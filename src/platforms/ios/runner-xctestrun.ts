@@ -52,6 +52,9 @@ const RUNNER_XCTESTRUN_CAPTURE_OPTIONS = {
   SystemAttachmentLifetime: 'keepNever',
   UserAttachmentLifetime: 'keepNever',
 } as const;
+const EXTERNAL_XCTESTRUN_FILE_ENV = 'AGENT_DEVICE_IOS_XCTESTRUN_FILE';
+const EXTERNAL_XCTEST_DERIVED_DATA_PATH_ENV = 'AGENT_DEVICE_IOS_XCTEST_DERIVED_DATA_PATH';
+const EXTERNAL_XCTEST_ENV_DIR_ENV = 'AGENT_DEVICE_IOS_XCTEST_ENV_DIR';
 
 const runnerXctestrunBuildLocks = new Map<string, Promise<unknown>>();
 const badRunnerArtifactsForRun = new Set<string>();
@@ -110,7 +113,7 @@ export type RunnerXctestrunCacheMetadata = {
   artifacts?: RunnerXctestrunCacheArtifacts;
 };
 
-export type RunnerXctestrunCacheKind = 'exact' | 'restore-key' | 'miss';
+export type RunnerXctestrunCacheKind = 'exact' | 'restore-key' | 'miss' | 'external';
 export type RunnerXctestrunArtifactState = 'valid' | 'rebuilt';
 
 export type RunnerXctestrunArtifact = {
@@ -119,7 +122,7 @@ export type RunnerXctestrunArtifact = {
   cache: RunnerXctestrunCacheKind;
   artifact: RunnerXctestrunArtifactState;
   buildMs: number;
-  xctestrunPathSource: 'manifest' | 'scan' | 'build';
+  xctestrunPathSource: 'manifest' | 'scan' | 'build' | 'external';
   reason?: string;
 };
 
@@ -436,6 +439,9 @@ export async function ensureXctestrunArtifact(
     forceRunnerXctestrunRebuild?: boolean;
   },
 ): Promise<RunnerXctestrunArtifact> {
+  const external = resolveExternalXctestrunArtifact();
+  if (external) return external;
+
   const projectRoot = findProjectRoot();
   const expectedCacheMetadata = resolveExpectedRunnerCacheMetadata(device, projectRoot);
   const derived = resolveRunnerDerivedPath(device, expectedCacheMetadata);
@@ -454,6 +460,42 @@ export async function ensureXctestrunArtifact(
       await releaseCacheLock();
     }
   });
+}
+
+function resolveExternalXctestrunArtifact(
+  env: NodeJS.ProcessEnv = process.env,
+): RunnerXctestrunArtifact | null {
+  const configuredXctestrunPath = env[EXTERNAL_XCTESTRUN_FILE_ENV]?.trim();
+  if (!configuredXctestrunPath) {
+    return null;
+  }
+
+  const xctestrunPath = path.resolve(configuredXctestrunPath);
+  if (!fs.existsSync(xctestrunPath)) {
+    throw new AppError('COMMAND_FAILED', 'Configured iOS XCTest runner .xctestrun file not found', {
+      env: EXTERNAL_XCTESTRUN_FILE_ENV,
+      xctestrunPath,
+    });
+  }
+
+  const configuredDerivedPath = env[EXTERNAL_XCTEST_DERIVED_DATA_PATH_ENV]?.trim();
+  const derived = configuredDerivedPath
+    ? path.resolve(configuredDerivedPath)
+    : path.dirname(xctestrunPath);
+
+  emitRunnerXctestrunDecision('reuse', 'external_xctestrun', {
+    derived,
+    xctestrunPath,
+  });
+
+  return {
+    xctestrunPath,
+    derived,
+    cache: 'external',
+    artifact: 'valid',
+    buildMs: 0,
+    xctestrunPathSource: 'external',
+  };
 }
 
 async function ensureXctestrunUnderCacheLock(params: {
@@ -766,9 +808,18 @@ export function writeRunnerCacheMetadata(
 }
 
 export async function markRunnerXctestrunArtifactBadForRun(
-  artifact: Pick<RunnerXctestrunArtifact, 'derived' | 'xctestrunPath'>,
+  artifact: Pick<RunnerXctestrunArtifact, 'cache' | 'derived' | 'xctestrunPath'>,
   reason: string,
 ): Promise<void> {
+  if (artifact.cache === 'external') {
+    emitRunnerXctestrunDecision('preserve', 'external_bad_artifact', {
+      derived: artifact.derived,
+      xctestrunPath: artifact.xctestrunPath,
+      reason,
+    });
+    return;
+  }
+
   badRunnerArtifactsForRun.add(artifact.derived);
   const releaseCacheLock = await acquireRunnerXctestrunCacheLock(artifact.derived);
   try {
@@ -1150,7 +1201,9 @@ export async function prepareXctestrunWithEnv(
   envVars: Record<string, string>,
   suffix: string,
 ): Promise<{ xctestrunPath: string; jsonPath: string }> {
-  const dir = path.dirname(xctestrunPath);
+  const configuredEnvDir = process.env[EXTERNAL_XCTEST_ENV_DIR_ENV]?.trim();
+  const dir = configuredEnvDir ? path.resolve(configuredEnvDir) : path.dirname(xctestrunPath);
+  fs.mkdirSync(dir, { recursive: true });
   const safeSuffix = suffix.replace(/[^a-zA-Z0-9._-]/g, '_');
   const tmpJsonPath = path.join(dir, `AgentDeviceRunner.env.${safeSuffix}.json`);
   const tmpXctestrunPath = path.join(dir, `AgentDeviceRunner.env.${safeSuffix}.xctestrun`);
@@ -1508,7 +1561,7 @@ async function evaluateExistingXctestrun(options: {
 }
 
 function emitRunnerXctestrunDecision(
-  action: 'clean' | 'reuse' | 'rebuild' | 'build',
+  action: 'clean' | 'reuse' | 'rebuild' | 'build' | 'preserve',
   reason:
     | 'forced_clean'
     | 'missing_xctestrun'
@@ -1520,7 +1573,9 @@ function emitRunnerXctestrunDecision(
     | 'reuse_ready'
     | 'forced_rebuild'
     | 'bad_artifact'
-    | 'built_new',
+    | 'built_new'
+    | 'external_xctestrun'
+    | 'external_bad_artifact',
   data: Record<string, unknown>,
 ): void {
   emitDiagnostic({
