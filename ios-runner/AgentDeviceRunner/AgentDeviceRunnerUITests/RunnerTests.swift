@@ -91,6 +91,11 @@ final class RunnerTests: XCTestCase {
 
   @MainActor
   func testCommand() throws {
+    if RunnerEnv.isTruthy("AGENT_DEVICE_RUNNER_NOOP_STARTUP") {
+      NSLog("AGENT_DEVICE_RUNNER_NOOP_STARTUP=1")
+      return
+    }
+
     doneExpectation = expectation(description: "agent-device command handled")
     NSLog("AGENT_DEVICE_RUNNER_HEADLESS_STARTUP=1")
     let desiredPort = RunnerEnv.resolvePort()
