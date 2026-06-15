@@ -166,38 +166,37 @@ async function startRunnerSessionWithLease(
   );
   let child: ExecBackgroundResult['child'] | undefined;
   let testPromise: Promise<ExecResult>;
+  const xcodebuildArgs = [
+    'test-without-building',
+    '-only-testing',
+    'AgentDeviceRunnerUITests/RunnerTests/testCommand',
+    '-parallel-testing-enabled',
+    'NO',
+    '-test-timeouts-enabled',
+    'NO',
+    '-collect-test-diagnostics',
+    'never',
+    resolveRunnerMaxConcurrentDestinationsFlag(device),
+    '1',
+    '-destination-timeout',
+    String(RUNNER_DESTINATION_TIMEOUT_SECONDS),
+    '-xctestrun',
+    xctestrunPath,
+    '-derivedDataPath',
+    xctestrunArtifact.derived,
+    '-destination',
+    resolveRunnerDestination(device),
+  ];
   try {
     ({ child, wait: testPromise } = await measureRunnerStartupStep(
       startupTimings,
       'launch_xcodebuild',
       () =>
-        runCmdBackground(
-          'xcodebuild',
-          [
-            'test-without-building',
-            '-only-testing',
-            'AgentDeviceRunnerUITests/RunnerTests/testCommand',
-            '-parallel-testing-enabled',
-            'NO',
-            '-test-timeouts-enabled',
-            'NO',
-            '-collect-test-diagnostics',
-            'never',
-            resolveRunnerMaxConcurrentDestinationsFlag(device),
-            '1',
-            '-destination-timeout',
-            String(RUNNER_DESTINATION_TIMEOUT_SECONDS),
-            '-xctestrun',
-            xctestrunPath,
-            '-destination',
-            resolveRunnerDestination(device),
-          ],
-          {
-            allowFailure: true,
-            env: { ...process.env, AGENT_DEVICE_RUNNER_PORT: String(port) },
-            detached: true,
-          },
-        ),
+        runCmdBackground('xcodebuild', xcodebuildArgs, {
+          allowFailure: true,
+          env: { ...process.env, AGENT_DEVICE_RUNNER_PORT: String(port) },
+          detached: true,
+        }),
     ));
   } catch (error) {
     await simulatorSetRedirect?.release();

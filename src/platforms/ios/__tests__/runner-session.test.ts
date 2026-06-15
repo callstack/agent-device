@@ -585,6 +585,9 @@ test('runner session starts xcodebuild through provider seams and reuses an aliv
   assert.equal(session.xctestrunPath, '/tmp/session-runner.xctestrun');
   assert.equal(mockRunCmdBackground.mock.calls.length, 1);
   assert.equal(mockRunCmdBackground.mock.calls[0]?.[0], 'xcodebuild');
+  const xcodebuildArgs = mockRunCmdBackground.mock.calls[0]?.[1];
+  assert.ok(Array.isArray(xcodebuildArgs));
+  assert.equal(xcodebuildArgs[xcodebuildArgs.indexOf('-derivedDataPath') + 1], '/tmp/derived');
   assert.deepEqual(mockPrepareXctestrunWithEnv.mock.calls[0]?.[1], {
     AGENT_DEVICE_RUNNER_PORT: '8123',
   });
