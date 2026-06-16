@@ -242,7 +242,15 @@ function summarizeProviderScenarioFlagExclusions() {
     {
       name: 'Apple launch and perf artifact options',
       owner: 'iOS platform, observability command, and parser tests',
-      keys: ['deviceHub', 'kind', 'launchArgs', 'perfTemplate'],
+      keys: [
+        'deviceHub',
+        'kind',
+        'launchArgs',
+        'perfTemplate',
+        'iosXctestrunFile',
+        'iosXctestDerivedDataPath',
+        'iosXctestEnvDir',
+      ],
     },
     {
       name: 'parser/client-only command flags',
