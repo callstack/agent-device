@@ -43,6 +43,9 @@ export function getIosRunnerOptions(
     logPath,
     traceLogPath: session.trace?.outPath,
     requestId: req.meta?.requestId,
+    iosXctestrunFile: req.flags?.iosXctestrunFile,
+    iosXctestDerivedDataPath: req.flags?.iosXctestDerivedDataPath,
+    iosXctestEnvDir: req.flags?.iosXctestEnvDir,
   };
 }
 

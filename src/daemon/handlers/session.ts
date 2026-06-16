@@ -97,6 +97,9 @@ function buildPrepareIosRunnerOptions(
     requestId: req.meta?.requestId,
     buildTimeoutMs,
     healthTimeoutMs: Math.min(buildTimeoutMs, PREPARE_IOS_RUNNER_HEALTH_TIMEOUT_MS),
+    iosXctestrunFile: req.flags?.iosXctestrunFile,
+    iosXctestDerivedDataPath: req.flags?.iosXctestDerivedDataPath,
+    iosXctestEnvDir: req.flags?.iosXctestEnvDir,
   };
 }
 

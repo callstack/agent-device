@@ -71,6 +71,9 @@ export function iosRunnerOverrides(
     logPath: ctx.logPath,
     traceLogPath: ctx.traceLogPath,
     requestId: ctx.requestId,
+    iosXctestrunFile: ctx.iosXctestrunFile,
+    iosXctestDerivedDataPath: ctx.iosXctestDerivedDataPath,
+    iosXctestEnvDir: ctx.iosXctestEnvDir,
   };
   return {
     runnerOpts,

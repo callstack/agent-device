@@ -157,6 +157,7 @@ async function startRunnerSessionWithLease(
         xctestrunArtifact.xctestrunPath,
         { AGENT_DEVICE_RUNNER_PORT: String(port) },
         `session-${device.id}-${RUNNER_OWNER_TOKEN}-${port}`,
+        { iosXctestEnvDir: options.iosXctestEnvDir },
       ),
   );
   const simulatorSetRedirect = await measureRunnerStartupStep(
@@ -261,18 +262,33 @@ async function resolveReusableRunnerSession(
     return null;
   }
 
+  const existingArtifact = existing.xctestrunArtifact;
+  if (existingArtifact?.cache === 'external') {
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'ios_runner_session_reuse',
+      data: {
+        deviceId: device.id,
+        sessionId: existing.sessionId,
+        ready: existing.ready,
+        cache: existingArtifact.cache,
+      },
+    });
+    return existing;
+  }
+
   const expectedDerived = resolveRunnerDerivedPath(
     device,
     resolveExpectedRunnerCacheMetadata(device),
   );
-  if (existing.xctestrunArtifact?.derived !== expectedDerived) {
+  if (existingArtifact?.derived !== expectedDerived) {
     emitDiagnostic({
       level: 'debug',
       phase: 'ios_runner_session_artifact_stale',
       data: {
         deviceId: device.id,
         sessionId: existing.sessionId,
-        currentDerived: existing.xctestrunArtifact?.derived,
+        currentDerived: existingArtifact?.derived,
         expectedDerived,
       },
     });

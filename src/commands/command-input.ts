@@ -24,6 +24,9 @@ export type CommonCommandInput = Pick<
   udid?: string;
   serial?: string;
   iosSimulatorDeviceSet?: string;
+  iosXctestrunFile?: string;
+  iosXctestDerivedDataPath?: string;
+  iosXctestEnvDir?: string;
   androidDeviceAllowlist?: string;
 };
 
@@ -283,6 +286,9 @@ export function readCommonInput(
     udid: optionalString(record, 'udid'),
     serial: optionalString(record, 'serial'),
     iosSimulatorDeviceSet: optionalString(record, 'iosSimulatorDeviceSet'),
+    iosXctestrunFile: optionalString(record, 'iosXctestrunFile'),
+    iosXctestDerivedDataPath: optionalString(record, 'iosXctestDerivedDataPath'),
+    iosXctestEnvDir: optionalString(record, 'iosXctestEnvDir'),
     androidDeviceAllowlist: optionalString(record, 'androidDeviceAllowlist'),
     daemonBaseUrl: optionalString(record, 'daemonBaseUrl'),
     daemonAuthToken: optionalString(record, 'daemonAuthToken'),
@@ -448,6 +454,9 @@ export function commonToClientOptions(
     udid: input.udid,
     serial: input.serial,
     iosSimulatorDeviceSet: input.iosSimulatorDeviceSet,
+    iosXctestrunFile: input.iosXctestrunFile,
+    iosXctestDerivedDataPath: input.iosXctestDerivedDataPath,
+    iosXctestEnvDir: input.iosXctestEnvDir,
     androidDeviceAllowlist: input.androidDeviceAllowlist,
     daemonBaseUrl: input.daemonBaseUrl,
     daemonAuthToken: input.daemonAuthToken,
@@ -582,6 +591,18 @@ function commonProperties(): Record<string, JsonSchema> {
     iosSimulatorDeviceSet: {
       type: 'string',
       description: 'iOS simulator device-set path used for device resolution.',
+    },
+    iosXctestrunFile: {
+      type: 'string',
+      description: 'Externally built iOS XCTest runner .xctestrun artifact path.',
+    },
+    iosXctestDerivedDataPath: {
+      type: 'string',
+      description: 'Derived data path for external iOS XCTest runner execution.',
+    },
+    iosXctestEnvDir: {
+      type: 'string',
+      description: 'Writable directory for iOS XCTest runner env overlays.',
     },
     androidDeviceAllowlist: {
       type: 'string',

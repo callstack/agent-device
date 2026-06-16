@@ -737,6 +737,26 @@ test('runner session restarts alive runner when expected xctestrun artifact chan
   assert.equal(mockRunCmdBackground.mock.calls.length, 2);
 });
 
+test('runner session reuses external xctestrun artifact without cache-derived comparison', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-external-artifact-sim' };
+  mockEnsureXctestrunArtifact.mockResolvedValueOnce({
+    xctestrunPath: '/tmp/aws/AgentDeviceRunner.xctestrun',
+    derived: '/tmp/aws-derived',
+    cache: 'external',
+    artifact: 'valid',
+    buildMs: 0,
+    xctestrunPathSource: 'external',
+  });
+
+  const session = await ensureRunnerSession(device, {});
+  mockResolveRunnerDerivedPath.mockReturnValue('/tmp/internal-cache-derived');
+  const reused = await ensureRunnerSession(device, {});
+
+  assert.equal(reused, session);
+  assert.equal(mockRunCmdBackground.mock.calls.length, 1);
+  assert.equal(mockEnsureXctestrunArtifact.mock.calls.length, 1);
+});
+
 test('runner session restarts dead runner without graceful shutdown', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-session-dead-sim' };
 

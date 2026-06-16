@@ -74,6 +74,9 @@ export type AgentDeviceClientConfig = {
   runtime?: SessionRuntimeHints;
   cwd?: string;
   debug?: boolean;
+  iosXctestrunFile?: string;
+  iosXctestDerivedDataPath?: string;
+  iosXctestEnvDir?: string;
 };
 
 export type AgentDeviceRequestOverrides = Pick<
@@ -93,6 +96,9 @@ export type AgentDeviceRequestOverrides = Pick<
   | 'leaseBackend'
   | 'cwd'
   | 'debug'
+  | 'iosXctestrunFile'
+  | 'iosXctestDerivedDataPath'
+  | 'iosXctestEnvDir'
 >;
 
 export type AgentDeviceIdentifiers = {

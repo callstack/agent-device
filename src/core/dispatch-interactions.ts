@@ -528,6 +528,9 @@ function runnerOptionsFromContext(context: DispatchContext | undefined): RunnerC
     logPath: context?.logPath,
     traceLogPath: context?.traceLogPath,
     requestId: context?.requestId,
+    iosXctestrunFile: context?.iosXctestrunFile,
+    iosXctestDerivedDataPath: context?.iosXctestDerivedDataPath,
+    iosXctestEnvDir: context?.iosXctestEnvDir,
   };
 }
 
@@ -1024,6 +1027,9 @@ export async function handleReadCommand(
       logPath: context?.logPath,
       traceLogPath: context?.traceLogPath,
       requestId: context?.requestId,
+      iosXctestrunFile: context?.iosXctestrunFile,
+      iosXctestDerivedDataPath: context?.iosXctestDerivedDataPath,
+      iosXctestEnvDir: context?.iosXctestEnvDir,
     },
   );
   const text =

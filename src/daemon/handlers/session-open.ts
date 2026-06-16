@@ -188,6 +188,9 @@ async function completeOpenCommand(params: {
     logPath,
     traceLogPath,
     requestId: req.meta?.requestId,
+    iosXctestrunFile: req.flags?.iosXctestrunFile,
+    iosXctestDerivedDataPath: req.flags?.iosXctestDerivedDataPath,
+    iosXctestEnvDir: req.flags?.iosXctestEnvDir,
   };
   const shouldPrewarmRunnerBeforeOpen = req.flags?.maestro?.prewarmRunnerBeforeOpen === true;
   let runnerPrewarm: Promise<void> | undefined;

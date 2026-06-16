@@ -52,9 +52,6 @@ const RUNNER_XCTESTRUN_CAPTURE_OPTIONS = {
   SystemAttachmentLifetime: 'keepNever',
   UserAttachmentLifetime: 'keepNever',
 } as const;
-const EXTERNAL_XCTESTRUN_FILE_ENV = 'AGENT_DEVICE_IOS_XCTESTRUN_FILE';
-const EXTERNAL_XCTEST_DERIVED_DATA_PATH_ENV = 'AGENT_DEVICE_IOS_XCTEST_DERIVED_DATA_PATH';
-const EXTERNAL_XCTEST_ENV_DIR_ENV = 'AGENT_DEVICE_IOS_XCTEST_ENV_DIR';
 
 const runnerXctestrunBuildLocks = new Map<string, Promise<unknown>>();
 const badRunnerArtifactsForRun = new Set<string>();
@@ -124,6 +121,12 @@ export type RunnerXctestrunArtifact = {
   buildMs: number;
   xctestrunPathSource: 'manifest' | 'scan' | 'build' | 'external';
   reason?: string;
+};
+
+export type ExternalXctestRunnerOptions = {
+  iosXctestrunFile?: string;
+  iosXctestDerivedDataPath?: string;
+  iosXctestEnvDir?: string;
 };
 
 type RunnerXctestrunCacheArtifacts = {
@@ -424,7 +427,12 @@ function resolveRunnerXctestrunCacheLockPath(derived: string): string {
 
 export async function ensureXctestrun(
   device: DeviceInfo,
-  options: { verbose?: boolean; logPath?: string; traceLogPath?: string; buildTimeoutMs?: number },
+  options: {
+    verbose?: boolean;
+    logPath?: string;
+    traceLogPath?: string;
+    buildTimeoutMs?: number;
+  } & ExternalXctestRunnerOptions,
 ): Promise<string> {
   return (await ensureXctestrunArtifact(device, options)).xctestrunPath;
 }
@@ -437,9 +445,9 @@ export async function ensureXctestrunArtifact(
     traceLogPath?: string;
     buildTimeoutMs?: number;
     forceRunnerXctestrunRebuild?: boolean;
-  },
+  } & ExternalXctestRunnerOptions,
 ): Promise<RunnerXctestrunArtifact> {
-  const external = resolveExternalXctestrunArtifact();
+  const external = resolveExternalXctestrunArtifact(options);
   if (external) return external;
 
   const projectRoot = findProjectRoot();
@@ -463,9 +471,9 @@ export async function ensureXctestrunArtifact(
 }
 
 function resolveExternalXctestrunArtifact(
-  env: NodeJS.ProcessEnv = process.env,
+  options: ExternalXctestRunnerOptions,
 ): RunnerXctestrunArtifact | null {
-  const configuredXctestrunPath = env[EXTERNAL_XCTESTRUN_FILE_ENV]?.trim();
+  const configuredXctestrunPath = options.iosXctestrunFile?.trim();
   if (!configuredXctestrunPath) {
     return null;
   }
@@ -473,15 +481,15 @@ function resolveExternalXctestrunArtifact(
   const xctestrunPath = path.resolve(configuredXctestrunPath);
   if (!fs.existsSync(xctestrunPath)) {
     throw new AppError('COMMAND_FAILED', 'Configured iOS XCTest runner .xctestrun file not found', {
-      env: EXTERNAL_XCTESTRUN_FILE_ENV,
+      configKey: 'iosXctestrunFile',
       xctestrunPath,
     });
   }
 
-  const configuredDerivedPath = env[EXTERNAL_XCTEST_DERIVED_DATA_PATH_ENV]?.trim();
+  const configuredDerivedPath = options.iosXctestDerivedDataPath?.trim();
   const derived = configuredDerivedPath
     ? path.resolve(configuredDerivedPath)
-    : path.dirname(xctestrunPath);
+    : resolveExternalXctestDerivedDataPath(xctestrunPath);
 
   emitRunnerXctestrunDecision('reuse', 'external_xctestrun', {
     derived,
@@ -496,6 +504,13 @@ function resolveExternalXctestrunArtifact(
     buildMs: 0,
     xctestrunPathSource: 'external',
   };
+}
+
+function resolveExternalXctestDerivedDataPath(xctestrunPath: string): string {
+  const hash = crypto.createHash('sha1');
+  hash.update(xctestrunPath);
+  const suffix = hash.digest('hex').slice(0, 12);
+  return path.join(os.tmpdir(), 'agent-device-ios-xctest-derived', suffix);
 }
 
 async function ensureXctestrunUnderCacheLock(params: {
@@ -1200,8 +1215,9 @@ export async function prepareXctestrunWithEnv(
   xctestrunPath: string,
   envVars: Record<string, string>,
   suffix: string,
+  options: Pick<ExternalXctestRunnerOptions, 'iosXctestEnvDir'> = {},
 ): Promise<{ xctestrunPath: string; jsonPath: string }> {
-  const configuredEnvDir = process.env[EXTERNAL_XCTEST_ENV_DIR_ENV]?.trim();
+  const configuredEnvDir = options.iosXctestEnvDir?.trim();
   const dir = configuredEnvDir ? path.resolve(configuredEnvDir) : path.dirname(xctestrunPath);
   fs.mkdirSync(dir, { recursive: true });
   const safeSuffix = suffix.replace(/[^a-zA-Z0-9._-]/g, '_');

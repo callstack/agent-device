@@ -1,9 +1,13 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { DeviceInfo } from '../../utils/device.ts';
 import type { RunnerCommand } from './runner-contract.ts';
-import type { RunnerXctestrunArtifactState, RunnerXctestrunCacheKind } from './runner-xctestrun.ts';
+import type {
+  RunnerXctestrunArtifactState,
+  RunnerXctestrunCacheKind,
+  ExternalXctestRunnerOptions,
+} from './runner-xctestrun.ts';
 
-export type AppleRunnerCommandOptions = {
+export type AppleRunnerCommandOptions = ExternalXctestRunnerOptions & {
   verbose?: boolean;
   logPath?: string;
   traceLogPath?: string;

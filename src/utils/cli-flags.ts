@@ -50,6 +50,9 @@ export type CliFlags = RemoteConfigMetroOptions &
     udid?: string;
     serial?: string;
     iosSimulatorDeviceSet?: string;
+    iosXctestrunFile?: string;
+    iosXctestDerivedDataPath?: string;
+    iosXctestEnvDir?: string;
     deviceHub?: boolean;
     androidDeviceAllowlist?: string;
     session?: string;
@@ -516,6 +519,27 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--ios-simulator-device-set <path>',
     usageDescription: 'Scope iOS simulator discovery/commands to this simulator device set',
+  },
+  {
+    key: 'iosXctestrunFile',
+    names: ['--ios-xctestrun-file'],
+    type: 'string',
+    usageLabel: '--ios-xctestrun-file <path>',
+    usageDescription: 'Use an externally built iOS XCTest runner .xctestrun artifact',
+  },
+  {
+    key: 'iosXctestDerivedDataPath',
+    names: ['--ios-xctest-derived-data-path'],
+    type: 'string',
+    usageLabel: '--ios-xctest-derived-data-path <path>',
+    usageDescription: 'Derived data path for external iOS XCTest runner execution',
+  },
+  {
+    key: 'iosXctestEnvDir',
+    names: ['--ios-xctest-env-dir'],
+    type: 'string',
+    usageLabel: '--ios-xctest-env-dir <path>',
+    usageDescription: 'Writable directory for per-session iOS XCTest runner env overlays',
   },
   {
     key: 'deviceHub',
@@ -1074,6 +1098,9 @@ export const GLOBAL_FLAG_KEYS = new Set<FlagKey>([
   'udid',
   'serial',
   'iosSimulatorDeviceSet',
+  'iosXctestrunFile',
+  'iosXctestDerivedDataPath',
+  'iosXctestEnvDir',
   'androidDeviceAllowlist',
   'session',
   'noRecord',

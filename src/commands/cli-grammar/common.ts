@@ -53,6 +53,9 @@ export function commonInputFromFlags(flags: CliFlags): Record<string, unknown> {
     udid: flags.udid,
     serial: flags.serial,
     iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
+    iosXctestrunFile: flags.iosXctestrunFile,
+    iosXctestDerivedDataPath: flags.iosXctestDerivedDataPath,
+    iosXctestEnvDir: flags.iosXctestEnvDir,
     androidDeviceAllowlist: flags.androidDeviceAllowlist,
   });
 }

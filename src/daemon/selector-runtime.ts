@@ -392,6 +392,9 @@ async function queryDirectIosSelector(
       logPath: params.logPath,
       traceLogPath: session.trace?.outPath,
       requestId: params.req.meta?.requestId,
+      iosXctestrunFile: params.req.flags?.iosXctestrunFile,
+      iosXctestDerivedDataPath: params.req.flags?.iosXctestDerivedDataPath,
+      iosXctestEnvDir: params.req.flags?.iosXctestEnvDir,
     },
   );
   const found = data.found === true;
@@ -648,6 +651,9 @@ async function findText(
         logPath,
         traceLogPath: session?.trace?.outPath,
         requestId: req.meta?.requestId,
+        iosXctestrunFile: req.flags?.iosXctestrunFile,
+        iosXctestDerivedDataPath: req.flags?.iosXctestDerivedDataPath,
+        iosXctestEnvDir: req.flags?.iosXctestEnvDir,
       },
     )) as { found?: boolean };
     return result?.found === true;

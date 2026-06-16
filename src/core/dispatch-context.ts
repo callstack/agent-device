@@ -40,6 +40,9 @@ export type DispatchContext = ScreenshotDispatchFlags & {
   verbose?: boolean;
   logPath?: string;
   traceLogPath?: string;
+  iosXctestrunFile?: string;
+  iosXctestDerivedDataPath?: string;
+  iosXctestEnvDir?: string;
   snapshotInteractiveOnly?: boolean;
   snapshotDepth?: number;
   snapshotScope?: string;

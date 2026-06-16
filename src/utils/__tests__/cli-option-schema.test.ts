@@ -32,6 +32,21 @@ test('option schema exposes env defaults and command scoping', () => {
   assert.ok(androidDeviceAllowlist);
   assert.deepEqual(androidDeviceAllowlist.env.names, ['AGENT_DEVICE_ANDROID_DEVICE_ALLOWLIST']);
 
+  const iosXctestrunFile = getOptionSpec('iosXctestrunFile');
+  assert.ok(iosXctestrunFile);
+  assert.deepEqual(iosXctestrunFile.env.names, ['AGENT_DEVICE_IOS_XCTESTRUN_FILE']);
+  assert.equal(iosXctestrunFile.supportsCommand('open'), true);
+
+  const iosXctestDerivedDataPath = getOptionSpec('iosXctestDerivedDataPath');
+  assert.ok(iosXctestDerivedDataPath);
+  assert.deepEqual(iosXctestDerivedDataPath.env.names, [
+    'AGENT_DEVICE_IOS_XCTEST_DERIVED_DATA_PATH',
+  ]);
+
+  const iosXctestEnvDir = getOptionSpec('iosXctestEnvDir');
+  assert.ok(iosXctestEnvDir);
+  assert.deepEqual(iosXctestEnvDir.env.names, ['AGENT_DEVICE_IOS_XCTEST_ENV_DIR']);
+
   const snapshotDepth = getOptionSpec('snapshotDepth');
   assert.ok(snapshotDepth);
   assert.equal(snapshotDepth.supportsCommand('snapshot'), true);

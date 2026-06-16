@@ -51,6 +51,9 @@ export async function dispatchCommand(
     verbose: context?.verbose,
     logPath: context?.logPath,
     traceLogPath: context?.traceLogPath,
+    iosXctestrunFile: context?.iosXctestrunFile,
+    iosXctestDerivedDataPath: context?.iosXctestDerivedDataPath,
+    iosXctestEnvDir: context?.iosXctestEnvDir,
   };
   const interactor = await getInteractor(device, runnerCtx);
   emitDiagnostic({

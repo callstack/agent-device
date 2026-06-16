@@ -16,12 +16,21 @@ export type RunnerContext = {
   verbose?: boolean;
   logPath?: string;
   traceLogPath?: string;
+  iosXctestrunFile?: string;
+  iosXctestDerivedDataPath?: string;
+  iosXctestEnvDir?: string;
 };
 
 /** Subset of {@link RunnerContext} forwarded to runner command invocations. */
 export type RunnerCallOptions = Pick<
   RunnerContext,
-  'verbose' | 'logPath' | 'traceLogPath' | 'requestId'
+  | 'verbose'
+  | 'logPath'
+  | 'traceLogPath'
+  | 'requestId'
+  | 'iosXctestrunFile'
+  | 'iosXctestDerivedDataPath'
+  | 'iosXctestEnvDir'
 >;
 
 export type { BackMode };
