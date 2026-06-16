@@ -768,6 +768,48 @@ test('runReplayScriptFile reports Maestro runScript failures at the runScript st
   assert.equal(calls.length, 0);
 });
 
+test('runReplayScriptFile reports iOS Maestro openLink setup failures before assertions', async () => {
+  const { response, calls } = await runReplayFixture({
+    label: 'maestro-ios-openlink-prewarm-fail',
+    script: [
+      'appId: demo.app',
+      '---',
+      '- openLink: demo://screen',
+      '- assertVisible: Ready',
+      '',
+    ].join('\n'),
+    flags: { replayBackend: 'maestro', platform: 'ios' },
+    invoke: async (req) => {
+      if (req.command === 'open') {
+        return {
+          ok: false,
+          error: {
+            code: 'COMMAND_FAILED',
+            message: 'Developer mode is disabled for Apple development tools',
+            details: {
+              hint: 'Run `sudo DevToolsSecurity -enable`.',
+            },
+          },
+        };
+      }
+      return { ok: true, data: {} };
+    },
+  });
+
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.match(response.error.message, /Replay failed at step 1/);
+    assert.match(response.error.message, /open "demo\.app" "demo:\/\/screen"/);
+    assert.match(response.error.message, /Developer mode is disabled/);
+    assert.match(String(response.error.details?.hint ?? ''), /DevToolsSecurity -enable/);
+  }
+  assert.deepEqual(
+    calls.map((call) => [call.command, call.positionals]),
+    [['open', ['demo.app', 'demo://screen']]],
+  );
+  assert.equal(calls[0]?.flags?.maestro?.prewarmRunnerBeforeOpen, true);
+});
+
 test('runReplayScriptFile explains empty Maestro runScript JSON bodies', async () => {
   const { response, calls } = await runReplayFixture({
     label: 'maestro-runscript-empty-json',

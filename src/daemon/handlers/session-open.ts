@@ -198,7 +198,10 @@ async function completeOpenCommand(params: {
     timing.runnerPrewarmKind = 'session';
     timing.runnerPrewarmScheduled = true;
     if (shouldPrewarmRunnerBeforeOpen) {
-      runnerPrewarm = prewarmIosRunnerSession(device, runnerPrewarmOptions);
+      runnerPrewarm = prewarmIosRunnerSession(device, {
+        ...runnerPrewarmOptions,
+        propagateError: true,
+      });
       const runnerPrewarmStartedAtMs = Date.now();
       await runnerPrewarm;
       timing.runnerPrewarmWaited = true;

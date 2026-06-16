@@ -53,6 +53,7 @@ jobs:
       IOS_RUNTIME_VERSION: '26.2'
       AGENT_DEVICE_STATE_DIR: ${{ github.workspace }}/.tmp/agent-device-state
       AGENT_DEVICE_IOS_RUNNER_DERIVED_PATH: ${{ github.workspace }}/.tmp/ios-runner-derived
+      AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS: '420000'
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -80,7 +81,7 @@ jobs:
       - name: Prepare iOS runner
         run: |
           pnpm clean:daemon
-          node --experimental-strip-types src/bin.ts prepare ios-runner --platform ios --timeout 300000 --json
+          node --experimental-strip-types src/bin.ts prepare ios-runner --platform ios --timeout "$AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS" --json
           pnpm clean:daemon
 
       - name: Run iOS simulator replay suite

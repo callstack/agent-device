@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
-import { IOS_SIMULATOR } from '../../../__tests__/test-utils/index.ts';
+import { IOS_DEVICE, IOS_SIMULATOR } from '../../../__tests__/test-utils/index.ts';
 import { AppError } from '../../../utils/errors.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
 import type { RunnerSession } from '../runner-session-types.ts';
@@ -612,18 +612,9 @@ test('runner session starts xcodebuild through provider seams and reuses an aliv
   await stopRunnerSession(session);
 });
 
-test('runner session fails early when Apple developer mode is disabled', async () => {
-  const device = { ...IOS_SIMULATOR, id: 'runner-session-devtools-disabled-sim' };
-  mockRunAppleToolCommand.mockImplementation(async (cmd, args) => {
-    if (cmd === 'DevToolsSecurity' && args[0] === '-status') {
-      return {
-        exitCode: 0,
-        stdout: 'Developer mode is currently disabled.\n',
-        stderr: '',
-      };
-    }
-    return { exitCode: 0, stdout: '', stderr: '' };
-  });
+test('runner session fails early for physical iOS devices when Apple developer mode is disabled', async () => {
+  const device = { ...IOS_DEVICE, id: 'runner-session-devtools-disabled-device' };
+  mockDevToolsSecurityDisabled();
 
   await assert.rejects(
     () => ensureRunnerSession(device, {}),
@@ -638,6 +629,18 @@ test('runner session fails early when Apple developer mode is disabled', async (
 
   assert.equal(mockEnsureXctestrunArtifact.mock.calls.length, 0);
   assert.equal(mockRunCmdBackground.mock.calls.length, 0);
+});
+
+test('runner session does not require Apple developer mode for iOS simulators', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-devtools-disabled-sim' };
+  mockDevToolsSecurityDisabled();
+
+  const session = await ensureRunnerSession(device, {});
+
+  assert.equal(session.deviceId, device.id);
+  assert.equal(mockEnsureXctestrunArtifact.mock.calls.length, 1);
+  assert.equal(mockRunCmdBackground.mock.calls.length, 1);
+  assert.equal(mockRunAppleToolCommand.mock.calls.some(isDevToolsSecurityStatusCall), false);
 });
 
 test('runner session startup kills legacy ownerless xcodebuild before launching a new runner', async () => {
@@ -882,6 +885,24 @@ test('runner session abort removes owned lease for in-memory sessions', async ()
 function isXcodebuildPkillCall(call: unknown[]): boolean {
   const args = call[1];
   return call[0] === 'pkill' && Array.isArray(args) && args.includes('-f');
+}
+
+function isDevToolsSecurityStatusCall(call: unknown[]): boolean {
+  const args = call[1];
+  return call[0] === 'DevToolsSecurity' && Array.isArray(args) && args[0] === '-status';
+}
+
+function mockDevToolsSecurityDisabled(): void {
+  mockRunAppleToolCommand.mockImplementation(async (cmd, args) => {
+    if (cmd === 'DevToolsSecurity' && args[0] === '-status') {
+      return {
+        exitCode: 0,
+        stdout: 'Developer mode is currently disabled.\n',
+        stderr: '',
+      };
+    }
+    return { exitCode: 0, stdout: '', stderr: '' };
+  });
 }
 
 function isSimctlTerminateCall(call: unknown[]): boolean {

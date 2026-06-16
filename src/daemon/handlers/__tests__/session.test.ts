@@ -2287,6 +2287,56 @@ test('open iOS Maestro app link waits for runner prewarm before launching app', 
   });
 });
 
+test('open iOS Maestro app link reports blocking runner prewarm failures before launching app', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-maestro-open-link-prewarm-failed';
+  sessionStore.set(sessionName, {
+    ...makeSession(sessionName, {
+      platform: 'ios',
+      id: 'ios-device-1',
+      name: 'iPhone Device',
+      kind: 'device',
+      booted: true,
+    }),
+    appBundleId: 'com.example.previous',
+    appName: 'Previous App',
+  });
+  mockPrewarmIosRunnerSession.mockRejectedValueOnce(
+    new AppError('COMMAND_FAILED', 'Developer mode is disabled for Apple development tools', {
+      hint: 'Run `sudo DevToolsSecurity -enable`.',
+    }),
+  );
+
+  await expect(
+    handleSessionCommands({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'open',
+        positionals: ['com.example.app', 'rne://screen-layout'],
+        flags: {
+          maestro: { prewarmRunnerBeforeOpen: true },
+        },
+      },
+      sessionName,
+      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      sessionStore,
+      invoke: noopInvoke,
+    }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'Developer mode is disabled for Apple development tools',
+    details: {
+      hint: expect.stringContaining('DevToolsSecurity -enable'),
+    },
+  });
+  expect(mockDispatch).not.toHaveBeenCalled();
+  expect(mockPrewarmIosRunnerSession).toHaveBeenCalledWith(
+    expect.objectContaining({ platform: 'ios', id: 'ios-device-1' }),
+    expect.objectContaining({ propagateError: true }),
+  );
+});
+
 test('open iOS URL without app bundle id skips runner prewarm', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-device-session';

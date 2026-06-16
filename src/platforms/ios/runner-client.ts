@@ -59,14 +59,19 @@ export async function runIosRunnerCommand(
   return provider.runCommand(device, runnerCommand, options);
 }
 
+type PrewarmIosRunnerSessionOptions = RunnerSessionOptions & {
+  propagateError?: boolean;
+};
+
 export function prewarmIosRunnerSession(
   device: DeviceInfo,
-  options: RunnerSessionOptions = {},
+  options: PrewarmIosRunnerSessionOptions = {},
 ): Promise<void> | undefined {
   if (device.platform !== 'ios') {
     return undefined;
   }
-  const provider = resolveAppleRunnerRuntime(device, options);
+  const { propagateError = false, ...runnerOptions } = options;
+  const provider = resolveAppleRunnerRuntime(device, runnerOptions);
   if (!provider.prewarm) {
     emitDiagnostic({
       level: 'debug',
@@ -76,7 +81,7 @@ export function prewarmIosRunnerSession(
     return undefined;
   }
   const prewarm = provider
-    .prewarm(device, options)
+    .prewarm(device, runnerOptions)
     .then(() => {})
     .catch((error: unknown) => {
       emitDiagnostic({
@@ -87,6 +92,9 @@ export function prewarmIosRunnerSession(
           error: error instanceof Error ? error.message : String(error),
         },
       });
+      if (propagateError) {
+        throw error;
+      }
     });
   void prewarm;
   return prewarm;

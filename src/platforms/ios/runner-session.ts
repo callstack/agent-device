@@ -464,7 +464,7 @@ async function ensureBooted(device: DeviceInfo): Promise<void> {
 }
 
 async function verifyDeveloperModeForIosRunner(device: DeviceInfo): Promise<void> {
-  if (device.platform !== 'ios') return;
+  if (device.platform !== 'ios' || device.kind !== 'device') return;
   const result = await runAppleToolCommand('DevToolsSecurity', ['-status'], {
     allowFailure: true,
     timeoutMs: 2_000,
