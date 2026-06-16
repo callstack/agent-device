@@ -9,6 +9,10 @@ import {
   markRequestCanceled,
   registerRequestAbort,
 } from '../request-cancel.ts';
+import {
+  type ReplayTestActionProgressContext,
+  withReplayTestActionProgress,
+} from '../request-progress.ts';
 import type { DaemonResponse } from '../types.ts';
 import type { ReplayScriptMetadata } from '../../replay/script.ts';
 import type {
@@ -32,6 +36,7 @@ export async function runReplayTestAttempt(
     target?: ReplayScriptMetadata['target'];
     artifactsDir?: string;
     shard?: ReplayTestRunReplayParams['shard'];
+    progress?: ReplayTestActionProgressContext;
   } & ReplayTestRuntimeDependencies,
 ): Promise<DaemonResponse> {
   const {
@@ -44,6 +49,7 @@ export async function runReplayTestAttempt(
     target,
     artifactsDir,
     shard,
+    progress,
     runReplay,
     cleanupSession,
     finalizeAttempt,
@@ -65,17 +71,21 @@ export async function runReplayTestAttempt(
     platform,
     target,
   });
-  const replayPromise = runReplay({
-    filePath,
-    sessionName,
-    platform,
-    target,
-    requestId,
-    artifactsDir,
-    artifactPaths,
-    tracePath,
-    shard,
-  })
+  const replayPromise = withReplayTestActionProgress(
+    progress,
+    async () =>
+      await runReplay({
+        filePath,
+        sessionName,
+        platform,
+        target,
+        requestId,
+        artifactsDir,
+        artifactPaths,
+        tracePath,
+        shard,
+      }),
+  )
     .catch((error) => {
       const appErr = normalizeError(error);
       return {

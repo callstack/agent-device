@@ -4,16 +4,35 @@ import { AppError } from './utils/errors.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon/types.ts';
 import type { RequestProgressEvent } from './daemon/request-progress.ts';
 import { consumeTextLines } from './utils/line-stream.ts';
-import { formatReplayTestProgressEvent } from './cli-test-progress.ts';
+import {
+  createReplayTestProgressRenderer,
+  type ReplayTestProgressRenderer,
+} from './cli-test-progress.ts';
 import {
   isDaemonProgressEnvelope,
   isDaemonResponseEnvelope,
   shouldStreamRequestProgress,
 } from './daemon/request-progress-protocol.ts';
 
-function writeRequestProgressEvent(event: RequestProgressEvent): void {
-  const line = formatReplayTestProgressEvent(event);
-  if (line) process.stderr.write(`${line}\n`);
+function createRequestProgressRenderer(req: DaemonRequest): ReplayTestProgressRenderer {
+  return createReplayTestProgressRenderer({
+    verbose: Boolean(req.flags?.verbose || req.meta?.debug),
+    liveProgress: shouldRenderLiveProgress(),
+    columns: process.stderr.columns,
+  });
+}
+
+function writeRequestProgressEvent(
+  event: RequestProgressEvent,
+  renderer: ReplayTestProgressRenderer,
+): void {
+  const output = renderer.render(event);
+  if (!output) return;
+  process.stderr.write(output.newline ? `${output.text}\n` : output.text);
+}
+
+function shouldRenderLiveProgress(): boolean {
+  return process.stderr.isTTY === true && !process.env.CI;
 }
 
 export function shouldReadDaemonProgressStream(
@@ -40,6 +59,7 @@ export function readDaemonSocketProgressResponse(
 ): void {
   const { req, isSettled, resolve, reject, clearTimeout } = options;
   let buffer = '';
+  const progressRenderer = createRequestProgressRenderer(req);
 
   const rejectInvalidLine = (line: string, error: unknown) => {
     clearTimeout();
@@ -65,7 +85,7 @@ export function readDaemonSocketProgressResponse(
       try {
         const message = JSON.parse(line) as unknown;
         if (isDaemonProgressEnvelope(message)) {
-          writeRequestProgressEvent(message.event);
+          writeRequestProgressEvent(message.event, progressRenderer);
           continue;
         }
         const response = isDaemonResponseEnvelope(message) ? message.response : message;
@@ -93,6 +113,7 @@ export function readDaemonHttpProgressResponse(
   const { req, handleResponseBody, reject, clearTimeout } = options;
   let buffer = '';
   let settled = false;
+  const progressRenderer = createRequestProgressRenderer(req);
   const rejectInvalidLine = (line: string, error: unknown) => {
     settled = true;
     clearTimeout();
@@ -113,7 +134,7 @@ export function readDaemonHttpProgressResponse(
     try {
       const message = JSON.parse(line) as unknown;
       if (isDaemonProgressEnvelope(message)) {
-        writeRequestProgressEvent(message.event);
+        writeRequestProgressEvent(message.event, progressRenderer);
         return false;
       }
       if (isDaemonResponseEnvelope<unknown>(message)) {

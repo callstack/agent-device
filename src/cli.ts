@@ -317,6 +317,7 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
               positionals,
               flags: { ...effectiveFlags, batchSteps },
               client,
+              debug: debugOutputEnabled,
             })
           ) {
             return;
@@ -327,7 +328,13 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
             'runtime command was removed. Use connect --remote-config <path> for remote runs, or metro prepare --remote-config <path> for inspection.',
           );
         } else if (
-          await tryRunClientBackedCommand({ command, positionals, flags: effectiveFlags, client })
+          await tryRunClientBackedCommand({
+            command,
+            positionals,
+            flags: effectiveFlags,
+            client,
+            debug: debugOutputEnabled,
+          })
         ) {
           return;
         }

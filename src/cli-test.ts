@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { ReplaySuiteResult, ReplaySuiteTestResult } from './daemon/types.ts';
-import { replayTestStepLines } from './cli-test-trace.ts';
+import { replayTestFailureStepLines } from './cli-test-trace.ts';
 import { formatDurationSeconds } from './utils/duration-format.ts';
 import { AppError } from './utils/errors.ts';
-import { printJson } from './utils/output.ts';
+import { colorize, printJson, supportsColor } from './utils/output.ts';
 
 type PassedReplayTestResult = Extract<ReplaySuiteTestResult, { status: 'passed' }>;
 type FailedReplayTestResult = Extract<ReplaySuiteTestResult, { status: 'failed' }>;
@@ -13,10 +13,10 @@ type ReplayTestError = FailedReplayTestResult['error'];
 export function renderReplayTestResponse(options: {
   suite: ReplaySuiteResult;
   json?: boolean;
-  verbose?: boolean;
+  debug?: boolean;
   reportJunit?: string;
 }): number {
-  const { suite, json, verbose, reportJunit } = options;
+  const { suite, json, debug, reportJunit } = options;
   if (reportJunit) {
     writeReplayJunitReport(reportJunit, suite);
   }
@@ -24,89 +24,34 @@ export function renderReplayTestResponse(options: {
     printJson({ success: true, data: suite });
     return getReplayTestExitCode(suite);
   }
-  return renderReplayTestSummary(suite, { verbose });
+  return renderReplayTestSummary(suite, { debug });
 }
 
 function renderReplayTestSummary(
   data: ReplaySuiteResult,
-  options: { verbose?: boolean } = {},
+  options: { debug?: boolean } = {},
 ): number {
   const flaky = data.tests.filter(isFlakyReplayTestResult);
-  if (options.verbose) {
-    for (const entry of data.tests) {
-      renderVerboseTestResult(entry);
-    }
-  } else {
-    for (const entry of data.tests) {
-      renderDefaultTestResult(entry);
-    }
-  }
-
-  const durationMs = typeof data.durationMs === 'number' ? data.durationMs : undefined;
-  const flakySuffix = flaky.length > 0 ? `, ${flaky.length} flaky` : '';
-  const durationSuffix = durationMs !== undefined ? ` in ${formatDurationSeconds(durationMs)}` : '';
-  process.stdout.write(
-    `Test summary: ${data.passed} passed, ${data.failed} failed${flakySuffix}${durationSuffix}\n`,
-  );
+  process.stdout.write(`${formatReplayTestSummaryLine(data, flaky.length)}\n`);
+  renderFailureDetails(data.tests.filter(isFailedReplayTestResult), { debug: options.debug });
   renderFlakyTestSummary(flaky);
   return getReplayTestExitCode(data);
 }
 
-function renderDefaultTestResult(result: ReplaySuiteTestResult): void {
-  if (result.status === 'failed') {
-    renderFailedTestResult(result);
-    return;
-  }
-  if (result.status !== 'passed') return;
-
-  process.stdout.write(
-    `PASS ${replayTestDisplayName(result)}${formatReplayTestDurationSuffix(result)}\n`,
-  );
-  for (const line of replayTestWarningLines(result)) {
-    process.stdout.write(`  ${line}\n`);
-  }
+function formatReplayTestSummaryLine(data: ReplaySuiteResult, flakyCount: number): string {
+  const durationMs = typeof data.durationMs === 'number' ? data.durationMs : undefined;
+  const flakySuffix = flakyCount > 0 ? `, ${flakyCount} flaky` : '';
+  const durationSuffix = durationMs !== undefined ? ` in ${formatDurationSeconds(durationMs)}` : '';
+  return `Test summary: ${data.passed} passed, ${data.failed} failed${flakySuffix}${durationSuffix}`;
 }
 
-function renderVerboseTestResult(result: ReplaySuiteTestResult): void {
-  if (result.status === 'failed') {
-    renderFailedTestResult(result);
-    return;
-  }
-
-  const durationSuffix = formatReplayTestDurationSuffix(result);
-  process.stdout.write(
-    `${replayResultPrefix(result)} ${replayTestDisplayName(result)}${durationSuffix}\n`,
-  );
-  if (result.status === 'skipped') {
-    process.stdout.write(`  ${result.message ?? 'skipped'}\n`);
-  }
-  for (const line of replayTestWarningLines(result)) {
-    process.stdout.write(`  ${line}\n`);
-  }
-  for (const line of replayTestStepLines(result)) {
-    process.stdout.write(`  ${line}\n`);
-  }
+function replayFlakyStatusIcon(): string {
+  const useColor = supportsColor();
+  return useColor ? colorize('✓', 'yellow') : '✓';
 }
 
-function renderFailedTestResult(result: FailedReplayTestResult): void {
-  const attemptSuffix = result.attempts > 1 ? ` after ${result.attempts} attempts` : '';
-  const durationSuffix = formatReplayTestDurationSuffix(result);
-  process.stdout.write(
-    `FAIL ${replayFailedTestDisplayName(result)}${attemptSuffix}${durationSuffix}\n`,
-  );
-  process.stdout.write(`  ${result.error?.message ?? 'Unknown test failure'}\n`);
-  for (const line of replayFailureConsoleLines(result)) {
-    process.stdout.write(`  ${line}\n`);
-  }
-  for (const line of replayTestStepLines(result)) {
-    process.stdout.write(`  ${line}\n`);
-  }
-}
-
-function replayResultPrefix(result: ReplaySuiteTestResult): string {
-  if (result.status === 'passed') return 'PASS';
-  if (result.status === 'skipped') return 'SKIP';
-  return 'INFO';
+function isFailedReplayTestResult(result: ReplaySuiteTestResult): result is FailedReplayTestResult {
+  return result.status === 'failed';
 }
 
 function replayFailureConsoleLines(result: FailedReplayTestResult): string[] {
@@ -124,10 +69,11 @@ function isFlakyReplayTestResult(result: ReplaySuiteTestResult): result is Passe
 
 function renderFlakyTestSummary(results: PassedReplayTestResult[]): void {
   if (results.length === 0) return;
+  process.stdout.write('\n');
   process.stdout.write('Flaky tests:\n');
   for (const result of results) {
     process.stdout.write(
-      `  PASS ${replayTestDisplayName(result)} after ${result.attempts} attempts${formatFlakyReplayDurationSuffix(result)}\n`,
+      `  ${replayFlakyStatusIcon()} ${replayTestDisplayNameWithFile(result)} after ${result.attempts} attempts${formatFlakyReplayDurationSuffix(result)}\n`,
     );
     for (const failure of result.attemptFailures ?? []) {
       const attemptDuration =
@@ -141,13 +87,35 @@ function renderFlakyTestSummary(results: PassedReplayTestResult[]): void {
   }
 }
 
-function replayTestDisplayName(result: ReplaySuiteTestResult): string {
-  const title = replayTestTitle(result);
-  const base = title && title.length > 0 ? JSON.stringify(title) : path.basename(result.file);
-  return `${base}${formatReplayTestShardSuffix(result)}`;
+function renderFailureDetails(
+  results: FailedReplayTestResult[],
+  options: { debug?: boolean } = {},
+): void {
+  if (results.length === 0) return;
+  process.stdout.write('\n');
+  process.stdout.write('Failures:\n');
+  for (const result of results) {
+    process.stdout.write(`  ${replayTestDisplayNameWithFile(result)}\n`);
+    renderReplayFailureBody(result, { debug: options.debug, indent: '    ' });
+  }
 }
 
-function replayFailedTestDisplayName(result: FailedReplayTestResult): string {
+function renderReplayFailureBody(
+  result: FailedReplayTestResult,
+  options: { debug?: boolean; indent: string },
+): void {
+  const { debug, indent } = options;
+  process.stdout.write(`${indent}${result.error?.message ?? 'Unknown test failure'}\n`);
+  for (const line of replayFailureConsoleLines(result)) {
+    process.stdout.write(`${indent}${line}\n`);
+  }
+  if (!debug) return;
+  for (const line of replayTestFailureStepLines(result)) {
+    process.stdout.write(`${indent}${line}\n`);
+  }
+}
+
+function replayTestDisplayNameWithFile(result: ReplaySuiteTestResult): string {
   const title = replayTestTitle(result);
   const filename = path.basename(result.file);
   const base = title && title.length > 0 ? `${JSON.stringify(title)} in ${filename}` : filename;
@@ -161,21 +129,6 @@ function replayTestCaseName(result: ReplaySuiteTestResult): string {
 function replayTestTitle(result: ReplaySuiteTestResult): string | undefined {
   const title = result.title?.trim();
   return title && title.length > 0 ? title : undefined;
-}
-
-function formatReplayTestDurationSuffix(result: ReplaySuiteTestResult): string {
-  if (result.status === 'passed' && result.attempts > 1) {
-    return formatFlakyReplayDurationSuffix(result);
-  }
-  if (result.status === 'failed' && result.attempts > 1 && result.durationMs > 0) {
-    return ` (total ${formatDurationSeconds(result.durationMs)})`;
-  }
-
-  const durationMs =
-    result.status === 'passed' && typeof result.finalAttemptDurationMs === 'number'
-      ? result.finalAttemptDurationMs
-      : result.durationMs;
-  return durationMs > 0 ? ` (${formatDurationSeconds(durationMs)})` : '';
 }
 
 function formatFlakyReplayDurationSuffix(result: PassedReplayTestResult): string {

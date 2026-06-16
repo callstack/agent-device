@@ -24,6 +24,31 @@ type ReplayActionStopTrace = {
 
 export function replayTestStepLines(result: ReplaySuiteTestResult): string[] {
   if (result.status === 'skipped') return [];
+  const stops = readReplayStepTraces(result);
+  if (stops.length === 0) return [];
+
+  return [
+    result.attempts > 1 ? `steps (attempt ${result.attempts}):` : 'steps:',
+    ...stops.map(({ stop, start }) => renderReplayStepTrace(stop, start)),
+  ];
+}
+
+export function replayTestFailureStepLines(
+  result: Extract<ReplaySuiteTestResult, { status: 'failed' }>,
+): string[] {
+  const stops = readReplayStepTraces(result);
+  const failedIndex = stops.findIndex(({ stop }) => stop.ok === false);
+  if (failedIndex < 0) return [];
+  const window = stops.slice(Math.max(0, failedIndex - 2), failedIndex + 1);
+  return [
+    result.attempts > 1 ? `steps (attempt ${result.attempts}):` : 'steps:',
+    ...window.map(({ stop, start }) => renderReplayStepTrace(stop, start)),
+  ];
+}
+
+function readReplayStepTraces(
+  result: Extract<ReplaySuiteTestResult, { status: 'passed' | 'failed' }>,
+): Array<{ stop: ReplayActionStopTrace; start: ReplayActionStartTrace | undefined }> {
   const tracePath = replayTestTimingTracePath(result);
   if (!tracePath) return [];
   const events = readReplayTimingTrace(tracePath);
@@ -41,12 +66,7 @@ export function replayTestStepLines(result: ReplaySuiteTestResult): string[] {
       stops.push({ stop: event, start: consumeReplayActionStart(starts, event) });
     }
   }
-  if (stops.length === 0) return [];
-
-  return [
-    result.attempts > 1 ? `steps (attempt ${result.attempts}):` : 'steps:',
-    ...stops.map(({ stop, start }) => renderReplayStepTrace(stop, start)),
-  ];
+  return stops;
 }
 
 function consumeReplayActionStart(

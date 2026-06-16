@@ -15,6 +15,7 @@ export async function runGenericClientBackedCommand({
   positionals,
   flags,
   client,
+  debug,
 }: ClientCommandParams & { command: ClientBackedCliCommandName }): Promise<boolean> {
   const { result, cliOutput } = await runCliCommandWithOutput({
     client,
@@ -25,7 +26,7 @@ export async function runGenericClientBackedCommand({
   if (cliOutput) {
     writeCliOutput(flags, cliOutput);
   } else {
-    const exitCode = writeGenericCliOutput(command, flags, result);
+    const exitCode = writeGenericCliOutput(command, flags, result, { debug });
     if (exitCode !== 0) {
       process.exit(exitCode);
     }
@@ -37,11 +38,12 @@ function writeGenericCliOutput(
   command: ClientBackedCliCommandName,
   flags: CliFlags,
   data: CommandRequestResult,
+  options: { debug?: boolean } = {},
 ): number {
   if (command === 'test') {
     return renderReplayTestResponse({
       suite: data as ReplaySuiteResult,
-      verbose: flags.verbose,
+      debug: options.debug,
       json: flags.json,
       reportJunit: flags.reportJunit,
     });

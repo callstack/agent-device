@@ -418,6 +418,46 @@ test('sendToDaemon reuses reachable local socket daemon metadata', async (t) => 
 
 test('sendToDaemon prints replay test progress before the socket response', async () => {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-socket-progress-'));
+  const artifactsDir = path.join(stateDir, 'login-flow');
+  const attemptDir = path.join(artifactsDir, 'attempt-2');
+  fs.mkdirSync(attemptDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(attemptDir, 'replay-timing.ndjson'),
+    [
+      {
+        type: 'replay_action_start',
+        step: 1,
+        line: 3,
+        command: 'open',
+        positionals: ['Demo'],
+      },
+      {
+        type: 'replay_action_stop',
+        step: 1,
+        line: 3,
+        command: 'open',
+        ok: true,
+        durationMs: 250,
+      },
+      {
+        type: 'replay_action_start',
+        step: 2,
+        line: 4,
+        command: '__maestroAssertVisible',
+        positionals: ['text="Home"', '3000'],
+      },
+      {
+        type: 'replay_action_stop',
+        step: 2,
+        line: 4,
+        command: '__maestroAssertVisible',
+        ok: true,
+        durationMs: 750,
+      },
+    ]
+      .map((entry) => JSON.stringify(entry))
+      .join('\n'),
+  );
   let stderr = '';
   const originalStderrWrite = process.stderr.write.bind(process.stderr);
   const originalCreateConnection = net.createConnection;
@@ -445,25 +485,23 @@ test('sendToDaemon prints replay test progress before the socket response', asyn
     socket.write = () => {
       if (createConnectionCalls === 2) {
         process.nextTick(() => {
-          socket.emit(
-            'data',
-            `${JSON.stringify({
-              type: 'progress',
-              event: {
-                type: 'replay-test',
-                file: '/tmp/01-login.ad',
-                title: 'Login flow',
-                status: 'fail',
-                index: 1,
-                total: 2,
-                attempt: 1,
-                maxAttempts: 2,
-                durationMs: 1234,
-                retrying: true,
-                message: 'first attempt failed',
-              },
-            })}\n`,
-          );
+          const progress = `${JSON.stringify({
+            type: 'progress',
+            event: {
+              type: 'replay-test',
+              file: '/tmp/01-login.ad',
+              title: 'Login flow',
+              status: 'pass',
+              index: 1,
+              total: 2,
+              attempt: 2,
+              maxAttempts: 2,
+              durationMs: 1234,
+              artifactsDir,
+            },
+          })}\n`;
+          socket.emit('data', progress);
+          socket.emit('data', progress);
           socket.emit(
             'data',
             `${JSON.stringify({
@@ -491,13 +529,16 @@ test('sendToDaemon prints replay test progress before the socket response', asyn
       session: 'default',
       command: 'test',
       positionals: ['/tmp/replays'],
-      flags: { stateDir, daemonTransport: 'socket' },
+      flags: { stateDir, daemonTransport: 'socket', verbose: true },
       meta: { requestId: 'req-progress', requestProgress: 'replay-test' },
     });
 
     assert.deepEqual(response, { ok: true, data: { via: 'socket' } });
-    assert.match(stderr, /\[1\/2] RETRY "Login flow" in 01-login\.ad attempt 1\/2 \(1\.23s\)/);
-    assert.match(stderr, /  first attempt failed/);
+    assert.match(stderr, /✓ "Login flow" in 01-login\.ad \(1\.23s\)/);
+    assert.equal(stderr.match(/✓ "Login flow" in 01-login\.ad \(1\.23s\)/g)?.length, 1);
+    assert.match(stderr, /steps \(attempt 2\):/);
+    assert.match(stderr, /open "Demo" \(line 3, 0\.25s\)/);
+    assert.match(stderr, /assertVisible "text=\\"Home\\"" "3000" \(line 4, 0\.75s\)/);
   } finally {
     (net as unknown as { createConnection: typeof net.createConnection }).createConnection =
       originalCreateConnection;
@@ -598,7 +639,7 @@ test('sendToDaemon prints replay test progress before the HTTP NDJSON response',
       assert.deepEqual(response, { ok: true, data: { via: 'http-progress' } });
     });
     assert.deepEqual(seenPaths, ['GET /agent-device/health', 'POST /agent-device/rpc']);
-    assert.match(stderr, /\[2\/3] PASS "Payments flow" in 02-payments\.ad \(2\.50s\)/);
+    assert.match(stderr, /✓ "Payments flow" in 02-payments\.ad \(2\.50s\)/);
   } finally {
     (http as unknown as { request: typeof http.request }).request = originalHttpRequest;
     process.stderr.write = originalStderrWrite;

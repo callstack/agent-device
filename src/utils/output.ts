@@ -585,7 +585,7 @@ function applyContextWindow(lines: SnapshotDiffLine[], contextWindow: number): S
   return lines.filter((_, index) => keep[index]);
 }
 
-function supportsColor(): boolean {
+export function supportsColor(stream: { isTTY?: boolean } = process.stdout): boolean {
   const forceColor = process.env.FORCE_COLOR;
   if (typeof forceColor === 'string') {
     return forceColor !== '0';
@@ -593,11 +593,15 @@ function supportsColor(): boolean {
   if (typeof process.env.NO_COLOR === 'string') {
     return false;
   }
-  return Boolean(process.stdout.isTTY);
+  return Boolean(stream.isTTY);
 }
 
-function colorize(text: string, format: Parameters<typeof styleText>[0]): string {
-  return styleText(format, text);
+export function colorize(
+  text: string,
+  format: Parameters<typeof styleText>[0],
+  options?: Parameters<typeof styleText>[2],
+): string {
+  return styleText(format, text, options);
 }
 
 function formatMuted(text: string, useColor: boolean): string {

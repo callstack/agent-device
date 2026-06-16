@@ -108,7 +108,17 @@ async function runSingleReplayTestAttempt(
   context: ReplayTestCaseContext,
   attemptIndex: number,
 ): Promise<ReplayTestAttemptResult> {
-  const { entry, sessionName, suiteInvocationId, caseIndex, requestId, timeoutMs, shard } = params;
+  const {
+    entry,
+    sessionName,
+    suiteInvocationId,
+    caseIndex,
+    suiteIndex,
+    suiteTotal,
+    requestId,
+    timeoutMs,
+    shard,
+  } = params;
   const attempt = attemptIndex + 1;
   const startedAt = Date.now();
   const testSessionName = buildReplayTestSessionName(
@@ -139,6 +149,17 @@ async function runSingleReplayTestAttempt(
     target: entry.metadata.target,
     artifactsDir: attemptArtifactsDir,
     shard,
+    progress: {
+      file: entry.path,
+      title: entry.title,
+      index: suiteIndex,
+      total: suiteTotal,
+      attempt,
+      maxAttempts: context.maxAttempts,
+      session: testSessionName,
+      artifactsDir: context.testArtifactsDir,
+      ...replayTestProgressShardMetadata(shard),
+    },
     runReplay: params.runReplay,
     cleanupSession: params.cleanupSession,
     finalizeAttempt: params.finalizeAttempt,

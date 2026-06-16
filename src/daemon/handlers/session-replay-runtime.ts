@@ -4,6 +4,7 @@ import { type CommandFlags } from '../../core/dispatch.ts';
 import { parseReplayInput } from '../../compat/replay-input.ts';
 import { asAppError } from '../../utils/errors.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
+import { emitRequestProgress, readReplayTestActionProgress } from '../request-progress.ts';
 import { SessionStore } from '../session-store.ts';
 import { type ReplayScriptMetadata, writeReplayScript } from '../../replay/script.ts';
 import { healReplayAction } from './session-replay-heal.ts';
@@ -92,6 +93,7 @@ export async function runReplayScriptFile(params: {
     for (let index = 0; index < actions.length; index += 1) {
       const action = actions[index];
       if (!action || action.command === 'replay') continue;
+      emitReplayTestActionProgress(resolved, index, actions.length);
 
       const sampleStart = readSessionSnapshotSampleCount(sessionStore, sessionName);
       let response = await invokeReplayAction({
@@ -231,6 +233,23 @@ function buildReplayBuiltinVars(params: {
     builtins.AD_ARTIFACTS = artifactsDir;
   }
   return builtins;
+}
+
+function emitReplayTestActionProgress(
+  file: string,
+  actionIndex: number,
+  actionTotal: number,
+): void {
+  const progress = readReplayTestActionProgress();
+  if (!progress) return;
+  emitRequestProgress({
+    type: 'replay-test',
+    ...progress,
+    file: progress.file || file,
+    status: 'progress',
+    stepIndex: actionIndex + 1,
+    stepTotal: actionTotal,
+  });
 }
 
 function buildReplayMetadataFlags(

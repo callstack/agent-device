@@ -171,8 +171,25 @@ test('test emits progress when attempts retry and pass', async () => {
     skipped: 0,
   });
   const testEvents = events.filter((event) => event.type === 'replay-test');
-  expect(testEvents.map((event) => event.status)).toEqual(['start', 'fail', 'pass']);
+  expect(testEvents.map((event) => event.status)).toEqual([
+    'start',
+    'progress',
+    'fail',
+    'progress',
+    'pass',
+  ]);
   expect(testEvents[1]).toMatchObject({
+    type: 'replay-test',
+    title: undefined,
+    status: 'progress',
+    index: 1,
+    total: 1,
+    attempt: 1,
+    maxAttempts: 2,
+    stepIndex: 1,
+    stepTotal: 1,
+  });
+  expect(testEvents[2]).toMatchObject({
     type: 'replay-test',
     title: undefined,
     status: 'fail',
@@ -184,7 +201,18 @@ test('test emits progress when attempts retry and pass', async () => {
     retrying: true,
     message: 'Replay failed at step 1 (open "Demo"): first attempt failed',
   });
-  expect(testEvents[2]).toMatchObject({
+  expect(testEvents[3]).toMatchObject({
+    type: 'replay-test',
+    title: undefined,
+    status: 'progress',
+    index: 1,
+    total: 1,
+    attempt: 2,
+    maxAttempts: 2,
+    stepIndex: 1,
+    stepTotal: 1,
+  });
+  expect(testEvents[4]).toMatchObject({
     type: 'replay-test',
     title: undefined,
     status: 'pass',
@@ -231,13 +259,21 @@ test('test emits skip progress without synthetic duration', async () => {
     skipped: 1,
   });
   const testEvents = events.filter((event) => event.type === 'replay-test');
-  expect(testEvents.map((event) => event.status)).toEqual(['skip', 'start', 'pass']);
+  expect(testEvents.map((event) => event.status)).toEqual(['skip', 'start', 'progress', 'pass']);
   expect(testEvents[0]).toMatchObject({
     type: 'replay-test',
     status: 'skip',
     index: 1,
     total: 2,
     message: 'missing platform metadata for --platform android',
+  });
+  expect(testEvents[2]).toMatchObject({
+    type: 'replay-test',
+    status: 'progress',
+    index: 2,
+    total: 2,
+    stepIndex: 1,
+    stepTotal: 1,
   });
   expect(testEvents[0]?.durationMs).toBeUndefined();
 });

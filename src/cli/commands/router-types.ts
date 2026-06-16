@@ -6,6 +6,7 @@ export type ClientCommandParams = {
   positionals: string[];
   flags: CliFlags;
   client: AgentDeviceClient;
+  debug?: boolean;
 };
 
 /**

@@ -15,9 +15,11 @@ export type ReplayTestProgressEvent = {
   type: 'replay-test';
   file: string;
   title?: string;
-  status: 'start' | 'pass' | 'fail' | 'skip';
+  status: 'start' | 'progress' | 'pass' | 'fail' | 'skip';
   index: number;
   total: number;
+  stepIndex?: number;
+  stepTotal?: number;
   attempt?: number;
   maxAttempts?: number;
   durationMs?: number;
@@ -32,8 +34,15 @@ export type ReplayTestProgressEvent = {
 
 export type RequestProgressEvent = ReplayTestSuiteProgressEvent | ReplayTestProgressEvent;
 export type RequestProgressSink = (event: RequestProgressEvent) => void;
+export type ReplayTestActionProgressContext = Omit<
+  ReplayTestProgressEvent,
+  'type' | 'status' | 'stepIndex' | 'stepTotal' | 'durationMs' | 'retrying' | 'message'
+>;
 
 const requestProgress = new AsyncLocalStorage<RequestProgressSink | undefined>();
+const replayTestActionProgress = new AsyncLocalStorage<
+  ReplayTestActionProgressContext | undefined
+>();
 
 export async function withRequestProgressSink<T>(
   sink: RequestProgressSink | undefined,
@@ -44,4 +53,15 @@ export async function withRequestProgressSink<T>(
 
 export function emitRequestProgress(event: RequestProgressEvent): void {
   requestProgress.getStore()?.(event);
+}
+
+export async function withReplayTestActionProgress<T>(
+  context: ReplayTestActionProgressContext | undefined,
+  run: () => Promise<T>,
+): Promise<T> {
+  return await replayTestActionProgress.run(context, run);
+}
+
+export function readReplayTestActionProgress(): ReplayTestActionProgressContext | undefined {
+  return replayTestActionProgress.getStore();
 }

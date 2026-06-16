@@ -1,69 +1,133 @@
 import path from 'node:path';
 import type { RequestProgressEvent } from './daemon/request-progress.ts';
+import { replayTestStepLines } from './cli-test-trace.ts';
+import type { ReplaySuiteTestResult } from './daemon/types.ts';
 import { formatDurationSeconds } from './utils/duration-format.ts';
+import { colorize, supportsColor } from './utils/output.ts';
 
 type ReplayTestCaseProgressEvent = Extract<RequestProgressEvent, { type: 'replay-test' }>;
-type ReplayTestCaseStatus = ReplayTestCaseProgressEvent['status'];
-
-const REPLAY_TEST_STATUS_LABELS: Record<ReplayTestCaseStatus, string> = {
-  start: 'START',
-  pass: 'PASS',
-  fail: 'FAIL',
-  skip: 'SKIP',
+type ReplayTestProgressFormatOptions = {
+  verbose?: boolean;
+  liveProgress?: boolean;
+  columns?: number;
 };
 
-export function formatReplayTestProgressEvent(event: RequestProgressEvent): string | undefined {
-  if (event.type === 'replay-test-suite') {
-    return formatReplayTestSuiteProgressEvent(event);
-  }
-  const eventType = (event as { type?: string }).type;
-  if (eventType !== 'replay-test') {
+export type ReplayTestProgressRender = {
+  text: string;
+  newline: boolean;
+};
+
+export type ReplayTestProgressRenderer = {
+  render(event: RequestProgressEvent): ReplayTestProgressRender | undefined;
+};
+
+export function createReplayTestProgressRenderer(
+  options: ReplayTestProgressFormatOptions = {},
+): ReplayTestProgressRenderer {
+  const completedKeys = new Set<string>();
+  let hasLiveProgressLine = false;
+  return {
+    render(event) {
+      if (event.type === 'replay-test-suite') {
+        completedKeys.clear();
+        hasLiveProgressLine = false;
+        return undefined;
+      }
+      if (event.type !== 'replay-test') {
+        return undefined;
+      }
+      if (event.status === 'progress') {
+        if (!options.liveProgress) return undefined;
+        hasLiveProgressLine = true;
+        return {
+          text: clearLinePrefix(formatReplayTestLiveProgressLine(event, options)),
+          newline: false,
+        };
+      }
+      if (isReplayTestCompletionProgressEvent(event)) {
+        const key = replayTestCompletionProgressKey(event);
+        if (completedKeys.has(key)) return undefined;
+        completedKeys.add(key);
+      }
+      const line = formatReplayTestProgressEvent(event, options);
+      if (!line) return undefined;
+      const text = hasLiveProgressLine ? clearLinePrefix(line) : line;
+      hasLiveProgressLine = false;
+      return { text, newline: true };
+    },
+  };
+}
+
+export function formatReplayTestProgressEvent(
+  event: RequestProgressEvent,
+  options: ReplayTestProgressFormatOptions = {},
+): string | undefined {
+  if (event.type !== 'replay-test') {
     return undefined;
   }
-  return formatReplayTestCaseProgressEvent(event);
+  return formatReplayTestCaseProgressEvent(event, options);
 }
 
-function formatReplayTestSuiteProgressEvent(
-  event: Extract<RequestProgressEvent, { type: 'replay-test-suite' }>,
-): string {
-  const lines = [`Running replay suite: ${event.total} ${event.total === 1 ? 'file' : 'files'}`];
-  if (event.shardMode && event.shardCount && event.shardCount > 1) {
-    lines.push(`  sharding: ${event.shardMode} across ${event.shardCount} devices`);
-  }
-  lines.push(`  artifacts: ${event.artifactsDir}`);
-  return lines.join('\n');
-}
-
-function formatReplayTestCaseProgressEvent(event: ReplayTestCaseProgressEvent): string {
+function formatReplayTestCaseProgressEvent(
+  event: ReplayTestCaseProgressEvent,
+  options: ReplayTestProgressFormatOptions,
+): string | undefined {
+  if (event.status === 'start' || event.status === 'progress') return undefined;
+  if (event.status === 'fail' && event.retrying) return undefined;
   const lines = [formatReplayTestCaseSummaryLine(event)];
-  addReplayTestCaseDetailLines(lines, event);
+  addReplayTestCaseDetailLines(lines, event, options);
+  if (options.verbose) {
+    lines.push(...replayTestProgressStepLines(event));
+  }
   return lines.join('\n');
 }
 
-function addReplayTestCaseDetailLines(lines: string[], event: ReplayTestCaseProgressEvent): void {
-  if (event.status === 'start') {
-    if (event.session) lines.push(`  session: ${event.session}`);
-    if (event.artifactsDir) lines.push(`  artifacts: ${event.artifactsDir}`);
-    return;
-  }
+function formatReplayTestLiveProgressLine(
+  event: ReplayTestCaseProgressEvent,
+  options: ReplayTestProgressFormatOptions,
+): string {
+  const title = event.title?.trim();
+  const file = path.basename(event.file);
+  const shardSuffix = formatReplayTestProgressShardSuffix(event);
+  const stepIndex = event.stepIndex ?? 0;
+  const stepTotal = event.stepTotal ?? 0;
+  const suffix = `${shardSuffix} [${stepIndex}/${stepTotal}]`;
+  const prefix = '⊙ ';
+  if (!title) return trimToColumns(`${prefix}${file}${suffix}`, options.columns);
 
+  const titlePrefix = `${prefix}"`;
+  const titleSuffix = `" in ${file}${suffix}`;
+  const availableTitleColumns = Math.max(
+    0,
+    resolveColumns(options.columns) - titlePrefix.length - titleSuffix.length,
+  );
+  const formattedTitle = trimToColumns(title, availableTitleColumns);
+  return trimToColumns(`${titlePrefix}${formattedTitle}${titleSuffix}`, options.columns);
+}
+
+function addReplayTestCaseDetailLines(
+  lines: string[],
+  event: ReplayTestCaseProgressEvent,
+  options: ReplayTestProgressFormatOptions,
+): void {
+  if (options.verbose && event.status === 'fail') return;
   const message = event.message?.replace(/\s+/g, ' ').trim();
-  if (message) lines.push(`  ${message}`);
+  if (message) {
+    lines.push(`    ${event.status === 'fail' ? `failed at: ${message}` : message}`);
+  }
   if (event.status === 'fail' && !event.retrying) {
-    if (event.session) lines.push(`  session: ${event.session}`);
-    if (event.artifactsDir) lines.push(`  artifacts: ${event.artifactsDir}`);
+    if (event.session) lines.push(`    session: ${event.session}`);
+    if (event.artifactsDir) lines.push(`    artifacts: ${event.artifactsDir}`);
   }
 }
 
 function formatReplayTestCaseSummaryLine(event: ReplayTestCaseProgressEvent): string {
-  const indexPrefix = `[${event.index}/${event.total}]`;
   const statusLabel = formatReplayTestProgressStatusLabel(event);
   const name = formatReplayTestProgressName(event);
   const shardSuffix = formatReplayTestProgressShardSuffix(event);
-  const attemptSuffix = formatReplayProgressAttemptSuffix(event);
   const durationSuffix =
     event.durationMs !== undefined ? ` (${formatReplayProgressDuration(event)})` : '';
-  return `${indexPrefix} ${statusLabel} ${name}${shardSuffix}${attemptSuffix}${durationSuffix}`;
+  return `${statusLabel} ${name}${shardSuffix}${durationSuffix}`;
 }
 
 function formatReplayTestProgressName(event: ReplayTestCaseProgressEvent): string {
@@ -73,7 +137,18 @@ function formatReplayTestProgressName(event: ReplayTestCaseProgressEvent): strin
 }
 
 function formatReplayTestProgressStatusLabel(event: ReplayTestCaseProgressEvent): string {
-  return event.retrying ? 'RETRY' : REPLAY_TEST_STATUS_LABELS[event.status];
+  const useColor = supportsColor(process.stderr);
+  if (event.status === 'pass') {
+    const format = event.attempt && event.attempt > 1 ? 'yellow' : 'green';
+    return useColor ? colorizeProgressMarker('✓', format) : '✓';
+  }
+  if (event.status === 'fail') return useColor ? colorizeProgressMarker('⨯', 'red') : '⨯';
+  if (event.status === 'progress') return '⊙';
+  return useColor ? colorizeProgressMarker('-', 'dim') : '-';
+}
+
+function colorizeProgressMarker(text: string, format: Parameters<typeof colorize>[1]): string {
+  return colorize(text, format, { validateStream: false });
 }
 
 function formatReplayTestProgressShardSuffix(event: ReplayTestCaseProgressEvent): string {
@@ -83,17 +158,79 @@ function formatReplayTestProgressShardSuffix(event: ReplayTestCaseProgressEvent)
   return ` [shard ${event.shardIndex + 1}/${shardCount}${device}]`;
 }
 
-function formatReplayProgressAttemptSuffix(event: ReplayTestCaseProgressEvent): string {
-  if (event.attempt === undefined) return '';
-  if (event.status === 'start') return '';
-  if (event.status === 'fail' && event.retrying && event.maxAttempts !== undefined) {
-    return ` attempt ${event.attempt}/${event.maxAttempts}`;
-  }
-  if (event.attempt > 1) return ` after ${event.attempt} attempts`;
-  return '';
+function formatReplayProgressDuration(event: ReplayTestCaseProgressEvent): string {
+  return formatDurationSeconds(event.durationMs ?? 0);
 }
 
-function formatReplayProgressDuration(event: ReplayTestCaseProgressEvent): string {
-  const duration = formatDurationSeconds(event.durationMs ?? 0);
-  return event.attempt && event.attempt > 1 && !event.retrying ? `total ${duration}` : duration;
+function isReplayTestCompletionProgressEvent(event: ReplayTestCaseProgressEvent): boolean {
+  return (
+    event.status === 'pass' ||
+    event.status === 'skip' ||
+    (event.status === 'fail' && !event.retrying)
+  );
+}
+
+function replayTestCompletionProgressKey(event: ReplayTestCaseProgressEvent): string {
+  const shard = typeof event.shardIndex === 'number' ? event.shardIndex : '';
+  return [event.status, event.index, event.total, event.file, event.title ?? '', shard].join('\0');
+}
+
+function clearLinePrefix(text: string): string {
+  return `\r\x1B[2K${text}`;
+}
+
+function resolveColumns(columns: number | undefined): number {
+  return typeof columns === 'number' && Number.isFinite(columns) && columns > 0
+    ? Math.floor(columns)
+    : 80;
+}
+
+function trimToColumns(value: string, columns: number | undefined): string {
+  const limit = resolveColumns(columns);
+  if (value.length <= limit) return value;
+  if (limit <= 0) return '';
+  if (limit <= 3) return '.'.repeat(limit);
+  return `${value.slice(0, limit - 3)}...`;
+}
+
+function replayTestProgressStepLines(event: ReplayTestCaseProgressEvent): string[] {
+  if (event.status !== 'pass' && event.status !== 'fail') return [];
+  if (!event.artifactsDir || !event.attempt) return [];
+  const result =
+    event.status === 'pass'
+      ? buildPassedReplayTestProgressResult(event)
+      : buildFailedReplayTestProgressResult(event);
+  return replayTestStepLines(result).map((line) => `    ${line}`);
+}
+
+function buildPassedReplayTestProgressResult(
+  event: ReplayTestCaseProgressEvent,
+): Extract<ReplaySuiteTestResult, { status: 'passed' }> {
+  return {
+    ...replayTestProgressResultBase(event),
+    status: 'passed',
+    replayed: 0,
+    healed: 0,
+  };
+}
+
+function buildFailedReplayTestProgressResult(
+  event: ReplayTestCaseProgressEvent,
+): Extract<ReplaySuiteTestResult, { status: 'failed' }> {
+  return {
+    ...replayTestProgressResultBase(event),
+    status: 'failed',
+    error: { code: 'COMMAND_FAILED', message: event.message ?? 'Unknown test failure' },
+  };
+}
+
+function replayTestProgressResultBase(event: ReplayTestCaseProgressEvent) {
+  return {
+    file: event.file,
+    title: event.title,
+    durationMs: event.durationMs ?? 0,
+    attempts: event.attempt ?? 1,
+    artifactsDir: event.artifactsDir,
+    session: event.session ?? '',
+  };
 }
