@@ -14,6 +14,7 @@ import {
   type LinuxToolProviderResolver,
   type RequestPlatformProviderScope,
   type RecordingProviderResolver,
+  type WebProviderResolver,
   withRequestPlatformProviderScope,
 } from './request-platform-providers.ts';
 import {
@@ -46,6 +47,7 @@ export type RequestRouterDeps = {
   appleRunnerProvider?: AppleRunnerProviderResolver;
   appleToolProvider?: AppleToolProviderResolver;
   linuxToolProvider?: LinuxToolProviderResolver;
+  webProvider?: WebProviderResolver;
   appLogProvider?: AppLogProviderResolver;
   recordingProvider?: RecordingProviderResolver;
   deviceInventoryProvider?: DeviceInventoryProvider;
@@ -64,6 +66,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     appleRunnerProvider,
     appleToolProvider,
     linuxToolProvider,
+    webProvider,
     appLogProvider,
     recordingProvider,
     deviceInventoryProvider,
@@ -132,6 +135,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
                 appleRunnerProvider,
                 appleToolProvider,
                 linuxToolProvider,
+                webProvider,
                 appLogProvider,
                 recordingProvider,
               },
