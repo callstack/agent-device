@@ -1365,6 +1365,29 @@ test('formatSnapshotText suppresses sparse snapshot hint for depth-limited reads
   assert.doesNotMatch(text, /sparse accessibility snapshot/);
 });
 
+test('formatSnapshotText renders web textboxes as text fields and suppresses native sparse hint', () => {
+  const text = withNoColor(() =>
+    formatSnapshotText({
+      nodes: [
+        {
+          ref: 'e1',
+          index: 0,
+          depth: 0,
+          type: 'textbox',
+          role: 'textbox',
+          label: 'Email ',
+          value: 'ada@example.com',
+        },
+      ],
+      truncated: false,
+      snapshotDiagnostics: { stats: { platform: 'web' } },
+    }),
+  );
+
+  assert.match(text, /@e1 \[text-field\] "ada@example\.com"/);
+  assert.doesNotMatch(text, /sparse accessibility snapshot/);
+});
+
 test('formatSnapshotText keeps flattened output and adds duplicate nav warning', () => {
   const nodes = Array.from({ length: 24 }, (_, index) => ({
     ref: `e${index + 1}`,

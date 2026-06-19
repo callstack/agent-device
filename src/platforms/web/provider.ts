@@ -1,8 +1,8 @@
 import type { ScrollDirection } from '../../core/scroll-gesture.ts';
 import type { SessionSurface } from '../../core/session-surface.ts';
-import { AppError } from '../../utils/errors.ts';
 import { createScopedProvider } from '../../utils/scoped-provider.ts';
 import type { RawSnapshotNode } from '../../utils/snapshot.ts';
+import { createAgentBrowserWebProvider } from './agent-browser-provider.ts';
 
 export type WebOpenOptions = {
   url?: string;
@@ -39,16 +39,7 @@ export type WebProvider = {
   readText?(x: number, y: number): Promise<string>;
 };
 
-const localWebProvider: WebProvider = {
-  open: () => unsupportedLocalWebProvider(),
-  close: () => unsupportedLocalWebProvider(),
-  snapshot: () => unsupportedLocalWebProvider(),
-  screenshot: () => unsupportedLocalWebProvider(),
-  click: () => unsupportedLocalWebProvider(),
-  fill: () => unsupportedLocalWebProvider(),
-  typeText: () => unsupportedLocalWebProvider(),
-  scroll: () => unsupportedLocalWebProvider(),
-};
+const localWebProvider: WebProvider = createAgentBrowserWebProvider();
 
 const webProviderScope = createScopedProvider(localWebProvider);
 
@@ -61,11 +52,4 @@ export async function withWebProvider<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   return await webProviderScope.run(provider, fn);
-}
-
-async function unsupportedLocalWebProvider(): Promise<never> {
-  throw new AppError(
-    'UNSUPPORTED_OPERATION',
-    'Web automation requires a request-scoped web provider.',
-  );
 }

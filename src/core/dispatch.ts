@@ -100,7 +100,12 @@ async function dispatchKnownCommand(
       return await handleOpenCommand(device, interactor, positionals, context);
     case 'close': {
       const app = positionals[0];
-      if (!app) return { closed: 'session', ...successText('Closed session') };
+      if (!app) {
+        if (device.platform === 'web') {
+          await interactor.close('');
+        }
+        return { closed: 'session', ...successText('Closed session') };
+      }
       await interactor.close(app);
       return { app, ...successText(`Closed: ${app}`) };
     }

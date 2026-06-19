@@ -33,6 +33,7 @@ import {
   type RequestExecutionScope,
 } from './request-execution-scope.ts';
 import { canRunReplayScopedAction } from './daemon-command-registry.ts';
+import { createAgentBrowserWebProvider } from '../platforms/web/agent-browser-provider.ts';
 
 // ---------------------------------------------------------------------------
 // Request handler API
@@ -135,7 +136,9 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
                 appleRunnerProvider,
                 appleToolProvider,
                 linuxToolProvider,
-                webProvider,
+                webProvider:
+                  webProvider ??
+                  (shouldUseDefaultWebProvider(lockedScope) ? createDefaultWebProvider : undefined),
                 appLogProvider,
                 recordingProvider,
               },
@@ -197,6 +200,13 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   }
 
   return handleRequest;
+}
+
+const createDefaultWebProvider: WebProviderResolver = ({ req, session }) =>
+  createAgentBrowserWebProvider({ session: session?.name ?? req.session });
+
+function shouldUseDefaultWebProvider(scope: LockedRequestScope): boolean {
+  return scope.existingSession?.device.platform === 'web' || scope.req.flags?.platform === 'web';
 }
 
 function unauthorizedResponse(): DaemonResponse {

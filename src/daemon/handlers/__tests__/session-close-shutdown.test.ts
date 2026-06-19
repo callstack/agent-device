@@ -47,11 +47,14 @@ import { handleSessionCommands } from '../session.ts';
 import { teardownSessionResources } from '../session-close.ts';
 import { shutdownSimulator } from '../../../platforms/ios/simulator.ts';
 import { runCmd } from '../../../utils/exec.ts';
+import { dispatchCommand } from '../../../core/dispatch.ts';
 import { cleanupAppleXctracePerfCapture } from '../../../platforms/ios/perf-xctrace.ts';
 import { cleanupAndroidNativePerfSession } from '../../../platforms/android/perf.ts';
+import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/index.ts';
 
 const mockShutdownSimulator = vi.mocked(shutdownSimulator);
 const mockRunCmd = vi.mocked(runCmd);
+const mockDispatchCommand = vi.mocked(dispatchCommand);
 const mockCleanupAppleXctracePerfCapture = vi.mocked(cleanupAppleXctracePerfCapture);
 const mockCleanupAndroidNativePerfSession = vi.mocked(cleanupAndroidNativePerfSession);
 
@@ -342,6 +345,36 @@ test('close stops active Android native perf capture before deleting session', a
 
   expect(response?.ok).toBe(true);
   expect(mockCleanupAndroidNativePerfSession).toHaveBeenCalledWith(session.device, activeCapture);
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+});
+
+test('close dispatches web session cleanup without a positional target', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'web-close-session';
+  sessionStore.set(sessionName, makeSession(sessionName, WEB_DESKTOP_DEVICE));
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(mockDispatchCommand).toHaveBeenCalledWith(
+    WEB_DESKTOP_DEVICE,
+    'close',
+    [],
+    undefined,
+    expect.objectContaining({ logPath: expect.stringContaining('daemon.log') }),
+  );
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 

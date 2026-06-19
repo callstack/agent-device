@@ -111,11 +111,11 @@ export async function handleCloseCommand(params: {
   }
   await stopSessionApplePerfCapture(session);
   await stopSessionAndroidNativePerfCapture(session);
-  if (req.positionals && req.positionals.length > 0) {
+  if (shouldDispatchPlatformClose(req, session)) {
     if (shouldStopAppleRunnerBeforeTargetedClose(session)) {
       await stopAppleRunnerForClose(session);
     }
-    await dispatchCommand(session.device, 'close', req.positionals, req.flags?.out, {
+    await dispatchCommand(session.device, 'close', req.positionals ?? [], req.flags?.out, {
       ...contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath),
     });
     await settleIosSimulator(session.device, IOS_SIMULATOR_POST_CLOSE_SETTLE_MS);
@@ -170,6 +170,14 @@ export async function handleCloseCommand(params: {
     };
   }
   return { ok: true, data: { session: session.name, ...successText(`Closed: ${session.name}`) } };
+}
+
+function shouldDispatchPlatformClose(req: DaemonRequest, session: SessionState): boolean {
+  return hasCloseTarget(req) || session.device.platform === 'web';
+}
+
+function hasCloseTarget(req: DaemonRequest): boolean {
+  return (req.positionals?.length ?? 0) > 0;
 }
 
 async function closeWithoutSession(req: DaemonRequest, logPath: string): Promise<DaemonResponse> {

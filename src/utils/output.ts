@@ -616,7 +616,7 @@ function buildSnapshotNotices(
 ): string[] {
   const notices = readSnapshotWarnings(data);
   // The structured snapshot quality verdict already carries a sharper version of this hint.
-  if (!data.snapshotQuality) {
+  if (shouldRenderLegacySparseSnapshotHint(data)) {
     const sparseSnapshotHint = formatSparseSnapshotHint(nodes, options);
     if (sparseSnapshotHint) notices.push(sparseSnapshotHint);
   }
@@ -630,6 +630,19 @@ function buildSnapshotNotices(
     notices.push('Warning: possible repeated nav subtree detected.');
   }
   return notices;
+}
+
+function shouldRenderLegacySparseSnapshotHint(data: Record<string, unknown>): boolean {
+  return !data.snapshotQuality && !isWebSnapshotData(data);
+}
+
+function isWebSnapshotData(data: Record<string, unknown>): boolean {
+  const diagnostics = data.snapshotDiagnostics;
+  if (!diagnostics || typeof diagnostics !== 'object') return false;
+  const stats = (diagnostics as { stats?: unknown }).stats;
+  return Boolean(
+    stats && typeof stats === 'object' && (stats as { platform?: unknown }).platform === 'web',
+  );
 }
 
 function formatSparseSnapshotHint(

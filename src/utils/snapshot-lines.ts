@@ -23,6 +23,7 @@ const ROLE_LABELS: Record<string, string> = {
   cell: 'cell',
   statictext: 'text',
   checkedtextview: 'text',
+  textbox: 'text-field',
   textfield: 'text-field',
   edittext: 'text-field',
   textarea: 'text-view',
