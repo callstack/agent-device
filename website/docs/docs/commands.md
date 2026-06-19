@@ -105,11 +105,20 @@ agent-device metro reload
 
 ## Web Automation
 
+Minimal `--platform web` support reuses [agent-browser](https://github.com/vercel-labs/agent-browser). `agent-device` owns command/session/replay integration, refs/selectors, and artifact routing; `agent-browser` owns browser launch, page control, screenshots, and browser-specific mechanics.
+
+Use `--platform web` when a browser step belongs inside an `agent-device` session, replay, batch, MCP, or typed-client flow. Use `agent-browser` directly for standalone web automation.
+
+Set up and verify the managed web backend before relying on web sessions:
+
 ```bash
 agent-device web setup
 agent-device web doctor
 agent-device open "https://example.com" --platform web
 agent-device snapshot -i --platform web
+agent-device get text @e2 --platform web
+agent-device is visible 'label="Welcome"' --platform web
+agent-device find text "Welcome" exists --platform web
 agent-device click @e12 --platform web
 agent-device fill @e13 "test@example.com" --platform web
 agent-device wait text "Welcome" --platform web
@@ -124,7 +133,7 @@ agent-device close --platform web
 - `web doctor` verifies the managed backend after setup.
 - The managed install respects `--state-dir` and `AGENT_DEVICE_STATE_DIR`.
 - Web automation requires Node 24+.
-- Supported through `agent-device`: URL open, snapshot refs, click/press, fill/type, wait, screenshot, close, and replay scripts composed from those commands.
+- Supported through `agent-device`: URL open, snapshot refs, `get text/attrs`, `is visible/exists/text`, `find text/selector`, click/press, fill/type, wait, screenshot, close, and replay scripts composed from those commands.
 - Out of scope for `agent-device` web support: tab/window/devtools control, network interception, cookies/storage, downloads/uploads, arbitrary page scripting, multi-page orchestration, and raw browser diagnostics. Use `agent-browser` directly for those browser-specific workflows.
 
 ## Device isolation scopes

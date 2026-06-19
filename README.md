@@ -93,12 +93,17 @@ Snapshots assign refs like `@e1`, `@e2`, and `@e3` to elements on the current sc
 
 `agent-device --platform web` is intentionally narrow. `agent-device` owns the command surface, sessions, replay integration, refs/selectors, and artifact routing; `agent-browser` owns browser launch, page control, screenshots, and browser-specific mechanics.
 
+Use `--platform web` when a browser step belongs inside an `agent-device` session, replay, batch, MCP, or typed-client flow. Use `agent-browser` directly for standalone web automation.
+
 Supported first-slice loop:
 
 ```bash
 agent-device web setup
 agent-device open https://example.com --platform web
 agent-device snapshot -i --platform web
+agent-device get text @e2 --platform web
+agent-device is visible 'label="Welcome"' --platform web
+agent-device find text "Welcome" exists --platform web
 agent-device click @e12 --platform web
 agent-device fill @e13 "test@example.com" --platform web
 agent-device wait text "Welcome" 3000 --platform web
@@ -106,7 +111,7 @@ agent-device screenshot ./artifacts/web-home.png --platform web
 agent-device close --platform web
 ```
 
-Supported through `agent-device`: URL open, snapshot refs, click/press, fill/type, wait, screenshot, close, and replay scripts composed from those commands.
+Supported through `agent-device`: URL open, snapshot refs, `get text/attrs`, `is visible/exists/text`, `find text/selector`, click/press, fill/type, wait, screenshot, close, and replay scripts composed from those commands.
 
 Out of scope for `agent-device` web support: tab/window/devtools control, network interception, cookies/storage, downloads/uploads, arbitrary page scripting, and raw browser diagnostics. Use `agent-browser` directly for those browser-specific workflows.
 

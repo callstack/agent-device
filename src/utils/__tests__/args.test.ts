@@ -1015,7 +1015,7 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /Web browser sessions: read help web/);
   assert.match(
     usageText,
-    /open <url> --platform web -> snapshot -i -> click\/fill\/wait\/screenshot -> close/,
+    /open <url> --platform web -> snapshot -i -> click\/fill\/get\/is\/find\/wait\/screenshot -> close/,
   );
   assert.match(usageText, /Session state contains request diagnostics and runner\.log/);
   assert.match(usageText, /logs clear --restart\/mark\/path/);
@@ -1164,9 +1164,18 @@ test('usageForCommand resolves workflow help topic', () => {
   assert.match(help, /Manual adb reverse tcp:<port> tcp:<port> is only needed/);
   assert.match(help, /do not split clear\/restart/);
   assert.match(help, /do not write network log headers/);
-  assert.match(help, /Web: agent-device reuses agent-browser/);
-  assert.match(help, /agent-browser doctor --offline --quick/);
+  assert.match(help, /Web: agent-device uses a managed, pinned agent-browser backend/);
+  assert.match(
+    help,
+    /Use --platform web when a browser step belongs inside an agent-device session/,
+  );
+  assert.match(help, /use agent-browser directly for standalone web automation/);
+  assert.match(help, /agent-device web setup/);
+  assert.match(help, /agent-device web doctor/);
   assert.match(help, /agent-device open https:\/\/example\.com --platform web/);
+  assert.match(help, /agent-device get text @e2 --platform web/);
+  assert.match(help, /agent-device is visible 'label="Welcome"' --platform web/);
+  assert.match(help, /agent-device find text "Welcome" exists --platform web/);
   assert.match(help, /agent-device close --platform web/);
   assert.match(help, /Use agent-browser directly for browser-specific features/);
   assert.match(help, /agent-device open exp:\/\/127\.0\.0\.1:8081 --platform ios/);
@@ -1192,19 +1201,30 @@ test('usageForCommand resolves web help topic', () => {
   const help = usageForCommand('web');
   if (help === null) throw new Error('Expected web help text');
   assert.match(help, /agent-device help web/);
-  assert.match(help, /agent-device reuses agent-browser for browser mechanics/);
+  assert.match(help, /agent-device uses a managed, pinned agent-browser backend/);
   assert.match(help, /agent-device owns command\/session\/replay integration/);
   assert.match(help, /agent-browser owns browser launch, page control, screenshots/);
-  assert.match(help, /agent-browser doctor --offline --quick/);
+  assert.match(
+    help,
+    /Use --platform web when a browser step belongs inside an agent-device session/,
+  );
+  assert.match(help, /Use agent-browser directly for standalone web automation/);
+  assert.match(help, /agent-device web setup/);
+  assert.match(help, /agent-device web doctor/);
   assert.match(help, /agent-device open https:\/\/example\.com --platform web/);
   assert.match(help, /agent-device snapshot -i --platform web/);
+  assert.match(help, /agent-device get text @e2 --platform web/);
+  assert.match(help, /agent-device is visible 'label="Welcome"' --platform web/);
+  assert.match(help, /agent-device find text "Welcome" exists --platform web/);
   assert.match(help, /agent-device click @e12 --platform web/);
   assert.match(help, /agent-device fill @e13 "qa@example\.com" --platform web/);
   assert.match(help, /agent-device wait text "Welcome" 3000 --platform web/);
   assert.match(help, /agent-device screenshot \.\/artifacts\/web-home\.png --platform web/);
   assert.match(help, /agent-device close --platform web/);
-  assert.match(help, /open <url>, snapshot -i, click\/press @ref or selector/);
-  assert.match(help, /Use agent-browser directly for those workflows/);
+  assert.match(help, /open <url>, snapshot -i, get text\/attrs/);
+  assert.match(help, /is visible\/exists\/text, find text\/selector/);
+  assert.match(help, /click\/press @ref or selector/);
+  assert.match(help, /Use agent-browser directly for those browser-specific workflows/);
   assert.match(help, /Do not claim web e2e CI exists/);
   assert.match(help, /Do not use native mobile or desktop setup commands/);
 });
@@ -1634,14 +1654,14 @@ test('session command help includes daemon state directory discovery', () => {
 test('web command help includes managed backend setup', () => {
   const help = usageForCommand('web');
   if (help === null) throw new Error('Expected command help text');
-  assert.match(help, /Usage:\s+agent-device web setup \| web doctor/);
-  assert.match(help, /managed web automation backend/);
+  assert.match(help, /agent-device help web/);
+  assert.match(help, /managed, pinned agent-browser backend/);
   assert.match(
     help,
-    /agent-device web setup[\s\S]*agent-device open "https:\/\/example\.com" --platform web/,
+    /agent-device web setup[\s\S]*agent-device open https:\/\/example\.com --platform web/,
   );
-  assert.match(help, /do not install the backend implicitly/);
-  assert.match(help, /web setup[\s\S]*install or reuse the pinned backend/);
+  assert.match(help, /Before first use, set up and verify the managed backend/);
+  assert.doesNotMatch(help, /do not install the backend implicitly/);
   assert.doesNotMatch(help, /web status/);
 });
 
