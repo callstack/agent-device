@@ -67,6 +67,7 @@ const LOCAL_CLI_COMMANDS = {
   metro: 'metro',
   reactDevtools: 'react-devtools',
   session: 'session',
+  web: 'web',
 } as const;
 
 export const GESTURE_KINDS = ['pan', 'fling', 'swipe', 'pinch', 'rotate', 'transform'] as const;
@@ -89,6 +90,7 @@ const MCP_UNEXPOSED_CLI_COMMANDS = commandSet(
   LOCAL_CLI_COMMANDS.disconnect,
   LOCAL_CLI_COMMANDS.mcp,
   LOCAL_CLI_COMMANDS.reactDevtools,
+  LOCAL_CLI_COMMANDS.web,
   PUBLIC_COMMANDS.prepare,
 );
 
@@ -102,6 +104,7 @@ const CAPABILITY_EXEMPT_CLI_COMMANDS = commandSet(
   LOCAL_CLI_COMMANDS.metro,
   LOCAL_CLI_COMMANDS.reactDevtools,
   LOCAL_CLI_COMMANDS.session,
+  LOCAL_CLI_COMMANDS.web,
   PUBLIC_COMMANDS.appState,
   PUBLIC_COMMANDS.prepare,
   PUBLIC_COMMANDS.batch,

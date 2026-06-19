@@ -14,6 +14,7 @@ import {
 import { materializeRemoteConnectionForCommand } from './cli/commands/connection-runtime.ts';
 import { tryRunClientBackedCommand } from './cli/commands/router.ts';
 import { runReactDevtoolsCommand } from './cli/commands/react-devtools.ts';
+import { runWebCommand } from './cli/commands/web.ts';
 import { readCliBatchStepsJson } from './cli/batch-steps.ts';
 import {
   createRequestId,
@@ -201,6 +202,14 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
             session: effectiveFlags.session ?? sessionName,
             cwd: process.cwd(),
             env: process.env,
+          });
+          process.exit(exitCode);
+          return;
+        }
+        if (command === 'web') {
+          const exitCode = await runWebCommand(positionals, {
+            flags: effectiveFlags,
+            stateDir: daemonPaths.baseDir,
           });
           process.exit(exitCode);
           return;

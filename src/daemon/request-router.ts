@@ -41,6 +41,7 @@ import { createAgentBrowserWebProvider } from '../platforms/web/agent-browser-pr
 
 export type RequestRouterDeps = {
   logPath: string;
+  stateDir?: string;
   token: string;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
@@ -62,6 +63,7 @@ export type RequestRouterDeps = {
 export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   const {
     logPath,
+    stateDir,
     token,
     androidAdbProvider,
     appleRunnerProvider,
@@ -138,7 +140,9 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
                 linuxToolProvider,
                 webProvider:
                   webProvider ??
-                  (shouldUseDefaultWebProvider(lockedScope) ? createDefaultWebProvider : undefined),
+                  (shouldUseDefaultWebProvider(lockedScope)
+                    ? createDefaultWebProvider(stateDir)
+                    : undefined),
                 appLogProvider,
                 recordingProvider,
               },
@@ -202,8 +206,10 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   return handleRequest;
 }
 
-const createDefaultWebProvider: WebProviderResolver = ({ req, session }) =>
-  createAgentBrowserWebProvider({ session: session?.name ?? req.session });
+const createDefaultWebProvider =
+  (stateDir: string | undefined): WebProviderResolver =>
+  ({ req, session }) =>
+    createAgentBrowserWebProvider({ session: session?.name ?? req.session, stateDir });
 
 function shouldUseDefaultWebProvider(scope: LockedRequestScope): boolean {
   return scope.existingSession?.device.platform === 'web' || scope.req.flags?.platform === 'web';

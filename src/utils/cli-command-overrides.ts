@@ -60,6 +60,23 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
     positionalArgs: ['args?'],
     allowsExtraPositionals: true,
   },
+  web: {
+    usageOverride: 'web setup | web doctor',
+    listUsageOverride: 'web setup|doctor',
+    helpDescription: `Install and inspect the managed web automation backend used by --platform web.
+
+First-run flow:
+  agent-device web setup
+  agent-device open "https://example.com" --platform web
+  agent-device snapshot -i --platform web
+  agent-device close --platform web
+
+Runtime web commands do not install the backend implicitly. If the managed backend is missing, run agent-device web setup. The backend is resolved only from the managed install in the effective agent-device state dir.
+
+Use web setup to install or reuse the pinned backend. Use web doctor after setup to verify browser backend health.`,
+    summary: 'Manage web automation backend',
+    positionalArgs: ['setup|doctor'],
+  },
 } as const satisfies Record<SchemaOnlyCliCommandName, CommandSchema>;
 
 const CLI_COMMAND_OVERRIDES = {

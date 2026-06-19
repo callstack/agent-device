@@ -1,5 +1,5 @@
 import { runCmd } from '../../utils/exec.ts';
-import { AppError, asAppError } from '../../utils/errors.ts';
+import { AppError } from '../../utils/errors.ts';
 import type { Rect } from '../../utils/snapshot.ts';
 import { normalizeAgentBrowserSnapshot } from './agent-browser-snapshot.ts';
 import {
@@ -9,14 +9,16 @@ import {
   type JsonObject,
 } from './json-utils.ts';
 import type { WebProvider, WebSnapshotOptions, WebSnapshotResult } from './provider.ts';
+import { mapManagedAgentBrowserError, resolveAgentBrowserTool } from './agent-browser-tool.ts';
 
 const AGENT_BROWSER = 'agent-browser';
 const AGENT_BROWSER_TIMEOUT_MS = 30_000;
 const AGENT_BROWSER_DOCTOR_HINT =
-  'Install agent-browser and run `agent-browser doctor --offline --quick` to verify the local browser setup.';
+  'Run `agent-device web setup` to install the managed web backend.';
 
 type AgentBrowserProviderOptions = {
   session?: string;
+  stateDir?: string;
 };
 
 export function createAgentBrowserWebProvider(
@@ -24,7 +26,7 @@ export function createAgentBrowserWebProvider(
 ): WebProvider {
   const session = options.session?.trim();
   const runJson = async (args: string[]): Promise<unknown> =>
-    await runAgentBrowserJson(args, session);
+    await runAgentBrowserJson(args, { session, options });
 
   return {
     async open(target) {
@@ -104,14 +106,21 @@ function isIgnorableBoxError(error: unknown): boolean {
   return !/\bstale\b/i.test(message) && /\bbox\b|not visible|not found|no element/i.test(message);
 }
 
-async function runAgentBrowserJson(args: string[], session: string | undefined): Promise<unknown> {
+async function runAgentBrowserJson(
+  args: string[],
+  params: { session: string | undefined; options: AgentBrowserProviderOptions },
+): Promise<unknown> {
+  const { session, options } = params;
   const cliArgs = [...args, '--json', ...(session ? ['--session', session] : [])];
-  const result = await runAgentBrowserCommand(cliArgs);
+  const result = await runAgentBrowserCommand(cliArgs, options);
   const parsed = parseAgentBrowserJson(result.stdout, result.stderr, cliArgs, result.exitCode);
   return unwrapAgentBrowserJson(parsed, result, cliArgs);
 }
 
-async function runAgentBrowserCommand(cliArgs: string[]): Promise<{
+async function runAgentBrowserCommand(
+  cliArgs: string[],
+  options: AgentBrowserProviderOptions,
+): Promise<{
   stdout: string;
   stderr: string;
   exitCode: number;
@@ -120,8 +129,10 @@ async function runAgentBrowserCommand(cliArgs: string[]): Promise<{
   let stderr = '';
   let exitCode = 0;
   try {
-    const result = await runCmd(AGENT_BROWSER, cliArgs, {
+    const tool = await resolveAgentBrowserTool({ stateDir: options.stateDir });
+    const result = await runCmd(tool.command, cliArgs, {
       allowFailure: true,
+      env: tool.env,
       timeoutMs: AGENT_BROWSER_TIMEOUT_MS,
     });
     stdout = result.stdout;
@@ -191,11 +202,11 @@ function parseAgentBrowserJson(
 }
 
 function mapAgentBrowserRunError(error: unknown, args: string[]): AppError {
-  const appError = asAppError(error);
+  const appError = mapManagedAgentBrowserError(error);
   if (appError.code === 'TOOL_MISSING') {
     return new AppError(
       'TOOL_MISSING',
-      'agent-browser not found in PATH',
+      appError.message,
       { cmd: AGENT_BROWSER, args, hint: AGENT_BROWSER_DOCTOR_HINT },
       appError,
     );

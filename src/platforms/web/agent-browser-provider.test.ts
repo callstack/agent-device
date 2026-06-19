@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { test } from 'vitest';
 import { createAgentBrowserWebProvider } from './agent-browser-provider.ts';
 import type { WebSnapshotResult } from './provider.ts';
@@ -10,6 +13,7 @@ import {
   resolveSelectorChain,
 } from '../../daemon/selectors.ts';
 import { attachRefs } from '../../utils/snapshot.ts';
+import { installFakeManagedAgentBrowser } from './__tests__/test-utils.ts';
 
 type AgentBrowserCall = {
   cmd: string;
@@ -17,122 +21,138 @@ type AgentBrowserCall = {
 };
 
 test('agent-browser provider maps supported operations to session-scoped JSON commands', async () => {
-  const calls: AgentBrowserCall[] = [];
-  const provider = createAgentBrowserWebProvider({ session: 'web-session' });
+  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
+    const calls: AgentBrowserCall[] = [];
 
-  await withCommandExecutorOverride(recordingExecutor(calls), async () => {
-    await provider.open('https://example.test');
-    await provider.screenshot('/tmp/page.png', { fullscreen: true });
-    await provider.click(10.4, 20.6);
-    await provider.fill(11, 22, 'Ada');
-    await provider.typeText('hello');
-    await provider.scroll('down', { pixels: 400 });
-    await provider.close();
+    await withCommandExecutorOverride(recordingExecutor(calls), async () => {
+      await provider.open('https://example.test');
+      await provider.screenshot('/tmp/page.png', { fullscreen: true });
+      await provider.click(10.4, 20.6);
+      await provider.fill(11, 22, 'Ada');
+      await provider.typeText('hello');
+      await provider.scroll('down', { pixels: 400 });
+      await provider.close();
+    });
+
+    assert.deepEqual(
+      calls.map((call) => call.args),
+      [
+        ['open', 'https://example.test', '--json', '--session', 'web-session'],
+        ['screenshot', '--full', '/tmp/page.png', '--json', '--session', 'web-session'],
+        ['mouse', 'move', '10', '21', '--json', '--session', 'web-session'],
+        ['mouse', 'down', '--json', '--session', 'web-session'],
+        ['mouse', 'up', '--json', '--session', 'web-session'],
+        ['mouse', 'move', '11', '22', '--json', '--session', 'web-session'],
+        ['mouse', 'down', '--json', '--session', 'web-session'],
+        ['mouse', 'up', '--json', '--session', 'web-session'],
+        ['press', expectedSelectAllShortcut(), '--json', '--session', 'web-session'],
+        ['keyboard', 'type', 'Ada', '--json', '--session', 'web-session'],
+        ['keyboard', 'type', 'hello', '--json', '--session', 'web-session'],
+        ['scroll', 'down', '400', '--json', '--session', 'web-session'],
+        ['close', '--json', '--session', 'web-session'],
+      ],
+    );
   });
-
-  assert.deepEqual(
-    calls.map((call) => call.args),
-    [
-      ['open', 'https://example.test', '--json', '--session', 'web-session'],
-      ['screenshot', '--full', '/tmp/page.png', '--json', '--session', 'web-session'],
-      ['mouse', 'move', '10', '21', '--json', '--session', 'web-session'],
-      ['mouse', 'down', '--json', '--session', 'web-session'],
-      ['mouse', 'up', '--json', '--session', 'web-session'],
-      ['mouse', 'move', '11', '22', '--json', '--session', 'web-session'],
-      ['mouse', 'down', '--json', '--session', 'web-session'],
-      ['mouse', 'up', '--json', '--session', 'web-session'],
-      ['press', expectedSelectAllShortcut(), '--json', '--session', 'web-session'],
-      ['keyboard', 'type', 'Ada', '--json', '--session', 'web-session'],
-      ['keyboard', 'type', 'hello', '--json', '--session', 'web-session'],
-      ['scroll', 'down', '400', '--json', '--session', 'web-session'],
-      ['close', '--json', '--session', 'web-session'],
-    ],
-  );
 });
 
 test('agent-browser provider normalizes snapshot refs, labels, values, parents, and rects', async () => {
-  const calls: AgentBrowserCall[] = [];
-  const provider = createAgentBrowserWebProvider({ session: 'web-session' });
+  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
+    const calls: AgentBrowserCall[] = [];
+    const snapshot = await withCommandExecutorOverride(
+      snapshotExecutor(calls),
+      async () => await provider.snapshot({ interactiveOnly: true, depth: 4, scope: '#main' }),
+    );
 
-  const snapshot = await withCommandExecutorOverride(
-    snapshotExecutor(calls),
-    async () => await provider.snapshot({ interactiveOnly: true, depth: 4, scope: '#main' }),
-  );
-
-  assert.deepEqual(calls[0]?.args, [
-    'snapshot',
-    '--interactive',
-    '--compact',
-    '--depth',
-    '4',
-    '--selector',
-    '#main',
-    '--json',
-    '--session',
-    'web-session',
-  ]);
-  assertNormalizedSnapshot(snapshot);
-  assertRoleSelectorResolves(snapshot);
+    assert.deepEqual(calls[0]?.args, [
+      'snapshot',
+      '--interactive',
+      '--compact',
+      '--depth',
+      '4',
+      '--selector',
+      '#main',
+      '--json',
+      '--session',
+      'web-session',
+    ]);
+    assertNormalizedSnapshot(snapshot);
+    assertRoleSelectorResolves(snapshot);
+  });
 });
 
 test('agent-browser provider surfaces stale ref failures during snapshot geometry lookup', async () => {
-  const provider = createAgentBrowserWebProvider({ session: 'web-session' });
-
-  await assert.rejects(
-    () =>
-      withCommandExecutorOverride(
-        async (_cmd, args) => {
-          if (args[0] === 'snapshot') {
-            return jsonResult({
-              success: true,
-              data: {
-                refs: { e1: { role: 'button', name: 'Save' } },
-                snapshot: 'button "Save" [ref=e1]',
-              },
-            });
-          }
-          return jsonResult({ success: false, error: 'Stale ref @e1' });
-        },
-        async () => await provider.snapshot(),
-      ),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'COMMAND_FAILED' &&
-      error.message === 'Stale ref @e1',
-  );
+  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
+    await assert.rejects(
+      () =>
+        withCommandExecutorOverride(
+          async (_cmd, args) => {
+            if (args[0] === 'snapshot') {
+              return jsonResult({
+                success: true,
+                data: {
+                  refs: { e1: { role: 'button', name: 'Save' } },
+                  snapshot: 'button "Save" [ref=e1]',
+                },
+              });
+            }
+            return jsonResult({ success: false, error: 'Stale ref @e1' });
+          },
+          async () => await provider.snapshot(),
+        ),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'COMMAND_FAILED' &&
+        error.message === 'Stale ref @e1',
+    );
+  });
 });
 
 test('agent-browser provider adds doctor guidance for missing binary and invalid JSON', async () => {
-  const provider = createAgentBrowserWebProvider();
-
-  await assert.rejects(
-    () =>
-      withCommandExecutorOverride(
-        async () => {
-          throw new AppError('TOOL_MISSING', 'agent-browser not found');
-        },
-        async () => await provider.open('https://example.test'),
-      ),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'TOOL_MISSING' &&
-      error.details?.hint ===
-        'Install agent-browser and run `agent-browser doctor --offline --quick` to verify the local browser setup.',
+  const missingStateDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-web-provider-missing-'),
   );
+  try {
+    const provider = createAgentBrowserWebProvider({ stateDir: missingStateDir });
+    await assert.rejects(
+      async () => await provider.open('https://example.test'),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'TOOL_MISSING' &&
+        error.details?.hint === 'Run `agent-device web setup` to install the managed web backend.',
+    );
+  } finally {
+    fs.rmSync(missingStateDir, { recursive: true, force: true });
+  }
 
-  await assert.rejects(
-    () =>
-      withCommandExecutorOverride(
-        async () => ({ stdout: 'not-json', stderr: '', exitCode: 0 }),
-        async () => await provider.open('https://example.test'),
-      ),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'COMMAND_FAILED' &&
-      error.message === 'agent-browser returned invalid JSON' &&
-      typeof error.details?.hint === 'string',
-  );
+  await withManagedAgentBrowserProvider({}, async (installedProvider) => {
+    await assert.rejects(
+      () =>
+        withCommandExecutorOverride(
+          async () => ({ stdout: 'not-json', stderr: '', exitCode: 0 }),
+          async () => await installedProvider.open('https://example.test'),
+        ),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'COMMAND_FAILED' &&
+        error.message === 'agent-browser returned invalid JSON' &&
+        typeof error.details?.hint === 'string',
+    );
+  });
 });
+
+async function withManagedAgentBrowserProvider(
+  options: { session?: string },
+  testFn: (provider: ReturnType<typeof createAgentBrowserWebProvider>) => void | Promise<void>,
+): Promise<void> {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-web-provider-'));
+  try {
+    installFakeManagedAgentBrowser(stateDir);
+    const provider = createAgentBrowserWebProvider({ ...options, stateDir });
+    await testFn(provider);
+  } finally {
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+}
 
 function recordingExecutor(calls: AgentBrowserCall[]) {
   return async (cmd: string, args: string[]): Promise<ExecResult> => {

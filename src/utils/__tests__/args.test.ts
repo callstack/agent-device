@@ -113,6 +113,16 @@ test('parseArgs recognizes command-specific flag combinations', async () => {
       },
     },
     {
+      label: 'web setup',
+      argv: ['web', 'setup', '--state-dir', './tmp/ad-state'],
+      strictFlags: true,
+      assertParsed: (parsed) => {
+        assert.equal(parsed.command, 'web');
+        assert.deepEqual(parsed.positionals, ['setup']);
+        assert.equal(parsed.flags.stateDir, './tmp/ad-state');
+      },
+    },
+    {
       label: 'open --surface frontmost-app',
       argv: ['open', '--platform', 'macos', '--surface', 'frontmost-app'],
       strictFlags: true,
@@ -1598,6 +1608,20 @@ test('session command help includes daemon state directory discovery', () => {
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /Usage:\s+agent-device session list \| session state-dir/);
   assert.match(help, /effective daemon state directory/);
+});
+
+test('web command help includes managed backend setup', () => {
+  const help = usageForCommand('web');
+  if (help === null) throw new Error('Expected command help text');
+  assert.match(help, /Usage:\s+agent-device web setup \| web doctor/);
+  assert.match(help, /managed web automation backend/);
+  assert.match(
+    help,
+    /agent-device web setup[\s\S]*agent-device open "https:\/\/example\.com" --platform web/,
+  );
+  assert.match(help, /do not install the backend implicitly/);
+  assert.match(help, /web setup[\s\S]*install or reuse the pinned backend/);
+  assert.doesNotMatch(help, /web status/);
 });
 
 test('command usage describes test suite flags', () => {

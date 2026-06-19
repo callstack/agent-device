@@ -633,6 +633,23 @@ const FIXTURE_SMOKE_CASES: Case[] = [
 
 const SKILL_GUIDANCE_CASES: Case[] = [
   makeCase({
+    id: 'web-first-use-runs-managed-setup',
+    contract: [
+      'Platform: Web',
+      'URL to verify: https://example.com',
+      'No web backend has been set up in this state directory yet',
+      'Web automation uses the managed backend through agent-device, not direct backend commands',
+    ],
+    task: 'Plan the first-run commands to set up web automation, open the URL, inspect interactive refs, and close the session.',
+    outputs: [
+      /(?:^|\n)(?:agent-device\s+)?web\s+setup\b[\s\S]*(?:^|\n)(?:agent-device\s+)?open\s+["']?https:\/\/example\.com["']?\s+--platform\s+web/i,
+      /(?:^|\n)(?:agent-device\s+)?snapshot\s+-i\s+--platform\s+web\b/i,
+      /(?:^|\n)(?:agent-device\s+)?close\s+--platform\s+web\b/i,
+    ],
+    forbiddenOutputs: [/agent-browser/i, /(?:^|\n)\s*(?:npm|pnpm|npx)\b/i],
+    strictFinalOutput: true,
+  }),
+  makeCase({
     id: 'inspect-visible-text-readonly',
     contract: [
       'App name: Agent Device Tester',

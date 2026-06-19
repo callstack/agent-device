@@ -83,6 +83,7 @@ export async function startDaemonRuntime(
 
   const handleRequest = createRequestHandler({
     logPath,
+    stateDir: baseDir,
     token,
     sessionStore,
     leaseRegistry,
