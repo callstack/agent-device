@@ -372,6 +372,11 @@ function summarizeProviderPressure(files) {
         /\bLinuxToolProvider\b|\blinuxToolProvider\b|\brunCommand\b|\bwhichCommand\b|\bxdotool\b|\bydotool\b|\bxclip\b|\bscrot\b|\bgrim\b|\bwmctrl\b|\bpkill\b/g,
     },
     {
+      name: 'Web semantic provider',
+      pattern:
+        /\bWebProvider\b|\bwebProvider\b|\bwithWebProvider\b|\bresolveWebProvider\b|\['web'/g,
+    },
+    {
       name: 'Recording provider',
       pattern: /\bRecordingProvider\b|\brecordingProvider\b|\bstartRecording\b/g,
     },

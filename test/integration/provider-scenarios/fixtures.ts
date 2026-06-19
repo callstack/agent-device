@@ -66,6 +66,15 @@ export const PROVIDER_SCENARIO_LINUX: DeviceInfo = {
   booted: true,
 };
 
+export const PROVIDER_SCENARIO_WEB: DeviceInfo = {
+  platform: 'web',
+  id: 'agent-browser-chrome',
+  name: 'Agent Browser Chrome',
+  kind: 'device',
+  target: 'desktop',
+  booted: true,
+};
+
 export function createDemoIosApp(prefix: string): { tempRoot: string; appPath: string } {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   const appPath = path.join(tempRoot, 'Demo.app');
