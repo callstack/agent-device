@@ -126,6 +126,24 @@ standalone Simulator app.
 `client.sessions.stateDir()` mirrors `session state-dir` and returns the resolved daemon state directory as a pure local resolution — it never starts
 or contacts the daemon. Pass `{ stateDir }` to resolve an explicit override the same way the CLI resolves `--state-dir`.
 
+## Web sessions
+
+Typed client commands can target browser sessions with the same command methods by passing
+`platform: 'web'`. The managed web backend is set up through the CLI, not through a typed client
+method, so run `agent-device web setup` before first use in the same effective state directory. Use
+`agent-device web doctor` when you need to verify backend health.
+
+```ts
+await client.apps.open({ url: 'https://example.com', platform: 'web' });
+await client.capture.snapshot({ platform: 'web', interactiveOnly: true });
+await client.interactions.fill({ platform: 'web', ref: '@e12', text: 'test@example.com' });
+await client.command.wait({ platform: 'web', text: 'Welcome' });
+await client.sessions.close();
+```
+
+Web automation requires Node 24+. MCP tools use the same command contracts, so they can target
+`platform: 'web'` after setup, but local setup/doctor remains a CLI-only workflow.
+
 ## Android snapshot helper providers
 
 Remote Android providers should import `agent-device/android-snapshot-helper` and inject their own

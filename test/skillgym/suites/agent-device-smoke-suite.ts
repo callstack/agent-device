@@ -650,6 +650,38 @@ const SKILL_GUIDANCE_CASES: Case[] = [
     strictFinalOutput: true,
   }),
   makeCase({
+    id: 'web-minimal-browser-loop',
+    contract: [
+      'Platform: web',
+      'Target URL: https://example.com/login',
+      'agent-device web setup already passed',
+      'Fresh interactive snapshot will expose @e12 as the email field and @e13 as the Continue button',
+      'Expected success text after submit: Welcome',
+      'Visual evidence path: ./artifacts/web-login.png',
+    ],
+    task: 'Plan the minimal agent-device web commands to open the page, inspect interactive refs, fill the email field, click Continue, wait for the success text, capture a screenshot, and close.',
+    outputs: [
+      /(?:^|\n)(?:agent-device\s+)?open\s+https:\/\/example\.com\/login\b[^\n]*--platform\s+web/i,
+      /(?:^|\n)(?:agent-device\s+)?snapshot\b[^\n]*-i\b[^\n]*--platform\s+web/i,
+      /(?:^|\n)(?:agent-device\s+)?fill\s+@e12\s+["']?[^"'\n]+@[^"'\n]+["']?[^\n]*--platform\s+web/i,
+      /(?:^|\n)(?:agent-device\s+)?(?:click|press)\s+@e13\b[^\n]*--platform\s+web/i,
+      /(?:^|\n)(?:agent-device\s+)?wait\s+text\s+["']Welcome["'][^\n]*--platform\s+web/i,
+      /(?:^|\n)(?:agent-device\s+)?screenshot\s+\.\/artifacts\/web-login\.png\b[^\n]*--platform\s+web/i,
+      /(?:^|\n)(?:agent-device\s+)?close\b[^\n]*--platform\s+web/i,
+    ],
+    forbiddenOutputs: [
+      /agent-browser/i,
+      plannedCommand('boot'),
+      plannedCommand('apps'),
+      plannedCommand('install'),
+      plannedCommand('alert'),
+      plannedCommand('keyboard'),
+      plannedCommand('react-devtools'),
+    ],
+    strictFinalOutput: true,
+    allowOnlyLocalCliHelpCommands: true,
+  }),
+  makeCase({
     id: 'inspect-visible-text-readonly',
     contract: [
       'App name: Agent Device Tester',

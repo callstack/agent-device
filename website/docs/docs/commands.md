@@ -17,6 +17,7 @@ agent-device help debugging
 agent-device help react-native
 agent-device help react-devtools
 agent-device help remote
+agent-device help web
 agent-device help macos
 agent-device help web
 agent-device help dogfood
@@ -30,7 +31,7 @@ For MCP-aware clients that support direct tools, run:
 agent-device mcp
 ```
 
-The MCP server exposes direct structured tools for installed commands. Tools use structured input contracts through `AgentDeviceClient`; local-only workflows stay CLI-only rather than subprocess fallbacks. It does not expose generic shell execution over MCP.
+The MCP server exposes direct structured tools for installed commands. Tools use structured input contracts through `AgentDeviceClient`; local-only workflows stay CLI-only rather than subprocess fallbacks. It does not expose generic shell execution over MCP. MCP tools can target `platform: "web"` after `agent-device web setup`, but setup and doctor stay CLI-only.
 
 ## Navigation
 
@@ -109,6 +110,10 @@ agent-device web setup
 agent-device web doctor
 agent-device open "https://example.com" --platform web
 agent-device snapshot -i --platform web
+agent-device click @e12 --platform web
+agent-device fill @e13 "test@example.com" --platform web
+agent-device wait text "Welcome" --platform web
+agent-device screenshot ./artifacts/web-home.png --platform web
 agent-device close --platform web
 ```
 
@@ -119,6 +124,8 @@ agent-device close --platform web
 - `web doctor` verifies the managed backend after setup.
 - The managed install respects `--state-dir` and `AGENT_DEVICE_STATE_DIR`.
 - Web automation requires Node 24+.
+- Supported through `agent-device`: URL open, snapshot refs, click/press, fill/type, wait, screenshot, close, and replay scripts composed from those commands.
+- Out of scope for `agent-device` web support: tab/window/devtools control, network interception, cookies/storage, downloads/uploads, arbitrary page scripting, multi-page orchestration, and raw browser diagnostics. Use `agent-browser` directly for those browser-specific workflows.
 
 ## Device isolation scopes
 

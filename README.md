@@ -19,7 +19,7 @@ A device automation CLI for real apps on iOS, Android, TV, and desktop. Agents g
 
 `agent-device` lets coding agents open apps, inspect the current UI, interact with visible elements, and collect debugging evidence through one CLI. Use it when an agent needs to verify what actually happens on a device, not just reason about code.
 
-If you know Vercel's [agent-browser](https://github.com/vercel-labs/agent-browser), `agent-device` is the same idea for mobile, TV, and desktop apps.
+If you know Vercel's [agent-browser](https://github.com/vercel-labs/agent-browser), `agent-device` is the same idea for mobile, TV, and desktop apps. Minimal `--platform web` support reuses `agent-browser` when a browser session needs to fit into the same command/session/replay loop.
 
 It works with native iOS and Android apps, plus apps built with Expo, Flutter, and React Native, as long as the target can run on a supported device, simulator, emulator, or desktop environment.
 
@@ -56,7 +56,14 @@ agent-device help workflow
 
 The installed CLI help is the source of truth for agents. Start with `agent-device help workflow`, then follow the topic-specific help when a task needs dogfooding, debugging, replay, or React Native profiling.
 
-Prerequisites depend on the target platform: Node.js 22+, Xcode for iOS/tvOS/macOS targets, Android SDK + ADB for Android, and macOS Accessibility permission for desktop automation. See [Installation](https://oss.callstack.com/agent-device/docs/installation) for platform setup.
+Prerequisites depend on the target platform: Node.js 22+, Xcode for iOS/tvOS/macOS targets, Android SDK + ADB for Android, and macOS Accessibility permission for desktop automation. Web automation requires Node 24+. See [Installation](https://oss.callstack.com/agent-device/docs/installation) for platform setup.
+
+For web sessions, set up the managed browser backend before first use:
+
+```bash
+agent-device web setup
+agent-device web doctor
+```
 
 Try the basic loop:
 
@@ -81,6 +88,27 @@ agent-device close
 ```
 
 Snapshots assign refs like `@e1`, `@e2`, and `@e3` to elements on the current screen. Refs from the latest snapshot are immediately actionable; after scrolling or changing screens, take a fresh snapshot.
+
+## Minimal Web Support
+
+`agent-device --platform web` is intentionally narrow. `agent-device` owns the command surface, sessions, replay integration, refs/selectors, and artifact routing; `agent-browser` owns browser launch, page control, screenshots, and browser-specific mechanics.
+
+Supported first-slice loop:
+
+```bash
+agent-device web setup
+agent-device open https://example.com --platform web
+agent-device snapshot -i --platform web
+agent-device click @e12 --platform web
+agent-device fill @e13 "test@example.com" --platform web
+agent-device wait text "Welcome" 3000 --platform web
+agent-device screenshot ./artifacts/web-home.png --platform web
+agent-device close --platform web
+```
+
+Supported through `agent-device`: URL open, snapshot refs, click/press, fill/type, wait, screenshot, close, and replay scripts composed from those commands.
+
+Out of scope for `agent-device` web support: tab/window/devtools control, network interception, cookies/storage, downloads/uploads, arbitrary page scripting, and raw browser diagnostics. Use `agent-browser` directly for those browser-specific workflows.
 
 ## Next Steps
 

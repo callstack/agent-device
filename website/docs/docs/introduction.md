@@ -1,11 +1,11 @@
 ---
 title: Introduction
-description: Learn what agent-device is, where it fits in agentic mobile, TV, and desktop development, and how agents use it for app verification, debugging, profiling, QA, and replay.
+description: Learn what agent-device is, where it fits in agentic mobile, TV, desktop, and web development, and how agents use it for app verification, debugging, profiling, QA, and replay.
 ---
 
 # Introduction
 
-`agent-device` is an agent-native CLI for app verification and QA from coding agents. It gives agents structured UI access, deterministic interactions, debugging evidence, performance signals, and replayable flows across iOS, Android, tvOS, Android TV, macOS, and Linux desktop targets.
+`agent-device` is an agent-native CLI for app verification and QA from coding agents. It gives agents structured UI access, deterministic interactions, debugging evidence, performance signals, and replayable flows across iOS, Android, tvOS, Android TV, macOS, Linux desktop targets, and a minimal managed web browser surface.
 
 Use it when an agent needs to inspect and operate a real app, not just reason about source code or screenshots.
 
@@ -16,9 +16,9 @@ Use it when an agent needs to inspect and operate a real app, not just reason ab
 - **Runtime evidence**: capture screenshots, recordings, logs, network traffic, traces, CPU/memory/perf snapshots, and crash-related logs when the happy path breaks.
 - **Replayable checks**: turn stable exploratory sessions into `.ad` replay scripts that can run again without AI.
 - **React Native and Expo workflows**: pair device automation with optional React DevTools profiling for component trees, props/state/hooks, slow renders, and rerenders.
-- **Local devices and app surfaces**: drive simulators, emulators, physical devices, TV targets, and desktop apps through one CLI.
+- **Local devices and app surfaces**: drive simulators, emulators, physical devices, TV targets, desktop apps, and browser sessions through one CLI.
 
-If you know `agent-browser`, `agent-device` is the app/device counterpart for mobile, TV, and desktop targets.
+If you know `agent-browser`, `agent-device` brings the same agent-oriented workflow to mobile, TV, desktop, and a narrow managed web browser slice.
 
 ## Development loop
 

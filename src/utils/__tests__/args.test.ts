@@ -1012,6 +1012,11 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /After mutation: refs are stale/);
   assert.match(usageText, /use its selector directly; otherwise refresh with snapshot -i/);
   assert.match(usageText, /app-owned back uses back/);
+  assert.match(usageText, /Web browser sessions: read help web/);
+  assert.match(
+    usageText,
+    /open <url> --platform web -> snapshot -i -> click\/fill\/wait\/screenshot -> close/,
+  );
   assert.match(usageText, /Session state contains request diagnostics and runner\.log/);
   assert.match(usageText, /logs clear --restart\/mark\/path/);
   assert.match(usageText, /network dump --include headers/);
@@ -1032,6 +1037,7 @@ test('usage includes agent workflows, config, environment, and examples footers'
     usageText,
     /help react-native\s+React Native app automation hazards, overlays, Metro, and routing/,
   );
+  assert.match(usageText, /help web\s+Minimal browser sessions through agent-browser/);
   assert.match(usageText, /Configuration:/);
   assert.match(
     usageText,
@@ -1048,6 +1054,7 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /AGENT_DEVICE_DAEMON_BASE_URL\s+Connect to remote daemon/);
   assert.match(usageText, /Examples:/);
   assert.match(usageText, /agent-device open Settings --platform ios/);
+  assert.match(usageText, /agent-device open https:\/\/example\.com --platform web/);
   assert.match(usageText, /agent-device snapshot -i/);
   assert.match(usageText, /agent-device fill @e3 "test@example\.com"/);
   assert.match(usageText, /agent-device replay \.\/session\.ad/);
@@ -1157,6 +1164,11 @@ test('usageForCommand resolves workflow help topic', () => {
   assert.match(help, /Manual adb reverse tcp:<port> tcp:<port> is only needed/);
   assert.match(help, /do not split clear\/restart/);
   assert.match(help, /do not write network log headers/);
+  assert.match(help, /Web: agent-device reuses agent-browser/);
+  assert.match(help, /agent-browser doctor --offline --quick/);
+  assert.match(help, /agent-device open https:\/\/example\.com --platform web/);
+  assert.match(help, /agent-device close --platform web/);
+  assert.match(help, /Use agent-browser directly for browser-specific features/);
   assert.match(help, /agent-device open exp:\/\/127\.0\.0\.1:8081 --platform ios/);
   assert.match(help, /agent-device open "Expo Go" exp:\/\/127\.0\.0\.1:8081 --platform ios/);
   assert.match(help, /There is no open-url command/);
@@ -1174,6 +1186,27 @@ test('usageForCommand resolves workflow help topic', () => {
   assert.match(help, /help react-devtools/);
   assert.match(help, /help react-native/);
   assert.doesNotMatch(help, /agent-device react-devtools profile/);
+});
+
+test('usageForCommand resolves web help topic', () => {
+  const help = usageForCommand('web');
+  if (help === null) throw new Error('Expected web help text');
+  assert.match(help, /agent-device help web/);
+  assert.match(help, /agent-device reuses agent-browser for browser mechanics/);
+  assert.match(help, /agent-device owns command\/session\/replay integration/);
+  assert.match(help, /agent-browser owns browser launch, page control, screenshots/);
+  assert.match(help, /agent-browser doctor --offline --quick/);
+  assert.match(help, /agent-device open https:\/\/example\.com --platform web/);
+  assert.match(help, /agent-device snapshot -i --platform web/);
+  assert.match(help, /agent-device click @e12 --platform web/);
+  assert.match(help, /agent-device fill @e13 "qa@example\.com" --platform web/);
+  assert.match(help, /agent-device wait text "Welcome" 3000 --platform web/);
+  assert.match(help, /agent-device screenshot \.\/artifacts\/web-home\.png --platform web/);
+  assert.match(help, /agent-device close --platform web/);
+  assert.match(help, /open <url>, snapshot -i, click\/press @ref or selector/);
+  assert.match(help, /Use agent-browser directly for those workflows/);
+  assert.match(help, /Do not claim web e2e CI exists/);
+  assert.match(help, /Do not use native mobile or desktop setup commands/);
 });
 
 test('workflow help keeps common copyable command forms', () => {

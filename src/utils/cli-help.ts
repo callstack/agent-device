@@ -28,6 +28,7 @@ const AGENT_WORKFLOWS = [
     label: 'help remote',
     description: 'Remote/cloud config, tenants, leases, and local service tunnels',
   },
+  { label: 'help web', description: 'Minimal browser sessions through agent-browser' },
   { label: 'help macos', description: 'Desktop, frontmost-app, and menu bar surfaces' },
   { label: 'help dogfood', description: 'Exploratory QA report workflow' },
 ] as const;
@@ -54,6 +55,7 @@ const AGENT_QUICKSTART_LINES = [
   'Raw coordinates are fallback-only: use snapshot -i --json rects when iOS refs no-op or child refs are missing.',
   'Batch JSON steps use "command" and structured "input"; legacy "positionals"/"flags" steps still run in CLI but are deprecated until the next major version.',
   'Navigation: app-owned back uses back; system back uses back --system.',
+  'Web browser sessions: read help web; first slice is open <url> --platform web -> snapshot -i -> click/fill/wait/screenshot -> close.',
   'Verification commands must name the expected text/selector; bare screenshots/snapshots are not enough.',
   'Debug evidence: Session state contains request diagnostics and runner.log; use logs clear --restart/mark/path, trace, and network dump --include headers for app evidence.',
   'Use agent-device commands in final plans; raw platform tools, pseudo commands, and helper prose are wrong.',
@@ -82,6 +84,7 @@ const ENVIRONMENT_LINES = [
 
 const EXAMPLE_LINES = [
   'agent-device open Settings --platform ios',
+  'agent-device open https://example.com --platform web',
   'agent-device open TextEdit --platform macos',
   'agent-device snapshot -i',
   'agent-device react-devtools get tree --depth 3',
@@ -220,6 +223,17 @@ Validation and evidence:
   Debug logs: logs clear --restart, logs mark, reproduce, then logs path; do not split clear/restart into separate stop/start commands.
   Network headers: network dump --include headers; do not write network log headers.
   Remote/cloud: connect to discover a cloud profile, or connect --remote-config ./remote-config.json for a local profile; then open, snapshot, disconnect.
+  Web: agent-device uses a managed, pinned agent-browser backend as an implementation detail. Run agent-device web setup before first use, then agent-device web doctor for backend health checks. Web automation requires Node 24+.
+    agent-device web setup
+    agent-device web doctor
+    agent-device open https://example.com --platform web
+    agent-device snapshot -i --platform web
+    agent-device click @e12 --platform web
+    agent-device fill @e13 "qa@example.com" --platform web
+    agent-device wait text "Welcome" 3000 --platform web
+    agent-device screenshot ./artifacts/web-home.png --platform web
+    agent-device close --platform web
+  Minimal web support is for browser sessions with open, snapshot, click/press, fill/type, wait, screenshot, close, and replay over those commands. Use agent-browser directly for browser-specific features that agent-device does not surface, such as tab/devtools management, advanced page scripting, or raw browser debugging.
   macOS menu bar: open ... --platform macos --surface menubar; snapshot -i --platform macos --surface menubar.
 
 React Native dev loop:
@@ -551,6 +565,39 @@ Rules:
   Do not let iOS simulator-set scoping hide macOS desktop targets.
   Prefer refs/selectors over raw coordinates.
   macOS snapshot rects are window-space; use current refs or overlay refs instead of guessing coordinates.`,
+  },
+  web: {
+    summary: 'Minimal browser workflow with the managed web backend',
+    body: `agent-device help web
+
+Use --platform web only for the minimal browser command loop exposed through agent-device.
+
+Dependency:
+  agent-device uses a managed, pinned agent-browser backend for browser mechanics. agent-device owns command/session/replay integration, selectors/refs at the command surface, and artifact routing; agent-browser owns browser launch, page control, screenshots, and browser-specific behavior.
+  Before first use, set up and verify the managed backend:
+    agent-device web setup
+    agent-device web doctor
+  Web automation requires Node 24+.
+
+First-slice loop:
+  agent-device open https://example.com --platform web
+  agent-device snapshot -i --platform web
+  agent-device click @e12 --platform web
+  agent-device fill @e13 "qa@example.com" --platform web
+  agent-device wait text "Welcome" 3000 --platform web
+  agent-device screenshot ./artifacts/web-home.png --platform web
+  agent-device close --platform web
+
+Supported in agent-device web sessions:
+  open <url>, snapshot -i, click/press @ref or selector, fill/type @ref or selector, wait text/selector, screenshot, close, and replay scripts made from those commands.
+
+Out of scope for agent-device web support:
+  Browser runtime debugging, tabs/windows/devtools control, network interception, storage/cookie management, arbitrary page scripting, downloads/uploads, multi-page orchestration, and agent-browser-specific diagnostics. Use agent-browser directly for those browser-specific workflows.
+
+Rules:
+  Do not claim web e2e CI exists unless a project workflow explicitly provides it.
+  Do not use native mobile or desktop setup commands such as boot, apps, install, settings, alert, keyboard, perf, logs, or react-devtools for --platform web.
+  Keep browser plans session-scoped: open a URL, inspect refs, act on refs/selectors, verify with wait/get/is/snapshot, capture screenshot only when visual evidence is needed, then close.`,
   },
   dogfood: {
     summary: 'Exploratory QA workflow with reproducible evidence',

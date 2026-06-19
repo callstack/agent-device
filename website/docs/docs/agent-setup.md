@@ -1,13 +1,13 @@
 ---
 title: AI Agent Setup
-description: Configure Cursor, Codex, Claude Code, Windsurf, Cline, Goose, skills, and MCP for agent-device mobile, TV, and desktop app verification.
+description: Configure Cursor, Codex, Claude Code, Windsurf, Cline, Goose, skills, and MCP for agent-device mobile, TV, desktop, and web app verification.
 ---
 
 # AI Agent Setup
 
 `agent-device` is built for AI agents, but humans usually install it, grant device permissions, and decide which agent client should use it.
 
-Use this page to wire Cursor, Codex, Claude Code, Windsurf, Cline, Goose, or another coding agent into mobile, TV, and desktop app verification. It covers skills, project rules, and MCP setup for React Native QA, Expo app verification, iOS Simulator automation, Android Emulator automation, tvOS checks, Android TV checks, debugging, profiling, and exploratory QA.
+Use this page to wire Cursor, Codex, Claude Code, Windsurf, Cline, Goose, or another coding agent into mobile, TV, desktop, and web app verification. It covers skills, project rules, and MCP setup for React Native QA, Expo app verification, iOS Simulator automation, Android Emulator automation, tvOS checks, Android TV checks, web browser sessions, debugging, profiling, and exploratory QA.
 
 The short version: install the CLI, make the agent read version-matched help, and let the agent use either MCP tools or CLI commands. MCP tools use command contracts backed by the same `AgentDeviceClient` execution path as the CLI adapters.
 
@@ -55,6 +55,8 @@ Use MCP tools or the CLI in the integrated terminal. If `agent-device` is not on
 ## MCP server
 
 `agent-device mcp` starts the official stdio MCP server. It exposes direct structured tools for installed CLI commands. Tools run through command contracts and `AgentDeviceClient`; local-only workflows stay CLI-only rather than subprocess fallbacks.
+
+For web automation, MCP tools can target `platform: "web"` after the managed backend is available, but `agent-device web setup` and `agent-device web doctor` are CLI-only. Run setup from a terminal in the same effective state directory before asking an MCP client to drive a browser session.
 
 Tool execution failures are returned as MCP tool results with `isError: true`; clients and agents should inspect the tool result, not only the successful JSON-RPC envelope.
 
