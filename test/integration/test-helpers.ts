@@ -3,16 +3,11 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { PNG } from '../../src/utils/png.ts';
 import { runCmdSync } from '../../src/utils/exec.ts';
+import { type CliJsonResult, formatResultDebug, runSourceCliJsonSync } from './cli-json.ts';
 
-const CLI_TIMEOUT_MS = 120_000;
 const RECORDING_INSPECT_TIMEOUT_MS = 60_000;
 
-export type CliJsonResult = {
-  status: number;
-  json?: any;
-  stdout: string;
-  stderr: string;
-};
+export type { CliJsonResult } from './cli-json.ts';
 
 type IntegrationPlatform = 'ios' | 'android' | 'macos';
 
@@ -66,43 +61,7 @@ export type OverlayCropAnalysis = {
 };
 
 export function runCliJson(args: string[], options?: { env?: NodeJS.ProcessEnv }): CliJsonResult {
-  const result = runCmdSync(
-    process.execPath,
-    ['--experimental-strip-types', 'src/bin.ts', ...args],
-    {
-      allowFailure: true,
-      env: options?.env,
-      timeoutMs: CLI_TIMEOUT_MS,
-    },
-  );
-  let json: any;
-  try {
-    json = JSON.parse(result.stdout ?? '');
-  } catch {
-    json = undefined;
-  }
-  return {
-    status: result.exitCode,
-    json,
-    stdout: json ? '<JSON output>' : (result.stdout ?? ''),
-    stderr: result.stderr ?? '',
-  };
-}
-
-function formatResultDebug(step: string, args: string[], result: CliJsonResult): string {
-  const jsonText =
-    result.json === undefined ? '(unparseable)' : JSON.stringify(result.json, null, 2);
-  return [
-    `step: ${step}`,
-    `command: agent-device ${args.join(' ')}`,
-    `status: ${result.status}`,
-    `stderr:`,
-    result.stderr || '(empty)',
-    `stdout:`,
-    result.stdout || '(empty)',
-    `json:`,
-    jsonText,
-  ].join('\n');
+  return runSourceCliJsonSync(args, options);
 }
 
 export function createIntegrationTestContext(options: IntegrationTestContextOptions) {

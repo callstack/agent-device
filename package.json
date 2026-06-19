@@ -134,6 +134,7 @@
     "test:integration:provider": "vitest run --project provider-integration",
     "test:integration:progress": "node --experimental-strip-types scripts/integration-progress.ts",
     "test:integration:progress:check": "node --experimental-strip-types scripts/integration-progress.ts --check",
+    "test:smoke:web": "pnpm build && node --test test/integration/smoke-web-platform.test.ts",
     "test:skillgym": "node test/skillgym/runner-environment.ts && pnpm build && skillgym run ./test/skillgym/suites/agent-device-smoke-suite.ts --config ./test/skillgym/skillgym.config.ts",
     "test:skillgym:case": "node test/skillgym/runner-environment.ts && pnpm build && skillgym run ./test/skillgym/suites/agent-device-smoke-suite.ts --config ./test/skillgym/skillgym.config.ts --case",
     "test:smoke": "node --test test/integration/smoke-*.test.ts",

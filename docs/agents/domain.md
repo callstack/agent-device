@@ -8,5 +8,6 @@ Before architecture, diagnosis, TDD, triage, PRD, or roadmap work, read:
 - Relevant ADRs in `docs/adr/` for accepted architecture decisions.
 - This `docs/agents/` directory for issue-tracker and triage-label conventions.
 - `docs/agents/web-backend.md` before changing web automation backend setup or diagnostics.
+- `docs/agents/testing.md` for maintainer-only test lane notes such as the live web smoke.
 
 Use the vocabulary from `CONTEXT.md` in issue titles, refactor proposals, test names, and architecture notes. If a proposed change contradicts an ADR, call that out explicitly and explain why the decision should be reopened.
