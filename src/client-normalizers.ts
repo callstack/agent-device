@@ -183,7 +183,8 @@ export function normalizeOpenDevice(
     (platform !== 'ios' &&
       platform !== 'macos' &&
       platform !== 'android' &&
-      platform !== 'linux') ||
+      platform !== 'linux' &&
+      platform !== 'web') ||
     !id ||
     !name
   ) {

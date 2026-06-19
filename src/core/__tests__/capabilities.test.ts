@@ -1,7 +1,8 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { isCommandSupportedOnDevice, unsupportedHintForDevice } from '../capabilities.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import { matchesPlatformSelector, type DeviceInfo } from '../../utils/device.ts';
+import { WEB_DESKTOP_DEVICE } from '../../__tests__/test-utils/index.ts';
 
 const iosSimulator: DeviceInfo = {
   platform: 'ios',
@@ -46,6 +47,8 @@ const linuxDevice: DeviceInfo = {
   kind: 'device',
   target: 'desktop',
 };
+
+const webDevice = WEB_DESKTOP_DEVICE;
 
 const tvOsSimulator: DeviceInfo = {
   platform: 'ios',
@@ -382,6 +385,64 @@ test('Linux supports desktop interaction commands and blocks mobile/unsupported 
     ],
     [{ device: linuxDevice, expected: false, label: 'on Linux' }],
   );
+});
+
+test('web supports only the initial browser interaction slice', () => {
+  assertCommandSupport(
+    [
+      'click',
+      'close',
+      'fill',
+      'find',
+      'get',
+      'is',
+      'open',
+      'press',
+      'screenshot',
+      'scroll',
+      'snapshot',
+      'type',
+      'wait',
+    ],
+    [{ device: webDevice, expected: true, label: 'on web' }],
+  );
+  assertCommandSupport(
+    [
+      'alert',
+      'app-switcher',
+      'apps',
+      'back',
+      'boot',
+      'clipboard',
+      'diff',
+      'fling',
+      'focus',
+      'home',
+      'install',
+      'install-from-source',
+      'keyboard',
+      'logs',
+      'longpress',
+      'network',
+      'pan',
+      'perf',
+      'pinch',
+      'push',
+      'record',
+      'reinstall',
+      'rotate',
+      'settings',
+      'shutdown',
+      'swipe',
+      'trigger-app-event',
+    ],
+    [{ device: webDevice, expected: false, label: 'on web' }],
+  );
+});
+
+test('apple selector does not match web platform', () => {
+  assert.equal(matchesPlatformSelector(webDevice.platform, 'apple'), false);
+  assert.equal(matchesPlatformSelector(webDevice.platform, 'web'), true);
 });
 
 test('unknown commands default to supported', () => {

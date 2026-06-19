@@ -11,6 +11,7 @@ export type CommandCapability = {
   apple?: KindMatrix;
   android?: KindMatrix;
   linux?: KindMatrix;
+  web?: KindMatrix;
   supports?: (device: DeviceInfo) => boolean;
   /** Optional actionable hint surfaced when this command is rejected at admission for `device`. */
   unsupportedHint?: (device: DeviceInfo) => string | undefined;
@@ -39,12 +40,17 @@ const synthesisGestureUnsupportedHint = (device: DeviceInfo): string | undefined
 // Linux device kind is always 'device' (local desktop).
 const LINUX_DEVICE: KindMatrix = { device: true };
 const LINUX_NONE: KindMatrix = {};
+const WEB_DEVICE: KindMatrix = { device: true };
 const ALL_DEVICE_COMMAND_CAPABILITY = {
   apple: { simulator: true, device: true },
   android: { emulator: true, device: true, unknown: true },
   linux: LINUX_DEVICE,
 } as const satisfies CommandCapability;
-const APP_RUNTIME_CAPABILITY = ALL_DEVICE_COMMAND_CAPABILITY;
+const WEB_COMMAND_CAPABILITY = {
+  ...ALL_DEVICE_COMMAND_CAPABILITY,
+  web: WEB_DEVICE,
+} as const satisfies CommandCapability;
+const APP_RUNTIME_CAPABILITY = WEB_COMMAND_CAPABILITY;
 const APP_INVENTORY_CAPABILITY = {
   apple: { simulator: true, device: true },
   android: { emulator: true, device: true, unknown: true },
@@ -124,6 +130,7 @@ const COMMAND_CAPABILITY_MATRIX: Record<string, CommandCapability> = {
     apple: { simulator: true, device: true },
     android: { emulator: true, device: true, unknown: true },
     linux: LINUX_DEVICE,
+    web: WEB_DEVICE,
   },
   clipboard: {
     apple: { simulator: true, device: true },
@@ -147,19 +154,20 @@ const COMMAND_CAPABILITY_MATRIX: Record<string, CommandCapability> = {
     apple: { simulator: true, device: true },
     android: { emulator: true, device: true, unknown: true },
     linux: LINUX_DEVICE,
+    web: WEB_DEVICE,
   },
   fling: {
     apple: { simulator: true, device: true },
     android: { emulator: true, device: true, unknown: true },
     linux: LINUX_NONE,
   },
-  snapshot: ALL_DEVICE_COMMAND_CAPABILITY,
+  snapshot: WEB_COMMAND_CAPABILITY,
   diff: ALL_DEVICE_COMMAND_CAPABILITY,
-  screenshot: ALL_DEVICE_COMMAND_CAPABILITY,
-  wait: ALL_DEVICE_COMMAND_CAPABILITY,
-  get: ALL_DEVICE_COMMAND_CAPABILITY,
-  find: ALL_DEVICE_COMMAND_CAPABILITY,
-  is: ALL_DEVICE_COMMAND_CAPABILITY,
+  screenshot: WEB_COMMAND_CAPABILITY,
+  wait: WEB_COMMAND_CAPABILITY,
+  get: WEB_COMMAND_CAPABILITY,
+  find: WEB_COMMAND_CAPABILITY,
+  is: WEB_COMMAND_CAPABILITY,
   focus: {
     apple: { simulator: true, device: true },
     android: { emulator: true, device: true, unknown: true },
@@ -200,6 +208,7 @@ const COMMAND_CAPABILITY_MATRIX: Record<string, CommandCapability> = {
     apple: { simulator: true, device: true },
     android: { emulator: true, device: true, unknown: true },
     linux: LINUX_DEVICE,
+    web: WEB_DEVICE,
   },
   push: {
     apple: { simulator: true },
@@ -228,6 +237,7 @@ const COMMAND_CAPABILITY_MATRIX: Record<string, CommandCapability> = {
     apple: { simulator: true, device: true },
     android: { emulator: true, device: true, unknown: true },
     linux: LINUX_DEVICE,
+    web: WEB_DEVICE,
   },
   swipe: {
     apple: { simulator: true, device: true },
@@ -246,7 +256,7 @@ const COMMAND_CAPABILITY_MATRIX: Record<string, CommandCapability> = {
     android: { emulator: true, device: true, unknown: true },
     linux: LINUX_NONE,
   },
-  type: ALL_DEVICE_COMMAND_CAPABILITY,
+  type: WEB_COMMAND_CAPABILITY,
 };
 
 export function isCommandSupportedOnDevice(command: string, device: DeviceInfo): boolean {
@@ -254,9 +264,11 @@ export function isCommandSupportedOnDevice(command: string, device: DeviceInfo):
   if (!capability) return true;
   const byPlatform = isApplePlatform(device.platform)
     ? capability.apple
-    : device.platform === 'linux'
-      ? capability.linux
-      : capability.android;
+    : device.platform === 'android'
+      ? capability.android
+      : device.platform === 'linux'
+        ? capability.linux
+        : capability.web;
   if (!byPlatform) return false;
   if (capability.supports && !capability.supports(device)) return false;
   const kind = (device.kind ?? 'unknown') as keyof KindMatrix;

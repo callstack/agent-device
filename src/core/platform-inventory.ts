@@ -10,9 +10,22 @@ export type DeviceInventoryRequest = {
   androidSerialAllowlist?: string[];
 };
 
+const WEB_DESKTOP_DEVICE: DeviceInfo = {
+  platform: 'web',
+  id: 'agent-browser-chrome',
+  name: 'Agent Browser Chrome',
+  kind: 'device',
+  target: 'desktop',
+  booted: true,
+};
+
 export async function listLocalDeviceInventory(
   request: DeviceInventoryRequest,
 ): Promise<DeviceInfo[]> {
+  if (request.platform === 'web') {
+    return [WEB_DESKTOP_DEVICE];
+  }
+
   if (shouldUseHostMacFastPath(request)) {
     const { listMacosDevices } = await import('../platforms/macos/devices.ts');
     return await listMacosDevices();
@@ -66,6 +79,7 @@ export async function listLocalDeviceInventory(
     const { listLinuxDevices } = await import('../platforms/linux/devices.ts');
     devices.push(...(await listLinuxDevices()));
   } catch {}
+  devices.push(WEB_DESKTOP_DEVICE);
   return devices;
 }
 

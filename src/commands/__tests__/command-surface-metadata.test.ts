@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { listMcpExposedCommandNames } from '../../command-catalog.ts';
-import { listCommandMetadataNames, listMcpCommandMetadata } from '../command-metadata.ts';
+import {
+  listCommandMetadata,
+  listCommandMetadataNames,
+  listMcpCommandMetadata,
+} from '../command-metadata.ts';
 import { listExecutableCommandNames } from '../command-surface.ts';
 
 test('MCP exposed command names have metadata and executable command definitions', () => {
@@ -22,4 +26,14 @@ test('MCP exposed command names have metadata and executable command definitions
 
 test('CI-only prepare command stays out of MCP tool surface', () => {
   assert.equal(listMcpExposedCommandNames().includes('prepare'), false);
+});
+
+test('common command input accepts web platform selector', () => {
+  const snapshotMetadata = listCommandMetadata().find((metadata) => metadata.name === 'snapshot');
+  if (!snapshotMetadata) throw new Error('Expected snapshot command metadata');
+
+  const platformSchema = snapshotMetadata.inputSchema.properties?.platform;
+  const input = snapshotMetadata.readInput({ platform: 'web' }) as { platform?: unknown };
+  assert.deepEqual(platformSchema?.enum, ['ios', 'macos', 'android', 'linux', 'web', 'apple']);
+  assert.equal(input.platform, 'web');
 });

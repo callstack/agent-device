@@ -41,6 +41,15 @@ export const LINUX_DEVICE: DeviceInfo = {
   target: 'desktop',
 };
 
+export const WEB_DESKTOP_DEVICE: DeviceInfo = {
+  platform: 'web',
+  id: 'agent-browser-chrome',
+  name: 'Agent Browser Chrome',
+  kind: 'device',
+  target: 'desktop',
+  booted: true,
+};
+
 export const ANDROID_TV_DEVICE: DeviceInfo = {
   platform: 'android',
   id: 'and-tv-1',

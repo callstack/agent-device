@@ -103,6 +103,16 @@ test('parseArgs recognizes command-specific flag combinations', async () => {
       },
     },
     {
+      label: 'open --platform web',
+      argv: ['open', 'https://example.com', '--platform', 'web', '--target', 'desktop'],
+      strictFlags: true,
+      assertParsed: (parsed) => {
+        assert.equal(parsed.command, 'open');
+        assert.equal(parsed.flags.platform, 'web');
+        assert.equal(parsed.flags.target, 'desktop');
+      },
+    },
+    {
       label: 'open --surface frontmost-app',
       argv: ['open', '--platform', 'macos', '--surface', 'frontmost-app'],
       strictFlags: true,
@@ -1636,7 +1646,7 @@ test('command usage shows command and global flags separately', () => {
   assert.match(help, /Command flags:/);
   assert.match(help, /--pattern one-way\|ping-pong/);
   assert.match(help, /Global flags:/);
-  assert.match(help, /--platform ios\|macos\|android\|linux\|apple/);
+  assert.match(help, /--platform ios\|macos\|android\|linux\|web\|apple/);
 });
 
 test('back command usage documents explicit mode flags', () => {

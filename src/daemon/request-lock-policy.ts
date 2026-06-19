@@ -190,6 +190,7 @@ function targetSelectorsConflict(
       return target === 'desktop';
     case 'macos':
     case 'linux':
+    case 'web':
       return target !== 'desktop';
     case 'apple':
       return false;
@@ -225,8 +226,8 @@ function freshSessionSelectorKeysForPlatform(
         ? ['udid', 'serial', 'androidDeviceAllowlist', 'iosSimulatorDeviceSet']
         : ['serial', 'androidDeviceAllowlist'];
     case 'macos':
-      return ['udid', 'serial', 'iosSimulatorDeviceSet', 'androidDeviceAllowlist'];
     case 'linux':
+    case 'web':
       return ['udid', 'serial', 'iosSimulatorDeviceSet', 'androidDeviceAllowlist'];
     default:
       return assertNever(lockPlatform);

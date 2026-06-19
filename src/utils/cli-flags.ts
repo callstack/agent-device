@@ -322,8 +322,8 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     key: 'platform',
     names: ['--platform'],
     type: 'enum',
-    enumValues: ['ios', 'macos', 'android', 'linux', 'apple'],
-    usageLabel: '--platform ios|macos|android|linux|apple',
+    enumValues: ['ios', 'macos', 'android', 'linux', 'web', 'apple'],
+    usageLabel: '--platform ios|macos|android|linux|web|apple',
     usageDescription: 'Platform to target (`apple` aliases the Apple automation backend)',
   },
   {

@@ -6,6 +6,7 @@ export {
   LINUX_DEVICE,
   MACOS_DEVICE,
   TVOS_SIMULATOR,
+  WEB_DESKTOP_DEVICE,
 } from './device-fixtures.ts';
 
 export {
