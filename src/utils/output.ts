@@ -6,7 +6,14 @@ import {
 import { AppError, normalizeError, type NormalizedError } from './errors.ts';
 import { detectPossibleRepeatedNavSubtree } from './repeated-nav-subtree.ts';
 import { buildSnapshotDisplayLines, formatSnapshotLine } from './snapshot-lines.ts';
-import type { Rect, SnapshotNode, SnapshotUnchanged, SnapshotVisibility } from './snapshot.ts';
+import {
+  usesMobileSnapshotPresentation,
+  type Rect,
+  type SnapshotBackend,
+  type SnapshotNode,
+  type SnapshotUnchanged,
+  type SnapshotVisibility,
+} from './snapshot.ts';
 import type { MovementRange } from './screenshot-diff-ocr.ts';
 import type { ScreenshotDiffResult } from './screenshot-diff.ts';
 import type { ScreenshotDiffRegion } from './screenshot-diff-regions.ts';
@@ -62,7 +69,8 @@ export function formatSnapshotText(
 ): string {
   const rawNodes = data.nodes;
   const nodes = Array.isArray(rawNodes) ? (rawNodes as SnapshotNode[]) : [];
-  const backend = typeof data.backend === 'string' ? data.backend : undefined;
+  const backend = readSnapshotBackend(data.backend);
+  const useMobilePresentation = usesMobileSnapshotPresentation(backend);
   const helperPresentation = buildAndroidHelperPresentationInput(data, nodes, options);
   const prefix = formatSnapshotMetaPrefix(data);
   const notices = buildSnapshotNotices(data, nodes, options, helperPresentation);
@@ -72,13 +80,13 @@ export function formatSnapshotText(
     return `${prefix}${noticesBlock}${formatUnchangedSnapshotText(unchanged)}\n`;
   }
   const visiblePresentation =
-    options.raw || backend === 'macos-helper'
+    options.raw || !useMobilePresentation
       ? null
       : buildMobileSnapshotPresentation(helperPresentation.nodes);
   const truncated = Boolean(data.truncated);
   const displayedNodes = visiblePresentation?.nodes ?? nodes;
   const visibility =
-    options.raw || backend === 'macos-helper'
+    options.raw || !useMobilePresentation
       ? null
       : readSnapshotVisibility(
           data,
@@ -113,6 +121,19 @@ function readUnchangedSnapshot(data: Record<string, unknown>): SnapshotUnchanged
     interactiveOnly: unchanged.interactiveOnly === true ? true : undefined,
     scope: typeof unchanged.scope === 'string' ? unchanged.scope : undefined,
   };
+}
+
+function readSnapshotBackend(value: unknown): SnapshotBackend | undefined {
+  if (
+    value === 'xctest' ||
+    value === 'android' ||
+    value === 'macos-helper' ||
+    value === 'linux-atspi' ||
+    value === 'web'
+  ) {
+    return value;
+  }
+  return undefined;
 }
 
 function formatUnchangedSnapshotText(unchanged: SnapshotUnchanged): string {

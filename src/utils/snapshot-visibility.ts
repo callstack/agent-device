@@ -1,9 +1,9 @@
 import { buildMobileSnapshotPresentation } from './mobile-snapshot-semantics.ts';
-import type { SnapshotBackend, SnapshotState, SnapshotVisibility } from './snapshot.ts';
-
-function isDesktopBackend(backend: SnapshotBackend | undefined): boolean {
-  return backend === 'macos-helper' || backend === 'linux-atspi';
-}
+import {
+  usesMobileSnapshotPresentation,
+  type SnapshotState,
+  type SnapshotVisibility,
+} from './snapshot.ts';
 
 export function buildSnapshotVisibility(params: {
   nodes: SnapshotState['nodes'];
@@ -11,7 +11,7 @@ export function buildSnapshotVisibility(params: {
   snapshotRaw?: boolean;
 }): SnapshotVisibility {
   const { nodes, backend, snapshotRaw } = params;
-  if (snapshotRaw || isDesktopBackend(backend)) {
+  if (snapshotRaw || !usesMobileSnapshotPresentation(backend)) {
     return {
       partial: false,
       visibleNodeCount: nodes.length,
