@@ -128,13 +128,19 @@ export async function trimRecordingStart(params: {
 export async function overlayRecordingTouches(params: {
   videoPath: string;
   telemetryPath: string;
+  exportQuality?: RecordingExportQuality;
   targetLabel?: string;
 }): Promise<void> {
-  const { videoPath, telemetryPath, targetLabel = 'recording' } = params;
+  const {
+    videoPath,
+    telemetryPath,
+    exportQuality = DEFAULT_RECORDING_EXPORT_QUALITY,
+    targetLabel = 'recording',
+  } = params;
   await exportProcessedVideo({
     videoPath,
     scriptPath: getOverlayScriptPath(),
-    scriptArgs: ['--events', telemetryPath],
+    scriptArgs: ['--events', telemetryPath, '--export-quality', exportQuality],
     commandDescription: `Failed to add touch overlays to the ${targetLabel}`,
   });
 }

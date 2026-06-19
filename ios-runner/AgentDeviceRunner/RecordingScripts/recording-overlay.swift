@@ -146,11 +146,9 @@ func run() throws {
   )
 
   // Overlay burn-in forces a full re-encode; medium quality keeps simulator videos readable
-  // while avoiding very slow highest-quality exports.
-  let presetName = AVAssetExportSession.exportPresets(compatibleWith: composition)
-    .contains(AVAssetExportPresetMediumQuality)
-    ? AVAssetExportPresetMediumQuality
-    : AVAssetExportPresetHighestQuality
+  // while avoiding very slow highest-quality exports. Pass --export-quality high to opt into
+  // the slower highest-quality export.
+  let presetName = exportPresetName(for: parsedArgs.exportQuality, compatibleWith: composition)
   guard let exporter = AVAssetExportSession(asset: composition, presetName: presetName) else {
     throw OverlayError.exportFailed("Failed to create export session.")
   }
@@ -174,10 +172,20 @@ func run() throws {
   }
 }
 
-func parseArguments(_ arguments: [String]) throws -> (inputPath: String, outputPath: String, eventsPath: String) {
+enum ExportQuality: String {
+  case medium
+  case high
+}
+
+func parseArguments(
+  _ arguments: [String]
+) throws -> (inputPath: String, outputPath: String, eventsPath: String, exportQuality: ExportQuality) {
   var inputPath: String?
   var outputPath: String?
   var eventsPath: String?
+  // Export quality defaults to medium so existing callers keep the fast, simulator-friendly
+  // export. Pass --export-quality high to opt into a slower highest-quality export.
+  var exportQuality: ExportQuality = .medium
   var index = 0
 
   while index < arguments.count {
@@ -196,15 +204,43 @@ func parseArguments(_ arguments: [String]) throws -> (inputPath: String, outputP
       guard nextIndex < arguments.count else { throw OverlayError.invalidArgs("--events requires a value") }
       eventsPath = arguments[nextIndex]
       index += 2
+    case "--export-quality":
+      guard nextIndex < arguments.count else {
+        throw OverlayError.invalidArgs("--export-quality requires a value")
+      }
+      guard let parsed = ExportQuality(rawValue: arguments[nextIndex]) else {
+        throw OverlayError.invalidArgs("--export-quality must be one of: medium, high")
+      }
+      exportQuality = parsed
+      index += 2
     default:
       throw OverlayError.invalidArgs("Unknown argument: \(argument)")
     }
   }
 
   guard let inputPath, let outputPath, let eventsPath else {
-    throw OverlayError.invalidArgs("Usage: recording-overlay.swift --input <video> --output <video> --events <json>")
+    throw OverlayError.invalidArgs(
+      "Usage: recording-overlay.swift --input <video> --output <video> --events <json> [--export-quality <medium|high>]"
+    )
   }
-  return (inputPath, outputPath, eventsPath)
+  return (inputPath, outputPath, eventsPath, exportQuality)
+}
+
+func exportPresetName(
+  for exportQuality: ExportQuality,
+  compatibleWith asset: AVAsset
+) -> String {
+  switch exportQuality {
+  case .high:
+    return AVAssetExportPresetHighestQuality
+  case .medium:
+    // Prefer the faster medium preset, falling back to highest quality only when medium is
+    // not available for this composition.
+    let compatible = AVAssetExportSession.exportPresets(compatibleWith: asset)
+    return compatible.contains(AVAssetExportPresetMediumQuality)
+      ? AVAssetExportPresetMediumQuality
+      : AVAssetExportPresetHighestQuality
+  }
 }
 
 func resolvedRenderSize(for track: AVAssetTrack) -> CGSize {

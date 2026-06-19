@@ -104,6 +104,32 @@ test('overlay preserves Swift helper compile hints', async () => {
   });
 });
 
+test('overlay defaults to the fast medium export preset', async () => {
+  const videoPath = path.join(tmpDir, 'recording.mp4');
+  const telemetryPath = path.join(tmpDir, 'recording.gesture-telemetry.json');
+  fs.writeFileSync(videoPath, 'original');
+  fs.writeFileSync(telemetryPath, '{"events":[]}');
+
+  await overlayRecordingTouches({ videoPath, telemetryPath });
+
+  expect(helperScriptArgs()).toEqual(
+    expect.arrayContaining(['--events', telemetryPath, '--export-quality', 'medium']),
+  );
+});
+
+test('overlay forwards the requested high export preset', async () => {
+  const videoPath = path.join(tmpDir, 'recording.mp4');
+  const telemetryPath = path.join(tmpDir, 'recording.gesture-telemetry.json');
+  fs.writeFileSync(videoPath, 'original');
+  fs.writeFileSync(telemetryPath, '{"events":[]}');
+
+  await overlayRecordingTouches({ videoPath, telemetryPath, exportQuality: 'high' });
+
+  expect(helperScriptArgs()).toEqual(
+    expect.arrayContaining(['--events', telemetryPath, '--export-quality', 'high']),
+  );
+});
+
 test('resize defaults to the fast medium export preset', async () => {
   const videoPath = path.join(tmpDir, 'recording.mp4');
   fs.writeFileSync(videoPath, 'original');
