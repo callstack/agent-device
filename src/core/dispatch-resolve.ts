@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { AppError } from '../utils/errors.ts';
 import {
+  isApplePlatform,
   normalizePlatformSelector,
   resolveDevice,
   resolveAppleSimulatorSetPathForSelector,
@@ -36,7 +37,7 @@ export type DeviceInventoryProvider = (
 ) => Promise<DeviceInfo[] | null | undefined>;
 
 type AppleDeviceSelector = {
-  platform?: Exclude<PlatformSelector, 'android'>;
+  platform?: 'ios' | 'macos' | 'apple';
   target?: DeviceTarget;
   deviceName?: string;
   udid?: string;
@@ -248,7 +249,7 @@ function isAppleResolutionSelector(selector: {
   platform?: PlatformSelector;
   target?: DeviceTarget;
 }): boolean {
-  return !!selector.platform && selector.platform !== 'android' && selector.platform !== 'linux';
+  return isApplePlatform(selector.platform);
 }
 
 function readResolveTargetDeviceCache(cacheKey: string): DeviceInfo | undefined {

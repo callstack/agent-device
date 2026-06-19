@@ -118,6 +118,9 @@ async function handleAppStateCommand(params: {
   if (device.platform === 'macos') {
     return errorResponse('SESSION_NOT_FOUND', MACOS_APPSTATE_SESSION_REQUIRED_MESSAGE);
   }
+  if (device.platform === 'web') {
+    return errorResponse('UNSUPPORTED_OPERATION', 'appstate is not supported on web.');
+  }
 
   const { getAndroidAppState } = await import('../../platforms/android/app-lifecycle.ts');
   const state = await getAndroidAppState(device);

@@ -5,7 +5,7 @@ import type {
   LeaseBackend,
   SessionIsolationMode,
 } from './contracts.ts';
-import type { DeviceTarget, PlatformSelector } from './utils/device.ts';
+import { PLATFORM_SELECTORS, type DeviceTarget, type PlatformSelector } from './utils/device.ts';
 import type { MetroPrepareKind } from './client-metro.ts';
 
 export type RemoteConfigMetroOptions = {
@@ -81,7 +81,7 @@ export const REMOTE_CONFIG_FIELD_SPECS = [
     type: 'enum',
     enumValues: ['ios-simulator', 'ios-instance', 'android-instance'],
   },
-  { key: 'platform', type: 'enum', enumValues: ['ios', 'macos', 'android', 'linux', 'apple'] },
+  { key: 'platform', type: 'enum', enumValues: PLATFORM_SELECTORS },
   { key: 'target', type: 'enum', enumValues: ['mobile', 'tv', 'desktop'] },
   { key: 'device', type: 'string' },
   { key: 'udid', type: 'string' },

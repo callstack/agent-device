@@ -79,7 +79,6 @@ export async function listLocalDeviceInventory(
     const { listLinuxDevices } = await import('../platforms/linux/devices.ts');
     devices.push(...(await listLinuxDevices()));
   } catch {}
-  devices.push(WEB_DESKTOP_DEVICE);
   return devices;
 }
 

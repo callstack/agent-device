@@ -51,6 +51,15 @@ const bootedSimulator: DeviceInfo = {
   booted: true,
 };
 
+const webDesktop: DeviceInfo = {
+  platform: 'web',
+  id: 'agent-browser-chrome',
+  name: 'Agent Browser Chrome',
+  kind: 'device',
+  target: 'desktop',
+  booted: true,
+};
+
 beforeEach(() => {
   mockFindBootableIosSimulator.mockReset();
   mockFindBootableIosSimulator.mockResolvedValue(null);
@@ -213,6 +222,22 @@ test('resolveTargetDevice treats empty injected inventory as authoritative', asy
     ),
   );
 
+  assert.equal(mockListAppleDevices.mock.calls.length, 0);
+});
+
+test('resolveTargetDevice resolves web through generic inventory without Apple fallback', async () => {
+  const result = await withDeviceInventoryProvider(
+    async (request) => {
+      assert.equal(request.platform, 'web');
+      assert.equal(request.deviceName, 'Agent Browser Chrome');
+      return [webDesktop];
+    },
+    async () => await resolveTargetDevice({ platform: 'web', device: 'Agent Browser Chrome' }),
+  );
+
+  assert.equal(result.platform, 'web');
+  assert.equal(result.id, 'agent-browser-chrome');
+  assert.equal(mockFindBootableIosSimulator.mock.calls.length, 0);
   assert.equal(mockListAppleDevices.mock.calls.length, 0);
 });
 
