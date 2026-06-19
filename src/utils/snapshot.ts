@@ -62,7 +62,7 @@ export type SnapshotNode = RawSnapshotNode & {
   ref: string;
 };
 
-export type SnapshotBackend = 'xctest' | 'android' | 'macos-helper' | 'linux-atspi';
+export type SnapshotBackend = 'xctest' | 'android' | 'macos-helper' | 'linux-atspi' | 'web';
 
 export type SnapshotState = {
   nodes: SnapshotNode[];

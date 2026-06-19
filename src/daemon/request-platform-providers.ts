@@ -9,6 +9,7 @@ import type {
   AppleToolProvider,
 } from '../platforms/ios/tool-provider.ts';
 import type { LinuxToolProvider } from '../platforms/linux/tool-provider.ts';
+import type { WebProvider } from '../platforms/web/provider.ts';
 import { isApplePlatform, type DeviceInfo } from '../utils/device.ts';
 import type { AppLogProvider } from './app-log.ts';
 import { hasExplicitDeviceSelector } from './device-selector-intent.ts';
@@ -39,6 +40,8 @@ export type AppleToolProviderResolver = PlatformProviderResolver<
 
 export type LinuxToolProviderResolver = PlatformProviderResolver<LinuxToolProvider | undefined>;
 
+export type WebProviderResolver = PlatformProviderResolver<WebProvider | undefined>;
+
 export type AppLogProviderResolver = PlatformProviderResolver<AppLogProvider | undefined>;
 
 export type RecordingProviderResolver = PlatformProviderResolver<RecordingProvider | undefined>;
@@ -48,6 +51,7 @@ export type PlatformProviderResolvers = {
   appleRunnerProvider?: AppleRunnerProviderResolver;
   appleToolProvider?: AppleToolProviderResolver;
   linuxToolProvider?: LinuxToolProviderResolver;
+  webProvider?: WebProviderResolver;
   appLogProvider?: AppLogProviderResolver;
   recordingProvider?: RecordingProviderResolver;
 };
@@ -84,6 +88,9 @@ type ResolvedRequestPlatformProviders = {
   };
   linuxTool?: {
     provider?: LinuxToolProvider;
+  };
+  web?: {
+    provider?: WebProvider;
   };
   appLog?: {
     provider?: AppLogProvider;
@@ -182,6 +189,19 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
       if (!scopedProviders.linuxTool?.provider) return;
       const { withLinuxToolProvider } = await import('../platforms/linux/tool-provider.ts');
       appendRequestProviderWrapper(wrappers, scopedProviders.linuxTool, withLinuxToolProvider);
+    },
+  },
+  {
+    resolverKey: 'webProvider',
+    resolve(providers, context) {
+      const webProvider = providers.webProvider;
+      if (!webProvider || context.device.platform !== 'web') return {};
+      return { web: { provider: webProvider(context) } };
+    },
+    async appendWrapper(scopedProviders, wrappers) {
+      if (!scopedProviders.web?.provider) return;
+      const { withWebProvider } = await import('../platforms/web/provider.ts');
+      appendRequestProviderWrapper(wrappers, scopedProviders.web, withWebProvider);
     },
   },
   {

@@ -57,7 +57,7 @@ export type SnapshotOptions = BaseSnapshotOptions & {
 
 export type SnapshotResult = Omit<BackendSnapshotResult, 'backend' | 'nodes'> & {
   nodes?: RawSnapshotNode[];
-  backend: Extract<SnapshotBackend, 'android' | 'xctest' | 'linux-atspi'>;
+  backend: Extract<SnapshotBackend, 'android' | 'xctest' | 'linux-atspi' | 'web'>;
 };
 
 export type Interactor = {

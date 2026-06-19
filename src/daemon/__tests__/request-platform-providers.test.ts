@@ -3,11 +3,14 @@ import { test } from 'vitest';
 import {
   ANDROID_EMULATOR,
   IOS_SIMULATOR,
+  WEB_DESKTOP_DEVICE,
   makeAndroidSession,
   makeIosSession,
+  makeSession,
 } from '../../__tests__/test-utils/index.ts';
 import { withTargetDeviceResolutionScope } from '../../core/dispatch-resolve.ts';
 import { createLocalAppleToolProvider, runXcrun } from '../../platforms/ios/tool-provider.ts';
+import { resolveWebProvider, type WebProvider } from '../../platforms/web/provider.ts';
 import type { DeviceInfo } from '../../utils/device.ts';
 import { withRequestPlatformProviderScope } from '../request-platform-providers.ts';
 import type { DaemonRequest } from '../types.ts';
@@ -194,6 +197,66 @@ test('request platform provider scopes stay isolated across concurrent requests'
   assert.deepEqual(appleCalls, [`ios-session:${IOS_SIMULATOR.id}:list devices -j`]);
 });
 
+test('request platform provider scope applies web provider only for web sessions', async () => {
+  const calls: string[] = [];
+  const webProvider = makeWebProvider({
+    async open(target) {
+      calls.push(`open:${target}`);
+    },
+  });
+
+  await withRequestPlatformProviderScope(
+    {
+      req: request('open'),
+      existingSession: makeSession('web-session', { device: WEB_DESKTOP_DEVICE }),
+      providers: {
+        webProvider: ({ device, session }) => {
+          calls.push(`${session?.name}:${device.id}`);
+          return webProvider;
+        },
+        linuxToolProvider: () => {
+          throw new Error('Linux provider should not apply to a web session');
+        },
+      },
+    },
+    async () => await resolveWebProvider().open('https://example.test'),
+  );
+
+  assert.deepEqual(calls, ['web-session:agent-browser-chrome', 'open:https://example.test']);
+});
+
+test('request platform provider scope follows explicit web selector', async () => {
+  const seenDevices: string[] = [];
+
+  await withTargetDeviceResolutionScope(
+    async () => [WEB_DESKTOP_DEVICE],
+    async () =>
+      await withRequestPlatformProviderScope(
+        {
+          req: {
+            ...request('snapshot'),
+            flags: {
+              platform: 'web',
+            },
+          },
+          existingSession: undefined,
+          providers: {
+            webProvider: ({ device, session }) => {
+              seenDevices.push(`${session?.name ?? 'none'}:${device.id}`);
+              return makeWebProvider();
+            },
+            appleToolProvider: () => {
+              throw new Error('Apple provider should not apply to a web request');
+            },
+          },
+        },
+        async () => await resolveWebProvider().snapshot(),
+      ),
+  );
+
+  assert.deepEqual(seenDevices, ['none:agent-browser-chrome']);
+});
+
 function request(command: string): DaemonRequest {
   return {
     token: 'test-token',
@@ -202,5 +265,19 @@ function request(command: string): DaemonRequest {
     positionals: [],
     flags: {},
     meta: { requestId: `req-${command}` },
+  };
+}
+
+function makeWebProvider(overrides: Partial<WebProvider> = {}): WebProvider {
+  return {
+    open: async () => {},
+    close: async () => {},
+    snapshot: async () => ({ nodes: [] }),
+    screenshot: async () => {},
+    click: async () => {},
+    fill: async () => {},
+    typeText: async () => {},
+    scroll: async () => {},
+    ...overrides,
   };
 }

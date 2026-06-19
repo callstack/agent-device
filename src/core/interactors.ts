@@ -15,6 +15,10 @@ export async function getInteractor(
       const { createLinuxInteractor } = await import('./interactors/linux.ts');
       return createLinuxInteractor();
     }
+    case 'web': {
+      const { createWebInteractor } = await import('./interactors/web.ts');
+      return createWebInteractor();
+    }
     case 'ios':
     case 'macos': {
       const { createAppleInteractor } = await import('./interactors/apple.ts');
