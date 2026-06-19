@@ -7,9 +7,9 @@ import { AppError, normalizeError, type NormalizedError } from './errors.ts';
 import { detectPossibleRepeatedNavSubtree } from './repeated-nav-subtree.ts';
 import { buildSnapshotDisplayLines, formatSnapshotLine } from './snapshot-lines.ts';
 import {
+  isSnapshotBackend,
   usesMobileSnapshotPresentation,
   type Rect,
-  type SnapshotBackend,
   type SnapshotNode,
   type SnapshotUnchanged,
   type SnapshotVisibility,
@@ -69,7 +69,7 @@ export function formatSnapshotText(
 ): string {
   const rawNodes = data.nodes;
   const nodes = Array.isArray(rawNodes) ? (rawNodes as SnapshotNode[]) : [];
-  const backend = readSnapshotBackend(data.backend);
+  const backend = isSnapshotBackend(data.backend) ? data.backend : undefined;
   const useMobilePresentation = usesMobileSnapshotPresentation(backend);
   const helperPresentation = buildAndroidHelperPresentationInput(data, nodes, options);
   const prefix = formatSnapshotMetaPrefix(data);
@@ -121,19 +121,6 @@ function readUnchangedSnapshot(data: Record<string, unknown>): SnapshotUnchanged
     interactiveOnly: unchanged.interactiveOnly === true ? true : undefined,
     scope: typeof unchanged.scope === 'string' ? unchanged.scope : undefined,
   };
-}
-
-function readSnapshotBackend(value: unknown): SnapshotBackend | undefined {
-  if (
-    value === 'xctest' ||
-    value === 'android' ||
-    value === 'macos-helper' ||
-    value === 'linux-atspi' ||
-    value === 'web'
-  ) {
-    return value;
-  }
-  return undefined;
 }
 
 function formatUnchangedSnapshotText(unchanged: SnapshotUnchanged): string {

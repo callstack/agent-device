@@ -270,6 +270,11 @@ function addWebCommandCapabilities(
       ? { ...capability, web: WEB_DEVICE }
       : capability;
   }
+  for (const command of WEB_SUPPORTED_COMMANDS) {
+    if (!(command in matrix)) {
+      throw new Error(`Web command "${command}" missing from capability matrix`);
+    }
+  }
   return result;
 }
 

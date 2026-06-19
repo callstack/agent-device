@@ -153,6 +153,39 @@ test('formatSnapshotText keeps web backend output as a full tree', () => {
   assert.doesNotMatch(text, /\[off-screen below\]/);
 });
 
+test('formatSnapshotText keeps linux-atspi backend output as a full tree', () => {
+  const text = withNoColor(() =>
+    formatSnapshotText({
+      backend: 'linux-atspi',
+      nodes: [
+        {
+          ref: 'e1',
+          index: 0,
+          depth: 0,
+          type: 'Window',
+          label: 'Browser',
+          rect: { x: 0, y: 0, width: 390, height: 844 },
+        },
+        {
+          ref: 'e2',
+          index: 1,
+          depth: 1,
+          parentIndex: 0,
+          role: 'button',
+          label: 'Offscreen desktop action',
+          rect: { x: 0, y: 1200, width: 140, height: 44 },
+        },
+      ],
+      truncated: false,
+    }),
+  );
+
+  assert.match(text, /Snapshot: 2 nodes/);
+  assert.match(text, /Offscreen desktop action/);
+  assert.doesNotMatch(text, /visible nodes/);
+  assert.doesNotMatch(text, /\[off-screen below\]/);
+});
+
 test('formatSnapshotText omits unlabeled group wrappers while preserving labeled groups', () => {
   const text = withNoColor(() =>
     formatSnapshotText({

@@ -64,6 +64,16 @@ export type SnapshotNode = RawSnapshotNode & {
 
 export type SnapshotBackend = 'xctest' | 'android' | 'macos-helper' | 'linux-atspi' | 'web';
 
+export function isSnapshotBackend(value: unknown): value is SnapshotBackend {
+  return (
+    value === 'xctest' ||
+    value === 'android' ||
+    value === 'macos-helper' ||
+    value === 'linux-atspi' ||
+    value === 'web'
+  );
+}
+
 export function usesMobileSnapshotPresentation(backend: SnapshotBackend | undefined): boolean {
   return backend === undefined || backend === 'xctest' || backend === 'android';
 }
