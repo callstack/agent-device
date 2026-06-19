@@ -55,7 +55,8 @@ test('Provider-backed integration Android recording flow uses scripted ADB provi
 
         const recordStart = await daemon.callCommand('record', ['start', recordingPath], {
           hideTouches: true,
-          quality: 7,
+          screenshotMaxSize: 1344,
+          quality: 'high',
         });
         assertRecordingStarted(recordStart, { showTouches: false });
 
@@ -66,7 +67,7 @@ test('Provider-backed integration Android recording flow uses scripted ADB provi
         assertCommandCall(adbCalls, ['shell', 'wm', 'size']);
         assert.ok(
           adbCalls.some((args) =>
-            /^shell screenrecord --size 756x1344 \/sdcard\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
+            /^shell screenrecord --size 756x1344 --bit-rate 20000000 \/sdcard\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
               args.join(' '),
             ),
           ),
@@ -142,7 +143,7 @@ function androidAdbResult(args: string[]): {
     return { stdout: 'Physical size: 1080x1920\n', stderr: '', exitCode: 0 };
   }
   if (
-    /^shell screenrecord --size 756x1344 \/sdcard\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
+    /^shell screenrecord --size 756x1344 --bit-rate 20000000 \/sdcard\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
       command,
     )
   ) {
@@ -161,7 +162,7 @@ function androidAdbResult(args: string[]): {
 }
 
 function isAndroidScreenrecordStartCommand(command: string): boolean {
-  return /^shell screenrecord (?:--size 756x1344 )?\/sdcard\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
+  return /^shell screenrecord (?:--size 756x1344 )?--bit-rate (?:8000000|20000000) \/sdcard\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
     command,
   );
 }

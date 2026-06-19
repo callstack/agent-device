@@ -78,7 +78,8 @@ test('Provider-backed integration iOS physical recording flow uses runner and de
           ['start', recordingPath],
           {
             fps: 30,
-            quality: 8,
+            screenshotMaxSize: 720,
+            quality: 'high',
             hideTouches: true,
           },
           { meta: { requestId: 'ios-physical-record-start' } },
@@ -106,14 +107,14 @@ test('Provider-backed integration iOS physical recording flow uses runner and de
           {
             command: (recordStartCall?.request as { command?: unknown } | undefined)?.command,
             fps: (recordStartCall?.request as { fps?: unknown } | undefined)?.fps,
-            quality: (recordStartCall?.request as { quality?: unknown } | undefined)?.quality,
+            maxSize: (recordStartCall?.request as { maxSize?: unknown } | undefined)?.maxSize,
             appBundleId: (recordStartCall?.request as { appBundleId?: unknown } | undefined)
               ?.appBundleId,
           },
           {
             command: 'recordStart',
             fps: 30,
-            quality: 8,
+            maxSize: 720,
             appBundleId: 'com.apple.Preferences',
           },
         );

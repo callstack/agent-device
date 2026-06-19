@@ -420,24 +420,24 @@ extension RunnerTests {
       if let requestedFps = command.fps, (requestedFps < minRecordingFps || requestedFps > maxRecordingFps) {
         return Response(ok: false, error: ErrorPayload(message: "recordStart fps must be between \(minRecordingFps) and \(maxRecordingFps)"))
       }
-      if let requestedQuality = command.quality, (requestedQuality < minRecordingQuality || requestedQuality > maxRecordingQuality) {
-        return Response(ok: false, error: ErrorPayload(message: "recordStart quality must be between \(minRecordingQuality) and \(maxRecordingQuality)"))
+      if let requestedMaxSize = command.maxSize, requestedMaxSize < 1 {
+        return Response(ok: false, error: ErrorPayload(message: "recordStart maxSize must be a positive integer"))
       }
       do {
         let resolvedOutPath = resolveRecordingOutPath(requestedOutPath)
         let fpsLabel = command.fps.map(String.init) ?? String(RunnerTests.defaultRecordingFps)
-        let qualityLabel = command.quality.map(String.init) ?? "native"
+        let maxSizeLabel = command.maxSize.map(String.init) ?? "native"
         NSLog(
-          "AGENT_DEVICE_RUNNER_RECORD_START requestedOutPath=%@ resolvedOutPath=%@ fps=%@ quality=%@",
+          "AGENT_DEVICE_RUNNER_RECORD_START requestedOutPath=%@ resolvedOutPath=%@ fps=%@ maxSize=%@",
           requestedOutPath,
           resolvedOutPath,
           fpsLabel,
-          qualityLabel
+          maxSizeLabel
         )
         let recorder = ScreenRecorder(
           outputPath: resolvedOutPath,
           fps: command.fps.map { Int32($0) },
-          quality: command.quality
+          maxSize: command.maxSize
         )
         try recorder.start { [weak self] in
           return self?.captureRunnerFrame()

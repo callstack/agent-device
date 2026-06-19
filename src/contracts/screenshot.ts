@@ -39,7 +39,7 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     type: 'int',
     min: 1,
     usageLabel: '--max-size <px>',
-    usageDescription: 'Screenshot: downscale so the longest edge is at most <px>',
+    usageDescription: 'Screenshot/record: downscale so the longest edge is at most <px>',
   },
   {
     key: 'screenshotNoStabilize',

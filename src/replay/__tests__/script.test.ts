@@ -49,7 +49,7 @@ test('writeReplayScript preserves inline open runtime hints', () => {
   );
 });
 
-test('record replay script round-trips fps, quality, and hide-touches flags', () => {
+test('record replay script round-trips fps, max-size, quality, and hide-touches flags', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-script-record-'));
   const replayPath = path.join(root, 'flow.ad');
   const actions: SessionAction[] = [
@@ -57,18 +57,22 @@ test('record replay script round-trips fps, quality, and hide-touches flags', ()
       ts: Date.now(),
       command: 'record',
       positionals: ['start', './capture.mp4'],
-      flags: { fps: 24, quality: 7, hideTouches: true },
+      flags: { fps: 24, screenshotMaxSize: 1024, quality: 'high', hideTouches: true },
     },
   ];
 
   writeReplayScript(replayPath, actions, makeSession());
   const script = fs.readFileSync(replayPath, 'utf8');
-  assert.match(script, /record start "\.\/capture\.mp4" --fps 24 --quality 7 --hide-touches/);
+  assert.match(
+    script,
+    /record start "\.\/capture\.mp4" --fps 24 --max-size 1024 --quality high --hide-touches/,
+  );
 
   const parsed = parseReplayScript(script);
   assert.deepEqual(parsed[0]?.positionals, ['start', './capture.mp4']);
   assert.equal(parsed[0]?.flags.fps, 24);
-  assert.equal(parsed[0]?.flags.quality, 7);
+  assert.equal(parsed[0]?.flags.screenshotMaxSize, 1024);
+  assert.equal(parsed[0]?.flags.quality, 'high');
   assert.equal(parsed[0]?.flags.hideTouches, true);
 });
 

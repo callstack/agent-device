@@ -9,6 +9,10 @@ import type { CommandContext } from '../../../runtime-contract.ts';
 import { AppError } from '../../../utils/errors.ts';
 import { successText } from '../../../utils/success-text.ts';
 import { requireIntInRange } from '../../../utils/validation.ts';
+import {
+  recordingQualityInputToExportQuality,
+  type RecordingExportQuality,
+} from '../../../core/recording-export-quality.ts';
 import type {
   BackendResultEnvelope,
   BackendResultVariant,
@@ -21,7 +25,8 @@ export type RecordingRecordCommandOptions = CommandContext & {
   action: 'start' | 'stop';
   out?: FileOutputRef;
   fps?: number;
-  quality?: number;
+  maxSize?: number;
+  quality?: RecordingExportQuality;
   hideTouches?: boolean;
 };
 
@@ -118,17 +123,40 @@ function normalizeRecordingOptions(
   options: RecordingRecordCommandOptions,
   outPath: string | undefined,
 ): BackendRecordingOptions {
-  const fps = options.fps === undefined ? undefined : requireIntInRange(options.fps, 'fps', 1, 60);
-  const quality =
-    options.quality === undefined
-      ? undefined
-      : requireIntInRange(options.quality, 'quality', 5, 10);
-  return {
-    ...(outPath ? { outPath } : {}),
-    ...(fps !== undefined ? { fps } : {}),
-    ...(quality !== undefined ? { quality } : {}),
-    ...(options.hideTouches !== undefined ? { showTouches: options.hideTouches !== true } : {}),
-  };
+  const backendOptions: BackendRecordingOptions = {};
+  if (outPath) backendOptions.outPath = outPath;
+  const fps = normalizeRecordingFps(options.fps);
+  if (fps !== undefined) backendOptions.fps = fps;
+  const maxSize = normalizeRecordingMaxSize(options.maxSize);
+  if (maxSize !== undefined) backendOptions.maxSize = maxSize;
+  const quality = normalizeRecordingExportQuality(options.quality);
+  if (quality !== undefined) backendOptions.quality = quality;
+  if (options.hideTouches !== undefined) backendOptions.showTouches = options.hideTouches !== true;
+  return backendOptions;
+}
+
+function normalizeRecordingFps(value: number | undefined): number | undefined {
+  return value === undefined ? undefined : requireIntInRange(value, 'fps', 1, 60);
+}
+
+function normalizeRecordingMaxSize(value: number | undefined): number | undefined {
+  return value === undefined
+    ? undefined
+    : requireIntInRange(value, 'maxSize', 1, Number.MAX_SAFE_INTEGER);
+}
+
+function normalizeRecordingExportQuality(
+  value: RecordingExportQuality | undefined,
+): BackendRecordingOptions['quality'] {
+  if (value === undefined) return undefined;
+  const exportQuality = recordingQualityInputToExportQuality(value);
+  if (exportQuality === undefined) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'quality must be one of: medium, high (legacy numeric values 5-10 are accepted)',
+    );
+  }
+  return exportQuality;
 }
 
 function requireAction(action: string, command: string): 'start' | 'stop' {

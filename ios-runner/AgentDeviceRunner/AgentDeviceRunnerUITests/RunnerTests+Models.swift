@@ -136,7 +136,7 @@ struct Command: Codable {
   let velocity: Double?
   let outPath: String?
   let fps: Int?
-  let quality: Int?
+  let maxSize: Int?
   let interactiveOnly: Bool?
   let depth: Int?
   let scope: String?

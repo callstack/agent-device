@@ -146,7 +146,7 @@ func run() throws {
   )
 
   // Overlay burn-in forces a full re-encode; medium quality keeps simulator videos readable
-  // while avoiding very slow highest-quality exports. Pass --export-quality high to opt into
+  // while avoiding very slow highest-quality exports. Pass --quality high to opt into
   // the slower highest-quality export.
   let presetName = exportPresetName(for: parsedArgs.exportQuality, compatibleWith: composition)
   guard let exporter = AVAssetExportSession(asset: composition, presetName: presetName) else {
@@ -184,7 +184,7 @@ func parseArguments(
   var outputPath: String?
   var eventsPath: String?
   // Export quality defaults to medium so existing callers keep the fast, simulator-friendly
-  // export. Pass --export-quality high to opt into a slower highest-quality export.
+  // export. Pass --quality high to opt into a slower highest-quality export.
   var exportQuality: ExportQuality = .medium
   var index = 0
 
@@ -204,12 +204,12 @@ func parseArguments(
       guard nextIndex < arguments.count else { throw OverlayError.invalidArgs("--events requires a value") }
       eventsPath = arguments[nextIndex]
       index += 2
-    case "--export-quality":
+    case "--quality":
       guard nextIndex < arguments.count else {
-        throw OverlayError.invalidArgs("--export-quality requires a value")
+        throw OverlayError.invalidArgs("--quality requires a value")
       }
       guard let parsed = ExportQuality(rawValue: arguments[nextIndex]) else {
-        throw OverlayError.invalidArgs("--export-quality must be one of: medium, high")
+        throw OverlayError.invalidArgs("--quality must be one of: medium, high")
       }
       exportQuality = parsed
       index += 2
@@ -220,7 +220,7 @@ func parseArguments(
 
   guard let inputPath, let outputPath, let eventsPath else {
     throw OverlayError.invalidArgs(
-      "Usage: recording-overlay.swift --input <video> --output <video> --events <json> [--export-quality <medium|high>]"
+      "Usage: recording-overlay.swift --input <video> --output <video> --events <json> [--quality <medium|high>]"
     )
   }
   return (inputPath, outputPath, eventsPath, exportQuality)

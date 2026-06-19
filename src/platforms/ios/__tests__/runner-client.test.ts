@@ -158,7 +158,7 @@ const runnerProtocolCommandFixtures: Record<RunnerCommand['command'], RunnerComm
     command: 'recordStart',
     outPath: '/tmp/runner-recording.mp4',
     fps: 30,
-    quality: 7,
+    maxSize: 720,
   },
   recordStop: { command: 'recordStop' },
   status: { command: 'status', statusCommandId: 'runner-command-1' },
@@ -394,7 +394,7 @@ test('runner protocol fixtures cover every runner command with JSON-safe samples
   assert.equal(roundTrip.screenshot!.fullscreen, true);
   assert.equal(roundTrip.rotate!.orientation, 'landscape-left');
   assert.equal(roundTrip.recordStart!.fps, 30);
-  assert.equal(roundTrip.recordStart!.quality, 7);
+  assert.equal(roundTrip.recordStart!.maxSize, 720);
 });
 
 test('withRunnerCommandId replaces blank command ids', () => {

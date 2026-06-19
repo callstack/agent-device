@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { AppError } from '../utils/errors.ts';
+import { recordingQualityInputToExportQuality } from '../core/recording-export-quality.ts';
 import { readScreenshotScriptFlag } from '../contracts/screenshot.ts';
 import type { DeviceTarget, PlatformSelector } from '../utils/device.ts';
 import { parseReplayOpenFlags } from './open-script.ts';
@@ -340,9 +341,18 @@ function parseReplayScriptLine(line: string): SessionAction | null {
         continue;
       }
       if (token === '--quality' && index + 1 < args.length) {
-        const parsedQuality = Number(args[index + 1]);
-        if (Number.isFinite(parsedQuality)) {
-          action.flags.quality = Math.floor(parsedQuality);
+        const value = args[index + 1]!;
+        const exportQuality = recordingQualityInputToExportQuality(value);
+        if (exportQuality !== undefined) {
+          action.flags.quality = exportQuality;
+        }
+        index += 1;
+        continue;
+      }
+      if (token === '--max-size' && index + 1 < args.length) {
+        const parsedMaxSize = Number(args[index + 1]);
+        if (Number.isFinite(parsedMaxSize)) {
+          action.flags.screenshotMaxSize = Math.floor(parsedMaxSize);
         }
         index += 1;
         continue;

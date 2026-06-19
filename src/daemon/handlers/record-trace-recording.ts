@@ -19,7 +19,7 @@ import {
 import {
   DEFAULT_RECORDING_EXPORT_QUALITY,
   RECORDING_EXPORT_QUALITIES,
-  isRecordingExportQuality,
+  recordingQualityInputToExportQuality,
 } from '../../core/recording-export-quality.ts';
 import {
   buildRecordStopFailure,
@@ -49,8 +49,6 @@ import { resolveImplicitSessionScope, resolvePublicSessionName } from '../sessio
 
 const IOS_DEVICE_RECORD_MIN_FPS = 1;
 const IOS_DEVICE_RECORD_MAX_FPS = 120;
-const RECORDING_MIN_QUALITY = 5;
-const RECORDING_MAX_QUALITY = 10;
 const LOCAL_RECORDING_READY_POLL_MS = 250;
 const LOCAL_RECORDING_READY_SETTLE_POLLS = 2;
 const IOS_SIMULATOR_RECORDING_TAIL_SETTLE_MS = 350;
@@ -86,14 +84,13 @@ async function waitForRecordingTail(
 }
 
 function buildRecordingBase(req: DaemonRequest, outPath: string): RecordingBase {
+  const exportQuality = recordingQualityInputToExportQuality(req.flags?.quality);
   return {
     outPath,
     clientOutPath: req.meta?.clientArtifactPaths?.outPath,
     startedAt: Date.now(),
-    quality: req.flags?.quality,
-    exportQuality: isRecordingExportQuality(req.flags?.exportQuality)
-      ? req.flags.exportQuality
-      : DEFAULT_RECORDING_EXPORT_QUALITY,
+    maxSize: req.flags?.screenshotMaxSize,
+    exportQuality: exportQuality ?? DEFAULT_RECORDING_EXPORT_QUALITY,
     showTouches: req.flags?.hideTouches !== true,
     gestureEvents: [],
   };
@@ -206,6 +203,7 @@ async function startRecording(params: {
 
   const fpsFlag = req.flags?.fps;
   const qualityFlag = req.flags?.quality;
+  const maxSizeFlag = req.flags?.screenshotMaxSize;
   if (
     fpsFlag !== undefined &&
     (!Number.isInteger(fpsFlag) ||
@@ -219,23 +217,16 @@ async function startRecording(params: {
   }
   if (
     qualityFlag !== undefined &&
-    (!Number.isInteger(qualityFlag) ||
-      qualityFlag < RECORDING_MIN_QUALITY ||
-      qualityFlag > RECORDING_MAX_QUALITY)
+    recordingQualityInputToExportQuality(qualityFlag) === undefined
   ) {
     return errorResponse(
       'INVALID_ARGS',
-      `quality must be an integer between ${RECORDING_MIN_QUALITY} and ${RECORDING_MAX_QUALITY}`,
+      `quality must be one of: ${RECORDING_EXPORT_QUALITIES.join(', ')} (legacy numeric values 5-10 are accepted)`,
     );
   }
-  const exportQualityFlag = req.flags?.exportQuality;
-  if (exportQualityFlag !== undefined && !isRecordingExportQuality(exportQualityFlag)) {
-    return errorResponse(
-      'INVALID_ARGS',
-      `export-quality must be one of: ${RECORDING_EXPORT_QUALITIES.join(', ')}`,
-    );
+  if (maxSizeFlag !== undefined && (!Number.isInteger(maxSizeFlag) || maxSizeFlag < 1)) {
+    return errorResponse('INVALID_ARGS', 'max-size must be a positive integer');
   }
-
   if (!isCommandSupportedOnDevice('record', device)) {
     return errorResponse('UNSUPPORTED_OPERATION', 'record is not supported on this device');
   }
@@ -388,21 +379,20 @@ async function stopNonRunnerRecording(params: {
     );
   }
 
-  if (recording.quality !== undefined && recording.quality < RECORDING_MAX_QUALITY) {
-    const quality = recording.quality;
+  if (recording.maxSize !== undefined) {
     try {
       await withDiagnosticTimer(
         'record_stop_resize',
         () =>
           deps.resizeRecording({
             videoPath: recording.outPath,
-            quality,
+            maxSize: recording.maxSize!,
             exportQuality: recording.exportQuality,
             targetLabel: 'iOS recording',
           }),
         {
           outPath: recording.outPath,
-          quality,
+          maxSize: recording.maxSize,
         },
       );
     } catch (error) {

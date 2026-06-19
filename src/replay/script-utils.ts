@@ -136,7 +136,10 @@ export function appendRecordActionScriptArgs(parts: string[], action: SessionAct
   if (typeof action.flags?.fps === 'number') {
     parts.push('--fps', String(action.flags.fps));
   }
-  if (typeof action.flags?.quality === 'number') {
+  if (typeof action.flags?.screenshotMaxSize === 'number') {
+    parts.push('--max-size', String(action.flags.screenshotMaxSize));
+  }
+  if (typeof action.flags?.quality === 'number' || typeof action.flags?.quality === 'string') {
     parts.push('--quality', String(action.flags.quality));
   }
   if (action.flags?.hideTouches) {

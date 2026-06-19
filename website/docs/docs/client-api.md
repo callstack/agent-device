@@ -267,7 +267,7 @@ Additional CLI-backed methods are exposed on their domain groups with typed opti
 
 For Apple native profiling, call `perf({ area: 'cpu', subject: 'profile', action: 'start', kind: 'xctrace', template: 'Time Profiler', out: 'app.trace' })`, then stop with the same trace path and write a compact report with `action: 'report'`. `area: 'trace'` supports xctrace templates such as `Animation Hitches`. Responses include artifact paths and compact metadata only.
 
-`client.recording.record({ action: 'start', path, quality: 5 })` starts a smaller 50% resolution video; omit `quality` to keep native/current resolution.
+`client.recording.record({ action: 'start', path, maxSize: 1024, quality: 'medium' })` starts a recording capped to a 1024 px longest edge with medium output quality.
 
 `client.batch.run({ steps })` accepts structured steps:
 `{ command: 'open', input: { app: 'settings' } }`. Step `input` uses the same fields as the

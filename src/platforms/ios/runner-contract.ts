@@ -75,7 +75,7 @@ export type RunnerCommand = {
   velocity?: number;
   outPath?: string;
   fps?: number;
-  quality?: number;
+  maxSize?: number;
   interactiveOnly?: boolean;
   depth?: number;
   scope?: string;

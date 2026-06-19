@@ -46,7 +46,8 @@ test('record and trace runtime commands call typed backend lifecycle primitives'
     action: 'start',
     out: { kind: 'path', path: '/tmp/out.mp4' },
     fps: 30,
-    quality: 7,
+    maxSize: 1024,
+    quality: 'high',
     hideTouches: true,
   });
   assert.equal(recording.kind, 'recordingStarted');
@@ -60,7 +61,13 @@ test('record and trace runtime commands call typed backend lifecycle primitives'
   assert.deepEqual(calls, [
     {
       command: 'startRecording',
-      options: { outPath: '/tmp/out.mp4', fps: 30, quality: 7, showTouches: false },
+      options: {
+        outPath: '/tmp/out.mp4',
+        fps: 30,
+        maxSize: 1024,
+        quality: 'high',
+        showTouches: false,
+      },
     },
     { command: 'stopTrace', options: { outPath: '/tmp/out.trace' } },
   ]);

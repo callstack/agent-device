@@ -140,27 +140,27 @@ export async function overlayRecordingTouches(params: {
   await exportProcessedVideo({
     videoPath,
     scriptPath: getOverlayScriptPath(),
-    scriptArgs: ['--events', telemetryPath, '--export-quality', exportQuality],
+    scriptArgs: ['--events', telemetryPath, '--quality', exportQuality],
     commandDescription: `Failed to add touch overlays to the ${targetLabel}`,
   });
 }
 
 export async function resizeRecording(params: {
   videoPath: string;
-  quality: number;
+  maxSize: number;
   exportQuality?: RecordingExportQuality;
   targetLabel?: string;
 }): Promise<void> {
   const {
     videoPath,
-    quality,
+    maxSize,
     exportQuality = DEFAULT_RECORDING_EXPORT_QUALITY,
     targetLabel = 'recording',
   } = params;
   await exportProcessedVideo({
     videoPath,
     scriptPath: getResizeScriptPath(),
-    scriptArgs: ['--quality', String(quality), '--export-quality', exportQuality],
+    scriptArgs: ['--max-size', String(maxSize), '--quality', exportQuality],
     commandDescription: `Failed to resize the ${targetLabel}`,
   });
 }

@@ -143,12 +143,21 @@ test('writeSessionLog persists record --hide-touches flags in script output', ()
   fixture.store.recordAction(fixture.session, {
     command: 'record',
     positionals: ['start', './capture.mp4'],
-    flags: { platform: 'ios', fps: 30, quality: 8, hideTouches: true },
+    flags: {
+      platform: 'ios',
+      fps: 30,
+      screenshotMaxSize: 1024,
+      quality: 'high',
+      hideTouches: true,
+    },
     result: { action: 'start', showTouches: false },
   });
 
   const script = writeScript(fixture);
-  assert.match(script, /record start "\.\/capture\.mp4" --fps 30 --quality 8 --hide-touches/);
+  assert.match(
+    script,
+    /record start "\.\/capture\.mp4" --fps 30 --max-size 1024 --quality high --hide-touches/,
+  );
 });
 
 test('writeSessionLog persists screenshot flags in script output', () => {

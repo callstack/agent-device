@@ -202,7 +202,7 @@ type SessionRecordingBase = {
   warning?: string;
   overlayWarning?: string;
   startedAt: number;
-  quality?: number;
+  maxSize?: number;
   exportQuality?: RecordingExportQuality;
   showTouches: boolean;
   gestureEvents: RecordingGestureEvent[];

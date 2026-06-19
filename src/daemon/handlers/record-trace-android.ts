@@ -16,8 +16,17 @@ import {
   scheduleAndroidRecordingRotation,
 } from './record-trace-android-chunks.ts';
 import { copyAndroidRecordingChunksWithValidation } from './record-trace-android-copy.ts';
+import {
+  DEFAULT_RECORDING_EXPORT_QUALITY,
+  type RecordingExportQuality,
+} from '../../core/recording-export-quality.ts';
 
 type AndroidRecordingSize = { width: number; height: number };
+
+const ANDROID_RECORDING_BIT_RATE: Record<RecordingExportQuality, number> = {
+  medium: 8_000_000,
+  high: 20_000_000,
+};
 
 const ANDROID_REMOTE_FILE_POLL_MS = 250;
 const ANDROID_REMOTE_FILE_ATTEMPTS = 20;
@@ -35,7 +44,8 @@ type AndroidRecordingBase = Pick<
   | 'clientOutPath'
   | 'telemetryPath'
   | 'startedAt'
-  | 'quality'
+  | 'maxSize'
+  | 'exportQuality'
   | 'showTouches'
   | 'gestureEvents'
 >;
@@ -151,10 +161,10 @@ function androidRemoteRecordingPaths(timestamp: number, preferredDir?: string): 
 
 async function resolveAndroidRecordingSize(params: {
   deviceId: string;
-  quality: number | undefined;
+  maxSize: number | undefined;
 }): Promise<AndroidRecordingSize | undefined> {
-  const { deviceId, quality } = params;
-  if (quality === undefined || quality >= 10) {
+  const { deviceId, maxSize } = params;
+  if (maxSize === undefined) {
     return undefined;
   }
 
@@ -166,28 +176,43 @@ async function resolveAndroidRecordingSize(params: {
     sizeResult.stdout.match(/Physical size:\s*(\d+)x(\d+)/);
   if (sizeResult.exitCode !== 0 || !match) {
     throw new Error(
-      `failed to resolve Android screen size for recording quality: ${formatRecordTraceExecFailure(sizeResult, 'adb shell wm size')}`,
+      `failed to resolve Android screen size for recording max-size: ${formatRecordTraceExecFailure(sizeResult, 'adb shell wm size')}`,
     );
   }
 
+  return scaledSizeToMax({
+    width: Number(match[1]),
+    height: Number(match[2]),
+    maxSize,
+  });
+}
+
+function scaledSizeToMax(size: AndroidRecordingSize & { maxSize: number }): AndroidRecordingSize {
+  const longest = Math.max(size.width, size.height);
+  if (longest <= size.maxSize) {
+    return { width: size.width, height: size.height };
+  }
+  const scale = size.maxSize / longest;
   return {
-    width: scaledEvenDimension(Number(match[1]), quality),
-    height: scaledEvenDimension(Number(match[2]), quality),
+    width: scaledEvenDimension(size.width, scale),
+    height: scaledEvenDimension(size.height, scale),
   };
 }
 
-function scaledEvenDimension(value: number, quality: number): number {
-  return Math.max(2, Math.round((value * quality) / 10 / 2) * 2);
+function scaledEvenDimension(value: number, scale: number): number {
+  return Math.max(2, Math.round((value * scale) / 2) * 2);
 }
 
 function buildAndroidScreenrecordCommand(
   remotePath: string,
   size: AndroidRecordingSize | undefined,
+  quality: RecordingExportQuality,
 ): string {
   const screenrecordArgs = ['screenrecord'];
   if (size) {
     screenrecordArgs.push('--size', `${size.width}x${size.height}`);
   }
+  screenrecordArgs.push('--bit-rate', String(ANDROID_RECORDING_BIT_RATE[quality]));
   screenrecordArgs.push(remotePath);
   return `${screenrecordArgs.join(' ')} >/dev/null 2>&1 & echo $!`;
 }
@@ -222,18 +247,19 @@ async function forceStopAndroidProcess(deviceId: string, pid: string): Promise<b
 async function startAndroidScreenrecordChunk(params: {
   device: AndroidDevice;
   recordingSize: AndroidRecordingSize | undefined;
+  quality: RecordingExportQuality;
   preferredRemoteDir?: string;
 }): Promise<
   { remotePath: string; remotePid: string; startedAt: number } | { error: DaemonResponse }
 > {
-  const { device, recordingSize, preferredRemoteDir } = params;
+  const { device, recordingSize, quality, preferredRemoteDir } = params;
   let lastStartError =
     'failed to start recording: Android screenrecord did not begin producing frames';
 
   for (const remotePath of androidRemoteRecordingPaths(Date.now(), preferredRemoteDir)) {
     const startResult = await runAndroidRecordingAdb(
       device.id,
-      ['shell', buildAndroidScreenrecordCommand(remotePath, recordingSize)],
+      ['shell', buildAndroidScreenrecordCommand(remotePath, recordingSize, quality)],
       {
         allowFailure: true,
       },
@@ -287,13 +313,18 @@ export async function startAndroidRecording(params: {
   try {
     recordingSize = await resolveAndroidRecordingSize({
       deviceId: device.id,
-      quality: recordingBase.quality,
+      maxSize: recordingBase.maxSize,
     });
   } catch (error) {
     return errorResponse('COMMAND_FAILED', error instanceof Error ? error.message : String(error));
   }
 
-  const chunk = await startAndroidScreenrecordChunk({ device, recordingSize });
+  const quality = recordingBase.exportQuality ?? DEFAULT_RECORDING_EXPORT_QUALITY;
+  const chunk = await startAndroidScreenrecordChunk({
+    device,
+    recordingSize,
+    quality,
+  });
   if ('error' in chunk) {
     return chunk.error;
   }
@@ -324,6 +355,7 @@ export async function startAndroidRecording(params: {
       const nextChunk = await startAndroidScreenrecordChunk({
         device,
         recordingSize,
+        quality,
         preferredRemoteDir,
       });
       if ('error' in nextChunk) {

@@ -28,7 +28,7 @@ export type RecordingBase = {
   outPath: string;
   clientOutPath?: string;
   startedAt: number;
-  quality?: number;
+  maxSize?: number;
   exportQuality?: RecordingExportQuality;
   showTouches: boolean;
   gestureEvents: RecordingGestureEvent[];

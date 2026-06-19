@@ -113,7 +113,7 @@ test('overlay defaults to the fast medium export preset', async () => {
   await overlayRecordingTouches({ videoPath, telemetryPath });
 
   expect(helperScriptArgs()).toEqual(
-    expect.arrayContaining(['--events', telemetryPath, '--export-quality', 'medium']),
+    expect.arrayContaining(['--events', telemetryPath, '--quality', 'medium']),
   );
 });
 
@@ -126,18 +126,18 @@ test('overlay forwards the requested high export preset', async () => {
   await overlayRecordingTouches({ videoPath, telemetryPath, exportQuality: 'high' });
 
   expect(helperScriptArgs()).toEqual(
-    expect.arrayContaining(['--events', telemetryPath, '--export-quality', 'high']),
+    expect.arrayContaining(['--events', telemetryPath, '--quality', 'high']),
   );
 });
 
-test('resize defaults to the fast medium export preset', async () => {
+test('resize forwards max-size and defaults to the fast medium export preset', async () => {
   const videoPath = path.join(tmpDir, 'recording.mp4');
   fs.writeFileSync(videoPath, 'original');
 
-  await resizeRecording({ videoPath, quality: 7 });
+  await resizeRecording({ videoPath, maxSize: 1024 });
 
   expect(helperScriptArgs()).toEqual(
-    expect.arrayContaining(['--quality', '7', '--export-quality', 'medium']),
+    expect.arrayContaining(['--max-size', '1024', '--quality', 'medium']),
   );
 });
 
@@ -145,9 +145,9 @@ test('resize forwards the requested high export preset', async () => {
   const videoPath = path.join(tmpDir, 'recording.mp4');
   fs.writeFileSync(videoPath, 'original');
 
-  await resizeRecording({ videoPath, quality: 8, exportQuality: 'high' });
+  await resizeRecording({ videoPath, maxSize: 720, exportQuality: 'high' });
 
   expect(helperScriptArgs()).toEqual(
-    expect.arrayContaining(['--quality', '8', '--export-quality', 'high']),
+    expect.arrayContaining(['--max-size', '720', '--quality', 'high']),
   );
 });

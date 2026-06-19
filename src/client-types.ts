@@ -769,14 +769,12 @@ export type NetworkOptions = AgentDeviceRequestOverrides & {
   include?: NetworkIncludeMode;
 };
 
-type RecordingQuality = 5 | 6 | 7 | 8 | 9 | 10;
-
 export type RecordOptions = AgentDeviceRequestOverrides & {
   action: 'start' | 'stop';
   path?: string;
   fps?: number;
-  quality?: RecordingQuality;
-  exportQuality?: RecordingExportQuality;
+  maxSize?: number;
+  quality?: RecordingExportQuality;
   hideTouches?: boolean;
 };
 
@@ -856,8 +854,8 @@ type CommandExecutionOptions = Partial<ScreenshotRequestFlags> & {
   forceFull?: boolean;
   count?: number;
   fps?: number;
-  quality?: RecordingQuality;
-  exportQuality?: RecordingExportQuality;
+  maxSize?: number;
+  quality?: RecordingExportQuality;
   hideTouches?: boolean;
   intervalMs?: number;
   delayMs?: number;

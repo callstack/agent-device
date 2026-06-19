@@ -791,23 +791,21 @@ test('parseArgs recognizes record --fps flag', () => {
 });
 
 test('parseArgs recognizes record --quality flag', () => {
-  const parsed = parseArgs(['record', 'start', './capture.mp4', '--quality', '7'], {
+  const parsed = parseArgs(['record', 'start', './capture.mp4', '--quality', 'high'], {
     strictFlags: true,
   });
   assert.equal(parsed.command, 'record');
   assert.deepEqual(parsed.positionals, ['start', './capture.mp4']);
-  assert.equal(parsed.flags.quality, 7);
+  assert.equal(parsed.flags.quality, 'high');
 });
 
-test('parseArgs accepts record --quality boundaries', () => {
-  const parsedMin = parseArgs(['record', 'start', './capture.mp4', '--quality', '5'], {
+test('parseArgs recognizes record --max-size flag', () => {
+  const parsed = parseArgs(['record', 'start', './capture.mp4', '--max-size', '1024'], {
     strictFlags: true,
   });
-  assert.equal(parsedMin.flags.quality, 5);
-  const parsedMax = parseArgs(['record', 'start', './capture.mp4', '--quality', '10'], {
-    strictFlags: true,
-  });
-  assert.equal(parsedMax.flags.quality, 10);
+  assert.equal(parsed.command, 'record');
+  assert.deepEqual(parsed.positionals, ['start', './capture.mp4']);
+  assert.equal(parsed.flags.screenshotMaxSize, 1024);
 });
 
 test('parseArgs recognizes record --hide-touches flag', () => {
@@ -847,16 +845,6 @@ test('parseArgs rejects invalid record --fps range', () => {
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
       error.message === 'Invalid fps: 0',
-  );
-});
-
-test('parseArgs rejects invalid record --quality range', () => {
-  assert.throws(
-    () => parseArgs(['record', 'start', './capture.mp4', '--quality', '4'], { strictFlags: true }),
-    (error) =>
-      error instanceof AppError &&
-      error.code === 'INVALID_ARGS' &&
-      error.message === 'Invalid quality: 4',
   );
 });
 
@@ -975,7 +963,7 @@ test('usage includes only global flags in the top-level flags section', () => {
   assert.doesNotMatch(flagsSection, /--header <name:value>/);
   assert.doesNotMatch(flagsSection, /--restart/);
   assert.doesNotMatch(flagsSection, /--fps <n>/);
-  assert.doesNotMatch(flagsSection, /--quality <5-10>/);
+  assert.doesNotMatch(flagsSection, /--quality <medium\|high>/);
   assert.doesNotMatch(flagsSection, /--save-script \[path\]/);
   assert.doesNotMatch(flagsSection, /--metadata/);
 });
@@ -1663,10 +1651,10 @@ test('command usage shows record touch-overlay opt-out flag', () => {
   if (help === null) throw new Error('Expected command help text');
   assert.match(
     help,
-    /record start \[path\] \[--fps <n>\] \[--quality <5-10>\] \[--export-quality <medium\|high>\] \[--hide-touches\] \| record stop/,
+    /record start \[path\] \[--fps <n>\] \[--max-size <px>\] \[--quality <medium\|high>\] \[--hide-touches\] \| record stop/,
   );
-  assert.match(help, /--quality <5-10>/);
-  assert.match(help, /--export-quality <medium\|high>/);
+  assert.match(help, /--max-size <px>/);
+  assert.match(help, /--quality <medium\|high>/);
   assert.match(help, /--hide-touches/);
   assert.match(help, /skip touch-overlay post-processing/);
   assert.match(help, /multiple MP4 chunks/);

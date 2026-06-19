@@ -7,8 +7,6 @@ import {
   booleanField,
   enumField,
   integerField,
-  integerSchema,
-  jsonSchemaField,
   requiredField,
   stringField,
 } from '../command-input.ts';
@@ -30,8 +28,8 @@ export const recordCommandMetadata = defineFieldCommandMetadata(
     action: requiredField(enumField(RECORDING_ACTION_VALUES)),
     path: stringField(),
     fps: integerField(),
-    quality: jsonSchemaField<RecordOptions['quality']>(integerSchema()),
-    exportQuality: enumField(RECORDING_EXPORT_QUALITIES),
+    maxSize: integerField(),
+    quality: enumField(RECORDING_EXPORT_QUALITIES),
     hideTouches: booleanField(),
   },
 );
@@ -64,13 +62,13 @@ export const recordingCommandDefinitions = [
 
 const recordCliSchema = {
   usageOverride:
-    'record start [path] [--fps <n>] [--quality <5-10>] [--export-quality <medium|high>] [--hide-touches] | record stop',
+    'record start [path] [--fps <n>] [--max-size <px>] [--quality <medium|high>] [--hide-touches] | record stop',
   listUsageOverride: 'record start [path] | record stop',
   helpDescription:
-    'Start/stop screen recording; Android recordings longer than the 180s adb screenrecord limit are returned as multiple MP4 chunks. On iOS, --export-quality trades export speed (medium, default) for higher-quality output (high)',
+    'Start/stop screen recording; Android recordings longer than the 180s adb screenrecord limit are returned as multiple MP4 chunks. Use --max-size to limit dimensions and --quality to choose medium or high export quality',
   summary: 'Start or stop screen recording',
   positionalArgs: ['start|stop', 'path?'],
-  allowedFlags: ['fps', 'quality', 'exportQuality', 'hideTouches'],
+  allowedFlags: ['fps', 'screenshotMaxSize', 'quality', 'hideTouches'],
 } as const satisfies CommandSchemaOverride;
 
 const traceCliSchema = {
@@ -92,8 +90,8 @@ export const recordCliReader: CliReader = (positionals, flags) => ({
   action: readRecordingAction(positionals[0], RECORD_COMMAND_NAME),
   path: positionals[1],
   fps: flags.fps,
+  maxSize: flags.screenshotMaxSize,
   quality: flags.quality as RecordOptions['quality'],
-  exportQuality: flags.exportQuality,
   hideTouches: flags.hideTouches,
 });
 

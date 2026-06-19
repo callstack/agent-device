@@ -34,32 +34,22 @@ describe('recording command interface', () => {
     expect(
       recordCliReader(['start', './capture.mp4'], {
         fps: 30,
-        quality: 7,
+        screenshotMaxSize: 1024,
+        quality: 'high',
         hideTouches: true,
       } as CliFlags),
     ).toEqual({
       action: 'start',
       path: './capture.mp4',
       fps: 30,
-      quality: 7,
+      maxSize: 1024,
+      quality: 'high',
       hideTouches: true,
     });
   });
 
-  test('reads the export-quality flag into record input', () => {
-    expect(
-      recordCliReader(['start', './capture.mp4'], {
-        exportQuality: 'high',
-      } as CliFlags),
-    ).toMatchObject({
-      action: 'start',
-      path: './capture.mp4',
-      exportQuality: 'high',
-    });
-  });
-
   test('leaves export quality unset when the flag is omitted', () => {
-    expect(recordCliReader(['start'], NO_FLAGS).exportQuality).toBeUndefined();
+    expect(recordCliReader(['start'], NO_FLAGS).quality).toBeUndefined();
   });
 
   test('reads trace CLI input', () => {
