@@ -108,6 +108,7 @@ import {
   validateRunnerDevice,
 } from '../runner-session.ts';
 import {
+  cleanupRunnerLeasesForOwner,
   RUNNER_OWNER_START_TIME,
   RUNNER_OWNER_TOKEN,
   writeRunnerLease,
@@ -708,6 +709,40 @@ test('runner session startup reclaims dead foreign runner lease before launching
     String(pkillCalls[0]?.[1]?.[2] ?? ''),
     /xcodebuild\.\*test-without-building\.\*AgentDeviceRunner\\\.env\\\.session-runner-session-dead-lease-sim-owner-dead-foreign-/,
   );
+});
+
+test('runner lease cleanup reclaims only leases owned by the stopped daemon', async () => {
+  const ownerPid = 999_999_991;
+  const ownerStartTime = 'Fri Jun 19 12:00:00 2026';
+  const owned = makeRunnerLease({
+    deviceId: 'runner-session-clean-owned-lease',
+    ownerPid,
+    ownerStartTime,
+    ownerToken: 'owner-clean-owned',
+  });
+  const foreign = makeRunnerLease({
+    deviceId: 'runner-session-clean-foreign-lease',
+    ownerPid,
+    ownerStartTime: 'Fri Jun 19 12:01:00 2026',
+    ownerToken: 'owner-clean-foreign',
+  });
+  writeRunnerLease(owned);
+  writeRunnerLease(foreign);
+
+  await cleanupRunnerLeasesForOwner(
+    { pid: ownerPid, startTime: ownerStartTime },
+    {
+      cleanupRunnerProcessTree: async () => {},
+      cleanupRunnerXcodebuildProcesses: async () => {},
+      cleanupTempFile: mockCleanupTempFile,
+    },
+  );
+
+  const leaseDir = process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR;
+  assert.ok(leaseDir);
+  assert.equal(fs.existsSync(path.join(leaseDir, `${owned.deviceId}.json`)), false);
+  assert.equal(fs.existsSync(path.join(leaseDir, `${foreign.deviceId}.json`)), true);
+  assert.deepEqual(mockCleanupTempFile.mock.calls, [[owned.xctestrunPath], [owned.jsonPath]]);
 });
 
 test('runner session restarts alive runner when expected xctestrun artifact changes', async () => {

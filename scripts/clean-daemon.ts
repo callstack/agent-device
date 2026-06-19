@@ -6,6 +6,8 @@ import {
   isAgentDeviceDaemonProcess,
   stopProcessForTakeover,
 } from '../src/utils/process-identity.ts';
+import { cleanupRunnerLeasesForOwner } from '../src/platforms/ios/runner-lease.ts';
+import { runnerLeaseCleanupAdapter } from '../src/platforms/ios/runner-disposal.ts';
 
 const DAEMON_TERM_TIMEOUT_MS = 15_000;
 const DAEMON_KILL_TIMEOUT_MS = 2_000;
@@ -27,6 +29,10 @@ if (daemonPid !== null) {
     killTimeoutMs: DAEMON_KILL_TIMEOUT_MS,
     expectedStartTime: info?.processStartTime,
   });
+  await cleanupRunnerLeasesForOwner(
+    { pid: daemonPid, startTime: info?.processStartTime },
+    runnerLeaseCleanupAdapter,
+  );
 }
 
 removeIfPresent(paths.infoPath);

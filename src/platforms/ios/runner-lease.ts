@@ -141,6 +141,19 @@ export async function cleanupOwnedRunnerLease(
   }
 }
 
+export async function cleanupRunnerLeasesForOwner(
+  owner: { pid: number; startTime?: string | null },
+  cleanup: RunnerLeaseCleanupAdapter,
+): Promise<void> {
+  if (!Number.isInteger(owner.pid) || owner.pid <= 0) return;
+  const leases = listRunnerLeasesForOwner(owner);
+  await Promise.all(
+    leases.map(async (lease) => {
+      await cleanupLeasedRunnerProcesses(lease, 'owned', cleanup);
+    }),
+  );
+}
+
 export function releaseRunnerLease(lease: RunnerLease | undefined): void {
   if (!lease) return;
   removeRunnerLease({
@@ -180,6 +193,39 @@ function resolveRunnerLeaseRoot(): string {
   const override = process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR?.trim();
   if (override) return path.resolve(override);
   return path.join(os.homedir(), '.agent-device', 'ios-runner', 'leases');
+}
+
+function listRunnerLeasesForOwner(owner: {
+  pid: number;
+  startTime?: string | null;
+}): RunnerLease[] {
+  let entries: fs.Dirent[];
+  const root = resolveRunnerLeaseRoot();
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const leases: RunnerLease[] = [];
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+    const lease = readRunnerLeaseFile(path.join(root, entry.name));
+    if (!lease) continue;
+    if (lease.ownerPid !== owner.pid) continue;
+    if (owner.startTime !== undefined && lease.ownerStartTime !== owner.startTime) continue;
+    leases.push(lease);
+  }
+  return leases;
+}
+
+function readRunnerLeaseFile(filePath: string): RunnerLease | null {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8')) as Partial<RunnerLease>;
+    const deviceId = readNonEmptyString(parsed.deviceId);
+    return deviceId ? normalizeRunnerLease(parsed, deviceId) : null;
+  } catch {
+    return null;
+  }
 }
 
 function normalizeRunnerLease(value: unknown, deviceId: string): RunnerLease | null {
