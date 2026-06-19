@@ -705,6 +705,7 @@ agent-device record start               # Start screen recording to auto filenam
 agent-device record start session.mp4   # Start recording to explicit path
 agent-device record start session.mp4 --fps 30  # Override iOS device runner FPS
 agent-device record start session.mp4 --quality 7 # Scale recording resolution to 70%
+agent-device record start session.mp4 --export-quality high # Higher-quality iOS export (slower)
 agent-device record stop                # Stop active recording
 ```
 
@@ -791,6 +792,7 @@ tail -50 ~/.agent-device/sessions/default/app.log
 - Physical-device capture defaults to 15 FPS.
 - `--fps <n>` (1-120) applies to physical iOS device recording as an explicit FPS cap.
 - `--quality <5-10>` scales recording resolution from 50% through native resolution without changing FPS. Omitting it preserves the platform's current/native recording resolution.
+- `--export-quality <medium|high>` controls the iOS export preset used when a recording is re-encoded (for example when `--quality` downscales it). `medium` is the default and favors fast, simulator-friendly exports; `high` produces a slower, higher-quality export better suited to evidence, release notes, or debugging visual artifacts. This is independent of the `--quality` resolution scale: `--quality` decides how large the video is, `--export-quality` decides how hard the exporter works to preserve it.
 
 ## Tracing
 

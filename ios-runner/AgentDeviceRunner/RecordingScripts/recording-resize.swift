@@ -74,7 +74,8 @@ func run() throws {
   instruction.layerInstructions = [layerInstruction]
   videoComposition.instructions = [instruction]
 
-  guard let exporter = AVAssetExportSession(asset: composition, presetName: AVAssetExportPresetHighestQuality) else {
+  let presetName = exportPresetName(for: parsedArgs.exportQuality, compatibleWith: composition)
+  guard let exporter = AVAssetExportSession(asset: composition, presetName: presetName) else {
     throw ResizeError.exportFailed("Failed to create export session.")
   }
 
@@ -97,10 +98,20 @@ func run() throws {
   }
 }
 
-func parseArguments(_ arguments: [String]) throws -> (inputPath: String, outputPath: String, quality: Int) {
+enum ExportQuality: String {
+  case medium
+  case high
+}
+
+func parseArguments(
+  _ arguments: [String]
+) throws -> (inputPath: String, outputPath: String, quality: Int, exportQuality: ExportQuality) {
   var inputPath: String?
   var outputPath: String?
   var quality: Int?
+  // Export quality defaults to medium so existing callers keep the fast, simulator-friendly
+  // export. Pass --export-quality high to opt into a slower highest-quality export.
+  var exportQuality: ExportQuality = .medium
   var index = 0
 
   while index < arguments.count {
@@ -122,6 +133,15 @@ func parseArguments(_ arguments: [String]) throws -> (inputPath: String, outputP
       }
       quality = parsed
       index += 2
+    case "--export-quality":
+      guard nextIndex < arguments.count else {
+        throw ResizeError.invalidArgs("--export-quality requires a value")
+      }
+      guard let parsed = ExportQuality(rawValue: arguments[nextIndex]) else {
+        throw ResizeError.invalidArgs("--export-quality must be one of: medium, high")
+      }
+      exportQuality = parsed
+      index += 2
     default:
       throw ResizeError.invalidArgs("Unknown argument: \(argument)")
     }
@@ -129,10 +149,27 @@ func parseArguments(_ arguments: [String]) throws -> (inputPath: String, outputP
 
   guard let inputPath, let outputPath, let quality else {
     throw ResizeError.invalidArgs(
-      "Usage: recording-resize.swift --input <video> --output <video> --quality <5-10>"
+      "Usage: recording-resize.swift --input <video> --output <video> --quality <5-10> [--export-quality <medium|high>]"
     )
   }
-  return (inputPath, outputPath, quality)
+  return (inputPath, outputPath, quality, exportQuality)
+}
+
+func exportPresetName(
+  for exportQuality: ExportQuality,
+  compatibleWith asset: AVAsset
+) -> String {
+  switch exportQuality {
+  case .high:
+    return AVAssetExportPresetHighestQuality
+  case .medium:
+    // Mirror the touch-overlay export: prefer the faster medium preset, falling back to
+    // highest quality only when medium is not available for this composition.
+    let compatible = AVAssetExportSession.exportPresets(compatibleWith: asset)
+    return compatible.contains(AVAssetExportPresetMediumQuality)
+      ? AVAssetExportPresetMediumQuality
+      : AVAssetExportPresetHighestQuality
+  }
 }
 
 func resolvedRenderSize(for track: AVAssetTrack) -> CGSize {

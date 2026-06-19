@@ -17,6 +17,11 @@ import {
   trimRecordingStart,
 } from '../../recording/overlay.ts';
 import {
+  DEFAULT_RECORDING_EXPORT_QUALITY,
+  RECORDING_EXPORT_QUALITIES,
+  isRecordingExportQuality,
+} from '../../core/recording-export-quality.ts';
+import {
   buildRecordStopFailure,
   formatRecordTraceError,
   formatRecordTraceExecFailure,
@@ -86,6 +91,9 @@ function buildRecordingBase(req: DaemonRequest, outPath: string): RecordingBase 
     clientOutPath: req.meta?.clientArtifactPaths?.outPath,
     startedAt: Date.now(),
     quality: req.flags?.quality,
+    exportQuality: isRecordingExportQuality(req.flags?.exportQuality)
+      ? req.flags.exportQuality
+      : DEFAULT_RECORDING_EXPORT_QUALITY,
     showTouches: req.flags?.hideTouches !== true,
     gestureEvents: [],
   };
@@ -218,6 +226,13 @@ async function startRecording(params: {
     return errorResponse(
       'INVALID_ARGS',
       `quality must be an integer between ${RECORDING_MIN_QUALITY} and ${RECORDING_MAX_QUALITY}`,
+    );
+  }
+  const exportQualityFlag = req.flags?.exportQuality;
+  if (exportQualityFlag !== undefined && !isRecordingExportQuality(exportQualityFlag)) {
+    return errorResponse(
+      'INVALID_ARGS',
+      `export-quality must be one of: ${RECORDING_EXPORT_QUALITIES.join(', ')}`,
     );
   }
 
@@ -382,6 +397,7 @@ async function stopNonRunnerRecording(params: {
           deps.resizeRecording({
             videoPath: recording.outPath,
             quality,
+            exportQuality: recording.exportQuality,
             targetLabel: 'iOS recording',
           }),
         {

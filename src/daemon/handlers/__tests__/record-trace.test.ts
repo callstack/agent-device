@@ -56,6 +56,7 @@ import { handleRecordTraceCommands } from '../record-trace.ts';
 import { deriveRecordingTelemetryPath } from '../../recording-telemetry.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { SessionState } from '../../types.ts';
+import type { RecordingExportQuality } from '../../../core/recording-export-quality.ts';
 import { runIosRunnerCommand } from '../../../platforms/ios/runner-client.ts';
 import {
   getRecordingOverlaySupportWarning,
@@ -159,7 +160,12 @@ async function runRecordCommand(params: {
   positionals: string[];
   logPath?: string;
   cwd?: string;
-  flags?: { fps?: number; quality?: number; hideTouches?: boolean };
+  flags?: {
+    fps?: number;
+    quality?: number;
+    exportQuality?: RecordingExportQuality;
+    hideTouches?: boolean;
+  };
   clientArtifactPaths?: Record<string, string>;
 }) {
   return handleRecordTraceCommands({
@@ -639,8 +645,75 @@ test('record stop resizes iOS simulator recording when quality is explicit', asy
   expect(mockResizeRecording).toHaveBeenCalledWith({
     videoPath: path.resolve('./sim-quality.mp4'),
     quality: 6,
+    exportQuality: 'medium',
     targetLabel: 'iOS recording',
   });
+});
+
+test('record stop forwards the requested export quality to the resize step', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-sim-export-quality';
+  sessionStore.set(
+    sessionName,
+    makeSession(sessionName, {
+      platform: 'ios',
+      id: 'sim-1',
+      name: 'Simulator',
+      kind: 'simulator',
+      booted: true,
+    }),
+  );
+
+  mockRunCmdBackground.mockImplementation(() => ({
+    child: { kill: () => {} } as any,
+    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
+  }));
+
+  await runRecordCommand({
+    sessionStore,
+    sessionName,
+    positionals: ['start', './sim-export-quality.mp4'],
+    flags: { quality: 6, exportQuality: 'high' },
+  });
+
+  const responseStop = await runRecordCommand({
+    sessionStore,
+    sessionName,
+    positionals: ['stop'],
+  });
+
+  expect(responseStop?.ok).toBe(true);
+  expect(mockResizeRecording).toHaveBeenCalledWith({
+    videoPath: path.resolve('./sim-export-quality.mp4'),
+    quality: 6,
+    exportQuality: 'high',
+    targetLabel: 'iOS recording',
+  });
+});
+
+test('record start rejects an invalid export-quality value', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-sim-export-quality-invalid';
+  sessionStore.set(
+    sessionName,
+    makeSession(sessionName, {
+      platform: 'ios',
+      id: 'sim-1',
+      name: 'Simulator',
+      kind: 'simulator',
+      booted: true,
+    }),
+  );
+
+  const response = await runRecordCommand({
+    sessionStore,
+    sessionName,
+    positionals: ['start', './sim-export-quality-invalid.mp4'],
+    flags: { exportQuality: 'ultra' as never },
+  });
+
+  expect((response as any).error?.code).toBe('INVALID_ARGS');
+  expect((response as any).error?.message).toMatch(/export-quality must be one of: medium, high/);
 });
 
 test('record stop leaves a short visual tail after iOS simulator gestures', async () => {

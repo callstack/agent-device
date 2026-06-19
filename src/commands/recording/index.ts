@@ -1,4 +1,5 @@
 import type { RecordOptions } from '../../client-types.ts';
+import { RECORDING_EXPORT_QUALITIES } from '../../core/recording-export-quality.ts';
 import { AppError } from '../../utils/errors.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
@@ -30,6 +31,7 @@ export const recordCommandMetadata = defineFieldCommandMetadata(
     path: stringField(),
     fps: integerField(),
     quality: jsonSchemaField<RecordOptions['quality']>(integerSchema()),
+    exportQuality: enumField(RECORDING_EXPORT_QUALITIES),
     hideTouches: booleanField(),
   },
 );
@@ -62,13 +64,13 @@ export const recordingCommandDefinitions = [
 
 const recordCliSchema = {
   usageOverride:
-    'record start [path] [--fps <n>] [--quality <5-10>] [--hide-touches] | record stop',
+    'record start [path] [--fps <n>] [--quality <5-10>] [--export-quality <medium|high>] [--hide-touches] | record stop',
   listUsageOverride: 'record start [path] | record stop',
   helpDescription:
-    'Start/stop screen recording; Android recordings longer than the 180s adb screenrecord limit are returned as multiple MP4 chunks',
+    'Start/stop screen recording; Android recordings longer than the 180s adb screenrecord limit are returned as multiple MP4 chunks. On iOS, --export-quality trades export speed (medium, default) for higher-quality output (high)',
   summary: 'Start or stop screen recording',
   positionalArgs: ['start|stop', 'path?'],
-  allowedFlags: ['fps', 'quality', 'hideTouches'],
+  allowedFlags: ['fps', 'quality', 'exportQuality', 'hideTouches'],
 } as const satisfies CommandSchemaOverride;
 
 const traceCliSchema = {
@@ -91,6 +93,7 @@ export const recordCliReader: CliReader = (positionals, flags) => ({
   path: positionals[1],
   fps: flags.fps,
   quality: flags.quality as RecordOptions['quality'],
+  exportQuality: flags.exportQuality,
   hideTouches: flags.hideTouches,
 });
 

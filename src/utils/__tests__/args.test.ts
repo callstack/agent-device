@@ -1663,9 +1663,10 @@ test('command usage shows record touch-overlay opt-out flag', () => {
   if (help === null) throw new Error('Expected command help text');
   assert.match(
     help,
-    /record start \[path\] \[--fps <n>\] \[--quality <5-10>\] \[--hide-touches\] \| record stop/,
+    /record start \[path\] \[--fps <n>\] \[--quality <5-10>\] \[--export-quality <medium\|high>\] \[--hide-touches\] \| record stop/,
   );
   assert.match(help, /--quality <5-10>/);
+  assert.match(help, /--export-quality <medium\|high>/);
   assert.match(help, /--hide-touches/);
   assert.match(help, /skip touch-overlay post-processing/);
   assert.match(help, /multiple MP4 chunks/);

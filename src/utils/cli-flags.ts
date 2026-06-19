@@ -1,4 +1,8 @@
 import { SESSION_SURFACES, type SessionSurface } from '../core/session-surface.ts';
+import {
+  RECORDING_EXPORT_QUALITIES,
+  type RecordingExportQuality,
+} from '../core/recording-export-quality.ts';
 import type { BackMode } from '../core/back-mode.ts';
 import type { ClickButton } from '../core/click-button.ts';
 import type { SwipePattern } from '../core/scroll-gesture.ts';
@@ -77,6 +81,7 @@ export type CliFlags = RemoteConfigMetroOptions &
     count?: number;
     fps?: number;
     quality?: number;
+    exportQuality?: RecordingExportQuality;
     hideTouches?: boolean;
     intervalMs?: number;
     delayMs?: number;
@@ -633,6 +638,15 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageLabel: '--quality <5-10>',
     usageDescription:
       'Record: scale recording resolution from 5 (50%) through 10 (native resolution)',
+  },
+  {
+    key: 'exportQuality',
+    names: ['--export-quality'],
+    type: 'enum',
+    enumValues: RECORDING_EXPORT_QUALITIES,
+    usageLabel: '--export-quality <medium|high>',
+    usageDescription:
+      'Record: iOS export preset tradeoff. medium (default) favors fast simulator exports; high produces a slower, higher-quality export for evidence',
   },
   {
     key: 'hideTouches',

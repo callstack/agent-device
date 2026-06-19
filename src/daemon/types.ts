@@ -14,6 +14,7 @@ import type { CommandFlags } from '../core/dispatch.ts';
 import type { GestureReferenceFrame, ScrollDirection } from '../core/scroll-gesture.ts';
 import type { LogBackend } from './network-log.ts';
 import type { SessionSurface } from '../core/session-surface.ts';
+import type { RecordingExportQuality } from '../core/recording-export-quality.ts';
 import type { DeviceInfo, Platform, PlatformSelector } from '../utils/device.ts';
 import type { ExecBackgroundResult, ExecResult } from '../utils/exec.ts';
 import type { SnapshotState } from '../utils/snapshot.ts';
@@ -202,6 +203,7 @@ type SessionRecordingBase = {
   overlayWarning?: string;
   startedAt: number;
   quality?: number;
+  exportQuality?: RecordingExportQuality;
   showTouches: boolean;
   gestureEvents: RecordingGestureEvent[];
   touchReferenceFrame?: GestureReferenceFrame;

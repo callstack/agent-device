@@ -46,6 +46,22 @@ describe('recording command interface', () => {
     });
   });
 
+  test('reads the export-quality flag into record input', () => {
+    expect(
+      recordCliReader(['start', './capture.mp4'], {
+        exportQuality: 'high',
+      } as CliFlags),
+    ).toMatchObject({
+      action: 'start',
+      path: './capture.mp4',
+      exportQuality: 'high',
+    });
+  });
+
+  test('leaves export quality unset when the flag is omitted', () => {
+    expect(recordCliReader(['start'], NO_FLAGS).exportQuality).toBeUndefined();
+  });
+
   test('reads trace CLI input', () => {
     expect(traceCliReader(['stop', './diagnostics.trace'], NO_FLAGS)).toEqual({
       action: 'stop',

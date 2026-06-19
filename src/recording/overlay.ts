@@ -5,6 +5,10 @@ import { runCmd } from '../utils/exec.ts';
 import { AppError } from '../utils/errors.ts';
 import { buildSwiftToolEnv, compileSwiftSourceFile } from '../utils/swift-cache.ts';
 import { waitForPlayableVideo, waitForStableFile } from '../utils/video.ts';
+import {
+  DEFAULT_RECORDING_EXPORT_QUALITY,
+  type RecordingExportQuality,
+} from '../core/recording-export-quality.ts';
 
 function resolveScriptPath(scriptName: string): string {
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
@@ -138,13 +142,19 @@ export async function overlayRecordingTouches(params: {
 export async function resizeRecording(params: {
   videoPath: string;
   quality: number;
+  exportQuality?: RecordingExportQuality;
   targetLabel?: string;
 }): Promise<void> {
-  const { videoPath, quality, targetLabel = 'recording' } = params;
+  const {
+    videoPath,
+    quality,
+    exportQuality = DEFAULT_RECORDING_EXPORT_QUALITY,
+    targetLabel = 'recording',
+  } = params;
   await exportProcessedVideo({
     videoPath,
     scriptPath: getResizeScriptPath(),
-    scriptArgs: ['--quality', String(quality)],
+    scriptArgs: ['--quality', String(quality), '--export-quality', exportQuality],
     commandDescription: `Failed to resize the ${targetLabel}`,
   });
 }

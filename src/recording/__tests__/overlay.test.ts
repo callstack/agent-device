@@ -27,9 +27,14 @@ vi.mock('../../utils/video.ts', () => ({
   waitForPlayableVideo: vi.fn(async () => {}),
 }));
 
-import { overlayRecordingTouches } from '../overlay.ts';
+import { overlayRecordingTouches, resizeRecording } from '../overlay.ts';
 import { AppError } from '../../utils/errors.ts';
 import { runCmd } from '../../utils/exec.ts';
+
+function helperScriptArgs(): string[] {
+  const helperCall = mockRunCmd.mock.calls.find(([cmd]) => cmd !== 'xcrun');
+  return (helperCall?.[1] as string[] | undefined) ?? [];
+}
 
 const mockRunCmd = vi.mocked(runCmd);
 
@@ -97,4 +102,26 @@ test('overlay preserves Swift helper compile hints', async () => {
       hint,
     },
   });
+});
+
+test('resize defaults to the fast medium export preset', async () => {
+  const videoPath = path.join(tmpDir, 'recording.mp4');
+  fs.writeFileSync(videoPath, 'original');
+
+  await resizeRecording({ videoPath, quality: 7 });
+
+  expect(helperScriptArgs()).toEqual(
+    expect.arrayContaining(['--quality', '7', '--export-quality', 'medium']),
+  );
+});
+
+test('resize forwards the requested high export preset', async () => {
+  const videoPath = path.join(tmpDir, 'recording.mp4');
+  fs.writeFileSync(videoPath, 'original');
+
+  await resizeRecording({ videoPath, quality: 8, exportQuality: 'high' });
+
+  expect(helperScriptArgs()).toEqual(
+    expect.arrayContaining(['--quality', '8', '--export-quality', 'high']),
+  );
 });
