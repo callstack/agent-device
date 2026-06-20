@@ -371,12 +371,6 @@ export function getRunnerSessionSnapshot(
   };
 }
 
-export async function stopRunnerSession(session: RunnerSession): Promise<void> {
-  await withRunnerSessionLock(session.deviceId, async () => {
-    await stopRunnerSessionInternal(session.deviceId, session);
-  });
-}
-
 export async function invalidateRunnerSession(
   session: RunnerSession,
   reason: string,

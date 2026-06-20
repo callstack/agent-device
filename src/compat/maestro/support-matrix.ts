@@ -16,15 +16,6 @@ export const MAESTRO_COMPAT_SUPPORTED_CAPABILITIES = [
   'ordered trusted runScript file/env scripts with http.post, json, and output variables',
 ] as const;
 
-export const MAESTRO_COMPAT_UNSUPPORTED_CAPABILITIES = [
-  'repeat.while',
-  'full expression predicates beyond boolean literals and maestro.platform comparisons',
-  'evalScript',
-  'device utility commands',
-  'Android app launch arguments',
-  'Android app state reset',
-] as const;
-
 export const MAESTRO_COMPAT_TRACKER_URL = 'https://github.com/callstack/agent-device/issues/558';
 
 export const MAESTRO_NEW_ISSUE_URL = 'https://github.com/callstack/agent-device/issues/new';

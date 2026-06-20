@@ -30,16 +30,6 @@ type FindBestMatches = {
   score: number;
 };
 
-export function findNodeByLocator(
-  nodes: SnapshotNode[],
-  locator: FindLocator,
-  query: string,
-  options: FindMatchOptions = {},
-): SnapshotNode | null {
-  const best = findBestMatchesByLocator(nodes, locator, query, options);
-  return best.matches[0] ?? null;
-}
-
 export function findBestMatchesByLocator(
   nodes: SnapshotNode[],
   locator: FindLocator,

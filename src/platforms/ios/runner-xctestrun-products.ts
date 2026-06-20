@@ -11,14 +11,6 @@ const XCTESTRUN_PRODUCT_REFERENCE_KEYS = new Set([
   'UITargetAppPath',
 ]);
 
-export async function xctestrunReferencesExistingProducts(xctestrunPath: string): Promise<boolean> {
-  try {
-    return (await resolveExistingXctestrunProductPaths(xctestrunPath)) !== null;
-  } catch {
-    return false;
-  }
-}
-
 export async function resolveExistingXctestrunProductPaths(
   xctestrunPath: string,
 ): Promise<string[] | null> {

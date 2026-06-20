@@ -104,7 +104,6 @@ import {
   getRunnerSessionSnapshot,
   invalidateRunnerSession,
   stopIosRunnerSession,
-  stopRunnerSession,
   validateRunnerDevice,
 } from '../runner-session.ts';
 import {
@@ -608,9 +607,6 @@ test('runner session starts xcodebuild through provider seams and reuses an aliv
     sessionId: session.sessionId,
     alive: true,
   });
-
-  mockIsProcessAlive.mockReturnValue(false);
-  await stopRunnerSession(session);
 });
 
 test('runner session fails early for physical iOS devices when Apple developer mode is disabled', async () => {
@@ -851,33 +847,6 @@ test('runner session stale bundle cleanup is best-effort when simctl stalls', as
   assert.equal(mockRunCmdBackground.mock.calls.length, 1);
 });
 
-test('runner session stop sends shutdown, cleans temporary runner files, and releases simulator scope', async () => {
-  const device = { ...IOS_SIMULATOR, id: 'runner-session-stop-sim' };
-  const session = await ensureRunnerSession(device, {});
-
-  mockIsProcessAlive.mockReturnValue(false);
-  await stopRunnerSession(session);
-
-  assertRunnerCommand(mockWaitForRunner.mock.calls.at(-1)?.[2], { command: 'shutdown' });
-  assert.deepEqual(mockCleanupTempFile.mock.calls, [
-    ['/tmp/session-runner.xctestrun'],
-    ['/tmp/session-runner.json'],
-  ]);
-  const terminateCalls = mockRunXcrun.mock.calls.filter(isSimctlTerminateCall);
-  assert.equal(
-    terminateCalls.some((call) =>
-      call[0]?.includes('com.callstack.agentdevice.runner.uitests.xctrunner'),
-    ),
-    true,
-  );
-  assert.equal(
-    terminateCalls.every((call) => call[1]?.timeoutMs === 2_000),
-    true,
-  );
-  assert.equal(mockRedirectRelease.mock.calls.length, 1);
-  assert.equal(getRunnerSessionSnapshot(device.id), null);
-});
-
 test('runner session stop kills only owned stale xcodebuild runner processes without in-memory session', async () => {
   const deviceId = '11C70358-8331-4872-A0CA-F15B6859B6FC';
   writeRunnerLease(makeRunnerLease({ deviceId, ownerToken: RUNNER_OWNER_TOKEN }));
@@ -938,11 +907,6 @@ function mockDevToolsSecurityDisabled(): void {
     }
     return { exitCode: 0, stdout: '', stderr: '' };
   });
-}
-
-function isSimctlTerminateCall(call: unknown[]): boolean {
-  const args = call[0];
-  return Array.isArray(args) && args.includes('simctl') && args.includes('terminate');
 }
 
 test('runner session invalidation skips graceful shutdown and removes stale session', async () => {

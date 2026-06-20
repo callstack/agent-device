@@ -12,7 +12,6 @@ export type DaemonCommandRoute =
   | 'generic';
 
 export type SessionCommandKind = 'inventory' | 'state' | 'observability' | 'replay';
-type DaemonHandlerRoute = Exclude<DaemonCommandRoute, 'generic'>;
 
 type DaemonCommandDescriptor = {
   command: string;
@@ -179,10 +178,6 @@ export function getSessionCommandKind(command: string): SessionCommandKind | und
   return getDaemonCommandDescriptor(command)?.sessionKind;
 }
 
-export function listDaemonHandlerCommands(route: DaemonHandlerRoute): string[] {
-  return [...(DAEMON_COMMAND_REGISTRY.handlerCommandsByRoute.get(route) ?? [])];
-}
-
 export function isLeaseAdmissionExempt(command: string): boolean {
   return getDaemonCommandDescriptor(command)?.leaseAdmissionExempt === true;
 }
@@ -256,19 +251,13 @@ function getDaemonCommandDescriptor(command: string): DaemonCommandDescriptor | 
 
 function buildDaemonCommandRegistry(descriptors: readonly DaemonCommandDescriptor[]) {
   const descriptorsByCommand = new Map<string, DaemonCommandDescriptor>();
-  const handlerCommandsByRoute = new Map<DaemonHandlerRoute, string[]>();
   for (const descriptor of descriptors) {
     if (descriptorsByCommand.has(descriptor.command)) {
       throw new Error(`Duplicate daemon command descriptor: ${descriptor.command}`);
     }
     descriptorsByCommand.set(descriptor.command, descriptor);
-    if (descriptor.route !== 'generic') {
-      const commands = handlerCommandsByRoute.get(descriptor.route) ?? [];
-      commands.push(descriptor.command);
-      handlerCommandsByRoute.set(descriptor.route, commands);
-    }
   }
-  return { descriptorsByCommand, handlerCommandsByRoute };
+  return { descriptorsByCommand };
 }
 
 function isRecordStartRequest(req: DaemonRequest): boolean {

@@ -4,7 +4,6 @@ import { getFlagDefinitions } from '../../../utils/cli-flags.ts';
 import {
   MAESTRO_COMPAT_SUPPORTED_CAPABILITIES,
   MAESTRO_COMPAT_TRACKER_URL,
-  MAESTRO_COMPAT_UNSUPPORTED_CAPABILITIES,
   formatMaestroCapabilityList,
 } from '../support-matrix.ts';
 
@@ -20,9 +19,6 @@ test('Maestro replay docs stay in sync with the compatibility support matrix', (
   const docs = fs.readFileSync('website/docs/docs/replay-e2e.md', 'utf8');
   const plainDocs = docs.replace(/`/g, '');
   for (const capability of MAESTRO_COMPAT_SUPPORTED_CAPABILITIES) {
-    expect(plainDocs).toContain(capability);
-  }
-  for (const capability of MAESTRO_COMPAT_UNSUPPORTED_CAPABILITIES) {
     expect(plainDocs).toContain(capability);
   }
 });

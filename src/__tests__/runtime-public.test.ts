@@ -6,17 +6,12 @@ import { test } from 'vitest';
 import {
   createAgentDevice,
   createMemorySessionStore,
-  assertBackendCapabilityAllowed,
   localCommandPolicy,
   restrictedCommandPolicy,
   type AgentDevice,
   type CommandSessionStore,
 } from '../runtime.ts';
-import {
-  BACKEND_CAPABILITY_NAMES,
-  hasBackendCapability,
-  type AgentDeviceBackend,
-} from '../backend.ts';
+import { BACKEND_CAPABILITY_NAMES, type AgentDeviceBackend } from '../backend.ts';
 import { commands, type ScreenshotCommandOptions } from '../commands/index.ts';
 import {
   createLocalArtifactAdapter,
@@ -167,54 +162,6 @@ test('local artifact adapter can constrain explicit local paths to a root', asyn
   }
 });
 
-test('named backend capabilities require backend support and policy allowance', () => {
-  const supportedRuntime = createAgentDevice({
-    backend: {
-      platform: 'android',
-      capabilities: ['android.shell'],
-      escapeHatches: {
-        androidShell: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
-      },
-    },
-    artifacts,
-    policy: restrictedCommandPolicy({ allowNamedBackendCapabilities: ['android.shell'] }),
-  });
-
-  assert.doesNotThrow(() => assertBackendCapabilityAllowed(supportedRuntime, 'android.shell'));
-
-  const policyBlockedRuntime = createAgentDevice({
-    backend: {
-      platform: 'android',
-      capabilities: ['android.shell'],
-      escapeHatches: {
-        androidShell: async () => ({ exitCode: 0, stdout: '', stderr: '' }),
-      },
-    },
-    artifacts,
-  });
-
-  assert.throws(
-    () => assertBackendCapabilityAllowed(policyBlockedRuntime, 'android.shell'),
-    /not allowed by command policy/,
-  );
-
-  assert.throws(
-    () => assertBackendCapabilityAllowed(supportedRuntime, 'ios.runnerCommand'),
-    /not supported by this backend/,
-  );
-
-  const missingMethodRuntime = createAgentDevice({
-    backend: { platform: 'android', capabilities: ['android.shell'] },
-    artifacts,
-    policy: restrictedCommandPolicy({ allowNamedBackendCapabilities: ['android.shell'] }),
-  });
-
-  assert.throws(
-    () => assertBackendCapabilityAllowed(missingMethodRuntime, 'android.shell'),
-    /does not implement its escape hatch method/,
-  );
-});
-
 test('memory session store does not expose mutable record references', async () => {
   const store = createMemorySessionStore([
     {
@@ -288,11 +235,6 @@ test('internal backend, commands, and io modules are usable', () => {
     out: { kind: 'path', path: '/tmp/screen.png' },
   } satisfies ScreenshotCommandOptions;
   assert.equal(BACKEND_CAPABILITY_NAMES.includes('android.shell'), true);
-  assert.equal(hasBackendCapability(backend, 'android.shell'), false);
-  assert.equal(
-    hasBackendCapability({ platform: 'android', capabilities: ['android.shell'] }, 'android.shell'),
-    true,
-  );
   assert.equal(options.out.kind, 'path');
   assert.equal(typeof commands.capture.screenshot, 'function');
   assert.equal(typeof commands.capture.diffScreenshot, 'function');

@@ -196,12 +196,6 @@ export function setOf<T extends string>(...values: T[]): ReadonlySet<T> {
   return new Set(values);
 }
 
-export function commandNameSet<const TName extends string>(
-  names: readonly TName[],
-): ReadonlySet<string> {
-  return new Set(names);
-}
-
 export function isOneOf<T extends string>(
   value: string | undefined,
   values: ReadonlySet<T>,

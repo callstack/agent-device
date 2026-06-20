@@ -2,7 +2,6 @@ import { buildPrimaryEnvVarName, parseSourceValue } from './source-value.ts';
 import { listCliCommandNames } from '../command-catalog.ts';
 import {
   getCliCommandSchema,
-  getFlagDefinition,
   getFlagDefinitions,
   GLOBAL_FLAG_KEYS,
   type FlagDefinition,
@@ -43,12 +42,6 @@ const optionSpecByKey = new Map(optionSpecs.map((spec) => [spec.key, spec]));
 
 export function getOptionSpec(key: FlagKey): OptionSpec | undefined {
   return optionSpecByKey.get(key);
-}
-
-export function getOptionSpecForToken(token: string): OptionSpec | undefined {
-  const definition = getFlagDefinition(token);
-  if (!definition) return undefined;
-  return getOptionSpec(definition.key);
 }
 
 export function getConfigurableOptionSpecs(command: string | null): OptionSpec[] {

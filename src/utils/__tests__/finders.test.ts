@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { findBestMatchesByLocator, findNodeByLocator } from '../finders.ts';
+import { findBestMatchesByLocator } from '../finders.ts';
 import type { SnapshotNode } from '../snapshot.ts';
 
 function makeNode(ref: string, label?: string, identifier?: string): SnapshotNode {
@@ -25,10 +25,4 @@ test('findBestMatchesByLocator returns all best-scored matches', () => {
   assert.equal(result.matches.length, 2);
   assert.equal(result.matches[0]?.ref, 'e1');
   assert.equal(result.matches[1]?.ref, 'e2');
-});
-
-test('findNodeByLocator preserves first best match behavior', () => {
-  const nodes: SnapshotNode[] = [makeNode('e1', 'Continue'), makeNode('e2', 'Continue')];
-  const match = findNodeByLocator(nodes, 'label', 'Continue', { requireRect: true });
-  assert.equal(match?.ref, 'e1');
 });

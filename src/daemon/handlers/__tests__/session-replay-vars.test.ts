@@ -16,11 +16,7 @@ import {
   resolveReplayAction,
   resolveReplayString,
 } from '../../../replay/vars.ts';
-import {
-  parseReplayScript,
-  parseReplayScriptDetailed,
-  readReplayScriptMetadata,
-} from '../../../replay/script.ts';
+import { parseReplayScriptDetailed, readReplayScriptMetadata } from '../../../replay/script.ts';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
 
 const LOC = { file: 'test.ad', line: 1 };
@@ -312,16 +308,6 @@ test('readReplayScriptMetadata rejects duplicate env key', () => {
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
       /Duplicate env directive "APP"/.test(error.message),
-  );
-});
-
-test('parseReplayScript rejects env after first action', () => {
-  assert.throws(
-    () => parseReplayScript('context platform=android\nopen settings\nenv APP=late\n'),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'INVALID_ARGS' &&
-      /env directives must precede all actions/.test(error.message),
   );
 });
 

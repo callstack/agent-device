@@ -3,11 +3,7 @@ import { test } from 'vitest';
 import { withTargetDeviceResolutionScope } from '../../core/dispatch-resolve.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import {
-  getDaemonCommandRoute,
-  listDaemonHandlerCommands,
-  type DaemonCommandRoute,
-} from '../daemon-command-registry.ts';
+import { getDaemonCommandRoute, type DaemonCommandRoute } from '../daemon-command-registry.ts';
 import { contextFromFlags } from '../context.ts';
 import { handleLeaseCommands } from '../handlers/lease.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
@@ -28,7 +24,9 @@ const ROUTING_MISMATCH_MESSAGE = 'Daemon handler routing mismatch';
 
 test('specialized daemon routes are claimed by their handler chain', async () => {
   for (const route of SPECIALIZED_ROUTES) {
-    for (const command of listDaemonHandlerCommands(route)) {
+    const commands = catalogCommandsForRoute(route);
+    assert.ok(commands.length > 0, `${route} route should own at least one command`);
+    for (const command of commands) {
       const response = await runCatalogCommandThroughHandlerChain(command);
       assert.notEqual(response, null, `${route} route should claim ${command}`);
     }
@@ -65,7 +63,13 @@ test('lease handler executes commands owned by the lease route', async () => {
   const leaseRegistry = new LeaseRegistry();
   const allocated = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-a' });
 
-  for (const command of listDaemonHandlerCommands('lease')) {
+  const leaseCommands = [
+    INTERNAL_COMMANDS.leaseAllocate,
+    INTERNAL_COMMANDS.leaseHeartbeat,
+    INTERNAL_COMMANDS.leaseRelease,
+  ];
+
+  for (const command of leaseCommands) {
     const response = await handleLeaseCommands({
       req: {
         command,
@@ -84,6 +88,12 @@ test('lease handler executes commands owned by the lease route', async () => {
     assert.notEqual(response, null, `${command} should be handled by lease handler`);
   }
 });
+
+function catalogCommandsForRoute(route: Exclude<DaemonCommandRoute, 'generic'>): string[] {
+  return [...Object.values(PUBLIC_COMMANDS), ...Object.values(INTERNAL_COMMANDS)].filter(
+    (command) => getDaemonCommandRoute(command) === route,
+  );
+}
 
 async function runCatalogCommandThroughHandlerChain(
   command: string,

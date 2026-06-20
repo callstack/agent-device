@@ -2,7 +2,6 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   getOptionSpec,
-  getOptionSpecForToken,
   getConfigurableOptionSpecs,
   isFlagSupportedForCommand,
   parseOptionValueFromSource,
@@ -86,12 +85,6 @@ test('configurable option specs are filtered by command support', () => {
   assert.equal(installFromSourceSpecs.has('header'), true);
   assert.equal(installFromSourceSpecs.has('installSource'), true);
   assert.equal(installFromSourceSpecs.has('githubActionsArtifact'), false);
-});
-
-test('option schema resolves tokens back to canonical option specs', () => {
-  const spec = getOptionSpecForToken('--config');
-  assert.ok(spec);
-  assert.equal(spec.key, 'config');
 });
 
 test('isFlagSupportedForCommand consults option schema support map', () => {

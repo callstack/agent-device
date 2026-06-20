@@ -23,28 +23,6 @@ export { shouldResetDaemonAfterRequestTimeout } from './daemon-client-timeout.ts
 export type DaemonRequest = SharedDaemonRequest;
 export type DaemonResponse = SharedDaemonResponse;
 
-export type OpenAppOptions = {
-  session?: string;
-  app?: string;
-  url?: string;
-  lockPolicy?: NonNullable<DaemonRequest['meta']>['lockPolicy'];
-  lockPlatform?: NonNullable<DaemonRequest['meta']>['lockPlatform'];
-  platform?: NonNullable<DaemonRequest['flags']>['platform'];
-  target?: NonNullable<DaemonRequest['flags']>['target'];
-  device?: NonNullable<DaemonRequest['flags']>['device'];
-  udid?: NonNullable<DaemonRequest['flags']>['udid'];
-  serial?: NonNullable<DaemonRequest['flags']>['serial'];
-  activity?: NonNullable<DaemonRequest['flags']>['activity'];
-  launchConsole?: NonNullable<DaemonRequest['flags']>['launchConsole'];
-  launchArgs?: NonNullable<DaemonRequest['flags']>['launchArgs'];
-  out?: NonNullable<DaemonRequest['flags']>['out'];
-  saveScript?: NonNullable<DaemonRequest['flags']>['saveScript'];
-  deviceHub?: NonNullable<DaemonRequest['flags']>['deviceHub'];
-  relaunch?: boolean;
-  runtime?: DaemonRequest['runtime'];
-  meta?: Omit<NonNullable<DaemonRequest['meta']>, 'uploadedArtifactId' | 'clientArtifactPaths'>;
-};
-
 const REQUEST_TIMEOUT_MS = 90_000;
 const PREPARE_REQUEST_TIMEOUT_MS = 240_000;
 
@@ -133,56 +111,4 @@ function isExplicitTimeoutCommand(command: string | undefined): boolean {
     command === PUBLIC_COMMANDS.replay ||
     command === PUBLIC_COMMANDS.snapshot
   );
-}
-
-export async function openApp(options: OpenAppOptions = {}): Promise<DaemonResponse> {
-  const {
-    session = 'default',
-    app,
-    url,
-    lockPolicy,
-    lockPlatform,
-    platform,
-    target,
-    device,
-    udid,
-    serial,
-    activity,
-    launchConsole,
-    launchArgs,
-    out,
-    saveScript,
-    deviceHub,
-    relaunch,
-    runtime,
-    meta,
-  } = options;
-
-  const positionals = app ? (url ? [app, url] : [app]) : url ? [url] : [];
-
-  return await sendToDaemon({
-    session,
-    command: 'open',
-    positionals,
-    flags: {
-      ...(platform !== undefined ? { platform } : {}),
-      ...(target !== undefined ? { target } : {}),
-      ...(device !== undefined ? { device } : {}),
-      ...(udid !== undefined ? { udid } : {}),
-      ...(serial !== undefined ? { serial } : {}),
-      ...(activity !== undefined ? { activity } : {}),
-      ...(launchConsole !== undefined ? { launchConsole } : {}),
-      ...(launchArgs !== undefined ? { launchArgs } : {}),
-      ...(out !== undefined ? { out } : {}),
-      ...(saveScript !== undefined ? { saveScript } : {}),
-      ...(deviceHub !== undefined ? { deviceHub } : {}),
-      ...(relaunch ? { relaunch: true } : {}),
-    },
-    ...(runtime !== undefined ? { runtime } : {}),
-    meta: {
-      ...(meta ?? {}),
-      ...(lockPolicy !== undefined ? { lockPolicy } : {}),
-      ...(lockPlatform !== undefined ? { lockPlatform } : {}),
-    },
-  });
 }

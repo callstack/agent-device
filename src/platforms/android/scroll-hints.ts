@@ -13,25 +13,6 @@ type FlowBlock = {
   crossSize: number;
 };
 
-export function annotateAndroidScrollableContentHints(
-  nodes: RawSnapshotNode[],
-  activityTopDump: string,
-): void {
-  const hintsByIndex = deriveAndroidScrollableContentHints(nodes, activityTopDump);
-  for (const node of nodes) {
-    const hint = hintsByIndex.get(node.index);
-    if (!hint) {
-      continue;
-    }
-    if (hint.hiddenContentAbove) {
-      node.hiddenContentAbove = true;
-    }
-    if (hint.hiddenContentBelow) {
-      node.hiddenContentBelow = true;
-    }
-  }
-}
-
 export function deriveAndroidScrollableContentHints(
   nodes: RawSnapshotNode[],
   activityTopDump: string,

@@ -17,7 +17,6 @@ import {
   cleanupFailedDaemonStartupMetadata,
   computeDaemonCodeSignature,
   downloadRemoteArtifact,
-  openApp,
   resolveDaemonRequestTimeoutMs,
   resolveDaemonStartupHint,
   sendToDaemon,
@@ -954,111 +953,6 @@ test('sendToDaemon sends lease helpers as top-level JSON-RPC methods over HTTP',
       runId: 'run-123',
       leaseId: 'lease-new',
     });
-  } finally {
-    (http as unknown as { request: typeof http.request }).request = originalHttpRequest;
-    if (previousBaseUrl === undefined) delete process.env.AGENT_DEVICE_DAEMON_BASE_URL;
-    else process.env.AGENT_DEVICE_DAEMON_BASE_URL = previousBaseUrl;
-    if (previousAuthToken === undefined) delete process.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;
-    else process.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN = previousAuthToken;
-  }
-});
-
-test('openApp forwards typed runtime hints on open requests', async () => {
-  let rpcRequest: Record<string, unknown> | null = null;
-  const originalHttpRequest = http.request;
-  (http as unknown as { request: typeof http.request }).request = ((
-    options: any,
-    callback: (res: any) => void,
-  ) => {
-    const req = new EventEmitter() as EventEmitter & {
-      write: (chunk: string) => void;
-      end: () => void;
-      destroy: () => void;
-    };
-    let body = '';
-    req.write = (chunk: string) => {
-      body += chunk;
-    };
-    req.destroy = () => {
-      req.emit('close');
-    };
-    req.end = () => {
-      if (options.method === 'GET') {
-        const res = new EventEmitter() as EventEmitter & {
-          statusCode?: number;
-          resume: () => void;
-          setEncoding: (_encoding: string) => void;
-        };
-        res.statusCode = 200;
-        res.resume = () => {};
-        res.setEncoding = () => {};
-        process.nextTick(() => {
-          callback(res);
-          res.emit('end');
-        });
-        return;
-      }
-
-      rpcRequest = JSON.parse(body) as Record<string, unknown>;
-      const res = new EventEmitter() as EventEmitter & {
-        statusCode?: number;
-        setEncoding: (_encoding: string) => void;
-      };
-      res.statusCode = 200;
-      res.setEncoding = () => {};
-      process.nextTick(() => {
-        callback(res);
-        res.emit(
-          'data',
-          JSON.stringify({
-            jsonrpc: '2.0',
-            id: 'req-open-app',
-            result: {
-              ok: true,
-              data: { launched: true },
-            },
-          }),
-        );
-        res.emit('end');
-      });
-    };
-    return req as any;
-  }) as typeof http.request;
-
-  const previousBaseUrl = process.env.AGENT_DEVICE_DAEMON_BASE_URL;
-  const previousAuthToken = process.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN;
-  process.env.AGENT_DEVICE_DAEMON_BASE_URL = 'http://remote-mac.example.test:7777/agent-device';
-  process.env.AGENT_DEVICE_DAEMON_AUTH_TOKEN = 'remote-secret';
-
-  try {
-    const runtime = {
-      metroHost: '10.0.2.2',
-      metroPort: 8081,
-      launchUrl: 'myapp://debug',
-    };
-
-    const response = await openApp({
-      session: 'qa-session',
-      app: 'Demo',
-      platform: 'android',
-      launchArgs: ['-FeatureFlag', 'YES'],
-      relaunch: true,
-      runtime,
-      meta: { requestId: 'req-open-app' },
-    });
-
-    assert.equal(response.ok, true);
-    assert.deepEqual(response.data, { launched: true });
-    assert.equal((rpcRequest as any)?.method, 'agent_device.command');
-    assert.equal((rpcRequest as any)?.params?.command, 'open');
-    assert.equal((rpcRequest as any)?.params?.session, 'qa-session');
-    assert.deepEqual((rpcRequest as any)?.params?.positionals, ['Demo']);
-    assert.deepEqual((rpcRequest as any)?.params?.flags, {
-      platform: 'android',
-      launchArgs: ['-FeatureFlag', 'YES'],
-      relaunch: true,
-    });
-    assert.deepEqual((rpcRequest as any)?.params?.runtime, runtime);
   } finally {
     (http as unknown as { request: typeof http.request }).request = originalHttpRequest;
     if (previousBaseUrl === undefined) delete process.env.AGENT_DEVICE_DAEMON_BASE_URL;

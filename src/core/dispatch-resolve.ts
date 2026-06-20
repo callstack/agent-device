@@ -111,14 +111,6 @@ function hasExplicitAppleDeviceSelector(selector: AppleDeviceSelector): boolean 
   return Boolean(selector.udid || selector.serial || selector.deviceName);
 }
 
-export async function resolveIosDevice(
-  devices: DeviceInfo[],
-  selector: AppleDeviceSelector,
-  context: { simulatorSetPath?: string },
-): Promise<DeviceInfo> {
-  return await resolveAppleDevice(devices, selector, context);
-}
-
 export async function resolveTargetDevice(flags: ResolveDeviceFlags): Promise<DeviceInfo> {
   const normalizedPlatform = normalizePlatformSelector(flags.platform);
   const iosSimulatorSetPath = resolveAppleSimulatorSetPathForSelector({

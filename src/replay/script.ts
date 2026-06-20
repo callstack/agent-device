@@ -32,10 +32,6 @@ export type ReplayScriptMetadata = {
   env?: Record<string, string>;
 };
 
-export function parseReplayScript(script: string): SessionAction[] {
-  return parseReplayScriptDetailed(script).actions;
-}
-
 export type ParsedReplayScript = {
   actions: SessionAction[];
   actionLines: number[];

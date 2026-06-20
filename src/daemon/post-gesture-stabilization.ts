@@ -31,17 +31,6 @@ function clearPostGestureStabilization(session: SessionState | undefined): void 
   session.postGestureStabilization = undefined;
 }
 
-export async function capturePostGestureStabilizedSnapshot(params: {
-  session: SessionState | undefined;
-  capture: () => Promise<SnapshotState>;
-}): Promise<SnapshotState> {
-  return await capturePostGestureStabilizedResult({
-    session: params.session,
-    capture: params.capture,
-    readSnapshot: (snapshot) => snapshot,
-  });
-}
-
 export async function capturePostGestureStabilizedResult<T>(params: {
   session: SessionState | undefined;
   capture: () => Promise<T>;

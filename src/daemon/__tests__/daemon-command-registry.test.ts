@@ -7,7 +7,6 @@ import {
   getDaemonCommandRoute,
   getSessionCommandKind,
   isLeaseAdmissionExempt,
-  listDaemonHandlerCommands,
   shouldBlockForInvalidRecording,
   shouldGuardAndroidBlockingDialog,
   shouldLockSessionExecution,
@@ -19,18 +18,22 @@ import {
 import type { DaemonRequest } from '../types.ts';
 
 test('daemon command registry owns specialized handler routes', () => {
-  assert.deepEqual(listDaemonHandlerCommands('lease').sort(), [
+  for (const command of [
     INTERNAL_COMMANDS.leaseAllocate,
     INTERNAL_COMMANDS.leaseHeartbeat,
     INTERNAL_COMMANDS.leaseRelease,
-  ]);
-  assert.deepEqual(listDaemonHandlerCommands('snapshot').sort(), [
+  ]) {
+    assert.equal(getDaemonCommandRoute(command), 'lease', `${command} lease route`);
+  }
+  for (const command of [
     PUBLIC_COMMANDS.alert,
     PUBLIC_COMMANDS.diff,
     PUBLIC_COMMANDS.settings,
     PUBLIC_COMMANDS.snapshot,
     PUBLIC_COMMANDS.wait,
-  ]);
+  ]) {
+    assert.equal(getDaemonCommandRoute(command), 'snapshot', `${command} snapshot route`);
+  }
   assert.equal(getDaemonCommandRoute(PUBLIC_COMMANDS.back), 'generic');
 });
 

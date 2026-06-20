@@ -414,12 +414,6 @@ export type BackendEscapeHatches = {
   ): Promise<BackendScreenshotResult | void>;
 };
 
-const BACKEND_CAPABILITY_ESCAPE_HATCH_METHODS = {
-  'android.shell': 'androidShell',
-  'ios.runnerCommand': 'iosRunnerCommand',
-  'macos.desktopScreenshot': 'macosDesktopScreenshot',
-} as const satisfies Record<BackendCapabilityName, keyof BackendEscapeHatches>;
-
 export type AgentDeviceBackend = {
   platform: AgentDeviceBackendPlatform;
   capabilities?: BackendCapabilitySet;
@@ -572,18 +566,3 @@ export type AgentDeviceBackend = {
     options?: BackendMeasurePerfOptions,
   ): Promise<BackendMeasurePerfResult>;
 };
-
-export function hasBackendCapability(
-  backend: Pick<AgentDeviceBackend, 'platform' | 'capabilities'>,
-  capability: BackendCapabilityName,
-): boolean {
-  return backend.capabilities?.includes(capability) ?? false;
-}
-
-export function hasBackendEscapeHatch(
-  backend: Pick<AgentDeviceBackend, 'escapeHatches'>,
-  capability: BackendCapabilityName,
-): boolean {
-  const method = BACKEND_CAPABILITY_ESCAPE_HATCH_METHODS[capability];
-  return typeof backend.escapeHatches?.[method] === 'function';
-}
