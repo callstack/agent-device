@@ -207,7 +207,12 @@ function mapAgentBrowserRunError(error: unknown, args: string[]): AppError {
     return new AppError(
       'TOOL_MISSING',
       appError.message,
-      { cmd: AGENT_BROWSER, args, hint: AGENT_BROWSER_DOCTOR_HINT },
+      {
+        ...(appError.details ?? {}),
+        cmd: AGENT_BROWSER,
+        args,
+        hint: webBackendHint(appError),
+      },
       appError,
     );
   }
@@ -219,15 +224,16 @@ function mapAgentBrowserRunError(error: unknown, args: string[]): AppError {
         ...(appError.details ?? {}),
         cmd: AGENT_BROWSER,
         args,
-        hint:
-          typeof appError.details?.hint === 'string'
-            ? appError.details.hint
-            : AGENT_BROWSER_DOCTOR_HINT,
+        hint: webBackendHint(appError),
       },
       appError,
     );
   }
   return appError;
+}
+
+function webBackendHint(error: AppError): string {
+  return typeof error.details?.hint === 'string' ? error.details.hint : AGENT_BROWSER_DOCTOR_HINT;
 }
 
 function readEnvelopeErrorMessage(envelope: JsonObject): string {

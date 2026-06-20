@@ -140,6 +140,28 @@ test('agent-browser provider adds doctor guidance for missing binary and invalid
   });
 });
 
+test('agent-browser provider preserves Node version guidance for missing managed backend', async () => {
+  await withNodeRuntimeVersion('22.19.0', async () => {
+    const missingStateDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'agent-device-web-provider-node-'),
+    );
+    try {
+      const provider = createAgentBrowserWebProvider({ stateDir: missingStateDir });
+      await assert.rejects(
+        async () => await provider.open('https://example.test'),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.code === 'TOOL_MISSING' &&
+          error.details?.hint === 'Web automation requires Node 24+; current Node is v22.19.0.' &&
+          error.details?.version === '0.27.1' &&
+          typeof error.details?.installDir === 'string',
+      );
+    } finally {
+      fs.rmSync(missingStateDir, { recursive: true, force: true });
+    }
+  });
+});
+
 async function withManagedAgentBrowserProvider(
   options: { session?: string },
   testFn: (provider: ReturnType<typeof createAgentBrowserWebProvider>) => void | Promise<void>,
@@ -151,6 +173,28 @@ async function withManagedAgentBrowserProvider(
     await testFn(provider);
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+}
+
+async function withNodeRuntimeVersion(
+  version: string,
+  testFn: () => void | Promise<void>,
+): Promise<void> {
+  const originalNodeVersion = process.versions.node;
+  const originalProcessVersion = process.version;
+  Object.defineProperty(process.versions, 'node', { value: version, configurable: true });
+  Object.defineProperty(process, 'version', { value: `v${version}`, configurable: true });
+  try {
+    await testFn();
+  } finally {
+    Object.defineProperty(process.versions, 'node', {
+      value: originalNodeVersion,
+      configurable: true,
+    });
+    Object.defineProperty(process, 'version', {
+      value: originalProcessVersion,
+      configurable: true,
+    });
   }
 }
 
