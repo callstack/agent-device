@@ -188,11 +188,30 @@ async function runStep(
 }
 
 async function cleanupWebSmoke(context: WebSmokeContext, opened: boolean): Promise<void> {
+  const errors: unknown[] = [];
   if (opened) {
-    await runStep(context, 'close web session', ['close', ...context.common], 0);
+    try {
+      await runStep(context, 'close web session', ['close', ...context.common], 0);
+    } catch (error) {
+      errors.push(error);
+    }
   }
-  await closeServer(context.server);
-  rmSync(context.socketDir, { recursive: true, force: true });
+  try {
+    await closeServer(context.server);
+  } catch (error) {
+    errors.push(error);
+  }
+  try {
+    rmSync(context.socketDir, { recursive: true, force: true });
+  } catch (error) {
+    errors.push(error);
+  }
+  if (errors.length === 1) {
+    throw errors[0];
+  }
+  if (errors.length > 1) {
+    throw new AggregateError(errors, 'web smoke cleanup failed');
+  }
 }
 
 function recordStep(
