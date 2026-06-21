@@ -53,26 +53,11 @@ test('writeReplayScript preserves inline open runtime hints', () => {
   );
 });
 
-test('record replay script round-trips fps, max-size, quality, and hide-touches flags', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-script-record-'));
-  const replayPath = path.join(root, 'flow.ad');
-  const actions: SessionAction[] = [
-    {
-      ts: Date.now(),
-      command: 'record',
-      positionals: ['start', './capture.mp4'],
-      flags: { fps: 24, screenshotMaxSize: 1024, quality: 'high', hideTouches: true },
-    },
-  ];
-
-  writeReplayScript(replayPath, actions, makeSession());
-  const script = fs.readFileSync(replayPath, 'utf8');
-  assert.match(
-    script,
-    /record start "\.\/capture\.mp4" --fps 24 --max-size 1024 --quality high --hide-touches/,
-  );
-
+test('record replay script parses fps, max-size, quality, and hide-touches flags', () => {
+  const script =
+    'record start "./capture.mp4" --fps 24 --max-size 1024 --quality high --hide-touches\n';
   const parsed = parseReplayScriptDetailed(script).actions;
+
   assert.deepEqual(parsed[0]?.positionals, ['start', './capture.mp4']);
   assert.equal(parsed[0]?.flags.fps, 24);
   assert.equal(parsed[0]?.flags.screenshotMaxSize, 1024);
@@ -124,6 +109,28 @@ test('snapshot replay script parses full refresh flags', () => {
   assert.equal(parsed[0]?.flags.snapshotForceFull, true);
   assert.equal(parsed[0]?.flags.snapshotDepth, 2);
   assert.equal(parsed[0]?.flags.snapshotScope, '@e1');
+});
+
+test('snapshot replay script writes interactive refresh flags', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-script-snapshot-'));
+  const replayPath = path.join(root, 'flow.ad');
+  const actions: SessionAction[] = [
+    {
+      ts: Date.now(),
+      command: 'snapshot',
+      positionals: [],
+      flags: {
+        snapshotInteractiveOnly: true,
+        snapshotDepth: 2,
+        snapshotScope: '@e1',
+      },
+    },
+  ];
+
+  writeReplayScript(replayPath, actions, makeSession());
+  const script = fs.readFileSync(replayPath, 'utf8');
+
+  assert.match(script, /snapshot -i -d 2 -s @e1/);
 });
 
 test('gesture replay script parses pan, fling, swipe, pinch, and rotate gesture commands', () => {
@@ -182,28 +189,6 @@ test('type replay script preserves literal delay flag tokens', () => {
   const parsed = parseReplayScriptDetailed('type "--delay-ms" "abc"\n').actions;
   assert.deepEqual(parsed[0]?.positionals, ['--delay-ms', 'abc']);
   assert.equal(parsed[0]?.flags.delayMs, undefined);
-});
-
-test('snapshot replay script writes interactive refresh flags', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-script-snapshot-'));
-  const replayPath = path.join(root, 'flow.ad');
-  const actions: SessionAction[] = [
-    {
-      ts: Date.now(),
-      command: 'snapshot',
-      positionals: [],
-      flags: {
-        snapshotInteractiveOnly: true,
-        snapshotDepth: 2,
-        snapshotScope: '@e1',
-      },
-    },
-  ];
-
-  writeReplayScript(replayPath, actions, makeSession());
-  const script = fs.readFileSync(replayPath, 'utf8');
-
-  assert.match(script, /snapshot -i -d 2 -s @e1/);
 });
 
 test('writeReplayScript escapes device labels with quotes and backslashes', () => {
@@ -270,6 +255,15 @@ test('writeReplayScript preserves significant whitespace and empty string argume
   assert.match(script, /screenshot " \.\/screens\/final\.png "/);
   assert.match(script, /screenshot "foo\\\\nbar\.png"/);
   assert.match(script, /--metro-host " host\\t" --launch-url "myapp:\/\/dev "/);
+
+  const parsed = parseReplayScriptDetailed(script).actions;
+  assert.deepEqual(parsed[0]?.positionals, ['  leading\ttrailing  ']);
+  assert.deepEqual(parsed[1]?.positionals, ['@e2', '']);
+  assert.deepEqual(parsed[2]?.positionals, [' ./screens/final.png ']);
+  assert.deepEqual(parsed[3]?.positionals, ['foo\\nbar.png']);
+  assert.deepEqual(parsed[4]?.positionals, ['Demo']);
+  assert.equal(parsed[4]?.runtime?.metroHost, ' host\t');
+  assert.equal(parsed[4]?.runtime?.launchUrl, 'myapp://dev ');
 });
 
 test('readReplayScriptMetadata extracts platform from context header', () => {
