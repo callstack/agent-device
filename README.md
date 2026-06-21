@@ -58,13 +58,6 @@ The installed CLI help is the source of truth for agents. Start with `agent-devi
 
 Prerequisites depend on the target platform: Node.js 22+, Xcode for iOS/tvOS/macOS targets, Android SDK + ADB for Android, and macOS Accessibility permission for desktop automation. Web automation requires Node 24+. See [Installation](https://oss.callstack.com/agent-device/docs/installation) for platform setup.
 
-For web sessions, set up the managed browser backend before first use:
-
-```bash
-agent-device web setup
-agent-device web doctor
-```
-
 Try the basic loop:
 
 ```bash
@@ -88,32 +81,6 @@ agent-device close
 ```
 
 Snapshots assign refs like `@e1`, `@e2`, and `@e3` to elements on the current screen. Refs from the latest snapshot are immediately actionable; after scrolling or changing screens, take a fresh snapshot.
-
-## Minimal Web Support
-
-`agent-device --platform web` is intentionally narrow. `agent-device` owns the command surface, sessions, replay integration, refs/selectors, and artifact routing; `agent-browser` owns browser launch, page control, screenshots, and browser-specific mechanics.
-
-Use `--platform web` when a browser step belongs inside an `agent-device` session, replay, batch, MCP, or typed-client flow. Use `agent-browser` directly for standalone web automation.
-
-Supported first-slice loop:
-
-```bash
-agent-device web setup
-agent-device open https://example.com --platform web
-agent-device snapshot -i --platform web
-agent-device get text @e2 --platform web
-agent-device is visible 'label="Welcome"' --platform web
-agent-device find text "Welcome" exists --platform web
-agent-device click @e12 --platform web
-agent-device fill @e13 "test@example.com" --platform web
-agent-device wait text "Welcome" 3000 --platform web
-agent-device screenshot ./artifacts/web-home.png --platform web
-agent-device close --platform web
-```
-
-Supported through `agent-device`: URL open, snapshot refs, `get text/attrs`, `is visible/exists/text`, `find text/selector`, click/press, fill/type, wait, screenshot, close, and replay scripts composed from those commands.
-
-Out of scope for `agent-device` web support: tab/window/devtools control, network interception, cookies/storage, downloads/uploads, arbitrary page scripting, and raw browser diagnostics. Use `agent-browser` directly for those browser-specific workflows.
 
 ## Next Steps
 
