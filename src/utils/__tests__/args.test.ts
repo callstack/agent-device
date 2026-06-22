@@ -1712,6 +1712,8 @@ test('usage renders concise commands inline with descriptions', () => {
 test('connect command help lists lease id in usage and flags', () => {
   const help = usageForCommand('connect');
   if (help === null) throw new Error('Expected command help text');
+  assert.match(help, /Usage:\s+agent-device connect .*--daemon-base-url <url>/);
+  assert.match(help, /--daemon-base-url <url>\s+Explicit remote HTTP daemon base URL/);
   assert.match(help, /Usage:\s+agent-device connect .*--lease-id <id>/);
   assert.match(help, /--lease-id <id>\s+Lease identifier bound to tenant\/run admission scope/);
 });

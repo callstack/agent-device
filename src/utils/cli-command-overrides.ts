@@ -28,7 +28,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
   },
   connect: {
     usageOverride:
-      'connect [--remote-config <path>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]',
+      'connect [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]',
     helpDescription:
       'Connect to a remote daemon, authenticate when needed, and save remote session state. AGENT_DEVICE_CLOUD_BASE_URL is the bridge/control-plane API origin; use AGENT_DEVICE_DAEMON_AUTH_TOKEN=adc_live_... for CI/service-token automation.',
     listUsageOverride: 'connect',
@@ -36,6 +36,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
       'Attach CLI commands to a saved remote daemon/cloud lease; inspect for remote runs, tenants, or service-token CI',
     allowedFlags: [
       'remoteConfig',
+      'daemonBaseUrl',
       'tenant',
       'runId',
       'leaseId',
@@ -45,7 +46,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
       ...METRO_PREPARE_FLAGS,
       'launchUrl',
     ],
-    supportedFlags: ['stateDir', 'daemonAuthToken', 'session'],
+    supportedFlags: ['stateDir', 'daemonAuthToken', 'session', 'platform'],
   },
   connection: {
     usageOverride: 'connection status',
