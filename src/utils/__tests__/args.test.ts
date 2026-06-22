@@ -581,6 +581,16 @@ test('parseArgs scopes daemon and device flags to supported commands', () => {
   );
 });
 
+test('parseArgs keeps no-record accepted on recordable commands', () => {
+  const press = parseArgs(['press', '10', '10', '--no-record'], { strictFlags: true });
+  assert.equal(press.flags.noRecord, true);
+
+  const swipe = parseArgs(['swipe', '0', '0', '10', '10', '--no-record'], {
+    strictFlags: true,
+  });
+  assert.equal(swipe.flags.noRecord, true);
+});
+
 test('parseArgs recognizes connect lease backend force and no-login flags', () => {
   const parsed = parseArgs(
     [
@@ -1702,6 +1712,7 @@ test('usage renders concise commands inline with descriptions', () => {
   assert.match(help, /  react-devtools\s{2,}Inspect React Native components, props, hooks/);
   assert.match(help, /  batch --steps <json> \| --steps-file <path>\s{2,}Run multiple commands/);
   assert.match(help, /  test <path-or-glob>\.\.\.\s{2,}Run replay test suites/);
+  assert.match(help, /  screenshot \[path\]\s{2,}Capture screenshot with optional desktop/);
   assert.match(
     help,
     /  session\s{2,}List active sessions or print the effective daemon state directory/,
@@ -1718,6 +1729,9 @@ test('connect command help lists lease id in usage and flags', () => {
   assert.match(help, /--daemon-base-url <url>\s+Explicit remote HTTP daemon base URL/);
   assert.match(help, /Usage:\s+agent-device connect .*--lease-id <id>/);
   assert.match(help, /--lease-id <id>\s+Lease identifier bound to tenant\/run admission scope/);
+  assert.doesNotMatch(help, /--project-root <path>/);
+  assert.doesNotMatch(help, /--public-base-url <url>/);
+  assert.doesNotMatch(help, /--launch-url <url>/);
 });
 
 test('install-from-source command help describes all source types', () => {

@@ -1098,6 +1098,7 @@ export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS = flagKeys(
   'iosXctestEnvDir',
   'androidDeviceAllowlist',
   'session',
+  'noRecord',
 );
 
 export const GLOBAL_FLAG_KEYS = new Set<FlagKey>(['json', 'config', 'help', 'version', 'verbose']);

@@ -180,6 +180,7 @@ const diffCliSchema = {
 const screenshotCliSchema = {
   helpDescription:
     'Capture screenshot (macOS app sessions default to the app window; use --fullscreen for full desktop, --max-size to downscale, --overlay-refs to annotate current refs, or --no-stabilize for low-latency Android capture loops)',
+  summary: 'Capture screenshot with optional desktop, downscale, or ref overlay modes',
   positionalArgs: ['path?'],
   allowedFlags: SCREENSHOT_COMMAND_FLAG_KEYS,
 } as const satisfies CommandSchemaOverride;

@@ -43,10 +43,15 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
       'leaseBackend',
       'force',
       'noLogin',
+    ],
+    supportedFlags: [
+      'stateDir',
+      'daemonAuthToken',
+      'session',
+      'platform',
       ...METRO_PREPARE_FLAGS,
       'launchUrl',
     ],
-    supportedFlags: ['stateDir', 'daemonAuthToken', 'session', 'platform'],
   },
   connection: {
     usageOverride: 'connection status',
