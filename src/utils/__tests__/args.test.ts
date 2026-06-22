@@ -1421,6 +1421,9 @@ test('usageForCommand resolves react-native help topic', () => {
   assert.match(help, /same host context that owns Metro/);
   assert.match(help, /sandbox probe is not authoritative/);
   assert.match(help, /adb reverse only affects Android device-to-host traffic/);
+  assert.match(help, /Multiple local worktrees can reuse one native iOS simulator build/);
+  assert.match(help, /--metro-host 127\.0\.0\.1 --metro-port 8081/);
+  assert.match(help, /One simulator cannot run two copies of the same bundle id/);
   assert.match(help, /Keep the agent-device react-devtools prefix/);
   assert.match(help, /Use help react-devtools for status\/wait/);
   assert.match(help, /logs clear --restart/);

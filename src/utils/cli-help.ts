@@ -456,6 +456,10 @@ React Native dev loop:
   Android RN/Expo Metro: direct Android localhost URL opens with a port auto-configure host reachability. For app/package launches, use help react-native if the app cannot reach local Metro.
   Verify Metro from the same host context that owns Metro. If a sandboxed shell cannot curl localhost:8081/status but an unrestricted host shell can, Metro is running and the sandbox probe is not authoritative.
   adb reverse only affects Android device-to-host traffic. It does not prove host-to-Metro reachability, and it does not fix a redbox caused by a stale or wrong Metro/app state.
+  Multiple local worktrees can reuse one native iOS simulator build by running each worktree's Metro on a different port and opening the same installed app on different simulators with explicit runtime hints:
+    agent-device open "React Navigation Example" --platform ios --device "iPhone 17" --session rn-a --metro-host 127.0.0.1 --metro-port 8081 --relaunch
+    agent-device open "React Navigation Example" --platform ios --device "iPhone 17 Pro" --session rn-b --metro-host 127.0.0.1 --metro-port 8082 --relaunch
+  iOS simulator opens write React Native's per-simulator debug server settings before launch, so those ports do not conflict across simulators. Use separate sessions/devices, close both sessions when done, and rebuild only for native changes or dependency changes that affect the binary. One simulator cannot run two copies of the same bundle id.
   Expo Go/dev clients are host shells. Use provided project URLs, verify with snapshot -i after opening, and ask instead of inventing app ids or URLs. Help workflow owns the full Expo URL command shapes.
 
 Overlays and busy RN UIs:

@@ -1200,6 +1200,37 @@ const SKILL_GUIDANCE_CASES: Case[] = [
     forbiddenOutputs: [/open\b.*--relaunch/i, /(?:^|\n)(?:agent-device\s+)?screenshot\b/i],
   }),
   makeCase({
+    id: 'ios-rn-two-worktrees-one-native-build',
+    contract: [
+      'App name: React Navigation Example',
+      'Platform: iOS simulators',
+      'The app is already installed on both simulators',
+      'Worktree A Metro is already running on 127.0.0.1:8081',
+      'Worktree B Metro is already running on 127.0.0.1:8082',
+      'Use iPhone 17 for worktree A and iPhone 17 Pro for worktree B',
+      'Use separate sessions rn-a and rn-b',
+      'Do not rebuild, reinstall, or run package manager commands',
+    ],
+    task: 'Plan the agent-device commands to launch the same installed React Native iOS app against each worktree Metro instance and verify both sessions with interactive snapshots.',
+    outputs: [
+      /open\s+["']?React Navigation Example["']?(?=[^\n]*--platform ios)(?=[^\n]*--device ["']?iPhone 17["']?)(?=[^\n]*--session rn-a)(?=[^\n]*--metro-host 127\.0\.0\.1)(?=[^\n]*--metro-port 8081)(?=[^\n]*--relaunch)/i,
+      /open\s+["']?React Navigation Example["']?(?=[^\n]*--platform ios)(?=[^\n]*--device ["']?iPhone 17 Pro["']?)(?=[^\n]*--session rn-b)(?=[^\n]*--metro-host 127\.0\.0\.1)(?=[^\n]*--metro-port 8082)(?=[^\n]*--relaunch)/i,
+      /snapshot -i(?=[^\n]*--platform ios)(?=[^\n]*--session rn-a)/i,
+      /snapshot -i(?=[^\n]*--platform ios)(?=[^\n]*--session rn-b)/i,
+    ],
+    forbiddenOutputs: [
+      /run-ios/i,
+      /reinstall/i,
+      /install\b/i,
+      /yarn|pnpm|npm|npx/i,
+      /adb\s+reverse/i,
+      /--device "iPhone 17"[^\n]*--session rn-b/i,
+      /--device "iPhone 17 Pro"[^\n]*--session rn-a/i,
+    ],
+    strictFinalOutput: true,
+    allowOnlyLocalCliHelpCommands: true,
+  }),
+  makeCase({
     id: 'rn-warning-overlay-dismiss-before-tap',
     contract: [
       'App name: Agent Device Tester',

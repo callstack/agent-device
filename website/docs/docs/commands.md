@@ -709,6 +709,31 @@ agent-device react-devtools profile report @c5
 - Remote bridge React DevTools assumes the React Native-bundled DevTools behavior in React Native 0.83+. Older browser/Chromium DevTools workflows are not assumed to exist inside remote sandboxes. Expo projects should be verified against the SDK's bundled React Native version before relying on this path; this release does not claim a separately verified Expo SDK version.
 - For cross-platform validation with explicit target selectors, use separate sessions/devices and restart `react-devtools` between iOS and Android runs.
 
+## Multiple React Native worktrees
+
+You can reuse one installed iOS simulator debug build across multiple local worktrees when the native binary is compatible with both JavaScript trees. Run one Metro server per worktree on a unique port, then open the same app on different simulators with explicit Metro runtime hints:
+
+```bash
+# Worktree A terminal
+yarn expo start --dev-client --port 8081 --host localhost
+
+# Worktree B terminal
+yarn expo start --dev-client --port 8082 --host localhost
+
+agent-device open "React Navigation Example" --platform ios --device "iPhone 17" --session rn-a --metro-host 127.0.0.1 --metro-port 8081 --relaunch
+agent-device open "React Navigation Example" --platform ios --device "iPhone 17 Pro" --session rn-b --metro-host 127.0.0.1 --metro-port 8082 --relaunch
+```
+
+- Use different simulators and sessions for each worktree. One simulator cannot run two copies of the same bundle id at the same time.
+- On iOS simulators, `open` writes React Native's per-simulator debug server settings before launching, so `rn-a` can use port `8081` while `rn-b` uses port `8082`.
+- This covers JavaScript and Metro-resolved workspace changes. Rebuild/reinstall the app when native code, native dependencies, bundle identifiers, entitlements, or generated native project files change.
+- Close every manually opened session when done:
+
+```bash
+agent-device close --platform ios --session rn-a
+agent-device close --platform ios --session rn-b
+```
+
 ## Metro reload
 
 ```bash
