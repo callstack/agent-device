@@ -1048,9 +1048,11 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /do not use fill <target> ""/);
   assert.match(usageText, /Android IME capture: if fill says input was captured/);
   assert.match(usageText, /Implicit default sessions are scoped to the current worktree/);
+  assert.match(usageText, /if a prompt names a Session, include --session <name>/);
   assert.match(usageText, /Run mutating commands serially within one session/);
   assert.match(usageText, /After mutation: refs are stale/);
   assert.match(usageText, /use its selector directly; otherwise refresh with snapshot -i/);
+  assert.match(usageText, /verify the action with diff snapshot -i or snapshot --diff/);
   assert.match(usageText, /app-owned back uses back/);
   assert.match(usageText, /Web browser sessions: read help web/);
   assert.match(
@@ -1776,6 +1778,8 @@ test('snapshot command usage documents diff alias', () => {
   assert.match(help, /agent-device snapshot \[--diff\]/);
   assert.match(help, /--timeout <ms>/);
   assert.match(help, /Capture accessibility tree or diff against the previous session baseline/);
+  assert.match(help, /inspect rects with snapshot -i --json/);
+  assert.match(help, /verify with diff snapshot -i or snapshot --diff/);
 });
 
 test('network command usage documents include flag', () => {
@@ -1812,6 +1816,16 @@ test('open command usage documents surface and console log flags', () => {
   assert.match(help, /iOS simulator launch console/);
   assert.match(help, /--device-hub/);
   assert.match(help, /use Xcode Device Hub/);
+  assert.match(help, /Use --platform to bind URL\/deep-link opens/);
+  assert.match(help, /agent-device open "Expo Go" exp:\/\/127\.0\.0\.1:8081 --platform ios/);
+});
+
+test('replay command usage keeps Maestro target binding guidance', () => {
+  const help = usageForCommand('replay');
+  if (help === null) throw new Error('Expected command help text');
+  assert.match(help, /For Maestro YAML compatibility flows/);
+  assert.match(help, /replay <flow\.yaml> --maestro/);
+  assert.match(help, /--platform ios/);
 });
 
 test('command usage shows record touch-overlay opt-out flag', () => {
