@@ -566,26 +566,37 @@ function webNetworkEntryData(
   entry: BackendNetworkEntry,
   include: NetworkIncludeMode,
 ): Record<string, unknown> {
+  const headerData = webNetworkHeaderData(entry, include);
   return stripUndefined({
     timestamp: entry.timestamp,
     method: entry.method,
     url: entry.url,
     status: entry.status,
     durationMs: entry.durationMs,
-    headers: formatWebNetworkHeaders(entry, include),
-    requestHeaders: entry.requestHeaders,
-    responseHeaders: entry.responseHeaders,
+    ...headerData,
     requestBody: entry.requestBody,
     responseBody: entry.responseBody,
     metadata: entry.metadata,
   });
 }
 
-function formatWebNetworkHeaders(
+function webNetworkHeaderData(
   entry: BackendNetworkEntry,
   include: NetworkIncludeMode,
-): string | undefined {
-  if (include !== 'headers' && include !== 'all') return undefined;
+): {
+  headers?: string;
+  requestHeaders?: Record<string, string>;
+  responseHeaders?: Record<string, string>;
+} {
+  if (include !== 'headers' && include !== 'all') return {};
+  return {
+    headers: formatWebNetworkHeaders(entry),
+    requestHeaders: entry.requestHeaders,
+    responseHeaders: entry.responseHeaders,
+  };
+}
+
+function formatWebNetworkHeaders(entry: BackendNetworkEntry): string | undefined {
   const sections = [
     formatHeaderSection('request', entry.requestHeaders),
     formatHeaderSection('response', entry.responseHeaders),

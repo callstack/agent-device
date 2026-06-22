@@ -121,6 +121,23 @@ test('web provider is scoped through the request router and dispatch path', asyn
       },
     ]);
 
+    const networkSummary = await harness.callCommand(
+      'network',
+      ['dump', '5'],
+      { platform: 'web' },
+      { meta: { requestId: 'req-web-network-summary' } },
+    );
+    assert.deepEqual(networkSummary.json.result.data.entries, [
+      {
+        timestamp: '2026-06-22T09:08:19.500Z',
+        method: 'GET',
+        url: 'https://example.test/api',
+        status: 200,
+        metadata: { requestId: 'req-1', resourceType: 'fetch' },
+      },
+    ]);
+    assert.equal(networkSummary.json.result.data.include, 'summary');
+
     const network = await harness.callCommand(
       'network',
       ['dump', '5'],
@@ -147,6 +164,8 @@ test('web provider is scoped through the request router and dispatch path', asyn
       'open:https://example.test',
       'scope:default:agent-browser-chrome',
       'snapshot:main',
+      'scope:default:agent-browser-chrome',
+      'network:5:summary',
       'scope:default:agent-browser-chrome',
       'network:5:headers',
     ]);

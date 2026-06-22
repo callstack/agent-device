@@ -60,6 +60,11 @@ function isAgentBrowserNetworkRequest(value: unknown): value is Record<string, u
 function toBackendNetworkEntry(request: AgentBrowserNetworkRequest): BackendNetworkEntry {
   const timestamp =
     request.timestamp === undefined ? undefined : normalizeTimestamp(request.timestamp);
+  const metadata = stripUndefined({
+    requestId: request.requestId,
+    resourceType: request.resourceType,
+    mimeType: request.mimeType,
+  });
   return stripUndefined({
     timestamp,
     method: request.method,
@@ -67,11 +72,7 @@ function toBackendNetworkEntry(request: AgentBrowserNetworkRequest): BackendNetw
     status: request.status,
     requestHeaders: request.headers,
     responseHeaders: request.responseHeaders,
-    metadata: stripUndefined({
-      requestId: request.requestId,
-      resourceType: request.resourceType,
-      mimeType: request.mimeType,
-    }),
+    metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
   });
 }
 
