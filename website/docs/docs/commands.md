@@ -121,6 +121,7 @@ agent-device find text "Welcome" exists --platform web
 agent-device click @e12 --platform web
 agent-device fill @e13 "test@example.com" --platform web
 agent-device wait text "Welcome" --platform web
+agent-device network dump 25 --include headers --platform web
 agent-device screenshot ./artifacts/web-home.png --platform web
 agent-device close --platform web
 ```
@@ -132,8 +133,8 @@ agent-device close --platform web
 - `web doctor` verifies the managed backend after setup.
 - The managed install respects `--state-dir` and `AGENT_DEVICE_STATE_DIR`.
 - Web automation requires Node 24+.
-- Supported through `agent-device`: URL open, snapshot refs, `get text/attrs`, `is visible/exists/text`, `find text/selector`, click/press, fill/type, wait, screenshot, close, and replay scripts composed from those commands.
-- Out of scope for `agent-device` web support: tab/window/devtools control, network interception, cookies/storage, downloads/uploads, arbitrary page scripting, multi-page orchestration, and raw browser diagnostics. Use `agent-browser` directly for those browser-specific workflows.
+- Supported through `agent-device`: URL open, snapshot refs, `get text/attrs`, `is visible/exists/text`, `find text/selector`, click/press, fill/type, wait, `network dump`, screenshot, close, and replay scripts composed from those commands.
+- Out of scope for `agent-device` web support: tab/window/devtools control, network routing/interception/HAR, cookies/storage, downloads/uploads, arbitrary page scripting, multi-page orchestration, and raw browser diagnostics. Use `agent-browser` directly for those browser-specific workflows.
 
 ## Device isolation scopes
 
@@ -765,8 +766,9 @@ agent-device logs clear                 # Truncate app.log + remove rotated app.
 agent-device logs clear --restart       # Stop stream, clear log files, and start streaming again
 agent-device logs doctor                # Show logs backend/tool checks and readiness hints
 agent-device logs mark "before submit"  # Insert timeline marker into app.log
-agent-device network dump 25            # Parse recent HTTP(s) requests (method/url/status) from session app log
+agent-device network dump 25            # Parse recent HTTP(s) requests (method/url/status)
 agent-device network dump 25 --include all # Include parsed headers/body when available (truncated)
+agent-device network dump 25 --include headers --platform web # Browser requests via managed agent-browser
 ```
 
 - Supported on iOS simulator, iOS physical device, and Android.
@@ -774,10 +776,11 @@ agent-device network dump 25 --include all # Include parsed headers/body when av
 - `logs start` appends to `app.log` and rotates to `app.log.1` when the file exceeds 5 MB.
 - `open` prints `Session state: <path>` and JSON includes `sessionStateDir`, `runnerLogPath`, and `requestLogPath`. Use the session directory to inspect concurrent runs without parsing global daemon logs.
 - `requests/<request-id>.ndjson` contains daemon request diagnostics for the session; `runner.log` contains Apple runner and `xcodebuild` output.
-- `network dump [limit] [summary|headers|body|all]` parses recent HTTP(s) entries from `app.log`; `network log ...` is an alias.
+- `network dump [limit] [summary|headers|body|all]` parses recent HTTP(s) entries from `app.log` for app/device sessions and from managed `agent-browser` request history for web sessions; `network log ...` is an alias.
 - Prefer `--include headers|body|all` when you want explicit detail level without relying on positional ordering.
 - On macOS, `logs` and `network dump` are app-scoped and parse Unified Logging output associated with the active session app.
 - Network dump limits: scans up to 4000 recent log lines, returns up to 200 entries, and truncates payload/header fields at 2048 characters.
+- On web, `network dump` uses `agent-browser network requests`; request/response bodies are not exposed by that backend path, so use direct `agent-browser` HAR workflows for browser-specific body capture.
 - Android `network dump` also surfaces logcat timestamps and can backfill status and duration from adjacent GIBSDK packet lines when the URL is logged separately.
 - Android log streaming automatically rebinds to the app PID after process restarts.
 - iOS simulator log capture now streams from inside the simulator with `simctl spawn <udid> log ...`, and `network dump` can recover recent simulator log history with `simctl log show` when the live app-log window is sparse.

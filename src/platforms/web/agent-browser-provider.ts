@@ -1,6 +1,7 @@
 import { runCmd } from '../../utils/exec.ts';
 import { AppError } from '../../utils/errors.ts';
 import type { Rect } from '../../utils/snapshot.ts';
+import { normalizeAgentBrowserNetworkRequests } from './agent-browser-network.ts';
 import { normalizeAgentBrowserSnapshot } from './agent-browser-snapshot.ts';
 import {
   isJsonObject,
@@ -57,6 +58,9 @@ export function createAgentBrowserWebProvider(
     async scroll(direction, scrollOptions) {
       const distance = scrollOptions?.pixels ?? scrollOptions?.amount;
       await runJson(['scroll', direction, ...(distance === undefined ? [] : [String(distance)])]);
+    },
+    async dumpNetwork(options) {
+      return normalizeAgentBrowserNetworkRequests(await runJson(['network', 'requests']), options);
     },
   };
 }

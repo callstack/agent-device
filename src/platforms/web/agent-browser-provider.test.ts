@@ -80,6 +80,60 @@ test('agent-browser provider normalizes snapshot refs, labels, values, parents, 
   });
 });
 
+test('agent-browser provider dumps session network requests', async () => {
+  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
+    const calls: AgentBrowserCall[] = [];
+    const network = await withCommandExecutorOverride(
+      async (cmd, args) => {
+        calls.push({ cmd, args });
+        return jsonResult({
+          success: true,
+          data: {
+            requests: [
+              {
+                headers: { Authorization: 'Bearer test', Accept: 'application/json' },
+                method: 'GET',
+                mimeType: 'application/json',
+                requestId: 'req-1',
+                resourceType: 'fetch',
+                responseHeaders: { 'content-type': 'application/json' },
+                status: 200,
+                timestamp: 1_782_119_299_500,
+                url: 'https://example.test/api',
+              },
+            ],
+          },
+        });
+      },
+      async () => await provider.dumpNetwork?.({ include: 'headers', limit: 5 }),
+    );
+
+    assert.deepEqual(
+      calls.map((call) => call.args),
+      [['network', 'requests', '--json', '--session', 'web-session']],
+    );
+    assert.deepEqual(network, {
+      entries: [
+        {
+          timestamp: '2026-06-22T09:08:19.500Z',
+          method: 'GET',
+          url: 'https://example.test/api',
+          status: 200,
+          requestHeaders: { Authorization: 'Bearer test', Accept: 'application/json' },
+          responseHeaders: { 'content-type': 'application/json' },
+          metadata: {
+            requestId: 'req-1',
+            resourceType: 'fetch',
+            mimeType: 'application/json',
+          },
+        },
+      ],
+      backend: 'agent-browser',
+      redacted: false,
+    });
+  });
+});
+
 test('agent-browser provider surfaces stale ref failures during snapshot geometry lookup', async () => {
   await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
     await assert.rejects(

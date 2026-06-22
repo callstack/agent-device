@@ -2,6 +2,7 @@ import type { ScrollDirection } from '../../core/scroll-gesture.ts';
 import type { SessionSurface } from '../../core/session-surface.ts';
 import { createScopedProvider } from '../../utils/scoped-provider.ts';
 import type { RawSnapshotNode } from '../../utils/snapshot.ts';
+import type { BackendDumpNetworkOptions, BackendDumpNetworkResult } from '../../backend.ts';
 import { createAgentBrowserWebProvider } from './agent-browser-provider.ts';
 
 export type WebOpenOptions = {
@@ -37,6 +38,7 @@ export type WebProvider = {
   typeText(text: string, options?: { delayMs?: number }): Promise<void>;
   scroll(direction: ScrollDirection, options?: { amount?: number; pixels?: number }): Promise<void>;
   readText?(x: number, y: number): Promise<string>;
+  dumpNetwork?(options?: BackendDumpNetworkOptions): Promise<BackendDumpNetworkResult>;
 };
 
 const localWebProvider: WebProvider = createAgentBrowserWebProvider();

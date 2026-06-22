@@ -109,9 +109,10 @@ agent-device network dump 25 --include headers
 agent-device network dump 25 --include all
 ```
 
-- `network dump` parses recent HTTP(s) entries from the session app log.
+- `network dump` parses recent HTTP(s) entries from the session app log for app/device sessions and from managed `agent-browser` request history for web sessions.
 - `network log` is an alias for `network dump`.
 - Parsed results depend on what the app emits into the platform log backend.
+- Web `network dump` includes request and response headers when requested, but the current `agent-browser network requests` backend does not expose request or response bodies.
 
 ### Performance snapshots
 

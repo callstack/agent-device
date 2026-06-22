@@ -13,6 +13,7 @@ import {
   type PerfKind,
 } from '../../contracts/perf.ts';
 import { AppError, normalizeError } from '../../utils/errors.ts';
+import { resolveWebProvider } from '../../platforms/web/provider.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
@@ -36,6 +37,7 @@ import { errorResponse, type DaemonFailureResponse } from './response.ts';
 import { handleNativePerfCommand as handleAppleNativePerfCommand } from './session-perf-xctrace.ts';
 import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '../../contracts.ts';
 import type { LogBackend } from '../network-log.ts';
+import type { BackendNetworkEntry } from '../../backend.ts';
 import {
   LOG_ACTION_VALUES as LOG_ACTIONS,
   type LogAction as LogsAction,
@@ -494,6 +496,10 @@ async function handleNetworkCommand(params: ObservabilityParams): Promise<Daemon
   if (!request.ok) return request;
   const { include, maxEntries, session } = request;
 
+  if (session.device.platform === 'web') {
+    return await handleWebNetworkCommand({ include, maxEntries });
+  }
+
   const capture = await readSessionNetworkCapture({
     device: session.device,
     appBundleId: session.appBundleId,
@@ -516,6 +522,80 @@ async function handleNetworkCommand(params: ObservabilityParams): Promise<Daemon
       notes: capture.notes,
     },
   };
+}
+
+async function handleWebNetworkCommand(params: {
+  include: NetworkIncludeMode;
+  maxEntries: number;
+}): Promise<DaemonResponse> {
+  const provider = resolveWebProvider();
+  if (!provider.dumpNetwork) {
+    return errorResponse('UNSUPPORTED_OPERATION', 'network is not supported by this web provider');
+  }
+  try {
+    const result = await provider.dumpNetwork({
+      include: params.include,
+      limit: params.maxEntries,
+    });
+    const entries = result.entries.map((entry) => webNetworkEntryData(entry, params.include));
+    return {
+      ok: true,
+      data: {
+        entries,
+        active: true,
+        state: 'active',
+        backend: result.backend ?? 'agent-browser',
+        include: params.include,
+        matchedLines: entries.length,
+        scannedLines: entries.length,
+        limits: {
+          maxEntries: params.maxEntries,
+          maxPayloadChars: 2048,
+          maxScanLines: entries.length,
+        },
+        notes: result.notes,
+      },
+    };
+  } catch (error) {
+    return { ok: false, error: normalizeError(error) };
+  }
+}
+
+function webNetworkEntryData(
+  entry: BackendNetworkEntry,
+  include: NetworkIncludeMode,
+): Record<string, unknown> {
+  const headers =
+    include === 'headers' || include === 'all' ? formatWebNetworkHeaders(entry) : undefined;
+  return {
+    ...(entry.timestamp ? { timestamp: entry.timestamp } : {}),
+    ...(entry.method ? { method: entry.method } : {}),
+    ...(entry.url ? { url: entry.url } : {}),
+    ...(entry.status !== undefined ? { status: entry.status } : {}),
+    ...(entry.durationMs !== undefined ? { durationMs: entry.durationMs } : {}),
+    ...(headers ? { headers } : {}),
+    ...(entry.requestHeaders ? { requestHeaders: entry.requestHeaders } : {}),
+    ...(entry.responseHeaders ? { responseHeaders: entry.responseHeaders } : {}),
+    ...(entry.requestBody !== undefined ? { requestBody: entry.requestBody } : {}),
+    ...(entry.responseBody !== undefined ? { responseBody: entry.responseBody } : {}),
+    ...(entry.metadata ? { metadata: entry.metadata } : {}),
+  };
+}
+
+function formatWebNetworkHeaders(entry: BackendNetworkEntry): string | undefined {
+  const sections = [
+    formatHeaderSection('request', entry.requestHeaders),
+    formatHeaderSection('response', entry.responseHeaders),
+  ].filter((section): section is string => Boolean(section));
+  return sections.length > 0 ? sections.join('\n') : undefined;
+}
+
+function formatHeaderSection(
+  label: string,
+  headers: Record<string, string> | undefined,
+): string | undefined {
+  if (!headers || Object.keys(headers).length === 0) return undefined;
+  return `${label}: ${JSON.stringify(headers)}`;
 }
 
 function resolveNetworkCommandRequest(

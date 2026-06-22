@@ -42,7 +42,15 @@ const LINUX_DEVICE: KindMatrix = { device: true };
 const LINUX_NONE: KindMatrix = {};
 const WEB_DEVICE: KindMatrix = { device: true };
 const WEB_RUNTIME_COMMANDS = ['open', 'close'] as const;
-const WEB_QUERY_COMMANDS = ['find', 'get', 'is', 'screenshot', 'snapshot', 'wait'] as const;
+const WEB_QUERY_COMMANDS = [
+  'find',
+  'get',
+  'is',
+  'network',
+  'screenshot',
+  'snapshot',
+  'wait',
+] as const;
 const WEB_INTERACTION_COMMANDS = ['click', 'fill', 'focus', 'press', 'scroll', 'type'] as const;
 const WEB_SUPPORTED_COMMANDS = new Set<string>([
   ...WEB_RUNTIME_COMMANDS,

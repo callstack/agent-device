@@ -1219,11 +1219,14 @@ test('usageForCommand resolves web help topic', () => {
   assert.match(help, /agent-device click @e12 --platform web/);
   assert.match(help, /agent-device fill @e13 "qa@example\.com" --platform web/);
   assert.match(help, /agent-device wait text "Welcome" 3000 --platform web/);
+  assert.match(help, /agent-device network dump 25 --include headers --platform web/);
   assert.match(help, /agent-device screenshot \.\/artifacts\/web-home\.png --platform web/);
   assert.match(help, /agent-device close --platform web/);
   assert.match(help, /open <url>, snapshot -i, get text\/attrs/);
   assert.match(help, /is visible\/exists\/text, find text\/selector/);
   assert.match(help, /click\/press @ref or selector/);
+  assert.match(help, /network dump/);
+  assert.match(help, /network routing\/interception\/HAR/);
   assert.match(help, /Use agent-browser directly for those browser-specific workflows/);
   assert.match(help, /Do not claim web e2e CI exists/);
   assert.match(help, /Do not use native mobile or desktop setup commands/);

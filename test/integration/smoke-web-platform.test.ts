@@ -51,6 +51,7 @@ async function runWebSmoke(context: WebSmokeContext): Promise<void> {
     await runStep(context, 'open local fixture', ['open', context.url, ...context.common]);
     opened = true;
     await assertInitialWebSurface(context);
+    await assertWebNetwork(context);
     await assertReadAndVisibility(context);
     await assertWebInteractions(context);
     await assertWebScreenshot(context);
@@ -124,6 +125,30 @@ async function assertReadAndVisibility(context: WebSmokeContext): Promise<void> 
     ['is', 'visible', 'label="Submit order"'],
     { pass: true },
   );
+}
+
+async function assertWebNetwork(context: WebSmokeContext): Promise<void> {
+  const result = await runStep(context, 'inspect browser network', [
+    'network',
+    'dump',
+    '10',
+    '--include',
+    'headers',
+    ...context.common,
+  ]);
+  assert.equal(result.json?.data?.backend, 'agent-browser');
+  const entries: unknown[] = Array.isArray(result.json?.data?.entries)
+    ? result.json.data.entries
+    : [];
+  const fixtureEntry = entries.find(
+    (entry): entry is Record<string, unknown> =>
+      typeof entry === 'object' && entry !== null && 'url' in entry && entry.url === context.url,
+  );
+  if (!fixtureEntry) {
+    failWithContext(context, 'inspect browser network', ['network', 'dump', '10'], result);
+  }
+  assert.equal(fixtureEntry.method, 'GET');
+  assert.equal(typeof fixtureEntry.headers, 'string');
 }
 
 async function assertWebInteractions(context: WebSmokeContext): Promise<void> {

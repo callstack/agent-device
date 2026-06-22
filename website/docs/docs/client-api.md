@@ -138,11 +138,14 @@ await client.apps.open({ url: 'https://example.com', platform: 'web' });
 await client.capture.snapshot({ platform: 'web', interactiveOnly: true });
 await client.interactions.fill({ platform: 'web', ref: '@e12', text: 'test@example.com' });
 await client.command.wait({ platform: 'web', text: 'Welcome' });
+await client.observability.network({ platform: 'web', include: 'headers' });
 await client.sessions.close();
 ```
 
 Web automation requires Node 24+. MCP tools use the same command contracts, so they can target
-`platform: 'web'` after setup, but local setup/doctor remains a CLI-only workflow.
+`platform: 'web'` after setup, but local setup/doctor remains a CLI-only workflow. Web network
+inspection adapts managed `agent-browser` request history to the existing network result shape;
+request and response bodies are not exposed by that backend path.
 
 ## Android snapshot helper providers
 

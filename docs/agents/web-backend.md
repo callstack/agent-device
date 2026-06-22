@@ -15,9 +15,12 @@ Default first-run flow:
 agent-device web setup
 agent-device open "https://example.com" --platform web
 agent-device snapshot -i --platform web
+agent-device network dump 25 --platform web
 agent-device close --platform web
 ```
 
-Do not document direct `agent-browser` commands as agent-device features. Browser-specific network,
-CDP, React web, tabs, downloads, auth vaults, and profiling stay out of the minimal web surface until
-there is an explicit agent-device command design for them.
+Do not document direct `agent-browser` commands as agent-device features. Web `network dump` is the
+narrow exception: it adapts `agent-browser network requests` to the existing agent-device network
+evidence shape. Browser-specific network routing/interception/HAR, CDP, React web, tabs, downloads,
+auth vaults, and profiling stay out of the minimal web surface until there is an explicit
+agent-device command design for them.

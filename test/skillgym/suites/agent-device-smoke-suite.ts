@@ -682,6 +682,24 @@ const SKILL_GUIDANCE_CASES: Case[] = [
     allowOnlyLocalCliHelpCommands: true,
   }),
   makeCase({
+    id: 'web-network-dump',
+    contract: [
+      'Platform: web',
+      'Target URL: https://example.com/account',
+      'agent-device web setup already passed',
+      'Need recent browser network requests with headers after loading the page',
+    ],
+    task: 'Plan the agent-device commands to open the web page, inspect recent browser network requests with headers, and close.',
+    outputs: [
+      /(?:^|\n)(?:agent-device\s+)?open\s+https:\/\/example\.com\/account\b[^\n]*--platform\s+web/i,
+      /(?:^|\n)(?:agent-device\s+)?network\s+dump\b[^\n]*(?:--include\s+headers|\bheaders\b)[^\n]*--platform\s+web/i,
+      /(?:^|\n)(?:agent-device\s+)?close\b[^\n]*--platform\s+web/i,
+    ],
+    forbiddenOutputs: [/agent-browser/i, plannedCommand('logs')],
+    strictFinalOutput: true,
+    allowOnlyLocalCliHelpCommands: true,
+  }),
+  makeCase({
     id: 'inspect-visible-text-readonly',
     contract: [
       'App name: Agent Device Tester',
