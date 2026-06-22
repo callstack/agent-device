@@ -148,7 +148,7 @@ async function assertWebNetwork(context: WebSmokeContext): Promise<void> {
     failWithContext(context, 'inspect browser network', ['network', 'dump', '10'], result);
   }
   assert.equal(fixtureEntry.method, 'GET');
-  assert.equal(typeof fixtureEntry.headers, 'string');
+  assert.equal(typeof fixtureEntry.requestHeaders, 'object');
 }
 
 async function assertWebInteractions(context: WebSmokeContext): Promise<void> {

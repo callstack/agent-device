@@ -134,6 +134,43 @@ test('agent-browser provider dumps session network requests', async () => {
   });
 });
 
+test('agent-browser provider omits network headers in summary mode', async () => {
+  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
+    const network = await withCommandExecutorOverride(
+      async () =>
+        jsonResult({
+          success: true,
+          data: {
+            requests: [
+              {
+                headers: { Authorization: 'Bearer test', Accept: 'application/json' },
+                method: 'GET',
+                responseHeaders: { 'content-type': 'application/json' },
+                status: 200,
+                timestamp: 1_782_119_299_500,
+                url: 'https://example.test/api',
+              },
+            ],
+          },
+        }),
+      async () => await provider.dumpNetwork?.({ include: 'summary', limit: 5 }),
+    );
+
+    assert.deepEqual(network, {
+      entries: [
+        {
+          timestamp: '2026-06-22T09:08:19.500Z',
+          method: 'GET',
+          url: 'https://example.test/api',
+          status: 200,
+        },
+      ],
+      backend: 'agent-browser',
+      redacted: false,
+    });
+  });
+});
+
 test('agent-browser provider surfaces stale ref failures during snapshot geometry lookup', async () => {
   await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
     await assert.rejects(

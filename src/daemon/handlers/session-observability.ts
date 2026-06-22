@@ -37,8 +37,6 @@ import { errorResponse, type DaemonFailureResponse } from './response.ts';
 import { handleNativePerfCommand as handleAppleNativePerfCommand } from './session-perf-xctrace.ts';
 import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '../../contracts.ts';
 import type { LogBackend } from '../network-log.ts';
-import type { BackendNetworkEntry } from '../../backend.ts';
-import { stripUndefined } from '../../utils/parsing.ts';
 import {
   LOG_ACTION_VALUES as LOG_ACTIONS,
   type LogAction as LogsAction,
@@ -538,21 +536,20 @@ async function handleWebNetworkCommand(params: {
       include: params.include,
       limit: params.maxEntries,
     });
-    const entries = result.entries.map((entry) => webNetworkEntryData(entry, params.include));
     return {
       ok: true,
       data: {
-        entries,
+        entries: result.entries,
         active: true,
         state: 'active',
         backend: result.backend ?? 'agent-browser',
         include: params.include,
-        matchedLines: entries.length,
-        scannedLines: entries.length,
+        matchedLines: result.entries.length,
+        scannedLines: result.entries.length,
         limits: {
           maxEntries: params.maxEntries,
           maxPayloadChars: 2048,
-          maxScanLines: entries.length,
+          maxScanLines: result.entries.length,
         },
         notes: result.notes,
       },
@@ -560,56 +557,6 @@ async function handleWebNetworkCommand(params: {
   } catch (error) {
     return { ok: false, error: normalizeError(error) };
   }
-}
-
-function webNetworkEntryData(
-  entry: BackendNetworkEntry,
-  include: NetworkIncludeMode,
-): Record<string, unknown> {
-  const headerData = webNetworkHeaderData(entry, include);
-  return stripUndefined({
-    timestamp: entry.timestamp,
-    method: entry.method,
-    url: entry.url,
-    status: entry.status,
-    durationMs: entry.durationMs,
-    ...headerData,
-    requestBody: entry.requestBody,
-    responseBody: entry.responseBody,
-    metadata: entry.metadata,
-  });
-}
-
-function webNetworkHeaderData(
-  entry: BackendNetworkEntry,
-  include: NetworkIncludeMode,
-): {
-  headers?: string;
-  requestHeaders?: Record<string, string>;
-  responseHeaders?: Record<string, string>;
-} {
-  if (include !== 'headers' && include !== 'all') return {};
-  return {
-    headers: formatWebNetworkHeaders(entry),
-    requestHeaders: entry.requestHeaders,
-    responseHeaders: entry.responseHeaders,
-  };
-}
-
-function formatWebNetworkHeaders(entry: BackendNetworkEntry): string | undefined {
-  const sections = [
-    formatHeaderSection('request', entry.requestHeaders),
-    formatHeaderSection('response', entry.responseHeaders),
-  ].filter((section): section is string => Boolean(section));
-  return sections.length > 0 ? sections.join('\n') : undefined;
-}
-
-function formatHeaderSection(
-  label: string,
-  headers: Record<string, string> | undefined,
-): string | undefined {
-  if (!headers || Object.keys(headers).length === 0) return undefined;
-  return `${label}: ${JSON.stringify(headers)}`;
 }
 
 function resolveNetworkCommandRequest(

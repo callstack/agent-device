@@ -75,10 +75,21 @@ function formatNetworkEntry(entry: unknown): string[] {
   const durationMs =
     typeof record.durationMs === 'number' ? ` durationMs=${record.durationMs}` : '';
   const lines = [`${timestamp}${method} ${url}${status}${durationMs}`];
+  const hasFormattedHeaders = typeof record.headers === 'string';
   appendNetworkEntryBody(lines, 'headers', record.headers);
+  if (!hasFormattedHeaders) {
+    appendNetworkEntryHeaders(lines, 'request headers', record.requestHeaders);
+    appendNetworkEntryHeaders(lines, 'response headers', record.responseHeaders);
+  }
   appendNetworkEntryBody(lines, 'request', record.requestBody);
   appendNetworkEntryBody(lines, 'response', record.responseBody);
   return lines;
+}
+
+function appendNetworkEntryHeaders(lines: string[], label: string, value: unknown): void {
+  const headers = readRecord(value);
+  if (!headers || Object.keys(headers).length === 0) return;
+  lines.push(`  ${label}: ${JSON.stringify(headers)}`);
 }
 
 function appendNetworkEntryBody(lines: string[], label: string, value: unknown): void {

@@ -55,17 +55,23 @@ test('web provider is scoped through the request router and dispatch path', asyn
     },
     async dumpNetwork(options) {
       calls.push(`network:${options?.limit ?? ''}:${options?.include ?? ''}`);
+      const includeHeaders = options?.include === 'headers' || options?.include === 'all';
+      const entry = {
+        timestamp: '2026-06-22T09:08:19.500Z',
+        method: 'GET',
+        url: 'https://example.test/api',
+        status: 200,
+        metadata: { requestId: 'req-1', resourceType: 'fetch' },
+      };
       return {
         entries: [
-          {
-            timestamp: '2026-06-22T09:08:19.500Z',
-            method: 'GET',
-            url: 'https://example.test/api',
-            status: 200,
-            requestHeaders: { Accept: 'application/json' },
-            responseHeaders: { 'content-type': 'application/json' },
-            metadata: { requestId: 'req-1', resourceType: 'fetch' },
-          },
+          includeHeaders
+            ? {
+                ...entry,
+                requestHeaders: { Accept: 'application/json' },
+                responseHeaders: { 'content-type': 'application/json' },
+              }
+            : entry,
         ],
         backend: 'agent-browser',
         redacted: false,
@@ -154,8 +160,6 @@ test('web provider is scoped through the request router and dispatch path', asyn
         method: 'GET',
         url: 'https://example.test/api',
         status: 200,
-        headers:
-          'request: {"Accept":"application/json"}\nresponse: {"content-type":"application/json"}',
         requestHeaders: { Accept: 'application/json' },
         responseHeaders: { 'content-type': 'application/json' },
         metadata: { requestId: 'req-1', resourceType: 'fetch' },
