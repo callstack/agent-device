@@ -2,11 +2,16 @@ import { assert, commandMatcher, type Case, type CommandMatcher } from 'skillgym
 
 type SessionReport = Parameters<typeof assert.skills.has>[0];
 type AssertionContext = Parameters<Case['assert']>[1];
-type OutputMatcher = string | RegExp | PlannedCommandMatcher;
+type OutputMatcher = string | RegExp | PlannedCommandMatcher | TopLevelPlannedCommandMatcher;
 
 interface PlannedCommandMatcher {
   kind: 'planned-command';
   matchers: CommandMatcher[];
+}
+
+interface TopLevelPlannedCommandMatcher {
+  kind: 'top-level-planned-command';
+  commands: string[];
 }
 
 const WORKSPACE_ROOT = process.cwd().replaceAll('\\', '/');
@@ -24,6 +29,7 @@ Do not browse the web.
 Use only this prompt plus local CLI help as private reference.
 Do not execute live app/device commands while planning; only local CLI help commands are allowed before final output.
 For local CLI help in this repo, use node bin/agent-device.mjs help or --help; final commands still use agent-device.
+If the app contract names an expected id, selector, or visible text, include that exact target in a final verification command instead of stopping at the action that reaches or reveals it.
 Final output: only commands, one per line. Use agent-device for app/device automation; shell setup commands are allowed only when this prompt explicitly requires them. Any prose or Markdown fails.
 Every final output line must start with agent-device.
 Do not combine final commands with shell operators such as &&, ||, pipes, or semicolons.
@@ -96,12 +102,33 @@ function plannedCommandAlternatives(commands: string[]): PlannedCommandMatcher {
   };
 }
 
+function topLevelPlannedCommand(command: string): TopLevelPlannedCommandMatcher {
+  return topLevelPlannedCommandAlternatives([command]);
+}
+
+function topLevelPlannedCommandAlternatives(commands: string[]): TopLevelPlannedCommandMatcher {
+  return {
+    kind: 'top-level-planned-command',
+    commands: commands.map((command) => {
+      const [executable, ...args] = commandParts(command);
+      assert.ok(executable, 'top-level planned command must not be empty');
+      assert.equal(args.length, 0, 'top-level planned command matches only one command token');
+      return executable;
+    }),
+  };
+}
+
 function assertOutputs(finalOutput: string, matchers: OutputMatcher[]) {
   const output = normalizedFinalOutput(finalOutput);
   const plannedReport = plannedCommandReport(output);
   for (const matcher of matchers) {
     if (isPlannedCommandMatcher(matcher)) {
       assertPlannedCommandIncludes(plannedReport, matcher);
+      continue;
+    }
+
+    if (isTopLevelPlannedCommandMatcher(matcher)) {
+      assertTopLevelPlannedCommandIncludes(output, matcher);
       continue;
     }
 
@@ -115,6 +142,11 @@ function assertNoOutputs(finalOutput: string, matchers: OutputMatcher[]) {
   for (const matcher of matchers) {
     if (isPlannedCommandMatcher(matcher)) {
       assertPlannedCommandNotIncludes(plannedReport, matcher);
+      continue;
+    }
+
+    if (isTopLevelPlannedCommandMatcher(matcher)) {
+      assertTopLevelPlannedCommandNotIncludes(output, matcher);
       continue;
     }
 
@@ -135,6 +167,16 @@ function isPlannedCommandMatcher(matcher: OutputMatcher): matcher is PlannedComm
     typeof matcher === 'object' &&
     !(matcher instanceof RegExp) &&
     matcher.kind === 'planned-command'
+  );
+}
+
+function isTopLevelPlannedCommandMatcher(
+  matcher: OutputMatcher,
+): matcher is TopLevelPlannedCommandMatcher {
+  return (
+    typeof matcher === 'object' &&
+    !(matcher instanceof RegExp) &&
+    matcher.kind === 'top-level-planned-command'
   );
 }
 
@@ -161,6 +203,50 @@ function assertPlannedCommandNotIncludes(report: SessionReport, matcher: Planned
   for (const command of matcher.matchers) {
     assert.commands.notIncludes(report, command);
   }
+}
+
+function assertTopLevelPlannedCommandIncludes(
+  output: string,
+  matcher: TopLevelPlannedCommandMatcher,
+) {
+  const observed = topLevelPlannedCommands(output);
+  assert.ok(
+    observed.some((command) => matcher.commands.includes(command)),
+    `Expected final output to include top-level command ${matcher.commands
+      .map((command) => JSON.stringify(command))
+      .join(' or ')}. Observed top-level commands: ${observed
+      .map((command) => JSON.stringify(command))
+      .join(', ')}`,
+  );
+}
+
+function assertTopLevelPlannedCommandNotIncludes(
+  output: string,
+  matcher: TopLevelPlannedCommandMatcher,
+) {
+  const observed = topLevelPlannedCommands(output);
+  const forbidden = observed.filter((command) => matcher.commands.includes(command));
+  assert.deepEqual(
+    forbidden,
+    [],
+    `Expected final output not to include top-level command ${matcher.commands
+      .map((command) => JSON.stringify(command))
+      .join(' or ')}. Observed top-level commands: ${observed
+      .map((command) => JSON.stringify(command))
+      .join(', ')}`,
+  );
+}
+
+function topLevelPlannedCommands(output: string): string[] {
+  const commands: string[] = [];
+  for (const line of normalizedFinalOutput(output).split('\n')) {
+    const [executable, firstArg] = commandParts(line.trim());
+    if (executable === undefined) {
+      continue;
+    }
+    commands.push(executable === 'agent-device' && firstArg !== undefined ? firstArg : executable);
+  }
+  return commands;
 }
 
 function normalizedFinalOutput(output: string): string {
@@ -273,8 +359,24 @@ function isLocalCliHelpCommand(command: string) {
     .replace(/^\/bin\/zsh\s+-lc\s+'(.+)'$/, '$1')
     .trim();
 
-  return /^(?:node\s+bin\/agent-device\.mjs|agent-device)\s+(?:(?:help(?:\s+\S+)?)|(?:\S+\s+)?--help)(?:\s+2>&1)?$/.test(
-    strippedCommand,
+  return splitShellHelpProbe(strippedCommand).every(isLocalCliHelpSegment);
+}
+
+function splitShellHelpProbe(command: string): string[] {
+  return command
+    .split(/\s*(?:&&|\|\||[;|])\s*/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+function isLocalCliHelpSegment(command: string) {
+  const helpToken = '[^\\s;&|]+';
+  return (
+    new RegExp(
+      `^(?:node\\s+bin\\/agent-device\\.mjs|agent-device)\\s+(?:(?:help(?:\\s+${helpToken})*)|(?:${helpToken}\\s+)?--help)(?:\\s+2>&1)?$`,
+    ).test(command) ||
+    /^printf\s+["'][^"']*["']$/.test(command) ||
+    command === 'cat'
   );
 }
 
@@ -1659,10 +1761,10 @@ const SKILL_GUIDANCE_CASES: Case[] = [
     ],
     forbiddenOutputs: [
       plannedCommand('swipe'),
-      plannedCommand('pan'),
-      plannedCommand('fling'),
-      plannedCommand('rotate'),
-      plannedCommand('rotate-gesture'),
+      topLevelPlannedCommand('pan'),
+      topLevelPlannedCommand('fling'),
+      topLevelPlannedCommand('rotate'),
+      topLevelPlannedCommand('rotate-gesture'),
       /--duration-ms/i,
     ],
   }),

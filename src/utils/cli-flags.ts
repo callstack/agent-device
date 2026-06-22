@@ -917,7 +917,8 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'int',
     min: 1,
     usageLabel: '--shard-all <n>',
-    usageDescription: 'Test: run the full suite on each of n devices; AD_SHARD_INDEX is zero-based',
+    usageDescription:
+      'Test: run the full suite on each of n devices; combine with --device id1,id2 for explicit connected devices; AD_SHARD_INDEX is zero-based',
   },
   {
     key: 'shardSplit',

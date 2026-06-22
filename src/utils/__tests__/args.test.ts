@@ -1078,9 +1078,22 @@ test('usageForCommand includes Maestro test suite flag', () => {
   assert.match(help, /--maestro/);
   assert.match(help, /--record-video/);
   assert.match(help, /--shard-all <n>/);
+  assert.match(help, /combine with --device id1,id2/);
   assert.match(help, /--shard-split <n>/);
   assert.match(help, /AD_SHARD_INDEX is zero-based/);
   assert.match(help, /Replay\/Test: inject or override/);
+});
+
+test('command help keeps scroll and gesture planning guidance', () => {
+  const scrollHelp = usageForCommand('scroll');
+  if (scrollHelp === null) throw new Error('Expected scroll help text');
+  assert.match(scrollHelp, /Scroll in a direction/);
+  assert.match(scrollHelp, /top\/bottom edge/);
+
+  const gestureHelp = usageForCommand('gesture');
+  if (gestureHelp === null) throw new Error('Expected gesture help text');
+  assert.match(gestureHelp, /Android transform verification should assert/);
+  assert.match(gestureHelp, /app-observable gesture effects/);
 });
 
 test('parseArgs recognizes test --record-video flag', () => {
@@ -1127,7 +1140,8 @@ test('usageForCommand resolves workflow help topic', () => {
   assert.match(help, /choose a point near the center of the intended app-owned target/);
   assert.match(help, /Avoid screen edges, tab bars, navigation bars, and home indicators/);
   assert.match(help, /Android transform injects a geometric two-finger path/);
-  assert.match(help, /verify qualitative state such as "pan changed yes"/);
+  assert.match(help, /verify semantic app state or coarse per-component effects/);
+  assert.match(help, /instead of exact numeric deltas/);
   assert.match(help, /prefer isolated gesture pan, gesture pinch, or gesture rotate/);
   assert.match(help, /longpress accepts coordinates, @refs, or selectors/);
   assert.match(help, /use help react-native for Metro\/Fast Refresh/);
@@ -1143,6 +1157,8 @@ test('usageForCommand resolves workflow help topic', () => {
   );
   assert.match(help, /agent-device clipboard write "some text"/);
   assert.match(help, /For gesture-heavy iOS simulator proof videos, prefer --hide-touches/);
+  assert.match(help, /only a means to reveal or reach an expected target/);
+  assert.match(help, /using the id, selector, or text named by the task/);
   assert.match(
     help,
     /iOS simulator transform uses private XCTest synthesis for a continuous two-finger pan\/scale\/rotation path/,
@@ -1155,6 +1171,7 @@ test('usageForCommand resolves workflow help topic', () => {
   assert.match(help, /if no URL is provided but a target\/app name is provided, open that target/);
   assert.match(help, /localhost\/127\.0\.0\.1\/\[::1\] with a port auto-configure/);
   assert.match(help, /Manual adb reverse tcp:<port> tcp:<port> is only needed/);
+  assert.match(help, /do not stop at the action itself/);
   assert.match(help, /do not split clear\/restart/);
   assert.match(help, /do not write network log headers/);
   assert.match(help, /agent-device open exp:\/\/127\.0\.0\.1:8081 --platform ios/);
@@ -1165,6 +1182,7 @@ test('usageForCommand resolves workflow help topic', () => {
   assert.match(help, /snapshot returns a sparse\/AX-unavailable state/);
   assert.match(help, /Use plain screenshot, not screenshot --overlay-refs/);
   assert.match(help, /retry snapshot -i after reaching another screen/);
+  assert.match(help, /test \.\/e2e\/maestro --maestro --device udid1,emulator-5554 --shard-all 2/);
   assert.match(help, /agent-device open exp:\/\/127\.0\.0\.1:8081 --platform android/);
   assert.match(help, /apps lookup misses the project but shows Expo Go\/dev-client/);
   assert.match(help, /metro prepare --kind expo/);
@@ -1354,6 +1372,8 @@ test('usageForCommand resolves react-native help topic', () => {
   assert.match(help, /If snapshot reports a React Native warning\/error overlay/);
   assert.match(help, /agent-device react-native dismiss-overlay/);
   assert.match(help, /verifies the overlay is gone with a fresh post-dismiss snapshot/);
+  assert.match(help, /When overlay evidence and React diagnostics are required/);
+  assert.match(help, /agent-device react-devtools errors/);
   assert.match(help, /overlay is still visible/);
   assert.match(help, /Do not manually press warning\/error text bodies/);
   assert.match(help, /dismiss-overlay command owns the narrow LogBox\/RedBox targeting policy/);

@@ -199,12 +199,14 @@ Navigation and gestures:
     agent-device gesture rotate 35 200 420
     agent-device gesture transform 200 420 80 -40 2 35 700
   iOS simulator transform uses private XCTest synthesis for a continuous two-finger pan/scale/rotation path; verify app metrics instead of assuming requested values map exactly to recognizer output.
-  Android transform injects a geometric two-finger path; app recognizers may report non-exact pan/scale/rotation. For Android combined transforms, verify qualitative state such as "pan changed yes" / "pinch changed yes" / "rotate changed yes" unless the app explicitly promises exact centroid metrics.
+  Android transform injects a geometric two-finger path; app recognizers may report non-exact pan/scale/rotation. For Android combined transforms, verify semantic app state or coarse per-component effects instead of exact numeric deltas unless the app explicitly exposes stable metrics.
+    agent-device gesture transform 200 420 80 -40 2 35 700 --platform android
   If Android needs exact app-state values, prefer isolated gesture pan, gesture pinch, or gesture rotate commands over one combined transform.
 
 Validation and evidence:
   Nearby mutation diff: agent-device diff snapshot -i.
   Expected text/selector verification must include the exact text or selector via wait, is, get, or find; bare screenshots/snapshots are insufficient for named expectations.
+  When an action is only a means to reveal or reach an expected target, do not stop at the action itself. Follow it with exact target verification using the id, selector, or text named by the task.
   Prefer provided testIDs/ids/selectors for verification; use visible text when no durable selector is provided.
   If task says snapshot, use snapshot. If it asks visual evidence, use screenshot.
   Icon/tappable visual proof: screenshot --overlay-refs. Flag is --overlay-refs.
@@ -221,6 +223,8 @@ Validation and evidence:
   Network headers: network dump --include headers; do not write network log headers.
   Remote/cloud: connect to discover a cloud profile, or connect --remote-config ./remote-config.json for a local profile; then open, snapshot, disconnect.
   macOS menu bar: open ... --platform macos --surface menubar; snapshot -i --platform macos --surface menubar.
+  Maestro full-suite validation on explicit connected devices uses one test command with a comma-separated --device list and --shard-all. Use --shard-split only when splitting suite entries across devices:
+    agent-device test ./e2e/maestro --maestro --device udid1,emulator-5554 --shard-all 2
 
 React Native dev loop:
   JS-only change with Metro connected:
@@ -441,6 +445,13 @@ Overlays and busy RN UIs:
   If the command reports the overlay is still visible, use screenshot --overlay-refs for visual evidence and report the overlay instead of pressing warning/error text manually.
   Do not manually press warning/error text bodies, collapsed banner bodies, full-screen warning parents, or broad LogBox/RedBox refs. The dismiss-overlay command owns the narrow LogBox/RedBox targeting policy.
   Report the overlay in the final summary. Use screenshot --overlay-refs before dismissing only if visual evidence is required.
+  When overlay evidence and React diagnostics are required before continuing, keep the sequence explicit:
+    agent-device snapshot -i
+    agent-device screenshot --overlay-refs
+    agent-device react-devtools errors
+    agent-device react-native dismiss-overlay
+    agent-device snapshot -i
+    agent-device press 'id="submit-order"'
   If snapshot times out because the UI never becomes idle, Android accessibility may be blocked by busy or continuously changing app UI. After that timeout, use screenshot as visual truth instead of repeatedly retrying snapshots.
   If iOS snapshot reports AX unavailable or returns only a sparse root, the current screen's accessibility state is invalid. Use plain screenshot as visual truth, coordinate navigation to leave the bad screen, then take a fresh snapshot -i before returning to selector/@ref commands.
   Android runtime permission dialogs and native alerts are handled by alert wait/accept/dismiss. If alert reports no alert, treat the visible surface as app-owned UI and use snapshot -i plus press by label/ref.

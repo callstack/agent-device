@@ -86,6 +86,16 @@ pnpm test:skillgym -- --reporter json
 pnpm test:skillgym -- --repeat 3 --repeat-failure 1
 ```
 
+Optional Vercel AI Gateway runner:
+
+```bash
+AI_GATEWAY_API_KEY=<token> \
+SKILLGYM_ENABLE_VERCEL_GATEWAY=1 \
+pnpm test:skillgym:case open-and-snapshot --runner gpt-nano-gateway
+```
+
+`gpt-nano-gateway` uses SkillGym's OpenCode adapter with a repo-injected `@ai-sdk/openai-compatible` provider pointed at `https://ai-gateway.vercel.sh/v1` and model `openai/gpt-5.4-nano`. It is disabled by default so normal runs do not require Gateway credentials, OpenCode auth, or Gateway spend. `VERCEL_OIDC_TOKEN` can be used instead of `AI_GATEWAY_API_KEY`; the config passes either token as the bearer credential for Gateway.
+
 If you need to run `skillgym` directly while developing the runner itself, build first so agents can call `node bin/agent-device.mjs help workflow`:
 
 ```bash

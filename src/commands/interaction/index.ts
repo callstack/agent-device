@@ -93,7 +93,7 @@ export const interactionCliSchemas = {
     usageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform> ...',
     listUsageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform> ...',
     helpDescription:
-      'Run touch gestures: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance] [durationMs], swipe <left|right|left-edge|right-edge> [durationMs], pinch <scale> [x] [y], rotate <degrees> [x] [y] [velocity], or transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs]',
+      'Run touch gestures: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance] [durationMs], swipe <left|right|left-edge|right-edge> [durationMs], pinch <scale> [x] [y], rotate <degrees> [x] [y] [velocity], or transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs]. Android transform verification should assert app-observable gesture effects, not exact transform values.',
     summary: 'Run pan, fling, swipe, pinch, rotate, or transform gestures',
     positionalArgs: ['pan|fling|swipe|pinch|rotate|transform', 'args?'],
     allowsExtraPositionals: true,
@@ -114,7 +114,7 @@ export const interactionCliSchemas = {
   },
   scroll: {
     usageOverride: 'scroll <direction|top|bottom> [amount] [--pixels <n>]',
-    helpDescription: 'Scroll in direction, or verify hidden content and scroll toward top/bottom',
+    helpDescription: 'Scroll in a direction, or toward the top/bottom edge of scrollable content.',
     summary: 'Scroll in a direction or to an edge',
     positionalArgs: ['directionOrEdge', 'amount?'],
     allowedFlags: ['pixels'],
