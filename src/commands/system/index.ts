@@ -151,7 +151,8 @@ const rotateCliSchema = {
 
 const keyboardCliSchema = {
   usageOverride: 'keyboard [status|get|dismiss|enter|return]',
-  helpDescription: 'Inspect Android keyboard visibility/type or press/dismiss the device keyboard',
+  helpDescription:
+    'Inspect Android keyboard visibility/type or press/dismiss the device keyboard. For iOS toolbar Done dismissal, focus the field by id/ref first, then run keyboard dismiss; do not manually press Done unless keyboard dismiss reports unsupported.',
   summary: 'Inspect, press, or dismiss the device keyboard',
   positionalArgs: ['action?'],
 } as const satisfies CommandSchemaOverride;

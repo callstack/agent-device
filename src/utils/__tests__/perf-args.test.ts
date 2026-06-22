@@ -31,7 +31,9 @@ test('parseArgs accepts perf area subcommands', () => {
 test('usageForCommand advertises perf area subcommands for metrics alias', () => {
   const help = usageForCommand('metrics');
   assert.equal(help === null, false);
-  assert.match(help ?? '', /agent-device perf \[metrics\|frames\|memory\]/);
+  assert.match(help ?? '', /agent-device perf metrics --json/);
+  assert.match(help ?? '', /agent-device perf frames --json/);
   assert.match(help ?? '', /perf memory snapshot/);
-  assert.match(help ?? '', /perf cpu profile start\|stop\|report/);
+  assert.match(help ?? '', /perf cpu profile report --kind xctrace --out <report\.json>/);
+  assert.match(help ?? '', /perf cpu profile report --kind simpleperf --out <cpu-report\.json>/);
 });

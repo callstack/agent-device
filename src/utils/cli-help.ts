@@ -34,6 +34,7 @@ const AGENT_WORKFLOWS = [
 ] as const;
 
 const AGENT_QUICKSTART_LINES = [
+  'Planning output contract: when asked to plan commands, output command lines only: no prose, numbering, Markdown fences, pipes, or shell helpers.',
   'Default loop: devices/apps -> open -> snapshot -i -> press/fill/get/is/wait/find -> verify -> close.',
   'Use selectors or refs as positional targets: id="submit", label="Allow", or @e12 from snapshot -i.',
   'Plain snapshot reads state; snapshot -i refreshes current interactive refs only.',
@@ -43,7 +44,7 @@ const AGENT_QUICKSTART_LINES = [
   'Truncated text/input preview: expand first with snapshot -s @e12, not get text.',
   'React Native apps: read help react-native for Metro, DevTools routing, and RN-specific blockers; use react-native dismiss-overlay for LogBox/RedBox overlays.',
   'Android RN/Expo Metro: direct Android localhost URL opens with a port auto-configure host reachability.',
-  'Expo Go/dev clients: use the provided URL when given; on iOS prefer open "Expo Go" <url>; Android URL opens infer the foreground package for logs/perf when possible.',
+  'Expo Go/dev clients: use the provided URL when given; on iOS use open "Expo Go" <url> --platform ios, then snapshot -i --platform ios to verify project UI. Do not use plain snapshot or snapshot --diff for this recovery check. Android URL opens infer the foreground package for logs/perf when possible.',
   'Install flows: install/install-from-source first, then open the installed id with --relaunch.',
   'Text: fill \'id="field-email"\' "qa@example.com" replaces; type appends after press.',
   'Clearing text: do not use fill <target> ""; use a visible clear/reset control or report that clearing is unsupported.',
@@ -51,11 +52,14 @@ const AGENT_QUICKSTART_LINES = [
   'Implicit default sessions are scoped to the current worktree; if a prompt names a Session, include --session <name> on every command in that flow.',
   'Run mutating commands serially within one session; parallelize only read-only commands or separate sessions/devices.',
   'Clipboard limits: iOS Allow Paste cannot be automated through XCUITest; prefill with clipboard write. Android non-ASCII should use fill/type, not raw adb input.',
-  'After mutation: refs are stale. If the next target is known, use its selector directly; otherwise refresh with snapshot -i, scoped with -s when a stable container is known.',
+  'After mutation: refs are stale. If the next target is known, use its selector directly; otherwise refresh with snapshot -i, scoped with -s when a stable container is known. Do not use tap; use press or click.',
   'Raw coordinates are fallback-only: use snapshot -i --json rects when iOS refs no-op or child refs are missing, then verify the action with diff snapshot -i or snapshot --diff.',
+  'Sparse or AX-unavailable snapshot: use screenshot for visual truth, press the visible coordinate to leave the bad screen, then retry AX with snapshot -i.',
+  'macOS context menus use click <ref> --button secondary, then snapshot -i. Longpress is for mobile hold gestures, not macOS secondary-click menus.',
+  'Remote workflow profiles use --remote-config on operational commands. Do not substitute --config; --config only loads CLI defaults.',
   'Batch JSON steps use "command" and structured "input"; legacy "positionals"/"flags" steps still run in CLI but are deprecated until the next major version.',
   'Navigation: app-owned back uses back; system back uses back --system.',
-  'Web browser sessions: read help web; first slice is open <url> --platform web -> snapshot -i -> click/fill/get/is/find/wait/screenshot -> close.',
+  'Web browser sessions: read help web; first slice is web setup if needed -> web doctor -> open <url> --platform web -> snapshot -i -> click/fill/get/is/find/wait/screenshot -> close.',
   'Verification commands must name the expected text/selector; bare screenshots/snapshots are not enough.',
   'Debug evidence: Session state contains request diagnostics and runner.log; use logs clear --restart/mark/path, trace, and network dump --include headers for app evidence.',
   'Use agent-device commands in final plans; raw platform tools, pseudo commands, and helper prose are wrong.',
@@ -105,13 +109,14 @@ Core loop:
 
 Command shape:
   Plans should use agent-device commands, not raw platform tools, pseudo commands, package-manager aliases, or helper prose.
+  If the user asks for a command plan, final output should be command lines only: no intro sentence, numbered list, Markdown fence, shell pipe, grep/head/tail helper, or explanatory bullets.
   Put subcommand first, then positionals, then flags:
     agent-device open com.example.app --session checkout --platform android --relaunch
     agent-device record start ./checkout.mp4 --session checkout
   Snapshot refs look like @e12. After snapshot -i, use the exact @eN ref from that output.
   If the exact ref is not known yet, first output snapshot -i, then use a concrete example shape like press @e12 in the next command; do not write @<ref>, @ref, @Label_Name, or @eN placeholders.
   Close means agent-device close. App-owned back means back; system back means back --system.
-  Taps are press or click. Gestures use swipe, longpress, or gesture <pan|fling|swipe|pinch|rotate|transform>. Use gesture swipe left|right for reliable in-page horizontal swipes, and gesture swipe right-edge for left-edge navigation/back gestures. Android swipe, pinch, rotate, and transform use provider-native touch injection when available, then the bundled touch helper. iOS simulator transform uses private XCTest synthesis for a continuous two-finger pan/scale/rotation path; otherwise it reports UNSUPPORTED_OPERATION.
+  Taps are press or click; tap is not a command. Gestures use swipe, longpress, or gesture <pan|fling|swipe|pinch|rotate|transform>. Use gesture swipe left|right for reliable in-page horizontal swipes, and gesture swipe right-edge for left-edge navigation/back gestures. Android swipe, pinch, rotate, and transform use provider-native touch injection when available, then the bundled touch helper. iOS simulator transform uses private XCTest synthesis for a continuous two-finger pan/scale/rotation path; otherwise it reports UNSUPPORTED_OPERATION.
 
 Bootstrap:
   agent-device devices --platform ios
@@ -139,8 +144,9 @@ Snapshots and refs:
     [off-screen below] 4 items: "Privacy", "About" -> scroll down, then snapshot -i; those are hints, not refs.
   Re-snapshot after navigation, submit, typing/fill, modal/list/reload/dynamic changes when you need new refs.
   Anti-pattern: snapshot -i followed by snapshot -i | grep ...
-  Refs from the first snapshot remain valid until you press, fill, type, scroll, go back, wait for async UI, or otherwise change app state.
+  Refs from the first snapshot remain valid until you press, click, fill, type, scroll, go back, wait for async UI, or otherwise change app state.
   After a mutation, prefer a known selector/label directly (for example press 'label="Send"') because interaction commands refresh interactive state internally. If you need to discover the new control, use snapshot -i, or snapshot -i -s "Composer" when a stable container label/id can scope the refresh.
+  If typing/fill opened the keyboard or changed layout and the next target has no stable selector, run snapshot -i, use the fresh ref, then verify with wait/find or diff snapshot -i.
   For a targeted query, use find/get/is. If you truly need the full tree again, pass --force-full.
   Off-screen summaries are scroll hints; use scroll, not swipe, then snapshot -i.
   Missing target in a long list: use a short manual scroll + snapshot loop with a max attempt count. If a named target is summarized as off-screen below/above, use scroll down/up, then snapshot -i; do not use scroll bottom/top because the target may appear before the absolute list edge. Use scroll bottom/top only when the task explicitly asks for the list edge. Edge scrolls verify hidden content with snapshots and stop when no matching hidden content remains.
@@ -204,7 +210,13 @@ Navigation and gestures:
   iOS simulator transform uses private XCTest synthesis for a continuous two-finger pan/scale/rotation path; verify app metrics instead of assuming requested values map exactly to recognizer output.
   Android transform injects a geometric two-finger path; app recognizers may report non-exact pan/scale/rotation. For Android combined transforms, verify semantic app state or coarse per-component effects instead of exact numeric deltas unless the app explicitly exposes stable metrics.
     agent-device gesture transform 200 420 80 -40 2 35 700 --platform android
+    agent-device wait text "pan changed yes" 3000 --platform android
+    agent-device wait text "pinch changed yes" 3000 --platform android
+    agent-device wait text "rotate changed yes" 3000 --platform android
   If Android needs exact app-state values, prefer isolated gesture pan, gesture pinch, or gesture rotate commands over one combined transform.
+  macOS context menus are secondary clicks, not long presses:
+    agent-device click @e66 --button secondary --platform macos
+    agent-device snapshot -i --platform macos
 
 Validation and evidence:
   Nearby mutation diff: agent-device diff snapshot -i.
@@ -214,6 +226,9 @@ Validation and evidence:
   If task says snapshot, use snapshot. If it asks visual evidence, use screenshot.
   Icon/tappable visual proof: screenshot --overlay-refs. Flag is --overlay-refs.
   If snapshot returns a sparse/AX-unavailable state, refs are not reliable. Use plain screenshot, not screenshot --overlay-refs, navigate with coordinates if needed, then retry snapshot -i after reaching another screen; the AX failure may be screen-specific.
+    agent-device screenshot
+    agent-device press 124 817
+    agent-device snapshot -i
   Startup/CPU/memory/frame first pass: perf metrics --json (bare perf and metrics are aliases). Focused frame/jank health: perf frames --json. Memory-only sample: perf memory sample --json returns compact JSON with bounded top offenders. Heap/memgraph artifact escalation: perf memory snapshot --out heap.artifact; use --kind android-hprof on Android or --kind memgraph on supported Apple simulator/macOS app sessions. Android native profiling: perf cpu profile start|stop|report --kind simpleperf --out <path>; Android native traces: perf trace start|stop --kind perfetto --out <path>. Artifact collectors return compact state/path/size metadata only; raw heap/profile/trace files stay on disk. Treat native perf output as the agent evidence: for example, a Perfetto stop can return state=stopped, outPath=/tmp/app.perfetto-trace, sizeBytes=5392410, and method=adb-shell-perfetto while the 5.3 MB raw trace stays in the artifact. This is better than raw dumps for agents because it is stable, bounded, and keeps large artifacts out of context. heapprofd is deferred until Perfetto plumbing is available. Replay maintenance: replay -u ./flow.ad.
   Recording: record start/stop. Use --max-size to cap the longest edge and --quality medium|high to choose output quality across Android and Apple targets. By default, stop burns touch overlays into the video; use record start --hide-touches for the fastest raw recording. Android adb screenrecord has a 180s platform limit, so longer Android recordings are returned as multiple MP4 chunks. For gesture-heavy iOS simulator proof videos, prefer --hide-touches because overlay timing depends on a stable runner session while gestures are executing. Tracing: trace start ./trace.log, trace stop ./trace.log. Paths are positional.
   Stable known flow: batch ./steps.json, not workflow batch.
@@ -254,6 +269,7 @@ React Native dev loop:
   Expo Go is a host shell. Use a provided project URL instead of inventing a bundle id; if no URL is provided but a target/app name is provided, open that target and do not inspect project files to find one. On iOS, prefer host + URL when the host shell is known because direct URL open can report success while leaving the runner/shell focused; verify with snapshot -i after opening:
     agent-device open "Expo Go" exp://127.0.0.1:8081 --platform ios
     agent-device snapshot -i --platform ios
+  If recovery follows a runner/shell splash screen, use snapshot -i --platform ios; do not substitute plain snapshot or snapshot --diff.
   There is no open-url command; use open with the URL target or host + URL form.
   Direct iOS URL open remains valid when no host shell is known, but verify that the app UI loaded:
     agent-device open exp://127.0.0.1:8081 --platform ios
@@ -375,9 +391,9 @@ React Native internals:
 Use this for React Native performance/profiling and internals that the accessibility tree cannot expose: components, props, state, hooks, ownership, slow renders, and rerenders.
 
 Core commands:
+  agent-device react-devtools status
   agent-device react-devtools start
   agent-device react-devtools stop
-  agent-device react-devtools status
   agent-device react-devtools wait --connected
   agent-device react-devtools wait --component <ComponentName>
   agent-device react-devtools count
@@ -396,17 +412,18 @@ Core commands:
   agent-device react-devtools profile diff before.json after.json --limit 10
 
 Profiling loop:
-  1. Verify the app is connected: react-devtools status, then wait --connected if needed.
-  2. If correlating with logs or network, run logs clear --restart before the first logs mark.
-  3. Start profiling immediately before the interaction.
-  4. Drive the interaction with normal agent-device commands and mark before/after the repro when timing matters.
-  5. Stop profiling.
-  6. Make one bounded first-pass survey: profile stop for the summary, profile slow --limit 5 once, profile rerenders --limit 5 once, and profile timeline --limit 20 only when commit timing matters.
-  7. Use profile report @cN for targeted render causes and changed props/state/hooks; use get component @cN for current props/state/hooks.
+  1. Run agent-device react-devtools status first. Use start only if status reports the React DevTools helper is not running; start is not a connection check.
+  2. Always run agent-device react-devtools wait --connected after status and before profiling so the app, not just the helper, is attached.
+  3. If correlating with logs or network, run logs clear --restart before the first logs mark.
+  4. Start profiling immediately before the interaction.
+  5. Drive the interaction with normal agent-device commands and mark before/after the repro when timing matters.
+  6. Stop profiling.
+  7. Make one bounded first-pass survey: profile stop for the summary, profile slow --limit 5 once, profile rerenders --limit 5 once, and profile timeline --limit 20 only when commit timing matters.
+  8. Use profile report @cN for targeted render causes and changed props/state/hooks; use get component @cN for current props/state/hooks.
 
 Rules:
   Every React DevTools command is an agent-device subcommand: agent-device react-devtools ...
-  Do not write agent-devtools, agent-react-devtools, or bare react-devtools commands in final command plans.
+  Do not write agent-devtools, agent-react-devtools, or bare react-devtools commands in final command plans. Every profiling and survey line must begin with agent-device react-devtools.
   Start with get tree --depth 3 or find <name>; use find --exact when fuzzy results are noisy.
   @c refs reset after reload/remount. After reload, wait --connected and inspect again.
   Keep the profile window narrow; unrelated navigation makes render data noisy.
@@ -459,10 +476,16 @@ React Native dev loop:
   Expo Go/dev clients are host shells. Use provided project URLs, verify with snapshot -i after opening, and ask instead of inventing app ids or URLs. Help workflow owns the full Expo URL command shapes.
 
 Overlays and busy RN UIs:
-  If snapshot reports a React Native warning/error overlay, handle it before interacting with the app: run agent-device react-native dismiss-overlay. The command sends the safe LogBox/RedBox action and verifies the overlay is gone with a fresh post-dismiss snapshot.
+  If snapshot reports a React Native warning/error overlay, handle it before interacting with the app: run agent-device react-native dismiss-overlay. The command sends the safe LogBox/RedBox action and verifies the overlay is gone with a fresh post-dismiss snapshot -i.
   If the command reports the overlay is still visible, use screenshot --overlay-refs for visual evidence and report the overlay instead of pressing warning/error text manually.
   Do not manually press warning/error text bodies, collapsed banner bodies, full-screen warning parents, or broad LogBox/RedBox refs. The dismiss-overlay command owns the narrow LogBox/RedBox targeting policy.
   Report the overlay in the final summary. Use screenshot --overlay-refs before dismissing only if visual evidence is required.
+  Minimal overlay continuation:
+    agent-device snapshot -i
+    agent-device react-native dismiss-overlay
+    agent-device snapshot -i
+    agent-device press 'id="submit-order"'
+  Do not use a plain snapshot after dismiss-overlay when the next step needs current refs; use snapshot -i.
   When overlay evidence and React diagnostics are required before continuing, keep the sequence explicit:
     agent-device snapshot -i
     agent-device screenshot --overlay-refs
@@ -472,6 +495,9 @@ Overlays and busy RN UIs:
     agent-device press 'id="submit-order"'
   If snapshot times out because the UI never becomes idle, Android accessibility may be blocked by busy or continuously changing app UI. After that timeout, use screenshot as visual truth instead of repeatedly retrying snapshots.
   If iOS snapshot reports AX unavailable or returns only a sparse root, the current screen's accessibility state is invalid. Use plain screenshot as visual truth, coordinate navigation to leave the bad screen, then take a fresh snapshot -i before returning to selector/@ref commands.
+    agent-device screenshot
+    agent-device press 124 817
+    agent-device snapshot -i
   Android runtime permission dialogs and native alerts are handled by alert wait/accept/dismiss. If alert reports no alert, treat the visible surface as app-owned UI and use snapshot -i plus press by label/ref.
 
 React DevTools routing:
@@ -480,8 +506,15 @@ React DevTools routing:
   If React DevTools cannot connect, report status and continue with logs, network, perf metrics, screenshot, and trace evidence instead of blocking the whole flow.
 
 Slow-flow investigation:
-  Keep one session, open the app, and snapshot -i.
-  Use help react-devtools for the narrow React profile window.
+  Keep one session, open the app first, and snapshot -i before interacting.
+  Start React Native slow-flow plans with this ordered scaffold:
+    agent-device open "Agent Device Tester" --platform android
+    agent-device snapshot -i
+    agent-device react-devtools status
+    agent-device react-devtools wait --connected
+  If the task says to open the app, include the open command even when it also describes the current screen.
+  Use help react-devtools for the narrow React profile window. Profiling plans need both status and wait --connected before profile start.
+  Check status before wait/profile. Do not substitute react-devtools start for status; start launches the helper, while status reports connection state.
   Use help debugging for logs clear --restart, logs mark, network dump --include headers, perf metrics --json, traces, and runtime failure evidence.
   For 15-20s async work, use wait with the exact expected text or selector instead of repeated snapshots.
   Report React render offenders separately from network/backend waits and device frame/CPU/memory findings.`,
@@ -543,6 +576,7 @@ Rules:
   connect and disconnect are top-level commands. Do not write agent-device remote connect or agent-device remote disconnect.
   Use connect without --remote-config when the cloud control plane owns the connection profile.
   Prefer --remote-config over --daemon-base-url, --tenant, --run-id, and --lease-id when using a local profile.
+  Do not use --config as a remote profile flag. --config loads CLI defaults; --remote-config selects remote daemon/profile settings.
   For self-contained scripts, pass the same --remote-config to every operational command, including disconnect; a preceding connect is optional but not required.
   For remote artifact installs, use install-from-source <url> or install-from-source --github-actions-artifact org/repo:artifact; do not download CI artifacts locally first.
   After connect, let the active remote connection supply runtime hints.
@@ -595,7 +629,12 @@ Dependency:
     agent-device web doctor
   Web automation requires Node 24+.
 
+Planning rule:
+  For web command plans, output only agent-device command lines. Do not add prose, numbering, Markdown fences, shell pipes, or agent-browser commands unless the task is explicitly standalone browser automation outside agent-device.
+
 First-slice loop:
+  agent-device web setup
+  agent-device web doctor
   agent-device open https://example.com --platform web
   agent-device snapshot -i --platform web
   agent-device get text @e2 --platform web

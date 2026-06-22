@@ -74,12 +74,16 @@ export const interactionCliSchemas = {
   },
   press: {
     usageOverride: 'press <x y|@ref|selector>',
+    helpDescription:
+      'Short press a semantic UI target by ref, selector, or point. For native context menus or hold gestures, use longpress <target> <durationMs> instead of press --hold-ms.',
     positionalArgs: ['targetOrX', 'y?'],
     allowsExtraPositionals: true,
     allowedFlags: [...REPEATED_TOUCH_FLAGS, ...SELECTOR_SNAPSHOT_FLAGS],
   },
   longpress: {
     usageOverride: 'longpress <x y|@ref|selector> [durationMs]',
+    helpDescription:
+      'Open native context menus or long-press targets by ref, selector, or point. Duration is positional, for example longpress @e12 800 or longpress 300 500 800.',
     positionalArgs: ['targetOrX', 'yOrDurationMs?', 'durationMs?'],
     allowsExtraPositionals: true,
     allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS],
@@ -93,7 +97,7 @@ export const interactionCliSchemas = {
     usageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform> ...',
     listUsageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform> ...',
     helpDescription:
-      'Run touch gestures: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance] [durationMs], swipe <left|right|left-edge|right-edge> [durationMs], pinch <scale> [x] [y], rotate <degrees> [x] [y] [velocity], or transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs]. Android transform verification should assert app-observable gesture effects, not exact transform values.',
+      'Run touch gestures: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance] [durationMs], swipe <left|right|left-edge|right-edge> [durationMs], pinch <scale> [x] [y], rotate <degrees> [x] [y] [velocity], or transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
     summary: 'Run pan, fling, swipe, pinch, rotate, or transform gestures',
     positionalArgs: ['pan|fling|swipe|pinch|rotate|transform', 'args?'],
     allowsExtraPositionals: true,

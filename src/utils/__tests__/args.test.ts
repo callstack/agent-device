@@ -384,6 +384,7 @@ test('usageForCommand documents open --launch-args', () => {
   assert.match(help, /--launch-args <arg>/);
   assert.match(help, /forwarded verbatim/);
   assert.match(help, /Linux and macOS reject the flag/);
+  assert.match(help, /--launch-console artifacts\/launch-console\.log/);
 });
 
 test('parseArgs accepts install-from-source GitHub Actions artifact flag', () => {
@@ -943,10 +944,20 @@ test('usageForCommand supports legacy long-press alias', () => {
   assert.doesNotMatch(help ?? '', /agent-device long-press/);
 });
 
+test('usageForCommand documents keyboard dismissal flow', () => {
+  const help = usageForCommand('keyboard');
+  assert.equal(help === null, false);
+  assert.match(help ?? '', /focus the field by id\/ref first/);
+  assert.match(help ?? '', /keyboard dismiss reports unsupported/);
+});
+
 test('usageForCommand supports metrics alias', () => {
   const help = usageForCommand('metrics');
   assert.equal(help === null, false);
   assert.match(help ?? '', /agent-device perf/);
+  assert.match(help ?? '', /report --kind xctrace --out <report\.json>/);
+  assert.match(help ?? '', /profile report --kind simpleperf --out <cpu-report\.json>/);
+  assert.match(help ?? '', /report writes a compact \.json summary/);
   assert.match(help ?? '', /Native perf output is agent evidence/);
   assert.match(help ?? '', /raw profiles\/traces stay on disk/);
 });
@@ -1052,7 +1063,8 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /React Native apps: read help react-native/);
   assert.match(usageText, /localhost URL opens with a port auto-configure host reachability/);
   assert.match(usageText, /Expo Go\/dev clients: use the provided URL when given/);
-  assert.match(usageText, /on iOS prefer open "Expo Go" <url>/);
+  assert.match(usageText, /open "Expo Go" <url> --platform ios/);
+  assert.match(usageText, /Do not use plain snapshot or snapshot --diff for this recovery check/);
   assert.match(usageText, /Install flows: install\/install-from-source first/);
   assert.match(usageText, /fill 'id="field-email"' "qa@example\.com" replaces/);
   assert.match(usageText, /do not use fill <target> ""/);
@@ -1063,6 +1075,9 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /After mutation: refs are stale/);
   assert.match(usageText, /use its selector directly; otherwise refresh with snapshot -i/);
   assert.match(usageText, /verify the action with diff snapshot -i or snapshot --diff/);
+  assert.match(usageText, /Sparse or AX-unavailable snapshot/);
+  assert.match(usageText, /macOS context menus use click <ref> --button secondary/);
+  assert.match(usageText, /Remote workflow profiles use --remote-config/);
   assert.match(usageText, /app-owned back uses back/);
   assert.match(usageText, /Web browser sessions: read help web/);
   assert.match(
@@ -1151,8 +1166,8 @@ test('command help keeps scroll and gesture planning guidance', () => {
 
   const gestureHelp = usageForCommand('gesture');
   if (gestureHelp === null) throw new Error('Expected gesture help text');
-  assert.match(gestureHelp, /Android transform verification should assert/);
-  assert.match(gestureHelp, /app-observable gesture effects/);
+  assert.match(gestureHelp, /Android transform verification should use all app-observable effects/);
+  assert.match(gestureHelp, /wait text "pan changed yes"/);
 });
 
 test('parseArgs recognizes test --record-video flag', () => {
@@ -1388,6 +1403,7 @@ test('usageForCommand resolves remote help topic', () => {
   assert.match(help, /disconnect --remote-config \.\/remote-config\.json/);
   assert.match(help, /Script flow, per-command config/);
   assert.match(help, /same --remote-config to every operational command/);
+  assert.match(help, /Do not use --config as a remote profile flag/);
   assert.match(help, /install-from-source --github-actions-artifact org\/repo:artifact/);
 });
 
@@ -1443,6 +1459,9 @@ test('usageForCommand resolves react-devtools help topic', () => {
     /agent-device react-devtools profile diff before\.json after\.json --limit 10/,
   );
   assert.match(help, /render causes and changed props\/state\/hooks/);
+  assert.match(help, /Run agent-device react-devtools status first/);
+  assert.match(help, /start is not a connection check/);
+  assert.match(help, /Always run agent-device react-devtools wait --connected after status/);
   assert.match(help, /logs clear --restart before the first logs mark/);
   assert.match(help, /one bounded first-pass survey/);
   assert.match(help, /profile slow --limit 5 once/);
@@ -1453,6 +1472,7 @@ test('usageForCommand resolves react-devtools help topic', () => {
   assert.match(help, /agent-device logs mark "before catalog search"/);
   assert.match(help, /agent-device react-devtools profile timeline --limit 20/);
   assert.match(help, /Do not write agent-devtools/);
+  assert.match(help, /Every profiling and survey line must begin with agent-device react-devtools/);
   assert.match(help, /agent-device network dump --include headers/);
   assert.match(help, /@c refs reset after reload\/remount/);
   assert.match(help, /use separate sessions\/devices/);
@@ -1477,9 +1497,16 @@ test('usageForCommand resolves react-native help topic', () => {
   assert.match(help, /Use help react-devtools for status\/wait/);
   assert.match(help, /logs clear --restart/);
   assert.match(help, /network dump --include headers/);
+  assert.match(help, /agent-device open "Agent Device Tester" --platform android/);
+  assert.match(help, /Start React Native slow-flow plans with this ordered scaffold/);
+  assert.match(help, /include the open command even when it also describes the current screen/);
+  assert.match(help, /agent-device react-devtools status/);
+  assert.match(help, /Profiling plans need both status and wait --connected before profile start/);
+  assert.match(help, /Do not substitute react-devtools start for status/);
   assert.match(help, /If snapshot reports a React Native warning\/error overlay/);
   assert.match(help, /agent-device react-native dismiss-overlay/);
-  assert.match(help, /verifies the overlay is gone with a fresh post-dismiss snapshot/);
+  assert.match(help, /verifies the overlay is gone with a fresh post-dismiss snapshot -i/);
+  assert.match(help, /Do not use a plain snapshot after dismiss-overlay/);
   assert.match(help, /When overlay evidence and React diagnostics are required/);
   assert.match(help, /agent-device react-devtools errors/);
   assert.match(help, /overlay is still visible/);
