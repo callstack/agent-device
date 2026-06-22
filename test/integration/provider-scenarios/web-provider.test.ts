@@ -137,6 +137,10 @@ test('web provider is scoped through the request router and dispatch path', asyn
       },
     ]);
     assert.equal(networkSummary.json.result.data.include, 'summary');
+    const summaryEntry = networkSummary.json.result.data.entries[0];
+    assert.equal('headers' in summaryEntry, false);
+    assert.equal('requestHeaders' in summaryEntry, false);
+    assert.equal('responseHeaders' in summaryEntry, false);
 
     const network = await harness.callCommand(
       'network',
