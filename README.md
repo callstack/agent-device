@@ -15,7 +15,7 @@
 
 Mobile app verification for AI agents.
 
-A device automation CLI for real apps on iOS, Android, TV, and desktop. Agents get token-efficient snapshots, semantic refs, and evidence captured only when needed.
+A device automation CLI for real apps on iOS, Android, TV, web, and desktop. Agents get token-efficient snapshots, semantic refs, and evidence captured only when needed.
 
 `agent-device` lets coding agents open apps, inspect the current UI, interact with visible elements, and collect debugging evidence through one CLI. Use it when an agent needs to verify what actually happens on a device, not just reason about code.
 
