@@ -14,6 +14,21 @@ interface TopLevelPlannedCommandMatcher {
   commands: string[];
 }
 
+interface OutputAbsenceContext {
+  output: string;
+  finalOutput: string;
+  plannedReport: SessionReport;
+}
+
+interface CommandEventRecord {
+  type?: unknown;
+  command?: unknown;
+  args?: {
+    command?: unknown;
+    cmd?: unknown;
+  };
+}
+
 const WORKSPACE_ROOT = process.cwd().replaceAll('\\', '/');
 const APP_SOURCE = workspacePathPattern('examples/test-app', 'directory');
 const REPO_SOURCE = workspacePathPattern('src', 'directory');
@@ -139,27 +154,37 @@ function assertOutputs(finalOutput: string, matchers: OutputMatcher[]) {
 function assertNoOutputs(finalOutput: string, matchers: OutputMatcher[]) {
   const output = normalizedFinalOutput(finalOutput);
   const plannedReport = plannedCommandReport(output);
+  const context = { output, finalOutput, plannedReport };
+
   for (const matcher of matchers) {
-    if (isPlannedCommandMatcher(matcher)) {
-      assertPlannedCommandNotIncludes(plannedReport, matcher);
-      continue;
-    }
-
-    if (isTopLevelPlannedCommandMatcher(matcher)) {
-      assertTopLevelPlannedCommandNotIncludes(output, matcher);
-      continue;
-    }
-
-    if (typeof matcher === 'string') {
-      assert.ok(
-        !output.includes(matcher),
-        `Expected final output not to include ${JSON.stringify(matcher)}. Observed final output: ${finalOutput}`,
-      );
-      continue;
-    }
-
-    assert.doesNotMatch(output, matcher);
+    assertOutputAbsent(context, matcher);
   }
+}
+
+function assertOutputAbsent(context: OutputAbsenceContext, matcher: OutputMatcher) {
+  if (isPlannedCommandMatcher(matcher)) {
+    assertPlannedCommandNotIncludes(context.plannedReport, matcher);
+    return;
+  }
+
+  if (isTopLevelPlannedCommandMatcher(matcher)) {
+    assertTopLevelPlannedCommandNotIncludes(context.output, matcher);
+    return;
+  }
+
+  if (typeof matcher === 'string') {
+    assertStringOutputAbsent(context, matcher);
+    return;
+  }
+
+  assert.doesNotMatch(context.output, matcher);
+}
+
+function assertStringOutputAbsent(context: OutputAbsenceContext, matcher: string) {
+  assert.ok(
+    !context.output.includes(matcher),
+    `Expected final output not to include ${JSON.stringify(matcher)}. Observed final output: ${context.finalOutput}`,
+  );
 }
 
 function isPlannedCommandMatcher(matcher: OutputMatcher): matcher is PlannedCommandMatcher {
@@ -238,15 +263,23 @@ function assertTopLevelPlannedCommandNotIncludes(
 }
 
 function topLevelPlannedCommands(output: string): string[] {
-  const commands: string[] = [];
-  for (const line of normalizedFinalOutput(output).split('\n')) {
-    const [executable, firstArg] = commandParts(line.trim());
-    if (executable === undefined) {
-      continue;
-    }
-    commands.push(executable === 'agent-device' && firstArg !== undefined ? firstArg : executable);
+  return normalizedFinalOutput(output)
+    .split('\n')
+    .map(topLevelPlannedCommandFromLine)
+    .filter((command): command is string => command !== undefined);
+}
+
+function topLevelPlannedCommandFromLine(line: string): string | undefined {
+  const [executable, firstArg] = commandParts(line.trim());
+  if (executable === undefined) {
+    return undefined;
   }
-  return commands;
+
+  return topLevelCommandToken(executable, firstArg);
+}
+
+function topLevelCommandToken(executable: string, firstArg: string | undefined): string {
+  return executable === 'agent-device' && firstArg !== undefined ? firstArg : executable;
 }
 
 function normalizedFinalOutput(output: string): string {
@@ -326,31 +359,37 @@ function assertOnlyLocalCliHelpCommands(report: SessionReport) {
 
 function extractCommandEvents(report: SessionReport): string[] {
   const events = (report as { events?: unknown[] }).events ?? [];
-  const commands: string[] = [];
+  return events.flatMap(commandFromEvent);
+}
 
-  for (const event of events) {
-    if (!event || typeof event !== 'object') {
-      continue;
-    }
-
-    const record = event as {
-      type?: unknown;
-      command?: unknown;
-      args?: { command?: unknown; cmd?: unknown };
-    };
-
-    if (record.type === 'command' && typeof record.command === 'string') {
-      commands.push(record.command);
-      continue;
-    }
-
-    const toolCommand = record.args?.command ?? record.args?.cmd;
-    if (record.type === 'toolCall' && typeof toolCommand === 'string') {
-      commands.push(toolCommand);
-    }
+function commandFromEvent(event: unknown): string[] {
+  if (!isCommandEventRecord(event)) {
+    return [];
   }
 
-  return commands;
+  const command = directCommandEvent(event) ?? toolCallCommandEvent(event);
+  return command === undefined ? [] : [command];
+}
+
+function isCommandEventRecord(event: unknown): event is CommandEventRecord {
+  return typeof event === 'object' && event !== null;
+}
+
+function directCommandEvent(record: CommandEventRecord): string | undefined {
+  if (record.type === 'command' && typeof record.command === 'string') {
+    return record.command;
+  }
+
+  return undefined;
+}
+
+function toolCallCommandEvent(record: CommandEventRecord): string | undefined {
+  const command = record.args?.command ?? record.args?.cmd;
+  if (record.type === 'toolCall' && typeof command === 'string') {
+    return command;
+  }
+
+  return undefined;
 }
 
 function isLocalCliHelpCommand(command: string) {
