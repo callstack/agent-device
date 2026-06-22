@@ -745,7 +745,7 @@ CLI to control iOS and Android devices for AI agents.
   const commandLines = renderCommandSection(commands);
 
   const helpFlags = listHelpFlags(GLOBAL_FLAG_KEYS);
-  const flagsSection = renderFlagSection('Flags:', helpFlags);
+  const flagsSection = renderFlagSection('Global Flags:', helpFlags);
   const quickstartSection = renderTextSection('Agent Quickstart:', AGENT_QUICKSTART_LINES);
   const workflowsSection = renderAlignedSection('Agent Workflows:', AGENT_WORKFLOWS);
   const configSection = renderTextSection('Configuration:', CONFIGURATION_LINES);
@@ -833,21 +833,18 @@ export function buildCommandUsageText(commandName: string): string | null {
   if (!schema) return null;
   const usage = buildCommandUsage(commandName, schema);
   const commandFlags = listHelpFlags(new Set<FlagKey>(schema.allowedFlags ?? []));
-  const globalFlags = listHelpFlags(GLOBAL_FLAG_KEYS);
   const sections: string[] = [];
   if (commandFlags.length > 0) {
     sections.push(renderFlagSection('Command flags:', commandFlags));
   }
-  sections.push(renderFlagSection('Global flags:', globalFlags));
+  const flagsSections = sections.length > 0 ? `\n\n${sections.join('\n\n')}` : '';
 
   return `agent-device ${usage}
 
 ${schema.helpDescription}
 
 Usage:
-  agent-device ${usage}
-
-${sections.join('\n\n')}
+  agent-device ${usage}${flagsSections}
 `;
 }
 

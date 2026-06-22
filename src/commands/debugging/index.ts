@@ -35,10 +35,11 @@ export const debuggingCommandDefinitions = [debugCommandDefinition] as const;
 const debugCliSchema = {
   usageOverride:
     'debug symbols --artifact <crash.ips|crash.log> (--dsym <App.dSYM> | --search-path <dir>) [--out <symbolicated>]',
-  listUsageOverride: 'debug symbols --artifact <path> --dsym <App.dSYM>',
+  listUsageOverride: 'debug',
   helpDescription:
     'Symbolicate Apple crash artifacts with matching dSYM UUIDs. This debug namespace is intentionally narrow: use logs for app logs, network for HTTP evidence, perf for performance samples, record/trace for media and traces, and react-devtools for React Native profiles.',
-  summary: 'Symbolicate Apple crash artifacts',
+  summary:
+    'Symbolicate Apple crash artifacts with dSYMs; use logs/network/perf for other diagnostics',
   positionalArgs: ['symbols'],
   allowedFlags: ['artifact', 'dsym', 'searchPath', 'out'],
 } as const satisfies CommandSchemaOverride;

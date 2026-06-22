@@ -1072,9 +1072,7 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
   },
 ];
 
-export const GLOBAL_FLAG_KEYS = new Set<FlagKey>([
-  'json',
-  'config',
+export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS = flagKeys(
   'remoteConfig',
   'stateDir',
   'daemonBaseUrl',
@@ -1089,9 +1087,6 @@ export const GLOBAL_FLAG_KEYS = new Set<FlagKey>([
   'sessionLock',
   'sessionLocked',
   'sessionLockConflicts',
-  'help',
-  'version',
-  'verbose',
   'platform',
   'target',
   'device',
@@ -1103,8 +1098,9 @@ export const GLOBAL_FLAG_KEYS = new Set<FlagKey>([
   'iosXctestEnvDir',
   'androidDeviceAllowlist',
   'session',
-  'noRecord',
-]);
+);
+
+export const GLOBAL_FLAG_KEYS = new Set<FlagKey>(['json', 'config', 'help', 'version', 'verbose']);
 
 const flagDefinitionByName = new Map<string, FlagDefinition>();
 for (const definition of FLAG_DEFINITIONS) {

@@ -8,7 +8,8 @@ test('help appstate prints command help and skips daemon dispatch', async () => 
   assert.equal(result.calls.length, 0);
   assert.match(result.stdout, /Show foreground app\/activity/);
   assert.doesNotMatch(result.stdout, /Command flags:/);
-  assert.match(result.stdout, /Global flags:/);
+  assert.doesNotMatch(result.stdout, /Global flags:/);
+  assert.doesNotMatch(result.stdout, /Global Flags:/);
 });
 
 test('help longpress prints command help and skips daemon dispatch', async () => {
@@ -37,7 +38,8 @@ test('appstate --help prints command help and skips daemon dispatch', async () =
   assert.equal(result.code, 0);
   assert.equal(result.calls.length, 0);
   assert.match(result.stdout, /Usage:\n  agent-device appstate/);
-  assert.match(result.stdout, /Global flags:/);
+  assert.doesNotMatch(result.stdout, /Global flags:/);
+  assert.doesNotMatch(result.stdout, /Global Flags:/);
 });
 
 test('prepare help documents iOS runner CI setup', async () => {
@@ -110,7 +112,7 @@ test('help unknown command prints error plus global usage and skips daemon dispa
   assert.equal(result.calls.length, 0);
   assert.match(result.stderr, /Error \(INVALID_ARGS\): Unknown command: not-a-command/);
   assert.match(result.stdout, /Commands:/);
-  assert.match(result.stdout, /Flags:/);
+  assert.match(result.stdout, /Global Flags:/);
   assert.match(result.stdout, /--config <path>/);
 });
 

@@ -13,38 +13,56 @@ import { replayCliSchemas } from '../commands/replay/index.ts';
 import { systemCliSchemas } from '../commands/system/index.ts';
 import type { LocalCliCommandName } from '../command-catalog.ts';
 import type { CommandSchema, CommandSchemaOverride } from './cli-command-schema-types.ts';
-import { METRO_PREPARE_FLAGS } from './cli-flags.ts';
+import { COMMON_COMMAND_SUPPORTED_FLAG_KEYS, METRO_PREPARE_FLAGS } from './cli-flags.ts';
 
 type SchemaOnlyCliCommandName = Exclude<LocalCliCommandName, CommandName>;
 
 const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
   auth: {
     usageOverride: 'auth status|login|logout',
-    listUsageOverride: 'auth status|login|logout',
-    helpDescription: 'Manage cloud CLI authentication',
-    summary: 'Manage cloud authentication',
+    listUsageOverride: 'auth',
+    helpDescription: 'Manage cloud login state used by remote daemon and cloud device workflows.',
+    summary: 'Manage cloud login state used by remote daemon and cloud device workflows',
     positionalArgs: ['status|login|logout'],
+    supportedFlags: ['remoteConfig', 'stateDir'],
   },
   connect: {
     usageOverride:
-      'connect [--remote-config <path>] [--tenant <id>] [--run-id <id>] [--lease-backend <backend>] [--force] [--no-login]',
+      'connect [--remote-config <path>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]',
     helpDescription:
       'Connect to a remote daemon, authenticate when needed, and save remote session state. AGENT_DEVICE_CLOUD_BASE_URL is the bridge/control-plane API origin; use AGENT_DEVICE_DAEMON_AUTH_TOKEN=adc_live_... for CI/service-token automation.',
-    summary: 'Connect to remote daemon',
-    allowedFlags: ['force', 'noLogin', ...METRO_PREPARE_FLAGS, 'launchUrl'],
+    listUsageOverride: 'connect',
+    summary:
+      'Attach CLI commands to a saved remote daemon/cloud lease; inspect for remote runs, tenants, or service-token CI',
+    allowedFlags: [
+      'remoteConfig',
+      'tenant',
+      'runId',
+      'leaseId',
+      'leaseBackend',
+      'force',
+      'noLogin',
+      ...METRO_PREPARE_FLAGS,
+      'launchUrl',
+    ],
+    supportedFlags: ['stateDir', 'daemonAuthToken', 'session'],
   },
   connection: {
     usageOverride: 'connection status',
-    listUsageOverride: 'connection status',
+    listUsageOverride: 'connection',
     helpDescription: 'Inspect active remote connection state',
-    summary: 'Inspect remote connection',
+    summary: 'Inspect the active saved remote connection before assuming commands are local',
     positionalArgs: ['status'],
+    supportedFlags: ['remoteConfig', 'stateDir', 'session'],
   },
   disconnect: {
     helpDescription:
       'Disconnect remote daemon state, stop owned Metro companion, and release lease',
-    summary: 'Disconnect remote daemon',
+    listUsageOverride: 'disconnect',
+    summary:
+      'Clear remote connection state, stop owned Metro companions, and release remote leases',
     allowedFlags: ['shutdown'],
+    supportedFlags: ['remoteConfig', 'stateDir', 'session'],
   },
   mcp: {
     helpDescription:
@@ -53,12 +71,14 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
   },
   'react-devtools': {
     usageOverride: 'react-devtools [...args]',
-    listUsageOverride: 'react-devtools [...args]',
+    listUsageOverride: 'react-devtools',
     helpDescription:
       'Run pinned agent-react-devtools commands for React Native performance profiling, component trees, props/state/hooks, and render analysis',
-    summary: 'Profile React Native performance and component renders',
+    summary:
+      'Inspect React Native components, props, hooks, errors, slow renders, and rerender profiles',
     positionalArgs: ['args?'],
     allowsExtraPositionals: true,
+    supportedFlags: COMMON_COMMAND_SUPPORTED_FLAG_KEYS,
   },
   web: {
     usageOverride: 'web setup | web doctor',
@@ -76,6 +96,7 @@ Runtime web commands do not install the backend implicitly. If the managed backe
 Use web setup to install or reuse the pinned backend. Use web doctor after setup to verify browser backend health.`,
     summary: 'Manage web automation backend',
     positionalArgs: ['setup|doctor'],
+    supportedFlags: ['stateDir'],
   },
 } as const satisfies Record<SchemaOnlyCliCommandName, CommandSchema>;
 

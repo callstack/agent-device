@@ -561,6 +561,26 @@ test('parseArgs recognizes daemon transport/state/tenant isolation flags', () =>
   assert.equal(parsed.flags.leaseId, 'abcd1234ef567890');
 });
 
+test('parseArgs scopes daemon and device flags to supported commands', () => {
+  const open = parseArgs(['open', 'settings', '--ios-xctestrun-file', './runner.xctestrun'], {
+    strictFlags: true,
+  });
+  assert.equal(open.flags.iosXctestrunFile, './runner.xctestrun');
+
+  assert.throws(
+    () =>
+      parseArgs(['auth', 'status', '--ios-xctestrun-file', './runner.xctestrun'], {
+        strictFlags: true,
+      }),
+    /not supported for command auth/,
+  );
+
+  assert.throws(
+    () => parseArgs(['auth', 'status', '--platform', 'ios'], { strictFlags: true }),
+    /not supported for command auth/,
+  );
+});
+
 test('parseArgs recognizes connect lease backend force and no-login flags', () => {
   const parsed = parseArgs(
     [
@@ -943,16 +963,27 @@ test('usage includes concise top-level commands', () => {
   const usageText = usage();
   assert.match(
     usageText,
-    /install-from-source <url> \| install-from-source --github-actions-artifact/,
+    /install-from-source\s{2,}Install app builds from URLs, remote source specs, or CI artifacts/,
   );
-  assert.match(usageText, /prepare ios-runner --platform ios\|macos/);
-  assert.match(usageText, /metro prepare --public-base-url <url>/);
+  assert.match(usageText, /prepare\s{2,}Pre-warm platform helpers/);
+  assert.match(
+    usageText,
+    /metro\s{2,}Prepare Metro reachability for React Native\/Expo apps or trigger app reloads/,
+  );
   assert.match(usageText, /batch --steps <json> \| --steps-file <path>/);
-  assert.match(usageText, /network dump/);
+  assert.match(usageText, /network\s{2,}Inspect HTTP\(S\) traffic parsed from session app logs/);
   assert.match(usageText, /clipboard read \| clipboard write <text>/);
   assert.match(usageText, /keyboard \[action\]/);
-  assert.match(usageText, /trigger-app-event <event> \[payloadJson\]/);
+  assert.match(usageText, /trigger-app-event\s{2,}Invoke app-defined automation\/test events/);
   assert.match(usageText, /gesture <pan\|fling\|swipe\|pinch\|rotate\|transform> \.\.\./);
+  assert.doesNotMatch(
+    usageText,
+    /install-from-source <url> \| install-from-source --github-actions-artifact/,
+  );
+  assert.doesNotMatch(usageText, /prepare ios-runner --platform ios\|macos/);
+  assert.doesNotMatch(usageText, /metro prepare --public-base-url <url>/);
+  assert.doesNotMatch(usageText, /^  network dump/m);
+  assert.doesNotMatch(usageText, /trigger-app-event <event> \[payloadJson\]/);
   assert.doesNotMatch(usageText, /^  pan <x> <y> <dx> <dy> \[durationMs\]/m);
   assert.doesNotMatch(usageText, /^  fling <up\|down\|left\|right>/m);
   assert.doesNotMatch(usageText, /^  pinch <scale> \[x\] \[y\]/m);
@@ -962,23 +993,32 @@ test('usage includes concise top-level commands', () => {
   assert.match(usageText, /trace start <path> \| trace stop <path>/);
 });
 
-test('usage includes only global flags in the top-level flags section', () => {
+test('usage includes only global flags in the top-level global flags section', () => {
   const usageText = usage();
   const flagsSection = usageText.slice(
-    usageText.indexOf('Flags:'),
+    usageText.indexOf('Global Flags:'),
     usageText.indexOf('Agent Quickstart:'),
   );
-  assert.match(flagsSection, /--target mobile\|tv/);
-  assert.match(flagsSection, /--ios-simulator-device-set <path>/);
-  assert.match(flagsSection, /--android-device-allowlist <serials>/);
-  assert.match(flagsSection, /--state-dir <path>/);
-  assert.match(flagsSection, /--daemon-transport auto\|socket\|http/);
-  assert.match(flagsSection, /--daemon-server-mode socket\|http\|dual/);
-  assert.match(flagsSection, /--tenant <id>/);
-  assert.match(flagsSection, /--session-isolation none\|tenant/);
-  assert.match(flagsSection, /--run-id <id>/);
-  assert.match(flagsSection, /--lease-id <id>/);
-  assert.match(flagsSection, /--lease-backend ios-simulator\|ios-instance\|android-instance/);
+  assert.match(flagsSection, /^Global Flags:/);
+  assert.match(flagsSection, /--config <path>/);
+  assert.match(flagsSection, /--json/);
+  assert.match(flagsSection, /--help, -h/);
+  assert.match(flagsSection, /--version, -V/);
+  assert.match(flagsSection, /test --verbose prints per-test step timings without debug logs/);
+  assert.doesNotMatch(flagsSection, /--target mobile\|tv/);
+  assert.doesNotMatch(flagsSection, /--ios-simulator-device-set <path>/);
+  assert.doesNotMatch(flagsSection, /--android-device-allowlist <serials>/);
+  assert.doesNotMatch(flagsSection, /--state-dir <path>/);
+  assert.doesNotMatch(flagsSection, /--daemon-transport auto\|socket\|http/);
+  assert.doesNotMatch(flagsSection, /--daemon-server-mode socket\|http\|dual/);
+  assert.doesNotMatch(flagsSection, /--tenant <id>/);
+  assert.doesNotMatch(flagsSection, /--session-isolation none\|tenant/);
+  assert.doesNotMatch(flagsSection, /--run-id <id>/);
+  assert.doesNotMatch(flagsSection, /--lease-id <id>/);
+  assert.doesNotMatch(
+    flagsSection,
+    /--lease-backend ios-simulator\|ios-instance\|android-instance/,
+  );
   assert.doesNotMatch(flagsSection, /--relaunch/);
   assert.doesNotMatch(flagsSection, /--header <name:value>/);
   assert.doesNotMatch(flagsSection, /--restart/);
@@ -1654,17 +1694,32 @@ test('usage renders concise commands inline with descriptions', () => {
   const help = usage();
   assert.match(help, /Commands:[\s\S]*\n  boot\s{2,}Boot target device\/simulator/);
   assert.match(help, /Commands:[\s\S]*\n  shutdown\s{2,}Shutdown target simulator\/emulator/);
-  assert.match(help, /  prepare ios-runner --platform ios\|macos\s{2,}Prepare platform helpers/);
-  assert.match(
-    help,
-    /  metro prepare --public-base-url <url> \| --proxy-base-url <url>; metro reload\s{2,}Prepare Metro or reload apps/,
-  );
+  assert.match(help, /  prepare\s{2,}Pre-warm platform helpers/);
+  assert.match(help, /  metro\s{2,}Prepare Metro reachability for React Native\/Expo apps/);
+  assert.match(help, /  perf\s{2,}Check runtime metrics, frames, memory, CPU profiles/);
+  assert.match(help, /  react-devtools\s{2,}Inspect React Native components, props, hooks/);
   assert.match(help, /  batch --steps <json> \| --steps-file <path>\s{2,}Run multiple commands/);
   assert.match(help, /  test <path-or-glob>\.\.\.\s{2,}Run replay test suites/);
-  assert.match(help, /  session list\s{2,}List active sessions/);
+  assert.match(
+    help,
+    /  session\s{2,}List active sessions or print the effective daemon state directory/,
+  );
   assert.doesNotMatch(help, /  metro prepare[^\n]*--project-root/);
   assert.doesNotMatch(help, /\n  batch\s{2,}Run multiple commands/);
   assert.doesNotMatch(help, /agent-device-proxy/);
+});
+
+test('connect command help lists lease id in usage and flags', () => {
+  const help = usageForCommand('connect');
+  if (help === null) throw new Error('Expected command help text');
+  assert.match(help, /Usage:\s+agent-device connect .*--lease-id <id>/);
+  assert.match(help, /--lease-id <id>\s+Lease identifier bound to tenant\/run admission scope/);
+});
+
+test('install-from-source command help describes all source types', () => {
+  const help = usageForCommand('install-from-source');
+  if (help === null) throw new Error('Expected command help text');
+  assert.match(help, /Install app builds from URLs, remote source specs, or CI artifacts/);
 });
 
 test('session command help includes daemon state directory discovery', () => {
@@ -1700,7 +1755,7 @@ test('command usage describes test suite flags', () => {
   assert.match(help, /--retries <n>/);
   assert.match(help, /--record-video/);
   assert.match(help, /--artifacts-dir <path>/);
-  assert.match(help, /test --verbose prints per-test step timings without debug logs/);
+  assert.doesNotMatch(help, /test --verbose prints per-test step timings without debug logs/);
 });
 
 test('command usage describes delayed typing flags', () => {
@@ -1727,14 +1782,15 @@ test('network command usage documents include flag', () => {
   assert.match(help, /--include summary\|headers\|body\|all/);
 });
 
-test('command usage shows command and global flags separately', () => {
+test('command usage shows command flags without global flags', () => {
   const help = usageForCommand('swipe');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /Swipe coordinates with optional repeat pattern/);
   assert.match(help, /Command flags:/);
   assert.match(help, /--pattern one-way\|ping-pong/);
-  assert.match(help, /Global flags:/);
-  assert.match(help, /--platform ios\|macos\|android\|linux\|web\|apple/);
+  assert.doesNotMatch(help, /Global flags:/);
+  assert.doesNotMatch(help, /Global Flags:/);
+  assert.doesNotMatch(help, /--platform ios\|macos\|android\|linux\|web\|apple/);
 });
 
 test('back command usage documents explicit mode flags', () => {
@@ -1784,7 +1840,8 @@ test('command usage shows no command flags when unsupported', () => {
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /Show foreground app\/activity/);
   assert.doesNotMatch(help, /Command flags:/);
-  assert.match(help, /Global flags:/);
+  assert.doesNotMatch(help, /Global flags:/);
+  assert.doesNotMatch(help, /Global Flags:/);
 });
 
 test('clipboard command usage is documented', () => {

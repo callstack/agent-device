@@ -6,6 +6,7 @@ export type CommandSchema = {
   positionalArgs?: readonly string[];
   allowsExtraPositionals?: boolean;
   allowedFlags?: readonly FlagKey[];
+  supportedFlags?: readonly FlagKey[];
   defaults?: Partial<CliFlags>;
   usageOverride?: string;
   listUsageOverride?: string;

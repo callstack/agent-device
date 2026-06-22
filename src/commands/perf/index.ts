@@ -54,11 +54,10 @@ export const perfCommandDefinitions = [perfCommandDefinition] as const;
 const perfCliSchema = {
   usageOverride:
     'perf [metrics|frames|memory] [sample|snapshot]\n  agent-device perf memory sample --json\n  agent-device perf memory snapshot [--kind android-hprof|memgraph] [--out <path>]\n  agent-device perf cpu profile start|stop|report --kind xctrace [--template <name>] --out <path>\n  agent-device perf trace start|stop --kind xctrace [--template <name>] --out <path>\n  agent-device perf cpu profile start|stop|report --kind simpleperf [--out <path>]\n  agent-device perf trace start|stop --kind perfetto [--out <path>]',
-  listUsageOverride:
-    'perf [metrics|frames|memory] | perf cpu profile start|stop|report | perf trace start|stop',
+  listUsageOverride: 'perf',
   helpDescription:
     'Show session performance metrics, focused frame/jank health, memory diagnostics artifacts, Apple xctrace artifacts, or Android native Simpleperf/Perfetto artifacts. Bare perf and metrics are aliases for perf metrics. Native perf output is agent evidence: compact state, artifact path, and size only; raw profiles/traces stay on disk.',
-  summary: 'Show performance metrics or collect native perf artifacts',
+  summary: 'Check runtime metrics, frames, memory, CPU profiles, or native trace artifacts',
   positionalArgs: ['area?', 'subjectOrAction?', 'action?'],
   allowedFlags: ['kind', 'perfTemplate', 'out'],
 } as const satisfies CommandSchemaOverride;

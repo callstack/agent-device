@@ -70,10 +70,10 @@ export const metroCommandDefinition = defineExecutableCommand(
 const metroCliSchema = {
   usageOverride:
     'metro prepare (--public-base-url <url> | --proxy-base-url <url>) [--project-root <path>] [--port <port>] [--kind auto|react-native|expo]\n  agent-device metro reload [--metro-host <host>] [--metro-port <port>] [--bundle-url <url>]',
-  listUsageOverride: 'metro prepare --public-base-url <url> | --proxy-base-url <url>; metro reload',
+  listUsageOverride: 'metro',
   helpDescription:
     'Prepare a local Metro runtime or ask Metro to reload connected React Native apps',
-  summary: 'Prepare Metro or reload apps',
+  summary: 'Prepare Metro reachability for React Native/Expo apps or trigger app reloads',
   positionalArgs: ['prepare|reload'],
   allowedFlags: [...METRO_RELOAD_FLAGS, ...METRO_PREPARE_FLAGS],
 } as const satisfies CommandSchemaOverride;

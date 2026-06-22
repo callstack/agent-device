@@ -5,6 +5,7 @@ import { getCliCommandOverride, getSchemaOnlyCliCommandSchema } from './cli-comm
 import {
   getFlagDefinition,
   getFlagDefinitions,
+  COMMON_COMMAND_SUPPORTED_FLAG_KEYS,
   GLOBAL_FLAG_KEYS,
   type CliFlags,
   type DaemonExcludedCliFlag,
@@ -19,7 +20,7 @@ export { getFlagDefinition, getFlagDefinitions, GLOBAL_FLAG_KEYS };
 const COMMAND_SCHEMA_BASES = new Map<string, CommandSchema>(
   listCommandMetadata().map((metadata) => [
     metadata.name,
-    { helpDescription: metadata.description },
+    { helpDescription: metadata.description, supportedFlags: COMMON_COMMAND_SUPPORTED_FLAG_KEYS },
   ]),
 );
 

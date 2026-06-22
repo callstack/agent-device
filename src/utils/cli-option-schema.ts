@@ -75,7 +75,7 @@ function buildOptionSpecs(): OptionSpec[] {
   }
   for (const command of listCliCommandNames()) {
     const schema = getCliCommandSchema(command);
-    for (const key of schema.allowedFlags ?? []) {
+    for (const key of [...(schema.allowedFlags ?? []), ...(schema.supportedFlags ?? [])]) {
       const existing = supportedCommandsByKey.get(key);
       if (existing && existing.has('*')) continue;
       if (existing) existing.add(command);

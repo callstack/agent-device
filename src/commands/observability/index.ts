@@ -73,8 +73,10 @@ const logsCliSchema = {
 const networkCliSchema = {
   usageOverride:
     'network dump [limit] [summary|headers|body|all] [--include summary|headers|body|all] | network log [limit] [summary|headers|body|all] [--include summary|headers|body|all]',
+  listUsageOverride: 'network',
   helpDescription: 'Dump recent HTTP(s) traffic parsed from the session app log',
-  summary: 'Show recent HTTP traffic',
+  summary:
+    'Inspect HTTP(S) traffic parsed from session app logs, including summaries, headers, and bodies',
   positionalArgs: ['dump|log', 'limit?', 'include?'],
   allowedFlags: ['networkInclude'],
 } as const satisfies CommandSchemaOverride;
