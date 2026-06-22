@@ -74,6 +74,14 @@ test('network dump prints parsed entries and metadata', async () => {
           requestBody: '{"email":"u@example.com"}',
           responseBody: '{"error":"denied"}',
         },
+        {
+          timestamp: '2026-06-22T09:08:19.500Z',
+          method: 'GET',
+          url: 'https://example.test/api',
+          status: 200,
+          requestHeaders: { Accept: 'application/json' },
+          responseHeaders: { 'content-type': 'application/json' },
+        },
       ],
       notes: ['best-effort parser'],
     },
@@ -93,44 +101,12 @@ test('network dump prints parsed entries and metadata', async () => {
   assert.match(result.stdout, /headers:/);
   assert.match(result.stdout, /request:/);
   assert.match(result.stdout, /response:/);
+  assert.match(result.stdout, /request headers: \{"Accept":"application\/json"\}/);
+  assert.match(result.stdout, /response headers: \{"content-type":"application\/json"\}/);
   assert.match(result.stderr, /active=true/);
   assert.match(result.stderr, /include=all/);
   assert.match(result.stderr, /matchedLines=2/);
   assert.match(result.stderr, /best-effort parser/);
-});
-
-test('network dump prints structured request and response headers', async () => {
-  const result = await runCliCapture(
-    ['network', 'dump', '10', '--include', 'headers'],
-    async () => ({
-      ok: true,
-      data: {
-        include: 'headers',
-        active: true,
-        state: 'active',
-        backend: 'agent-browser',
-        scannedLines: 1,
-        matchedLines: 1,
-        entries: [
-          {
-            timestamp: '2026-06-22T09:08:19.500Z',
-            method: 'GET',
-            url: 'https://example.test/api',
-            status: 200,
-            requestHeaders: { Accept: 'application/json' },
-            responseHeaders: { 'content-type': 'application/json' },
-          },
-        ],
-      },
-    }),
-  );
-
-  assert.equal(result.code, null);
-  assert.match(result.stdout, /GET https:\/\/example\.test\/api status=200/);
-  assert.match(result.stdout, /request headers: \{"Accept":"application\/json"\}/);
-  assert.match(result.stdout, /response headers: \{"content-type":"application\/json"\}/);
-  assert.match(result.stderr, /backend=agent-browser/);
-  assert.match(result.stderr, /include=headers/);
 });
 
 test('test command prints suite summary and exits non-zero on failures', async () => {

@@ -24,11 +24,11 @@ export function normalizeAgentBrowserNetworkRequests(
 ): BackendDumpNetworkResult {
   const requests = readRequests(data);
   const limit = clampLimit(options.limit);
-  const include = options.include ?? 'summary';
+  const includeHeaders = options.include === 'headers' || options.include === 'all';
   const entries = requests
     .slice(-limit)
     .reverse()
-    .map((request) => toBackendNetworkEntry(request, include));
+    .map((request) => toBackendNetworkEntry(request, includeHeaders));
   const notes =
     options.include === 'body' || options.include === 'all'
       ? ['agent-browser network requests does not expose request or response bodies.']
@@ -63,7 +63,7 @@ function isAgentBrowserNetworkRequest(value: unknown): value is Record<string, u
 
 function toBackendNetworkEntry(
   request: AgentBrowserNetworkRequest,
-  include: BackendDumpNetworkOptions['include'],
+  includeHeaders: boolean,
 ): BackendNetworkEntry {
   const timestamp =
     request.timestamp === undefined ? undefined : normalizeTimestamp(request.timestamp);
@@ -77,14 +77,10 @@ function toBackendNetworkEntry(
     method: request.method,
     url: request.url,
     status: request.status,
-    requestHeaders: includesHeaders(include) ? request.headers : undefined,
-    responseHeaders: includesHeaders(include) ? request.responseHeaders : undefined,
+    requestHeaders: includeHeaders ? request.headers : undefined,
+    responseHeaders: includeHeaders ? request.responseHeaders : undefined,
     metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
   });
-}
-
-function includesHeaders(include: BackendDumpNetworkOptions['include']): boolean {
-  return include === 'headers' || include === 'all';
 }
 
 function readStringRecord(value: unknown): Record<string, string> | undefined {
