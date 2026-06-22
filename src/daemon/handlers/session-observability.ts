@@ -38,6 +38,7 @@ import { handleNativePerfCommand as handleAppleNativePerfCommand } from './sessi
 import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '../../contracts.ts';
 import type { LogBackend } from '../network-log.ts';
 import type { BackendNetworkEntry } from '../../backend.ts';
+import { stripUndefined } from '../../utils/parsing.ts';
 import {
   LOG_ACTION_VALUES as LOG_ACTIONS,
   type LogAction as LogsAction,
@@ -565,24 +566,26 @@ function webNetworkEntryData(
   entry: BackendNetworkEntry,
   include: NetworkIncludeMode,
 ): Record<string, unknown> {
-  const headers =
-    include === 'headers' || include === 'all' ? formatWebNetworkHeaders(entry) : undefined;
-  return {
-    ...(entry.timestamp ? { timestamp: entry.timestamp } : {}),
-    ...(entry.method ? { method: entry.method } : {}),
-    ...(entry.url ? { url: entry.url } : {}),
-    ...(entry.status !== undefined ? { status: entry.status } : {}),
-    ...(entry.durationMs !== undefined ? { durationMs: entry.durationMs } : {}),
-    ...(headers ? { headers } : {}),
-    ...(entry.requestHeaders ? { requestHeaders: entry.requestHeaders } : {}),
-    ...(entry.responseHeaders ? { responseHeaders: entry.responseHeaders } : {}),
-    ...(entry.requestBody !== undefined ? { requestBody: entry.requestBody } : {}),
-    ...(entry.responseBody !== undefined ? { responseBody: entry.responseBody } : {}),
-    ...(entry.metadata ? { metadata: entry.metadata } : {}),
-  };
+  return stripUndefined({
+    timestamp: entry.timestamp,
+    method: entry.method,
+    url: entry.url,
+    status: entry.status,
+    durationMs: entry.durationMs,
+    headers: formatWebNetworkHeaders(entry, include),
+    requestHeaders: entry.requestHeaders,
+    responseHeaders: entry.responseHeaders,
+    requestBody: entry.requestBody,
+    responseBody: entry.responseBody,
+    metadata: entry.metadata,
+  });
 }
 
-function formatWebNetworkHeaders(entry: BackendNetworkEntry): string | undefined {
+function formatWebNetworkHeaders(
+  entry: BackendNetworkEntry,
+  include: NetworkIncludeMode,
+): string | undefined {
+  if (include !== 'headers' && include !== 'all') return undefined;
   const sections = [
     formatHeaderSection('request', entry.requestHeaders),
     formatHeaderSection('response', entry.responseHeaders),

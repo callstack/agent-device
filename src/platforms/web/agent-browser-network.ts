@@ -3,6 +3,7 @@ import type {
   BackendDumpNetworkResult,
   BackendNetworkEntry,
 } from '../../backend.ts';
+import { stripUndefined } from '../../utils/parsing.ts';
 import { isJsonObject, readNumberProperty, readStringProperty } from './json-utils.ts';
 
 type AgentBrowserNetworkRequest = {
@@ -57,21 +58,21 @@ function isAgentBrowserNetworkRequest(value: unknown): value is Record<string, u
 }
 
 function toBackendNetworkEntry(request: AgentBrowserNetworkRequest): BackendNetworkEntry {
-  return {
-    ...(request.timestamp !== undefined
-      ? { timestamp: normalizeTimestamp(request.timestamp) }
-      : {}),
-    ...(request.method ? { method: request.method } : {}),
-    ...(request.url ? { url: request.url } : {}),
-    ...(request.status !== undefined ? { status: request.status } : {}),
-    ...(request.headers ? { requestHeaders: request.headers } : {}),
-    ...(request.responseHeaders ? { responseHeaders: request.responseHeaders } : {}),
-    metadata: {
-      ...(request.requestId ? { requestId: request.requestId } : {}),
-      ...(request.resourceType ? { resourceType: request.resourceType } : {}),
-      ...(request.mimeType ? { mimeType: request.mimeType } : {}),
-    },
-  };
+  const timestamp =
+    request.timestamp === undefined ? undefined : normalizeTimestamp(request.timestamp);
+  return stripUndefined({
+    timestamp,
+    method: request.method,
+    url: request.url,
+    status: request.status,
+    requestHeaders: request.headers,
+    responseHeaders: request.responseHeaders,
+    metadata: stripUndefined({
+      requestId: request.requestId,
+      resourceType: request.resourceType,
+      mimeType: request.mimeType,
+    }),
+  });
 }
 
 function readStringRecord(value: unknown): Record<string, string> | undefined {
