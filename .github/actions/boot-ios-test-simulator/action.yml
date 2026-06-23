@@ -58,30 +58,15 @@ runs:
         echo "simulator-udid=$UDID" >> "$GITHUB_OUTPUT"
         xcrun simctl shutdown all || true
         xcrun simctl boot "$UDID" || true
-        xcrun simctl bootstatus "$UDID" -b &
-        BOOTSTATUS_PID="$!"
         TIMEOUT_SECONDS="${{ inputs.boot-timeout-seconds }}"
-        BOOT_TIMEOUT_FILE="$(mktemp)"
-        (
-          sleep "$TIMEOUT_SECONDS"
-          if kill -0 "$BOOTSTATUS_PID" 2>/dev/null; then
-            echo "Timed out waiting ${TIMEOUT_SECONDS}s for simulator $UDID to boot" >&2
-            touch "$BOOT_TIMEOUT_FILE"
-            kill "$BOOTSTATUS_PID" 2>/dev/null || true
-          fi
-        ) &
-        BOOT_WATCHDOG_PID="$!"
         set +e
-        wait "$BOOTSTATUS_PID"
+        perl -e 'alarm shift; exec @ARGV' "$TIMEOUT_SECONDS" xcrun simctl bootstatus "$UDID" -b
         BOOTSTATUS_EXIT="$?"
         set -e
-        kill "$BOOT_WATCHDOG_PID" 2>/dev/null || true
-        wait "$BOOT_WATCHDOG_PID" 2>/dev/null || true
-        if [ -f "$BOOT_TIMEOUT_FILE" ]; then
-          rm -f "$BOOT_TIMEOUT_FILE"
+        if [ "$BOOTSTATUS_EXIT" -eq 142 ]; then
+          echo "Timed out waiting ${TIMEOUT_SECONDS}s for simulator $UDID to boot" >&2
           xcrun simctl list devices || true
           exit 1
         fi
-        rm -f "$BOOT_TIMEOUT_FILE"
         exit "$BOOTSTATUS_EXIT"
       shell: bash
