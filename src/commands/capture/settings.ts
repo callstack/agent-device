@@ -15,12 +15,13 @@ import {
   setOf,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
+import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 
-export const SETTINGS_COMMAND_NAME = 'settings';
+const SETTINGS_COMMAND_NAME = 'settings';
 const settingsCommandDescription = 'Change OS settings and app permissions.';
 
-export const settingsCommandMetadata = defineFieldCommandMetadata(
+const settingsCommandMetadata = defineFieldCommandMetadata(
   SETTINGS_COMMAND_NAME,
   settingsCommandDescription,
   {
@@ -34,12 +35,12 @@ export const settingsCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-export const settingsCommandDefinition = defineExecutableCommand(
+const settingsCommandDefinition = defineExecutableCommand(
   settingsCommandMetadata,
   (client, input) => client.settings.update(input as SettingsUpdateOptions),
 );
 
-export const settingsCliSchema = {
+const settingsCliSchema = {
   usageOverride: SETTINGS_USAGE_OVERRIDE,
   listUsageOverride: 'settings [area] [options]',
   helpDescription:
@@ -54,6 +55,15 @@ export const settingsCliReader: CliReader = (positionals, flags) =>
 export const settingsDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.settings, (input) =>
   settingsPositionals(input as SettingsUpdateOptions),
 );
+
+export const settingsCommandFacet = defineCommandFacet({
+  name: SETTINGS_COMMAND_NAME,
+  metadata: settingsCommandMetadata,
+  definition: settingsCommandDefinition,
+  cliSchema: settingsCliSchema,
+  cliReader: settingsCliReader,
+  daemonWriter: settingsDaemonWriter,
+});
 
 // fallow-ignore-next-line complexity
 function readSettingsOptionsFromPositionals(

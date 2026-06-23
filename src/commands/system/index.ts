@@ -4,6 +4,7 @@ import { BACK_MODES } from '../../core/back-mode.ts';
 import { parseDeviceRotation, DEVICE_ROTATIONS } from '../../core/device-rotation.ts';
 import { AppError } from '../../utils/errors.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
+import { defineCommandFamily } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { compactRecord, enumField, requiredField, stringField } from '../command-input.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
@@ -15,6 +16,7 @@ import {
   requiredDaemonString,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
+import { systemCliOutputFormatters } from './output.ts';
 
 const APPSTATE_COMMAND_NAME = 'appstate';
 const BACK_COMMAND_NAME = 'back';
@@ -82,7 +84,7 @@ const clipboardCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-export const systemCommandMetadata = [
+const systemCommandMetadata = [
   appStateCommandMetadata,
   backCommandMetadata,
   homeCommandMetadata,
@@ -124,7 +126,7 @@ const clipboardCommandDefinition = defineExecutableCommand(
   (client, input) => client.command.clipboard(input as ClipboardCommandOptions),
 );
 
-export const systemCommandDefinitions = [
+const systemCommandDefinitions = [
   appStateCommandDefinition,
   backCommandDefinition,
   homeCommandDefinition,
@@ -165,7 +167,7 @@ const clipboardCliSchema = {
   allowsExtraPositionals: true,
 } as const satisfies CommandSchemaOverride;
 
-export const systemCliSchemas = {
+const systemCliSchemas = {
   [APPSTATE_COMMAND_NAME]: appStateCliSchema,
   [BACK_COMMAND_NAME]: backCliSchema,
   [ROTATE_COMMAND_NAME]: rotateCliSchema,
@@ -197,7 +199,7 @@ export const clipboardCliReader: CliReader = (positionals, flags) => ({
   ...readClipboardInput(positionals),
 });
 
-export const systemCliReaders = {
+const systemCliReaders = {
   appstate: appStateCliReader,
   home: homeCliReader,
   'app-switcher': appSwitcherCliReader,
@@ -228,7 +230,7 @@ export const clipboardDaemonWriter: DaemonWriter = direct(CLIPBOARD_COMMAND_NAME
   clipboardPositionals(input as ClipboardCommandOptions),
 );
 
-export const systemDaemonWriters = {
+const systemDaemonWriters = {
   appstate: appStateDaemonWriter,
   back: backDaemonWriter,
   home: homeDaemonWriter,
@@ -237,6 +239,16 @@ export const systemDaemonWriters = {
   keyboard: keyboardDaemonWriter,
   clipboard: clipboardDaemonWriter,
 } satisfies Record<string, DaemonWriter>;
+
+export const systemCommandFamily = defineCommandFamily({
+  name: 'system',
+  metadata: systemCommandMetadata,
+  definitions: systemCommandDefinitions,
+  cliSchemas: systemCliSchemas,
+  cliReaders: systemCliReaders,
+  daemonWriters: systemDaemonWriters,
+  cliOutputFormatters: systemCliOutputFormatters,
+});
 
 function readBackMode(value: unknown): BackMode | undefined {
   return value === 'in-app' || value === 'system' ? value : undefined;

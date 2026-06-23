@@ -6,6 +6,14 @@ import {
   listCommandMetadataNames,
   listMcpCommandMetadata,
 } from '../command-metadata.ts';
+import {
+  commandFamilies,
+  listCommandFamilyCliReaders,
+  listCommandFamilyCliSchemas,
+  listCommandFamilyDaemonWriters,
+  listCommandFamilyDefinitions,
+  listCommandFamilyMetadata,
+} from '../family/registry.ts';
 import { listExecutableCommandNames } from '../command-surface.ts';
 
 test('MCP exposed command names have metadata and executable command definitions', () => {
@@ -36,4 +44,57 @@ test('common command input accepts web platform selector', () => {
   const input = snapshotMetadata.readInput({ platform: 'web' }) as { platform?: unknown };
   assert.deepEqual(platformSchema?.enum, ['ios', 'macos', 'android', 'linux', 'web', 'apple']);
   assert.equal(input.platform, 'web');
+});
+
+test('command family facets expose one complete metadata and executable surface', () => {
+  const familyNames = commandFamilies.map((family) => family.name);
+  assert.deepEqual(familyNames, [...new Set(familyNames)], 'command family names must be unique');
+
+  const metadataNames = listCommandFamilyMetadata()
+    .map((metadata) => metadata.name)
+    .sort();
+  const definitionNames = listCommandFamilyDefinitions()
+    .map((definition) => definition.name)
+    .sort();
+
+  assert.deepEqual(definitionNames, metadataNames);
+  assert.deepEqual(metadataNames, listCommandMetadataNames());
+  assert.deepEqual(definitionNames, listExecutableCommandNames());
+});
+
+test('command family facets expose CLI schema and reader coverage centrally', () => {
+  const metadataNames = listCommandFamilyMetadata()
+    .map((metadata) => metadata.name)
+    .sort();
+  const cliSchemaNames = Object.keys(listCommandFamilyCliSchemas()).sort();
+  const cliReaderNames = Object.keys(listCommandFamilyCliReaders()).sort();
+  const metadataNameSet = new Set<string>(metadataNames);
+
+  assert.deepEqual(cliReaderNames, metadataNames);
+  for (const name of cliSchemaNames) {
+    assert.ok(metadataNameSet.has(name), `${name} CLI schema must belong to command metadata`);
+  }
+});
+
+test('command family facets keep daemon writers as an explicit projection subset', () => {
+  const writerNames = Object.keys(listCommandFamilyDaemonWriters()).sort();
+  const metadataNames = new Set<string>(
+    listCommandFamilyMetadata().map((metadata) => metadata.name),
+  );
+  const projectionAliases = new Set([
+    'gesture-fling',
+    'gesture-pan',
+    'gesture-pinch',
+    'gesture-rotate',
+    'gesture-swipe',
+    'gesture-transform',
+  ]);
+
+  assert.ok(writerNames.length > 0);
+  for (const name of writerNames) {
+    assert.ok(
+      metadataNames.has(name) || projectionAliases.has(name),
+      `${name} daemon writer must belong to command metadata or projection aliases`,
+    );
+  }
 });

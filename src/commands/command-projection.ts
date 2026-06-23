@@ -1,35 +1,13 @@
 import { createBatchDaemonWriter, type BatchCommandName } from './batch/index.ts';
-import { captureDaemonWriters } from './capture/index.ts';
 import type { CommandInput, DaemonCommandRequest, DaemonWriter } from './cli-grammar/types.ts';
-import {
-  gestureDaemonWriters,
-  interactionDaemonWriters,
-  selectorDaemonWriters,
-} from './interaction/index.ts';
-import { appDaemonWriters } from './management/index.ts';
-import { observabilityDaemonWriters } from './observability/index.ts';
-import { perfDaemonWriters } from './perf/index.ts';
-import { reactNativeDaemonWriters } from './react-native/index.ts';
-import { recordingDaemonWriters } from './recording/index.ts';
-import { replayDaemonWriters } from './replay/index.ts';
-import { systemDaemonWriters } from './system/index.ts';
 import { findCommandMetadata } from './command-metadata.ts';
+import { listCommandFamilyDaemonWriters } from './family/registry.ts';
 import { AppError } from '../utils/errors.ts';
 
-const daemonWriters = {
-  ...appDaemonWriters,
-  ...captureDaemonWriters,
-  ...interactionDaemonWriters,
-  ...gestureDaemonWriters,
-  ...selectorDaemonWriters,
-  ...observabilityDaemonWriters,
-  ...perfDaemonWriters,
-  ...reactNativeDaemonWriters,
-  ...recordingDaemonWriters,
-  ...replayDaemonWriters,
-  ...systemDaemonWriters,
+const daemonWriters: Record<string, DaemonWriter> = {
+  ...listCommandFamilyDaemonWriters(),
   batch: createBatchDaemonWriter(prepareBatchDaemonCommandRequest),
-} satisfies Record<string, DaemonWriter>;
+};
 
 export type DaemonCommandName = keyof typeof daemonWriters;
 
@@ -65,5 +43,9 @@ export function prepareDaemonCommandRequest(
   command: DaemonCommandName,
   input: CommandInput,
 ): DaemonCommandRequest {
-  return daemonWriters[command](input);
+  const writer = daemonWriters[command];
+  if (!writer) {
+    throw new Error(`Missing daemon writer for command: ${command}`);
+  }
+  return writer(input);
 }

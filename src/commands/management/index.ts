@@ -11,6 +11,7 @@ import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types
 import { AppError } from '../../utils/errors.ts';
 import { parseGitHubActionsArtifactInstallSourceSpec } from '../../utils/install-source-config.ts';
 import { assertResolvedAppsFilter } from './app-inventory-contract.ts';
+import { defineCommandFamily } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import {
   booleanField,
@@ -37,6 +38,7 @@ import {
 import type { CliReader, DaemonWriter, CommandInput } from '../cli-grammar/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { DEFAULT_APPS_FILTER } from '../../contracts/app-inventory.ts';
+import { managementCliOutputFormatters } from './output.ts';
 
 const PREPARE_ACTION_VALUES = ['ios-runner'] as const;
 
@@ -56,7 +58,7 @@ const managementCommandDescriptions = {
   'trigger-app-event': 'Trigger an app-defined event.',
 } as const;
 
-export const managementCommandMetadata = [
+const managementCommandMetadata = [
   defineFieldCommandMetadata('devices', managementCommandDescriptions.devices, {}),
   defineFieldCommandMetadata('boot', managementCommandDescriptions.boot, {
     headless: booleanField('Boot without showing simulator UI when supported.'),
@@ -134,7 +136,7 @@ export const managementCommandMetadata = [
 type ManagementCommandMetadata = (typeof managementCommandMetadata)[number];
 type ManagementCommandName = ManagementCommandMetadata['name'];
 
-export const managementCommandDefinitions = [
+const managementCommandDefinitions = [
   defineExecutableCommand(metadata('devices'), (client, input) => client.devices.list(input)),
   defineExecutableCommand(metadata('boot'), (client, input) => client.devices.boot(input)),
   defineExecutableCommand(metadata('shutdown'), (client, input) => client.devices.shutdown(input)),
@@ -160,7 +162,7 @@ export const managementCommandDefinitions = [
   defineExecutableCommand(metadata('prepare'), (client, input) => client.command.prepare(input)),
 ] as const;
 
-export const managementCliSchemas = {
+const managementCliSchemas = {
   boot: {
     summary: 'Boot target device/simulator',
     allowedFlags: ['headless'],
@@ -261,7 +263,7 @@ function withoutApp(input: AppCloseOptions & { shutdown?: boolean }): { shutdown
   return rest;
 }
 
-export const appCliReaders = {
+const appCliReaders = {
   devices: (_positionals, flags) => commonInputFromFlags(flags),
   apps: (_positionals, flags) => ({
     ...commonInputFromFlags(flags),
@@ -322,7 +324,7 @@ export const appCliReaders = {
   }),
 } satisfies Record<string, CliReader>;
 
-export const appDaemonWriters = {
+const appDaemonWriters = {
   devices: direct(PUBLIC_COMMANDS.devices),
   boot: direct(PUBLIC_COMMANDS.boot),
   shutdown: direct(PUBLIC_COMMANDS.shutdown),
@@ -346,6 +348,16 @@ export const appDaemonWriters = {
     triggerEventPositionals(input as AppTriggerEventOptions),
   ),
 } satisfies Record<string, DaemonWriter>;
+
+export const managementCommandFamily = defineCommandFamily({
+  name: 'management',
+  metadata: managementCommandMetadata,
+  definitions: managementCommandDefinitions,
+  cliSchemas: managementCliSchemas,
+  cliReaders: appCliReaders,
+  daemonWriters: appDaemonWriters,
+  cliOutputFormatters: managementCliOutputFormatters,
+});
 
 function installInputFromCli(
   positionals: string[],

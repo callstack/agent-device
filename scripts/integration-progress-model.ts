@@ -12,7 +12,7 @@ export function buildIntegrationProgressModel({ root = process.cwd() } = {}) {
   const handlerTestDir = path.join(root, 'src/daemon/handlers/__tests__');
   const providerScenarioDir = path.join(root, 'test/integration/provider-scenarios');
   const commandContractFiles = listFiles(path.join(root, 'src/commands'), (file) =>
-    file.endsWith(`${path.sep}index.ts`),
+    isCommandContractSource(file),
   );
   const clientCommandMethods = readClientCommandMethods(commandContractFiles);
 
@@ -299,6 +299,14 @@ function listFiles(dir, predicate) {
     if (entry.isDirectory()) return listFiles(fullPath, predicate);
     return predicate(fullPath) ? [fullPath] : [];
   });
+}
+
+function isCommandContractSource(file) {
+  return (
+    file.endsWith('.ts') &&
+    !file.endsWith('.test.ts') &&
+    !file.includes(`${path.sep}__tests__${path.sep}`)
+  );
 }
 
 function summarizeFiles(files) {

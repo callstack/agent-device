@@ -1,4 +1,5 @@
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
+import { defineCommandFamily } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import {
   booleanField,
@@ -57,7 +58,7 @@ export const testCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-export const replayCommandMetadataList = [replayCommandMetadata, testCommandMetadata] as const;
+const replayCommandMetadataList = [replayCommandMetadata, testCommandMetadata] as const;
 
 export const replayCommandDefinition = defineExecutableCommand(
   replayCommandMetadata,
@@ -68,7 +69,7 @@ export const testCommandDefinition = defineExecutableCommand(testCommandMetadata
   client.replay.test(input),
 );
 
-export const replayCommandDefinitions = [replayCommandDefinition, testCommandDefinition] as const;
+const replayCommandDefinitions = [replayCommandDefinition, testCommandDefinition] as const;
 
 const replayCliSchema = {
   usageOverride: 'replay <path> | replay export <file.ad> [--format maestro] [--out <path>]',
@@ -101,7 +102,7 @@ const testCliSchema = {
   ],
 } as const satisfies CommandSchemaOverride;
 
-export const replayCliSchemas = {
+const replayCliSchemas = {
   [REPLAY_COMMAND_NAME]: replayCliSchema,
   [TEST_COMMAND_NAME]: testCliSchema,
 } as const satisfies Record<string, CommandSchemaOverride>;
@@ -148,15 +149,24 @@ export const testDaemonWriter: DaemonWriter = (input) =>
     replayShellEnv: collectReplayClientShellEnv(process.env),
   });
 
-export const replayCliReaders = {
+const replayCliReaders = {
   replay: replayCliReader,
   test: testCliReader,
 } satisfies Record<string, CliReader>;
 
-export const replayDaemonWriters = {
+const replayDaemonWriters = {
   replay: replayDaemonWriter,
   test: testDaemonWriter,
 } satisfies Record<string, DaemonWriter>;
+
+export const replayCommandFamily = defineCommandFamily({
+  name: 'replay',
+  metadata: replayCommandMetadataList,
+  definitions: replayCommandDefinitions,
+  cliSchemas: replayCliSchemas,
+  cliReaders: replayCliReaders,
+  daemonWriters: replayDaemonWriters,
+});
 
 function readReplayBackend(input: CommandInput): string | undefined {
   return input.backend ?? (input.maestro === true ? 'maestro' : undefined);

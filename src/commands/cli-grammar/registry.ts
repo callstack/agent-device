@@ -1,44 +1,17 @@
 import type { CliFlags } from '../../utils/cli-flags.ts';
-import { batchCliReaders } from '../batch/index.ts';
-import { captureCliReaders } from '../capture/index.ts';
-import { debuggingCliReaders } from '../debugging/index.ts';
-import type { CliReader } from './types.ts';
 import type { CommandName } from '../command-metadata.ts';
-import {
-  gestureCliReaders,
-  interactionCliReaders,
-  selectorCliReaders as interactionSelectorCliReaders,
-} from '../interaction/index.ts';
-import { appCliReaders } from '../management/index.ts';
-import { metroCliReaders } from '../metro/index.ts';
-import { observabilityCliReaders } from '../observability/index.ts';
-import { perfCliReaders } from '../perf/index.ts';
-import { reactNativeCliReaders } from '../react-native/index.ts';
-import { recordingCliReaders } from '../recording/index.ts';
-import { replayCliReaders } from '../replay/index.ts';
-import { systemCliReaders } from '../system/index.ts';
+import { listCommandFamilyCliReaders } from '../family/registry.ts';
 
-const cliReaders = {
-  ...appCliReaders,
-  ...captureCliReaders,
-  ...interactionCliReaders,
-  ...gestureCliReaders,
-  ...interactionSelectorCliReaders,
-  ...observabilityCliReaders,
-  ...perfCliReaders,
-  ...debuggingCliReaders,
-  ...reactNativeCliReaders,
-  ...recordingCliReaders,
-  ...replayCliReaders,
-  ...systemCliReaders,
-  ...metroCliReaders,
-  ...batchCliReaders,
-} satisfies Record<CommandName, CliReader>;
+const cliReaders = listCommandFamilyCliReaders();
 
 export function readInputFromCli(
   command: CommandName,
   positionals: string[],
   flags: CliFlags,
 ): Record<string, unknown> {
-  return cliReaders[command](positionals, flags);
+  const reader = cliReaders[command];
+  if (!reader) {
+    throw new Error(`Missing CLI reader for command: ${command}`);
+  }
+  return reader(positionals, flags);
 }

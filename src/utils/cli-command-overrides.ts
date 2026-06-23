@@ -1,16 +1,5 @@
 import type { CommandName } from '../commands/command-metadata.ts';
-import { batchCliSchemas } from '../commands/batch/index.ts';
-import { captureCliSchemas } from '../commands/capture/index.ts';
-import { debuggingCliSchemas } from '../commands/debugging/index.ts';
-import { interactionCliSchemas } from '../commands/interaction/index.ts';
-import { managementCliSchemas } from '../commands/management/index.ts';
-import { metroCliSchemas } from '../commands/metro/index.ts';
-import { observabilityCliSchemas } from '../commands/observability/index.ts';
-import { perfCliSchemas } from '../commands/perf/index.ts';
-import { reactNativeCliSchemas } from '../commands/react-native/index.ts';
-import { recordingCliSchemas } from '../commands/recording/index.ts';
-import { replayCliSchemas } from '../commands/replay/index.ts';
-import { systemCliSchemas } from '../commands/system/index.ts';
+import { listCommandFamilyCliSchemas } from '../commands/family/registry.ts';
 import type { LocalCliCommandName } from '../command-catalog.ts';
 import type { CommandSchema, CommandSchemaOverride } from './cli-command-schema-types.ts';
 import { COMMON_COMMAND_SUPPORTED_FLAG_KEYS, METRO_PREPARE_FLAGS } from './cli-flags.ts';
@@ -125,20 +114,9 @@ Use web setup to install or reuse the pinned backend. Use web doctor after setup
   },
 } as const satisfies Record<SchemaOnlyCliCommandName, CommandSchema>;
 
-const CLI_COMMAND_OVERRIDES = {
-  ...managementCliSchemas,
-  ...captureCliSchemas,
-  ...systemCliSchemas,
-  ...interactionCliSchemas,
-  ...observabilityCliSchemas,
-  ...perfCliSchemas,
-  ...debuggingCliSchemas,
-  ...metroCliSchemas,
-  ...replayCliSchemas,
-  ...batchCliSchemas,
-  ...recordingCliSchemas,
-  ...reactNativeCliSchemas,
-} as const satisfies Partial<Record<CommandName, CommandSchemaOverride>>;
+const CLI_COMMAND_OVERRIDES = listCommandFamilyCliSchemas() as Partial<
+  Record<CommandName, CommandSchemaOverride>
+>;
 
 export function getSchemaOnlyCliCommandSchema(command: string): CommandSchema | undefined {
   return Object.hasOwn(SCHEMA_ONLY_CLI_COMMAND_SCHEMAS, command)

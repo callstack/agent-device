@@ -16,10 +16,12 @@ import {
   stringField,
   stringSchema,
 } from '../command-input.ts';
+import { defineCommandFamily } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import type { CliReader } from '../cli-grammar/types.ts';
 import { METRO_PREPARE_FLAGS, METRO_RELOAD_FLAGS } from '../../utils/cli-flags.ts';
+import { metroCliOutputFormatters } from './output.ts';
 
 const METRO_COMMAND_NAME = 'metro';
 const METRO_ACTION_VALUES = ['prepare', 'reload'] as const;
@@ -78,7 +80,7 @@ const metroCliSchema = {
   allowedFlags: [...METRO_RELOAD_FLAGS, ...METRO_PREPARE_FLAGS],
 } as const satisfies CommandSchemaOverride;
 
-export const metroCliSchemas = {
+const metroCliSchemas = {
   [METRO_COMMAND_NAME]: metroCliSchema,
 } as const satisfies Record<string, CommandSchemaOverride>;
 
@@ -128,9 +130,18 @@ export const metroCliReader: CliReader = (positionals, flags) => {
   };
 };
 
-export const metroCliReaders = {
+const metroCliReaders = {
   metro: metroCliReader,
 } satisfies Record<string, CliReader>;
+
+export const metroCommandFamily = defineCommandFamily({
+  name: 'metro',
+  metadata: [metroCommandMetadata],
+  definitions: [metroCommandDefinition],
+  cliSchemas: metroCliSchemas,
+  cliReaders: metroCliReaders,
+  cliOutputFormatters: metroCliOutputFormatters,
+});
 
 function toMetroPrepareOptions(input: MetroInput): MetroPrepareOptions {
   return {

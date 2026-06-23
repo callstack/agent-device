@@ -2,19 +2,20 @@ import type { BatchRunOptions } from '../../client-types.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import { commonInputFromFlags } from '../cli-grammar/common.ts';
 import type { CliReader } from '../cli-grammar/types.ts';
+import { defineCommandFamily } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { commonToClientOptions } from '../command-input.ts';
+import { batchCliOutputFormatters } from './output.ts';
 import { createBatchCommandMetadata, type BatchInput } from './metadata.ts';
 import { createBatchDaemonWriter } from './projection.ts';
 
-export const batchCommandMetadata = createBatchCommandMetadata();
+const batchCommandMetadata = createBatchCommandMetadata();
 
-export const batchCommandDefinition = defineExecutableCommand(
-  batchCommandMetadata,
-  (client, input) => client.batch.run(toBatchOptions(input)),
+const batchCommandDefinition = defineExecutableCommand(batchCommandMetadata, (client, input) =>
+  client.batch.run(toBatchOptions(input)),
 );
 
-export const batchCliSchemas = {
+const batchCliSchemas = {
   batch: {
     usageOverride: 'batch [--steps <json> | --steps-file <path>]',
     listUsageOverride: 'batch --steps <json> | --steps-file <path>',
@@ -24,7 +25,7 @@ export const batchCliSchemas = {
   },
 } as const satisfies Record<string, CommandSchemaOverride>;
 
-export const batchCliReaders = {
+const batchCliReaders = {
   batch: ((_positionals, flags) => ({
     ...commonInputFromFlags(flags),
     steps: flags.batchSteps ?? [],
@@ -33,6 +34,16 @@ export const batchCliReaders = {
     out: flags.out,
   })) satisfies CliReader,
 } as const;
+
+export const batchCommandFamily = defineCommandFamily({
+  name: 'batch',
+  clientSurface: false,
+  metadata: [batchCommandMetadata],
+  definitions: [batchCommandDefinition],
+  cliSchemas: batchCliSchemas,
+  cliReaders: batchCliReaders,
+  cliOutputFormatters: batchCliOutputFormatters,
+});
 
 export { createBatchDaemonWriter };
 export type { BatchCommandName } from './projection.ts';

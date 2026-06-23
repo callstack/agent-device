@@ -1,27 +1,13 @@
 import type { AgentDeviceClient } from '../client-types.ts';
-import { batchCommandDefinition } from './batch/index.ts';
-import { clientCommandDefinitions } from './client-command-facets.ts';
-import type { JsonSchema } from './command-contract.ts';
-import { interactionCommandDefinitions } from './interaction/index.ts';
+import { listCommandFamilyDefinitions, type CommandFamilyDefinition } from './family/registry.ts';
 import type { BatchCommandName } from './command-projection.ts';
 import type { CommandName } from './command-metadata.ts';
 
-type AnyExecutableCommand = {
-  name: string;
-  description: string;
-  inputSchema: JsonSchema;
-  invoke: (client: AgentDeviceClient, input: unknown) => Promise<unknown>;
-};
-
-const commandSurface = [
-  ...interactionCommandDefinitions,
-  ...clientCommandDefinitions,
-  batchCommandDefinition,
-] as const;
+const commandSurface = listCommandFamilyDefinitions();
 
 export type { BatchCommandName, CommandName };
 
-const commandMap: ReadonlyMap<CommandName, AnyExecutableCommand> = new Map(
+const commandMap: ReadonlyMap<CommandName, CommandFamilyDefinition> = new Map(
   commandSurface.map((definition) => [definition.name, definition]),
 );
 
@@ -37,6 +23,6 @@ export function listExecutableCommandNames(): CommandName[] {
   return [...commandMap.keys()].sort();
 }
 
-function getCommandDefinition(name: CommandName): AnyExecutableCommand {
+function getCommandDefinition(name: CommandName): CommandFamilyDefinition {
   return commandMap.get(name)!;
 }

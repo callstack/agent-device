@@ -1,10 +1,12 @@
 import { AppError } from '../../utils/errors.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import { enumField, requiredField, stringField } from '../command-input.ts';
+import { defineCommandFamily } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { commonInputFromFlags } from '../cli-grammar/common.ts';
 import type { CliReader } from '../cli-grammar/types.ts';
+import { debuggingCliOutputFormatters } from './output.ts';
 
 const DEBUG_COMMAND_NAME = 'debug';
 const DEBUG_ACTION_VALUES = ['symbols'] as const;
@@ -23,14 +25,14 @@ export const debugCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-export const debuggingCommandMetadata = [debugCommandMetadata] as const;
+const debuggingCommandMetadata = [debugCommandMetadata] as const;
 
 export const debugCommandDefinition = defineExecutableCommand(
   debugCommandMetadata,
   (client, input) => client.debug.symbols(input),
 );
 
-export const debuggingCommandDefinitions = [debugCommandDefinition] as const;
+const debuggingCommandDefinitions = [debugCommandDefinition] as const;
 
 const debugCliSchema = {
   usageOverride:
@@ -44,7 +46,7 @@ const debugCliSchema = {
   allowedFlags: ['artifact', 'dsym', 'searchPath', 'out'],
 } as const satisfies CommandSchemaOverride;
 
-export const debuggingCliSchemas = {
+const debuggingCliSchemas = {
   [DEBUG_COMMAND_NAME]: debugCliSchema,
 } as const satisfies Record<string, CommandSchemaOverride>;
 
@@ -57,9 +59,18 @@ export const debugCliReader: CliReader = (positionals, flags) => ({
   out: flags.out,
 });
 
-export const debuggingCliReaders = {
+const debuggingCliReaders = {
   debug: debugCliReader,
 } satisfies Record<string, CliReader>;
+
+export const debuggingCommandFamily = defineCommandFamily({
+  name: 'debugging',
+  metadata: debuggingCommandMetadata,
+  definitions: debuggingCommandDefinitions,
+  cliSchemas: debuggingCliSchemas,
+  cliReaders: debuggingCliReaders,
+  cliOutputFormatters: debuggingCliOutputFormatters,
+});
 
 function readDebugAction(value: string | undefined): 'symbols' {
   if (value === 'symbols') return value;

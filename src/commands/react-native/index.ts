@@ -1,5 +1,6 @@
 import { AppError } from '../../utils/errors.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
+import { defineCommandFamily } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { enumField, requiredField } from '../command-input.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
@@ -30,7 +31,7 @@ const reactNativeCliSchema = {
   positionalArgs: ['dismiss-overlay'],
 } as const satisfies CommandSchemaOverride;
 
-export const reactNativeCliSchemas = {
+const reactNativeCliSchemas = {
   [REACT_NATIVE_COMMAND_NAME]: reactNativeCliSchema,
 } as const satisfies Record<string, CommandSchemaOverride>;
 
@@ -39,7 +40,7 @@ export const reactNativeCliReader: CliReader = (positionals, flags) => ({
   action: readReactNativeAction(positionals[0]),
 });
 
-export const reactNativeCliReaders = {
+const reactNativeCliReaders = {
   'react-native': reactNativeCliReader,
 } satisfies Record<string, CliReader>;
 
@@ -47,9 +48,18 @@ export const reactNativeDaemonWriter: DaemonWriter = direct(REACT_NATIVE_COMMAND
   requiredDaemonString(input.action, 'react-native requires action'),
 ]);
 
-export const reactNativeDaemonWriters = {
+const reactNativeDaemonWriters = {
   'react-native': reactNativeDaemonWriter,
 } satisfies Record<string, DaemonWriter>;
+
+export const reactNativeCommandFamily = defineCommandFamily({
+  name: 'react-native',
+  metadata: [reactNativeCommandMetadata],
+  definitions: [reactNativeCommandDefinition],
+  cliSchemas: reactNativeCliSchemas,
+  cliReaders: reactNativeCliReaders,
+  daemonWriters: reactNativeDaemonWriters,
+});
 
 function readReactNativeAction(value: string | undefined): 'dismiss-overlay' {
   if (value === 'dismiss-overlay') return value;

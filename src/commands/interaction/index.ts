@@ -19,6 +19,7 @@ import type {
 } from '../../client-types.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import { REPEATED_TOUCH_FLAGS, SELECTOR_SNAPSHOT_FLAGS } from '../../utils/cli-flags.ts';
+import { defineCommandFamily } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import {
   commonToClientOptions,
@@ -41,13 +42,12 @@ import {
   type SwipeGestureInput,
   type TransformInput,
 } from './metadata.ts';
+import { gestureCliReaders, gestureDaemonWriters } from './gesture.ts';
+import { interactionCliReaders, interactionDaemonWriters } from './interactions.ts';
+import { interactionCliOutputFormatters } from './output.ts';
+import { selectorCliReaders, selectorDaemonWriters } from './selectors.ts';
 
-export { gestureCliReaders, gestureDaemonWriters } from './gesture.ts';
-export { interactionCliReaders, interactionDaemonWriters } from './interactions.ts';
-export { interactionCommandMetadata } from './metadata.ts';
-export { selectorCliReaders, selectorDaemonWriters } from './selectors.ts';
-
-export const interactionCliSchemas = {
+const interactionCliSchemas = {
   get: {
     usageOverride: 'get text|attrs <@ref|selector>',
     positionalArgs: ['subcommand', 'target'],
@@ -128,7 +128,7 @@ export const interactionCliSchemas = {
 type InteractionCommandMetadata = (typeof interactionCommandMetadata)[number];
 type InteractionCommandName = InteractionCommandMetadata['name'];
 
-export const interactionCommandDefinitions = [
+const interactionCommandDefinitions = [
   defineExecutableCommand(metadata('click'), (client, input) =>
     client.interactions.click(toClickOptions(input)),
   ),
@@ -179,6 +179,25 @@ export const interactionCommandDefinitions = [
     }
   }),
 ] as const;
+
+export const interactionCommandFamily = defineCommandFamily({
+  name: 'interaction',
+  clientSurface: false,
+  metadata: interactionCommandMetadata,
+  definitions: interactionCommandDefinitions,
+  cliSchemas: interactionCliSchemas,
+  cliReaders: {
+    ...interactionCliReaders,
+    ...gestureCliReaders,
+    ...selectorCliReaders,
+  },
+  daemonWriters: {
+    ...interactionDaemonWriters,
+    ...gestureDaemonWriters,
+    ...selectorDaemonWriters,
+  },
+  cliOutputFormatters: interactionCliOutputFormatters,
+});
 
 function metadata<TName extends InteractionCommandName>(
   name: TName,
