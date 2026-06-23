@@ -4,6 +4,7 @@ import {
   applyCommandDefaults,
   getCommandSchema,
   getFlagDefinition,
+  getFlagDefinitions,
   type CliFlags,
   type FlagDefinition,
   type FlagKey,
@@ -70,7 +71,7 @@ export function parseRawArgs(argv: string[]): RawParsedArgs {
     if (isLegacyIgnoredSnapshotShortFlag(command, token)) {
       continue;
     }
-    const definition = resolveFlagDefinition(token);
+    const definition = resolveFlagDefinition(token, command);
     if (shouldPassThroughReactDevtoolsFlag(command, definition)) {
       positionals.push(arg);
       continue;
@@ -116,7 +117,15 @@ function shouldPassThroughReactDevtoolsFlag(
   return !isFlagSupportedForCommand(definition.key, command);
 }
 
-function resolveFlagDefinition(token: string): FlagDefinition | undefined {
+function resolveFlagDefinition(token: string, command: string | null): FlagDefinition | undefined {
+  const definitions = getFlagDefinitions().filter((definition) => definition.names.includes(token));
+  if (definitions.length <= 1) return definitions[0] ?? getFlagDefinition(token);
+  if (command) {
+    const commandDefinition = definitions.find((definition) =>
+      isFlagSupportedForCommand(definition.key, command),
+    );
+    if (commandDefinition) return commandDefinition;
+  }
   return getFlagDefinition(token);
 }
 

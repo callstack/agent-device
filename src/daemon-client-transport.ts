@@ -14,11 +14,21 @@ import {
 import { buildHttpRpcPayload, handleDaemonHttpResponseBody } from './daemon-client-rpc.ts';
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
+import { DAEMON_RPC_PROTOCOL_VERSION } from './daemon/http-health.ts';
+import { readVersion } from './utils/version.ts';
 
 type ResolvedDaemonTransport = 'socket' | 'http';
 
 const LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS = 500;
 const REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS = 3000;
+
+export type RemoteDaemonHealth = {
+  reachable: boolean;
+  statusCode?: number;
+  service?: string;
+  version?: string;
+  rpcProtocolVersion?: number;
+};
 
 export async function canConnect(
   info: DaemonInfo,
@@ -62,18 +72,47 @@ export function canConnectSocket(port: number | undefined): Promise<boolean> {
 }
 
 function canConnectHttp(info: DaemonInfo): Promise<boolean> {
+  return readDaemonHttpHealth(info).then((health) => health.reachable);
+}
+
+export async function readRemoteDaemonHealth(info: DaemonInfo): Promise<RemoteDaemonHealth> {
+  const health = await readDaemonHttpHealth(info);
+  if (!info.baseUrl || !health.reachable) return health;
+  if (
+    typeof health.rpcProtocolVersion === 'number' &&
+    health.rpcProtocolVersion !== DAEMON_RPC_PROTOCOL_VERSION
+  ) {
+    throw new AppError('COMMAND_FAILED', 'Remote daemon RPC protocol is incompatible', {
+      daemonBaseUrl: info.baseUrl,
+      clientVersion: readVersion(),
+      remoteVersion: health.version,
+      remoteService: health.service,
+      supportedRpcProtocolVersion: DAEMON_RPC_PROTOCOL_VERSION,
+      remoteRpcProtocolVersion: health.rpcProtocolVersion,
+      hint: 'Upgrade agent-device on the client or remote host so both support the same daemon RPC protocol.',
+    });
+  }
+  return health;
+}
+
+function readDaemonHttpHealth(info: DaemonInfo): Promise<RemoteDaemonHealth> {
   const endpoint = info.baseUrl
     ? buildDaemonHttpUrl(info.baseUrl, 'health')
     : info.httpPort
       ? `http://127.0.0.1:${info.httpPort}/health`
       : null;
-  if (!endpoint) return Promise.resolve(false);
+  if (!endpoint) return Promise.resolve({ reachable: false });
   const url = new URL(endpoint);
   const transport = url.protocol === 'https:' ? https : http;
   const timeoutMs = info.baseUrl
     ? REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS
     : LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS;
   return new Promise((resolve) => {
+    const headers: Record<string, string> = {};
+    if (info.baseUrl && info.token) {
+      headers.authorization = `Bearer ${info.token}`;
+      headers['x-agent-device-token'] = info.token;
+    }
     const req = transport.request(
       {
         protocol: url.protocol,
@@ -82,21 +121,51 @@ function canConnectHttp(info: DaemonInfo): Promise<boolean> {
         path: url.pathname + url.search,
         method: 'GET',
         timeout: timeoutMs,
+        headers,
       },
       (res) => {
-        res.resume();
-        resolve((res.statusCode ?? 500) < 500);
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          body += chunk;
+        });
+        res.on('end', () => {
+          const statusCode = res.statusCode ?? 500;
+          resolve({
+            reachable: statusCode < 500,
+            statusCode,
+            ...readHealthPayload(body),
+          });
+        });
       },
     );
     req.on('timeout', () => {
       req.destroy();
-      resolve(false);
+      resolve({ reachable: false });
     });
     req.on('error', () => {
-      resolve(false);
+      resolve({ reachable: false });
     });
     req.end();
   });
+}
+
+function readHealthPayload(body: string): Omit<RemoteDaemonHealth, 'reachable' | 'statusCode'> {
+  try {
+    const parsed = JSON.parse(body) as {
+      service?: unknown;
+      version?: unknown;
+      rpcProtocolVersion?: unknown;
+    };
+    return {
+      service: typeof parsed.service === 'string' ? parsed.service : undefined,
+      version: typeof parsed.version === 'string' ? parsed.version : undefined,
+      rpcProtocolVersion:
+        typeof parsed.rpcProtocolVersion === 'number' ? parsed.rpcProtocolVersion : undefined,
+    };
+  } catch {
+    return {};
+  }
 }
 
 export async function sendRequest(

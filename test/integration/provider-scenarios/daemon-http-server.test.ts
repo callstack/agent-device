@@ -6,6 +6,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '../../../src/utils/errors.ts';
 import { trackDownloadableArtifact } from '../../../src/daemon/artifact-tracking.ts';
+import { DAEMON_RPC_PROTOCOL_VERSION } from '../../../src/daemon/http-health.ts';
 import { createDaemonHttpServer } from '../../../src/daemon/http-server.ts';
 import { emitRequestProgress } from '../../../src/daemon/request-progress.ts';
 import { getRequestSignal, isRequestCanceled } from '../../../src/daemon/request-cancel.ts';
@@ -82,7 +83,11 @@ test('Provider-backed integration daemon HTTP server maps RPC methods, auth, and
 
     const health = await fetch(`http://127.0.0.1:${port}/health`);
     assert.equal(health.status, 200);
-    assert.deepEqual(await health.json(), { ok: true });
+    const healthPayload = (await health.json()) as Record<string, unknown>;
+    assert.equal(healthPayload.ok, true);
+    assert.equal(healthPayload.service, 'agent-device-daemon');
+    assert.equal(typeof healthPayload.version, 'string');
+    assert.equal(healthPayload.rpcProtocolVersion, DAEMON_RPC_PROTOCOL_VERSION);
 
     const command = await callRpc(port, {
       jsonrpc: '2.0',

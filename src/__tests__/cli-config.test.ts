@@ -179,6 +179,39 @@ test('interaction commands preserve remote config defaults', async () => {
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test('normal config can point commands at a direct remote daemon proxy', async () => {
+  const { root, home, project } = makeTempWorkspace();
+  fs.mkdirSync(path.join(home, '.agent-device'), { recursive: true });
+  fs.writeFileSync(
+    path.join(project, 'agent-device.json'),
+    JSON.stringify({
+      daemonBaseUrl: 'https://example.trycloudflare.com/agent-device',
+      daemonAuthToken: 'proxy-token',
+    }),
+    'utf8',
+  );
+
+  const result = await runCliCapture(['devices', '--json'], {
+    cwd: project,
+    env: { HOME: home },
+  });
+
+  assert.equal(result.code, null);
+  assert.equal(result.calls.length, 1);
+  assert.equal(result.calls[0]?.command, 'devices');
+  assert.equal(
+    result.calls[0]?.flags?.daemonBaseUrl,
+    'https://example.trycloudflare.com/agent-device',
+  );
+  assert.equal(result.calls[0]?.flags?.daemonAuthToken, 'proxy-token');
+  assert.equal(Object.hasOwn(result.calls[0]?.flags ?? {}, 'platform'), false);
+  assert.equal(Object.hasOwn(result.calls[0]?.flags ?? {}, 'remoteConfig'), false);
+  assert.equal(Object.hasOwn(result.calls[0]?.flags ?? {}, 'tenant'), false);
+  assert.equal(Object.hasOwn(result.calls[0]?.flags ?? {}, 'runId'), false);
+
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
 test('explicit --config path overrides default config discovery', async () => {
   const { root, home, project } = makeTempWorkspace();
   fs.mkdirSync(path.join(home, '.agent-device'), { recursive: true });

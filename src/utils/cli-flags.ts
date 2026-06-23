@@ -33,6 +33,8 @@ export type CliFlags = RemoteConfigMetroOptions &
     daemonAuthToken?: string;
     daemonTransport?: DaemonTransportPreference;
     daemonServerMode?: DaemonServerMode;
+    proxyHost?: string;
+    proxyPort?: number;
     tenant?: string;
     sessionIsolation?: SessionIsolationMode;
     runId?: string;
@@ -226,7 +228,8 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     names: ['--daemon-auth-token'],
     type: 'string',
     usageLabel: '--daemon-auth-token <token>',
-    usageDescription: 'Remote HTTP daemon auth token (sent as request token and bearer header)',
+    usageDescription:
+      'Remote HTTP daemon or proxy auth token (sent as request token and bearer header)',
   },
   {
     key: 'daemonTransport',
@@ -243,6 +246,22 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: ['socket', 'http', 'dual'],
     usageLabel: '--daemon-server-mode socket|http|dual',
     usageDescription: 'Daemon server mode used when spawning daemon',
+  },
+  {
+    key: 'proxyHost',
+    names: ['--host'],
+    type: 'string',
+    usageLabel: '--host <host>',
+    usageDescription: 'Proxy: host interface to bind (default: 127.0.0.1)',
+  },
+  {
+    key: 'proxyPort',
+    names: ['--port'],
+    type: 'int',
+    min: 1,
+    max: 65535,
+    usageLabel: '--port <port>',
+    usageDescription: 'Proxy: TCP port to bind (default: 0, choose a free port)',
   },
   {
     key: 'tenant',

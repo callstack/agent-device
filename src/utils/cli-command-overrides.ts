@@ -75,6 +75,25 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
       'Start the official stdio MCP server. It exposes structured command tools backed by the agent-device client.',
     summary: 'Start MCP server',
   },
+  proxy: {
+    usageOverride:
+      'proxy [--host <host>] [--port <port>] [--daemon-auth-token <token>] [--state-dir <path>]',
+    listUsageOverride: 'proxy',
+    helpDescription: `Expose the local daemon HTTP contract through a tunnel-friendly reverse proxy.
+
+Run this on the host that has access to simulators/devices, then point another machine at the printed daemon base URL with --daemon-base-url or AGENT_DEVICE_DAEMON_BASE_URL.
+
+The proxy starts or reuses a local HTTP daemon, accepts /health, /rpc, /upload, and /artifacts/*, and also accepts the same routes under /agent-device/*. Health is unauthenticated for reachability probes. Other routes require the generated bearer token printed at startup, or the explicit --daemon-auth-token value when provided. The proxy rewrites authorized client requests to the upstream daemon token instead of exposing the local daemon token.
+
+Use the /agent-device base path when connecting through cloudflared, ngrok, or another shared origin. Treat the bearer token as a secret; anyone with it can control the proxied daemon. This direct proxy flow does not use agent-device auth.
+
+Examples:
+  agent-device proxy --port 4310
+  cloudflared tunnel --url http://127.0.0.1:4310
+  agent-device devices --daemon-base-url https://example.trycloudflare.com/agent-device --daemon-auth-token <token>`,
+    summary: 'Expose a local daemon through cloudflared, ngrok, or another HTTP tunnel',
+    allowedFlags: ['proxyHost', 'proxyPort', 'daemonAuthToken', 'stateDir'],
+  },
   'react-devtools': {
     usageOverride: 'react-devtools [...args]',
     listUsageOverride: 'react-devtools',

@@ -40,6 +40,11 @@
     "label": "Configuration"
   },
   {
+    "name": "remote-proxy",
+    "type": "file",
+    "label": "Remote Proxy"
+  },
+  {
     "name": "security-trust",
     "type": "file",
     "label": "Security & Trust"

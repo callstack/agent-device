@@ -817,6 +817,60 @@ test('sendToDaemon uses explicit remote daemon base URL and auth token', async (
   }
 });
 
+test('sendToDaemon rejects remote daemon RPC protocol mismatches before RPC', async () => {
+  const seenPaths: string[] = [];
+  let rpcCalled = false;
+  const restoreHttpRequest = mockEventHttpRequest(({ options, res }) => {
+    seenPaths.push(String(options.path ?? ''));
+    if (options.method === 'GET') {
+      res.emit(
+        'data',
+        JSON.stringify({
+          ok: true,
+          service: 'agent-device-proxy',
+          version: '99.0.0',
+          rpcProtocolVersion: 999,
+        }),
+      );
+      res.emit('end');
+      return;
+    }
+
+    rpcCalled = true;
+    emitJsonRpcResult(res, 'req-incompatible', { ok: true, data: {} });
+  });
+
+  try {
+    await withRemoteDaemonEnv(async () => {
+      let error: unknown;
+      try {
+        await sendToDaemon({
+          session: 'default',
+          command: 'remote-smoke',
+          positionals: ['ping'],
+          flags: {},
+          meta: { requestId: 'req-incompatible' },
+        });
+      } catch (caught) {
+        error = caught;
+      }
+
+      assert.ok(error instanceof Error);
+      assert.equal((error as any).code, 'COMMAND_FAILED');
+      assert.match(error.message, /Remote daemon RPC protocol is incompatible/);
+      assert.equal((error as any).details?.remoteService, 'agent-device-proxy');
+      assert.equal((error as any).details?.remoteVersion, '99.0.0');
+      assert.equal((error as any).details?.remoteRpcProtocolVersion, 999);
+      assert.equal(typeof (error as any).details?.supportedRpcProtocolVersion, 'number');
+    });
+
+    assert.deepEqual(seenPaths, ['/agent-device/health']);
+    assert.equal(rpcCalled, false);
+  } finally {
+    restoreHttpRequest();
+  }
+});
+
 test('sendToDaemon sends lease helpers as top-level JSON-RPC methods over HTTP', async () => {
   const rpcRequests: Record<string, unknown>[] = [];
   const originalHttpRequest = http.request;

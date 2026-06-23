@@ -8,6 +8,7 @@
 - Scenario transcript: command-level integration flow that describes user-visible behavior through daemon commands.
 - In-process provider scenario harness: integration runner that invokes the daemon request handler directly without opening an HTTP listener.
 - HTTP contract test: narrow test that verifies JSON-RPC transport, auth, and response finalization over the daemon HTTP boundary.
+- Daemon RPC protocol version: integer advertised by daemon/proxy `/health` and checked by remote clients before HTTP JSON-RPC; bump only for breaking transport/request/response compatibility across the remote daemon boundary.
 - Interactor: semantic interface between command dispatch and platform behavior.
 - Platform module: platform-specific implementation behind the Interactor.
 - Target: selected automation destination, such as mobile, tv, or desktop.

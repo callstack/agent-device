@@ -64,6 +64,7 @@ const REMOTE_MATERIALIZATION_DEFERRED_COMMANDS = new Set([
   'close',
   'disconnect',
   'metro',
+  'proxy',
   'session',
 ]);
 
@@ -447,7 +448,13 @@ function resolveActiveConnectionDefaults(options: {
   flags: Partial<CliFlags>;
   runtime?: SessionRuntimeHints;
 } | null {
-  if (options.command === 'connect' || options.command === 'connection') return null;
+  if (
+    options.command === 'connect' ||
+    options.command === 'connection' ||
+    options.command === 'proxy'
+  ) {
+    return null;
+  }
   const defaults = resolveRemoteConnectionDefaults({
     stateDir: options.stateDir,
     session: options.session,
@@ -467,7 +474,7 @@ function shouldMaterializeRemoteConnection(command: string): boolean {
 }
 
 function shouldResolveRemoteAuth(command: string): boolean {
-  return command !== 'auth' && command !== 'connection';
+  return command !== 'auth' && command !== 'connection' && command !== 'proxy';
 }
 
 function shouldWarnOpenMayMissRemoteRuntime(options: {

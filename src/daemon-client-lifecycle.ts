@@ -32,7 +32,7 @@ import {
   type DaemonInfo,
   type DaemonStartupCleanupResult,
 } from './daemon-client-metadata.ts';
-import { canConnect } from './daemon-client-transport.ts';
+import { canConnect, readRemoteDaemonHealth } from './daemon-client-transport.ts';
 
 export type DaemonClientSettings = {
   paths: DaemonPaths;
@@ -153,7 +153,7 @@ async function ensureRemoteDaemon(settings: DaemonClientSettings): Promise<Ensur
     pid: 0,
     baseUrl: settings.remoteBaseUrl,
   };
-  if (await canConnect(remoteInfo, 'http')) {
+  if ((await readRemoteDaemonHealth(remoteInfo)).reachable) {
     return { info: remoteInfo, startedByClient: false };
   }
   throw new AppError('COMMAND_FAILED', 'Remote daemon is unavailable', {

@@ -629,6 +629,28 @@ test('parseArgs accepts auth management subcommands', () => {
   assert.equal(login.flags.remoteConfig, './remote.json');
 });
 
+test('parseArgs accepts proxy command flags', () => {
+  const parsed = parseArgs(
+    [
+      'proxy',
+      '--state-dir',
+      './tmp/ad-state',
+      '--host',
+      '0.0.0.0',
+      '--port',
+      '4310',
+      '--daemon-auth-token',
+      'proxy-secret',
+    ],
+    { strictFlags: true },
+  );
+  assert.equal(parsed.command, 'proxy');
+  assert.equal(parsed.flags.stateDir, './tmp/ad-state');
+  assert.equal(parsed.flags.proxyHost, '0.0.0.0');
+  assert.equal(parsed.flags.proxyPort, 4310);
+  assert.equal(parsed.flags.daemonAuthToken, 'proxy-secret');
+});
+
 test('parseArgs recognizes explicit config file flag', () => {
   const parsed = parseArgs(['open', 'settings', '--config', './agent-device.json'], {
     strictFlags: true,
@@ -1402,7 +1424,17 @@ test('usageForCommand resolves remote help topic', () => {
   assert.match(help, /agent-device open com\.example\.app --remote-config \.\/remote-config\.json/);
   assert.match(help, /disconnect --remote-config \.\/remote-config\.json/);
   assert.match(help, /Script flow, per-command config/);
+  assert.match(help, /Direct proxy flow for a remote Mac/);
+  assert.match(help, /agent-device proxy --port 4310/);
+  assert.match(
+    help,
+    /--daemon-base-url https:\/\/example\.trycloudflare\.com\/agent-device --daemon-auth-token <token>/,
+  );
+  assert.match(help, /store daemonBaseUrl and daemonAuthToken in normal agent-device\.json/);
+  assert.match(help, /Keep platform selection on each command or workflow/);
   assert.match(help, /same --remote-config to every operational command/);
+  assert.match(help, /do not use agent-device auth for this direct proxy flow/);
+  assert.match(help, /Do not use --remote-config unless you are using the tenant\/run\/lease/);
   assert.match(help, /Do not use --config as a remote profile flag/);
   assert.match(help, /install-from-source --github-actions-artifact org\/repo:artifact/);
 });
@@ -1740,6 +1772,7 @@ test('usage renders concise commands inline with descriptions', () => {
   assert.match(help, /  metro\s{2,}Prepare Metro reachability for React Native\/Expo apps/);
   assert.match(help, /  perf\s{2,}Check runtime metrics, frames, memory, CPU profiles/);
   assert.match(help, /  react-devtools\s{2,}Inspect React Native components, props, hooks/);
+  assert.match(help, /  proxy\s{2,}Expose a local daemon through cloudflared, ngrok/);
   assert.match(help, /  batch --steps <json> \| --steps-file <path>\s{2,}Run multiple commands/);
   assert.match(help, /  test <path-or-glob>\.\.\.\s{2,}Run replay test suites/);
   assert.match(help, /  screenshot \[path\]\s{2,}Capture screenshot with optional desktop/);
@@ -1749,6 +1782,21 @@ test('usage renders concise commands inline with descriptions', () => {
   );
   assert.doesNotMatch(help, /  metro prepare[^\n]*--project-root/);
   assert.doesNotMatch(help, /\n  batch\s{2,}Run multiple commands/);
+  assert.doesNotMatch(help, /agent-device-proxy/);
+});
+
+test('proxy command help describes tunnel usage', () => {
+  const help = usageForCommand('proxy');
+  if (help === null) throw new Error('Expected command help text');
+  assert.match(help, /Usage:\s+agent-device proxy/);
+  assert.match(help, /cloudflared tunnel --url http:\/\/127\.0\.0\.1:4310/);
+  assert.match(help, /--host <host>\s+Proxy: host interface to bind/);
+  assert.match(help, /--port <port>\s+Proxy: TCP port to bind/);
+  assert.match(help, /--daemon-auth-token <token>\s+Remote HTTP daemon or proxy auth token/);
+  assert.match(help, /--state-dir <path>\s+Daemon state directory/);
+  assert.match(help, /\/agent-device\/\*/);
+  assert.match(help, /https:\/\/example\.trycloudflare\.com\/agent-device/);
+  assert.match(help, /does not use agent-device auth/);
   assert.doesNotMatch(help, /agent-device-proxy/);
 });
 

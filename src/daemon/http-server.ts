@@ -28,6 +28,7 @@ import {
   serializeDaemonRpcResponseEnvelope,
   shouldStreamRequestProgress,
 } from './request-progress-protocol.ts';
+import { buildDaemonHealthPayload } from './http-health.ts';
 
 type JsonRpcRequest = JsonRpcRequestEnvelope;
 
@@ -498,7 +499,7 @@ export async function createDaemonHttpServer(options: {
     if (req.method === 'GET' && req.url === '/health') {
       res.statusCode = 200;
       res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ ok: true }));
+      res.end(JSON.stringify(buildDaemonHealthPayload('agent-device-daemon')));
       return;
     }
 

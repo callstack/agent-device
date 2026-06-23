@@ -271,6 +271,8 @@ function summarizeProviderScenarioFlagExclusions() {
         'shardSplit',
         'searchPath',
         'stepsFile',
+        'proxyHost',
+        'proxyPort',
       ],
     },
     {

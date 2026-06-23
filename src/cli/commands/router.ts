@@ -6,6 +6,7 @@ import {
 } from '../../command-catalog.ts';
 import { connectCommand, connectionCommand, disconnectCommand } from './connection.ts';
 import { authCommand } from './auth.ts';
+import { proxyCommand } from './proxy.ts';
 import { replayCommand } from './replay.ts';
 import { screenshotCommand, diffCommand } from './screenshot.ts';
 import type { ClientCommandHandlerMap, ClientCommandParams } from './router-types.ts';
@@ -21,6 +22,7 @@ const dedicatedCliCommandHandlers = {
   disconnect: disconnectCommand,
   connection: connectionCommand,
   auth: authCommand,
+  proxy: proxyCommand,
   replay: replayCommand,
   screenshot: screenshotCommand,
   diff: diffCommand,

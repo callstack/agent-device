@@ -576,10 +576,21 @@ Script flow, per-command config:
   agent-device snapshot --remote-config ./remote-config.json
   agent-device disconnect --remote-config ./remote-config.json
 
+Direct proxy flow for a remote Mac:
+  On the Mac with simulator/device access:
+    agent-device proxy --port 4310
+    cloudflared tunnel --url http://127.0.0.1:4310
+  On the remote client:
+    agent-device devices --daemon-base-url https://example.trycloudflare.com/agent-device --daemon-auth-token <token>
+    agent-device devices
+
 Rules:
   connect and disconnect are top-level commands. Do not write agent-device remote connect or agent-device remote disconnect.
   Use connect without --remote-config when the cloud control plane owns the connection profile.
   Prefer --remote-config over --daemon-base-url, --tenant, --run-id, and --lease-id when using a local profile.
+  Use agent-device proxy for direct tunnel access to a Mac you control. Copy the printed daemon base URL and daemon auth token; do not use agent-device auth for this direct proxy flow.
+  For repeated direct proxy commands, store daemonBaseUrl and daemonAuthToken in normal agent-device.json CLI config. Keep platform selection on each command or workflow. Do not use --remote-config unless you are using the tenant/run/lease remote connection flow.
+  Keep the proxy token secret. Anyone with the token can control the proxied daemon.
   Do not use --config as a remote profile flag. --config loads CLI defaults; --remote-config selects remote daemon/profile settings.
   For self-contained scripts, pass the same --remote-config to every operational command, including disconnect; a preceding connect is optional but not required.
   For remote artifact installs, use install-from-source <url> or install-from-source --github-actions-artifact org/repo:artifact; do not download CI artifacts locally first.

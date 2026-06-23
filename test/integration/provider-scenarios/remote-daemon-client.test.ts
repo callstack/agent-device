@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { createAgentDeviceClient } from '../../../src/client.ts';
+import { createDaemonProxyServer } from '../../../src/daemon-proxy.ts';
 import { normalizeAgentDeviceError } from '../../../src/utils/errors.ts';
 import {
   closeLoopbackServer,
@@ -16,8 +17,10 @@ type RemoteRpcRequest = {
   id: unknown;
   method?: string;
   params?: {
+    token?: string;
     command?: string;
     positionals?: unknown[];
+    flags?: Record<string, unknown>;
     meta?: {
       clientArtifactPaths?: Record<string, string>;
       installSource?: unknown;
@@ -29,6 +32,10 @@ type RemoteRpcRequest = {
 type UploadRequest = {
   headers: http.IncomingHttpHeaders;
   body: Buffer;
+};
+
+type ProxyUpstreamRpcRequest = RemoteRpcRequest & {
+  headers: http.IncomingHttpHeaders;
 };
 
 type RemoteClient = ReturnType<typeof createAgentDeviceClient>;
@@ -96,6 +103,79 @@ function createRemoteDaemonServer(paths: { screenshotPath: string }): {
   };
 }
 
+function createProxyUpstreamDaemonServer(): {
+  server: http.Server;
+  rpcRequests: ProxyUpstreamRpcRequest[];
+} {
+  const rpcRequests: ProxyUpstreamRpcRequest[] = [];
+  const server = http.createServer((req, res) => {
+    if (req.method === 'GET' && req.url === '/health') {
+      assert.equal(req.headers.authorization, 'Bearer upstream-token');
+      assert.equal(req.headers['x-agent-device-token'], 'upstream-token');
+      writeJson(res, 200, { ok: true });
+      return;
+    }
+    if (req.method !== 'POST' || req.url !== '/rpc') {
+      res.writeHead(404);
+      res.end('not found');
+      return;
+    }
+    assert.equal(req.headers.authorization, 'Bearer upstream-token');
+    assert.equal(req.headers['x-agent-device-token'], 'upstream-token');
+    let body = '';
+    req.setEncoding('utf8');
+    req.on('data', (chunk) => {
+      body += chunk;
+    });
+    req.on('end', () => {
+      const payload = JSON.parse(body) as RemoteRpcRequest;
+      rpcRequests.push({ ...payload, headers: req.headers });
+      assert.equal(payload.params?.token, 'upstream-token');
+      writeJson(res, 200, {
+        jsonrpc: '2.0',
+        id: payload.id,
+        result: {
+          ok: true,
+          data: responseDataForProxyRpc(payload),
+        },
+      });
+    });
+  });
+  return { server, rpcRequests };
+}
+
+function responseDataForProxyRpc(payload: RemoteRpcRequest): Record<string, unknown> {
+  if (payload.params?.command === 'devices') {
+    return {
+      devices: [
+        {
+          platform: 'ios',
+          id: 'remote-ios-1',
+          name: 'Remote iPhone',
+          kind: 'simulator',
+          target: 'mobile',
+          booted: true,
+        },
+      ],
+    };
+  }
+  if (payload.params?.command === 'session_list') {
+    return {
+      sessions: [
+        {
+          name: 'remote-session',
+          platform: 'ios',
+          id: 'remote-ios-1',
+          device: 'Remote iPhone',
+          target: 'mobile',
+          createdAt: 123,
+        },
+      ],
+    };
+  }
+  return {};
+}
+
 function handleRemoteDaemonRequest(
   req: http.IncomingMessage,
   res: http.ServerResponse,
@@ -133,15 +213,24 @@ function writeArtifactResponse(
 function remoteRoute(
   req: http.IncomingMessage,
 ): 'health' | 'screenshot-artifact' | 'recording-artifact' | 'upload' | 'rpc' | undefined {
-  const method = req.method;
   const url = req.url ?? '';
-  if (method === 'GET' && url.startsWith('/health')) return 'health';
-  if (method === 'GET' && url.startsWith('/artifacts/shot-1')) return 'screenshot-artifact';
-  if (method === 'GET' && url.startsWith('/artifacts/recording-1')) {
-    return 'recording-artifact';
-  }
-  if (method === 'POST' && url === '/upload') return 'upload';
-  if (method === 'POST' && url === '/rpc') return 'rpc';
+  if (req.method === 'GET') return remoteGetRoute(url);
+  if (req.method === 'POST') return remotePostRoute(url);
+  return undefined;
+}
+
+function remoteGetRoute(
+  url: string,
+): 'health' | 'screenshot-artifact' | 'recording-artifact' | undefined {
+  if (url.startsWith('/health')) return 'health';
+  if (url.startsWith('/artifacts/shot-1')) return 'screenshot-artifact';
+  if (url.startsWith('/artifacts/recording-1')) return 'recording-artifact';
+  return undefined;
+}
+
+function remotePostRoute(url: string): 'upload' | 'rpc' | undefined {
+  if (url === '/upload') return 'upload';
+  if (url === '/rpc') return 'rpc';
   return undefined;
 }
 
@@ -500,6 +589,69 @@ test('Provider-backed integration remote daemon client materializes artifacts an
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
 });
+
+test('Provider-backed integration daemon proxy forwards remote client RPC commands', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'daemon proxy integration coverage')) {
+    return;
+  }
+
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-proxy-client-'));
+  const upstream = createProxyUpstreamDaemonServer();
+  let proxyServer: http.Server | undefined;
+
+  try {
+    const upstreamPort = await listenOnLoopback(upstream.server);
+    proxyServer = createDaemonProxyServer({
+      upstreamBaseUrl: `http://127.0.0.1:${upstreamPort}`,
+      upstreamToken: 'upstream-token',
+      clientToken: 'proxy-token',
+    });
+    const proxyPort = await listenOnLoopback(proxyServer);
+    const client = createAgentDeviceClient({
+      daemonBaseUrl: `http://127.0.0.1:${proxyPort}/agent-device`,
+      daemonAuthToken: 'proxy-token',
+      stateDir,
+    });
+
+    await assertProxyClientRpcPassThrough(client, upstream.rpcRequests);
+  } finally {
+    if (proxyServer) await closeLoopbackServer(proxyServer);
+    await closeLoopbackServer(upstream.server);
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
+async function assertProxyClientRpcPassThrough(
+  client: RemoteClient,
+  rpcRequests: ProxyUpstreamRpcRequest[],
+): Promise<void> {
+  const devices = await client.devices.list({ platform: 'ios' });
+  assert.equal(devices[0]?.id, 'remote-ios-1');
+  assert.equal(devices[0]?.name, 'Remote iPhone');
+
+  const sessions = await client.sessions.list();
+  assert.equal(sessions[0]?.name, 'remote-session');
+  assert.equal(sessions[0]?.device.id, 'remote-ios-1');
+
+  assertProxyUpstreamRpcRequests(rpcRequests);
+}
+
+function assertProxyUpstreamRpcRequests(rpcRequests: ProxyUpstreamRpcRequest[]): void {
+  assert.equal(rpcRequests.length, 2);
+  const [devicesRpc, sessionsRpc] = rpcRequests;
+  assert.ok(devicesRpc);
+  assert.ok(sessionsRpc);
+  assert.equal(devicesRpc.method, 'agent_device.command');
+  assert.equal(devicesRpc.params?.command, 'devices');
+  assert.equal(devicesRpc.params?.flags?.platform, 'ios');
+  assert.equal(devicesRpc.params?.token, 'upstream-token');
+  assert.equal(devicesRpc.headers.authorization, 'Bearer upstream-token');
+
+  assert.equal(sessionsRpc.method, 'agent_device.command');
+  assert.equal(sessionsRpc.params?.command, 'session_list');
+  assert.equal(sessionsRpc.params?.token, 'upstream-token');
+  assert.equal(sessionsRpc.headers['x-agent-device-token'], 'upstream-token');
+}
 
 test('Provider-backed integration remote daemon client normalizes artifact download failures after successful RPC', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'remote daemon artifact failure coverage')) {
