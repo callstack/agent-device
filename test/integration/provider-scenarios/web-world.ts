@@ -66,6 +66,12 @@ export async function createWebDesktopWorld(): Promise<WebDesktopWorld> {
         state.statusText = 'Submitted';
       }
     },
+    clickRef: async (ref) => {
+      semanticCalls.push(['web', 'clickRef', ref]);
+      if (ref === '@e4') {
+        state.statusText = 'Submitted';
+      }
+    },
     fill: async (x, y, text, options) => {
       semanticCalls.push([
         'web',
@@ -76,6 +82,12 @@ export async function createWebDesktopWorld(): Promise<WebDesktopWorld> {
         String(options?.delayMs ?? 0),
       ]);
       if (pointInRect(x, y, INPUT_RECT)) {
+        state.inputValue = text;
+      }
+    },
+    fillRef: async (ref, text, options) => {
+      semanticCalls.push(['web', 'fillRef', ref, text, String(options?.delayMs ?? 0)]);
+      if (ref === '@e3') {
         state.inputValue = text;
       }
     },

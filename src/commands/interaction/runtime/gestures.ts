@@ -133,15 +133,13 @@ export const focusCommand: RuntimeCommand<FocusCommandOptions, FocusCommandResul
   if (!runtime.backend.focus) {
     throw new AppError('UNSUPPORTED_OPERATION', 'focus is not supported by this backend');
   }
-  const backendResult = await runtime.backend.focus(
-    toBackendContext(runtime, options),
-    resolved.point,
-  );
+  const point = requireResolvedPoint(resolved);
+  const backendResult = await runtime.backend.focus(toBackendContext(runtime, options), point);
   const formattedBackendResult = toBackendResult(backendResult);
   return {
     ...resolved,
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
-    ...successText(`Focused (${resolved.point.x}, ${resolved.point.y})`),
+    ...successText(`Focused (${point.x}, ${point.y})`),
   };
 };
 
@@ -161,17 +159,16 @@ export const longPressCommand: RuntimeCommand<
     options.durationMs === undefined
       ? undefined
       : requireIntInRange(options.durationMs, 'durationMs', 0, 120_000);
-  const backendResult = await runtime.backend.longPress(
-    toBackendContext(runtime, options),
-    resolved.point,
-    { durationMs },
-  );
+  const point = requireResolvedPoint(resolved);
+  const backendResult = await runtime.backend.longPress(toBackendContext(runtime, options), point, {
+    durationMs,
+  });
   const formattedBackendResult = toBackendResult(backendResult);
   return {
     ...resolved,
     ...(durationMs !== undefined ? { durationMs } : {}),
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
-    ...successText(`Long pressed (${resolved.point.x}, ${resolved.point.y})`),
+    ...successText(`Long pressed (${point.x}, ${point.y})`),
   };
 };
 
@@ -193,7 +190,7 @@ export const scrollCommand: RuntimeCommand<ScrollCommandOptions, ScrollCommandRe
   const backendTarget =
     resolved.kind === 'viewport'
       ? { kind: 'viewport' as const }
-      : { kind: 'point' as const, point: resolved.point };
+      : { kind: 'point' as const, point: requireResolvedPoint(resolved) };
   const scrollBackend = runtime.backend.scroll;
   const runScroll = async () =>
     await scrollBackend(toBackendContext(runtime, options), backendTarget, {
@@ -381,7 +378,7 @@ async function resolveSwipeFrom(
         promoteToHittableAncestor: false,
       },
     );
-    return { point: target.point, target };
+    return { point: requireResolvedPoint(target), target };
   }
   if (!options.direction) {
     throw new AppError('INVALID_ARGS', 'swipe requires from+to or a direction');
@@ -428,8 +425,15 @@ function buildScrollEdgeTarget(resolved: ResolvedScrollTarget): ScrollEdgeTarget
     ? {}
     : {
         point: resolved.point,
-        nodeIndex: 'node' in resolved ? resolved.node.index : undefined,
+        nodeIndex: 'node' in resolved ? resolved.node?.index : undefined,
       };
+}
+
+function requireResolvedPoint(result: { point?: Point }): Point {
+  if (!result.point) {
+    throw new AppError('COMMAND_FAILED', 'Interaction target resolved without coordinates');
+  }
+  return result.point;
 }
 
 async function captureRuntimeScrollEdgeState(

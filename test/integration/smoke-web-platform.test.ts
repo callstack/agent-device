@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import path from 'node:path';
 import test from 'node:test';
@@ -25,7 +25,6 @@ type WebSmokeContext = {
   lastSnapshot?: any;
   screenshotPath: string;
   server: Server;
-  socketDir: string;
   stepHistory: StepRecord[];
   url: string;
 };
@@ -65,7 +64,6 @@ async function createWebSmokeContext(): Promise<WebSmokeContext> {
   const stateDir = path.join(artifactDir, 'agent-device-state');
   const agentBrowserConfigPath = path.join(artifactDir, 'agent-browser.json');
   const session = `ws-${process.pid.toString(36)}-${(Date.now() % 1_679_616).toString(36)}`;
-  const socketDir = path.join('/tmp', `adw-${process.pid.toString(36)}`);
   const fixture = await startFixtureServer();
   const env = {
     ...process.env,
@@ -73,11 +71,9 @@ async function createWebSmokeContext(): Promise<WebSmokeContext> {
     AGENT_BROWSER_CONFIG: agentBrowserConfigPath,
     AGENT_BROWSER_HEADED: 'false',
     AGENT_BROWSER_IDLE_TIMEOUT_MS: '30000',
-    AGENT_BROWSER_SOCKET_DIR: socketDir,
   };
 
   mkdirSync(stateDir, { recursive: true });
-  mkdirSync(socketDir, { recursive: true });
   writeFileSync(agentBrowserConfigPath, JSON.stringify({ headed: false }, null, 2));
 
   return {
@@ -86,7 +82,6 @@ async function createWebSmokeContext(): Promise<WebSmokeContext> {
     env,
     screenshotPath: path.join(artifactDir, 'web-smoke.png'),
     server: fixture.server,
-    socketDir,
     stepHistory: [],
     url: fixture.url,
   };
@@ -223,11 +218,6 @@ async function cleanupWebSmoke(context: WebSmokeContext, opened: boolean): Promi
   }
   try {
     await closeServer(context.server);
-  } catch (error) {
-    errors.push(error);
-  }
-  try {
-    rmSync(context.socketDir, { recursive: true, force: true });
   } catch (error) {
     errors.push(error);
   }

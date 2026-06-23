@@ -2,6 +2,7 @@ import { AppError } from '../../../utils/errors.ts';
 import type { ClickButton } from '../../../core/click-button.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { isFillableType } from '../../../utils/snapshot-processing.ts';
+import type { Point } from '../../../utils/snapshot.ts';
 import { requireIntInRange } from '../../../utils/validation.ts';
 import { successText } from '../../../utils/success-text.ts';
 import { findMistargetedTypeRefToken } from '../../../utils/type-target-warning.ts';
@@ -85,6 +86,9 @@ export const fillCommand: RuntimeCommand<FillCommandOptions, FillCommandResult> 
   options,
 ): Promise<FillCommandResult> => {
   if (!options.text) throw new AppError('INVALID_ARGS', 'fill requires text');
+  const nativeRefFill = await maybeFillRefTarget(runtime, options);
+  if (nativeRefFill) return nativeRefFill;
+
   const resolved = await resolveInteractionTarget(runtime, options, {
     action: 'fill',
     requireInteractive: true,
@@ -93,14 +97,15 @@ export const fillCommand: RuntimeCommand<FillCommandOptions, FillCommandResult> 
   if (!runtime.backend.fill) {
     throw new AppError('UNSUPPORTED_OPERATION', 'fill is not supported by this backend');
   }
+  const point = requireResolvedPoint(resolved);
   const backendResult = await runtime.backend.fill(
     toBackendContext(runtime, options),
-    resolved.point,
+    point,
     options.text,
     { delayMs: options.delayMs },
   );
   const formattedBackendResult = toBackendResult(backendResult);
-  const nodeType = 'node' in resolved ? (resolved.node.type ?? '') : '';
+  const nodeType = 'node' in resolved ? (resolved.node?.type ?? '') : '';
   const warning =
     nodeType && !isFillableType(nodeType, runtime.backend.platform)
       ? `fill target ${formatTargetForWarning(resolved)} resolved to "${nodeType}", attempting fill anyway.`
@@ -151,6 +156,9 @@ async function tapCommand(
   options: PressCommandOptions,
   action: 'click' | 'press',
 ): Promise<PressCommandResult> {
+  const nativeRefTap = await maybeTapRefTarget(runtime, options, action);
+  if (nativeRefTap) return nativeRefTap;
+
   const resolved = await resolveInteractionTarget(runtime, options, {
     action,
     requireInteractive: true,
@@ -159,23 +167,84 @@ async function tapCommand(
   if (!runtime.backend.tap) {
     throw new AppError('UNSUPPORTED_OPERATION', 'tap is not supported by this backend');
   }
-  const backendResult = await runtime.backend.tap(
-    toBackendContext(runtime, options),
-    resolved.point,
-    {
-      button: options.button,
-      count: options.count,
-      intervalMs: options.intervalMs,
-      holdMs: options.holdMs,
-      jitterPx: options.jitterPx,
-      doubleTap: options.doubleTap,
-    },
-  );
+  const point = requireResolvedPoint(resolved);
+  const backendResult = await runtime.backend.tap(toBackendContext(runtime, options), point, {
+    button: options.button,
+    count: options.count,
+    intervalMs: options.intervalMs,
+    holdMs: options.holdMs,
+    jitterPx: options.jitterPx,
+    doubleTap: options.doubleTap,
+  });
   const formattedBackendResult = toBackendResult(backendResult);
   return {
     ...resolved,
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
   };
+}
+
+function requireResolvedPoint(result: { point?: Point }): Point {
+  if (!result.point) {
+    throw new AppError('COMMAND_FAILED', 'Interaction target resolved without coordinates');
+  }
+  return result.point;
+}
+
+async function maybeTapRefTarget(
+  runtime: AgentDeviceRuntime,
+  options: PressCommandOptions,
+  action: 'click' | 'press',
+): Promise<PressCommandResult | null> {
+  if (action !== 'click' || options.target.kind !== 'ref' || !runtime.backend.tapTarget) {
+    return null;
+  }
+  if (hasNonDefaultTapOptions(options)) return null;
+  const backendResult = await runtime.backend.tapTarget(toBackendContext(runtime, options), {
+    kind: 'ref',
+    ref: options.target.ref,
+    ...(options.target.fallbackLabel ? { fallbackLabel: options.target.fallbackLabel } : {}),
+  });
+  const formattedBackendResult = toBackendResult(backendResult);
+  return {
+    kind: 'ref',
+    target: { kind: 'ref', ref: options.target.ref },
+    ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
+  };
+}
+
+async function maybeFillRefTarget(
+  runtime: AgentDeviceRuntime,
+  options: FillCommandOptions,
+): Promise<FillCommandResult | null> {
+  if (options.target.kind !== 'ref' || !runtime.backend.fillTarget) return null;
+  const backendResult = await runtime.backend.fillTarget(
+    toBackendContext(runtime, options),
+    {
+      kind: 'ref',
+      ref: options.target.ref,
+      ...(options.target.fallbackLabel ? { fallbackLabel: options.target.fallbackLabel } : {}),
+    },
+    options.text,
+    { delayMs: options.delayMs },
+  );
+  const formattedBackendResult = toBackendResult(backendResult);
+  return {
+    kind: 'ref',
+    target: { kind: 'ref', ref: options.target.ref },
+    text: options.text,
+    ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
+  };
+}
+
+function hasNonDefaultTapOptions(options: PressCommandOptions): boolean {
+  return Boolean(
+    options.count !== undefined ||
+    options.intervalMs !== undefined ||
+    options.holdMs !== undefined ||
+    options.jitterPx !== undefined ||
+    options.doubleTap !== undefined ||
+    (options.button !== undefined && options.button !== 'primary'),
+  );
 }
 
 function formatTargetForWarning(result: {

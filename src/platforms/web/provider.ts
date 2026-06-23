@@ -35,7 +35,9 @@ export type WebProvider = {
   snapshot(options?: WebSnapshotOptions): Promise<WebSnapshotResult>;
   screenshot(outPath: string, options?: WebScreenshotOptions): Promise<void>;
   click(x: number, y: number): Promise<void>;
+  clickRef?(ref: string): Promise<void>;
   fill(x: number, y: number, text: string, options?: { delayMs?: number }): Promise<void>;
+  fillRef?(ref: string, text: string, options?: { delayMs?: number }): Promise<void>;
   typeText(text: string, options?: { delayMs?: number }): Promise<void>;
   scroll(direction: ScrollDirection, options?: { amount?: number; pixels?: number }): Promise<void>;
   readText?(x: number, y: number): Promise<string>;

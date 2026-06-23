@@ -12,6 +12,8 @@ import type { InteractionHandlerParams } from './interaction-common.ts';
 import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
 import { createDaemonRuntimePolicy } from '../runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from '../runtime-session.ts';
+import { resolveWebProvider, type WebProvider } from '../../platforms/web/provider.ts';
+import { stripAtPrefix } from './interaction-touch-targets.ts';
 
 export function createInteractionRuntime(
   params: InteractionHandlerParams & {
@@ -42,6 +44,7 @@ function createInteractionBackend(
   },
 ): AgentDeviceBackend {
   const { req, session } = params;
+  const webProvider = resolveNativeWebInteractionProvider(session);
   return {
     platform: session.device.platform,
     captureSnapshot: async (_context, options): Promise<BackendSnapshotResult> => ({
@@ -66,6 +69,12 @@ function createInteractionBackend(
           params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
         ),
       ),
+    tapTarget: webProvider?.clickRef
+      ? async (_context, target): Promise<BackendActionResult> => {
+          await webProvider.clickRef?.(target.ref);
+          return { ref: stripAtPrefix(target.ref) };
+        }
+      : undefined,
     fill: async (_context, point, text): Promise<BackendActionResult> =>
       toBackendActionResult(
         await dispatchCommand(
@@ -76,6 +85,16 @@ function createInteractionBackend(
           params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
         ),
       ),
+    fillTarget: webProvider?.fillRef
+      ? async (_context, target, text, options): Promise<BackendActionResult> => {
+          await webProvider.fillRef?.(target.ref, text, options);
+          return {
+            ref: stripAtPrefix(target.ref),
+            text,
+            delayMs: options?.delayMs ?? 0,
+          };
+        }
+      : undefined,
     longPress: async (_context, point, options): Promise<BackendActionResult> =>
       toBackendActionResult(
         await dispatchCommand(
@@ -101,6 +120,12 @@ function createInteractionBackend(
         ),
       ),
   };
+}
+
+function resolveNativeWebInteractionProvider(session: SessionState): WebProvider | undefined {
+  if (session.device.platform !== 'web') return undefined;
+  const provider = resolveWebProvider();
+  return provider.clickRef || provider.fillRef ? provider : undefined;
 }
 
 function toBackendActionResult(data: unknown): BackendActionResult {

@@ -32,8 +32,8 @@ export type InteractionHandlerParams = {
 
 export function buildTouchVisualizationResult(params: {
   data: Record<string, unknown> | undefined;
-  fallbackX: number;
-  fallbackY: number;
+  fallbackX?: number;
+  fallbackY?: number;
   referenceFrame?: GestureReferenceFrame;
   extra?: Record<string, unknown>;
 }): Record<string, unknown> {
@@ -42,8 +42,7 @@ export function buildTouchVisualizationResult(params: {
     buildTouchMessage(extra, fallbackX, fallbackY) ??
     (typeof data?.message === 'string' ? data.message : undefined);
   return {
-    x: fallbackX,
-    y: fallbackY,
+    ...(fallbackX === undefined || fallbackY === undefined ? {} : { x: fallbackX, y: fallbackY }),
     ...(referenceFrame ?? {}),
     ...(extra ?? {}),
     ...(data ?? {}),
@@ -53,23 +52,24 @@ export function buildTouchVisualizationResult(params: {
 
 function buildTouchMessage(
   extra: Record<string, unknown> | undefined,
-  x: number,
-  y: number,
+  x: number | undefined,
+  y: number | undefined,
 ): string | undefined {
   const ref = typeof extra?.ref === 'string' ? extra.ref : undefined;
   const button = typeof extra?.button === 'string' ? extra.button : undefined;
   const gesture = typeof extra?.gesture === 'string' ? extra.gesture : undefined;
+  const pointSuffix = x === undefined || y === undefined ? '' : ` (${x}, ${y})`;
   if (typeof extra?.text === 'string') {
     return `Filled ${Array.from(extra.text).length} chars`;
   }
   if (ref) {
     if (gesture === 'longpress') {
-      return `Long pressed @${ref} (${x}, ${y})`;
+      return `Long pressed @${ref}${pointSuffix}`;
     }
     if (button && button !== 'primary') {
-      return `Clicked ${button} @${ref} (${x}, ${y})`;
+      return `Clicked ${button} @${ref}${pointSuffix}`;
     }
-    return `Tapped @${ref} (${x}, ${y})`;
+    return `Tapped @${ref}${pointSuffix}`;
   }
   return undefined;
 }

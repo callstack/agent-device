@@ -27,6 +27,56 @@ test('runtime click taps an explicit point without requiring a snapshot', async 
   assert.deepEqual(result, { kind: 'point', point: { x: 10, y: 20 } });
 });
 
+test('runtime click uses backend ref primitive without resolving snapshot geometry', async () => {
+  const calls: string[] = [];
+  const device = createInteractionDevice(selectorSnapshot(), {
+    platform: 'web',
+    captureSnapshot: async () => {
+      throw new Error('native ref click should not capture a snapshot');
+    },
+    tapTarget: async (_context, target) => {
+      calls.push(target.ref);
+      return { ref: target.ref.replace(/^@/, '') };
+    },
+  });
+
+  const result = await device.interactions.click(ref('@e2'), { session: 'default' });
+
+  assert.deepEqual(calls, ['@e2']);
+  assert.equal(result.kind, 'ref');
+  assert.deepEqual(result.target, { kind: 'ref', ref: '@e2' });
+  assert.equal(result.point, undefined);
+  assert.equal(result.node, undefined);
+  assert.deepEqual(result.backendResult, { ref: 'e2' });
+});
+
+test('runtime fill uses backend ref primitive without resolving snapshot geometry', async () => {
+  const calls: Array<{ ref: string; text: string; delayMs?: number }> = [];
+  const device = createInteractionDevice(fillableSnapshot(), {
+    platform: 'web',
+    captureSnapshot: async () => {
+      throw new Error('native ref fill should not capture a snapshot');
+    },
+    fillTarget: async (_context, target, text, options) => {
+      calls.push({ ref: target.ref, text, delayMs: options?.delayMs });
+      return { ref: target.ref.replace(/^@/, ''), text };
+    },
+  });
+
+  const result = await device.interactions.fill(ref('@e1'), 'hello', {
+    session: 'default',
+    delayMs: 25,
+  });
+
+  assert.deepEqual(calls, [{ ref: '@e1', text: 'hello', delayMs: 25 }]);
+  assert.equal(result.kind, 'ref');
+  assert.equal(result.point, undefined);
+  assert.equal(result.node, undefined);
+  assert.deepEqual(result.target, { kind: 'ref', ref: '@e1' });
+  assert.equal(result.text, 'hello');
+  assert.deepEqual(result.backendResult, { ref: 'e1', text: 'hello' });
+});
+
 test('runtime interactions pass runtime signal to backend primitives', async () => {
   const controller = new AbortController();
   let signal: AbortSignal | undefined;
@@ -1063,7 +1113,9 @@ function createInteractionDevice(
       AgentDeviceBackend,
       | 'captureSnapshot'
       | 'tap'
+      | 'tapTarget'
       | 'fill'
+      | 'fillTarget'
       | 'typeText'
       | 'focus'
       | 'longPress'
@@ -1082,7 +1134,13 @@ function createInteractionDevice(
       captureSnapshot: async (...args) =>
         overrides.captureSnapshot ? await overrides.captureSnapshot(...args) : { snapshot },
       tap: async (...args) => await overrides.tap?.(...args),
+      tapTarget: overrides.tapTarget
+        ? async (...args) => await overrides.tapTarget?.(...args)
+        : undefined,
       fill: async (...args) => await overrides.fill?.(...args),
+      fillTarget: overrides.fillTarget
+        ? async (...args) => await overrides.fillTarget?.(...args)
+        : undefined,
       typeText: async (...args) => await overrides.typeText?.(...args),
       focus: overrides.focus ? async (...args) => await overrides.focus?.(...args) : undefined,
       longPress: overrides.longPress

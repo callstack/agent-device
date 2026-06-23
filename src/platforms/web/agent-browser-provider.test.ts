@@ -28,7 +28,9 @@ test('agent-browser provider maps supported operations to session-scoped JSON co
       await provider.open('https://example.test');
       await provider.screenshot('/tmp/page.png', { fullscreen: true });
       await provider.click(10.4, 20.6);
+      await provider.clickRef?.('@e3');
       await provider.fill(11, 22, 'Ada');
+      await provider.fillRef?.('@e2', 'Grace');
       await provider.typeText('hello');
       await provider.scroll('down', { pixels: 400 });
       await provider.close();
@@ -42,11 +44,13 @@ test('agent-browser provider maps supported operations to session-scoped JSON co
         ['mouse', 'move', '10', '21', '--json', '--session', 'web-session'],
         ['mouse', 'down', '--json', '--session', 'web-session'],
         ['mouse', 'up', '--json', '--session', 'web-session'],
+        ['click', '@e3', '--json', '--session', 'web-session'],
         ['mouse', 'move', '11', '22', '--json', '--session', 'web-session'],
         ['mouse', 'down', '--json', '--session', 'web-session'],
         ['mouse', 'up', '--json', '--session', 'web-session'],
         ['press', expectedSelectAllShortcut(), '--json', '--session', 'web-session'],
         ['keyboard', 'type', 'Ada', '--json', '--session', 'web-session'],
+        ['fill', '@e2', 'Grace', '--json', '--session', 'web-session'],
         ['keyboard', 'type', 'hello', '--json', '--session', 'web-session'],
         ['scroll', 'down', '400', '--json', '--session', 'web-session'],
         ['close', '--json', '--session', 'web-session'],

@@ -235,8 +235,8 @@ async function buildTargetedTouchResponseData(params: {
       : readSnapshotNodesReferenceFrame(session.snapshot?.nodes ?? []);
   return buildTouchVisualizationResult({
     data: result.backendResult,
-    fallbackX: result.point.x,
-    fallbackY: result.point.y,
+    fallbackX: result.point?.x,
+    fallbackY: result.point?.y,
     referenceFrame,
     extra: {
       ...interactionResultExtra(result),
@@ -452,8 +452,8 @@ async function dispatchFillViaRuntime(
           : readSnapshotNodesReferenceFrame(session.snapshot?.nodes ?? []);
       const recordedResult = buildTouchVisualizationResult({
         data: result.backendResult,
-        fallbackX: result.point.x,
-        fallbackY: result.point.y,
+        fallbackX: result.point?.x,
+        fallbackY: result.point?.y,
         referenceFrame,
         extra: {
           ...interactionResultExtra(result),
@@ -467,8 +467,7 @@ async function dispatchFillViaRuntime(
           ? {
               ...(result.backendResult ?? {
                 ref: stripAtPrefix(result.target?.kind === 'ref' ? result.target.ref : undefined),
-                x: result.point.x,
-                y: result.point.y,
+                ...(result.point ? { x: result.point.x, y: result.point.y } : {}),
               }),
             }
           : recordedResult;
@@ -610,7 +609,9 @@ function retryPositionalsForRuntimeResult(
   command: string,
   result: PressCommandResult | FillCommandResult | LongPressCommandResult,
 ): string[] | undefined {
+  if (result.kind === 'ref' && !result.node) return undefined;
   if (command === 'click' || command === 'press') {
+    if (!result.point) return undefined;
     return pointPositionals(result.point);
   }
   return undefined;

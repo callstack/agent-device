@@ -1,10 +1,13 @@
 import {
   doctorManagedAgentBrowser,
   setupManagedAgentBrowser,
+  type AgentBrowserToolStatus,
 } from '../../platforms/web/agent-browser-tool.ts';
 import { AppError } from '../../utils/errors.ts';
 import type { CliFlags } from '../../utils/cli-flags.ts';
 import { printJson } from '../../utils/output.ts';
+
+type PublicAgentBrowserToolStatus = Omit<AgentBrowserToolStatus, 'socketDir'>;
 
 export async function runWebCommand(
   positionals: string[],
@@ -46,7 +49,7 @@ function printWebSetupResult(
   status: Awaited<ReturnType<typeof setupManagedAgentBrowser>>,
 ): void {
   if (json) {
-    printJson({ success: true, data: { status } });
+    printJson({ success: true, data: { status: toPublicAgentBrowserToolStatus(status) } });
     return;
   }
   process.stdout.write(
@@ -56,8 +59,34 @@ function printWebSetupResult(
 
 function printWebResult(json: boolean | undefined, message: string, data: Record<string, unknown>) {
   if (json) {
-    printJson({ success: true, data });
+    printJson({ success: true, data: toPublicWebResult(data) });
     return;
   }
   process.stdout.write(`${message}\n`);
+}
+
+function toPublicAgentBrowserToolStatus(
+  status: AgentBrowserToolStatus,
+): PublicAgentBrowserToolStatus {
+  const { socketDir: _socketDir, ...publicStatus } = status;
+  return publicStatus;
+}
+
+function toPublicWebResult(data: Record<string, unknown>): Record<string, unknown> {
+  const status = data.status;
+  if (!isAgentBrowserToolStatus(status)) return data;
+  return {
+    ...data,
+    status: toPublicAgentBrowserToolStatus(status),
+  };
+}
+
+function isAgentBrowserToolStatus(value: unknown): value is AgentBrowserToolStatus {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'socketDir' in value &&
+    'installDir' in value &&
+    'binaryPath' in value
+  );
 }

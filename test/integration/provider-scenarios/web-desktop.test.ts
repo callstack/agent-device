@@ -76,7 +76,13 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
           name: 'click submit ref',
           command: 'click',
           positionals: ['@e4'],
-          expectData: { x: 84, y: 166 },
+          expectData: { ref: 'e4' },
+          assert: (response) => {
+            const data = response.json?.result?.data;
+            assert.equal(data?.x, undefined);
+            assert.equal(data?.y, undefined);
+            assert.equal(data?.message, 'Tapped @e4');
+          },
         },
         {
           name: 'fill email ref',
@@ -116,18 +122,24 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
       const actions = daemon.session()?.actions ?? [];
       assert.ok(
         actions.some(
-          (action) => action.command === 'click' && action.positionals.join(' ') === '@e4',
+          (action) =>
+            action.command === 'click' &&
+            action.positionals.join(' ') === '@e4' &&
+            action.result?.x === undefined &&
+            action.result?.y === undefined,
         ),
-        'Expected ref click action to be recorded on the session',
+        'Expected ref click action to be recorded on the session without fabricated coordinates',
       );
       assert.ok(
         actions.some(
           (action) =>
             action.command === 'fill' &&
             action.positionals.join(' ') === '@e3 qa@example.test' &&
-            action.flags.delayMs === 1,
+            action.flags.delayMs === 1 &&
+            action.result?.x === undefined &&
+            action.result?.y === undefined,
         ),
-        'Expected ref fill action to be recorded on the session',
+        'Expected ref fill action to be recorded on the session without fabricated coordinates',
       );
       assert.ok(
         actions.some(
@@ -141,8 +153,8 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
 
       assertFlatToolCall(semanticCalls, ['web', 'open', WEB_URL, '']);
       assertFlatToolCall(semanticCalls, ['web', 'snapshot', 'true', '']);
-      assertFlatToolCall(semanticCalls, ['web', 'click', '84', '166']);
-      assertFlatToolCall(semanticCalls, ['web', 'fill', '144', '114', 'qa@example.test', '1']);
+      assertFlatToolCall(semanticCalls, ['web', 'clickRef', '@e4']);
+      assertFlatToolCall(semanticCalls, ['web', 'fillRef', '@e3', 'qa@example.test', '1']);
       assertFlatToolCall(semanticCalls, ['web', 'type', ' ok', '0']);
       assertFlatToolCall(semanticCalls, ['web', 'scroll', 'down', '', '240']);
       assertFlatToolCall(semanticCalls, [

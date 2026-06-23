@@ -45,12 +45,18 @@ export function createAgentBrowserWebProvider(
     async click(x, y) {
       await clickCoordinates(runJson, x, y);
     },
+    async clickRef(ref) {
+      await runJson(['click', browserRefSelector(ref)]);
+    },
     async fill(x, y, text) {
       // The shared web interactor is coordinate-first; bridge that to low-level
       // browser input until a future ref-targeted web path can call native fill.
       await clickCoordinates(runJson, x, y);
       await runJson(['press', selectAllShortcut()]);
       await runJson(['keyboard', 'type', text]);
+    },
+    async fillRef(ref, text) {
+      await runJson(['fill', browserRefSelector(ref), text]);
     },
     async typeText(text) {
       await runJson(['keyboard', 'type', text]);
@@ -258,7 +264,7 @@ function toErrorCode(value: unknown): 'COMMAND_FAILED' | (string & {}) {
 }
 
 function browserRefSelector(ref: string): string {
-  return `@${ref}`;
+  return ref.startsWith('@') ? ref : `@${ref}`;
 }
 
 function selectAllShortcut(): string {

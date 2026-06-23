@@ -38,10 +38,10 @@ export type ResolvedInteractionTarget =
     }
   | {
       kind: 'ref';
-      point: Point;
+      point?: Point;
       target: Extract<ResolvedTarget, { kind: 'ref' }>;
-      node: SnapshotNode;
-      selectorChain: string[];
+      node?: SnapshotNode;
+      selectorChain?: string[];
       refLabel?: string;
     }
   | {

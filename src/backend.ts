@@ -137,6 +137,12 @@ export type BackendTapOptions = RepeatedInput & {
   button?: ClickButton;
 };
 
+export type BackendRefTarget = {
+  kind: 'ref';
+  ref: string;
+  fallbackLabel?: string;
+};
+
 export type BackendFillOptions = {
   delayMs?: number;
 };
@@ -435,9 +441,20 @@ export type AgentDeviceBackend = {
     point: Point,
     options?: BackendTapOptions,
   ): Promise<BackendActionResult>;
+  tapTarget?(
+    context: BackendCommandContext,
+    target: BackendRefTarget,
+    options?: BackendTapOptions,
+  ): Promise<BackendActionResult>;
   fill?(
     context: BackendCommandContext,
     point: Point,
+    text: string,
+    options?: BackendFillOptions,
+  ): Promise<BackendActionResult>;
+  fillTarget?(
+    context: BackendCommandContext,
+    target: BackendRefTarget,
     text: string,
     options?: BackendFillOptions,
   ): Promise<BackendActionResult>;
