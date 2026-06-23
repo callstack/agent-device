@@ -32,8 +32,8 @@ vi.mock('../runner-macos-products.ts', async () => {
 import type { DeviceInfo } from '../../../utils/device.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
 import { AppError } from '../../../utils/errors.ts';
-import type { RunnerCommand } from '../runner-contract.ts';
-import { isReadOnlyRunnerCommand, withRunnerCommandId } from '../runner-contract.ts';
+import { isReadOnlyRunnerCommand } from '../runner-command-traits.ts';
+import { withRunnerCommandId, type RunnerCommand } from '../runner-contract.ts';
 import {
   assertSafeDerivedCleanup,
   isRetryableRunnerError,
@@ -361,8 +361,8 @@ test('withRunnerCommandId preserves existing command ids', () => {
 });
 
 test('scroll is a mutating, command-id-tracked runner command', () => {
-  // Omission from isReadOnlyRunnerCommand classifies the fused scroll as mutating, routing it
-  // through single-send (no transport retry), command-id tracking, and status recovery.
+  // Runner command traits classify fused scroll as mutating, routing it through single-send
+  // (no transport retry), command-id tracking, and status recovery.
   assert.equal(isReadOnlyRunnerCommand('scroll'), false);
 
   const command = withRunnerCommandId({ command: 'scroll', direction: 'down', pixels: 120 });

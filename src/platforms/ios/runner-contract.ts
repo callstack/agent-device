@@ -20,9 +20,9 @@ export type RunnerCommand = {
     | 'remotePress'
     | 'type'
     | 'swipe'
-    // Fused frame-resolve + drag scroll (non-tvOS). Intentionally mutating: omitted from
-    // isReadOnlyRunnerCommand so it routes through single-send, command-id tracking, and
-    // lost-response status recovery like other gestures.
+    // Fused frame-resolve + drag scroll (non-tvOS). Intentionally mutating in runner command
+    // traits so it routes through single-send, command-id tracking, and lost-response status
+    // recovery like other gestures.
     | 'scroll'
     | 'findText'
     | 'querySelector'
@@ -214,19 +214,6 @@ function resolveSigningFailureHint(error: AppError): string | undefined {
 
 export function resolveRunnerBuildFailureHint(error: AppError): string {
   return resolveSigningFailureHint(error) ?? RUNNER_CACHE_RECOVERY_HINT;
-}
-
-export function isReadOnlyRunnerCommand(command: RunnerCommand['command']): boolean {
-  return (
-    command === 'snapshot' ||
-    command === 'screenshot' ||
-    command === 'findText' ||
-    command === 'querySelector' ||
-    command === 'readText' ||
-    command === 'alert' ||
-    command === 'status' ||
-    command === 'uptime'
-  );
 }
 
 export function withRunnerCommandId(command: RunnerCommand): RunnerCommand {

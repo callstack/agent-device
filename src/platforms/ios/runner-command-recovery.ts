@@ -1,7 +1,8 @@
 import { AppError, toAppErrorCode } from '../../utils/errors.ts';
 import type { DeviceInfo } from '../../utils/device.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { isReadOnlyRunnerCommand, type RunnerCommand } from './runner-contract.ts';
+import type { RunnerCommand } from './runner-contract.ts';
+import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';
 import type { AppleRunnerCommandOptions } from './runner-provider.ts';
 import { executeRunnerCommandWithSession, type RunnerSession } from './runner-session.ts';
 

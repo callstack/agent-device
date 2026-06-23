@@ -25,11 +25,12 @@ import {
   resolveRunnerDestination,
   resolveRunnerMaxConcurrentDestinationsFlag,
 } from './runner-xctestrun.ts';
+import { withRunnerCommandId, type RunnerCommand } from './runner-contract.ts';
 import {
+  canSkipRunnerReadinessPreflightAfterHealthyMutation,
   isReadOnlyRunnerCommand,
-  withRunnerCommandId,
-  type RunnerCommand,
-} from './runner-contract.ts';
+  isRunnerReadinessProbeCommand,
+} from './runner-command-traits.ts';
 import {
   buildRunnerLease,
   prepareRunnerLeaseForStartup,
@@ -58,17 +59,6 @@ const runnerSessionLocks = new Map<string, Promise<unknown>>();
 const RUNNER_READY_PREFLIGHT_TIMEOUT_MS = 1_000;
 const RUNNER_STALE_BUNDLE_UNINSTALL_TIMEOUT_MS = 10_000;
 const RUNNER_PREFLIGHT_SKIP_FRESHNESS_MS = 5_000;
-// Only commands this daemon actually sends belong here. The retired tapSeries/dragSeries/
-// interactionFrame wire commands were removed from both daemon and runner; an old daemon
-// paired with a new runner gets a decode rejection and rebuilds via the source fingerprint.
-const PREFLIGHT_SKIP_ELIGIBLE_RUNNER_COMMANDS = new Set<RunnerCommand['command']>([
-  'tap',
-  'longPress',
-  'drag',
-  'swipe',
-  'scroll',
-  'sequence',
-]);
 
 type RunnerReadinessPreflightDecision =
   | {
@@ -539,7 +529,7 @@ export async function executeRunnerCommandWithSession(
     if (runnerFatalReason) {
       session.lastHealthyMutation = undefined;
       await invalidateRunnerSession(session, runnerFatalReason);
-    } else if (PREFLIGHT_SKIP_ELIGIBLE_RUNNER_COMMANDS.has(runnerCommand.command)) {
+    } else if (canSkipRunnerReadinessPreflightAfterHealthyMutation(runnerCommand.command)) {
       session.lastHealthyMutation = {
         atMs: Date.now(),
         appBundleId: runnerCommand.appBundleId,
@@ -795,7 +785,7 @@ function resolveRunnerReadinessPreflightDecision(
       reason: 'readiness_probe_command',
     };
   }
-  if (!PREFLIGHT_SKIP_ELIGIBLE_RUNNER_COMMANDS.has(command.command)) {
+  if (!canSkipRunnerReadinessPreflightAfterHealthyMutation(command.command)) {
     return {
       action: 'run',
       reason: 'conservative_command',
@@ -827,10 +817,6 @@ function resolveRunnerReadinessPreflightDecision(
     reason: 'recent_healthy_mutation',
     lastHealthyMutationAgeMs,
   };
-}
-
-function isRunnerReadinessProbeCommand(command: RunnerCommand['command']): boolean {
-  return command === 'uptime' || command === 'status';
 }
 
 function markRunnerReadinessPreflightError(error: unknown): AppError {

@@ -4,11 +4,11 @@ import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { type RunnerSessionOptions, validateRunnerDevice } from './runner-session.ts';
 import {
   assertRunnerRequestActive,
-  isReadOnlyRunnerCommand,
   isRetryableRunnerError,
   withRunnerCommandId,
   type RunnerCommand,
 } from './runner-contract.ts';
+import { isReadOnlyRunnerCommand } from './runner-command-traits.ts';
 import {
   createLocalAppleRunnerProvider,
   resolveAppleRunnerProvider,
