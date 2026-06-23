@@ -66,7 +66,7 @@ test('batch structured interaction target is projected to positionals, not devic
   const result = await runCliCapture([
     'batch',
     '--steps',
-    '[{"command":"press","input":{"target":{"kind":"point","x":10,"y":20},"count":2}}]',
+    '[{"command":"press","input":{"target":{"kind":"point","x":10,"y":20},"count":2,"platform":"ios","udid":"sim-1"}}]',
     '--json',
   ]);
 
@@ -76,6 +76,21 @@ test('batch structured interaction target is projected to positionals, not devic
   assert.deepEqual(step?.positionals, ['10', '20']);
   assert.equal(step?.flags?.target, undefined);
   assert.equal(step?.flags?.count, 2);
+  assert.equal(step?.flags?.platform, 'ios');
+  assert.equal(step?.flags?.udid, 'sim-1');
+});
+
+test('batch rejects invalid structured step input before daemon projection', async () => {
+  const result = await runCliCapture([
+    'batch',
+    '--steps',
+    '[{"command":"focus","input":{"x":10}}]',
+  ]);
+
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stderr, /Batch step 1 focus input is invalid: Expected y to be set\./);
+  assert.doesNotMatch(result.stderr, /undefined/);
 });
 
 test('batch rejects structured replay steps before daemon dispatch', async () => {

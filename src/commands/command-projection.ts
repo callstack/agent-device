@@ -13,6 +13,8 @@ import { reactNativeDaemonWriters } from './react-native/index.ts';
 import { recordingDaemonWriters } from './recording/index.ts';
 import { replayDaemonWriters } from './replay/index.ts';
 import { systemDaemonWriters } from './system/index.ts';
+import { findCommandMetadata } from './command-metadata.ts';
+import { AppError } from '../utils/errors.ts';
 
 const daemonWriters = {
   ...appDaemonWriters,
@@ -36,12 +38,27 @@ export type { BatchCommandName };
 function prepareBatchDaemonCommandRequest(
   command: string,
   input: CommandInput,
+  stepNumber: number,
 ): DaemonCommandRequest {
   const writer = (daemonWriters as Readonly<Record<string, DaemonWriter>>)[command];
   if (!writer) {
     throw new Error(`Missing daemon writer for batch command: ${command}`);
   }
-  return writer(input);
+  const metadata = findCommandMetadata(command);
+  if (!metadata) {
+    throw new Error(`Missing command metadata for batch command: ${command}`);
+  }
+  try {
+    return writer(metadata.readInput(input) as CommandInput);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    throw new AppError(
+      'INVALID_ARGS',
+      `Batch step ${stepNumber} ${command} input is invalid: ${message}`,
+      undefined,
+      err,
+    );
+  }
 }
 
 export function prepareDaemonCommandRequest(

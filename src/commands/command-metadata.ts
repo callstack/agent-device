@@ -24,10 +24,11 @@ export function listCommandMetadata(): AnyCommandMetadata[] {
 
 export function listMcpCommandMetadata(): AnyCommandMetadata[] {
   return listMcpExposedCommandNames().map((name) => {
-    if (!isCommandName(name)) {
+    const metadata = findCommandMetadata(name);
+    if (!metadata) {
       throw new Error(`Missing command metadata for MCP-exposed command: ${name}`);
     }
-    return getCommandMetadata(name);
+    return metadata;
   });
 }
 
@@ -39,6 +40,6 @@ export function isCommandName(name: string): name is CommandName {
   return commandMetadataMap.has(name as CommandName);
 }
 
-function getCommandMetadata(name: CommandName): AnyCommandMetadata {
-  return commandMetadataMap.get(name)!;
+export function findCommandMetadata(name: string): AnyCommandMetadata | undefined {
+  return commandMetadataMap.get(name as CommandName);
 }

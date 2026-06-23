@@ -14,7 +14,11 @@ const batchCommandNames = STRUCTURED_BATCH_COMMAND_NAMES satisfies readonly Daem
 
 export type BatchCommandName = (typeof batchCommandNames)[number];
 
-type PrepareDaemonCommandRequest = (command: string, input: CommandInput) => DaemonCommandRequest;
+type PrepareDaemonCommandRequest = (
+  command: string,
+  input: CommandInput,
+  stepNumber: number,
+) => DaemonCommandRequest;
 
 export function createBatchDaemonWriter(
   prepareDaemonCommandRequest: PrepareDaemonCommandRequest,
@@ -49,24 +53,12 @@ function readBatchDaemonStep(
   const command = readBatchStepCommand(record, stepNumber);
   const input = readBatchStepInput(record, stepNumber);
   const runtime = readBatchStepRuntime(record, stepNumber);
-  const prepared = prepareBatchStep(command, input, prepareDaemonCommandRequest);
-  return {
-    ...prepared,
-    runtime: runtime ?? prepared.runtime,
-  };
-}
-
-function prepareBatchStep(
-  command: BatchCommandName,
-  input: CommandInput,
-  prepareDaemonCommandRequest: PrepareDaemonCommandRequest,
-): DaemonBatchStep {
-  const prepared = prepareDaemonCommandRequest(command, input);
+  const prepared = prepareDaemonCommandRequest(command, input, stepNumber);
   return {
     command: prepared.command,
     positionals: prepared.positionals,
     flags: buildFlags(prepared.options),
-    runtime: prepared.options.runtime,
+    runtime: runtime ?? prepared.options.runtime,
   };
 }
 
