@@ -9,14 +9,25 @@ inputs:
     description: "Preferred simulator device name"
     required: false
     default: "iPhone 17 Pro"
+  boot-timeout-seconds:
+    description: "Maximum time to wait for simulator bootstatus"
+    required: false
+    default: "300"
+
+outputs:
+  simulator-udid:
+    description: "UDID of the booted iOS simulator"
+    value: ${{ steps.boot.outputs.simulator-udid }}
 
 runs:
   using: "composite"
   steps:
     - name: Resolve and boot iOS test simulator
+      id: boot
       run: |
         set -euo pipefail
-        RUNTIME_TOKEN="SimRuntime.iOS-${{ inputs.runtime-version }}"
+        RUNTIME_VERSION="${{ inputs.runtime-version }}"
+        RUNTIME_TOKEN="SimRuntime.iOS-${RUNTIME_VERSION//./-}"
         export RUNTIME_TOKEN
         export PREFERRED_DEVICE_NAME="${{ inputs.preferred-device-name }}"
         UDID="$(
@@ -40,10 +51,37 @@ runs:
               available.find((device) => device.state === "Booted") ??
               available[0];
             if (!preferred?.udid) process.exit(1);
+            console.error(`Selected ${preferred.name} (${preferred.udid}) from ${preferred.runtime}`);
             process.stdout.write(preferred.udid);
           '
         )"
+        echo "simulator-udid=$UDID" >> "$GITHUB_OUTPUT"
         xcrun simctl shutdown all || true
         xcrun simctl boot "$UDID" || true
-        xcrun simctl bootstatus "$UDID" -b
+        xcrun simctl bootstatus "$UDID" -b &
+        BOOTSTATUS_PID="$!"
+        TIMEOUT_SECONDS="${{ inputs.boot-timeout-seconds }}"
+        BOOT_TIMEOUT_FILE="$(mktemp)"
+        (
+          sleep "$TIMEOUT_SECONDS"
+          if kill -0 "$BOOTSTATUS_PID" 2>/dev/null; then
+            echo "Timed out waiting ${TIMEOUT_SECONDS}s for simulator $UDID to boot" >&2
+            touch "$BOOT_TIMEOUT_FILE"
+            kill "$BOOTSTATUS_PID" 2>/dev/null || true
+          fi
+        ) &
+        BOOT_WATCHDOG_PID="$!"
+        set +e
+        wait "$BOOTSTATUS_PID"
+        BOOTSTATUS_EXIT="$?"
+        set -e
+        kill "$BOOT_WATCHDOG_PID" 2>/dev/null || true
+        wait "$BOOT_WATCHDOG_PID" 2>/dev/null || true
+        if [ -f "$BOOT_TIMEOUT_FILE" ]; then
+          rm -f "$BOOT_TIMEOUT_FILE"
+          xcrun simctl list devices || true
+          exit 1
+        fi
+        rm -f "$BOOT_TIMEOUT_FILE"
+        exit "$BOOTSTATUS_EXIT"
       shell: bash

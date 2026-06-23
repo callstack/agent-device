@@ -50,6 +50,7 @@ jobs:
           xcuitest-destination: generic/platform=iOS Simulator
 
       - name: Boot iOS test simulator
+        id: ios-simulator
         uses: ./.github/actions/boot-ios-test-simulator
         with:
           runtime-version: ${{ env.IOS_RUNTIME_VERSION }}
@@ -58,12 +59,12 @@ jobs:
       - name: Prepare iOS runner
         run: |
           pnpm clean:daemon
-          node --experimental-strip-types src/bin.ts prepare ios-runner --platform ios --timeout "$AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS" --json
+          node --experimental-strip-types src/bin.ts prepare ios-runner --platform ios --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --timeout "$AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS" --json
           pnpm clean:daemon
 
       - name: Run iOS simulator smoke replay
         run: |
-          node --experimental-strip-types src/bin.ts test test/integration/replays/ios/simulator/01-settings.ad --retries 2 --artifacts-dir test/artifacts/replays-ios-simulator-smoke --report-junit test/artifacts/replays-ios-simulator-smoke.junit.xml
+          node --experimental-strip-types src/bin.ts test test/integration/replays/ios/simulator/01-settings.ad --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --retries 2 --artifacts-dir test/artifacts/replays-ios-simulator-smoke --report-junit test/artifacts/replays-ios-simulator-smoke.junit.xml
 
       - name: Run iOS physical device smoke replay
         if: env.IOS_UDID != ''
