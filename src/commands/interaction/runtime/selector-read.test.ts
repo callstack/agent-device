@@ -145,7 +145,31 @@ test('runtime selectors forward public snapshot options to backend capture', asy
     depth: 2,
     scope: 'Login',
     raw: true,
+    includeRects: false,
   });
+});
+
+test('runtime visibility predicates request snapshot rects', async () => {
+  const snapshot = selectorSnapshot();
+  let captureOptions: BackendSnapshotOptions | undefined;
+  const device = createAgentDevice({
+    backend: {
+      platform: 'web',
+      captureSnapshot: async (_context, options) => {
+        captureOptions = options;
+        return { snapshot };
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
+    policy: localCommandPolicy(),
+  });
+
+  await device.selectors.isVisible(selector('label=Continue'), {
+    session: 'default',
+  });
+
+  assert.equal(captureOptions?.includeRects, true);
 });
 
 test('runtime is validates selector predicates', async () => {

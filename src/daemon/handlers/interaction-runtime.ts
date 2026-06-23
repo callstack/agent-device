@@ -50,7 +50,10 @@ function createInteractionBackend(
         req.flags,
         params.sessionStore,
         params.contextFromFlags,
-        { interactiveOnly: options?.interactiveOnly === true },
+        {
+          interactiveOnly: options?.interactiveOnly === true,
+          includeRects: options?.includeRects === true,
+        },
       ),
     }),
     tap: async (_context, point): Promise<BackendActionResult> =>

@@ -53,6 +53,7 @@ type CaptureSnapshotParams = {
   device: SessionState['device'];
   session: SessionState | undefined;
   flags: CommandFlags | undefined;
+  includeRects?: boolean;
   outPath?: string;
   logPath: string;
   snapshotScope?: string;
@@ -227,6 +228,7 @@ export async function captureSnapshotData(params: CaptureSnapshotParams): Promis
       session?.appBundleId,
       session?.trace?.outPath,
     ),
+    snapshotIncludeRects: params.includeRects,
   })) as SnapshotData;
 }
 

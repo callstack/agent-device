@@ -47,6 +47,7 @@ export type DispatchContext = ScreenshotDispatchFlags & {
   snapshotDepth?: number;
   snapshotScope?: string;
   snapshotRaw?: boolean;
+  snapshotIncludeRects?: boolean;
   count?: number;
   intervalMs?: number;
   delayMs?: number;

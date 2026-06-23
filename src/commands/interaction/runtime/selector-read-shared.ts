@@ -36,7 +36,9 @@ export async function requireSnapshotSession(
 export async function captureSelectorSnapshot(
   runtime: AgentDeviceRuntime,
   options: CommandContext & SelectorSnapshotOptions,
-  captureOptions: { updateSession: boolean; scope?: string } = { updateSession: true },
+  captureOptions: { updateSession: boolean; scope?: string; includeRects?: boolean } = {
+    updateSession: true,
+  },
 ): Promise<CapturedSnapshot> {
   const captureSnapshot = runtime.backend.captureSnapshot;
   if (!captureSnapshot) {
@@ -49,6 +51,7 @@ export async function captureSelectorSnapshot(
     depth: options.depth,
     scope: captureOptions.scope ?? options.scope,
     raw: options.raw,
+    includeRects: captureOptions.includeRects,
   });
   const snapshot =
     result.snapshot ??

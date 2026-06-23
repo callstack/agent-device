@@ -26,6 +26,7 @@ export type AgentBrowserToolStatus = {
   binaryPath: string;
   homeDir: string;
   runtimeHomeDir: string;
+  socketDir: string;
   installed: boolean;
   nodeMajor: number;
   nodeSupported: boolean;
@@ -94,6 +95,7 @@ function getManagedAgentBrowserStatus(options: { stateDir?: string }): AgentBrow
   const binaryPath = resolveManagedBinaryPath(installDir);
   const homeDir = path.join(installDir, 'home');
   const runtimeHomeDir = resolveManagedRuntimeHomeDir(installDir);
+  const socketDir = resolveManagedSocketDir(installDir);
   const installed = isExecutable(binaryPath) && hasManifest(installDir);
   const nodeMajor = Number.parseInt(process.versions.node.split('.')[0] ?? '0', 10);
   return {
@@ -103,6 +105,7 @@ function getManagedAgentBrowserStatus(options: { stateDir?: string }): AgentBrow
     binaryPath,
     homeDir,
     runtimeHomeDir,
+    socketDir,
     installed,
     nodeMajor,
     nodeSupported: nodeMajor >= MINIMUM_WEB_NODE_MAJOR,
@@ -153,9 +156,11 @@ function managedAgentBrowserEnv(
 ): NodeJS.ProcessEnv {
   fs.mkdirSync(status.homeDir, { recursive: true });
   ensureRuntimeHomeDir(status);
+  fs.mkdirSync(status.socketDir, { recursive: true });
   return {
     ...env,
     HOME: status.runtimeHomeDir,
+    AGENT_BROWSER_SOCKET_DIR: status.socketDir,
   };
 }
 
@@ -232,6 +237,11 @@ function resolveManagedRuntimeHomeDir(installDir: string): string {
   if (process.platform === 'win32') return path.join(installDir, 'home');
   const hash = crypto.createHash('sha1').update(installDir).digest('hex').slice(0, 12);
   return path.join(os.tmpdir(), 'agent-device-web', hash);
+}
+
+function resolveManagedSocketDir(installDir: string): string {
+  const hash = crypto.createHash('sha1').update(installDir).digest('hex').slice(0, 12);
+  return path.join(os.tmpdir(), 'adw', hash);
 }
 
 function isNoEntryError(error: unknown): boolean {

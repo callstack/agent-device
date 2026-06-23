@@ -22,13 +22,13 @@ const MAX_CONCURRENT_BOX_FETCHES = 8;
 
 export async function normalizeAgentBrowserSnapshot(
   data: unknown,
-  fetchBox: (ref: string) => Promise<Rect | undefined>,
+  fetchBox?: (ref: string) => Promise<Rect | undefined>,
 ): Promise<WebSnapshotResult> {
   const snapshotText = readStringProperty(data, 'snapshot') ?? '';
   const refs = collectSnapshotRefs(readProperty(data, 'refs'));
   const drafts = parseSnapshotDraftNodes(snapshotText, refs);
 
-  await attachDraftRects(drafts, fetchBox);
+  if (fetchBox) await attachDraftRects(drafts, fetchBox);
 
   return {
     nodes: drafts.map((draft, index) => ({ ...draft.node, index })),

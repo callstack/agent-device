@@ -20,6 +20,7 @@ export type WebSnapshotOptions = {
   depth?: number;
   scope?: string;
   raw?: boolean;
+  includeRects?: boolean;
   surface?: SessionSurface;
 };
 

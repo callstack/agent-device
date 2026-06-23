@@ -12,6 +12,7 @@ import {
   makeAndroidSession as makeBaseAndroidSession,
   makeMacOsSession as makeBaseMacOsSession,
 } from '../../../__tests__/test-utils/session-factories.ts';
+import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
 
 const { mockRunIosRunnerCommand } = vi.hoisted(() => ({
   mockRunIosRunnerCommand: vi.fn(),
@@ -86,7 +87,11 @@ async function emulateCaptureSnapshotForSession(
     appBundleId?: string,
     traceLogPath?: string,
   ) => Record<string, unknown>,
-  options: { interactiveOnly: boolean; androidFreshnessMode?: 'ref-refresh' },
+  options: {
+    interactiveOnly: boolean;
+    androidFreshnessMode?: 'ref-refresh';
+    includeRects?: boolean;
+  },
 ) {
   const effectiveFlags = {
     ...(flags ?? {}),
@@ -119,6 +124,26 @@ function makeMacOsDesktopSession(name: string): SessionState {
 
 function makeMacOsMenubarSession(name: string): SessionState {
   return makeBaseMacOsSession(name, { surface: 'menubar' });
+}
+
+function makeVisibleButtonSnapshot(label: string, backend: SnapshotBackend) {
+  return buildSnapshotState(
+    {
+      nodes: [
+        { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
+        {
+          index: 1,
+          parentIndex: 0,
+          type: 'Button',
+          label,
+          rect: { x: 10, y: 20, width: 120, height: 44 },
+          hittable: true,
+        },
+      ],
+      backend,
+    },
+    { snapshotInteractiveOnly: false },
+  );
 }
 
 const contextFromFlags = (flags: CommandFlags | undefined) => ({
@@ -2408,6 +2433,66 @@ test('is visible preserves CLI snapshot flags during runtime snapshot capture', 
     snapshotScope: 'Login',
     snapshotRaw: true,
     snapshotInteractiveOnly: false,
+    snapshotIncludeRects: true,
+  });
+});
+
+test('is visible reuses fresh cached iOS snapshots with rects', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-visible-cached';
+  const session = makeSession(sessionName);
+  session.snapshot = makeVisibleButtonSnapshot('Cached action', 'xctest');
+  sessionStore.set(sessionName, session);
+  mockDispatch.mockRejectedValue(new Error('unexpected fresh snapshot'));
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'is',
+      positionals: ['visible', 'label="Cached action"'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(mockDispatch).not.toHaveBeenCalled();
+});
+
+test('is visible recaptures web snapshots when cached nodes may lack rects', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'web-visible-refreshes-rects';
+  const session = makeSession(sessionName);
+  session.device = WEB_DESKTOP_DEVICE;
+  session.snapshot = buildSnapshotState(
+    {
+      nodes: [{ index: 0, type: 'button', label: 'Submit order' }],
+      backend: 'web',
+    },
+    { snapshotInteractiveOnly: false },
+  );
+  sessionStore.set(sessionName, session);
+  mockDispatch.mockResolvedValue(makeVisibleButtonSnapshot('Submit order', 'web'));
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'is',
+      positionals: ['visible', 'label="Submit order"'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(mockDispatch.mock.calls[0]?.[4]).toMatchObject({
+    snapshotIncludeRects: true,
   });
 });
 

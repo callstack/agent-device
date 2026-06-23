@@ -52,6 +52,7 @@ export type ElementSelectorTapOptions = {
 
 export type SnapshotOptions = BaseSnapshotOptions & {
   appBundleId?: string;
+  includeRects?: boolean;
   surface?: SessionSurface;
 };
 

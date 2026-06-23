@@ -80,7 +80,10 @@ async function captureAgentBrowserSnapshot(
   options: WebSnapshotOptions | undefined,
 ): Promise<WebSnapshotResult> {
   const data = await runJson(buildSnapshotArgs(options));
-  return await normalizeAgentBrowserSnapshot(data, async (ref) => await fetchRefRect(runJson, ref));
+  return await normalizeAgentBrowserSnapshot(
+    data,
+    options?.includeRects ? async (ref) => await fetchRefRect(runJson, ref) : undefined,
+  );
 }
 
 function buildSnapshotArgs(options: WebSnapshotOptions | undefined): string[] {

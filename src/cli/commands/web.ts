@@ -13,10 +13,11 @@ export async function runWebCommand(
   const action = positionals[0];
   switch (action) {
     case 'setup': {
+      printWebSetupStart(options.flags.json);
       const status = await setupManagedAgentBrowser({
         stateDir: options.stateDir,
       });
-      printWebResult(options.flags.json, 'Managed web backend installed.', { status });
+      printWebSetupResult(options.flags.json, status);
       return 0;
     }
     case 'doctor': {
@@ -33,6 +34,24 @@ export async function runWebCommand(
     default:
       throw new AppError('INVALID_ARGS', 'web requires setup or doctor');
   }
+}
+
+function printWebSetupStart(json: boolean | undefined): void {
+  if (json) return;
+  process.stdout.write('Setting up managed agent-browser backend (downloads if needed)...\n');
+}
+
+function printWebSetupResult(
+  json: boolean | undefined,
+  status: Awaited<ReturnType<typeof setupManagedAgentBrowser>>,
+): void {
+  if (json) {
+    printJson({ success: true, data: { status } });
+    return;
+  }
+  process.stdout.write(
+    `Managed web backend installed.\nagent-browser available at: ${status.binaryPath}\n`,
+  );
 }
 
 function printWebResult(json: boolean | undefined, message: string, data: Record<string, unknown>) {

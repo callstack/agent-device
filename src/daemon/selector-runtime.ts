@@ -552,12 +552,16 @@ function createSelectorBackend(params: {
         ...req.flags,
         ...snapshotFlagOverrides(options),
       };
+      const includeRects = options?.includeRects === true;
       const snapshotScope = options?.scope ?? req.flags?.snapshotScope;
       const timestamp = Date.now();
       const presentationKey = buildSnapshotPresentationKey(
         snapshotPresentationOptionsFromFlags(flags),
       );
-      const needsFreshSnapshot = req.command === 'wait' || req.command === 'find';
+      const needsFreshSnapshot =
+        req.command === 'wait' ||
+        req.command === 'find' ||
+        (includeRects && device.platform === 'web');
       if (
         !needsFreshSnapshot &&
         lastSnapshotResult &&
@@ -586,6 +590,7 @@ function createSelectorBackend(params: {
         outPath: req.flags?.out,
         logPath: logPath ?? '',
         snapshotScope,
+        includeRects,
       });
       if (session && !isSparseSnapshotQualityVerdict(capture.snapshot.snapshotQuality)) {
         setSessionSnapshot(session, capture.snapshot);

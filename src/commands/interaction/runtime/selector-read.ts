@@ -18,6 +18,7 @@ import { buildSelectorChainForNode } from '../../../utils/selector-build.ts';
 import {
   evaluateIsPredicate,
   isSupportedPredicate,
+  type IsPredicate,
 } from '../../../utils/selector-is-predicates.ts';
 import type {
   ElementTarget,
@@ -256,7 +257,11 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
   if (options.predicate === 'text' && !options.expectedText) {
     throw new AppError('INVALID_ARGS', 'is text requires expected text value');
   }
-  const capture = await captureSelectorSnapshot(runtime, options, { updateSession: true });
+  const includeRects = predicateNeedsRects(options.predicate);
+  const capture = await captureSelectorSnapshot(runtime, options, {
+    updateSession: true,
+    includeRects,
+  });
   const chain = parseSelectorChain(options.selector);
 
   if (options.predicate === 'exists') {
@@ -421,6 +426,10 @@ function sparseSelectorSnapshotError(verdict: SnapshotQualityVerdict): AppError 
     reason: verdict.reason,
     hint: 'The snapshot quality verdict is sparse. Use screenshot as visual truth, navigate with coordinates if needed, then retry find after reaching a readable screen.',
   });
+}
+
+function predicateNeedsRects(predicate: IsPredicate): boolean {
+  return predicate === 'visible' || predicate === 'hidden';
 }
 
 async function waitForSelector(

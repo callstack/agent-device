@@ -12,7 +12,11 @@ export type CaptureSnapshotForSession = (
   flags: CommandFlags | undefined,
   sessionStore: SessionStore,
   contextFromFlags: ContextFromFlags,
-  options: { interactiveOnly: boolean; androidFreshnessMode?: 'ref-refresh' },
+  options: {
+    interactiveOnly: boolean;
+    androidFreshnessMode?: 'ref-refresh';
+    includeRects?: boolean;
+  },
 ) => Promise<SnapshotState>;
 
 export async function captureSnapshotForSession(
@@ -20,7 +24,11 @@ export async function captureSnapshotForSession(
   flags: CommandFlags | undefined,
   sessionStore: SessionStore,
   contextFromFlags: ContextFromFlags,
-  options: { interactiveOnly: boolean; androidFreshnessMode?: 'ref-refresh' },
+  options: {
+    interactiveOnly: boolean;
+    androidFreshnessMode?: 'ref-refresh';
+    includeRects?: boolean;
+  },
 ): Promise<SnapshotState> {
   const effectiveFlags = {
     ...(flags ?? {}),
@@ -37,6 +45,7 @@ export async function captureSnapshotForSession(
     flags: effectiveFlags,
     outPath: effectiveFlags.out,
     logPath: dispatchContext.logPath ?? '',
+    includeRects: options.includeRects,
     androidFreshnessMode: options.androidFreshnessMode,
   });
   if (!isSparseSnapshotQualityVerdict(snapshot.snapshotQuality)) {

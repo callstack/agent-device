@@ -55,6 +55,7 @@ export type BackendSnapshotResult = {
 } & SnapshotCaptureAnnotations;
 
 export type BackendSnapshotOptions = SnapshotOptions & {
+  includeRects?: boolean;
   outPath?: string;
 };
 

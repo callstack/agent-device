@@ -55,7 +55,7 @@ test('agent-browser provider maps supported operations to session-scoped JSON co
   });
 });
 
-test('agent-browser provider normalizes snapshot refs, labels, values, parents, and rects', async () => {
+test('agent-browser provider normalizes snapshot refs, labels, values, and parents', async () => {
   await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
     const calls: AgentBrowserCall[] = [];
     const snapshot = await withCommandExecutorOverride(
@@ -75,7 +75,32 @@ test('agent-browser provider normalizes snapshot refs, labels, values, parents, 
       '--session',
       'web-session',
     ]);
+    assert.equal(calls.length, 1);
     assertNormalizedSnapshot(snapshot);
+    assertRoleSelectorResolves(snapshot);
+  });
+});
+
+test('agent-browser provider fetches snapshot rects only when requested', async () => {
+  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
+    const calls: AgentBrowserCall[] = [];
+    const snapshot = await withCommandExecutorOverride(
+      snapshotExecutor(calls),
+      async () => await provider.snapshot({ includeRects: true }),
+    );
+
+    assert.deepEqual(
+      calls.map((call) => call.args.slice(0, 3)),
+      [
+        ['snapshot', '--compact', '--json'],
+        ['get', 'box', '@e1'],
+        ['get', 'box', '@e2'],
+        ['get', 'box', '@e3'],
+        ['get', 'box', '@e4'],
+      ],
+    );
+    assertNormalizedSnapshot(snapshot);
+    assertSnapshotRects(snapshot);
     assertRoleSelectorResolves(snapshot);
   });
 });
@@ -145,7 +170,7 @@ test('agent-browser provider dumps session network requests', async () => {
   });
 });
 
-test('agent-browser provider surfaces stale ref failures during snapshot geometry lookup', async () => {
+test('agent-browser provider surfaces stale ref failures during requested snapshot geometry lookup', async () => {
   await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
     await assert.rejects(
       () =>
@@ -162,7 +187,7 @@ test('agent-browser provider surfaces stale ref failures during snapshot geometr
             }
             return jsonResult({ success: false, error: 'Stale ref @e1' });
           },
-          async () => await provider.snapshot(),
+          async () => await provider.snapshot({ includeRects: true }),
         ),
       (error: unknown) =>
         error instanceof AppError &&
@@ -284,12 +309,25 @@ function snapshotExecutor(calls: AgentBrowserCall[]) {
 }
 
 function assertNormalizedSnapshot(snapshot: WebSnapshotResult): void {
-  assert.deepEqual(snapshot.nodes, [
-    expectedNode(0, 'heading', 'Welcome', undefined, 0, { x: 1, y: 2, width: 100, height: 20 }),
-    expectedNode(1, 'textbox', 'Name', 'Ada', 1, { x: 11, y: 12, width: 100, height: 20 }, 0),
+  const nodesWithoutRects = snapshot.nodes.map(({ rect: _rect, ...node }) => node);
+  assert.deepEqual(nodesWithoutRects, [
+    expectedNode(0, 'heading', 'Welcome', undefined, 0, undefined),
+    expectedNode(1, 'textbox', 'Name', 'Ada', 1, undefined, 0),
     expectedNode(2, 'button', 'Save', undefined, 1, undefined, 0),
-    expectedNode(3, 'link', 'Docs', undefined, 1, { x: 31, y: 32, width: 100, height: 20 }, 0),
+    expectedNode(3, 'link', 'Docs', undefined, 1, undefined, 0),
   ]);
+}
+
+function assertSnapshotRects(snapshot: WebSnapshotResult): void {
+  assert.deepEqual(
+    snapshot.nodes.map((node) => node.rect),
+    [
+      { x: 1, y: 2, width: 100, height: 20 },
+      { x: 11, y: 12, width: 100, height: 20 },
+      undefined,
+      { x: 31, y: 32, width: 100, height: 20 },
+    ],
+  );
 }
 
 function assertRoleSelectorResolves(snapshot: WebSnapshotResult): void {

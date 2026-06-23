@@ -32,8 +32,10 @@ test('managed agent-browser tool uses short runtime home for backend state', asy
 
     assert.equal(tool.command, status.binaryPath);
     assert.equal(tool.env?.HOME, status.runtimeHomeDir);
+    assert.equal(tool.env?.AGENT_BROWSER_SOCKET_DIR, status.socketDir);
     assert.notEqual(status.runtimeHomeDir, status.homeDir);
     assert.ok(fs.existsSync(status.runtimeHomeDir));
+    assert.ok(fs.existsSync(status.socketDir));
   } finally {
     fs.rmSync(stateDir, { recursive: true, force: true });
   }

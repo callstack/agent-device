@@ -539,6 +539,7 @@ async function handleSnapshotCommand(
     depth: context?.snapshotDepth,
     scope: context?.snapshotScope,
     raw: context?.snapshotRaw,
+    includeRects: context?.snapshotIncludeRects,
     surface: context?.surface,
   });
 }
