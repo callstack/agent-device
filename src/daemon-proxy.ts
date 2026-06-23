@@ -4,6 +4,11 @@ import { pipeline } from 'node:stream/promises';
 import { randomUUID } from 'node:crypto';
 import { AppError, normalizeError } from './utils/errors.ts';
 import { timingSafeStringEqual } from './utils/timing-safe-equal.ts';
+import {
+  DAEMON_HTTP_BASE_PATH,
+  buildDaemonHttpAuthHeaders,
+  buildDaemonHttpUrl,
+} from './daemon/http-contract.ts';
 import { buildDaemonHealthPayload } from './daemon/http-health.ts';
 
 export type DaemonProxyOptions = {
@@ -17,7 +22,7 @@ export type DaemonProxyOptions = {
 
 const DEFAULT_MAX_RPC_BODY_BYTES = 1024 * 1024;
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 5 * 60 * 1000;
-const DAEMON_PROXY_PREFIX = '/agent-device/';
+const DAEMON_PROXY_PREFIX = `${DAEMON_HTTP_BASE_PATH}/`;
 const FORWARDED_REQUEST_HEADERS = ['content-type', 'x-artifact-type', 'x-artifact-filename'];
 const FORWARDED_RESPONSE_HEADERS = ['content-type', 'content-disposition', 'x-request-id'];
 
@@ -68,7 +73,7 @@ async function sendProxyHealth(res: ServerResponse, options: Required<DaemonProx
 }
 
 async function readUpstreamHealth(options: Required<DaemonProxyOptions>): Promise<unknown> {
-  const upstreamUrl = new URL('health', `${options.upstreamBaseUrl}/`);
+  const upstreamUrl = new URL(buildDaemonHttpUrl(options.upstreamBaseUrl, 'health'));
   const response = await options.fetchImpl(upstreamUrl, {
     method: 'GET',
     headers: buildUpstreamHeaders({ headers: {} }, options.upstreamToken, '/health'),
@@ -153,7 +158,7 @@ function normalizeToken(value: string, label: string): string {
 
 function resolveProxyRoute(requestUrl: string): string {
   const pathname = new URL(requestUrl, 'http://127.0.0.1').pathname;
-  if (pathname === '/agent-device') return '/';
+  if (pathname === DAEMON_HTTP_BASE_PATH) return '/';
   if (pathname.startsWith(DAEMON_PROXY_PREFIX)) {
     return `/${pathname.slice(DAEMON_PROXY_PREFIX.length)}`;
   }
@@ -168,7 +173,7 @@ function isSupportedDaemonRoute(route: string, method: string | undefined): bool
 }
 
 function buildUpstreamUrl(upstreamBaseUrl: string, route: string, rawUrl: string): URL {
-  const upstreamUrl = new URL(route.replace(/^\//, ''), `${upstreamBaseUrl}/`);
+  const upstreamUrl = new URL(buildDaemonHttpUrl(upstreamBaseUrl, route));
   const rawSearchIndex = rawUrl.indexOf('?');
   if (rawSearchIndex >= 0) upstreamUrl.search = rawUrl.slice(rawSearchIndex);
   return upstreamUrl;
@@ -187,8 +192,9 @@ function buildUpstreamHeaders(
   if (route === '/rpc' && !headers.has('content-type')) {
     headers.set('content-type', 'application/json');
   }
-  headers.set('authorization', `Bearer ${upstreamToken}`);
-  headers.set('x-agent-device-token', upstreamToken);
+  for (const [name, value] of Object.entries(buildDaemonHttpAuthHeaders(upstreamToken))) {
+    headers.set(name, value);
+  }
   return headers;
 }
 

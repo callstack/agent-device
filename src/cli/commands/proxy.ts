@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { createDaemonProxyServer } from '../../daemon-proxy.ts';
+import { buildDaemonHttpBaseUrl } from '../../daemon/http-contract.ts';
 import { ensureDaemon, resolveClientSettings } from '../../daemon-client-lifecycle.ts';
 import { AppError } from '../../utils/errors.ts';
 import type { CliFlags } from '../../utils/cli-flags.ts';
@@ -54,7 +55,7 @@ async function startProxy(flags: CliFlags): Promise<ProxyStartup> {
   const proxyBaseUrl = `http://${formatHostForUrl(address.address)}:${address.port}`;
   return {
     proxyBaseUrl,
-    agentDeviceBaseUrl: `${proxyBaseUrl}/agent-device`,
+    agentDeviceBaseUrl: buildDaemonHttpBaseUrl(proxyBaseUrl),
     token,
     upstreamBaseUrl,
     stateDir: settings.paths.baseDir,

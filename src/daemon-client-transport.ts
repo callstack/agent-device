@@ -11,6 +11,7 @@ import {
   readDaemonSocketProgressResponse,
   shouldReadDaemonProgressStream,
 } from './daemon-client-progress.ts';
+import { buildDaemonHttpAuthHeaders, buildDaemonHttpUrl } from './daemon/http-contract.ts';
 import { buildHttpRpcPayload, handleDaemonHttpResponseBody } from './daemon-client-rpc.ts';
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
@@ -108,11 +109,7 @@ function readDaemonHttpHealth(info: DaemonInfo): Promise<RemoteDaemonHealth> {
     ? REMOTE_DAEMON_HEALTHCHECK_TIMEOUT_MS
     : LOCAL_DAEMON_HEALTHCHECK_TIMEOUT_MS;
   return new Promise((resolve) => {
-    const headers: Record<string, string> = {};
-    if (info.baseUrl && info.token) {
-      headers.authorization = `Bearer ${info.token}`;
-      headers['x-agent-device-token'] = info.token;
-    }
+    const headers = info.baseUrl ? buildDaemonHttpAuthHeaders(info.token) : {};
     const req = transport.request(
       {
         protocol: url.protocol,
@@ -369,9 +366,8 @@ async function sendHttpRequest(
     'content-type': 'application/json',
     'content-length': Buffer.byteLength(rpcPayload),
   };
-  if (info.baseUrl && info.token) {
-    headers.authorization = `Bearer ${info.token}`;
-    headers['x-agent-device-token'] = info.token;
+  if (info.baseUrl) {
+    Object.assign(headers, buildDaemonHttpAuthHeaders(info.token));
   }
 
   return await new Promise((resolve, reject) => {
@@ -443,10 +439,4 @@ async function sendHttpRequest(
     request.write(rpcPayload);
     request.end();
   });
-}
-
-function buildDaemonHttpUrl(baseUrl: string, route: 'health' | 'rpc'): string {
-  // URL(base, relative) treats a base without trailing slash as a file path, so normalize to a directory-like base.
-  const normalizedBase = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`;
-  return new URL(route, normalizedBase).toString();
 }

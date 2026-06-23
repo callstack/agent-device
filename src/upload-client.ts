@@ -9,6 +9,7 @@ import { pipeline } from 'node:stream/promises';
 import { AppError } from './utils/errors.ts';
 import { readNodeHttpResponseBody } from './utils/node-http.ts';
 import { runCmd } from './utils/exec.ts';
+import { buildDaemonHttpAuthHeaders } from './daemon/http-contract.ts';
 
 const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const UPLOAD_PREFLIGHT_TIMEOUT_MS = 30 * 1000;
@@ -188,10 +189,7 @@ async function uploadLegacyArtifact(options: {
     'x-artifact-hash-algorithm': ARTIFACT_HASH_ALGORITHM,
     'transfer-encoding': 'chunked',
   };
-  if (token) {
-    headers.authorization = `Bearer ${token}`;
-    headers['x-agent-device-token'] = token;
-  }
+  Object.assign(headers, buildDaemonHttpAuthHeaders(token));
 
   const response = await streamFileToHttpRequest({
     url: uploadUrl,
@@ -225,10 +223,7 @@ async function requestUploadPreflight(options: {
   const headers: Record<string, string> = {
     'content-type': 'application/json',
   };
-  if (options.token) {
-    headers.authorization = `Bearer ${options.token}`;
-    headers['x-agent-device-token'] = options.token;
-  }
+  Object.assign(headers, buildDaemonHttpAuthHeaders(options.token));
 
   const response = await fetch(preflightUrl, {
     method: 'POST',
@@ -517,10 +512,7 @@ async function finalizeDirectUpload(options: {
   const headers: Record<string, string> = {
     'content-type': 'application/json',
   };
-  if (options.token) {
-    headers.authorization = `Bearer ${options.token}`;
-    headers['x-agent-device-token'] = options.token;
-  }
+  Object.assign(headers, buildDaemonHttpAuthHeaders(options.token));
 
   const response = await fetch(finalizeUrl, {
     method: 'POST',

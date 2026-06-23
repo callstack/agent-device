@@ -5,6 +5,7 @@ import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from './utils/errors.ts';
 import type { DaemonArtifact, DaemonRequest, DaemonResponse } from './daemon/types.ts';
+import { buildDaemonHttpAuthHeaders } from './daemon/http-contract.ts';
 import { uploadArtifact } from './upload-client.ts';
 
 // Mirrors the current daemon RPC timeout, but artifact download timeouts may diverge.
@@ -319,12 +320,7 @@ export async function downloadRemoteArtifact(params: {
         port: artifactUrl.port,
         method: 'GET',
         path: artifactUrl.pathname + artifactUrl.search,
-        headers: params.token
-          ? {
-              authorization: `Bearer ${params.token}`,
-              'x-agent-device-token': params.token,
-            }
-          : undefined,
+        headers: buildDaemonHttpAuthHeaders(params.token),
       },
       (res) => {
         if ((res.statusCode ?? 500) >= 400) {
