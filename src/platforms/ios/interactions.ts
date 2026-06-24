@@ -31,6 +31,8 @@ type NormalizedScrollOptions = {
   preferProvidedPixels?: boolean;
 };
 
+type AppleScrollOptions = Omit<NormalizedScrollOptions, 'preferProvidedPixels'>;
+
 type IosDragCommandOptions = {
   defaultDurationMs: number;
   legacyDefaultDurationMs?: number;
@@ -324,7 +326,7 @@ async function runAppleScroll(
   ctx: RunnerContext,
   runnerOpts: RunnerOpts,
   direction: ScrollDirection,
-  options?: { amount?: number; pixels?: number; durationMs?: number },
+  options?: AppleScrollOptions,
 ): Promise<Record<string, unknown>> {
   if (device.target === 'tv') {
     const runnerResult = await runRunnerCommand(
@@ -347,9 +349,7 @@ async function runAppleScroll(
       {
         command: 'desktopScroll',
         direction,
-        ...(options?.amount !== undefined ? { amount: options.amount } : {}),
-        ...(options?.pixels !== undefined ? { pixels: options.pixels } : {}),
-        ...(options?.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
+        ...scrollRunnerFields(options, { includeDuration: true }),
         appBundleId: ctx.appBundleId,
       },
       runnerOpts,
@@ -366,8 +366,7 @@ async function runAppleScroll(
     {
       command: 'scroll',
       direction,
-      ...(options?.amount !== undefined ? { amount: options.amount } : {}),
-      ...(options?.pixels !== undefined ? { pixels: options.pixels } : {}),
+      ...scrollRunnerFields(options),
       appBundleId: ctx.appBundleId,
     },
     runnerOpts,
@@ -392,7 +391,7 @@ function assertScrollDurationInput(durationMs: number | undefined): void {
 function normalizeScrollResultWithResolvedFrame(
   runnerResult: Record<string, unknown>,
   direction: ScrollDirection,
-  options?: { amount?: number; pixels?: number; durationMs?: number },
+  options?: AppleScrollOptions,
 ): Record<string, unknown> {
   const referenceWidth = readFiniteNumber(runnerResult.referenceWidth);
   const referenceHeight = readFiniteNumber(runnerResult.referenceHeight);
@@ -417,6 +416,19 @@ function normalizeScrollResultWithResolvedFrame(
   });
 }
 
+function scrollRunnerFields(
+  options: AppleScrollOptions | undefined,
+  config?: { includeDuration?: boolean },
+): Record<string, number> {
+  return {
+    ...(options?.amount !== undefined ? { amount: options.amount } : {}),
+    ...(options?.pixels !== undefined ? { pixels: options.pixels } : {}),
+    ...(config?.includeDuration && options?.durationMs !== undefined
+      ? { durationMs: options.durationMs }
+      : {}),
+  };
+}
+
 function readFiniteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
@@ -432,14 +444,7 @@ function normalizeIosScrollResult(
     x1 !== undefined && x2 !== undefined ? Math.round(Math.abs(x2 - x1)) : undefined;
   const verticalTravel =
     y1 !== undefined && y2 !== undefined ? Math.round(Math.abs(y2 - y1)) : undefined;
-  const travelPixels =
-    options?.preferProvidedPixels && options.pixels !== undefined
-      ? options.pixels
-      : horizontalTravel && horizontalTravel > 0
-        ? horizontalTravel
-        : verticalTravel && verticalTravel > 0
-          ? verticalTravel
-          : undefined;
+  const travelPixels = selectScrollTravelPixels(options, horizontalTravel, verticalTravel);
 
   return {
     ...(x1 !== undefined ? { x1 } : {}),
@@ -452,6 +457,17 @@ function normalizeIosScrollResult(
     ...(travelPixels !== undefined ? { pixels: travelPixels } : {}),
     ...(options?.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
   };
+}
+
+function selectScrollTravelPixels(
+  options: NormalizedScrollOptions | undefined,
+  horizontalTravel: number | undefined,
+  verticalTravel: number | undefined,
+): number | undefined {
+  if (options?.preferProvidedPixels && options.pixels !== undefined) return options.pixels;
+  if (horizontalTravel !== undefined && horizontalTravel > 0) return horizontalTravel;
+  if (verticalTravel !== undefined && verticalTravel > 0) return verticalTravel;
+  return undefined;
 }
 
 function remapRunnerCoordinates(runnerResult: Record<string, unknown>): {

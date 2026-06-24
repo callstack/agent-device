@@ -672,6 +672,8 @@ extension RunnerTests {
       }
       let x = frame.midX
       let y = frame.midY
+      let localX = x - (appFrame.isEmpty ? frame.minX : appFrame.minX)
+      let localY = y - (appFrame.isEmpty ? frame.minY : appFrame.minY)
       if let durationMs = command.durationMs, durationMs.isFinite == false || durationMs < 0 {
         return Response(
           ok: false,
@@ -683,8 +685,8 @@ extension RunnerTests {
       }
       let touchFrame = resolvedTouchVisualizationFrame(
         app: activeApp,
-        x: x - (appFrame.isEmpty ? frame.minX : appFrame.minX),
-        y: y - (appFrame.isEmpty ? frame.minY : appFrame.minY)
+        x: localX,
+        y: localY
       )
       do {
         var scrollError: Error?
