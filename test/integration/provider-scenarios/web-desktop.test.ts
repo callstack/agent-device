@@ -105,11 +105,11 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
           expectData: { pixels: 240 },
         },
         {
-          name: 'capture web screenshot artifact',
+          name: 'capture full-page web screenshot artifact',
           command: 'screenshot',
           positionals: [screenshotPath],
           flags: {
-            screenshotFullscreen: true,
+            screenshotFullPage: true,
             screenshotNoStabilize: true,
           },
           expectData: { path: screenshotPath },
@@ -162,6 +162,7 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
         'screenshot',
         screenshotPath,
         'true',
+        'false',
         'false',
         'app',
       ]);

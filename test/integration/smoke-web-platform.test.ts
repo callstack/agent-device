@@ -174,7 +174,7 @@ async function assertWebScreenshot(context: WebSmokeContext): Promise<void> {
   await assertCommandData(
     context,
     'capture screenshot artifact',
-    ['screenshot', context.screenshotPath, '--fullscreen', '--no-stabilize'],
+    ['screenshot', context.screenshotPath, '--full-page', '--no-stabilize'],
     { path: context.screenshotPath },
   );
   assertPngFile(context.screenshotPath);

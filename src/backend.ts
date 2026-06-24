@@ -72,6 +72,7 @@ export type BackendFindTextResult = {
 };
 
 export type BackendScreenshotOptions = {
+  fullPage?: boolean;
   fullscreen?: boolean;
   overlayRefs?: boolean;
   stabilize?: boolean;

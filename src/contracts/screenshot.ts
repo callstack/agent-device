@@ -3,12 +3,14 @@ import { AppError } from '../utils/errors.ts';
 export const SCREENSHOT_COMMAND_FLAG_KEYS = [
   'out',
   'overlayRefs',
+  'screenshotFullPage',
   'screenshotFullscreen',
   'screenshotMaxSize',
   'screenshotNoStabilize',
 ] as const;
 
 export const SCREENSHOT_ACTION_FLAG_KEYS = [
+  'screenshotFullPage',
   'screenshotFullscreen',
   'screenshotMaxSize',
   'screenshotNoStabilize',
@@ -26,6 +28,13 @@ type ScreenshotSpecificFlagDefinition = {
 };
 
 export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFlagDefinition[] = [
+  {
+    key: 'screenshotFullPage',
+    names: ['--full-page'],
+    type: 'boolean',
+    usageLabel: '--full-page',
+    usageDescription: 'Screenshot: capture the full page on web instead of the current viewport',
+  },
   {
     key: 'screenshotFullscreen',
     names: ['--fullscreen'],
@@ -54,6 +63,7 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
 export type ScreenshotRequestFlags = {
   out?: string;
   overlayRefs?: boolean;
+  screenshotFullPage?: boolean;
   screenshotFullscreen?: boolean;
   screenshotMaxSize?: number;
   screenshotNoStabilize?: boolean;
@@ -61,16 +71,17 @@ export type ScreenshotRequestFlags = {
 
 export type ScreenshotDispatchFlags = Pick<
   ScreenshotRequestFlags,
-  'screenshotFullscreen' | 'screenshotNoStabilize'
+  'screenshotFullPage' | 'screenshotFullscreen' | 'screenshotNoStabilize'
 >;
 
 export type ScreenshotRuntimeFlags = Pick<
   ScreenshotRequestFlags,
-  'screenshotFullscreen' | 'screenshotMaxSize' | 'screenshotNoStabilize'
+  'screenshotFullPage' | 'screenshotFullscreen' | 'screenshotMaxSize' | 'screenshotNoStabilize'
 >;
 
 export type ScreenshotPublicOptions = {
   overlayRefs?: boolean;
+  fullPage?: boolean;
   fullscreen?: boolean;
   maxSize?: number;
   stabilize?: boolean;
@@ -78,6 +89,7 @@ export type ScreenshotPublicOptions = {
 
 export type ScreenshotRuntimeOptions = {
   overlayRefs?: boolean;
+  fullPage?: boolean;
   fullscreen?: boolean;
   maxSize?: number;
   stabilize?: boolean;
@@ -88,6 +100,7 @@ export function screenshotOptionsFromFlags(
 ): ScreenshotRuntimeOptions {
   return stripUndefined({
     overlayRefs: flags?.overlayRefs,
+    fullPage: flags?.screenshotFullPage,
     fullscreen: flags?.screenshotFullscreen,
     maxSize: flags?.screenshotMaxSize,
     stabilize: flags?.screenshotNoStabilize ? false : undefined,
@@ -99,6 +112,7 @@ export function screenshotFlagsFromOptions(
 ): Partial<ScreenshotRequestFlags> {
   return stripUndefined({
     overlayRefs: options.overlayRefs,
+    screenshotFullPage: options.screenshotFullPage ?? options.fullPage,
     screenshotFullscreen: options.screenshotFullscreen ?? options.fullscreen,
     screenshotMaxSize: options.screenshotMaxSize ?? options.maxSize,
     screenshotNoStabilize:
@@ -110,6 +124,7 @@ export function appendScreenshotScriptFlags(
   parts: string[],
   flags: Partial<ScreenshotRequestFlags> | undefined,
 ): void {
+  if (flags?.screenshotFullPage) parts.push('--full-page');
   if (flags?.screenshotFullscreen) parts.push('--fullscreen');
   if (typeof flags?.screenshotMaxSize === 'number') {
     parts.push('--max-size', String(flags.screenshotMaxSize));
@@ -124,6 +139,10 @@ export function readScreenshotScriptFlag(params: {
 }): { handled: true; nextIndex: number } | { handled: false } {
   const { args, flags, index } = params;
   const token = args[index];
+  if (token === '--full-page') {
+    flags.screenshotFullPage = true;
+    return { handled: true, nextIndex: index };
+  }
   if (token === '--fullscreen') {
     flags.screenshotFullscreen = true;
     return { handled: true, nextIndex: index };

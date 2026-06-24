@@ -23,6 +23,7 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
   {
     path: stringField('Output path.'),
     overlayRefs: booleanField(),
+    fullPage: booleanField(),
     fullscreen: booleanField(),
     maxSize: integerField(),
     stabilize: booleanField(),
@@ -37,8 +38,8 @@ const screenshotCommandDefinition = defineExecutableCommand(
 
 const screenshotCliSchema = {
   helpDescription:
-    'Capture screenshot (macOS app sessions default to the app window; use --fullscreen for full desktop, --max-size to downscale, --overlay-refs to annotate current refs, or --no-stabilize for low-latency Android capture loops)',
-  summary: 'Capture screenshot with optional desktop, downscale, or ref overlay modes',
+    'Capture screenshot (web defaults to the viewport; use --full-page for the entire document. macOS app sessions default to the app window; use --fullscreen for full desktop, --max-size to downscale, --overlay-refs to annotate current refs, or --no-stabilize for low-latency Android capture loops)',
+  summary: 'Capture screenshot with optional web page, desktop, downscale, or ref overlay modes',
   positionalArgs: ['path?'],
   allowedFlags: SCREENSHOT_COMMAND_FLAG_KEYS,
 } as const;

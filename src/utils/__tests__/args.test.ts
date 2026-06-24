@@ -892,21 +892,32 @@ test('parseArgs recognizes record --hide-touches flag', () => {
 
 test('parseArgs recognizes screenshot flags', () => {
   const parsed = parseArgs(
-    ['screenshot', 'page.png', '--fullscreen', '--max-size', '1024', '--no-stabilize'],
+    [
+      'screenshot',
+      'page.png',
+      '--full-page',
+      '--fullscreen',
+      '--max-size',
+      '1024',
+      '--no-stabilize',
+    ],
     {
       strictFlags: true,
     },
   );
   assert.equal(parsed.command, 'screenshot');
   assert.deepEqual(parsed.positionals, ['page.png']);
+  assert.equal(parsed.flags.screenshotFullPage, true);
   assert.equal(parsed.flags.screenshotFullscreen, true);
   assert.equal(parsed.flags.screenshotMaxSize, 1024);
   assert.equal(parsed.flags.screenshotNoStabilize, true);
 });
 
-test('usageForCommand documents screenshot stabilization tradeoff', () => {
+test('usageForCommand documents screenshot full-page and stabilization flags', () => {
   const help = usageForCommand('screenshot');
   if (help === null) throw new Error('Expected screenshot help text');
+  assert.match(help, /--full-page/);
+  assert.match(help, /entire document/i);
   assert.match(help, /--no-stabilize/);
   assert.match(help, /low-latency Android capture loops/);
 });

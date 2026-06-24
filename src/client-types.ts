@@ -351,6 +351,7 @@ export type CaptureSnapshotResult = {
 export type CaptureScreenshotOptions = AgentDeviceRequestOverrides & {
   path?: string;
   overlayRefs?: boolean;
+  fullPage?: boolean;
   fullscreen?: boolean;
   maxSize?: number;
   stabilize?: boolean;

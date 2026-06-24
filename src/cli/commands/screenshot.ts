@@ -88,6 +88,7 @@ function createClientScreenshotBackend(
         path: outPath,
         session: context.session,
         overlayRefs: options?.overlayRefs,
+        fullPage: options?.fullPage,
         fullscreen: options?.fullscreen,
         stabilize: options?.stabilize,
         surface: options?.surface,

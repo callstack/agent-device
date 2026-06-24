@@ -10,6 +10,7 @@ export type WebOpenOptions = {
 };
 
 export type WebScreenshotOptions = {
+  fullPage?: boolean;
   fullscreen?: boolean;
   stabilize?: boolean;
   surface?: SessionSurface;

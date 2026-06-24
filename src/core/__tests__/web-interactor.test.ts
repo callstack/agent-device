@@ -22,7 +22,9 @@ test('web interactor delegates first-slice operations to the scoped provider', a
       };
     },
     async screenshot(outPath, options) {
-      calls.push(`screenshot:${outPath}:${options?.fullscreen === true}`);
+      calls.push(
+        `screenshot:${outPath}:${options?.fullPage === true}:${options?.fullscreen === true}`,
+      );
     },
     async click(x, y) {
       calls.push(`click:${x}:${y}`);
@@ -47,7 +49,7 @@ test('web interactor delegates first-slice operations to the scoped provider', a
     await interactor.fill(12, 22, 'hello', 5);
     await interactor.type('world', 6);
     await interactor.scroll('down', { pixels: 400 });
-    await interactor.screenshot('/tmp/web.png', { fullscreen: true });
+    await interactor.screenshot('/tmp/web.png', { fullPage: true });
     return await interactor.snapshot({ scope: 'main' });
   });
 
@@ -60,7 +62,7 @@ test('web interactor delegates first-slice operations to the scoped provider', a
     'fill:12:22:hello:5',
     'type:world:6',
     'scroll:down:400',
-    'screenshot:/tmp/web.png:true',
+    'screenshot:/tmp/web.png:true:false',
     'snapshot:main',
   ]);
   assert.equal(snapshot.backend, 'web');

@@ -37,6 +37,7 @@ export type { BackMode };
 
 export type ScreenshotOptions = {
   appBundleId?: string;
+  fullPage?: boolean;
   fullscreen?: boolean;
   stabilize?: boolean;
   surface?: SessionSurface;

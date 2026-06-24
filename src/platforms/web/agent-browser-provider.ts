@@ -40,7 +40,17 @@ export function createAgentBrowserWebProvider(
       return await captureAgentBrowserSnapshot(runJson, snapshotOptions);
     },
     async screenshot(outPath, screenshotOptions) {
-      await runJson(['screenshot', ...(screenshotOptions?.fullscreen ? ['--full'] : []), outPath]);
+      if (screenshotOptions?.fullscreen) {
+        throw new AppError(
+          'INVALID_ARGS',
+          'web screenshots do not support --fullscreen; use --full-page for the full document',
+        );
+      }
+      await runJson([
+        'screenshot',
+        ...(screenshotOptions?.fullPage ? ['--full'] : []),
+        outPath,
+      ]);
     },
     async click(x, y) {
       await clickCoordinates(runJson, x, y);

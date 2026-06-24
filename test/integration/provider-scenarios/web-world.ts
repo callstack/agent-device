@@ -54,6 +54,7 @@ export async function createWebDesktopWorld(): Promise<WebDesktopWorld> {
         'web',
         'screenshot',
         outPath,
+        String(options?.fullPage ?? ''),
         String(options?.fullscreen ?? ''),
         String(options?.stabilize ?? ''),
         String(options?.surface ?? ''),
