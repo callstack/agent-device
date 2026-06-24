@@ -709,7 +709,7 @@ test('installAndroidApp installs .aab via bundletool build-apks + install-apks',
       '    fi',
       '    shift',
       '  done',
-      '  mkdir -p "$(dirname "$out")"',
+      '  /bin/mkdir -p "${out%/*}"',
       '  printf "apks" > "$out"',
       '  exit 0',
       'fi',
@@ -726,7 +726,7 @@ test('installAndroidApp installs .aab via bundletool build-apks + install-apks',
   const previousPath = process.env.PATH;
   const previousArgsFile = process.env.AGENT_DEVICE_TEST_ARGS_FILE;
   const previousBundletoolJar = process.env.AGENT_DEVICE_BUNDLETOOL_JAR;
-  process.env.PATH = `${tmpDir}${path.delimiter}${previousPath ?? ''}`;
+  process.env.PATH = tmpDir;
   process.env.AGENT_DEVICE_TEST_ARGS_FILE = argsLogPath;
   delete process.env.AGENT_DEVICE_BUNDLETOOL_JAR;
 
@@ -772,7 +772,7 @@ test('installAndroidApp .aab reports missing bundletool tooling', async () => {
 
   const previousPath = process.env.PATH;
   const previousBundletoolJar = process.env.AGENT_DEVICE_BUNDLETOOL_JAR;
-  process.env.PATH = `${tmpDir}${path.delimiter}${previousPath ?? ''}`;
+  process.env.PATH = tmpDir;
   delete process.env.AGENT_DEVICE_BUNDLETOOL_JAR;
 
   const device: DeviceInfo = {
