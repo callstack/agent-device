@@ -19,8 +19,9 @@ const viewportCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-const viewportCommandDefinition = defineExecutableCommand(viewportCommandMetadata, (client, input) =>
-  client.command.viewport(input),
+const viewportCommandDefinition = defineExecutableCommand(
+  viewportCommandMetadata,
+  (client, input) => client.command.viewport(input),
 );
 
 const viewportCliSchema = {

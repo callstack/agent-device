@@ -1795,7 +1795,10 @@ test('usage renders concise commands inline with descriptions', () => {
   assert.match(help, /  proxy\s{2,}Expose a local daemon through cloudflared, ngrok/);
   assert.match(help, /  batch --steps <json> \| --steps-file <path>\s{2,}Run multiple commands/);
   assert.match(help, /  test <path-or-glob>\.\.\.\s{2,}Run replay test suites/);
-  assert.match(help, /  screenshot \[path\]\s{2,}Capture screenshot with optional desktop/);
+  assert.match(
+    help,
+    /  screenshot \[path\]\s{2,}Capture screenshot with optional web full-page, desktop/,
+  );
   assert.match(
     help,
     /  session\s{2,}List active sessions or print the effective daemon state directory/,

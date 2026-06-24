@@ -38,7 +38,8 @@ const screenshotCommandDefinition = defineExecutableCommand(
 const screenshotCliSchema = {
   helpDescription:
     'Capture screenshot (web defaults to the viewport; use --fullscreen, --full, or -f for the entire page. macOS app sessions default to the app window; use --fullscreen for full desktop, --max-size to downscale, --overlay-refs to annotate current refs, or --no-stabilize for low-latency Android capture loops)',
-  summary: 'Capture screenshot with optional web full-page, desktop, downscale, or ref overlay modes',
+  summary:
+    'Capture screenshot with optional web full-page, desktop, downscale, or ref overlay modes',
   positionalArgs: ['path?'],
   allowedFlags: SCREENSHOT_COMMAND_FLAG_KEYS,
 } as const;

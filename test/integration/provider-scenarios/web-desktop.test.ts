@@ -164,7 +164,14 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
       assertFlatToolCall(semanticCalls, ['web', 'type', ' ok', '0']);
       assertFlatToolCall(semanticCalls, ['web', 'scroll', 'down', '', '240']);
       assertFlatToolCall(semanticCalls, ['web', 'viewport', '1280', '900']);
-      assertFlatToolCall(semanticCalls, ['web', 'screenshot', screenshotPath, 'true', 'false', 'app']);
+      assertFlatToolCall(semanticCalls, [
+        'web',
+        'screenshot',
+        screenshotPath,
+        'true',
+        'false',
+        'app',
+      ]);
       assertFlatToolCall(semanticCalls, ['web', 'close', WEB_URL]);
     } finally {
       fs.rmSync(screenshotPath, { force: true });
