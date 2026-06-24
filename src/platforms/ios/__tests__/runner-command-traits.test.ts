@@ -8,48 +8,42 @@ import {
   readRunnerCommandTraits,
   type RunnerCommandTraits,
 } from '../runner-command-traits.ts';
+import { RUNNER_COMMAND_TRAIT_MANIFEST } from '../runner-command-manifest.ts';
 
-const EXPECTED_RUNNER_COMMAND_TRAITS = {
-  tap: hotMutation(),
-  mouseClick: defaults(),
-  longPress: hotMutation(),
-  drag: hotMutation(),
-  remotePress: defaults(),
-  type: defaults(),
-  swipe: hotMutation(),
-  scroll: hotMutation(),
-  desktopScroll: hotMutation(),
-  findText: readOnly(),
-  querySelector: readOnly(),
-  readText: readOnly(),
-  snapshot: readOnly(),
-  screenshot: readOnly(),
-  back: defaults(),
-  backInApp: defaults(),
-  backSystem: defaults(),
-  home: defaults(),
-  rotate: defaults(),
-  rotateGesture: defaults(),
-  transformGesture: defaults(),
-  appSwitcher: defaults(),
-  keyboardDismiss: defaults(),
-  keyboardReturn: defaults(),
-  alert: readOnly(),
-  pinch: defaults(),
-  sequence: hotMutation(),
-  recordStart: defaults(),
-  recordStop: defaults(),
-  status: readOnlyReadinessProbe(),
-  uptime: readOnlyReadinessProbe(),
-  shutdown: defaults(),
-} satisfies Record<RunnerCommand['command'], RunnerCommandTraits>;
+const EXPECTED_RUNNER_COMMAND_TRAITS = Object.fromEntries(
+  Object.entries(RUNNER_COMMAND_TRAIT_MANIFEST).map(([command, traitClass]) => [
+    command,
+    expectedTraitsForClass(traitClass),
+  ]),
+) as Record<RunnerCommand['command'], RunnerCommandTraits>;
 
-test('runner command traits classify every runner command in one table', () => {
+test('runner command traits are derived from the runner command manifest', () => {
   for (const [command, expectedTraits] of Object.entries(EXPECTED_RUNNER_COMMAND_TRAITS) as Array<
     [RunnerCommand['command'], RunnerCommandTraits]
   >) {
     assert.deepEqual(readRunnerCommandTraits(command), expectedTraits, command);
   }
+});
+
+test('runner command manifest pins lifecycle-sensitive command groups', () => {
+  assert.deepEqual(commandsForClass('preflightSkippableTouchMutation'), [
+    'desktopScroll',
+    'drag',
+    'longPress',
+    'scroll',
+    'sequence',
+    'swipe',
+    'tap',
+  ]);
+  assert.deepEqual(commandsForClass('readOnly'), [
+    'alert',
+    'findText',
+    'querySelector',
+    'readText',
+    'screenshot',
+    'snapshot',
+  ]);
+  assert.deepEqual(commandsForClass('readOnlyReadinessProbe'), ['status', 'uptime']);
 });
 
 test('runner command trait helpers read from the shared trait table', () => {
@@ -66,6 +60,30 @@ test('runner command trait helpers read from the shared trait table', () => {
     );
   }
 });
+
+function commandsForClass(
+  traitClass: (typeof RUNNER_COMMAND_TRAIT_MANIFEST)[RunnerCommand['command']],
+): RunnerCommand['command'][] {
+  return Object.entries(RUNNER_COMMAND_TRAIT_MANIFEST)
+    .filter((entry) => entry[1] === traitClass)
+    .map((entry) => entry[0] as RunnerCommand['command'])
+    .sort();
+}
+
+function expectedTraitsForClass(
+  traitClass: (typeof RUNNER_COMMAND_TRAIT_MANIFEST)[RunnerCommand['command']],
+): RunnerCommandTraits {
+  switch (traitClass) {
+    case 'default':
+      return defaults();
+    case 'readOnly':
+      return readOnly();
+    case 'readOnlyReadinessProbe':
+      return readOnlyReadinessProbe();
+    case 'preflightSkippableTouchMutation':
+      return hotMutation();
+  }
+}
 
 function defaults(): RunnerCommandTraits {
   return {

@@ -4,11 +4,15 @@ import { centerOfRect } from '../../../utils/snapshot.ts';
 import {
   buildSwipePresetGesturePlan,
   parseSwipePreset,
-  SCROLL_DURATION_MAX_MS,
   type GestureReferenceFrame,
   type ScrollDirection,
   type SwipePreset,
 } from '../../../core/scroll-gesture.ts';
+import {
+  assertExclusiveScrollDistanceInputs,
+  honoredScrollDurationMs,
+  normalizeScrollDurationMs,
+} from '../../../core/scroll-command.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { requireIntInRange } from '../../../utils/validation.ts';
 import { successText } from '../../../utils/success-text.ts';
@@ -186,14 +190,11 @@ export const scrollCommand: RuntimeCommand<ScrollCommandOptions, ScrollCommandRe
   const target = resolveScrollDirection(options.direction);
   const amount = normalizeOptionalPositiveNumber(options.amount, 'scroll amount');
   const pixels = normalizeOptionalPositiveInteger(options.pixels, 'scroll pixels');
-  const durationMs = normalizeOptionalNonNegativeInteger(
-    options.durationMs,
-    'scroll durationMs',
-    SCROLL_DURATION_MAX_MS,
+  const durationMs = normalizeScrollDurationMs(options.durationMs);
+  assertExclusiveScrollDistanceInputs(
+    { amount, pixels },
+    'scroll accepts either amount or pixels, not both',
   );
-  if (amount !== undefined && pixels !== undefined) {
-    throw new AppError('INVALID_ARGS', 'scroll accepts either amount or pixels, not both');
-  }
 
   const resolved = await resolveScrollTarget(runtime, options);
   const backendTarget =
@@ -240,12 +241,6 @@ export const scrollCommand: RuntimeCommand<ScrollCommandOptions, ScrollCommandRe
     ),
   };
 };
-
-function honoredScrollDurationMs(
-  backendResult: Record<string, unknown> | undefined,
-): number | undefined {
-  return typeof backendResult?.durationMs === 'number' ? backendResult.durationMs : undefined;
-}
 
 export const swipeCommand: RuntimeCommand<SwipeCommandOptions, SwipeCommandResult> = async (
   runtime,
@@ -530,21 +525,6 @@ function normalizeOptionalPositiveInteger(
   if (value === undefined) return undefined;
   if (!Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
     throw new AppError('INVALID_ARGS', `${field} must be a positive integer`);
-  }
-  return value;
-}
-
-function normalizeOptionalNonNegativeInteger(
-  value: number | undefined,
-  field: string,
-  max?: number,
-): number | undefined {
-  if (value === undefined) return undefined;
-  if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0) {
-    throw new AppError('INVALID_ARGS', `${field} must be a non-negative integer`);
-  }
-  if (max !== undefined && value > max) {
-    throw new AppError('INVALID_ARGS', `${field} must be at most ${max}`);
   }
   return value;
 }

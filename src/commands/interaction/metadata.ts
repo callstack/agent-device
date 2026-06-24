@@ -27,8 +27,8 @@ import {
 } from '../command-input.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { CLICK_BUTTONS } from '../../core/click-button.ts';
+import { SCROLL_DURATION_MAX_MS } from '../../core/scroll-command.ts';
 import {
-  SCROLL_DURATION_MAX_MS,
   SCROLL_DIRECTIONS,
   SWIPE_PATTERNS,
   SWIPE_PRESETS,

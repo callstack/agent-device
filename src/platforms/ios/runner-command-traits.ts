@@ -1,4 +1,8 @@
 import type { RunnerCommand } from './runner-contract.ts';
+import {
+  RUNNER_COMMAND_TRAIT_MANIFEST,
+  type RunnerCommandTraitClass,
+} from './runner-command-manifest.ts';
 
 export type RunnerCommandTraits = Readonly<{
   readOnly: boolean;
@@ -33,40 +37,12 @@ const PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS: RunnerCommandTraits = {
   readinessPreflightSkipEligibleAfterHealthyMutation: true,
 };
 
-const RUNNER_COMMAND_TRAITS = {
-  tap: PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS,
-  mouseClick: DEFAULT_TRAITS,
-  longPress: PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS,
-  drag: PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS,
-  remotePress: DEFAULT_TRAITS,
-  type: DEFAULT_TRAITS,
-  swipe: PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS,
-  scroll: PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS,
-  desktopScroll: PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS,
-  findText: READ_ONLY_TRAITS,
-  querySelector: READ_ONLY_TRAITS,
-  readText: READ_ONLY_TRAITS,
-  snapshot: READ_ONLY_TRAITS,
-  screenshot: READ_ONLY_TRAITS,
-  back: DEFAULT_TRAITS,
-  backInApp: DEFAULT_TRAITS,
-  backSystem: DEFAULT_TRAITS,
-  home: DEFAULT_TRAITS,
-  rotate: DEFAULT_TRAITS,
-  rotateGesture: DEFAULT_TRAITS,
-  transformGesture: DEFAULT_TRAITS,
-  appSwitcher: DEFAULT_TRAITS,
-  keyboardDismiss: DEFAULT_TRAITS,
-  keyboardReturn: DEFAULT_TRAITS,
-  alert: READ_ONLY_TRAITS,
-  pinch: DEFAULT_TRAITS,
-  sequence: PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS,
-  recordStart: DEFAULT_TRAITS,
-  recordStop: DEFAULT_TRAITS,
-  status: READ_ONLY_READINESS_PROBE_TRAITS,
-  uptime: READ_ONLY_READINESS_PROBE_TRAITS,
-  shutdown: DEFAULT_TRAITS,
-} satisfies Record<RunnerCommand['command'], RunnerCommandTraits>;
+const RUNNER_COMMAND_TRAITS = Object.fromEntries(
+  Object.entries(RUNNER_COMMAND_TRAIT_MANIFEST).map(([command, traitClass]) => [
+    command,
+    traitsForClass(traitClass),
+  ]),
+) as Record<RunnerCommand['command'], RunnerCommandTraits>;
 
 export function readRunnerCommandTraits(command: RunnerCommand['command']): RunnerCommandTraits {
   return RUNNER_COMMAND_TRAITS[command];
@@ -84,4 +60,17 @@ export function canSkipRunnerReadinessPreflightAfterHealthyMutation(
   command: RunnerCommand['command'],
 ): boolean {
   return readRunnerCommandTraits(command).readinessPreflightSkipEligibleAfterHealthyMutation;
+}
+
+function traitsForClass(traitClass: RunnerCommandTraitClass): RunnerCommandTraits {
+  switch (traitClass) {
+    case 'default':
+      return DEFAULT_TRAITS;
+    case 'readOnly':
+      return READ_ONLY_TRAITS;
+    case 'readOnlyReadinessProbe':
+      return READ_ONLY_READINESS_PROBE_TRAITS;
+    case 'preflightSkippableTouchMutation':
+      return PREFLIGHT_SKIPPABLE_TOUCH_MUTATION_TRAITS;
+  }
 }

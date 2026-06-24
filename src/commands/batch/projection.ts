@@ -3,11 +3,11 @@ import {
   STRUCTURED_BATCH_COMMAND_NAMES,
   readStructuredBatchCommandName,
 } from '../../batch-policy.ts';
-import { buildFlags } from '../../client-normalizers.ts';
 import type { DaemonBatchStep } from '../../core/batch.ts';
 import { AppError } from '../../utils/errors.ts';
 import { request } from '../cli-grammar/common.ts';
 import type { CommandInput, DaemonCommandRequest, DaemonWriter } from '../cli-grammar/types.ts';
+import { buildRequestFlags } from '../command-flags.ts';
 import type { DaemonCommandName } from '../command-projection.ts';
 
 const batchCommandNames = STRUCTURED_BATCH_COMMAND_NAMES satisfies readonly DaemonCommandName[];
@@ -57,7 +57,7 @@ function readBatchDaemonStep(
   return {
     command: prepared.command,
     positionals: prepared.positionals,
-    flags: buildFlags(prepared.options),
+    flags: buildRequestFlags(prepared.options, prepared.metadataFlags),
     runtime: runtime ?? prepared.options.runtime,
   };
 }

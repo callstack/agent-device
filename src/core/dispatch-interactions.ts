@@ -7,7 +7,6 @@ import {
   inferGestureReferenceFrame,
   parseScrollDirection,
   parseSwipePreset,
-  SCROLL_DURATION_MAX_MS,
   SCROLL_DIRECTIONS,
   SWIPE_PATTERNS,
   type ScrollDirection,
@@ -15,6 +14,12 @@ import {
   type SwipePreset,
   type TransformGestureParams,
 } from './scroll-gesture.ts';
+import {
+  assertExclusiveScrollDistanceInputs,
+  honoredScrollDurationMs,
+  normalizeScrollDurationMs,
+  type ScrollCommandOptions,
+} from './scroll-command.ts';
 import { isStringMember, parseStringMember } from '../utils/string-enum.ts';
 import {
   getClickButtonValidationError,
@@ -48,12 +53,6 @@ import type { Interactor, RunnerCallOptions } from './interactor-types.ts';
 type ScrollTarget = {
   direction: ScrollDirection;
   edge?: ScrollEdge;
-};
-
-type ScrollCommandOptions = {
-  amount?: number;
-  pixels?: number;
-  durationMs?: number;
 };
 
 export async function handleLongPressCommand(
@@ -773,38 +772,13 @@ function assertScrollCommandInputs(
   durationMs: number | undefined,
 ): void {
   assertScrollAmountInput(amount);
-  assertScrollDurationInput(durationMs);
-  assertExclusiveScrollDistanceInputs(amount, pixels);
+  normalizeScrollDurationMs(durationMs);
+  assertExclusiveScrollDistanceInputs({ amount, pixels });
 }
 
 function assertScrollAmountInput(amount: number | undefined): void {
   if (amount !== undefined && !Number.isFinite(amount)) {
     throw new AppError('INVALID_ARGS', 'scroll amount must be a number');
-  }
-}
-
-function assertScrollDurationInput(durationMs: number | undefined): void {
-  if (durationMs === undefined) return;
-  if (!Number.isFinite(durationMs) || !Number.isInteger(durationMs) || durationMs < 0) {
-    throw new AppError('INVALID_ARGS', 'scroll durationMs must be a non-negative integer');
-  }
-  if (durationMs > SCROLL_DURATION_MAX_MS) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `scroll durationMs must be a non-negative integer at most ${SCROLL_DURATION_MAX_MS}`,
-    );
-  }
-}
-
-function assertExclusiveScrollDistanceInputs(
-  amount: number | undefined,
-  pixels: number | undefined,
-): void {
-  if (amount !== undefined && pixels !== undefined) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'scroll accepts either a relative amount or --pixels, not both',
-    );
   }
 }
 
@@ -840,11 +814,13 @@ function buildDispatchedScrollResult(
   completedPasses: number,
   interactionResult: Record<string, unknown>,
 ): Record<string, unknown> {
+  const durationMs = honoredScrollDurationMs(interactionResult);
   return {
     direction: target.direction,
     ...(target.edge ? { edge: target.edge, passes: completedPasses } : {}),
     ...(options.amount !== undefined ? { amount: options.amount } : {}),
     ...(options.pixels !== undefined ? { pixels: options.pixels } : {}),
+    ...(durationMs !== undefined ? { durationMs } : {}),
     ...interactionResult,
   };
 }

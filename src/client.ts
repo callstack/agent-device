@@ -7,9 +7,9 @@ import {
   prepareDaemonCommandRequest,
   type DaemonCommandName,
 } from './commands/command-projection.ts';
+import { buildRequestFlags } from './commands/command-flags.ts';
 import { throwDaemonError } from './daemon-error.ts';
 import {
-  buildFlags,
   buildMeta,
   normalizeDeployResult,
   normalizeDevice,
@@ -45,6 +45,7 @@ import type {
 } from './client-types.ts';
 import { readSerializedSnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
 import { readSnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
+import type { CommandFlags } from './core/dispatch-context.ts';
 
 export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},
@@ -56,13 +57,14 @@ export function createAgentDeviceClient(
     command: string,
     positionals: string[] = [],
     options: InternalRequestOptions = {},
+    metadataFlags?: Partial<CommandFlags>,
   ): Promise<Record<string, unknown>> => {
     const merged = mergeClientOptions(config, options);
     const response = await transport({
       session: resolveSessionName(merged.session),
       command,
       positionals,
-      flags: buildFlags(merged),
+      flags: buildRequestFlags(merged, metadataFlags),
       runtime: merged.runtime,
       meta: buildMeta(merged),
     });
@@ -83,7 +85,12 @@ export function createAgentDeviceClient(
     options: InternalRequestOptions = {},
   ): Promise<T> => {
     const request = prepareDaemonCommandRequest(command, options);
-    return (await execute(request.command, request.positionals, request.options)) as T;
+    return (await execute(
+      request.command,
+      request.positionals,
+      request.options,
+      request.metadataFlags,
+    )) as T;
   };
 
   const resolveRequestSession = (options: InternalRequestOptions = {}) =>
