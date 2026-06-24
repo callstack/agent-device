@@ -44,6 +44,10 @@ import {
   type AndroidSnapshotHelperOutput,
 } from './snapshot-helper.ts';
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
+import {
+  classifyAndroidHelperContentRecovery,
+  type AndroidHelperContentRecoveryDecision,
+} from './snapshot-content-recovery.ts';
 
 const UI_HIERARCHY_DUMP_TIMEOUT_MS = 8_000;
 const HELPER_INSTALL_TIMEOUT_MS = 30_000;
@@ -62,6 +66,7 @@ const RETRYABLE_ADB_STDERR_PATTERNS = [
 ] as const;
 
 export type AndroidSnapshotOptions = SnapshotOptions & {
+  appBundleId?: string;
   helperArtifact?: AndroidSnapshotHelperArtifact;
   helperInstallPolicy?: AndroidSnapshotHelperInstallPolicy;
   helperSessionScope?: 'command' | 'daemon-session';
@@ -230,7 +235,20 @@ async function captureAndroidUiHierarchyWithHelper(
       artifact,
       helperDeviceKey,
     });
-    return formatAndroidHelperCaptureResult(capture, artifact, install.reason);
+    const helperCapture = formatAndroidHelperCaptureResult(capture, artifact, install.reason);
+    const contentRecovery = classifyAndroidHelperContentRecovery(
+      helperCapture.xml,
+      helperCapture.metadata,
+      { foregroundAppPackage: options.appBundleId },
+    );
+    if (!contentRecovery) return helperCapture;
+    return await recoverAndroidHelperContentUnavailable({
+      contentRecovery,
+      helperDeviceKey,
+      artifact,
+      device,
+      adb,
+    });
   } catch (error) {
     return await recoverAndroidHelperCaptureFailure({
       error,
@@ -362,6 +380,30 @@ function formatAndroidHelperCaptureResult(
       elapsedMs: capture.metadata.elapsedMs,
     },
   };
+}
+
+async function recoverAndroidHelperContentUnavailable(params: {
+  contentRecovery: AndroidHelperContentRecoveryDecision;
+  helperDeviceKey: string;
+  artifact: AndroidSnapshotHelperArtifact;
+  device: DeviceInfo;
+  adb: AndroidAdbExecutor;
+}): Promise<{ xml: string; metadata: AndroidSnapshotBackendMetadata }> {
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'android_snapshot_helper_content_fallback',
+    data: {
+      reason: params.contentRecovery.reason,
+      fallbackReason: params.contentRecovery.fallbackReason,
+      ...params.contentRecovery.diagnostics,
+    },
+  });
+  await resetAndroidSnapshotHelperRuntime(params.adb, params.artifact.manifest.packageName);
+  return await captureStockUiHierarchy(
+    params.device,
+    params.contentRecovery.fallbackReason,
+    params.adb,
+  );
 }
 
 async function recoverAndroidHelperCaptureFailure(params: {

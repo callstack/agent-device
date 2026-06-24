@@ -67,6 +67,7 @@ export function createAndroidInteractor(device: DeviceInfo): Interactor {
         'snapshot_capture',
         async () =>
           await snapshotAndroid(device, {
+            appBundleId: options?.appBundleId,
             interactiveOnly: options?.interactiveOnly,
             depth: options?.depth,
             scope: options?.scope,

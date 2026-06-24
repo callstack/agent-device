@@ -459,10 +459,6 @@ type AndroidNodeInclusionInfo = {
   isVisual: boolean;
 };
 
-type AndroidTreePruneState = {
-  agentVisibleContentMemo: WeakMap<AndroidNode, boolean>;
-};
-
 type AndroidCoveringCandidate = AndroidNode & {
   rect: Rect;
   drawingOrder: number;
@@ -528,7 +524,7 @@ export function parseUiHierarchyTree(xml: string): AndroidUiHierarchy {
   discardInactiveAndroidApplicationWindows(root);
   // UiAutomation can expose covered React Native navigation surfaces in the same accessibility
   // window. If a higher drawing-order sibling covers them, agents should see the foreground surface.
-  pruneAndroidCoveredSubtrees(root, { agentVisibleContentMemo: new WeakMap() });
+  pruneAndroidCoveredSubtrees(root);
   applyAndroidScrollActionHints(root);
   return root;
 }
@@ -546,15 +542,15 @@ function pruneAndroidInvisibleSubtrees(node: AndroidNode): void {
   }
 }
 
-function pruneAndroidCoveredSubtrees(node: AndroidNode, state: AndroidTreePruneState): void {
+function pruneAndroidCoveredSubtrees(node: AndroidNode): void {
   for (const child of node.children) {
-    pruneAndroidCoveredSubtrees(child, state);
+    pruneAndroidCoveredSubtrees(child);
   }
   if (node.children.length < 2) {
     return;
   }
   const siblings = node.children;
-  const coveringCandidates = siblings.filter((sibling) => canCoverSibling(sibling, state));
+  const coveringCandidates = siblings.filter(canCoverSibling);
   if (coveringCandidates.length === 0) return;
   node.children = siblings.filter(
     (child) => !isCoveredByHigherDrawingOrderSibling(child, coveringCandidates),
@@ -580,35 +576,23 @@ function isCoveredByHigherDrawingOrderSibling(
   return false;
 }
 
-function canCoverSibling(
-  node: AndroidNode,
-  state: AndroidTreePruneState,
-): node is AndroidCoveringCandidate {
+function canCoverSibling(node: AndroidNode): node is AndroidCoveringCandidate {
   return (
     node.visibleToUser !== false &&
     node.drawingOrder !== undefined &&
     hasPositiveRect(node) &&
-    hasAgentVisibleContent(node, state)
+    hasOwnAgentVisibleContent(node)
   );
 }
 
-function hasAgentVisibleContent(node: AndroidNode, state: AndroidTreePruneState): boolean {
-  const cached = state.agentVisibleContentMemo.get(node);
-  if (cached !== undefined) return cached;
-
-  const result = computeHasAgentVisibleContent(node, state);
-  state.agentVisibleContentMemo.set(node, result);
-  return result;
-}
-
-function computeHasAgentVisibleContent(node: AndroidNode, state: AndroidTreePruneState): boolean {
+function hasOwnAgentVisibleContent(node: AndroidNode): boolean {
   if (node.visibleToUser === false) return false;
   if (node.hittable) return true;
   const label = node.label?.trim() ?? '';
   if (label && !isGenericAndroidId(label)) return true;
   const identifier = node.identifier?.trim() ?? '';
   if (identifier && !isGenericAndroidId(identifier)) return true;
-  return node.children.some((child) => hasAgentVisibleContent(child, state));
+  return false;
 }
 
 function hasPositiveRect(node: AndroidNode): node is AndroidNode & { rect: Rect } {

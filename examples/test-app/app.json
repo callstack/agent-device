@@ -5,7 +5,6 @@
     "version": "1.0.0",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
     "plugins": ["expo-router"],
     "ios": {
       "supportsTablet": true,
@@ -13,7 +12,6 @@
     },
     "android": {
       "package": "com.callstack.agentdevicelab",
-      "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false
     }
   }

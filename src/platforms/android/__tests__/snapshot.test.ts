@@ -77,8 +77,15 @@ const installedHelperProbe = {
   stderr: '',
 };
 
-function snapshotAndroidWithHelper(helperAdb: AndroidAdbExecutor) {
+function snapshotAndroidWithHelper(
+  helperAdb: AndroidAdbExecutor,
+  options: Omit<
+    NonNullable<Parameters<typeof snapshotAndroid>[1]>,
+    'helperAdb' | 'helperArtifact'
+  > = {},
+) {
   return snapshotAndroid(device, {
+    ...options,
     helperAdb,
     helperArtifact,
   });
@@ -316,10 +323,11 @@ test('screenshotAndroid throws when PNG payload is truncated', async () => {
 
 function helperOutput(
   xml: string,
-  options: { truncated?: boolean; nodeCount?: number } = {},
+  options: { truncated?: boolean; nodeCount?: number; windowCount?: number } = {},
 ): string {
   const truncated = options.truncated ?? false;
   const nodeCount = options.nodeCount ?? 1;
+  const windowCount = options.windowCount ?? 1;
   return [
     'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
     'INSTRUMENTATION_STATUS: helperApiVersion=1',
@@ -338,11 +346,66 @@ function helperOutput(
     'INSTRUMENTATION_RESULT: maxNodes=5000',
     'INSTRUMENTATION_RESULT: rootPresent=true',
     'INSTRUMENTATION_RESULT: captureMode=interactive-windows',
-    'INSTRUMENTATION_RESULT: windowCount=1',
+    `INSTRUMENTATION_RESULT: windowCount=${windowCount}`,
     `INSTRUMENTATION_RESULT: nodeCount=${nodeCount}`,
     `INSTRUMENTATION_RESULT: truncated=${truncated}`,
     'INSTRUMENTATION_RESULT: elapsedMs=12',
     'INSTRUMENTATION_CODE: 0',
+  ].join('\n');
+}
+
+function androidSystemWindowOnlyXml(): string {
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<hierarchy rotation="0">',
+    '  <node window-index="0" window-type="3" window-layer="30" window-active="true" window-focused="true" class="android.widget.FrameLayout" package="com.android.systemui" bounds="[0,0][390,844]" enabled="true" visible-to-user="true">',
+    '    <node content-desc="Back" class="android.widget.ImageButton" package="com.android.systemui" bounds="[0,792][96,844]" clickable="true" enabled="true" focusable="true" visible-to-user="true" />',
+    '    <node content-desc="Home" class="android.widget.ImageButton" package="com.android.systemui" bounds="[147,792][243,844]" clickable="true" enabled="true" focusable="true" visible-to-user="true" />',
+    '  </node>',
+    '</hierarchy>',
+  ].join('\n');
+}
+
+function androidFabricAppXml(): string {
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<hierarchy rotation="0">',
+    '  <node index="0" class="android.widget.FrameLayout" package="io.example.fabric" bounds="[0,0][390,844]" enabled="true">',
+    '    <node index="0" text="Fabric dashboard" resource-id="io.example.fabric:id/title" class="android.widget.TextView" package="io.example.fabric" bounds="[24,96][280,140]" enabled="true" />',
+    '    <node index="1" text="Open details" class="android.widget.Button" package="io.example.fabric" bounds="[24,180][220,236]" clickable="true" enabled="true" focusable="true" />',
+    '  </node>',
+    '</hierarchy>',
+  ].join('\n');
+}
+
+function androidContentPoorFabricAppWindowXml(): string {
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<hierarchy rotation="0">',
+    '  <node window-index="0" window-type="1" window-layer="10" window-active="true" window-focused="true" class="android.widget.FrameLayout" package="io.example.fabric" bounds="[0,0][390,844]" enabled="true" visible-to-user="true">',
+    '    <node index="0" class="androidx.compose.ui.platform.ComposeView" package="io.example.fabric" bounds="[0,0][390,844]" enabled="true" visible-to-user="true" />',
+    '  </node>',
+    '  <node window-index="1" window-type="3" window-layer="30" window-active="false" window-focused="false" class="android.widget.FrameLayout" package="com.android.systemui" bounds="[0,0][390,24]" enabled="true" visible-to-user="true">',
+    '    <node content-desc="Battery" class="android.widget.ImageView" package="com.android.systemui" bounds="[340,4][370,20]" enabled="true" visible-to-user="true" />',
+    '  </node>',
+    '</hierarchy>',
+  ].join('\n');
+}
+
+function androidContentPoorExpoToolsOverlayXml(): string {
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<hierarchy rotation="0">',
+    '  <node index="0" class="android.widget.FrameLayout" package="com.android.systemui" bounds="[0,0][390,24]" enabled="true" visible-to-user="true">',
+    '    <node text="7:52" resource-id="com.android.systemui:id/clock" class="android.widget.TextView" package="com.android.systemui" bounds="[12,4][54,20]" enabled="true" visible-to-user="true" />',
+    '    <node content-desc="Battery 100 percent." resource-id="com.android.systemui:id/battery" class="android.widget.LinearLayout" package="com.android.systemui" bounds="[340,4][380,20]" enabled="true" visible-to-user="true" />',
+    '  </node>',
+    '  <node index="1" class="android.widget.FrameLayout" package="host.exp.exponent" bounds="[0,0][390,844]" enabled="true" visible-to-user="true">',
+    '    <node index="0" class="androidx.compose.ui.platform.ComposeView" package="host.exp.exponent" bounds="[0,0][390,844]" enabled="true" visible-to-user="true" />',
+    '    <node index="1" text="Agent Device Tester" class="android.widget.TextView" package="host.exp.exponent" bounds="[0,0][0,0]" enabled="true" visible-to-user="false" />',
+    '    <node index="1" text="Tools" class="android.widget.ImageView" package="host.exp.exponent" bounds="[20,760][64,804]" enabled="true" visible-to-user="true" />',
+    '  </node>',
+    '</hierarchy>',
   ].join('\n');
 }
 
@@ -728,6 +791,176 @@ test('snapshotAndroid falls back to stock uiautomator when helper fails', async 
     ['shell', 'shell', 'shell', 'exec-out'],
   );
   assert.equal(mockRunCmd.mock.calls.length, 0);
+});
+
+test('snapshotAndroid falls back to stock uiautomator when helper returns only system windows', async () => {
+  const adbCalls: string[][] = [];
+  const helperXml = androidSystemWindowOnlyXml();
+  const stockXml = androidFabricAppXml();
+  const helperAdb: AndroidAdbExecutor = async (args) => {
+    adbCalls.push(args);
+    if (args.includes('--show-versioncode')) return installedHelperProbe;
+    if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'force-stop') {
+      return { exitCode: 0, stdout: '', stderr: '' };
+    }
+    if (args.includes('instrument')) {
+      return { exitCode: 0, stdout: helperOutput(helperXml, { nodeCount: 3 }), stderr: '' };
+    }
+    if (args.includes('exec-out')) {
+      return { exitCode: 0, stdout: stockXml, stderr: '' };
+    }
+    throw new Error(`unexpected helper adb args: ${args.join(' ')}`);
+  };
+
+  const result = await snapshotAndroidWithHelper(helperAdb);
+
+  assert.equal(result.androidSnapshot.backend, 'uiautomator-dump');
+  assert.equal(
+    result.androidSnapshot.fallbackReason,
+    'Android snapshot helper returned only non-application windows',
+  );
+  assert.equal(
+    result.nodes.some((node) => node.label === 'Fabric dashboard'),
+    true,
+  );
+  assert.equal(
+    result.nodes.some((node) => node.label === 'Open details'),
+    true,
+  );
+  assert.equal(
+    adbCalls.some(
+      (args) => args.join(' ') === 'shell am force-stop com.callstack.agentdevice.snapshothelper',
+    ),
+    true,
+  );
+  assert.equal(
+    adbCalls.some((args) => args.includes('exec-out')),
+    true,
+  );
+});
+
+test('snapshotAndroid falls back to stock uiautomator when helper returns no nodes', async () => {
+  const helperXml = '<?xml version="1.0" encoding="UTF-8"?><hierarchy rotation="0"></hierarchy>';
+  const stockXml = androidFabricAppXml();
+  const helperAdb = createHelperAdb({
+    instrument: async () => ({
+      exitCode: 0,
+      stdout: helperOutput(helperXml, { nodeCount: 0 }),
+      stderr: '',
+    }),
+    stock: async () => ({ exitCode: 0, stdout: stockXml, stderr: '' }),
+  });
+
+  const result = await snapshotAndroidWithHelper(helperAdb);
+
+  assert.equal(result.androidSnapshot.backend, 'uiautomator-dump');
+  assert.equal(
+    result.androidSnapshot.fallbackReason,
+    'Android snapshot helper returned no accessibility nodes',
+  );
+  assert.equal(
+    result.nodes.some((node) => node.label === 'Fabric dashboard'),
+    true,
+  );
+});
+
+test('snapshotAndroid falls back to stock uiautomator when foreground app window lacks content', async () => {
+  const helperXml = androidContentPoorFabricAppWindowXml();
+  const stockXml = androidFabricAppXml();
+  const helperAdb = createHelperAdb({
+    instrument: async () => ({
+      exitCode: 0,
+      stdout: helperOutput(helperXml, { nodeCount: 4, windowCount: 2 }),
+      stderr: '',
+    }),
+    stock: async () => ({ exitCode: 0, stdout: stockXml, stderr: '' }),
+  });
+
+  const result = await snapshotAndroidWithHelper(helperAdb, {
+    appBundleId: 'io.example.fabric',
+  });
+
+  assert.equal(result.androidSnapshot.backend, 'uiautomator-dump');
+  assert.equal(
+    result.androidSnapshot.fallbackReason,
+    'Android snapshot helper returned insufficient foreground app content',
+  );
+  assert.equal(
+    result.nodes.some((node) => node.label === 'Fabric dashboard'),
+    true,
+  );
+  assert.equal(
+    result.nodes.some((node) => node.label === 'Open details'),
+    true,
+  );
+});
+
+test('snapshotAndroid falls back to stock uiautomator when standalone helper sees only an app overlay', async () => {
+  const helperXml = androidContentPoorExpoToolsOverlayXml();
+  const stockXml = androidFabricAppXml();
+  const helperAdb = createHelperAdb({
+    instrument: async () => ({
+      exitCode: 0,
+      stdout: helperOutput(helperXml, { nodeCount: 4, windowCount: 2 }),
+      stderr: '',
+    }),
+    stock: async () => ({ exitCode: 0, stdout: stockXml, stderr: '' }),
+  });
+
+  const result = await snapshotAndroidWithHelper(helperAdb);
+
+  assert.equal(result.androidSnapshot.backend, 'uiautomator-dump');
+  assert.equal(
+    result.androidSnapshot.fallbackReason,
+    'Android snapshot helper returned insufficient application window content',
+  );
+  assert.equal(
+    result.nodes.some((node) => node.label === 'Fabric dashboard'),
+    true,
+  );
+  assert.equal(
+    result.nodes.some((node) => node.label === 'Open details'),
+    true,
+  );
+});
+
+test('snapshotAndroid keeps helper output when application and system windows are both present', async () => {
+  let stockAttempted = false;
+  const helperXml = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<hierarchy rotation="0">',
+    '  <node window-index="0" window-type="1" window-layer="10" window-active="true" window-focused="true" class="android.widget.FrameLayout" package="io.example.fabric" bounds="[0,0][390,844]" enabled="true" visible-to-user="true">',
+    '    <node text="Fabric dashboard" class="android.widget.TextView" package="io.example.fabric" bounds="[24,96][260,140]" enabled="true" visible-to-user="true" />',
+    '    <node text="Open details" class="android.widget.Button" package="io.example.fabric" bounds="[24,180][220,236]" clickable="true" enabled="true" focusable="true" visible-to-user="true" />',
+    '  </node>',
+    '  <node window-index="1" window-type="3" window-layer="20" window-active="false" window-focused="false" class="android.widget.FrameLayout" package="com.android.systemui" bounds="[0,0][390,24]" enabled="true" visible-to-user="true">',
+    '    <node content-desc="Battery" class="android.widget.ImageView" package="com.android.systemui" bounds="[340,4][370,20]" enabled="true" visible-to-user="true" />',
+    '  </node>',
+    '</hierarchy>',
+  ].join('\n');
+  const helperAdb = createHelperAdb({
+    instrument: async () => ({
+      exitCode: 0,
+      stdout: helperOutput(helperXml, { nodeCount: 4 }),
+      stderr: '',
+    }),
+    stock: async () => {
+      stockAttempted = true;
+      throw new Error('stock fallback should not run');
+    },
+  });
+
+  const result = await snapshotAndroidWithHelper(helperAdb, {
+    appBundleId: 'io.example.fabric',
+  });
+
+  assert.equal(result.androidSnapshot.backend, 'android-helper');
+  assert.equal(result.androidSnapshot.fallbackReason, undefined);
+  assert.equal(
+    result.nodes.some((node) => node.label === 'Fabric dashboard'),
+    true,
+  );
+  assert.equal(stockAttempted, false);
 });
 
 test('snapshotAndroid emits fallback and stock capture diagnostics', async () => {

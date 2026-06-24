@@ -10,21 +10,20 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@expo/metro-runtime": "~55.0.9",
-    "@react-navigation/native": "^7.2.2",
-    "expo": "~55.0.12",
-    "expo-constants": "55.0.12",
-    "expo-linking": "55.0.11",
-    "expo-router": "~55.0.11",
-    "expo-status-bar": "~55.0.5",
-    "react": "19.2.0",
-    "react-native": "0.83.4",
+    "@expo/metro-runtime": "~56.0.15",
+    "expo": "~56.0.12",
+    "expo-constants": "56.0.18",
+    "expo-linking": "56.0.14",
+    "expo-router": "~56.2.11",
+    "expo-status-bar": "~56.0.4",
+    "react": "19.2.3",
+    "react-native": "0.85.3",
     "react-native-gesture-handler": "^2.31.2",
-    "react-native-safe-area-context": "~5.6.2",
-    "react-native-screens": "~4.23.0"
+    "react-native-safe-area-context": "~5.7.0",
+    "react-native-screens": "~4.25.2"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
-    "typescript": "~5.9.2"
+    "typescript": "~6.0.3"
   }
 }
