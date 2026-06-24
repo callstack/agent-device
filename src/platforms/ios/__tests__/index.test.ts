@@ -358,7 +358,7 @@ test('iosRunnerOverrides maps iOS scroll to a single fused scroll command', asyn
     appBundleId: 'com.example.App',
   });
 
-  await overrides.scroll('down');
+  const result = await overrides.scroll('down', { durationMs: 50 });
 
   assert.equal(mockRunIosRunnerCommand.mock.calls.length, 1);
   assert.deepEqual(mockRunIosRunnerCommand.mock.calls[0]?.[1], {
@@ -366,6 +366,35 @@ test('iosRunnerOverrides maps iOS scroll to a single fused scroll command', asyn
     direction: 'down',
     appBundleId: 'com.example.App',
   });
+  assert.deepEqual(result, {
+    x1: 200,
+    y1: 640,
+    x2: 200,
+    y2: 160,
+    referenceWidth: 400,
+    referenceHeight: 800,
+    pixels: 480,
+  });
+});
+
+test('iosRunnerOverrides does not report duration for tvOS remote scroll', async () => {
+  mockRunIosRunnerCommand.mockResolvedValueOnce({
+    ok: true,
+  });
+
+  const { overrides } = iosRunnerOverrides(TVOS_TEST_SIMULATOR, {
+    appBundleId: 'com.example.App',
+  });
+
+  const result = await overrides.scroll('down', { durationMs: 50 });
+
+  assert.equal(mockRunIosRunnerCommand.mock.calls.length, 1);
+  assert.deepEqual(mockRunIosRunnerCommand.mock.calls[0]?.[1], {
+    command: 'remotePress',
+    remoteButton: 'down',
+    appBundleId: 'com.example.App',
+  });
+  assert.deepEqual(result, {});
 });
 
 test('iosRunnerOverrides maps macOS desktop scroll to a desktop wheel command', async () => {

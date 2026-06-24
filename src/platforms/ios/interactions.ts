@@ -335,7 +335,7 @@ async function runAppleScroll(
       appleRemotePressCommand(direction, ctx.appBundleId),
       runnerOpts,
     );
-    return normalizeIosScrollResult(runnerResult, options);
+    return normalizeIosScrollResult(runnerResult, { amount: options?.amount });
   }
 
   // Validate amount/pixels up front so bad inputs throw INVALID_ARGS before any runner command
@@ -355,7 +355,9 @@ async function runAppleScroll(
       },
       runnerOpts,
     );
-    return normalizeScrollResultWithResolvedFrame(runnerResult, direction, options);
+    return normalizeScrollResultWithResolvedFrame(runnerResult, direction, options, {
+      includeDuration: true,
+    });
   }
 
   // Single fused lifecycle command: the runner resolves the interaction frame and runs the drag.
@@ -401,6 +403,7 @@ function normalizeScrollResultWithResolvedFrame(
   runnerResult: Record<string, unknown>,
   direction: ScrollDirection,
   options?: AppleScrollOptions,
+  config?: { includeDuration?: boolean },
 ): Record<string, unknown> {
   const referenceWidth = readFiniteNumber(runnerResult.referenceWidth);
   const referenceHeight = readFiniteNumber(runnerResult.referenceHeight);
@@ -420,7 +423,7 @@ function normalizeScrollResultWithResolvedFrame(
   return normalizeIosScrollResult(runnerResult, {
     amount: options?.amount,
     pixels: plan.pixels,
-    durationMs: options?.durationMs,
+    durationMs: config?.includeDuration ? options?.durationMs : undefined,
     preferProvidedPixels: true,
   });
 }
@@ -455,17 +458,25 @@ function normalizeIosScrollResult(
     y1 !== undefined && y2 !== undefined ? Math.round(Math.abs(y2 - y1)) : undefined;
   const travelPixels = selectScrollTravelPixels(options, horizontalTravel, verticalTravel);
 
-  return {
-    ...(x1 !== undefined ? { x1 } : {}),
-    ...(y1 !== undefined ? { y1 } : {}),
-    ...(x2 !== undefined ? { x2 } : {}),
-    ...(y2 !== undefined ? { y2 } : {}),
-    ...(referenceWidth !== undefined ? { referenceWidth } : {}),
-    ...(referenceHeight !== undefined ? { referenceHeight } : {}),
-    ...(options?.amount !== undefined ? { amount: options.amount } : {}),
-    ...(travelPixels !== undefined ? { pixels: travelPixels } : {}),
-    ...(options?.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
-  };
+  const result: Record<string, unknown> = {};
+  setDefinedNumber(result, 'x1', x1);
+  setDefinedNumber(result, 'y1', y1);
+  setDefinedNumber(result, 'x2', x2);
+  setDefinedNumber(result, 'y2', y2);
+  setDefinedNumber(result, 'referenceWidth', referenceWidth);
+  setDefinedNumber(result, 'referenceHeight', referenceHeight);
+  setDefinedNumber(result, 'amount', options?.amount);
+  setDefinedNumber(result, 'pixels', travelPixels);
+  setDefinedNumber(result, 'durationMs', options?.durationMs);
+  return result;
+}
+
+function setDefinedNumber(
+  result: Record<string, unknown>,
+  key: string,
+  value: number | undefined,
+): void {
+  if (value !== undefined) result[key] = value;
 }
 
 function selectScrollTravelPixels(
