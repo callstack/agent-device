@@ -10,8 +10,10 @@ export {
 } from './snapshot-helper-capture.ts';
 export {
   captureAndroidSnapshotWithHelperSession,
+  getAndroidSnapshotHelperSessionDeviceKey,
   resetAndroidSnapshotHelperSessions,
   stopAndroidSnapshotHelperSession,
+  stopAndroidSnapshotHelperSessionForDevice,
 } from './snapshot-helper-session.ts';
 export {
   ensureAndroidSnapshotHelper,

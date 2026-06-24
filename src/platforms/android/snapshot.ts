@@ -34,6 +34,7 @@ import {
   ANDROID_SNAPSHOT_HELPER_WAIT_FOR_IDLE_TIMEOUT_MS,
   ensureAndroidSnapshotHelper,
   forgetAndroidSnapshotHelperInstall,
+  getAndroidSnapshotHelperSessionDeviceKey,
   parseAndroidSnapshotHelperManifest,
   stopAndroidSnapshotHelperSession,
   type AndroidAdbExecutor,
@@ -63,6 +64,7 @@ const RETRYABLE_ADB_STDERR_PATTERNS = [
 export type AndroidSnapshotOptions = SnapshotOptions & {
   helperArtifact?: AndroidSnapshotHelperArtifact;
   helperInstallPolicy?: AndroidSnapshotHelperInstallPolicy;
+  helperSessionScope?: 'command' | 'daemon-session';
   helperAdb?: AndroidAdbExecutor | AndroidAdbProvider;
   helperWaitForIdleTimeoutMs?: number;
   includeHiddenContentHints?: boolean;
@@ -207,8 +209,9 @@ async function captureAndroidUiHierarchyWithHelper(
   adb: AndroidAdbExecutor,
   artifact: AndroidSnapshotHelperArtifact,
 ): Promise<{ xml: string; metadata: AndroidSnapshotBackendMetadata }> {
-  const helperDeviceKey = getAndroidSnapshotHelperDeviceKey(device);
+  const helperDeviceKey = getAndroidSnapshotHelperSessionDeviceKey(device);
   const adbProvider = resolveAndroidAdbProvider(device, options.helperAdb);
+  const commandScopedHelperSession = options.helperSessionScope !== 'daemon-session';
   try {
     const install = await installAndroidSnapshotHelper(
       options,
@@ -220,13 +223,13 @@ async function captureAndroidUiHierarchyWithHelper(
     if (install.installed) {
       await stopAndroidSnapshotHelperSession(helperDeviceKey);
     }
-    const capture = await captureAndroidUiHierarchyFromHelper(
+    const capture = await captureAndroidUiHierarchyFromHelper({
       options,
       adb,
       adbProvider,
       artifact,
       helperDeviceKey,
-    );
+    });
     return formatAndroidHelperCaptureResult(capture, artifact, install.reason);
   } catch (error) {
     return await recoverAndroidHelperCaptureFailure({
@@ -236,6 +239,10 @@ async function captureAndroidUiHierarchyWithHelper(
       device,
       adb,
     });
+  } finally {
+    if (commandScopedHelperSession) {
+      await stopAndroidSnapshotHelperSession(helperDeviceKey);
+    }
   }
 }
 
@@ -276,17 +283,18 @@ async function installAndroidSnapshotHelper(
   return install;
 }
 
-async function captureAndroidUiHierarchyFromHelper(
-  options: AndroidSnapshotOptions,
-  adb: AndroidAdbExecutor,
-  adbProvider: AndroidAdbProvider,
-  artifact: AndroidSnapshotHelperArtifact,
-  deviceKey: string,
-): Promise<AndroidSnapshotHelperOutput> {
+async function captureAndroidUiHierarchyFromHelper(params: {
+  options: AndroidSnapshotOptions;
+  adb: AndroidAdbExecutor;
+  adbProvider: AndroidAdbProvider;
+  artifact: AndroidSnapshotHelperArtifact;
+  helperDeviceKey: string;
+}): Promise<AndroidSnapshotHelperOutput> {
+  const { options, adb, adbProvider, artifact, helperDeviceKey } = params;
   const captureOptions = {
     adb,
     adbProvider,
-    deviceKey,
+    deviceKey: helperDeviceKey,
     helperVersion: artifact.manifest.version,
     helperVersionCode: artifact.manifest.versionCode,
     packageName: artifact.manifest.packageName,
@@ -543,10 +551,6 @@ function enrichStockSnapshotFailureWithHelperReason(
     },
     error,
   );
-}
-
-function getAndroidSnapshotHelperDeviceKey(device: DeviceInfo): string {
-  return `${device.platform}:${device.id}`;
 }
 
 async function deriveScrollableContentHintsIfNeeded(

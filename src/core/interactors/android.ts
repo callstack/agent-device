@@ -71,6 +71,9 @@ export function createAndroidInteractor(device: DeviceInfo): Interactor {
             depth: options?.depth,
             scope: options?.scope,
             raw: options?.raw,
+            // appBundleId is present for app-backed daemon sessions; keep the helper warm there,
+            // but release it after standalone device snapshots so UiAutomation is not squatted.
+            helperSessionScope: options?.appBundleId ? 'daemon-session' : 'command',
           }),
         { backend: 'android' },
       );

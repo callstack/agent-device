@@ -26,6 +26,11 @@ vi.mock('../../../platforms/android/perf.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../platforms/android/perf.ts')>();
   return { ...actual, cleanupAndroidNativePerfSession: vi.fn(async () => {}) };
 });
+vi.mock('../../../platforms/android/snapshot-helper.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/android/snapshot-helper.ts')>();
+  return { ...actual, stopAndroidSnapshotHelperSessionForDevice: vi.fn(async () => {}) };
+});
 vi.mock('../../../platforms/ios/macos-helper.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../platforms/ios/macos-helper.ts')>();
   return { ...actual, runMacOsAlertAction: vi.fn(async () => {}) };
@@ -50,6 +55,7 @@ import { runCmd } from '../../../utils/exec.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { cleanupAppleXctracePerfCapture } from '../../../platforms/ios/perf-xctrace.ts';
 import { cleanupAndroidNativePerfSession } from '../../../platforms/android/perf.ts';
+import { stopAndroidSnapshotHelperSessionForDevice } from '../../../platforms/android/snapshot-helper.ts';
 import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/index.ts';
 
 const mockShutdownSimulator = vi.mocked(shutdownSimulator);
@@ -57,6 +63,9 @@ const mockRunCmd = vi.mocked(runCmd);
 const mockDispatchCommand = vi.mocked(dispatchCommand);
 const mockCleanupAppleXctracePerfCapture = vi.mocked(cleanupAppleXctracePerfCapture);
 const mockCleanupAndroidNativePerfSession = vi.mocked(cleanupAndroidNativePerfSession);
+const mockStopAndroidSnapshotHelperSessionForDevice = vi.mocked(
+  stopAndroidSnapshotHelperSessionForDevice,
+);
 
 const noopInvoke = async (_req: DaemonRequest): Promise<DaemonResponse> => ({ ok: true, data: {} });
 
@@ -174,6 +183,40 @@ test('close --shutdown calls shutdownAndroidEmulator for Android emulator and in
       exitCode: 0,
     });
   }
+});
+
+test('close stops Android snapshot helper session before deleting session', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-snapshot-helper-session';
+  const device: SessionState['device'] = {
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel_9_API_35',
+    kind: 'emulator',
+    booted: true,
+  };
+  sessionStore.set(sessionName, {
+    ...makeSession(sessionName, device),
+    appBundleId: 'com.example.app',
+  });
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(mockStopAndroidSnapshotHelperSessionForDevice).toHaveBeenCalledWith(device);
+  expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 
 test('close --shutdown is ignored for non-simulator iOS devices', async () => {
@@ -409,6 +452,24 @@ test('daemon session teardown stops active Android native perf capture', async (
 
   expect(mockCleanupAndroidNativePerfSession).toHaveBeenCalledWith(session.device, activeCapture);
   expect(session.nativePerf?.android).toBeUndefined();
+});
+
+test('daemon session teardown stops Android snapshot helper session', async () => {
+  const sessionName = 'android-snapshot-helper-teardown-session';
+  const session = {
+    ...makeSession(sessionName, {
+      platform: 'android',
+      id: 'emulator-5554',
+      name: 'Pixel',
+      kind: 'emulator',
+      booted: true,
+    }),
+    appBundleId: 'com.example.app',
+  } as SessionState;
+
+  await teardownSessionResources(session, sessionName);
+
+  expect(mockStopAndroidSnapshotHelperSessionForDevice).toHaveBeenCalledWith(session.device);
 });
 
 test('close --shutdown is ignored for Android devices', async () => {

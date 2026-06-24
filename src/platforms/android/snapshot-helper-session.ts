@@ -1,5 +1,6 @@
 import net from 'node:net';
 import type { AndroidAdbProcess } from './adb-executor.ts';
+import type { DeviceInfo } from '../../utils/device.ts';
 import { AppError } from '../../utils/errors.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import {
@@ -122,6 +123,18 @@ export async function stopAndroidSnapshotHelperSession(deviceKey: string): Promi
       lifetimeMs: Date.now() - session.startedAtMs,
     },
   });
+}
+
+export async function stopAndroidSnapshotHelperSessionForDevice(
+  device: Pick<DeviceInfo, 'platform' | 'id'>,
+): Promise<void> {
+  await stopAndroidSnapshotHelperSession(getAndroidSnapshotHelperSessionDeviceKey(device));
+}
+
+export function getAndroidSnapshotHelperSessionDeviceKey(
+  device: Pick<DeviceInfo, 'platform' | 'id'>,
+): string {
+  return `${device.platform}:${device.id}`;
 }
 
 export async function resetAndroidSnapshotHelperSessions(): Promise<void> {

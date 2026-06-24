@@ -9,6 +9,7 @@ import { stopAppLog } from '../app-log.ts';
 import { stopIosRunnerSession } from '../../platforms/ios/runner-client.ts';
 import { cleanupAppleXctracePerfCapture } from '../../platforms/ios/perf-xctrace.ts';
 import { cleanupAndroidNativePerfSession } from '../../platforms/android/perf.ts';
+import { stopAndroidSnapshotHelperSessionForDevice } from '../../platforms/android/snapshot-helper.ts';
 import { clearRuntimeHintsFromApp, hasRuntimeTransportHints } from '../runtime-hints.ts';
 import { cleanupRetainedMaterializedPathsForSession } from '../materialized-path-registry.ts';
 import {
@@ -80,6 +81,11 @@ async function stopSessionAndroidNativePerfCapture(session: SessionState): Promi
   session.nativePerf = { ...(session.nativePerf ?? {}), android: undefined };
 }
 
+async function stopSessionAndroidSnapshotHelper(session: SessionState): Promise<void> {
+  if (session.device.platform !== 'android') return;
+  await stopAndroidSnapshotHelperSessionForDevice(session.device);
+}
+
 export async function teardownSessionResources(
   session: SessionState,
   sessionName: string,
@@ -89,6 +95,7 @@ export async function teardownSessionResources(
   }
   await stopSessionApplePerfCapture(session);
   await stopSessionAndroidNativePerfCapture(session);
+  await stopSessionAndroidSnapshotHelper(session);
   if (isApplePlatform(session.device.platform)) {
     await stopAppleRunnerForClose(session);
   }
@@ -111,6 +118,7 @@ export async function handleCloseCommand(params: {
   }
   await stopSessionApplePerfCapture(session);
   await stopSessionAndroidNativePerfCapture(session);
+  await stopSessionAndroidSnapshotHelper(session);
   if (shouldDispatchPlatformClose(req, session)) {
     if (shouldStopAppleRunnerBeforeTargetedClose(session)) {
       await stopAppleRunnerForClose(session);

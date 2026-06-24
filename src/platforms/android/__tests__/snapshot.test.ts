@@ -1,8 +1,11 @@
-import { beforeEach, test, vi } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import { promises as fs } from 'node:fs';
+import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
+import { PassThrough } from 'node:stream';
 
 vi.mock('../../../utils/exec.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
@@ -22,11 +25,16 @@ import { AppError } from '../../../utils/errors.ts';
 import { runCmd } from '../../../utils/exec.ts';
 import { sleep } from '../adb.ts';
 import {
+  resetAndroidSnapshotHelperSessions,
   resetAndroidSnapshotHelperInstallCache,
   type AndroidAdbExecutor,
   type AndroidSnapshotHelperManifest,
 } from '../snapshot-helper.ts';
-import { withAndroidAdbProvider, type AndroidAdbProvider } from '../adb-executor.ts';
+import {
+  withAndroidAdbProvider,
+  type AndroidAdbProcess,
+  type AndroidAdbProvider,
+} from '../adb-executor.ts';
 
 const VALID_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+b9xkAAAAASUVORK5CYII=',
@@ -94,7 +102,123 @@ function createHelperAdb(
   };
 }
 
-beforeEach(() => {
+function createPersistentSnapshotHelperProvider(options: {
+  calls: string[][];
+  spawnArgs: string[][];
+  killedProcesses: FakeAndroidProcess[];
+}): AndroidAdbProvider {
+  return {
+    exec: async (args) => {
+      options.calls.push(args);
+      if (args.includes('--show-versioncode')) return installedHelperProbe;
+      if (args[0] === 'forward') return { exitCode: 0, stdout: '', stderr: '' };
+      if (args[0] === 'shell' && args[1] === 'am' && args[2] === 'force-stop') {
+        return { exitCode: 0, stdout: '', stderr: '' };
+      }
+      throw new Error(`unexpected persistent helper adb args: ${args.join(' ')}`);
+    },
+    spawn: (args) => {
+      options.spawnArgs.push(args);
+      const process = new FakeAndroidProcess();
+      const port = readSessionPort(args);
+      let snapshotCount = 0;
+      const server = net.createServer((socket) => {
+        socket.once('data', (chunk) => {
+          const command = chunk.toString('utf8').trim();
+          const [, requestId = ''] = command.split(/\s+/, 2);
+          if (command.startsWith('quit')) {
+            socket.end(sessionResponse({ requestId, body: '' }));
+            return;
+          }
+          snapshotCount += 1;
+          const body = `<hierarchy><node text="persistent helper snapshot ${snapshotCount}" bounds="[0,0][10,10]" /></hierarchy>`;
+          socket.end(
+            sessionResponse({
+              requestId,
+              body,
+              metadata: {
+                waitForIdleTimeoutMs: '500',
+                waitForIdleQuietMs: '100',
+                timeoutMs: '5000',
+                maxDepth: '128',
+                maxNodes: '5000',
+                rootPresent: 'true',
+                captureMode: 'interactive-windows',
+                windowCount: '1',
+                nodeCount: '1',
+                truncated: 'false',
+                elapsedMs: '8',
+              },
+            }),
+          );
+        });
+      });
+      server.listen(port, '127.0.0.1', () => {
+        process.stdout.write(
+          [
+            'INSTRUMENTATION_STATUS: agentDeviceProtocol=android-snapshot-helper-v1',
+            'INSTRUMENTATION_STATUS: sessionReady=true',
+            'INSTRUMENTATION_STATUS_CODE: 2',
+            '',
+          ].join('\n'),
+        );
+      });
+      process.onKill = () => {
+        options.killedProcesses.push(process);
+        server.close(() => process.emitExit(0, null));
+      };
+      return process;
+    },
+  };
+}
+
+function sessionResponse(params: {
+  requestId: string;
+  body: string;
+  metadata?: Record<string, string>;
+}): string {
+  const headers = {
+    agentDeviceProtocol: 'android-snapshot-helper-v1',
+    helperApiVersion: '1',
+    outputFormat: 'uiautomator-xml',
+    requestId: params.requestId,
+    ok: 'true',
+    byteLength: String(Buffer.byteLength(params.body, 'utf8')),
+    ...params.metadata,
+  };
+  return `${Object.entries(headers)
+    .map(([key, value]) => `${key}=${value}`)
+    .join('\n')}\n\n${params.body}`;
+}
+
+function readSessionPort(args: string[]): number {
+  const index = args.indexOf('sessionPort');
+  assert.notEqual(index, -1);
+  return Number(args[index + 1]);
+}
+
+class FakeAndroidProcess extends EventEmitter implements AndroidAdbProcess {
+  stdin = new PassThrough();
+  stdout = new PassThrough();
+  stderr = new PassThrough();
+  killed = false;
+  onKill: (() => void) | undefined;
+
+  kill(): boolean {
+    if (this.killed) return true;
+    this.killed = true;
+    this.onKill?.();
+    return true;
+  }
+
+  emitExit(code: number | null, signal: NodeJS.Signals | null): void {
+    this.emit('exit', code, signal);
+    this.emit('close', code, signal);
+  }
+}
+
+beforeEach(async () => {
+  await resetAndroidSnapshotHelperSessions();
   resetAndroidSnapshotHelperInstallCache();
   mockRunCmd.mockReset();
   mockSleep.mockReset();
@@ -105,6 +229,10 @@ beforeEach(() => {
     }
     return { exitCode: 0, stdout: '', stderr: '' };
   });
+});
+
+afterEach(async () => {
+  await resetAndroidSnapshotHelperSessions();
 });
 
 test('screenshotAndroid waits for transient UI to settle before capture', async () => {
@@ -494,6 +622,72 @@ test('snapshotAndroid resolves helper adb through scoped provider', async () => 
     ['shell', 'shell'],
   );
   assert.equal(mockRunCmd.mock.calls.length, 0);
+});
+
+test('snapshotAndroid stops command-scoped persistent helper session after capture', async () => {
+  const adbCalls: string[][] = [];
+  const spawnArgs: string[][] = [];
+  const killedProcesses: FakeAndroidProcess[] = [];
+  const provider = createPersistentSnapshotHelperProvider({
+    calls: adbCalls,
+    spawnArgs,
+    killedProcesses,
+  });
+
+  const result = await snapshotAndroid(device, {
+    helperAdb: provider,
+    helperArtifact,
+  });
+
+  assert.equal(result.nodes[0]?.label, 'persistent helper snapshot 1');
+  assert.equal(result.androidSnapshot.helperTransport, 'persistent-session');
+  assert.equal(result.androidSnapshot.helperSessionReused, false);
+  assert.equal(spawnArgs.length, 1);
+  assert.equal(killedProcesses.length, 1);
+  assert.equal(
+    adbCalls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
+    true,
+  );
+});
+
+test('snapshotAndroid keeps daemon-session helper alive for reuse until session cleanup', async () => {
+  const adbCalls: string[][] = [];
+  const spawnArgs: string[][] = [];
+  const killedProcesses: FakeAndroidProcess[] = [];
+  const provider = createPersistentSnapshotHelperProvider({
+    calls: adbCalls,
+    spawnArgs,
+    killedProcesses,
+  });
+
+  const first = await snapshotAndroid(device, {
+    helperAdb: provider,
+    helperArtifact,
+    helperSessionScope: 'daemon-session',
+  });
+  const second = await snapshotAndroid(device, {
+    helperAdb: provider,
+    helperArtifact,
+    helperSessionScope: 'daemon-session',
+  });
+
+  assert.equal(first.androidSnapshot.helperSessionReused, false);
+  assert.equal(second.androidSnapshot.helperSessionReused, true);
+  assert.equal(second.nodes[0]?.label, 'persistent helper snapshot 2');
+  assert.equal(spawnArgs.length, 1);
+  assert.equal(killedProcesses.length, 0);
+  assert.equal(
+    adbCalls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
+    false,
+  );
+
+  await resetAndroidSnapshotHelperSessions();
+
+  assert.equal(killedProcesses.length, 1);
+  assert.equal(
+    adbCalls.some((args) => args[0] === 'forward' && args[1] === '--remove'),
+    true,
+  );
 });
 
 test('snapshotAndroid falls back to stock uiautomator when helper fails', async () => {
