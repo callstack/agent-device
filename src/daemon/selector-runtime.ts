@@ -10,17 +10,12 @@ import { isCommandSupportedOnDevice } from '../core/capabilities.ts';
 import { resolveTargetDevice, type CommandFlags } from '../core/dispatch.ts';
 import { isApplePlatform } from '../utils/device.ts';
 import { AppError, asAppError, normalizeError } from '../utils/errors.ts';
-import {
-  buildSnapshotPresentationKey,
-  snapshotPresentationOptionsFromFlags,
-  type SnapshotNode,
-} from '../utils/snapshot.ts';
+import type { SnapshotNode } from '../utils/snapshot.ts';
 import { runIosRunnerCommand } from '../platforms/ios/runner-client.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { SessionStore } from './session-store.ts';
 import { contextFromFlags } from './context.ts';
 import { ensureDeviceReady } from './device-ready.ts';
-import { captureSnapshot } from './handlers/snapshot-capture.ts';
 import { readTextForNode } from './handlers/interaction-read.ts';
 import { errorResponse } from './handlers/response.ts';
 import { findNodeByLabel } from '../utils/snapshot-processing.ts';
@@ -35,8 +30,6 @@ import {
 } from '../utils/selector-is-predicates.ts';
 import type { ContextFromFlags } from './handlers/interaction-common.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
-import { getActiveAndroidSnapshotFreshness } from './android-snapshot-freshness.ts';
-import { isSparseSnapshotQualityVerdict } from '../utils/snapshot-quality.ts';
 import {
   describeAndroidEscapeSurface,
   detectAndroidEscapeSurface,
@@ -58,6 +51,7 @@ import {
   readSimpleIosSelectorTarget,
   type DirectIosSelectorTarget,
 } from './direct-ios-selector.ts';
+import { createSelectorCaptureRuntime } from './selector-capture-runtime.ts';
 
 type SelectorRuntimeParams = {
   req: DaemonRequest;
@@ -542,11 +536,16 @@ function createSelectorBackend(params: {
   device: SessionState['device'];
 }): AgentDeviceBackend {
   const { req, session, device, logPath, sessionName, sessionStore } = params;
-  let lastSnapshotAt = 0;
-  let lastSnapshotResult: BackendSnapshotResult | undefined;
+  const captureRuntime = createSelectorCaptureRuntime({
+    device,
+    session,
+    sessionStore,
+    sessionName,
+    req,
+    logPath,
+  });
   return {
     platform: device.platform,
-    // fallow-ignore-next-line complexity
     captureSnapshot: async (_context, options): Promise<BackendSnapshotResult> => {
       const flags = {
         ...req.flags,
@@ -554,51 +553,20 @@ function createSelectorBackend(params: {
       };
       const includeRects = options?.includeRects === true;
       const snapshotScope = options?.scope ?? req.flags?.snapshotScope;
-      const timestamp = Date.now();
-      const presentationKey = buildSnapshotPresentationKey(
-        snapshotPresentationOptionsFromFlags(flags),
-      );
       const needsFreshSnapshot =
         req.command === 'wait' ||
         req.command === 'find' ||
         (includeRects && device.platform === 'web');
-      if (
-        !needsFreshSnapshot &&
-        lastSnapshotResult &&
-        timestamp - lastSnapshotAt < 750 &&
-        !getActiveAndroidSnapshotFreshness(session) &&
-        !session?.postGestureStabilization
-      ) {
-        return lastSnapshotResult;
-      }
-      if (
-        !needsFreshSnapshot &&
-        session?.snapshot &&
-        timestamp - session.snapshot.createdAt < 750 &&
-        session.snapshot.presentationKey === presentationKey &&
-        !getActiveAndroidSnapshotFreshness(session) &&
-        !session.postGestureStabilization
-      ) {
-        lastSnapshotAt = session.snapshot.createdAt;
-        lastSnapshotResult = { snapshot: session.snapshot };
-        return lastSnapshotResult;
-      }
-      const capture = await captureSnapshot({
-        device,
-        session,
+      return await captureRuntime.capture({
         flags,
-        outPath: req.flags?.out,
-        logPath: logPath ?? '',
         snapshotScope,
         includeRects,
+        cache: {
+          forceFresh: needsFreshSnapshot,
+          useSessionSnapshot: true,
+          bypassForPostGestureStabilization: true,
+        },
       });
-      if (session && !isSparseSnapshotQualityVerdict(capture.snapshot.snapshotQuality)) {
-        setSessionSnapshot(session, capture.snapshot);
-        sessionStore.set(sessionName, session);
-      }
-      lastSnapshotAt = timestamp;
-      lastSnapshotResult = { snapshot: capture.snapshot };
-      return lastSnapshotResult;
     },
     readText: async (_context, node: SnapshotNode) => ({
       text: await readTextForNode({
@@ -676,21 +644,26 @@ async function captureWaitSnapshot(params: {
   session: SessionState | undefined;
   device: SessionState['device'];
 }) {
-  const capture = await captureSnapshot({
+  // Reuse selector capture session-write policy, but keep wait text captures fresh.
+  const captureRuntime = createSelectorCaptureRuntime({
     device: params.device,
     session: params.session,
+    sessionStore: params.sessionStore,
+    sessionName: params.sessionName,
+    req: params.req,
+    logPath: params.logPath,
+  });
+  const { snapshot } = await captureRuntime.capture({
     flags: {
       ...params.req.flags,
       snapshotInteractiveOnly: false,
     },
-    outPath: params.req.flags?.out,
-    logPath: params.logPath ?? '',
+    cache: {
+      forceFresh: true,
+      bypassForPostGestureStabilization: true,
+    },
   });
-  if (params.session && !isSparseSnapshotQualityVerdict(capture.snapshot.snapshotQuality)) {
-    setSessionSnapshot(params.session, capture.snapshot);
-    params.sessionStore.set(params.sessionName, params.session);
-  }
-  return capture.snapshot;
+  return snapshot;
 }
 
 function parseGetTarget(req: DaemonRequest):

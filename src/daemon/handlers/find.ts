@@ -13,12 +13,10 @@ import {
 } from '../../core/interaction-targeting.ts';
 import { isSnapshotNodeInteractionBlocked } from '../../utils/snapshot-occlusion.ts';
 import { readTextForNode } from './interaction-read.ts';
-import { captureSnapshot } from './snapshot-capture.ts';
-import { setSessionSnapshot } from '../session-snapshot.ts';
 import { errorResponse } from './response.ts';
-import { getActiveAndroidSnapshotFreshness } from '../android-snapshot-freshness.ts';
 import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts';
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
+import { createSelectorCaptureRuntime } from '../selector-capture-runtime.ts';
 import {
   isSparseSnapshotQualityVerdict,
   type SnapshotQualityVerdict,
@@ -158,12 +156,6 @@ export async function handleFindCommands(params: {
   return handler ? handler() : null;
 }
 
-function isLegacySparseIosInteractiveSnapshot(snapshot: SnapshotState): boolean {
-  if (snapshot.snapshotQuality) return false;
-  if (snapshot.backend !== 'xctest' || snapshot.nodes.length !== 1) return false;
-  return snapshot.nodes[0]?.type === 'Application';
-}
-
 // --- Per-action handlers ---
 
 function isReadOnlyFindAction(action: string): boolean {
@@ -199,91 +191,43 @@ function createFindNodeFetcher(params: {
 }): FindNodeFetcher {
   const { device, session, req, logPath, locator, query, scope, interactiveOnly } = params;
   const { sessionStore, sessionName } = params;
-  let lastSnapshotAt = 0;
-  let lastSnapshotResult: FindSnapshotResult | null = null;
-  const capture = async (snapshotScope: string | undefined, interactive: boolean) => {
-    const { snapshot } = await captureSnapshot({
-      device,
-      session,
+  const captureRuntime = createSelectorCaptureRuntime({
+    device,
+    session,
+    sessionStore,
+    sessionName,
+    req,
+    logPath,
+  });
+  return async () => {
+    const { snapshot } = await captureRuntime.capture({
       flags: {
         ...req.flags,
-        snapshotInteractiveOnly: interactive,
+        snapshotInteractiveOnly: interactiveOnly,
       },
-      outPath: req.flags?.out,
-      logPath,
-      snapshotScope,
+      snapshotScope: scope,
+      recovery: interactiveOnly
+        ? {
+            legacyIosSparse: {
+              query,
+              scope,
+              shouldScope: shouldScopeFind(locator),
+            },
+            sparseVerdictQueryScope: {
+              query,
+              shouldScope: shouldScopeFind(locator),
+            },
+          }
+        : undefined,
     });
-    return snapshot;
-  };
-  return async () => {
-    const now = Date.now();
-    // Re-use a snapshot captured within the last 750 ms to avoid redundant dumps during
-    // rapid find iterations.  Skipped when Android freshness tracking is active, because
-    // the cached tree may already be stale from a recent navigation action.
-    if (
-      lastSnapshotResult &&
-      now - lastSnapshotAt < 750 &&
-      !getActiveAndroidSnapshotFreshness(session)
-    ) {
-      return lastSnapshotResult;
-    }
-    let snapshot = await capture(scope, interactiveOnly);
-    if (interactiveOnly && isLegacySparseIosInteractiveSnapshot(snapshot)) {
-      snapshot = await recoverSparseInteractiveSnapshot({ capture, locator, query, scope });
-    } else if (
-      interactiveOnly &&
-      isSparseSnapshotQualityVerdict(snapshot.snapshotQuality) &&
-      shouldScopeFind(locator)
-    ) {
-      snapshot = await recoverSparseVerdictWithQueryScope({ capture, query, snapshot });
-    }
     const snapshotResult = {
       nodes: snapshot.nodes,
       truncated: snapshot.truncated,
       backend: snapshot.backend,
       snapshotQuality: snapshot.snapshotQuality,
     };
-    lastSnapshotAt = now;
-    lastSnapshotResult = snapshotResult;
-    if (session && !isSparseSnapshotQualityVerdict(snapshot.snapshotQuality)) {
-      setSessionSnapshot(session, snapshot);
-      sessionStore.set(sessionName, session);
-    }
     return snapshotResult;
   };
-}
-
-async function recoverSparseVerdictWithQueryScope(params: {
-  capture: (scope: string | undefined, interactive: boolean) => Promise<SnapshotState>;
-  query: string;
-  snapshot: SnapshotState;
-}): Promise<SnapshotState> {
-  const { capture, query, snapshot } = params;
-  try {
-    return await capture(query, false);
-  } catch {
-    return snapshot;
-  }
-}
-
-/**
- * Legacy iOS runners did not report a structured quality verdict. For those mixed-version
- * sessions, the one-node application shape still means the runner could not enumerate the tree:
- * retry with a full snapshot, then a query-scoped full snapshot if broad serialization fails.
- */
-async function recoverSparseInteractiveSnapshot(params: {
-  capture: (scope: string | undefined, interactive: boolean) => Promise<SnapshotState>;
-  locator: FindLocator;
-  query: string;
-  scope: string | undefined;
-}): Promise<SnapshotState> {
-  const { capture, locator, query, scope } = params;
-  try {
-    return await capture(scope, false);
-  } catch (error) {
-    if (!shouldScopeFind(locator)) throw error;
-    return await capture(query, false);
-  }
 }
 
 function sparseFindSnapshotResponse(verdict: SnapshotQualityVerdict): DaemonResponse {
