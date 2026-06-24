@@ -88,6 +88,20 @@ Snapshots assign refs like `@e1`, `@e2`, and `@e3` to elements on the current sc
 - **Try the sample app**: clone the repo and run the bundled Expo fixture when you want a guided first dogfood run with screenshots, replay, and performance evidence. See [Quick Start](https://oss.callstack.com/agent-device/docs/quick-start).
 - **Go deeper**: use [Commands](https://oss.callstack.com/agent-device/docs/commands), [Replay & E2E](https://oss.callstack.com/agent-device/docs/replay-e2e), and [Debugging & Profiling](https://oss.callstack.com/agent-device/docs/debugging-profiling) for production workflows.
 
+## Articles & Videos
+
+### Articles
+
+- [Build an AI QA agent for Expo apps with EAS Workflows](https://expo.dev/blog/build-an-ai-qa-agent-for-expo-apps-with-eas-workflows-in-minutes-today)
+- [Agent Device: iOS & Android automation for AI agents](https://www.callstack.com/blog/agent-device-ai-native-mobile-automation-for-ios-android)
+- [Building mobile QA agents with Vercel Eve](https://www.callstack.com/blog/building-reviewable-mobile-qa-agents-with-vercel-eve)
+- [How we optimized Agent Device for mobile app automation](https://www.callstack.com/blog/how-we-optimized-agent-device-for-mobile-app-automation)
+
+### Videos
+
+- [Verifying mobile apps with agent-device](https://youtu.be/kZDU-k5r9kE)
+- [Using agent-device in an AI coding workflow](https://youtu.be/dfVG_aNPkW4)
+
 ## Where To Run agent-device
 
 | Path | Best for | Start with |
