@@ -9,6 +9,7 @@ enum CommandType: String, Codable {
   case type
   case swipe
   case scroll
+  case desktopScroll
   case findText
   case querySelector
   case readText
@@ -69,8 +70,9 @@ extension CommandType {
     // Interaction commands: require the foreground-guard + stabilization preflight.
     // keyboardReturn is the sibling of keyboardDismiss (missing from the historical switch —
     // drift the table now prevents). .scroll is the fused frame-resolve + drag scroll; same
-    // classification as .drag. .sequence is the fused multi-step gesture batch.
-    case .tap, .longPress, .drag, .remotePress, .type, .swipe, .scroll,
+    // classification as .drag. .desktopScroll is the macOS frame-resolve + wheel event sibling.
+    // .sequence is the fused multi-step gesture batch.
+    case .tap, .longPress, .drag, .remotePress, .type, .swipe, .scroll, .desktopScroll,
          .back, .backInApp, .backSystem, .rotate, .appSwitcher,
          .keyboardDismiss, .keyboardReturn, .pinch, .sequence, .rotateGesture, .transformGesture:
       return CommandTraits(isInteraction: true, readOnly: .never, isLifecycle: false)

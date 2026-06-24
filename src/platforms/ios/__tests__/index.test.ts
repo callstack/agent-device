@@ -341,37 +341,63 @@ for (const [name, device] of [
   });
 }
 
-for (const [name, device] of [
-  ['iOS', IOS_TEST_SIMULATOR],
-  ['macOS', MACOS_TEST_DEVICE],
-] as const) {
-  test(`iosRunnerOverrides maps ${name} scroll to a single fused scroll command`, async () => {
-    // The fused scroll resolves the frame and performs the drag in one runner lifecycle command;
-    // no separate interactionFrame request and no durationMs (the runner pins the non-synthesized
-    // drag path that ignores it).
-    mockRunIosRunnerCommand.mockResolvedValueOnce({
-      x: 200,
-      y: 640,
-      x2: 200,
-      y2: 160,
-      referenceWidth: 400,
-      referenceHeight: 800,
-    });
-
-    const { overrides } = iosRunnerOverrides(device, {
-      appBundleId: 'com.example.App',
-    });
-
-    await overrides.scroll('down');
-
-    assert.equal(mockRunIosRunnerCommand.mock.calls.length, 1);
-    assert.deepEqual(mockRunIosRunnerCommand.mock.calls[0]?.[1], {
-      command: 'scroll',
-      direction: 'down',
-      appBundleId: 'com.example.App',
-    });
+test('iosRunnerOverrides maps iOS scroll to a single fused scroll command', async () => {
+  // The fused scroll resolves the frame and performs the drag in one runner lifecycle command;
+  // no separate interactionFrame request and no durationMs (the runner pins the non-synthesized
+  // drag path that ignores it).
+  mockRunIosRunnerCommand.mockResolvedValueOnce({
+    x: 200,
+    y: 640,
+    x2: 200,
+    y2: 160,
+    referenceWidth: 400,
+    referenceHeight: 800,
   });
-}
+
+  const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
+    appBundleId: 'com.example.App',
+  });
+
+  await overrides.scroll('down');
+
+  assert.equal(mockRunIosRunnerCommand.mock.calls.length, 1);
+  assert.deepEqual(mockRunIosRunnerCommand.mock.calls[0]?.[1], {
+    command: 'scroll',
+    direction: 'down',
+    appBundleId: 'com.example.App',
+  });
+});
+
+test('iosRunnerOverrides maps macOS desktop scroll to a desktop wheel command', async () => {
+  mockRunIosRunnerCommand.mockResolvedValueOnce({
+    x: 200,
+    y: 400,
+    referenceWidth: 400,
+    referenceHeight: 800,
+  });
+
+  const { overrides } = iosRunnerOverrides(MACOS_TEST_DEVICE, {
+    appBundleId: 'com.example.App',
+  });
+
+  const result = await overrides.scroll('down', { amount: 0.5 });
+
+  assert.equal(mockRunIosRunnerCommand.mock.calls.length, 1);
+  assert.deepEqual(mockRunIosRunnerCommand.mock.calls[0]?.[1], {
+    command: 'desktopScroll',
+    direction: 'down',
+    amount: 0.5,
+    appBundleId: 'com.example.App',
+  });
+  assert.deepEqual(result, {
+    x1: 200,
+    y1: 400,
+    referenceWidth: 400,
+    referenceHeight: 800,
+    amount: 0.5,
+    pixels: 400,
+  });
+});
 
 test('AGENT_DEVICE_MACOS_HELPER_BIN rejects relative override paths', async () => {
   const previousHelperPath = process.env.AGENT_DEVICE_MACOS_HELPER_BIN;

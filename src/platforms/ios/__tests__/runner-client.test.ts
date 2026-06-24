@@ -113,6 +113,7 @@ const runnerProtocolCommandFixtures: Record<RunnerCommand['command'], RunnerComm
   type: { command: 'type', text: 'hello', delayMs: 20, textEntryMode: 'replace' },
   swipe: { command: 'swipe', direction: 'down', durationMs: 250 },
   scroll: { command: 'scroll', direction: 'down', amount: 0.6, pixels: 240 },
+  desktopScroll: { command: 'desktopScroll', direction: 'down', amount: 0.6, pixels: 240 },
   findText: { command: 'findText', text: 'Settings' },
   querySelector: { command: 'querySelector', selectorKey: 'id', selectorValue: 'submit' },
   readText: { command: 'readText' },
@@ -307,6 +308,7 @@ test('runner protocol fixtures cover every runner command with JSON-safe samples
     'back',
     'backInApp',
     'backSystem',
+    'desktopScroll',
     'drag',
     'findText',
     'home',
@@ -366,6 +368,17 @@ test('scroll is a mutating, command-id-tracked runner command', () => {
   assert.equal(isReadOnlyRunnerCommand('scroll'), false);
 
   const command = withRunnerCommandId({ command: 'scroll', direction: 'down', pixels: 120 });
+  assert.match(command.commandId ?? '', /^runner-/);
+});
+
+test('desktopScroll is a mutating, command-id-tracked runner command', () => {
+  assert.equal(isReadOnlyRunnerCommand('desktopScroll'), false);
+
+  const command = withRunnerCommandId({
+    command: 'desktopScroll',
+    direction: 'down',
+    pixels: 120,
+  });
   assert.match(command.commandId ?? '', /^runner-/);
 });
 

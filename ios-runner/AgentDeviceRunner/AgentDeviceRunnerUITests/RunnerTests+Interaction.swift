@@ -1,5 +1,9 @@
 import XCTest
 
+#if os(macOS)
+import CoreGraphics
+#endif
+
 private enum RunnerInterfaceOrientation {
   static let unknown = 0
   static let portrait = 1
@@ -605,6 +609,73 @@ extension RunnerTests {
 #endif
   }
 
+  func desktopScrollAt(app: XCUIApplication, x: Double, y: Double, direction: String, pixels: Double) throws {
+#if os(macOS)
+    _ = app
+    guard let deltas = desktopScrollWheelDeltas(direction: direction, pixels: pixels) else {
+      throw NSError(
+        domain: "AgentDeviceRunner",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "unsupported desktop scroll direction: \(direction)"]
+      )
+    }
+
+    let point = CGPoint(x: x, y: y)
+    guard let move = CGEvent(
+      mouseEventSource: nil,
+      mouseType: .mouseMoved,
+      mouseCursorPosition: point,
+      mouseButton: .left
+    ),
+      let scroll = CGEvent(
+        scrollWheelEvent2Source: nil,
+        units: .pixel,
+        wheelCount: 2,
+        wheel1: deltas.vertical,
+        wheel2: deltas.horizontal,
+        wheel3: 0
+      )
+    else {
+      throw NSError(
+        domain: "AgentDeviceRunner",
+        code: 1,
+        userInfo: [NSLocalizedDescriptionKey: "desktop scroll event creation failed"]
+      )
+    }
+    scroll.location = point
+    move.post(tap: .cghidEventTap)
+    scroll.post(tap: .cghidEventTap)
+#elseif os(tvOS)
+    throw NSError(
+      domain: "AgentDeviceRunner",
+      code: 1,
+      userInfo: [NSLocalizedDescriptionKey: "desktopScroll is not supported on tvOS"]
+    )
+#else
+    throw NSError(
+      domain: "AgentDeviceRunner",
+      code: 1,
+      userInfo: [NSLocalizedDescriptionKey: "desktopScroll is only supported on macOS"]
+    )
+#endif
+  }
+
+  func desktopScrollWheelDeltas(direction: String, pixels: Double) -> (vertical: Int32, horizontal: Int32)? {
+    let magnitude = Int32(max(1, min(Double(Int32.max), pixels.rounded())))
+    switch direction {
+    case "up":
+      return (vertical: magnitude, horizontal: 0)
+    case "down":
+      return (vertical: -magnitude, horizontal: 0)
+    case "left":
+      return (vertical: 0, horizontal: magnitude)
+    case "right":
+      return (vertical: 0, horizontal: -magnitude)
+    default:
+      return nil
+    }
+  }
+
   func doubleTapAt(app: XCUIApplication, x: Double, y: Double) -> RunnerInteractionOutcome {
     if let outcome = selectFocusedTvElement(app: app, point: CGPoint(x: x, y: y), action: "double tap") {
       guard case .performed = outcome else { return outcome }
@@ -1198,5 +1269,13 @@ extension RunnerTests {
       XCTAssertEqual(vector.dx, expected.dx, "dx interfaceOrientation \(orientation)")
       XCTAssertEqual(vector.dy, expected.dy, "dy interfaceOrientation \(orientation)")
     }
+  }
+
+  func testDesktopScrollWheelDeltasMapDirections() throws {
+    XCTAssertEqual(try XCTUnwrap(desktopScrollWheelDeltas(direction: "up", pixels: 120)).vertical, 120)
+    XCTAssertEqual(try XCTUnwrap(desktopScrollWheelDeltas(direction: "down", pixels: 120)).vertical, -120)
+    XCTAssertEqual(try XCTUnwrap(desktopScrollWheelDeltas(direction: "left", pixels: 120)).horizontal, 120)
+    XCTAssertEqual(try XCTUnwrap(desktopScrollWheelDeltas(direction: "right", pixels: 120)).horizontal, -120)
+    XCTAssertNil(desktopScrollWheelDeltas(direction: "diagonal", pixels: 120))
   }
 }

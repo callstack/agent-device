@@ -24,6 +24,9 @@ export type RunnerCommand = {
     // traits so it routes through single-send, command-id tracking, and lost-response status
     // recovery like other gestures.
     | 'scroll'
+    // macOS-only frame-resolve + desktop wheel scroll. Kept distinct from `scroll` so mobile
+    // touch drag semantics remain stable.
+    | 'desktopScroll'
     | 'findText'
     | 'querySelector'
     | 'readText'

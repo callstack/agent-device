@@ -18,6 +18,7 @@ const EXPECTED_RUNNER_COMMAND_TRAITS = {
   type: defaults(),
   swipe: hotMutation(),
   scroll: hotMutation(),
+  desktopScroll: hotMutation(),
   findText: readOnly(),
   querySelector: readOnly(),
   readText: readOnly(),

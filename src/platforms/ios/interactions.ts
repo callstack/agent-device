@@ -338,6 +338,21 @@ async function runAppleScroll(
   // could cost one runner request first).
   assertScrollGestureInput(options ?? {});
 
+  if (device.platform === 'macos' && device.target === 'desktop') {
+    const runnerResult = await runRunnerCommand(
+      device,
+      {
+        command: 'desktopScroll',
+        direction,
+        ...(options?.amount !== undefined ? { amount: options.amount } : {}),
+        ...(options?.pixels !== undefined ? { pixels: options.pixels } : {}),
+        appBundleId: ctx.appBundleId,
+      },
+      runnerOpts,
+    );
+    return normalizeScrollResultWithResolvedFrame(runnerResult, direction, options);
+  }
+
   // Single fused lifecycle command: the runner resolves the interaction frame and runs the drag.
   // durationMs is intentionally not sent — scroll's drag used 250ms today, but the runner's
   // non-synthesized drag path ignores it (coordinateDragHoldDuration + XCTest default drag
@@ -356,24 +371,38 @@ async function runAppleScroll(
 
   const referenceWidth = readFiniteNumber(runnerResult.referenceWidth);
   const referenceHeight = readFiniteNumber(runnerResult.referenceHeight);
-  if (referenceWidth !== undefined && referenceHeight !== undefined) {
-    // Recompute the plan from the runner's resolved frame so reported pixels match the planned
-    // travel (TS keeps buildScrollGesturePlan for Android and recording anyway).
-    const plan = buildScrollGesturePlan({
-      direction,
-      amount: options?.amount,
-      pixels: options?.pixels,
-      referenceWidth,
-      referenceHeight,
-    });
-    return normalizeIosScrollResult(runnerResult, {
-      amount: options?.amount,
-      pixels: plan.pixels,
-      preferProvidedPixels: true,
-    });
-  }
+  if (referenceWidth !== undefined && referenceHeight !== undefined)
+    return normalizeScrollResultWithResolvedFrame(runnerResult, direction, options);
+
   // Missing frame dims: derive pixels from endpoint travel instead of throwing.
   return normalizeIosScrollResult(runnerResult, { amount: options?.amount });
+}
+
+function normalizeScrollResultWithResolvedFrame(
+  runnerResult: Record<string, unknown>,
+  direction: ScrollDirection,
+  options?: { amount?: number; pixels?: number },
+): Record<string, unknown> {
+  const referenceWidth = readFiniteNumber(runnerResult.referenceWidth);
+  const referenceHeight = readFiniteNumber(runnerResult.referenceHeight);
+  if (referenceWidth === undefined || referenceHeight === undefined) {
+    return normalizeIosScrollResult(runnerResult, { amount: options?.amount });
+  }
+
+  // Recompute the plan from the runner's resolved frame so reported pixels match the planned
+  // travel (TS keeps buildScrollGesturePlan for Android and recording anyway).
+  const plan = buildScrollGesturePlan({
+    direction,
+    amount: options?.amount,
+    pixels: options?.pixels,
+    referenceWidth,
+    referenceHeight,
+  });
+  return normalizeIosScrollResult(runnerResult, {
+    amount: options?.amount,
+    pixels: plan.pixels,
+    preferProvidedPixels: true,
+  });
 }
 
 function readFiniteNumber(value: unknown): number | undefined {
