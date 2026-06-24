@@ -7,6 +7,7 @@ import {
   inferGestureReferenceFrame,
   parseScrollDirection,
   parseSwipePreset,
+  SCROLL_DURATION_MAX_MS,
   SCROLL_DIRECTIONS,
   SWIPE_PATTERNS,
   type ScrollDirection,
@@ -771,15 +772,34 @@ function assertScrollCommandInputs(
   pixels: number | undefined,
   durationMs: number | undefined,
 ): void {
+  assertScrollAmountInput(amount);
+  assertScrollDurationInput(durationMs);
+  assertExclusiveScrollDistanceInputs(amount, pixels);
+}
+
+function assertScrollAmountInput(amount: number | undefined): void {
   if (amount !== undefined && !Number.isFinite(amount)) {
     throw new AppError('INVALID_ARGS', 'scroll amount must be a number');
   }
-  if (
-    durationMs !== undefined &&
-    (!Number.isFinite(durationMs) || !Number.isInteger(durationMs) || durationMs < 0)
-  ) {
+}
+
+function assertScrollDurationInput(durationMs: number | undefined): void {
+  if (durationMs === undefined) return;
+  if (!Number.isFinite(durationMs) || !Number.isInteger(durationMs) || durationMs < 0) {
     throw new AppError('INVALID_ARGS', 'scroll durationMs must be a non-negative integer');
   }
+  if (durationMs > SCROLL_DURATION_MAX_MS) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `scroll durationMs must be a non-negative integer at most ${SCROLL_DURATION_MAX_MS}`,
+    );
+  }
+}
+
+function assertExclusiveScrollDistanceInputs(
+  amount: number | undefined,
+  pixels: number | undefined,
+): void {
   if (amount !== undefined && pixels !== undefined) {
     throw new AppError(
       'INVALID_ARGS',
@@ -825,7 +845,6 @@ function buildDispatchedScrollResult(
     ...(target.edge ? { edge: target.edge, passes: completedPasses } : {}),
     ...(options.amount !== undefined ? { amount: options.amount } : {}),
     ...(options.pixels !== undefined ? { pixels: options.pixels } : {}),
-    ...(options.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
     ...interactionResult,
   };
 }

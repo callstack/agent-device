@@ -2,6 +2,7 @@ import type { DeviceInfo } from '../../utils/device.ts';
 import {
   assertScrollGestureInput,
   buildScrollGesturePlan,
+  SCROLL_DURATION_MAX_MS,
   type ScrollDirection,
 } from '../../core/scroll-gesture.ts';
 import { AppError } from '../../utils/errors.ts';
@@ -383,8 +384,16 @@ async function runAppleScroll(
 
 function assertScrollDurationInput(durationMs: number | undefined): void {
   if (durationMs === undefined) return;
-  if (!Number.isFinite(durationMs) || !Number.isInteger(durationMs) || durationMs < 0) {
-    throw new AppError('INVALID_ARGS', 'scroll durationMs must be a non-negative integer');
+  if (
+    !Number.isFinite(durationMs) ||
+    !Number.isInteger(durationMs) ||
+    durationMs < 0 ||
+    durationMs > SCROLL_DURATION_MAX_MS
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `scroll durationMs must be a non-negative integer at most ${SCROLL_DURATION_MAX_MS}`,
+    );
   }
 }
 

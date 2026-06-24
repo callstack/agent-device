@@ -524,6 +524,7 @@ test('runtime scroll resolves selector targets before calling the backend primit
   });
 
   assert.equal(selectorResult.kind, 'selector');
+  assert.equal(selectorResult.durationMs, undefined);
   assert.equal(viewportResult.kind, 'viewport');
   assert.deepEqual(calls, [
     {
@@ -535,6 +536,42 @@ test('runtime scroll resolves selector targets before calling the backend primit
       options: { direction: 'up', amount: 0.5 },
     },
   ]);
+});
+
+test('runtime scroll reports duration only when the backend honored it', async () => {
+  const device = createInteractionDevice(selectorSnapshot(), {
+    scroll: async (_context, _target, options) => ({ durationMs: options?.durationMs }),
+  });
+
+  const result = await device.interactions.scroll({
+    direction: 'down',
+    pixels: 120,
+    durationMs: 50,
+  });
+
+  assert.equal(result.durationMs, 50);
+  assert.deepEqual(result.backendResult, { durationMs: 50 });
+});
+
+test('runtime scroll rejects duration above the shared cap', async () => {
+  const device = createInteractionDevice(selectorSnapshot(), {
+    scroll: async () => {
+      throw new Error('scroll should be rejected before backend call');
+    },
+  });
+
+  await assert.rejects(
+    () =>
+      device.interactions.scroll({
+        direction: 'down',
+        pixels: 120,
+        durationMs: 10_001,
+      }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      /durationMs.*at most 10000/i.test(error.message),
+  );
 });
 
 test('runtime scroll bottom rejects blind scrolling without snapshot support', async () => {

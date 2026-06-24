@@ -93,6 +93,21 @@ test('batch rejects invalid structured step input before daemon projection', asy
   assert.doesNotMatch(result.stderr, /undefined/);
 });
 
+test('batch rejects structured scroll duration above the shared cap before daemon projection', async () => {
+  const result = await runCliCapture([
+    'batch',
+    '--steps',
+    '[{"command":"scroll","input":{"direction":"down","pixels":200,"durationMs":10001}}]',
+  ]);
+
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 0);
+  assert.match(
+    result.stderr,
+    /Batch step 1 scroll input is invalid: Expected durationMs to be at most 10000\./,
+  );
+});
+
 test('batch rejects structured replay steps before daemon dispatch', async () => {
   const result = await runCliCapture([
     'batch',

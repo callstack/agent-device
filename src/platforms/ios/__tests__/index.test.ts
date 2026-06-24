@@ -400,6 +400,17 @@ test('iosRunnerOverrides maps macOS desktop scroll to a desktop wheel command', 
   });
 });
 
+test('iosRunnerOverrides rejects macOS desktop scroll duration above the shared cap', async () => {
+  const { overrides } = iosRunnerOverrides(MACOS_TEST_DEVICE, {
+    appBundleId: 'com.example.App',
+  });
+
+  await assert.rejects(() => overrides.scroll('down', { pixels: 200, durationMs: 10_001 }), {
+    code: 'INVALID_ARGS',
+  });
+  assert.equal(mockRunIosRunnerCommand.mock.calls.length, 0);
+});
+
 test('AGENT_DEVICE_MACOS_HELPER_BIN rejects relative override paths', async () => {
   const previousHelperPath = process.env.AGENT_DEVICE_MACOS_HELPER_BIN;
   process.env.AGENT_DEVICE_MACOS_HELPER_BIN = './agent-device-macos-helper';

@@ -674,12 +674,14 @@ extension RunnerTests {
       let y = frame.midY
       let localX = x - (appFrame.isEmpty ? frame.minX : appFrame.minX)
       let localY = y - (appFrame.isEmpty ? frame.minY : appFrame.minY)
-      if let durationMs = command.durationMs, durationMs.isFinite == false || durationMs < 0 {
+      if let durationMs = command.durationMs,
+        durationMs.isFinite == false || durationMs < 0 || durationMs > 10000
+      {
         return Response(
           ok: false,
           error: ErrorPayload(
             code: "INVALID_ARGS",
-            message: "desktopScroll durationMs must be >= 0"
+            message: "desktopScroll durationMs must be between 0 and 10000"
           )
         )
       }

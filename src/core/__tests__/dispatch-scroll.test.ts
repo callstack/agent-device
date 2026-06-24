@@ -16,7 +16,7 @@ test('dispatch scroll rejects mixing amount and --pixels', async () => {
   );
 });
 
-test('dispatch scroll forwards pixels and duration to the interactor', async () => {
+test('dispatch scroll forwards pixels and duration without reporting ignored duration', async () => {
   const calls: Array<{ direction: string; options: unknown }> = [];
   const interactor = {
     scroll: async (direction: any, options: unknown) => {
@@ -37,7 +37,37 @@ test('dispatch scroll forwards pixels and duration to the interactor', async () 
     },
   ]);
   assert.equal(result.pixels, 200);
+  assert.equal(result.durationMs, undefined);
+});
+
+test('dispatch scroll reports duration when the interactor honored it', async () => {
+  const interactor = {
+    scroll: async () => ({ pixels: 200, durationMs: 50 }),
+  } as unknown as Interactor;
+
+  const result = await handleScrollCommand(interactor, ['down'], {
+    pixels: 200,
+    durationMs: 50,
+  });
+
+  assert.equal(result.pixels, 200);
   assert.equal(result.durationMs, 50);
+});
+
+test('dispatch scroll rejects duration above the shared cap', async () => {
+  const interactor = {
+    scroll: async () => {
+      throw new Error('scroll should be rejected before backend call');
+    },
+  } as unknown as Interactor;
+
+  await assert.rejects(
+    () => handleScrollCommand(interactor, ['down'], { pixels: 200, durationMs: 10_001 }),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      /durationMs.*at most 10000/i.test(error.message),
+  );
 });
 
 test('dispatch scroll bottom rejects blind scrolling without snapshot support', async () => {
