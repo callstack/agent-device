@@ -291,11 +291,12 @@ test('invokeMaestroSwipeScreen mirrors Android horizontal directional content la
 test('invokeMaestroSwipeOn resolves visible non-interactive text from a regular snapshot', async () => {
   const snapshotFlags: Array<DaemonRequest['flags']> = [];
   const swipes: string[][] = [];
+  const swipeFlags: Array<DaemonRequest['flags']> = [];
   const response = await invokeMaestroSwipeOn({
     baseReq: {
       token: 'test',
       session: 'android-carousel',
-      flags: { platform: 'android' },
+      flags: { platform: 'android', postGestureStabilization: true },
     },
     positionals: ['label="Gallery" || text="Gallery" || id="Gallery"', 'left', '300'],
     invoke: async (req: DaemonRequest): Promise<DaemonResponse> => {
@@ -325,6 +326,7 @@ test('invokeMaestroSwipeOn resolves visible non-interactive text from a regular 
       }
       if (req.command === 'swipe') {
         swipes.push(req.positionals ?? []);
+        swipeFlags.push(req.flags);
         return { ok: true, data: {} };
       }
       return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
@@ -336,6 +338,7 @@ test('invokeMaestroSwipeOn resolves visible non-interactive text from a regular 
   expect(snapshotFlags[0]?.snapshotInteractiveOnly).toBeUndefined();
   expect(snapshotFlags[0]?.snapshotRaw).toBe(true);
   expect(swipes).toEqual([['200', '250', '8', '250', '300']]);
+  expect(swipeFlags[0]?.postGestureStabilization).toBe(true);
 });
 
 test('invokeMaestroSwipeScreen preserves vertical percentage endpoints', async () => {
