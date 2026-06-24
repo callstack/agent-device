@@ -609,10 +609,20 @@ extension RunnerTests {
 #endif
   }
 
-  func desktopScrollAt(app: XCUIApplication, x: Double, y: Double, direction: String, pixels: Double) throws {
+  func desktopScrollAt(
+    app: XCUIApplication,
+    x: Double,
+    y: Double,
+    direction: String,
+    pixels: Double,
+    durationMs: Double?
+  ) throws {
 #if os(macOS)
-    _ = app
-    guard let deltas = desktopScrollWheelDeltas(direction: direction, pixels: pixels) else {
+    guard let events = desktopScrollWheelDeltaEvents(
+      direction: direction,
+      pixels: pixels,
+      durationMs: durationMs
+    ) else {
       throw NSError(
         domain: "AgentDeviceRunner",
         code: 1,
@@ -620,31 +630,17 @@ extension RunnerTests {
       )
     }
 
-    let point = CGPoint(x: x, y: y)
-    guard let move = CGEvent(
-      mouseEventSource: nil,
-      mouseType: .mouseMoved,
-      mouseCursorPosition: point,
-      mouseButton: .left
-    ),
-      let scroll = CGEvent(
-        scrollWheelEvent2Source: nil,
-        units: .pixel,
-        wheelCount: 2,
-        wheel1: deltas.vertical,
-        wheel2: deltas.horizontal,
-        wheel3: 0
+    let coordinate = interactionCoordinate(app: app, x: x, y: y)
+    let interval = desktopScrollEventIntervalSeconds(durationMs: durationMs, eventCount: events.count)
+    for (index, deltas) in events.enumerated() {
+      coordinate.scroll(
+        byDeltaX: CGFloat(deltas.horizontal),
+        deltaY: CGFloat(deltas.vertical)
       )
-    else {
-      throw NSError(
-        domain: "AgentDeviceRunner",
-        code: 1,
-        userInfo: [NSLocalizedDescriptionKey: "desktop scroll event creation failed"]
-      )
+      if interval > 0 && index < events.count - 1 {
+        Thread.sleep(forTimeInterval: interval)
+      }
     }
-    scroll.location = point
-    move.post(tap: .cghidEventTap)
-    scroll.post(tap: .cghidEventTap)
 #elseif os(tvOS)
     throw NSError(
       domain: "AgentDeviceRunner",
@@ -673,6 +669,45 @@ extension RunnerTests {
       return (vertical: 0, horizontal: -magnitude)
     default:
       return nil
+    }
+  }
+
+  func desktopScrollWheelDeltaEvents(
+    direction: String,
+    pixels: Double,
+    durationMs: Double?
+  ) -> [(vertical: Int32, horizontal: Int32)]? {
+    guard let totalDeltas = desktopScrollWheelDeltas(direction: direction, pixels: pixels) else {
+      return nil
+    }
+    let magnitude = max(abs(Int(totalDeltas.vertical)), abs(Int(totalDeltas.horizontal)))
+    let duration = max(0, durationMs ?? 0)
+    let requestedEventCount = duration > 0 ? Int(ceil(duration / 16.0)) : 1
+    let eventCount = max(1, min(magnitude, requestedEventCount))
+    guard eventCount > 1 else {
+      return [totalDeltas]
+    }
+
+    if totalDeltas.vertical != 0 {
+      return distributeDesktopScrollDelta(totalDeltas.vertical, eventCount: eventCount)
+        .map { (vertical: $0, horizontal: 0) }
+    }
+    return distributeDesktopScrollDelta(totalDeltas.horizontal, eventCount: eventCount)
+      .map { (vertical: 0, horizontal: $0) }
+  }
+
+  func desktopScrollEventIntervalSeconds(durationMs: Double?, eventCount: Int) -> TimeInterval {
+    guard let durationMs, durationMs > 0, eventCount > 1 else { return 0 }
+    return (durationMs / 1000.0) / Double(eventCount - 1)
+  }
+
+  private func distributeDesktopScrollDelta(_ delta: Int32, eventCount: Int) -> [Int32] {
+    let sign: Int32 = delta < 0 ? -1 : 1
+    let magnitude = abs(Int(delta))
+    let base = magnitude / eventCount
+    let remainder = magnitude % eventCount
+    return (0..<eventCount).map { index in
+      sign * Int32(base + (index < remainder ? 1 : 0))
     }
   }
 
@@ -1277,5 +1312,19 @@ extension RunnerTests {
     XCTAssertEqual(try XCTUnwrap(desktopScrollWheelDeltas(direction: "left", pixels: 120)).horizontal, 120)
     XCTAssertEqual(try XCTUnwrap(desktopScrollWheelDeltas(direction: "right", pixels: 120)).horizontal, -120)
     XCTAssertNil(desktopScrollWheelDeltas(direction: "diagonal", pixels: 120))
+  }
+
+  func testDesktopScrollWheelDeltaEventsHonorDurationAndPreservePixels() throws {
+    let events = try XCTUnwrap(desktopScrollWheelDeltaEvents(direction: "down", pixels: 200, durationMs: 50))
+    XCTAssertEqual(events.count, 4)
+    XCTAssertEqual(events.map(\.vertical).reduce(0, +), -200)
+    XCTAssertEqual(events.map(\.horizontal).reduce(0, +), 0)
+    XCTAssertEqual(desktopScrollEventIntervalSeconds(durationMs: 50, eventCount: events.count), 0.05 / 3.0)
+  }
+
+  func testDesktopScrollWheelDeltaEventsKeepInstantScrollSingleEvent() throws {
+    let events = try XCTUnwrap(desktopScrollWheelDeltaEvents(direction: "down", pixels: 200, durationMs: 0))
+    XCTAssertEqual(events.count, 1)
+    XCTAssertEqual(events.first?.vertical, -200)
   }
 }

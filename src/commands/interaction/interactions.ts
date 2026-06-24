@@ -87,6 +87,7 @@ export const interactionCliReaders = {
     direction: readScrollDirection(positionals[0]),
     amount: optionalCliNumber(positionals[1]),
     pixels: flags.pixels,
+    durationMs: flags.durationMs,
   }),
   get: (positionals, flags) => ({
     ...commonInputFromFlags(flags),

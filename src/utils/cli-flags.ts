@@ -83,6 +83,7 @@ export type CliFlags = RemoteConfigMetroOptions &
     hideTouches?: boolean;
     intervalMs?: number;
     delayMs?: number;
+    durationMs?: number;
     holdMs?: number;
     jitterPx?: number;
     pixels?: number;
@@ -676,6 +677,15 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     max: 10_000,
     usageLabel: '--delay-ms <ms>',
     usageDescription: 'Delay between typed characters',
+  },
+  {
+    key: 'durationMs',
+    names: ['--duration-ms'],
+    type: 'int',
+    min: 0,
+    max: 10_000,
+    usageLabel: '--duration-ms <ms>',
+    usageDescription: 'Scroll: spread desktop wheel events over this duration',
   },
   {
     key: 'holdMs',

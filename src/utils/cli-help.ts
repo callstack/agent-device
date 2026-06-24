@@ -194,6 +194,9 @@ Read-only and waits:
 
 Navigation and gestures:
   Use scroll for lists; swipe for coordinate gestures/carousels; gesture pan for deliberate drags; gesture fling for fast directional throws.
+  For fast macOS desktop list traversal, prefer fixed pixel wheel steps and batch them when no snapshot is needed between passes:
+    agent-device scroll down --pixels 200 --duration-ms 50 --platform macos
+    agent-device batch --steps '[{"command":"scroll","input":{"direction":"down","pixels":200,"durationMs":50}},{"command":"scroll","input":{"direction":"down","pixels":200,"durationMs":50}}]' --platform macos
   For raw coordinate gestures, run snapshot -i first and choose a point near the center of the intended app-owned target. Avoid screen edges, tab bars, navigation bars, and home indicators because those areas can trigger system or app navigation instead of the gesture under test.
   If app-owned back is ambiguous or has just misrouted, prefer a visible nav/back button ref, tab-bar ref, or deep link over repeated back/system back.
   App-owned action sheets, menus, and camera/scan screens are normal UI. After opening one, run snapshot -i or wait for the option, press by label/ref, handle visible permission sheets through UI or platform-supported native alerts, then wait for a concrete result before returning to chat/form state.

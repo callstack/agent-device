@@ -117,11 +117,11 @@ const interactionCliSchemas = {
     allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS, 'delayMs'],
   },
   scroll: {
-    usageOverride: 'scroll <direction|top|bottom> [amount] [--pixels <n>]',
+    usageOverride: 'scroll <direction|top|bottom> [amount] [--pixels <n>] [--duration-ms <ms>]',
     helpDescription: 'Scroll in a direction, or toward the top/bottom edge of scrollable content.',
     summary: 'Scroll in a direction or to an edge',
     positionalArgs: ['directionOrEdge', 'amount?'],
-    allowedFlags: ['pixels'],
+    allowedFlags: ['pixels', 'durationMs'],
   },
 } as const satisfies Record<string, CommandSchemaOverride>;
 

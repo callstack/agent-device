@@ -380,13 +380,14 @@ test('iosRunnerOverrides maps macOS desktop scroll to a desktop wheel command', 
     appBundleId: 'com.example.App',
   });
 
-  const result = await overrides.scroll('down', { amount: 0.5 });
+  const result = await overrides.scroll('down', { pixels: 200, durationMs: 50 });
 
   assert.equal(mockRunIosRunnerCommand.mock.calls.length, 1);
   assert.deepEqual(mockRunIosRunnerCommand.mock.calls[0]?.[1], {
     command: 'desktopScroll',
     direction: 'down',
-    amount: 0.5,
+    pixels: 200,
+    durationMs: 50,
     appBundleId: 'com.example.App',
   });
   assert.deepEqual(result, {
@@ -394,8 +395,8 @@ test('iosRunnerOverrides maps macOS desktop scroll to a desktop wheel command', 
     y1: 400,
     referenceWidth: 400,
     referenceHeight: 800,
-    amount: 0.5,
-    pixels: 400,
+    pixels: 200,
+    durationMs: 50,
   });
 });
 

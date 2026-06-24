@@ -653,6 +653,7 @@ export type ScrollOptions = DeviceCommandBaseOptions & {
   direction: ScrollInputDirection;
   amount?: number;
   pixels?: number;
+  durationMs?: number;
 };
 
 export type PinchOptions = DeviceCommandBaseOptions & {
@@ -859,6 +860,7 @@ type CommandExecutionOptions = Partial<ScreenshotRequestFlags> & {
   hideTouches?: boolean;
   intervalMs?: number;
   delayMs?: number;
+  durationMs?: number;
   holdMs?: number;
   jitterPx?: number;
   pixels?: number;

@@ -516,6 +516,7 @@ test('runtime scroll resolves selector targets before calling the backend primit
     target: selector('label=Continue'),
     direction: 'down',
     pixels: 120,
+    durationMs: 50,
   });
   const viewportResult = await device.interactions.scroll({
     direction: 'up',
@@ -527,7 +528,7 @@ test('runtime scroll resolves selector targets before calling the backend primit
   assert.deepEqual(calls, [
     {
       target: { kind: 'point', point: { x: 60, y: 40 } },
-      options: { direction: 'down', pixels: 120 },
+      options: { direction: 'down', pixels: 120, durationMs: 50 },
     },
     {
       target: { kind: 'viewport' },

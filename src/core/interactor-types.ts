@@ -114,7 +114,7 @@ export type Interactor = {
   ): Promise<Record<string, unknown> | void>;
   scroll(
     direction: ScrollDirection,
-    options?: { amount?: number; pixels?: number },
+    options?: { amount?: number; pixels?: number; durationMs?: number },
   ): Promise<Record<string, unknown> | void>;
   pinch(scale: number, x?: number, y?: number): Promise<Record<string, unknown> | void>;
   screenshot(outPath: string, options?: ScreenshotOptions): Promise<void>;

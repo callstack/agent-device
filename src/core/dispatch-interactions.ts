@@ -735,9 +735,16 @@ export async function handleScrollCommand(
   const directionInput = positionals[0];
   const amount = positionals[1] ? Number(positionals[1]) : undefined;
   const pixels = context?.pixels;
+  const durationMs = context?.durationMs;
   if (!directionInput) throw new AppError('INVALID_ARGS', 'scroll requires direction');
   if (amount !== undefined && !Number.isFinite(amount)) {
     throw new AppError('INVALID_ARGS', 'scroll amount must be a number');
+  }
+  if (
+    durationMs !== undefined &&
+    (!Number.isFinite(durationMs) || !Number.isInteger(durationMs) || durationMs < 0)
+  ) {
+    throw new AppError('INVALID_ARGS', 'scroll durationMs must be a non-negative integer');
   }
   if (amount !== undefined && pixels !== undefined) {
     throw new AppError(
@@ -755,12 +762,12 @@ export async function handleScrollCommand(
       edge,
       captureState: async (scope) =>
         await captureVerifiedScrollEdgeState(interactor, context, edge, scope),
-      scroll: async () => await interactor.scroll(target.direction, { amount, pixels }),
+      scroll: async () => await interactor.scroll(target.direction, { amount, pixels, durationMs }),
     });
     interactionResult = edgeResult.result ?? {};
     completedPasses = edgeResult.passes;
   } else {
-    interactionResult = await interactor.scroll(target.direction, { amount, pixels });
+    interactionResult = await interactor.scroll(target.direction, { amount, pixels, durationMs });
     completedPasses = 1;
   }
 
@@ -775,6 +782,7 @@ export async function handleScrollCommand(
         : {}),
       ...(amount !== undefined ? { amount } : {}),
       ...(pixels !== undefined ? { pixels } : {}),
+      ...(durationMs !== undefined ? { durationMs } : {}),
       ...interactionResult,
     },
     formatScrollEdgeMessage(target.direction, target.edge, completedPasses, amount, pixels),

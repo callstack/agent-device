@@ -204,7 +204,7 @@ function throwAndroidFillFailure(
 export async function scrollAndroid(
   device: DeviceInfo,
   direction: ScrollDirection,
-  options?: { amount?: number; pixels?: number },
+  options?: { amount?: number; pixels?: number; durationMs?: number },
 ): Promise<Record<string, unknown>> {
   const size = await getAndroidScreenSize(device);
   const plan = buildScrollGesturePlan({

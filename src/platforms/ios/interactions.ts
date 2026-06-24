@@ -4,6 +4,7 @@ import {
   buildScrollGesturePlan,
   type ScrollDirection,
 } from '../../core/scroll-gesture.ts';
+import { AppError } from '../../utils/errors.ts';
 import { runIosRunnerCommand } from './runner-client.ts';
 import { buildRunnerSequenceCommand, parseRunnerSequenceResult } from './runner-sequence.ts';
 import type { RunnerCommand } from './runner-contract.ts';
@@ -26,6 +27,7 @@ const IOS_SWIPE_MAX_DURATION_MS = 10_000;
 type NormalizedScrollOptions = {
   amount?: number;
   pixels?: number;
+  durationMs?: number;
   preferProvidedPixels?: boolean;
 };
 
@@ -322,7 +324,7 @@ async function runAppleScroll(
   ctx: RunnerContext,
   runnerOpts: RunnerOpts,
   direction: ScrollDirection,
-  options?: { amount?: number; pixels?: number },
+  options?: { amount?: number; pixels?: number; durationMs?: number },
 ): Promise<Record<string, unknown>> {
   if (device.target === 'tv') {
     const runnerResult = await runRunnerCommand(
@@ -337,6 +339,7 @@ async function runAppleScroll(
   // is sent (previously validation ran between the frame request and the drag, so a bad amount
   // could cost one runner request first).
   assertScrollGestureInput(options ?? {});
+  assertScrollDurationInput(options?.durationMs);
 
   if (device.platform === 'macos' && device.target === 'desktop') {
     const runnerResult = await runRunnerCommand(
@@ -346,6 +349,7 @@ async function runAppleScroll(
         direction,
         ...(options?.amount !== undefined ? { amount: options.amount } : {}),
         ...(options?.pixels !== undefined ? { pixels: options.pixels } : {}),
+        ...(options?.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
         appBundleId: ctx.appBundleId,
       },
       runnerOpts,
@@ -378,10 +382,17 @@ async function runAppleScroll(
   return normalizeIosScrollResult(runnerResult, { amount: options?.amount });
 }
 
+function assertScrollDurationInput(durationMs: number | undefined): void {
+  if (durationMs === undefined) return;
+  if (!Number.isFinite(durationMs) || !Number.isInteger(durationMs) || durationMs < 0) {
+    throw new AppError('INVALID_ARGS', 'scroll durationMs must be a non-negative integer');
+  }
+}
+
 function normalizeScrollResultWithResolvedFrame(
   runnerResult: Record<string, unknown>,
   direction: ScrollDirection,
-  options?: { amount?: number; pixels?: number },
+  options?: { amount?: number; pixels?: number; durationMs?: number },
 ): Record<string, unknown> {
   const referenceWidth = readFiniteNumber(runnerResult.referenceWidth);
   const referenceHeight = readFiniteNumber(runnerResult.referenceHeight);
@@ -401,6 +412,7 @@ function normalizeScrollResultWithResolvedFrame(
   return normalizeIosScrollResult(runnerResult, {
     amount: options?.amount,
     pixels: plan.pixels,
+    durationMs: options?.durationMs,
     preferProvidedPixels: true,
   });
 }
@@ -438,6 +450,7 @@ function normalizeIosScrollResult(
     ...(referenceHeight !== undefined ? { referenceHeight } : {}),
     ...(options?.amount !== undefined ? { amount: options.amount } : {}),
     ...(travelPixels !== undefined ? { pixels: travelPixels } : {}),
+    ...(options?.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
   };
 }
 

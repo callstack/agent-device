@@ -16,6 +16,30 @@ test('dispatch scroll rejects mixing amount and --pixels', async () => {
   );
 });
 
+test('dispatch scroll forwards pixels and duration to the interactor', async () => {
+  const calls: Array<{ direction: string; options: unknown }> = [];
+  const interactor = {
+    scroll: async (direction: any, options: unknown) => {
+      calls.push({ direction, options });
+      return { ok: true };
+    },
+  } as unknown as Interactor;
+
+  const result = await handleScrollCommand(interactor, ['down'], {
+    pixels: 200,
+    durationMs: 50,
+  });
+
+  assert.deepEqual(calls, [
+    {
+      direction: 'down',
+      options: { amount: undefined, pixels: 200, durationMs: 50 },
+    },
+  ]);
+  assert.equal(result.pixels, 200);
+  assert.equal(result.durationMs, 50);
+});
+
 test('dispatch scroll bottom rejects blind scrolling without snapshot support', async () => {
   const calls: Array<{ direction: string; options: unknown }> = [];
   const interactor = {
@@ -93,7 +117,7 @@ test('dispatch scroll bottom scrolls only while scoped snapshot confirms hidden 
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0], {
     direction: 'down',
-    options: { amount: undefined, pixels: undefined },
+    options: { amount: undefined, pixels: undefined, durationMs: undefined },
   });
   assert.equal(result.passes, 1);
   assert.equal(result.lastPass, 1);

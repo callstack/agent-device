@@ -114,6 +114,7 @@ const scrollFields = {
   direction: requiredField(enumField(SCROLL_INPUT_DIRECTIONS)),
   amount: numberField('Platform scroll amount.'),
   pixels: integerField('Pixel scroll amount.', { min: 0 }),
+  durationMs: integerField('Desktop scroll duration in milliseconds.', { min: 0 }),
 };
 
 const getFields = {

@@ -309,6 +309,7 @@ export function buildFlags(options: InternalRequestOptions): CommandFlags {
     hideTouches: options.hideTouches,
     intervalMs: options.intervalMs,
     delayMs: options.delayMs,
+    durationMs: options.durationMs,
     holdMs: options.holdMs,
     jitterPx: options.jitterPx,
     pixels: options.pixels,

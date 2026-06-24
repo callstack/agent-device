@@ -168,6 +168,7 @@ export type BackendScrollOptions = {
   direction: ScrollDirection;
   amount?: number;
   pixels?: number;
+  durationMs?: number;
 };
 
 export type BackendPinchOptions = {

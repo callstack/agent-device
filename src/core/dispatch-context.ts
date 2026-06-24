@@ -51,6 +51,7 @@ export type DispatchContext = ScreenshotDispatchFlags & {
   count?: number;
   intervalMs?: number;
   delayMs?: number;
+  durationMs?: number;
   holdMs?: number;
   jitterPx?: number;
   pixels?: number;

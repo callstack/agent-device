@@ -53,7 +53,10 @@ export type LinuxInputProvider = {
   doubleClick(x: number, y: number): Promise<void>;
   longPress(x: number, y: number, durationMs: number): Promise<void>;
   drag(x1: number, y1: number, x2: number, y2: number, durationMs: number): Promise<void>;
-  scroll(direction: ScrollDirection, options?: { amount?: number; pixels?: number }): Promise<void>;
+  scroll(
+    direction: ScrollDirection,
+    options?: { amount?: number; pixels?: number; durationMs?: number },
+  ): Promise<void>;
   typeText(text: string, options?: { delayMs?: number }): Promise<void>;
   key(combo: string, scancodes: string[]): Promise<void>;
 };

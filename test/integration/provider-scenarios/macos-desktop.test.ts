@@ -70,7 +70,8 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
       request: {
         command: 'desktopScroll',
         direction: 'down',
-        amount: 0.5,
+        pixels: 200,
+        durationMs: 50,
         appBundleId: 'com.apple.systempreferences',
       },
       result: { x: 200, y: 400, referenceWidth: 400, referenceHeight: 800 },
@@ -139,14 +140,15 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
           {
             name: 'scroll app session with desktop wheel event',
             command: 'scroll',
-            positionals: ['down', '0.5'],
+            positionals: ['down'],
+            flags: { pixels: 200, durationMs: 50 },
             expectData: {
               x1: 200,
               y1: 400,
               referenceWidth: 400,
               referenceHeight: 800,
-              amount: 0.5,
-              pixels: 400,
+              pixels: 200,
+              durationMs: 50,
             },
           },
           {

@@ -671,6 +671,15 @@ extension RunnerTests {
       }
       let x = frame.midX
       let y = frame.midY
+      if let durationMs = command.durationMs, durationMs.isFinite == false || durationMs < 0 {
+        return Response(
+          ok: false,
+          error: ErrorPayload(
+            code: "INVALID_ARGS",
+            message: "desktopScroll durationMs must be >= 0"
+          )
+        )
+      }
       let touchFrame = TouchVisualizationFrame(
         x: x,
         y: y,
@@ -686,7 +695,8 @@ extension RunnerTests {
               x: x,
               y: y,
               direction: direction,
-              pixels: plan.travelPixels
+              pixels: plan.travelPixels,
+              durationMs: command.durationMs
             )
           } catch {
             scrollError = error

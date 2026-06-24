@@ -40,6 +40,7 @@ export function contextFromFlags(
     count: flags?.count,
     intervalMs: flags?.intervalMs,
     delayMs: flags?.delayMs,
+    durationMs: flags?.durationMs,
     holdMs: flags?.holdMs,
     jitterPx: flags?.jitterPx,
     pixels: flags?.pixels,

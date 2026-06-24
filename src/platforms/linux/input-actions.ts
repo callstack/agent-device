@@ -177,7 +177,7 @@ const DEFAULT_SCROLL_CLICKS = 5;
 
 export async function scrollLinux(
   direction: ScrollDirection,
-  options?: { amount?: number; pixels?: number },
+  options?: { amount?: number; pixels?: number; durationMs?: number },
 ): Promise<void> {
   const provider = resolveLinuxInputProvider();
   if (provider) {

@@ -64,6 +64,7 @@ export type ScrollCommandOptions = CommandContext & {
   direction: ScrollInputDirection;
   amount?: number;
   pixels?: number;
+  durationMs?: number;
 };
 
 export type ScrollCommandResult =
@@ -74,6 +75,7 @@ export type ScrollCommandResult =
       passes?: number;
       amount?: number;
       pixels?: number;
+      durationMs?: number;
     }>
   | BackendResultVariant<
       ResolvedInteractionTarget & {
@@ -82,6 +84,7 @@ export type ScrollCommandResult =
         passes?: number;
         amount?: number;
         pixels?: number;
+        durationMs?: number;
       }
     >;
 
@@ -182,6 +185,7 @@ export const scrollCommand: RuntimeCommand<ScrollCommandOptions, ScrollCommandRe
   const target = resolveScrollDirection(options.direction);
   const amount = normalizeOptionalPositiveNumber(options.amount, 'scroll amount');
   const pixels = normalizeOptionalPositiveInteger(options.pixels, 'scroll pixels');
+  const durationMs = normalizeOptionalNonNegativeInteger(options.durationMs, 'scroll durationMs');
   if (amount !== undefined && pixels !== undefined) {
     throw new AppError('INVALID_ARGS', 'scroll accepts either amount or pixels, not both');
   }
@@ -197,6 +201,7 @@ export const scrollCommand: RuntimeCommand<ScrollCommandOptions, ScrollCommandRe
       direction: target.direction,
       ...(amount !== undefined ? { amount } : {}),
       ...(pixels !== undefined ? { pixels } : {}),
+      ...(durationMs !== undefined ? { durationMs } : {}),
     });
   let backendResult: Awaited<ReturnType<NonNullable<typeof runtime.backend.scroll>>> | undefined;
   let completedPasses = 0;
@@ -222,6 +227,7 @@ export const scrollCommand: RuntimeCommand<ScrollCommandOptions, ScrollCommandRe
     ...(target.edge ? { edge: target.edge, passes: completedPasses } : {}),
     ...(amount !== undefined ? { amount } : {}),
     ...(pixels !== undefined ? { pixels } : {}),
+    ...(durationMs !== undefined ? { durationMs } : {}),
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
     ...successText(
       formatScrollEdgeMessage(target.direction, target.edge, completedPasses, amount, pixels),
@@ -512,6 +518,17 @@ function normalizeOptionalPositiveInteger(
   if (value === undefined) return undefined;
   if (!Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
     throw new AppError('INVALID_ARGS', `${field} must be a positive integer`);
+  }
+  return value;
+}
+
+function normalizeOptionalNonNegativeInteger(
+  value: number | undefined,
+  field: string,
+): number | undefined {
+  if (value === undefined) return undefined;
+  if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0) {
+    throw new AppError('INVALID_ARGS', `${field} must be a non-negative integer`);
   }
   return value;
 }

@@ -39,7 +39,10 @@ export type WebProvider = {
   fill(x: number, y: number, text: string, options?: { delayMs?: number }): Promise<void>;
   fillRef?(ref: string, text: string, options?: { delayMs?: number }): Promise<void>;
   typeText(text: string, options?: { delayMs?: number }): Promise<void>;
-  scroll(direction: ScrollDirection, options?: { amount?: number; pixels?: number }): Promise<void>;
+  scroll(
+    direction: ScrollDirection,
+    options?: { amount?: number; pixels?: number; durationMs?: number },
+  ): Promise<void>;
   readText?(x: number, y: number): Promise<string>;
   dumpNetwork?(options?: BackendDumpNetworkOptions): Promise<BackendDumpNetworkResult>;
 };
