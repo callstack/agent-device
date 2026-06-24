@@ -19,7 +19,9 @@ export function buildIntegrationProgressModel({ root = process.cwd() } = {}) {
   const handlerTests = listFiles(handlerTestDir, (file) => file.endsWith('.test.ts'));
   const providerScenarioTests = listFiles(providerScenarioDir, (file) => file.endsWith('.test.ts'));
   const providerScenarioSources = listFiles(providerScenarioDir, (file) => file.endsWith('.ts'));
-  const providerScenarioSupportSources = providerScenarioSources.filter((file) => !file.endsWith('.test.ts'));
+  const providerScenarioSupportSources = providerScenarioSources.filter(
+    (file) => !file.endsWith('.test.ts'),
+  );
   const handlerStats = summarizeFiles(handlerTests);
   const providerScenarioStats = summarizeFiles(providerScenarioTests);
   const providerScenarioSupportStats = summarizeFiles(providerScenarioSupportSources);
@@ -28,7 +30,10 @@ export function buildIntegrationProgressModel({ root = process.cwd() } = {}) {
   );
   const mockHeavyHandlerRows = summarizeMockHeavyHandlerFiles(root, mockHeavyHandlerFiles);
   const providerPressureRows = summarizeProviderPressure(providerScenarioSources);
-  const publicCommandRows = summarizePublicCommandCoverage(providerScenarioTests, clientCommandMethods);
+  const publicCommandRows = summarizePublicCommandCoverage(
+    providerScenarioTests,
+    clientCommandMethods,
+  );
   const missingPublicCommands = publicCommandRows.filter((command) => command.references === 0);
   const flagCoverageRows = summarizeProviderScenarioFlagCoverage(providerScenarioTests);
   const missingFlagRows = flagCoverageRows.filter((flag) => flag.references === 0);
@@ -57,12 +62,18 @@ export function buildIntegrationProgressModel({ root = process.cwd() } = {}) {
       'Public commands covered by provider-backed integration',
       `${publicCommandRows.length - missingPublicCommands.length}/${publicCommandRows.length}`,
     ],
-    ['Public commands missing provider-backed integration coverage', String(missingPublicCommands.length)],
+    [
+      'Public commands missing provider-backed integration coverage',
+      String(missingPublicCommands.length),
+    ],
     [
       'Device-observable workflow flags covered by provider-backed integration',
       `${flagCoverageRows.length - missingFlagRows.length}/${flagCoverageRows.length}`,
     ],
-    ['Device-observable workflow flags missing provider-backed integration coverage', String(missingFlagRows.length)],
+    [
+      'Device-observable workflow flags missing provider-backed integration coverage',
+      String(missingFlagRows.length),
+    ],
     [
       'Public CLI flags intentionally outside provider-backed integration',
       String(excludedFlagRows.reduce((sum, group) => sum + group.keys.length, 0)),
@@ -140,6 +151,7 @@ function summarizeProviderScenarioFlagCoverage(files) {
     ['hideTouches', 'recording without touch overlays'],
     ['intervalMs', 'repeated press interval'],
     ['delayMs', 'typing/fill delay'],
+    ['durationMs', 'scroll and gesture duration'],
     ['holdMs', 'press hold duration'],
     ['jitterPx', 'press jitter'],
     ['pixels', 'scroll distance'],
@@ -338,7 +350,8 @@ function summarizeProviderPressure(files) {
   const surfaces = [
     {
       name: 'Android ADB provider',
-      pattern: /\bAndroidAdbProvider\b|\bandroidAdbProvider\b|\badbProvider\b|\badb\.(?:exec|installer|puller|portReverse)\b/g,
+      pattern:
+        /\bAndroidAdbProvider\b|\bandroidAdbProvider\b|\badbProvider\b|\badb\.(?:exec|installer|puller|portReverse)\b/g,
     },
     {
       name: 'Apple runner provider',
@@ -346,8 +359,7 @@ function summarizeProviderPressure(files) {
     },
     {
       name: 'Apple simctl/devicectl provider',
-      pattern:
-        /\bsimctl\b|\bdevicectl\b|\brunXcrun\b|\bsimctl\s*:|\bdevicectl\s*:/g,
+      pattern: /\bsimctl\b|\bdevicectl\b|\brunXcrun\b|\bsimctl\s*:|\bdevicectl\s*:/g,
     },
     {
       name: 'Apple macOS helper provider',
@@ -451,7 +463,9 @@ function readClientCommandMethods(commandContractFiles) {
   for (const file of commandContractFiles) {
     const text = fs.readFileSync(file, 'utf8');
     for (const block of readCommandContractBlocks(text)) {
-      for (const method of block.source.matchAll(/\bclient\.([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)\s*\(/g)) {
+      for (const method of block.source.matchAll(
+        /\bclient\.([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)\s*\(/g,
+      )) {
         commands.set(`${method[1]}.${method[2]}`, block.name);
       }
     }
@@ -513,7 +527,9 @@ function extractProviderScenarioCommandReferences(text, clientCommandMethods) {
 
 function extractLiteralCommandReferences(text) {
   const commands = [];
-  for (const match of text.matchAll(/\bcommand:\s*['"]([^'"]+)['"]|\.callCommand\(\s*['"]([^'"]+)['"]/g)) {
+  for (const match of text.matchAll(
+    /\bcommand:\s*['"]([^'"]+)['"]|\.callCommand\(\s*['"]([^'"]+)['"]/g,
+  )) {
     commands.push(match[1] ?? match[2]);
   }
   return commands;
