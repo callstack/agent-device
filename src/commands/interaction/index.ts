@@ -127,6 +127,8 @@ const interactionCliSchemas = {
 
 type InteractionCommandMetadata = (typeof interactionCommandMetadata)[number];
 type InteractionCommandName = InteractionCommandMetadata['name'];
+const { gesture: _gestureDaemonWriter, ...gestureProjectionAliasDaemonWriters } =
+  gestureDaemonWriters;
 
 const clickCommandDefinition = defineExecutableCommand(metadata('click'), (client, input) =>
   client.interactions.click(toClickOptions(input)),
@@ -303,7 +305,7 @@ const gestureCommandFacet = defineCommandFacet({
   cliSchema: interactionCliSchemas.gesture,
   cliReader: gestureCliReaders.gesture,
   daemonWriter: gestureDaemonWriters.gesture,
-  extraDaemonWriters: gestureDaemonWriters,
+  extraDaemonWriters: gestureProjectionAliasDaemonWriters,
 });
 
 export const interactionCommandFamily = defineCommandFamilyFromFacets({

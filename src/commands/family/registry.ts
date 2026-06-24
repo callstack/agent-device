@@ -70,7 +70,7 @@ function mergeFamilyRecords<TKey extends keyof CommandFamilyRecordMap>(
 ): Record<string, CommandFamilyRecordMap[TKey]> {
   const records: Record<string, CommandFamilyRecordMap[TKey]> = {};
   for (const family of commandFamilies) {
-    const record = (family as CommandFamilyFacet)[key] as
+    const record = family[key] as
       | Readonly<Record<string, CommandFamilyRecordMap[TKey]>>
       | undefined;
     if (!record) continue;
