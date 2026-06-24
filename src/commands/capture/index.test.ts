@@ -80,11 +80,10 @@ describe('capture command interface', () => {
   test('reads screenshot path and writes screenshot flags', () => {
     const input = screenshotCliReader(
       ['page.png'],
-      flags({ screenshotFullPage: true, screenshotFullscreen: true, screenshotMaxSize: 1024 }),
+      flags({ screenshotFullscreen: true, screenshotMaxSize: 1024 }),
     );
     expect(input).toMatchObject({
       path: 'page.png',
-      fullPage: true,
       fullscreen: true,
       maxSize: 1024,
     });
@@ -92,7 +91,6 @@ describe('capture command interface', () => {
       command: 'screenshot',
       positionals: ['page.png'],
       options: {
-        screenshotFullPage: true,
         screenshotFullscreen: true,
         screenshotMaxSize: 1024,
       },

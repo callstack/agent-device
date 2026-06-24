@@ -41,6 +41,7 @@ import type {
   Lease,
   MaterializationReleaseOptions,
   MetroPrepareOptions,
+  ViewportCommandResult,
 } from './client-types.ts';
 import { readSerializedSnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
 import { readSnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
@@ -101,6 +102,7 @@ export function createAgentDeviceClient(
       clipboard: async (options) => await executeCommand('clipboard', options),
       reactNative: async (options) => await executeCommand('react-native', options),
       prepare: async (options) => await executeCommand('prepare', options),
+      viewport: async (options) => await executeCommand<ViewportCommandResult>('viewport', options),
     },
     devices: {
       list: async (options = {}) => {

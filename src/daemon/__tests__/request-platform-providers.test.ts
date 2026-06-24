@@ -274,6 +274,7 @@ function makeWebProvider(overrides: Partial<WebProvider> = {}): WebProvider {
     close: async () => {},
     snapshot: async () => ({ nodes: [] }),
     screenshot: async () => {},
+    setViewport: async () => {},
     click: async () => {},
     fill: async () => {},
     typeText: async () => {},

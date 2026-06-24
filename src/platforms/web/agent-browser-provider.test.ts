@@ -26,7 +26,8 @@ test('agent-browser provider maps supported operations to session-scoped JSON co
 
     await withCommandExecutorOverride(recordingExecutor(calls), async () => {
       await provider.open('https://example.test');
-      await provider.screenshot('/tmp/page.png', { fullPage: true });
+      await provider.screenshot('/tmp/page.png', { fullscreen: true });
+      await provider.setViewport(1280, 900);
       await provider.click(10.4, 20.6);
       await provider.clickRef?.('@e3');
       await provider.fill(11, 22, 'Ada');
@@ -41,6 +42,7 @@ test('agent-browser provider maps supported operations to session-scoped JSON co
       [
         ['open', 'https://example.test', '--json', '--session', 'web-session'],
         ['screenshot', '--full', '/tmp/page.png', '--json', '--session', 'web-session'],
+        ['set', 'viewport', '1280', '900', '--json', '--session', 'web-session'],
         ['mouse', 'move', '10', '21', '--json', '--session', 'web-session'],
         ['mouse', 'down', '--json', '--session', 'web-session'],
         ['mouse', 'up', '--json', '--session', 'web-session'],
@@ -55,19 +57,6 @@ test('agent-browser provider maps supported operations to session-scoped JSON co
         ['scroll', 'down', '400', '--json', '--session', 'web-session'],
         ['close', '--json', '--session', 'web-session'],
       ],
-    );
-  });
-});
-
-test('agent-browser provider rejects fullscreen web screenshots in favor of full-page', async () => {
-  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
-    await assert.rejects(
-      () => provider.screenshot('/tmp/page.png', { fullscreen: true }),
-      (error: unknown) =>
-        error instanceof AppError &&
-        error.code === 'INVALID_ARGS' &&
-        error.message ===
-          'web screenshots do not support --fullscreen; use --full-page for the full document',
     );
   });
 });

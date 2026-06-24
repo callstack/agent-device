@@ -21,6 +21,7 @@ export function createWebInteractor(): Interactor {
     scroll: (direction, options) => provider().scroll(direction, options),
     pinch: () => unsupportedWebOperation('pinch'),
     screenshot: (outPath, options) => provider().screenshot(outPath, options),
+    setViewport: (width, height) => provider().setViewport(width, height),
     snapshot: async (options) => {
       const result = await withDiagnosticTimer(
         'snapshot_capture',

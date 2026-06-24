@@ -26,7 +26,6 @@ export type BackendResultVariant<T extends object> = T & BackendResultEnvelope;
 
 export type ScreenshotCommandOptions = CommandContext & {
   out?: FileOutputRef;
-  fullPage?: boolean;
   fullscreen?: boolean;
   overlayRefs?: boolean;
   maxSize?: number;

@@ -41,6 +41,9 @@ test('web provider is scoped through the request router and dispatch path', asyn
     async screenshot() {
       calls.push('screenshot');
     },
+    async setViewport(width, height) {
+      calls.push(`viewport:${width}:${height}`);
+    },
     async click(x, y) {
       calls.push(`click:${x}:${y}`);
     },
@@ -140,6 +143,17 @@ test('web provider is scoped through the request router and dispatch path', asyn
     ]);
     assert.equal(network.json.result.data.backend, 'agent-browser');
     assert.equal(network.json.result.data.include, 'headers');
+    const viewport = await harness.callCommand(
+      'viewport',
+      ['1280', '900'],
+      { platform: 'web' },
+      { meta: { requestId: 'req-web-viewport' } },
+    );
+    assert.deepEqual(viewport.json.result.data, {
+      width: 1280,
+      height: 900,
+      message: 'Viewport set: 1280x900',
+    });
     assert.deepEqual(calls, [
       'scope:none:agent-browser-chrome',
       'open:https://example.test',
@@ -147,6 +161,8 @@ test('web provider is scoped through the request router and dispatch path', asyn
       'snapshot:main',
       'scope:default:agent-browser-chrome',
       'network:5:headers',
+      'scope:default:agent-browser-chrome',
+      'viewport:1280:900',
     ]);
   } finally {
     await harness.close();

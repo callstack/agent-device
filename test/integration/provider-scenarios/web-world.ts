@@ -54,12 +54,14 @@ export async function createWebDesktopWorld(): Promise<WebDesktopWorld> {
         'web',
         'screenshot',
         outPath,
-        String(options?.fullPage ?? ''),
         String(options?.fullscreen ?? ''),
         String(options?.stabilize ?? ''),
         String(options?.surface ?? ''),
       ]);
       fs.writeFileSync(outPath, validPng());
+    },
+    setViewport: async (width, height) => {
+      semanticCalls.push(['web', 'viewport', String(width), String(height)]);
     },
     click: async (x, y) => {
       semanticCalls.push(['web', 'click', String(x), String(y)]);

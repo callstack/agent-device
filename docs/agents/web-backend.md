@@ -15,6 +15,8 @@ Default first-run flow:
 agent-device web setup
 agent-device open "https://example.com" --platform web
 agent-device snapshot -i --platform web
+agent-device viewport 1280 900 --platform web
+agent-device screenshot ./artifacts/web-full.png --platform web --fullscreen
 agent-device network dump 25 --platform web
 agent-device close --platform web
 ```

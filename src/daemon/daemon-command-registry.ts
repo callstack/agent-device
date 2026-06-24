@@ -158,6 +158,7 @@ const DAEMON_COMMAND_DESCRIPTORS = [
   ),
   descriptor(PUBLIC_COMMANDS.focus, 'generic', { androidBlockingDialogGuard: true }),
   descriptor(PUBLIC_COMMANDS.screenshot, 'generic', { replayScopedAction: true }),
+  descriptor(PUBLIC_COMMANDS.viewport, 'generic', { replayScopedAction: true }),
   ...descriptors(
     'generic',
     { androidBlockingDialogGuard: true },

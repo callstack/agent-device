@@ -10,7 +10,6 @@ export type WebOpenOptions = {
 };
 
 export type WebScreenshotOptions = {
-  fullPage?: boolean;
   fullscreen?: boolean;
   stabilize?: boolean;
   surface?: SessionSurface;
@@ -35,6 +34,7 @@ export type WebProvider = {
   close(target?: string): Promise<void>;
   snapshot(options?: WebSnapshotOptions): Promise<WebSnapshotResult>;
   screenshot(outPath: string, options?: WebScreenshotOptions): Promise<void>;
+  setViewport(width: number, height: number): Promise<void>;
   click(x: number, y: number): Promise<void>;
   clickRef?(ref: string): Promise<void>;
   fill(x: number, y: number, text: string, options?: { delayMs?: number }): Promise<void>;

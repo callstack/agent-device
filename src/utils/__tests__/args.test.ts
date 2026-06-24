@@ -895,7 +895,8 @@ test('parseArgs recognizes screenshot flags', () => {
     [
       'screenshot',
       'page.png',
-      '--full-page',
+      '--full',
+      '-f',
       '--fullscreen',
       '--max-size',
       '1024',
@@ -907,19 +908,27 @@ test('parseArgs recognizes screenshot flags', () => {
   );
   assert.equal(parsed.command, 'screenshot');
   assert.deepEqual(parsed.positionals, ['page.png']);
-  assert.equal(parsed.flags.screenshotFullPage, true);
   assert.equal(parsed.flags.screenshotFullscreen, true);
   assert.equal(parsed.flags.screenshotMaxSize, 1024);
   assert.equal(parsed.flags.screenshotNoStabilize, true);
 });
 
-test('usageForCommand documents screenshot full-page and stabilization flags', () => {
+test('usageForCommand documents screenshot web aliases and stabilization flags', () => {
   const help = usageForCommand('screenshot');
   if (help === null) throw new Error('Expected screenshot help text');
-  assert.match(help, /--full-page/);
-  assert.match(help, /entire document/i);
+  assert.match(help, /--fullscreen, --full, -f/);
+  assert.match(help, /entire page/i);
   assert.match(help, /--no-stabilize/);
   assert.match(help, /low-latency Android capture loops/);
+});
+
+test('parseArgs recognizes viewport command', () => {
+  const parsed = parseArgs(['viewport', '1280', '900', '--platform', 'web'], {
+    strictFlags: true,
+  });
+  assert.equal(parsed.command, 'viewport');
+  assert.deepEqual(parsed.positionals, ['1280', '900']);
+  assert.equal(parsed.flags.platform, 'web');
 });
 
 test('parseArgs rejects invalid record --fps range', () => {

@@ -52,10 +52,12 @@ const WEB_QUERY_COMMANDS = [
   'wait',
 ] as const;
 const WEB_INTERACTION_COMMANDS = ['click', 'fill', 'focus', 'press', 'scroll', 'type'] as const;
+const WEB_SETTING_COMMANDS = ['viewport'] as const;
 const WEB_SUPPORTED_COMMANDS = new Set<string>([
   ...WEB_RUNTIME_COMMANDS,
   ...WEB_QUERY_COMMANDS,
   ...WEB_INTERACTION_COMMANDS,
+  ...WEB_SETTING_COMMANDS,
 ]);
 const ALL_DEVICE_COMMAND_CAPABILITY = {
   apple: { simulator: true, device: true },
@@ -258,6 +260,11 @@ const BASE_COMMAND_CAPABILITY_MATRIX: Record<string, CommandCapability> = {
     linux: LINUX_NONE,
     supports: (device) =>
       device.platform === 'android' || device.platform === 'macos' || device.kind === 'simulator',
+  },
+  viewport: {
+    apple: { simulator: true, device: true },
+    android: { emulator: true, device: true, unknown: true },
+    linux: LINUX_NONE,
   },
   'trigger-app-event': {
     apple: { simulator: true, device: true },

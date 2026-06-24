@@ -841,6 +841,26 @@ const SKILL_GUIDANCE_CASES: Case[] = [
     allowOnlyLocalCliHelpCommands: true,
   }),
   makeCase({
+    id: 'web-fixed-layout-viewport-and-fullshot',
+    contract: [
+      'Platform: web',
+      'Target URL: https://example.com/app',
+      'agent-device web setup already passed',
+      'The app uses a fixed 100vh layout, so a taller viewport is needed before taking evidence screenshots',
+      'Visual evidence path: ./artifacts/web-app.png',
+    ],
+    task: 'Plan the agent-device commands to open the web app, resize the viewport to 1280x900, capture a full-page screenshot, and close.',
+    outputs: [
+      /(?:^|\n)(?:agent-device\s+)?open\s+https:\/\/example\.com\/app\b[^\n]*--platform\s+web/i,
+      /(?:^|\n)(?:agent-device\s+)?viewport\s+1280\s+900\b[^\n]*--platform\s+web/i,
+      /(?:^|\n)(?:agent-device\s+)?screenshot\s+\.\/artifacts\/web-app\.png\b[^\n]*(?:--fullscreen|--full|-f)[^\n]*--platform\s+web/i,
+      /(?:^|\n)(?:agent-device\s+)?close\b[^\n]*--platform\s+web/i,
+    ],
+    forbiddenOutputs: [/agent-browser/i, /--full-page\b/i],
+    strictFinalOutput: true,
+    allowOnlyLocalCliHelpCommands: true,
+  }),
+  makeCase({
     id: 'inspect-visible-text-readonly',
     contract: [
       'App name: Agent Device Tester',

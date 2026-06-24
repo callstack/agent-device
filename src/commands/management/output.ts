@@ -117,6 +117,7 @@ export const managementCliOutputFormatters = {
   reinstall: resultOutput(deployCliOutput),
   'install-from-source': resultOutput(installFromSourceCliOutput),
   prepare: messageOutput,
+  viewport: messageOutput,
 } as const satisfies Record<string, CliOutputFormatter>;
 
 function formatDeviceLine(device: AgentDeviceDevice): string {

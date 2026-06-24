@@ -124,7 +124,8 @@ agent-device fill @e13 "test@example.com" --platform web
 agent-device wait text "Welcome" --platform web
 agent-device network dump 25 --include headers --platform web
 agent-device screenshot ./artifacts/web-home.png --platform web
-agent-device screenshot ./artifacts/web-full.png --platform web --full-page
+agent-device screenshot ./artifacts/web-full.png --platform web --fullscreen
+agent-device viewport 1280 900 --platform web
 agent-device close --platform web
 ```
 
@@ -757,7 +758,8 @@ agent-device screenshot                 # Auto filename
 agent-device screenshot page.png        # Explicit screenshot path
 agent-device screenshot page.png --max-size 1024  # Downscale longest edge for agent-friendly artifacts
 agent-device screenshot page.png --overlay-refs  # Draw current @eN refs and target rectangles onto the PNG
-agent-device screenshot page.png --platform web --full-page  # Capture the entire web document instead of just the viewport
+agent-device screenshot page.png --platform web --fullscreen  # On web, --fullscreen/--full/-f captures the entire document
+agent-device viewport 1280 900 --platform web                # Resize the active web viewport for fixed-layout or 100vh apps
 agent-device screenshot textedit.png    # App-session window capture on macOS
 agent-device screenshot --fullscreen    # Force full-screen capture on macOS app sessions
 agent-device open --platform macos --surface desktop && agent-device screenshot desktop.png

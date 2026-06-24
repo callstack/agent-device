@@ -253,7 +253,8 @@ Validation and evidence:
     agent-device wait text "Welcome" 3000 --platform web
     agent-device network dump 25 --include headers --platform web
     agent-device screenshot ./artifacts/web-home.png --platform web
-    agent-device screenshot ./artifacts/web-full.png --platform web --full-page
+    agent-device screenshot ./artifacts/web-full.png --platform web --fullscreen
+    agent-device viewport 1280 900 --platform web
     agent-device close --platform web
   Minimal web support is for browser sessions with open, snapshot, find, get, is, click/press, fill/type, wait, network dump, screenshot, close, and replay over those commands. Use agent-browser directly for browser-specific features that agent-device does not surface, such as tab/devtools management, advanced page scripting, network routing/HAR, or raw browser debugging.
   macOS menu bar: open ... --platform macos --surface menubar; snapshot -i --platform macos --surface menubar.
@@ -661,7 +662,8 @@ First-slice loop:
   agent-device wait text "Welcome" 3000 --platform web
   agent-device network dump 25 --include headers --platform web
   agent-device screenshot ./artifacts/web-home.png --platform web
-  agent-device screenshot ./artifacts/web-full.png --platform web --full-page
+  agent-device screenshot ./artifacts/web-full.png --platform web --fullscreen
+  agent-device viewport 1280 900 --platform web
   agent-device close --platform web
 
 Supported in agent-device web sessions:
