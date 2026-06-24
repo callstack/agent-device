@@ -74,7 +74,7 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
         durationMs: 50,
         appBundleId: 'com.apple.systempreferences',
       },
-      result: { x: 200, y: 400, referenceWidth: 400, referenceHeight: 800 },
+      result: { x: 737.5, y: 476.5, referenceWidth: 400, referenceHeight: 800 },
     },
   ]);
   const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
@@ -143,8 +143,8 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
             positionals: ['down'],
             flags: { pixels: 200, durationMs: 50 },
             expectData: {
-              x1: 200,
-              y1: 400,
+              x1: 737.5,
+              y1: 476.5,
               referenceWidth: 400,
               referenceHeight: 800,
               pixels: 200,

@@ -341,7 +341,7 @@ async function runAppleScroll(
   assertScrollGestureInput(options ?? {});
   assertScrollDurationInput(options?.durationMs);
 
-  if (device.platform === 'macos' && device.target === 'desktop') {
+  if (device.platform === 'macos') {
     const runnerResult = await runRunnerCommand(
       device,
       {

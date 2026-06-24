@@ -119,6 +119,24 @@ extension RunnerTests {
     XCTAssertEqual(plan.travelPixels, 720)
   }
 
+  func testRunnerScrollGesturePlanClampsExplicitPixelsVertically() throws {
+    // 400x800, down, pixels 1000 clamps travel to the safe band (720): (200,760)->(200,40).
+    let plan = try XCTUnwrap(
+      runnerScrollGesturePlan(
+        direction: "down",
+        amount: nil,
+        pixels: 1000,
+        referenceWidth: 400,
+        referenceHeight: 800
+      )
+    )
+    XCTAssertEqual(plan.x1, 200)
+    XCTAssertEqual(plan.y1, 760)
+    XCTAssertEqual(plan.x2, 200)
+    XCTAssertEqual(plan.y2, 40)
+    XCTAssertEqual(plan.travelPixels, 720)
+  }
+
   func testRunnerScrollGesturePlanFloorsTinyFrames() throws {
     // 2x2, down, pixels 10 engages every max(1, ...) floor and the .5 rounding cases the two
     // ports must agree on (halfTravel 0.5 -> 1, center 1 from 2/2): (1,2)->(1,0), travel 1.

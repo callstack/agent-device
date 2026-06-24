@@ -370,8 +370,8 @@ test('iosRunnerOverrides maps iOS scroll to a single fused scroll command', asyn
 
 test('iosRunnerOverrides maps macOS desktop scroll to a desktop wheel command', async () => {
   mockRunIosRunnerCommand.mockResolvedValueOnce({
-    x: 200,
-    y: 400,
+    x: 737.5,
+    y: 476.5,
     referenceWidth: 400,
     referenceHeight: 800,
   });
@@ -391,8 +391,8 @@ test('iosRunnerOverrides maps macOS desktop scroll to a desktop wheel command', 
     appBundleId: 'com.example.App',
   });
   assert.deepEqual(result, {
-    x1: 200,
-    y1: 400,
+    x1: 737.5,
+    y1: 476.5,
     referenceWidth: 400,
     referenceHeight: 800,
     pixels: 200,

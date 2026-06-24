@@ -633,6 +633,8 @@ extension RunnerTests {
     let coordinate = interactionCoordinate(app: app, x: x, y: y)
     let interval = desktopScrollEventIntervalSeconds(durationMs: durationMs, eventCount: events.count)
     for (index, deltas) in events.enumerated() {
+      // Keep desktop scrolling on XCTest's coordinate API so macOS owns wheel synthesis, natural
+      // scrolling preference handling, and cursor placement instead of posting raw CGEvents.
       coordinate.scroll(
         byDeltaX: CGFloat(deltas.horizontal),
         deltaY: CGFloat(deltas.vertical)

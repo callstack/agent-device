@@ -75,6 +75,27 @@ test('buildScrollGesturePlan clamps amounts above 1 to the safe gesture band', (
   });
 });
 
+test('buildScrollGesturePlan clamps explicit pixel travel to the vertical safe gesture band', () => {
+  const plan = buildScrollGesturePlan({
+    direction: 'down',
+    pixels: 1000,
+    referenceWidth: 400,
+    referenceHeight: 800,
+  });
+
+  assert.deepEqual(plan, {
+    direction: 'down',
+    x1: 200,
+    y1: 760,
+    x2: 200,
+    y2: 40,
+    referenceWidth: 400,
+    referenceHeight: 800,
+    amount: undefined,
+    pixels: 720,
+  });
+});
+
 test('buildScrollGesturePlan floors padding and travel on tiny frames', () => {
   // 2x2 engages every max(1, ...) floor and the .5 rounding cases the two ports must agree on
   // (halfTravel 0.5 -> 1, center 1 from 2/2).

@@ -647,7 +647,8 @@ extension RunnerTests {
           )
         )
       }
-      let frame = resolvedTouchReferenceFrame(app: activeApp, appFrame: activeApp.frame)
+      let appFrame = activeApp.frame
+      let frame = resolvedTouchReferenceFrame(app: activeApp, appFrame: appFrame)
       guard frame.width > 0, frame.height > 0 else {
         return Response(
           ok: false,
@@ -680,11 +681,10 @@ extension RunnerTests {
           )
         )
       }
-      let touchFrame = TouchVisualizationFrame(
-        x: x,
-        y: y,
-        referenceWidth: frame.width,
-        referenceHeight: frame.height
+      let touchFrame = resolvedTouchVisualizationFrame(
+        app: activeApp,
+        x: x - (appFrame.isEmpty ? frame.minX : appFrame.minX),
+        y: y - (appFrame.isEmpty ? frame.minY : appFrame.minY)
       )
       do {
         var scrollError: Error?
