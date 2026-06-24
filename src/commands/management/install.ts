@@ -88,7 +88,7 @@ const installCliReader: CliReader = (positionals, flags) =>
   installInputFromCli(positionals, flags, 'install');
 
 const reinstallCliReader: CliReader = (positionals, flags) =>
-  installInputFromCli(positionals, flags, 'install');
+  installInputFromCli(positionals, flags, 'reinstall');
 
 const installFromSourceCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
