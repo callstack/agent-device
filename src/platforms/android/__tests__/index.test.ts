@@ -348,7 +348,7 @@ test('parseUiHierarchy prunes descendants of Android nodes that are not visible 
 test('parseUiHierarchy prunes lower drawing-order subtrees covered by a foreground sibling', () => {
   const xml = `<hierarchy>
   <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="0">
-    <node class="android.view.ViewGroup" content-desc="Foreground surface" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="2">
+    <node class="android.view.ViewGroup" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="2">
       <node class="android.widget.Button" text="Foreground action" bounds="[24,420][366,480]" clickable="true" enabled="true" visible-to-user="true" drawing-order="1"/>
     </node>
     <node class="android.view.ViewGroup" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="1">
