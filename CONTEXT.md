@@ -22,6 +22,49 @@
 - Snapshot quality verdict: structured outcome (state, backend, reason code, effective depth, collapsed leaves) computed once by the plan runner and shipped with every planned snapshot payload; the daemon and CLI render it instead of re-deriving degradation from node shapes.
 - AX-unavailable target invalidation: iOS/macOS runner behavior where a root accessibility snapshot failure such as `kAXErrorIllegalArgument` marks the cached `XCUIApplication` target handle suspect. The runner fails closed for degraded interactive snapshots, clears the cached target, and lets the next command reacquire the app through normal activation.
 
+## Selector Capture Reliability Contract
+
+Selector capture is allowed to optimize transport, helper reuse, and polling, but it must preserve
+the observable freshness and failure semantics below before any runtime refactor.
+
+- Direct iOS selector queries are a narrow fast path only: iOS, simple one-term
+  `id`/`label`/`text`/`value` selectors, and never while `postGestureStabilization` is pending. A
+  direct miss may fall back to the snapshot selector path, but ambiguous matches and runner errors
+  must surface instead of silently falling back. `get text` uses direct native selectors only for
+  simple `id` selectors because label/text/value reads need snapshot disambiguation.
+- Regular selector reads remain capture-backed. `@ref` reads resolve against stored session
+  snapshots; selector `get`/`is`/`find`/`wait` capture through the backend. `find` and `wait`
+  polling must bypass the 750 ms snapshot cache. The cache is also bypassed while Android freshness
+  recovery or post-gesture stabilization is active.
+- Sparse snapshot quality verdicts are observable failures. Sparse captures must not replace
+  `session.snapshot`, and selector routes should report the sparse verdict instead of treating a
+  root-only or sparse tree as an empty UI.
+- iOS sparse and AX failures are not proof of empty UI. Regular visible snapshots can recover
+  through the capture plan; raw and strict paths preserve failure. `runnerFatal` invalidates the
+  cached target and must never refresh healthy mutation recency.
+- Android helper reuse must not become snapshot result caching. Freshness is short lived, marked
+  only after navigation-sensitive actions, compared against broad route-safe baselines, and not
+  learned from scoped, depth-limited, interactive, or ref-refresh snapshots.
+- Pending interaction outcome retry runs before post-gesture stabilization. Android freshness then
+  composes when needed. Stabilization applies after swipe, scroll, gesture, or an explicit flag, and
+  disables direct iOS selector shortcuts while pending.
+- `setSessionSnapshot` is the centralized session snapshot mutation path. Sparse captures do not
+  write back, and empty `@ref`-scoped snapshot output must not replace the stored session snapshot.
+- Maestro target matching remains snapshot-based, fresh, and policy-rich. Native selector
+  simplification must not erase Maestro regex/string selector behavior, visibility filtering,
+  ranking, fuzzy fallback, visible-context preference, Android duplicate handling, tab-strip
+  inference, or assertion/wait semantics.
+
+Evidence: [ADR 0002](docs/adr/0002-persistent-platform-helper-sessions.md),
+[ADR 0004](docs/adr/0004-ios-snapshot-backend-strategy.md),
+[ADR 0005](docs/adr/0005-ios-runner-interaction-lifecycle.md),
+[Maestro compatibility debt map](docs/maestro-compat-debt-map.md),
+[`find.test.ts`](src/daemon/handlers/__tests__/find.test.ts),
+[`snapshot-handler.test.ts`](src/daemon/handlers/__tests__/snapshot-handler.test.ts),
+[`snapshot-scoped-refs.test.ts`](src/daemon/handlers/__tests__/snapshot-scoped-refs.test.ts),
+[`runtime-targets.test.ts`](src/compat/maestro/__tests__/runtime-targets.test.ts), and
+[`android-test-suite.test.ts`](test/integration/provider-scenarios/android-test-suite.test.ts).
+
 ## Testing Principles
 
 - Provider-backed integration scenarios should exercise the public daemon path whenever practical.
