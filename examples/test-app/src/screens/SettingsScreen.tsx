@@ -95,7 +95,7 @@ export function SettingsScreen(props: SettingsScreenProps) {
 
         {props.diagnosticsExpanded ? (
           <View style={styles.diagnosticsBody} testID="diagnostics-body">
-            <Text style={styles.diagnosticsText}>Build: expo-sdk-55 / lab-fixture-1</Text>
+            <Text style={styles.diagnosticsText}>Build: expo-sdk-56 / lab-fixture-1</Text>
             <Text style={styles.diagnosticsText}>API mode: mock network with retry simulation</Text>
             <Text style={styles.diagnosticsText}>
               Device target hint: use this accordion for get-text and exists assertions

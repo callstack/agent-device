@@ -33,11 +33,12 @@ export function classifyAndroidHelperContentRecovery(
 
   const summary = summarizeAndroidHelperXml(xml, options.foregroundAppPackage);
   if (summary.nodeCount === 0 || metadata.nodeCount === 0 || metadata.rootPresent === false) {
-    return {
-      reason: 'empty-helper-output',
-      fallbackReason: 'Android snapshot helper returned no accessibility nodes',
-      diagnostics: buildRecoveryDiagnostics(summary, metadata),
-    };
+    return buildRecoveryDecision(
+      summary,
+      metadata,
+      'empty-helper-output',
+      'Android snapshot helper returned no accessibility nodes',
+    );
   }
 
   const foregroundAppMeaningfulNodeCount = summary.foregroundAppMeaningfulNodeCount;
@@ -47,11 +48,12 @@ export function classifyAndroidHelperContentRecovery(
       (foregroundAppMeaningfulNodeCount < MIN_FOREGROUND_APP_MEANINGFUL_NODES &&
         summary.meaningfulNodeCount > foregroundAppMeaningfulNodeCount))
   ) {
-    return {
-      reason: 'content-poor-app-window',
-      fallbackReason: 'Android snapshot helper returned insufficient foreground app content',
-      diagnostics: buildRecoveryDiagnostics(summary, metadata),
-    };
+    return buildRecoveryDecision(
+      summary,
+      metadata,
+      'content-poor-app-window',
+      'Android snapshot helper returned insufficient foreground app content',
+    );
   }
 
   if (
@@ -59,11 +61,12 @@ export function classifyAndroidHelperContentRecovery(
     summary.applicationWindowRootCount > 0 &&
     summary.applicationMeaningfulNodeCount < MIN_FOREGROUND_APP_MEANINGFUL_NODES
   ) {
-    return {
-      reason: 'content-poor-app-window',
-      fallbackReason: 'Android snapshot helper returned insufficient application window content',
-      diagnostics: buildRecoveryDiagnostics(summary, metadata),
-    };
+    return buildRecoveryDecision(
+      summary,
+      metadata,
+      'content-poor-app-window',
+      'Android snapshot helper returned insufficient application window content',
+    );
   }
 
   if (
@@ -72,22 +75,37 @@ export function classifyAndroidHelperContentRecovery(
     (metadata.windowCount ?? 0) > 1 &&
     summary.nonSystemMeaningfulNodeCount < MIN_FOREGROUND_APP_MEANINGFUL_NODES
   ) {
-    return {
-      reason: 'content-poor-app-window',
-      fallbackReason: 'Android snapshot helper returned insufficient application window content',
-      diagnostics: buildRecoveryDiagnostics(summary, metadata),
-    };
+    return buildRecoveryDecision(
+      summary,
+      metadata,
+      'content-poor-app-window',
+      'Android snapshot helper returned insufficient application window content',
+    );
   }
 
   if (summary.windowRootCount > 0 && summary.applicationWindowRootCount === 0) {
-    return {
-      reason: 'system-window-only',
-      fallbackReason: 'Android snapshot helper returned only non-application windows',
-      diagnostics: buildRecoveryDiagnostics(summary, metadata),
-    };
+    return buildRecoveryDecision(
+      summary,
+      metadata,
+      'system-window-only',
+      'Android snapshot helper returned only non-application windows',
+    );
   }
 
   return undefined;
+}
+
+function buildRecoveryDecision(
+  summary: AndroidHelperXmlSummary,
+  metadata: AndroidSnapshotBackendMetadata,
+  reason: AndroidHelperContentRecoveryDecision['reason'],
+  fallbackReason: string,
+): AndroidHelperContentRecoveryDecision {
+  return {
+    reason,
+    fallbackReason,
+    diagnostics: buildRecoveryDiagnostics(summary, metadata),
+  };
 }
 
 type AndroidHelperXmlSummary = {
