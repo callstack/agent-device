@@ -1,6 +1,6 @@
 import { AppError } from '../../utils/errors.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
-import { defineCommandFamily } from '../family/types.ts';
+import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { enumField, requiredField } from '../command-input.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
@@ -31,34 +31,27 @@ const reactNativeCliSchema = {
   positionalArgs: ['dismiss-overlay'],
 } as const satisfies CommandSchemaOverride;
 
-const reactNativeCliSchemas = {
-  [REACT_NATIVE_COMMAND_NAME]: reactNativeCliSchema,
-} as const satisfies Record<string, CommandSchemaOverride>;
-
 export const reactNativeCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
   action: readReactNativeAction(positionals[0]),
 });
 
-const reactNativeCliReaders = {
-  'react-native': reactNativeCliReader,
-} satisfies Record<string, CliReader>;
-
 export const reactNativeDaemonWriter: DaemonWriter = direct(REACT_NATIVE_COMMAND_NAME, (input) => [
   requiredDaemonString(input.action, 'react-native requires action'),
 ]);
 
-const reactNativeDaemonWriters = {
-  'react-native': reactNativeDaemonWriter,
-} satisfies Record<string, DaemonWriter>;
+const reactNativeCommandFacet = defineCommandFacet({
+  name: REACT_NATIVE_COMMAND_NAME,
+  metadata: reactNativeCommandMetadata,
+  definition: reactNativeCommandDefinition,
+  cliSchema: reactNativeCliSchema,
+  cliReader: reactNativeCliReader,
+  daemonWriter: reactNativeDaemonWriter,
+});
 
-export const reactNativeCommandFamily = defineCommandFamily({
+export const reactNativeCommandFamily = defineCommandFamilyFromFacets({
   name: 'react-native',
-  metadata: [reactNativeCommandMetadata],
-  definitions: [reactNativeCommandDefinition],
-  cliSchemas: reactNativeCliSchemas,
-  cliReaders: reactNativeCliReaders,
-  daemonWriters: reactNativeDaemonWriters,
+  commands: [reactNativeCommandFacet],
 });
 
 function readReactNativeAction(value: string | undefined): 'dismiss-overlay' {

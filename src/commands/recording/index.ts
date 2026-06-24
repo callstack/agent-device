@@ -2,7 +2,7 @@ import type { RecordOptions } from '../../client-types.ts';
 import { RECORDING_EXPORT_QUALITIES } from '../../core/recording-export-quality.ts';
 import { AppError } from '../../utils/errors.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
-import { defineCommandFamily } from '../family/types.ts';
+import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import {
   booleanField,
@@ -45,8 +45,6 @@ export const traceCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-const recordingCommandMetadata = [recordCommandMetadata, traceCommandMetadata] as const;
-
 export const recordCommandDefinition = defineExecutableCommand(
   recordCommandMetadata,
   (client, input) => client.recording.record(input as RecordOptions),
@@ -56,8 +54,6 @@ export const traceCommandDefinition = defineExecutableCommand(
   traceCommandMetadata,
   (client, input) => client.recording.trace(input),
 );
-
-const recordingCommandDefinitions = [recordCommandDefinition, traceCommandDefinition] as const;
 
 const recordCliSchema = {
   usageOverride:
@@ -79,11 +75,6 @@ const traceCliSchema = {
   positionalArgs: ['start|stop', 'path?'],
 } as const satisfies CommandSchemaOverride;
 
-const recordingCliSchemas = {
-  [RECORD_COMMAND_NAME]: recordCliSchema,
-  [TRACE_COMMAND_NAME]: traceCliSchema,
-} as const satisfies Record<string, CommandSchemaOverride>;
-
 export const recordCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
   action: readRecordingAction(positionals[0], RECORD_COMMAND_NAME),
@@ -100,11 +91,6 @@ export const traceCliReader: CliReader = (positionals, flags) => ({
   path: positionals[1],
 });
 
-const recordingCliReaders = {
-  record: recordCliReader,
-  trace: traceCliReader,
-} satisfies Record<string, CliReader>;
-
 export const recordDaemonWriter: DaemonWriter = direct(RECORD_COMMAND_NAME, (input) =>
   recordingPositionals(input as RecordOptions),
 );
@@ -113,19 +99,28 @@ export const traceDaemonWriter: DaemonWriter = direct(TRACE_COMMAND_NAME, (input
   recordingPositionals(input as RecordOptions),
 );
 
-const recordingDaemonWriters = {
-  record: recordDaemonWriter,
-  trace: traceDaemonWriter,
-} satisfies Record<string, DaemonWriter>;
+const recordCommandFacet = defineCommandFacet({
+  name: RECORD_COMMAND_NAME,
+  metadata: recordCommandMetadata,
+  definition: recordCommandDefinition,
+  cliSchema: recordCliSchema,
+  cliReader: recordCliReader,
+  daemonWriter: recordDaemonWriter,
+  cliOutputFormatter: recordingCliOutputFormatters.record,
+});
 
-export const recordingCommandFamily = defineCommandFamily({
+const traceCommandFacet = defineCommandFacet({
+  name: TRACE_COMMAND_NAME,
+  metadata: traceCommandMetadata,
+  definition: traceCommandDefinition,
+  cliSchema: traceCliSchema,
+  cliReader: traceCliReader,
+  daemonWriter: traceDaemonWriter,
+});
+
+export const recordingCommandFamily = defineCommandFamilyFromFacets({
   name: 'recording',
-  metadata: recordingCommandMetadata,
-  definitions: recordingCommandDefinitions,
-  cliSchemas: recordingCliSchemas,
-  cliReaders: recordingCliReaders,
-  daemonWriters: recordingDaemonWriters,
-  cliOutputFormatters: recordingCliOutputFormatters,
+  commands: [recordCommandFacet, traceCommandFacet],
 });
 
 function recordingPositionals(input: RecordOptions): string[] {

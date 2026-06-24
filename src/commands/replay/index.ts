@@ -1,5 +1,5 @@
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
-import { defineCommandFamily } from '../family/types.ts';
+import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import {
   booleanField,
@@ -58,8 +58,6 @@ export const testCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-const replayCommandMetadataList = [replayCommandMetadata, testCommandMetadata] as const;
-
 export const replayCommandDefinition = defineExecutableCommand(
   replayCommandMetadata,
   (client, input) => client.replay.run(input),
@@ -68,8 +66,6 @@ export const replayCommandDefinition = defineExecutableCommand(
 export const testCommandDefinition = defineExecutableCommand(testCommandMetadata, (client, input) =>
   client.replay.test(input),
 );
-
-const replayCommandDefinitions = [replayCommandDefinition, testCommandDefinition] as const;
 
 const replayCliSchema = {
   usageOverride: 'replay <path> | replay export <file.ad> [--format maestro] [--out <path>]',
@@ -101,11 +97,6 @@ const testCliSchema = {
     'shardSplit',
   ],
 } as const satisfies CommandSchemaOverride;
-
-const replayCliSchemas = {
-  [REPLAY_COMMAND_NAME]: replayCliSchema,
-  [TEST_COMMAND_NAME]: testCliSchema,
-} as const satisfies Record<string, CommandSchemaOverride>;
 
 export const replayCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
@@ -149,23 +140,27 @@ export const testDaemonWriter: DaemonWriter = (input) =>
     replayShellEnv: collectReplayClientShellEnv(process.env),
   });
 
-const replayCliReaders = {
-  replay: replayCliReader,
-  test: testCliReader,
-} satisfies Record<string, CliReader>;
+const replayCommandFacet = defineCommandFacet({
+  name: REPLAY_COMMAND_NAME,
+  metadata: replayCommandMetadata,
+  definition: replayCommandDefinition,
+  cliSchema: replayCliSchema,
+  cliReader: replayCliReader,
+  daemonWriter: replayDaemonWriter,
+});
 
-const replayDaemonWriters = {
-  replay: replayDaemonWriter,
-  test: testDaemonWriter,
-} satisfies Record<string, DaemonWriter>;
+const testCommandFacet = defineCommandFacet({
+  name: TEST_COMMAND_NAME,
+  metadata: testCommandMetadata,
+  definition: testCommandDefinition,
+  cliSchema: testCliSchema,
+  cliReader: testCliReader,
+  daemonWriter: testDaemonWriter,
+});
 
-export const replayCommandFamily = defineCommandFamily({
+export const replayCommandFamily = defineCommandFamilyFromFacets({
   name: 'replay',
-  metadata: replayCommandMetadataList,
-  definitions: replayCommandDefinitions,
-  cliSchemas: replayCliSchemas,
-  cliReaders: replayCliReaders,
-  daemonWriters: replayDaemonWriters,
+  commands: [replayCommandFacet, testCommandFacet],
 });
 
 function readReplayBackend(input: CommandInput): string | undefined {

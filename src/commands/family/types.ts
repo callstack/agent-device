@@ -31,6 +31,7 @@ export type CommandFacet<TCommandName extends string = string> = {
   cliSchema?: CommandSchemaOverride;
   cliReader: CliReader;
   daemonWriter?: DaemonWriter;
+  extraDaemonWriters?: Readonly<Record<string, DaemonWriter>>;
   cliOutputFormatter?: CliOutputFormatter;
 };
 
@@ -47,7 +48,7 @@ type CommandFacetName<TCommands extends readonly CommandFacet[]> = TCommands[num
 type CommandFamilyMetadataName<TMetadata extends readonly AnyCommandMetadata[]> =
   TMetadata[number]['name'];
 
-export function defineCommandFamily<
+function defineCommandFamily<
   const TMetadata extends readonly AnyCommandMetadata[],
   const TDefinitions extends readonly AnyCommandDefinition<CommandFamilyMetadataName<TMetadata>>[],
   const TFamily extends CommandFamilyFacet<CommandFamilyMetadataName<TMetadata>> & {
@@ -78,6 +79,7 @@ export function defineCommandFamilyFromFacets<
     if (command.cliSchema) cliSchemas[command.name] = command.cliSchema;
     cliReaders[command.name] = command.cliReader;
     if (command.daemonWriter) daemonWriters[command.name] = command.daemonWriter;
+    if (command.extraDaemonWriters) Object.assign(daemonWriters, command.extraDaemonWriters);
     if (command.cliOutputFormatter) {
       cliOutputFormatters[command.name] = command.cliOutputFormatter;
     }

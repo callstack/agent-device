@@ -3,7 +3,7 @@ import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '../../contracts.
 import { AppError } from '../../utils/errors.ts';
 import { parseStringMember } from '../../utils/string-enum.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
-import { defineCommandFamily } from '../family/types.ts';
+import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { booleanField, enumField, integerField, stringField } from '../command-input.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
@@ -46,8 +46,6 @@ export const networkCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-const observabilityCommandMetadata = [logsCommandMetadata, networkCommandMetadata] as const;
-
 export const logsCommandDefinition = defineExecutableCommand(logsCommandMetadata, (client, input) =>
   client.observability.logs(input),
 );
@@ -56,8 +54,6 @@ export const networkCommandDefinition = defineExecutableCommand(
   networkCommandMetadata,
   (client, input) => client.observability.network(input),
 );
-
-const observabilityCommandDefinitions = [logsCommandDefinition, networkCommandDefinition] as const;
 
 const logsCliSchema = {
   usageOverride:
@@ -80,11 +76,6 @@ const networkCliSchema = {
   allowedFlags: ['networkInclude'],
 } as const satisfies CommandSchemaOverride;
 
-const observabilityCliSchemas = {
-  [LOGS_COMMAND_NAME]: logsCliSchema,
-  [NETWORK_COMMAND_NAME]: networkCliSchema,
-} as const satisfies Record<string, CommandSchemaOverride>;
-
 export const logsCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
   action: readLogsAction(positionals[0]),
@@ -99,11 +90,6 @@ export const networkCliReader: CliReader = (positionals, flags) => ({
   include: flags.networkInclude ?? readNetworkInclude(positionals[2]),
 });
 
-const observabilityCliReaders = {
-  logs: logsCliReader,
-  network: networkCliReader,
-} satisfies Record<string, CliReader>;
-
 export const logsDaemonWriter: DaemonWriter = direct(LOGS_COMMAND_NAME, (input) =>
   logsPositionals(input as LogsOptions),
 );
@@ -114,19 +100,29 @@ export const networkDaemonWriter: DaemonWriter = (input) =>
     networkInclude: input.include,
   });
 
-const observabilityDaemonWriters = {
-  logs: logsDaemonWriter,
-  network: networkDaemonWriter,
-} satisfies Record<string, DaemonWriter>;
+const logsCommandFacet = defineCommandFacet({
+  name: LOGS_COMMAND_NAME,
+  metadata: logsCommandMetadata,
+  definition: logsCommandDefinition,
+  cliSchema: logsCliSchema,
+  cliReader: logsCliReader,
+  daemonWriter: logsDaemonWriter,
+  cliOutputFormatter: observabilityCliOutputFormatters.logs,
+});
 
-export const observabilityCommandFamily = defineCommandFamily({
+const networkCommandFacet = defineCommandFacet({
+  name: NETWORK_COMMAND_NAME,
+  metadata: networkCommandMetadata,
+  definition: networkCommandDefinition,
+  cliSchema: networkCliSchema,
+  cliReader: networkCliReader,
+  daemonWriter: networkDaemonWriter,
+  cliOutputFormatter: observabilityCliOutputFormatters.network,
+});
+
+export const observabilityCommandFamily = defineCommandFamilyFromFacets({
   name: 'observability',
-  metadata: observabilityCommandMetadata,
-  definitions: observabilityCommandDefinitions,
-  cliSchemas: observabilityCliSchemas,
-  cliReaders: observabilityCliReaders,
-  daemonWriters: observabilityDaemonWriters,
-  cliOutputFormatters: observabilityCliOutputFormatters,
+  commands: [logsCommandFacet, networkCommandFacet],
 });
 
 function logsPositionals(input: { action?: string; message?: string }): string[] {

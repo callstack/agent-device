@@ -2,7 +2,7 @@ import type { PerfOptions } from '../../client-types.ts';
 import { AppError } from '../../utils/errors.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import { enumField, stringField } from '../command-input.ts';
-import { defineCommandFamily } from '../family/types.ts';
+import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import {
@@ -45,13 +45,9 @@ export const perfCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-const perfCommandMetadataList = [perfCommandMetadata] as const;
-
 export const perfCommandDefinition = defineExecutableCommand(perfCommandMetadata, (client, input) =>
   client.observability.perf(input),
 );
-
-const perfCommandDefinitions = [perfCommandDefinition] as const;
 
 const perfCliSchema = {
   usageOverride:
@@ -64,10 +60,6 @@ const perfCliSchema = {
   allowedFlags: ['kind', 'perfTemplate', 'out'],
 } as const satisfies CommandSchemaOverride;
 
-const perfCliSchemas = {
-  [PERF_COMMAND_NAME]: perfCliSchema,
-} as const satisfies Record<string, CommandSchemaOverride>;
-
 export const perfCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
   ...readPerfPositionals(positionals, {
@@ -77,26 +69,23 @@ export const perfCliReader: CliReader = (positionals, flags) => ({
   }),
 });
 
-const perfCliReaders = {
-  perf: perfCliReader,
-} satisfies Record<string, CliReader>;
-
 export const perfDaemonWriter: DaemonWriter = direct(PERF_COMMAND_NAME, (input) =>
   perfPositionals(input as PerfOptions),
 );
 
-const perfDaemonWriters = {
-  perf: perfDaemonWriter,
-} satisfies Record<string, DaemonWriter>;
+const perfCommandFacet = defineCommandFacet({
+  name: PERF_COMMAND_NAME,
+  metadata: perfCommandMetadata,
+  definition: perfCommandDefinition,
+  cliSchema: perfCliSchema,
+  cliReader: perfCliReader,
+  daemonWriter: perfDaemonWriter,
+  cliOutputFormatter: perfCliOutputFormatters.perf,
+});
 
-export const perfCommandFamily = defineCommandFamily({
+export const perfCommandFamily = defineCommandFamilyFromFacets({
   name: 'perf',
-  metadata: perfCommandMetadataList,
-  definitions: perfCommandDefinitions,
-  cliSchemas: perfCliSchemas,
-  cliReaders: perfCliReaders,
-  daemonWriters: perfDaemonWriters,
-  cliOutputFormatters: perfCliOutputFormatters,
+  commands: [perfCommandFacet],
 });
 
 function perfPositionals(input: PerfOptions): string[] {

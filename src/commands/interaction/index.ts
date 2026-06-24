@@ -19,7 +19,7 @@ import type {
 } from '../../client-types.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import { REPEATED_TOUCH_FLAGS, SELECTOR_SNAPSHOT_FLAGS } from '../../utils/cli-flags.ts';
-import { defineCommandFamily } from '../family/types.ts';
+import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import {
   commonToClientOptions,
@@ -128,41 +128,53 @@ const interactionCliSchemas = {
 type InteractionCommandMetadata = (typeof interactionCommandMetadata)[number];
 type InteractionCommandName = InteractionCommandMetadata['name'];
 
-const interactionCommandDefinitions = [
-  defineExecutableCommand(metadata('click'), (client, input) =>
-    client.interactions.click(toClickOptions(input)),
-  ),
-  defineExecutableCommand(metadata('press'), (client, input) =>
-    client.interactions.press(toPressOptions(input)),
-  ),
-  defineExecutableCommand(metadata('fill'), (client, input) =>
-    client.interactions.fill(toFillOptions(input)),
-  ),
-  defineExecutableCommand(metadata('longpress'), (client, input) =>
-    client.interactions.longPress(toLongPressOptions(input)),
-  ),
-  defineExecutableCommand(metadata('swipe'), (client, input) =>
-    client.interactions.swipe(input as SwipeOptions),
-  ),
-  defineExecutableCommand(metadata('focus'), (client, input) =>
-    client.interactions.focus(input as FocusOptions),
-  ),
-  defineExecutableCommand(metadata('type'), (client, input) =>
-    client.interactions.type(input as TypeTextOptions),
-  ),
-  defineExecutableCommand(metadata('scroll'), (client, input) =>
-    client.interactions.scroll(input as ScrollOptions),
-  ),
-  defineExecutableCommand(metadata('get'), (client, input) =>
-    client.interactions.get(toGetOptions(input)),
-  ),
-  defineExecutableCommand(metadata('is'), (client, input) =>
-    client.interactions.is(input as IsOptions),
-  ),
-  defineExecutableCommand(metadata('find'), (client, input) =>
-    client.interactions.find(input as FindOptions),
-  ),
-  defineExecutableCommand(metadata('gesture'), async (client, input) => {
+const clickCommandDefinition = defineExecutableCommand(metadata('click'), (client, input) =>
+  client.interactions.click(toClickOptions(input)),
+);
+
+const pressCommandDefinition = defineExecutableCommand(metadata('press'), (client, input) =>
+  client.interactions.press(toPressOptions(input)),
+);
+
+const fillCommandDefinition = defineExecutableCommand(metadata('fill'), (client, input) =>
+  client.interactions.fill(toFillOptions(input)),
+);
+
+const longPressCommandDefinition = defineExecutableCommand(metadata('longpress'), (client, input) =>
+  client.interactions.longPress(toLongPressOptions(input)),
+);
+
+const swipeCommandDefinition = defineExecutableCommand(metadata('swipe'), (client, input) =>
+  client.interactions.swipe(input as SwipeOptions),
+);
+
+const focusCommandDefinition = defineExecutableCommand(metadata('focus'), (client, input) =>
+  client.interactions.focus(input as FocusOptions),
+);
+
+const typeCommandDefinition = defineExecutableCommand(metadata('type'), (client, input) =>
+  client.interactions.type(input as TypeTextOptions),
+);
+
+const scrollCommandDefinition = defineExecutableCommand(metadata('scroll'), (client, input) =>
+  client.interactions.scroll(input as ScrollOptions),
+);
+
+const getCommandDefinition = defineExecutableCommand(metadata('get'), (client, input) =>
+  client.interactions.get(toGetOptions(input)),
+);
+
+const isCommandDefinition = defineExecutableCommand(metadata('is'), (client, input) =>
+  client.interactions.is(input as IsOptions),
+);
+
+const findCommandDefinition = defineExecutableCommand(metadata('find'), (client, input) =>
+  client.interactions.find(input as FindOptions),
+);
+
+const gestureCommandDefinition = defineExecutableCommand(
+  metadata('gesture'),
+  async (client, input) => {
     switch (input.kind) {
       case 'pan':
         return await client.interactions.pan(toPanOptions(input));
@@ -177,26 +189,140 @@ const interactionCommandDefinitions = [
       case 'transform':
         return await client.interactions.transformGesture(toTransformOptions(input));
     }
-  }),
-] as const;
+  },
+);
 
-export const interactionCommandFamily = defineCommandFamily({
+const clickCommandFacet = defineCommandFacet({
+  name: 'click',
+  metadata: metadata('click'),
+  definition: clickCommandDefinition,
+  cliSchema: interactionCliSchemas.click,
+  cliReader: interactionCliReaders.click,
+  daemonWriter: interactionDaemonWriters.click,
+  cliOutputFormatter: interactionCliOutputFormatters.click,
+});
+
+const pressCommandFacet = defineCommandFacet({
+  name: 'press',
+  metadata: metadata('press'),
+  definition: pressCommandDefinition,
+  cliSchema: interactionCliSchemas.press,
+  cliReader: interactionCliReaders.press,
+  daemonWriter: interactionDaemonWriters.press,
+  cliOutputFormatter: interactionCliOutputFormatters.press,
+});
+
+const fillCommandFacet = defineCommandFacet({
+  name: 'fill',
+  metadata: metadata('fill'),
+  definition: fillCommandDefinition,
+  cliSchema: interactionCliSchemas.fill,
+  cliReader: interactionCliReaders.fill,
+  daemonWriter: interactionDaemonWriters.fill,
+});
+
+const longPressCommandFacet = defineCommandFacet({
+  name: 'longpress',
+  metadata: metadata('longpress'),
+  definition: longPressCommandDefinition,
+  cliSchema: interactionCliSchemas.longpress,
+  cliReader: interactionCliReaders.longpress,
+  daemonWriter: interactionDaemonWriters.longpress,
+});
+
+const swipeCommandFacet = defineCommandFacet({
+  name: 'swipe',
+  metadata: metadata('swipe'),
+  definition: swipeCommandDefinition,
+  cliSchema: interactionCliSchemas.swipe,
+  cliReader: interactionCliReaders.swipe,
+  daemonWriter: interactionDaemonWriters.swipe,
+});
+
+const focusCommandFacet = defineCommandFacet({
+  name: 'focus',
+  metadata: metadata('focus'),
+  definition: focusCommandDefinition,
+  cliSchema: interactionCliSchemas.focus,
+  cliReader: interactionCliReaders.focus,
+  daemonWriter: interactionDaemonWriters.focus,
+});
+
+const typeCommandFacet = defineCommandFacet({
+  name: 'type',
+  metadata: metadata('type'),
+  definition: typeCommandDefinition,
+  cliSchema: interactionCliSchemas.type,
+  cliReader: interactionCliReaders.type,
+  daemonWriter: interactionDaemonWriters.type,
+});
+
+const scrollCommandFacet = defineCommandFacet({
+  name: 'scroll',
+  metadata: metadata('scroll'),
+  definition: scrollCommandDefinition,
+  cliSchema: interactionCliSchemas.scroll,
+  cliReader: interactionCliReaders.scroll,
+  daemonWriter: interactionDaemonWriters.scroll,
+});
+
+const getCommandFacet = defineCommandFacet({
+  name: 'get',
+  metadata: metadata('get'),
+  definition: getCommandDefinition,
+  cliSchema: interactionCliSchemas.get,
+  cliReader: interactionCliReaders.get,
+  daemonWriter: interactionDaemonWriters.get,
+  cliOutputFormatter: interactionCliOutputFormatters.get,
+});
+
+const isCommandFacet = defineCommandFacet({
+  name: 'is',
+  metadata: metadata('is'),
+  definition: isCommandDefinition,
+  cliSchema: interactionCliSchemas.is,
+  cliReader: selectorCliReaders.is,
+  daemonWriter: selectorDaemonWriters.is,
+  cliOutputFormatter: interactionCliOutputFormatters.is,
+});
+
+const findCommandFacet = defineCommandFacet({
+  name: 'find',
+  metadata: metadata('find'),
+  definition: findCommandDefinition,
+  cliSchema: interactionCliSchemas.find,
+  cliReader: selectorCliReaders.find,
+  daemonWriter: selectorDaemonWriters.find,
+  cliOutputFormatter: interactionCliOutputFormatters.find,
+});
+
+const gestureCommandFacet = defineCommandFacet({
+  name: 'gesture',
+  metadata: metadata('gesture'),
+  definition: gestureCommandDefinition,
+  cliSchema: interactionCliSchemas.gesture,
+  cliReader: gestureCliReaders.gesture,
+  daemonWriter: gestureDaemonWriters.gesture,
+  extraDaemonWriters: gestureDaemonWriters,
+});
+
+export const interactionCommandFamily = defineCommandFamilyFromFacets({
   name: 'interaction',
   clientSurface: false,
-  metadata: interactionCommandMetadata,
-  definitions: interactionCommandDefinitions,
-  cliSchemas: interactionCliSchemas,
-  cliReaders: {
-    ...interactionCliReaders,
-    ...gestureCliReaders,
-    ...selectorCliReaders,
-  },
-  daemonWriters: {
-    ...interactionDaemonWriters,
-    ...gestureDaemonWriters,
-    ...selectorDaemonWriters,
-  },
-  cliOutputFormatters: interactionCliOutputFormatters,
+  commands: [
+    clickCommandFacet,
+    pressCommandFacet,
+    fillCommandFacet,
+    longPressCommandFacet,
+    swipeCommandFacet,
+    focusCommandFacet,
+    typeCommandFacet,
+    scrollCommandFacet,
+    getCommandFacet,
+    isCommandFacet,
+    findCommandFacet,
+    gestureCommandFacet,
+  ],
 });
 
 function metadata<TName extends InteractionCommandName>(

@@ -1,7 +1,7 @@
 import { AppError } from '../../utils/errors.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import { enumField, requiredField, stringField } from '../command-input.ts';
-import { defineCommandFamily } from '../family/types.ts';
+import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { commonInputFromFlags } from '../cli-grammar/common.ts';
@@ -25,14 +25,10 @@ export const debugCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-const debuggingCommandMetadata = [debugCommandMetadata] as const;
-
 export const debugCommandDefinition = defineExecutableCommand(
   debugCommandMetadata,
   (client, input) => client.debug.symbols(input),
 );
-
-const debuggingCommandDefinitions = [debugCommandDefinition] as const;
 
 const debugCliSchema = {
   usageOverride:
@@ -46,10 +42,6 @@ const debugCliSchema = {
   allowedFlags: ['artifact', 'dsym', 'searchPath', 'out'],
 } as const satisfies CommandSchemaOverride;
 
-const debuggingCliSchemas = {
-  [DEBUG_COMMAND_NAME]: debugCliSchema,
-} as const satisfies Record<string, CommandSchemaOverride>;
-
 export const debugCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
   action: readDebugAction(positionals[0]),
@@ -59,17 +51,18 @@ export const debugCliReader: CliReader = (positionals, flags) => ({
   out: flags.out,
 });
 
-const debuggingCliReaders = {
-  debug: debugCliReader,
-} satisfies Record<string, CliReader>;
+const debugCommandFacet = defineCommandFacet({
+  name: DEBUG_COMMAND_NAME,
+  metadata: debugCommandMetadata,
+  definition: debugCommandDefinition,
+  cliSchema: debugCliSchema,
+  cliReader: debugCliReader,
+  cliOutputFormatter: debuggingCliOutputFormatters.debug,
+});
 
-export const debuggingCommandFamily = defineCommandFamily({
+export const debuggingCommandFamily = defineCommandFamilyFromFacets({
   name: 'debugging',
-  metadata: debuggingCommandMetadata,
-  definitions: debuggingCommandDefinitions,
-  cliSchemas: debuggingCliSchemas,
-  cliReaders: debuggingCliReaders,
-  cliOutputFormatters: debuggingCliOutputFormatters,
+  commands: [debugCommandFacet],
 });
 
 function readDebugAction(value: string | undefined): 'symbols' {

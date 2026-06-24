@@ -4,7 +4,7 @@ import { BACK_MODES } from '../../core/back-mode.ts';
 import { parseDeviceRotation, DEVICE_ROTATIONS } from '../../core/device-rotation.ts';
 import { AppError } from '../../utils/errors.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
-import { defineCommandFamily } from '../family/types.ts';
+import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { compactRecord, enumField, requiredField, stringField } from '../command-input.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
@@ -84,16 +84,6 @@ const clipboardCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
-const systemCommandMetadata = [
-  appStateCommandMetadata,
-  backCommandMetadata,
-  homeCommandMetadata,
-  rotateCommandMetadata,
-  appSwitcherCommandMetadata,
-  keyboardCommandMetadata,
-  clipboardCommandMetadata,
-] as const;
-
 const appStateCommandDefinition = defineExecutableCommand(
   appStateCommandMetadata,
   (client, input) => client.command.appState(input),
@@ -126,16 +116,6 @@ const clipboardCommandDefinition = defineExecutableCommand(
   (client, input) => client.command.clipboard(input as ClipboardCommandOptions),
 );
 
-const systemCommandDefinitions = [
-  appStateCommandDefinition,
-  backCommandDefinition,
-  homeCommandDefinition,
-  rotateCommandDefinition,
-  appSwitcherCommandDefinition,
-  keyboardCommandDefinition,
-  clipboardCommandDefinition,
-] as const;
-
 const appStateCliSchema = {
   helpDescription: 'Show foreground app/activity',
 } as const satisfies CommandSchemaOverride;
@@ -167,14 +147,6 @@ const clipboardCliSchema = {
   allowsExtraPositionals: true,
 } as const satisfies CommandSchemaOverride;
 
-const systemCliSchemas = {
-  [APPSTATE_COMMAND_NAME]: appStateCliSchema,
-  [BACK_COMMAND_NAME]: backCliSchema,
-  [ROTATE_COMMAND_NAME]: rotateCliSchema,
-  [KEYBOARD_COMMAND_NAME]: keyboardCliSchema,
-  [CLIPBOARD_COMMAND_NAME]: clipboardCliSchema,
-} as const satisfies Record<string, CommandSchemaOverride>;
-
 export const appStateCliReader: CliReader = (_positionals, flags) => commonInputFromFlags(flags);
 export const homeCliReader: CliReader = (_positionals, flags) => commonInputFromFlags(flags);
 export const appSwitcherCliReader: CliReader = (_positionals, flags) => commonInputFromFlags(flags);
@@ -199,16 +171,6 @@ export const clipboardCliReader: CliReader = (positionals, flags) => ({
   ...readClipboardInput(positionals),
 });
 
-const systemCliReaders = {
-  appstate: appStateCliReader,
-  home: homeCliReader,
-  'app-switcher': appSwitcherCliReader,
-  back: backCliReader,
-  rotate: rotateCliReader,
-  keyboard: keyboardCliReader,
-  clipboard: clipboardCliReader,
-} satisfies Record<string, CliReader>;
-
 export const appStateDaemonWriter: DaemonWriter = direct(APPSTATE_COMMAND_NAME);
 
 export const backDaemonWriter: DaemonWriter = (input) =>
@@ -230,24 +192,85 @@ export const clipboardDaemonWriter: DaemonWriter = direct(CLIPBOARD_COMMAND_NAME
   clipboardPositionals(input as ClipboardCommandOptions),
 );
 
-const systemDaemonWriters = {
-  appstate: appStateDaemonWriter,
-  back: backDaemonWriter,
-  home: homeDaemonWriter,
-  rotate: rotateDaemonWriter,
-  'app-switcher': appSwitcherDaemonWriter,
-  keyboard: keyboardDaemonWriter,
-  clipboard: clipboardDaemonWriter,
-} satisfies Record<string, DaemonWriter>;
+const appStateCommandFacet = defineCommandFacet({
+  name: APPSTATE_COMMAND_NAME,
+  metadata: appStateCommandMetadata,
+  definition: appStateCommandDefinition,
+  cliSchema: appStateCliSchema,
+  cliReader: appStateCliReader,
+  daemonWriter: appStateDaemonWriter,
+  cliOutputFormatter: systemCliOutputFormatters.appstate,
+});
 
-export const systemCommandFamily = defineCommandFamily({
+const backCommandFacet = defineCommandFacet({
+  name: BACK_COMMAND_NAME,
+  metadata: backCommandMetadata,
+  definition: backCommandDefinition,
+  cliSchema: backCliSchema,
+  cliReader: backCliReader,
+  daemonWriter: backDaemonWriter,
+  cliOutputFormatter: systemCliOutputFormatters.back,
+});
+
+const homeCommandFacet = defineCommandFacet({
+  name: HOME_COMMAND_NAME,
+  metadata: homeCommandMetadata,
+  definition: homeCommandDefinition,
+  cliReader: homeCliReader,
+  daemonWriter: homeDaemonWriter,
+  cliOutputFormatter: systemCliOutputFormatters.home,
+});
+
+const rotateCommandFacet = defineCommandFacet({
+  name: ROTATE_COMMAND_NAME,
+  metadata: rotateCommandMetadata,
+  definition: rotateCommandDefinition,
+  cliSchema: rotateCliSchema,
+  cliReader: rotateCliReader,
+  daemonWriter: rotateDaemonWriter,
+  cliOutputFormatter: systemCliOutputFormatters.rotate,
+});
+
+const appSwitcherCommandFacet = defineCommandFacet({
+  name: APP_SWITCHER_COMMAND_NAME,
+  metadata: appSwitcherCommandMetadata,
+  definition: appSwitcherCommandDefinition,
+  cliReader: appSwitcherCliReader,
+  daemonWriter: appSwitcherDaemonWriter,
+  cliOutputFormatter: systemCliOutputFormatters['app-switcher'],
+});
+
+const keyboardCommandFacet = defineCommandFacet({
+  name: KEYBOARD_COMMAND_NAME,
+  metadata: keyboardCommandMetadata,
+  definition: keyboardCommandDefinition,
+  cliSchema: keyboardCliSchema,
+  cliReader: keyboardCliReader,
+  daemonWriter: keyboardDaemonWriter,
+  cliOutputFormatter: systemCliOutputFormatters.keyboard,
+});
+
+const clipboardCommandFacet = defineCommandFacet({
+  name: CLIPBOARD_COMMAND_NAME,
+  metadata: clipboardCommandMetadata,
+  definition: clipboardCommandDefinition,
+  cliSchema: clipboardCliSchema,
+  cliReader: clipboardCliReader,
+  daemonWriter: clipboardDaemonWriter,
+  cliOutputFormatter: systemCliOutputFormatters.clipboard,
+});
+
+export const systemCommandFamily = defineCommandFamilyFromFacets({
   name: 'system',
-  metadata: systemCommandMetadata,
-  definitions: systemCommandDefinitions,
-  cliSchemas: systemCliSchemas,
-  cliReaders: systemCliReaders,
-  daemonWriters: systemDaemonWriters,
-  cliOutputFormatters: systemCliOutputFormatters,
+  commands: [
+    appStateCommandFacet,
+    backCommandFacet,
+    homeCommandFacet,
+    rotateCommandFacet,
+    appSwitcherCommandFacet,
+    keyboardCommandFacet,
+    clipboardCommandFacet,
+  ],
 });
 
 function readBackMode(value: unknown): BackMode | undefined {

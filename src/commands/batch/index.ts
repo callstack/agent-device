@@ -2,7 +2,7 @@ import type { BatchRunOptions } from '../../client-types.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import { commonInputFromFlags } from '../cli-grammar/common.ts';
 import type { CliReader } from '../cli-grammar/types.ts';
-import { defineCommandFamily } from '../family/types.ts';
+import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { commonToClientOptions } from '../command-input.ts';
 import { batchCliOutputFormatters } from './output.ts';
@@ -15,34 +15,35 @@ const batchCommandDefinition = defineExecutableCommand(batchCommandMetadata, (cl
   client.batch.run(toBatchOptions(input)),
 );
 
-const batchCliSchemas = {
-  batch: {
-    usageOverride: 'batch [--steps <json> | --steps-file <path>]',
-    listUsageOverride: 'batch --steps <json> | --steps-file <path>',
-    helpDescription: 'Execute multiple commands in one daemon request',
-    summary: 'Run multiple commands',
-    allowedFlags: ['steps', 'stepsFile', 'batchOnError', 'batchMaxSteps', 'out'],
-  },
-} as const satisfies Record<string, CommandSchemaOverride>;
+const batchCliSchema = {
+  usageOverride: 'batch [--steps <json> | --steps-file <path>]',
+  listUsageOverride: 'batch --steps <json> | --steps-file <path>',
+  helpDescription: 'Execute multiple commands in one daemon request',
+  summary: 'Run multiple commands',
+  allowedFlags: ['steps', 'stepsFile', 'batchOnError', 'batchMaxSteps', 'out'],
+} as const satisfies CommandSchemaOverride;
 
-const batchCliReaders = {
-  batch: ((_positionals, flags) => ({
-    ...commonInputFromFlags(flags),
-    steps: flags.batchSteps ?? [],
-    onError: flags.batchOnError,
-    maxSteps: flags.batchMaxSteps,
-    out: flags.out,
-  })) satisfies CliReader,
-} as const;
+const batchCliReader: CliReader = (_positionals, flags) => ({
+  ...commonInputFromFlags(flags),
+  steps: flags.batchSteps ?? [],
+  onError: flags.batchOnError,
+  maxSteps: flags.batchMaxSteps,
+  out: flags.out,
+});
 
-export const batchCommandFamily = defineCommandFamily({
+const batchCommandFacet = defineCommandFacet({
+  name: 'batch',
+  metadata: batchCommandMetadata,
+  definition: batchCommandDefinition,
+  cliSchema: batchCliSchema,
+  cliReader: batchCliReader,
+  cliOutputFormatter: batchCliOutputFormatters.batch,
+});
+
+export const batchCommandFamily = defineCommandFamilyFromFacets({
   name: 'batch',
   clientSurface: false,
-  metadata: [batchCommandMetadata],
-  definitions: [batchCommandDefinition],
-  cliSchemas: batchCliSchemas,
-  cliReaders: batchCliReaders,
-  cliOutputFormatters: batchCliOutputFormatters,
+  commands: [batchCommandFacet],
 });
 
 export { createBatchDaemonWriter };
