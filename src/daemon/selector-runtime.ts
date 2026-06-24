@@ -1,24 +1,11 @@
-import type {
-  AgentDeviceBackend,
-  BackendSnapshotOptions,
-  BackendSnapshotResult,
-} from '../backend.ts';
-import { createAgentDevice } from '../runtime.ts';
 import { parseWaitPositionals } from '../core/wait-positionals.ts';
 import type { WaitParsed } from '../core/wait-positionals.ts';
 import { isCommandSupportedOnDevice } from '../core/capabilities.ts';
-import { resolveTargetDevice, type CommandFlags } from '../core/dispatch.ts';
-import { isApplePlatform } from '../utils/device.ts';
 import { AppError, asAppError, normalizeError } from '../utils/errors.ts';
 import type { SnapshotNode } from '../utils/snapshot.ts';
 import { runIosRunnerCommand } from '../platforms/ios/runner-client.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
-import { SessionStore } from './session-store.ts';
-import { contextFromFlags } from './context.ts';
-import { ensureDeviceReady } from './device-ready.ts';
-import { readTextForNode } from './handlers/interaction-read.ts';
 import { errorResponse } from './handlers/response.ts';
-import { findNodeByLabel } from '../utils/snapshot-processing.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from './handlers/snapshot-session.ts';
 import { parseFindArgs, type FindAction } from '../utils/finders.ts';
 import { splitIsSelectorArgs } from './selectors.ts';
@@ -28,8 +15,6 @@ import {
   isSupportedPredicate,
   type IsPredicate,
 } from '../utils/selector-is-predicates.ts';
-import type { ContextFromFlags } from './handlers/interaction-common.ts';
-import { setSessionSnapshot } from './session-snapshot.ts';
 import {
   describeAndroidEscapeSurface,
   detectAndroidEscapeSurface,
@@ -43,27 +28,17 @@ import {
   toDaemonGetData,
   toDaemonWaitData,
 } from './selector-recording.ts';
-import { createDaemonRuntimePolicy } from './runtime-policy.ts';
-import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
 import { maybeWaitTimeoutSurfaceResponse } from './wait-current-surface.ts';
 import {
   isDirectIosSelectorFallbackError,
   readSimpleIosSelectorTarget,
   type DirectIosSelectorTarget,
 } from './direct-ios-selector.ts';
-import { createSelectorCaptureRuntime } from './selector-capture-runtime.ts';
-
-type SelectorRuntimeParams = {
-  req: DaemonRequest;
-  sessionName: string;
-  logPath?: string;
-  sessionStore: SessionStore;
-  contextFromFlags?: ContextFromFlags;
-};
-
-type SnapshotFlagOverrides = Partial<
-  Pick<CommandFlags, 'snapshotInteractiveOnly' | 'snapshotScope' | 'snapshotDepth' | 'snapshotRaw'>
->;
+import {
+  createSelectorRuntime,
+  createSelectorRuntimeForDevice,
+  type SelectorRuntimeParams,
+} from './selector-runtime-backend.ts';
 
 type DirectIosSelectorQueryResult = {
   found: boolean;
@@ -464,206 +439,6 @@ function readDirectIosSelectorNode(data: Record<string, unknown>): SnapshotNode 
   const node = nodes[0];
   if (!node || typeof node !== 'object') return undefined;
   return node as SnapshotNode;
-}
-
-function createSelectorRuntimeForDevice(params: {
-  req: DaemonRequest;
-  sessionName: string;
-  logPath?: string;
-  sessionStore: SessionStore;
-  contextFromFlags?: ContextFromFlags;
-  session: SessionState | undefined;
-  device: SessionState['device'];
-}) {
-  return createAgentDevice({
-    backend: createSelectorBackend(params),
-    ...createDaemonRuntimePolicy('selector commands', { plural: true }),
-    sessions: createDaemonRuntimeSessionStore({
-      sessionName: params.sessionName,
-      getSession: () => params.session,
-      recordOptions: { includeSnapshot: true },
-      setRecord: (record) => {
-        if (!params.session || !record.snapshot) return;
-        setSessionSnapshot(params.session, record.snapshot);
-        params.sessionStore.set(params.sessionName, params.session);
-      },
-    }),
-  });
-}
-
-async function createSelectorRuntime(
-  params: SelectorRuntimeParams,
-  options: { requireSession: boolean; capability: 'find' | 'get' | 'is' },
-): Promise<
-  | { ok: true; runtime: ReturnType<typeof createSelectorRuntimeForDevice> }
-  | { ok: false; response: DaemonResponse }
-> {
-  const session = params.sessionStore.get(params.sessionName);
-  if (!session && options.requireSession) {
-    return {
-      ok: false,
-      response: errorResponse('SESSION_NOT_FOUND', 'No active session. Run open first.'),
-    };
-  }
-  const device = session?.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
-  if (!session) await ensureDeviceReady(device);
-  if (!isCommandSupportedOnDevice(options.capability, device)) {
-    return {
-      ok: false,
-      response: errorResponse(
-        'UNSUPPORTED_OPERATION',
-        `${options.capability} is not supported on this device`,
-      ),
-    };
-  }
-  return {
-    ok: true,
-    runtime: createSelectorRuntimeForDevice({
-      ...params,
-      session,
-      device,
-    }),
-  };
-}
-
-function createSelectorBackend(params: {
-  req: DaemonRequest;
-  sessionName: string;
-  logPath?: string;
-  sessionStore: SessionStore;
-  contextFromFlags?: ContextFromFlags;
-  session: SessionState | undefined;
-  device: SessionState['device'];
-}): AgentDeviceBackend {
-  const { req, session, device, logPath, sessionName, sessionStore } = params;
-  const captureRuntime = createSelectorCaptureRuntime({
-    device,
-    session,
-    sessionStore,
-    sessionName,
-    req,
-    logPath,
-  });
-  return {
-    platform: device.platform,
-    captureSnapshot: async (_context, options): Promise<BackendSnapshotResult> => {
-      const flags = {
-        ...req.flags,
-        ...snapshotFlagOverrides(options),
-      };
-      const includeRects = options?.includeRects === true;
-      const snapshotScope = options?.scope ?? req.flags?.snapshotScope;
-      const needsFreshSnapshot =
-        req.command === 'wait' ||
-        req.command === 'find' ||
-        (includeRects && device.platform === 'web');
-      return await captureRuntime.capture({
-        flags,
-        snapshotScope,
-        includeRects,
-        cache: {
-          forceFresh: needsFreshSnapshot,
-          useSessionSnapshot: true,
-          bypassForPostGestureStabilization: true,
-        },
-      });
-    },
-    readText: async (_context, node: SnapshotNode) => ({
-      text: await readTextForNode({
-        device,
-        node,
-        flags: req.flags,
-        appBundleId: session?.appBundleId,
-        traceOutPath: session?.trace?.outPath,
-        surface: session?.surface,
-        contextFromFlags:
-          params.contextFromFlags ??
-          ((flags, appBundleId, traceLogPath) =>
-            contextFromFlags(logPath ?? '', flags, appBundleId, traceLogPath)),
-      }),
-    }),
-    findText: async (_context, text) => ({
-      found: await findText(params, text),
-    }),
-  };
-}
-
-function snapshotFlagOverrides(options: BackendSnapshotOptions | undefined): SnapshotFlagOverrides {
-  const flags: SnapshotFlagOverrides = {};
-  if (options?.interactiveOnly !== undefined)
-    flags.snapshotInteractiveOnly = options.interactiveOnly;
-  if (options?.scope !== undefined) flags.snapshotScope = options.scope;
-  if (options?.depth !== undefined) flags.snapshotDepth = options.depth;
-  if (options?.raw !== undefined) flags.snapshotRaw = options.raw;
-  return flags;
-}
-
-async function findText(
-  params: {
-    req: DaemonRequest;
-    sessionName: string;
-    logPath?: string;
-    sessionStore: SessionStore;
-    contextFromFlags?: ContextFromFlags;
-    session: SessionState | undefined;
-    device: SessionState['device'];
-  },
-  text: string,
-): Promise<boolean> {
-  const { device, session, req, logPath } = params;
-  if (device.platform === 'macos' && session?.surface && session.surface !== 'app') {
-    const snapshot = await captureWaitSnapshot(params);
-    return Boolean(findNodeByLabel(snapshot.nodes, text));
-  }
-  if (isApplePlatform(device.platform) && session?.appBundleId) {
-    const result = (await runIosRunnerCommand(
-      device,
-      { command: 'findText', text, appBundleId: session?.appBundleId },
-      {
-        verbose: req.flags?.verbose,
-        logPath,
-        traceLogPath: session?.trace?.outPath,
-        requestId: req.meta?.requestId,
-        iosXctestrunFile: req.flags?.iosXctestrunFile,
-        iosXctestDerivedDataPath: req.flags?.iosXctestDerivedDataPath,
-        iosXctestEnvDir: req.flags?.iosXctestEnvDir,
-      },
-    )) as { found?: boolean };
-    return result?.found === true;
-  }
-  const snapshot = await captureWaitSnapshot(params);
-  return Boolean(findNodeByLabel(snapshot.nodes, text));
-}
-
-async function captureWaitSnapshot(params: {
-  req: DaemonRequest;
-  sessionName: string;
-  logPath?: string;
-  sessionStore: SessionStore;
-  contextFromFlags?: ContextFromFlags;
-  session: SessionState | undefined;
-  device: SessionState['device'];
-}) {
-  // Reuse selector capture session-write policy, but keep wait text captures fresh.
-  const captureRuntime = createSelectorCaptureRuntime({
-    device: params.device,
-    session: params.session,
-    sessionStore: params.sessionStore,
-    sessionName: params.sessionName,
-    req: params.req,
-    logPath: params.logPath,
-  });
-  const { snapshot } = await captureRuntime.capture({
-    flags: {
-      ...params.req.flags,
-      snapshotInteractiveOnly: false,
-    },
-    cache: {
-      forceFresh: true,
-      bypassForPostGestureStabilization: true,
-    },
-  });
-  return snapshot;
 }
 
 function parseGetTarget(req: DaemonRequest):
