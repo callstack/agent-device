@@ -1,6 +1,11 @@
 import { dispatchCommand, resolveTargetDevice } from '../../core/dispatch.ts';
 import { sleep } from '../../utils/timeouts.ts';
-import { findBestMatchesByLocator, parseFindArgs, type FindLocator } from '../../utils/finders.ts';
+import {
+  findBestMatchesByLocator,
+  parseFindArgs,
+  parseFindSelectorExpression,
+  type FindLocator,
+} from '../../utils/finders.ts';
 import { centerOfRect, type SnapshotState } from '../../utils/snapshot.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
@@ -21,6 +26,7 @@ import {
   isSparseSnapshotQualityVerdict,
   type SnapshotQualityVerdict,
 } from '../../utils/snapshot-quality.ts';
+import { resolveSelectorChain, type SelectorChain } from '../../selectors.ts';
 
 export { parseFindArgs } from '../../utils/finders.ts';
 
@@ -91,7 +97,11 @@ export async function handleFindCommands(params: {
   const requiresRect = findActionRequiresRect(action);
   // Interaction targets need the full interactive tree so duplicate labels can be
   // resolved against viewport visibility before an off-screen subtree wins.
-  const scope = shouldScopeFind(locator) && !requiresRect ? query : undefined;
+  const selectorChain = parseFindSelectorExpression(locator, query);
+  const scope =
+    device.platform !== 'web' && !selectorChain && shouldScopeFind(locator) && !requiresRect
+      ? query
+      : undefined;
   const fetchNodes = createFindNodeFetcher({
     device,
     session,
@@ -132,8 +142,10 @@ export async function handleFindCommands(params: {
     nodes,
     locator,
     query,
+    selectorChain,
     requiresRect,
     flags: req.flags,
+    platform: device.platform,
   });
   if (!matchResult.ok) return matchResult.response;
   const node = matchResult.node;
@@ -241,13 +253,29 @@ function resolveFindMatch(params: {
   nodes: SnapshotState['nodes'];
   locator: FindLocator;
   query: string;
+  selectorChain: SelectorChain | null;
   requiresRect: boolean;
   flags: DaemonRequest['flags'];
+  platform: SessionState['device']['platform'];
 }): FindMatchResult {
-  const { nodes, locator, query, requiresRect, flags } = params;
+  const { nodes, locator, query, selectorChain, requiresRect, flags, platform } = params;
   const searchableNodes = requiresRect
     ? nodes.filter((node) => !isRootInteractionContainer(node, nodes[0]))
     : nodes;
+  if (selectorChain) {
+    const resolved = resolveSelectorChain(searchableNodes, selectorChain, {
+      platform,
+      requireRect: requiresRect,
+      requireUnique: false,
+    });
+    if (!resolved) {
+      return {
+        ok: false,
+        response: errorResponse('COMMAND_FAILED', 'find did not match any element'),
+      };
+    }
+    return { ok: true, node: resolved.node };
+  }
   const bestMatches = findBestMatchesByLocator(searchableNodes, locator, query, {
     requireRect: requiresRect,
   });

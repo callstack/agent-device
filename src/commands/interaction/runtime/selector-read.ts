@@ -1,5 +1,9 @@
-import type { FindAction, FindLocator } from '../../../utils/finders.ts';
-import { findBestMatchesByLocator } from '../../../utils/finders.ts';
+import {
+  findBestMatchesByLocator,
+  parseFindSelectorExpression,
+  type FindAction,
+  type FindLocator,
+} from '../../../utils/finders.ts';
 import type { SnapshotNode } from '../../../utils/snapshot.ts';
 import { findNodeByRef, normalizeRef } from '../../../utils/snapshot.ts';
 import {
@@ -13,6 +17,7 @@ import {
   formatSelectorFailure,
   parseSelectorChain,
   resolveSelectorChain,
+  type SelectorChain,
 } from '../../../selectors.ts';
 import { buildSelectorChainForNode } from '../../../utils/selector-build.ts';
 import {
@@ -408,17 +413,37 @@ async function findFirstLocatorMatch(
   options: FindReadCommandOptions,
   locator: FindLocator,
 ): Promise<{ capture: CapturedSnapshot; match: SnapshotNode | undefined }> {
+  const selectorChain = parseFindSelectorExpression(locator, options.query);
   const capture = await captureSelectorSnapshot(runtime, options, {
     updateSession: true,
-    scope: shouldScopeFind(locator) ? options.query : undefined,
+    scope: findSnapshotScope(runtime, locator, options.query, selectorChain),
   });
   if (isSparseSnapshotQualityVerdict(capture.snapshot.snapshotQuality)) {
     throw sparseSelectorSnapshotError(capture.snapshot.snapshotQuality);
+  }
+  if (selectorChain) {
+    const resolved = resolveSelectorChain(capture.snapshot.nodes, selectorChain, {
+      platform: runtime.backend.platform,
+      requireRect: false,
+      requireUnique: false,
+    });
+    return { capture, match: resolved?.node };
   }
   const match = findBestMatchesByLocator(capture.snapshot.nodes, locator, options.query, {
     requireRect: false,
   }).matches[0];
   return { capture, match };
+}
+
+function findSnapshotScope(
+  runtime: AgentDeviceRuntime,
+  locator: FindLocator,
+  query: string,
+  selectorChain: SelectorChain | null,
+): string | undefined {
+  if (selectorChain) return undefined;
+  if (runtime.backend.platform === 'web') return undefined;
+  return shouldScopeFind(locator) ? query : undefined;
 }
 
 function sparseSelectorSnapshotError(verdict: SnapshotQualityVerdict): AppError {

@@ -208,6 +208,45 @@ test('runtime find get_text reads the matched node', async () => {
   assert.equal(result.node.label, 'Continue');
 });
 
+test('runtime find accepts selector expression queries', async () => {
+  const device = createSelectorDevice(selectorSnapshot());
+
+  const result = await device.selectors.find({
+    session: 'default',
+    query: 'label="Continue"',
+    action: 'exists',
+  });
+
+  assert.deepEqual(result, { kind: 'found', found: true });
+});
+
+test('runtime web find text does not pass locator text as browser selector scope', async () => {
+  const snapshot = selectorSnapshot();
+  let captureOptions: BackendSnapshotOptions | undefined;
+  const device = createAgentDevice({
+    backend: {
+      platform: 'web',
+      captureSnapshot: async (_context, options) => {
+        captureOptions = options;
+        return { snapshot };
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
+    policy: localCommandPolicy(),
+  });
+
+  const result = await device.selectors.find({
+    session: 'default',
+    locator: 'text',
+    query: 'Continue',
+    action: 'exists',
+  });
+
+  assert.deepEqual(result, { kind: 'found', found: true });
+  assert.equal(captureOptions?.scope, undefined);
+});
+
 test('runtime find wait reports sparse snapshot verdicts on the selector-read route', async () => {
   const initialSnapshot = selectorSnapshot();
   const session = { name: 'default', snapshot: initialSnapshot };

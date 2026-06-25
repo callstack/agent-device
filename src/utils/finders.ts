@@ -1,5 +1,6 @@
 import type { SnapshotNode } from './snapshot.ts';
 import { AppError } from './errors.ts';
+import { tryParseSelectorChain, type SelectorChain } from './selectors-parse.ts';
 
 export const FIND_LOCATORS = ['any', 'text', 'label', 'value', 'role', 'id'] as const;
 export type FindLocator = (typeof FIND_LOCATORS)[number];
@@ -147,6 +148,15 @@ export function parseFindArgs(args: string[]): {
     return { locator, query, action: 'type', value };
   }
   throw new AppError('INVALID_ARGS', `Unsupported find action: ${actionTokens[0]}`);
+}
+
+export function parseFindSelectorExpression(
+  locator: FindLocator,
+  query: string,
+): SelectorChain | null {
+  if (locator !== 'any') return null;
+  if (!query.includes('=') && !query.includes('||')) return null;
+  return tryParseSelectorChain(query);
 }
 
 function parseTimeout(value: string | undefined): number | null {

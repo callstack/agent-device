@@ -120,6 +120,18 @@ async function assertReadAndVisibility(context: WebSmokeContext): Promise<void> 
     ['is', 'visible', 'label="Submit order"'],
     { pass: true },
   );
+  await assertCommandData(
+    context,
+    'find ready text by locator',
+    ['find', 'text', 'Ready marker', 'exists'],
+    { found: true },
+  );
+  await assertCommandData(
+    context,
+    'find ready text by selector expression',
+    ['find', 'text="Ready marker"', 'exists'],
+    { found: true },
+  );
 }
 
 async function assertWebNetwork(context: WebSmokeContext): Promise<void> {

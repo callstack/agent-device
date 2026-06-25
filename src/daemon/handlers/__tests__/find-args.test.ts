@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { parseFindArgs } from '../find.ts';
+import { parseFindSelectorExpression } from '../../../utils/finders.ts';
 
 test('parseFindArgs defaults to click with any locator', () => {
   const parsed = parseFindArgs(['Login']);
@@ -43,4 +44,12 @@ test('parseFindArgs with bare locator yields empty query', () => {
   expect(parsed.locator).toBe('text');
   expect(parsed.query).toBe('');
   expect(parsed.action).toBe('click');
+});
+
+test('parseFindSelectorExpression only treats bare selector-shaped queries as selectors', () => {
+  const parsed = parseFindSelectorExpression('any', 'label="Continue"');
+  expect(parsed?.raw).toBe('label="Continue"');
+
+  expect(parseFindSelectorExpression('text', 'label="Continue"')).toBeNull();
+  expect(parseFindSelectorExpression('any', 'a=b')).toBeNull();
 });
