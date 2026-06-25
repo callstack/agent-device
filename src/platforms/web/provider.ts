@@ -43,7 +43,7 @@ export type WebProvider = {
   scroll(
     direction: ScrollDirection,
     options?: { amount?: number; pixels?: number; durationMs?: number },
-  ): Promise<void>;
+  ): Promise<Record<string, unknown> | void>;
   readText?(x: number, y: number): Promise<string>;
   dumpNetwork?(options?: BackendDumpNetworkOptions): Promise<BackendDumpNetworkResult>;
 };

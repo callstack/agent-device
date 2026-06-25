@@ -98,7 +98,7 @@ test('typeLinux uses ydotool type', async () => {
 
 test('scrollLinux uses ydotool mousemove --wheel for vertical scroll', async () => {
   setupYdotool();
-  await scrollLinux('up');
+  const result = await scrollLinux('up', { pixels: 80, durationMs: 1 });
   const c = calls();
   assert.ok(
     c.some(
@@ -109,4 +109,5 @@ test('scrollLinux uses ydotool mousemove --wheel for vertical scroll', async () 
         args.includes('-y'),
     ),
   );
+  assert.equal(result.durationMs, 1);
 });

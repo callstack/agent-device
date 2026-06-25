@@ -342,9 +342,8 @@ for (const [name, device] of [
 }
 
 test('iosRunnerOverrides maps iOS scroll to a single fused scroll command', async () => {
-  // The fused scroll resolves the frame and performs the drag in one runner lifecycle command;
-  // no separate interactionFrame request and no durationMs (the runner pins the non-synthesized
-  // drag path that ignores it).
+  // The fused scroll resolves the frame and performs the duration-aware drag in one runner
+  // lifecycle command; no separate interactionFrame request is needed.
   mockRunIosRunnerCommand.mockResolvedValueOnce({
     x: 200,
     y: 640,
@@ -364,6 +363,7 @@ test('iosRunnerOverrides maps iOS scroll to a single fused scroll command', asyn
   assert.deepEqual(mockRunIosRunnerCommand.mock.calls[0]?.[1], {
     command: 'scroll',
     direction: 'down',
+    durationMs: 50,
     appBundleId: 'com.example.App',
   });
   assert.deepEqual(result, {
@@ -374,10 +374,11 @@ test('iosRunnerOverrides maps iOS scroll to a single fused scroll command', asyn
     referenceWidth: 400,
     referenceHeight: 800,
     pixels: 480,
+    durationMs: 50,
   });
 });
 
-test('iosRunnerOverrides does not report duration for tvOS remote scroll', async () => {
+test('iosRunnerOverrides maps tvOS scroll duration to remote press hold duration', async () => {
   mockRunIosRunnerCommand.mockResolvedValueOnce({
     ok: true,
   });
@@ -392,9 +393,10 @@ test('iosRunnerOverrides does not report duration for tvOS remote scroll', async
   assert.deepEqual(mockRunIosRunnerCommand.mock.calls[0]?.[1], {
     command: 'remotePress',
     remoteButton: 'down',
+    durationMs: 50,
     appBundleId: 'com.example.App',
   });
-  assert.deepEqual(result, {});
+  assert.deepEqual(result, { durationMs: 50 });
 });
 
 test('iosRunnerOverrides maps macOS desktop scroll to a desktop wheel command', async () => {

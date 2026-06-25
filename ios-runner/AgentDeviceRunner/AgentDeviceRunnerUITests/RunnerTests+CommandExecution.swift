@@ -625,14 +625,25 @@ extension RunnerTests {
           )
         )
       }
+      if let durationMs = command.durationMs,
+        durationMs.isFinite == false || durationMs < 0 || durationMs > 10000
+      {
+        return Response(
+          ok: false,
+          error: ErrorPayload(
+            code: "INVALID_ARGS",
+            message: "scroll durationMs must be between 0 and 10000"
+          )
+        )
+      }
       return executeDragGesture(
         activeApp: activeApp,
         x: frame.minX + plan.x1,
         y: frame.minY + plan.y1,
         x2: frame.minX + plan.x2,
         y2: frame.minY + plan.y2,
-        durationMs: nil,
-        synthesized: false,
+        durationMs: command.durationMs,
+        synthesized: command.durationMs != nil,
         message: "scrolled"
       )
     case .desktopScroll:
@@ -988,8 +999,7 @@ extension RunnerTests {
   /// Shared drag execution for `.drag` and the fused `.scroll`. Mirrors the original `.drag` body
   /// exactly: keyboardAvoidingDragPoints -> resolvedDragVisualizationFrame -> synthesized branch
   /// (16-10000ms clamp) or non-synthesized dragAt with coordinateDragHoldDuration ->
-  /// gestureResponse(.drag). `.scroll` always passes synthesized: false, pinning the same
-  /// non-synthesized drag path scroll's drag used today.
+  /// gestureResponse(.drag). `.scroll` uses the synthesized path only when a duration is requested.
   private func executeDragGesture(
     activeApp: XCUIApplication,
     x: Double,

@@ -13,7 +13,7 @@ export function normalizeAppleScrollResultWithResolvedFrame(
   runnerResult: Record<string, unknown>,
   direction: ScrollDirection,
   options?: AppleScrollOptions,
-  config?: { includeDuration?: boolean },
+  config: { includeDuration?: boolean } = { includeDuration: true },
 ): Record<string, unknown> {
   const referenceWidth = readFiniteNumber(runnerResult.referenceWidth);
   const referenceHeight = readFiniteNumber(runnerResult.referenceHeight);
@@ -40,7 +40,7 @@ export function normalizeAppleScrollResultWithResolvedFrame(
 
 export function scrollRunnerFields(
   options: AppleScrollOptions | undefined,
-  config?: { includeDuration?: boolean },
+  config: { includeDuration?: boolean } = { includeDuration: true },
 ): Record<string, number> {
   return {
     ...(options?.amount !== undefined ? { amount: options.amount } : {}),

@@ -178,11 +178,11 @@ const DEFAULT_SCROLL_CLICKS = 5;
 export async function scrollLinux(
   direction: ScrollDirection,
   options?: { amount?: number; pixels?: number; durationMs?: number },
-): Promise<void> {
+): Promise<Record<string, unknown>> {
   const provider = resolveLinuxInputProvider();
   if (provider) {
     await provider.scroll(direction, options);
-    return;
+    return scrollDurationResult(options);
   }
 
   const { tool } = await ensureInputTool();
@@ -205,17 +205,47 @@ export async function scrollLinux(
   if (tool === 'xdotool') {
     const button =
       direction === 'up' ? '4' : direction === 'down' ? '5' : direction === 'left' ? '6' : '7';
-    await xdotool('click', '--repeat', String(scrollCount), button);
+    await runPacedScrollSteps(scrollCount, options?.durationMs, async () => {
+      await xdotool('click', button);
+    });
   } else {
     // ydotool: wheel events use positive/negative values
     if (direction === 'up' || direction === 'down') {
-      const value = direction === 'up' ? String(-scrollCount) : String(scrollCount);
-      await ydotool('mousemove', '--wheel', '-y', value);
+      await runPacedScrollSteps(scrollCount, options?.durationMs, async (stepCount) => {
+        const stepValue = direction === 'up' ? String(-stepCount) : String(stepCount);
+        await ydotool('mousemove', '--wheel', '-y', stepValue);
+      });
     } else {
-      const value = direction === 'left' ? String(-scrollCount) : String(scrollCount);
-      await ydotool('mousemove', '--wheel', '-x', value);
+      await runPacedScrollSteps(scrollCount, options?.durationMs, async (stepCount) => {
+        const stepValue = direction === 'left' ? String(-stepCount) : String(stepCount);
+        await ydotool('mousemove', '--wheel', '-x', stepValue);
+      });
     }
   }
+  return scrollDurationResult(options);
+}
+
+async function runPacedScrollSteps(
+  totalCount: number,
+  durationMs: number | undefined,
+  runStep: (stepCount: number) => Promise<void>,
+): Promise<void> {
+  if (durationMs === undefined || durationMs <= 0 || totalCount <= 1) {
+    await runStep(totalCount);
+    return;
+  }
+
+  const intervalMs = durationMs / Math.max(1, totalCount - 1);
+  for (let index = 0; index < totalCount; index += 1) {
+    await runStep(1);
+    if (index < totalCount - 1) await sleep(intervalMs);
+  }
+}
+
+function scrollDurationResult(
+  options: { durationMs?: number } | undefined,
+): Record<string, unknown> {
+  return options?.durationMs !== undefined ? { durationMs: options.durationMs } : {};
 }
 
 // ── Keyboard actions ────────────────────────────────────────────────────

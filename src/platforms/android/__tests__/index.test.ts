@@ -534,12 +534,13 @@ test('scrollAndroid supports explicit pixel travel distance', async () => {
       '',
     ].join('\n'),
     async ({ argsLogPath, device }) => {
-      const result = await scrollAndroid(device, 'down', { pixels: 240 });
+      const result = await scrollAndroid(device, 'down', { pixels: 240, durationMs: 120 });
       const args = await fs.readFile(argsLogPath, 'utf8');
 
-      assert.match(args, /shell\ninput\nswipe\n540\n1080\n540\n840\n300\n/);
+      assert.match(args, /shell\ninput\nswipe\n540\n1080\n540\n840\n120\n/);
       assert.doesNotMatch(args, /uiautomator|dump/);
       assert.equal(result.pixels, 240);
+      assert.equal(result.durationMs, 120);
       assert.equal(result.referenceWidth, 1080);
       assert.equal(result.referenceHeight, 1920);
     },

@@ -214,6 +214,7 @@ export async function scrollAndroid(
     referenceWidth: size.width,
     referenceHeight: size.height,
   });
+  const durationMs = options?.durationMs ?? 300;
 
   await runAndroidAdb(device, [
     'shell',
@@ -223,10 +224,13 @@ export async function scrollAndroid(
     String(plan.y1),
     String(plan.x2),
     String(plan.y2),
-    '300',
+    String(durationMs),
   ]);
 
-  return plan;
+  return {
+    ...plan,
+    ...(options?.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
+  };
 }
 
 function resolveAndroidUserRotation(orientation: DeviceRotation): string {

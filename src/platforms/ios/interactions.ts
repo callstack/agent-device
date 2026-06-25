@@ -322,22 +322,26 @@ async function runAppleScroll(
   direction: ScrollDirection,
   options?: AppleScrollOptions,
 ): Promise<Record<string, unknown>> {
+  normalizeScrollDurationMs(options?.durationMs, {
+    invalidMessage: `scroll durationMs must be a non-negative integer at most ${SCROLL_DURATION_MAX_MS}`,
+  });
+
   if (device.target === 'tv') {
     const runnerResult = await runRunnerCommand(
       device,
-      appleRemotePressCommand(direction, ctx.appBundleId),
+      appleRemotePressCommand(direction, ctx.appBundleId, options?.durationMs),
       runnerOpts,
     );
-    return normalizeAppleScrollResult(runnerResult, { amount: options?.amount });
+    return normalizeAppleScrollResult(runnerResult, {
+      amount: options?.amount,
+      durationMs: options?.durationMs,
+    });
   }
 
   // Validate amount/pixels up front so bad inputs throw INVALID_ARGS before any runner command
   // is sent (previously validation ran between the frame request and the drag, so a bad amount
   // could cost one runner request first).
   assertScrollGestureInput(options ?? {});
-  normalizeScrollDurationMs(options?.durationMs, {
-    invalidMessage: `scroll durationMs must be a non-negative integer at most ${SCROLL_DURATION_MAX_MS}`,
-  });
 
   if (device.platform === 'macos') {
     return await runMacosDesktopScroll(
@@ -351,9 +355,6 @@ async function runAppleScroll(
   }
 
   // Single fused lifecycle command: the runner resolves the interaction frame and runs the drag.
-  // durationMs is intentionally not sent — scroll's drag used 250ms today, but the runner's
-  // non-synthesized drag path ignores it (coordinateDragHoldDuration + XCTest default drag
-  // velocity), and the fused `scroll` handler pins that same non-synthesized path.
   const runnerResult = await runRunnerCommand(
     device,
     {
