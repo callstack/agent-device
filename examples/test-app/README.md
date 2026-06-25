@@ -53,14 +53,14 @@ From the repo root:
 
 ```bash
 pnpm test-app:install
-pnpm test-app:ios
+pnpm test-app:ios -- --device "iPhone 17 Pro"
 ```
 
 Or on Android:
 
 ```bash
 pnpm test-app:install
-pnpm test-app:android
+pnpm test-app:android -- --device "$ANDROID_DEVICE"
 ```
 
 If you prefer to work from inside the app folder:
