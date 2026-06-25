@@ -197,14 +197,6 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
       }
       let logTailStopper: (() => void) | null = null;
       try {
-        if (command === 'cdp') {
-          const exitCode = await runAgentCdpCommand(positionals, {
-            cwd: process.cwd(),
-            env: process.env,
-          });
-          process.exit(exitCode);
-          return;
-        }
         if (command === 'react-devtools') {
           const exitCode = await runReactDevtoolsCommand(positionals, {
             flags: effectiveFlags,
@@ -283,6 +275,7 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
             flags: effectiveFlags,
             client: materializationClient,
             runtime: resolvedRuntime,
+            positionals,
             batchSteps: parsedBatchSteps,
             forceRuntimePrepare: hasExplicitMetroRuntimeOverrides(explicitFlagKeys),
           });
@@ -301,6 +294,16 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
           process.stderr.write(
             'Warning: open is using explicit remote daemon or tenant flags without saved Metro runtime hints. React Native apps may launch without bundle/runtime hints; prefer connect --remote-config <path> first or pass --remote-config <path> on this command.\n',
           );
+        }
+        if (command === 'cdp') {
+          const exitCode = await runAgentCdpCommand(positionals, {
+            flags: effectiveFlags,
+            runtime: resolvedRuntime,
+            cwd: process.cwd(),
+            env: process.env,
+          });
+          process.exit(exitCode);
+          return;
         }
         const remoteDaemonBaseUrl = effectiveFlags.daemonBaseUrl;
         logTailStopper =

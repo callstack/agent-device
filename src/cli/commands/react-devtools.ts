@@ -4,6 +4,7 @@ import {
   stopReactDevtoolsCompanion,
 } from '../../client-react-devtools-companion.ts';
 import { AppError } from '../../utils/errors.ts';
+import { isRemoteBridgeBackend } from './remote-bridge.ts';
 import type { CliFlags } from '../../utils/cli-flags.ts';
 
 const AGENT_REACT_DEVTOOLS_VERSION = '0.4.0';
@@ -46,10 +47,6 @@ export function buildReactDevtoolsNpmExecArgs(args: string[]): string[] {
     AGENT_REACT_DEVTOOLS_BIN,
     ...args,
   ];
-}
-
-function isRemoteBridgeBackend(leaseBackend: CliFlags['leaseBackend']): boolean {
-  return leaseBackend === 'android-instance' || leaseBackend === 'ios-instance';
 }
 
 function isRemoteIosBridgeBackend(leaseBackend: CliFlags['leaseBackend']): boolean {

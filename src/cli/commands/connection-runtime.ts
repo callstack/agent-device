@@ -2,6 +2,7 @@ import { resolveDaemonPaths } from '../../daemon/config.ts';
 import { stopReactDevtoolsCompanion } from '../../client-react-devtools-companion.ts';
 import { stopMetroTunnel } from '../../metro.ts';
 import { resolveRemoteConfigProfile } from '../../remote-config.ts';
+import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
 import type { MetroBridgeScope } from '../../client-companion-tunnel-contract.ts';
 import {
   buildRemoteConnectionDaemonState,
@@ -33,6 +34,7 @@ export async function materializeRemoteConnectionForCommand(options: {
   flags: CliFlags;
   client: AgentDeviceClient;
   runtime?: SessionRuntimeHints;
+  positionals?: string[];
   batchSteps?: BatchStep[];
   forceRuntimePrepare?: boolean;
 }): Promise<{ flags: CliFlags; runtime?: SessionRuntimeHints }> {
@@ -100,7 +102,7 @@ export async function materializeRemoteConnectionForCommand(options: {
   }
 
   if (
-    shouldPrepareRuntimeForCommand(command, options.batchSteps) &&
+    shouldPrepareRuntimeForCommand(command, nextFlags, options.batchSteps, options.positionals) &&
     hasDeferredMetroConfig(nextFlags)
   ) {
     if (!nextState.leaseId && nextFlags.leaseId) {
@@ -291,7 +293,15 @@ function shouldAllocateLeaseForCommand(command: string): boolean {
   return !leaseDeferredCommands.has(command);
 }
 
-function shouldPrepareRuntimeForCommand(command: string, batchSteps?: BatchStep[]): boolean {
+function shouldPrepareRuntimeForCommand(
+  command: string,
+  flags: CliFlags,
+  batchSteps?: BatchStep[],
+  positionals: string[] = [],
+): boolean {
+  if (command === 'cdp') {
+    return shouldAgentCdpUseRemoteBridgeUrl(positionals) && Boolean(flags.metroPublicBaseUrl);
+  }
   if (runtimeDeferredCommands.has(command)) {
     return true;
   }

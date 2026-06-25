@@ -631,6 +631,161 @@ test('deferred materialization re-prepares runtime when explicit Metro overrides
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('cdp remote materialization prepares Metro runtime for bridge target discovery', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-agent-cdp-runtime-'));
+  const stateDir = path.join(tempRoot, '.state');
+  const remoteConfigPath = path.join(tempRoot, 'remote.json');
+  fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+  let prepareRequest: Parameters<AgentDeviceClient['metro']['prepare']>[0] | undefined;
+
+  const materialized = await materializeRemoteConnectionForCommand({
+    command: 'cdp',
+    positionals: ['target', 'list'],
+    flags: {
+      json: true,
+      help: false,
+      version: false,
+      stateDir,
+      remoteConfig: remoteConfigPath,
+      daemonBaseUrl: 'https://daemon.example',
+      tenant: 'acme',
+      runId: 'run-123',
+      session: 'adc-android',
+      platform: 'android',
+      leaseBackend: 'android-instance',
+      metroProjectRoot: '/tmp/project',
+      metroProxyBaseUrl: 'https://proxy.example.test',
+      metroPublicBaseUrl: 'https://sandbox.example.test',
+    },
+    client: createTestClient({
+      prepare: async (options) => {
+        prepareRequest = options;
+        return {
+          projectRoot: '/tmp/project',
+          kind: 'react-native',
+          dependenciesInstalled: false,
+          packageManager: null,
+          started: false,
+          reused: true,
+          pid: 0,
+          logPath: '/tmp/project/.agent-device/metro.log',
+          statusUrl: 'http://127.0.0.1:8081/status',
+          runtimeFilePath: null,
+          iosRuntime: { platform: 'ios' },
+          androidRuntime: {
+            platform: 'android',
+            bundleUrl:
+              'https://proxy.example.test/api/metro/runtimes/runtime-1/index.bundle?platform=android',
+          },
+          bridge: null,
+        };
+      },
+    }),
+  });
+
+  assert.equal(prepareRequest?.proxyBaseUrl, 'https://proxy.example.test');
+  assert.deepEqual(prepareRequest?.bridgeScope, {
+    tenantId: 'acme',
+    runId: 'run-123',
+    leaseId: 'lease-1',
+  });
+  assert.deepEqual(materialized.runtime, {
+    platform: 'android',
+    bundleUrl:
+      'https://proxy.example.test/api/metro/runtimes/runtime-1/index.bundle?platform=android',
+  });
+  assert.deepEqual(readRemoteConnectionState({ stateDir, session: 'adc-android' })?.metro, {
+    projectRoot: '/tmp/project',
+    profileKey: remoteConfigPath,
+    consumerKey: 'adc-android',
+  });
+
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('cdp remote materialization skips Metro runtime for non-target commands', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-agent-cdp-memory-'));
+  const stateDir = path.join(tempRoot, '.state');
+  const remoteConfigPath = path.join(tempRoot, 'remote.json');
+  fs.writeFileSync(path.join(tempRoot, 'remote.json'), JSON.stringify({}));
+  let prepared = false;
+
+  try {
+    const materialized = await materializeRemoteConnectionForCommand({
+      command: 'cdp',
+      positionals: ['memory', 'usage', 'sample'],
+      flags: {
+        json: true,
+        help: false,
+        version: false,
+        stateDir,
+        remoteConfig: remoteConfigPath,
+        daemonBaseUrl: 'https://daemon.example',
+        tenant: 'acme',
+        runId: 'run-123',
+        session: 'adc-android',
+        platform: 'android',
+        leaseBackend: 'android-instance',
+        metroProjectRoot: '/tmp/project',
+        metroProxyBaseUrl: 'https://proxy.example.test',
+        metroPublicBaseUrl: 'https://sandbox.example.test',
+      },
+      client: createTestClient({
+        prepare: async () => {
+          prepared = true;
+          throw new Error('prepare should not be called');
+        },
+      }),
+    });
+
+    assert.equal(prepared, false);
+    assert.equal(materialized.runtime, undefined);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('cdp remote materialization skips Metro runtime without public CDP url', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-agent-cdp-no-public-'));
+  const stateDir = path.join(tempRoot, '.state');
+  const remoteConfigPath = path.join(tempRoot, 'remote.json');
+  fs.writeFileSync(remoteConfigPath, JSON.stringify({}));
+  let prepared = false;
+
+  try {
+    const materialized = await materializeRemoteConnectionForCommand({
+      command: 'cdp',
+      positionals: ['target', 'list'],
+      flags: {
+        json: true,
+        help: false,
+        version: false,
+        stateDir,
+        remoteConfig: remoteConfigPath,
+        daemonBaseUrl: 'https://daemon.example',
+        tenant: 'acme',
+        runId: 'run-123',
+        session: 'adc-android',
+        platform: 'android',
+        leaseBackend: 'android-instance',
+        metroProjectRoot: '/tmp/project',
+        metroProxyBaseUrl: 'https://proxy.example.test',
+      },
+      client: createTestClient({
+        prepare: async () => {
+          prepared = true;
+          throw new Error('prepare should not be called');
+        },
+      }),
+    });
+
+    assert.equal(prepared, false);
+    assert.equal(materialized.runtime, undefined);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('deferred materialization heartbeats an existing lease before dispatch', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-heartbeat-'));
   const stateDir = path.join(tempRoot, '.state');

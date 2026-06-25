@@ -55,6 +55,7 @@ agent-device cdp memory snapshot retainers --snapshot ms_3 --id <node-id> --dept
 
 - `cdp` dynamically runs a pinned CDP helper through npm; the first run may download the pinned package, and later runs can reuse the npm cache.
 - Every argument after `cdp` is passed to the CDP helper. Put `agent-device` global flags before `cdp` when you need the outer CLI to consume them.
+- In remote bridge sessions, run `connect` first and omit `--url` for `target list` or `target select`; `agent-device` derives the Metro CDP URL from the prepared remote runtime.
 - Start with `memory usage sample --gc` for a quick JS heap growth signal. Use snapshot diff and `leak-triplet` for proof that objects stayed retained after cleanup.
 - Until `cdp` has a compact leak report command, synthesize one from `memory usage diff`, `memory snapshot diff`, `memory snapshot leak-triplet`, and `memory snapshot retainers`.
 - Keep raw heap snapshots and allocation exports as artifacts. Default answers should summarize heap deltas, top retained classes/shapes, leak-triplet rows that stayed high after cleanup, and shortest useful retaining paths.
@@ -90,11 +91,11 @@ agent-device open MyApp --platform ios --relaunch --launch-console ./artifacts/a
 
 Crash routing:
 
-| Need | Use |
-| --- | --- |
-| Lead-up timeline before a failure | `logs` |
+| Need                                                                          | Use             |
+| ----------------------------------------------------------------------------- | --------------- |
+| Lead-up timeline before a failure                                             | `logs`          |
 | Failing frame from `crash.ips`/`crash.log` plus matching dSYM/build directory | `debug symbols` |
-| Live state, breakpoints, variables, memory, or stepping | Xcode/LLDB |
+| Live state, breakpoints, variables, memory, or stepping                       | Xcode/LLDB      |
 
 Use `debug symbols` when you already have an Apple crash artifact and local dSYMs and need the failing code path, not a full log dump:
 

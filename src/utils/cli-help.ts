@@ -475,6 +475,7 @@ state. Do not use this as the default React Native profiler.
 
 Setup:
   Start Metro and open the app first. For Android devices/emulators, make sure Metro is reachable from the app, typically with adb reverse tcp:8081 tcp:8081.
+  In remote bridge sessions, omit --url for target list/select after connect; agent-device derives the Metro CDP URL from the prepared remote runtime.
   agent-device cdp target list --url http://127.0.0.1:8081
   agent-device cdp target select <target-id>
 
