@@ -6,11 +6,18 @@ import { normalizeAgentBrowserNetworkRequests } from './agent-browser-network.ts
 import { normalizeAgentBrowserSnapshot } from './agent-browser-snapshot.ts';
 import {
   isJsonObject,
+  readBooleanProperty,
   readNumberProperty,
   readStringProperty,
   type JsonObject,
 } from './json-utils.ts';
-import type { WebProvider, WebSnapshotOptions, WebSnapshotResult } from './provider.ts';
+import type {
+  WebAudioProbeOptions,
+  WebAudioProbeResult,
+  WebProvider,
+  WebSnapshotOptions,
+  WebSnapshotResult,
+} from './provider.ts';
 import { mapManagedAgentBrowserError, resolveAgentBrowserTool } from './agent-browser-tool.ts';
 
 const AGENT_BROWSER = 'agent-browser';
@@ -80,7 +87,254 @@ export function createAgentBrowserWebProvider(
     async dumpNetwork(options) {
       return normalizeAgentBrowserNetworkRequests(await runJson(['network', 'requests']), options);
     },
+    async probeAudio(options) {
+      return normalizeAgentBrowserAudioProbeResult(
+        await runJson(['eval', buildAudioProbeEvalScript(options)]),
+      );
+    },
   };
+}
+
+function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
+  return `(() => {
+  const options = ${JSON.stringify({
+    action: options.action,
+    durationMs: options.durationMs,
+    bucketMs: options.bucketMs,
+    source: options.source ?? 'media-elements',
+  })};
+  const key = '__agentDeviceAudioProbe';
+  const silenceDb = -90;
+  const now = () => Date.now();
+  const dbfs = (value) => {
+    if (!Number.isFinite(value) || value <= 0) return silenceDb;
+    return Math.max(silenceDb, Math.min(0, Math.round(20 * Math.log10(value))));
+  };
+  const note = (probe, message) => {
+    if (!probe.notes.includes(message)) probe.notes.push(message);
+  };
+  const mediaElements = () => Array.from(document.querySelectorAll('audio,video'));
+  const stopProbe = (probe, reason) => {
+    if (!probe || probe.state === 'stopped') return probe;
+    clearInterval(probe.timer);
+    clearTimeout(probe.timeout);
+    probe.timer = undefined;
+    probe.timeout = undefined;
+    probe.state = 'stopped';
+    probe.active = false;
+    probe.reason = reason;
+    probe.stoppedAt = now();
+    try {
+      void probe.context.close();
+    } catch {}
+    return probe;
+  };
+  const discover = (probe) => {
+    const elements = mediaElements();
+    probe.mediaElementCount = elements.length;
+    for (const element of elements) {
+      if (probe.seen.has(element)) continue;
+      probe.seen.add(element);
+      if (typeof element.captureStream !== 'function') {
+        note(probe, 'Some media elements do not expose captureStream(), so they cannot be sampled.');
+        continue;
+      }
+      const stream = element.captureStream();
+      if (!stream || stream.getAudioTracks().length === 0) {
+        note(probe, 'Some media elements have no exposed audio track.');
+        continue;
+      }
+      const analyser = probe.context.createAnalyser();
+      analyser.fftSize = 2048;
+      const source = probe.context.createMediaStreamSource(stream);
+      source.connect(analyser);
+      analyser.connect(probe.sink);
+      probe.analysers.push({ analyser, buffer: new Float32Array(analyser.fftSize) });
+    }
+    probe.sourceCount = probe.analysers.length;
+    if (probe.sourceCount === 0) {
+      note(probe, 'No capturable page media audio sources were found yet.');
+    }
+  };
+  const sample = (probe) => {
+    if (!probe || probe.state !== 'running') return;
+    discover(probe);
+    let totalSquares = 0;
+    let totalSamples = 0;
+    let peak = 0;
+    for (const entry of probe.analysers) {
+      entry.analyser.getFloatTimeDomainData(entry.buffer);
+      for (const value of entry.buffer) {
+        totalSquares += value * value;
+        totalSamples += 1;
+        const abs = Math.abs(value);
+        if (abs > peak) peak = abs;
+      }
+    }
+    const rms = totalSamples > 0 ? Math.sqrt(totalSquares / totalSamples) : 0;
+    const rmsDb = dbfs(rms);
+    const peakDb = dbfs(peak);
+    probe.rmsDbfs.push(rmsDb);
+    probe.peakDbfs.push(peakDb);
+    probe.heard = probe.heard || rmsDb > silenceDb || peakDb > silenceDb;
+    const maxSamples = Math.ceil(probe.durationMs / probe.bucketMs) + 2;
+    if (probe.rmsDbfs.length > maxSamples) probe.rmsDbfs.splice(0, probe.rmsDbfs.length - maxSamples);
+    if (probe.peakDbfs.length > maxSamples) probe.peakDbfs.splice(0, probe.peakDbfs.length - maxSamples);
+    if (now() - probe.startedAt >= probe.durationMs) stopProbe(probe, 'duration');
+  };
+  const result = (probe) => {
+    const mediaCount = mediaElements().length;
+    if (!probe) {
+      return {
+        audio: 'probe',
+        state: 'stopped',
+        active: false,
+        heard: false,
+        source: 'media-elements',
+        backend: 'agent-browser',
+        durationMs: Number(options.durationMs) || 10000,
+        elapsedMs: 0,
+        bucketMs: Number(options.bucketMs) || 1000,
+        sampleCount: 0,
+        mediaElementCount: mediaCount,
+        sourceCount: 0,
+        rmsDbfs: [],
+        peakDbfs: [],
+        notes: [
+          'Audio probe samples HTML media elements exposed by captureStream(); it is not whole-tab or system audio capture.'
+        ],
+      };
+    }
+    return {
+      audio: 'probe',
+      state: probe.state,
+      active: probe.state === 'running',
+      heard: probe.heard,
+      source: 'media-elements',
+      backend: 'agent-browser',
+      durationMs: probe.durationMs,
+      elapsedMs: Math.max(0, Math.min(now() - probe.startedAt, probe.durationMs)),
+      bucketMs: probe.bucketMs,
+      sampleCount: probe.rmsDbfs.length,
+      mediaElementCount: mediaCount,
+      sourceCount: probe.sourceCount,
+      rmsDbfs: probe.rmsDbfs.slice(),
+      peakDbfs: probe.peakDbfs.slice(),
+      startedAt: new Date(probe.startedAt).toISOString(),
+      stoppedAt: probe.stoppedAt ? new Date(probe.stoppedAt).toISOString() : undefined,
+      reason: probe.reason,
+      notes: [
+        'Audio probe samples HTML media elements exposed by captureStream(); it is not whole-tab or system audio capture.',
+        ...probe.notes,
+      ],
+    };
+  };
+  const action = options.action || 'status';
+  let probe = window[key];
+  if (probe && probe.state === 'running' && now() - probe.startedAt >= probe.durationMs) {
+    sample(probe);
+    stopProbe(probe, 'duration');
+  }
+  if (action === 'start') {
+    if (probe) stopProbe(probe, 'restarted');
+    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextCtor) {
+      return {
+        audio: 'probe',
+        state: 'stopped',
+        active: false,
+        heard: false,
+        source: 'media-elements',
+        backend: 'agent-browser',
+        durationMs: Number(options.durationMs) || 10000,
+        elapsedMs: 0,
+        bucketMs: Number(options.bucketMs) || 1000,
+        sampleCount: 0,
+        mediaElementCount: mediaElements().length,
+        sourceCount: 0,
+        rmsDbfs: [],
+        peakDbfs: [],
+        notes: ['Web Audio API is not available in this browser context.'],
+      };
+    }
+    const context = new AudioContextCtor();
+    const sink = context.createGain();
+    sink.gain.value = 0;
+    sink.connect(context.destination);
+    probe = {
+      state: 'running',
+      active: true,
+      context,
+      sink,
+      seen: new WeakSet(),
+      analysers: [],
+      mediaElementCount: 0,
+      sourceCount: 0,
+      durationMs: Math.max(100, Number(options.durationMs) || 10000),
+      bucketMs: Math.max(100, Number(options.bucketMs) || 1000),
+      startedAt: now(),
+      stoppedAt: undefined,
+      reason: undefined,
+      heard: false,
+      rmsDbfs: [],
+      peakDbfs: [],
+      notes: [],
+    };
+    window[key] = probe;
+    try {
+      void context.resume();
+    } catch {
+      note(probe, 'AudioContext could not be resumed by the probe.');
+    }
+    discover(probe);
+    probe.timer = setInterval(() => sample(probe), probe.bucketMs);
+    probe.timeout = setTimeout(() => stopProbe(probe, 'duration'), probe.durationMs);
+    return result(probe);
+  }
+  if (action === 'stop') {
+    if (probe) sample(probe);
+    stopProbe(probe, 'manual');
+    return result(probe);
+  }
+  if (probe) sample(probe);
+  return result(probe);
+})()`;
+}
+
+function normalizeAgentBrowserAudioProbeResult(data: unknown): WebAudioProbeResult {
+  const record = isJsonObject(data) ? data : {};
+  return {
+    audio: 'probe',
+    state: readStringProperty(record, 'state') === 'running' ? 'running' : 'stopped',
+    active: readBooleanProperty(record, 'active') === true,
+    heard: readBooleanProperty(record, 'heard') === true,
+    source: 'media-elements',
+    backend: readStringProperty(record, 'backend') ?? 'agent-browser',
+    durationMs: readNumberProperty(record, 'durationMs') ?? 0,
+    elapsedMs: readNumberProperty(record, 'elapsedMs') ?? 0,
+    bucketMs: readNumberProperty(record, 'bucketMs') ?? 1000,
+    sampleCount: readNumberProperty(record, 'sampleCount') ?? 0,
+    mediaElementCount: readNumberProperty(record, 'mediaElementCount') ?? 0,
+    sourceCount: readNumberProperty(record, 'sourceCount') ?? 0,
+    rmsDbfs: readNumberArray(record.rmsDbfs),
+    peakDbfs: readNumberArray(record.peakDbfs),
+    startedAt: readStringProperty(record, 'startedAt'),
+    stoppedAt: readStringProperty(record, 'stoppedAt'),
+    reason: readStringProperty(record, 'reason'),
+    notes: readStringArray(record.notes),
+  };
+}
+
+function readNumberArray(value: unknown): number[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is number => typeof item === 'number' && Number.isFinite(item))
+    : [];
+}
+
+function readStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const items = value.filter((item): item is string => typeof item === 'string' && item.length > 0);
+  return items.length > 0 ? items : undefined;
 }
 
 async function runPacedScroll(

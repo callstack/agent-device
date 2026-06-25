@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest';
 import type { CliFlags } from '../../cli/parser/cli-flags.ts';
 import {
+  audioCliReader,
+  audioCommandDefinition,
+  audioCommandMetadata,
+  audioDaemonWriter,
   logsCliReader,
   logsCommandDefinition,
   logsCommandMetadata,
@@ -24,10 +28,33 @@ function expectInvalidArgs(fn: () => unknown, messageFragment: string) {
 
 describe('observability command interface', () => {
   test('owns logs and network public metadata', () => {
+    expect(audioCommandMetadata.name).toBe('audio');
+    expect(audioCommandDefinition.name).toBe('audio');
     expect(logsCommandMetadata.name).toBe('logs');
     expect(logsCommandDefinition.name).toBe('logs');
     expect(networkCommandMetadata.name).toBe('network');
     expect(networkCommandDefinition.name).toBe('network');
+  });
+
+  test('reads audio probe timing as compact daemon positionals', () => {
+    expect(audioCliReader(['probe', 'start', '7.5', '500'], NO_FLAGS)).toEqual({
+      action: 'probe',
+      probeAction: 'start',
+      durationMs: 7500,
+      bucketMs: 500,
+      source: 'media-elements',
+    });
+    expect(
+      audioDaemonWriter({
+        action: 'probe',
+        probeAction: 'start',
+        durationMs: 7500,
+        bucketMs: 500,
+      }),
+    ).toMatchObject({
+      command: 'audio',
+      positionals: ['probe', 'start', '7500', '500'],
+    });
   });
 
   test('reads logs action and message', () => {
@@ -66,6 +93,8 @@ describe('observability command interface', () => {
   test('rejects invalid observability positionals', () => {
     expectInvalidArgs(() => logsCliReader(['explode'], NO_FLAGS), 'logs requires');
     expectInvalidArgs(() => networkCliReader(['explode'], NO_FLAGS), 'network requires');
+    expectInvalidArgs(() => audioCliReader(['explode'], NO_FLAGS), 'audio requires probe');
+    expectInvalidArgs(() => audioCliReader(['probe', 'explode'], NO_FLAGS), 'audio probe requires');
     expectInvalidArgs(
       () => networkCliReader(['dump', '25', 'explode'], NO_FLAGS),
       'network include',

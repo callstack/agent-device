@@ -1,5 +1,6 @@
 export const PUBLIC_COMMANDS = {
   alert: 'alert',
+  audio: 'audio',
   appState: 'appstate',
   appSwitcher: 'app-switcher',
   artifacts: 'artifacts',

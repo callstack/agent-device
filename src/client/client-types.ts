@@ -772,6 +772,14 @@ export type NetworkOptions = AgentDeviceRequestOverrides & {
   include?: NetworkIncludeMode;
 };
 
+export type AudioOptions = AgentDeviceRequestOverrides & {
+  action?: 'probe';
+  probeAction?: 'start' | 'status' | 'stop';
+  durationMs?: number;
+  bucketMs?: number;
+  source?: 'media-elements';
+};
+
 export type RecordOptions = AgentDeviceRequestOverrides & {
   action: 'start' | 'stop';
   path?: string;
@@ -1002,6 +1010,7 @@ export type AgentDeviceClient = {
     perf: (options?: PerfOptions) => Promise<CommandRequestResult>;
     logs: (options?: LogsOptions) => Promise<CommandRequestResult>;
     network: (options?: NetworkOptions) => Promise<CommandRequestResult>;
+    audio: (options?: AudioOptions) => Promise<CommandRequestResult>;
   };
   debug: {
     symbols: (options: DebugSymbolsOptions) => Promise<DebugSymbolsResult>;

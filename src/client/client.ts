@@ -333,6 +333,7 @@ export function createAgentDeviceClient(
       perf: async (options = {}) => await executeCommand('perf', options),
       logs: async (options = {}) => await executeCommand('logs', options),
       network: async (options = {}) => await executeCommand('network', options),
+      audio: async (options = {}) => await executeCommand('audio', options),
     },
     debug: {
       symbols: async (options) => {

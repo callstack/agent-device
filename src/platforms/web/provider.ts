@@ -29,6 +29,36 @@ export type WebSnapshotResult = {
   truncated?: boolean;
 };
 
+export type WebAudioProbeAction = 'start' | 'status' | 'stop';
+
+export type WebAudioProbeOptions = {
+  action: WebAudioProbeAction;
+  durationMs?: number;
+  bucketMs?: number;
+  source?: 'media-elements';
+};
+
+export type WebAudioProbeResult = {
+  audio: 'probe';
+  state: 'running' | 'stopped';
+  active: boolean;
+  heard: boolean;
+  source: 'media-elements';
+  backend?: string;
+  durationMs: number;
+  elapsedMs: number;
+  bucketMs: number;
+  sampleCount: number;
+  mediaElementCount: number;
+  sourceCount: number;
+  rmsDbfs: number[];
+  peakDbfs: number[];
+  startedAt?: string;
+  stoppedAt?: string;
+  reason?: string;
+  notes?: string[];
+};
+
 export type WebProvider = {
   open(target: string, options?: WebOpenOptions): Promise<void>;
   close(target?: string): Promise<void>;
@@ -48,6 +78,7 @@ export type WebProvider = {
   ): Promise<Record<string, unknown> | void>;
   readText?(x: number, y: number): Promise<string>;
   dumpNetwork?(options?: BackendDumpNetworkOptions): Promise<BackendDumpNetworkResult>;
+  probeAudio?(options: WebAudioProbeOptions): Promise<WebAudioProbeResult>;
 };
 
 const localWebProvider: WebProvider = createAgentBrowserWebProvider();

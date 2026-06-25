@@ -188,6 +188,69 @@ test('agent-browser provider dumps session network requests', async () => {
   });
 });
 
+test('agent-browser provider probes page audio through eval', async () => {
+  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
+    const calls: AgentBrowserCall[] = [];
+    const audio = await withCommandExecutorOverride(
+      async (cmd, args) => {
+        calls.push({ cmd, args });
+        return jsonResult({
+          success: true,
+          data: {
+            audio: 'probe',
+            state: 'running',
+            active: true,
+            heard: true,
+            source: 'media-elements',
+            backend: 'agent-browser',
+            durationMs: 7500,
+            elapsedMs: 1000,
+            bucketMs: 500,
+            sampleCount: 2,
+            mediaElementCount: 1,
+            sourceCount: 1,
+            rmsDbfs: [-30, -24],
+            peakDbfs: [-18, -12],
+            notes: ['Audio probe samples HTML media elements exposed by captureStream().'],
+          },
+        });
+      },
+      async () =>
+        await provider.probeAudio?.({
+          action: 'start',
+          durationMs: 7500,
+          bucketMs: 500,
+          source: 'media-elements',
+        }),
+    );
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0]?.args[0], 'eval');
+    assert.match(calls[0]?.args[1] ?? '', /__agentDeviceAudioProbe/);
+    assert.deepEqual(calls[0]?.args.slice(2), ['--json', '--session', 'web-session']);
+    assert.deepEqual(audio, {
+      audio: 'probe',
+      state: 'running',
+      active: true,
+      heard: true,
+      source: 'media-elements',
+      backend: 'agent-browser',
+      durationMs: 7500,
+      elapsedMs: 1000,
+      bucketMs: 500,
+      sampleCount: 2,
+      mediaElementCount: 1,
+      sourceCount: 1,
+      rmsDbfs: [-30, -24],
+      peakDbfs: [-18, -12],
+      startedAt: undefined,
+      stoppedAt: undefined,
+      reason: undefined,
+      notes: ['Audio probe samples HTML media elements exposed by captureStream().'],
+    });
+  });
+});
+
 test('agent-browser provider surfaces stale ref failures during requested snapshot geometry lookup', async () => {
   await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
     await assert.rejects(

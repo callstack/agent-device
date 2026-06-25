@@ -50,6 +50,23 @@ type NetworkCliResult = {
   notes?: readonly string[];
 };
 
+type AudioCliResult = {
+  active?: boolean;
+  backend?: string;
+  source?: string;
+  state?: string;
+  heard?: boolean;
+  durationMs?: number;
+  elapsedMs?: number;
+  bucketMs?: number;
+  sampleCount?: number;
+  sourceCount?: number;
+  mediaElementCount?: number;
+  rmsDbfs?: readonly number[];
+  peakDbfs?: readonly number[];
+  notes?: readonly string[];
+};
+
 function logsCliOutput(data: LogsCliResult): CliOutput {
   return {
     data,
@@ -91,10 +108,45 @@ function networkCliOutput(data: NetworkCliResult): CliOutput {
   };
 }
 
+function audioCliOutput(data: AudioCliResult): CliOutput {
+  const lines = [
+    `Audio probe: ${String(data.state ?? 'stopped')} heard=${String(data.heard === true)}`,
+    formatAudioArray('rmsDbfs', data.rmsDbfs),
+    formatAudioArray('peakDbfs', data.peakDbfs),
+  ].filter((line): line is string => Boolean(line));
+  return {
+    data,
+    text: lines.join('\n'),
+    stderr: joinDefinedLines([
+      formatKeyValueFields(data, [
+        'active',
+        'backend',
+        'source',
+        'durationMs',
+        'elapsedMs',
+        'bucketMs',
+        'sampleCount',
+        'sourceCount',
+        'mediaElementCount',
+      ] as const),
+      formatNotes(data.notes),
+    ]),
+  };
+}
+
 export const observabilityCliOutputFormatters = {
   logs: resultOutput<LogsCliResult>(logsCliOutput),
   network: resultOutput<NetworkCliResult>(networkCliOutput),
+  audio: resultOutput<AudioCliResult>(audioCliOutput),
 } as const satisfies Record<string, CliOutputFormatter>;
+
+function formatAudioArray(label: string, value: readonly number[] | undefined): string | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const numbers = value.filter(
+    (item): item is number => typeof item === 'number' && Number.isFinite(item),
+  );
+  return numbers.length > 0 ? `${label}: [${numbers.join(', ')}]` : undefined;
+}
 
 function formatActionFields(data: LogsActionFields): string | undefined {
   return (

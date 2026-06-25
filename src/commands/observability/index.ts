@@ -1,4 +1,4 @@
-import type { LogsOptions, NetworkOptions } from '../../client/client-types.ts';
+import type { AudioOptions, LogsOptions, NetworkOptions } from '../../client/client-types.ts';
 import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '../../kernel/contracts.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { parseStringMember } from '../../utils/string-enum.ts';
@@ -21,10 +21,14 @@ import { observabilityCliOutputFormatters } from './output.ts';
 
 const LOGS_COMMAND_NAME = 'logs';
 const NETWORK_COMMAND_NAME = 'network';
+const AUDIO_COMMAND_NAME = 'audio';
 const NETWORK_ACTION_VALUES = ['dump', 'log'] as const;
+const AUDIO_ACTION_VALUES = ['probe'] as const;
+const AUDIO_PROBE_ACTION_VALUES = ['start', 'status', 'stop'] as const;
 
 const logsCommandDescription = 'Manage session app logs.';
 const networkCommandDescription = 'Show recent HTTP traffic.';
+const audioCommandDescription = 'Probe browser page audio levels.';
 
 export const logsCommandMetadata = defineFieldCommandMetadata(
   LOGS_COMMAND_NAME,
@@ -46,6 +50,17 @@ export const networkCommandMetadata = defineFieldCommandMetadata(
   },
 );
 
+export const audioCommandMetadata = defineFieldCommandMetadata(
+  AUDIO_COMMAND_NAME,
+  audioCommandDescription,
+  {
+    action: enumField(AUDIO_ACTION_VALUES),
+    probeAction: enumField(AUDIO_PROBE_ACTION_VALUES),
+    durationMs: integerField('Probe duration in milliseconds.'),
+    bucketMs: integerField('Audio level bucket size in milliseconds.'),
+  },
+);
+
 export const logsCommandDefinition = defineExecutableCommand(logsCommandMetadata, (client, input) =>
   client.observability.logs(input),
 );
@@ -53,6 +68,11 @@ export const logsCommandDefinition = defineExecutableCommand(logsCommandMetadata
 export const networkCommandDefinition = defineExecutableCommand(
   networkCommandMetadata,
   (client, input) => client.observability.network(input),
+);
+
+export const audioCommandDefinition = defineExecutableCommand(
+  audioCommandMetadata,
+  (client, input) => client.observability.audio(input),
 );
 
 const logsCliSchema = {
@@ -76,6 +96,15 @@ const networkCliSchema = {
   allowedFlags: ['networkInclude'],
 } as const satisfies CommandSchemaOverride;
 
+const audioCliSchema = {
+  usageOverride:
+    'audio probe start [durationSeconds] [bucketMs] | audio probe status | audio probe stop',
+  listUsageOverride: 'audio',
+  helpDescription: 'Probe browser page audio levels as compact dBFS buckets',
+  summary: 'Probe browser page audio levels',
+  positionalArgs: ['probe', 'start|status|stop', 'durationSeconds?', 'bucketMs?'],
+} as const satisfies CommandSchemaOverride;
+
 export const logsCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
   action: readLogsAction(positionals[0]),
@@ -90,6 +119,14 @@ export const networkCliReader: CliReader = (positionals, flags) => ({
   include: flags.networkInclude ?? readNetworkInclude(positionals[2]),
 });
 
+export const audioCliReader: CliReader = (positionals, flags) => ({
+  ...commonInputFromFlags(flags),
+  action: readAudioAction(positionals[0]),
+  probeAction: readAudioProbeAction(positionals[1]),
+  durationMs: readAudioDurationMs(positionals[2]),
+  bucketMs: optionalCliNumber(positionals[3]),
+});
+
 export const logsDaemonWriter: DaemonWriter = direct(LOGS_COMMAND_NAME, (input) =>
   logsPositionals(input as LogsOptions),
 );
@@ -99,6 +136,9 @@ export const networkDaemonWriter: DaemonWriter = (input) =>
     ...input,
     networkInclude: input.include,
   });
+
+export const audioDaemonWriter: DaemonWriter = (input) =>
+  request(AUDIO_COMMAND_NAME, audioPositionals(input as AudioOptions), input);
 
 const logsCommandFacet = defineCommandFacet({
   name: LOGS_COMMAND_NAME,
@@ -120,9 +160,19 @@ const networkCommandFacet = defineCommandFacet({
   cliOutputFormatter: observabilityCliOutputFormatters.network,
 });
 
+const audioCommandFacet = defineCommandFacet({
+  name: AUDIO_COMMAND_NAME,
+  metadata: audioCommandMetadata,
+  definition: audioCommandDefinition,
+  cliSchema: audioCliSchema,
+  cliReader: audioCliReader,
+  daemonWriter: audioDaemonWriter,
+  cliOutputFormatter: observabilityCliOutputFormatters.audio,
+});
+
 export const observabilityCommandFamily = defineCommandFamilyFromFacets({
   name: 'observability',
-  commands: [logsCommandFacet, networkCommandFacet],
+  commands: [logsCommandFacet, networkCommandFacet, audioCommandFacet],
 });
 
 function logsPositionals(input: { action?: string; message?: string }): string[] {
@@ -131,6 +181,15 @@ function logsPositionals(input: { action?: string; message?: string }): string[]
 
 function networkPositionals(input: NetworkOptions): string[] {
   return [...(input.action ? [input.action] : []), ...optionalNumber(input.limit)];
+}
+
+function audioPositionals(input: AudioOptions): string[] {
+  return [
+    input.action ?? 'probe',
+    input.probeAction ?? 'status',
+    ...optionalNumber(input.durationMs),
+    ...optionalNumber(input.bucketMs),
+  ];
 }
 
 function readLogsAction(value: string | undefined): LogAction | undefined {
@@ -151,4 +210,23 @@ function readNetworkInclude(value: string | undefined): NetworkIncludeMode | und
   return parseStringMember(NETWORK_INCLUDE_MODES, value, {
     message: 'network include must be summary, headers, body, or all',
   });
+}
+
+function readAudioAction(value: string | undefined): 'probe' | undefined {
+  if (value === undefined) return undefined;
+  return parseStringMember(AUDIO_ACTION_VALUES, value, {
+    message: 'audio requires probe',
+  });
+}
+
+function readAudioProbeAction(value: string | undefined): 'start' | 'status' | 'stop' | undefined {
+  if (value === undefined) return undefined;
+  return parseStringMember(AUDIO_PROBE_ACTION_VALUES, value, {
+    message: 'audio probe requires start, status, or stop',
+  });
+}
+
+function readAudioDurationMs(value: string | undefined): number | undefined {
+  const durationSeconds = optionalCliNumber(value);
+  return durationSeconds === undefined ? undefined : Math.round(durationSeconds * 1000);
 }

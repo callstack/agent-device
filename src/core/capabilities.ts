@@ -30,6 +30,7 @@ const WEB_DEVICE: KindMatrix = { device: true };
 const WEB_RUNTIME_COMMANDS = ['open', 'close'] as const;
 const WEB_RECORDING_COMMANDS = ['record'] as const;
 const WEB_QUERY_COMMANDS = [
+  'audio',
   'find',
   'get',
   'is',

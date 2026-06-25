@@ -168,6 +168,12 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
+    name: PUBLIC_COMMANDS.audio,
+    daemon: { route: 'session', sessionKind: 'observability' },
+    capability: { apple: {}, android: {}, linux: LINUX_NONE },
+    batchable: true,
+  },
+  {
     name: PUBLIC_COMMANDS.replay,
     daemon: {
       route: 'session',

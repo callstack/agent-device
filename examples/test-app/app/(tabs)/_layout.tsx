@@ -33,6 +33,10 @@ export default function TabsLayout() {
         <NativeTabs.Trigger.Icon md="fact_check" sf="doc.text.fill" />
         <NativeTabs.Trigger.Label>Form</NativeTabs.Trigger.Label>
       </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="audio">
+        <NativeTabs.Trigger.Icon md="music_note" sf="waveform" />
+        <NativeTabs.Trigger.Label>Audio</NativeTabs.Trigger.Label>
+      </NativeTabs.Trigger>
       <NativeTabs.Trigger name="settings">
         <NativeTabs.Trigger.Icon md="settings" sf="gearshape.fill" />
         <NativeTabs.Trigger.Label>Settings</NativeTabs.Trigger.Label>

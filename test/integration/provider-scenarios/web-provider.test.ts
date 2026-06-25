@@ -74,6 +74,26 @@ test('web provider is scoped through the request router and dispatch path', asyn
         redacted: false,
       };
     },
+    async probeAudio(options) {
+      calls.push(`audio:${options.action}:${options.durationMs ?? ''}:${options.bucketMs ?? ''}`);
+      return {
+        audio: 'probe',
+        state: 'running',
+        active: true,
+        heard: true,
+        source: 'media-elements',
+        backend: 'agent-browser',
+        durationMs: options.durationMs ?? 10_000,
+        elapsedMs: 1000,
+        bucketMs: options.bucketMs ?? 1000,
+        sampleCount: 1,
+        mediaElementCount: 1,
+        sourceCount: 1,
+        rmsDbfs: [-24],
+        peakDbfs: [-12],
+        notes: ['HTML media element probe'],
+      };
+    },
   };
 
   const harness = await createProviderScenarioHarness({
@@ -143,6 +163,15 @@ test('web provider is scoped through the request router and dispatch path', asyn
     ]);
     assert.equal(network.json.result.data.backend, 'agent-browser');
     assert.equal(network.json.result.data.include, 'headers');
+    const audio = await harness.callCommand(
+      'audio',
+      ['probe', 'start', '10000', '1000'],
+      { platform: 'web' },
+      { meta: { requestId: 'req-web-audio' } },
+    );
+    assert.deepEqual(audio.json.result.data.rmsDbfs, [-24]);
+    assert.equal(audio.json.result.data.heard, true);
+
     const viewport = await harness.callCommand(
       'viewport',
       ['1280', '900'],
@@ -161,6 +190,8 @@ test('web provider is scoped through the request router and dispatch path', asyn
       'snapshot:main',
       'scope:default:agent-browser-chrome',
       'network:5:headers',
+      'scope:default:agent-browser-chrome',
+      'audio:start:10000:1000',
       'scope:default:agent-browser-chrome',
       'viewport:1280:900',
     ]);

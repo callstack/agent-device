@@ -44,6 +44,7 @@ test('daemon command registry owns session handler subroutes', () => {
   assert.equal(getSessionCommandKind(PUBLIC_COMMANDS.boot), 'state');
   assert.equal(getSessionCommandKind(PUBLIC_COMMANDS.shutdown), 'state');
   assert.equal(getSessionCommandKind(PUBLIC_COMMANDS.appState), 'state');
+  assert.equal(getSessionCommandKind(PUBLIC_COMMANDS.audio), 'observability');
   assert.equal(getSessionCommandKind(PUBLIC_COMMANDS.logs), 'observability');
   assert.equal(getSessionCommandKind(PUBLIC_COMMANDS.test), 'replay');
   assert.equal(getSessionCommandKind(PUBLIC_COMMANDS.open), undefined);

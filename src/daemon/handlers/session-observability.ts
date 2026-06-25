@@ -43,8 +43,12 @@ import {
 
 const LOG_ACTIONS_MESSAGE = `logs requires ${LOG_ACTIONS.slice(0, -1).join(', ')}, or ${LOG_ACTIONS.at(-1)}`;
 const NETWORK_ACTIONS = ['dump', 'log'] as const;
+const AUDIO_ACTIONS = ['probe'] as const;
+const AUDIO_PROBE_ACTIONS = ['start', 'status', 'stop'] as const;
 const NETWORK_ACTIONS_MESSAGE = `network requires ${NETWORK_ACTIONS.join(' or ')}`;
 const NETWORK_INCLUDE_MESSAGE = `network include mode must be one of: ${NETWORK_INCLUDE_MODES.join(', ')}`;
+const AUDIO_ACTIONS_MESSAGE = 'audio requires probe';
+const AUDIO_PROBE_ACTIONS_MESSAGE = `audio probe requires ${AUDIO_PROBE_ACTIONS.join(', ')}`;
 
 type ObservabilityParams = {
   req: DaemonRequest;
@@ -91,6 +95,9 @@ export async function handleSessionObservabilityCommands(
   }
   if (req.command === 'network') {
     return handleNetworkCommand(params);
+  }
+  if (req.command === 'audio') {
+    return await handleAudioCommand(params);
   }
 
   return null;
@@ -601,4 +608,109 @@ function resolveNetworkIncludeMode(
     return errorResponse('INVALID_ARGS', NETWORK_INCLUDE_MESSAGE);
   }
   return { ok: true, include: requestedInclude as NetworkIncludeMode };
+}
+
+// ---------------------------------------------------------------------------
+// audio
+// ---------------------------------------------------------------------------
+
+async function handleAudioCommand(params: ObservabilityParams): Promise<DaemonResponse> {
+  const request = resolveAudioCommandRequest(params);
+  if (!request.ok) return request;
+  const provider = resolveWebProvider();
+  if (!provider.probeAudio) {
+    return errorResponse('UNSUPPORTED_OPERATION', 'audio is not supported by this web provider');
+  }
+
+  try {
+    return {
+      ok: true,
+      data: await provider.probeAudio({
+        action: request.probeAction,
+        durationMs: request.durationMs,
+        bucketMs: request.bucketMs,
+        source: 'media-elements',
+      }),
+    };
+  } catch (error) {
+    return { ok: false, error: normalizeError(error) };
+  }
+}
+
+function resolveAudioCommandRequest(params: ObservabilityParams):
+  | {
+      ok: true;
+      probeAction: 'start' | 'status' | 'stop';
+      durationMs: number;
+      bucketMs: number;
+    }
+  | DaemonFailureResponse {
+  const { req, sessionName, sessionStore } = params;
+  const session = sessionStore.get(sessionName);
+  if (!session) {
+    return errorResponse('SESSION_NOT_FOUND', 'audio requires an active session');
+  }
+  if (!isCommandSupportedOnDevice('audio', session.device)) {
+    return errorResponse(
+      'UNSUPPORTED_OPERATION',
+      'audio is currently supported for web browser sessions only',
+    );
+  }
+
+  const action = (req.positionals?.[0] ?? 'probe').toLowerCase();
+  if (!AUDIO_ACTIONS.includes(action as (typeof AUDIO_ACTIONS)[number])) {
+    return errorResponse('INVALID_ARGS', AUDIO_ACTIONS_MESSAGE);
+  }
+
+  const probeAction = (req.positionals?.[1] ?? 'status').toLowerCase();
+  if (!AUDIO_PROBE_ACTIONS.includes(probeAction as (typeof AUDIO_PROBE_ACTIONS)[number])) {
+    return errorResponse('INVALID_ARGS', AUDIO_PROBE_ACTIONS_MESSAGE);
+  }
+
+  const durationMs = readBoundedInteger(req.positionals?.[2], {
+    defaultValue: 10_000,
+    min: 100,
+    max: 120_000,
+    message: 'audio probe duration must be an integer in range 100..120000 ms',
+  });
+  if (durationMs instanceof Error) return errorResponse('INVALID_ARGS', durationMs.message);
+
+  const bucketMs = readBoundedInteger(req.positionals?.[3], {
+    defaultValue: 1_000,
+    min: 100,
+    max: 10_000,
+    message: 'audio probe bucket must be an integer in range 100..10000 ms',
+  });
+  if (bucketMs instanceof Error) return errorResponse('INVALID_ARGS', bucketMs.message);
+
+  if (probeAction !== 'start' && req.positionals && req.positionals.length > 2) {
+    return errorResponse(
+      'INVALID_ARGS',
+      'audio probe duration and bucket are only supported with audio probe start',
+    );
+  }
+
+  return {
+    ok: true,
+    probeAction: probeAction as 'start' | 'status' | 'stop',
+    durationMs,
+    bucketMs,
+  };
+}
+
+function readBoundedInteger(
+  value: string | undefined,
+  params: { defaultValue: number; min: number; max: number; message: string },
+): number | Error {
+  if (value === undefined) return params.defaultValue;
+  const parsed = Number.parseInt(value, 10);
+  if (
+    !Number.isInteger(parsed) ||
+    String(parsed) !== value ||
+    parsed < params.min ||
+    parsed > params.max
+  ) {
+    return new Error(params.message);
+  }
+  return parsed;
 }
