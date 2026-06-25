@@ -116,8 +116,12 @@ test('Provider-backed integration Android record start without a session scopes 
 
             assertRecordingStarted(recordStart, { showTouches: true });
             assert.ok(
-              adbCalls.some((args) => isAndroidScreenrecordStartCommand(args.join(' '))),
+              adbCalls.some((args) => isAndroidDefaultScreenrecordStartCommand(args.join(' '))),
               JSON.stringify(adbCalls),
+            );
+            assert.equal(
+              adbCalls.some((args) => args.join(' ') === 'shell wm size'),
+              false,
             );
             assert.deepEqual(readLoggedArgs(logPath), []);
           } finally {
@@ -140,7 +144,11 @@ function androidAdbResult(args: string[]): {
     return { stdout: '1\n', stderr: '', exitCode: 0 };
   }
   if (command === 'shell wm size') {
-    return { stdout: 'Physical size: 1080x1920\n', stderr: '', exitCode: 0 };
+    return {
+      stdout: 'Physical size: 1440x2560\nOverride size: 1080x1920\n',
+      stderr: '',
+      exitCode: 0,
+    };
   }
   if (
     /^shell screenrecord --size 756x1344 --bit-rate 20000000 \/sdcard\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
@@ -163,6 +171,12 @@ function androidAdbResult(args: string[]): {
 
 function isAndroidScreenrecordStartCommand(command: string): boolean {
   return /^shell screenrecord (?:--size 756x1344 )?--bit-rate (?:8000000|20000000) \/sdcard\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
+    command,
+  );
+}
+
+function isAndroidDefaultScreenrecordStartCommand(command: string): boolean {
+  return /^shell screenrecord --bit-rate 8000000 \/sdcard\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
     command,
   );
 }
