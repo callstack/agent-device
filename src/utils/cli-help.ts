@@ -21,6 +21,10 @@ const AGENT_WORKFLOWS = [
     description: 'React Native performance, profiling, component tree, and renders',
   },
   {
+    label: 'help agent-cdp',
+    description: 'React Native CDP targets, JS heap snapshots, and leak triage',
+  },
+  {
     label: 'help physical-device',
     description: 'Connected phone/tablet setup and iOS signing prerequisites',
   },
@@ -43,6 +47,7 @@ const AGENT_QUICKSTART_LINES = [
   'Anti-pattern: snapshot -i followed by snapshot -i | grep ...; prior refs stay valid until app state changes, and --force-full is the explicit full re-read.',
   'Truncated text/input preview: expand first with snapshot -s @e12, not get text.',
   'React Native apps: read help react-native for Metro, DevTools routing, and RN-specific blockers; use react-native dismiss-overlay for LogBox/RedBox overlays.',
+  'React Native JS memory leaks: read help agent-cdp; use heap usage samples for a quick signal, then snapshot diff/leak-triplet for retained object proof.',
   'Android RN/Expo Metro: direct Android localhost URL opens with a port auto-configure host reachability.',
   'Expo Go/dev clients: use the provided URL when given; on iOS use open "Expo Go" <url> --platform ios, then snapshot -i --platform ios to verify project UI. Do not use plain snapshot or snapshot --diff for this recovery check. Android URL opens infer the foreground package for logs/perf when possible.',
   'Install flows: install/install-from-source first, then open the installed id with --relaunch.',
@@ -92,6 +97,7 @@ const EXAMPLE_LINES = [
   'agent-device open TextEdit --platform macos',
   'agent-device snapshot -i',
   'agent-device react-devtools get tree --depth 3',
+  'agent-device agent-cdp memory usage sample --gc --label baseline',
   'agent-device fill @e3 "test@example.com"',
   'agent-device replay ./session.ad',
   'agent-device test ./suite --platform android',
@@ -455,6 +461,50 @@ Example:
 
 Use snapshot, screenshot, logs, network, and perf metrics for device/app runtime evidence. Use react-devtools only when component internals or React rendering behavior matters.`,
   },
+  'agent-cdp': {
+    summary: 'React Native CDP targets, JS heap snapshots, and leak triage',
+    body: `agent-device help agent-cdp
+
+Use this when a React Native or Expo app exposes a CDP target through Metro and
+the task needs live JS runtime inspection, JS heap growth checks, heap snapshot
+diffs, allocation hotspots, or retained-object leak evidence.
+
+Setup:
+  Start Metro and open the app first. For Android devices/emulators, make sure Metro is reachable from the app, typically with adb reverse tcp:8081 tcp:8081.
+  agent-device agent-cdp target list --url http://127.0.0.1:8081
+  agent-device agent-cdp target select <target-id>
+
+Quick JS heap signal:
+  agent-device agent-cdp memory usage sample --label baseline --gc
+  # perform the suspected leaking action with agent-device commands
+  agent-device agent-cdp memory usage sample --label after-action --gc
+  agent-device agent-cdp memory usage diff --base jm_1 --compare jm_2
+  agent-device agent-cdp memory usage leak-signal --since jm_1
+
+Retained-object proof:
+  agent-device agent-cdp memory snapshot capture --name baseline --gc
+  # perform the suspected leaking action
+  agent-device agent-cdp memory snapshot capture --name after-action --gc
+  # perform cleanup/navigation that should release the objects
+  agent-device agent-cdp memory snapshot capture --name cleanup --gc
+  agent-device agent-cdp memory snapshot diff --base ms_1 --compare ms_2 --limit 10
+  agent-device agent-cdp memory snapshot leak-triplet --baseline ms_1 --action ms_2 --cleanup ms_3 --limit 10
+  agent-device agent-cdp memory snapshot retainers --snapshot ms_3 --id <node-id> --depth 8 --limit 10
+
+Allocation pressure:
+  Use allocation sampling to find where allocations were created, not to prove a leak:
+    agent-device agent-cdp memory allocation start --name suspected-flow --interval 32768 --stack-depth 32
+    # perform the flow once
+    agent-device agent-cdp memory allocation stop
+    agent-device agent-cdp memory allocation hotspots --limit 10
+    agent-device agent-cdp memory allocation source-maps
+
+Output contract:
+  Report heap deltas, top retained classes/shapes, leak-triplet rows that stayed high after cleanup, and the shortest useful retaining paths. Do not paste raw heap snapshots or large allocation profiles into the response; use exported artifacts only when the user asks for raw data.
+
+Target caveats:
+  React Native/Hermes implements a subset of browser CDP. If a command reports an unsupported method, keep the target selected and switch to heap usage samples plus heap snapshots. Prefer react-devtools for component tree/render causes; prefer perf memory sample or perf memory snapshot for native/process memory.`,
+  },
   'react-native': {
     summary: 'React Native app automation hazards and routing',
     body: `agent-device help react-native
@@ -467,6 +517,7 @@ Choose the next help topic:
   Generic navigation, selectors, refs, verification, serial commands: help workflow.
   Logs, network, diagnostics, traces, permission dialogs, or runtime failures: help debugging.
   Component tree, props/state/hooks, slow renders, rerenders, or render causes: help react-devtools.
+  JS heap growth, heap snapshots, allocation hotspots, or retained-object leaks: help agent-cdp.
   Remote/cloud config, leases, and local service tunnels: help remote.
 
 React Native dev loop:
@@ -513,6 +564,11 @@ React DevTools routing:
   Keep the agent-device react-devtools prefix on every React DevTools command.
   Use help react-devtools for status/wait, component trees, props/state/hooks, profile windows, slow renders, rerenders, and remote bridge rules.
   If React DevTools cannot connect, report status and continue with logs, network, perf metrics, screenshot, and trace evidence instead of blocking the whole flow.
+
+CDP memory routing:
+  Keep the agent-device agent-cdp prefix on every CDP command.
+  Use help agent-cdp for JS heap usage samples, heap snapshots, snapshot diffs, leak-triplet analysis, allocation hotspots, and retained-object paths.
+  Use perf memory sample or perf memory snapshot for native/process memory; use agent-cdp only for JavaScript heap evidence.
 
 Slow-flow investigation:
   Keep one session, open the app first, and snapshot -i before interacting.

@@ -1,0 +1,73 @@
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+import { afterEach, test, vi } from 'vitest';
+
+vi.mock('../utils/exec.ts', () => ({
+  runCmdStreaming: vi.fn(),
+}));
+
+import { runCmdStreaming } from '../utils/exec.ts';
+import {
+  AGENT_CDP_PACKAGE,
+  buildAgentCdpNpmExecArgs,
+  runAgentCdpCommand,
+} from '../cli/commands/agent-cdp.ts';
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
+
+test('agent-cdp passthrough pins agent-cdp package version', () => {
+  assert.equal(AGENT_CDP_PACKAGE, 'agent-cdp@1.5.2');
+  assert.deepEqual(
+    buildAgentCdpNpmExecArgs(['memory', 'usage', 'sample', '--label', 'baseline', '--gc']),
+    [
+      'exec',
+      '--yes',
+      '--package',
+      'agent-cdp@1.5.2',
+      '--',
+      'agent-cdp',
+      'memory',
+      'usage',
+      'sample',
+      '--label',
+      'baseline',
+      '--gc',
+    ],
+  );
+});
+
+test('agent-cdp docs mention the pinned package version', () => {
+  assert.match(fs.readFileSync('website/docs/docs/commands.md', 'utf8'), /agent-cdp@1\.5\.2/);
+});
+
+test('agent-cdp streams through npm exec and returns downstream exit code', async () => {
+  const env = { ...process.env };
+  vi.mocked(runCmdStreaming).mockResolvedValueOnce({
+    exitCode: 7,
+    stdout: '',
+    stderr: '',
+  });
+
+  const exitCode = await runAgentCdpCommand(['target', 'list'], {
+    cwd: '/tmp/project',
+    env,
+  });
+
+  assert.equal(exitCode, 7);
+  assert.equal(vi.mocked(runCmdStreaming).mock.calls[0]?.[0], 'npm');
+  assert.deepEqual(vi.mocked(runCmdStreaming).mock.calls[0]?.[1], [
+    'exec',
+    '--yes',
+    '--package',
+    'agent-cdp@1.5.2',
+    '--',
+    'agent-cdp',
+    'target',
+    'list',
+  ]);
+  assert.equal(vi.mocked(runCmdStreaming).mock.calls[0]?.[2]?.cwd, '/tmp/project');
+  assert.equal(vi.mocked(runCmdStreaming).mock.calls[0]?.[2]?.env, env);
+  assert.equal(vi.mocked(runCmdStreaming).mock.calls[0]?.[2]?.allowFailure, true);
+});

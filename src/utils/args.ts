@@ -72,7 +72,7 @@ export function parseRawArgs(argv: string[]): RawParsedArgs {
       continue;
     }
     const definition = resolveFlagDefinition(token, command);
-    if (shouldPassThroughReactDevtoolsFlag(command, definition)) {
+    if (shouldPassThroughLocalToolFlag(command, definition)) {
       positionals.push(arg);
       continue;
     }
@@ -108,11 +108,11 @@ function isLegacyIgnoredSnapshotShortFlag(command: string | null, token: string)
   return token === '-c' && (command === 'snapshot' || command === 'diff');
 }
 
-function shouldPassThroughReactDevtoolsFlag(
+function shouldPassThroughLocalToolFlag(
   command: string | null,
   definition: FlagDefinition | undefined,
 ): boolean {
-  if (command !== 'react-devtools') return false;
+  if (command !== 'react-devtools' && command !== 'agent-cdp') return false;
   if (!definition) return true;
   return !isFlagSupportedForCommand(definition.key, command);
 }

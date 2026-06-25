@@ -13,6 +13,7 @@ import {
 } from './client.ts';
 import { materializeRemoteConnectionForCommand } from './cli/commands/connection-runtime.ts';
 import { tryRunClientBackedCommand } from './cli/commands/router.ts';
+import { runAgentCdpCommand } from './cli/commands/agent-cdp.ts';
 import { runReactDevtoolsCommand } from './cli/commands/react-devtools.ts';
 import { runWebCommand } from './cli/commands/web.ts';
 import { readCliBatchStepsJson } from './cli/batch-steps.ts';
@@ -196,6 +197,14 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
       }
       let logTailStopper: (() => void) | null = null;
       try {
+        if (command === 'agent-cdp') {
+          const exitCode = await runAgentCdpCommand(positionals, {
+            cwd: process.cwd(),
+            env: process.env,
+          });
+          process.exit(exitCode);
+          return;
+        }
         if (command === 'react-devtools') {
           const exitCode = await runReactDevtoolsCommand(positionals, {
             flags: effectiveFlags,

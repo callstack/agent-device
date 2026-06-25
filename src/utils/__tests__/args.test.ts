@@ -289,6 +289,50 @@ test('parseArgs supports explicit passthrough boundary for react-devtools global
   assert.deepEqual(parsed.positionals, ['status', '--json']);
 });
 
+test('parseArgs preserves agent-cdp arguments as passthrough positionals', () => {
+  const parsed = parseArgs(
+    [
+      'agent-cdp',
+      'memory',
+      'snapshot',
+      'diff',
+      '--base',
+      'ms_1',
+      '--compare',
+      'ms_2',
+      '--limit=10',
+      '--json',
+      '--session',
+      'rn',
+    ],
+    { strictFlags: true },
+  );
+  assert.equal(parsed.command, 'agent-cdp');
+  assert.equal(parsed.flags.json, true);
+  assert.equal(parsed.flags.session, 'rn');
+  assert.deepEqual(parsed.positionals, [
+    'memory',
+    'snapshot',
+    'diff',
+    '--base',
+    'ms_1',
+    '--compare',
+    'ms_2',
+    '--limit=10',
+  ]);
+});
+
+test('parseArgs supports explicit passthrough boundary for agent-cdp global flag names', () => {
+  const parsed = parseArgs(
+    ['agent-cdp', '--', 'target', 'list', '--url', 'http://127.0.0.1:8081'],
+    {
+      strictFlags: true,
+    },
+  );
+  assert.equal(parsed.command, 'agent-cdp');
+  assert.deepEqual(parsed.positionals, ['target', 'list', '--url', 'http://127.0.0.1:8081']);
+});
+
 test('parseArgs accepts push with payload file', () => {
   const parsed = parseArgs(['push', 'com.example.app', './payload.json'], { strictFlags: true });
   assert.equal(parsed.command, 'push');
@@ -1535,6 +1579,17 @@ test('usageForCommand resolves react-devtools help topic', () => {
   assert.match(help, /Remote iOS apps attempt the legacy React DevTools websocket/);
 });
 
+test('usageForCommand resolves agent-cdp help topic', () => {
+  const help = usageForCommand('agent-cdp');
+  if (help === null) throw new Error('Expected agent-cdp help text');
+  assert.match(help, /agent-device agent-cdp target list --url http:\/\/127\.0\.0\.1:8081/);
+  assert.match(help, /memory usage sample --label baseline --gc/);
+  assert.match(help, /memory snapshot leak-triplet --baseline ms_1 --action ms_2 --cleanup ms_3/);
+  assert.match(help, /memory snapshot retainers --snapshot ms_3 --id <node-id>/);
+  assert.match(help, /Do not paste raw heap snapshots/);
+  assert.match(help, /React Native\/Hermes implements a subset of browser CDP/);
+});
+
 test('usageForCommand resolves react-native help topic', () => {
   const help = usageForCommand('react-native');
   if (help === null) throw new Error('Expected react-native help text');
@@ -1553,6 +1608,8 @@ test('usageForCommand resolves react-native help topic', () => {
   assert.match(help, /One simulator cannot run two copies of the same bundle id/);
   assert.match(help, /Keep the agent-device react-devtools prefix/);
   assert.match(help, /Use help react-devtools for status\/wait/);
+  assert.match(help, /Keep the agent-device agent-cdp prefix/);
+  assert.match(help, /Use help agent-cdp for JS heap usage samples/);
   assert.match(help, /logs clear --restart/);
   assert.match(help, /network dump --include headers/);
   assert.match(help, /agent-device open "Agent Device Tester" --platform android/);
@@ -1794,6 +1851,7 @@ test('usage renders concise commands inline with descriptions', () => {
   assert.match(help, /  prepare\s{2,}Pre-warm platform helpers/);
   assert.match(help, /  metro\s{2,}Prepare Metro reachability for React Native\/Expo apps/);
   assert.match(help, /  perf\s{2,}Check runtime metrics, frames, memory, CPU profiles/);
+  assert.match(help, /  agent-cdp\s{2,}Inspect React Native CDP targets, JS heap growth/);
   assert.match(help, /  react-devtools\s{2,}Inspect React Native components, props, hooks/);
   assert.match(help, /  proxy\s{2,}Expose a local daemon through cloudflared, ngrok/);
   assert.match(help, /  batch --steps <json> \| --steps-file <path>\s{2,}Run multiple commands/);
