@@ -61,6 +61,21 @@ test('typeLinux omits --delay when delayMs is 0', async () => {
   assert.ok(!typeCall[1].includes('--delay'));
 });
 
+test('scrollLinux preserves xdotool repeat count for non-paced scroll', async () => {
+  setupXdotool();
+  await scrollLinux('down', { pixels: 75 });
+  const c = calls();
+  assert.ok(
+    c.some(
+      ([cmd, args]) =>
+        cmd === 'xdotool' &&
+        args.includes('click') &&
+        args.includes('--repeat') &&
+        args.includes('5'),
+    ),
+  );
+});
+
 // ── ydotool tests ────────────────────────────────────────────────────────
 
 test('pressLinux uses ydotool mousemove + click on Wayland', async () => {

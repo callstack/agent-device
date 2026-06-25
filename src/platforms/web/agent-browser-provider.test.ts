@@ -34,8 +34,8 @@ test('agent-browser provider maps supported operations to session-scoped JSON co
       await provider.fillRef?.('@e2', 'Grace');
       await provider.typeText('hello');
       await provider.scroll('down', { pixels: 400 });
-      const scrollResult = await provider.scroll('up', { pixels: 100, durationMs: 1 });
-      assert.deepEqual(scrollResult, { durationMs: 1 });
+      const scrollResult = await provider.scroll('up', { pixels: 100, durationMs: 120 });
+      assert.deepEqual(scrollResult, { durationMs: 120 });
       await provider.close();
     });
 
@@ -57,7 +57,9 @@ test('agent-browser provider maps supported operations to session-scoped JSON co
         ['fill', '@e2', 'Grace', '--json', '--session', 'web-session'],
         ['keyboard', 'type', 'hello', '--json', '--session', 'web-session'],
         ['scroll', 'down', '400', '--json', '--session', 'web-session'],
-        ['scroll', 'up', '100', '--json', '--session', 'web-session'],
+        ['scroll', 'up', '34', '--json', '--session', 'web-session'],
+        ['scroll', 'up', '33', '--json', '--session', 'web-session'],
+        ['scroll', 'up', '33', '--json', '--session', 'web-session'],
         ['close', '--json', '--session', 'web-session'],
       ],
     );

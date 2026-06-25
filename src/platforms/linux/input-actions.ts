@@ -205,8 +205,8 @@ export async function scrollLinux(
   if (tool === 'xdotool') {
     const button =
       direction === 'up' ? '4' : direction === 'down' ? '5' : direction === 'left' ? '6' : '7';
-    await runPacedScrollSteps(scrollCount, options?.durationMs, async () => {
-      await xdotool('click', button);
+    await runPacedScrollSteps(scrollCount, options?.durationMs, async (stepCount) => {
+      await xdotool('click', '--repeat', String(stepCount), button);
     });
   } else {
     // ydotool: wheel events use positive/negative values

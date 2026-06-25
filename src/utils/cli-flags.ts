@@ -685,7 +685,7 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 0,
     max: 10_000,
     usageLabel: '--duration-ms <ms>',
-    usageDescription: 'Scroll: spread desktop wheel events over this duration',
+    usageDescription: 'Scroll: pace the gesture over this duration when supported',
   },
   {
     key: 'holdMs',

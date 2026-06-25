@@ -104,12 +104,30 @@ function buildPacedScrollSteps(
   }
 
   const stepCount = Math.max(1, Math.min(20, Math.ceil(durationMs / 50)));
-  const stepDistance = (requestedDistance ?? 300) / stepCount;
   const intervalMs = durationMs / Math.max(1, stepCount - 1);
-  return Array.from({ length: stepCount }, (_, index) => ({
-    distance: stepDistance,
+  return scrollStepDistances(scrollOptions, stepCount).map((distance, index) => ({
+    distance,
     delayAfterMs: index < stepCount - 1 ? intervalMs : 0,
   }));
+}
+
+function scrollStepDistances(
+  scrollOptions: { amount?: number; pixels?: number } | undefined,
+  stepCount: number,
+): number[] {
+  const totalDistance = scrollOptions?.pixels ?? scrollOptions?.amount ?? 300;
+  if (scrollOptions?.amount !== undefined && scrollOptions.pixels === undefined) {
+    return Array.from({ length: stepCount }, () => totalDistance / stepCount);
+  }
+  return distributeIntegerDistance(Math.round(totalDistance), stepCount);
+}
+
+function distributeIntegerDistance(totalDistance: number, stepCount: number): number[] {
+  const baseDistance = Math.floor(totalDistance / stepCount);
+  const remainder = totalDistance - baseDistance * stepCount;
+  return Array.from({ length: stepCount }, (_, index) =>
+    index < remainder ? baseDistance + 1 : baseDistance,
+  );
 }
 
 function buildScrollArgs(direction: string, distance: number | undefined): string[] {
