@@ -549,6 +549,47 @@ test('sendToDaemon prints a takeover notice before replacing an unreachable daem
   }
 });
 
+test('sendToDaemon replaces socket-only daemon metadata when HTTP transport is requested', async (t) => {
+  if (!(await supportsLoopbackBind())) {
+    t.skip('loopback listeners are not permitted in this environment');
+    return;
+  }
+
+  const stateDir = makeTempStateDir('agent-device-daemon-http-takeover-');
+  const paths = resolveDaemonPaths(stateDir);
+  const freshDaemon = await startHttpDaemonFixture({ via: 'fresh-http-daemon' });
+  vi.stubEnv('AGENT_DEVICE_STATE_DIR', stateDir);
+  installSpawnedHttpDaemon(paths, freshDaemon.port);
+  writeDaemonInfo(paths, {
+    port: 65_532,
+    transport: 'socket',
+    pid: 999_999,
+  });
+  const stderrCapture = captureStderr();
+
+  try {
+    const response = await sendToDaemon({
+      session: 'default',
+      command: 'http-takeover-smoke',
+      positionals: [],
+      flags: { stateDir, daemonTransport: 'http' },
+      meta: { requestId: 'req-http-takeover' },
+    });
+
+    assert.deepEqual(response, { ok: true, data: { via: 'fresh-http-daemon' } });
+    assert.equal(mockRunCmdDetached.mock.calls.length, 1);
+    assert.deepEqual(freshDaemon.seenPaths, ['GET /health', 'POST /rpc']);
+    assert.equal(
+      stderrCapture.read(),
+      `Replacing daemon (pid 999999, v${readVersion()}) in ${paths.baseDir}: unreachable\n`,
+    );
+  } finally {
+    stderrCapture.restore();
+    await closeLoopbackServer(freshDaemon.server);
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
 function captureStderr(): { read: () => string; restore: () => void } {
   const originalWrite = process.stderr.write.bind(process.stderr);
   let captured = '';

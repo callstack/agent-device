@@ -22,6 +22,7 @@ export type RunnerLease = {
   ownerToken: string;
   ownerPid: number;
   ownerStartTime: string | null;
+  ownerStateDir?: string;
   sessionId: string;
   runnerPid: number | null;
   port: number;
@@ -61,6 +62,7 @@ export function buildRunnerLease(params: {
     ownerToken: RUNNER_OWNER_TOKEN,
     ownerPid: RUNNER_OWNER_PID,
     ownerStartTime: RUNNER_OWNER_START_TIME,
+    ownerStateDir: process.env.AGENT_DEVICE_STATE_DIR,
     sessionId: params.sessionId,
     runnerPid: params.runnerPid ?? null,
     port: params.port,
@@ -115,6 +117,10 @@ export async function prepareRunnerLeaseForStartup(
     return;
   }
   if (state.type === 'busy') {
+    if (isSameStateDirRunnerLease(state.lease)) {
+      await cleanupLeasedRunnerProcesses(state.lease, 'same-state-dir', cleanup);
+      return;
+    }
     throw new AppError(
       'COMMAND_FAILED',
       `iOS runner for ${deviceId} is already owned by another agent-device daemon`,
@@ -122,13 +128,29 @@ export async function prepareRunnerLeaseForStartup(
         deviceId,
         ownerPid: state.lease.ownerPid,
         ownerStartTime: state.lease.ownerStartTime,
+        ownerStateDir: state.lease.ownerStateDir,
         ownerToken: state.lease.ownerToken,
         sessionId: state.lease.sessionId,
-        hint: 'Use a different simulator/session, wait for the other run to finish, or stop the owning daemon before retrying.',
+        hint: buildBusyRunnerLeaseHint(state.lease),
       },
     );
   }
   await cleanupLeasedRunnerProcesses(state.lease, state.type, cleanup);
+}
+
+function isSameStateDirRunnerLease(lease: RunnerLease): boolean {
+  const currentStateDir = process.env.AGENT_DEVICE_STATE_DIR?.trim();
+  if (!currentStateDir || !lease.ownerStateDir) return false;
+  return path.resolve(currentStateDir) === path.resolve(lease.ownerStateDir);
+}
+
+function buildBusyRunnerLeaseHint(lease: RunnerLease): string {
+  const owner = `PID ${lease.ownerPid}`;
+  const stateDir = lease.ownerStateDir ? ` with AGENT_DEVICE_STATE_DIR=${lease.ownerStateDir}` : '';
+  return [
+    `The Mac operator must stop the owning daemon (${owner}${stateDir}) or wait for that run to finish, then retry.`,
+    'Do not run prepare ios-runner from another daemon/client to recover this; a live foreign runner lease cannot be released by the remote client.',
+  ].join(' ');
 }
 
 export async function cleanupOwnedRunnerLease(
@@ -240,6 +262,7 @@ function normalizeRunnerLease(value: unknown, deviceId: string): RunnerLease | n
     deviceId,
     ...fields,
     ownerStartTime: readOptionalString(raw.ownerStartTime),
+    ownerStateDir: readOptionalString(raw.ownerStateDir) ?? undefined,
     runnerPid: readPositiveInteger(raw.runnerPid),
   };
 }
@@ -286,15 +309,16 @@ function isRunnerLeaseOwnerAlive(lease: RunnerLease): boolean {
 
 async function cleanupLeasedRunnerProcesses(
   lease: RunnerLease,
-  reason: 'owned' | 'stale',
+  reason: 'owned' | 'stale' | 'same-state-dir',
   cleanup: RunnerLeaseCleanupAdapter,
 ): Promise<void> {
   emitDiagnostic({
-    level: reason === 'stale' ? 'warn' : 'debug',
+    level: reason === 'stale' || reason === 'same-state-dir' ? 'warn' : 'debug',
     phase: 'ios_runner_lease_cleanup',
     data: {
       deviceId: lease.deviceId,
       ownerPid: lease.ownerPid,
+      ownerStateDir: lease.ownerStateDir,
       ownerToken: lease.ownerToken,
       runnerPid: lease.runnerPid,
       sessionId: lease.sessionId,

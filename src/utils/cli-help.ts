@@ -56,7 +56,7 @@ const AGENT_QUICKSTART_LINES = [
   'Raw coordinates are fallback-only: use snapshot -i --json rects when iOS refs no-op or child refs are missing, then verify the action with diff snapshot -i or snapshot --diff.',
   'Sparse or AX-unavailable snapshot: use screenshot for visual truth, press the visible coordinate to leave the bad screen, then retry AX with snapshot -i.',
   'macOS context menus use click <ref> --button secondary, then snapshot -i. Longpress is for mobile hold gestures, not macOS secondary-click menus.',
-  'Remote workflow profiles use --remote-config on operational commands. Do not substitute --config; --config only loads CLI defaults.',
+  'Cloud/Linux clients can use iOS simulators when they are connected to a Mac through agent-device proxy. A proxy URL/token means direct proxy mode: use --daemon-base-url plus --daemon-auth-token, or saved daemonBaseUrl/daemonAuthToken config; do not use connect or --remote-config. For direct proxy, choose one explicit --session and reuse it for open/snapshot/interactions/close so cwd-scoped default sessions do not diverge. Cloud/remote-config profiles are a separate mode that uses connect or --remote-config on operational commands. Do not substitute --config; --config only loads CLI defaults.',
   'Batch JSON steps use "command" and structured "input"; legacy "positionals"/"flags" steps still run in CLI but are deprecated until the next major version.',
   'Navigation: app-owned back uses back; system back uses back --system.',
   'Web browser sessions: read help web; first slice is web setup if needed -> web doctor -> open <url> --platform web -> snapshot -i -> click/fill/get/is/find/wait/screenshot -> close.',
@@ -130,7 +130,7 @@ Bootstrap:
   agent-device prepare ios-runner --platform ios --timeout 240000
   If app id is unknown, plan devices, apps, then open <discovered-app-id>. Discovery is not enough when the task asks to open/start the app.
   Install arguments are app/package id then artifact path. If the task says install, use install; use reinstall only when explicitly requested. Fresh runtime state is open --relaunch after install.
-  In Apple CI, run prepare ios-runner after boot/install and before replay/test. prepare ios-runner builds/reuses the XCTest runner, health-checks it with a lightweight command, and retries one stuck/non-connecting runner launch before the first snapshot pays that setup cost. If the replay/test step starts a separate daemon, run clean:daemon after prepare so the prepared runner does not keep a live lease owned by the prepare daemon.
+  In Apple CI, run prepare ios-runner after boot/install and before replay/test. prepare ios-runner builds/reuses the XCTest runner, health-checks it with a lightweight command, and retries one stuck/non-connecting runner launch before the first snapshot pays that setup cost. It is not a recovery step for "runner already owned by another agent-device daemon"; stop or clean the owning daemon on the Mac with simulator access instead. If the replay/test step starts a separate daemon, run clean:daemon after prepare so the prepared runner does not keep a live lease owned by the prepare daemon.
   CI may cache ~/.agent-device/ios-runner/derived with an exact key that includes the agent-device package and Xcode version. Avoid broad restore-key fallbacks; prepare ios-runner already recovers bad restored runner artifacts and one retryable non-connecting runner launch. Runner build/start output is written to the session's runner.log; daemon.log is for daemon lifecycle/startup issues.
   Do not open artifact paths or invent package ids. If apps lookup misses the target and no URL/artifact is provided, ask or stop.
 
@@ -242,7 +242,8 @@ Validation and evidence:
   Android animations: settings animations off/on, not animations disable/restore.
   Debug logs: logs clear --restart, logs mark, reproduce, then logs path; do not split clear/restart into separate stop/start commands.
   Network headers: network dump --include headers; do not write network log headers.
-  Remote/cloud: connect to discover a cloud profile, or connect --remote-config ./remote-config.json for a local profile; then open, snapshot, disconnect.
+  Direct proxy to a Mac you control: cloud/Linux clients can still use iOS simulators through the proxied Mac. Use the printed /agent-device daemon base URL and auth token, or store them as daemonBaseUrl and daemonAuthToken in agent-device.json. Use one explicit --session across open, snapshot, interactions, and close. Do not use connect, --remote-config, tenant, run, or lease flags for direct proxy simulators.
+  Cloud/remote-config profiles: use connect to discover a cloud profile, or connect --remote-config ./remote-config.json for a local profile; then open, snapshot, disconnect.
   Web: agent-device uses a managed, pinned agent-browser backend as an implementation detail. Use --platform web when a browser step belongs inside an agent-device session, replay, batch, MCP, or typed-client flow; use agent-browser directly for standalone web automation. Run agent-device web setup before first use, then agent-device web doctor for backend health checks. Web automation requires Node 24+.
     agent-device web setup
     agent-device web doctor
@@ -559,10 +560,22 @@ Android physical-device prerequisites:
   Android does not need the iOS runner signing setup. For React Native/Expo Metro reachability, read help react-native.`,
   },
   remote: {
-    summary: 'Remote config, tenant, lease, and remote host flow',
+    summary: 'Direct proxy, cloud profiles, and remote config',
     body: `agent-device help remote
 
-Use remote config or the cloud connection profile when a profile owns daemon URL, auth, tenant, run, lease, device scope, and Metro hints. Do not restate those as individual flags unless overriding intentionally.
+There are two different remote modes:
+  1. Direct proxy: agent-device proxy exposes a Mac you control. A cloud/Linux client can use iOS simulators through that proxied Mac. Use --daemon-base-url plus --daemon-auth-token, or store daemonBaseUrl and daemonAuthToken in agent-device.json. Use one explicit --session across open, snapshot, interactions, and close so implicit cwd-scoped default sessions do not diverge. Do not use connect, --remote-config, tenant, run, or lease flags for this mode.
+  2. Cloud/profile: the cloud connection profile or a local --remote-config owns daemon URL, auth, tenant, run, lease, device scope, and Metro hints. Do not restate those as individual flags unless overriding intentionally.
+
+Direct proxy flow for a remote Mac/simulator:
+  On the Mac with simulator/device access:
+    agent-device proxy --port 4310
+    cloudflared tunnel --url http://127.0.0.1:4310
+  On the remote client:
+    agent-device devices --daemon-base-url https://example.trycloudflare.com/agent-device --daemon-auth-token <token>
+    agent-device open Maps --session maps --platform ios --device "iPhone 17 Pro" --daemon-base-url https://example.trycloudflare.com/agent-device --daemon-auth-token <token>
+    agent-device snapshot -i --session maps --platform ios --device "iPhone 17 Pro" --daemon-base-url https://example.trycloudflare.com/agent-device --daemon-auth-token <token>
+    agent-device close --session maps --daemon-base-url https://example.trycloudflare.com/agent-device --daemon-auth-token <token>
 
 Cloud profile flow:
   agent-device connect
@@ -581,21 +594,14 @@ Script flow, per-command config:
   agent-device snapshot --remote-config ./remote-config.json
   agent-device disconnect --remote-config ./remote-config.json
 
-Direct proxy flow for a remote Mac:
-  On the Mac with simulator/device access:
-    agent-device proxy --port 4310
-    cloudflared tunnel --url http://127.0.0.1:4310
-  On the remote client:
-    agent-device devices --daemon-base-url https://example.trycloudflare.com/agent-device --daemon-auth-token <token>
-    agent-device devices
-
 Rules:
   connect and disconnect are top-level commands. Do not write agent-device remote connect or agent-device remote disconnect.
   Use connect without --remote-config when the cloud control plane owns the connection profile.
   Prefer --remote-config over --daemon-base-url, --tenant, --run-id, and --lease-id when using a local profile.
-  Use agent-device proxy for direct tunnel access to a Mac you control. Copy the printed daemon base URL and daemon auth token; do not use agent-device auth for this direct proxy flow.
-  For repeated direct proxy commands, store daemonBaseUrl and daemonAuthToken in normal agent-device.json CLI config. Keep platform selection on each command or workflow. Do not use --remote-config unless you are using the tenant/run/lease remote connection flow.
+  Use agent-device proxy for direct tunnel access to a Mac you control. Copy the printed daemon base URL and daemon auth token; do not use agent-device auth, connect, disconnect, --remote-config, tenant, run, or lease flags for this direct proxy flow.
+  For repeated direct proxy commands, store daemonBaseUrl and daemonAuthToken in normal agent-device.json CLI config. Keep platform selection on each command or workflow, and keep the same explicit --session until close.
   Keep the proxy token secret. Anyone with the token can control the proxied daemon.
+  If iOS snapshot/interaction reports that the runner is already owned by another agent-device daemon, do not run prepare ios-runner from the remote client. Retry the original snapshot or interaction; same-proxy-state stale runner leases are reclaimed by the proxy daemon. If the conflict repeats, the Mac operator should close the owning session or clean the conflicting local daemon.
   Do not use --config as a remote profile flag. --config loads CLI defaults; --remote-config selects remote daemon/profile settings.
   For self-contained scripts, pass the same --remote-config to every operational command, including disconnect; a preceding connect is optional but not required.
   For remote artifact installs, use install-from-source <url> or install-from-source --github-actions-artifact org/repo:artifact; do not download CI artifacts locally first.
@@ -814,13 +820,13 @@ CLI to control iOS and Android devices for AI agents.
   const examplesSection = renderTextSection('Examples:', EXAMPLE_LINES);
 
   return `${header}
+${workflowsSection}
+
 ${commandLines}
 
 ${flagsSection}
 
 ${quickstartSection}
-
-${workflowsSection}
 
 ${configSection}
 

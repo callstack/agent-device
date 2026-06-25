@@ -1096,6 +1096,10 @@ test('usage includes only global flags in the top-level global flags section', (
 
 test('usage includes agent workflows, config, environment, and examples footers', () => {
   const usageText = usage();
+  assert.ok(
+    usageText.indexOf('Agent Workflows:') < usageText.indexOf('Commands:'),
+    'Agent workflows should appear before the command list for agents that only read the top of help.',
+  );
   assert.match(usageText, /Agent Quickstart:/);
   assert.match(usageText, /Default loop: devices\/apps -> open -> snapshot -i/);
   assert.match(usageText, /Use selectors or refs as positional targets/);
@@ -1122,7 +1126,11 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /verify the action with diff snapshot -i or snapshot --diff/);
   assert.match(usageText, /Sparse or AX-unavailable snapshot/);
   assert.match(usageText, /macOS context menus use click <ref> --button secondary/);
-  assert.match(usageText, /Remote workflow profiles use --remote-config/);
+  assert.match(usageText, /Cloud\/Linux clients can use iOS simulators/);
+  assert.match(usageText, /A proxy URL\/token means direct proxy mode/);
+  assert.match(usageText, /choose one explicit --session/);
+  assert.match(usageText, /do not use connect or --remote-config/);
+  assert.match(usageText, /Cloud\/remote-config profiles are a separate mode/);
   assert.match(usageText, /app-owned back uses back/);
   assert.match(usageText, /Web browser sessions: read help web/);
   assert.match(
@@ -1230,6 +1238,10 @@ test('usageForCommand documents prepare ios-runner', () => {
   assert.match(help, /XCTest runner/);
   assert.match(help, /separate daemon/);
   assert.match(help, /clean:daemon after prepare/);
+  assert.match(
+    help,
+    /not a recovery step for "runner already owned by another agent-device daemon"/,
+  );
   assert.match(help, /Runner build\/start output is written to the session runner\.log/);
 });
 
@@ -1321,6 +1333,10 @@ test('usageForCommand resolves workflow help topic', () => {
   assert.match(help, /metro prepare --kind expo/);
   assert.match(help, /agent-device prepare ios-runner --platform ios --timeout 240000/);
   assert.match(help, /prepare ios-runner builds\/reuses the XCTest runner/);
+  assert.match(
+    help,
+    /not a recovery step for "runner already owned by another agent-device daemon"/,
+  );
   assert.match(help, /prepared runner does not keep a live lease/);
   assert.match(help, /help react-devtools/);
   assert.match(help, /help react-native/);
@@ -1443,7 +1459,11 @@ test('usageForCommand resolves remote help topic', () => {
   const help = usageForCommand('remote');
   if (help === null) throw new Error('Expected remote help text');
   assert.match(help, /agent-device connect/);
-  assert.match(help, /without --remote-config/);
+  assert.match(help, /There are two different remote modes/);
+  assert.match(help, /Direct proxy: agent-device proxy exposes a Mac you control/);
+  assert.match(help, /A cloud\/Linux client can use iOS simulators through that proxied Mac/);
+  assert.match(help, /Use one explicit --session across open, snapshot, interactions, and close/);
+  assert.match(help, /Do not use connect, --remote-config, tenant, run, or lease flags/);
   assert.match(help, /agent-device open com\.example\.app --remote-config \.\/remote-config\.json/);
   assert.match(help, /disconnect --remote-config \.\/remote-config\.json/);
   assert.match(help, /Script flow, per-command config/);
@@ -1453,11 +1473,15 @@ test('usageForCommand resolves remote help topic', () => {
     help,
     /--daemon-base-url https:\/\/example\.trycloudflare\.com\/agent-device --daemon-auth-token <token>/,
   );
+  assert.match(help, /agent-device open Maps --session maps/);
+  assert.match(help, /agent-device snapshot -i --session maps/);
+  assert.match(help, /agent-device close --session maps/);
   assert.match(help, /store daemonBaseUrl and daemonAuthToken in normal agent-device\.json/);
-  assert.match(help, /Keep platform selection on each command or workflow/);
+  assert.match(help, /keep the same explicit --session until close/);
+  assert.match(help, /do not run prepare ios-runner from the remote client/);
+  assert.match(help, /same-proxy-state stale runner leases are reclaimed/);
   assert.match(help, /same --remote-config to every operational command/);
-  assert.match(help, /do not use agent-device auth for this direct proxy flow/);
-  assert.match(help, /Do not use --remote-config unless you are using the tenant\/run\/lease/);
+  assert.match(help, /do not use agent-device auth, connect, disconnect, --remote-config/);
   assert.match(help, /Do not use --config as a remote profile flag/);
   assert.match(help, /install-from-source --github-actions-artifact org\/repo:artifact/);
 });

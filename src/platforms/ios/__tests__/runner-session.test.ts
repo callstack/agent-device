@@ -662,25 +662,80 @@ test('runner session startup kills legacy ownerless xcodebuild before launching 
 
 test('runner session startup rejects live foreign runner lease', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-session-busy-lease-sim' };
+  const previousStateDir = process.env.AGENT_DEVICE_STATE_DIR;
+  process.env.AGENT_DEVICE_STATE_DIR = '/tmp/agent-device-current';
   writeRunnerLease(
     makeRunnerLease({
       deviceId: device.id,
       ownerToken: 'owner-foreign-live',
       ownerPid: process.pid,
       ownerStartTime: RUNNER_OWNER_START_TIME,
+      ownerStateDir: '/tmp/agent-device-owner',
     }),
   );
 
-  await assert.rejects(
-    () => ensureRunnerSession(device, {}),
-    /already owned by another agent-device daemon/,
+  try {
+    let thrown: unknown;
+    await assert.rejects(async () => {
+      try {
+        await ensureRunnerSession(device, {});
+      } catch (error) {
+        thrown = error;
+        throw error;
+      }
+    }, /already owned by another agent-device daemon/);
+
+    assert.equal(
+      (thrown as { details?: Record<string, unknown> }).details?.ownerStateDir,
+      '/tmp/agent-device-owner',
+    );
+    assert.match(
+      String((thrown as { details?: Record<string, unknown> }).details?.hint),
+      /Do not run prepare ios-runner/,
+    );
+    assert.equal(mockRunCmdBackground.mock.calls.length, 0);
+    assert.equal(
+      mockRunAppleToolCommand.mock.calls.some((call) => call[0] === 'pkill'),
+      false,
+    );
+  } finally {
+    if (previousStateDir === undefined) delete process.env.AGENT_DEVICE_STATE_DIR;
+    else process.env.AGENT_DEVICE_STATE_DIR = previousStateDir;
+  }
+});
+
+test('runner session startup reclaims live foreign runner lease from same state dir', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-same-state-lease-sim' };
+  const previousStateDir = process.env.AGENT_DEVICE_STATE_DIR;
+  const stateDir = '/tmp/agent-device-proxy-state';
+  process.env.AGENT_DEVICE_STATE_DIR = stateDir;
+  writeRunnerLease(
+    makeRunnerLease({
+      deviceId: device.id,
+      ownerToken: 'owner-foreign-same-state',
+      ownerPid: process.pid,
+      ownerStartTime: RUNNER_OWNER_START_TIME,
+      ownerStateDir: stateDir,
+      runnerPid: 4_321,
+    }),
   );
 
-  assert.equal(mockRunCmdBackground.mock.calls.length, 0);
-  assert.equal(
-    mockRunAppleToolCommand.mock.calls.some((call) => call[0] === 'pkill'),
-    false,
-  );
+  try {
+    const session = await ensureRunnerSession(device, {});
+
+    assert.equal(session.deviceId, device.id);
+    assert.equal(mockRunCmdBackground.mock.calls.length, 1);
+    assert.deepEqual(mockCleanupTempFile.mock.calls, [
+      [`/tmp/AgentDeviceRunner.env.session-${device.id}-owner-foreign-same-state-8123.xctestrun`],
+      [`/tmp/AgentDeviceRunner.env.session-${device.id}-owner-foreign-same-state-8123.json`],
+    ]);
+    const pkillCalls = mockRunAppleToolCommand.mock.calls.filter(isXcodebuildPkillCall);
+    assert.ok(pkillCalls.length >= 2);
+    assert.match(String(pkillCalls[0]?.[1]?.[2] ?? ''), /owner-foreign-same-state/);
+  } finally {
+    if (previousStateDir === undefined) delete process.env.AGENT_DEVICE_STATE_DIR;
+    else process.env.AGENT_DEVICE_STATE_DIR = previousStateDir;
+  }
 });
 
 test('runner session startup reclaims dead foreign runner lease before launching', async () => {

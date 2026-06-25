@@ -166,13 +166,34 @@ async function readReusableLocalDaemon(settings: DaemonClientSettings): Promise<
   const existing = readDaemonInfo(settings.paths.infoPath);
   if (!existing) return null;
 
-  const existingReachable = await canConnect(existing, settings.transportPreference);
+  const existingReachable = await canConnectReusableDaemon(existing, settings.transportPreference);
   if (isReusableDaemonInfo(existing, existingReachable)) return existing;
 
   emitDaemonTakeoverNotice(existing, existingReachable, settings.paths.baseDir);
   await stopDaemonProcessForTakeover(existing);
   removeDaemonInfo(settings.paths.infoPath);
   return null;
+}
+
+async function canConnectReusableDaemon(
+  info: DaemonInfo,
+  preference: DaemonTransportPreference,
+): Promise<boolean> {
+  try {
+    return await canConnect(info, preference);
+  } catch (error) {
+    if (isDaemonTransportUnavailableError(error)) return false;
+    throw error;
+  }
+}
+
+function isDaemonTransportUnavailableError(error: unknown): boolean {
+  return (
+    error instanceof AppError &&
+    error.code === 'COMMAND_FAILED' &&
+    (error.message === 'Daemon HTTP endpoint is unavailable' ||
+      error.message === 'Daemon socket endpoint is unavailable')
+  );
 }
 
 function isReusableDaemonInfo(info: DaemonInfo, reachable: boolean): boolean {
