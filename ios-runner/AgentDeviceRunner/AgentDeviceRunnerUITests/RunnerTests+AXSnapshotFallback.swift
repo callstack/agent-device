@@ -46,14 +46,11 @@ extension RunnerTests {
         return nil
       }
 
-      // If the app frame is unavailable, the private root's own frame is the reliable screen
-      // rect here. Avoid public window queries: stale transient windows can record XCTest
+      // Prefer the private root's own frame as the screen rect; fall back to the public app-frame
+      // query only when the root frame is empty. Stale transient windows can record XCTest
       // failures after the runner already returned a successful command response.
-      var viewport = safeSnapshotViewport(app: app)
       let rootFrame = privateAXRect(root["frame"])
-      if viewport.isInfinite || viewport.isNull || viewport.isEmpty, !rootFrame.isEmpty {
-        viewport = rootFrame
-      }
+      let viewport = rootFrame.isEmpty ? safeSnapshotViewport(app: app) : rootFrame
       var nodes: [SnapshotNode] = []
       appendPrivateAXNode(
         root,

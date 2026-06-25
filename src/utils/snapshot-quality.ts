@@ -50,25 +50,35 @@ export function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdi
   ) {
     return undefined;
   }
-  return {
+  const verdict: SnapshotQualityVerdict = {
     state: raw.state as SnapshotQualityVerdict['state'],
     backend: raw.backend as SnapshotQualityVerdict['backend'],
-    reason: typeof raw.reason === 'string' ? raw.reason : undefined,
-    // An unknown reasonCode is dropped, not rejected: a forward-version runner that adds one
-    // still yields a usable verdict (only the budget-specific wording is keyed off it).
-    reasonCode:
-      typeof raw.reasonCode === 'string' &&
-      SNAPSHOT_QUALITY_REASON_CODES.has(
-        raw.reasonCode as NonNullable<SnapshotQualityVerdict['reasonCode']>,
-      )
-        ? (raw.reasonCode as SnapshotQualityVerdict['reasonCode'])
-        : undefined,
-    requestedDepth: typeof raw.requestedDepth === 'number' ? raw.requestedDepth : undefined,
-    effectiveDepth: typeof raw.effectiveDepth === 'number' ? raw.effectiveDepth : undefined,
-    collapsedLeafIndexes: Array.isArray(raw.collapsedLeafIndexes)
-      ? raw.collapsedLeafIndexes.filter((entry): entry is number => typeof entry === 'number')
-      : undefined,
   };
+  if (typeof raw.reason === 'string') {
+    verdict.reason = raw.reason;
+  }
+  // An unknown reasonCode is dropped, not rejected: a forward-version runner that adds one
+  // still yields a usable verdict (only the budget-specific wording is keyed off it).
+  if (
+    typeof raw.reasonCode === 'string' &&
+    SNAPSHOT_QUALITY_REASON_CODES.has(
+      raw.reasonCode as NonNullable<SnapshotQualityVerdict['reasonCode']>,
+    )
+  ) {
+    verdict.reasonCode = raw.reasonCode as SnapshotQualityVerdict['reasonCode'];
+  }
+  if (typeof raw.requestedDepth === 'number') {
+    verdict.requestedDepth = raw.requestedDepth;
+  }
+  if (typeof raw.effectiveDepth === 'number') {
+    verdict.effectiveDepth = raw.effectiveDepth;
+  }
+  if (Array.isArray(raw.collapsedLeafIndexes)) {
+    verdict.collapsedLeafIndexes = raw.collapsedLeafIndexes.filter(
+      (entry): entry is number => typeof entry === 'number',
+    );
+  }
+  return verdict;
 }
 
 export function isSparseSnapshotQualityVerdict(

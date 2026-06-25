@@ -1313,7 +1313,7 @@ test('usageForCommand resolves workflow help topic', () => {
   assert.match(help, /direct URL open can report success while leaving the runner\/shell focused/);
   assert.match(help, /verify with snapshot -i after opening/);
   assert.match(help, /snapshot returns a sparse\/AX-unavailable state/);
-  assert.match(help, /Use plain screenshot, not screenshot --overlay-refs/);
+  assert.match(help, /use plain screenshot, not screenshot --overlay-refs/);
   assert.match(help, /retry snapshot -i after reaching another screen/);
   assert.match(help, /test \.\/e2e\/maestro --maestro --device udid1,emulator-5554 --shard-all 2/);
   assert.match(help, /agent-device open exp:\/\/127\.0\.0\.1:8081 --platform android/);

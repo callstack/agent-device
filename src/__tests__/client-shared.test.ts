@@ -162,6 +162,9 @@ test('serializeSnapshotResult maps degraded capture quality annotation to public
     nodes: [],
     truncated: true,
     quality: snapshotQuality,
+    identifiers: {
+      session: 'qa',
+    },
   } as Parameters<typeof serializeSnapshotResult>[0] & { quality: typeof snapshotQuality });
 
   assert.deepEqual(data, {
