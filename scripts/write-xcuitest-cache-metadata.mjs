@@ -197,6 +197,15 @@ function resolveSigningBuildSettings() {
   ];
 }
 
+function resolveSandboxBuildArgs() {
+  return [
+    '-IDEPackageSupportDisableManifestSandbox=1',
+    '-IDEPackageSupportDisablePluginExecutionSandbox=1',
+    'ENABLE_USER_SCRIPT_SANDBOXING=NO',
+    'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox',
+  ];
+}
+
 const appBundleId = resolveRunnerAppBundleId();
 const testBundleId = resolveRunnerTestBundleId();
 const metadata = {
@@ -214,6 +223,7 @@ const metadata = {
   ],
   runnerSigningBuildSettings: resolveSigningBuildSettings(),
   runnerPerformanceBuildSettings: ['COMPILER_INDEX_STORE_ENABLE=NO', 'ENABLE_CODE_COVERAGE=NO'],
+  runnerSandboxBuildArgs: resolveSandboxBuildArgs(),
 };
 
 const artifacts = resolveRunnerCacheArtifacts();

@@ -102,6 +102,10 @@ xcodebuild build-for-testing \
   AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID="$RUNNER_TEST_BUNDLE_ID" \
   COMPILER_INDEX_STORE_ENABLE=NO \
   ENABLE_CODE_COVERAGE=NO \
+  -IDEPackageSupportDisableManifestSandbox=1 \
+  -IDEPackageSupportDisablePluginExecutionSandbox=1 \
+  ENABLE_USER_SCRIPT_SANDBOXING=NO \
+  OTHER_SWIFT_FLAGS='$(inherited) -disable-sandbox' \
   $SIGNING_BUILD_SETTINGS
 
 node --experimental-strip-types scripts/patch-xcuitest-runner-icon.ts "$DERIVED_PATH"

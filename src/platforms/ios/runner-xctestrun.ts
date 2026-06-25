@@ -52,6 +52,12 @@ const RUNNER_XCTESTRUN_CAPTURE_OPTIONS = {
   SystemAttachmentLifetime: 'keepNever',
   UserAttachmentLifetime: 'keepNever',
 } as const;
+const RUNNER_SANDBOX_BUILD_ARGS = [
+  '-IDEPackageSupportDisableManifestSandbox=1',
+  '-IDEPackageSupportDisablePluginExecutionSandbox=1',
+  'ENABLE_USER_SCRIPT_SANDBOXING=NO',
+  'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox',
+] as const;
 
 const runnerXctestrunBuildLocks = new Map<string, Promise<unknown>>();
 const badRunnerArtifactsForRun = new Set<string>();
@@ -107,6 +113,7 @@ export type RunnerXctestrunCacheMetadata = {
   runnerBundleBuildSettings: string[];
   runnerSigningBuildSettings: string[];
   runnerPerformanceBuildSettings: string[];
+  runnerSandboxBuildArgs: string[];
   artifacts?: RunnerXctestrunCacheArtifacts;
 };
 
@@ -758,6 +765,7 @@ export function resolveExpectedRunnerCacheMetadata(
       device.platform,
     ),
     runnerPerformanceBuildSettings: resolveRunnerPerformanceBuildSettings(),
+    runnerSandboxBuildArgs: resolveRunnerSandboxBuildArgs(),
   };
 }
 
@@ -1363,6 +1371,7 @@ async function buildRunnerXctestrun(
   );
   const provisioningArgs = device.kind === 'device' ? ['-allowProvisioningUpdates'] : [];
   const performanceBuildSettings = resolveRunnerPerformanceBuildSettings();
+  const sandboxBuildArgs = resolveRunnerSandboxBuildArgs();
   const simulatorSetRedirect = await acquireXcodebuildSimulatorSetRedirect(device);
   try {
     await runCmdStreaming(
@@ -1382,6 +1391,7 @@ async function buildRunnerXctestrun(
         '-derivedDataPath',
         derived,
         ...performanceBuildSettings,
+        ...sandboxBuildArgs,
         ...runnerBundleBuildSettings,
         ...provisioningArgs,
         ...signingBuildSettings,
@@ -1484,6 +1494,10 @@ export function resolveRunnerBundleBuildSettings(env: NodeJS.ProcessEnv = proces
 
 export function resolveRunnerPerformanceBuildSettings(): string[] {
   return ['COMPILER_INDEX_STORE_ENABLE=NO', 'ENABLE_CODE_COVERAGE=NO'];
+}
+
+export function resolveRunnerSandboxBuildArgs(): string[] {
+  return [...RUNNER_SANDBOX_BUILD_ARGS];
 }
 
 function shouldCleanDerived(): boolean {

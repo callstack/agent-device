@@ -55,6 +55,7 @@ import {
   resolveRunnerDerivedPath,
   resolveRunnerCacheMetadataPath,
   resolveRunnerPerformanceBuildSettings,
+  resolveRunnerSandboxBuildArgs,
   shouldDeleteRunnerDerivedRootEntry,
   writeRunnerCacheMetadata,
   xctestrunReferencesProjectRoot,
@@ -472,6 +473,15 @@ test('resolveRunnerPerformanceBuildSettings disables indexing and code coverage'
   assert.deepEqual(resolveRunnerPerformanceBuildSettings(), [
     'COMPILER_INDEX_STORE_ENABLE=NO',
     'ENABLE_CODE_COVERAGE=NO',
+  ]);
+});
+
+test('resolveRunnerSandboxBuildArgs disables nested Xcode and Swift sandboxing', () => {
+  assert.deepEqual(resolveRunnerSandboxBuildArgs(), [
+    '-IDEPackageSupportDisableManifestSandbox=1',
+    '-IDEPackageSupportDisablePluginExecutionSandbox=1',
+    'ENABLE_USER_SCRIPT_SANDBOXING=NO',
+    'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox',
   ]);
 });
 
@@ -1193,6 +1203,37 @@ test('ensureXctestrun rebuilds cached runner when metadata package version misma
     resolveExpectedRunnerCacheMetadata(macOsDevice, repoRoot),
   );
   assert.equal(rebuiltMetadata.artifacts?.xctestrunPath, rebuiltXctestrunPath);
+});
+
+test('ensureXctestrunArtifact passes sandbox-disabling settings to xcodebuild', async () => {
+  const projectRoot = repoRoot;
+  const tmpDir = await makeProjectTmpDir();
+  const derivedPath = path.join(tmpDir, 'custom-derived');
+  const rebuiltXctestrunPath = path.join(derivedPath, 'Build', 'Products', 'rebuilt.xctestrun');
+
+  withRunnerDerivedPathEnv(derivedPath);
+
+  mockRunCmdStreaming.mockImplementationOnce(async () => {
+    await fs.promises.mkdir(path.join(derivedPath, 'Build', 'Products', 'Runner.app'), {
+      recursive: true,
+    });
+    writeXctestrunFixture(rebuiltXctestrunPath, {
+      projectRoot,
+      productRelativePaths: ['Runner.app'],
+    });
+  });
+
+  const result = await ensureXctestrunArtifact(iosSimulator, {
+    forceRunnerXctestrunRebuild: true,
+  });
+
+  assert.equal(result.xctestrunPath, rebuiltXctestrunPath);
+  assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
+  const args = mockRunCmdStreaming.mock.calls[0]?.[1] ?? [];
+  assert.equal(args.includes('-IDEPackageSupportDisableManifestSandbox=1'), true);
+  assert.equal(args.includes('-IDEPackageSupportDisablePluginExecutionSandbox=1'), true);
+  assert.equal(args.includes('ENABLE_USER_SCRIPT_SANDBOXING=NO'), true);
+  assert.equal(args.includes('OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox'), true);
 });
 
 test('ensureXctestrunArtifact stress-recovers after a bad restored artifact', async () => {
