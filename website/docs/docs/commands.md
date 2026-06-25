@@ -693,10 +693,12 @@ agent-device agent-cdp memory snapshot retainers --snapshot ms_3 --id <node-id> 
 ```
 
 - `agent-cdp` dynamically runs pinned `agent-cdp@1.5.2` through npm and passes arguments through 1:1.
-- Use it when a React Native or Expo app exposes a Metro CDP target and the task needs JavaScript heap usage, heap snapshots, allocation hotspots, retained-object diffs, or retaining paths.
+- Use it when a React Native or Expo app exposes a Metro CDP target and the task needs JavaScript heap usage, heap snapshots, allocation hotspots, retained-object diffs, retaining paths, or a small runtime eval to confirm JS state.
 - Start with `memory usage sample --gc` for a quick JS heap growth signal. Use snapshot diff and `leak-triplet` for proof that objects stayed retained after cleanup.
-- Keep raw heap snapshots and allocation exports as artifacts. Default answers should summarize heap deltas, top retained classes/shapes, and shortest useful retaining paths.
+- Until `agent-cdp` has a compact leak report command, synthesize one from `memory usage diff`, `memory snapshot diff`, `memory snapshot leak-triplet`, and `memory snapshot retainers`.
+- Keep raw heap snapshots and allocation exports as artifacts. Default answers should summarize heap deltas, top retained classes/shapes, leak-triplet rows that stayed high after cleanup, and shortest useful retaining paths.
 - React Native/Hermes supports only part of browser CDP. If a method is unsupported, keep the selected target and fall back to heap usage samples plus heap snapshots.
+- Avoid `agent-cdp profile cpu`, `trace`, `network`, and `console` by default because `agent-device` already has `perf cpu`, `trace`, `network`, `logs`, and `react-devtools` guidance for those areas.
 - Use `perf memory sample` and `perf memory snapshot` for native/process memory. Use `agent-cdp` only for JavaScript heap evidence.
 
 ## React Native component internals

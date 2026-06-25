@@ -1586,7 +1586,8 @@ test('usageForCommand resolves agent-cdp help topic', () => {
   assert.match(help, /memory usage sample --label baseline --gc/);
   assert.match(help, /memory snapshot leak-triplet --baseline ms_1 --action ms_2 --cleanup ms_3/);
   assert.match(help, /memory snapshot retainers --snapshot ms_3 --id <node-id>/);
-  assert.match(help, /Do not paste raw heap snapshots/);
+  assert.match(help, /Until agent-cdp has a compact leak report command/);
+  assert.match(help, /Avoid agent-cdp profile cpu, trace, network, and console by default/);
   assert.match(help, /React Native\/Hermes implements a subset of browser CDP/);
 });
 

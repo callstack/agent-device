@@ -466,8 +466,9 @@ Use snapshot, screenshot, logs, network, and perf metrics for device/app runtime
     body: `agent-device help agent-cdp
 
 Use this when a React Native or Expo app exposes a CDP target through Metro and
-the task needs live JS runtime inspection, JS heap growth checks, heap snapshot
-diffs, allocation hotspots, or retained-object leak evidence.
+the task needs JavaScript heap growth checks, heap snapshot diffs, allocation
+hotspots, retained-object leak evidence, or a small runtime eval to confirm JS
+state. Do not use this as the default React Native profiler.
 
 Setup:
   Start Metro and open the app first. For Android devices/emulators, make sure Metro is reachable from the app, typically with adb reverse tcp:8081 tcp:8081.
@@ -499,8 +500,12 @@ Allocation pressure:
     agent-device agent-cdp memory allocation hotspots --limit 10
     agent-device agent-cdp memory allocation source-maps
 
+Recommended subset:
+  Use agent-cdp memory usage, memory snapshot, memory allocation, and targeted runtime eval.
+  Avoid agent-cdp profile cpu, trace, network, and console by default because agent-device already has perf cpu, trace, network, logs, and react-devtools guidance for those areas.
+
 Output contract:
-  Report heap deltas, top retained classes/shapes, leak-triplet rows that stayed high after cleanup, and the shortest useful retaining paths. Do not paste raw heap snapshots or large allocation profiles into the response; use exported artifacts only when the user asks for raw data.
+  Until agent-cdp has a compact leak report command, synthesize one from memory usage diff, snapshot diff, leak-triplet, and retainers. Report heap deltas, top retained classes/shapes, leak-triplet rows that stayed high after cleanup, and the shortest useful retaining paths. Do not paste raw heap snapshots or large allocation profiles into the response; use exported artifacts only when the user asks for raw data.
 
 Target caveats:
   React Native/Hermes implements a subset of browser CDP. If a command reports an unsupported method, keep the target selected and switch to heap usage samples plus heap snapshots. Prefer react-devtools for component tree/render causes; prefer perf memory sample or perf memory snapshot for native/process memory.`,
