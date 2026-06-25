@@ -88,6 +88,10 @@ pnpm ad --session test-app-maestro wait "Agent Device Tester" 30000 --platform i
 pnpm test-app:maestro:ios -- --session test-app-maestro -- --device "iPhone 17 Pro"
 ```
 
+`pnpm test-app:ios` keeps Metro in the foreground after launching the app. Leave
+that terminal running and run the `agent-device` and Maestro commands from a
+separate terminal.
+
 When targeting a specific Android emulator or device, build and install the
 development client on that same target before running Maestro:
 

@@ -48,6 +48,9 @@ These are the main case families this app can support without adding more screen
 This fixture uses an Expo development build, not Expo Go. Expo's development-build
 workflow installs `expo-dev-client`, builds the native app with `expo run:ios` or
 `expo run:android`, and then serves JavaScript from Metro with `expo start`.
+The app declares `@expo/dom-webview` directly to keep Expo's development runtime
+on the SDK 56 native module; Android verification failed when the dev client
+resolved the older transitive SDK 55 copy.
 
 From the repo root:
 
@@ -55,6 +58,10 @@ From the repo root:
 pnpm test-app:install
 pnpm test-app:ios -- --device "iPhone 17 Pro"
 ```
+
+`expo run:*` keeps Metro in the foreground after launching the app. Leave that
+terminal running, then use a separate terminal for `agent-device` or Maestro
+commands.
 
 Or on Android:
 
