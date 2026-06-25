@@ -378,7 +378,10 @@ extension RunnerTests {
     return DataPayload(nodes: nodes, truncated: truncated)
   }
 
-  func snapshotAccessibilityUnavailable(failure: SnapshotCaptureFailure) -> DataPayload {
+  func snapshotAccessibilityUnavailable(
+    failure: SnapshotCaptureFailure,
+    options: SnapshotOptions = SnapshotOptions()
+  ) -> DataPayload {
     NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_AX_UNAVAILABLE=%@", failure.message)
     invalidateCachedTarget(reason: Self.axSnapshotUnavailableReason)
     // This is a planned terminal result, so it carries the structured verdict like every other
@@ -390,6 +393,7 @@ extension RunnerTests {
         backend: SnapshotBackendKind.recursiveTree.rawValue,
         reason: failure.message,
         reasonCode: "ax-rejected",
+        requestedDepth: options.depth,
         effectiveDepth: nil,
         collapsedLeafIndexes: nil
       ),

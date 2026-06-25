@@ -54,7 +54,7 @@ const AGENT_QUICKSTART_LINES = [
   'Clipboard limits: iOS Allow Paste cannot be automated through XCUITest; prefill with clipboard write. Android non-ASCII should use fill/type, not raw adb input.',
   'After mutation: refs are stale. If the next target is known, use its selector directly; otherwise refresh with snapshot -i, scoped with -s when a stable container is known. Do not use tap; use press or click.',
   'Raw coordinates are fallback-only: use snapshot -i --json rects when iOS refs no-op or child refs are missing, then verify the action with diff snapshot -i or snapshot --diff.',
-  'Sparse or AX-unavailable snapshot: use screenshot for visual truth, press the visible coordinate to leave the bad screen, then retry AX with snapshot -i.',
+  'Sparse or AX-unavailable snapshot: if the warning says a shallow iOS depth returned only wrappers/chrome, try snapshot -i -d 56, then -d 40, then -d 24 before treating it as blocked. Otherwise use screenshot for visual truth, press the visible coordinate to leave the bad screen, then retry snapshot -i.',
   'macOS context menus use click <ref> --button secondary, then snapshot -i. Longpress is for mobile hold gestures, not macOS secondary-click menus.',
   'Remote workflow profiles use --remote-config on operational commands. Do not substitute --config; --config only loads CLI defaults.',
   'Batch JSON steps use "command" and structured "input"; legacy "positionals"/"flags" steps still run in CLI but are deprecated until the next major version.',
@@ -228,7 +228,7 @@ Validation and evidence:
   Prefer provided testIDs/ids/selectors for verification; use visible text when no durable selector is provided.
   If task says snapshot, use snapshot. If it asks visual evidence, use screenshot.
   Icon/tappable visual proof: screenshot --overlay-refs. Flag is --overlay-refs.
-  If snapshot returns a sparse/AX-unavailable state, refs are not reliable. Use plain screenshot, not screenshot --overlay-refs, navigate with coordinates if needed, then retry snapshot -i after reaching another screen; the AX failure may be screen-specific.
+  If snapshot returns a sparse/AX-unavailable state, refs are not reliable. If the warning says a shallow iOS depth returned only wrappers/chrome, try agent-device snapshot -i -d 56, then -d 40, then -d 24 before treating it as blocked. Otherwise use plain screenshot, not screenshot --overlay-refs, navigate with coordinates if needed, then retry snapshot -i after reaching another screen; the AX failure may be screen-specific.
     agent-device screenshot
     agent-device press 124 817
     agent-device snapshot -i
@@ -503,7 +503,7 @@ Overlays and busy RN UIs:
     agent-device snapshot -i
     agent-device press 'id="submit-order"'
   If snapshot times out because the UI never becomes idle, Android accessibility may be blocked by busy or continuously changing app UI. After that timeout, use screenshot as visual truth instead of repeatedly retrying snapshots.
-  If iOS snapshot reports AX unavailable or returns only a sparse root, the current screen's accessibility state is invalid. Use plain screenshot as visual truth, coordinate navigation to leave the bad screen, then take a fresh snapshot -i before returning to selector/@ref commands.
+  If iOS snapshot reports AX unavailable or returns only a sparse root, refs are not reliable. If the warning says a shallow iOS depth returned only wrappers/chrome, try agent-device snapshot -i -d 56, then -d 40, then -d 24 before treating it as blocked. Otherwise use plain screenshot as visual truth, coordinate navigation to leave the bad screen, then take a fresh snapshot -i before returning to selector/@ref commands.
     agent-device screenshot
     agent-device press 124 817
     agent-device snapshot -i

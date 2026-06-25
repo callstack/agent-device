@@ -7,6 +7,7 @@ import {
 import type { SnapshotNode } from '../../../utils/snapshot.ts';
 import { findNodeByRef, normalizeRef } from '../../../utils/snapshot.ts';
 import {
+  formatSparseSnapshotRecoveryHint,
   isSparseSnapshotQualityVerdict,
   type SnapshotQualityVerdict,
 } from '../../../utils/snapshot-quality.ts';
@@ -449,7 +450,7 @@ function findSnapshotScope(
 function sparseSelectorSnapshotError(verdict: SnapshotQualityVerdict): AppError {
   return new AppError('COMMAND_FAILED', 'find could not read the current accessibility tree', {
     reason: verdict.reason,
-    hint: 'The snapshot quality verdict is sparse. Use screenshot as visual truth, navigate with coordinates if needed, then retry find after reaching a readable screen.',
+    hint: `The snapshot quality verdict is sparse. ${formatSparseSnapshotRecoveryHint(verdict)}`,
   });
 }
 

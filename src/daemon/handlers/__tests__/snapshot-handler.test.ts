@@ -492,7 +492,7 @@ test('snapshot annotations survive pending interaction capture into CLI JSON', a
   expect(response?.ok).toBe(true);
   if (!response?.ok) return;
 
-  expect(response.data?.snapshotQuality).toEqual(snapshotQuality);
+  expect(response.data?.snapshotQuality).toBeUndefined();
   expect(response.data?.warnings).toEqual(['backend warning from interaction capture']);
 
   const cliOutput = snapshotCliOutput({
@@ -501,9 +501,9 @@ test('snapshot annotations survive pending interaction capture into CLI JSON', a
   expect(cliOutput.jsonData).toMatchObject({
     nodes: [expect.objectContaining({ label: 'Albums' })],
     truncated: false,
-    snapshotQuality,
     warnings: ['backend warning from interaction capture'],
   });
+  expect(cliOutput.jsonData).not.toHaveProperty('snapshotQuality');
   expect(cliOutput.jsonData).not.toHaveProperty('analysis');
   expect(cliOutput.jsonData).not.toHaveProperty('freshness');
 });

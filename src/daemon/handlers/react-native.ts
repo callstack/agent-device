@@ -10,6 +10,7 @@ import { stripUndefined } from '../../utils/parsing.ts';
 import { successText } from '../../utils/success-text.ts';
 import type { SnapshotState } from '../../utils/snapshot.ts';
 import {
+  formatSparseSnapshotRecoveryHint,
   isSparseSnapshotQualityVerdict,
   type SnapshotQualityVerdict,
 } from '../../utils/snapshot-quality.ts';
@@ -99,7 +100,7 @@ function responseForSparseReactNativeOverlaySnapshot(
     'React Native overlay state could not be determined because the accessibility tree is unreadable',
     {
       reason: verdict.reason,
-      hint: 'The snapshot quality verdict is sparse. Use screenshot as visual truth; if an overlay is visible, report it or navigate with coordinates, then retry snapshot or dismiss-overlay on a readable screen.',
+      hint: `The snapshot quality verdict is sparse. ${formatSparseSnapshotRecoveryHint(verdict)}`,
     },
   );
 }

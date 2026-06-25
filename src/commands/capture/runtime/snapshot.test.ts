@@ -255,9 +255,98 @@ test('runtime snapshot renders the structured quality verdict and skips legacy d
     String(result.warnings?.[0]),
     /Recovered this snapshot with the queries accessibility backend/,
   );
-  assert.match(String(result.warnings?.[0]), /fixing the app's accessibility is the real cure/);
+  assert.match(String(result.warnings?.[0]), /primary backend returned degraded output/);
+  assert.match(String(result.warnings?.[0]), /recovered tree is the better accessibility evidence/);
   assert.match(String(result.warnings?.[1]), /@e2 \[Other\] merges many labels/);
   assert.deepEqual(result.snapshotQuality?.state, 'recovered');
+});
+
+test('runtime snapshot recommends bounded depth retry for shallow private AX sparse verdicts', async () => {
+  const device = createSnapshotOnlyDevice({
+    nodes: [
+      { ref: 'e1', index: 0, depth: 0, type: 'Application', label: 'X' },
+      {
+        ref: 'e2',
+        index: 1,
+        depth: 1,
+        parentIndex: 0,
+        type: 'Window',
+        identifier: 'TwitterAppRootView',
+      },
+    ],
+    truncated: true,
+    backend: 'xctest',
+    quality: {
+      state: 'sparse',
+      backend: 'private-ax',
+      reason: 'snapshot returned only structural application/window nodes',
+      reasonCode: 'sparse-tree',
+      requestedDepth: 8,
+    },
+  });
+
+  const result = await device.capture.snapshot({ session: 'default', interactiveOnly: true });
+
+  assert.equal(result.warnings?.length, 1);
+  assert.match(String(result.warnings?.[0]), /depth 8/);
+  assert.match(String(result.warnings?.[0]), /snapshot -i -d 24/);
+  assert.match(String(result.warnings?.[0]), /snapshot -i -d 40/);
+  assert.match(String(result.warnings?.[0]), /snapshot -i -d 56/);
+  assert.match(String(result.warnings?.[0]), /Use screenshot as visual truth/);
+});
+
+test('runtime snapshot warns when shallow iOS depth stops before list content', async () => {
+  const device = createSnapshotOnlyDevice({
+    nodes: [
+      { ref: 'e1', index: 0, depth: 0, type: 'Application', label: 'X' },
+      {
+        ref: 'e2',
+        index: 1,
+        depth: 1,
+        parentIndex: 0,
+        type: 'Window',
+        identifier: 'TwitterAppRootView',
+      },
+      {
+        ref: 'e3',
+        index: 2,
+        depth: 4,
+        parentIndex: 1,
+        type: 'NavigationBar',
+        label: 'Account Menu',
+      },
+      {
+        ref: 'e4',
+        index: 3,
+        depth: 5,
+        parentIndex: 2,
+        type: 'Button',
+        label: 'Account Menu',
+      },
+      { ref: 'e5', index: 4, depth: 5, parentIndex: 1, type: 'Button', label: 'Compose post' },
+      { ref: 'e6', index: 5, depth: 3, parentIndex: 1, type: 'Other', label: 'Home tab' },
+      { ref: 'e7', index: 6, depth: 4, parentIndex: 5, type: 'Other', label: 'Search tab' },
+      { ref: 'e8', index: 7, depth: 4, parentIndex: 5, type: 'Other', label: 'Notifications tab' },
+      { ref: 'e9', index: 8, depth: 4, parentIndex: 5, type: 'Other', label: 'Chat tab' },
+    ],
+    truncated: false,
+    backend: 'xctest',
+  });
+
+  const result = await device.capture.snapshot({
+    session: 'default',
+    interactiveOnly: true,
+    depth: 14,
+  });
+
+  assert.equal(result.snapshotQuality, undefined);
+  assert.equal(result.warnings?.length, 1);
+  assert.match(String(result.warnings?.[0]), /shallow depth 14/);
+  assert.match(String(result.warnings?.[0]), /not proof that the screen is empty/);
+  assert.match(
+    String(result.warnings?.[0]),
+    /snapshot -i -d 56, then snapshot -i -d 40, then snapshot -i -d 24/,
+  );
 });
 
 test('runtime snapshot does not warn for a normal iOS interactive output', async () => {

@@ -131,7 +131,7 @@ test('serializeSnapshotResult includes Android backend metadata', () => {
   });
 });
 
-test('serializeSnapshotResult maps capture quality annotation to public snapshotQuality', () => {
+test('serializeSnapshotResult omits healthy quality annotation from public snapshotQuality', () => {
   const snapshotQuality = {
     state: 'healthy',
     backend: 'tree',
@@ -148,6 +148,25 @@ test('serializeSnapshotResult maps capture quality annotation to public snapshot
   assert.deepEqual(data, {
     nodes: [],
     truncated: false,
+  });
+});
+
+test('serializeSnapshotResult maps degraded capture quality annotation to public snapshotQuality', () => {
+  const snapshotQuality = {
+    state: 'recovered',
+    backend: 'private-ax',
+    reason: 'snapshot returned only structural application/window nodes',
+    reasonCode: 'sparse-tree',
+  } as const;
+  const data = serializeSnapshotResult({
+    nodes: [],
+    truncated: true,
+    quality: snapshotQuality,
+  } as Parameters<typeof serializeSnapshotResult>[0] & { quality: typeof snapshotQuality });
+
+  assert.deepEqual(data, {
+    nodes: [],
+    truncated: true,
     snapshotQuality,
   });
 });

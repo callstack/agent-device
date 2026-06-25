@@ -47,9 +47,10 @@ export function snapshotCaptureAnnotationsFrom(
 export function publicSnapshotCaptureAnnotations(
   annotations: Partial<SnapshotCaptureAnnotations>,
 ): PublicSnapshotCaptureAnnotations {
+  const publicQuality = annotations.quality?.state === 'healthy' ? undefined : annotations.quality;
   return {
     ...(annotations.androidSnapshot ? { androidSnapshot: annotations.androidSnapshot } : {}),
-    ...(annotations.quality ? { snapshotQuality: annotations.quality } : {}),
+    ...(publicQuality ? { snapshotQuality: publicQuality } : {}),
     ...(annotations.warnings && annotations.warnings.length > 0
       ? { warnings: annotations.warnings }
       : {}),

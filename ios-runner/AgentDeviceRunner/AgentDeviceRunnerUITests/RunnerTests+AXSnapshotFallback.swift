@@ -14,12 +14,9 @@ extension RunnerTests {
     app: XCUIApplication,
     options: SnapshotOptions
   ) -> SnapshotBackendCapture? {
-    #if os(iOS) && targetEnvironment(simulator)
+    #if os(iOS)
       let requestedDepth = options.depth ?? 64
-      var attemptDepths = [requestedDepth]
-      attemptDepths.append(
-        contentsOf: Self.privateAXSnapshotDepthLadder.filter { $0 < requestedDepth }
-      )
+      let attemptDepths = Self.privateAXSnapshotAttemptDepths(requestedDepth: requestedDepth)
       var response: [String: Any] = [:]
       var effectiveDepth = requestedDepth
       var lastError = "unknown private AX snapshot failure"
@@ -85,6 +82,16 @@ extension RunnerTests {
     #else
       return nil
     #endif
+  }
+
+  private static func privateAXSnapshotAttemptDepths(requestedDepth: Int) -> [Int] {
+    let candidates = [requestedDepth] + privateAXSnapshotDepthLadder.filter { $0 < requestedDepth }
+    var seen = Set<Int>()
+    return candidates.filter { depth in
+      guard depth >= 0, !seen.contains(depth) else { return false }
+      seen.insert(depth)
+      return true
+    }
   }
 
   private func appendPrivateAXNode(

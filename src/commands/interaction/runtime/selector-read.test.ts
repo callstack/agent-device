@@ -273,6 +273,7 @@ test('runtime find wait reports sparse snapshot verdicts on the selector-read ro
           backend: 'private-ax',
           reason: 'sparse tree',
           reasonCode: 'sparse-tree',
+          requestedDepth: 8,
         },
       }),
     } satisfies AgentDeviceBackend,
@@ -297,7 +298,9 @@ test('runtime find wait reports sparse snapshot verdicts on the selector-read ro
     (error: unknown) =>
       error instanceof Error &&
       error.message === 'find could not read the current accessibility tree' &&
-      (error as { details?: { reason?: string } }).details?.reason === 'sparse tree',
+      (error as { details?: { reason?: string; hint?: string } }).details?.reason ===
+        'sparse tree' &&
+      /snapshot -i -d 24/.test((error as { details?: { hint?: string } }).details?.hint ?? ''),
   );
   assert.equal(session.snapshot, initialSnapshot);
 });

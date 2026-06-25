@@ -9,6 +9,7 @@ export type SnapshotQualityVerdict = {
   backend: 'tree' | 'queries' | 'private-ax';
   reason?: string;
   reasonCode?: 'ax-rejected' | 'sparse-tree' | 'budget' | 'no-nodes' | 'capture-failed';
+  requestedDepth?: number;
   effectiveDepth?: number;
   collapsedLeafIndexes?: number[];
 };
@@ -62,6 +63,7 @@ export function readSnapshotQualityVerdict(value: unknown): SnapshotQualityVerdi
       )
         ? (raw.reasonCode as SnapshotQualityVerdict['reasonCode'])
         : undefined,
+    requestedDepth: typeof raw.requestedDepth === 'number' ? raw.requestedDepth : undefined,
     effectiveDepth: typeof raw.effectiveDepth === 'number' ? raw.effectiveDepth : undefined,
     collapsedLeafIndexes: Array.isArray(raw.collapsedLeafIndexes)
       ? raw.collapsedLeafIndexes.filter((entry): entry is number => typeof entry === 'number')
@@ -73,6 +75,13 @@ export function isSparseSnapshotQualityVerdict(
   verdict: SnapshotQualityVerdict | undefined,
 ): verdict is SnapshotQualityVerdict {
   return verdict?.state === 'sparse';
+}
+
+export function formatSparseSnapshotRecoveryHint(verdict: SnapshotQualityVerdict): string {
+  const depthHint = formatSparseDepthRecoveryHint(verdict);
+  const visualFallback =
+    'Use screenshot as visual truth and coordinate taps; retry snapshot after navigating.';
+  return depthHint ? `${depthHint} ${visualFallback}` : visualFallback;
 }
 
 /** Canonical warning lines for a verdict; the single place degradation is worded. */
@@ -92,7 +101,7 @@ function stateWarning(verdict: SnapshotQualityVerdict): string[] {
     const meaning =
       verdict.reasonCode === 'budget'
         ? ' The primary capture ran out of its time budget (busy app or simulator); the recovered tree is authoritative for this screen.'
-        : " This usually means the app publishes an unhealthy accessibility tree — fixing the app's accessibility is the real cure. Treat screenshot as visual truth when this warning appears.";
+        : ' The primary backend returned degraded output; the recovered tree is the better accessibility evidence for this screen, but screenshot remains visual truth.';
     return [
       `Recovered this snapshot with the ${verdict.backend} accessibility backend` +
         (verdict.reason ? ` after: ${verdict.reason}.` : '.') +
@@ -103,10 +112,28 @@ function stateWarning(verdict: SnapshotQualityVerdict): string[] {
     return [
       'No snapshot backend could read this screen' +
         (verdict.reason ? ` (${verdict.reason})` : '') +
-        '. Use screenshot as visual truth and coordinate taps; retry snapshot after navigating.',
+        `. ${formatSparseSnapshotRecoveryHint(verdict)}`,
     ];
   }
   return [];
+}
+
+function formatSparseDepthRecoveryHint(verdict: SnapshotQualityVerdict): string | undefined {
+  if (!isDepthLimitedIosSparseVerdict(verdict) || verdict.requestedDepth === undefined) {
+    return undefined;
+  }
+  const requestedDepth = verdict.requestedDepth;
+  const untriedDepths = [56, 40, 24].filter((depth) => depth > requestedDepth);
+  if (untriedDepths.length === 0) return undefined;
+  const depthList = untriedDepths.map((depth) => `\`snapshot -i -d ${depth}\``).join(', then ');
+  return `This can be an iOS depth-limited accessibility tree at depth ${verdict.requestedDepth}, not proof that the screen is empty. Before treating it as blocked, try bounded interactive snapshots from deepest to shallower: ${depthList}. Those depths give the private AX fallback enough room to reach real controls when the standard XCTest path failed or stayed sparse.`;
+}
+
+function isDepthLimitedIosSparseVerdict(verdict: SnapshotQualityVerdict): boolean {
+  return (
+    (verdict.backend === 'private-ax' && verdict.reasonCode === 'sparse-tree') ||
+    (verdict.backend === 'tree' && verdict.reasonCode === 'ax-rejected')
+  );
 }
 
 function depthWarning(verdict: SnapshotQualityVerdict): string[] {

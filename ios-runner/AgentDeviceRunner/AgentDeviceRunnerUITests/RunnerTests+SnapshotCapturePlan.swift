@@ -18,6 +18,8 @@ struct SnapshotQuality: Codable {
   let reason: String?
   /// Machine-readable reason: ax-rejected | sparse-tree | budget | no-nodes.
   let reasonCode: String?
+  /// User-requested traversal depth, when the command supplied one.
+  let requestedDepth: Int?
   /// Private AX ladder cap when the accepted tree is shallower than requested.
   let effectiveDepth: Int?
   /// Leaves that merge many labels — a container marked accessible hides its descendants.
@@ -123,7 +125,8 @@ extension RunnerTests {
         capture,
         backend: kind,
         state: recovered ? "recovered" : "healthy",
-        reason: recovered ? firstFailure : nil
+        reason: recovered ? firstFailure : nil,
+        options: options
       )
     }
 
@@ -140,19 +143,28 @@ extension RunnerTests {
         // invalidation, CONTEXT.md). A sparse `best` from a later tier (e.g. the query sweep's
         // synthetic root) must NOT suppress this — reaching the terminal already means no backend
         // produced a usable tree.
-        return snapshotAccessibilityUnavailable(failure: axFailure)
+        return snapshotAccessibilityUnavailable(failure: axFailure, options: options)
       case .sparseBest:
         break
       }
     }
 
     let fallbackPayload =
-      best.map { stampedSnapshotPayload($0.capture, backend: $0.kind, state: "sparse", reason: firstFailure) }
+      best.map {
+        stampedSnapshotPayload(
+          $0.capture,
+          backend: $0.kind,
+          state: "sparse",
+          reason: firstFailure,
+          options: options
+        )
+      }
       ?? stampedSnapshotPayload(
         SnapshotBackendCapture(payload: sparseTruncatedSnapshotPayload(), effectiveDepth: nil),
         backend: plan.last ?? .recursiveTree,
         state: "sparse",
-        reason: firstFailure
+        reason: firstFailure,
+        options: options
       )
     return fallbackPayload
   }
@@ -222,11 +234,13 @@ extension RunnerTests {
     guard !nodes.isEmpty else { return false }
     return nodes.allSatisfy { node in
       // Application/Window labels are just the app/window name, and full-screen roots
-      // compute as hittable; neither says anything about tree health.
+      // compute as hittable. Root window identifiers are often framework wrapper ids, so
+      // they do not prove the app exposed meaningful controls either.
       let isRootContainer = node.type == "Application" || node.type == "Window"
-      let hasContent = (!isRootContainer && node.label?.isEmpty == false)
+      let hasContent = !isRootContainer
+        && (node.label?.isEmpty == false
         || node.identifier?.isEmpty == false
-        || node.value?.isEmpty == false
+        || node.value?.isEmpty == false)
       return !hasContent
         && (isRootContainer || !node.hittable)
         && Self.structuralOnlyNodeTypes.contains(node.type)
@@ -253,7 +267,8 @@ extension RunnerTests {
     _ capture: SnapshotBackendCapture,
     backend: SnapshotBackendKind,
     state: String,
-    reason: (reason: String, code: String)?
+    reason: (reason: String, code: String)?,
+    options: SnapshotOptions
   ) -> DataPayload {
     let payload = capture.payload
     let quality = SnapshotQuality(
@@ -261,6 +276,7 @@ extension RunnerTests {
       backend: backend.rawValue,
       reason: reason?.reason,
       reasonCode: reason?.code,
+      requestedDepth: options.depth,
       effectiveDepth: capture.effectiveDepth,
       collapsedLeafIndexes: Self.collapsedLeafIndexes(payload.nodes ?? [])
     )
@@ -281,7 +297,7 @@ extension RunnerTests {
     if quality.state == "recovered" {
       let meaning = quality.reasonCode == "budget"
         ? " The primary capture ran out of its time budget (busy app or simulator); the recovered tree is authoritative for this screen."
-        : " This usually means the app publishes an unhealthy accessibility tree — fixing the app's accessibility is the real cure. Treat screenshot as visual truth when this warning appears."
+        : " The primary backend returned degraded output; the recovered tree is the better accessibility evidence for this screen, but screenshot remains visual truth."
       parts.append(
         "Recovered this snapshot with the \(quality.backend) accessibility backend"
           + (quality.reason.map { " after: \($0)." } ?? ".")
@@ -292,7 +308,9 @@ extension RunnerTests {
       parts.append(
         "No snapshot backend could read this screen"
           + (quality.reason.map { " (\($0))" } ?? "")
-          + ". Use screenshot as visual truth and coordinate taps."
+          + "."
+          + Self.legacySparseDepthRecoveryHint(quality)
+          + " Use screenshot as visual truth and coordinate taps."
       )
     }
     if let depth = quality.effectiveDepth {
@@ -301,6 +319,19 @@ extension RunnerTests {
       )
     }
     return parts.isEmpty ? nil : parts.joined(separator: " ")
+  }
+
+  private static func legacySparseDepthRecoveryHint(_ quality: SnapshotQuality) -> String {
+    guard quality.backend == "private-ax",
+      quality.reasonCode == "sparse-tree",
+      let requestedDepth = quality.requestedDepth
+    else {
+      return ""
+    }
+    let untriedDepths = [56, 40, 24].filter { $0 > requestedDepth }
+    guard !untriedDepths.isEmpty else { return "" }
+    let depthList = untriedDepths.map { "-d \($0)" }.joined(separator: ", then ")
+    return " This can be an iOS depth-limited wrapper tree rather than an empty screen. Before treating it as blocked, retry bounded interactive snapshots from deepest to shallower with \(depthList)."
   }
 }
 
@@ -336,10 +367,13 @@ extension RunnerTests {
   func testSparsePayloadReasonMatrix() {
     let root = planTestNode(index: 0, type: "Application", label: "Example App", hittable: true)
     let window = planTestNode(index: 1, type: "Window", parentIndex: 0)
+    let identifiedWindow = planTestNode(index: 1, type: "Window", identifier: "TwitterAppRootView", parentIndex: 0)
     let button = planTestNode(index: 1, type: "Button", label: "Ok", hittable: true, parentIndex: 0)
 
     // Labeled, hittable root over a bare window is still sparse.
     XCTAssertNotNil(Self.sparsePayloadReason(DataPayload(nodes: [root, window], truncated: false)))
+    // Structural window identifiers are framework wrappers, not proof of useful UI content.
+    XCTAssertNotNil(Self.sparsePayloadReason(DataPayload(nodes: [root, identifiedWindow], truncated: false)))
     // Deadline-truncated near-empty sweep needs recovery even with one real control.
     XCTAssertNotNil(Self.sparsePayloadReason(DataPayload(nodes: [root, button], truncated: true)))
     // The same tiny tree from a completed sweep is a legitimately minimal screen.
@@ -372,21 +406,40 @@ extension RunnerTests {
       backend: "queries",
       reason: "snapshot returned only structural application/window nodes",
       reasonCode: "sparse-tree",
+      requestedDepth: nil,
       effectiveDepth: nil,
       collapsedLeafIndexes: nil
     )
     let message = Self.legacyQualityMessage(recovered)
     XCTAssertTrue(message?.contains("queries accessibility backend") == true)
-    XCTAssertTrue(message?.contains("fixing the app's accessibility") == true)
+    XCTAssertTrue(message?.contains("primary backend returned degraded output") == true)
     XCTAssertTrue(message?.contains("screenshot as visual truth") == true)
     XCTAssertNil(
       Self.legacyQualityMessage(
         SnapshotQuality(
-          state: "healthy", backend: "tree", reason: nil, reasonCode: nil, effectiveDepth: nil,
+          state: "healthy", backend: "tree", reason: nil, reasonCode: nil, requestedDepth: nil, effectiveDepth: nil,
           collapsedLeafIndexes: nil)
       )
     )
   }
+
+  func testLegacyQualityMessageSuggestsBoundedDepthForShallowPrivateAxSparseOutput() {
+    let message = Self.legacyQualityMessage(
+      SnapshotQuality(
+        state: "sparse",
+        backend: "private-ax",
+        reason: "snapshot returned only structural application/window nodes",
+        reasonCode: "sparse-tree",
+        requestedDepth: 8,
+        effectiveDepth: nil,
+        collapsedLeafIndexes: nil
+      )
+    )
+    XCTAssertTrue(message?.contains("-d 24") == true)
+    XCTAssertTrue(message?.contains("-d 40") == true)
+    XCTAssertTrue(message?.contains("-d 56") == true)
+  }
+
   func testTerminalFailsClosedOnInteractiveAxFailureRegardlessOfSparseBest() {
     // Interactive AX failure must invalidate + fail closed; a later tier's sparse synthetic-root
     // "best" must never downgrade this to a returned-sparse payload (regression: best == nil guard).
@@ -416,10 +469,12 @@ extension RunnerTests {
         code: "IOS_AX_SNAPSHOT_FAILED",
         message: "kAXErrorIllegalArgument",
         hint: "use screenshot"
-      )
+      ),
+      options: SnapshotOptions(depth: 14)
     )
     XCTAssertEqual(payload.runnerFatal, true)
     XCTAssertEqual(payload.snapshotQuality?.state, "sparse")
     XCTAssertEqual(payload.snapshotQuality?.reasonCode, "ax-rejected")
+    XCTAssertEqual(payload.snapshotQuality?.requestedDepth, 14)
   }
 }

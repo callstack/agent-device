@@ -23,6 +23,7 @@ import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts'
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
 import { createSelectorCaptureRuntime } from '../selector-capture-runtime.ts';
 import {
+  formatSparseSnapshotRecoveryHint,
   isSparseSnapshotQualityVerdict,
   type SnapshotQualityVerdict,
 } from '../../utils/snapshot-quality.ts';
@@ -245,7 +246,7 @@ function createFindNodeFetcher(params: {
 function sparseFindSnapshotResponse(verdict: SnapshotQualityVerdict): DaemonResponse {
   return errorResponse('COMMAND_FAILED', 'find could not read the current accessibility tree', {
     reason: verdict.reason,
-    hint: 'The snapshot quality verdict is sparse. Use screenshot as visual truth, navigate with coordinates if needed, then retry find after reaching a readable screen.',
+    hint: `The snapshot quality verdict is sparse. ${formatSparseSnapshotRecoveryHint(verdict)}`,
   });
 }
 

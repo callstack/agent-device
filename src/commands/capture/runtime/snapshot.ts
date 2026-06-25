@@ -242,6 +242,9 @@ function buildSnapshotWarnings(params: {
     warnings.push(...buildSparseIosInteractiveWarnings(params));
     warnings.push(...buildMergedAccessibilityLeafWarnings(params.snapshot.nodes));
   }
+  if (params.annotations.quality?.state !== 'sparse') {
+    warnings.push(...buildShallowIosInteractiveDepthWarnings(params));
+  }
 
   const helperFallbackWarning = formatAndroidHelperFallbackWarning(
     params.annotations.androidSnapshot,
@@ -275,6 +278,30 @@ function buildSparseIosInteractiveWarnings(params: {
 
   return [
     'iOS interactive snapshot exposed only the application root. XCTest accessibility queries can fail to enumerate some simulator UI trees even when screenshots and direct gestures still work. Use screenshot as visual truth, try a scoped/full snapshot for diagnostics, and prefer direct selectors when known.',
+  ];
+}
+
+function buildShallowIosInteractiveDepthWarnings(params: {
+  snapshot: SnapshotState;
+  options: SnapshotCommandOptions;
+}): string[] {
+  const depth = params.options.depth;
+  if (
+    params.snapshot.backend !== 'xctest' ||
+    params.options.interactiveOnly !== true ||
+    typeof depth !== 'number' ||
+    depth >= 24 ||
+    params.snapshot.nodes.length > 24
+  ) {
+    return [];
+  }
+
+  const untriedDepths = [56, 40, 24].filter((candidate) => candidate > depth);
+  if (untriedDepths.length === 0) return [];
+
+  const depthList = untriedDepths.map((candidate) => `snapshot -i -d ${candidate}`).join(', then ');
+  return [
+    `Interactive snapshot was requested at shallow depth ${depth} and returned only ${params.snapshot.nodes.length} nodes. That depth can stop before deeper controls or list content, so this is not proof that the screen is empty. If expected content is missing, retry bounded depths from deepest to shallower: ${depthList}.`,
   ];
 }
 

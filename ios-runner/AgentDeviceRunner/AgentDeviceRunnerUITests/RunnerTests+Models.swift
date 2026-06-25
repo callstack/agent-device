@@ -355,4 +355,16 @@ struct SnapshotOptions {
   let depth: Int?
   let scope: String?
   let raw: Bool
+
+  init(
+    interactiveOnly: Bool = false,
+    depth: Int? = nil,
+    scope: String? = nil,
+    raw: Bool = false
+  ) {
+    self.interactiveOnly = interactiveOnly
+    self.depth = depth
+    self.scope = scope
+    self.raw = raw
+  }
 }

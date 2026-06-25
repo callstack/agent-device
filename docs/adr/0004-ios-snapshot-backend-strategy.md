@@ -50,15 +50,24 @@ strategies:
   carry the response, fail explicitly instead of silently truncating the tree at a hard node count.
   If XCTest reports a real AX serialization failure, preserve that error instead of pretending the
   UI is empty.
-- **Future simulator AX-service strategy**: treat Bluesky-class failures as evidence that XCTest is
-  not a complete semantic snapshot backend. A robust semantic fix should add a host-side simulator
-  accessibility backend, similar in role to `idb` accessibility commands or Argent's `ax-service`,
-  and normalize its output into the same `SnapshotNode` model. That backend can be simulator-only;
-  physical devices can continue using XCTest unless a supported lower-level API exists.
+- **Private AX fallback strategy**: treat Bluesky-class failures as evidence that XCTest is not a
+  complete semantic snapshot backend. The in-runner private AX request path may be attempted after
+  XCTest returns sparse output when the runtime exposes it, including on physical iOS devices, but
+  it is still a fallback: sparse private AX output must remain observable and must not be presented
+  as proof that the UI is empty. When the user requested a shallow depth and iOS returns only
+  wrappers/chrome instead of the expected content, the warning should recommend bounded retries
+  from deepest to shallower, such as `snapshot -i -d 56`, then `-d 40`, then `-d 24`, before
+  treating the screen as blocked. A more
+  robust semantic fix should add a host-side simulator accessibility backend, similar in role to
+  `idb` accessibility commands or Argent's `ax-service`, and normalize its output into the same
+  `SnapshotNode` model.
 
 The daemon should make degraded output observable. If an iOS interactive snapshot contains only the
 application root or another sparse shape, surface a structured quality verdict and warning so
 agents know the snapshot is degraded output rather than proof that the screen has no controls.
+Do not expose a `healthy` verdict as a user-facing guarantee when no degraded condition was found:
+absence of a warning is enough. `healthy` is an internal plan-acceptance state, not proof that the
+app exposed every useful control.
 
 ## Regression Notes
 
@@ -67,8 +76,10 @@ snapshots. That was the correct diagnostic change, but it exposed apps whose acc
 XCTest cannot serialize.
 
 Later work moved recovery into the regular visible capture plan so healthy apps keep the fast
-recursive tree path while degraded simulator app classes can still return bounded, honest output
-when fallback query tiers are the only available source of visible controls.
+recursive tree path while degraded app classes can still return bounded, honest output when
+fallback query or private AX tiers are the only available source of visible controls. Physical
+device verification against X showed that root wrapper identifiers such as `TwitterAppRootView`
+must not make an Application/Window-only tree look healthy.
 
 ## Consequences
 
