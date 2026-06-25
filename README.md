@@ -19,6 +19,8 @@ A device automation CLI for real apps on iOS, Android, TV, web, and desktop. Age
 
 `agent-device` lets coding agents open apps, inspect the current UI, interact with visible elements, and collect debugging evidence through one CLI. Use it when an agent needs to verify what actually happens on a device, not just reason about code.
 
+The CLI is the agent's hands, eyes, and evidence collector; it is not the brain. Your coding agent or QA harness reads the task, interprets the current screen, chooses the next command, and decides whether the result satisfies the test. `agent-device` keeps that loop grounded in structured accessibility data, deterministic actions, and files an engineer can inspect.
+
 If you know Vercel's [agent-browser](https://github.com/vercel-labs/agent-browser), `agent-device` is the same idea for mobile, TV, and desktop apps. Minimal `--platform web` support reuses `agent-browser` when a browser session needs to fit into the same command/session/replay loop.
 
 It works with native iOS and Android apps, plus apps built with Expo, Flutter, and React Native, as long as the target can run on a supported device, simulator, emulator, or desktop environment.
@@ -81,6 +83,8 @@ agent-device close
 ```
 
 Snapshots assign refs like `@e1`, `@e2`, and `@e3` to elements on the current screen. Refs from the latest snapshot are immediately actionable; after scrolling or changing screens, take a fresh snapshot.
+
+Snapshots come from the app's accessibility tree, so high-quality labels, roles, and test IDs make agent runs far more reliable. Use screenshots and videos as evidence or visual fallback, but prefer refs and selectors for actions and assertions whenever the UI exposes enough structure.
 
 ## Next Steps
 

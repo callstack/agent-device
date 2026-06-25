@@ -9,6 +9,8 @@ description: Learn what agent-device is, where it fits in agentic mobile, TV, de
 
 Use it when an agent needs to inspect and operate a real app, not just reason about source code or screenshots.
 
+`agent-device` is the agent's hands, eyes, and evidence collector. It does not contain the test intelligence itself: the coding agent, QA agent, or project harness reads the task, interprets the current screen, chooses commands, and judges whether the result meets the scenario. Keeping that boundary clear makes it easier to combine live exploration, deterministic replay, and human review without hiding decision-making inside the device tool.
+
 ## Where it shines
 
 - **App verification for agents**: run the app, inspect visible UI, act through refs/selectors, and verify expected state.
@@ -38,6 +40,8 @@ agent-device press @e12
 agent-device diff snapshot -i
 agent-device close
 ```
+
+Snapshots are accessibility-first: labels, roles, values, and test IDs are the primary signal for choosing refs and selectors. Screenshots and videos are still important evidence, and they are useful fallbacks when a screen exposes poor accessibility data, but durable agent workflows should prefer structured refs/selectors over pixel or OCR guesses.
 
 Installed CLI help is the version-matched operating guide. Start there before planning device work:
 
