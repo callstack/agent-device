@@ -17,7 +17,7 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-test('agent-cdp passthrough pins agent-cdp package version', () => {
+test('cdp wrapper pins agent-cdp package version', () => {
   assert.equal(AGENT_CDP_PACKAGE, 'agent-cdp@1.6.0');
   assert.deepEqual(
     buildAgentCdpNpmExecArgs(['memory', 'usage', 'sample', '--label', 'baseline', '--gc']),
@@ -38,11 +38,11 @@ test('agent-cdp passthrough pins agent-cdp package version', () => {
   );
 });
 
-test('agent-cdp docs mention the pinned package version', () => {
-  assert.match(fs.readFileSync('website/docs/docs/commands.md', 'utf8'), /agent-cdp@1\.6\.0/);
+test('cdp docs hide the implementation package name', () => {
+  assert.doesNotMatch(fs.readFileSync('website/docs/docs/commands.md', 'utf8'), /agent-cdp/);
 });
 
-test('agent-cdp streams through npm exec and returns downstream exit code', async () => {
+test('cdp wrapper streams through npm exec and returns downstream exit code', async () => {
   const env = { ...process.env };
   vi.mocked(runCmdStreaming).mockResolvedValueOnce({
     exitCode: 7,

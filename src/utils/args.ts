@@ -122,7 +122,7 @@ function shouldPassThroughLocalToolFlag(
 }
 
 function shouldPreservePostCommandArgs(command: string | null): boolean {
-  return command === 'agent-cdp';
+  return command === 'cdp';
 }
 
 function resolveFlagDefinition(token: string, command: string | null): FlagDefinition | undefined {

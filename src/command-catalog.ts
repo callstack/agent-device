@@ -59,7 +59,7 @@ export const INTERNAL_COMMANDS = {
 } as const;
 
 const LOCAL_CLI_COMMANDS = {
-  agentCdp: 'agent-cdp',
+  cdp: 'cdp',
   auth: 'auth',
   connect: 'connect',
   connection: 'connection',
@@ -88,7 +88,7 @@ export type ClientBackedCliCommandName =
 
 const MCP_UNEXPOSED_CLI_COMMANDS = commandSet(
   LOCAL_CLI_COMMANDS.auth,
-  LOCAL_CLI_COMMANDS.agentCdp,
+  LOCAL_CLI_COMMANDS.cdp,
   LOCAL_CLI_COMMANDS.connect,
   LOCAL_CLI_COMMANDS.connection,
   LOCAL_CLI_COMMANDS.disconnect,
@@ -101,7 +101,7 @@ const MCP_UNEXPOSED_CLI_COMMANDS = commandSet(
 
 const CAPABILITY_EXEMPT_CLI_COMMANDS = commandSet(
   LOCAL_CLI_COMMANDS.auth,
-  LOCAL_CLI_COMMANDS.agentCdp,
+  LOCAL_CLI_COMMANDS.cdp,
   LOCAL_CLI_COMMANDS.connect,
   LOCAL_CLI_COMMANDS.connection,
   LOCAL_CLI_COMMANDS.debug,

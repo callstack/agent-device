@@ -197,7 +197,7 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
       }
       let logTailStopper: (() => void) | null = null;
       try {
-        if (command === 'agent-cdp') {
+        if (command === 'cdp') {
           const exitCode = await runAgentCdpCommand(positionals, {
             cwd: process.cwd(),
             env: process.env,

@@ -430,8 +430,8 @@ const BOUNDED_PROFILE_TIMELINE =
   /react-devtools\s+profile\s+timeline\b[^\n]*--limit\s+(?:10|20)\b/i;
 const BROAD_PROFILE_SLOW_LIMIT =
   /react-devtools\s+profile\s+slow\b[^\n]*--limit\s+(?:[5-9]\d|[1-9]\d{2,})\b/i;
-const AGENT_CDP_MEMORY_USAGE_SAMPLE = /agent-cdp\s+memory\s+usage\s+sample\b/i;
-const AGENT_CDP_MEMORY_SNAPSHOT_CAPTURE = /agent-cdp\s+memory\s+snapshot\s+capture\b/i;
+const CDP_MEMORY_USAGE_SAMPLE = /cdp\s+memory\s+usage\s+sample\b/i;
+const CDP_MEMORY_SNAPSHOT_CAPTURE = /cdp\s+memory\s+snapshot\s+capture\b/i;
 const IOS_EXPO_GO_OPEN =
   /(?:^|\n)(?:agent-device\s+)?open\s+["']Expo Go["']\s+["']?exp:\/\/127\.0\.0\.1:8081["']?/i;
 
@@ -1659,27 +1659,27 @@ const SKILL_GUIDANCE_CASES: Case[] = [
       'Need proof that retained JS objects survive cleanup, plus shortest useful retaining paths',
       'This is not a native/process memory investigation',
     ],
-    task: 'Plan a bounded React Native JS heap leak workflow using agent-cdp: select the Metro CDP target, sample heap usage, capture baseline/action/cleanup snapshots, diff them, run leak-triplet, and inspect retainers for a leaked node.',
+    task: 'Plan a bounded React Native JS heap leak workflow using cdp: select the Metro CDP target, sample heap usage, capture baseline/action/cleanup snapshots, diff them, run leak-triplet, and inspect retainers for a leaked node.',
     outputs: [
-      plannedCommand('agent-cdp target list'),
+      plannedCommand('cdp target list'),
       /--url\s+http:\/\/127\.0\.0\.1:8081/i,
-      plannedCommand('agent-cdp target select'),
-      AGENT_CDP_MEMORY_SNAPSHOT_CAPTURE,
+      plannedCommand('cdp target select'),
+      CDP_MEMORY_SNAPSHOT_CAPTURE,
       /--name\s+baseline/i,
       /--name\s+(?:after-action|action)/i,
       /--name\s+cleanup/i,
-      plannedCommand('agent-cdp memory snapshot diff'),
-      plannedCommand('agent-cdp memory snapshot leak-triplet'),
-      plannedCommand('agent-cdp memory snapshot retainers'),
+      plannedCommand('cdp memory snapshot diff'),
+      plannedCommand('cdp memory snapshot leak-triplet'),
+      plannedCommand('cdp memory snapshot retainers'),
     ],
     forbiddenOutputs: [
       plannedCommand('perf memory sample'),
       plannedCommand('perf memory snapshot'),
       plannedCommand('react-devtools'),
-      plannedCommand('agent-cdp profile cpu'),
-      plannedCommand('agent-cdp trace'),
-      plannedCommand('agent-cdp network'),
-      plannedCommand('agent-cdp console'),
+      plannedCommand('cdp profile cpu'),
+      plannedCommand('cdp trace'),
+      plannedCommand('cdp network'),
+      plannedCommand('cdp console'),
     ],
   }),
   makeCase({
@@ -1695,18 +1695,18 @@ const SKILL_GUIDANCE_CASES: Case[] = [
     ],
     task: 'Plan the CDP commands to select the Metro target and collect compact before/after JavaScript heap usage samples with GC, then diff the usage samples.',
     outputs: [
-      plannedCommand('agent-cdp target list'),
+      plannedCommand('cdp target list'),
       /--url\s+http:\/\/127\.0\.0\.1:8081/i,
-      plannedCommand('agent-cdp target select'),
-      AGENT_CDP_MEMORY_USAGE_SAMPLE,
+      plannedCommand('cdp target select'),
+      CDP_MEMORY_USAGE_SAMPLE,
       /--label\s+baseline/i,
       /--label\s+after-action/i,
-      plannedCommand('agent-cdp memory usage diff'),
+      plannedCommand('cdp memory usage diff'),
     ],
     forbiddenOutputs: [
       plannedCommand('perf memory sample'),
       plannedCommand('perf memory snapshot'),
-      AGENT_CDP_MEMORY_SNAPSHOT_CAPTURE,
+      CDP_MEMORY_SNAPSHOT_CAPTURE,
       plannedCommand('react-devtools'),
     ],
   }),
@@ -1729,9 +1729,9 @@ const SKILL_GUIDANCE_CASES: Case[] = [
       /--out\s+\S+\.hprof/i,
     ],
     forbiddenOutputs: [
-      /agent-cdp/i,
-      AGENT_CDP_MEMORY_USAGE_SAMPLE,
-      AGENT_CDP_MEMORY_SNAPSHOT_CAPTURE,
+      plannedCommand('cdp'),
+      CDP_MEMORY_USAGE_SAMPLE,
+      CDP_MEMORY_SNAPSHOT_CAPTURE,
       plannedCommand('react-devtools'),
     ],
   }),
