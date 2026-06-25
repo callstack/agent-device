@@ -40,6 +40,21 @@ test('cdp wrapper pins agent-cdp package version', () => {
 
 test('cdp docs hide the implementation package name', () => {
   assert.doesNotMatch(fs.readFileSync('website/docs/docs/commands.md', 'utf8'), /agent-cdp/);
+  assert.doesNotMatch(
+    fs.readFileSync('website/docs/docs/debugging-profiling.md', 'utf8'),
+    /agent-cdp/,
+  );
+});
+
+test('cdp workflow docs live in debugging and profiling guide', () => {
+  assert.doesNotMatch(
+    fs.readFileSync('website/docs/docs/commands.md', 'utf8'),
+    /React Native JS memory through CDP/,
+  );
+  assert.match(
+    fs.readFileSync('website/docs/docs/debugging-profiling.md', 'utf8'),
+    /React Native JS memory through CDP/,
+  );
 });
 
 test('cdp wrapper streams through npm exec and returns downstream exit code', async () => {
