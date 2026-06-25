@@ -82,8 +82,8 @@ pnpm exec vitest run src/compat/maestro/__tests__/replay-flow.test.ts src/compat
 Run the Expo test-app flow on iOS:
 
 ```bash
-pnpm test-app:start
-pnpm ad --session test-app-maestro open "Expo Go" exp://127.0.0.1:8081 --platform ios --device "iPhone 17 Pro"
+pnpm test-app:ios
+pnpm ad --session test-app-maestro open "Agent Device Tester" --platform ios --device "iPhone 17 Pro"
 pnpm ad --session test-app-maestro wait "Agent Device Tester" 30000 --platform ios --device "iPhone 17 Pro"
 pnpm test-app:maestro:ios -- --session test-app-maestro -- --device "iPhone 17 Pro"
 ```

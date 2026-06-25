@@ -1,4 +1,4 @@
-appId: host.exp.Exponent
+appId: com.callstack.agentdevicelab
 env:
   CHECKOUT_NAME: Ada Lovelace
   CHECKOUT_EMAIL: ada@example.com

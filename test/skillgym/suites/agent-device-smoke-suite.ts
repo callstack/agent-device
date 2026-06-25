@@ -432,6 +432,11 @@ const BROAD_PROFILE_SLOW_LIMIT =
   /react-devtools\s+profile\s+slow\b[^\n]*--limit\s+(?:[5-9]\d|[1-9]\d{2,})\b/i;
 const IOS_EXPO_GO_OPEN =
   /(?:^|\n)(?:agent-device\s+)?open\s+["']Expo Go["']\s+["']?exp:\/\/127\.0\.0\.1:8081["']?/i;
+const IOS_TEST_APP_DEV_BUILD_OPEN = new RegExp(
+  String.raw`(?:^|\n)(?:agent-device\s+)?open\s+` +
+    String.raw`(?:(?:"Agent Device Tester")|(?:'Agent Device Tester')|com\.callstack\.agentdevicelab)\b`,
+  'i',
+);
 
 function makeCase(options: {
   id: string;
@@ -478,11 +483,16 @@ const FIXTURE_SMOKE_CASES: Case[] = [
     contract: [
       'App name: Agent Device Tester',
       'Platform: iOS',
-      'Launch context: Expo Go',
-      'Project URL: exp://127.0.0.1:8081',
+      'Launch context: installed Expo development build',
+      'Bundle identifier: com.callstack.agentdevicelab',
     ],
-    task: 'Plan the commands to open Agent Device Tester in Expo Go on iOS, take a snapshot -i to verify the app UI loaded, then close.',
-    outputs: [IOS_EXPO_GO_OPEN, /snapshot -i/i, plannedCommand('close')],
+    task: 'Plan the commands to open Agent Device Tester as an installed Expo development build on iOS, take a snapshot -i to verify the app UI loaded, then close.',
+    outputs: [IOS_TEST_APP_DEV_BUILD_OPEN, /snapshot -i/i, plannedCommand('close')],
+    forbiddenOutputs: [
+      /open\s+["']Expo Go["']/i,
+      /host\.exp\.Exponent/i,
+      /exp:\/\/127\.0\.0\.1:8081/i,
+    ],
   }),
   makeCase({
     id: 'home-dismiss-notice',

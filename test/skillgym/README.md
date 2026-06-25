@@ -18,7 +18,7 @@ The suite uses SkillGym v0.8 case tags:
 
 ## Included files
 
-- `../../examples/test-app/`: minimal Expo SDK 55 fixture app for broad UI coverage
+- `../../examples/test-app/`: minimal Expo SDK 56 development-build fixture app for broad UI coverage
 - `skillgym.config.ts`: starter config that runs Codex and Claude Haiku against this repo
 - `suites/agent-device-smoke-suite.ts`: planning suite for skill routing, fixture-aware flows, and skill-guidance regressions
 
@@ -28,7 +28,7 @@ The suite keeps the app small while separating coverage into two non-overlapping
 
 Fixture smoke cases cover concrete app surfaces:
 
-- open/snapshot/close defaults with Expo Go
+- open/snapshot/close defaults with the installed Expo development build
 - banners, alerts, toggles, and quick actions on Home
 - search debounce, filters, long-list scroll, favorites, and cart updates in Catalog
 - detail navigation, quantity edits, note append, and save-to-cart on Product
@@ -41,7 +41,7 @@ Skill-guidance regression cases cover distinct command-planning habits:
 - read-only inspection versus mutation
 - fresh `@ref` targeting, durable selectors, raw-rect fallbacks, and off-screen scroll recovery
 - text replacement, append semantics, supported field clearing, keyboard status, and keyboard fallback
-- install/open setup, Expo Go host-shell launch, app discovery, session scoping, and app-owned navigation fallbacks
+- install/open setup, Expo Go/dev-client launch paths, app discovery, session scoping, and app-owned navigation fallbacks
 - Metro reload, logs, network dump, alert fallback, and screenshot evidence
 - performance metrics, React DevTools profiling, gestures, settings, and trace capture
 - remote config, macOS menu bar surfaces, replay update, same-session mutation ordering, and batch schema/recording
