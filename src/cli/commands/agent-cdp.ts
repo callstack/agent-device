@@ -1,6 +1,6 @@
 import { runCmdStreaming } from '../../utils/exec.ts';
 
-const AGENT_CDP_VERSION = '1.5.2';
+const AGENT_CDP_VERSION = '1.6.0';
 export const AGENT_CDP_PACKAGE = `agent-cdp@${AGENT_CDP_VERSION}`;
 const AGENT_CDP_BIN = 'agent-cdp';
 

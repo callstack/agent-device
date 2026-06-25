@@ -18,14 +18,14 @@ afterEach(() => {
 });
 
 test('agent-cdp passthrough pins agent-cdp package version', () => {
-  assert.equal(AGENT_CDP_PACKAGE, 'agent-cdp@1.5.2');
+  assert.equal(AGENT_CDP_PACKAGE, 'agent-cdp@1.6.0');
   assert.deepEqual(
     buildAgentCdpNpmExecArgs(['memory', 'usage', 'sample', '--label', 'baseline', '--gc']),
     [
       'exec',
       '--yes',
       '--package',
-      'agent-cdp@1.5.2',
+      'agent-cdp@1.6.0',
       '--',
       'agent-cdp',
       'memory',
@@ -39,7 +39,7 @@ test('agent-cdp passthrough pins agent-cdp package version', () => {
 });
 
 test('agent-cdp docs mention the pinned package version', () => {
-  assert.match(fs.readFileSync('website/docs/docs/commands.md', 'utf8'), /agent-cdp@1\.5\.2/);
+  assert.match(fs.readFileSync('website/docs/docs/commands.md', 'utf8'), /agent-cdp@1\.6\.0/);
 });
 
 test('agent-cdp streams through npm exec and returns downstream exit code', async () => {
@@ -61,7 +61,7 @@ test('agent-cdp streams through npm exec and returns downstream exit code', asyn
     'exec',
     '--yes',
     '--package',
-    'agent-cdp@1.5.2',
+    'agent-cdp@1.6.0',
     '--',
     'agent-cdp',
     'target',
