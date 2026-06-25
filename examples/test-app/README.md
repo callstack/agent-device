@@ -50,7 +50,7 @@ workflow installs `expo-dev-client`, builds the native app with `expo run:ios` o
 `expo run:android`, and then serves JavaScript from Metro with `expo start`.
 The app declares `@expo/dom-webview` directly to keep Expo's development runtime
 on the SDK 56 native module; Android verification failed when the dev client
-resolved the older transitive SDK 55 copy.
+resolved an older transitive copy.
 
 From the repo root:
 
