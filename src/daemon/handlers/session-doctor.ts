@@ -1,6 +1,10 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { analyzeReactNativeOverlay } from '../../core/react-native-overlay.ts';
-import { getAndroidAppState, resolveAndroidApp } from '../../platforms/android/app-lifecycle.ts';
+import {
+  getAndroidAppState,
+  resolveAndroidApp,
+  type AndroidForegroundApp,
+} from '../../platforms/android/app-lifecycle.ts';
 import {
   resolveAndroidAdbExecutor,
   type AndroidAdbExecutor,
@@ -16,6 +20,13 @@ import { resolveCommandDevice } from './session-device-utils.ts';
 
 type DoctorStatus = 'pass' | 'warn' | 'fail' | 'info';
 type DoctorKind = 'auto' | 'react-native' | 'expo';
+type DoctorOptions = {
+  targetApp?: string;
+  metroHost: string;
+  metroPort: number;
+  kind: DoctorKind;
+  shouldProbeMetro: boolean;
+};
 
 type DoctorCheck = {
   id: string;
@@ -95,18 +106,8 @@ export async function handleDoctorCommand(params: {
   };
 }
 
-function readDoctorOptions(
-  req: DaemonRequest,
-  session: SessionState | undefined,
-): {
-  targetApp?: string;
-  metroHost: string;
-  metroPort: number;
-  kind: DoctorKind;
-  shouldProbeMetro: boolean;
-} {
-  const rawKind = req.flags?.kind;
-  const kind: DoctorKind = rawKind === 'expo' || rawKind === 'react-native' ? rawKind : 'auto';
+function readDoctorOptions(req: DaemonRequest, session: SessionState | undefined): DoctorOptions {
+  const kind = readDoctorKind(req.flags?.kind);
   const targetApp = readNonEmptyString(req.flags?.targetApp) ?? session?.appBundleId;
   const metroHost = readNonEmptyString(req.flags?.metroHost) ?? DEFAULT_METRO_HOST;
   const metroPort = readPositivePort(req.flags?.metroPort) ?? DEFAULT_METRO_PORT;
@@ -115,12 +116,18 @@ function readDoctorOptions(
     metroHost,
     metroPort,
     kind,
-    shouldProbeMetro:
-      kind === 'react-native' ||
-      kind === 'expo' ||
-      typeof req.flags?.metroPort === 'number' ||
-      typeof req.flags?.metroHost === 'string',
+    shouldProbeMetro: shouldProbeMetro(req.flags, kind),
   };
+}
+
+function readDoctorKind(value: unknown): DoctorKind {
+  return value === 'expo' || value === 'react-native' ? value : 'auto';
+}
+
+function shouldProbeMetro(flags: DaemonRequest['flags'], kind: DoctorKind): boolean {
+  return (
+    kind !== 'auto' || typeof flags?.metroPort === 'number' || typeof flags?.metroHost === 'string'
+  );
 }
 
 function sessionChecks(
@@ -232,10 +239,7 @@ function deviceReadinessCheck(device: DeviceInfo): DoctorCheck {
   };
 }
 
-function platformScopeChecks(
-  device: DeviceInfo,
-  options: ReturnType<typeof readDoctorOptions>,
-): DoctorCheck[] {
+function platformScopeChecks(device: DeviceInfo, options: DoctorOptions): DoctorCheck[] {
   if (
     (options.kind === 'react-native' || options.kind === 'expo') &&
     device.platform !== 'ios' &&
@@ -320,24 +324,7 @@ async function appendAndroidChecks(
 
   try {
     const state = await getAndroidAppState(device);
-    const foregroundPackage = state.package;
-    const expectedPackage = targetApp ?? session?.appBundleId;
-    const foregroundMatches = expectedPackage && foregroundPackage === expectedPackage;
-    const onLauncher = foregroundPackage ? ANDROID_LAUNCHER_PACKAGES.has(foregroundPackage) : false;
-    appendDoctorCheck(checks, {
-      id: 'android-foreground',
-      status: onLauncher || (expectedPackage && !foregroundMatches) ? 'warn' : 'pass',
-      summary: onLauncher
-        ? 'Android is on the launcher, not the target app.'
-        : expectedPackage && !foregroundMatches
-          ? `Android foreground package is ${foregroundPackage ?? 'unknown'}, expected ${expectedPackage}.`
-          : `Android foreground package is ${foregroundPackage ?? 'unknown'}.`,
-      command:
-        onLauncher || (expectedPackage && !foregroundMatches && expectedPackage)
-          ? `agent-device open ${expectedPackage} --platform android`
-          : undefined,
-      evidence: state as Record<string, unknown>,
-    });
+    appendDoctorCheck(checks, androidForegroundCheck(state, targetApp ?? session?.appBundleId));
   } catch (error) {
     const normalized = normalizeError(error);
     appendDoctorCheck(checks, {
@@ -351,6 +338,48 @@ async function appendAndroidChecks(
 
   appendDoctorCheck(checks, await probeAndroidReverse(adb, device.id, metroPort));
   appendDoctorCheck(checks, await probeAndroidAnimations(adb));
+}
+
+function androidForegroundCheck(
+  state: AndroidForegroundApp,
+  expectedPackage: string | undefined,
+): DoctorCheck {
+  const foregroundPackage = state.package;
+  const onLauncher = isAndroidLauncherPackage(foregroundPackage);
+  const mismatch = hasAndroidForegroundMismatch(foregroundPackage, expectedPackage);
+  return {
+    id: 'android-foreground',
+    status: onLauncher || mismatch ? 'warn' : 'pass',
+    summary: androidForegroundSummary(foregroundPackage, expectedPackage, onLauncher, mismatch),
+    command:
+      expectedPackage && (onLauncher || mismatch)
+        ? `agent-device open ${expectedPackage} --platform android`
+        : undefined,
+    evidence: state as Record<string, unknown>,
+  };
+}
+
+function isAndroidLauncherPackage(packageName: string | undefined): boolean {
+  return packageName ? ANDROID_LAUNCHER_PACKAGES.has(packageName) : false;
+}
+
+function hasAndroidForegroundMismatch(
+  foregroundPackage: string | undefined,
+  expectedPackage: string | undefined,
+): boolean {
+  return expectedPackage !== undefined && foregroundPackage !== expectedPackage;
+}
+
+function androidForegroundSummary(
+  foregroundPackage: string | undefined,
+  expectedPackage: string | undefined,
+  onLauncher: boolean,
+  mismatch: boolean,
+): string {
+  const actual = foregroundPackage ?? 'unknown';
+  if (onLauncher) return 'Android is on the launcher, not the target app.';
+  if (mismatch) return `Android foreground package is ${actual}, expected ${expectedPackage}.`;
+  return `Android foreground package is ${actual}.`;
 }
 
 async function probeAndroidReverse(
@@ -424,20 +453,21 @@ async function probeAndroidAnimations(adb: AndroidAdbExecutor): Promise<DoctorCh
 function appendReactNativeOverlayCheck(
   checks: DoctorCheck[],
   session: SessionState | undefined,
-  options: ReturnType<typeof readDoctorOptions>,
+  options: DoctorOptions,
 ): void {
-  if (options.kind === 'auto' && !session?.snapshot) return;
-  if (!session?.snapshot) {
-    appendDoctorCheck(checks, {
-      id: 'rn-overlay',
-      status: 'info',
-      summary: 'No current session snapshot; React Native overlay check skipped.',
-      command: 'agent-device snapshot -i',
-    });
-    return;
-  }
+  const check = reactNativeOverlayCheck(session, options);
+  if (check) appendDoctorCheck(checks, check);
+}
+
+function reactNativeOverlayCheck(
+  session: SessionState | undefined,
+  options: DoctorOptions,
+): DoctorCheck | undefined {
+  if (shouldSkipReactNativeOverlayCheck(session, options)) return undefined;
+  if (!session?.snapshot) return missingSnapshotOverlayCheck();
+
   const overlay = analyzeReactNativeOverlay(session.snapshot.nodes);
-  appendDoctorCheck(checks, {
+  return {
     id: 'rn-overlay',
     status: overlay.detected ? 'warn' : 'pass',
     summary: overlay.detected
@@ -448,7 +478,23 @@ function appendReactNativeOverlayCheck(
       redBox: overlay.redBox,
       dismissTargets: overlay.dismissNodes.length + overlay.collapsedNodes.length,
     },
-  });
+  };
+}
+
+function shouldSkipReactNativeOverlayCheck(
+  session: SessionState | undefined,
+  options: DoctorOptions,
+): boolean {
+  return options.kind === 'auto' && !session?.snapshot;
+}
+
+function missingSnapshotOverlayCheck(): DoctorCheck {
+  return {
+    id: 'rn-overlay',
+    status: 'info',
+    summary: 'No current session snapshot; React Native overlay check skipped.',
+    command: 'agent-device snapshot -i',
+  };
 }
 
 async function probeMetro(host: string, port: number, kind: DoctorKind): Promise<DoctorCheck> {

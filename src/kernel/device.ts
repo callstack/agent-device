@@ -142,81 +142,97 @@ export async function resolveDevice(
   selector: DeviceSelector,
   context: DeviceSelectionContext = {},
 ): Promise<DeviceInfo> {
-  let candidates = devices;
-  const normalize = (value: string): string =>
-    value.toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
-
-  if (selector.platform) {
-    candidates = candidates.filter((d) => matchesPlatformSelector(d.platform, selector.platform));
-  }
-  if (selector.target) {
-    candidates = candidates.filter((d) => (d.target ?? 'mobile') === selector.target);
-  }
-  if (isAppleDeviceCandidateSet(candidates)) {
-    candidates = sortAppleDevicesForSelection(candidates);
-  }
-
-  if (selector.udid) {
-    const match = candidates.find((d) => d.id === selector.udid && isApplePlatform(d.platform));
-    if (!match) {
-      throw new AppError('DEVICE_NOT_FOUND', `No Apple device with UDID ${selector.udid}`);
-    }
-    return match;
-  }
-
-  if (selector.serial) {
-    const match = candidates.find((d) => d.id === selector.serial && d.platform === 'android');
-    if (!match)
-      throw new AppError('DEVICE_NOT_FOUND', `No Android device with serial ${selector.serial}`);
-    return match;
-  }
-
-  if (selector.deviceName) {
-    const target = normalize(selector.deviceName);
-    const match = candidates.find((d) => normalize(d.name) === target);
-    if (!match) {
-      throw new AppError('DEVICE_NOT_FOUND', `No device named ${selector.deviceName}`);
-    }
-    return match;
-  }
+  const candidates = sortDeviceCandidatesForSelection(filterDeviceCandidates(devices, selector));
+  const explicitSelection = resolveExplicitDeviceSelection(candidates, selector);
+  if (explicitSelection) return explicitSelection;
 
   const onlyCandidate = candidates[0];
   if (onlyCandidate !== undefined && candidates.length === 1) return onlyCandidate;
 
   if (candidates.length === 0) {
-    const simulatorSetPath = context.simulatorSetPath;
-    if (simulatorSetPath && supportsAppleSimulatorSelection(selector.platform)) {
-      throw new AppError('DEVICE_NOT_FOUND', 'No devices found in the scoped simulator set', {
-        simulatorSetPath,
-        hint: `The simulator set at "${simulatorSetPath}" appears to be empty. Create a simulator first:\n  xcrun simctl --set "${simulatorSetPath}" create "iPhone 16" com.apple.CoreSimulator.SimDeviceType.iPhone-16 com.apple.CoreSimulator.SimRuntime.iOS-18-0`,
-        selector,
-      });
-    }
-    throw new AppError('DEVICE_NOT_FOUND', 'No devices found', { selector });
+    throwNoDevicesFound(selector, context);
   }
 
-  // Prefer virtual devices (simulators/emulators) over physical devices unless
-  // a physical device was explicitly requested via --device/--udid/--serial.
-  const virtual = candidates.filter((d) => d.kind !== 'device');
-  if (virtual.length > 0) {
-    candidates = virtual;
-  }
-
-  if (!isAppleDeviceCandidateSet(candidates)) {
-    const booted = candidates.filter((d) => d.booted);
-    const onlyBooted = booted[0];
-    if (onlyBooted !== undefined && booted.length === 1) return onlyBooted;
-  }
-
-  // Apple candidates are pre-sorted by agent-friendly default priority. Other
-  // platforms preserve discovery order except for the existing booted-device preference.
-  const selected = isAppleDeviceCandidateSet(candidates)
-    ? candidates[0]
-    : (candidates.find((d) => d.booted) ?? candidates[0]);
-  if (selected === undefined) {
-    throw new AppError('DEVICE_NOT_FOUND', 'No devices found', { selector });
-  }
+  const selected = selectDefaultDevice(candidates);
+  if (selected === undefined) throwNoDevicesFound(selector, context);
   return selected;
+}
+
+function filterDeviceCandidates(devices: DeviceInfo[], selector: DeviceSelector): DeviceInfo[] {
+  return devices
+    .filter((device) => matchesPlatformSelector(device.platform, selector.platform))
+    .filter((device) => !selector.target || (device.target ?? 'mobile') === selector.target);
+}
+
+function sortDeviceCandidatesForSelection(candidates: DeviceInfo[]): DeviceInfo[] {
+  return isAppleDeviceCandidateSet(candidates)
+    ? sortAppleDevicesForSelection(candidates)
+    : candidates;
+}
+
+function resolveExplicitDeviceSelection(
+  candidates: DeviceInfo[],
+  selector: DeviceSelector,
+): DeviceInfo | undefined {
+  if (selector.udid) return findAppleDeviceById(candidates, selector.udid);
+  if (selector.serial) return findAndroidDeviceById(candidates, selector.serial);
+  if (selector.deviceName) return findDeviceByName(candidates, selector.deviceName);
+  return undefined;
+}
+
+function findAppleDeviceById(candidates: DeviceInfo[], udid: string): DeviceInfo {
+  const match = candidates.find((device) => device.id === udid && isApplePlatform(device.platform));
+  if (!match) throw new AppError('DEVICE_NOT_FOUND', `No Apple device with UDID ${udid}`);
+  return match;
+}
+
+function findAndroidDeviceById(candidates: DeviceInfo[], serial: string): DeviceInfo {
+  const match = candidates.find((device) => device.id === serial && device.platform === 'android');
+  if (!match) throw new AppError('DEVICE_NOT_FOUND', `No Android device with serial ${serial}`);
+  return match;
+}
+
+function findDeviceByName(candidates: DeviceInfo[], deviceName: string): DeviceInfo {
+  const normalizedName = normalizeDeviceName(deviceName);
+  const match = candidates.find((device) => normalizeDeviceName(device.name) === normalizedName);
+  if (!match) throw new AppError('DEVICE_NOT_FOUND', `No device named ${deviceName}`);
+  return match;
+}
+
+function selectDefaultDevice(candidates: DeviceInfo[]): DeviceInfo | undefined {
+  const selectable = preferVirtualDevices(candidates);
+  const singleBootedDevice = findSingleBootedDevice(selectable);
+  if (singleBootedDevice && !isAppleDeviceCandidateSet(selectable)) return singleBootedDevice;
+  return isAppleDeviceCandidateSet(selectable)
+    ? selectable[0]
+    : (selectable.find((device) => device.booted) ?? selectable[0]);
+}
+
+function preferVirtualDevices(candidates: DeviceInfo[]): DeviceInfo[] {
+  // Prefer virtual devices unless a physical device was explicitly selected.
+  const virtual = candidates.filter((device) => device.kind !== 'device');
+  return virtual.length > 0 ? virtual : candidates;
+}
+
+function findSingleBootedDevice(candidates: DeviceInfo[]): DeviceInfo | undefined {
+  const booted = candidates.filter((device) => device.booted);
+  return booted.length === 1 ? booted[0] : undefined;
+}
+
+function throwNoDevicesFound(selector: DeviceSelector, context: DeviceSelectionContext): never {
+  const simulatorSetPath = context.simulatorSetPath;
+  if (simulatorSetPath && supportsAppleSimulatorSelection(selector.platform)) {
+    throw new AppError('DEVICE_NOT_FOUND', 'No devices found in the scoped simulator set', {
+      simulatorSetPath,
+      hint: `The simulator set at "${simulatorSetPath}" appears to be empty. Create a simulator first:\n  xcrun simctl --set "${simulatorSetPath}" create "iPhone 16" com.apple.CoreSimulator.SimDeviceType.iPhone-16 com.apple.CoreSimulator.SimRuntime.iOS-18-0`,
+      selector,
+    });
+  }
+  throw new AppError('DEVICE_NOT_FOUND', 'No devices found', { selector });
+}
+
+function normalizeDeviceName(value: string): string {
+  return value.toLowerCase().replace(/_/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 function compareAppleDevicesForSelection<TDevice extends DeviceInfo>(
@@ -232,18 +248,25 @@ function compareAppleDevicesForSelection<TDevice extends DeviceInfo>(
 }
 
 function appleDeviceSelectionRank(device: DeviceInfo): number {
-  const target = device.target ?? 'mobile';
-  if (device.kind === 'simulator') {
-    if (target === 'mobile') return isIpadDeviceName(device.name) ? 1 : 0;
-    if (target === 'tv') return 2;
-    return 3;
-  }
-  if (device.kind === 'device' && device.platform === 'ios') {
-    if (target === 'mobile') return isIpadDeviceName(device.name) ? 11 : 10;
-    if (target === 'tv') return 12;
-    return 13;
-  }
+  if (device.kind === 'simulator') return appleTargetSelectionRank(device, 0, 1, 2, 3);
+  if (device.kind === 'device' && device.platform === 'ios')
+    return appleTargetSelectionRank(device, 10, 11, 12, 13);
   return 14;
+}
+
+function appleTargetSelectionRank(
+  device: DeviceInfo,
+  phoneRank: number,
+  ipadRank: number,
+  tvRank: number,
+  fallbackRank: number,
+): number {
+  const targetRanks: Record<DeviceTarget, number> = {
+    mobile: isIpadDeviceName(device.name) ? ipadRank : phoneRank,
+    tv: tvRank,
+    desktop: fallbackRank,
+  };
+  return targetRanks[device.target ?? 'mobile'];
 }
 
 function isAppleDeviceCandidateSet(devices: DeviceInfo[]): boolean {
