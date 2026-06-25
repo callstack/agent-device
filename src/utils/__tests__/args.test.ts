@@ -1126,11 +1126,12 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /verify the action with diff snapshot -i or snapshot --diff/);
   assert.match(usageText, /Sparse or AX-unavailable snapshot/);
   assert.match(usageText, /macOS context menus use click <ref> --button secondary/);
-  assert.match(usageText, /Cloud\/Linux clients can use iOS simulators/);
+  assert.match(usageText, /Direct proxy: Cloud\/Linux clients can use iOS simulators/);
   assert.match(usageText, /A proxy URL\/token means direct proxy mode/);
-  assert.match(usageText, /choose one explicit --session/);
-  assert.match(usageText, /do not use connect or --remote-config/);
-  assert.match(usageText, /Cloud\/remote-config profiles are a separate mode/);
+  assert.match(usageText, /Direct proxy sessions: choose one explicit --session/);
+  assert.match(usageText, /do not use connect, --remote-config, tenant, run, or lease flags/);
+  assert.match(usageText, /Cloud\/remote-config profiles are separate from direct proxy/);
+  assert.match(usageText, /Do not substitute --config/);
   assert.match(usageText, /app-owned back uses back/);
   assert.match(usageText, /Web browser sessions: read help web/);
   assert.match(

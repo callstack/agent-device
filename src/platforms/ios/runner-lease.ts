@@ -62,7 +62,7 @@ export function buildRunnerLease(params: {
     ownerToken: RUNNER_OWNER_TOKEN,
     ownerPid: RUNNER_OWNER_PID,
     ownerStartTime: RUNNER_OWNER_START_TIME,
-    ownerStateDir: process.env.AGENT_DEVICE_STATE_DIR,
+    ownerStateDir: readCurrentStateDir(),
     sessionId: params.sessionId,
     runnerPid: params.runnerPid ?? null,
     port: params.port,
@@ -139,9 +139,14 @@ export async function prepareRunnerLeaseForStartup(
 }
 
 function isSameStateDirRunnerLease(lease: RunnerLease): boolean {
-  const currentStateDir = process.env.AGENT_DEVICE_STATE_DIR?.trim();
+  // Same-state reclaim assumes callers sharing AGENT_DEVICE_STATE_DIR are the same logical daemon owner.
+  const currentStateDir = readCurrentStateDir();
   if (!currentStateDir || !lease.ownerStateDir) return false;
   return path.resolve(currentStateDir) === path.resolve(lease.ownerStateDir);
+}
+
+function readCurrentStateDir(): string | undefined {
+  return process.env.AGENT_DEVICE_STATE_DIR?.trim() || undefined;
 }
 
 function buildBusyRunnerLeaseHint(lease: RunnerLease): string {

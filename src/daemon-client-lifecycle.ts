@@ -32,7 +32,12 @@ import {
   type DaemonInfo,
   type DaemonStartupCleanupResult,
 } from './daemon-client-metadata.ts';
-import { canConnect, readRemoteDaemonHealth } from './daemon-client-transport.ts';
+import {
+  canConnect,
+  DAEMON_HTTP_ENDPOINT_UNAVAILABLE_MESSAGE,
+  DAEMON_SOCKET_ENDPOINT_UNAVAILABLE_MESSAGE,
+  readRemoteDaemonHealth,
+} from './daemon-client-transport.ts';
 
 export type DaemonClientSettings = {
   paths: DaemonPaths;
@@ -191,8 +196,8 @@ function isDaemonTransportUnavailableError(error: unknown): boolean {
   return (
     error instanceof AppError &&
     error.code === 'COMMAND_FAILED' &&
-    (error.message === 'Daemon HTTP endpoint is unavailable' ||
-      error.message === 'Daemon socket endpoint is unavailable')
+    (error.message === DAEMON_HTTP_ENDPOINT_UNAVAILABLE_MESSAGE ||
+      error.message === DAEMON_SOCKET_ENDPOINT_UNAVAILABLE_MESSAGE)
   );
 }
 
