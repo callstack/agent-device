@@ -1,45 +1,58 @@
 import { createElement, useEffect, useRef, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { ActionButton, InlineBadge, ScreenTitle, SectionCard } from '../components';
+import { InlineBadge, ScreenTitle, SectionCard } from '../components';
 import { useAppColors, type AppColors } from '../theme';
 
 type BrowserAudioElement = {
-  currentTime: number;
+  srcObject: MediaStream | null;
   pause: () => void;
   play: () => Promise<void>;
+};
+
+type SamplePlayback = {
+  stream: MediaStream;
+  stop: () => void;
 };
 
 export function AudioScreen() {
   const colors = useAppColors();
   const styles = createStyles(colors);
   const audioRef = useRef<BrowserAudioElement | null>(null);
-  const [audioSrc, setAudioSrc] = useState<string | undefined>();
+  const playbackRef = useRef<SamplePlayback | null>(null);
   const [playbackState, setPlaybackState] = useState<'ready' | 'playing' | 'paused' | 'ended'>(
     'ready',
   );
 
   useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    const url = createClassicLoopWavUrl();
-    setAudioSrc(url);
-    return () => {
-      URL.revokeObjectURL(url);
-    };
+    return () => stopSample('ended');
   }, []);
 
   function playSample() {
     const audio = audioRef.current;
     if (!audio) return;
-    audio.currentTime = 0;
+    stopSample('ready');
+    const playback = createClassicLoopStream(() => {
+      stopSample('ended');
+    });
+    playbackRef.current = playback;
+    audio.srcObject = playback.stream;
     void audio.play().then(() => setPlaybackState('playing'));
   }
 
   function pauseSample() {
+    stopSample('paused');
+  }
+
+  function stopSample(nextState: 'ready' | 'paused' | 'ended') {
     const audio = audioRef.current;
-    if (!audio) return;
-    audio.pause();
-    setPlaybackState('paused');
+    playbackRef.current?.stop();
+    playbackRef.current = null;
+    if (audio) {
+      audio.pause();
+      audio.srcObject = null;
+    }
+    setPlaybackState(nextState);
   }
 
   return (
@@ -52,13 +65,12 @@ export function AudioScreen() {
       />
 
       <SectionCard subtitle="Generated tracker-style loop, 8 seconds." title="Classic loop">
-        {Platform.OS === 'web' && audioSrc ? (
+        {Platform.OS === 'web' ? (
           <View style={styles.player} testID="classic-audio-card">
             {createElement('audio', {
               'aria-label': 'Classic sample audio',
               controls: true,
               loop: false,
-              onEnded: () => setPlaybackState('ended'),
               onPause: () => {
                 if (playbackState === 'playing') setPlaybackState('paused');
               },
@@ -66,7 +78,6 @@ export function AudioScreen() {
               ref: (node: BrowserAudioElement | null) => {
                 audioRef.current = node;
               },
-              src: audioSrc,
               style: { width: '100%' },
               'data-testid': 'classic-audio',
             })}
@@ -82,13 +93,26 @@ export function AudioScreen() {
             </View>
 
             <View style={styles.actionRow}>
-              <ActionButton label="Start sample" onPress={playSample} testID="start-audio" />
-              <ActionButton
-                kind="secondary"
-                label="Pause"
-                onPress={pauseSample}
-                testID="pause-audio"
-              />
+              {createElement(
+                'button',
+                {
+                  'aria-label': 'Start sample',
+                  onClick: playSample,
+                  style: webButtonStyle(colors, 'primary'),
+                  'data-testid': 'start-audio',
+                },
+                'Start sample',
+              )}
+              {createElement(
+                'button',
+                {
+                  'aria-label': 'Pause',
+                  onClick: pauseSample,
+                  style: webButtonStyle(colors, 'secondary'),
+                  'data-testid': 'pause-audio',
+                },
+                'Pause',
+              )}
             </View>
           </View>
         ) : (
@@ -101,54 +125,72 @@ export function AudioScreen() {
   );
 }
 
-function createClassicLoopWavUrl(): string {
-  const sampleRate = 11_025;
+function webButtonStyle(colors: AppColors, kind: 'primary' | 'secondary') {
+  return {
+    backgroundColor: kind === 'primary' ? colors.text : 'transparent',
+    border: `1px solid ${kind === 'primary' ? colors.text : colors.lineStrong}`,
+    borderRadius: 4,
+    color: kind === 'primary' ? colors.surface : colors.text,
+    cursor: 'pointer',
+    fontSize: 15,
+    fontWeight: 600,
+    padding: '13px 16px',
+  };
+}
+
+function createClassicLoopStream(onEnded: () => void): SamplePlayback {
+  const webkitAudio = window as Window & { webkitAudioContext?: typeof AudioContext };
+  const AudioContextCtor = window.AudioContext ?? webkitAudio.webkitAudioContext;
+  if (!AudioContextCtor) throw new Error('Web Audio API is not available.');
+  const context = new AudioContextCtor();
+  const destination = context.createMediaStreamDestination();
+  const master = context.createGain();
   const durationSeconds = 8;
-  const sampleCount = sampleRate * durationSeconds;
-  const channels = 1;
-  const bytesPerSample = 2;
-  const dataBytes = sampleCount * channels * bytesPerSample;
-  const buffer = new ArrayBuffer(44 + dataBytes);
-  const view = new DataView(buffer);
-
-  writeAscii(view, 0, 'RIFF');
-  view.setUint32(4, 36 + dataBytes, true);
-  writeAscii(view, 8, 'WAVE');
-  writeAscii(view, 12, 'fmt ');
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, channels, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * channels * bytesPerSample, true);
-  view.setUint16(32, channels * bytesPerSample, true);
-  view.setUint16(34, bytesPerSample * 8, true);
-  writeAscii(view, 36, 'data');
-  view.setUint32(40, dataBytes, true);
-
+  const startAt = context.currentTime + 0.03;
   const melody = [196, 247, 294, 330, 392, 330, 294, 247, 220, 262, 330, 392, 494, 392, 330, 262];
-  for (let index = 0; index < sampleCount; index += 1) {
-    const t = index / sampleRate;
-    const step = Math.floor(t * 4) % melody.length;
-    const beatPhase = (t * 4) % 1;
-    const envelope = Math.max(0.18, 1 - beatPhase * 0.72);
-    const bass = squareWave(98, t) * 0.18;
-    const lead = squareWave(melody[step] ?? 220, t) * 0.42 * envelope;
-    const hat = ((index * 17) % 31 < 2 ? 0.12 : 0) * (beatPhase < 0.08 ? 1 : 0);
-    const sample = Math.max(-0.82, Math.min(0.82, lead + bass + hat));
-    view.setInt16(44 + index * 2, Math.round(sample * 32767), true);
+
+  master.gain.value = 0.55;
+  master.connect(destination);
+  void context.resume();
+
+  for (let step = 0; step < durationSeconds * 4; step += 1) {
+    const noteStart = startAt + step * 0.25;
+    const frequency = melody[step % melody.length] ?? 220;
+    scheduleTone(context, master, frequency, noteStart, 0.2, 0.42);
+    if (step % 4 === 0) scheduleTone(context, master, 98, noteStart, 0.22, 0.25);
+    if (step % 2 === 0) scheduleTone(context, master, 1760, noteStart, 0.04, 0.08);
   }
 
-  return URL.createObjectURL(new Blob([buffer], { type: 'audio/wav' }));
+  const endTimer = window.setTimeout(onEnded, durationSeconds * 1000);
+  return {
+    stream: destination.stream,
+    stop: () => {
+      window.clearTimeout(endTimer);
+      destination.stream.getTracks().forEach((track) => track.stop());
+      void context.close();
+    },
+  };
 }
 
-function squareWave(frequency: number, t: number): number {
-  return Math.sin(Math.PI * 2 * frequency * t) >= 0 ? 1 : -1;
-}
-
-function writeAscii(view: DataView, offset: number, value: string): void {
-  for (let index = 0; index < value.length; index += 1) {
-    view.setUint8(offset + index, value.charCodeAt(index));
-  }
+function scheduleTone(
+  context: AudioContext,
+  output: AudioNode,
+  frequency: number,
+  startAt: number,
+  duration: number,
+  volume: number,
+): void {
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.type = 'square';
+  oscillator.frequency.setValueAtTime(frequency, startAt);
+  gain.gain.setValueAtTime(0.0001, startAt);
+  gain.gain.exponentialRampToValueAtTime(volume, startAt + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+  oscillator.connect(gain);
+  gain.connect(output);
+  oscillator.start(startAt);
+  oscillator.stop(startAt + duration + 0.01);
 }
 
 function createStyles(colors: AppColors) {

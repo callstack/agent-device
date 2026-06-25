@@ -645,28 +645,46 @@ function resolveAudioCommandRequest(params: ObservabilityParams):
       bucketMs: number;
     }
   | DaemonFailureResponse {
-  const { req, sessionName, sessionStore } = params;
-  const session = sessionStore.get(sessionName);
-  if (!session) {
-    return errorResponse('SESSION_NOT_FOUND', 'audio requires an active session');
-  }
-  if (!isCommandSupportedOnDevice('audio', session.device)) {
+  const sessionResult = resolveAudioSession(params);
+  if (!sessionResult.ok) return sessionResult;
+  const actionResult = resolveAudioProbeAction(params.req);
+  if (!actionResult.ok) return actionResult;
+  const timingResult = resolveAudioProbeTiming(params.req, actionResult.probeAction);
+  if (!timingResult.ok) return timingResult;
+  return { ok: true, probeAction: actionResult.probeAction, ...timingResult.timing };
+}
+
+function resolveAudioSession(params: ObservabilityParams): { ok: true } | DaemonFailureResponse {
+  const session = params.sessionStore.get(params.sessionName);
+  if (!session) return errorResponse('SESSION_NOT_FOUND', 'audio requires an active session');
+  return isCommandSupportedOnDevice('audio', session.device)
+    ? { ok: true }
+    : errorResponse(
+        'UNSUPPORTED_OPERATION',
+        'audio is currently supported for web browser sessions only',
+      );
+}
+
+function resolveAudioProbeAction(
+  req: DaemonRequest,
+): { ok: true; probeAction: 'start' | 'status' | 'stop' } | DaemonFailureResponse {
+  const audioAction = readAudioAction(req.positionals?.[0]);
+  if (!audioAction) return errorResponse('INVALID_ARGS', AUDIO_ACTIONS_MESSAGE);
+  const probeAction = readAudioProbeAction(req.positionals?.[1]);
+  if (!probeAction) return errorResponse('INVALID_ARGS', AUDIO_PROBE_ACTIONS_MESSAGE);
+  return { ok: true, probeAction };
+}
+
+function resolveAudioProbeTiming(
+  req: DaemonRequest,
+  probeAction: 'start' | 'status' | 'stop',
+): { ok: true; timing: { durationMs: number; bucketMs: number } } | DaemonFailureResponse {
+  if (probeAction !== 'start' && req.positionals && req.positionals.length > 2) {
     return errorResponse(
-      'UNSUPPORTED_OPERATION',
-      'audio is currently supported for web browser sessions only',
+      'INVALID_ARGS',
+      'audio probe duration and bucket are only supported with audio probe start',
     );
   }
-
-  const action = (req.positionals?.[0] ?? 'probe').toLowerCase();
-  if (!AUDIO_ACTIONS.includes(action as (typeof AUDIO_ACTIONS)[number])) {
-    return errorResponse('INVALID_ARGS', AUDIO_ACTIONS_MESSAGE);
-  }
-
-  const probeAction = (req.positionals?.[1] ?? 'status').toLowerCase();
-  if (!AUDIO_PROBE_ACTIONS.includes(probeAction as (typeof AUDIO_PROBE_ACTIONS)[number])) {
-    return errorResponse('INVALID_ARGS', AUDIO_PROBE_ACTIONS_MESSAGE);
-  }
-
   const durationMs = readBoundedInteger(req.positionals?.[2], {
     defaultValue: 10_000,
     min: 100,
@@ -682,20 +700,19 @@ function resolveAudioCommandRequest(params: ObservabilityParams):
     message: 'audio probe bucket must be an integer in range 100..10000 ms',
   });
   if (bucketMs instanceof Error) return errorResponse('INVALID_ARGS', bucketMs.message);
+  return { ok: true, timing: { durationMs, bucketMs } };
+}
 
-  if (probeAction !== 'start' && req.positionals && req.positionals.length > 2) {
-    return errorResponse(
-      'INVALID_ARGS',
-      'audio probe duration and bucket are only supported with audio probe start',
-    );
-  }
+function readAudioAction(value: string | undefined): 'probe' | undefined {
+  const action = (value ?? 'probe').toLowerCase();
+  return AUDIO_ACTIONS.includes(action as (typeof AUDIO_ACTIONS)[number]) ? 'probe' : undefined;
+}
 
-  return {
-    ok: true,
-    probeAction: probeAction as 'start' | 'status' | 'stop',
-    durationMs,
-    bucketMs,
-  };
+function readAudioProbeAction(value: string | undefined): 'start' | 'status' | 'stop' | undefined {
+  const probeAction = (value ?? 'status').toLowerCase();
+  return AUDIO_PROBE_ACTIONS.includes(probeAction as (typeof AUDIO_PROBE_ACTIONS)[number])
+    ? (probeAction as 'start' | 'status' | 'stop')
+    : undefined;
 }
 
 function readBoundedInteger(
