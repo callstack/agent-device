@@ -71,9 +71,6 @@ export type CliFlags = CloudProviderProfileFields &
     iosXctestEnvDir?: string;
     deviceHub?: boolean;
     androidDeviceAllowlist?: string;
-    targetApp?: string;
-    doctorReactNative?: boolean;
-    doctorExpo?: boolean;
     session?: string;
     metroHost?: string;
     metroPort?: number;
@@ -680,27 +677,6 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--android-device-allowlist <serials>',
     usageDescription: 'Comma/space separated Android serial allowlist for discovery/selection',
-  },
-  {
-    key: 'targetApp',
-    names: ['--target-app'],
-    type: 'string',
-    usageLabel: '--target-app <bundle|package|app>',
-    usageDescription: 'Doctor: app bundle id, package name, or app name expected for the run',
-  },
-  {
-    key: 'doctorReactNative',
-    names: ['--react-native'],
-    type: 'boolean',
-    usageLabel: '--react-native',
-    usageDescription: 'Doctor: include React Native-specific preflight checks',
-  },
-  {
-    key: 'doctorExpo',
-    names: ['--expo'],
-    type: 'boolean',
-    usageLabel: '--expo',
-    usageDescription: 'Doctor: include Expo/Metro-specific preflight checks',
   },
   {
     key: 'activity',

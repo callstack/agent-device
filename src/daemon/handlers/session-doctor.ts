@@ -11,6 +11,7 @@ import {
 } from '../../platforms/android/adb-executor.ts';
 import { resolveIosApp } from '../../platforms/ios/apps.ts';
 import type { DeviceInfo } from '../../utils/device.ts';
+import { detectProjectRuntimeKind } from '../../utils/project-runtime.ts';
 import { readVersion } from '../../utils/version.ts';
 import { normalizeError } from '../../utils/errors.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
@@ -46,6 +47,7 @@ const ANDROID_LAUNCHER_PACKAGES = new Set([
   'com.android.launcher3',
   'com.google.android.apps.nexuslauncher',
 ]);
+const REMOTE_CONNECTION_FLAG_KEYS = ['daemonBaseUrl', 'tenant', 'runId', 'leaseId'] as const;
 
 export async function handleDoctorCommand(params: {
   req: DaemonRequest;
@@ -67,6 +69,7 @@ export async function handleDoctorCommand(params: {
       summary: `agent-device ${readVersion()} using ${sessionStore.resolveStateDir()}`,
       evidence: { version: readVersion(), stateDir: sessionStore.resolveStateDir() },
     },
+    ...remoteConnectionChecks(req),
     ...sessionChecks(sessionStore, sessionName, session),
   );
 
@@ -80,6 +83,7 @@ export async function handleDoctorCommand(params: {
       session,
       targetApp: options.targetApp,
       metroPort: options.metroPort,
+      shouldProbeMetro: options.shouldProbeMetro,
       androidAdbExecutor,
     });
     appendReactNativeOverlayCheck(checks, session, options);
@@ -107,27 +111,51 @@ export async function handleDoctorCommand(params: {
 }
 
 function readDoctorOptions(req: DaemonRequest, session: SessionState | undefined): DoctorOptions {
-  const kind = readDoctorKind(req.flags?.kind);
-  const targetApp = readNonEmptyString(req.flags?.targetApp) ?? session?.appBundleId;
-  const metroHost = readNonEmptyString(req.flags?.metroHost) ?? DEFAULT_METRO_HOST;
-  const metroPort = readPositivePort(req.flags?.metroPort) ?? DEFAULT_METRO_PORT;
+  const kind = detectProjectRuntimeKind(req.meta?.cwd);
+  const targetApp = session?.appBundleId;
+  const metroHost = readNonEmptyString(req.runtime?.metroHost) ?? DEFAULT_METRO_HOST;
+  const metroPort = readPositivePort(req.runtime?.metroPort) ?? DEFAULT_METRO_PORT;
   return {
     targetApp,
     metroHost,
     metroPort,
     kind,
-    shouldProbeMetro: shouldProbeMetro(req.flags, kind),
+    shouldProbeMetro: shouldProbeMetro(req, kind),
   };
 }
 
-function readDoctorKind(value: unknown): DoctorKind {
-  return value === 'expo' || value === 'react-native' ? value : 'auto';
+function shouldProbeMetro(req: DaemonRequest, kind: DoctorKind): boolean {
+  return (
+    kind !== 'auto' ||
+    typeof req.runtime?.metroPort === 'number' ||
+    typeof req.runtime?.metroHost === 'string'
+  );
 }
 
-function shouldProbeMetro(flags: DaemonRequest['flags'], kind: DoctorKind): boolean {
-  return (
-    kind !== 'auto' || typeof flags?.metroPort === 'number' || typeof flags?.metroHost === 'string'
+function remoteConnectionChecks(req: DaemonRequest): DoctorCheck[] {
+  const evidence = remoteConnectionEvidence(req);
+  if (!evidence) return [];
+  return [
+    {
+      id: 'remote-connection',
+      status: 'info',
+      summary: 'Remote daemon/session scope is active.',
+      evidence,
+    },
+  ];
+}
+
+function remoteConnectionEvidence(req: DaemonRequest): Record<string, unknown> | undefined {
+  const configured = Object.fromEntries(
+    REMOTE_CONNECTION_FLAG_KEYS.flatMap((key) =>
+      typeof req.flags?.[key] === 'string' ? [[key, '<configured>']] : [],
+    ),
   );
+  const evidence = {
+    ...configured,
+    ...(req.flags?.sessionIsolation === 'tenant' ? { sessionIsolation: 'tenant' } : {}),
+  };
+  return Object.keys(evidence).length > 0 ? evidence : undefined;
 }
 
 function sessionChecks(
@@ -273,12 +301,6 @@ async function appendAppChecks(
 ): Promise<void> {
   const { device, targetApp, session } = params;
   if (!targetApp) {
-    appendDoctorCheck(checks, {
-      id: 'target-app',
-      status: 'info',
-      summary: 'No --target-app provided; app install/discovery check skipped.',
-      hint: 'Pass --target-app with the package or bundle expected for the run.',
-    });
     return;
   }
 
@@ -315,28 +337,34 @@ async function appendAndroidChecks(
     session: SessionState | undefined;
     targetApp?: string;
     metroPort: number;
+    shouldProbeMetro: boolean;
     androidAdbExecutor?: AndroidAdbExecutor;
   },
 ): Promise<void> {
-  const { device, session, targetApp, metroPort, androidAdbExecutor } = params;
+  const { device, session, targetApp, metroPort, shouldProbeMetro, androidAdbExecutor } = params;
   if (device.platform !== 'android') return;
   const adb = resolveAndroidAdbExecutor(device, androidAdbExecutor);
+  const expectedPackage = targetApp ?? session?.appBundleId;
 
-  try {
-    const state = await getAndroidAppState(device);
-    appendDoctorCheck(checks, androidForegroundCheck(state, targetApp ?? session?.appBundleId));
-  } catch (error) {
-    const normalized = normalizeError(error);
-    appendDoctorCheck(checks, {
-      id: 'android-foreground',
-      status: 'warn',
-      summary: 'Could not read Android foreground package.',
-      hint: normalized.message,
-      evidence: { code: normalized.code },
-    });
+  if (expectedPackage) {
+    try {
+      const state = await getAndroidAppState(device);
+      appendDoctorCheck(checks, androidForegroundCheck(state, expectedPackage));
+    } catch (error) {
+      const normalized = normalizeError(error);
+      appendDoctorCheck(checks, {
+        id: 'android-foreground',
+        status: 'warn',
+        summary: 'Could not read Android foreground package.',
+        hint: normalized.message,
+        evidence: { code: normalized.code },
+      });
+    }
   }
 
-  appendDoctorCheck(checks, await probeAndroidReverse(adb, device.id, metroPort));
+  if (shouldProbeMetro) {
+    appendDoctorCheck(checks, await probeAndroidReverse(adb, device.id, metroPort));
+  }
   appendDoctorCheck(checks, await probeAndroidAnimations(adb));
 }
 

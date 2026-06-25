@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import http from 'node:http';
 import { test } from 'vitest';
 import type { AndroidAdbProvider } from '../../../src/platforms/android/adb-executor.ts';
@@ -10,9 +11,13 @@ import {
   PROVIDER_SCENARIO_MACOS,
   PROVIDER_SCENARIO_WEB,
 } from './fixtures.ts';
-import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
+import {
+  createProviderScenarioHarness,
+  withProviderScenarioResource,
+  withProviderScenarioTempDir,
+} from './harness.ts';
 
-test('Provider-backed integration doctor reports Android RN/Metro readiness through daemon route', async () => {
+test('Provider-backed integration doctor infers Android RN/Metro readiness through daemon route', async () => {
   const server = await startMetroStatusServer();
   const adbCalls: string[][] = [];
   const adbProvider: AndroidAdbProvider = {
@@ -23,30 +28,39 @@ test('Provider-backed integration doctor reports Android RN/Metro readiness thro
   };
 
   try {
-    await withProviderScenarioResource(
-      async () =>
-        await createProviderScenarioHarness({
-          androidAdbProvider: () => adbProvider,
-          deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
-        }),
-      async (daemon) => {
-        const response = await daemon.callCommand('doctor', [], {
-          platform: 'android',
-          targetApp: 'com.example.app',
-          kind: 'react-native',
-          metroPort: server.port,
-        });
-        assertRpcOk(response);
-        const data = response.json.result.data;
-        assert.equal(data.status, 'pass');
-        assertDoctorCheck(data, 'metro', 'pass');
-        assertDoctorCheck(data, 'android-reverse', 'pass');
-        assertDoctorCheck(data, 'android-animations', 'pass');
-        assert.ok(
-          adbCalls.some((args) => args.join(' ') === 'reverse --list'),
-          JSON.stringify(adbCalls),
-        );
-      },
+    await withProviderScenarioTempDir(
+      'agent-device-doctor-rn-',
+      async (cwd) =>
+        await withProviderScenarioResource(
+          async () =>
+            await createProviderScenarioHarness({
+              androidAdbProvider: () => adbProvider,
+              deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+            }),
+          async (daemon) => {
+            writePackageJson(cwd, { dependencies: { 'react-native': '0.0.0' } });
+            const response = await daemon.callCommand(
+              'doctor',
+              [],
+              { platform: 'android' },
+              {
+                meta: { cwd },
+                runtime: { metroPort: server.port },
+              },
+            );
+            assertRpcOk(response);
+            const data = response.json.result.data;
+            assert.equal(data.status, 'pass');
+            assert.equal(data.kind, 'react-native');
+            assertDoctorCheck(data, 'metro', 'pass');
+            assertDoctorCheck(data, 'android-reverse', 'pass');
+            assertDoctorCheck(data, 'android-animations', 'pass');
+            assert.ok(
+              adbCalls.some((args) => args.join(' ') === 'reverse --list'),
+              JSON.stringify(adbCalls),
+            );
+          },
+        ),
     );
   } finally {
     await server.close();
@@ -75,19 +89,19 @@ test('Provider-backed integration doctor runs predictably for supported platform
       for (const device of devices) {
         const response = await daemon.callCommand('doctor', [], {
           platform: device.platform,
-          kind: device.platform === 'ios' || device.platform === 'android' ? 'auto' : 'expo',
         });
         assertRpcOk(response);
         const data = response.json.result.data;
         assert.equal(data.platform, device.platform);
         assert.ok(Array.isArray(data.checks), `${device.platform} checks`);
-        if (device.platform !== 'ios' && device.platform !== 'android') {
-          assertDoctorCheck(data, 'platform-scope', 'info');
-        }
       }
     },
   );
 });
+
+function writePackageJson(dir: string, value: Record<string, unknown>): void {
+  fs.writeFileSync(`${dir}/package.json`, `${JSON.stringify(value)}\n`);
+}
 
 function assertDoctorCheck(
   data: { checks: Array<{ id: string; status: string }> },

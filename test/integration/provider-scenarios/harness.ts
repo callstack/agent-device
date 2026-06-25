@@ -24,7 +24,7 @@ export type ProviderScenarioHarness = {
     command: string,
     positionals?: string[],
     flags?: DaemonRequest['flags'],
-    options?: { meta?: DaemonRequest['meta'] },
+    options?: { meta?: DaemonRequest['meta']; runtime?: DaemonRequest['runtime'] },
   ) => Promise<ProviderScenarioRpcResult>;
   client: () => AgentDeviceClient;
   session: (name?: string) => SessionState | undefined;
@@ -65,7 +65,7 @@ export async function createProviderScenarioHarness(
   return {
     callCommand: async (command, positionals = [], flags = {}, options = {}) =>
       responseToRpcResult(
-        await handleRequest(commandRequest(command, positionals, flags, options.meta)),
+        await handleRequest(commandRequest(command, positionals, flags, options)),
         `direct-${command}-${Date.now()}`,
       ),
     client: () => createAgentDeviceClient({}, { transport }),
@@ -129,7 +129,7 @@ function commandRequest(
   command: string,
   positionals: string[] = [],
   flags: DaemonRequest['flags'] = {},
-  meta?: DaemonRequest['meta'],
+  options: { meta?: DaemonRequest['meta']; runtime?: DaemonRequest['runtime'] } = {},
 ): DaemonRequest {
   return {
     token: PROVIDER_SCENARIO_TOKEN,
@@ -137,7 +137,8 @@ function commandRequest(
     command,
     positionals,
     flags,
-    meta,
+    runtime: options.runtime,
+    meta: options.meta,
   };
 }
 
