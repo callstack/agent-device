@@ -47,6 +47,10 @@ test('cdp docs hide the implementation package name', () => {
 });
 
 test('cdp workflow docs live in debugging and profiling guide', () => {
+  assert.match(
+    fs.readFileSync('website/docs/docs/commands.md', 'utf8'),
+    /agent-device cdp memory usage sample --label baseline --gc/,
+  );
   assert.doesNotMatch(
     fs.readFileSync('website/docs/docs/commands.md', 'utf8'),
     /React Native JS memory through CDP/,
