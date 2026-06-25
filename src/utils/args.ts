@@ -59,6 +59,10 @@ export function parseRawArgs(argv: string[]): RawParsedArgs {
       else positionals.push(arg);
       continue;
     }
+    if (shouldPreservePostCommandArgs(command)) {
+      positionals.push(arg);
+      continue;
+    }
     const isLongFlag = arg.startsWith('--');
     const isShortFlag = arg.startsWith('-') && arg.length > 1;
     if (!isLongFlag && !isShortFlag) {
@@ -112,9 +116,13 @@ function shouldPassThroughLocalToolFlag(
   command: string | null,
   definition: FlagDefinition | undefined,
 ): boolean {
-  if (command !== 'react-devtools' && command !== 'agent-cdp') return false;
+  if (command !== 'react-devtools') return false;
   if (!definition) return true;
   return !isFlagSupportedForCommand(definition.key, command);
+}
+
+function shouldPreservePostCommandArgs(command: string | null): boolean {
+  return command === 'agent-cdp';
 }
 
 function resolveFlagDefinition(token: string, command: string | null): FlagDefinition | undefined {

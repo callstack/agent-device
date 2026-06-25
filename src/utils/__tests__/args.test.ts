@@ -308,8 +308,8 @@ test('parseArgs preserves agent-cdp arguments as passthrough positionals', () =>
     { strictFlags: true },
   );
   assert.equal(parsed.command, 'agent-cdp');
-  assert.equal(parsed.flags.json, true);
-  assert.equal(parsed.flags.session, 'rn');
+  assert.equal(parsed.flags.json, false);
+  assert.equal(parsed.flags.session, undefined);
   assert.deepEqual(parsed.positionals, [
     'memory',
     'snapshot',
@@ -319,6 +319,46 @@ test('parseArgs preserves agent-cdp arguments as passthrough positionals', () =>
     '--compare',
     'ms_2',
     '--limit=10',
+    '--json',
+    '--session',
+    'rn',
+  ]);
+});
+
+test('parseArgs preserves agent-cdp help as a downstream flag', () => {
+  const parsed = parseArgs(['agent-cdp', '--help'], { strictFlags: true });
+  assert.equal(parsed.command, 'agent-cdp');
+  assert.equal(parsed.flags.help, false);
+  assert.deepEqual(parsed.positionals, ['--help']);
+});
+
+test('parseArgs accepts agent-device globals before agent-cdp passthrough args', () => {
+  const parsed = parseArgs(
+    [
+      '--session',
+      'outer-session',
+      'agent-cdp',
+      'target',
+      'list',
+      '--target',
+      'Hermes',
+      '--device',
+      'rn-app',
+      '--json',
+    ],
+    { strictFlags: true },
+  );
+  assert.equal(parsed.command, 'agent-cdp');
+  assert.equal(parsed.flags.session, 'outer-session');
+  assert.equal(parsed.flags.json, false);
+  assert.deepEqual(parsed.positionals, [
+    'target',
+    'list',
+    '--target',
+    'Hermes',
+    '--device',
+    'rn-app',
+    '--json',
   ]);
 });
 

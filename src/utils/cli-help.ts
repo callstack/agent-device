@@ -501,6 +501,8 @@ Allocation pressure:
     agent-device agent-cdp memory allocation source-maps
 
 Recommended subset:
+  agent-cdp dynamically runs pinned agent-cdp@1.6.0 through npm; the first run may download the pinned package, and later runs can reuse the npm cache.
+  Every argument after agent-cdp is passed to agent-cdp. Put agent-device global flags before agent-cdp when you need the outer CLI to consume them.
   Use agent-cdp memory usage, memory snapshot, memory allocation, and targeted runtime eval.
   Avoid agent-cdp profile cpu, trace, network, and console by default because agent-device already has perf cpu, trace, network, logs, and react-devtools guidance for those areas.
 

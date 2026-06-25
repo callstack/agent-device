@@ -692,7 +692,8 @@ agent-device agent-cdp memory snapshot leak-triplet --baseline ms_1 --action ms_
 agent-device agent-cdp memory snapshot retainers --snapshot ms_3 --id <node-id> --depth 8 --limit 10
 ```
 
-- `agent-cdp` dynamically runs pinned `agent-cdp@1.6.0` through npm and passes arguments through 1:1.
+- `agent-cdp` dynamically runs pinned `agent-cdp@1.6.0` through npm; the first run may download the pinned package, and later runs can reuse the npm cache.
+- Every argument after `agent-cdp` is passed to `agent-cdp`. Put `agent-device` global flags before `agent-cdp` when you need the outer CLI to consume them.
 - Use it when a React Native or Expo app exposes a Metro CDP target and the task needs JavaScript heap usage, heap snapshots, allocation hotspots, retained-object diffs, retaining paths, or a small runtime eval to confirm JS state.
 - Start with `memory usage sample --gc` for a quick JS heap growth signal. Use snapshot diff and `leak-triplet` for proof that objects stayed retained after cleanup.
 - Until `agent-cdp` has a compact leak report command, synthesize one from `memory usage diff`, `memory snapshot diff`, `memory snapshot leak-triplet`, and `memory snapshot retainers`.
