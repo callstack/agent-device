@@ -372,8 +372,7 @@ function summarizeProviderPressure(files) {
     },
     {
       name: 'Apple generic host-tool provider',
-      pattern:
-        /\bxcrun\b|['"](?:open|pbcopy|pbpaste|plutil|osascript|swift|codesign|mdfind|ps|pkill)['"]/g,
+      pattern: buildAppleGenericHostToolPattern(),
     },
     {
       name: 'Linux semantic desktop provider',
@@ -407,6 +406,31 @@ function summarizeProviderPressure(files) {
   return surfaces
     .map((surface) => ({ name: surface.name, ...countSurfaceReferences(files, surface.pattern) }))
     .filter((surface) => surface.references > 0);
+}
+
+function buildAppleGenericHostToolPattern(): RegExp {
+  const hostTools = [
+    'xcrun',
+    'open',
+    'pbcopy',
+    'pbpaste',
+    'plutil',
+    'osascript',
+    'swift',
+    'codesign',
+    'mdfind',
+    'ps',
+    'pkill',
+  ].join('|');
+  return new RegExp(
+    [
+      String.raw`\brunAppleToolCommand\b`,
+      String.raw`\brunCommand\s*\(\s*['"](?:${hostTools})['"]`,
+      String.raw`\bassertFlatToolCall\([^,\n]+,\s*\[\s*['"](?:${hostTools})['"]`,
+      String.raw`\bcalls\.push\(\[\s*['"](?:${hostTools})['"]`,
+    ].join('|'),
+    'g',
+  );
 }
 
 function countSurfaceReferences(files, pattern) {
