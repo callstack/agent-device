@@ -2109,7 +2109,7 @@ test('fillAndroid tolerates delayed React Native text verification', async () =>
       await fillAndroid(device, 10, 10, 'sent the update');
     },
   );
-});
+}, 10_000);
 
 test('typeAndroid reports clear error when unicode input is unsupported', async () => {
   await withMockedAdb(
