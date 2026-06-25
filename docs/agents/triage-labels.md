@@ -1,20 +1,20 @@
 # Issue Label Workflow
 
-This repo uses labels for issue state, not executor type.
+The skills speak in terms of five canonical triage roles. This file maps those roles to the actual GitHub labels used in this repo.
 
-| GitHub label | Meaning |
-| --- | --- |
-| `needs-triage` | New or unreviewed issue; maintainer needs to evaluate it |
-| `in-progress` | Someone has started work on the issue |
-| `needs-info` | Waiting on reporter or external input |
-| `wontfix` | Will not be actioned after an explicit maintainer decision |
+| Skill role | GitHub label | Meaning |
+| --- | --- | --- |
+| `needs-triage` | `needs-triage` | New or unreviewed issue; maintainer needs to evaluate it |
+| `needs-info` | `needs-info` | Waiting on reporter or external input |
+| `ready-for-agent` | `ready-for-agent` | Fully specified, AFK-ready for an agent to pick up |
+| `ready-for-human` | `ready-for-human` | Valid work, but needs human implementation or judgment |
+| `wontfix` | `wontfix` | Will not be actioned after an explicit maintainer decision |
 
 Default flow:
 
 1. New issues get `needs-triage`.
 2. Remove `needs-triage` once the issue is understood and valid.
-3. Add `in-progress` and assign the active owner when work starts.
-4. Leave a triaged, unassigned issue without a state label when it is available work.
-5. Remove `in-progress` when the issue closes or the work is abandoned.
-
-Do not use `ready-for-agent`, `ready-for-human`, or other executor-specific labels.
+3. Add `needs-info` when reporter or external input is required.
+4. Add `ready-for-agent` when the issue is fully specified and can be picked up by an AFK agent with no extra human context.
+5. Add `ready-for-human` when the issue is valid but needs human implementation, product judgment, or maintainer ownership.
+6. Add `wontfix` only after an explicit maintainer decision.

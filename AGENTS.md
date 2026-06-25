@@ -6,11 +6,11 @@ Minimal operating guide for AI coding agents in this repo.
 
 ### Issue tracker
 
-Issues and PRDs live in GitHub Issues for `callstack/agent-device`. See `docs/agents/issue-tracker.md`.
+Issues and PRDs live in GitHub Issues for `callstack/agent-device`; external PRs are not a triage request surface. See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-Follow the issue label workflow in `docs/agents/triage-labels.md`.
+Follow the issue label workflow in `docs/agents/triage-labels.md`, including `ready-for-agent` and `ready-for-human`.
 
 ### Domain docs
 
