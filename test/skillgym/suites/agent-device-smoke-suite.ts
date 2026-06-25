@@ -430,6 +430,8 @@ const BOUNDED_PROFILE_TIMELINE =
   /react-devtools\s+profile\s+timeline\b[^\n]*--limit\s+(?:10|20)\b/i;
 const BROAD_PROFILE_SLOW_LIMIT =
   /react-devtools\s+profile\s+slow\b[^\n]*--limit\s+(?:[5-9]\d|[1-9]\d{2,})\b/i;
+const AGENT_CDP_MEMORY_USAGE_SAMPLE = /agent-cdp\s+memory\s+usage\s+sample\b/i;
+const AGENT_CDP_MEMORY_SNAPSHOT_CAPTURE = /agent-cdp\s+memory\s+snapshot\s+capture\b/i;
 const IOS_EXPO_GO_OPEN =
   /(?:^|\n)(?:agent-device\s+)?open\s+["']Expo Go["']\s+["']?exp:\/\/127\.0\.0\.1:8081["']?/i;
 
@@ -1644,6 +1646,93 @@ const SKILL_GUIDANCE_CASES: Case[] = [
       plannedCommand('react-devtools'),
       plannedCommand('debug'),
       plannedCommand('perf frames'),
+    ],
+  }),
+  makeCase({
+    id: 'react-native-js-heap-leak-cdp-triplet',
+    contract: [
+      'App name: Agent Device Tester',
+      'Platform: iOS simulator',
+      'Metro is running at http://127.0.0.1:8081',
+      'The app exposes a React Native CDP target through Metro',
+      'Symptom: JavaScript heap grows after opening and closing the Cart screen',
+      'Need proof that retained JS objects survive cleanup, plus shortest useful retaining paths',
+      'This is not a native/process memory investigation',
+    ],
+    task: 'Plan a bounded React Native JS heap leak workflow using agent-cdp: select the Metro CDP target, sample heap usage, capture baseline/action/cleanup snapshots, diff them, run leak-triplet, and inspect retainers for a leaked node.',
+    outputs: [
+      plannedCommand('agent-cdp target list'),
+      /--url\s+http:\/\/127\.0\.0\.1:8081/i,
+      plannedCommand('agent-cdp target select'),
+      AGENT_CDP_MEMORY_SNAPSHOT_CAPTURE,
+      /--name\s+baseline/i,
+      /--name\s+(?:after-action|action)/i,
+      /--name\s+cleanup/i,
+      plannedCommand('agent-cdp memory snapshot diff'),
+      plannedCommand('agent-cdp memory snapshot leak-triplet'),
+      plannedCommand('agent-cdp memory snapshot retainers'),
+    ],
+    forbiddenOutputs: [
+      plannedCommand('perf memory sample'),
+      plannedCommand('perf memory snapshot'),
+      plannedCommand('react-devtools'),
+      plannedCommand('agent-cdp profile cpu'),
+      plannedCommand('agent-cdp trace'),
+      plannedCommand('agent-cdp network'),
+      plannedCommand('agent-cdp console'),
+    ],
+  }),
+  makeCase({
+    id: 'react-native-js-heap-quick-signal-cdp',
+    contract: [
+      'App name: Agent Device Tester',
+      'Platform: Android emulator',
+      'Metro is running at http://127.0.0.1:8081',
+      'The app exposes a React Native CDP target through Metro',
+      'Symptom: JavaScript heap may grow after filtering the product list',
+      'Need only a compact first-pass JS heap growth signal before deciding whether to capture heap snapshots',
+      'This is not a native/process memory investigation',
+    ],
+    task: 'Plan the CDP commands to select the Metro target and collect compact before/after JavaScript heap usage samples with GC, then diff the usage samples.',
+    outputs: [
+      plannedCommand('agent-cdp target list'),
+      /--url\s+http:\/\/127\.0\.0\.1:8081/i,
+      plannedCommand('agent-cdp target select'),
+      AGENT_CDP_MEMORY_USAGE_SAMPLE,
+      /--label\s+baseline/i,
+      /--label\s+after-action/i,
+      plannedCommand('agent-cdp memory usage diff'),
+    ],
+    forbiddenOutputs: [
+      plannedCommand('perf memory sample'),
+      plannedCommand('perf memory snapshot'),
+      AGENT_CDP_MEMORY_SNAPSHOT_CAPTURE,
+      plannedCommand('react-devtools'),
+    ],
+  }),
+  makeCase({
+    id: 'react-native-native-memory-uses-perf-not-cdp',
+    contract: [
+      'App name: Agent Device Tester',
+      'Platform: Android emulator',
+      'The app is already open',
+      'Symptom: total process RSS/PSS grows while scrolling a native image gallery',
+      'Need native/process memory evidence and an Android heap artifact if escalation is needed',
+      'This is not a JavaScript heap or retained JS object investigation',
+    ],
+    task: 'Plan the memory diagnostics commands for this native/process memory issue without using CDP heap snapshots.',
+    outputs: [
+      plannedCommand('perf memory sample'),
+      /--json/i,
+      plannedCommand('perf memory snapshot'),
+      /--kind\s+android-hprof/i,
+      /--out\s+\S+\.hprof/i,
+    ],
+    forbiddenOutputs: [
+      /agent-cdp/i,
+      AGENT_CDP_MEMORY_USAGE_SAMPLE,
+      AGENT_CDP_MEMORY_SNAPSHOT_CAPTURE,
+      plannedCommand('react-devtools'),
     ],
   }),
   makeCase({

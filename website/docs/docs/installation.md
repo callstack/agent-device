@@ -21,6 +21,7 @@ Use global install for normal agent workflows. It gives agents a stable `agent-d
 agent-device help workflow
 agent-device help debugging
 agent-device help react-devtools
+agent-device help agent-cdp
 ```
 
 Some agent clients run commands in an environment that differs from the user's normal install shell. If `agent-device` is missing in the agent terminal but was installed globally elsewhere, resolve the command the same way the user would from a normal terminal session, then use the absolute binary path for agent commands. This may require inspecting shell startup behavior or package-manager/global bin locations; do not assume the agent process `PATH` is the user's `PATH`.

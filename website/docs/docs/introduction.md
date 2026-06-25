@@ -45,6 +45,7 @@ Installed CLI help is the version-matched operating guide. Start there before pl
 agent-device help workflow
 agent-device help debugging
 agent-device help react-devtools
+agent-device help agent-cdp
 agent-device help dogfood
 ```
 

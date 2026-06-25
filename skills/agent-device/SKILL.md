@@ -27,6 +27,7 @@ Escalate only when relevant:
 agent-device help debugging
 agent-device help react-native
 agent-device help react-devtools
+agent-device help agent-cdp
 agent-device help remote
 agent-device help macos
 agent-device help dogfood
