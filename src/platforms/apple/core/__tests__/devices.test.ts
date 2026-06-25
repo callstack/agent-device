@@ -84,6 +84,82 @@ test('apple product type helpers classify iOS and tvOS product families', () => 
   assert.equal(isAppleTvProductType('iPhone16,2'), false);
 });
 
+test('listAppleDevices orders simulators by iPhone, iPad, tvOS, then physical devices', async () => {
+  mockRunCommand = async (_cmd, args) => {
+    if (args.join(' ') === 'simctl list devices -j') {
+      return {
+        stdout: JSON.stringify({
+          devices: {
+            'com.apple.CoreSimulator.SimRuntime.tvOS-18-0': [
+              {
+                name: 'Apple TV 4K (3rd generation)',
+                udid: 'tvos-sim',
+                state: 'Shutdown',
+                isAvailable: true,
+              },
+            ],
+            'com.apple.CoreSimulator.SimRuntime.iOS-18-0': [
+              {
+                name: 'iPad Pro 13-inch',
+                udid: 'ipad-sim',
+                state: 'Shutdown',
+                isAvailable: true,
+              },
+              {
+                name: 'iPhone 16',
+                udid: 'iphone-sim',
+                state: 'Shutdown',
+                isAvailable: true,
+              },
+            ],
+          },
+        }),
+        stderr: '',
+        exitCode: 0,
+      };
+    }
+
+    if (args[0] === 'devicectl' && args[1] === 'list' && args[2] === 'devices') {
+      const jsonPath = String(args[4]);
+      await fs.writeFile(
+        jsonPath,
+        JSON.stringify({
+          result: {
+            devices: [
+              {
+                name: 'My iPhone',
+                hardwareProperties: {
+                  platform: 'iOS',
+                  udid: 'physical-iphone',
+                  productType: 'iPhone16,2',
+                },
+              },
+            ],
+          },
+        }),
+        'utf8',
+      );
+      return { stdout: '', stderr: '', exitCode: 0 };
+    }
+
+    if (args.join(' ') === 'xctrace list devices') {
+      return { stdout: '== Devices ==', stderr: '', exitCode: 0 };
+    }
+
+    throw new Error(`unexpected xcrun args: ${args.join(' ')}`);
+  };
+
+  const devices = await withMockedPlatform(
+    'darwin',
+    async () => await withMockedAppleTools(async () => await listAppleDevices()),
+  );
+
+  assert.deepEqual(
+    devices.slice(0, 4).map((device) => device.id),
+    ['iphone-sim', 'ipad-sim', 'tvos-sim', 'physical-iphone'],
+  );
+});
+
 test('parseXctracePhysicalAppleDevices parses only physical devices from the Devices section', () => {
   const parsed = parseXctracePhysicalAppleDevices(
     [

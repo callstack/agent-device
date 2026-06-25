@@ -4,6 +4,7 @@ import { AppError } from '../../kernel/errors.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import type { RequestProgressEvent, RequestProgressSink } from '../request-progress.ts';
 import { consumeTextLines } from '../../utils/line-stream.ts';
+import { markDoctorProgressRendered } from '../../cli-doctor-output.ts';
 import {
   isDaemonProgressEnvelope,
   isDaemonResponseEnvelope,
@@ -19,6 +20,7 @@ type ProgressResponseFormat = 'socket-legacy' | 'ndjson-envelope';
 function emitProgressEvent(
   event: RequestProgressEvent,
   options: {
+    req: DaemonRequest;
     onProgress?: RequestProgressSink;
   },
 ): void {
@@ -27,6 +29,7 @@ function emitProgressEvent(
     return;
   }
   if (event.type === 'command') {
+    if (options.req.command === 'doctor') markDoctorProgressRendered();
     process.stderr.write(`${event.message}\n`);
   }
 }
@@ -71,6 +74,7 @@ function createProgressLineReader(options: {
       if (isDaemonProgressEnvelope(message)) {
         try {
           emitProgressEvent(message.event, {
+            req: options.req,
             onProgress: options.onProgress,
           });
           return false;

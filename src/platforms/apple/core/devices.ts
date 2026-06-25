@@ -2,7 +2,12 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '../../../kernel/errors.ts';
-import type { AppleOS, DeviceInfo, DeviceTarget } from '../../../kernel/device.ts';
+import {
+  sortAppleDevicesForSelection,
+  type AppleOS,
+  type DeviceInfo,
+  type DeviceTarget,
+} from '../../../kernel/device.ts';
 import { resolveIosSimulatorDeviceSetPath } from '../../../utils/device-isolation.ts';
 import { buildHostMacDevice } from '../os/macos/devices.ts';
 import { buildSimctlArgs } from './simctl.ts';
@@ -190,23 +195,10 @@ export async function findBootableIosSimulator(
     return null;
   }
 
-  const simulators = parseSimctlAppleDevices(payload, simulatorSetPath);
-  let bestBooted: DeviceInfo | null = null;
-  let bestMobile: DeviceInfo | null = null;
-  let bestAny: DeviceInfo | null = null;
-
-  for (const simulator of simulators) {
-    if (targetFilter && simulator.target !== targetFilter) continue;
-    if (simulator.booted) {
-      bestBooted = bestBooted ?? simulator;
-    }
-    if (simulator.target === 'mobile') {
-      bestMobile = bestMobile ?? simulator;
-    }
-    bestAny = bestAny ?? simulator;
-  }
-
-  return bestBooted ?? bestMobile ?? bestAny;
+  const simulators = sortAppleDevicesForSelection(
+    parseSimctlAppleDevices(payload, simulatorSetPath),
+  );
+  return simulators.find((simulator) => !targetFilter || simulator.target === targetFilter) ?? null;
 }
 
 function parseSimctlAppleDevices(
@@ -391,7 +383,7 @@ export async function listAppleDevices(
   // Do not enumerate host-global physical devices, but keep the local Mac available
   // because desktop targeting is independent of simulator sets.
   if (simulatorSetPath) {
-    return devices;
+    return sortAppleDevicesForSelection(devices);
   }
 
   const [devicectlDevices, xctraceDevices] = await Promise.all([
@@ -400,5 +392,5 @@ export async function listAppleDevices(
   ]);
 
   devices = mergeAppleDevices(devices, devicectlDevices);
-  return mergeAppleDevices(devices, xctraceDevices);
+  return sortAppleDevicesForSelection(mergeAppleDevices(devices, xctraceDevices));
 }

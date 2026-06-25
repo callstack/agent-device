@@ -36,6 +36,7 @@ import { handleSessionInventoryCommands } from './session-inventory.ts';
 import { handleSessionStateCommands } from './session-state.ts';
 import { handleSessionObservabilityCommands } from './session-observability.ts';
 import { handleSessionReplayCommands } from './session-replay.ts';
+import { handleDoctorCommand } from './session-doctor.ts';
 import { getSessionCommandKind } from '../daemon-command-registry.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { PREPARE_REQUEST_TIMEOUT_MS } from '../request-timeouts.ts';
@@ -246,6 +247,15 @@ export async function handleSessionCommands(params: {
     invokeReplayAction,
     androidAdbExecutor,
   } = params;
+
+  if (req.command === PUBLIC_COMMANDS.doctor) {
+    return await handleDoctorCommand({
+      req,
+      sessionName,
+      sessionStore,
+      androidAdbExecutor,
+    });
+  }
 
   if (getSessionCommandKind(req.command) === 'inventory') {
     return await handleSessionInventoryCommands({

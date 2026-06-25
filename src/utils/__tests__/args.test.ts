@@ -93,6 +93,48 @@ test('parseArgs recognizes command-specific flag combinations', async () => {
       },
     },
     {
+      label: 'doctor android react native',
+      argv: [
+        'doctor',
+        '--platform',
+        'android',
+        '--target-app',
+        'com.example.app',
+        '--metro-port',
+        '8081',
+        '--react-native',
+      ],
+      strictFlags: true,
+      assertParsed: (parsed) => {
+        assert.equal(parsed.command, 'doctor');
+        assert.equal(parsed.flags.platform, 'android');
+        assert.equal(parsed.flags.targetApp, 'com.example.app');
+        assert.equal(parsed.flags.metroPort, 8081);
+        assert.equal(parsed.flags.doctorReactNative, true);
+      },
+    },
+    {
+      label: 'doctor ios expo',
+      argv: [
+        'doctor',
+        '--platform',
+        'ios',
+        '--target-app',
+        'com.example.app',
+        '--metro-port',
+        '8081',
+        '--expo',
+      ],
+      strictFlags: true,
+      assertParsed: (parsed) => {
+        assert.equal(parsed.command, 'doctor');
+        assert.equal(parsed.flags.platform, 'ios');
+        assert.equal(parsed.flags.targetApp, 'com.example.app');
+        assert.equal(parsed.flags.metroPort, 8081);
+        assert.equal(parsed.flags.doctorExpo, true);
+      },
+    },
+    {
       label: 'open --platform apple alias',
       argv: ['open', 'Settings', '--platform', 'apple', '--target', 'tv'],
       strictFlags: true,
@@ -1820,6 +1862,14 @@ test('usageForCommand resolves react-native help topic', () => {
   assert.match(help, /help react-devtools/);
   assert.match(help, /Help workflow owns the full Expo URL command shapes/);
   assert.match(help, /For app\/package launches, run metro prepare/);
+  assert.match(
+    help,
+    /agent-device doctor --platform android --target-app com\.example\.app --metro-port 8081 --react-native/,
+  );
+  assert.match(
+    help,
+    /agent-device doctor --platform ios --target-app com\.example\.app --metro-port 8081 --expo/,
+  );
   assert.match(help, /same host context that owns Metro/);
   assert.match(help, /sandbox probe is not authoritative/);
   assert.match(help, /adb reverse only affects Android device-to-host traffic/);

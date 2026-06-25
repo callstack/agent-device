@@ -189,6 +189,52 @@ test('resolveDevice prefers booted simulator over physical device', async () => 
   assert.equal(result.id, 'sim-1');
 });
 
+test('resolveDevice keeps Apple simulator family priority ahead of boot state', async () => {
+  const tvSimulator: DeviceInfo = {
+    platform: 'ios',
+    id: 'tv-sim',
+    name: 'Apple TV 4K',
+    kind: 'simulator',
+    target: 'tv',
+    booted: true,
+  };
+  const iphoneSimulator: DeviceInfo = {
+    platform: 'ios',
+    id: 'iphone-sim',
+    name: 'iPhone 16',
+    kind: 'simulator',
+    target: 'mobile',
+    booted: false,
+  };
+
+  const result = await resolveDevice([tvSimulator, iphoneSimulator], { platform: 'ios' });
+
+  assert.equal(result.id, 'iphone-sim');
+});
+
+test('resolveDevice prefers booted Apple simulator within the same family', async () => {
+  const shutdownIphone: DeviceInfo = {
+    platform: 'ios',
+    id: 'iphone-shutdown',
+    name: 'iPhone 16',
+    kind: 'simulator',
+    target: 'mobile',
+    booted: false,
+  };
+  const bootedIphone: DeviceInfo = {
+    platform: 'ios',
+    id: 'iphone-booted',
+    name: 'iPhone 17',
+    kind: 'simulator',
+    target: 'mobile',
+    booted: true,
+  };
+
+  const result = await resolveDevice([shutdownIphone, bootedIphone], { platform: 'ios' });
+
+  assert.equal(result.id, 'iphone-booted');
+});
+
 test('resolveDevice returns physical device when explicitly selected by deviceName', async () => {
   const physical: DeviceInfo = {
     platform: 'ios',

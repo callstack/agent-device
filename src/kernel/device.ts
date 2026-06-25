@@ -124,6 +124,15 @@ export function resolveAppleSimulatorSetPathForSelector(params: {
   return simulatorSetPath;
 }
 
+export function sortAppleDevicesForSelection<TDevice extends DeviceInfo>(
+  devices: TDevice[],
+): TDevice[] {
+  return devices
+    .map((device, index) => ({ device, index }))
+    .sort((left, right) => compareAppleDevicesForSelection(left, right))
+    .map(({ device }) => device);
+}
+
 function supportsAppleSimulatorSelection(platform: PlatformSelector | undefined): boolean {
   return !platform || platform === 'apple' || platform === 'ios';
 }
@@ -142,6 +151,9 @@ export async function resolveDevice(
   }
   if (selector.target) {
     candidates = candidates.filter((d) => (d.target ?? 'mobile') === selector.target);
+  }
+  if (isAppleDeviceCandidateSet(candidates)) {
+    candidates = sortAppleDevicesForSelection(candidates);
   }
 
   if (selector.udid) {
@@ -190,15 +202,54 @@ export async function resolveDevice(
     candidates = virtual;
   }
 
-  const booted = candidates.filter((d) => d.booted);
-  const onlyBooted = booted[0];
-  if (onlyBooted !== undefined && booted.length === 1) return onlyBooted;
+  if (!isAppleDeviceCandidateSet(candidates)) {
+    const booted = candidates.filter((d) => d.booted);
+    const onlyBooted = booted[0];
+    if (onlyBooted !== undefined && booted.length === 1) return onlyBooted;
+  }
 
-  // When multiple candidates remain equally valid, preserve discovery order from
-  // the underlying platform tools rather than introducing another tie-breaker here.
-  const selected = booted[0] ?? candidates[0];
+  // Apple candidates are pre-sorted by agent-friendly default priority. Other
+  // platforms preserve discovery order except for the existing booted-device preference.
+  const selected = isAppleDeviceCandidateSet(candidates)
+    ? candidates[0]
+    : (candidates.find((d) => d.booted) ?? candidates[0]);
   if (selected === undefined) {
     throw new AppError('DEVICE_NOT_FOUND', 'No devices found', { selector });
   }
   return selected;
+}
+
+function compareAppleDevicesForSelection<TDevice extends DeviceInfo>(
+  left: { device: TDevice; index: number },
+  right: { device: TDevice; index: number },
+): number {
+  return (
+    appleDeviceSelectionRank(left.device) - appleDeviceSelectionRank(right.device) ||
+    Number(right.device.booted === true) - Number(left.device.booted === true) ||
+    left.device.name.localeCompare(right.device.name) ||
+    left.index - right.index
+  );
+}
+
+function appleDeviceSelectionRank(device: DeviceInfo): number {
+  const target = device.target ?? 'mobile';
+  if (device.kind === 'simulator') {
+    if (target === 'mobile') return isIpadDeviceName(device.name) ? 1 : 0;
+    if (target === 'tv') return 2;
+    return 3;
+  }
+  if (device.kind === 'device' && device.platform === 'ios') {
+    if (target === 'mobile') return isIpadDeviceName(device.name) ? 11 : 10;
+    if (target === 'tv') return 12;
+    return 13;
+  }
+  return 14;
+}
+
+function isAppleDeviceCandidateSet(devices: DeviceInfo[]): boolean {
+  return devices.length > 0 && devices.every((device) => isApplePlatform(device.platform));
+}
+
+function isIpadDeviceName(name: string): boolean {
+  return /\bipad\b/i.test(name);
 }

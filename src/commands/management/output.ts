@@ -20,6 +20,11 @@ import type { CloudArtifactsResult } from '../../cloud-artifacts.ts';
 import { readCommandMessage } from '../../utils/success-text.ts';
 import type { CliOutput } from '../command-contract.ts';
 import {
+  consumeDoctorProgressRendered,
+  formatDoctorCheckDetailLines,
+  formatDoctorCheckSummaryLine,
+} from '../../cli-doctor-output.ts';
+import {
   messageCliOutput,
   messageOutput,
   resultOutput,
@@ -115,10 +120,32 @@ function shutdownCliOutput(result: CommandRequestResult): CliOutput {
   return { data, text: `${status}: ${device} (${platform})` };
 }
 
+export function doctorCliOutput(result: CommandRequestResult): CliOutput {
+  const data = result as Record<string, unknown>;
+  const status = typeof data.status === 'string' ? data.status : 'unknown';
+  const lines = [`Doctor: ${status}`];
+  const checks = readDoctorChecks(data.checks);
+
+  if (consumeDoctorProgressRendered()) {
+    const summary = typeof data.summary === 'string' ? data.summary : undefined;
+    if (summary) lines.push(summary);
+  } else if (checks.length === 0) {
+    const summary = typeof data.summary === 'string' ? data.summary : 'No blockers found.';
+    lines.push(summary);
+  } else {
+    for (const check of checks) {
+      lines.push(formatDoctorCheckSummaryLine(check));
+      lines.push(...formatDoctorCheckDetailLines(check));
+    }
+  }
+  return { data, text: lines.join('\n') };
+}
+
 export const managementCliOutputFormatters = {
   boot: resultOutput(bootCliOutput),
   shutdown: resultOutput(shutdownCliOutput),
   devices: resultOutput(devicesCliOutput),
+  doctor: resultOutput(doctorCliOutput),
   apps: ({ input, result }) =>
     appsCliOutput({
       result: result as Parameters<typeof appsCliOutput>[0]['result'],
@@ -151,4 +178,13 @@ function formatCloudArtifactLine(artifact: CloudArtifactsResult['cloudArtifacts'
 function formatCloudArtifactsRetryCommand(result: CloudArtifactsResult): string | undefined {
   if (!result.providerSessionId) return undefined;
   return `agent-device artifacts ${result.providerSessionId} --provider ${result.provider} --json`;
+}
+
+function readDoctorChecks(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value)
+    ? value.filter(
+        (check): check is Record<string, unknown> =>
+          Boolean(check) && typeof check === 'object' && !Array.isArray(check),
+      )
+    : [];
 }

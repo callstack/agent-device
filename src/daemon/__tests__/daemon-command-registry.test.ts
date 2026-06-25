@@ -40,6 +40,7 @@ test('daemon command registry owns specialized handler routes', () => {
 test('daemon command registry owns session handler subroutes', () => {
   assert.equal(getSessionCommandKind(INTERNAL_COMMANDS.sessionList), 'inventory');
   assert.equal(getSessionCommandKind(PUBLIC_COMMANDS.devices), 'inventory');
+  assert.equal(getSessionCommandKind(PUBLIC_COMMANDS.doctor), 'inventory');
   assert.equal(getSessionCommandKind(PUBLIC_COMMANDS.apps), 'inventory');
   assert.equal(getSessionCommandKind(PUBLIC_COMMANDS.boot), 'state');
   assert.equal(getSessionCommandKind(PUBLIC_COMMANDS.shutdown), 'state');
@@ -53,6 +54,7 @@ test('daemon command registry preserves request admission traits', () => {
   for (const command of [
     INTERNAL_COMMANDS.sessionList,
     PUBLIC_COMMANDS.devices,
+    PUBLIC_COMMANDS.doctor,
     INTERNAL_COMMANDS.releaseMaterializedPaths,
     INTERNAL_COMMANDS.leaseAllocate,
     INTERNAL_COMMANDS.leaseHeartbeat,
@@ -65,6 +67,7 @@ test('daemon command registry preserves request admission traits', () => {
   for (const command of [
     INTERNAL_COMMANDS.sessionList,
     PUBLIC_COMMANDS.devices,
+    PUBLIC_COMMANDS.doctor,
     INTERNAL_COMMANDS.releaseMaterializedPaths,
   ]) {
     assert.equal(shouldValidateSessionSelector(command), false, `${command} selector`);
@@ -139,6 +142,7 @@ test('daemon command registry preserves Android modal and lock-policy traits', (
   assert.equal(shouldGuardAndroidBlockingDialog(PUBLIC_COMMANDS.get), false);
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.apps), true);
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.devices), true);
+  assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.doctor), true);
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.open), false);
 });
 
@@ -152,6 +156,7 @@ test('daemon command registry preserves provider device resolution traits', () =
     false,
   );
   assert.equal(usesSessionlessDefaultProviderDevice(makeRequest(PUBLIC_COMMANDS.open)), true);
+  assert.equal(usesSessionlessDefaultProviderDevice(makeRequest(PUBLIC_COMMANDS.doctor)), true);
   assert.equal(
     usesSessionlessDefaultProviderDevice(makeRequest(PUBLIC_COMMANDS.record, ['start'])),
     true,

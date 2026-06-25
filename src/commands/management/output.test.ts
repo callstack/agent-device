@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'vitest';
 import { managementCliOutputFormatters, openCliOutput } from './output.ts';
+import { doctorCliOutput } from './output.ts';
+import { markDoctorProgressRendered } from '../../cli-doctor-output.ts';
+import { withNoColor } from '../../__tests__/test-utils/index.ts';
 
 describe('openCliOutput', () => {
   test('prints session state directory on a second line', () => {
@@ -64,5 +67,93 @@ describe('artifactsCliOutput', () => {
         'Retry: agent-device artifacts arn:aws:devicefarm:us-west-2:123:session/project/session/00000 --provider aws-device-farm --json',
       ].join('\n'),
     );
+  });
+});
+
+describe('doctorCliOutput', () => {
+  test('prints passing checks by default using test-style status markers', () => {
+    const output = withNoColor(() =>
+      doctorCliOutput({
+        status: 'pass',
+        summary: 'No blockers found.',
+        checks: [
+          {
+            id: 'agent-device',
+            status: 'pass',
+            summary: 'agent-device 0.17.9 using /tmp/agent-device',
+          },
+          {
+            id: 'device',
+            status: 'pass',
+            summary: 'Selected Pixel (android)',
+          },
+          {
+            id: 'session',
+            status: 'info',
+            summary: 'No active session named default. Doctor will use the selected device.',
+          },
+        ],
+      }),
+    );
+
+    expect(output.text).toBe(
+      [
+        'Doctor: pass',
+        '✓ agent-device: agent-device 0.17.9 using /tmp/agent-device',
+        '✓ device: Selected Pixel (android)',
+        '- session: No active session named default. Doctor will use the selected device.',
+      ].join('\n'),
+    );
+  });
+
+  test('keeps warning and failure recovery details under the relevant row', () => {
+    const output = withNoColor(() =>
+      doctorCliOutput({
+        status: 'fail',
+        checks: [
+          {
+            id: 'device',
+            status: 'fail',
+            summary: 'No devices found.',
+            command: 'agent-device devices',
+          },
+          {
+            id: 'android-reverse',
+            status: 'warn',
+            summary: 'Android adb reverse is missing for Metro port 8081.',
+            command: 'adb -s emulator-5554 reverse tcp:8081 tcp:8081',
+          },
+        ],
+      }),
+    );
+
+    expect(output.text).toBe(
+      [
+        'Doctor: fail',
+        '⨯ device: No devices found.',
+        '  run: agent-device devices',
+        '! android-reverse: Android adb reverse is missing for Metro port 8081.',
+        '  run: adb -s emulator-5554 reverse tcp:8081 tcp:8081',
+      ].join('\n'),
+    );
+  });
+
+  test('prints only the summary after streamed progress rendered the checks', () => {
+    const output = withNoColor(() => {
+      markDoctorProgressRendered();
+      return doctorCliOutput({
+        status: 'pass',
+        summary: 'No blockers found.',
+        checks: [
+          {
+            id: 'device',
+            status: 'pass',
+            summary: 'Selected Pixel (android)',
+          },
+        ],
+      });
+    });
+
+    expect(output.text).toBe(['Doctor: pass', 'No blockers found.'].join('\n'));
   });
 });

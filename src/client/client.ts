@@ -123,6 +123,7 @@ export function createAgentDeviceClient(
       clipboard: async (options) =>
         await executeCommand<CommandResult<'clipboard'>>('clipboard', options),
       reactNative: async (options) => await executeCommand('react-native', options),
+      doctor: async (options = {}) => await executeCommand('doctor', options),
       prepare: async (options) => await executeCommand('prepare', options),
       viewport: async (options) =>
         await executeCommand<CommandResult<'viewport'>>('viewport', options),

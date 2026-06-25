@@ -149,6 +149,45 @@ test('test command prints suite summary and exits non-zero on failures', async (
   assert.match(result.stdout, /Test summary: 1 passed \(3\), 1 failed in 0\.025s/);
 });
 
+test('doctor command opts into progress rows for human output', async () => {
+  const result = await runCliCapture(['doctor'], async () => ({
+    ok: true,
+    data: {
+      status: 'pass',
+      summary: 'No blockers found.',
+      checks: [
+        {
+          id: 'agent-device',
+          status: 'pass',
+          summary: 'agent-device 0.17.9 using /tmp/agent-device',
+        },
+      ],
+    },
+  }));
+
+  assert.equal(result.code, null);
+  assert.equal(result.calls.length, 1);
+  assert.equal(result.calls[0]?.command, 'doctor');
+  assert.equal(result.calls[0]?.meta?.requestProgress, 'doctor');
+  assert.match(result.stdout, /✓ agent-device: agent-device 0\.17\.9 using \/tmp\/agent-device/);
+});
+
+test('doctor command keeps json output non-streaming', async () => {
+  const result = await runCliCapture(['doctor', '--json'], async () => ({
+    ok: true,
+    data: {
+      status: 'pass',
+      summary: 'No blockers found.',
+      checks: [],
+    },
+  }));
+
+  assert.equal(result.code, null);
+  assert.equal(result.calls.length, 1);
+  assert.equal(result.calls[0]?.meta?.requestProgress, undefined);
+  assert.match(result.stdout, /"success": true/);
+});
+
 test('test command --verbose prints all test statuses', async () => {
   const result = await runCliCapture(['test', './suite', '--verbose'], async () =>
     makeReplaySuiteResponse(),

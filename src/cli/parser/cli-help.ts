@@ -552,6 +552,9 @@ Choose the next help topic:
   Remote/cloud config, leases, and local service tunnels: help remote.
 
 React Native dev loop:
+  Before QA/dogfood runs, use doctor to separate environment setup from app failures:
+    agent-device doctor --platform android --target-app com.example.app --metro-port 8081 --react-native
+    agent-device doctor --platform ios --target-app com.example.app --metro-port 8081 --expo
   For "start from screen X" flows, prefer open --relaunch before the first snapshot so the app does not reuse a prior in-progress navigation state.
   JS-only change with Metro connected:
     agent-device metro reload

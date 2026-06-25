@@ -18,6 +18,8 @@ export {
 
 export { makeSnapshotState } from './snapshot-builders.ts';
 
+export { withNoColor } from './color.ts';
+
 export {
   closeLoopbackServer,
   listenOnLoopback,
