@@ -1,13 +1,9 @@
 import crypto from 'node:crypto';
 import type { RemoteConfigProfile } from '../remote-config-schema.ts';
-import { profileToCliFlags } from '../utils/remote-config.ts';
 import { AppError } from '../utils/errors.ts';
 import type { CliFlags } from '../utils/cli-flags.ts';
 import type { EnvMap } from '../utils/env-map.ts';
-import {
-  resolveGeneratedRemoteConfigProfile,
-  writeGeneratedRemoteConfig,
-} from './generated-remote-config.ts';
+import { persistAndResolveGeneratedProfile } from './generated-remote-config.ts';
 import { resolveRequestedLeaseBackend } from './commands/connection-runtime.ts';
 
 export function resolveProxyConnectProfile(options: {
@@ -23,7 +19,7 @@ export function resolveProxyConnectProfile(options: {
       'connect proxy requires --daemon-base-url <url> or AGENT_DEVICE_DAEMON_BASE_URL.',
     );
   }
-  const clientId = buildProxyClientId(options.stateDir, daemonBaseUrl);
+  const clientId = buildProxyClientId(options.stateDir, daemonBaseUrl, options.flags.session);
   const profile: RemoteConfigProfile = {
     daemonBaseUrl,
     daemonTransport: options.flags.daemonTransport ?? 'http',
@@ -59,33 +55,28 @@ export function resolveProxyConnectProfile(options: {
     metroNoReuseExisting: options.flags.metroNoReuseExisting,
     metroNoInstallDeps: options.flags.metroNoInstallDeps,
   };
-  const remoteConfigPath = writeGeneratedRemoteConfig({
+  return persistAndResolveGeneratedProfile({
     stateDir: options.stateDir,
     provider: 'proxy',
     profile,
-  });
-  const remoteConfig = resolveGeneratedRemoteConfigProfile({
-    configPath: remoteConfigPath,
     cwd: options.cwd,
     env: options.env,
-    provider: 'Proxy',
-  });
-  return {
-    flags: {
-      ...profileToCliFlags(remoteConfig.profile),
-      ...options.flags,
-      remoteConfig: remoteConfig.resolvedPath,
+    flags: options.flags,
+    extraFlags: {
       daemonBaseUrl,
       daemonTransport: options.flags.daemonTransport ?? 'http',
     },
-    remoteConfigPath: remoteConfig.resolvedPath,
-  };
+  });
 }
 
-function buildProxyClientId(stateDir: string, daemonBaseUrl: string): string {
+function buildProxyClientId(
+  stateDir: string,
+  daemonBaseUrl: string,
+  session: string | undefined,
+): string {
   return crypto
     .createHash('sha256')
-    .update(`${stateDir}\0${daemonBaseUrl}`)
+    .update(`${stateDir}\0${daemonBaseUrl}\0${session ?? ''}`)
     .digest('hex')
     .slice(0, 16);
 }

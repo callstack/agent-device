@@ -151,7 +151,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           );
     };
 
-    return inheritedProviderScope ? await run() : await scope.runLocked(run);
+    return inheritedProviderScope ? await scope.runAdmitted(run) : await scope.runLocked(run);
   }
 
   async function executeLockedRequest(params: {

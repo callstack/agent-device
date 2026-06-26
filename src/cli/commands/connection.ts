@@ -382,6 +382,14 @@ function buildLeasePreparationNotice(
   state: RemoteConnectionState,
 ): LeasePreparationNotice | undefined {
   if (state.leaseId) return undefined;
+  if (state.leaseProvider === 'proxy') {
+    return {
+      status: 'deferred',
+      nextSteps: ['agent-device open <app-id> --relaunch', 'agent-device devices'],
+      message:
+        'Proxy lease allocation is pending; run open when ready to allocate or refresh the device lease. Devices can inspect inventory but do not allocate a proxy lease.',
+    };
+  }
   const needsPlatform =
     state.platform === undefined && state.leaseBackend === undefined
       ? ' Add --platform ios|android if the profile does not set a platform.'

@@ -6,6 +6,7 @@ import { AppError } from './utils/errors.ts';
 import { emitDiagnostic } from './utils/diagnostics.ts';
 import type { CliFlags } from './utils/cli-flags.ts';
 import type { LeaseBackend, SessionRuntimeHints } from './contracts.ts';
+import { stripUndefined } from './utils/parsing.ts';
 
 export type RemoteConnectionState = {
   version: 1;
@@ -283,10 +284,6 @@ function safeStateName(value: string): string {
   if (safe === value) return safe;
   const suffix = crypto.createHash('sha256').update(value).digest('hex').slice(0, 8);
   return `${safe}-${suffix}`;
-}
-
-function stripUndefined<T extends Record<string, unknown>>(record: T): T {
-  return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined)) as T;
 }
 
 // fallow-ignore-next-line complexity

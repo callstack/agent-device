@@ -151,6 +151,20 @@ function normalizeAgentIdentifier(
   return value;
 }
 
+function leaseRequiresOwnerScope(lease: DeviceLease): boolean {
+  return Boolean(lease.leaseProvider ?? lease.deviceKey ?? lease.clientId);
+}
+
+function hasRequiredOwnerScope(lease: DeviceLease, request: LeaseScopeMatchRequest): boolean {
+  if (!request.tenantId || !request.runId) return false;
+  const provider = request.leaseProvider ?? request.provider;
+  return [
+    [lease.leaseProvider, provider],
+    [lease.deviceKey, request.deviceKey],
+    [lease.clientId, request.clientId],
+  ].every(([leaseValue, requestValue]) => !leaseValue || Boolean(requestValue));
+}
+
 export class LeaseRegistry {
   private readonly leases = new Map<string, DeviceLease>();
   private readonly runBindings = new Map<string, string>();
@@ -232,6 +246,7 @@ export class LeaseRegistry {
     const leaseId = this.normalizeRequiredLeaseId(request.leaseId);
     this.cleanupExpiredLeases();
     const lease = this.getActiveLease(leaseId);
+    this.assertRequiredScopeForDeviceAwareLease(lease, this.scopeMatchRequest(request));
     this.assertOptionalScopeMatch(lease, this.scopeMatchRequest(request));
     const leaseTtlMs = this.resolveLeaseTtlMs(request.ttlMs);
     return this.refreshLease(lease, leaseTtlMs);
@@ -244,6 +259,7 @@ export class LeaseRegistry {
     if (!lease) {
       return { released: false };
     }
+    this.assertRequiredScopeForDeviceAwareLease(lease, this.scopeMatchRequest(request));
     this.assertOptionalScopeMatch(lease, this.scopeMatchRequest(request));
     this.leases.delete(leaseId);
     this.unbindLease(lease);
@@ -292,6 +308,16 @@ export class LeaseRegistry {
       expired.push({ ...lease });
     }
     return expired;
+  }
+
+  consumeExpiredLease(leaseId: string): DeviceLease | undefined {
+    const normalizedLeaseId = normalizeLeaseId(leaseId);
+    if (!normalizedLeaseId) return undefined;
+    const lease = this.leases.get(normalizedLeaseId);
+    if (!lease || lease.expiresAt > this.now()) return undefined;
+    this.leases.delete(lease.leaseId);
+    this.unbindLease(lease);
+    return { ...lease };
   }
 
   private cleanupExpiredLeases(): void {
@@ -449,12 +475,19 @@ export class LeaseRegistry {
       deviceKey: activeLease.deviceKey,
       backend: activeLease.backend,
       leaseProvider: activeLease.leaseProvider,
-      leaseId: activeLease.leaseId,
-      tenantId: activeLease.tenantId,
-      runId: activeLease.runId,
       expiresAt: activeLease.expiresAt,
       hint: 'Retry after the lease expires or close the owning session.',
     });
+  }
+
+  private assertRequiredScopeForDeviceAwareLease(
+    lease: DeviceLease,
+    request: LeaseScopeMatchRequest,
+  ): void {
+    if (!leaseRequiresOwnerScope(lease)) return;
+    if (!hasRequiredOwnerScope(lease, request)) {
+      this.throwScopeRequired();
+    }
   }
 
   // fallow-ignore-next-line complexity
@@ -520,6 +553,12 @@ export class LeaseRegistry {
   private throwScopeMismatch(): never {
     throw new AppError('UNAUTHORIZED', 'Lease does not match tenant/run scope', {
       reason: 'LEASE_SCOPE_MISMATCH',
+    });
+  }
+
+  private throwScopeRequired(): never {
+    throw new AppError('UNAUTHORIZED', 'Lease owner scope is required', {
+      reason: 'LEASE_SCOPE_REQUIRED',
     });
   }
 }

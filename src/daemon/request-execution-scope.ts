@@ -47,6 +47,7 @@ export type RequestExecutionScope = {
   sessionName: string;
   requestLogPath: string;
   runnerLogPath: string;
+  runAdmitted<T>(task: () => Promise<T>): Promise<T>;
   runLocked<T>(task: () => Promise<T>): Promise<T>;
   throwIfCanceled(): void;
 };
@@ -79,7 +80,6 @@ export async function createRequestExecutionScope(params: {
   leaseRegistry: LeaseRegistry;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
-  await cleanupExpiredLeasedSessions({ sessionStore, leaseRegistry });
   let scopedReq = applyRequestCommandDefaults(scopeRequestSession(params.req));
 
   const command = scopedReq.command;
@@ -121,21 +121,26 @@ export async function createRequestExecutionScope(params: {
     requestLogPath,
     runnerLogPath,
     throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
+    runAdmitted: async (task) => {
+      throwIfRequestCanceled(scopedReq.meta?.requestId);
+      await cleanupExpiredLeasedSession({ sessionName, sessionStore, leaseRegistry });
+      scopedReq = admitRequestLeaseForLockedScope({
+        req: scopedReq,
+        sessionName,
+        sessionStore,
+        leaseRegistry,
+      });
+      scope.req = scopedReq;
+      return await task();
+    },
     runLocked: async (task) => {
       throwIfRequestCanceled(scopedReq.meta?.requestId);
-      const runAdmitted = async () => {
-        throwIfRequestCanceled(scopedReq.meta?.requestId);
-        scopedReq = admitRequestLeaseForLockedScope({
-          req: scopedReq,
-          sessionName,
-          sessionStore,
-          leaseRegistry,
-        });
-        scope.req = scopedReq;
-        return await task();
-      };
-      if (executionLockKeys.length === 0) return await runAdmitted();
-      return await withRequestExecutionLocks(executionLocks, executionLockKeys, runAdmitted);
+      if (executionLockKeys.length === 0) return await scope.runAdmitted(task);
+      return await withRequestExecutionLocks(
+        executionLocks,
+        executionLockKeys,
+        async () => await scope.runAdmitted(task),
+      );
     },
   };
   return scope;
@@ -172,40 +177,40 @@ function admitRequestLeaseForLockedScope(params: {
   return nextReq;
 }
 
-async function cleanupExpiredLeasedSessions(params: {
+async function cleanupExpiredLeasedSession(params: {
+  sessionName: string;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
-}): Promise<void> {
-  const expiredLeases = params.leaseRegistry.consumeExpiredLeases();
-  if (expiredLeases.length === 0) return;
-  const expiredLeaseIds = new Set(expiredLeases.map((lease) => lease.leaseId));
-  for (const session of params.sessionStore.toArray()) {
-    const lease = session.lease;
-    if (!lease || !expiredLeaseIds.has(lease.leaseId)) continue;
+}): Promise<boolean> {
+  const session = params.sessionStore.get(params.sessionName);
+  const lease = session?.lease;
+  if (!session || !lease) return false;
+  const expiredLease = params.leaseRegistry.consumeExpiredLease(lease.leaseId);
+  if (!expiredLease) return false;
+  emitDiagnostic({
+    level: 'info',
+    phase: 'leased_session_expired',
+    data: {
+      reason: 'LEASE_EXPIRED',
+      leaseId: lease.leaseId,
+      session: session.name,
+      deviceKey: lease.deviceKey,
+    },
+  });
+  await teardownSessionResources(session, session.name).catch((error) => {
     emitDiagnostic({
-      level: 'info',
-      phase: 'leased_session_expired',
+      level: 'debug',
+      phase: 'leased_session_expiry_cleanup_failed',
       data: {
         reason: 'LEASE_EXPIRED',
         leaseId: lease.leaseId,
         session: session.name,
-        deviceKey: lease.deviceKey,
+        error: error instanceof Error ? error.message : String(error),
       },
     });
-    await teardownSessionResources(session, session.name).catch((error) => {
-      emitDiagnostic({
-        level: 'debug',
-        phase: 'leased_session_expiry_cleanup_failed',
-        data: {
-          reason: 'LEASE_EXPIRED',
-          leaseId: lease.leaseId,
-          session: session.name,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-    });
-    params.sessionStore.delete(session.name);
-  }
+  });
+  params.sessionStore.delete(session.name);
+  return true;
 }
 
 async function withRequestExecutionLocks<T>(

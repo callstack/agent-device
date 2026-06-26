@@ -6,6 +6,7 @@ import { handleCloseCommand } from './session-close.ts';
 import { collectReplayActionArtifactPaths, runReplayScriptFile } from './session-replay-runtime.ts';
 import type { ReplayScriptMetadata } from '../../replay/script.ts';
 import { buildReplayTestShardFlags, type ReplayTestShardContext } from './session-test-sharding.ts';
+import type { LeaseRegistry } from '../lease-registry.ts';
 import {
   buildReplayTestVideoOpenLifecycle,
   finalizeReplayTestVideoRecording,
@@ -52,9 +53,10 @@ export async function handleSessionReplayCommands(params: {
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
+  leaseRegistry: LeaseRegistry;
   invoke: DaemonInvokeFn;
 }): Promise<DaemonResponse | null> {
-  const { req, sessionName, logPath, sessionStore, invoke } = params;
+  const { req, sessionName, logPath, sessionStore, leaseRegistry, invoke } = params;
 
   if (req.command === 'replay') {
     return await runReplayScriptFile({
@@ -166,6 +168,7 @@ export async function handleSessionReplayCommands(params: {
           sessionName: testSessionName,
           logPath,
           sessionStore,
+          leaseRegistry,
         });
       },
     });

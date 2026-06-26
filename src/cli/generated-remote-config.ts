@@ -5,6 +5,8 @@ import { resolveRemoteConfigProfile } from '../remote-config.ts';
 import type { RemoteConfigProfile, ResolvedRemoteConfigProfile } from '../remote-config-schema.ts';
 import { AppError, asAppError } from '../utils/errors.ts';
 import type { EnvMap } from '../utils/env-map.ts';
+import type { CliFlags } from '../utils/cli-flags.ts';
+import { profileToCliFlags } from '../utils/remote-config.ts';
 
 const GENERATED_REMOTE_CONFIG_SECRET_KEYS = new Set(['daemonAuthToken', 'metroBearerToken']);
 
@@ -29,7 +31,7 @@ export function writeGeneratedRemoteConfig(options: {
   return configPath;
 }
 
-export function resolveGeneratedRemoteConfigProfile(options: {
+function resolveGeneratedRemoteConfigProfile(options: {
   configPath: string;
   cwd: string;
   env?: EnvMap;
@@ -50,6 +52,37 @@ export function resolveGeneratedRemoteConfigProfile(options: {
       appError,
     );
   }
+}
+
+export function persistAndResolveGeneratedProfile(options: {
+  stateDir: string;
+  cwd: string;
+  env?: EnvMap;
+  provider: string;
+  profile: RemoteConfigProfile;
+  flags: CliFlags;
+  extraFlags?: Partial<CliFlags>;
+}): { flags: CliFlags; remoteConfigPath: string } {
+  const remoteConfigPath = writeGeneratedRemoteConfig({
+    stateDir: options.stateDir,
+    provider: options.provider,
+    profile: options.profile,
+  });
+  const remoteConfig = resolveGeneratedRemoteConfigProfile({
+    configPath: remoteConfigPath,
+    cwd: options.cwd,
+    env: options.env,
+    provider: titleCaseProvider(options.provider),
+  });
+  return {
+    flags: {
+      ...profileToCliFlags(remoteConfig.profile),
+      ...options.flags,
+      ...(options.extraFlags ?? {}),
+      remoteConfig: remoteConfig.resolvedPath,
+    },
+    remoteConfigPath: remoteConfig.resolvedPath,
+  };
 }
 
 function stripGeneratedProfileSecrets(profile: RemoteConfigProfile): RemoteConfigProfile {
@@ -79,4 +112,9 @@ function normalizeJson(value: unknown): unknown {
 
 function safeProviderName(value: string): string {
   return value.replaceAll(/[^a-zA-Z0-9._-]/g, '_') || 'generated';
+}
+
+function titleCaseProvider(value: string): string {
+  const [first = '', ...rest] = value;
+  return `${first.toUpperCase()}${rest.join('')}`;
 }

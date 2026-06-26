@@ -66,8 +66,9 @@ export function assertRequestLeaseAdmission(
   const requestLeaseScope = resolveLeaseScope(req);
   assertProxyOpenLeaseMetadata(req, requestLeaseScope);
   const sessionLease = session?.lease;
-  if (!sessionLease && req.meta?.sessionIsolation !== 'tenant' && !requestLeaseScope.leaseId) {
-    return undefined;
+  if (!sessionLease && req.meta?.sessionIsolation !== 'tenant') {
+    if (!requestLeaseScope.leaseId) return undefined;
+    if (!requestLeaseScope.tenantId && !requestLeaseScope.runId) return undefined;
   }
   assertRequestSessionLeaseMatches(requestLeaseScope, sessionLease);
   const leaseScope = resolveRequestOrSessionLeaseScope(req, session);

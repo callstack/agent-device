@@ -1,14 +1,10 @@
 import type { RemoteConfigProfile } from '../remote-config-schema.ts';
-import { profileToCliFlags } from '../utils/remote-config.ts';
 import { AppError } from '../utils/errors.ts';
 import type { CliFlags } from '../utils/cli-flags.ts';
 import type { EnvMap } from '../utils/env-map.ts';
 import { resolveCloudAccessForConnect } from './auth-session.ts';
 import { readCloudJsonResponse } from './cloud-response.ts';
-import {
-  resolveGeneratedRemoteConfigProfile,
-  writeGeneratedRemoteConfig,
-} from './generated-remote-config.ts';
+import { persistAndResolveGeneratedProfile } from './generated-remote-config.ts';
 
 const CONNECTION_PROFILE_PATH = '/api/control-plane/connection-profile';
 const HTTP_TIMEOUT_MS = 15_000;
@@ -40,26 +36,17 @@ export async function resolveCloudConnectProfile(options: {
     accessToken: auth.accessToken,
     fetchImpl: options.fetchImpl,
   });
-  const remoteConfigPath = writeGeneratedRemoteConfig({
+  return persistAndResolveGeneratedProfile({
     stateDir: options.stateDir,
     provider: 'cloud',
     profile,
-  });
-  const remoteConfig = resolveGeneratedRemoteConfigProfile({
-    configPath: remoteConfigPath,
     cwd: options.cwd,
     env: options.env,
-    provider: 'Cloud',
-  });
-  return {
-    flags: {
-      ...profileToCliFlags(remoteConfig.profile),
-      ...options.flags,
-      remoteConfig: remoteConfig.resolvedPath,
+    flags: options.flags,
+    extraFlags: {
       daemonAuthToken: auth.accessToken,
     },
-    remoteConfigPath: remoteConfig.resolvedPath,
-  };
+  });
 }
 
 async function fetchConnectionProfile(options: {

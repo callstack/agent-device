@@ -135,7 +135,7 @@ test('device-aware allocation is idempotent per tenant/run/backend/provider/devi
 
 test('same backend/provider/device rejects conflicting active lease', () => {
   const registry = new LeaseRegistry();
-  const first = registry.allocateLease({
+  registry.allocateLease({
     tenantId: 'tenant-a',
     runId: 'run-1',
     backend: 'ios-instance',
@@ -143,21 +143,23 @@ test('same backend/provider/device rejects conflicting active lease', () => {
     deviceKey: 'device-1',
   });
 
-  assert.throws(
-    () =>
-      registry.allocateLease({
-        tenantId: 'tenant-b',
-        runId: 'run-2',
-        backend: 'ios-instance',
-        leaseProvider: 'proxy',
-        deviceKey: 'device-1',
-      }),
-    (error) =>
-      error instanceof Error &&
-      error.message === 'Device is already leased' &&
-      (error as { details?: Record<string, unknown> }).details?.reason === 'DEVICE_LEASE_BUSY' &&
-      (error as { details?: Record<string, unknown> }).details?.leaseId === first.leaseId,
+  const error = captureThrown(() =>
+    registry.allocateLease({
+      tenantId: 'tenant-b',
+      runId: 'run-2',
+      backend: 'ios-instance',
+      leaseProvider: 'proxy',
+      deviceKey: 'device-1',
+    }),
   );
+
+  assert.ok(error instanceof Error);
+  assert.equal(error.message, 'Device is already leased');
+  const details = (error as { details?: Record<string, unknown> }).details;
+  assert.equal(details?.reason, 'DEVICE_LEASE_BUSY');
+  assert.equal(details?.leaseId, undefined);
+  assert.equal(details?.tenantId, undefined);
+  assert.equal(details?.runId, undefined);
 });
 
 test('device leases are isolated by provider and device key', () => {
@@ -199,23 +201,95 @@ test('heartbeat enforces device and provider scope when supplied', () => {
   });
 
   assert.throws(
-    () => registry.heartbeatLease({ leaseId: lease.leaseId, deviceKey: 'device-2' }),
+    () =>
+      registry.heartbeatLease({
+        leaseId: lease.leaseId,
+        tenantId: 'tenant-a',
+        runId: 'run-1',
+        leaseProvider: 'proxy',
+        deviceKey: 'device-2',
+        clientId: 'client-a',
+      }),
     (error) =>
       error instanceof Error &&
       (error as { details?: Record<string, unknown> }).details?.reason === 'LEASE_SCOPE_MISMATCH',
   );
   assert.throws(
-    () => registry.heartbeatLease({ leaseId: lease.leaseId, leaseProvider: 'limrun' }),
+    () =>
+      registry.heartbeatLease({
+        leaseId: lease.leaseId,
+        tenantId: 'tenant-a',
+        runId: 'run-1',
+        leaseProvider: 'limrun',
+        deviceKey: 'device-1',
+        clientId: 'client-a',
+      }),
     (error) =>
       error instanceof Error &&
       (error as { details?: Record<string, unknown> }).details?.reason === 'LEASE_SCOPE_MISMATCH',
   );
   assert.throws(
-    () => registry.heartbeatLease({ leaseId: lease.leaseId, clientId: 'client-b' }),
+    () =>
+      registry.heartbeatLease({
+        leaseId: lease.leaseId,
+        tenantId: 'tenant-a',
+        runId: 'run-1',
+        leaseProvider: 'proxy',
+        deviceKey: 'device-1',
+        clientId: 'client-b',
+      }),
     (error) =>
       error instanceof Error &&
       (error as { details?: Record<string, unknown> }).details?.reason === 'LEASE_SCOPE_MISMATCH',
   );
+});
+
+test('heartbeat/release require owner scope for device-aware leases', () => {
+  const registry = new LeaseRegistry();
+  const lease = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'proxy',
+    deviceKey: 'device-1',
+    clientId: 'client-a',
+  });
+
+  assert.throws(
+    () => registry.heartbeatLease({ leaseId: lease.leaseId }),
+    (error) =>
+      error instanceof Error &&
+      (error as { details?: Record<string, unknown> }).details?.reason === 'LEASE_SCOPE_REQUIRED',
+  );
+  assert.throws(
+    () =>
+      registry.releaseLease({
+        leaseId: lease.leaseId,
+        tenantId: 'tenant-a',
+        runId: 'run-1',
+        leaseProvider: 'proxy',
+        deviceKey: 'device-1',
+      }),
+    (error) =>
+      error instanceof Error &&
+      (error as { details?: Record<string, unknown> }).details?.reason === 'LEASE_SCOPE_REQUIRED',
+  );
+});
+
+test('consumeExpiredLease removes one expired lease without sweeping unrelated sessions', () => {
+  let now = 1_000;
+  const registry = new LeaseRegistry({
+    now: () => now,
+    defaultLeaseTtlMs: 5_000,
+  });
+  const first = registry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+  const second = registry.allocateLease({ tenantId: 'tenant-b', runId: 'run-2' });
+
+  now = 7_000;
+  const expired = registry.consumeExpiredLease(first.leaseId);
+
+  assert.equal(expired?.leaseId, first.leaseId);
+  assert.equal(registry.consumeExpiredLease(second.leaseId)?.leaseId, second.leaseId);
+  assert.deepEqual(registry.consumeExpiredLease(first.leaseId), undefined);
 });
 
 test('expired device lease releases device binding for new clients', () => {
@@ -243,3 +317,12 @@ test('expired device lease releases device binding for new clients', () => {
 
   assert.notEqual(second.leaseId, first.leaseId);
 });
+
+function captureThrown(task: () => unknown): unknown {
+  try {
+    task();
+    return undefined;
+  } catch (error) {
+    return error;
+  }
+}

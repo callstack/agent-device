@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
 import { SessionStore } from '../../session-store.ts';
+import { LeaseRegistry } from '../../lease-registry.ts';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/index.ts';
 import { buildNestedReplayFlags, handleSessionReplayCommands } from '../session-replay.ts';
@@ -244,6 +245,7 @@ test('test --record-video records each replay attempt on the generated test sess
     sessionName: 'default',
     logPath: path.join(root, 'daemon.log'),
     sessionStore,
+    leaseRegistry: new LeaseRegistry(),
     invoke: async (nestedReq) => {
       nestedRequests.push(nestedReq);
       if (nestedReq.command === 'open') {

@@ -2,6 +2,7 @@ import type { DaemonRequest } from './types.ts';
 import type { LeaseBackend } from '../contracts.ts';
 import type { DeviceLease } from './lease-registry.ts';
 import type { RunnerLogicalLeaseContext } from '../core/runner-lease-context.ts';
+import { stripUndefined } from '../utils/parsing.ts';
 
 const PROXY_LEASE_PROVIDER = 'proxy';
 export const DEFAULT_PROXY_LEASE_TTL_MS = 300_000;
@@ -147,8 +148,4 @@ function readFlagString(flags: object | undefined, key: string): string | undefi
 
 function readNonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
-}
-
-function stripUndefined<T extends Record<string, unknown>>(record: T): T {
-  return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined)) as T;
 }

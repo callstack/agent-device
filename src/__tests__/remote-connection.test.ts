@@ -246,6 +246,63 @@ test('connect proxy writes normal remote state with generated non-secret profile
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('connect proxy scopes generated client identity by explicit session', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-proxy-sessions-'));
+  const stateDir = path.join(tempRoot, '.state');
+
+  for (const session of ['agent-a', 'agent-b']) {
+    await captureStdout(async () => {
+      await connectCommand({
+        positionals: ['proxy'],
+        flags: {
+          json: true,
+          help: false,
+          version: false,
+          stateDir,
+          daemonBaseUrl: 'http://proxy.example.test/agent-device',
+          platform: 'android',
+          session,
+        },
+        client: createTestClient(),
+      });
+    });
+  }
+
+  const first = readRemoteConnectionState({ stateDir, session: 'agent-a' });
+  const second = readRemoteConnectionState({ stateDir, session: 'agent-b' });
+  assert.ok(first);
+  assert.ok(second);
+  assert.notEqual(first.clientId, second.clientId);
+  assert.notEqual(first.runId, second.runId);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('connect proxy notice only advertises open as the lease allocator', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-proxy-notice-'));
+  const stateDir = path.join(tempRoot, '.state');
+
+  const stdout = await captureStdout(async () => {
+    await connectCommand({
+      positionals: ['proxy'],
+      flags: {
+        json: false,
+        help: false,
+        version: false,
+        stateDir,
+        daemonBaseUrl: 'http://proxy.example.test/agent-device',
+        platform: 'android',
+      },
+      client: createTestClient(),
+    });
+  });
+
+  assert.match(stdout, /Proxy lease allocation is pending/);
+  assert.match(stdout, /run open when ready/);
+  assert.doesNotMatch(stdout, /snapshot/);
+  assert.doesNotMatch(stdout, /install-from-source/);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('generated remote config writer strips secret fields', () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-generated-profile-'));
   const configPath = writeGeneratedRemoteConfig({
@@ -599,6 +656,7 @@ test('proxy open resolves device key before allocating lease', async () => {
   assert.equal(allocateRequest?.ttlMs, PROXY_REMOTE_LEASE_TTL_MS);
   assert.equal(allocateRequest?.leaseBackend, 'ios-instance');
   assert.equal(materialized.flags.leaseId, 'abc123abc123abc1');
+  assert.equal(materialized.flags.udid, 'SIM-001');
   assert.equal(materialized.connection?.deviceKey, 'ios:mobile:SIM-001');
   const state = readRemoteConnectionState({ stateDir, session: 'adc-proxy' });
   assert.equal(state?.leaseId, 'abc123abc123abc1');

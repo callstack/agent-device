@@ -97,15 +97,17 @@ export async function materializeRemoteConnectionForCommand(options: {
   if (shouldAllocateLeaseForCommand(command, nextState)) {
     const preliminaryLeaseBackend = state.leaseBackend ?? resolveRequestedLeaseBackend(nextFlags);
     if (nextState.leaseProvider === 'proxy') {
-      nextState = (
-        await resolveProxyLeaseState({
-          command,
-          client,
-          state: nextState,
-          flags: nextFlags,
-          leaseBackend: preliminaryLeaseBackend,
-        })
-      ).state;
+      const resolvedProxyLease = await resolveProxyLeaseState({
+        command,
+        client,
+        state: nextState,
+        flags: nextFlags,
+        leaseBackend: preliminaryLeaseBackend,
+      });
+      nextState = resolvedProxyLease.state;
+      if (resolvedProxyLease.device) {
+        applyResolvedDeviceSelector(nextFlags, resolvedProxyLease.device);
+      }
     }
     const leaseBackend =
       nextState.leaseBackend ??
@@ -475,7 +477,7 @@ async function resolveProxyLeaseState(options: {
   state: RemoteConnectionState;
   flags: CliFlags;
   leaseBackend?: LeaseBackend;
-}): Promise<{ state: RemoteConnectionState }> {
+}): Promise<{ state: RemoteConnectionState; device?: DeviceInfo }> {
   if (options.command !== 'open') {
     if (options.state.leaseId && options.state.deviceKey) return { state: options.state };
     throw new AppError(
@@ -495,7 +497,20 @@ async function resolveProxyLeaseState(options: {
       target: options.state.target ?? device.target,
       updatedAt: new Date().toISOString(),
     },
+    device,
   };
+}
+
+function applyResolvedDeviceSelector(flags: CliFlags, device: DeviceInfo): void {
+  flags.platform = device.platform;
+  flags.target = device.target ?? flags.target;
+  if (device.platform === 'ios') {
+    flags.udid = device.id;
+    return;
+  }
+  if (device.platform === 'android') {
+    flags.serial = device.id;
+  }
 }
 
 async function resolveSelectedDevice(

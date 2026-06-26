@@ -424,6 +424,7 @@ export async function handleSessionCommands(params: {
       sessionName,
       logPath,
       sessionStore,
+      leaseRegistry,
       invoke: invokeReplayAction ?? invoke,
     });
   }

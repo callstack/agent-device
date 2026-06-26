@@ -25,7 +25,7 @@ import {
   settleIosSimulator,
 } from './session-device-utils.ts';
 import { errorResponse } from './response.ts';
-import { LeaseRegistry } from '../lease-registry.ts';
+import type { LeaseRegistry } from '../lease-registry.ts';
 
 async function maybeShutdownSessionTarget(params: {
   device: DeviceInfo;
@@ -108,9 +108,9 @@ export async function handleCloseCommand(params: {
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
-  leaseRegistry?: LeaseRegistry;
+  leaseRegistry: LeaseRegistry;
 }): Promise<DaemonResponse> {
-  const { req, sessionName, logPath, sessionStore, leaseRegistry = new LeaseRegistry() } = params;
+  const { req, sessionName, logPath, sessionStore, leaseRegistry } = params;
   const session = sessionStore.get(sessionName);
   if (!session) {
     return await closeWithoutSession(req, logPath);
