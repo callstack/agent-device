@@ -27,7 +27,7 @@ export type DeviceInfo = {
   simulatorSetPath?: string;
 };
 
-type DeviceSelector = {
+export type DeviceSelector = {
   platform?: PlatformSelector;
   target?: DeviceTarget;
   deviceName?: string;
@@ -159,9 +159,35 @@ export async function resolveDevice(
 }
 
 function filterDeviceCandidates(devices: DeviceInfo[], selector: DeviceSelector): DeviceInfo[] {
-  return devices
-    .filter((device) => matchesPlatformSelector(device.platform, selector.platform))
-    .filter((device) => !selector.target || (device.target ?? 'mobile') === selector.target);
+  return devices.filter((device) => matchesDeviceSelector(device, selector));
+}
+
+export function matchesDeviceSelector(
+  device: DeviceInfo,
+  selector: DeviceSelector,
+  options: { includeExplicitSelectors?: boolean } = {},
+): boolean {
+  return (
+    matchesPlatformSelector(device.platform, selector.platform) &&
+    (!selector.target || (device.target ?? 'mobile') === selector.target) &&
+    (!options.includeExplicitSelectors || matchesExplicitDeviceSelector(device, selector))
+  );
+}
+
+function matchesExplicitDeviceSelector(device: DeviceInfo, selector: DeviceSelector): boolean {
+  if (selector.udid && !(device.id === selector.udid && isApplePlatform(device.platform))) {
+    return false;
+  }
+  if (selector.serial && !(device.id === selector.serial && device.platform === 'android')) {
+    return false;
+  }
+  if (
+    selector.deviceName &&
+    normalizeDeviceName(device.name) !== normalizeDeviceName(selector.deviceName)
+  ) {
+    return false;
+  }
+  return true;
 }
 
 function sortDeviceCandidatesForSelection(candidates: DeviceInfo[]): DeviceInfo[] {

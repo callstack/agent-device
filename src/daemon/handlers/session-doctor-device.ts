@@ -1,14 +1,16 @@
-import { listDeviceInventory } from '../../core/dispatch-resolve.ts';
-import type { DeviceInfo, DeviceTarget, Platform, PlatformSelector } from '../../utils/device.ts';
 import {
-  normalizePlatformSelector,
-  resolveAppleSimulatorSetPathForSelector,
-} from '../../utils/device.ts';
+  buildDeviceInventoryRequestFromFlags,
+  listDeviceInventory,
+} from '../../core/dispatch-resolve.ts';
+import type { DeviceInventoryRequest } from '../../core/platform-inventory.ts';
 import {
-  resolveAndroidSerialAllowlist,
-  resolveIosSimulatorDeviceSetPath,
-} from '../../utils/device-isolation.ts';
-import { AppError, normalizeError } from '../../utils/errors.ts';
+  matchesDeviceSelector,
+  type DeviceInfo,
+  type DeviceTarget,
+  type Platform,
+  type PlatformSelector,
+} from '../../kernel/device.ts';
+import { normalizeError } from '../../utils/errors.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import type { DoctorCheck, DoctorOptions } from './session-doctor-types.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';
@@ -92,42 +94,28 @@ export function platformScopeChecks(device: DeviceInfo, options: DoctorOptions):
 
 function deviceInventorySelector(req: DaemonRequest, session: SessionState | undefined) {
   const flags = req.flags ?? {};
-  const platform = normalizePlatformSelector(flags.platform) ?? session?.device.platform;
-  const target = flags.target ?? session?.device.target;
-  if (target && !platform) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Device target selector requires --platform. Use --platform ios|macos|android|linux|apple with --target mobile|tv|desktop.',
-    );
-  }
-  const iosSimulatorSetPath = resolveAppleSimulatorSetPathForSelector({
-    simulatorSetPath: resolveIosSimulatorDeviceSetPath(flags.iosSimulatorDeviceSet),
-    platform,
-    target,
-  });
-  const androidSerialAllowlist = resolveAndroidSerialAllowlist(flags.androidDeviceAllowlist);
-  return {
-    platform,
-    target,
-    deviceName: flags.device,
+  return buildDeviceInventoryRequestFromFlags({
+    platform: flags.platform ?? session?.device.platform,
+    target: flags.target ?? session?.device.target,
+    device: flags.device,
     udid: flags.udid,
     serial: flags.serial,
-    iosSimulatorSetPath,
-    androidSerialAllowlist: androidSerialAllowlist
-      ? Array.from(androidSerialAllowlist).sort()
-      : undefined,
-  };
+    iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
+    androidDeviceAllowlist: flags.androidDeviceAllowlist,
+  });
 }
 
 function filterInventoryForSelector(
   devices: DeviceInfo[],
-  selector: ReturnType<typeof deviceInventorySelector>,
+  selector: DeviceInventoryRequest,
 ): DeviceInfo[] {
-  return devices.filter((device) => deviceMatchesSelector(device, selector));
+  return devices.filter((device) =>
+    matchesDeviceSelector(device, selector, { includeExplicitSelectors: true }),
+  );
 }
 
 async function readDoctorDeviceInventory(
-  selector: ReturnType<typeof deviceInventorySelector>,
+  selector: DeviceInventoryRequest,
 ): Promise<{ devices: DeviceInfo[]; failures: DoctorInventoryFailure[] }> {
   if (selector.platform) {
     return { devices: await listDeviceInventory(selector), failures: [] };
@@ -155,38 +143,9 @@ function inventoryFailure(platform: PlatformSelector, error: unknown): DoctorInv
   };
 }
 
-function deviceMatchesSelector(
-  device: DeviceInfo,
-  selector: ReturnType<typeof deviceInventorySelector>,
-): boolean {
-  return [
-    optionalPlatformMatches(selector.platform, device),
-    optionalValueMatches(selector.target, device.target),
-    optionalValueMatches(selector.deviceName, device.name),
-    optionalValueMatches(selector.udid, device.id),
-    optionalValueMatches(selector.serial, device.id),
-  ].every(Boolean);
-}
-
-function optionalPlatformMatches(
-  selector: PlatformSelector | undefined,
-  device: DeviceInfo,
-): boolean {
-  return selector === undefined || deviceMatchesPlatform(device, selector);
-}
-
-function optionalValueMatches<T>(expected: T | undefined, actual: T | undefined): boolean {
-  return expected === undefined || actual === expected;
-}
-
-function deviceMatchesPlatform(device: DeviceInfo, selector: PlatformSelector): boolean {
-  if (selector === 'apple') return device.platform === 'ios' || device.platform === 'macos';
-  return device.platform === selector;
-}
-
 function deviceInventorySummary(
   devices: DeviceInfo[],
-  selector: Pick<ReturnType<typeof deviceInventorySelector>, 'platform' | 'target'>,
+  selector: Pick<DeviceInventoryRequest, 'platform' | 'target'>,
   failures: DoctorInventoryFailure[],
 ): string {
   if (devices.length === 0) {
@@ -203,7 +162,7 @@ function deviceInventorySummary(
 }
 
 function deviceInventoryLabel(
-  selector: Pick<ReturnType<typeof deviceInventorySelector>, 'platform' | 'target'>,
+  selector: Pick<DeviceInventoryRequest, 'platform' | 'target'>,
 ): string {
   const platform = selector.platform ? platformLabel(selector.platform) : 'local';
   return selector.target ? `${platform} ${selector.target}` : platform;
@@ -229,9 +188,7 @@ function plural(count: number, singular: string): string {
   return count === 1 ? singular : `${singular}s`;
 }
 
-function deviceInventoryCommand(
-  selector: Pick<ReturnType<typeof deviceInventorySelector>, 'platform'>,
-): string {
+function deviceInventoryCommand(selector: Pick<DeviceInventoryRequest, 'platform'>): string {
   return selector.platform
     ? `agent-device devices --platform ${selector.platform}`
     : 'agent-device devices';
