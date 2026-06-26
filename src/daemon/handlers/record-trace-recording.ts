@@ -96,10 +96,6 @@ async function startRecording(params: {
   const qualityFlag = req.flags?.quality;
   const maxSizeFlag = req.flags?.screenshotMaxSize;
   const backend = resolveRecordingBackendForDevice(device);
-  const platformValidationError = backend.validateStart?.(req) ?? null;
-  if (platformValidationError) {
-    return platformValidationError;
-  }
   if (
     fpsFlag !== undefined &&
     (!Number.isInteger(fpsFlag) ||
@@ -127,11 +123,7 @@ async function startRecording(params: {
     return errorResponse('UNSUPPORTED_OPERATION', 'record is not supported on this device');
   }
 
-  const outputPath = backend.resolveOutputPath({ req, device });
-  if (!outputPath.ok) {
-    return outputPath.response;
-  }
-  const outPath = outputPath.path;
+  const outPath = backend.resolveOutputPath({ req });
   const resolvedOut = SessionStore.expandHome(outPath, req.meta?.cwd);
   const recordingBase = buildRecordingBase(req, resolvedOut);
   fs.mkdirSync(path.dirname(resolvedOut), { recursive: true });
@@ -283,17 +275,15 @@ function deriveClientTelemetryPath(
   return deriveRecordingTelemetryPath(recording.clientOutPath);
 }
 
-async function releaseRecordOnlySession(
+function releaseRecordOnlySession(
   sessionStore: SessionStore,
   sessionName: string,
   session: SessionState,
   options: { writeLog?: boolean } = {},
-): Promise<void> {
+): void {
   if (!session.recordOnlySession) {
     return;
   }
-  const backend = resolveRecordingBackendForDevice(session.device);
-  await backend.cleanupRecordOnlySession?.(session);
   if (options.writeLog) {
     sessionStore.writeSessionLog(session);
   }
@@ -338,7 +328,7 @@ export async function handleRecordCommand(params: {
 
   const response = await stopRecording({ req, activeSession, device, logPath, deps });
   if (!response.ok) {
-    await releaseRecordOnlySession(sessionStore, sessionName, activeSession);
+    releaseRecordOnlySession(sessionStore, sessionName, activeSession);
     return response;
   }
 
@@ -352,6 +342,6 @@ export async function handleRecordCommand(params: {
       showTouches: response.data?.showTouches,
     },
   });
-  await releaseRecordOnlySession(sessionStore, sessionName, activeSession, { writeLog: true });
+  releaseRecordOnlySession(sessionStore, sessionName, activeSession, { writeLog: true });
   return response;
 }

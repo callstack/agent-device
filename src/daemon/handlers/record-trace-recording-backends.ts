@@ -17,13 +17,8 @@ import type { RecordTraceDeps, RecordingBase } from './record-trace-types.ts';
 
 type ActiveRecording = NonNullable<SessionState['recording']>;
 
-type RecordingOutputPathResult =
-  | { ok: true; path: string }
-  | { ok: false; response: DaemonResponse };
-
 type RecordingOutputPathContext = {
   req: DaemonRequest;
-  device: SessionState['device'];
 };
 
 type RecordingStartContext = {
@@ -49,11 +44,9 @@ type RecordingStopContext = {
 };
 
 export type RecordingBackend = {
-  validateStart?: (req: DaemonRequest) => DaemonResponse | null;
-  resolveOutputPath: (context: RecordingOutputPathContext) => RecordingOutputPathResult;
+  resolveOutputPath: (context: RecordingOutputPathContext) => string;
   start: (context: RecordingStartContext) => Promise<DaemonResponse | ActiveRecording>;
   stop: (context: RecordingStopContext) => Promise<DaemonResponse | null>;
-  cleanupRecordOnlySession?: (session: SessionState) => Promise<void>;
 };
 
 export function resolveRecordingBackendForDevice(device: SessionState['device']): RecordingBackend {
@@ -80,11 +73,9 @@ export function resolveRecordingBackendForRecording(recording: ActiveRecording):
   return exhaustive;
 }
 
-function resolveNativeRecordingOutputPath({
-  req,
-}: RecordingOutputPathContext): RecordingOutputPathResult {
+function resolveNativeRecordingOutputPath({ req }: RecordingOutputPathContext): string {
   const requestedPath = req.positionals?.[1];
-  return { ok: true, path: requestedPath ?? `./recording-${Date.now()}.mp4` };
+  return requestedPath ?? `./recording-${Date.now()}.mp4`;
 }
 
 const iosDeviceRecordingBackend: RecordingBackend = {
