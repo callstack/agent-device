@@ -20,15 +20,18 @@ export async function probeMetro(
   options: MetroProbeOptions = {},
 ): Promise<DoctorCheck> {
   const url = `http://${host}:${port}/status`;
-  const processInfoPromise = (options.resolveProcessInfo ?? resolveMetroProcessInfo)(
-    host,
-    port,
-  ).catch(() => undefined);
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(METRO_PROBE_TIMEOUT_MS) });
     const text = await response.text();
     const running = response.ok && text.toLowerCase().includes('packager-status:running');
-    const processInfo = running ? await processInfoPromise : undefined;
+    let processInfo: MetroProcessInfo | undefined;
+    if (running) {
+      try {
+        processInfo = await (options.resolveProcessInfo ?? resolveMetroProcessInfo)(host, port);
+      } catch {
+        processInfo = undefined;
+      }
+    }
     return {
       id: 'metro',
       status: running ? 'pass' : 'warn',
