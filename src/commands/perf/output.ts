@@ -1,11 +1,6 @@
 import type { CommandRequestResult } from '../../client-types.ts';
 import type { CliOutput } from '../command-contract.ts';
-import {
-  readRecord,
-  readRecordArray,
-  resultOutput,
-  type CliOutputFormatter,
-} from '../output-common.ts';
+import { readRecord, resultOutput, type CliOutputFormatter } from '../output-common.ts';
 
 function perfCliOutput(result: CommandRequestResult): CliOutput {
   const data = result as Record<string, unknown>;
@@ -177,7 +172,10 @@ function formatSampleWindow(sampleWindowMs: number | undefined): string {
 }
 
 function formatWorstFrameWindows(fps: Record<string, unknown>): string[] {
-  return readRecordArray(fps.worstWindows).flatMap((window) => {
+  if (!Array.isArray(fps.worstWindows)) return [];
+  return fps.worstWindows.flatMap((entry) => {
+    const window = readRecord(entry);
+    if (!window) return [];
     const line = formatWorstFrameWindow(window);
     return line ? [line] : [];
   });

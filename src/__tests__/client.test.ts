@@ -701,6 +701,53 @@ test('client capture.snapshot forwards force-full as snapshotForceFull flag', as
   assert.equal(setup.calls[0]?.flags?.snapshotForceFull, true);
 });
 
+test('client capture.screenshot normalizes overlay refs from daemon response data', async () => {
+  const setup = createTransport(async () => ({
+    ok: true,
+    data: {
+      path: '/tmp/screenshot.png',
+      overlayRefs: [
+        {
+          ref: '@e1',
+          label: 'Continue',
+          rect: { x: 10, y: 20, width: 30, height: 40 },
+          overlayRect: { x: 12, y: 22, width: 34, height: 44 },
+          center: { x: 25, y: 40 },
+        },
+        {
+          ref: '@missing-center',
+          rect: { x: 1, y: 2, width: 3, height: 4 },
+          overlayRect: { x: 1, y: 2, width: 3, height: 4 },
+        },
+        {
+          ref: '@array-rect',
+          rect: [],
+          overlayRect: { x: 1, y: 2, width: 3, height: 4 },
+          center: { x: 2, y: 3 },
+        },
+        'not-an-overlay-ref',
+      ],
+    },
+  }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const result = await client.capture.screenshot({ overlayRefs: true });
+
+  assert.deepEqual(result, {
+    path: '/tmp/screenshot.png',
+    overlayRefs: [
+      {
+        ref: '@e1',
+        label: 'Continue',
+        rect: { x: 10, y: 20, width: 30, height: 40 },
+        overlayRect: { x: 12, y: 22, width: 34, height: 44 },
+        center: { x: 25, y: 40 },
+      },
+    ],
+    identifiers: { session: 'qa' },
+  });
+});
+
 test('sessions.stateDir resolves locally without contacting the daemon', async () => {
   const setup = createTransport(async () => {
     throw new Error('unexpected daemon call');

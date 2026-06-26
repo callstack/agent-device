@@ -16,7 +16,6 @@ import {
   normalizeInstallFromSourceResult,
   normalizeMaterializationReleaseResult,
   normalizeOpenDevice,
-  readScreenshotOverlayRefs,
   normalizeRuntimeHints,
   normalizeSession,
   normalizeStartupSample,
@@ -25,6 +24,7 @@ import {
   readSnapshotNodes,
   resolveSessionName,
 } from './client-normalizers.ts';
+import { readScreenshotResultData } from './utils/screenshot-overlay-refs.ts';
 import type {
   AgentDeviceClient,
   AgentDeviceClientConfig,
@@ -276,9 +276,10 @@ export function createAgentDeviceClient(
       screenshot: async (options: CaptureScreenshotOptions = {}) => {
         const session = resolveRequestSession(options);
         const data = await executeCommand<Record<string, unknown>>('screenshot', options);
+        const screenshot = readScreenshotResultData(data);
         return {
           path: readRequiredString(data, 'path'),
-          overlayRefs: readScreenshotOverlayRefs(data),
+          overlayRefs: screenshot?.overlayRefs,
           identifiers: { session },
         };
       },

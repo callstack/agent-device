@@ -108,19 +108,17 @@ async function resolveXctestrunProductReferences(xctestrunPath: string): Promise
 function resolveXctestrunProductReferencesFromJson(parsed: Record<string, unknown>): string[] {
   const values = new Set<string>();
 
-  for (const target of collectXctestrunProductReferenceTargets(parsed)) {
+  for (const target of [
+    parsed,
+    ...collectConfiguredTestTargets(parsed),
+    ...collectLegacyTestTargets(parsed),
+  ]) {
     for (const value of collectXctestrunProductReferenceValuesFromTarget(target)) {
       values.add(value);
     }
   }
 
   return Array.from(values);
-}
-
-function collectXctestrunProductReferenceTargets(
-  parsed: Record<string, unknown>,
-): Record<string, unknown>[] {
-  return [parsed, ...collectConfiguredTestTargets(parsed), ...collectLegacyTestTargets(parsed)];
 }
 
 function collectConfiguredTestTargets(parsed: Record<string, unknown>): Record<string, unknown>[] {

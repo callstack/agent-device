@@ -2,7 +2,7 @@ import type { CommandFlags } from './core/dispatch.ts';
 import { screenshotFlagsFromOptions } from './contracts/screenshot.ts';
 import type { DaemonRequest, SessionRuntimeHints } from './daemon/types.ts';
 import { AppError } from './utils/errors.ts';
-import type { ScreenshotOverlayRef, SnapshotNode } from './utils/snapshot.ts';
+import type { SnapshotNode } from './utils/snapshot.ts';
 import { buildAppIdentifiers, buildDeviceIdentifiers } from './client-shared.ts';
 import type {
   AgentDeviceDevice,
@@ -20,8 +20,6 @@ import {
   readDeviceTarget,
   readNullableString,
   readOptionalString,
-  readPoint,
-  readRect,
   readRequiredDeviceKind,
   readRequiredNumber,
   readRequiredPlatform,
@@ -231,30 +229,6 @@ export function normalizeStartupSample(value: unknown): StartupPerfSample | unde
 export function readSnapshotNodes(value: unknown): SnapshotNode[] {
   // Snapshot nodes are produced by the daemon snapshot pipeline and treated as trusted here.
   return Array.isArray(value) ? (value as SnapshotNode[]) : [];
-}
-
-export function readScreenshotOverlayRefs(
-  record: Record<string, unknown>,
-): ScreenshotOverlayRef[] | undefined {
-  const value = record.overlayRefs;
-  if (!Array.isArray(value)) return undefined;
-  const refs: ScreenshotOverlayRef[] = [];
-  for (const entry of value) {
-    if (!isRecord(entry)) continue;
-    const ref = readOptionalString(entry, 'ref');
-    const rect = readRect(entry, 'rect');
-    const overlayRect = readRect(entry, 'overlayRect');
-    const center = readPoint(entry, 'center');
-    if (!ref || !rect || !overlayRect || !center) continue;
-    refs.push({
-      ref,
-      label: readOptionalString(entry, 'label'),
-      rect,
-      overlayRect,
-      center,
-    });
-  }
-  return refs;
 }
 
 export function buildFlags(options: InternalRequestOptions): CommandFlags {

@@ -1,12 +1,13 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { AgentDeviceBackend, BackendScreenshotResult } from '../backend.ts';
+import type { AgentDeviceBackend } from '../backend.ts';
 import type { ArtifactAdapter } from '../io.ts';
 import { createAgentDevice, localCommandPolicy } from '../runtime.ts';
 import { dispatchCommand } from '../core/dispatch.ts';
 import { screenshotFlagsFromOptions, screenshotOptionsFromFlags } from '../contracts/screenshot.ts';
 import { AppError } from '../utils/errors.ts';
+import { readScreenshotResultData } from '../utils/screenshot-overlay-refs.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { SessionState } from './types.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
@@ -58,25 +59,14 @@ function createDispatchScreenshotBackend(params: {
         surface: options?.surface,
       };
       if (outputPlacement === 'out') {
-        return toBackendScreenshotResult(
+        return readScreenshotResultData(
           await dispatchCommand(session.device, 'screenshot', [], outPath, context),
         );
       }
-      return toBackendScreenshotResult(
+      return readScreenshotResultData(
         await dispatchCommand(session.device, 'screenshot', [outPath], undefined, context),
       );
     },
-  };
-}
-
-function toBackendScreenshotResult(data: unknown): BackendScreenshotResult | void {
-  if (typeof data !== 'object' || data === null) return;
-  const record = data as Record<string, unknown>;
-  return {
-    ...(typeof record.path === 'string' ? { path: record.path } : {}),
-    ...(Array.isArray(record.overlayRefs)
-      ? { overlayRefs: record.overlayRefs as NonNullable<BackendScreenshotResult['overlayRefs']> }
-      : {}),
   };
 }
 
