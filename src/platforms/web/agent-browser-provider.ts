@@ -96,23 +96,30 @@ export function createAgentBrowserWebProvider(
 }
 
 function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
-  return `(() => {
-  const options = ${JSON.stringify({
+  return `(${audioProbeEvalScript.toString()})(${JSON.stringify({
     action: options.action,
     durationMs: options.durationMs,
     bucketMs: options.bucketMs,
     source: options.source ?? 'media-elements',
-  })};
+  })})`;
+}
+
+type AudioProbePageRecord = Record<string, any>;
+
+declare const window: AudioProbePageRecord;
+declare const document: { querySelectorAll(selector: string): any[] };
+
+function audioProbeEvalScript(options: AudioProbePageRecord): unknown {
   const key = '__agentDeviceAudioProbe';
   const contextKey = '__agentDeviceAudioProbeContext';
   const sourceKey = '__agentDeviceAudioProbeSources';
   const silenceDb = -90;
   const now = () => Date.now();
-  const dbfs = (value) => {
+  const dbfs = (value: number) => {
     if (!Number.isFinite(value) || value <= 0) return silenceDb;
     return Math.max(silenceDb, Math.min(0, Math.round(20 * Math.log10(value))));
   };
-  const note = (probe, message) => {
+  const note = (probe: AudioProbePageRecord, message: string) => {
     if (!probe.notes.includes(message)) probe.notes.push(message);
   };
   const scopeNote =
@@ -120,7 +127,7 @@ function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
   const routingNote =
     'URL-backed media elements may be routed through the probe AudioContext while they are observed.';
   const mediaElements = () => Array.from(document.querySelectorAll('audio,video'));
-  const stopProbe = (probe, reason) => {
+  const stopProbe = (probe: AudioProbePageRecord | undefined, reason: string) => {
     if (!probe || probe.state === 'stopped') return probe;
     clearInterval(probe.timer);
     clearTimeout(probe.timeout);
@@ -154,7 +161,7 @@ function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
     window[contextKey] = context;
     return context;
   };
-  const createElementAudioSource = (probe, element) => {
+  const createElementAudioSource = (probe: AudioProbePageRecord, element: AudioProbePageRecord) => {
     if (!element.currentSrc && !element.src && element.readyState === 0) return undefined;
     try {
       if (!window[sourceKey]) window[sourceKey] = new WeakMap();
@@ -172,17 +179,23 @@ function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
       return undefined;
     }
   };
-  const createMediaStreamAudioSource = (probe, stream) => {
+  const createMediaStreamAudioSource = (
+    probe: AudioProbePageRecord,
+    stream: AudioProbePageRecord | undefined,
+  ) => {
     if (!stream || typeof stream.getAudioTracks !== 'function') return undefined;
     if (stream.getAudioTracks().length === 0) return undefined;
     return { source: probe.context.createMediaStreamSource(stream), audible: false };
   };
-  const createCaptureStreamAudioSource = (probe, element) => {
+  const createCaptureStreamAudioSource = (
+    probe: AudioProbePageRecord,
+    element: AudioProbePageRecord,
+  ) => {
     if (typeof element.captureStream !== 'function') return undefined;
     const stream = element.captureStream();
     return createMediaStreamAudioSource(probe, stream);
   };
-  const discover = (probe) => {
+  const discover = (probe: AudioProbePageRecord) => {
     const elements = mediaElements();
     probe.mediaElementCount = elements.length;
     for (const element of elements) {
@@ -203,7 +216,7 @@ function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
       probe.analysers.push({
         ...sourceEntry,
         analyser,
-        buffer: new Float32Array(analyser.fftSize)
+        buffer: new Float32Array(analyser.fftSize),
       });
     }
     probe.sourceCount = probe.analysers.length;
@@ -211,7 +224,7 @@ function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
       note(probe, 'No capturable page media audio sources were found yet.');
     }
   };
-  const sample = (probe) => {
+  const sample = (probe: AudioProbePageRecord | undefined) => {
     if (!probe || probe.state !== 'running') return;
     discover(probe);
     let totalSquares = 0;
@@ -233,31 +246,15 @@ function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
     probe.peakDbfs.push(peakDb);
     probe.heard = probe.heard || rmsDb > silenceDb || peakDb > silenceDb;
     const maxSamples = Math.ceil(probe.durationMs / probe.bucketMs) + 2;
-    if (probe.rmsDbfs.length > maxSamples) probe.rmsDbfs.splice(0, probe.rmsDbfs.length - maxSamples);
-    if (probe.peakDbfs.length > maxSamples) probe.peakDbfs.splice(0, probe.peakDbfs.length - maxSamples);
+    if (probe.rmsDbfs.length > maxSamples)
+      probe.rmsDbfs.splice(0, probe.rmsDbfs.length - maxSamples);
+    if (probe.peakDbfs.length > maxSamples)
+      probe.peakDbfs.splice(0, probe.peakDbfs.length - maxSamples);
     if (now() - probe.startedAt >= probe.durationMs) stopProbe(probe, 'duration');
   };
-  const result = (probe) => {
+  const result = (probe: AudioProbePageRecord | undefined) => {
     const mediaCount = mediaElements().length;
-    if (!probe) {
-      return {
-        audio: 'probe',
-        state: 'stopped',
-        active: false,
-        heard: false,
-        source: 'media-elements',
-        backend: 'agent-browser',
-        durationMs: Number(options.durationMs) || 10000,
-        elapsedMs: 0,
-        bucketMs: Number(options.bucketMs) || 1000,
-        sampleCount: 0,
-        mediaElementCount: mediaCount,
-        sourceCount: 0,
-        rmsDbfs: [],
-        peakDbfs: [],
-        notes: [scopeNote, routingNote],
-      };
-    }
+    if (!probe) return stoppedResult([scopeNote, routingNote]);
     return {
       audio: 'probe',
       state: probe.state,
@@ -268,7 +265,7 @@ function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
       durationMs: probe.durationMs,
       elapsedMs: Math.max(
         0,
-        Math.min((probe.stoppedAt || now()) - probe.startedAt, probe.durationMs)
+        Math.min((probe.stoppedAt || now()) - probe.startedAt, probe.durationMs),
       ),
       bucketMs: probe.bucketMs,
       sampleCount: probe.rmsDbfs.length,
@@ -282,6 +279,23 @@ function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
       notes: [scopeNote, routingNote, ...probe.notes],
     };
   };
+  const stoppedResult = (notes: string[]) => ({
+    audio: 'probe',
+    state: 'stopped',
+    active: false,
+    heard: false,
+    source: 'media-elements',
+    backend: 'agent-browser',
+    durationMs: Number(options.durationMs) || 10000,
+    elapsedMs: 0,
+    bucketMs: Number(options.bucketMs) || 1000,
+    sampleCount: 0,
+    mediaElementCount: mediaElements().length,
+    sourceCount: 0,
+    rmsDbfs: [],
+    peakDbfs: [],
+    notes,
+  });
   const action = options.action || 'status';
   let probe = window[key];
   if (probe && probe.state === 'running' && now() - probe.startedAt >= probe.durationMs) {
@@ -292,23 +306,7 @@ function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
     if (probe) stopProbe(probe, 'restarted');
     const context = getContext();
     if (!context) {
-      return {
-        audio: 'probe',
-        state: 'stopped',
-        active: false,
-        heard: false,
-        source: 'media-elements',
-        backend: 'agent-browser',
-        durationMs: Number(options.durationMs) || 10000,
-        elapsedMs: 0,
-        bucketMs: Number(options.bucketMs) || 1000,
-        sampleCount: 0,
-        mediaElementCount: mediaElements().length,
-        sourceCount: 0,
-        rmsDbfs: [],
-        peakDbfs: [],
-        notes: ['Web Audio API is not available in this browser context.'],
-      };
+      return stoppedResult(['Web Audio API is not available in this browser context.']);
     }
     const sink = context.createGain();
     sink.gain.value = 0;
@@ -363,7 +361,6 @@ function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
   }
   if (probe) sample(probe);
   return result(probe);
-})()`;
 }
 
 function normalizeAgentBrowserAudioProbeResult(data: unknown): WebAudioProbeResult {

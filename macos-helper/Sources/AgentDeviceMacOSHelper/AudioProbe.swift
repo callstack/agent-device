@@ -23,7 +23,6 @@ struct AudioProbeResponse: Codable {
   let startedAt: String
   let stoppedAt: String?
   let reason: String?
-  let notes: [String]
 }
 
 private struct AudioProbeBucket {
@@ -170,11 +169,7 @@ private final class AudioProbeStatusWriter {
       peakDbfs: peakDbfs,
       startedAt: iso8601(startedAt),
       stoppedAt: stoppedAt.map(iso8601),
-      reason: reason,
-      notes: [
-        "Audio probe samples macOS system audio through ScreenCaptureKit; it is not app-instrumented audio.",
-        "Screen Recording permission is required for macOS system audio capture.",
-      ]
+      reason: reason
     )
   }
 
