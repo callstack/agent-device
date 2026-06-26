@@ -10,7 +10,7 @@ Use `agent-device` when the task moves past UI automation and you need runtime e
 
 - Session app logs for targeted debugging windows
 - Network inspection from recent HTTP(s) entries in app logs via `network dump`
-- Audio-level probes for browser media elements and macOS system audio
+- Audio-level probes for browser media elements and host-rendered simulator/emulator audio
 - Performance snapshots with `perf metrics` / `perf frames`
 - Apple crash symbolication with `debug symbols`
 - Screenshots, recordings, and replayable repro flows
@@ -146,11 +146,13 @@ agent-device audio probe start 10 1000 --platform web
 agent-device audio probe status --platform web
 agent-device audio probe stop --platform web
 agent-device audio probe start 10 1000 --platform macos
+agent-device audio probe start 10 1000 --platform ios
+agent-device audio probe start 10 1000 --platform android
 ```
 
 - `audio probe start [durationSeconds] [bucketMs]` samples live audio while the session keeps running, then exposes compact `rmsDbfs` and `peakDbfs` buckets. The first timing positional is seconds; the second is milliseconds.
 - On web, the probe samples HTML media elements through Web Audio. URL-backed media may be routed through the probe `AudioContext` while observed.
-- On macOS, the probe samples host system audio through ScreenCaptureKit and requires Screen Recording permission. It is system-audio evidence, not app-instrumented audio.
+- On macOS hosts, the probe samples host system audio through ScreenCaptureKit for macOS sessions, iOS simulators, and Android emulators. It requires Screen Recording permission and is system-audio evidence, not app-instrumented audio. Physical iOS and Android devices are not supported.
 - Use `status` to poll partial buckets during a 10-20 second observation window, and `stop` to end the probe early.
 
 ### Performance snapshots

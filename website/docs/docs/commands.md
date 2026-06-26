@@ -224,7 +224,7 @@ agent-device snapshot -i --platform apple --target desktop
 - Use `frontmost-app`, `desktop`, and `menubar` mainly for `snapshot`, `get`, `is`, and `wait`.
 - If you inspect with `desktop` or `menubar` and then need to click or fill inside one app, open that app in a normal `app` session.
 - macOS also supports `clipboard read|write`, `trigger-app-event`, `logs`, `network dump`, `audio probe`, `alert`, `settings appearance`, and `settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>`.
-- macOS `audio probe start 10 1000 --platform macos` samples host system audio through ScreenCaptureKit. Grant Screen Recording permission before relying on it in a run.
+- `audio probe start 10 1000 --platform macos` samples host system audio through ScreenCaptureKit. The same host-system audio backend is used for iOS simulators and Android emulators on macOS hosts; grant Screen Recording permission before relying on it in a run.
 - In macOS app sessions, `screenshot` captures the target app window bounds rather than the full desktop.
 - Prefer selector or `@ref`-driven interactions on macOS. Window position can shift between runs, so raw x/y point commands are less stable than snapshot-derived targets.
 - Use `click --button secondary` for context menus on macOS, then run `snapshot -i` again.

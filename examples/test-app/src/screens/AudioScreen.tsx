@@ -1,4 +1,5 @@
 import { createElement, useEffect, useRef, useState } from 'react';
+import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { ActionButton, InlineBadge, ScreenTitle, SectionCard } from '../components';
@@ -15,11 +16,16 @@ type SamplePlayback = {
   stop: () => void;
 };
 
+const SAMPLE_DURATION_SECONDS = 6;
+const SAMPLE_FREQUENCY_HZ = 440;
+
 export function AudioScreen() {
   const colors = useAppColors();
   const styles = createStyles(colors);
   const audioRef = useRef<BrowserAudioElement | null>(null);
   const playbackRef = useRef<SamplePlayback | null>(null);
+  const nativePlayerRef = useRef<AudioPlayer | null>(null);
+  const nativeEndTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [playbackState, setPlaybackState] = useState<
     'ready' | 'playing' | 'paused' | 'ended' | 'error'
   >('ready');
@@ -33,10 +39,15 @@ export function AudioScreen() {
         audio.pause();
         audio.srcObject = null;
       }
+      stopNativeSample();
     };
   }, []);
 
   function playSample() {
+    if (Platform.OS !== 'web') {
+      playNativeSample();
+      return;
+    }
     const audio = audioRef.current;
     if (!audio) return;
     stopSample('ready');
@@ -54,6 +65,10 @@ export function AudioScreen() {
   }
 
   function pauseSample() {
+    if (Platform.OS !== 'web') {
+      pauseNativeSample();
+      return;
+    }
     stopSample('paused');
   }
 
@@ -68,16 +83,54 @@ export function AudioScreen() {
     setPlaybackState(nextState);
   }
 
+  function playNativeSample() {
+    stopNativeSample();
+    try {
+      const player = createAudioPlayer({ uri: createNativeBeepDataUri(), name: 'Agent Device beep' });
+      nativePlayerRef.current = player;
+      player.play();
+      setPlaybackState('playing');
+      nativeEndTimerRef.current = setTimeout(() => {
+        stopNativeSample();
+        setPlaybackState('ended');
+      }, SAMPLE_DURATION_SECONDS * 1000);
+    } catch {
+      stopNativeSample();
+      setPlaybackState('error');
+    }
+  }
+
+  function pauseNativeSample() {
+    stopNativeSample();
+    setPlaybackState('paused');
+  }
+
+  function stopNativeSample() {
+    if (nativeEndTimerRef.current) {
+      clearTimeout(nativeEndTimerRef.current);
+      nativeEndTimerRef.current = null;
+    }
+    const player = nativePlayerRef.current;
+    nativePlayerRef.current = null;
+    if (!player) return;
+    try {
+      player.pause();
+    } catch {
+      // Playback may already have finished.
+    }
+    player.remove();
+  }
+
   return (
     <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
       <ScreenTitle
         badge="Media"
-        subtitle="A short browser media sample with a visible playback state."
+        subtitle="A short generated audio sample with a visible playback state."
         title="Audio"
         testID="audio-title"
       />
 
-      <SectionCard subtitle="Generated browser beep, 6 seconds." title="Audio sample">
+      <SectionCard subtitle="Generated 440 Hz beep, 6 seconds." title="Audio sample">
         {Platform.OS === 'web' ? (
           <View style={styles.player} testID="audio-sample-card">
             {createElement('audio', {
@@ -119,8 +172,33 @@ export function AudioScreen() {
             </View>
           </View>
         ) : (
-          <View style={styles.nativeFallback} testID="audio-native-fallback">
-            <Text style={styles.statusText}>Browser audio sample</Text>
+          <View style={styles.player} testID="audio-sample-card">
+            <View style={styles.nativeFallback} testID="audio-native-player">
+              <Text style={styles.statusText}>Native audio sample</Text>
+            </View>
+
+            <View style={styles.statusRow} testID="audio-playback-state">
+              <InlineBadge
+                label={playbackLabel(playbackState)}
+                tone={
+                  playbackState === 'playing'
+                    ? 'success'
+                    : playbackState === 'error'
+                      ? 'danger'
+                      : 'neutral'
+                }
+              />
+            </View>
+
+            <View style={styles.actionRow}>
+              <ActionButton label="Start sample" onPress={playSample} testID="start-audio" />
+              <ActionButton
+                kind="secondary"
+                label="Pause"
+                onPress={pauseSample}
+                testID="pause-audio"
+              />
+            </View>
           </View>
         )}
       </SectionCard>
@@ -140,12 +218,12 @@ function createBeepStream(onEnded: () => void): SamplePlayback {
   const destination = context.createMediaStreamDestination();
   const oscillator = context.createOscillator();
   const gain = context.createGain();
-  const durationSeconds = 6;
+  const durationSeconds = SAMPLE_DURATION_SECONDS;
   const startAt = context.currentTime + 0.03;
   const endAt = startAt + durationSeconds;
 
   oscillator.type = 'square';
-  oscillator.frequency.setValueAtTime(440, startAt);
+  oscillator.frequency.setValueAtTime(SAMPLE_FREQUENCY_HZ, startAt);
   gain.gain.setValueAtTime(0.0001, startAt);
   gain.gain.exponentialRampToValueAtTime(0.35, startAt + 0.05);
   gain.gain.setValueAtTime(0.35, endAt - 0.08);
@@ -170,6 +248,66 @@ function createBeepStream(onEnded: () => void): SamplePlayback {
       void context.close();
     },
   };
+}
+
+function createNativeBeepDataUri(): string {
+  const sampleRate = 8000;
+  const dataSize = sampleRate * SAMPLE_DURATION_SECONDS;
+  const headerSize = 44;
+  const bytes = new Uint8Array(headerSize + dataSize);
+  writeAscii(bytes, 0, 'RIFF');
+  writeUint32(bytes, 4, 36 + dataSize);
+  writeAscii(bytes, 8, 'WAVE');
+  writeAscii(bytes, 12, 'fmt ');
+  writeUint32(bytes, 16, 16);
+  writeUint16(bytes, 20, 1);
+  writeUint16(bytes, 22, 1);
+  writeUint32(bytes, 24, sampleRate);
+  writeUint32(bytes, 28, sampleRate);
+  writeUint16(bytes, 32, 1);
+  writeUint16(bytes, 34, 8);
+  writeAscii(bytes, 36, 'data');
+  writeUint32(bytes, 40, dataSize);
+
+  for (let index = 0; index < dataSize; index += 1) {
+    const cycle = Math.sin((2 * Math.PI * SAMPLE_FREQUENCY_HZ * index) / sampleRate);
+    bytes[headerSize + index] = Math.round(128 + cycle * 96);
+  }
+
+  return `data:audio/wav;base64,${base64Encode(bytes)}`;
+}
+
+function writeAscii(bytes: Uint8Array, offset: number, value: string) {
+  for (let index = 0; index < value.length; index += 1) {
+    bytes[offset + index] = value.charCodeAt(index);
+  }
+}
+
+function writeUint16(bytes: Uint8Array, offset: number, value: number) {
+  bytes[offset] = value & 0xff;
+  bytes[offset + 1] = (value >> 8) & 0xff;
+}
+
+function writeUint32(bytes: Uint8Array, offset: number, value: number) {
+  bytes[offset] = value & 0xff;
+  bytes[offset + 1] = (value >> 8) & 0xff;
+  bytes[offset + 2] = (value >> 16) & 0xff;
+  bytes[offset + 3] = (value >> 24) & 0xff;
+}
+
+function base64Encode(bytes: Uint8Array): string {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  let output = '';
+  for (let index = 0; index < bytes.length; index += 3) {
+    const first = bytes[index];
+    const second = bytes[index + 1];
+    const third = bytes[index + 2];
+    output += alphabet[first >> 2];
+    output += alphabet[((first & 0x03) << 4) | ((second ?? 0) >> 4)];
+    output += index + 1 < bytes.length ? alphabet[((second & 0x0f) << 2) | ((third ?? 0) >> 6)] : '=';
+    output += index + 2 < bytes.length ? alphabet[(third ?? 0) & 0x3f] : '=';
+  }
+  return output;
 }
 
 function createStyles(colors: AppColors) {

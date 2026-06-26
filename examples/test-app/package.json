@@ -13,6 +13,7 @@
     "@expo/dom-webview": "~56.0.5",
     "@expo/metro-runtime": "~56.0.15",
     "expo": "~56.0.12",
+    "expo-audio": "~56.0.12",
     "expo-constants": "56.0.18",
     "expo-dev-client": "~56.0.20",
     "expo-linking": "56.0.14",

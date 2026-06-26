@@ -10,6 +10,7 @@ import {
   makeIosSession,
   makeMacOsSession,
   makeSession,
+  IOS_DEVICE,
   WEB_DESKTOP_DEVICE,
 } from '../../../__tests__/test-utils/index.ts';
 import { AppError } from '../../../kernel/errors.ts';
@@ -439,23 +440,23 @@ test('audio probe validates daemon duration bounds', async () => {
 
 test('audio probe rejects non-web sessions in daemon handler', async () => {
   const sessionStore = makeSessionStore('agent-device-session-observability-audio-');
-  sessionStore.set('android', makeAndroidSession('android'));
+  sessionStore.set('ios-device', makeIosSession('ios-device', { device: IOS_DEVICE }));
   const response = await handleSessionObservabilityCommands({
     req: {
       token: 't',
-      session: 'android',
+      session: 'ios-device',
       command: 'audio',
       positionals: ['probe', 'status'],
       flags: {},
     },
-    sessionName: 'android',
+    sessionName: 'ios-device',
     sessionStore,
   });
 
   assert.equal(response?.ok, false);
   if (response && !response.ok) {
     assert.equal(response.error.code, 'UNSUPPORTED_OPERATION');
-    assert.match(response.error.message, /web browser and macOS sessions only/);
+    assert.match(response.error.message, /web browser sessions, macOS sessions, iOS simulators/);
   }
 });
 
@@ -482,7 +483,7 @@ test('audio probe starts macOS ScreenCaptureKit helper and reads status', async 
           sourceCount: 1,
           rmsDbfs: [-12],
           peakDbfs: [-8],
-          notes: ['macOS status'],
+          notes: ['helper status'],
         }),
       );
       return {
@@ -509,6 +510,12 @@ test('audio probe starts macOS ScreenCaptureKit helper and reads status', async 
     assert.equal(response.data?.backend, 'macos-screencapturekit');
     assert.equal(response.data?.source, 'system-audio');
     assert.deepEqual(response.data?.rmsDbfs, [-12]);
+    assert.deepEqual(response.data?.notes, [
+      'helper status',
+      'Audio probe samples host system audio through ScreenCaptureKit for this macOS session; it is not app-instrumented audio.',
+      'Screen Recording permission is required for host system audio capture.',
+      'Other audible host apps can contribute to the measured buckets.',
+    ]);
   }
   assert.equal(macosAudioMocks.startMacOsAudioProbeProcess.mock.calls.length, 1);
   assert.equal(macosAudioMocks.startMacOsAudioProbeProcess.mock.calls[0]?.[0].durationMs, 1000);
@@ -540,7 +547,7 @@ test('audio probe stop kills active macOS helper and returns stopped status', as
   );
   const kill = vi.fn();
   session.audioProbe = {
-    platform: 'macos',
+    platform: 'host-system-audio',
     child: { kill, pid: 1234 },
     wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
     statusPath,
@@ -569,6 +576,114 @@ test('audio probe stop kills active macOS helper and returns stopped status', as
     assert.equal(response.data?.state, 'stopped');
     assert.equal(response.data?.active, false);
     assert.deepEqual(response.data?.peakDbfs, [-9, -8]);
+  }
+});
+
+test('audio probe starts host helper for iOS simulator audio', async () => {
+  const sessionStore = makeSessionStore('agent-device-session-observability-audio-');
+  sessionStore.set('ios', makeIosSession('ios'));
+  macosAudioMocks.startMacOsAudioProbeProcess.mockImplementation(
+    async (options: { durationMs: number; bucketMs: number; statusPath: string }) => {
+      await fsPromises.mkdir(path.dirname(options.statusPath), { recursive: true });
+      await fsPromises.writeFile(
+        options.statusPath,
+        JSON.stringify({
+          audio: 'probe',
+          state: 'running',
+          active: true,
+          heard: true,
+          source: 'system-audio',
+          backend: 'macos-screencapturekit',
+          durationMs: options.durationMs,
+          elapsedMs: 500,
+          bucketMs: options.bucketMs,
+          sampleCount: 1,
+          sourceCount: 1,
+          rmsDbfs: [-18],
+          peakDbfs: [-12],
+        }),
+      );
+      return {
+        child: { kill: vi.fn(), pid: 1234 },
+        wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
+      };
+    },
+  );
+
+  const response = await handleSessionObservabilityCommands({
+    req: {
+      token: 't',
+      session: 'ios',
+      command: 'audio',
+      positionals: ['probe', 'start', '1000', '500'],
+      flags: {},
+    },
+    sessionName: 'ios',
+    sessionStore,
+  });
+
+  assert.equal(response?.ok, true);
+  assert.equal(sessionStore.get('ios')?.audioProbe?.platform, 'host-system-audio');
+  if (response?.ok) {
+    assert.equal(response.data?.source, 'system-audio');
+    assert.deepEqual(response.data?.rmsDbfs, [-18]);
+    const notes = response.data?.notes;
+    assert.ok(Array.isArray(notes));
+    assert.match(String(notes[0]), /iOS simulator/);
+  }
+});
+
+test('audio probe starts host helper for Android emulator audio', async () => {
+  const sessionStore = makeSessionStore('agent-device-session-observability-audio-');
+  sessionStore.set('android', makeAndroidSession('android'));
+  macosAudioMocks.startMacOsAudioProbeProcess.mockImplementation(
+    async (options: { durationMs: number; bucketMs: number; statusPath: string }) => {
+      await fsPromises.mkdir(path.dirname(options.statusPath), { recursive: true });
+      await fsPromises.writeFile(
+        options.statusPath,
+        JSON.stringify({
+          audio: 'probe',
+          state: 'running',
+          active: true,
+          heard: true,
+          source: 'system-audio',
+          backend: 'macos-screencapturekit',
+          durationMs: options.durationMs,
+          elapsedMs: 500,
+          bucketMs: options.bucketMs,
+          sampleCount: 1,
+          sourceCount: 1,
+          rmsDbfs: [-20],
+          peakDbfs: [-13],
+        }),
+      );
+      return {
+        child: { kill: vi.fn(), pid: 1234 },
+        wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
+      };
+    },
+  );
+
+  const response = await handleSessionObservabilityCommands({
+    req: {
+      token: 't',
+      session: 'android',
+      command: 'audio',
+      positionals: ['probe', 'start', '1000', '500'],
+      flags: {},
+    },
+    sessionName: 'android',
+    sessionStore,
+  });
+
+  assert.equal(response?.ok, true);
+  assert.equal(sessionStore.get('android')?.audioProbe?.platform, 'host-system-audio');
+  if (response?.ok) {
+    assert.equal(response.data?.source, 'system-audio');
+    assert.deepEqual(response.data?.peakDbfs, [-13]);
+    const notes = response.data?.notes;
+    assert.ok(Array.isArray(notes));
+    assert.match(String(notes[0]), /Android emulator/);
   }
 });
 

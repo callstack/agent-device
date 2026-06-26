@@ -100,7 +100,8 @@ const audioCliSchema = {
   usageOverride:
     'audio probe start [durationSeconds] [bucketMs] | audio probe status | audio probe stop',
   listUsageOverride: 'audio',
-  helpDescription: 'Probe browser or macOS audio levels as compact dBFS buckets',
+  helpDescription:
+    'Probe browser or host-rendered simulator/emulator audio as compact dBFS buckets',
   summary: 'Probe audio levels',
   positionalArgs: ['probe', 'start|status|stop', 'durationSeconds?', 'bucketMs?'],
 } as const satisfies CommandSchemaOverride;

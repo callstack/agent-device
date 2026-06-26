@@ -171,10 +171,9 @@ const RAW_COMMAND_DESCRIPTORS = [
     name: PUBLIC_COMMANDS.audio,
     daemon: { route: 'session', sessionKind: 'observability' },
     capability: {
-      apple: { device: true },
-      android: {},
+      apple: APPLE_SIM_AND_DEVICE,
+      android: { emulator: true },
       linux: LINUX_NONE,
-      supports: (device) => device.platform === 'macos' || device.platform === 'web',
     },
     batchable: true,
   },

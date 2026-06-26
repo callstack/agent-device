@@ -1639,8 +1639,11 @@ test('usageForCommand resolves debugging help topic', () => {
   assert.match(help, /agent-device perf memory sample --json/);
   assert.match(help, /agent-device audio probe start 10 1000 --platform web/);
   assert.match(help, /agent-device audio probe start 10 1000 --platform macos/);
+  assert.match(help, /agent-device audio probe start 10 1000 --platform ios/);
+  assert.match(help, /agent-device audio probe start 10 1000 --platform android/);
   assert.match(help, /compact rmsDbfs and peakDbfs arrays/);
   assert.match(help, /requires Screen Recording permission/);
+  assert.match(help, /Physical iOS and Android devices are not supported/);
   assert.match(help, /Memory artifact \(android-hprof\): \/tmp\/app\.hprof \(42MB\)/);
   assert.match(help, /Prefer perf memory sample over raw dumpsys\/leaks output/);
   assert.match(help, /Unsupported platforms return artifact\.available=false with reason\/hint/);

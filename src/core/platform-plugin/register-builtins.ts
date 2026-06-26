@@ -25,6 +25,9 @@ const supportsSynthesisGesture = (device: DeviceInfo): boolean =>
   device.platform === 'android' || isIosMobileSimulator(device);
 const supportsAndroidOrIosNonTv = (device: DeviceInfo): boolean =>
   device.platform === 'android' || (device.platform === 'ios' && device.target !== 'tv');
+const supportsHostAudioProbe = (device: DeviceInfo): boolean =>
+  process.platform === 'darwin' &&
+  (device.platform === 'macos' || (device.platform === 'ios' && device.kind === 'simulator'));
 
 const synthesisGestureUnsupportedHint = (device: DeviceInfo): string | undefined => {
   if (device.platform === 'macos')
@@ -57,6 +60,7 @@ const APPLE_SUPPORTS_BY_DEFAULT: Record<string, (device: DeviceInfo) => boolean>
     device.platform === 'android' || isMacOsOrAppleSimulator(device),
   [PUBLIC_COMMANDS.settings]: (device) =>
     device.platform === 'android' || device.platform === 'macos' || device.kind === 'simulator',
+  [PUBLIC_COMMANDS.audio]: supportsHostAudioProbe,
   pinch: supportsSynthesisGesture,
   'rotate-gesture': supportsSynthesisGesture,
   'transform-gesture': supportsSynthesisGesture,

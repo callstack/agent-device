@@ -270,7 +270,7 @@ export type SessionState = {
     android?: AndroidNativePerfSession;
   };
   audioProbe?: {
-    platform: 'macos';
+    platform: 'host-system-audio';
     child: SessionRecordingProcessChild;
     wait: Promise<ExecResult>;
     statusPath: string;
