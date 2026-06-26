@@ -1,5 +1,5 @@
 import type { ScreenshotOverlayRef } from './snapshot.ts';
-import { isRecord, readOptionalString, readPoint, readRect } from './parsing.ts';
+import { isRecord, readPoint, readRect } from './parsing.ts';
 
 export type ScreenshotResultData = {
   path?: string;
@@ -10,7 +10,7 @@ export function readScreenshotResultData(value: unknown): ScreenshotResultData |
   if (!isRecord(value)) return undefined;
   const path = typeof value.path === 'string' ? value.path : undefined;
   const overlayRefs = Array.isArray(value.overlayRefs)
-    ? value.overlayRefs.flatMap((entry) => {
+    ? value.overlayRefs.filter(isRecord).flatMap((entry) => {
         const overlayRef = readScreenshotOverlayRef(entry);
         return overlayRef ? [overlayRef] : [];
       })
@@ -21,14 +21,15 @@ export function readScreenshotResultData(value: unknown): ScreenshotResultData |
   };
 }
 
-function readScreenshotOverlayRef(value: unknown): ScreenshotOverlayRef | undefined {
-  if (!isRecord(value)) return undefined;
-  const ref = readOptionalString(value, 'ref');
-  const geometry = readScreenshotOverlayGeometry(value);
-  if (!ref || !geometry) return undefined;
+function readScreenshotOverlayRef(
+  record: Record<string, unknown>,
+): ScreenshotOverlayRef | undefined {
+  if (typeof record.ref !== 'string' || record.ref.length === 0) return undefined;
+  const geometry = readScreenshotOverlayGeometry(record);
+  if (!geometry) return undefined;
   return {
-    ref,
-    ...readScreenshotOverlayLabel(value),
+    ref: record.ref,
+    ...readScreenshotOverlayLabel(record),
     ...geometry,
   };
 }
@@ -47,6 +48,5 @@ function readScreenshotOverlayGeometry(
 function readScreenshotOverlayLabel(
   record: Record<string, unknown>,
 ): Pick<ScreenshotOverlayRef, 'label'> {
-  const label = readOptionalString(record, 'label');
-  return label ? { label } : {};
+  return typeof record.label === 'string' && record.label.length > 0 ? { label: record.label } : {};
 }
