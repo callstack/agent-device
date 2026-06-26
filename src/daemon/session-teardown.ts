@@ -7,7 +7,10 @@ import { cleanupAppleXctracePerfCapture } from '../platforms/apple/core/perf-xct
 import { cleanupAndroidNativePerfSession } from '../platforms/android/perf.ts';
 import { stopAndroidSnapshotHelperSessionForDevice } from '../platforms/android/snapshot-helper.ts';
 import { cleanupRetainedMaterializedPathsForSession } from './materialized-path-registry.ts';
+import { stopSessionAudioProbe } from './audio-probe.ts';
 import type { SessionState } from './types.ts';
+
+export { stopSessionAudioProbe } from './audio-probe.ts';
 
 export async function stopAppleRunnerForClose(session: SessionState): Promise<void> {
   await stopIosRunnerSession(session.device.id);
@@ -56,20 +59,12 @@ export async function stopSessionAndroidSnapshotHelper(session: SessionState): P
   await stopAndroidSnapshotHelperSessionForDevice(session.device);
 }
 
-export async function stopSessionAudioProbe(session: SessionState): Promise<void> {
-  const probe = session.audioProbe;
-  if (!probe) return;
-  probe.child.kill('SIGTERM');
-  await probe.wait.catch(() => {});
-  session.audioProbe = undefined;
-}
-
 export async function teardownSessionResources(
   session: SessionState,
   sessionName: string,
 ): Promise<void> {
   await stopSessionAppLog(session);
-  await stopSessionAudioProbe(session);
+  await stopSessionAudioProbe(session, 'session-teardown');
   await stopSessionApplePerfCapture(session);
   await stopSessionAndroidNativePerfCapture(session);
   await stopSessionAndroidSnapshotHelper(session);

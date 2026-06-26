@@ -2,11 +2,11 @@ import { runCmd } from '../../utils/exec.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import type { Rect } from '../../kernel/snapshot.ts';
+import { normalizeAudioProbeRecord } from '../../audio-probe-result.ts';
 import { normalizeAgentBrowserNetworkRequests } from './agent-browser-network.ts';
 import { normalizeAgentBrowserSnapshot } from './agent-browser-snapshot.ts';
 import {
   isJsonObject,
-  readBooleanProperty,
   readNumberProperty,
   readStringProperty,
   type JsonObject,
@@ -368,57 +368,21 @@ function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
 
 function normalizeAgentBrowserAudioProbeResult(data: unknown): WebAudioProbeResult {
   const record = readAgentBrowserEvalResultRecord(data);
-  return {
-    audio: 'probe',
-    state: readAudioProbeState(record),
-    active: readBooleanProperty(record, 'active') === true,
-    heard: readBooleanProperty(record, 'heard') === true,
+  return normalizeAudioProbeRecord(record, {
     source: 'media-elements',
-    backend: readStringPropertyWithDefault(record, 'backend', 'agent-browser'),
-    durationMs: readNumberPropertyWithDefault(record, 'durationMs', 0),
-    elapsedMs: readNumberPropertyWithDefault(record, 'elapsedMs', 0),
-    bucketMs: readNumberPropertyWithDefault(record, 'bucketMs', 1000),
-    sampleCount: readNumberPropertyWithDefault(record, 'sampleCount', 0),
-    mediaElementCount: readNumberPropertyWithDefault(record, 'mediaElementCount', 0),
-    sourceCount: readNumberPropertyWithDefault(record, 'sourceCount', 0),
-    rmsDbfs: readNumberArray(record.rmsDbfs),
-    peakDbfs: readNumberArray(record.peakDbfs),
-    startedAt: readStringProperty(record, 'startedAt'),
-    stoppedAt: readStringProperty(record, 'stoppedAt'),
-    reason: readStringProperty(record, 'reason'),
-    notes: readStringArray(record.notes),
-  };
+    backend: 'agent-browser',
+    durationMs: 0,
+    elapsedMs: 0,
+    bucketMs: 1000,
+    activeFallback: false,
+    mediaElementCount: 0,
+    sourceCount: 0,
+  }) as WebAudioProbeResult;
 }
 
 function readAgentBrowserEvalResultRecord(data: unknown): JsonObject {
   if (!isJsonObject(data)) return {};
   return isJsonObject(data.result) ? data.result : data;
-}
-
-function readAudioProbeState(record: JsonObject): 'running' | 'stopped' {
-  return readStringProperty(record, 'state') === 'running' ? 'running' : 'stopped';
-}
-
-function readStringPropertyWithDefault(record: JsonObject, key: string, fallback: string): string {
-  const value = readStringProperty(record, key);
-  return value === undefined ? fallback : value;
-}
-
-function readNumberPropertyWithDefault(record: JsonObject, key: string, fallback: number): number {
-  const value = readNumberProperty(record, key);
-  return value === undefined ? fallback : value;
-}
-
-function readNumberArray(value: unknown): number[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is number => typeof item === 'number' && Number.isFinite(item))
-    : [];
-}
-
-function readStringArray(value: unknown): string[] | undefined {
-  if (!Array.isArray(value)) return undefined;
-  const items = value.filter((item): item is string => typeof item === 'string' && item.length > 0);
-  return items.length > 0 ? items : undefined;
 }
 
 async function runPacedScroll(

@@ -66,7 +66,7 @@ export async function handleCloseCommand(params: {
   let providerData: Record<string, unknown> | undefined;
   try {
     await stopSessionAppLog(session);
-    await stopSessionAudioProbe(session);
+    await stopSessionAudioProbe(session, 'session-close');
     await stopSessionApplePerfCapture(session);
     await stopSessionAndroidNativePerfCapture(session);
     await stopSessionAndroidSnapshotHelper(session);

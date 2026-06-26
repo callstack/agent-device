@@ -3,6 +3,7 @@ import type { SessionSurface } from '../../core/session-surface.ts';
 import { createScopedProvider } from '../../utils/scoped-provider.ts';
 import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
 import type { BackendDumpNetworkOptions, BackendDumpNetworkResult } from '../../backend.ts';
+import type { AudioProbeResult } from '../../audio-probe-result.ts';
 import { createAgentBrowserWebProvider } from './agent-browser-provider.ts';
 
 export type WebOpenOptions = {
@@ -38,25 +39,9 @@ export type WebAudioProbeOptions = {
   source?: 'media-elements';
 };
 
-export type WebAudioProbeResult = {
-  audio: 'probe';
-  state: 'running' | 'stopped';
-  active: boolean;
-  heard: boolean;
+export type WebAudioProbeResult = AudioProbeResult & {
   source: 'media-elements';
-  backend?: string;
-  durationMs: number;
-  elapsedMs: number;
-  bucketMs: number;
-  sampleCount: number;
   mediaElementCount: number;
-  sourceCount: number;
-  rmsDbfs: number[];
-  peakDbfs: number[];
-  startedAt?: string;
-  stoppedAt?: string;
-  reason?: string;
-  notes?: string[];
 };
 
 export type WebProvider = {
