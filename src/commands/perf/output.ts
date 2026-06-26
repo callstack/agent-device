@@ -20,6 +20,10 @@ function formatPerfCliOutput(data: Record<string, unknown>): string {
     return formatMemoryArtifactSummary(artifact);
   }
   const metrics = isRecord(data.metrics) ? data.metrics : undefined;
+  return formatFramePerfOutput(metrics);
+}
+
+function formatFramePerfOutput(metrics: Record<string, unknown> | undefined): string {
   const fps = isRecord(metrics?.fps) ? metrics.fps : undefined;
   const resourceSummary = buildResourcePerfSummary(metrics);
   if (!fps) {
@@ -33,6 +37,10 @@ function formatPerfCliOutput(data: Record<string, unknown>): string {
   const frameSummary = formatFrameHealthSummary(fps);
   if (!frameSummary) return formatPerfUnavailable(resourceSummary, 'missing dropped-frame summary');
 
+  return formatFrameHealthOutput(fps, frameSummary);
+}
+
+function formatFrameHealthOutput(fps: Record<string, unknown>, frameSummary: string): string {
   const lines = [`Frame health: ${frameSummary}`];
   const worstWindows = formatWorstFrameWindows(fps);
   if (worstWindows.length > 0) {
