@@ -152,12 +152,16 @@ function mockCloudConnectionProfile(connection: Record<string, unknown>): Return
 function assertGeneratedProfileState(state: RemoteConnectionState): void {
   assert.equal(state.tenant, 'acme');
   assert.equal(state.runId, 'demo-run-001');
+  assert.equal(state.leaseProvider, 'cloud');
+  assert.match(state.clientId ?? '', /^[a-f0-9]{16}$/);
   assert.equal(state.daemon?.baseUrl, 'https://bridge.example.com/agent-device');
   assert.match(state.remoteConfigPath, /remote-connections\/generated\/cloud-[a-f0-9]{16}\.json$/);
   assert.equal(state.remoteConfigHash, hashRemoteConfigFile(state.remoteConfigPath));
   assert.deepEqual(readGeneratedConfigKeys(state.remoteConfigPath), [
+    'clientId',
     'daemonBaseUrl',
     'daemonTransport',
+    'leaseProvider',
     'metroKind',
     'metroProxyBaseUrl',
     'metroPublicBaseUrl',
@@ -165,7 +169,10 @@ function assertGeneratedProfileState(state: RemoteConnectionState): void {
     'sessionIsolation',
     'tenant',
   ]);
-  assert.equal(readGeneratedConfig(state.remoteConfigPath).tenant, 'acme');
+  const generated = readGeneratedConfig(state.remoteConfigPath);
+  assert.equal(generated.tenant, 'acme');
+  assert.equal(generated.leaseProvider, 'cloud');
+  assert.equal(generated.clientId, state.clientId);
 }
 
 function fetchProfileUrl(fetchMock: ReturnType<typeof vi.fn>): string | undefined {
@@ -190,8 +197,16 @@ async function connectWithGeneratedCloudProfile(stateDir: string): Promise<void>
   }
 }
 
-function readGeneratedConfig(configPath: string): { tenant?: string } {
-  return JSON.parse(fs.readFileSync(configPath, 'utf8')) as { tenant?: string };
+function readGeneratedConfig(configPath: string): {
+  tenant?: string;
+  leaseProvider?: string;
+  clientId?: string;
+} {
+  return JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
+    tenant?: string;
+    leaseProvider?: string;
+    clientId?: string;
+  };
 }
 
 function readGeneratedConfigKeys(configPath: string): string[] {

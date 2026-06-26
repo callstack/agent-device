@@ -161,6 +161,36 @@ test('same backend/provider/device rejects conflicting active lease', () => {
   assert.equal(details?.runId, undefined);
 });
 
+test('same run/provider/device with different client reports device busy', () => {
+  const registry = new LeaseRegistry();
+  registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'shared-run',
+    leaseBackend: 'ios-instance',
+    leaseProvider: 'cloud',
+    deviceKey: 'device-1',
+    clientId: 'client-a',
+  });
+
+  const error = captureThrown(() =>
+    registry.allocateLease({
+      tenantId: 'tenant-a',
+      runId: 'shared-run',
+      leaseBackend: 'ios-instance',
+      leaseProvider: 'cloud',
+      deviceKey: 'device-1',
+      clientId: 'client-b',
+    }),
+  );
+
+  assert.ok(error instanceof Error);
+  assert.equal(error.message, 'Device is already leased');
+  const details = (error as { details?: Record<string, unknown> }).details;
+  assert.equal(details?.reason, 'DEVICE_LEASE_BUSY');
+  assert.equal(details?.deviceKey, 'device-1');
+  assert.equal(details?.leaseProvider, 'cloud');
+});
+
 test('device leases are isolated by provider and device key', () => {
   const registry = new LeaseRegistry();
   const proxy = registry.allocateLease({

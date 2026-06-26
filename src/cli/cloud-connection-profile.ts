@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import type { RemoteConfigProfile } from '../remote-config-schema.ts';
 import { AppError } from '../utils/errors.ts';
 import type { CliFlags } from '../utils/cli-flags.ts';
@@ -36,10 +37,21 @@ export async function resolveCloudConnectProfile(options: {
     accessToken: auth.accessToken,
     fetchImpl: options.fetchImpl,
   });
+  const clientId = buildCloudClientId({
+    stateDir: options.stateDir,
+    cloudBaseUrl: auth.cloudBaseUrl,
+    daemonBaseUrl: typeof profile.daemonBaseUrl === 'string' ? profile.daemonBaseUrl : '',
+    session: options.flags.session,
+  });
   return persistAndResolveGeneratedProfile({
     stateDir: options.stateDir,
     provider: 'cloud',
-    profile,
+    profile: {
+      ...profile,
+      leaseProvider: profile.leaseProvider ?? 'cloud',
+      clientId: profile.clientId ?? clientId,
+      runId: profile.runId ?? `cloud-${clientId}`,
+    },
     cwd: options.cwd,
     env: options.env,
     flags: options.flags,
@@ -95,4 +107,19 @@ function parseRemoteConfigProfile(value: unknown): RemoteConfigProfile {
     throw new AppError('COMMAND_FAILED', 'Cloud connection profile remoteConfigProfile is empty.');
   }
   return value as RemoteConfigProfile;
+}
+
+function buildCloudClientId(options: {
+  stateDir: string;
+  cloudBaseUrl: string;
+  daemonBaseUrl: string;
+  session: string | undefined;
+}): string {
+  return crypto
+    .createHash('sha256')
+    .update(
+      `${options.stateDir}\0${options.cloudBaseUrl}\0${options.daemonBaseUrl}\0${options.session ?? ''}`,
+    )
+    .digest('hex')
+    .slice(0, 16);
 }

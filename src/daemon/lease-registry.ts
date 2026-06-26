@@ -85,6 +85,16 @@ type NormalizedLeaseScopeMatchRequest = {
   clientId?: string;
 };
 
+type NormalizedAllocateLeaseRequest = {
+  tenantId: string;
+  runId: string;
+  backend: LeaseBackend;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
+  ttlMs?: number;
+};
+
 const DEFAULT_LEASE_TTL_MS = 60_000;
 const MIN_LEASE_TTL_MS = 5_000;
 const MAX_LEASE_TTL_MS = 10 * 60_000;
@@ -146,6 +156,42 @@ function normalizeAgentIdentifier(
   return value;
 }
 
+function normalizeRequiredTenantId(raw: string): string {
+  const tenantId = normalizeTenantId(raw);
+  if (!tenantId) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'Invalid tenant id. Use 1-128 chars: letters, numbers, dot, underscore, hyphen.',
+    );
+  }
+  return tenantId;
+}
+
+function normalizeRequiredRunId(raw: string): string {
+  const runId = normalizeRunId(raw);
+  if (!runId) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'Invalid run id. Use 1-128 chars: letters, numbers, dot, underscore, hyphen.',
+    );
+  }
+  return runId;
+}
+
+function normalizeAllocateLeaseRequest(
+  request: AllocateLeaseRequest,
+): NormalizedAllocateLeaseRequest {
+  return {
+    backend: normalizeLeaseBackend(request.leaseBackend),
+    leaseProvider: normalizeLeaseProvider(request.leaseProvider),
+    deviceKey: normalizeDeviceKey(request.deviceKey),
+    clientId: normalizeClientId(request.clientId),
+    tenantId: normalizeRequiredTenantId(request.tenantId),
+    runId: normalizeRequiredRunId(request.runId),
+    ttlMs: request.ttlMs,
+  };
+}
+
 function leaseRequiresOwnerScope(lease: DeviceLease): boolean {
   return Boolean(lease.leaseProvider ?? lease.deviceKey ?? lease.clientId);
 }
@@ -186,54 +232,55 @@ export class LeaseRegistry {
   }
 
   allocateLease(request: AllocateLeaseRequest): DeviceLease {
-    const backend = normalizeLeaseBackend(request.leaseBackend);
-    const leaseProvider = normalizeLeaseProvider(request.leaseProvider);
-    const deviceKey = normalizeDeviceKey(request.deviceKey);
-    const clientId = normalizeClientId(request.clientId);
-    const tenantId = normalizeTenantId(request.tenantId);
-    if (!tenantId) {
-      throw new AppError(
-        'INVALID_ARGS',
-        'Invalid tenant id. Use 1-128 chars: letters, numbers, dot, underscore, hyphen.',
-      );
-    }
-    const runId = normalizeRunId(request.runId);
-    if (!runId) {
-      throw new AppError(
-        'INVALID_ARGS',
-        'Invalid run id. Use 1-128 chars: letters, numbers, dot, underscore, hyphen.',
-      );
-    }
+    const normalized = normalizeAllocateLeaseRequest(request);
     this.cleanupExpiredLeases();
-    const leaseTtlMs = this.resolveLeaseTtlMs(request.ttlMs);
-    const bindingKey = this.bindingKey({ tenantId, runId, backend, leaseProvider, deviceKey });
+    const leaseTtlMs = this.resolveLeaseTtlMs(normalized.ttlMs);
+    const existingLease = this.refreshExistingRunBinding(normalized, leaseTtlMs);
+    if (existingLease) return existingLease;
+    this.assertDeviceAvailable(normalized);
+    this.enforceCapacity(normalized.backend);
+    const lease = this.createLease(normalized, leaseTtlMs);
+    this.leases.set(lease.leaseId, lease);
+    this.bindLease(lease);
+    return { ...lease };
+  }
+
+  private refreshExistingRunBinding(
+    request: NormalizedAllocateLeaseRequest,
+    leaseTtlMs: number,
+  ): DeviceLease | undefined {
+    const bindingKey = this.bindingKey(request);
     const existingId = this.runBindings.get(bindingKey);
-    if (existingId) {
-      const existingLease = this.leases.get(existingId);
-      if (existingLease) {
-        this.assertOptionalLeaseIdentityMatch(existingLease, { clientId });
-        return this.refreshLease(existingLease, leaseTtlMs);
-      }
+    if (!existingId) return undefined;
+    const existingLease = this.leases.get(existingId);
+    if (!existingLease) {
       this.runBindings.delete(bindingKey);
+      return undefined;
     }
-    this.assertDeviceAvailable({ backend, leaseProvider, deviceKey });
-    this.enforceCapacity(backend);
+    if (this.canReuseRunBinding(existingLease, request)) {
+      return this.refreshLease(existingLease, leaseTtlMs);
+    }
+    if (existingLease.deviceKey) {
+      this.throwDeviceBusy(existingLease);
+    }
+    this.assertOptionalLeaseIdentityMatch(existingLease, request);
+    return this.refreshLease(existingLease, leaseTtlMs);
+  }
+
+  private createLease(request: NormalizedAllocateLeaseRequest, leaseTtlMs: number): DeviceLease {
     const now = this.now();
-    const lease: DeviceLease = {
+    return {
       leaseId: crypto.randomBytes(16).toString('hex'),
-      tenantId,
-      runId,
-      backend,
-      ...(leaseProvider ? { leaseProvider } : {}),
-      ...(deviceKey ? { deviceKey } : {}),
-      ...(clientId ? { clientId } : {}),
+      tenantId: request.tenantId,
+      runId: request.runId,
+      backend: request.backend,
+      ...(request.leaseProvider ? { leaseProvider: request.leaseProvider } : {}),
+      ...(request.deviceKey ? { deviceKey: request.deviceKey } : {}),
+      ...(request.clientId ? { clientId: request.clientId } : {}),
       createdAt: now,
       heartbeatAt: now,
       expiresAt: now + leaseTtlMs,
     };
-    this.leases.set(lease.leaseId, lease);
-    this.bindLease(lease);
-    return { ...lease };
   }
 
   heartbeatLease(request: HeartbeatLeaseRequest): DeviceLease {
@@ -451,6 +498,19 @@ export class LeaseRegistry {
       this.deviceBindings.delete(deviceBindingKey);
       return;
     }
+    this.throwDeviceBusy(activeLease);
+  }
+
+  private canReuseRunBinding(
+    lease: DeviceLease,
+    request: {
+      clientId?: string;
+    },
+  ): boolean {
+    return lease.clientId === request.clientId;
+  }
+
+  private throwDeviceBusy(activeLease: DeviceLease): never {
     throw new AppError('COMMAND_FAILED', 'Device is already leased', {
       reason: 'DEVICE_LEASE_BUSY',
       deviceKey: activeLease.deviceKey,
