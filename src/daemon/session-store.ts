@@ -75,12 +75,6 @@ export class SessionStore {
     return path.join(this.sessionsDir, safeSessionName(sessionName));
   }
 
-  resolveStateDir(): string {
-    return path.basename(this.sessionsDir) === 'sessions'
-      ? path.dirname(this.sessionsDir)
-      : this.sessionsDir;
-  }
-
   ensureSessionDir(sessionName: string): string {
     const sessionDir = this.resolveSessionDir(sessionName);
     fs.mkdirSync(sessionDir, { recursive: true });
