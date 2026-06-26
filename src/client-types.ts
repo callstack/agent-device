@@ -38,8 +38,9 @@ import type {
 import type { MetroBridgeScope } from './client-companion-tunnel-contract.ts';
 import type { AppsFilter } from './contracts/app-inventory.ts';
 import type { ScreenshotRequestFlags } from './contracts/screenshot.ts';
+import type { BatchRunResult, DaemonBatchStep } from './core/batch.ts';
+export type { BatchRunResult } from './core/batch.ts';
 import type { PerfAction, PerfArea, PerfKind, PerfSubject } from './contracts/perf.ts';
-import type { DaemonBatchStep } from './core/batch.ts';
 import type { AlertAction, AlertInfo } from './alert-contract.ts';
 import type { DebugSymbolsOptions, DebugSymbolsResult } from './contracts/debug-symbols.ts';
 
@@ -996,7 +997,7 @@ export type AgentDeviceClient = {
     test: (options: ReplayTestOptions) => Promise<CommandRequestResult>;
   };
   batch: {
-    run: (options: BatchRunOptions) => Promise<CommandRequestResult>;
+    run: (options: BatchRunOptions) => Promise<BatchRunResult>;
   };
   observability: {
     perf: (options?: PerfOptions) => Promise<CommandRequestResult>;

@@ -48,6 +48,13 @@ export type BatchStepResult = {
   durationMs: number;
 };
 
+export type BatchRunResult = Record<string, unknown> & {
+  total: number;
+  executed: number;
+  totalDurationMs: number;
+  results: BatchStepResult[];
+};
+
 export async function runBatch(
   req: BatchRequest,
   sessionName: string,
@@ -94,14 +101,15 @@ export async function runBatch(
       }
       partialResults.push(stepResponse.result);
     }
+    const data: BatchRunResult = {
+      total: steps.length,
+      executed: steps.length,
+      totalDurationMs: Date.now() - startedAt,
+      results: partialResults,
+    };
     return {
       ok: true,
-      data: {
-        total: steps.length,
-        executed: steps.length,
-        totalDurationMs: Date.now() - startedAt,
-        results: partialResults,
-      },
+      data,
     };
   } catch (error) {
     const appErr = asAppError(error);

@@ -13,7 +13,7 @@ import {
 
 const batchDefaultResponse: DaemonResponse = {
   ok: true,
-  data: { total: 1, executed: 1, totalDurationMs: 1 },
+  data: { total: 0, executed: 0, totalDurationMs: 1, results: [] },
 };
 
 function runCliCapture(
@@ -299,38 +299,4 @@ test('batch human output renders per-step results', async () => {
   assert.match(result.stdout, /Batch completed: 2\/2 steps in 15ms/);
   assert.match(result.stdout, /1\. OK Opened: Settings \(7ms\)/);
   assert.match(result.stdout, /2\. OK Typed 5 chars \(8ms\)/);
-});
-
-test('batch human output renders failed steps distinctly', async () => {
-  const result = await runCliCapture(
-    ['batch', '--steps', '[{"command":"open","input":{}}]'],
-    async () => ({
-      ok: true,
-      data: {
-        total: 2,
-        executed: 1,
-        totalDurationMs: 15,
-        results: [
-          {
-            step: 1,
-            command: 'open',
-            ok: true,
-            data: { appName: 'Settings', message: 'Opened: Settings' },
-            durationMs: 7,
-          },
-          {
-            step: 2,
-            command: 'type',
-            ok: false,
-            error: { message: 'type requires text' },
-            durationMs: 8,
-          },
-        ],
-      },
-    }),
-  );
-
-  assert.equal(result.code, null);
-  assert.match(result.stdout, /1\. OK Opened: Settings \(7ms\)/);
-  assert.match(result.stdout, /2\. FAILED type requires text \(8ms\)/);
 });

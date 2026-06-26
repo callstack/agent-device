@@ -54,6 +54,7 @@ export type {
   AppTriggerEventOptions,
   BackCommandOptions,
   BackCommandResult,
+  BatchRunResult,
   BatchRunOptions,
   BatchStep,
   CaptureDiffOptions,
