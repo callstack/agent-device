@@ -68,6 +68,9 @@ export type DaemonRequestMeta = {
   leaseId?: string;
   leaseTtlMs?: number;
   leaseBackend?: LeaseBackend;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
   sessionIsolation?: SessionIsolationMode;
   uploadedArtifactId?: string;
   clientArtifactPaths?: Record<string, string>;
@@ -129,6 +132,9 @@ export type LeaseAllocatePayload = {
   runId?: string;
   ttlMs?: number;
   backend?: LeaseBackend;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
 };
 
 export type LeaseHeartbeatPayload = {
@@ -139,6 +145,10 @@ export type LeaseHeartbeatPayload = {
   runId?: string;
   leaseId?: string;
   ttlMs?: number;
+  backend?: LeaseBackend;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
 };
 
 export type LeaseReleasePayload = {
@@ -148,6 +158,10 @@ export type LeaseReleasePayload = {
   tenant?: string;
   runId?: string;
   leaseId?: string;
+  backend?: LeaseBackend;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
 };
 
 export type JsonRpcId = string | number | null;
@@ -223,6 +237,37 @@ function optionalString(
 ): string | undefined {
   const value = record[key];
   return value === undefined ? undefined : expectString(value, `${path}.${key}`);
+}
+
+function optionalDeviceKey(
+  record: Record<string, unknown>,
+  key: string,
+  path: string,
+): string | undefined {
+  const value = optionalString(record, key, path);
+  if (value === undefined) return undefined;
+  const trimmed = value.trim();
+  if (!trimmed || value.length > 256 || !/^[\x20-\x7E]+$/.test(value)) {
+    fail(`${path}.${key}`, 'Expected 1-256 printable characters');
+  }
+  return value;
+}
+
+function optionalIdentifier(
+  record: Record<string, unknown>,
+  key: string,
+  path: string,
+  maxLength: number,
+): string | undefined {
+  const value = optionalString(record, key, path);
+  if (value === undefined) return undefined;
+  if (value.length < 1 || value.length > maxLength || !/^[a-zA-Z0-9._-]+$/.test(value)) {
+    fail(
+      `${path}.${key}`,
+      `Expected 1-${String(maxLength)} chars: letters, numbers, dot, underscore, hyphen`,
+    );
+  }
+  return value;
 }
 
 function optionalBoolean(
@@ -374,6 +419,9 @@ export const daemonCommandRequestSchema = schema<DaemonRequest>((input, path) =>
             leaseId: optionalString(meta, 'leaseId', `${path}.meta`),
             leaseTtlMs: optionalInteger(meta, 'leaseTtlMs', `${path}.meta`),
             leaseBackend: optionalEnum(meta, 'leaseBackend', LEASE_BACKENDS, `${path}.meta`),
+            leaseProvider: optionalIdentifier(meta, 'leaseProvider', `${path}.meta`, 64),
+            deviceKey: optionalDeviceKey(meta, 'deviceKey', `${path}.meta`),
+            clientId: optionalIdentifier(meta, 'clientId', `${path}.meta`, 128),
             sessionIsolation: optionalEnum(
               meta,
               'sessionIsolation',
@@ -431,6 +479,9 @@ function parseLeaseScope(
   tenantId?: string;
   tenant?: string;
   runId?: string;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
 } {
   return {
     token: optionalString(record, 'token', path),
@@ -438,6 +489,9 @@ function parseLeaseScope(
     tenantId: optionalString(record, 'tenantId', path),
     tenant: optionalString(record, 'tenant', path),
     runId: optionalString(record, 'runId', path),
+    leaseProvider: optionalIdentifier(record, 'leaseProvider', path, 64),
+    deviceKey: optionalDeviceKey(record, 'deviceKey', path),
+    clientId: optionalIdentifier(record, 'clientId', path, 128),
   };
 }
 
@@ -456,6 +510,7 @@ export const leaseHeartbeatSchema = schema<LeaseHeartbeatPayload>((input, path) 
     ...parseLeaseScope(parsed.record, path),
     leaseId: parsed.leaseId,
     ttlMs: parsed.ttlMs,
+    backend: optionalEnum(parsed.record, 'backend', LEASE_BACKENDS, path),
   };
 });
 
@@ -467,6 +522,7 @@ export const leaseReleaseSchema = schema<LeaseReleasePayload>((input, path) => {
   return {
     ...parseLeaseScope(record, path),
     leaseId: optionalString(record, 'leaseId', path),
+    backend: optionalEnum(record, 'backend', LEASE_BACKENDS, path),
   };
 });
 

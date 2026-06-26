@@ -1,9 +1,15 @@
 import { AppError } from '../utils/errors.ts';
 import { normalizeTenantId, resolveSessionIsolationMode } from './config.ts';
 import { isLeaseAdmissionExempt } from './daemon-command-registry.ts';
-import { resolveLeaseScope } from './lease-context.ts';
-import type { LeaseRegistry } from './lease-registry.ts';
-import type { DaemonRequest } from './types.ts';
+import {
+  DEFAULT_PROXY_LEASE_TTL_MS,
+  findMissingProxyLeaseFields,
+  isProxyLeaseScope,
+  resolveLeaseScope,
+  resolveRequestOrSessionLeaseScope,
+} from './lease-context.ts';
+import type { DeviceLease, LeaseRegistry } from './lease-registry.ts';
+import type { DaemonRequest, SessionState } from './types.ts';
 
 export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
   const isolation = resolveSessionIsolationMode(
@@ -52,15 +58,81 @@ export function scopeRequestSession(req: DaemonRequest): DaemonRequest {
 export function assertRequestLeaseAdmission(
   req: DaemonRequest,
   leaseRegistry: LeaseRegistry,
-): void {
-  if (isLeaseAdmissionExempt(req.command) || req.meta?.sessionIsolation !== 'tenant') {
-    return;
+  session?: SessionState,
+): DeviceLease | undefined {
+  if (isLeaseAdmissionExempt(req.command)) {
+    return undefined;
   }
-  const leaseScope = resolveLeaseScope(req);
+  const requestLeaseScope = resolveLeaseScope(req);
+  assertProxyOpenLeaseMetadata(req, requestLeaseScope);
+  const sessionLease = session?.lease;
+  if (!sessionLease && req.meta?.sessionIsolation !== 'tenant' && !requestLeaseScope.leaseId) {
+    return undefined;
+  }
+  assertRequestSessionLeaseMatches(requestLeaseScope, sessionLease);
+  const leaseScope = resolveRequestOrSessionLeaseScope(req, session);
   leaseRegistry.assertLeaseAdmission({
     tenantId: leaseScope.tenantId,
     runId: leaseScope.runId,
     leaseId: leaseScope.leaseId,
     backend: leaseScope.leaseBackend,
+    leaseProvider: leaseScope.leaseProvider,
+    deviceKey: leaseScope.deviceKey,
+    clientId: leaseScope.clientId,
+  });
+  return leaseRegistry.heartbeatLease({
+    leaseId: leaseScope.leaseId ?? '',
+    tenantId: leaseScope.tenantId,
+    runId: leaseScope.runId,
+    backend: leaseScope.leaseBackend,
+    leaseProvider: leaseScope.leaseProvider,
+    deviceKey: leaseScope.deviceKey,
+    clientId: leaseScope.clientId,
+    ttlMs:
+      leaseScope.leaseTtlMs ??
+      (isProxyLeaseScope(leaseScope) ? DEFAULT_PROXY_LEASE_TTL_MS : undefined),
+  });
+}
+
+function assertProxyOpenLeaseMetadata(
+  req: DaemonRequest,
+  requestLeaseScope: ReturnType<typeof resolveLeaseScope>,
+): void {
+  if (req.command !== 'open') return;
+  const missing = findMissingProxyLeaseFields(requestLeaseScope);
+  if (missing.length === 0) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    'Proxy open requires leaseId, tenantId, runId, clientId, and deviceKey lease metadata.',
+    { missing },
+  );
+}
+
+function assertRequestSessionLeaseMatches(
+  requestLeaseScope: ReturnType<typeof resolveLeaseScope>,
+  sessionLease: SessionState['lease'] | undefined,
+): void {
+  if (!sessionLease) return;
+  assertMatchingLeaseField('leaseId', requestLeaseScope.leaseId, sessionLease.leaseId);
+  assertMatchingLeaseField('tenantId', requestLeaseScope.tenantId, sessionLease.tenantId);
+  assertMatchingLeaseField('runId', requestLeaseScope.runId, sessionLease.runId);
+  assertMatchingLeaseField(
+    'leaseProvider',
+    requestLeaseScope.leaseProvider,
+    sessionLease.leaseProvider,
+  );
+  assertMatchingLeaseField('clientId', requestLeaseScope.clientId, sessionLease.clientId);
+  assertMatchingLeaseField('deviceKey', requestLeaseScope.deviceKey, sessionLease.deviceKey);
+}
+
+function assertMatchingLeaseField(
+  field: string,
+  requestValue?: string,
+  sessionValue?: string,
+): void {
+  if (!requestValue || !sessionValue || requestValue === sessionValue) return;
+  throw new AppError('UNAUTHORIZED', `Lease does not match session owner (${field})`, {
+    reason: 'LEASE_SESSION_MISMATCH',
+    field,
   });
 }

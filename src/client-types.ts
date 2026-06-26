@@ -71,6 +71,10 @@ export type AgentDeviceClientConfig = {
   runId?: string;
   leaseId?: string;
   leaseBackend?: LeaseBackend;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
+  leaseTtlMs?: number;
   runtime?: SessionRuntimeHints;
   cwd?: string;
   debug?: boolean;
@@ -94,6 +98,10 @@ export type AgentDeviceRequestOverrides = Pick<
   | 'runId'
   | 'leaseId'
   | 'leaseBackend'
+  | 'leaseProvider'
+  | 'deviceKey'
+  | 'clientId'
+  | 'leaseTtlMs'
   | 'cwd'
   | 'debug'
   | 'iosXctestrunFile'
@@ -273,6 +281,10 @@ export type Lease = {
   tenantId: string;
   runId: string;
   backend: LeaseBackend;
+  leaseProvider?: string;
+  provider?: string;
+  deviceKey?: string;
+  clientId?: string;
   createdAt?: number;
   heartbeatAt?: number;
   expiresAt?: number;
@@ -286,12 +298,21 @@ export type LeaseAllocateOptions = LeaseOptions & {
   tenant: string;
   runId: string;
   leaseBackend?: LeaseBackend;
+  leaseProvider?: string;
+  provider?: string;
+  deviceKey?: string;
+  clientId?: string;
 };
 
 export type LeaseScopedOptions = LeaseOptions & {
   tenant?: string;
   runId?: string;
   leaseId: string;
+  leaseBackend?: LeaseBackend;
+  leaseProvider?: string;
+  provider?: string;
+  deviceKey?: string;
+  clientId?: string;
 };
 
 export type MetroPrepareOptions = {

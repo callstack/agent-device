@@ -35,6 +35,9 @@ export type RemoteConfigProfile = RemoteConfigMetroOptions & {
   runId?: string;
   leaseId?: string;
   leaseBackend?: LeaseBackend;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
   platform?: PlatformSelector;
   target?: DeviceTarget;
   device?: string;
@@ -109,8 +112,19 @@ export const REMOTE_CONFIG_FIELD_SPECS = [
   { key: 'metroNoInstallDeps', type: 'boolean' },
 ] as const satisfies readonly RemoteConfigFieldSpec[];
 
+const REMOTE_CONFIG_LEASE_FIELD_SPECS = [
+  { key: 'leaseProvider', type: 'string', env: false },
+  { key: 'deviceKey', type: 'string', env: false },
+  { key: 'clientId', type: 'string', env: false },
+] as const satisfies readonly RemoteConfigFieldSpec[];
+
+export const REMOTE_CONFIG_PROFILE_FIELD_SPECS = [
+  ...REMOTE_CONFIG_FIELD_SPECS,
+  ...REMOTE_CONFIG_LEASE_FIELD_SPECS,
+] as const satisfies readonly RemoteConfigFieldSpec[];
+
 const remoteConfigFieldSpecByKey = new Map(
-  REMOTE_CONFIG_FIELD_SPECS.map((spec) => [spec.key, spec]),
+  REMOTE_CONFIG_PROFILE_FIELD_SPECS.map((spec) => [spec.key, spec]),
 );
 
 export function getRemoteConfigFieldSpec(

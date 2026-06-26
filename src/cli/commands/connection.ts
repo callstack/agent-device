@@ -10,9 +10,11 @@ import {
   removeRemoteConnectionState,
   writeRemoteConnectionState,
   type RemoteConnectionState,
+  type RemoteConnectionRequestMetadata,
 } from '../../remote-connection-state.ts';
 import { AppError } from '../../utils/errors.ts';
 import { resolveCloudConnectProfile } from '../cloud-connection-profile.ts';
+import { resolveProxyConnectProfile } from '../proxy-connection-profile.ts';
 import {
   hasDeferredMetroConfig,
   releasePreviousLease,
@@ -25,17 +27,32 @@ import type { LeaseBackend } from '../../contracts.ts';
 import type { CliFlags } from '../../utils/cli-flags.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
-export const connectCommand: ClientCommandHandler = async ({ flags, client }) => {
+export const connectCommand: ClientCommandHandler = async ({ positionals, flags, client }) => {
   const stateDir = resolveDaemonPaths(flags.stateDir).baseDir;
+  const provider = readConnectProvider(positionals);
+  if (provider && flags.remoteConfig) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'connect provider positional and --remote-config are mutually exclusive.',
+    );
+  }
   const resolved = flags.remoteConfig
     ? resolveRemoteConnectFlags(flags)
-    : await resolveCloudConnectProfile({
-        flags,
-        stateDir,
-        cwd: process.cwd(),
-        env: process.env,
-      });
+    : provider === 'proxy'
+      ? resolveProxyConnectProfile({
+          flags,
+          stateDir,
+          cwd: process.cwd(),
+          env: process.env,
+        })
+      : await resolveCloudConnectProfile({
+          flags,
+          stateDir,
+          cwd: process.cwd(),
+          env: process.env,
+        });
   const connectFlags = resolved.flags;
+  const connectionMetadata = readRemoteConfigConnectionMetadata(resolved.remoteConfigPath);
   const tenant = connectFlags.tenant;
   const runId = connectFlags.runId;
   if (!tenant) {
@@ -73,6 +90,7 @@ export const connectCommand: ClientCommandHandler = async ({ flags, client }) =>
       remoteConfigPath: resolved.remoteConfigPath,
       remoteConfigHash,
       desiredLeaseBackend: resolveRequestedLeaseBackend(connectFlags),
+      connection: connectionMetadata,
       daemon,
     })
   ) {
@@ -99,6 +117,13 @@ export const connectCommand: ClientCommandHandler = async ({ flags, client }) =>
       previous && !connectFlags.force
         ? previous.leaseBackend
         : resolveRequestedLeaseBackend(connectFlags),
+    leaseProvider:
+      connectionMetadata?.leaseProvider ??
+      (previous && !connectFlags.force ? previous.leaseProvider : undefined),
+    clientId:
+      connectionMetadata?.clientId ??
+      (previous && !connectFlags.force ? previous.clientId : undefined),
+    deviceKey: previous && !connectFlags.force ? previous.deviceKey : connectionMetadata?.deviceKey,
     platform:
       connectFlags.platform ?? (previous && !connectFlags.force ? previous.platform : undefined),
     target: connectFlags.target ?? (previous && !connectFlags.force ? previous.target : undefined),
@@ -148,6 +173,22 @@ function resolveRemoteConnectFlags(flags: CliFlags): {
   };
 }
 
+function readRemoteConfigConnectionMetadata(
+  remoteConfigPath: string,
+): RemoteConnectionRequestMetadata | undefined {
+  const profile = resolveRemoteConfigProfile({
+    configPath: remoteConfigPath,
+    cwd: process.cwd(),
+    env: process.env,
+  }).profile;
+  const metadata = {
+    leaseProvider: profile.leaseProvider,
+    clientId: profile.clientId,
+    deviceKey: profile.deviceKey,
+  };
+  return Object.values(metadata).some((value) => value !== undefined) ? metadata : undefined;
+}
+
 export const disconnectCommand: ClientCommandHandler = async ({ flags, client }) => {
   const { session, stateDir, state } = readRequestedConnectionState(flags);
   if (!state) {
@@ -170,6 +211,9 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
         tenant: state.tenant,
         runId: state.runId,
         leaseId: state.leaseId,
+        leaseProvider: state.leaseProvider,
+        clientId: state.clientId,
+        deviceKey: state.deviceKey,
       });
       released = result.released;
     } catch {
@@ -221,6 +265,19 @@ function createRemoteSessionName(stateDir: string): string {
   return `adc-${Date.now().toString(36)}-${crypto.randomBytes(2).toString('hex')}`;
 }
 
+function readConnectProvider(positionals: string[]): 'proxy' | undefined {
+  const provider = positionals[0];
+  if (provider === undefined) return undefined;
+  if (positionals.length > 1) {
+    throw new AppError('INVALID_ARGS', 'connect accepts at most one provider positional.');
+  }
+  if (provider === 'proxy') return provider;
+  throw new AppError(
+    'INVALID_ARGS',
+    `Unknown connect provider: ${provider}. Supported providers: proxy.`,
+  );
+}
+
 function readRequestedConnectionState(flags: CliFlags): {
   session: string;
   stateDir: string;
@@ -253,6 +310,7 @@ function isCompatibleConnection(
     remoteConfigPath: string;
     remoteConfigHash: string;
     desiredLeaseBackend?: LeaseBackend;
+    connection?: RemoteConnectionRequestMetadata;
     daemon: RemoteConnectionState['daemon'];
   },
 ): boolean {
@@ -266,6 +324,10 @@ function isCompatibleConnection(
       state.leaseBackend === options.desiredLeaseBackend) &&
     (options.flags.platform === undefined || state.platform === options.flags.platform) &&
     (options.flags.target === undefined || state.target === options.flags.target) &&
+    (options.connection?.leaseProvider === undefined ||
+      state.leaseProvider === options.connection.leaseProvider) &&
+    (options.connection?.clientId === undefined ||
+      state.clientId === options.connection.clientId) &&
     isSameDaemonState(state.daemon, options.daemon)
   );
 }

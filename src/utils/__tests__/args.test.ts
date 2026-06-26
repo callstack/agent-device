@@ -700,6 +700,16 @@ test('parseArgs recognizes connect lease backend force and no-login flags', () =
   assert.equal(parsed.flags.noLogin, true);
 });
 
+test('parseArgs preserves connect proxy provider positional', () => {
+  const parsed = parseArgs(
+    ['connect', 'proxy', '--daemon-base-url', 'http://host:4310/agent-device'],
+    { strictFlags: true },
+  );
+  assert.equal(parsed.command, 'connect');
+  assert.deepEqual(parsed.positionals, ['proxy']);
+  assert.equal(parsed.flags.daemonBaseUrl, 'http://host:4310/agent-device');
+});
+
 test('parseArgs accepts auth management subcommands', () => {
   const status = parseArgs(['auth', 'status'], { strictFlags: true });
   assert.equal(status.command, 'auth');
@@ -1232,12 +1242,14 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /verify the action with diff snapshot -i or snapshot --diff/);
   assert.match(usageText, /Sparse or AX-unavailable snapshot/);
   assert.match(usageText, /macOS context menus use click <ref> --button secondary/);
-  assert.match(usageText, /Direct proxy: Cloud\/Linux clients can use iOS simulators/);
-  assert.match(usageText, /A proxy URL\/token means direct proxy mode/);
-  assert.match(usageText, /Direct proxy sessions: choose one explicit --session/);
-  assert.match(usageText, /do not use connect, --remote-config, tenant, run, or lease flags/);
-  assert.match(usageText, /Cloud\/remote-config profiles are separate from direct proxy/);
-  assert.match(usageText, /Do not substitute --config/);
+  assert.match(
+    usageText,
+    /Remote lifecycle: use connect, then open, commands, close, and disconnect/,
+  );
+  assert.match(usageText, /connect proxy --daemon-base-url <proxy-agent-device-url>/);
+  assert.match(usageText, /proxy device lease is automatic on open/);
+  assert.match(usageText, /expires after five minutes of inactivity/);
+  assert.match(usageText, /disconnect releases local connection state/);
   assert.match(usageText, /app-owned back uses back/);
   assert.match(usageText, /Web browser sessions: read help web/);
   assert.match(
@@ -1575,11 +1587,10 @@ test('usageForCommand resolves remote help topic', () => {
   const help = usageForCommand('remote');
   if (help === null) throw new Error('Expected remote help text');
   assert.match(help, /agent-device connect/);
-  assert.match(help, /There are two different remote modes/);
-  assert.match(help, /Direct proxy: agent-device proxy exposes a Mac you control/);
-  assert.match(help, /A cloud\/Linux client can use iOS simulators through that proxied Mac/);
-  assert.match(help, /Use one explicit --session across open, snapshot, interactions, and close/);
-  assert.match(help, /Do not use connect, --remote-config, tenant, run, or lease flags/);
+  assert.match(help, /Remote connection providers use the same lifecycle/);
+  assert.match(help, /connect -> open -> commands -> close -> disconnect/);
+  assert.match(help, /Direct proxy: agent-device connect proxy/);
+  assert.match(help, /stores the shared proxy profile and client identity/);
   assert.match(help, /agent-device open com\.example\.app --remote-config \.\/remote-config\.json/);
   assert.match(help, /disconnect --remote-config \.\/remote-config\.json/);
   assert.match(help, /Script flow, per-command config/);
@@ -1587,17 +1598,18 @@ test('usageForCommand resolves remote help topic', () => {
   assert.match(help, /agent-device proxy --port 4310/);
   assert.match(
     help,
-    /--daemon-base-url https:\/\/example\.trycloudflare\.com\/agent-device --daemon-auth-token <token>/,
+    /connect proxy --daemon-base-url https:\/\/example\.trycloudflare\.com\/agent-device --daemon-auth-token <token>/,
   );
-  assert.match(help, /agent-device open Maps --session maps/);
-  assert.match(help, /agent-device snapshot -i --session maps/);
-  assert.match(help, /agent-device close --session maps/);
-  assert.match(help, /store daemonBaseUrl and daemonAuthToken in normal agent-device\.json/);
-  assert.match(help, /keep the same explicit --session until close/);
-  assert.match(help, /do not run prepare ios-runner from the remote client/);
-  assert.match(help, /same-proxy-state stale runner leases are reclaimed/);
+  assert.match(help, /agent-device open Maps --platform ios/);
+  assert.match(help, /agent-device snapshot -i --platform ios/);
+  assert.match(help, /agent-device close/);
+  assert.match(help, /lease is acquired lazily on open/);
+  assert.match(help, /expires after five minutes without commands/);
+  assert.match(help, /Multiple agents can share one proxy/);
+  assert.match(help, /disconnect releases the connection lease and local state/);
+  assert.match(help, /A busy direct-proxy device error means another agent owns the device/);
+  assert.match(help, /local\/proxy iOS reports that the runner is already owned/);
   assert.match(help, /same --remote-config to every operational command/);
-  assert.match(help, /do not use agent-device auth, connect, disconnect, --remote-config/);
   assert.match(help, /Do not use --config as a remote profile flag/);
   assert.match(help, /install-from-source --github-actions-artifact org\/repo:artifact/);
 });

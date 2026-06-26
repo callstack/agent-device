@@ -143,6 +143,10 @@ function buildLeaseRpcParams(
     session: req.session,
     tenantId: req.meta?.tenantId,
     runId: req.meta?.runId,
+    leaseProvider: req.meta?.leaseProvider,
+    provider: req.meta?.leaseProvider,
+    clientId: req.meta?.clientId,
+    deviceKey: req.meta?.deviceKey,
   };
   switch (command) {
     case 'lease_allocate':

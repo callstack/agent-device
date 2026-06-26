@@ -73,6 +73,7 @@ async function runSessionHandler(params: RequestHandlerChainParams): Promise<Dae
       sessionName: params.sessionName,
       logPath: params.logPath,
       sessionStore: params.sessionStore,
+      leaseRegistry: params.leaseRegistry,
       invoke: params.invoke,
       invokeReplayAction: params.invokeReplayAction,
       androidAdbExecutor: params.androidAdbExecutor,

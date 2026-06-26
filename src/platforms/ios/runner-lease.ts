@@ -6,6 +6,7 @@ import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { AppError } from '../../utils/errors.ts';
 import { acquireProcessLock } from '../../utils/process-lock.ts';
 import { isProcessAlive, readProcessStartTime } from '../../utils/process-identity.ts';
+import type { RunnerLogicalLeaseContext } from '../../core/runner-lease-context.ts';
 
 const RUNNER_LEASE_SCHEMA_VERSION = 1;
 const RUNNER_LEASE_LOCK_TIMEOUT_MS = 30_000;
@@ -15,6 +16,8 @@ const RUNNER_LEASE_OWNER_GRACE_MS = 5_000;
 const RUNNER_OWNER_PID = process.pid;
 export const RUNNER_OWNER_START_TIME = readProcessStartTime(process.pid);
 export const RUNNER_OWNER_TOKEN = buildRunnerOwnerToken(RUNNER_OWNER_PID, RUNNER_OWNER_START_TIME);
+
+let runnerLeaseOwnerStateDir: string | undefined;
 
 export type RunnerLease = {
   schemaVersion: 1;
@@ -72,6 +75,10 @@ export function buildRunnerLease(params: {
   };
 }
 
+export function setRunnerLeaseOwnerStateDir(stateDir: string | undefined): void {
+  runnerLeaseOwnerStateDir = stateDir?.trim() || undefined;
+}
+
 export async function withRunnerLeaseLock<T>(deviceId: string, task: () => Promise<T>): Promise<T> {
   const release = await acquireProcessLock({
     lockDirPath: `${resolveRunnerLeasePath(deviceId)}.lock`,
@@ -110,6 +117,7 @@ function classifyRunnerLease(lease: RunnerLease | null): RunnerLeaseState {
 export async function prepareRunnerLeaseForStartup(
   deviceId: string,
   cleanup: RunnerLeaseCleanupAdapter,
+  logicalLeaseContext?: RunnerLogicalLeaseContext,
 ): Promise<void> {
   const state = classifyRunnerLease(readRunnerLease(deviceId));
   if (state.type === 'empty') {
@@ -123,15 +131,18 @@ export async function prepareRunnerLeaseForStartup(
     }
     throw new AppError(
       'COMMAND_FAILED',
-      `iOS runner for ${deviceId} is already owned by another agent-device daemon`,
+      logicalLeaseContext
+        ? `iOS runner for ${deviceId} is busy after device lease admission`
+        : `iOS runner for ${deviceId} is already owned by another agent-device daemon`,
       {
         deviceId,
+        logicalLeaseContext,
         ownerPid: state.lease.ownerPid,
         ownerStartTime: state.lease.ownerStartTime,
         ownerStateDir: state.lease.ownerStateDir,
         ownerToken: state.lease.ownerToken,
         sessionId: state.lease.sessionId,
-        hint: buildBusyRunnerLeaseHint(state.lease),
+        hint: buildBusyRunnerLeaseHint(state.lease, logicalLeaseContext),
       },
     );
   }
@@ -146,14 +157,30 @@ function isSameStateDirRunnerLease(lease: RunnerLease): boolean {
 }
 
 function readCurrentStateDir(): string | undefined {
+  if (runnerLeaseOwnerStateDir) return runnerLeaseOwnerStateDir;
   return process.env.AGENT_DEVICE_STATE_DIR?.trim() || undefined;
 }
 
-function buildBusyRunnerLeaseHint(lease: RunnerLease): string {
+function buildBusyRunnerLeaseHint(
+  lease: RunnerLease,
+  logicalLeaseContext?: RunnerLogicalLeaseContext,
+): string {
   const owner = `PID ${lease.ownerPid}`;
   const stateDir = lease.ownerStateDir ? ` with AGENT_DEVICE_STATE_DIR=${lease.ownerStateDir}` : '';
+  const currentStateDir = readCurrentStateDir();
+  const current =
+    currentStateDir && currentStateDir !== lease.ownerStateDir
+      ? ` Current daemon state dir is ${currentStateDir}.`
+      : '';
+  if (logicalLeaseContext) {
+    return [
+      `The device is busy because another active device lease owns it, or the runner is owned by another daemon/process after lease admission. Runner owner: ${owner}${stateDir}.${current}`,
+      'Retry after the owning session closes or after the five-minute inactivity lease expires.',
+      'If this persists after expiry, inspect the runner owner details and clean the stale daemon state on the machine with simulator access.',
+    ].join(' ');
+  }
   return [
-    `The Mac operator must stop the owning daemon (${owner}${stateDir}) or wait for that run to finish, then retry.`,
+    `Runner owner details: ${owner}${stateDir}.${current} Retry after the owning runner finishes.`,
     'Do not run prepare ios-runner from another daemon/client to recover this; a live foreign runner lease cannot be released by the remote client.',
   ].join(' ');
 }

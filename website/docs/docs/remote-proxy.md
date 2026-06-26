@@ -31,41 +31,22 @@ By default the proxy binds `127.0.0.1`. Use `--host 0.0.0.0` only when you inten
 
 ## Remote Client
 
-On the machine running the agent, use the public tunnel origin with the `/agent-device` base path:
+On the machine running the agent, connect to the public tunnel origin with the `/agent-device` base path:
 
 ```bash
-export AGENT_DEVICE_DAEMON_BASE_URL="https://example.trycloudflare.com/agent-device"
-export AGENT_DEVICE_DAEMON_AUTH_TOKEN="<token>"
-
+agent-device connect proxy \
+  --daemon-base-url https://example.trycloudflare.com/agent-device \
+  --daemon-auth-token <token>
 agent-device devices --platform ios
 agent-device open MyApp --platform ios
 agent-device snapshot --platform ios
+agent-device close
+agent-device disconnect
 ```
 
-You can also pass the values per command:
+`connect proxy` stores the proxy profile and client identity. The proxy device lease is acquired automatically on `open`, refreshes on command activity, and expires after five minutes without commands. `disconnect` releases the connection lease and local state; `close` releases the session/device lease where supported.
 
-```bash
-agent-device devices \
-  --daemon-base-url https://example.trycloudflare.com/agent-device \
-  --daemon-auth-token <token>
-```
-
-For repeated use, put the remote client settings in normal CLI config:
-
-```json
-{
-  "daemonBaseUrl": "https://example.trycloudflare.com/agent-device",
-  "daemonAuthToken": "<token>"
-}
-```
-
-With `agent-device.json` in the working directory, normal commands pick up those defaults:
-
-```bash
-agent-device devices
-agent-device open MyApp
-agent-device snapshot
-```
+Multiple agents can share one proxy when each uses the normal `connect proxy`, `open`, command, `close`, and `disconnect` flow. A busy device error means another agent owns the device until it closes or the five-minute inactivity lease expires.
 
 Do not commit a config file that contains a live `daemonAuthToken`.
 
@@ -81,4 +62,4 @@ Remote clients read `/health` before issuing commands and compare the daemon RPC
 
 ## Cleanup
 
-Stop the tunnel and the `agent-device proxy` process when the remote session is done. Restarting the proxy generates a fresh token unless you supplied `--daemon-auth-token` explicitly.
+Run `agent-device disconnect` when the remote session is done. Stop the tunnel and the `agent-device proxy` process only when the host should stop accepting remote clients. Restarting the proxy generates a fresh token unless you supplied `--daemon-auth-token` explicitly; use lease expiry or `close` for normal device contention.

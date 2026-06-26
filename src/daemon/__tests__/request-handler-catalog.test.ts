@@ -90,6 +90,58 @@ test('lease handler executes commands owned by the lease route', async () => {
   }
 });
 
+test('lease handler preserves device-aware lease fields', async () => {
+  const leaseRegistry = new LeaseRegistry();
+  const allocateResponse = await handleLeaseCommands({
+    req: {
+      command: INTERNAL_COMMANDS.leaseAllocate,
+      token: 'test-token',
+      session: 'catalog-test',
+      meta: {
+        tenantId: 'tenant-a',
+        runId: 'run-a',
+        leaseBackend: 'ios-instance',
+        leaseProvider: 'proxy',
+        deviceKey: 'device-1',
+        clientId: 'client-a',
+      },
+      positionals: [],
+    },
+    leaseRegistry,
+  });
+
+  assert.equal(allocateResponse?.ok, true);
+  const allocateLease = readLeaseResponse(allocateResponse);
+  assert.equal(allocateLease.deviceKey, 'device-1');
+  assert.equal(allocateLease.clientId, 'client-a');
+  assert.equal(allocateLease.leaseProvider, 'proxy');
+
+  const heartbeatResponse = await handleLeaseCommands({
+    req: {
+      command: INTERNAL_COMMANDS.leaseHeartbeat,
+      token: 'test-token',
+      session: 'catalog-test',
+      meta: {
+        tenantId: 'tenant-a',
+        runId: 'run-a',
+        leaseId: allocateLease.leaseId,
+        leaseBackend: 'ios-instance',
+        leaseProvider: 'proxy',
+        deviceKey: 'device-1',
+        clientId: 'client-a',
+      },
+      positionals: [],
+    },
+    leaseRegistry,
+  });
+
+  assert.equal(heartbeatResponse?.ok, true);
+  const heartbeatLease = readLeaseResponse(heartbeatResponse);
+  assert.equal(heartbeatLease.deviceKey, 'device-1');
+  assert.equal(heartbeatLease.clientId, 'client-a');
+  assert.equal(heartbeatLease.leaseProvider, 'proxy');
+});
+
 function catalogCommandsForRoute(route: Exclude<DaemonCommandRoute, 'generic'>): string[] {
   return [...Object.values(PUBLIC_COMMANDS), ...Object.values(INTERNAL_COMMANDS)].filter(
     (command) => getDaemonCommandRoute(command) === route,
@@ -153,4 +205,14 @@ function catalogRouteRequest(command: string): DaemonRequest {
 function assertNoRoutingMismatch(error: unknown, command: string): void {
   assert.ok(error instanceof Error, `${command} threw a non-error value`);
   assert.doesNotMatch(error.message, new RegExp(ROUTING_MISMATCH_MESSAGE), command);
+}
+
+function readLeaseResponse(response: DaemonResponse | null): Record<string, unknown> & {
+  leaseId: string;
+} {
+  assert.ok(response?.ok);
+  const lease = response.data?.lease;
+  assert.ok(lease && typeof lease === 'object' && !Array.isArray(lease));
+  assert.equal(typeof (lease as Record<string, unknown>).leaseId, 'string');
+  return lease as Record<string, unknown> & { leaseId: string };
 }

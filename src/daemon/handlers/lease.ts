@@ -16,6 +16,9 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         tenantId: leaseScope.tenantId ?? '',
         runId: leaseScope.runId ?? '',
         backend: leaseScope.leaseBackend,
+        leaseProvider: leaseScope.leaseProvider,
+        deviceKey: leaseScope.deviceKey,
+        clientId: leaseScope.clientId,
         ttlMs: leaseScope.leaseTtlMs,
       });
       return {
@@ -28,6 +31,10 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         leaseId: leaseScope.leaseId ?? '',
         tenantId: leaseScope.tenantId,
         runId: leaseScope.runId,
+        backend: leaseScope.leaseBackend,
+        leaseProvider: leaseScope.leaseProvider,
+        deviceKey: leaseScope.deviceKey,
+        clientId: leaseScope.clientId,
         ttlMs: leaseScope.leaseTtlMs,
       });
       return {
@@ -40,6 +47,10 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
         leaseId: leaseScope.leaseId ?? '',
         tenantId: leaseScope.tenantId,
         runId: leaseScope.runId,
+        backend: leaseScope.leaseBackend,
+        leaseProvider: leaseScope.leaseProvider,
+        deviceKey: leaseScope.deviceKey,
+        clientId: leaseScope.clientId,
       });
       return {
         ok: true,

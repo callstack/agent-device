@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type { RunnerLogicalLeaseContext } from '../../core/runner-lease-context.ts';
 import type { DeviceInfo } from '../../utils/device.ts';
 import type { RunnerCommand } from './runner-contract.ts';
 import type {
@@ -14,6 +15,7 @@ export type AppleRunnerCommandOptions = ExternalXctestRunnerOptions & {
   cleanStaleBundles?: boolean;
   startupTimeoutMs?: number;
   requestId?: string;
+  runnerLeaseContext?: RunnerLogicalLeaseContext;
 };
 
 export type AppleRunnerLifecycleOptions = AppleRunnerCommandOptions & {

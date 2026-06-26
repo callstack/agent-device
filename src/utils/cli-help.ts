@@ -80,9 +80,9 @@ const AGENT_QUICKSTART_LINES = [
   'Raw coordinates are fallback-only: use snapshot -i --json rects when iOS refs no-op or child refs are missing, then verify the action with diff snapshot -i or snapshot --diff.',
   'Sparse or AX-unavailable snapshot: use screenshot for visual truth, press the visible coordinate to leave the bad screen, then retry AX with snapshot -i.',
   'macOS context menus use click <ref> --button secondary, then snapshot -i. Longpress is for mobile hold gestures, not macOS secondary-click menus.',
-  'Direct proxy: Cloud/Linux clients can use iOS simulators through a Mac running agent-device proxy. A proxy URL/token means direct proxy mode: use --daemon-base-url plus --daemon-auth-token, or saved daemonBaseUrl/daemonAuthToken config.',
-  'Direct proxy sessions: choose one explicit --session and reuse it for open/snapshot/interactions/close; do not use connect, --remote-config, tenant, run, or lease flags.',
-  'Cloud/remote-config profiles are separate from direct proxy: use connect or --remote-config on operational commands. Do not substitute --config; --config only loads CLI defaults.',
+  'Remote lifecycle: use connect, then open, commands, close, and disconnect. Cloud, remote-config, direct proxy, and limrun are connection providers under the same flow.',
+  'Direct proxy: run agent-device connect proxy --daemon-base-url <proxy-agent-device-url> before using a shared Mac proxy. The proxy device lease is automatic on open, refreshes on commands, expires after five minutes of inactivity, and disconnect releases local connection state.',
+  'Busy direct-proxy device: another agent owns the local/proxy iOS device until it closes or the five-minute inactivity lease expires.',
   'Batch JSON steps use "command" and structured "input"; legacy "positionals"/"flags" steps still run in CLI but are deprecated until the next major version.',
   'Navigation: app-owned back uses back; system back uses back --system.',
   'Web browser sessions: read help web; first slice is web setup if needed -> web doctor -> open <url> --platform web -> snapshot -i -> click/fill/get/is/find/wait/screenshot -> close.',
@@ -268,8 +268,10 @@ Validation and evidence:
   Android animations: settings animations off/on, not animations disable/restore.
   Debug logs: logs clear --restart, logs mark, reproduce, then logs path; do not split clear/restart into separate stop/start commands.
   Network headers: network dump --include headers; do not write network log headers.
-  Direct proxy to a Mac you control: cloud/Linux clients can still use iOS simulators through the proxied Mac. Use the printed /agent-device daemon base URL and auth token, or store them as daemonBaseUrl and daemonAuthToken in agent-device.json. Use one explicit --session across open, snapshot, interactions, and close. Do not use connect, --remote-config, tenant, run, or lease flags for direct proxy simulators.
-  Cloud/remote-config profiles: use connect to discover a cloud profile, or connect --remote-config ./remote-config.json for a local profile; then open, snapshot, disconnect.
+  Remote lifecycle: cloud, remote-config, direct proxy, and limrun are connection providers under the same flow: connect, open, commands, close, disconnect.
+  Remote config profile: agent-device connect --remote-config ./remote-config.json; then run normal commands and disconnect.
+  Direct proxy to a Mac you control: cloud/Linux clients can use local/proxy iOS devices through the proxied Mac. Run agent-device connect proxy --daemon-base-url <proxy-agent-device-url> first; connect stores the profile and client identity. The proxy device lease is automatic on open, refreshes on commands, expires after five minutes of inactivity, and disconnect releases local connection state. close releases the session/device lease where supported.
+  Busy direct-proxy device: another agent owns the device until it closes or the five-minute inactivity lease expires. Use lease expiry or close for normal contention.
   Web: agent-device uses a managed, pinned agent-browser backend as an implementation detail. Use --platform web when a browser step belongs inside an agent-device session, replay, batch, MCP, or typed-client flow; use agent-browser directly for standalone web automation. Run agent-device web setup before first use, then agent-device web doctor for backend health checks. Web automation requires Node 24+.
     agent-device web setup
     agent-device web doctor
@@ -647,19 +649,26 @@ Android physical-device prerequisites:
     summary: 'Direct proxy, cloud profiles, and remote config',
     body: `agent-device help remote
 
-There are two different remote modes:
-  1. Direct proxy: agent-device proxy exposes a Mac you control. A cloud/Linux client can use iOS simulators through that proxied Mac. Use --daemon-base-url plus --daemon-auth-token, or store daemonBaseUrl and daemonAuthToken in agent-device.json. Use one explicit --session across open, snapshot, interactions, and close so implicit cwd-scoped default sessions do not diverge. Do not use connect, --remote-config, tenant, run, or lease flags for this mode.
-  2. Cloud/profile: the cloud connection profile or a local --remote-config owns daemon URL, auth, tenant, run, lease, device scope, and Metro hints. Do not restate those as individual flags unless overriding intentionally.
+Remote connection providers use the same lifecycle:
+  connect -> open -> commands -> close -> disconnect
+
+Providers:
+  Cloud: agent-device connect discovers the cloud profile.
+  Remote config: agent-device connect --remote-config ./remote-config.json uses a local profile.
+  Direct proxy: agent-device connect proxy --daemon-base-url <proxy-agent-device-url> stores the shared proxy profile and client identity.
+  Limrun: agent-device connect limrun uses the generated limrun profile when available.
 
 Direct proxy flow for a remote Mac/simulator:
   On the Mac with simulator/device access:
     agent-device proxy --port 4310
     cloudflared tunnel --url http://127.0.0.1:4310
   On the remote client:
-    agent-device devices --daemon-base-url https://example.trycloudflare.com/agent-device --daemon-auth-token <token>
-    agent-device open Maps --session maps --platform ios --device "iPhone 17 Pro" --daemon-base-url https://example.trycloudflare.com/agent-device --daemon-auth-token <token>
-    agent-device snapshot -i --session maps --platform ios --device "iPhone 17 Pro" --daemon-base-url https://example.trycloudflare.com/agent-device --daemon-auth-token <token>
-    agent-device close --session maps --daemon-base-url https://example.trycloudflare.com/agent-device --daemon-auth-token <token>
+    agent-device connect proxy --daemon-base-url https://example.trycloudflare.com/agent-device --daemon-auth-token <token>
+    agent-device devices --platform ios
+    agent-device open Maps --platform ios --device "iPhone 17 Pro"
+    agent-device snapshot -i --platform ios --device "iPhone 17 Pro"
+    agent-device close
+    agent-device disconnect
 
 Cloud profile flow:
   agent-device connect
@@ -681,11 +690,14 @@ Script flow, per-command config:
 Rules:
   connect and disconnect are top-level commands. Do not write agent-device remote connect or agent-device remote disconnect.
   Use connect without --remote-config when the cloud control plane owns the connection profile.
-  Prefer --remote-config over --daemon-base-url, --tenant, --run-id, and --lease-id when using a local profile.
-  Use agent-device proxy for direct tunnel access to a Mac you control. Copy the printed daemon base URL and daemon auth token; do not use agent-device auth, connect, disconnect, --remote-config, tenant, run, or lease flags for this direct proxy flow.
-  For repeated direct proxy commands, store daemonBaseUrl and daemonAuthToken in normal agent-device.json CLI config. Keep platform selection on each command or workflow, and keep the same explicit --session until close.
+  Prefer connect --remote-config over --daemon-base-url, --tenant, --run-id, and --lease-id when using a local profile.
+  Use agent-device proxy for direct tunnel access to a Mac you control. Copy the printed daemon base URL and daemon auth token, then run agent-device connect proxy --daemon-base-url <url> before normal commands.
+  connect proxy establishes the connection profile and client identity. The proxy device lease is acquired lazily on open, refreshes on command activity, and expires after five minutes without commands.
+  Multiple agents can share one proxy when each uses the normal connect proxy/open/command/disconnect flow; the daemon isolates sessions by client.
+  disconnect releases the connection lease and local state. close releases the session/device lease where supported.
+  A busy direct-proxy device error means another agent owns the device until it closes or the five-minute inactivity lease expires.
   Keep the proxy token secret. Anyone with the token can control the proxied daemon.
-  If iOS snapshot/interaction reports that the runner is already owned by another agent-device daemon, do not run prepare ios-runner from the remote client. Retry the original snapshot or interaction; same-proxy-state stale runner leases are reclaimed by the proxy daemon. If the conflict repeats, the Mac operator should close the owning session or clean the conflicting local daemon.
+  If local/proxy iOS reports that the runner is already owned by another agent-device daemon after lease admission, do not run prepare ios-runner from the remote client. Retry after the owning session closes or after the five-minute inactivity lease expires; if the conflict repeats after expiry, inspect the runner owner details and clean stale daemon state on the machine with simulator access.
   Do not use --config as a remote profile flag. --config loads CLI defaults; --remote-config selects remote daemon/profile settings.
   For self-contained scripts, pass the same --remote-config to every operational command, including disconnect; a preceding connect is optional but not required.
   For remote artifact installs, use install-from-source <url> or install-from-source --github-actions-artifact org/repo:artifact; do not download CI artifacts locally first.

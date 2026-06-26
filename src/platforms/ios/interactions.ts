@@ -72,6 +72,7 @@ export function iosRunnerOverrides(
     iosXctestrunFile: ctx.iosXctestrunFile,
     iosXctestDerivedDataPath: ctx.iosXctestDerivedDataPath,
     iosXctestEnvDir: ctx.iosXctestEnvDir,
+    runnerLeaseContext: ctx.runnerLeaseContext,
   };
   return {
     runnerOpts,

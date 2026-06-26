@@ -36,6 +36,7 @@ import { handleSessionStateCommands } from './session-state.ts';
 import { handleSessionObservabilityCommands } from './session-observability.ts';
 import { handleSessionReplayCommands } from './session-replay.ts';
 import { getSessionCommandKind } from '../daemon-command-registry.ts';
+import { LeaseRegistry } from '../lease-registry.ts';
 
 const PREPARE_IOS_RUNNER_MIN_STARTUP_TIMEOUT_MS = 45_000;
 const PREPARE_IOS_RUNNER_DEFAULT_BUILD_TIMEOUT_MS = 5 * 60_000;
@@ -247,6 +248,7 @@ export async function handleSessionCommands(params: {
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
+  leaseRegistry?: LeaseRegistry;
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;
   androidAdbExecutor?: AndroidAdbExecutor;
@@ -256,6 +258,7 @@ export async function handleSessionCommands(params: {
     sessionName,
     logPath,
     sessionStore,
+    leaseRegistry = new LeaseRegistry(),
     invoke,
     invokeReplayAction,
     androidAdbExecutor,
@@ -435,6 +438,7 @@ export async function handleSessionCommands(params: {
       sessionName,
       logPath,
       sessionStore,
+      leaseRegistry,
     });
   }
 

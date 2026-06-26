@@ -124,7 +124,7 @@ const DAEMON_COMMAND_DESCRIPTORS = [
   descriptor(PUBLIC_COMMANDS.record, 'recordTrace', {
     replayScopedAction: true,
     allowInvalidRecording: true,
-    allowSessionlessDefaultDevice: isRecordStartRequest,
+    allowSessionlessDefaultDevice: isRecordingStartRequest,
   }),
   descriptor(PUBLIC_COMMANDS.trace, 'recordTrace'),
   descriptor(PUBLIC_COMMANDS.find, 'find', { replayScopedAction: true }),
@@ -261,7 +261,7 @@ function buildDaemonCommandRegistry(descriptors: readonly DaemonCommandDescripto
   return { descriptorsByCommand };
 }
 
-function isRecordStartRequest(req: DaemonRequest): boolean {
+function isRecordingStartRequest(req: DaemonRequest): boolean {
   return (req.positionals?.[0] ?? '').toLowerCase() === 'start';
 }
 

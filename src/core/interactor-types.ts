@@ -4,6 +4,7 @@ import type { ScrollDirection, TransformGestureParams } from './scroll-gesture.t
 import type { SettingOptions } from '../platforms/permission-utils.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { BackendSnapshotResult } from '../backend.ts';
+import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
 import type {
   RawSnapshotNode,
   SnapshotBackend,
@@ -19,6 +20,7 @@ export type RunnerContext = {
   iosXctestrunFile?: string;
   iosXctestDerivedDataPath?: string;
   iosXctestEnvDir?: string;
+  runnerLeaseContext?: RunnerLogicalLeaseContext;
 };
 
 /** Subset of {@link RunnerContext} forwarded to runner command invocations. */
@@ -31,6 +33,7 @@ export type RunnerCallOptions = Pick<
   | 'iosXctestrunFile'
   | 'iosXctestDerivedDataPath'
   | 'iosXctestEnvDir'
+  | 'runnerLeaseContext'
 >;
 
 export type { BackMode };

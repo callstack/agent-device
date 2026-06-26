@@ -3,6 +3,7 @@ import { runCmdBackground, type ExecResult, type ExecBackgroundResult } from '..
 import { withKeyedLock } from '../../utils/keyed-lock.ts';
 import { Deadline } from '../../utils/retry.ts';
 import type { DeviceInfo } from '../../utils/device.ts';
+import type { RunnerLogicalLeaseContext } from '../../core/runner-lease-context.ts';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { buildSimctlArgsForDevice } from './simctl.ts';
@@ -108,8 +109,20 @@ async function startRunnerSessionWithLease(
   options: RunnerSessionOptions,
 ): Promise<RunnerSession> {
   const startupTimings: Record<string, number> = {};
+  const logicalLeaseContext = normalizeRunnerLogicalLeaseContext(
+    options.runnerLeaseContext,
+    device.id,
+  );
+  emitDiagnostic({
+    level: 'debug',
+    phase: 'ios_runner_session_startup',
+    data: {
+      deviceId: device.id,
+      logicalLeaseContext,
+    },
+  });
   await measureRunnerStartupStep(startupTimings, 'cleanup_stale_xcodebuild', async () => {
-    await prepareRunnerLeaseForStartup(device.id, runnerLeaseCleanupAdapter);
+    await prepareRunnerLeaseForStartup(device.id, runnerLeaseCleanupAdapter, logicalLeaseContext);
   });
   await measureRunnerStartupStep(startupTimings, 'ensure_booted', async () => {
     await ensureBootedIfNeeded(device);
@@ -222,6 +235,7 @@ async function startRunnerSessionWithLease(
     ready: false,
     startupTimeoutMs: normalizeRunnerStartupTimeoutMs(options.startupTimeoutMs),
     startupTimings,
+    logicalLeaseContext,
     simulatorSetRedirect: simulatorSetRedirect ?? undefined,
     lease,
   };
@@ -262,6 +276,7 @@ async function resolveReusableRunnerSession(
         sessionId: existing.sessionId,
         ready: existing.ready,
         cache: existingArtifact.cache,
+        logicalLeaseContext: existing.logicalLeaseContext,
       },
     });
     return existing;
@@ -295,6 +310,7 @@ async function resolveReusableRunnerSession(
       deviceId: device.id,
       sessionId: existing.sessionId,
       ready: existing.ready,
+      logicalLeaseContext: existing.logicalLeaseContext,
     },
   });
   return existing;
@@ -889,7 +905,29 @@ function emitRunnerStartupTimings(session: RunnerSession, command: string): void
       command,
       sessionId: session.sessionId,
       ready: session.ready,
+      logicalLeaseContext: session.logicalLeaseContext,
       timings: session.startupTimings,
     },
   });
+}
+
+function normalizeRunnerLogicalLeaseContext(
+  context: RunnerLogicalLeaseContext | undefined,
+  deviceKey: string,
+): RunnerLogicalLeaseContext | undefined {
+  if (!context) return undefined;
+  const normalized = {
+    leaseId: readOptionalContextString(context.leaseId),
+    clientId: readOptionalContextString(context.clientId),
+    tenantId: readOptionalContextString(context.tenantId),
+    runId: readOptionalContextString(context.runId),
+    leaseProvider: readOptionalContextString(context.leaseProvider),
+    deviceKey: readOptionalContextString(context.deviceKey) ?? deviceKey,
+  };
+  const entries = Object.entries(normalized).filter(([, value]) => value !== undefined);
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined;
+}
+
+function readOptionalContextString(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 }

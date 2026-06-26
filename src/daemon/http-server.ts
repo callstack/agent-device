@@ -282,6 +282,10 @@ function toLeaseDaemonRequest(
       leaseId: readStringParam(params, 'leaseId'),
       leaseTtlMs: readIntParam(params, 'ttlMs'),
       leaseBackend: readStringParam(params, 'backend') as LeaseBackend | undefined,
+      leaseProvider:
+        readStringParam(params, 'leaseProvider') ?? readStringParam(params, 'provider'),
+      deviceKey: readStringParam(params, 'deviceKey'),
+      clientId: readStringParam(params, 'clientId'),
     },
   };
 }

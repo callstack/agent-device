@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  REMOTE_CONFIG_FIELD_SPECS,
+  REMOTE_CONFIG_PROFILE_FIELD_SPECS,
   getRemoteConfigEnvNames,
   getRemoteConfigFieldSpec,
   type RemoteConfigProfile,
@@ -74,7 +74,7 @@ function readRemoteConfigEnvDefaults(
   env: Record<string, string | undefined> = process.env,
 ): RemoteConfigProfile {
   const profile: RemoteConfigProfile = {};
-  for (const spec of REMOTE_CONFIG_FIELD_SPECS) {
+  for (const spec of REMOTE_CONFIG_PROFILE_FIELD_SPECS) {
     const envMatch = getRemoteConfigEnvNames(spec.key)
       .map((name) => ({ name, value: env[name] }))
       .find((entry) => typeof entry.value === 'string' && entry.value.trim().length > 0);
@@ -95,7 +95,7 @@ function mergeRemoteConfigProfile(
   const merged: RemoteConfigProfile = {};
   for (const profile of profiles) {
     if (!profile) continue;
-    for (const spec of REMOTE_CONFIG_FIELD_SPECS) {
+    for (const spec of REMOTE_CONFIG_PROFILE_FIELD_SPECS) {
       const value = profile[spec.key];
       if (value !== undefined) {
         (merged as Record<string, unknown>)[spec.key] = value;

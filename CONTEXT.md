@@ -15,6 +15,17 @@
 - Modality: broad supported device family, such as mobile, tv, or desktop.
 - Session: daemon-owned state for a selected target and opened app or surface.
 - Recording backend: daemon-internal module interface selected per recording target that owns platform recording validation, output path policy, start/stop execution, and record-only cleanup below the daemon recording lifecycle.
+- Device lease: logical remote ownership of one selected device for a
+  tenant/run/client and lease provider, separate from platform helper process
+  locking.
+- Device key: stable provider-scoped device identity used for lease contention,
+  such as a simulator UDID, physical device id, or provider inventory id.
+- Lease provider: remote connection source that routes and owns a device lease,
+  such as `proxy`, cloud bridge, or `limrun`.
+- Direct proxy client id: optional remote proxy client identity used to bind
+  lease activity to the agent that acquired the selected device.
+- Runner/process lease: backend helper mutual-exclusion guard for platform
+  runners or tools; it is not the remote client ownership boundary.
 - Command surface: catalog of public command identity, interface exposure, adapter policy, and shared command metadata across CLI, Node.js, MCP, and batch entrypoints.
 - Daemon command registry: daemon-side source of truth for command route ownership and request-policy traits, including admission exemptions, session locking, selector validation, replay-scoped actions, recording invalidation, Android dialog guards, and request provider device resolution.
 - Runner command traits: per-command-type classification for iOS/macOS runner lifecycle behavior, distinct from the public command surface and daemon command registry. The Swift runner traits classify interaction, read-only, and runner-lifecycle axes for XCTest execution; Swift resolves the alert command as read-only only for its `get` action. The TypeScript runner command traits classify daemon-side runner send/recovery policy such as read-only retry routing, readiness probes, and recent-healthy-mutation preflight skips; the TypeScript table is command-type keyed and currently classifies alert as read-only for daemon retry policy. Each side keeps one source of truth keyed by runner command type.

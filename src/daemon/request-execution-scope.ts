@@ -31,6 +31,7 @@ import {
   type SessionStore,
 } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
+import { teardownSessionResources } from './handlers/session-close.ts';
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps
 // test and embedded routers isolated without changing process-level serialization there.
@@ -74,10 +75,12 @@ export async function createRequestExecutionScope(params: {
   leaseRegistry: LeaseRegistry;
 }): Promise<RequestExecutionScope> {
   const { sessionStore, leaseRegistry } = params;
-  const scopedReq = applyRequestCommandDefaults(scopeRequestSession(params.req));
+  await cleanupExpiredLeasedSessions({ sessionStore, leaseRegistry });
+  let scopedReq = applyRequestCommandDefaults(scopeRequestSession(params.req));
 
   const command = scopedReq.command;
   const sessionName = resolveEffectiveSessionName(scopedReq, sessionStore);
+  const existingSession = sessionStore.get(sessionName);
   const diagnosticsMeta = getDiagnosticsMeta();
   const sessionDir = sessionStore.resolveSessionDir(sessionName);
   const requestLogPath = resolveSessionRequestLogPath(
@@ -102,7 +105,26 @@ export async function createRequestExecutionScope(params: {
       runnerLogPath,
     },
   });
-  assertRequestLeaseAdmission(scopedReq, leaseRegistry);
+  const activeLease = assertRequestLeaseAdmission(scopedReq, leaseRegistry, existingSession);
+  if (activeLease) {
+    scopedReq = {
+      ...scopedReq,
+      internal: {
+        ...scopedReq.internal,
+        admittedLease: activeLease,
+      },
+    };
+  }
+  if (activeLease && existingSession?.lease) {
+    sessionStore.set(sessionName, {
+      ...existingSession,
+      lease: {
+        ...existingSession.lease,
+        leaseBackend: activeLease.backend,
+        expiresAt: activeLease.expiresAt,
+      },
+    });
+  }
   const executionLockKeys = shouldLockSessionExecution(command)
     ? await resolveRequestExecutionLockKeys({ req: scopedReq, sessionName, sessionStore })
     : [];
@@ -125,6 +147,42 @@ export async function createRequestExecutionScope(params: {
     },
   };
   return scope;
+}
+
+async function cleanupExpiredLeasedSessions(params: {
+  sessionStore: SessionStore;
+  leaseRegistry: LeaseRegistry;
+}): Promise<void> {
+  const expiredLeases = params.leaseRegistry.consumeExpiredLeases();
+  if (expiredLeases.length === 0) return;
+  const expiredLeaseIds = new Set(expiredLeases.map((lease) => lease.leaseId));
+  for (const session of params.sessionStore.toArray()) {
+    const lease = session.lease;
+    if (!lease || !expiredLeaseIds.has(lease.leaseId)) continue;
+    emitDiagnostic({
+      level: 'info',
+      phase: 'leased_session_expired',
+      data: {
+        reason: 'LEASE_EXPIRED',
+        leaseId: lease.leaseId,
+        session: session.name,
+        deviceKey: lease.deviceKey,
+      },
+    });
+    await teardownSessionResources(session, session.name).catch((error) => {
+      emitDiagnostic({
+        level: 'debug',
+        phase: 'leased_session_expiry_cleanup_failed',
+        data: {
+          reason: 'LEASE_EXPIRED',
+          leaseId: lease.leaseId,
+          session: session.name,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    });
+    params.sessionStore.delete(session.name);
+  }
 }
 
 async function withRequestExecutionLocks<T>(
@@ -207,7 +265,8 @@ export function prepareLockedRequestScope(params: {
     flags: CommandFlags | undefined,
     appBundleId?: string,
     traceLogPath?: string,
-  ): DaemonCommandContext => contextFromRequestFlags(logPath, flags, appBundleId, traceLogPath);
+  ): DaemonCommandContext =>
+    contextFromRequestFlags(logPath, flags, appBundleId, traceLogPath, lockedReq.meta);
 
   return {
     type: 'scope',
@@ -233,10 +292,11 @@ function contextFromRequestFlags(
   flags: CommandFlags | undefined,
   appBundleId?: string,
   traceLogPath?: string,
+  meta?: DaemonRequest['meta'],
 ): DaemonCommandContext {
   const requestId = getDiagnosticsMeta().requestId;
   return {
-    ...contextFromFlagsWithLog(logPath, flags, appBundleId, traceLogPath, requestId),
+    ...contextFromFlagsWithLog(logPath, flags, appBundleId, traceLogPath, requestId, meta),
     requestId,
   };
 }

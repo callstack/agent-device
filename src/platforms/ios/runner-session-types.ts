@@ -1,3 +1,4 @@
+import type { RunnerLogicalLeaseContext } from '../../core/runner-lease-context.ts';
 import type { ExecResult, ExecBackgroundResult } from '../../utils/exec.ts';
 import type { DeviceInfo } from '../../utils/device.ts';
 import type { RunnerXctestrunArtifact } from './runner-xctestrun.ts';
@@ -21,6 +22,7 @@ export type RunnerSession = {
   lastHealthyMutation?: { atMs: number; appBundleId?: string };
   startupTimings?: Record<string, number>;
   startupTimingsReported?: boolean;
+  logicalLeaseContext?: RunnerLogicalLeaseContext;
   simulatorSetRedirect?: { release: () => Promise<void> };
   lease?: RunnerLease;
 };

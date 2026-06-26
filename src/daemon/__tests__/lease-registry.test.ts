@@ -98,3 +98,148 @@ test('capacity limits reject additional simulator leases', () => {
     /No simulator lease capacity available/,
   );
 });
+
+test('device-aware allocation is idempotent per tenant/run/backend/provider/device', () => {
+  let now = 1_000;
+  const registry = new LeaseRegistry({
+    now: () => now,
+    defaultLeaseTtlMs: 10_000,
+  });
+  const first = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    backend: 'ios-instance',
+    leaseProvider: 'proxy',
+    deviceKey: 'device-1',
+    clientId: 'client-a',
+  });
+
+  now = 3_000;
+  const second = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    backend: 'ios-instance',
+    leaseProvider: 'proxy',
+    deviceKey: 'device-1',
+    clientId: 'client-a',
+  });
+
+  assert.equal(second.leaseId, first.leaseId);
+  assert.equal(second.leaseProvider, 'proxy');
+  assert.equal(second.provider, 'proxy');
+  assert.equal(second.deviceKey, 'device-1');
+  assert.equal(second.clientId, 'client-a');
+  assert.equal(second.heartbeatAt, 3_000);
+  assert.equal(second.expiresAt, 13_000);
+});
+
+test('same backend/provider/device rejects conflicting active lease', () => {
+  const registry = new LeaseRegistry();
+  const first = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    backend: 'ios-instance',
+    leaseProvider: 'proxy',
+    deviceKey: 'device-1',
+  });
+
+  assert.throws(
+    () =>
+      registry.allocateLease({
+        tenantId: 'tenant-b',
+        runId: 'run-2',
+        backend: 'ios-instance',
+        leaseProvider: 'proxy',
+        deviceKey: 'device-1',
+      }),
+    (error) =>
+      error instanceof Error &&
+      error.message === 'Device is already leased' &&
+      (error as { details?: Record<string, unknown> }).details?.reason === 'DEVICE_LEASE_BUSY' &&
+      (error as { details?: Record<string, unknown> }).details?.leaseId === first.leaseId,
+  );
+});
+
+test('device leases are isolated by provider and device key', () => {
+  const registry = new LeaseRegistry();
+  const proxy = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    backend: 'ios-instance',
+    leaseProvider: 'proxy',
+    deviceKey: 'device-1',
+  });
+  const limrun = registry.allocateLease({
+    tenantId: 'tenant-b',
+    runId: 'run-2',
+    backend: 'ios-instance',
+    leaseProvider: 'limrun',
+    deviceKey: 'device-1',
+  });
+  const secondDevice = registry.allocateLease({
+    tenantId: 'tenant-c',
+    runId: 'run-3',
+    backend: 'ios-instance',
+    leaseProvider: 'proxy',
+    deviceKey: 'device-2',
+  });
+
+  assert.notEqual(limrun.leaseId, proxy.leaseId);
+  assert.notEqual(secondDevice.leaseId, proxy.leaseId);
+});
+
+test('heartbeat enforces device and provider scope when supplied', () => {
+  const registry = new LeaseRegistry();
+  const lease = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'proxy',
+    deviceKey: 'device-1',
+    clientId: 'client-a',
+  });
+
+  assert.throws(
+    () => registry.heartbeatLease({ leaseId: lease.leaseId, deviceKey: 'device-2' }),
+    (error) =>
+      error instanceof Error &&
+      (error as { details?: Record<string, unknown> }).details?.reason === 'LEASE_SCOPE_MISMATCH',
+  );
+  assert.throws(
+    () => registry.heartbeatLease({ leaseId: lease.leaseId, leaseProvider: 'limrun' }),
+    (error) =>
+      error instanceof Error &&
+      (error as { details?: Record<string, unknown> }).details?.reason === 'LEASE_SCOPE_MISMATCH',
+  );
+  assert.throws(
+    () => registry.heartbeatLease({ leaseId: lease.leaseId, clientId: 'client-b' }),
+    (error) =>
+      error instanceof Error &&
+      (error as { details?: Record<string, unknown> }).details?.reason === 'LEASE_SCOPE_MISMATCH',
+  );
+});
+
+test('expired device lease releases device binding for new clients', () => {
+  let now = 1_000;
+  const registry = new LeaseRegistry({
+    now: () => now,
+    defaultLeaseTtlMs: 5_000,
+  });
+  const first = registry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    backend: 'ios-instance',
+    leaseProvider: 'proxy',
+    deviceKey: 'device-1',
+  });
+
+  now = 7_000;
+  const second = registry.allocateLease({
+    tenantId: 'tenant-b',
+    runId: 'run-2',
+    backend: 'ios-instance',
+    leaseProvider: 'proxy',
+    deviceKey: 'device-1',
+  });
+
+  assert.notEqual(second.leaseId, first.leaseId);
+});

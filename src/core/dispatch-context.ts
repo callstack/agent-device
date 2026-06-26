@@ -6,6 +6,7 @@ import type { ClickButton } from './click-button.ts';
 import type { ElementSelectorKey } from './interactor-types.ts';
 import type { SwipePattern } from './scroll-gesture.ts';
 import type { SessionSurface } from './session-surface.ts';
+import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
 
 export type MaestroRuntimeFlags = {
   allowNonHittableCoordinateFallback?: boolean;
@@ -43,6 +44,7 @@ export type DispatchContext = ScreenshotDispatchFlags & {
   iosXctestrunFile?: string;
   iosXctestDerivedDataPath?: string;
   iosXctestEnvDir?: string;
+  runnerLeaseContext?: RunnerLogicalLeaseContext;
   snapshotInteractiveOnly?: boolean;
   snapshotDepth?: number;
   snapshotScope?: string;

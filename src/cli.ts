@@ -28,7 +28,10 @@ import { resolveDaemonPaths } from './daemon/config.ts';
 import { applyDefaultPlatformBinding, resolveBindingSettings } from './utils/session-binding.ts';
 import { resolveCliOptions } from './utils/cli-options.ts';
 import { maybeRunUpgradeNotifier } from './utils/update-check.ts';
-import { resolveRemoteConnectionDefaults } from './remote-connection-state.ts';
+import {
+  resolveRemoteConnectionDefaults,
+  type RemoteConnectionRequestMetadata,
+} from './remote-connection-state.ts';
 import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
 import type { CliFlags, FlagKey } from './utils/cli-flags.ts';
 import type { SessionRuntimeHints } from './contracts.ts';
@@ -223,9 +226,11 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
           flags: effectiveFlags,
         });
         let resolvedRuntime = connectionDefaults?.runtime;
+        let connectionMetadata = connectionDefaults?.connection;
         const buildClientConfig = (
           currentFlags: CliFlags,
           runtime: SessionRuntimeHints | undefined,
+          connection: RemoteConnectionRequestMetadata | undefined,
         ): AgentDeviceClientConfig => ({
           session: currentFlags.session,
           requestId,
@@ -239,6 +244,9 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
           runId: currentFlags.runId,
           leaseId: currentFlags.leaseId,
           leaseBackend: currentFlags.leaseBackend,
+          leaseProvider: connection?.leaseProvider,
+          clientId: connection?.clientId,
+          deviceKey: connection?.deviceKey,
           runtime,
           lockPolicy: binding.lockPolicy,
           lockPlatform: binding.defaultPlatform,
@@ -265,7 +273,7 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
 
         if (effectiveFlags.remoteConfig && shouldMaterializeRemoteConnection(command)) {
           const materializationClient = createAgentDeviceClient(
-            buildClientConfig(effectiveFlags, resolvedRuntime),
+            buildClientConfig(effectiveFlags, resolvedRuntime, connectionMetadata),
             {
               transport: deps.sendToDaemon as AgentDeviceDaemonTransport,
             },
@@ -281,6 +289,7 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
           });
           effectiveFlags = materialized.flags;
           resolvedRuntime = materialized.runtime;
+          connectionMetadata = materialized.connection;
         }
         if (
           shouldWarnOpenMayMissRemoteRuntime({
@@ -310,13 +319,16 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
           debugOutputEnabled && !effectiveFlags.json && !remoteDaemonBaseUrl
             ? startDaemonLogTail(daemonPaths.logPath)
             : null;
-        const client = createAgentDeviceClient(buildClientConfig(effectiveFlags, resolvedRuntime), {
-          transport: createCliDaemonTransport({
-            command,
-            flags: effectiveFlags,
-            transport: deps.sendToDaemon as AgentDeviceDaemonTransport,
-          }),
-        });
+        const client = createAgentDeviceClient(
+          buildClientConfig(effectiveFlags, resolvedRuntime, connectionMetadata),
+          {
+            transport: createCliDaemonTransport({
+              command,
+              flags: effectiveFlags,
+              transport: deps.sendToDaemon as AgentDeviceDaemonTransport,
+            }),
+          },
+        );
         if (command === 'batch') {
           if (!parsedBatchSteps) {
             throw new AppError('INVALID_ARGS', 'batch requires --steps or --steps-file.');
@@ -459,6 +471,7 @@ function resolveActiveConnectionDefaults(options: {
 }): {
   flags: Partial<CliFlags>;
   runtime?: SessionRuntimeHints;
+  connection?: RemoteConnectionRequestMetadata;
 } | null {
   if (
     options.command === 'connect' ||

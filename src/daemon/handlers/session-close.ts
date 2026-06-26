@@ -25,6 +25,7 @@ import {
   settleIosSimulator,
 } from './session-device-utils.ts';
 import { errorResponse } from './response.ts';
+import { LeaseRegistry } from '../lease-registry.ts';
 
 async function maybeShutdownSessionTarget(params: {
   device: DeviceInfo;
@@ -107,8 +108,9 @@ export async function handleCloseCommand(params: {
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
+  leaseRegistry?: LeaseRegistry;
 }): Promise<DaemonResponse> {
-  const { req, sessionName, logPath, sessionStore } = params;
+  const { req, sessionName, logPath, sessionStore, leaseRegistry = new LeaseRegistry() } = params;
   const session = sessionStore.get(sessionName);
   if (!session) {
     return await closeWithoutSession(req, logPath);
@@ -163,6 +165,7 @@ export async function handleCloseCommand(params: {
   }
   sessionStore.writeSessionLog(session);
   await cleanupRetainedMaterializedPathsForSession(sessionName).catch(() => {});
+  releaseSessionLease(session, leaseRegistry);
   sessionStore.delete(sessionName);
   const shutdownResult = await maybeShutdownSessionTarget({
     device: session.device,
@@ -178,6 +181,29 @@ export async function handleCloseCommand(params: {
     };
   }
   return { ok: true, data: { session: session.name, ...successText(`Closed: ${session.name}`) } };
+}
+
+function releaseSessionLease(session: SessionState, leaseRegistry: LeaseRegistry): void {
+  const lease = session.lease;
+  if (!lease) return;
+  const result = leaseRegistry.releaseLease({
+    leaseId: lease.leaseId,
+    tenantId: lease.tenantId,
+    runId: lease.runId,
+    backend: lease.leaseBackend,
+    leaseProvider: lease.leaseProvider,
+    deviceKey: lease.deviceKey,
+    clientId: lease.clientId,
+  });
+  emitDiagnostic({
+    level: 'info',
+    phase: 'session_lease_released',
+    data: {
+      session: session.name,
+      leaseId: lease.leaseId,
+      released: result.released,
+    },
+  });
 }
 
 function shouldDispatchPlatformClose(req: DaemonRequest, session: SessionState): boolean {

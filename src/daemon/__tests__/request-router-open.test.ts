@@ -29,24 +29,32 @@ function makeIosDevice(id: string): DeviceInfo {
   };
 }
 
-function createOpenHandler(sessionStore: ReturnType<typeof makeSessionStore>) {
+function createOpenHandler(
+  sessionStore: ReturnType<typeof makeSessionStore>,
+  leaseRegistry = new LeaseRegistry(),
+) {
   return createRequestHandler({
     logPath: path.join(os.tmpdir(), 'daemon.log'),
     token: 'test-token',
     sessionStore,
-    leaseRegistry: new LeaseRegistry(),
+    leaseRegistry,
     trackDownloadableArtifact: () => 'artifact-id',
   });
 }
 
-function openRequest(session: string, flags: Record<string, unknown>, requestId: string) {
+function openRequest(
+  session: string,
+  flags: Record<string, unknown>,
+  requestId: string,
+  meta: Record<string, unknown> = {},
+) {
   return {
     token: 'test-token',
     session,
     command: 'open',
     positionals: [],
     flags,
-    meta: { requestId },
+    meta: { requestId, ...meta },
   };
 }
 
@@ -80,6 +88,142 @@ test('open returns and creates the session state directory', async () => {
     );
     expect(fs.existsSync(String(response.data?.sessionStateDir))).toBe(true);
   }
+});
+
+test('open stores admitted lease metadata on the session', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-open-');
+  const leaseRegistry = new LeaseRegistry({ now: () => 1_000 });
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'proxy',
+    clientId: 'client-a',
+    deviceKey: 'ios:SIM-LEASED',
+  });
+  const device = makeIosDevice('SIM-LEASED');
+  mockResolveTargetDevice.mockResolvedValue(device);
+
+  const handler = createOpenHandler(sessionStore, leaseRegistry);
+
+  const response = await handler(
+    openRequest('default', { platform: 'ios' }, 'req-open-lease', {
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      leaseId: lease.leaseId,
+      sessionIsolation: 'tenant',
+      leaseProvider: 'proxy',
+      clientId: 'client-a',
+      deviceKey: 'ios:SIM-LEASED',
+      leaseBackend: 'ios-simulator',
+    }),
+  );
+
+  expect(response.ok).toBe(true);
+  expect(sessionStore.get('tenant-a:default')?.lease).toEqual({
+    leaseId: lease.leaseId,
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseBackend: 'ios-simulator',
+    leaseProvider: 'proxy',
+    clientId: 'client-a',
+    deviceKey: 'ios:SIM-LEASED',
+    expiresAt: 301_000,
+  });
+});
+
+test('proxy open without required lease metadata fails before device resolution', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-open-');
+  const handler = createOpenHandler(sessionStore, new LeaseRegistry());
+
+  const response = await handler(
+    openRequest('default', { platform: 'ios' }, 'req-open-proxy-missing', {
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+      leaseProvider: 'proxy',
+      sessionIsolation: 'tenant',
+    }),
+  );
+
+  expect(response.ok).toBe(false);
+  if (!response.ok) {
+    expect(response.error.code).toBe('INVALID_ARGS');
+    expect(response.error.message).toMatch(/Proxy open requires leaseId/);
+  }
+  expect(mockResolveTargetDevice).not.toHaveBeenCalled();
+  expect(mockDispatch).not.toHaveBeenCalled();
+});
+
+test('close releases the session lease', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-open-');
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    clientId: 'client-a',
+  });
+  sessionStore.set('default', {
+    name: 'default',
+    device: makeIosDevice('SIM-CLOSE'),
+    createdAt: Date.now(),
+    actions: [],
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      clientId: 'client-a',
+    },
+  });
+  const handler = createOpenHandler(sessionStore, leaseRegistry);
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'close',
+    positionals: [],
+    meta: { requestId: 'req-close-lease' },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(sessionStore.get('default')).toBeUndefined();
+  expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
+});
+
+test('close rejects a different client before cleanup', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-open-');
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    clientId: 'client-a',
+  });
+  sessionStore.set('default', {
+    name: 'default',
+    device: makeIosDevice('SIM-CLOSE-CLIENT'),
+    createdAt: Date.now(),
+    actions: [],
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      clientId: 'client-a',
+    },
+  });
+  const handler = createOpenHandler(sessionStore, leaseRegistry);
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'close',
+    positionals: [],
+    meta: { requestId: 'req-close-wrong-client', clientId: 'client-b' },
+  });
+
+  expect(response.ok).toBe(false);
+  expect(sessionStore.get('default')).toBeDefined();
+  expect(leaseRegistry.listActiveLeases()).toHaveLength(1);
+  expect(mockDispatch).not.toHaveBeenCalled();
 });
 
 test('router serializes same-device open requests before first session creation finishes', async () => {

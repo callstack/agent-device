@@ -110,6 +110,7 @@ import {
   cleanupRunnerLeasesForOwner,
   RUNNER_OWNER_START_TIME,
   RUNNER_OWNER_TOKEN,
+  setRunnerLeaseOwnerStateDir,
   writeRunnerLease,
   type RunnerLease,
 } from '../runner-lease.ts';
@@ -117,6 +118,7 @@ import {
 beforeEach(async () => {
   await abortAllIosRunnerSessions();
   vi.resetAllMocks();
+  setRunnerLeaseOwnerStateDir(undefined);
   process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR = fs.mkdtempSync(
     path.join(os.tmpdir(), 'agent-device-runner-lease-test-'),
   );
@@ -609,6 +611,29 @@ test('runner session starts xcodebuild through provider seams and reuses an aliv
   });
 });
 
+test('runner session startup diagnostics include logical lease context', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-lease-context-sim' };
+
+  const diagnostics = await captureDiagnostics(async () => {
+    await ensureRunnerSession(device, {
+      runnerLeaseContext: {
+        tenantId: 'tenant-123',
+        runId: 'run-456',
+        leaseId: 'lease-789',
+        leaseProvider: 'ios-simulator',
+      },
+    });
+  });
+
+  assert.match(diagnostics, /ios_runner_session_startup/);
+  assert.match(diagnostics, /"logicalLeaseContext"/);
+  assert.match(diagnostics, /"tenantId":"tenant-123"/);
+  assert.match(diagnostics, /"runId":"run-456"/);
+  assert.match(diagnostics, /"leaseId":"lease-789"/);
+  assert.match(diagnostics, /"leaseProvider":"ios-simulator"/);
+  assert.match(diagnostics, /"deviceKey":"runner-session-lease-context-sim"/);
+});
+
 test('runner session fails early for physical iOS devices when Apple developer mode is disabled', async () => {
   const device = { ...IOS_DEVICE, id: 'runner-session-devtools-disabled-device' };
   mockDevToolsSecurityDisabled();
@@ -693,6 +718,10 @@ test('runner session startup rejects live foreign runner lease', async () => {
       String((thrown as { details?: Record<string, unknown> }).details?.hint),
       /Do not run prepare ios-runner/,
     );
+    assert.match(
+      String((thrown as { details?: Record<string, unknown> }).details?.hint),
+      /PID \d+ with AGENT_DEVICE_STATE_DIR=\/tmp\/agent-device-owner/,
+    );
     assert.equal(mockRunCmdBackground.mock.calls.length, 0);
     assert.equal(
       mockRunAppleToolCommand.mock.calls.some((call) => call[0] === 'pkill'),
@@ -702,6 +731,51 @@ test('runner session startup rejects live foreign runner lease', async () => {
     if (previousStateDir === undefined) delete process.env.AGENT_DEVICE_STATE_DIR;
     else process.env.AGENT_DEVICE_STATE_DIR = previousStateDir;
   }
+});
+
+test('runner session busy error includes logical lease context after admission', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-logical-busy-lease-sim' };
+  writeRunnerLease(
+    makeRunnerLease({
+      deviceId: device.id,
+      ownerToken: 'owner-foreign-logical-live',
+      ownerPid: process.pid,
+      ownerStartTime: RUNNER_OWNER_START_TIME,
+      ownerStateDir: '/tmp/agent-device-owner',
+    }),
+  );
+
+  let thrown: unknown;
+  await assert.rejects(async () => {
+    try {
+      await ensureRunnerSession(device, {
+        runnerLeaseContext: {
+          tenantId: 'tenant-123',
+          runId: 'run-456',
+          leaseId: 'lease-789',
+          leaseProvider: 'ios-simulator',
+        },
+      });
+    } catch (error) {
+      thrown = error;
+      throw error;
+    }
+  }, /busy after device lease admission/);
+
+  assert.ok(thrown instanceof AppError);
+  assert.deepEqual(thrown.details?.logicalLeaseContext, {
+    tenantId: 'tenant-123',
+    runId: 'run-456',
+    leaseId: 'lease-789',
+    leaseProvider: 'ios-simulator',
+    deviceKey: device.id,
+  });
+  assert.match(String(thrown.details?.hint), /five-minute inactivity lease expires/);
+  assert.match(
+    String(thrown.details?.hint),
+    /Runner owner: PID \d+ with AGENT_DEVICE_STATE_DIR=\/tmp\/agent-device-owner/,
+  );
+  assert.equal(mockRunCmdBackground.mock.calls.length, 0);
 });
 
 test('runner session startup reclaims live foreign runner lease from same state dir', async () => {
@@ -733,6 +807,38 @@ test('runner session startup reclaims live foreign runner lease from same state 
     assert.ok(pkillCalls.length >= 2);
     assert.match(String(pkillCalls[0]?.[1]?.[2] ?? ''), /owner-foreign-same-state/);
   } finally {
+    if (previousStateDir === undefined) delete process.env.AGENT_DEVICE_STATE_DIR;
+    else process.env.AGENT_DEVICE_STATE_DIR = previousStateDir;
+  }
+});
+
+test('runner session startup reclaims same-state live lease from daemon runtime owner state dir', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-runtime-state-lease-sim' };
+  const previousStateDir = process.env.AGENT_DEVICE_STATE_DIR;
+  const stateDir = '/tmp/agent-device-runtime-state';
+  delete process.env.AGENT_DEVICE_STATE_DIR;
+  setRunnerLeaseOwnerStateDir(stateDir);
+  writeRunnerLease(
+    makeRunnerLease({
+      deviceId: device.id,
+      ownerToken: 'owner-foreign-runtime-state',
+      ownerPid: process.pid,
+      ownerStartTime: RUNNER_OWNER_START_TIME,
+      ownerStateDir: stateDir,
+      runnerPid: 4_321,
+    }),
+  );
+
+  try {
+    const session = await ensureRunnerSession(device, {});
+
+    assert.equal(session.deviceId, device.id);
+    assert.equal(mockRunCmdBackground.mock.calls.length, 1);
+    const pkillCalls = mockRunAppleToolCommand.mock.calls.filter(isXcodebuildPkillCall);
+    assert.ok(pkillCalls.length >= 2);
+    assert.match(String(pkillCalls[0]?.[1]?.[2] ?? ''), /owner-foreign-runtime-state/);
+  } finally {
+    setRunnerLeaseOwnerStateDir(undefined);
     if (previousStateDir === undefined) delete process.env.AGENT_DEVICE_STATE_DIR;
     else process.env.AGENT_DEVICE_STATE_DIR = previousStateDir;
   }

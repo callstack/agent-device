@@ -6,7 +6,9 @@ import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../utils
 import {
   makeAndroidSession,
   makeIosSession,
+  makeSession,
 } from '../../__tests__/test-utils/session-factories.ts';
+import { LINUX_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { clearRequestCanceled, markRequestCanceled } from '../request-cancel.ts';
@@ -27,7 +29,13 @@ afterAll(() => {
 test('createRequestExecutionScope applies tenant scoping and lease admission', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   const leaseRegistry = new LeaseRegistry();
-  const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'proxy',
+    clientId: 'client-a',
+    deviceKey: 'ios:sim-1',
+  });
 
   const scope = await createRequestExecutionScope({
     req: makeRequest({
@@ -112,6 +120,186 @@ test('createRequestExecutionScope rejects tenant requests without an active leas
       leaseRegistry: new LeaseRegistry(),
     }),
   ).rejects.toThrow(/Lease is not active/);
+});
+
+test('leased session admission uses stored lease metadata and heartbeats', async () => {
+  let now = 1_000;
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  const leaseRegistry = new LeaseRegistry({ now: () => now });
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'proxy',
+    clientId: 'client-a',
+    deviceKey: 'ios:sim-1',
+  });
+  sessionStore.set(
+    'default',
+    makeIosSession('default', {
+      lease: {
+        leaseId: lease.leaseId,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        leaseBackend: lease.backend,
+        leaseProvider: 'proxy',
+        clientId: 'client-a',
+        deviceKey: 'ios:sim-1',
+        expiresAt: lease.expiresAt,
+      },
+    }),
+  );
+  now = 2_000;
+
+  const scope = await createRequestExecutionScope({
+    req: makeRequest({ command: 'snapshot' }),
+    sessionStore,
+    leaseRegistry,
+  });
+
+  expect(scope.sessionName).toBe('default');
+  const activeLease = leaseRegistry.listActiveLeases()[0];
+  expect(activeLease?.heartbeatAt).toBe(2_000);
+  expect(activeLease?.expiresAt).toBe(302_000);
+  expect(sessionStore.get('default')?.lease?.expiresAt).toBe(302_000);
+});
+
+test('leased session rejects mismatched lease id before dispatch', async () => {
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+  sessionStore.set(
+    'default',
+    makeIosSession('default', {
+      lease: {
+        leaseId: lease.leaseId,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        leaseBackend: lease.backend,
+      },
+    }),
+  );
+
+  await expect(
+    createRequestExecutionScope({
+      req: makeRequest({ command: 'snapshot', meta: { leaseId: '1'.repeat(32) } }),
+      sessionStore,
+      leaseRegistry,
+    }),
+  ).rejects.toThrow(/Lease does not match session owner \(leaseId\)/);
+});
+
+test.each([
+  ['leaseProvider', { leaseProvider: 'cloud' }],
+  ['clientId', { clientId: 'client-b' }],
+  ['deviceKey', { deviceKey: 'ios:SIM-002' }],
+] as const)('leased session rejects mismatched %s before dispatch', async (_field, meta) => {
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+  sessionStore.set(
+    'default',
+    makeIosSession('default', {
+      lease: {
+        leaseId: lease.leaseId,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        leaseBackend: lease.backend,
+        leaseProvider: 'proxy',
+        clientId: 'client-a',
+        deviceKey: 'ios:SIM-001',
+      },
+    }),
+  );
+
+  await expect(
+    createRequestExecutionScope({
+      req: makeRequest({ command: 'snapshot', meta }),
+      sessionStore,
+      leaseRegistry,
+    }),
+  ).rejects.toThrow(/Lease does not match session owner/);
+});
+
+test('local unleased session admission still succeeds', async () => {
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  sessionStore.set('default', makeIosSession('default'));
+
+  const scope = await createRequestExecutionScope({
+    req: makeRequest({ command: 'snapshot' }),
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+  });
+
+  expect(scope.sessionName).toBe('default');
+});
+
+test('provider lease admission succeeds without a device key', async () => {
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    backend: 'android-instance',
+    leaseProvider: 'limrun',
+  });
+  sessionStore.set(
+    'default',
+    makeAndroidSession('default', {
+      lease: {
+        leaseId: lease.leaseId,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        leaseBackend: lease.backend,
+        leaseProvider: 'limrun',
+      },
+    }),
+  );
+
+  const scope = await createRequestExecutionScope({
+    req: makeRequest({ command: 'snapshot' }),
+    sessionStore,
+    leaseRegistry,
+  });
+
+  expect(scope.sessionName).toBe('default');
+});
+
+test('expired leases remove owned sessions before the next command and free capacity', async () => {
+  let now = 1_000;
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  const leaseRegistry = new LeaseRegistry({
+    maxActiveSimulatorLeases: 1,
+    defaultLeaseTtlMs: 10,
+    minLeaseTtlMs: 1,
+    now: () => now,
+  });
+  const lease = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-1' });
+  sessionStore.set(
+    'default',
+    makeSession('default', {
+      device: LINUX_DEVICE,
+      lease: {
+        leaseId: lease.leaseId,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        leaseBackend: lease.backend,
+        leaseProvider: 'proxy',
+        deviceKey: 'ios:SIM-001',
+        expiresAt: lease.expiresAt,
+      },
+    }),
+  );
+  now = 1_011;
+
+  await createRequestExecutionScope({
+    req: makeRequest({ command: 'snapshot' }),
+    sessionStore,
+    leaseRegistry,
+  });
+
+  expect(sessionStore.get('default')).toBeUndefined();
+  const nextLease = leaseRegistry.allocateLease({ tenantId: 'tenant-b', runId: 'run-2' });
+  expect(nextLease.tenantId).toBe('tenant-b');
 });
 
 test('tenant lease rejection flushes diagnostics into the effective session request log', async () => {

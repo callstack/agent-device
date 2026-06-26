@@ -2,14 +2,17 @@ import { resolveDaemonPaths } from '../../daemon/config.ts';
 import { stopReactDevtoolsCompanion } from '../../client-react-devtools-companion.ts';
 import { stopMetroTunnel } from '../../metro.ts';
 import { resolveRemoteConfigProfile } from '../../remote-config.ts';
+import { resolveDevice, type DeviceInfo } from '../../utils/device.ts';
 import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
 import type { MetroBridgeScope } from '../../client-companion-tunnel-contract.ts';
 import {
   buildRemoteConnectionDaemonState,
+  buildRemoteConnectionRequestMetadata,
   hashRemoteConfigFile,
   readRemoteConnectionState,
   writeRemoteConnectionState,
   type RemoteConnectionState,
+  type RemoteConnectionRequestMetadata,
 } from '../../remote-connection-state.ts';
 import { profileToCliFlags } from '../../utils/remote-config.ts';
 import type { BatchStep } from '../../client-types.ts';
@@ -28,6 +31,7 @@ const leaseDeferredCommands = new Set([
   'session',
 ]);
 const runtimeDeferredCommands = new Set(['open']);
+export const PROXY_REMOTE_LEASE_TTL_MS = 5 * 60 * 1000;
 
 export async function materializeRemoteConnectionForCommand(options: {
   command: string;
@@ -37,7 +41,11 @@ export async function materializeRemoteConnectionForCommand(options: {
   positionals?: string[];
   batchSteps?: BatchStep[];
   forceRuntimePrepare?: boolean;
-}): Promise<{ flags: CliFlags; runtime?: SessionRuntimeHints }> {
+}): Promise<{
+  flags: CliFlags;
+  runtime?: SessionRuntimeHints;
+  connection?: RemoteConnectionRequestMetadata;
+}> {
   const { command, flags, client } = options;
   if (!flags.remoteConfig) {
     return { flags, runtime: options.runtime };
@@ -72,7 +80,12 @@ export async function materializeRemoteConnectionForCommand(options: {
   }
 
   const state =
-    existingState ?? createRemoteConnectionStateFromFlags(mergedFlags, remoteConfig.resolvedPath);
+    existingState ??
+    createRemoteConnectionStateFromFlags(
+      mergedFlags,
+      remoteConfig.resolvedPath,
+      remoteConfig.profile,
+    );
   const nextFlags = { ...mergedFlags, session: state.session };
   let nextRuntime = selectCompatibleRuntime(state.runtime, nextFlags.platform) ?? options.runtime;
   let nextState = state;
@@ -80,19 +93,41 @@ export async function materializeRemoteConnectionForCommand(options: {
   let metroCleanupToStop: RemoteConnectionState['metro'] | undefined;
   let preparedMetroCleanupOnFailure: RemoteConnectionState['metro'] | undefined;
 
-  if (shouldAllocateLeaseForCommand(command)) {
-    const leaseBackend = state.leaseBackend ?? requireRequestedLeaseBackend(flags, command);
-    assertRequestedConnectionScope(state, flags, leaseBackend);
+  if (shouldAllocateLeaseForCommand(command, nextState)) {
+    const preliminaryLeaseBackend = state.leaseBackend ?? resolveRequestedLeaseBackend(nextFlags);
+    if (nextState.leaseProvider === 'proxy') {
+      nextState = (
+        await resolveProxyLeaseState({
+          command,
+          client,
+          state: nextState,
+          flags: nextFlags,
+          leaseBackend: preliminaryLeaseBackend,
+        })
+      ).state;
+    }
+    const leaseBackend =
+      nextState.leaseBackend ??
+      preliminaryLeaseBackend ??
+      requireRequestedLeaseBackend(nextFlags, command);
+    assertRequestedConnectionScope(state, nextFlags, leaseBackend);
     const lease = await allocateOrReuseLease(client, nextState, leaseBackend);
     nextFlags.leaseId = lease.leaseId;
     nextFlags.leaseBackend = leaseBackend;
     nextFlags.platform = nextState.platform ?? nextFlags.platform;
     nextFlags.target = nextState.target ?? nextFlags.target;
-    if (nextState.leaseId !== lease.leaseId || nextState.leaseBackend !== leaseBackend) {
+    if (
+      nextState.leaseId !== lease.leaseId ||
+      nextState.leaseBackend !== leaseBackend ||
+      nextState.deviceKey !== (lease.deviceKey ?? nextState.deviceKey)
+    ) {
       nextState = {
         ...nextState,
         leaseId: lease.leaseId,
         leaseBackend,
+        leaseProvider: lease.leaseProvider ?? lease.provider ?? nextState.leaseProvider,
+        clientId: lease.clientId ?? nextState.clientId,
+        deviceKey: lease.deviceKey ?? nextState.deviceKey,
         platform: nextState.platform ?? flags.platform,
         target: nextState.target ?? flags.target,
         updatedAt: new Date().toISOString(),
@@ -168,6 +203,7 @@ export async function materializeRemoteConnectionForCommand(options: {
       target: nextState.target ?? nextFlags.target,
     },
     runtime: nextRuntime,
+    connection: buildRemoteConnectionRequestMetadata(nextState),
   };
 }
 
@@ -267,6 +303,9 @@ export async function releasePreviousLease(
       daemonBaseUrl: previous.daemon?.baseUrl,
       daemonTransport: previous.daemon?.transport,
       daemonServerMode: previous.daemon?.serverMode,
+      leaseProvider: previous.leaseProvider,
+      clientId: previous.clientId,
+      deviceKey: previous.deviceKey,
     });
   } catch {
     // Reconnect must succeed even if the old lease was already released.
@@ -289,7 +328,8 @@ function requireRequestedLeaseBackend(flags: CliFlags, command: string): LeaseBa
   );
 }
 
-function shouldAllocateLeaseForCommand(command: string): boolean {
+function shouldAllocateLeaseForCommand(command: string, state: RemoteConnectionState): boolean {
+  if (state.leaseProvider === 'proxy' && command === 'devices') return false;
   return !leaseDeferredCommands.has(command);
 }
 
@@ -359,6 +399,7 @@ function selectCompatibleRuntime(
 function createRemoteConnectionStateFromFlags(
   flags: CliFlags,
   remoteConfigPath: string,
+  profile: Pick<RemoteConnectionState, 'leaseProvider' | 'clientId' | 'deviceKey'> = {},
 ): RemoteConnectionState {
   if (!flags.tenant) {
     throw new AppError(
@@ -389,6 +430,9 @@ function createRemoteConnectionStateFromFlags(
     runId: flags.runId,
     leaseId: flags.leaseId,
     leaseBackend: flags.leaseBackend ?? resolveRequestedLeaseBackend(flags),
+    leaseProvider: profile.leaseProvider,
+    clientId: profile.clientId,
+    deviceKey: profile.deviceKey,
     platform: flags.platform,
     target: flags.target,
     connectedAt: now,
@@ -406,6 +450,10 @@ async function allocateOrReuseLease(
       tenant: state.tenant,
       runId: state.runId,
       leaseBackend,
+      leaseProvider: state.leaseProvider,
+      clientId: state.clientId,
+      deviceKey: state.deviceKey,
+      ttlMs: leaseTtlMsForConnection(state),
     });
     if (existing) return existing;
   }
@@ -413,7 +461,82 @@ async function allocateOrReuseLease(
     tenant: state.tenant,
     runId: state.runId,
     leaseBackend,
+    leaseProvider: state.leaseProvider,
+    clientId: state.clientId,
+    deviceKey: state.deviceKey,
+    ttlMs: leaseTtlMsForConnection(state),
   });
+}
+
+async function resolveProxyLeaseState(options: {
+  command: string;
+  client: AgentDeviceClient;
+  state: RemoteConnectionState;
+  flags: CliFlags;
+  leaseBackend?: LeaseBackend;
+}): Promise<{ state: RemoteConnectionState }> {
+  if (options.command !== 'open') {
+    if (options.state.leaseId && options.state.deviceKey) return { state: options.state };
+    throw new AppError(
+      'INVALID_ARGS',
+      'No active proxy device lease for this session; run open first.',
+    );
+  }
+  const device = await resolveSelectedDevice(options.client, options.flags);
+  const deviceKey = buildProxyDeviceKey(device);
+  return {
+    state: {
+      ...options.state,
+      deviceKey,
+      leaseBackend:
+        options.state.leaseBackend ?? options.leaseBackend ?? leaseBackendForDevice(device),
+      platform: options.state.platform ?? device.platform,
+      target: options.state.target ?? device.target,
+      updatedAt: new Date().toISOString(),
+    },
+  };
+}
+
+async function resolveSelectedDevice(
+  client: AgentDeviceClient,
+  flags: CliFlags,
+): Promise<DeviceInfo> {
+  const devices = await client.devices.list({
+    platform: flags.platform,
+    target: flags.target,
+    device: flags.device,
+    udid: flags.udid,
+    serial: flags.serial,
+    iosSimulatorDeviceSet: flags.iosSimulatorDeviceSet,
+    androidDeviceAllowlist: flags.androidDeviceAllowlist,
+  });
+  return await resolveDevice(
+    devices.map((device) => ({
+      platform: device.platform,
+      id: device.id,
+      name: device.name,
+      kind: device.kind,
+      target: device.target,
+      booted: device.booted,
+    })),
+    {
+      platform: flags.platform,
+      target: flags.target,
+      deviceName: flags.device,
+      udid: flags.udid,
+      serial: flags.serial,
+    },
+  );
+}
+
+function buildProxyDeviceKey(device: DeviceInfo): string {
+  return `${device.platform}:${device.target ?? 'mobile'}:${device.id}`;
+}
+
+function leaseBackendForDevice(device: DeviceInfo): LeaseBackend | undefined {
+  if (device.platform === 'ios') return 'ios-instance';
+  if (device.platform === 'android') return 'android-instance';
+  return undefined;
 }
 
 function assertRequestedConnectionScope(
@@ -447,7 +570,15 @@ function assertRequestedConnectionScope(
 async function heartbeatOrAllocateLease(
   client: AgentDeviceClient,
   leaseId: string,
-  scope: { tenant: string; runId: string; leaseBackend: LeaseBackend },
+  scope: {
+    tenant: string;
+    runId: string;
+    leaseBackend: LeaseBackend;
+    leaseProvider?: RemoteConnectionState['leaseProvider'];
+    clientId?: string;
+    deviceKey?: string;
+    ttlMs?: number;
+  },
 ): Promise<Lease | undefined> {
   try {
     return await client.leases.heartbeat({
@@ -455,11 +586,19 @@ async function heartbeatOrAllocateLease(
       runId: scope.runId,
       leaseId,
       leaseBackend: scope.leaseBackend,
+      leaseProvider: scope.leaseProvider,
+      clientId: scope.clientId,
+      deviceKey: scope.deviceKey,
+      ttlMs: scope.ttlMs,
     });
   } catch (error) {
     if (isInactiveLeaseError(error)) return undefined;
     throw error;
   }
+}
+
+function leaseTtlMsForConnection(state: RemoteConnectionState): number | undefined {
+  return state.leaseProvider === 'proxy' ? PROXY_REMOTE_LEASE_TTL_MS : undefined;
 }
 
 function isInactiveLeaseError(error: unknown): boolean {

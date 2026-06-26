@@ -19,6 +19,7 @@ import type { DeviceInfo, Platform, PlatformSelector } from '../utils/device.ts'
 import type { ExecBackgroundResult, ExecResult } from '../utils/exec.ts';
 import type { SnapshotState } from '../utils/snapshot.ts';
 import type { AppLogState } from './app-log-process.ts';
+import type { DeviceLease } from './lease-registry.ts';
 import type { AndroidNativePerfSession } from '../platforms/android/perf.ts';
 import type {
   AppleXctracePerfCapture,
@@ -46,6 +47,7 @@ export type DaemonOpenLifecycle = {
 
 type DaemonRequestInternal = {
   openLifecycle?: DaemonOpenLifecycle;
+  admittedLease?: DeviceLease;
 };
 
 export type DaemonRequest = Omit<PublicDaemonRequest, 'token' | 'session' | 'flags' | 'meta'> & {
@@ -226,6 +228,16 @@ export type SessionState = {
   sessionScope?: {
     kind: 'cwd';
     id: string;
+  };
+  lease?: {
+    leaseId: string;
+    tenantId: string;
+    runId: string;
+    leaseBackend?: LeaseBackend;
+    leaseProvider?: string;
+    deviceKey?: string;
+    clientId?: string;
+    expiresAt?: number;
   };
   device: DeviceInfo;
   createdAt: number;

@@ -108,6 +108,32 @@ test('defaultTracePath sanitizes session name', () => {
   assert.match(tracePath, /\.trace\.log$/);
 });
 
+test('session lease metadata round-trips through the store', () => {
+  const { store, session } = makeFixture('agent-device-session-lease-');
+  session.lease = {
+    leaseId: 'f'.repeat(32),
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    clientId: 'client-a',
+    leaseBackend: 'ios-simulator',
+    leaseProvider: 'proxy',
+    deviceKey: 'ios:SIM-001',
+    expiresAt: 123_456,
+  };
+
+  store.set(session.name, session);
+
+  assert.deepEqual(store.get(session.name)?.lease, session.lease);
+});
+
+test('sessions without lease metadata remain valid', () => {
+  const { store, session } = makeFixture('agent-device-session-unleased-');
+
+  store.set(session.name, session);
+
+  assert.equal(store.get(session.name)?.lease, undefined);
+});
+
 test('saveScript flag enables .ad session log writing', () => {
   const { root, store, session } = makeFixture('agent-device-session-log-enabled-');
   recordOpen(store, session);

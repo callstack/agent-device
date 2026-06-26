@@ -21,6 +21,9 @@ export type RemoteConnectionState = {
   runId: string;
   leaseId?: string;
   leaseBackend?: LeaseBackend;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
   platform?: CliFlags['platform'];
   target?: CliFlags['target'];
   runtime?: SessionRuntimeHints;
@@ -33,9 +36,15 @@ export type RemoteConnectionState = {
   updatedAt: string;
 };
 
+export type RemoteConnectionRequestMetadata = Pick<
+  RemoteConnectionState,
+  'leaseProvider' | 'deviceKey' | 'clientId'
+>;
+
 type RemoteConnectionDefaults = {
   flags: Partial<CliFlags>;
   runtime?: SessionRuntimeHints;
+  connection?: RemoteConnectionRequestMetadata;
 };
 
 export function readRemoteConnectionState(options: {
@@ -129,6 +138,7 @@ export function resolveRemoteConnectionDefaults(options: {
   const profile = resolveConnectionProfile(state, options);
   return {
     runtime: state.runtime,
+    connection: buildRemoteConnectionRequestMetadata(state),
     flags: {
       ...profile,
       remoteConfig: state.remoteConfigPath,
@@ -145,6 +155,17 @@ export function resolveRemoteConnectionDefaults(options: {
       target: state.target ?? profile.target,
     },
   };
+}
+
+export function buildRemoteConnectionRequestMetadata(
+  state: RemoteConnectionState,
+): RemoteConnectionRequestMetadata | undefined {
+  const connection = stripUndefined({
+    leaseProvider: state.leaseProvider,
+    deviceKey: state.deviceKey,
+    clientId: state.clientId,
+  });
+  return Object.keys(connection).length > 0 ? connection : undefined;
 }
 
 export function hashRemoteConfigFile(configPath: string): string {
@@ -264,6 +285,10 @@ function safeStateName(value: string): string {
   return `${safe}-${suffix}`;
 }
 
+function stripUndefined<T extends Record<string, unknown>>(record: T): T {
+  return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined)) as T;
+}
+
 function isRemoteConnectionState(value: unknown): value is RemoteConnectionState {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
@@ -280,6 +305,9 @@ function isRemoteConnectionState(value: unknown): value is RemoteConnectionState
     typeof record.runId === 'string' &&
     (record.leaseId === undefined || typeof record.leaseId === 'string') &&
     (record.leaseBackend === undefined || typeof record.leaseBackend === 'string') &&
+    (record.leaseProvider === undefined || typeof record.leaseProvider === 'string') &&
+    (record.deviceKey === undefined || typeof record.deviceKey === 'string') &&
+    (record.clientId === undefined || typeof record.clientId === 'string') &&
     typeof record.connectedAt === 'string' &&
     typeof record.updatedAt === 'string'
   );

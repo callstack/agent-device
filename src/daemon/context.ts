@@ -5,6 +5,8 @@ import {
   type ScreenshotRuntimeFlags,
 } from '../contracts/screenshot.ts';
 import { getDiagnosticsMeta } from '../utils/diagnostics.ts';
+import { resolveRunnerLogicalLeaseContext } from './lease-context.ts';
+import type { DaemonRequest } from './types.ts';
 
 export type DaemonCommandContext = DispatchContext & ScreenshotRuntimeFlags;
 
@@ -17,11 +19,13 @@ export function contextFromFlags(
   appBundleId?: string,
   traceLogPath?: string,
   requestId?: string,
+  meta?: DaemonRequest['meta'],
 ): DaemonCommandContext {
   const effectiveRequestId = requestId ?? getDiagnosticsMeta().requestId;
   return {
     requestId: effectiveRequestId,
     appBundleId,
+    runnerLeaseContext: resolveRunnerLogicalLeaseContext({ meta }),
     activity: flags?.activity,
     launchConsole: flags?.launchConsole,
     launchArgs: flags?.launchArgs,

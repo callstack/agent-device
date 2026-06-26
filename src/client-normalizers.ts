@@ -157,12 +157,13 @@ function buildClientDevicePlatformFields(
 }
 
 export function normalizeRuntimeHints(value: unknown): SessionRuntimeHints | undefined {
-  if (!isRecord(value)) return undefined;
-  const platform = value.platform;
-  const metroHost = readOptionalString(value, 'metroHost');
-  const metroPort = typeof value.metroPort === 'number' ? value.metroPort : undefined;
-  const bundleUrl = readOptionalString(value, 'bundleUrl');
-  const launchUrl = readOptionalString(value, 'launchUrl');
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const platform = record.platform;
+  const metroHost = readOptionalString(record, 'metroHost');
+  const metroPort = typeof record.metroPort === 'number' ? record.metroPort : undefined;
+  const bundleUrl = readOptionalString(record, 'bundleUrl');
+  const launchUrl = readOptionalString(record, 'launchUrl');
   return {
     platform: platform === 'ios' || platform === 'android' ? platform : undefined,
     metroHost,
@@ -210,20 +211,21 @@ export function normalizeOpenDevice(
 }
 
 export function normalizeStartupSample(value: unknown): StartupPerfSample | undefined {
-  if (!isRecord(value)) return undefined;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
   if (
-    typeof value.durationMs !== 'number' ||
-    typeof value.measuredAt !== 'string' ||
-    typeof value.method !== 'string'
+    typeof record.durationMs !== 'number' ||
+    typeof record.measuredAt !== 'string' ||
+    typeof record.method !== 'string'
   ) {
     return undefined;
   }
   return {
-    durationMs: value.durationMs,
-    measuredAt: value.measuredAt,
-    method: value.method,
-    appTarget: readOptionalString(value, 'appTarget'),
-    appBundleId: readOptionalString(value, 'appBundleId'),
+    durationMs: record.durationMs,
+    measuredAt: record.measuredAt,
+    method: record.method,
+    appTarget: readOptionalString(record, 'appTarget'),
+    appBundleId: readOptionalString(record, 'appBundleId'),
   };
 }
 
@@ -362,6 +364,9 @@ export function buildMeta(options: InternalRequestOptions): DaemonRequest['meta'
     leaseId: options.leaseId,
     leaseBackend: options.leaseBackend,
     leaseTtlMs: options.leaseTtlMs,
+    leaseProvider: options.leaseProvider,
+    clientId: options.clientId,
+    deviceKey: options.deviceKey,
     sessionIsolation: options.sessionIsolation,
     installSource: options.installSource,
     retainMaterializedPaths: options.retainMaterializedPaths,
