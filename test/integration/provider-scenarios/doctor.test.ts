@@ -50,7 +50,7 @@ test('Provider-backed integration doctor infers Android RN/Metro readiness throu
             );
             assertRpcOk(response);
             const data = response.json.result.data;
-            assert.equal(data.status, 'pass');
+            assert.equal(data.status, 'pass', JSON.stringify(data.checks));
             assert.equal(data.kind, 'react-native');
             assertDoctorCheck(data, 'device', 'pass');
             assertDoctorCheck(data, 'metro', 'pass');
@@ -145,13 +145,21 @@ function writePackageJson(dir: string, value: Record<string, unknown>): void {
 }
 
 function assertDoctorCheck(
-  data: { checks: Array<{ id: string; status: string }> },
+  data: {
+    checks: Array<{
+      id: string;
+      status: string;
+      summary: string;
+      evidence?: Record<string, unknown>;
+    }>;
+  },
   id: string,
   status: string,
-): void {
+): { id: string; status: string; summary: string; evidence?: Record<string, unknown> } {
   const check = data.checks.find((entry) => entry.id === id);
   assert.ok(check, `missing ${id}: ${JSON.stringify(data.checks)}`);
   assert.equal(check.status, status);
+  return check;
 }
 
 function assertNoDoctorCheck(data: { checks: Array<{ id: string }> }, id: string): void {
