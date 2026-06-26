@@ -1247,9 +1247,8 @@ test('usage includes agent workflows, config, environment, and examples footers'
     /Remote lifecycle: use connect, then open, commands, close, and disconnect/,
   );
   assert.match(usageText, /connect proxy --daemon-base-url <proxy-agent-device-url>/);
-  assert.match(usageText, /proxy device lease is automatic on open/);
-  assert.match(usageText, /expires after five minutes of inactivity/);
-  assert.match(usageText, /disconnect releases local connection state/);
+  assert.match(usageText, /Device leases are automatic on open/);
+  assert.match(usageText, /expire after five minutes of inactivity/);
   assert.match(usageText, /app-owned back uses back/);
   assert.match(usageText, /Web browser sessions: read help web/);
   assert.match(
@@ -1603,10 +1602,10 @@ test('usageForCommand resolves remote help topic', () => {
   assert.match(help, /agent-device open Maps --platform ios/);
   assert.match(help, /agent-device snapshot -i --platform ios/);
   assert.match(help, /agent-device close/);
-  assert.match(help, /lease is acquired lazily on open/);
-  assert.match(help, /expires after five minutes without commands/);
+  assert.match(help, /Device leases are acquired on open/);
+  assert.match(help, /expire after five minutes without commands/);
   assert.match(help, /Multiple agents can share one proxy/);
-  assert.match(help, /disconnect releases the connection lease and local state/);
+  assert.match(help, /disconnect releases local connection state/);
   assert.match(help, /A busy direct-proxy device error means another agent owns the device/);
   assert.match(help, /local\/proxy iOS reports that the runner is already owned/);
   assert.match(help, /same --remote-config to every operational command/);

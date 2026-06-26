@@ -44,9 +44,9 @@ agent-device close
 agent-device disconnect
 ```
 
-`connect proxy` stores the proxy profile and client identity. The proxy device lease is acquired automatically on `open`, refreshes on command activity, and expires after five minutes without commands. `disconnect` releases the connection lease and local state; `close` releases the session/device lease where supported.
+`connect proxy` stores the proxy profile and client identity. Device leases are automatic on `open` and expire after five minutes without commands. `close` releases the active session and device lease; `disconnect` clears local connection state.
 
-Multiple agents can share one proxy when each uses the normal `connect proxy`, `open`, command, `close`, and `disconnect` flow. A busy device error means another agent owns the device until it closes or the five-minute inactivity lease expires.
+Multiple agents can share one proxy when each uses the normal `connect proxy`, `open`, commands, `close`, and `disconnect` flow. A busy device error means another agent owns the device until it closes or its inactivity lease expires.
 
 Do not commit a config file that contains a live `daemonAuthToken`.
 
@@ -62,4 +62,4 @@ Remote clients read `/health` before issuing commands and compare the daemon RPC
 
 ## Cleanup
 
-Run `agent-device disconnect` when the remote session is done. Stop the tunnel and the `agent-device proxy` process only when the host should stop accepting remote clients. Restarting the proxy generates a fresh token unless you supplied `--daemon-auth-token` explicitly; use lease expiry or `close` for normal device contention.
+Run `agent-device disconnect` when the remote session is done. Stop the tunnel and the `agent-device proxy` process only when the host should stop accepting remote clients. Restarting the proxy generates a fresh token unless you supplied `--daemon-auth-token` explicitly.

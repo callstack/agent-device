@@ -22,8 +22,6 @@
   such as a simulator UDID, physical device id, or provider inventory id.
 - Lease provider: remote connection source that routes and owns a device lease,
   such as `proxy`, cloud bridge, or `limrun`.
-- Direct proxy client id: optional remote proxy client identity used to bind
-  lease activity to the agent that acquired the selected device.
 - Runner/process lease: backend helper mutual-exclusion guard for platform
   runners or tools; it is not the remote client ownership boundary.
 - Command surface: catalog of public command identity, interface exposure, adapter policy, and shared command metadata across CLI, Node.js, MCP, and batch entrypoints.

@@ -6,10 +6,9 @@ Accepted
 
 ## Context
 
-Remote daemon users need a clear ownership boundary before a command reaches a
-platform runner or helper. The existing lease model can bind a tenant/run to a
-backend, but direct proxy and hosted providers also need to identify the selected
-device and the connection provider that owns it.
+Remote daemon users need a clear ownership boundary before commands reach a
+platform runner or helper. Shared proxy and hosted providers need ownership to
+include the selected device and connection provider, not only tenant/run.
 
 Runner and helper processes already have backend-specific mutual exclusion. That
 guard protects platform tooling, not remote client ownership, so surfacing those
@@ -17,12 +16,11 @@ errors directly makes device contention harder to recover from.
 
 ## Decision
 
-A remote device lease is logical ownership of one selected device by one remote
-agent/client for a connection provider such as `proxy`, a cloud bridge, or
-`limrun`.
+A remote device lease is logical ownership of one selected device by one
+remote client for a connection provider such as `proxy`, cloud, or `limrun`.
 
-`connect` establishes a connection profile and client identity. Lease allocation
-remains lazy and happens only when a device, backend, and provider are known.
+`connect` establishes connection profile and client identity. Lease allocation
+is lazy and happens when a device, backend, and provider are known.
 
 A runner/process lease is a backend helper guard and is not a user/client
 ownership boundary. It stays below daemon device leases and should not be
@@ -36,10 +34,10 @@ Lease admission, heartbeat, stored session lease refresh, and request execution
 must run under the same daemon request lock. Scope resolution may happen before
 the lock, but lease ownership mutation must not.
 
-Generated connection profiles are non-secret. They may persist stable routing,
-device, lease provider, device key, and client identity metadata, but must strip
-daemon and Metro bearer tokens. Tokens are supplied in-memory for the current
-command or through the existing environment/CLI token paths.
+Generated connection profiles are non-secret. They may persist routing and
+lease metadata, but must strip daemon and Metro bearer tokens. Tokens are
+supplied in-memory for the current command or through environment/CLI token
+paths.
 
 The proxy process is expected to be long-lived and self-serve. Recovery from a
 stale or expired device lease should not require restarting the proxy.
@@ -50,6 +48,5 @@ Device contention can fail before platform execution with an explicit
 device-lease error that includes the backend, provider, selected device key, and
 owning lease expiry.
 
-Backend-only leases remain valid for older remote clients. Device and provider
-fields are optional until provider-aware `open` acquisition and admission
-refreshes are implemented.
+Backend-only leases remain valid for older remote clients, while provider-aware
+clients get device-level contention and clearer recovery.
