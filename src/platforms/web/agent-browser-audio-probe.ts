@@ -24,16 +24,10 @@ const audioProbePageScriptFunctions = [
 
 export function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
   const scriptBody = audioProbePageScriptFunctions.map((fn) => `${fn.toString()};`).join('');
-  const optionsJsonLiteral = escapeUnsafeChars(
-    JSON.stringify(
-      JSON.stringify({
-        action: options.action,
-        durationMs: finiteNumberOrUndefined(options.durationMs),
-        bucketMs: finiteNumberOrUndefined(options.bucketMs),
-      }),
-    ),
-  );
-  return `(()=>{${scriptBody}return ${audioProbeEvalScript.name}(JSON.parse(${optionsJsonLiteral}))})()`;
+  const action = readAudioProbeEvalAction(options.action);
+  const durationMs = finiteNumberLiteralOrUndefined(options.durationMs);
+  const bucketMs = finiteNumberLiteralOrUndefined(options.bucketMs);
+  return `(()=>{${scriptBody}return ${audioProbeEvalScript.name}({action:${JSON.stringify(action)},durationMs:${durationMs},bucketMs:${bucketMs}})})()`;
 }
 
 export function normalizeAgentBrowserAudioProbeResult(data: unknown): WebAudioProbeResult {
@@ -64,29 +58,21 @@ type AudioProbePageStats = { rms: number; peak: number };
 declare const window: AudioProbePageRecord;
 declare const document: { querySelectorAll(selector: string): any[] };
 
-const unsafeCodeStringCharacters: Record<string, string> = {
-  '<': '\\u003C',
-  '>': '\\u003E',
-  '\b': '\\b',
-  '\f': '\\f',
-  '\n': '\\n',
-  '\r': '\\r',
-  '\t': '\\t',
-  '\u0000': '\\0',
-  '\u2028': '\\u2028',
-  '\u2029': '\\u2029',
-};
-
-function escapeUnsafeChars(value: string): string {
-  return value.replace(
-    // eslint-disable-next-line no-control-regex -- CodeQL js/bad-code-sanitization recommends this sanitizer shape for generated code strings.
-    /[<>\b\f\n\r\t\0\u2028\u2029]/g,
-    (character) => unsafeCodeStringCharacters[character] ?? character,
-  );
+function readAudioProbeEvalAction(
+  action: WebAudioProbeOptions['action'],
+): WebAudioProbeOptions['action'] {
+  switch (action) {
+    case 'start':
+      return 'start';
+    case 'stop':
+      return 'stop';
+    default:
+      return 'status';
+  }
 }
 
-function finiteNumberOrUndefined(value: number | undefined): number | undefined {
-  return Number.isFinite(value) ? value : undefined;
+function finiteNumberLiteralOrUndefined(value: number | undefined): string {
+  return value === undefined || !Number.isFinite(value) ? 'undefined' : String(Math.trunc(value));
 }
 
 function audioProbeDbfs(value: number): number {
