@@ -24,7 +24,7 @@ const audioProbePageScriptFunctions = [
 
 export function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
   const scriptBody = audioProbePageScriptFunctions.map((fn) => `${fn.toString()};`).join('');
-  const optionsJsonLiteral = escapeUnsafeCodeString(
+  const optionsJsonLiteral = escapeUnsafeChars(
     JSON.stringify(
       JSON.stringify({
         action: options.action,
@@ -67,7 +67,6 @@ declare const document: { querySelectorAll(selector: string): any[] };
 const unsafeCodeStringCharacters: Record<string, string> = {
   '<': '\\u003C',
   '>': '\\u003E',
-  '/': '\\u002F',
   '\b': '\\b',
   '\f': '\\f',
   '\n': '\\n',
@@ -78,12 +77,12 @@ const unsafeCodeStringCharacters: Record<string, string> = {
   '\u2029': '\\u2029',
 };
 
-function escapeUnsafeCodeString(value: string): string {
-  let escaped = '';
-  for (const character of value) {
-    escaped += unsafeCodeStringCharacters[character] ?? character;
-  }
-  return escaped;
+function escapeUnsafeChars(value: string): string {
+  return value.replace(
+    // eslint-disable-next-line no-control-regex -- CodeQL js/bad-code-sanitization recommends this sanitizer shape for generated code strings.
+    /[<>\b\f\n\r\t\0\u2028\u2029]/g,
+    (character) => unsafeCodeStringCharacters[character] ?? character,
+  );
 }
 
 function finiteNumberOrUndefined(value: number | undefined): number | undefined {
