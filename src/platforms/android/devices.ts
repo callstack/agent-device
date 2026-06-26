@@ -256,7 +256,7 @@ export async function listAndroidDevices(
     },
   );
 
-  return devices;
+  return [...devices, ...(await listStoppedAndroidAvdDevices(devices))];
 }
 
 type AndroidDeviceEntry = {
@@ -319,6 +319,29 @@ async function listAndroidAvdNames(): Promise<string[]> {
     });
   }
   return parseAndroidAvdList(result.stdout);
+}
+
+async function listStoppedAndroidAvdDevices(runningDevices: DeviceInfo[]): Promise<DeviceInfo[]> {
+  const avdNames = await listAndroidAvdNames().catch(() => []);
+  const runningEmulatorNames = new Set(
+    runningDevices
+      .filter((device) => device.kind === 'emulator')
+      .map((device) => normalizeAndroidName(device.name)),
+  );
+  return avdNames
+    .filter((avdName) => !runningEmulatorNames.has(normalizeAndroidName(avdName)))
+    .map((avdName) => ({
+      platform: 'android',
+      id: avdName,
+      name: avdName,
+      kind: 'emulator',
+      target: inferAndroidAvdTarget(avdName),
+      booted: false,
+    }));
+}
+
+function inferAndroidAvdTarget(avdName: string): 'mobile' | 'tv' {
+  return /\b(tv|television)\b/i.test(normalizeAndroidName(avdName)) ? 'tv' : 'mobile';
 }
 
 function findAndroidEmulatorByAvdName(
@@ -434,7 +457,8 @@ export async function ensureAndroidEmulatorBooted(params: {
     resolvedAvdName,
     params.serial,
   );
-  if (!existing) {
+  const runningExisting = existing && isEmulatorSerial(existing.id) ? existing : undefined;
+  if (!runningExisting) {
     const launchArgs = ['-avd', resolvedAvdName];
     if (params.headless) {
       launchArgs.push('-no-window', '-no-audio');
@@ -443,7 +467,7 @@ export async function ensureAndroidEmulatorBooted(params: {
   }
 
   const discovered =
-    existing ??
+    runningExisting ??
     (await waitForAndroidEmulatorByAvdName({
       avdName: resolvedAvdName,
       serial: params.serial,

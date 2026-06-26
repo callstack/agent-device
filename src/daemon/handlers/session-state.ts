@@ -233,6 +233,17 @@ export async function handleSessionStateCommands(params: {
         });
       }
       await ensureDeviceReady(device);
+    } else if (
+      device.platform === 'android' &&
+      device.kind === 'emulator' &&
+      device.booted !== true
+    ) {
+      device = await ensureAndroidEmulatorBoot({
+        avdName: device.name,
+        serial: flags.serial,
+        headless: false,
+      });
+      await ensureDeviceReady(device);
     } else {
       const shouldEnsureReady = device.platform !== 'android' || device.booted !== true;
       if (shouldEnsureReady) {

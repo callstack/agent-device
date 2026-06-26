@@ -311,6 +311,18 @@ test('listAndroidDevices falls back to model when emulator avd name is unavailab
   );
 });
 
+test('listAndroidDevices includes stopped AVDs as non-booted emulators', async () => {
+  await withMockedAndroidTools(async () => {
+    const devices = await listAndroidDevices();
+
+    assert.equal(devices.length, 1);
+    assert.equal(devices[0]?.id, 'Pixel_9_Pro_XL');
+    assert.equal(devices[0]?.name, 'Pixel_9_Pro_XL');
+    assert.equal(devices[0]?.kind, 'emulator');
+    assert.equal(devices[0]?.booted, false);
+  });
+});
+
 test('ensureAndroidEmulatorBooted launches emulator in headless mode when requested', async () => {
   await withMockedAndroidTools(async ({ emulatorLogPath, emulatorBootedPath }) => {
     const device = await ensureAndroidEmulatorBooted({
