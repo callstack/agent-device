@@ -104,8 +104,7 @@ function formatActionFields(data: LogsActionFields): string | undefined {
 }
 
 function formatActionField(key: string, value: true | number | undefined): string {
-  if (value === true) return `${key}=true`;
-  return typeof value === 'number' ? `${key}=${value}` : '';
+  return value === undefined ? '' : `${key}=${value}`;
 }
 
 function formatNetworkEntry(entry: NetworkCliEntry): string[] {

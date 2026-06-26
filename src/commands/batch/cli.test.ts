@@ -120,6 +120,19 @@ test('batch rejects structured replay steps before daemon dispatch', async () =>
   assert.match(result.stderr, /not available through command batch/);
 });
 
+test('batch rejects invalid structured runtime without falling back to legacy parsing', async () => {
+  const result = await runCliCapture([
+    'batch',
+    '--steps',
+    '[{"command":"open","input":{"app":"settings"},"runtime":null}]',
+  ]);
+
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stderr, /Batch step 1 runtime is invalid/);
+  assert.doesNotMatch(result.stderr, /unknown legacy field\(s\): input/);
+});
+
 test('batch accepts legacy positionals/flags steps with deprecation warning', async () => {
   const result = await runCliCapture([
     'batch',

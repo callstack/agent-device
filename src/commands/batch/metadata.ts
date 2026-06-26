@@ -1,5 +1,5 @@
 import { DEFAULT_BATCH_MAX_STEPS } from '../../batch-contract.ts';
-import type { SessionRuntimeHints } from '../../contracts.ts';
+import { daemonRuntimeSchema, type SessionRuntimeHints } from '../../contracts.ts';
 import {
   STRUCTURED_BATCH_COMMAND_NAMES,
   readStructuredBatchCommandName,
@@ -165,11 +165,12 @@ function readBatchStepRuntimeProperty(
   stepNumber: number,
 ): Pick<BatchCommandStep, 'runtime'> {
   const runtime = record.runtime;
-  if (
-    runtime !== undefined &&
-    (!runtime || typeof runtime !== 'object' || Array.isArray(runtime))
-  ) {
-    throw new Error(`Batch step ${stepNumber} runtime must be an object.`);
+  if (runtime === undefined) return {};
+  try {
+    return { runtime: daemonRuntimeSchema.parse(runtime) };
+  } catch (error) {
+    throw new Error(
+      `Batch step ${stepNumber} runtime is invalid: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
-  return runtime === undefined ? {} : { runtime: runtime as SessionRuntimeHints };
 }

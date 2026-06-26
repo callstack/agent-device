@@ -1,4 +1,4 @@
-import type { DaemonRequest, DaemonResponse } from '../contracts.ts';
+import { daemonRuntimeSchema, type DaemonRequest, type DaemonResponse } from '../contracts.ts';
 import { AppError, asAppError } from '../utils/errors.ts';
 import { DEFAULT_BATCH_MAX_STEPS } from '../batch-contract.ts';
 import {
@@ -173,20 +173,26 @@ export function validateAndNormalizeBatchSteps(
     ) {
       throw new AppError('INVALID_ARGS', `Batch step ${index + 1} flags must be an object.`);
     }
-    if (
-      step.runtime !== undefined &&
-      (typeof step.runtime !== 'object' || Array.isArray(step.runtime) || !step.runtime)
-    ) {
-      throw new AppError('INVALID_ARGS', `Batch step ${index + 1} runtime must be an object.`);
-    }
     normalized.push({
       command,
       positionals: positionals as string[],
       flags: (step.flags ?? {}) as Record<string, unknown>,
-      runtime: step.runtime,
+      runtime: readBatchStepRuntime(step.runtime, index + 1),
     });
   }
   return normalized;
+}
+
+function readBatchStepRuntime(value: unknown, stepNumber: number): DaemonRequest['runtime'] {
+  if (value === undefined) return undefined;
+  try {
+    return daemonRuntimeSchema.parse(value);
+  } catch (error) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `Batch step ${stepNumber} runtime is invalid: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 export function buildBatchStepFlags(

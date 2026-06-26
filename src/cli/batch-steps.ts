@@ -1,5 +1,5 @@
 import type { BatchStep } from '../client-types.ts';
-import type { SessionRuntimeHints } from '../contracts.ts';
+import { daemonRuntimeSchema, type SessionRuntimeHints } from '../contracts.ts';
 import { readInputFromCli } from '../commands/cli-grammar.ts';
 import { isCommandName, type CommandName } from '../commands/command-metadata.ts';
 import type { CliFlags } from '../utils/cli-flags.ts';
@@ -28,7 +28,7 @@ export function readCliBatchStepsJson(raw: string): BatchStep[] {
 function normalizeCliBatchSteps(steps: unknown[]): BatchStep[] {
   let sawLegacyStep = false;
   const normalized = steps.map((step, index) => {
-    if (isStructuredBatchStep(step)) return step;
+    if (isStructuredBatchStepShape(step)) return readStructuredBatchStep(step, index + 1);
     const legacyStep = readLegacyCliBatchStep(step, index + 1);
     sawLegacyStep = true;
     return legacyStepToStructuredStep(legacyStep);
@@ -54,16 +54,27 @@ function legacyStepToStructuredStep(legacyStep: LegacyCliBatchStep): BatchStep {
   };
 }
 
-function isStructuredBatchStep(step: unknown): step is BatchStep {
+function isStructuredBatchStepShape(step: unknown): step is Record<string, unknown> & BatchStep {
   return (
     step !== null &&
     typeof step === 'object' &&
     !Array.isArray(step) &&
     'input' in step &&
     !('positionals' in step) &&
-    !('flags' in step) &&
-    isRuntimeHints((step as Record<string, unknown>).runtime)
+    !('flags' in step)
   );
+}
+
+function readStructuredBatchStep(
+  step: Record<string, unknown> & BatchStep,
+  stepNumber: number,
+): BatchStep {
+  const runtime = readRuntimeHints(step.runtime, stepNumber);
+  const { runtime: _runtime, ...rest } = step;
+  return {
+    ...rest,
+    ...(runtime === undefined ? {} : { runtime }),
+  };
 }
 
 function readLegacyCliBatchStep(step: unknown, stepNumber: number): LegacyCliBatchStep {
@@ -127,16 +138,14 @@ function readLegacyFlags(value: unknown, stepNumber: number): Record<string, unk
 
 function readRuntimeHints(value: unknown, stepNumber: number): SessionRuntimeHints | undefined {
   if (value === undefined) return undefined;
-  if (!isRuntimeHints(value)) {
-    throw new AppError('INVALID_ARGS', `Batch step ${stepNumber} runtime must be an object.`);
+  try {
+    return daemonRuntimeSchema.parse(value);
+  } catch (error) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `Batch step ${stepNumber} runtime is invalid: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
-  return value;
-}
-
-function isRuntimeHints(value: unknown): value is SessionRuntimeHints | undefined {
-  return (
-    value === undefined || (Boolean(value) && typeof value === 'object' && !Array.isArray(value))
-  );
 }
 
 function cliFlagsFromBatchStep(flags: Record<string, unknown> | undefined): CliFlags {

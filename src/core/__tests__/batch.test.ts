@@ -25,3 +25,14 @@ test('validateAndNormalizeBatchSteps blocks replay daemon steps', () => {
     /cannot run replay/i,
   );
 });
+
+test('validateAndNormalizeBatchSteps validates runtime hints', () => {
+  assert.throws(
+    () =>
+      validateAndNormalizeBatchSteps(
+        [{ command: 'open', runtime: { platform: 'web' } } as unknown as DaemonBatchStep],
+        10,
+      ),
+    /runtime is invalid/i,
+  );
+});
