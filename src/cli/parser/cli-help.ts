@@ -270,7 +270,7 @@ Validation and evidence:
   Remote lifecycle: cloud, remote-config, direct proxy, and limrun use the same flow: connect, open, commands, close, disconnect.
   Remote config profile: agent-device connect --remote-config ./remote-config.json; then run normal commands and disconnect.
   Direct proxy to a Mac you control: cloud/Linux clients can use local/proxy iOS devices through the proxied Mac. Run agent-device connect proxy --daemon-base-url <proxy-agent-device-url> first. Device leases are automatic on open and expire after five minutes of inactivity.
-  Web: agent-device uses a managed, pinned agent-browser backend as an implementation detail. Use --platform web when a browser step belongs inside an agent-device session, replay, batch, MCP, or typed-client flow; use agent-browser directly for standalone web automation. Run agent-device web setup before first use, then agent-device web doctor for backend health checks. Web automation requires Node 24+. For audio probe start, the first timing positional is duration in seconds and the second is bucket size in milliseconds. Audio probe samples HTML media elements, and URL-backed media may be routed through the probe AudioContext while observed.
+  Web: agent-device uses a managed, pinned agent-browser backend as an implementation detail. Use --platform web when a browser step belongs inside an agent-device session, replay, batch, MCP, or typed-client flow; use agent-browser directly for standalone web automation. Run agent-device web setup before first use, then agent-device web doctor for backend health checks. Web automation requires Node 24+. For audio probe start, the first timing positional is duration in seconds and the second is bucket size in milliseconds. On web, audio probe samples HTML media elements, and URL-backed media may be routed through the probe AudioContext while observed. On macOS, audio probe samples system audio through ScreenCaptureKit and requires Screen Recording permission.
     agent-device web setup
     agent-device web doctor
     agent-device open https://example.com --platform web
@@ -291,6 +291,7 @@ Validation and evidence:
     agent-device close --platform web
   Minimal web support is for browser sessions with open, snapshot, find, get, is, click/press, fill/type, wait, network dump, audio probe, screenshot, record start/stop with WebM output, close, and replay over those commands. Use agent-browser directly for browser-specific features that agent-device does not surface, such as tab/devtools management, advanced page scripting, network routing/HAR, or raw browser debugging.
   macOS menu bar: open ... --platform macos --surface menubar; snapshot -i --platform macos --surface menubar.
+  macOS audio: audio probe start 10 1000 --platform macos samples host system audio through ScreenCaptureKit; grant Screen Recording permission first.
   Maestro full-suite validation on explicit connected devices uses one test command with a comma-separated --device list and --shard-all. Use --shard-split only when splitting suite entries across devices:
     agent-device test ./e2e/maestro --maestro --device udid1,emulator-5554 --shard-all 2
 

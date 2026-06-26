@@ -777,7 +777,7 @@ export type AudioOptions = AgentDeviceRequestOverrides & {
   probeAction?: 'start' | 'status' | 'stop';
   durationMs?: number;
   bucketMs?: number;
-  source?: 'media-elements';
+  source?: 'media-elements' | 'system-audio';
 };
 
 export type RecordOptions = AgentDeviceRequestOverrides & {

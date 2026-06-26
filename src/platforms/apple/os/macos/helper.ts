@@ -4,7 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AppError } from '../../../../kernel/errors.ts';
-import { resolveExecutableOverridePath } from '../../../../utils/exec.ts';
+import {
+  resolveExecutableOverridePath,
+  runCmdBackground,
+  type ExecBackgroundResult,
+} from '../../../../utils/exec.ts';
 import type { SessionSurface } from '../../../../core/session-surface.ts';
 import {
   hasScopedAppleToolProvider,
@@ -225,6 +229,27 @@ async function resolveMacOsHelperCommandPath(): Promise<string> {
     throw new AppError('UNSUPPORTED_PLATFORM', 'macOS helper is only available on macOS');
   }
   return await ensureMacOsHelperBinary();
+}
+
+export async function startMacOsAudioProbeProcess(options: {
+  durationMs: number;
+  bucketMs: number;
+  statusPath: string;
+}): Promise<ExecBackgroundResult> {
+  const helperPath = await resolveMacOsHelperCommandPath();
+  return runCmdBackground(
+    helperPath,
+    [
+      'audio-probe',
+      '--duration-ms',
+      String(options.durationMs),
+      '--bucket-ms',
+      String(options.bucketMs),
+      '--out',
+      options.statusPath,
+    ],
+    { allowFailure: true, captureOutput: true },
+  );
 }
 
 async function runMacOsHelper<T extends Record<string, unknown>>(args: string[]): Promise<T> {

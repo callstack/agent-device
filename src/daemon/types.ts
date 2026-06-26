@@ -269,6 +269,15 @@ export type SessionState = {
   nativePerf?: {
     android?: AndroidNativePerfSession;
   };
+  audioProbe?: {
+    platform: 'macos';
+    child: SessionRecordingProcessChild;
+    wait: Promise<ExecResult>;
+    statusPath: string;
+    startedAt: number;
+    durationMs: number;
+    bucketMs: number;
+  };
   /** Session was created by record start and should be released when recording stops. */
   recordOnlySession?: boolean;
   recordSession?: boolean;

@@ -56,11 +56,20 @@ export async function stopSessionAndroidSnapshotHelper(session: SessionState): P
   await stopAndroidSnapshotHelperSessionForDevice(session.device);
 }
 
+export async function stopSessionAudioProbe(session: SessionState): Promise<void> {
+  const probe = session.audioProbe;
+  if (!probe) return;
+  probe.child.kill('SIGTERM');
+  await probe.wait.catch(() => {});
+  session.audioProbe = undefined;
+}
+
 export async function teardownSessionResources(
   session: SessionState,
   sessionName: string,
 ): Promise<void> {
   await stopSessionAppLog(session);
+  await stopSessionAudioProbe(session);
   await stopSessionApplePerfCapture(session);
   await stopSessionAndroidNativePerfCapture(session);
   await stopSessionAndroidSnapshotHelper(session);

@@ -120,6 +120,8 @@ struct AgentDeviceMacOSHelper {
       return try handlePress(arguments: Array(arguments.dropFirst()))
     case "screenshot":
       return try handleScreenshot(arguments: Array(arguments.dropFirst()))
+    case "audio-probe":
+      return try handleAudioProbe(arguments: Array(arguments.dropFirst()))
     default:
       throw HelperError.invalidArgs("unknown command: \(command)")
     }
@@ -390,6 +392,27 @@ struct AgentDeviceMacOSHelper {
     try captureSurfaceScreenshot(surface: surface, outPath: outPath, fullscreen: fullscreen)
     return SuccessEnvelope(data: ScreenshotResponse(path: outPath, surface: surface, fullscreen: fullscreen))
   }
+
+  static func handleAudioProbe(arguments: [String]) throws -> any Encodable {
+    let durationMs = intOption(arguments: arguments, name: "--duration-ms") ?? 10_000
+    let bucketMs = intOption(arguments: arguments, name: "--bucket-ms") ?? 1_000
+    guard durationMs >= 100, durationMs <= 120_000 else {
+      throw HelperError.invalidArgs("audio-probe --duration-ms must be in range 100..120000")
+    }
+    guard bucketMs >= 100, bucketMs <= 10_000 else {
+      throw HelperError.invalidArgs("audio-probe --bucket-ms must be in range 100..10000")
+    }
+    guard let outPath = optionValue(arguments: arguments, name: "--out")?
+      .trimmingCharacters(in: .whitespacesAndNewlines),
+      !outPath.isEmpty
+    else {
+      throw HelperError.invalidArgs("audio-probe requires --out <path>")
+    }
+
+    return SuccessEnvelope(
+      data: try runAudioProbe(durationMs: durationMs, bucketMs: bucketMs, outPath: outPath)
+    )
+  }
 }
 
 private func optionValue(arguments: [String], name: String) -> String? {
@@ -397,6 +420,13 @@ private func optionValue(arguments: [String], name: String) -> String? {
     return nil
   }
   return arguments[index + 1]
+}
+
+private func intOption(arguments: [String], name: String) -> Int? {
+  guard let value = optionValue(arguments: arguments, name: name) else {
+    return nil
+  }
+  return Int(value)
 }
 
 private func readTextAtPosition(bundleId: String?, surface: String?, x: Double, y: Double) throws -> String {

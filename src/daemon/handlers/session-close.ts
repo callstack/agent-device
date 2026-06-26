@@ -29,6 +29,7 @@ import {
   stopSessionAndroidSnapshotHelper,
   stopSessionAppLog,
   stopSessionApplePerfCapture,
+  stopSessionAudioProbe,
 } from '../session-teardown.ts';
 
 async function maybeShutdownSessionTarget(params: {
@@ -65,6 +66,7 @@ export async function handleCloseCommand(params: {
   let providerData: Record<string, unknown> | undefined;
   try {
     await stopSessionAppLog(session);
+    await stopSessionAudioProbe(session);
     await stopSessionApplePerfCapture(session);
     await stopSessionAndroidNativePerfCapture(session);
     await stopSessionAndroidSnapshotHelper(session);

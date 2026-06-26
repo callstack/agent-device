@@ -1,3 +1,6 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
+import { isCommandSupportedOnDevice } from '../../core/capabilities.ts';
 import {
   isPerfAction,
   isPerfArea,
@@ -13,6 +16,7 @@ import {
 } from '../../contracts/perf.ts';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { resolveWebProvider } from '../../platforms/web/provider.ts';
+import { startMacOsAudioProbeProcess } from '../../platforms/ios/macos-helper.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
@@ -617,6 +621,9 @@ function resolveNetworkIncludeMode(
 async function handleAudioCommand(params: ObservabilityParams): Promise<DaemonResponse> {
   const request = resolveAudioCommandRequest(params);
   if (!request.ok) return request;
+  if (request.session.device.platform === 'macos') {
+    return await handleMacOsAudioCommand(params, request);
+  }
   const provider = resolveWebProvider();
   if (!provider.probeAudio) {
     return errorResponse('UNSUPPORTED_OPERATION', 'audio is not supported by this web provider');
@@ -640,6 +647,7 @@ async function handleAudioCommand(params: ObservabilityParams): Promise<DaemonRe
 function resolveAudioCommandRequest(params: ObservabilityParams):
   | {
       ok: true;
+      session: SessionState;
       probeAction: 'start' | 'status' | 'stop';
       durationMs: number;
       bucketMs: number;
@@ -651,18 +659,266 @@ function resolveAudioCommandRequest(params: ObservabilityParams):
   if (!actionResult.ok) return actionResult;
   const timingResult = resolveAudioProbeTiming(params.req, actionResult.probeAction);
   if (!timingResult.ok) return timingResult;
-  return { ok: true, probeAction: actionResult.probeAction, ...timingResult.timing };
+  return {
+    ok: true,
+    session: sessionResult.session,
+    probeAction: actionResult.probeAction,
+    ...timingResult.timing,
+  };
 }
 
-function resolveAudioSession(params: ObservabilityParams): { ok: true } | DaemonFailureResponse {
+function resolveAudioSession(
+  params: ObservabilityParams,
+): { ok: true; session: SessionState } | DaemonFailureResponse {
   const session = params.sessionStore.get(params.sessionName);
   if (!session) return errorResponse('SESSION_NOT_FOUND', 'audio requires an active session');
   return isCommandSupportedOnDevice('audio', session.device)
-    ? { ok: true }
+    ? { ok: true, session }
     : errorResponse(
         'UNSUPPORTED_OPERATION',
-        'audio is currently supported for web browser sessions only',
+        'audio is currently supported for web browser and macOS sessions only',
       );
+}
+
+type ResolvedAudioCommandRequest = Extract<
+  ReturnType<typeof resolveAudioCommandRequest>,
+  { ok: true }
+>;
+
+type MacOsAudioProbeData = {
+  audio: 'probe';
+  state: 'running' | 'stopped';
+  active: boolean;
+  heard: boolean;
+  source: 'system-audio';
+  backend: 'macos-screencapturekit';
+  durationMs: number;
+  elapsedMs: number;
+  bucketMs: number;
+  sampleCount: number;
+  sourceCount: number;
+  rmsDbfs: number[];
+  peakDbfs: number[];
+  startedAt?: string;
+  stoppedAt?: string;
+  reason?: string;
+  notes?: string[];
+};
+
+async function handleMacOsAudioCommand(
+  params: ObservabilityParams,
+  request: ResolvedAudioCommandRequest,
+): Promise<DaemonResponse> {
+  const { session, probeAction } = request;
+  try {
+    if (probeAction === 'start') {
+      await stopMacOsAudioProbe(session);
+      const statusPath = path.join(
+        params.sessionStore.ensureSessionDir(params.sessionName),
+        'audio-probe.json',
+      );
+      const probe = await startMacOsAudioProbeProcess({
+        durationMs: request.durationMs,
+        bucketMs: request.bucketMs,
+        statusPath,
+      });
+      session.audioProbe = {
+        platform: 'macos',
+        child: probe.child,
+        wait: probe.wait,
+        statusPath,
+        startedAt: Date.now(),
+        durationMs: request.durationMs,
+        bucketMs: request.bucketMs,
+      };
+      void probe.wait.catch(() => {});
+      return { ok: true, data: await waitForMacOsAudioProbeStatus(session) };
+    }
+
+    if (probeAction === 'stop') {
+      const data = await stopMacOsAudioProbe(session);
+      return {
+        ok: true,
+        data: data ?? buildMacOsAudioProbeFallback(request, 'stopped', 'not-started'),
+      };
+    }
+
+    const data = await readMacOsAudioProbeStatus(session);
+    if (data) {
+      if (data.state === 'stopped') session.audioProbe = undefined;
+      return { ok: true, data };
+    }
+    return { ok: true, data: buildMacOsAudioProbeFallback(request, 'stopped', 'not-started') };
+  } catch (error) {
+    return { ok: false, error: normalizeError(error) };
+  }
+}
+
+async function waitForMacOsAudioProbeStatus(session: SessionState): Promise<MacOsAudioProbeData> {
+  const deadline = Date.now() + 5_000;
+  while (Date.now() < deadline) {
+    const status = await readMacOsAudioProbeStatus(session);
+    if (status) return status;
+    const exit = await Promise.race([
+      session.audioProbe?.wait.then(
+        (result) => result,
+        (error: unknown) => error,
+      ),
+      sleep(100).then(() => undefined),
+    ]);
+    if (exit instanceof Error) throw exit;
+    if (exit) {
+      const result = exit as { stdout?: string; stderr?: string; exitCode?: number };
+      const message =
+        result.stderr?.trim() ||
+        result.stdout?.trim() ||
+        `macOS audio probe helper exited with code ${result.exitCode ?? 1}`;
+      throw new AppError('COMMAND_FAILED', `failed to start macOS audio probe: ${message}`);
+    }
+  }
+  throw new AppError('COMMAND_FAILED', 'failed to start macOS audio probe');
+}
+
+async function readMacOsAudioProbeStatus(
+  session: SessionState,
+): Promise<MacOsAudioProbeData | undefined> {
+  const probe = session.audioProbe;
+  if (!probe) return undefined;
+  try {
+    const raw = await fs.readFile(probe.statusPath, 'utf8');
+    return normalizeMacOsAudioProbeData(JSON.parse(raw), probe);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
+
+async function stopMacOsAudioProbe(
+  session: SessionState,
+): Promise<MacOsAudioProbeData | undefined> {
+  const probe = session.audioProbe;
+  if (!probe) return undefined;
+  const beforeStop = await readMacOsAudioProbeStatus(session);
+  probe.child.kill('SIGTERM');
+  await probe.wait.catch(() => {});
+  session.audioProbe = undefined;
+  return finalizeMacOsAudioProbeStatus(beforeStop, probe, 'stopped');
+}
+
+function normalizeMacOsAudioProbeData(
+  value: unknown,
+  probe: NonNullable<SessionState['audioProbe']>,
+): MacOsAudioProbeData {
+  const record = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
+  const state = record.state === 'stopped' ? 'stopped' : 'running';
+  const rmsDbfs = readNumberArray(record.rmsDbfs);
+  const peakDbfs = readNumberArray(record.peakDbfs);
+  return {
+    audio: 'probe',
+    state,
+    active: state === 'running' && record.active !== false,
+    heard: record.heard === true,
+    source: 'system-audio',
+    backend: 'macos-screencapturekit',
+    durationMs: readFiniteNumber(record.durationMs, probe.durationMs),
+    elapsedMs: readFiniteNumber(record.elapsedMs, Date.now() - probe.startedAt),
+    bucketMs: readFiniteNumber(record.bucketMs, probe.bucketMs),
+    sampleCount: readFiniteNumber(record.sampleCount, rmsDbfs.length),
+    sourceCount: readFiniteNumber(record.sourceCount, 1),
+    rmsDbfs,
+    peakDbfs,
+    startedAt: typeof record.startedAt === 'string' ? record.startedAt : undefined,
+    stoppedAt: typeof record.stoppedAt === 'string' ? record.stoppedAt : undefined,
+    reason: typeof record.reason === 'string' ? record.reason : undefined,
+    notes: readStringArray(record.notes),
+  };
+}
+
+function finalizeMacOsAudioProbeStatus(
+  status: MacOsAudioProbeData | undefined,
+  probe: NonNullable<SessionState['audioProbe']>,
+  reason: string,
+): MacOsAudioProbeData {
+  const elapsedMs = Math.min(probe.durationMs, Math.max(0, Date.now() - probe.startedAt));
+  const base =
+    status ??
+    ({
+      audio: 'probe',
+      state: 'stopped',
+      active: false,
+      heard: false,
+      source: 'system-audio',
+      backend: 'macos-screencapturekit',
+      durationMs: probe.durationMs,
+      elapsedMs: 0,
+      bucketMs: probe.bucketMs,
+      sampleCount: 0,
+      sourceCount: 1,
+      rmsDbfs: [],
+      peakDbfs: [],
+      notes: [
+        'Audio probe samples macOS system audio through ScreenCaptureKit; it is not app-instrumented audio.',
+        'Screen Recording permission is required for macOS system audio capture.',
+      ],
+    } as MacOsAudioProbeData);
+  return {
+    ...base,
+    state: 'stopped',
+    active: false,
+    elapsedMs,
+    stoppedAt: new Date().toISOString(),
+    reason,
+  };
+}
+
+function buildMacOsAudioProbeFallback(
+  request: ResolvedAudioCommandRequest,
+  state: 'running' | 'stopped',
+  reason?: string,
+): MacOsAudioProbeData {
+  return {
+    audio: 'probe',
+    state,
+    active: state === 'running',
+    heard: false,
+    source: 'system-audio',
+    backend: 'macos-screencapturekit',
+    durationMs: request.durationMs,
+    elapsedMs: 0,
+    bucketMs: request.bucketMs,
+    sampleCount: 0,
+    sourceCount: 0,
+    rmsDbfs: [],
+    peakDbfs: [],
+    reason,
+    notes: [
+      'Audio probe samples macOS system audio through ScreenCaptureKit; it is not app-instrumented audio.',
+      'Screen Recording permission is required for macOS system audio capture.',
+      'No active macOS audio probe is running.',
+    ],
+  };
+}
+
+function readFiniteNumber(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function readNumberArray(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  const numbers: number[] = [];
+  for (const item of value) {
+    if (typeof item === 'number' && Number.isFinite(item)) numbers.push(item);
+  }
+  return numbers;
+}
+
+function readStringArray(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.filter((item): item is string => typeof item === 'string');
+}
+
+async function sleep(ms: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function resolveAudioProbeAction(

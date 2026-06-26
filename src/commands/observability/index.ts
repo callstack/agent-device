@@ -28,7 +28,7 @@ const AUDIO_PROBE_ACTION_VALUES = ['start', 'status', 'stop'] as const;
 
 const logsCommandDescription = 'Manage session app logs.';
 const networkCommandDescription = 'Show recent HTTP traffic.';
-const audioCommandDescription = 'Probe browser page audio levels.';
+const audioCommandDescription = 'Probe audio levels.';
 
 export const logsCommandMetadata = defineFieldCommandMetadata(
   LOGS_COMMAND_NAME,
@@ -100,8 +100,8 @@ const audioCliSchema = {
   usageOverride:
     'audio probe start [durationSeconds] [bucketMs] | audio probe status | audio probe stop',
   listUsageOverride: 'audio',
-  helpDescription: 'Probe browser page audio levels as compact dBFS buckets',
-  summary: 'Probe browser page audio levels',
+  helpDescription: 'Probe browser or macOS audio levels as compact dBFS buckets',
+  summary: 'Probe audio levels',
   positionalArgs: ['probe', 'start|status|stop', 'durationSeconds?', 'bucketMs?'],
 } as const satisfies CommandSchemaOverride;
 
