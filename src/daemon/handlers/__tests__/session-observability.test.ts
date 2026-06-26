@@ -505,18 +505,22 @@ test('audio probe starts macOS ScreenCaptureKit helper and reads status', async 
     sessionStore,
   });
 
-  assert.equal(response?.ok, true);
-  if (response?.ok) {
-    assert.equal(response.data?.backend, 'macos-screencapturekit');
-    assert.equal(response.data?.source, 'system-audio');
-    assert.deepEqual(response.data?.rmsDbfs, [-12]);
-    assert.deepEqual(response.data?.notes, [
-      'helper status',
-      'Audio probe samples host system audio through ScreenCaptureKit for this macOS session; it is not app-instrumented audio.',
-      'Screen Recording permission is required for host system audio capture.',
-      'Other audible host apps can contribute to the measured buckets.',
-    ]);
+  if (process.platform !== 'darwin') {
+    assertHostAudioUnsupportedResponse(response);
+    assert.equal(macosAudioMocks.startMacOsAudioProbeProcess.mock.calls.length, 0);
+    return;
   }
+
+  assert.ok(response?.ok);
+  assert.equal(response.data?.backend, 'macos-screencapturekit');
+  assert.equal(response.data?.source, 'system-audio');
+  assert.deepEqual(response.data?.rmsDbfs, [-12]);
+  assert.deepEqual(response.data?.notes, [
+    'helper status',
+    'Audio probe samples host system audio through ScreenCaptureKit for this macOS session; it is not app-instrumented audio.',
+    'Screen Recording permission is required for host system audio capture.',
+    'Other audible host apps can contribute to the measured buckets.',
+  ]);
   assert.equal(macosAudioMocks.startMacOsAudioProbeProcess.mock.calls.length, 1);
   assert.equal(macosAudioMocks.startMacOsAudioProbeProcess.mock.calls[0]?.[0].durationMs, 1000);
   assert.equal(macosAudioMocks.startMacOsAudioProbeProcess.mock.calls[0]?.[0].bucketMs, 500);
@@ -569,14 +573,18 @@ test('audio probe stop kills active macOS helper and returns stopped status', as
     sessionStore,
   });
 
-  assert.equal(response?.ok, true);
+  if (process.platform !== 'darwin') {
+    assertHostAudioUnsupportedResponse(response);
+    assert.equal(kill.mock.calls.length, 0);
+    return;
+  }
+
+  assert.ok(response?.ok);
   assert.equal(kill.mock.calls[0]?.[0], 'SIGTERM');
   assert.equal(sessionStore.get('macos')?.audioProbe, undefined);
-  if (response?.ok) {
-    assert.equal(response.data?.state, 'stopped');
-    assert.equal(response.data?.active, false);
-    assert.deepEqual(response.data?.peakDbfs, [-9, -8]);
-  }
+  assert.equal(response.data?.state, 'stopped');
+  assert.equal(response.data?.active, false);
+  assert.deepEqual(response.data?.peakDbfs, [-9, -8]);
 });
 
 test('audio probe starts host helper for iOS simulator audio', async () => {
@@ -622,15 +630,18 @@ test('audio probe starts host helper for iOS simulator audio', async () => {
     sessionStore,
   });
 
-  assert.equal(response?.ok, true);
-  assert.equal(sessionStore.get('ios')?.audioProbe?.platform, 'host-system-audio');
-  if (response?.ok) {
-    assert.equal(response.data?.source, 'system-audio');
-    assert.deepEqual(response.data?.rmsDbfs, [-18]);
-    const notes = response.data?.notes;
-    assert.ok(Array.isArray(notes));
-    assert.match(String(notes[0]), /iOS simulator/);
+  if (process.platform !== 'darwin') {
+    assertHostAudioUnsupportedResponse(response);
+    assert.equal(macosAudioMocks.startMacOsAudioProbeProcess.mock.calls.length, 0);
+    return;
   }
+
+  assert.ok(response?.ok);
+  assert.equal(sessionStore.get('ios')?.audioProbe?.platform, 'host-system-audio');
+  assert.equal(response.data?.source, 'system-audio');
+  assert.deepEqual(response.data?.rmsDbfs, [-18]);
+  assert.ok(Array.isArray(response.data?.notes));
+  assert.match(String(response.data.notes[0]), /iOS simulator/);
 });
 
 test('audio probe starts host helper for Android emulator audio', async () => {
@@ -676,15 +687,18 @@ test('audio probe starts host helper for Android emulator audio', async () => {
     sessionStore,
   });
 
-  assert.equal(response?.ok, true);
-  assert.equal(sessionStore.get('android')?.audioProbe?.platform, 'host-system-audio');
-  if (response?.ok) {
-    assert.equal(response.data?.source, 'system-audio');
-    assert.deepEqual(response.data?.peakDbfs, [-13]);
-    const notes = response.data?.notes;
-    assert.ok(Array.isArray(notes));
-    assert.match(String(notes[0]), /Android emulator/);
+  if (process.platform !== 'darwin') {
+    assertHostAudioUnsupportedResponse(response);
+    assert.equal(macosAudioMocks.startMacOsAudioProbeProcess.mock.calls.length, 0);
+    return;
   }
+
+  assert.ok(response?.ok);
+  assert.equal(sessionStore.get('android')?.audioProbe?.platform, 'host-system-audio');
+  assert.equal(response.data?.source, 'system-audio');
+  assert.deepEqual(response.data?.peakDbfs, [-13]);
+  assert.ok(Array.isArray(response.data?.notes));
+  assert.match(String(response.data.notes[0]), /Android emulator/);
 });
 
 test('audio probe validates daemon bucket bounds', async () => {
@@ -1269,6 +1283,17 @@ function assertInvalidArgs(response: DaemonResponse | null, message: RegExp): vo
   if (response && !response.ok) {
     assert.equal(response.error.code, 'INVALID_ARGS');
     assert.match(response.error.message, message);
+  }
+}
+
+function assertHostAudioUnsupportedResponse(response: DaemonResponse | null): void {
+  assert.equal(response?.ok, false);
+  if (response && !response.ok) {
+    assert.equal(response.error.code, 'UNSUPPORTED_OPERATION');
+    assert.match(
+      response.error.message,
+      /web browser sessions, macOS sessions, iOS simulators, and Android emulators on macOS hosts/,
+    );
   }
 }
 
