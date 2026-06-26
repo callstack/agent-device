@@ -1,6 +1,6 @@
 ---
 title: Security & Trust
-description: Security and trust guidance for agent-device local app automation, device permissions, screenshots, recordings, logs, network dumps, traces, and reports.
+description: Security and trust guidance for agent-device local app automation, device permissions, screenshots, recordings, logs, network dumps, audio probes, traces, and reports.
 ---
 
 # Security & Trust
@@ -26,7 +26,7 @@ For remote or cloud deployments, the daemon supports a custom auth hook: `AGENT_
 
 ## Sensitive artifacts
 
-Screenshots, recordings, traces, logs, network dumps, replay files, provider-hosted cloud videos/logs, and reports can contain private UI state, credentials, tokens, request data, or customer information. Store them in a controlled directory, review before sharing, and avoid committing artifacts unless they are intentionally sanitized fixtures.
+Screenshots, recordings, traces, logs, network dumps, audio probes, replay files, provider-hosted cloud videos/logs, and reports can contain private UI state, credentials, tokens, request data, timing signals, or customer information. Store them in a controlled directory, review before sharing, and avoid committing artifacts unless they are intentionally sanitized fixtures.
 
 Cloud provider artifact URLs returned by `artifacts`, `close --json`, or `disconnect --json` may be provider dashboard URLs, public share links, or pre-signed download URLs. Treat the URLs themselves as sensitive credentials until you know the provider's sharing and expiry policy.
 

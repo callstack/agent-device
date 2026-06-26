@@ -155,13 +155,21 @@ await client.capture.snapshot({ platform: 'web', interactiveOnly: true });
 await client.interactions.fill({ platform: 'web', ref: '@e12', text: 'test@example.com' });
 await client.command.wait({ platform: 'web', text: 'Welcome' });
 await client.observability.network({ platform: 'web', include: 'headers' });
+await client.observability.audio({
+  platform: 'web',
+  action: 'probe',
+  probeAction: 'start',
+  durationMs: 10_000,
+  bucketMs: 1_000,
+});
 await client.sessions.close();
 ```
 
 Web automation requires Node 24+. MCP tools use the same command contracts, so they can target
 `platform: 'web'` after setup, but local setup/doctor remains a CLI-only workflow. Web network
 inspection adapts managed `agent-browser` request history to the existing network result shape;
-request and response bodies are not exposed by that backend path.
+request and response bodies are not exposed by that backend path. Web audio probes sample HTML
+media elements and return compact dBFS buckets.
 
 ## Android ADB providers
 
@@ -239,9 +247,30 @@ Additional CLI-backed methods are exposed on their domain groups with typed opti
 - `client.interactions.click()`, `press()`, `longPress()`, `swipe()`, `pan()`, `fling()`, `focus()`, `type()`, `fill()`, `scroll()`, `pinch()`, `rotateGesture()`, `transformGesture()`, `get()`, `is()`, `find()`
 - `client.replay.run()` and `client.replay.test()`
 - `client.batch.run()`
-- `client.observability.perf()`, `logs()`, and `network()`
+- `client.observability.perf()`, `logs()`, `network()`, and `audio()`
 - `client.recording.record()` and `client.recording.trace()`
 - `client.settings.update()`
+
+`client.observability.audio()` mirrors `audio probe start|status|stop`. Use it to collect compact RMS/peak dBFS buckets while other session actions continue:
+
+```ts
+await client.observability.audio({
+  platform: 'web',
+  action: 'probe',
+  probeAction: 'start',
+  durationMs: 10_000,
+  bucketMs: 1_000,
+});
+await client.interactions.click({ platform: 'web', ref: '@e4' });
+const audio = await client.observability.audio({
+  platform: 'web',
+  action: 'probe',
+  probeAction: 'status',
+});
+await client.observability.audio({ platform: 'web', action: 'probe', probeAction: 'stop' });
+```
+
+Web probes sample HTML media elements. macOS probes use `platform: 'macos'`, sample host system audio through ScreenCaptureKit, and require Screen Recording permission. iOS and Android app audio are not exposed by this command.
 
 `client.observability.perf()` returns daemon-shaped JSON so local and remote transports expose the same metrics payload. Pass `{ area: 'metrics' }` for the broad startup/CPU/memory/frame first pass, `{ area: 'frames' }` for a focused frame/jank-health payload, or `{ area: 'memory', action: 'sample' }` for a compact memory-only sample. Use `{ area: 'memory', action: 'snapshot', kind: 'android-hprof', out: 'app.hprof' }` on Android or `{ area: 'memory', action: 'snapshot', kind: 'memgraph', out: 'app.memgraph' }` on supported Apple simulator/macOS app sessions to write large memory artifacts to disk. Android native artifacts use `{ area: 'cpu', subject: 'profile', action: 'start' | 'stop' | 'report', kind: 'simpleperf', out }` and `{ area: 'trace', action: 'start' | 'stop', kind: 'perfetto', out }`; these Android-only commands return artifact paths and compact summaries, not trace/profile contents. Physical iOS device memgraph capture reports unavailable with a reason/hint. heapprofd allocation tracing is deferred until Perfetto plumbing is available. On Android and supported Apple targets, `data.metrics.fps.droppedFramePercent` is the primary frame-smoothness value. Android derives it from the current `adb shell dumpsys gfxinfo <package> framestats` window; connected iOS devices derive it from `xcrun xctrace` Animation Hitches for the active app process. Frame samples include `windowStartedAt`, `windowEndedAt`, and `worstWindows` so agents can correlate dropped-frame clusters with logs, network entries, and their own session actions. A successful Android read resets Android frame stats; `open <app>` resets the Android frame window too, so agents can call `perf({ area: 'frames' })`, perform a transition or gesture, then call it again to inspect that focused window. iOS simulator and macOS app sessions report frame health as unavailable rather than inventing FPS or dropped-frame values.
 

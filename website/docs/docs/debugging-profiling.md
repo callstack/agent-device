@@ -10,6 +10,7 @@ Use `agent-device` when the task moves past UI automation and you need runtime e
 
 - Session app logs for targeted debugging windows
 - Network inspection from recent HTTP(s) entries in app logs via `network dump`
+- Audio-level probes for browser media elements and macOS system audio
 - Performance snapshots with `perf metrics` / `perf frames`
 - Apple crash symbolication with `debug symbols`
 - Screenshots, recordings, and replayable repro flows
@@ -33,7 +34,7 @@ agent-device react-devtools profile report @c5
 
 `agent-device` remains centered on the device and app runtime layer. The `react-devtools` command dynamically runs pinned `agent-react-devtools` commands for React internals.
 
-For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to React DevTools or debugging evidence, start with `agent-device help react-native`. For slow-flow investigations, combine `help react-devtools` for the narrow React profile window with `help debugging` for log markers, network evidence, traces, and perf samples. Make one bounded first-pass survey with the `profile stop` summary, bounded `slow` and `rerenders` tables, and `timeline` only when commit timing matters; then drill into a specific `@c` ref with `profile report` instead of repeatedly raising broad `profile slow` limits.
+For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to React DevTools or debugging evidence, start with `agent-device help react-native`. For slow-flow investigations, combine `help react-devtools` for the narrow React profile window with `help debugging` for log markers, network/audio evidence, traces, and perf samples. Make one bounded first-pass survey with the `profile stop` summary, bounded `slow` and `rerenders` tables, and `timeline` only when commit timing matters; then drill into a specific `@c` ref with `profile report` instead of repeatedly raising broad `profile slow` limits.
 
 React Native warning/error overlays belong to the app run. Treat them as findings or blockers: capture them, check `react-devtools errors` when connected, run `agent-device react-native dismiss-overlay` when the overlay is unrelated, then re-snapshot and report the overlay.
 
@@ -137,6 +138,20 @@ agent-device network dump 25 --include all
 - `network log` is an alias for `network dump`.
 - Parsed results depend on what the app emits into the platform log backend.
 - Web `network dump` includes request and response headers when requested, but the current `agent-browser network requests` backend does not expose request or response bodies.
+
+### Audio probes
+
+```bash
+agent-device audio probe start 10 1000 --platform web
+agent-device audio probe status --platform web
+agent-device audio probe stop --platform web
+agent-device audio probe start 10 1000 --platform macos
+```
+
+- `audio probe start [durationSeconds] [bucketMs]` samples live audio while the session keeps running, then exposes compact `rmsDbfs` and `peakDbfs` buckets. The first timing positional is seconds; the second is milliseconds.
+- On web, the probe samples HTML media elements through Web Audio. URL-backed media may be routed through the probe `AudioContext` while observed.
+- On macOS, the probe samples host system audio through ScreenCaptureKit and requires Screen Recording permission. It is system-audio evidence, not app-instrumented audio.
+- Use `status` to poll partial buckets during a 10-20 second observation window, and `stop` to end the probe early.
 
 ### Performance snapshots
 

@@ -124,6 +124,9 @@ agent-device click @e12 --platform web
 agent-device fill @e13 "test@example.com" --platform web
 agent-device wait text "Welcome" --platform web
 agent-device network dump 25 --include headers --platform web
+agent-device audio probe start 10 1000 --platform web
+agent-device audio probe status --platform web
+agent-device audio probe stop --platform web
 agent-device screenshot ./artifacts/web-home.png --platform web
 agent-device screenshot ./artifacts/web-full.png --platform web --fullscreen
 agent-device viewport 1280 900 --platform web
@@ -137,7 +140,9 @@ agent-device close --platform web
 - `web doctor` verifies the managed backend after setup.
 - The managed install respects `--state-dir` and `AGENT_DEVICE_STATE_DIR`.
 - Web automation requires Node 24+.
-- Supported through `agent-device`: URL open, snapshot refs, `get text/attrs`, `is visible/exists/text`, `find text/selector`, click/press, fill/type, wait, `network dump`, screenshot, close, and replay scripts composed from those commands.
+- Supported through `agent-device`: URL open, snapshot refs, `get text/attrs`, `is visible/exists/text`, `find text/selector`, click/press, fill/type, wait, `network dump`, `audio probe`, screenshot, close, and replay scripts composed from those commands.
+- `audio probe start [durationSeconds] [bucketMs]` samples HTML media elements into compact RMS/peak dBFS buckets while the page keeps running. The first timing positional is seconds; the second is milliseconds.
+- URL-backed web media may be routed through the probe `AudioContext` while observed. Use `audio probe status` to poll partial buckets and `audio probe stop` to end the probe early.
 - Out of scope for `agent-device` web support: tab/window/devtools control, network routing/interception/HAR, cookies/storage, downloads/uploads, arbitrary page scripting, multi-page orchestration, and raw browser diagnostics. Use `agent-browser` directly for those browser-specific workflows.
 
 ## Device isolation scopes
@@ -218,7 +223,8 @@ agent-device snapshot -i --platform apple --target desktop
 - Status-item apps often expose little or no useful UI through the default macOS `app` surface. Prefer `--surface menubar` for discovery when the app lives in the top menu bar.
 - Use `frontmost-app`, `desktop`, and `menubar` mainly for `snapshot`, `get`, `is`, and `wait`.
 - If you inspect with `desktop` or `menubar` and then need to click or fill inside one app, open that app in a normal `app` session.
-- macOS also supports `clipboard read|write`, `trigger-app-event`, `logs`, `network dump`, `alert`, `settings appearance`, and `settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>`.
+- macOS also supports `clipboard read|write`, `trigger-app-event`, `logs`, `network dump`, `audio probe`, `alert`, `settings appearance`, and `settings permission <grant|reset> <accessibility|screen-recording|input-monitoring>`.
+- macOS `audio probe start 10 1000 --platform macos` samples host system audio through ScreenCaptureKit. Grant Screen Recording permission before relying on it in a run.
 - In macOS app sessions, `screenshot` captures the target app window bounds rather than the full desktop.
 - Prefer selector or `@ref`-driven interactions on macOS. Window position can shift between runs, so raw x/y point commands are less stable than snapshot-derived targets.
 - Use `click --button secondary` for context menus on macOS, then run `snapshot -i` again.
@@ -706,7 +712,7 @@ agent-device react-devtools profile report @c5
 - Use it when a React Native workflow needs component hierarchy, props, state, hooks, render causes, slow components, or re-render counts.
 - For profiling, keep the window narrow and make one bounded first-pass survey: use the `profile stop` summary, run `profile slow --limit 5` and `profile rerenders --limit 5` once, add `profile timeline --limit 20` only when commit timing matters, then drill into a specific `@c` ref with `profile report`.
 - Do not repeatedly raise broad `profile slow` limits such as `--limit 50`, `--limit 200`, or `--limit 500` unless you have a specific target that needs more rows.
-- Keep using `snapshot`, `press`, `fill`, `logs`, `network`, `perf metrics`, and `perf frames` for device/app runtime evidence. Use `react-devtools` for React internals.
+- Keep using `snapshot`, `press`, `fill`, `logs`, `network`, `audio probe`, `perf metrics`, and `perf frames` for device/app runtime evidence. Use `react-devtools` for React internals.
 - For React Native apps, overlays, Metro/Fast Refresh blockers, and routing to React DevTools or debugging evidence, start with `agent-device help react-native`.
 - On Android, use `alert get`, `alert wait <short-ms>`, `alert accept`, and `alert dismiss` for runtime permission prompts and native alerts. On iOS, use the same alert commands for XCTest alerts, app-owned modal popups with native blocking markers, and blocking system dialogs. Do not use `settings permission` to answer a dialog already on screen; reserve it for setup or resetting permission state before a flow.
 - React Native development builds can connect to the DevTools daemon on port 8097. For Android emulators or physical devices, run `adb reverse tcp:8097 tcp:8097` if the app cannot reach the host.
@@ -834,7 +840,7 @@ agent-device debug symbols --artifact crash.log --dsym MyApp.dSYM --out crash-sy
 agent-device debug symbols --artifact crash.ips --search-path ./build --out crash-symbolicated.ips
 ```
 
-- `debug` is intentionally narrow: do not use it for app logs, network evidence, performance samples, recordings, traces, or React Native internals.
+- `debug` is intentionally narrow: do not use it for app logs, network/audio evidence, performance samples, recordings, traces, or React Native internals.
 - Android Java/R8 `mapping.txt` and native `ndk-stack`/`addr2line` symbolication are deferred; capture Android crash evidence with `logs` and symbolicate externally for now.
 - The crash artifact body is written to `--out`; it is not dumped into agent context or default JSON.
 

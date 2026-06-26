@@ -1361,7 +1361,7 @@ test('usage includes agent workflows, config, environment, and examples footers'
   );
   assert.match(
     usageText,
-    /agent-device help debugging\s+Use when logs, network, perf memory, traces, alerts, or diagnostics matter/,
+    /agent-device help debugging\s+Use when logs, network, audio, perf memory, traces, alerts, or diagnostics matter/,
   );
   assert.match(
     usageText,
@@ -1592,12 +1592,15 @@ test('usageForCommand resolves web help topic', () => {
   assert.match(help, /agent-device fill @e13 "qa@example\.com" --platform web/);
   assert.match(help, /agent-device wait text "Welcome" 3000 --platform web/);
   assert.match(help, /agent-device network dump 25 --include headers --platform web/);
+  assert.match(help, /agent-device audio probe start 10 1000 --platform web/);
+  assert.match(help, /Audio probe start uses duration seconds first, then bucket milliseconds/);
   assert.match(help, /agent-device screenshot \.\/artifacts\/web-home\.png --platform web/);
   assert.match(help, /agent-device close --platform web/);
   assert.match(help, /open <url>, snapshot -i, get text\/attrs/);
   assert.match(help, /is visible\/exists\/text, find text\/selector/);
   assert.match(help, /click\/press @ref or selector/);
   assert.match(help, /network dump/);
+  assert.match(help, /audio probe/);
   assert.match(help, /network routing\/interception\/HAR/);
   assert.match(help, /Use agent-browser directly for those browser-specific workflows/);
   assert.match(help, /Do not claim web e2e CI exists/);
@@ -1625,6 +1628,7 @@ test('usageForCommand resolves debugging help topic', () => {
   assert.match(help, /Use Xcode\/LLDB when you need live state/);
   assert.match(help, /debug symbols --artifact crash\.ips --search-path \.\/build/);
   assert.match(help, /Android Java\/R8 mapping\.txt and native ndk-stack\/addr2line/);
+  assert.match(help, /network\/audio evidence/);
   assert.match(help, /agent-device alert wait 3000/);
   assert.match(help, /iOS support is runner-derived/);
   assert.match(help, /resolved app executable/);
@@ -1633,6 +1637,10 @@ test('usageForCommand resolves debugging help topic', () => {
   assert.match(help, /requests\/<request-id>\.ndjson holds daemon request diagnostics/);
   assert.match(help, /daemon\.log is global daemon lifecycle evidence/);
   assert.match(help, /agent-device perf memory sample --json/);
+  assert.match(help, /agent-device audio probe start 10 1000 --platform web/);
+  assert.match(help, /agent-device audio probe start 10 1000 --platform macos/);
+  assert.match(help, /compact rmsDbfs and peakDbfs arrays/);
+  assert.match(help, /requires Screen Recording permission/);
   assert.match(help, /Memory artifact \(android-hprof\): \/tmp\/app\.hprof \(42MB\)/);
   assert.match(help, /Prefer perf memory sample over raw dumpsys\/leaks output/);
   assert.match(help, /Unsupported platforms return artifact\.available=false with reason\/hint/);

@@ -16,7 +16,8 @@ const AGENT_WORKFLOWS = [
   },
   {
     label: 'agent-device help debugging',
-    description: 'Use when logs, network, perf memory, traces, alerts, or diagnostics matter',
+    description:
+      'Use when logs, network, audio, perf memory, traces, alerts, or diagnostics matter',
   },
   {
     label: 'agent-device help react-native',
@@ -349,6 +350,16 @@ Network:
   Use this instead of logs path when the question is request/response metadata.
   network log is a supported alias, but network dump --include headers is the clearest plan form. Do not write network log headers.
 
+Audio:
+  Use audio probe when the question is whether a browser page or macOS host produced audible output during a short observation window.
+    agent-device audio probe start 10 1000 --platform web
+    agent-device audio probe status --platform web
+    agent-device audio probe stop --platform web
+    agent-device audio probe start 10 1000 --platform macos
+  audio probe start uses duration seconds first, then bucket milliseconds. Results are compact rmsDbfs and peakDbfs arrays so agents can correlate audible moments with screenshots, actions, network entries, or frame samples.
+  On web, audio probe samples HTML media elements and URL-backed media may be routed through the probe AudioContext while observed.
+  On macOS, audio probe samples host system audio through ScreenCaptureKit and requires Screen Recording permission. It is system-audio evidence, not app-instrumented audio.
+
 Crash symbolication:
   Crash routing:
     Use logs when you need the lead-up timeline before a failure.
@@ -357,7 +368,7 @@ Crash symbolication:
   Use debug symbols when you already have an Apple crash artifact and local dSYMs and need the failing code path, not a full log dump:
     agent-device debug symbols --artifact crash.log --dsym MyApp.dSYM --out crash-symbolicated.log
     agent-device debug symbols --artifact crash.ips --search-path ./build --out crash-symbolicated.ips
-  debug is intentionally narrow. Do not use it for logs, network evidence, performance samples, recordings, traces, or React Native internals.
+  debug is intentionally narrow. Do not use it for logs, network/audio evidence, performance samples, recordings, traces, or React Native internals.
   Apple support matches crash Binary Images / IPS usedImages UUIDs against dwarfdump --uuid output from .dSYM bundles, then writes a symbolicated artifact path and compact crash report: app/thread, exception or termination, top symbolicated frames, and first-frame finding. This is better than pasting crash logs because it keeps agent context small while preserving the artifact on disk for inspection.
   Android Java/R8 mapping.txt and native ndk-stack/addr2line symbolication are not in this first debug symbols workflow; capture crash evidence with logs and use the Android toolchain externally for now.
 
