@@ -778,6 +778,37 @@ test('runner session busy error includes logical lease context after admission',
   assert.equal(mockRunCmdBackground.mock.calls.length, 0);
 });
 
+test('runner session startup reclaims live foreign runner lease after proxy lease admission', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-proxy-takeover-sim' };
+  writeRunnerLease(
+    makeRunnerLease({
+      deviceId: device.id,
+      ownerToken: 'owner-foreign-proxy-live',
+      ownerPid: process.pid,
+      ownerStartTime: RUNNER_OWNER_START_TIME,
+      ownerStateDir: '/tmp/agent-device-owner',
+      runnerPid: 4_321,
+    }),
+  );
+
+  const session = await ensureRunnerSession(device, {
+    runnerLeaseContext: {
+      tenantId: 'proxy',
+      runId: 'run-456',
+      leaseId: 'lease-789',
+      leaseProvider: 'proxy',
+      clientId: 'client-a',
+      deviceKey: `ios:mobile:${device.id}`,
+    },
+  });
+
+  assert.equal(session.deviceId, device.id);
+  assert.equal(mockRunCmdBackground.mock.calls.length, 1);
+  const pkillCalls = mockRunAppleToolCommand.mock.calls.filter(isXcodebuildPkillCall);
+  assert.ok(pkillCalls.length >= 2);
+  assert.match(String(pkillCalls[0]?.[1]?.[2] ?? ''), /owner-foreign-proxy-live/);
+});
+
 test('runner session startup reclaims live foreign runner lease from same state dir', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-session-same-state-lease-sim' };
   const previousStateDir = process.env.AGENT_DEVICE_STATE_DIR;

@@ -19,6 +19,7 @@ export type RemoteConnectionState = {
   remoteConfigHash: string;
   daemon?: {
     baseUrl?: string;
+    authToken?: string;
     transport?: CliFlags['daemonTransport'];
     serverMode?: CliFlags['daemonServerMode'];
   };
@@ -86,10 +87,14 @@ export function writeRemoteConnectionState(options: {
 }
 
 export function buildRemoteConnectionDaemonState(
-  flags: Pick<CliFlags, 'daemonBaseUrl' | 'daemonTransport' | 'daemonServerMode'>,
+  flags: Pick<
+    CliFlags,
+    'daemonBaseUrl' | 'daemonAuthToken' | 'daemonTransport' | 'daemonServerMode'
+  >,
 ): RemoteConnectionState['daemon'] {
   return {
     baseUrl: sanitizeDaemonBaseUrl(flags.daemonBaseUrl),
+    authToken: flags.daemonAuthToken,
     transport: flags.daemonTransport,
     serverMode: flags.daemonServerMode,
   };
@@ -149,6 +154,7 @@ export function resolveRemoteConnectionDefaults(options: {
       ...profile,
       remoteConfig: state.remoteConfigPath,
       daemonBaseUrl: state.daemon?.baseUrl ?? profile.daemonBaseUrl,
+      daemonAuthToken: state.daemon?.authToken ?? profile.daemonAuthToken,
       daemonTransport: state.daemon?.transport ?? profile.daemonTransport,
       daemonServerMode: state.daemon?.serverMode ?? profile.daemonServerMode,
       ...leaseScopeToCommandFlags(leaseScope),
@@ -295,7 +301,8 @@ function isRemoteConnectionState(value: unknown): value is RemoteConnectionState
     (record.daemon === undefined ||
       (typeof record.daemon === 'object' &&
         record.daemon !== null &&
-        !Array.isArray(record.daemon))) &&
+        !Array.isArray(record.daemon) &&
+        isRemoteConnectionDaemonState(record.daemon))) &&
     typeof record.tenant === 'string' &&
     typeof record.runId === 'string' &&
     (record.leaseId === undefined || typeof record.leaseId === 'string') &&
@@ -305,5 +312,15 @@ function isRemoteConnectionState(value: unknown): value is RemoteConnectionState
     (record.clientId === undefined || typeof record.clientId === 'string') &&
     typeof record.connectedAt === 'string' &&
     typeof record.updatedAt === 'string'
+  );
+}
+
+function isRemoteConnectionDaemonState(value: object): boolean {
+  const record = value as Record<string, unknown>;
+  return (
+    (record.baseUrl === undefined || typeof record.baseUrl === 'string') &&
+    (record.authToken === undefined || typeof record.authToken === 'string') &&
+    (record.transport === undefined || typeof record.transport === 'string') &&
+    (record.serverMode === undefined || typeof record.serverMode === 'string')
   );
 }

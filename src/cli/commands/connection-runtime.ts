@@ -304,6 +304,7 @@ export async function releasePreviousLease(
       runId: previous.runId,
       leaseId: previous.leaseId,
       daemonBaseUrl: previous.daemon?.baseUrl,
+      daemonAuthToken: previous.daemon?.authToken,
       daemonTransport: previous.daemon?.transport,
       daemonServerMode: previous.daemon?.serverMode,
       leaseProvider: previous.leaseProvider,

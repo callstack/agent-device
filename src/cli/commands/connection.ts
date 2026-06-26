@@ -39,7 +39,7 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
   }
   const resolved = flags.remoteConfig
     ? resolveRemoteConnectFlags(flags)
-    : provider === 'proxy'
+    : provider === 'proxy' || shouldUseProxyConnectShortcut(flags)
       ? resolveProxyConnectProfile({
           flags,
           stateDir,
@@ -212,6 +212,10 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
         tenant: state.tenant,
         runId: state.runId,
         leaseId: state.leaseId,
+        daemonBaseUrl: state.daemon?.baseUrl,
+        daemonAuthToken: state.daemon?.authToken,
+        daemonTransport: state.daemon?.transport,
+        daemonServerMode: state.daemon?.serverMode,
         leaseProvider: state.leaseProvider,
         clientId: state.clientId,
         deviceKey: state.deviceKey,
@@ -277,6 +281,22 @@ function readConnectProvider(positionals: string[]): 'proxy' | undefined {
     'INVALID_ARGS',
     `Unknown connect provider: ${provider}. Supported providers: proxy.`,
   );
+}
+
+function shouldUseProxyConnectShortcut(flags: CliFlags): boolean {
+  if (!flags.daemonBaseUrl || flags.tenant || flags.runId || flags.leaseId || flags.leaseBackend) {
+    return false;
+  }
+  return isAgentDeviceProxyBaseUrl(flags.daemonBaseUrl);
+}
+
+function isAgentDeviceProxyBaseUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return url.pathname.replace(/\/+$/, '').endsWith('/agent-device');
+  } catch {
+    return false;
+  }
 }
 
 function readRequestedConnectionState(flags: CliFlags): {

@@ -230,7 +230,11 @@ test('connect proxy writes normal remote state with generated non-secret profile
   assert.match(state.clientId ?? '', /^[a-f0-9]{16}$/);
   assert.equal(state.leaseBackend, 'android-instance');
   assert.equal(state.leaseId, undefined);
-  assert.equal(state.daemon?.baseUrl, 'http://proxy.example.test/agent-device');
+  assert.deepEqual(state.daemon, {
+    baseUrl: 'http://proxy.example.test/agent-device',
+    authToken: 'proxy-secret',
+    transport: 'http',
+  });
   assert.match(state.remoteConfigPath, /remote-connections\/generated\/proxy-[a-f0-9]{16}\.json$/);
   const generated = JSON.parse(fs.readFileSync(state.remoteConfigPath, 'utf8')) as Record<
     string,
@@ -243,6 +247,39 @@ test('connect proxy writes normal remote state with generated non-secret profile
   assert.equal(generated.leaseTtlMs, undefined);
   assert.equal(JSON.stringify(generated).includes('proxy-secret'), false);
   assert.equal(JSON.stringify(generated).includes('metro-bearer-secret'), false);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('connect daemon-base-url shortcut uses proxy profile for direct proxy URLs', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-proxy-shortcut-'));
+  const stateDir = path.join(tempRoot, '.state');
+
+  await captureStdout(async () => {
+    await connectCommand({
+      positionals: [],
+      flags: {
+        json: true,
+        help: false,
+        version: false,
+        stateDir,
+        daemonBaseUrl: 'http://127.0.0.1:4310/agent-device',
+        daemonAuthToken: 'proxy-secret',
+      },
+      client: createTestClient(),
+    });
+  });
+
+  const state = readActiveConnectionState({ stateDir });
+  assert.ok(state);
+  assert.equal(state.tenant, 'proxy');
+  assert.equal(state.leaseProvider, 'proxy');
+  assert.match(state.clientId ?? '', /^[a-f0-9]{16}$/);
+  assert.deepEqual(state.daemon, {
+    baseUrl: 'http://127.0.0.1:4310/agent-device',
+    authToken: 'proxy-secret',
+    transport: 'http',
+  });
+  assert.equal(state.leaseId, undefined);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
@@ -1815,6 +1852,10 @@ test('disconnect releases proxy lease with provider client and device metadata',
       tenant: 'proxy',
       runId: 'proxy-client-1',
       leaseId: 'abc123abc123abc1',
+      daemon: {
+        baseUrl: 'http://proxy.example.test/agent-device',
+        authToken: 'proxy-secret',
+      },
       leaseBackend: 'ios-instance',
       leaseProvider: 'proxy',
       clientId: 'client-1',
@@ -1848,6 +1889,8 @@ test('disconnect releases proxy lease with provider client and device metadata',
   assert.equal(releaseRequest?.clientId, 'client-1');
   assert.equal(releaseRequest?.deviceKey, 'ios:mobile:SIM-001');
   assert.equal(releaseRequest?.leaseId, 'abc123abc123abc1');
+  assert.equal(releaseRequest?.daemonBaseUrl, 'http://proxy.example.test/agent-device');
+  assert.equal(releaseRequest?.daemonAuthToken, 'proxy-secret');
   assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-proxy' }), null);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });

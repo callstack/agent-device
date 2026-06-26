@@ -129,6 +129,10 @@ export async function prepareRunnerLeaseForStartup(
       await cleanupLeasedRunnerProcesses(state.lease, 'same-state-dir', cleanup);
       return;
     }
+    if (canLogicalLeaseReclaimRunner(state.lease, logicalLeaseContext)) {
+      await cleanupLeasedRunnerProcesses(state.lease, 'logical-lease-takeover', cleanup);
+      return;
+    }
     throw new AppError(
       'COMMAND_FAILED',
       logicalLeaseContext
@@ -154,6 +158,25 @@ function isSameStateDirRunnerLease(lease: RunnerLease): boolean {
   const currentStateDir = readCurrentStateDir();
   if (!currentStateDir || !lease.ownerStateDir) return false;
   return path.resolve(currentStateDir) === path.resolve(lease.ownerStateDir);
+}
+
+function canLogicalLeaseReclaimRunner(
+  lease: RunnerLease,
+  logicalLeaseContext: RunnerLogicalLeaseContext | undefined,
+): boolean {
+  if (!logicalLeaseContext || logicalLeaseContext.leaseProvider !== 'proxy') return false;
+  if (!logicalLeaseContext.leaseId || !logicalLeaseContext.clientId) return false;
+  return logicalLeaseContextMatchesDevice(logicalLeaseContext.deviceKey, lease.deviceId);
+}
+
+function logicalLeaseContextMatchesDevice(
+  logicalDeviceKey: string | undefined,
+  runnerDeviceId: string,
+): boolean {
+  if (!logicalDeviceKey) return false;
+  if (logicalDeviceKey === runnerDeviceId) return true;
+  const [, , canonicalDeviceId] = logicalDeviceKey.split(':', 3);
+  return canonicalDeviceId === runnerDeviceId;
 }
 
 function readCurrentStateDir(): string | undefined {
@@ -341,11 +364,14 @@ function isRunnerLeaseOwnerAlive(lease: RunnerLease): boolean {
 
 async function cleanupLeasedRunnerProcesses(
   lease: RunnerLease,
-  reason: 'owned' | 'stale' | 'same-state-dir',
+  reason: 'owned' | 'stale' | 'same-state-dir' | 'logical-lease-takeover',
   cleanup: RunnerLeaseCleanupAdapter,
 ): Promise<void> {
   emitDiagnostic({
-    level: reason === 'stale' || reason === 'same-state-dir' ? 'warn' : 'debug',
+    level:
+      reason === 'stale' || reason === 'same-state-dir' || reason === 'logical-lease-takeover'
+        ? 'warn'
+        : 'debug',
     phase: 'ios_runner_lease_cleanup',
     data: {
       deviceId: lease.deviceId,
