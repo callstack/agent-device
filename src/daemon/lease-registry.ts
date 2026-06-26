@@ -240,8 +240,8 @@ export class LeaseRegistry {
     const leaseId = this.normalizeRequiredLeaseId(request.leaseId);
     this.cleanupExpiredLeases();
     const lease = this.getActiveLease(leaseId);
-    this.assertRequiredScopeForDeviceAwareLease(lease, this.scopeMatchRequest(request));
-    this.assertOptionalScopeMatch(lease, this.scopeMatchRequest(request));
+    this.assertRequiredScopeForDeviceAwareLease(lease, request);
+    this.assertOptionalScopeMatch(lease, request);
     const leaseTtlMs = this.resolveLeaseTtlMs(request.ttlMs);
     return this.refreshLease(lease, leaseTtlMs);
   }
@@ -253,8 +253,8 @@ export class LeaseRegistry {
     if (!lease) {
       return { released: false };
     }
-    this.assertRequiredScopeForDeviceAwareLease(lease, this.scopeMatchRequest(request));
-    this.assertOptionalScopeMatch(lease, this.scopeMatchRequest(request));
+    this.assertRequiredScopeForDeviceAwareLease(lease, request);
+    this.assertOptionalScopeMatch(lease, request);
     this.leases.delete(leaseId);
     this.unbindLease(lease);
     return { released: true };
@@ -359,17 +359,6 @@ export class LeaseRegistry {
     throw new AppError('UNAUTHORIZED', 'Lease is not active', {
       reason: 'LEASE_NOT_FOUND',
     });
-  }
-
-  private scopeMatchRequest(request: LeaseScopeMatchRequest): LeaseScopeMatchRequest {
-    return {
-      tenantId: request.tenantId,
-      runId: request.runId,
-      leaseBackend: request.leaseBackend,
-      leaseProvider: request.leaseProvider,
-      deviceKey: request.deviceKey,
-      clientId: request.clientId,
-    };
   }
 
   private refreshLease(lease: DeviceLease, ttlMs: number): DeviceLease {

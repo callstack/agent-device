@@ -447,24 +447,34 @@ export async function stopReactDevtoolsCleanup(options: {
   }
 }
 
+export async function releaseRemoteConnectionLease(
+  client: AgentDeviceClient,
+  state: RemoteConnectionState,
+): Promise<boolean> {
+  if (!state.leaseId) return false;
+  const result = await client.leases.release({
+    tenant: state.tenant,
+    runId: state.runId,
+    leaseId: state.leaseId,
+    leaseBackend: state.leaseBackend,
+    daemonBaseUrl: state.daemon?.baseUrl,
+    daemonAuthToken: state.daemon?.authToken,
+    daemonTransport: state.daemon?.transport,
+    daemonServerMode: state.daemon?.serverMode,
+    leaseProvider: state.leaseProvider,
+    clientId: state.clientId,
+    deviceKey: state.deviceKey,
+  });
+  return result.released;
+}
+
 export async function releasePreviousLease(
   client: AgentDeviceClient,
   previous: RemoteConnectionState,
 ): Promise<void> {
   if (!previous.leaseId) return;
   try {
-    await client.leases.release({
-      tenant: previous.tenant,
-      runId: previous.runId,
-      leaseId: previous.leaseId,
-      daemonBaseUrl: previous.daemon?.baseUrl,
-      daemonAuthToken: previous.daemon?.authToken,
-      daemonTransport: previous.daemon?.transport,
-      daemonServerMode: previous.daemon?.serverMode,
-      leaseProvider: previous.leaseProvider,
-      clientId: previous.clientId,
-      deviceKey: previous.deviceKey,
-    });
+    await releaseRemoteConnectionLease(client, previous);
   } catch {
     // Reconnect must succeed even if the old lease was already released.
   }

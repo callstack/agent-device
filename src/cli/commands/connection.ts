@@ -17,6 +17,7 @@ import { resolveCloudConnectProfile } from '../cloud-connection-profile.ts';
 import { resolveProxyConnectProfile } from '../proxy-connection-profile.ts';
 import {
   hasDeferredMetroConfig,
+  releaseRemoteConnectionLease,
   releasePreviousLease,
   resolveRequestedLeaseBackend,
   stopMetroCleanup,
@@ -298,19 +299,7 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
   let released = false;
   if (state.leaseId) {
     try {
-      const result = await client.leases.release({
-        tenant: state.tenant,
-        runId: state.runId,
-        leaseId: state.leaseId,
-        daemonBaseUrl: state.daemon?.baseUrl,
-        daemonAuthToken: state.daemon?.authToken,
-        daemonTransport: state.daemon?.transport,
-        daemonServerMode: state.daemon?.serverMode,
-        leaseProvider: state.leaseProvider,
-        clientId: state.clientId,
-        deviceKey: state.deviceKey,
-      });
-      released = result.released;
+      released = await releaseRemoteConnectionLease(client, state);
     } catch {
       // Bridges may release on close or be unreachable; local state still needs cleanup.
     }

@@ -1898,6 +1898,7 @@ test('disconnect releases proxy lease with provider client and device metadata',
   assert.equal(releaseRequest?.clientId, 'client-1');
   assert.equal(releaseRequest?.deviceKey, 'ios:mobile:SIM-001');
   assert.equal(releaseRequest?.leaseId, 'abc123abc123abc1');
+  assert.equal(releaseRequest?.leaseBackend, 'ios-instance');
   assert.equal(releaseRequest?.daemonBaseUrl, 'http://proxy.example.test/agent-device');
   assert.equal(releaseRequest?.daemonAuthToken, 'proxy-secret');
   assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-proxy' }), null);
