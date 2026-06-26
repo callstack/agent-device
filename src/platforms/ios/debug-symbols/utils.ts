@@ -32,18 +32,18 @@ export function compactJoin(values: (string | undefined)[]): string | undefined 
   return compact.length > 0 ? compact.join(' ') : undefined;
 }
 
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
-}
-
 export function readRecord(value: unknown): Record<string, unknown> | undefined {
-  return isRecord(value) ? value : undefined;
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
 export function readJsonRecord(text: string): Record<string, unknown> | null {
   try {
     const value = JSON.parse(text);
-    return isRecord(value) ? value : null;
+    return value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : null;
   } catch {
     return null;
   }

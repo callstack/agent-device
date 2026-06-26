@@ -129,12 +129,18 @@ function collectConfiguredTestTargets(parsed: Record<string, unknown>): Record<s
 
   const targets: Record<string, unknown>[] = [];
   for (const config of testConfigurations) {
-    if (!isRecord(config)) {
+    if (config === null || typeof config !== 'object' || Array.isArray(config)) {
       continue;
     }
-    const testTargets = config.TestTargets;
+    const configRecord = config as Record<string, unknown>;
+    const testTargets = configRecord.TestTargets;
     if (Array.isArray(testTargets)) {
-      targets.push(...testTargets.filter(isRecord));
+      targets.push(
+        ...testTargets.filter(
+          (target): target is Record<string, unknown> =>
+            target !== null && typeof target === 'object' && !Array.isArray(target),
+        ),
+      );
     }
   }
   return targets;
@@ -142,12 +148,12 @@ function collectConfiguredTestTargets(parsed: Record<string, unknown>): Record<s
 
 function collectLegacyTestTargets(parsed: Record<string, unknown>): Record<string, unknown>[] {
   return Object.values(parsed).filter(
-    (value): value is Record<string, unknown> => isRecord(value) && 'TestBundlePath' in value,
+    (value): value is Record<string, unknown> =>
+      value !== null &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      'TestBundlePath' in value,
   );
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object';
 }
 
 function collectXctestrunProductReferenceValuesFromTarget(

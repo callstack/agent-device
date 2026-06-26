@@ -73,11 +73,12 @@ export function readDeviceTarget(record: Record<string, unknown>, key: string): 
 
 export function readRect(record: Record<string, unknown>, key: string): Rect | undefined {
   const value = record[key];
-  if (!isRecord(value)) return undefined;
-  const x = readNumberField(value, 'x');
-  const y = readNumberField(value, 'y');
-  const width = readNumberField(value, 'width');
-  const height = readNumberField(value, 'height');
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const valueRecord = value as Record<string, unknown>;
+  const x = readNumberField(valueRecord, 'x');
+  const y = readNumberField(valueRecord, 'y');
+  const width = readNumberField(valueRecord, 'width');
+  const height = readNumberField(valueRecord, 'height');
   if (x === undefined || y === undefined || width === undefined || height === undefined) {
     return undefined;
   }
@@ -86,9 +87,10 @@ export function readRect(record: Record<string, unknown>, key: string): Rect | u
 
 export function readPoint(record: Record<string, unknown>, key: string): Point | undefined {
   const value = record[key];
-  if (!isRecord(value)) return undefined;
-  const x = readNumberField(value, 'x');
-  const y = readNumberField(value, 'y');
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const valueRecord = value as Record<string, unknown>;
+  const x = readNumberField(valueRecord, 'x');
+  const y = readNumberField(valueRecord, 'y');
   if (x === undefined || y === undefined) {
     return undefined;
   }
@@ -127,16 +129,12 @@ function parseDeviceTarget(value: unknown): DeviceTarget | undefined {
 }
 
 export function asRecord(value: unknown): Record<string, unknown> {
-  if (!isRecord(value)) {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {
     throw new AppError('COMMAND_FAILED', 'Daemon returned an unexpected response shape.', {
       value,
     });
   }
-  return value;
-}
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null;
+  return value as Record<string, unknown>;
 }
 
 export function stripUndefined<T extends Record<string, unknown>>(value: T): T {

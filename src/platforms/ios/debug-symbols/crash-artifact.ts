@@ -9,7 +9,6 @@ import type {
 } from './types.ts';
 import {
   addressKey,
-  isRecord,
   normalizeUuid,
   parseAtosSymbol,
   readJsonRecord,
@@ -68,7 +67,10 @@ function readIpsFrameRecords(thread: unknown): Record<string, unknown>[] {
   if (!thread || typeof thread !== 'object') return [];
   const frames = (thread as Record<string, unknown>).frames;
   return Array.isArray(frames)
-    ? frames.filter((frame): frame is Record<string, unknown> => isRecord(frame))
+    ? frames.filter(
+        (frame): frame is Record<string, unknown> =>
+          frame !== null && typeof frame === 'object' && !Array.isArray(frame),
+      )
     : [];
 }
 

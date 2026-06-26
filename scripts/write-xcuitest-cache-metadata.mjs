@@ -362,15 +362,32 @@ function collectConfiguredTestTargets(parsed) {
   if (!Array.isArray(testConfigurations)) return [];
   const targets = [];
   for (const config of testConfigurations) {
-    if (!isRecord(config) || !Array.isArray(config.TestTargets)) continue;
-    targets.push(...config.TestTargets.filter(isRecord));
+    if (
+      config === null ||
+      typeof config !== 'object' ||
+      Array.isArray(config) ||
+      !Array.isArray(config.TestTargets)
+    ) {
+      continue;
+    }
+    targets.push(
+      ...config.TestTargets.filter(
+        (target) => target !== null && typeof target === 'object' && !Array.isArray(target),
+      ),
+    );
   }
   return targets;
 }
 
 function collectLegacyTestTargets(parsed) {
-  if (!isRecord(parsed)) return [];
-  return Object.values(parsed).filter((value) => isRecord(value) && 'TestBundlePath' in value);
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
+  return Object.values(parsed).filter(
+    (value) =>
+      value !== null &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      'TestBundlePath' in value,
+  );
 }
 
 function collectXctestrunProductReferenceValuesFromTarget(target) {
@@ -451,8 +468,4 @@ function readFileSize(filePath) {
   } catch {
     return null;
   }
-}
-
-function isRecord(value) {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
