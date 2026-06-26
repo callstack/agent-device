@@ -32,12 +32,6 @@ export function compactJoin(values: (string | undefined)[]): string | undefined 
   return compact.length > 0 ? compact.join(' ') : undefined;
 }
 
-export function readRecord(value: unknown): Record<string, unknown> | undefined {
-  return value !== null && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
-}
-
 export function readJsonRecord(text: string): Record<string, unknown> | null {
   try {
     const value = JSON.parse(text);

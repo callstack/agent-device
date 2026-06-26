@@ -1,7 +1,7 @@
 import type { CommandRequestResult } from '../../client-types.ts';
 import { readCommandMessage } from '../../utils/success-text.ts';
 import type { CliOutput } from '../command-contract.ts';
-import { readRecord, resultOutput, type CliOutputFormatter } from '../output-common.ts';
+import { resultOutput, type CliOutputFormatter } from '../output-common.ts';
 
 function batchCliOutput(result: CommandRequestResult): CliOutput {
   const data = result as Record<string, unknown>;
@@ -24,8 +24,8 @@ export const batchCliOutputFormatters = {
 } as const satisfies Record<string, CliOutputFormatter>;
 
 function renderBatchStepLine(entry: unknown): string | undefined {
-  const result = readRecord(entry);
-  if (!result) return undefined;
+  if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return undefined;
+  const result = entry as Record<string, unknown>;
   const step = typeof result.step === 'number' ? result.step : undefined;
   const command = typeof result.command === 'string' ? result.command : 'step';
   const stepOk = result.ok !== false;
@@ -41,8 +41,18 @@ function readBatchStepDescription(
   stepOk: boolean,
   command: string,
 ): string {
-  if (stepOk) return readCommandMessage(readRecord(result.data)) ?? command;
-  return readBatchStepFailure(readRecord(result.error)) ?? command;
+  if (stepOk) {
+    const data =
+      result.data !== null && typeof result.data === 'object' && !Array.isArray(result.data)
+        ? (result.data as Record<string, unknown>)
+        : undefined;
+    return readCommandMessage(data) ?? command;
+  }
+  const error =
+    result.error !== null && typeof result.error === 'object' && !Array.isArray(result.error)
+      ? (result.error as Record<string, unknown>)
+      : undefined;
+  return readBatchStepFailure(error) ?? command;
 }
 
 function readBatchStepFailure(error: Record<string, unknown> | undefined): string | null {

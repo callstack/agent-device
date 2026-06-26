@@ -128,20 +128,14 @@ function formatSlowSnapshotWarning(stats: SnapshotTimingStats): string {
 }
 
 function readSnapshotTimingStats(value: unknown): SnapshotTimingStats | undefined {
-  const record = readRecord(value);
-  if (!record) return undefined;
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
   const required = readRequiredSnapshotTimingStats(record);
   if (!required) return undefined;
   return {
     ...required,
     ...readOptionalSnapshotTimingStats(record),
   };
-}
-
-function readRecord(value: unknown): Record<string, unknown> | undefined {
-  return value && typeof value === 'object' && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : undefined;
 }
 
 function readRequiredSnapshotTimingStats(
@@ -174,8 +168,12 @@ function readOptionalSnapshotTimingStats(
   record: Record<string, unknown>,
 ): Pick<SnapshotTimingStats, 'platform' | 'backends'> {
   const platform = typeof record.platform === 'string' ? record.platform : undefined;
-  const backendRecord = readRecord(record.backends);
-  const backends = backendRecord ? readBackendCounts(backendRecord) : undefined;
+  const backends =
+    record.backends !== null &&
+    typeof record.backends === 'object' &&
+    !Array.isArray(record.backends)
+      ? readBackendCounts(record.backends as Record<string, unknown>)
+      : undefined;
   return {
     ...(platform ? { platform: platform as SnapshotTimingStats['platform'] } : {}),
     ...(backends ? { backends } : {}),

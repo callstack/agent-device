@@ -1,6 +1,6 @@
 import type { CommandRequestResult } from '../../client-types.ts';
 import type { CliOutput } from '../command-contract.ts';
-import { readRecord, resultOutput, type CliOutputFormatter } from '../output-common.ts';
+import { resultOutput, type CliOutputFormatter } from '../output-common.ts';
 
 function logsCliOutput(result: CommandRequestResult): CliOutput {
   const data = result as Record<string, unknown>;
@@ -67,7 +67,10 @@ function formatActionField(key: string, value: unknown): string {
 }
 
 function formatNetworkEntry(entry: unknown): string[] {
-  const record = readRecord(entry) ?? {};
+  const record =
+    entry !== null && typeof entry === 'object' && !Array.isArray(entry)
+      ? (entry as Record<string, unknown>)
+      : {};
   const method = typeof record.method === 'string' ? record.method : 'HTTP';
   const url = typeof record.url === 'string' ? record.url : '<unknown-url>';
   const status = typeof record.status === 'number' ? ` status=${record.status}` : '';
@@ -87,7 +90,10 @@ function formatNetworkEntry(entry: unknown): string[] {
 }
 
 function appendNetworkEntryHeaders(lines: string[], label: string, value: unknown): void {
-  const headers = readRecord(value);
+  const headers =
+    value !== null && typeof value === 'object' && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : undefined;
   if (!headers || Object.keys(headers).length === 0) return;
   lines.push(`  ${label}: ${JSON.stringify(headers)}`);
 }
