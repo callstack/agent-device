@@ -46,7 +46,10 @@ export function resolveProxyConnectProfile(options: {
     metroKind: options.flags.metroKind,
     metroPublicBaseUrl: options.flags.metroPublicBaseUrl,
     metroProxyBaseUrl: options.flags.metroProxyBaseUrl,
-    metroBearerToken: options.flags.metroBearerToken,
+    // Secrets must never be persisted in the generated (non-secret) profile.
+    // Mirror the cloud path, which keeps daemonAuthToken in-memory only: the
+    // bearer token survives this connect via the returned flags below, and
+    // later commands re-supply it through AGENT_DEVICE_METRO_BEARER_TOKEN.
     metroPreparePort: options.flags.metroPreparePort,
     metroListenHost: options.flags.metroListenHost,
     metroStatusHost: options.flags.metroStatusHost,
