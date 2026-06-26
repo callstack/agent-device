@@ -1,4 +1,4 @@
-import { isApplePlatform, type DeviceInfo } from '../utils/device.ts';
+import type { DeviceInfo } from '../utils/device.ts';
 
 type KindMatrix = {
   simulator?: boolean;
@@ -295,16 +295,35 @@ function addWebCommandCapabilities(
   return result;
 }
 
+// Exhaustive platform -> capability-bucket selection. Switching over the full Platform
+// union (instead of an if/else ladder that funnels every unmatched platform into
+// `capability.web`) makes adding a new Platform a compile error here, so a future
+// platform can no longer silently inherit web's capability matrix.
+function selectCapabilityForPlatform(
+  capability: CommandCapability,
+  platform: DeviceInfo['platform'],
+): KindMatrix | undefined {
+  switch (platform) {
+    case 'ios':
+    case 'macos':
+      return capability.apple;
+    case 'android':
+      return capability.android;
+    case 'linux':
+      return capability.linux;
+    case 'web':
+      return capability.web;
+    default: {
+      const exhaustive: never = platform;
+      return exhaustive;
+    }
+  }
+}
+
 export function isCommandSupportedOnDevice(command: string, device: DeviceInfo): boolean {
   const capability = COMMAND_CAPABILITY_MATRIX[command];
   if (!capability) return true;
-  const byPlatform = isApplePlatform(device.platform)
-    ? capability.apple
-    : device.platform === 'android'
-      ? capability.android
-      : device.platform === 'linux'
-        ? capability.linux
-        : capability.web;
+  const byPlatform = selectCapabilityForPlatform(capability, device.platform);
   if (!byPlatform) return false;
   if (capability.supports && !capability.supports(device)) return false;
   const kind = (device.kind ?? 'unknown') as keyof KindMatrix;
