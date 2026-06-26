@@ -17,6 +17,7 @@ import {
   connectionCommand,
   disconnectCommand,
 } from '../cli/commands/connection.ts';
+import { writeGeneratedRemoteConfig } from '../cli/generated-remote-config.ts';
 import {
   hasDeferredMetroConfig,
   materializeRemoteConnectionForCommand,
@@ -240,6 +241,30 @@ test('connect proxy writes normal remote state with generated non-secret profile
   assert.equal(generated.metroBearerToken, undefined);
   assert.equal(generated.leaseProvider, 'proxy');
   assert.equal(generated.leaseTtlMs, undefined);
+  assert.equal(JSON.stringify(generated).includes('proxy-secret'), false);
+  assert.equal(JSON.stringify(generated).includes('metro-bearer-secret'), false);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('generated remote config writer strips secret fields', () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-generated-profile-'));
+  const configPath = writeGeneratedRemoteConfig({
+    stateDir: path.join(tempRoot, '.state'),
+    provider: 'proxy',
+    profile: {
+      daemonBaseUrl: 'http://proxy.example.test/agent-device',
+      daemonAuthToken: 'proxy-secret',
+      metroBearerToken: 'metro-bearer-secret',
+      leaseProvider: 'proxy',
+      clientId: 'client-a',
+    },
+  });
+
+  const generated = JSON.parse(fs.readFileSync(configPath, 'utf8')) as Record<string, unknown>;
+  assert.equal(generated.daemonBaseUrl, 'http://proxy.example.test/agent-device');
+  assert.equal(generated.daemonAuthToken, undefined);
+  assert.equal(generated.metroBearerToken, undefined);
+  assert.equal(generated.leaseProvider, 'proxy');
   assert.equal(JSON.stringify(generated).includes('proxy-secret'), false);
   assert.equal(JSON.stringify(generated).includes('metro-bearer-secret'), false);
   fs.rmSync(tempRoot, { recursive: true, force: true });

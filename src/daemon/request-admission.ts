@@ -94,6 +94,11 @@ export function assertRequestLeaseAdmission(
   });
 }
 
+export function assertRequestLeaseAdmissionPreflight(req: DaemonRequest): void {
+  if (isLeaseAdmissionExempt(req.command)) return;
+  assertProxyOpenLeaseMetadata(req, resolveLeaseScope(req));
+}
+
 function assertProxyOpenLeaseMetadata(
   req: DaemonRequest,
   requestLeaseScope: ReturnType<typeof resolveLeaseScope>,

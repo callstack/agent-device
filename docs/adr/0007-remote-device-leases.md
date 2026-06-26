@@ -32,6 +32,15 @@ weakened or replaced by them.
 and session creation meet there. Commands after `open` must refresh the lease;
 no activity for five minutes should make the device available again.
 
+Lease admission, heartbeat, stored session lease refresh, and request execution
+must run under the same daemon request lock. Scope resolution may happen before
+the lock, but lease ownership mutation must not.
+
+Generated connection profiles are non-secret. They may persist stable routing,
+device, lease provider, device key, and client identity metadata, but must strip
+daemon and Metro bearer tokens. Tokens are supplied in-memory for the current
+command or through the existing environment/CLI token paths.
+
 The proxy process is expected to be long-lived and self-serve. Recovery from a
 stale or expired device lease should not require restarting the proxy.
 
@@ -44,4 +53,3 @@ owning lease expiry.
 Backend-only leases remain valid for older remote clients. Device and provider
 fields are optional until provider-aware `open` acquisition and admission
 refreshes are implemented.
-

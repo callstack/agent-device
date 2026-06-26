@@ -10,7 +10,11 @@ import type { DaemonCommandContext } from './context.ts';
 import { contextFromFlags as contextFromFlagsWithLog } from './context.ts';
 import { assertSessionSelectorMatches } from './session-selector.ts';
 import { resolveEffectiveSessionName } from './session-routing.ts';
-import { assertRequestLeaseAdmission, scopeRequestSession } from './request-admission.ts';
+import {
+  assertRequestLeaseAdmission,
+  assertRequestLeaseAdmissionPreflight,
+  scopeRequestSession,
+} from './request-admission.ts';
 import {
   prepareLockedRequestBinding,
   resolveRequestExecutionLockKeys,
@@ -80,7 +84,6 @@ export async function createRequestExecutionScope(params: {
 
   const command = scopedReq.command;
   const sessionName = resolveEffectiveSessionName(scopedReq, sessionStore);
-  const existingSession = sessionStore.get(sessionName);
   const diagnosticsMeta = getDiagnosticsMeta();
   const sessionDir = sessionStore.resolveSessionDir(sessionName);
   const requestLogPath = resolveSessionRequestLogPath(
@@ -105,26 +108,7 @@ export async function createRequestExecutionScope(params: {
       runnerLogPath,
     },
   });
-  const activeLease = assertRequestLeaseAdmission(scopedReq, leaseRegistry, existingSession);
-  if (activeLease) {
-    scopedReq = {
-      ...scopedReq,
-      internal: {
-        ...scopedReq.internal,
-        admittedLease: activeLease,
-      },
-    };
-  }
-  if (activeLease && existingSession?.lease) {
-    sessionStore.set(sessionName, {
-      ...existingSession,
-      lease: {
-        ...existingSession.lease,
-        leaseBackend: activeLease.backend,
-        expiresAt: activeLease.expiresAt,
-      },
-    });
-  }
+  assertRequestLeaseAdmissionPreflight(scopedReq);
   const executionLockKeys = shouldLockSessionExecution(command)
     ? await resolveRequestExecutionLockKeys({ req: scopedReq, sessionName, sessionStore })
     : [];
@@ -139,14 +123,53 @@ export async function createRequestExecutionScope(params: {
     throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
     runLocked: async (task) => {
       throwIfRequestCanceled(scopedReq.meta?.requestId);
-      if (executionLockKeys.length === 0) return await task();
-      return await withRequestExecutionLocks(executionLocks, executionLockKeys, async () => {
+      const runAdmitted = async () => {
         throwIfRequestCanceled(scopedReq.meta?.requestId);
+        scopedReq = admitRequestLeaseForLockedScope({
+          req: scopedReq,
+          sessionName,
+          sessionStore,
+          leaseRegistry,
+        });
+        scope.req = scopedReq;
         return await task();
-      });
+      };
+      if (executionLockKeys.length === 0) return await runAdmitted();
+      return await withRequestExecutionLocks(executionLocks, executionLockKeys, runAdmitted);
     },
   };
   return scope;
+}
+
+function admitRequestLeaseForLockedScope(params: {
+  req: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+  leaseRegistry: LeaseRegistry;
+}): DaemonRequest {
+  const { sessionName, sessionStore, leaseRegistry } = params;
+  const existingSession = sessionStore.get(sessionName);
+  const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, existingSession);
+  if (!activeLease) return params.req;
+
+  const nextReq = {
+    ...params.req,
+    internal: {
+      ...params.req.internal,
+      admittedLease: activeLease,
+    },
+  };
+  if (existingSession?.lease) {
+    sessionStore.set(sessionName, {
+      ...existingSession,
+      lease: {
+        ...existingSession.lease,
+        leaseBackend: activeLease.backend,
+        expiresAt: activeLease.expiresAt,
+      },
+    });
+  }
+  return nextReq;
 }
 
 async function cleanupExpiredLeasedSessions(params: {

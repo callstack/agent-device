@@ -6,12 +6,14 @@ import type { RemoteConfigProfile, ResolvedRemoteConfigProfile } from '../remote
 import { AppError, asAppError } from '../utils/errors.ts';
 import type { EnvMap } from '../utils/env-map.ts';
 
+const GENERATED_REMOTE_CONFIG_SECRET_KEYS = new Set(['daemonAuthToken', 'metroBearerToken']);
+
 export function writeGeneratedRemoteConfig(options: {
   stateDir: string;
   provider: string;
   profile: RemoteConfigProfile;
 }): string {
-  const normalized = normalizeJson(options.profile);
+  const normalized = normalizeJson(stripGeneratedProfileSecrets(options.profile));
   const configDir = path.join(options.stateDir, 'remote-connections', 'generated');
   fs.mkdirSync(configDir, { recursive: true, mode: 0o700 });
   const configPath = path.join(
@@ -48,6 +50,12 @@ export function resolveGeneratedRemoteConfigProfile(options: {
       appError,
     );
   }
+}
+
+function stripGeneratedProfileSecrets(profile: RemoteConfigProfile): RemoteConfigProfile {
+  return Object.fromEntries(
+    Object.entries(profile).filter(([key]) => !GENERATED_REMOTE_CONFIG_SECRET_KEYS.has(key)),
+  ) as RemoteConfigProfile;
 }
 
 function profileHash(value: unknown): string {

@@ -26,7 +26,7 @@ afterAll(() => {
   fs.rmSync(TEST_ROOT, { recursive: true, force: true });
 });
 
-test('createRequestExecutionScope applies tenant scoping and lease admission', async () => {
+test('createRequestExecutionScope applies tenant scoping and locked lease admission', async () => {
   const sessionStore = makeSessionStore('agent-device-request-scope-');
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({
@@ -55,6 +55,10 @@ test('createRequestExecutionScope applies tenant scoping and lease admission', a
   expect(scope.req.session).toBe('tenant-a:default');
   expect(scope.req.meta?.tenantId).toBe('tenant-a');
   expect(scope.sessionName).toBe('tenant-a:default');
+  const admittedLeaseId = await scope.runLocked(
+    async () => scope.req.internal?.admittedLease?.leaseId,
+  );
+  expect(admittedLeaseId).toBe(lease.leaseId);
 });
 
 test('createRequestExecutionScope resolves session-scoped request and runner log paths', async () => {
@@ -103,23 +107,23 @@ test('request diagnostics flush into the effective session request log', async (
   expect(fs.readFileSync(result.expectedPath, 'utf8')).toContain('"phase":"request_start"');
 });
 
-test('createRequestExecutionScope rejects tenant requests without an active lease', async () => {
-  await expect(
-    createRequestExecutionScope({
-      req: makeRequest({
-        session: 'default',
-        command: 'snapshot',
-        meta: {
-          tenantId: 'tenant-a',
-          runId: 'run-1',
-          leaseId: '0'.repeat(32),
-          sessionIsolation: 'tenant',
-        },
-      }),
-      sessionStore: makeSessionStore('agent-device-request-scope-'),
-      leaseRegistry: new LeaseRegistry(),
+test('runLocked rejects tenant requests without an active lease', async () => {
+  const scope = await createRequestExecutionScope({
+    req: makeRequest({
+      session: 'default',
+      command: 'snapshot',
+      meta: {
+        tenantId: 'tenant-a',
+        runId: 'run-1',
+        leaseId: '0'.repeat(32),
+        sessionIsolation: 'tenant',
+      },
     }),
-  ).rejects.toThrow(/Lease is not active/);
+    sessionStore: makeSessionStore('agent-device-request-scope-'),
+    leaseRegistry: new LeaseRegistry(),
+  });
+
+  await expect(scope.runLocked(async () => 'ran')).rejects.toThrow(/Lease is not active/);
 });
 
 test('leased session admission uses stored lease metadata and heartbeats', async () => {
@@ -156,11 +160,78 @@ test('leased session admission uses stored lease metadata and heartbeats', async
     leaseRegistry,
   });
 
+  await scope.runLocked(async () => 'ran');
+
   expect(scope.sessionName).toBe('default');
   const activeLease = leaseRegistry.listActiveLeases()[0];
   expect(activeLease?.heartbeatAt).toBe(2_000);
   expect(activeLease?.expiresAt).toBe(302_000);
   expect(sessionStore.get('default')?.lease?.expiresAt).toBe(302_000);
+});
+
+test('leased session heartbeat is serialized with the request execution lock', async () => {
+  let now = 1_000;
+  const sessionStore = makeSessionStore('agent-device-request-scope-');
+  const leaseRegistry = new LeaseRegistry({ now: () => now });
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'proxy',
+    clientId: 'client-a',
+    deviceKey: 'ios:sim-1',
+  });
+  sessionStore.set(
+    'default',
+    makeIosSession('default', {
+      lease: {
+        leaseId: lease.leaseId,
+        tenantId: lease.tenantId,
+        runId: lease.runId,
+        leaseBackend: lease.backend,
+        leaseProvider: 'proxy',
+        clientId: 'client-a',
+        deviceKey: 'ios:sim-1',
+        expiresAt: lease.expiresAt,
+      },
+    }),
+  );
+
+  const first = await createRequestExecutionScope({
+    req: makeRequest({ command: 'click' }),
+    sessionStore,
+    leaseRegistry,
+  });
+  const second = await createRequestExecutionScope({
+    req: makeRequest({ command: 'click' }),
+    sessionStore,
+    leaseRegistry,
+  });
+
+  let releaseFirst: () => void = () => {};
+  let firstEntered: () => void = () => {};
+  const firstEnteredPromise = new Promise<void>((resolve) => {
+    firstEntered = resolve;
+  });
+  now = 2_000;
+  const firstRun = first.runLocked(
+    async () =>
+      await new Promise<void>((release) => {
+        releaseFirst = release;
+        firstEntered();
+      }),
+  );
+  await firstEnteredPromise;
+  expect(leaseRegistry.listActiveLeases()[0]?.heartbeatAt).toBe(2_000);
+
+  now = 3_000;
+  const secondRun = second.runLocked(async () => 'second');
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  expect(leaseRegistry.listActiveLeases()[0]?.heartbeatAt).toBe(2_000);
+
+  releaseFirst();
+  await firstRun;
+  await expect(secondRun).resolves.toBe('second');
+  expect(leaseRegistry.listActiveLeases()[0]?.heartbeatAt).toBe(3_000);
 });
 
 test('leased session rejects mismatched lease id before dispatch', async () => {
@@ -179,13 +250,15 @@ test('leased session rejects mismatched lease id before dispatch', async () => {
     }),
   );
 
-  await expect(
-    createRequestExecutionScope({
-      req: makeRequest({ command: 'snapshot', meta: { leaseId: '1'.repeat(32) } }),
-      sessionStore,
-      leaseRegistry,
-    }),
-  ).rejects.toThrow(/Lease does not match session owner \(leaseId\)/);
+  const scope = await createRequestExecutionScope({
+    req: makeRequest({ command: 'snapshot', meta: { leaseId: '1'.repeat(32) } }),
+    sessionStore,
+    leaseRegistry,
+  });
+
+  await expect(scope.runLocked(async () => 'ran')).rejects.toThrow(
+    /Lease does not match session owner \(leaseId\)/,
+  );
 });
 
 test.each([
@@ -211,13 +284,15 @@ test.each([
     }),
   );
 
-  await expect(
-    createRequestExecutionScope({
-      req: makeRequest({ command: 'snapshot', meta }),
-      sessionStore,
-      leaseRegistry,
-    }),
-  ).rejects.toThrow(/Lease does not match session owner/);
+  const scope = await createRequestExecutionScope({
+    req: makeRequest({ command: 'snapshot', meta }),
+    sessionStore,
+    leaseRegistry,
+  });
+
+  await expect(scope.runLocked(async () => 'ran')).rejects.toThrow(
+    /Lease does not match session owner/,
+  );
 });
 
 test('local unleased session admission still succeeds', async () => {
@@ -308,23 +383,22 @@ test('tenant lease rejection flushes diagnostics into the effective session requ
   let flushedPath: string | null = null;
 
   await withDiagnosticsScope({ command: 'snapshot', requestId, logPath: LOG_PATH }, async () => {
-    await expect(
-      createRequestExecutionScope({
-        req: makeRequest({
-          session: 'default',
-          command: 'snapshot',
-          meta: {
-            tenantId: 'tenant-a',
-            runId: 'run-1',
-            leaseId: '0'.repeat(32),
-            sessionIsolation: 'tenant',
-            requestId,
-          },
-        }),
-        sessionStore,
-        leaseRegistry: new LeaseRegistry(),
+    const scope = await createRequestExecutionScope({
+      req: makeRequest({
+        session: 'default',
+        command: 'snapshot',
+        meta: {
+          tenantId: 'tenant-a',
+          runId: 'run-1',
+          leaseId: '0'.repeat(32),
+          sessionIsolation: 'tenant',
+          requestId,
+        },
       }),
-    ).rejects.toThrow(/Lease is not active/);
+      sessionStore,
+      leaseRegistry: new LeaseRegistry(),
+    });
+    await expect(scope.runLocked(async () => 'ran')).rejects.toThrow(/Lease is not active/);
     flushedPath = flushDiagnosticsToSessionFile({ force: true });
   });
 
