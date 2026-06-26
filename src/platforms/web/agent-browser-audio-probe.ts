@@ -28,7 +28,6 @@ export function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string
     action: options.action,
     durationMs: options.durationMs,
     bucketMs: options.bucketMs,
-    source: options.source ?? 'media-elements',
   })})})()`;
 }
 

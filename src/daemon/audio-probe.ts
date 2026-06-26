@@ -5,7 +5,6 @@ import {
   normalizeAudioProbeRecord,
   type AudioProbeResult,
 } from '../audio-probe-result.ts';
-import { isHostSystemAudioProbeDevice } from '../core/capabilities.ts';
 import { startMacOsAudioProbeProcess } from '../platforms/ios/macos-helper.ts';
 import { AppError } from '../utils/errors.ts';
 import { sleep } from '../utils/timeouts.ts';
@@ -22,8 +21,6 @@ export type HostAudioProbeCommand = {
   durationMs: number;
   bucketMs: number;
 };
-
-export const usesHostSystemAudioProbe = isHostSystemAudioProbeDevice;
 
 export async function runHostSystemAudioProbeCommand(
   request: HostAudioProbeCommand,

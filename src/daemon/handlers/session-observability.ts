@@ -1,4 +1,7 @@
-import { isCommandSupportedOnDevice } from '../../core/capabilities.ts';
+import {
+  isCommandSupportedOnDevice,
+  isHostSystemAudioProbeDevice,
+} from '../../core/capabilities.ts';
 import {
   isPerfAction,
   isPerfArea,
@@ -17,7 +20,7 @@ import { resolveWebProvider } from '../../platforms/web/provider.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
-import { runHostSystemAudioProbeCommand, usesHostSystemAudioProbe } from '../audio-probe.ts';
+import { runHostSystemAudioProbeCommand } from '../audio-probe.ts';
 import {
   appendAppLogMarker,
   clearAppLogFiles,
@@ -619,7 +622,7 @@ function resolveNetworkIncludeMode(
 async function handleAudioCommand(params: ObservabilityParams): Promise<DaemonResponse> {
   const request = resolveAudioCommandRequest(params);
   if (!request.ok) return request;
-  if (usesHostSystemAudioProbe(request.session.device)) {
+  if (isHostSystemAudioProbeDevice(request.session.device)) {
     return await handleHostSystemAudioCommand(params, request);
   }
   const provider = resolveWebProvider();
