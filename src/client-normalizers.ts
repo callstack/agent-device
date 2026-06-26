@@ -4,6 +4,11 @@ import type { DaemonRequest, SessionRuntimeHints } from './daemon/types.ts';
 import { AppError, type NormalizedError } from './utils/errors.ts';
 import type { SnapshotNode } from './utils/snapshot.ts';
 import { buildAppIdentifiers, buildDeviceIdentifiers } from './client-shared.ts';
+import {
+  leaseScopeFromOptions,
+  leaseScopeToCommandFlags,
+  leaseScopeToRequestMeta,
+} from './core/lease-scope.ts';
 import type {
   AgentDeviceDevice,
   AgentDeviceSession,
@@ -157,13 +162,12 @@ function buildClientDevicePlatformFields(
 }
 
 export function normalizeRuntimeHints(value: unknown): SessionRuntimeHints | undefined {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const record = value as Record<string, unknown>;
-  const platform = record.platform;
-  const metroHost = readOptionalString(record, 'metroHost');
-  const metroPort = typeof record.metroPort === 'number' ? record.metroPort : undefined;
-  const bundleUrl = readOptionalString(record, 'bundleUrl');
-  const launchUrl = readOptionalString(record, 'launchUrl');
+  if (!isRecord(value)) return undefined;
+  const platform = value.platform;
+  const metroHost = readOptionalString(value, 'metroHost');
+  const metroPort = typeof value.metroPort === 'number' ? value.metroPort : undefined;
+  const bundleUrl = readOptionalString(value, 'bundleUrl');
+  const launchUrl = readOptionalString(value, 'launchUrl');
   return {
     platform: platform === 'ios' || platform === 'android' ? platform : undefined,
     metroHost,
@@ -211,21 +215,20 @@ export function normalizeOpenDevice(
 }
 
 export function normalizeStartupSample(value: unknown): StartupPerfSample | undefined {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const record = value as Record<string, unknown>;
+  if (!isRecord(value)) return undefined;
   if (
-    typeof record.durationMs !== 'number' ||
-    typeof record.measuredAt !== 'string' ||
-    typeof record.method !== 'string'
+    typeof value.durationMs !== 'number' ||
+    typeof value.measuredAt !== 'string' ||
+    typeof value.method !== 'string'
   ) {
     return undefined;
   }
   return {
-    durationMs: record.durationMs,
-    measuredAt: record.measuredAt,
-    method: record.method,
-    appTarget: readOptionalString(record, 'appTarget'),
-    appBundleId: readOptionalString(record, 'appBundleId'),
+    durationMs: value.durationMs,
+    measuredAt: value.measuredAt,
+    method: value.method,
+    appTarget: readOptionalString(value, 'appTarget'),
+    appBundleId: readOptionalString(value, 'appBundleId'),
   };
 }
 
@@ -268,17 +271,15 @@ export function readSnapshotNodes(value: unknown): SnapshotNode[] {
 }
 
 export function buildFlags(options: InternalRequestOptions): CommandFlags {
+  const leaseScope = leaseScopeFromOptions(options);
   return stripUndefined({
     stateDir: options.stateDir,
     daemonBaseUrl: options.daemonBaseUrl,
     daemonAuthToken: options.daemonAuthToken,
     daemonTransport: options.daemonTransport,
     daemonServerMode: options.daemonServerMode,
-    tenant: options.tenant,
+    ...leaseScopeToCommandFlags(leaseScope),
     sessionIsolation: options.sessionIsolation,
-    runId: options.runId,
-    leaseId: options.leaseId,
-    leaseBackend: options.leaseBackend,
     platform: options.platform,
     target: options.target,
     device: options.device,
@@ -352,6 +353,7 @@ export function buildFlags(options: InternalRequestOptions): CommandFlags {
 }
 
 export function buildMeta(options: InternalRequestOptions): DaemonRequest['meta'] {
+  const leaseScope = leaseScopeFromOptions(options);
   return stripUndefined({
     requestId: options.requestId,
     cwd: options.cwd,
@@ -359,14 +361,7 @@ export function buildMeta(options: InternalRequestOptions): DaemonRequest['meta'
     debug: options.debug,
     lockPolicy: options.lockPolicy,
     lockPlatform: options.lockPlatform,
-    tenantId: options.tenant,
-    runId: options.runId,
-    leaseId: options.leaseId,
-    leaseBackend: options.leaseBackend,
-    leaseTtlMs: options.leaseTtlMs,
-    leaseProvider: options.leaseProvider,
-    clientId: options.clientId,
-    deviceKey: options.deviceKey,
+    ...leaseScopeToRequestMeta(leaseScope),
     sessionIsolation: options.sessionIsolation,
     installSource: options.installSource,
     retainMaterializedPaths: options.retainMaterializedPaths,

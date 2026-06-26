@@ -3,6 +3,11 @@ import { createRequestId } from './utils/diagnostics.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon/types.ts';
 import { materializeRemoteArtifacts } from './daemon-artifacts.ts';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
+import {
+  leaseScopeFromRequest,
+  leaseScopeToLeaseRpcParams,
+  type LeaseRpcCommand,
+} from './core/lease-scope.ts';
 
 export function handleDaemonHttpResponseBody(
   body: string,
@@ -114,8 +119,6 @@ export function buildHttpRpcPayload(
   };
 }
 
-type LeaseRpcCommand = 'lease_allocate' | 'lease_heartbeat' | 'lease_release';
-
 function isLeaseRpcCommand(command: string): command is LeaseRpcCommand {
   return (
     command === 'lease_allocate' || command === 'lease_heartbeat' || command === 'lease_release'
@@ -133,39 +136,14 @@ function leaseRpcMethodForCommand(command: LeaseRpcCommand): string {
   }
 }
 
-// fallow-ignore-next-line complexity
 function buildLeaseRpcParams(
   req: DaemonRequest,
   command: LeaseRpcCommand,
   options: { includeTokenParam: boolean },
 ): Record<string, unknown> {
-  const common = {
-    ...(options.includeTokenParam ? { token: req.token } : {}),
+  return leaseScopeToLeaseRpcParams(leaseScopeFromRequest(req), command, {
+    includeTokenParam: options.includeTokenParam,
+    token: req.token,
     session: req.session,
-    tenantId: req.meta?.tenantId,
-    runId: req.meta?.runId,
-    leaseProvider: req.meta?.leaseProvider,
-    provider: req.meta?.leaseProvider,
-    clientId: req.meta?.clientId,
-    deviceKey: req.meta?.deviceKey,
-  };
-  switch (command) {
-    case 'lease_allocate':
-      return {
-        ...common,
-        ttlMs: req.meta?.leaseTtlMs,
-        backend: req.meta?.leaseBackend,
-      };
-    case 'lease_heartbeat':
-      return {
-        ...common,
-        leaseId: req.meta?.leaseId,
-        ttlMs: req.meta?.leaseTtlMs,
-      };
-    case 'lease_release':
-      return {
-        ...common,
-        leaseId: req.meta?.leaseId,
-      };
-  }
+  });
 }

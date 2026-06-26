@@ -215,16 +215,10 @@ export function createAgentDeviceClient(
           await execute(INTERNAL_COMMANDS.leaseAllocate, [], {
             ...options,
             leaseId: undefined,
-            leaseTtlMs: options.ttlMs,
           }),
         ),
       heartbeat: async (options) =>
-        normalizeLease(
-          await execute(INTERNAL_COMMANDS.leaseHeartbeat, [], {
-            ...options,
-            leaseTtlMs: options.ttlMs,
-          }),
-        ),
+        normalizeLease(await execute(INTERNAL_COMMANDS.leaseHeartbeat, [], options)),
       release: async (options) => {
         const data = await execute(INTERNAL_COMMANDS.leaseRelease, [], options);
         return { released: data.released === true };

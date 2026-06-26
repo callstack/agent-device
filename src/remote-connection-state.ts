@@ -6,7 +6,11 @@ import { AppError } from './utils/errors.ts';
 import { emitDiagnostic } from './utils/diagnostics.ts';
 import type { CliFlags } from './utils/cli-flags.ts';
 import type { LeaseBackend, SessionRuntimeHints } from './contracts.ts';
-import { stripUndefined } from './utils/parsing.ts';
+import {
+  leaseScopeFromOptions,
+  leaseScopeToCommandFlags,
+  leaseScopeToConnectionMetadata,
+} from './core/lease-scope.ts';
 
 export type RemoteConnectionState = {
   version: 1;
@@ -137,20 +141,18 @@ export function resolveRemoteConnectionDefaults(options: {
     );
   }
   const profile = resolveConnectionProfile(state, options);
+  const leaseScope = leaseScopeFromOptions(state);
   return {
     runtime: state.runtime,
-    connection: buildRemoteConnectionRequestMetadata(state),
+    connection: leaseScopeToConnectionMetadata(leaseScope),
     flags: {
       ...profile,
       remoteConfig: state.remoteConfigPath,
       daemonBaseUrl: state.daemon?.baseUrl ?? profile.daemonBaseUrl,
       daemonTransport: state.daemon?.transport ?? profile.daemonTransport,
       daemonServerMode: state.daemon?.serverMode ?? profile.daemonServerMode,
-      tenant: state.tenant,
+      ...leaseScopeToCommandFlags(leaseScope),
       sessionIsolation: 'tenant',
-      runId: state.runId,
-      leaseId: state.leaseId,
-      leaseBackend: state.leaseBackend,
       session: state.session,
       platform: state.platform ?? profile.platform,
       target: state.target ?? profile.target,
@@ -161,12 +163,7 @@ export function resolveRemoteConnectionDefaults(options: {
 export function buildRemoteConnectionRequestMetadata(
   state: RemoteConnectionState,
 ): RemoteConnectionRequestMetadata | undefined {
-  const connection = stripUndefined({
-    leaseProvider: state.leaseProvider,
-    deviceKey: state.deviceKey,
-    clientId: state.clientId,
-  });
-  return Object.keys(connection).length > 0 ? connection : undefined;
+  return leaseScopeToConnectionMetadata(leaseScopeFromOptions(state));
 }
 
 export function hashRemoteConfigFile(configPath: string): string {
