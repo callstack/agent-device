@@ -18,7 +18,7 @@ export type DaemonBatchStep = {
   command: string;
   positionals?: string[];
   flags?: Record<string, unknown>;
-  runtime?: unknown;
+  runtime?: DaemonRequest['runtime'];
 };
 
 export type BatchFlags = Record<string, unknown> & {
@@ -37,7 +37,7 @@ export type NormalizedBatchStep = {
   command: string;
   positionals: string[];
   flags: Record<string, unknown>;
-  runtime?: unknown;
+  runtime?: DaemonRequest['runtime'];
 };
 
 export type BatchStepResult = {
@@ -248,7 +248,7 @@ async function runBatchStep(
     command: step.command,
     positionals: step.positionals,
     flags: stepFlags,
-    runtime: (step.runtime === undefined ? req.runtime : step.runtime) as DaemonRequest['runtime'],
+    runtime: step.runtime === undefined ? req.runtime : step.runtime,
     meta: req.meta,
   });
   const durationMs = Date.now() - stepStartedAt;

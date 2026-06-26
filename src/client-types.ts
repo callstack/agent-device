@@ -745,7 +745,7 @@ export type ReplayTestOptions = AgentDeviceRequestOverrides &
 export type BatchStep = {
   command: string;
   input: Record<string, unknown>;
-  runtime?: unknown;
+  runtime?: SessionRuntimeHints;
 };
 
 export type BatchRunOptions = AgentDeviceRequestOverrides & {

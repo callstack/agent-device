@@ -1,4 +1,5 @@
 import { DEFAULT_BATCH_MAX_STEPS } from '../../batch-contract.ts';
+import type { SessionRuntimeHints } from '../../contracts.ts';
 import {
   STRUCTURED_BATCH_COMMAND_NAMES,
   readStructuredBatchCommandName,
@@ -24,7 +25,7 @@ import {
 export type BatchCommandStep = {
   command: string;
   input: Record<string, unknown>;
-  runtime?: unknown;
+  runtime?: SessionRuntimeHints;
 };
 
 export type BatchInput = InferCommandInput<CommandFieldMap> & {
@@ -170,5 +171,5 @@ function readBatchStepRuntimeProperty(
   ) {
     throw new Error(`Batch step ${stepNumber} runtime must be an object.`);
   }
-  return runtime === undefined ? {} : { runtime };
+  return runtime === undefined ? {} : { runtime: runtime as SessionRuntimeHints };
 }

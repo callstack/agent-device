@@ -1,4 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import type { DaemonRequest } from '../../contracts.ts';
 import {
   STRUCTURED_BATCH_COMMAND_NAMES,
   readStructuredBatchCommandName,
@@ -87,7 +88,7 @@ function readBatchStepInput(record: Record<string, unknown>, stepNumber: number)
 function readBatchStepRuntime(
   record: Record<string, unknown>,
   stepNumber: number,
-): Record<string, unknown> | undefined {
+): DaemonRequest['runtime'] {
   const runtime = record.runtime;
   if (
     runtime !== undefined &&
@@ -95,5 +96,5 @@ function readBatchStepRuntime(
   ) {
     throw new AppError('INVALID_ARGS', `Batch step ${stepNumber} runtime must be an object.`);
   }
-  return runtime as Record<string, unknown> | undefined;
+  return runtime as DaemonRequest['runtime'];
 }

@@ -1,4 +1,5 @@
 import type { BatchStep } from '../client-types.ts';
+import type { SessionRuntimeHints } from '../contracts.ts';
 import { readInputFromCli } from '../commands/cli-grammar.ts';
 import { isCommandName, type CommandName } from '../commands/command-metadata.ts';
 import type { CliFlags } from '../utils/cli-flags.ts';
@@ -8,7 +9,7 @@ type LegacyCliBatchStep = {
   command: CommandName;
   positionals?: string[];
   flags?: Record<string, unknown>;
-  runtime?: unknown;
+  runtime?: SessionRuntimeHints;
 };
 
 export function readCliBatchStepsJson(raw: string): BatchStep[] {
@@ -60,7 +61,8 @@ function isStructuredBatchStep(step: unknown): step is BatchStep {
     !Array.isArray(step) &&
     'input' in step &&
     !('positionals' in step) &&
-    !('flags' in step)
+    !('flags' in step) &&
+    isRuntimeHints((step as Record<string, unknown>).runtime)
   );
 }
 
@@ -73,11 +75,12 @@ function readLegacyCliBatchStep(step: unknown, stepNumber: number): LegacyCliBat
   const command = readLegacyCommand(record.command, stepNumber);
   const positionals = readLegacyPositionals(record.positionals, stepNumber);
   const flags = readLegacyFlags(record.flags, stepNumber);
+  const runtime = readRuntimeHints(record.runtime, stepNumber);
   return {
     command,
     ...(positionals === undefined ? {} : { positionals }),
     ...(flags === undefined ? {} : { flags }),
-    ...(record.runtime === undefined ? {} : { runtime: record.runtime }),
+    ...(runtime === undefined ? {} : { runtime }),
   };
 }
 
@@ -120,6 +123,20 @@ function readLegacyFlags(value: unknown, stepNumber: number): Record<string, unk
     throw new AppError('INVALID_ARGS', `Batch step ${stepNumber} flags must be an object.`);
   }
   return value as Record<string, unknown>;
+}
+
+function readRuntimeHints(value: unknown, stepNumber: number): SessionRuntimeHints | undefined {
+  if (value === undefined) return undefined;
+  if (!isRuntimeHints(value)) {
+    throw new AppError('INVALID_ARGS', `Batch step ${stepNumber} runtime must be an object.`);
+  }
+  return value;
+}
+
+function isRuntimeHints(value: unknown): value is SessionRuntimeHints | undefined {
+  return (
+    value === undefined || (Boolean(value) && typeof value === 'object' && !Array.isArray(value))
+  );
 }
 
 function cliFlagsFromBatchStep(flags: Record<string, unknown> | undefined): CliFlags {

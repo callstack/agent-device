@@ -37,6 +37,7 @@ Single-context repo. Read `CONTEXT.md` for domain language and testing/architect
 - Match existing style. Remove imports/variables your change made unused.
 - Test through public interfaces when possible. Do not add unrelated exports just to make tests easier.
 - Prefer type-level checks when TypeScript can enforce a contract or invalid shape.
+- Use `unknown` only at trust boundaries: parsed JSON, daemon/runtime payloads, catch values, generic I/O, or parser callbacks. Once a value is validated or its producer has a known contract, narrow to a domain type or focused parser/helper instead of carrying `unknown` through internal helper and formatter signatures.
 - Keep modules small for agent context safety:
   - target <= 300 LOC per implementation file when practical.
   - if a file grows past 500 LOC, plan/extract focused submodules before adding new behavior.

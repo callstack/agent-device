@@ -1152,7 +1152,7 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
   });
   assert.equal(fastScreenshot.path, fastScreenshotPath);
   assert.ok(
-    Array.isArray(fastScreenshot.overlayRefs) && fastScreenshot.overlayRefs.length > 0,
+    fastScreenshot.overlayRefs && fastScreenshot.overlayRefs.length > 0,
     JSON.stringify(fastScreenshot),
   );
   assertPngFile(fastScreenshotPath);

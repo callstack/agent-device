@@ -10,6 +10,7 @@ import type {
   DaemonTransportPreference,
   LeaseBackend,
   NetworkIncludeMode,
+  SessionRuntimeHints,
   SessionIsolationMode,
 } from '../contracts.ts';
 import type { RemoteConfigMetroOptions } from '../remote-config-schema.ts';
@@ -129,7 +130,7 @@ export type CliFlags = RemoteConfigMetroOptions &
     batchSteps?: Array<{
       command: string;
       input: Record<string, unknown>;
-      runtime?: unknown;
+      runtime?: SessionRuntimeHints;
     }>;
     out?: string;
     help: boolean;
