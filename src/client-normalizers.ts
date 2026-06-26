@@ -1,7 +1,7 @@
 import type { CommandFlags } from './core/dispatch.ts';
 import { screenshotFlagsFromOptions } from './contracts/screenshot.ts';
 import type { DaemonRequest, SessionRuntimeHints } from './daemon/types.ts';
-import { AppError } from './utils/errors.ts';
+import { AppError, type NormalizedError } from './utils/errors.ts';
 import type { SnapshotNode } from './utils/snapshot.ts';
 import { buildAppIdentifiers, buildDeviceIdentifiers } from './client-shared.ts';
 import type {
@@ -13,6 +13,7 @@ import type {
   InternalRequestOptions,
   MaterializationReleaseResult,
   StartupPerfSample,
+  TargetShutdownResult,
 } from './client-types.ts';
 import {
   asRecord,
@@ -223,6 +224,39 @@ export function normalizeStartupSample(value: unknown): StartupPerfSample | unde
     method: value.method,
     appTarget: readOptionalString(value, 'appTarget'),
     appBundleId: readOptionalString(value, 'appBundleId'),
+  };
+}
+
+export function normalizeTargetShutdownResult(value: unknown): TargetShutdownResult | undefined {
+  if (!isRecord(value)) return undefined;
+  if (
+    typeof value.success !== 'boolean' ||
+    typeof value.exitCode !== 'number' ||
+    typeof value.stdout !== 'string' ||
+    typeof value.stderr !== 'string'
+  ) {
+    return undefined;
+  }
+  const error = normalizeTargetShutdownError(value.error);
+  return {
+    success: value.success,
+    exitCode: value.exitCode,
+    stdout: value.stdout,
+    stderr: value.stderr,
+    ...(error ? { error } : {}),
+  };
+}
+
+function normalizeTargetShutdownError(value: unknown): NormalizedError | undefined {
+  if (!isRecord(value)) return undefined;
+  if (typeof value.code !== 'string' || typeof value.message !== 'string') return undefined;
+  return {
+    code: value.code,
+    message: value.message,
+    ...(typeof value.hint === 'string' ? { hint: value.hint } : {}),
+    ...(typeof value.diagnosticId === 'string' ? { diagnosticId: value.diagnosticId } : {}),
+    ...(typeof value.logPath === 'string' ? { logPath: value.logPath } : {}),
+    ...(isRecord(value.details) ? { details: value.details } : {}),
   };
 }
 

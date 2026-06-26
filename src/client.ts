@@ -19,6 +19,7 @@ import {
   normalizeRuntimeHints,
   normalizeSession,
   normalizeStartupSample,
+  normalizeTargetShutdownResult,
   readOptionalString,
   readRequiredString,
   readSnapshotNodes,
@@ -131,10 +132,9 @@ export function createAgentDeviceClient(
       close: async (options = {}) => {
         const session = resolveRequestSession(options);
         const data = await executeCommand<Record<string, unknown>>('close', options);
-        const shutdown = data.shutdown;
         return {
           session,
-          shutdown: isRecord(shutdown) ? shutdown : undefined,
+          shutdown: normalizeTargetShutdownResult(data.shutdown),
           identifiers: { session },
         };
       },
@@ -190,11 +190,10 @@ export function createAgentDeviceClient(
       close: async (options: AppCloseOptions = {}) => {
         const session = resolveRequestSession(options);
         const data = await executeCommand<Record<string, unknown>>('close', options);
-        const shutdown = data.shutdown;
         return {
           session,
           closedApp: options.app,
-          shutdown: isRecord(shutdown) ? shutdown : undefined,
+          shutdown: normalizeTargetShutdownResult(data.shutdown),
           identifiers: { session },
         };
       },

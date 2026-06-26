@@ -121,6 +121,47 @@ test('apps.open forwards explicit runtime hints through the daemon request', asy
   });
 });
 
+test('client close normalizes target shutdown results', async () => {
+  const setup = createTransport(async () => ({
+    ok: true,
+    data:
+      setup.calls.length === 1
+        ? {
+            shutdown: {
+              success: false,
+              exitCode: -1,
+              stdout: '',
+              stderr: 'simctl shutdown failed',
+              error: {
+                code: 'COMMAND_FAILED',
+                message: 'simctl shutdown failed',
+                details: { retryable: false },
+              },
+            },
+          }
+        : {
+            shutdown: { success: true },
+          },
+  }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const sessionClose = await client.sessions.close({ shutdown: true });
+  const appClose = await client.apps.close({ shutdown: true });
+
+  assert.deepEqual(sessionClose.shutdown, {
+    success: false,
+    exitCode: -1,
+    stdout: '',
+    stderr: 'simctl shutdown failed',
+    error: {
+      code: 'COMMAND_FAILED',
+      message: 'simctl shutdown failed',
+      details: { retryable: false },
+    },
+  });
+  assert.equal(appClose.shutdown, undefined);
+});
+
 test('observability.perf projects structured frame area to daemon positionals', async () => {
   const setup = createTransport(async (req) => {
     if (req.command === 'perf') {

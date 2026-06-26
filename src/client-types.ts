@@ -40,6 +40,8 @@ import type { AppsFilter } from './contracts/app-inventory.ts';
 import type { ScreenshotRequestFlags } from './contracts/screenshot.ts';
 import type { BatchRunResult, DaemonBatchStep } from './core/batch.ts';
 export type { BatchRunResult } from './core/batch.ts';
+import type { TargetShutdownResult } from './target-shutdown-contract.ts';
+export type { TargetShutdownResult } from './target-shutdown-contract.ts';
 import type { PerfAction, PerfArea, PerfKind, PerfSubject } from './contracts/perf.ts';
 import type { AlertAction, AlertInfo } from './alert-contract.ts';
 import type { DebugSymbolsOptions, DebugSymbolsResult } from './contracts/debug-symbols.ts';
@@ -170,7 +172,7 @@ export type StartupPerfSample = {
 
 export type SessionCloseResult = {
   session: string;
-  shutdown?: Record<string, unknown>;
+  shutdown?: TargetShutdownResult;
   identifiers: AgentDeviceIdentifiers;
 };
 
@@ -227,7 +229,7 @@ export type AppCloseOptions = AgentDeviceRequestOverrides & {
 export type AppCloseResult = {
   session: string;
   closedApp?: string;
-  shutdown?: Record<string, unknown>;
+  shutdown?: TargetShutdownResult;
   identifiers: AgentDeviceIdentifiers;
 };
 

@@ -103,6 +103,7 @@ export type {
   SettingsUpdateOptions,
   StartupPerfSample,
   SwipeOptions,
+  TargetShutdownResult,
   TraceOptions,
   TypeTextOptions,
   WaitCommandOptions,
