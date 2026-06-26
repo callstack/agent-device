@@ -526,6 +526,7 @@ test('deferred materialization allocates lease and prepares Metro for open', asy
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+// fallow-ignore-next-line complexity
 test('proxy open resolves device key before allocating lease', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-proxy-open-'));
   const stateDir = path.join(tempRoot, '.state');

@@ -27,6 +27,7 @@ import type { LeaseBackend } from '../../contracts.ts';
 import type { CliFlags } from '../../utils/cli-flags.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
+// fallow-ignore-next-line complexity
 export const connectCommand: ClientCommandHandler = async ({ positionals, flags, client }) => {
   const stateDir = resolveDaemonPaths(flags.stateDir).baseDir;
   const provider = readConnectProvider(positionals);

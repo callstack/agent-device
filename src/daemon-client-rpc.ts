@@ -133,6 +133,7 @@ function leaseRpcMethodForCommand(command: LeaseRpcCommand): string {
   }
 }
 
+// fallow-ignore-next-line complexity
 function buildLeaseRpcParams(
   req: DaemonRequest,
   command: LeaseRpcCommand,

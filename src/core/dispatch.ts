@@ -34,6 +34,7 @@ import {
 } from './dispatch-interactions.ts';
 import { readNotificationPayload } from './dispatch-payload.ts';
 import { parseDeviceRotation } from './device-rotation.ts';
+import { readViewportDimension } from './viewport-dimension.ts';
 
 export { resolveTargetDevice } from './dispatch-resolve.ts';
 export type { CommandFlags, DispatchContext } from './dispatch-context.ts';
@@ -326,14 +327,6 @@ async function handleClipboardCommand(
     textLength: Array.from(text).length,
     ...successText('Clipboard updated'),
   };
-}
-
-function readViewportDimension(value: string | undefined, label: 'width' | 'height'): number {
-  const parsed = value === undefined ? NaN : Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new AppError('INVALID_ARGS', `viewport ${label} must be a positive integer`);
-  }
-  return parsed;
 }
 
 async function handleKeyboardCommand(

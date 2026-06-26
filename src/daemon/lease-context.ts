@@ -3,9 +3,9 @@ import type { LeaseBackend } from '../contracts.ts';
 import type { DeviceLease } from './lease-registry.ts';
 import type { RunnerLogicalLeaseContext } from '../core/runner-lease-context.ts';
 
-export const PROXY_LEASE_PROVIDER = 'proxy';
+const PROXY_LEASE_PROVIDER = 'proxy';
 export const DEFAULT_PROXY_LEASE_TTL_MS = 300_000;
-export const REQUIRED_PROXY_LEASE_FIELDS = [
+const REQUIRED_PROXY_LEASE_FIELDS = [
   'leaseId',
   'tenantId',
   'runId',

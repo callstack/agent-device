@@ -1,7 +1,7 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { ViewportCommandOptions } from '../../client-types.ts';
+import { readViewportDimension } from '../../core/viewport-dimension.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
-import { AppError } from '../../utils/errors.ts';
 import { integerField, requiredField } from '../command-input.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { commonInputFromFlags, direct } from '../cli-grammar/common.ts';
@@ -51,11 +51,3 @@ export const viewportCommandFacet = defineCommandFacet({
   daemonWriter: viewportDaemonWriter,
   cliOutputFormatter: managementCliOutputFormatters.viewport,
 });
-
-function readViewportDimension(value: string | undefined, label: 'width' | 'height'): number {
-  const parsed = value === undefined ? NaN : Number(value);
-  if (!Number.isInteger(parsed) || parsed < 1) {
-    throw new AppError('INVALID_ARGS', `viewport ${label} must be a positive integer`);
-  }
-  return parsed;
-}

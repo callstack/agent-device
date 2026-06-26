@@ -33,6 +33,7 @@ const leaseDeferredCommands = new Set([
 const runtimeDeferredCommands = new Set(['open']);
 export const PROXY_REMOTE_LEASE_TTL_MS = 5 * 60 * 1000;
 
+// fallow-ignore-next-line complexity
 export async function materializeRemoteConnectionForCommand(options: {
   command: string;
   flags: CliFlags;

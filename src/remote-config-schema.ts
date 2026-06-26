@@ -24,7 +24,7 @@ export type RemoteConfigMetroOptions = {
   metroNoInstallDeps?: boolean;
 };
 
-export type RemoteConfigProfile = RemoteConfigMetroOptions & {
+export type RemoteConnectionProfileFields = {
   stateDir?: string;
   daemonBaseUrl?: string;
   daemonAuthToken?: string;
@@ -38,15 +38,19 @@ export type RemoteConfigProfile = RemoteConfigMetroOptions & {
   leaseProvider?: string;
   deviceKey?: string;
   clientId?: string;
-  platform?: PlatformSelector;
-  target?: DeviceTarget;
-  device?: string;
-  udid?: string;
-  serial?: string;
-  iosSimulatorDeviceSet?: string;
-  androidDeviceAllowlist?: string;
-  session?: string;
 };
+
+export type RemoteConfigProfile = RemoteConfigMetroOptions &
+  RemoteConnectionProfileFields & {
+    platform?: PlatformSelector;
+    target?: DeviceTarget;
+    device?: string;
+    udid?: string;
+    serial?: string;
+    iosSimulatorDeviceSet?: string;
+    androidDeviceAllowlist?: string;
+    session?: string;
+  };
 
 export type RemoteConfigProfileOptions = {
   configPath: string;

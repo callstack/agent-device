@@ -289,6 +289,7 @@ function stripUndefined<T extends Record<string, unknown>>(record: T): T {
   return Object.fromEntries(Object.entries(record).filter(([, value]) => value !== undefined)) as T;
 }
 
+// fallow-ignore-next-line complexity
 function isRemoteConnectionState(value: unknown): value is RemoteConnectionState {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;

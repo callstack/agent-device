@@ -72,6 +72,16 @@ export type AdmissionRequest = {
   clientId?: string;
 };
 
+type LeaseScopeMatchRequest = {
+  tenantId?: string;
+  runId?: string;
+  backend?: LeaseBackend;
+  provider?: string;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
+};
+
 const DEFAULT_LEASE_TTL_MS = 60_000;
 const MIN_LEASE_TTL_MS = 5_000;
 const MAX_LEASE_TTL_MS = 10 * 60_000;
@@ -219,49 +229,22 @@ export class LeaseRegistry {
   }
 
   heartbeatLease(request: HeartbeatLeaseRequest): DeviceLease {
-    const leaseId = normalizeLeaseId(request.leaseId);
-    if (!leaseId) {
-      throw new AppError('INVALID_ARGS', 'Invalid lease id.');
-    }
+    const leaseId = this.normalizeRequiredLeaseId(request.leaseId);
     this.cleanupExpiredLeases();
-    const lease = this.leases.get(leaseId);
-    if (!lease) {
-      throw new AppError('UNAUTHORIZED', 'Lease is not active', {
-        reason: 'LEASE_NOT_FOUND',
-      });
-    }
-    this.assertOptionalScopeMatch(lease, {
-      tenantId: request.tenantId,
-      runId: request.runId,
-      backend: request.backend,
-      provider: request.provider,
-      leaseProvider: request.leaseProvider,
-      deviceKey: request.deviceKey,
-      clientId: request.clientId,
-    });
+    const lease = this.getActiveLease(leaseId);
+    this.assertOptionalScopeMatch(lease, this.scopeMatchRequest(request));
     const leaseTtlMs = this.resolveLeaseTtlMs(request.ttlMs);
     return this.refreshLease(lease, leaseTtlMs);
   }
 
   releaseLease(request: ReleaseLeaseRequest): { released: boolean } {
-    const leaseId = normalizeLeaseId(request.leaseId);
-    if (!leaseId) {
-      throw new AppError('INVALID_ARGS', 'Invalid lease id.');
-    }
+    const leaseId = this.normalizeRequiredLeaseId(request.leaseId);
     this.cleanupExpiredLeases();
     const lease = this.leases.get(leaseId);
     if (!lease) {
       return { released: false };
     }
-    this.assertOptionalScopeMatch(lease, {
-      tenantId: request.tenantId,
-      runId: request.runId,
-      backend: request.backend,
-      provider: request.provider,
-      leaseProvider: request.leaseProvider,
-      deviceKey: request.deviceKey,
-      clientId: request.clientId,
-    });
+    this.assertOptionalScopeMatch(lease, this.scopeMatchRequest(request));
     this.leases.delete(leaseId);
     this.unbindLease(lease);
     return { released: true };
@@ -282,12 +265,7 @@ export class LeaseRegistry {
       throw new AppError('INVALID_ARGS', 'tenant isolation requires lease id.');
     }
     this.cleanupExpiredLeases();
-    const lease = this.leases.get(leaseId);
-    if (!lease) {
-      throw new AppError('UNAUTHORIZED', 'Lease is not active', {
-        reason: 'LEASE_NOT_FOUND',
-      });
-    }
+    const lease = this.getActiveLease(leaseId);
     this.assertOptionalScopeMatch(lease, {
       tenantId,
       runId,
@@ -346,6 +324,34 @@ export class LeaseRegistry {
       );
     }
     return value;
+  }
+
+  private normalizeRequiredLeaseId(raw: string | undefined): string {
+    const leaseId = normalizeLeaseId(raw);
+    if (!leaseId) {
+      throw new AppError('INVALID_ARGS', 'Invalid lease id.');
+    }
+    return leaseId;
+  }
+
+  private getActiveLease(leaseId: string): DeviceLease {
+    const lease = this.leases.get(leaseId);
+    if (lease) return lease;
+    throw new AppError('UNAUTHORIZED', 'Lease is not active', {
+      reason: 'LEASE_NOT_FOUND',
+    });
+  }
+
+  private scopeMatchRequest(request: LeaseScopeMatchRequest): LeaseScopeMatchRequest {
+    return {
+      tenantId: request.tenantId,
+      runId: request.runId,
+      backend: request.backend,
+      provider: request.provider,
+      leaseProvider: request.leaseProvider,
+      deviceKey: request.deviceKey,
+      clientId: request.clientId,
+    };
   }
 
   private refreshLease(lease: DeviceLease, ttlMs: number): DeviceLease {
@@ -451,6 +457,7 @@ export class LeaseRegistry {
     });
   }
 
+  // fallow-ignore-next-line complexity
   private assertOptionalScopeMatch(
     lease: DeviceLease,
     request: {

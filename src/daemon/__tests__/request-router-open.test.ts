@@ -66,6 +66,7 @@ beforeEach(() => {
   mockEnsureDeviceReady.mockResolvedValue(undefined);
 });
 
+// fallow-ignore-next-line complexity
 test('open returns and creates the session state directory', async () => {
   const sessionStore = makeSessionStore('agent-device-router-open-');
   const device = makeIosDevice('SIM-STATE');

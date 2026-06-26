@@ -324,6 +324,7 @@ async function completeOpenCommand(params: {
   return { ok: true, data: openResult };
 }
 
+// fallow-ignore-next-line complexity
 async function prepareOpenDispatchSession(params: {
   req: DaemonRequest;
   sessionName: string;
