@@ -688,7 +688,7 @@ Rules:
   connect and disconnect are top-level commands. Do not write agent-device remote connect or agent-device remote disconnect.
   Use connect without --remote-config when the cloud control plane owns the connection profile.
   Prefer connect --remote-config over --daemon-base-url, --tenant, --run-id, and --lease-id when using a local profile.
-  Use agent-device proxy for direct tunnel access to a Mac you control. Copy the printed daemon base URL and daemon auth token, then run agent-device connect proxy --daemon-base-url <url> before normal commands.
+  Use agent-device proxy for direct tunnel access to a Mac you control. Expose the printed proxy URL through cloudflared/ngrok, then run agent-device connect proxy with the tunnel URL and printed token before normal commands.
   connect proxy stores the connection profile and client identity. Device leases are acquired on open and expire after five minutes without commands.
   Multiple agents can share one proxy when each uses connect proxy, open, commands, close, and disconnect.
   disconnect releases local connection state; close releases the active session and device lease.

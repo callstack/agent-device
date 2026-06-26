@@ -89,17 +89,14 @@ function formatHostForUrl(host: string): string {
   return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
 }
 
-function renderProxyStartup(startup: ProxyStartup): string {
+export function renderProxyStartup(startup: ProxyStartup): string {
   return [
-    `agent-device proxy listening on ${startup.proxyBaseUrl}`,
-    `daemon base URL: ${startup.agentDeviceBaseUrl}`,
-    `daemon auth token: ${startup.token}`,
-    'treat the daemon auth token as a secret; anyone with it can control the proxied daemon',
-    `upstream local daemon: ${startup.upstreamBaseUrl}`,
-    `state dir: ${startup.stateDir}`,
+    `✔️ Proxy listening at ${startup.proxyBaseUrl}`,
     '',
-    'Remote client example:',
-    `agent-device devices --daemon-base-url ${startup.agentDeviceBaseUrl} --daemon-auth-token ${startup.token}`,
+    'Provide this to the agent-device instance connecting:',
+    '',
+    'Daemon base URL: <tunnel URL>/agent-device',
+    `Daemon auth token: ${startup.token}`,
   ].join('\n');
 }
 

@@ -17,7 +17,7 @@ On the Mac with simulator or device access:
 agent-device proxy --port 4310
 ```
 
-The command prints a `daemon base URL` and `daemon auth token`. Keep the token secret; anyone with it can control the proxied daemon.
+The command prints the local proxy URL and a `daemon auth token`. Keep the token secret; anyone with it can control the proxied daemon.
 
 Expose the proxy with your tunnel:
 
@@ -31,7 +31,7 @@ By default the proxy binds `127.0.0.1`. Use `--host 0.0.0.0` only when you inten
 
 ## Remote Client
 
-On the machine running the agent, connect to the public tunnel origin with the `/agent-device` base path:
+On the machine running the agent, connect to the public tunnel origin with the `/agent-device` base path and the printed token:
 
 ```bash
 agent-device connect proxy \
