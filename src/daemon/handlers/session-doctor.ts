@@ -6,11 +6,7 @@ import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { appendAndroidChecks } from './session-doctor-android.ts';
 import { appendAppChecks } from './session-doctor-app.ts';
-import {
-  appendDeviceCheck,
-  deviceReadinessCheck,
-  platformScopeChecks,
-} from './session-doctor-device.ts';
+import { appendDeviceCheck, platformScopeChecks } from './session-doctor-device.ts';
 import { probeMetro } from './session-doctor-metro.ts';
 import {
   readDoctorOptions,
@@ -54,13 +50,10 @@ export async function handleDoctorCommand(params: {
 
   const device = await appendDeviceCheck(checks, req, session);
   if (device) {
-    appendDoctorCheck(checks, deviceReadinessCheck(device));
     appendDoctorChecks(checks, ...platformScopeChecks(device, options));
     await appendAppChecks(checks, { device, session, targetApp: options.targetApp });
     await appendAndroidChecks(checks, {
       device,
-      session,
-      targetApp: options.targetApp,
       metroPort: options.metroPort,
       shouldProbeMetro: options.shouldProbeMetro,
       androidAdbExecutor,

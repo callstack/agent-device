@@ -54,11 +54,7 @@ test('Provider-backed integration doctor infers Android RN/Metro readiness throu
             assert.equal(data.kind, 'react-native');
             assertDoctorCheck(data, 'metro', 'pass');
             assertDoctorCheck(data, 'android-reverse', 'pass');
-            assertDoctorCheck(data, 'android-animations', 'pass');
-            assert.ok(
-              adbCalls.some((args) => args.join(' ') === 'reverse --list'),
-              JSON.stringify(adbCalls),
-            );
+            assert.deepEqual(adbCalls, [['reverse', '--list']]);
           },
         ),
     );
@@ -122,22 +118,12 @@ function androidDoctorAdbResult(
   exitCode: number;
 } {
   const command = args.join(' ');
-  if (command === 'shell dumpsys window windows') {
-    return {
-      stdout: 'mCurrentFocus=Window{123 u0 com.example.app/.MainActivity}\n',
-      stderr: '',
-      exitCode: 0,
-    };
-  }
   if (command === 'reverse --list') {
     return {
       stdout: `emulator-5554 tcp:${metroPort} tcp:${metroPort}\n`,
       stderr: '',
       exitCode: 0,
     };
-  }
-  if (command.startsWith('shell settings get global ')) {
-    return { stdout: '0\n', stderr: '', exitCode: 0 };
   }
   return { stdout: '', stderr: '', exitCode: 0 };
 }

@@ -14,8 +14,10 @@ export async function appendDeviceCheck(
     const device = await resolveCommandDevice({ session, flags: req.flags, ensureReady: false });
     appendDoctorCheck(checks, {
       id: 'device',
-      status: 'pass',
-      summary: `Selected ${device.name} (${device.platform}${device.target ? `/${device.target}` : ''})`,
+      status: device.booted === false ? 'fail' : 'pass',
+      summary: deviceSummary(device),
+      command:
+        device.booted === false ? `agent-device boot --platform ${device.platform}` : undefined,
       evidence: {
         id: device.id,
         name: device.name,
@@ -40,25 +42,15 @@ export async function appendDeviceCheck(
   }
 }
 
-export function deviceReadinessCheck(device: DeviceInfo): DoctorCheck {
+function deviceSummary(device: DeviceInfo): string {
+  const label = `${device.name} (${device.platform}${device.target ? `/${device.target}` : ''})`;
   if (device.booted === false) {
-    return {
-      id: 'device-readiness',
-      status: 'fail',
-      summary: `${device.name} is present but not booted.`,
-      command: `agent-device boot --platform ${device.platform}`,
-      evidence: { booted: false },
-    };
+    return `Selected ${label}, but it is not booted.`;
   }
-  return {
-    id: 'device-readiness',
-    status: 'pass',
-    summary:
-      device.booted === true
-        ? `${device.name} is booted.`
-        : `${device.name} readiness is selected; boot state is not reported for this target.`,
-    evidence: { booted: device.booted },
-  };
+  if (device.booted === true) {
+    return `Selected ${label}; device is booted.`;
+  }
+  return `Selected ${label}; boot state is not reported for this target.`;
 }
 
 export function platformScopeChecks(device: DeviceInfo, options: DoctorOptions): DoctorCheck[] {
