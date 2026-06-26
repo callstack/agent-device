@@ -24,11 +24,14 @@ const audioProbePageScriptFunctions = [
 
 export function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
   const scriptBody = audioProbePageScriptFunctions.map((fn) => `${fn.toString()};`).join('');
-  return `(()=>{${scriptBody}return ${audioProbeEvalScript.name}(${JSON.stringify({
-    action: options.action,
-    durationMs: options.durationMs,
-    bucketMs: options.bucketMs,
-  })})})()`;
+  const optionsJsonLiteral = JSON.stringify(
+    JSON.stringify({
+      action: options.action,
+      durationMs: finiteNumberOrUndefined(options.durationMs),
+      bucketMs: finiteNumberOrUndefined(options.bucketMs),
+    }),
+  );
+  return `(()=>{${scriptBody}return ${audioProbeEvalScript.name}(JSON.parse(${optionsJsonLiteral}))})()`;
 }
 
 export function normalizeAgentBrowserAudioProbeResult(data: unknown): WebAudioProbeResult {
@@ -58,6 +61,10 @@ type AudioProbePageStats = { rms: number; peak: number };
 
 declare const window: AudioProbePageRecord;
 declare const document: { querySelectorAll(selector: string): any[] };
+
+function finiteNumberOrUndefined(value: number | undefined): number | undefined {
+  return Number.isFinite(value) ? value : undefined;
+}
 
 function audioProbeDbfs(value: number): number {
   const silenceDb = -90;
