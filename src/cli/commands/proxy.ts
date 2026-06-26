@@ -97,7 +97,7 @@ export function renderProxyStartup(
   const useColor = options.useColor ?? supportsColor();
   const checkmark = formatProxyOutputValue('✓', 'green', useColor);
   const proxyBaseUrl = formatProxyOutputValue(startup.proxyBaseUrl, 'cyan', useColor);
-  const daemonBaseUrl = formatProxyOutputValue('<tunnel URL>/agent-device', 'cyan', useColor);
+  const daemonBaseUrl = formatProxyOutputValue('<tunnel URL>', 'cyan', useColor);
   const token = formatProxyOutputValue(startup.token, 'yellow', useColor);
   return [
     `${checkmark} Proxy listening at ${proxyBaseUrl}`,

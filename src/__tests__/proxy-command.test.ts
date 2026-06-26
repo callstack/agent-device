@@ -21,7 +21,7 @@ test('renderProxyStartup keeps human output concise without color', () => {
       '',
       'Provide this to the agent-device instance connecting:',
       '',
-      'Daemon base URL: <tunnel URL>/agent-device',
+      'Daemon base URL: <tunnel URL>',
       'Daemon auth token: proxy-secret',
     ].join('\n'),
   );
@@ -41,7 +41,7 @@ test('renderProxyStartup colors status, urls, and token', () => {
       '',
       'Provide this to the agent-device instance connecting:',
       '',
-      `Daemon base URL: ${colored('<tunnel URL>/agent-device', 'cyan')}`,
+      `Daemon base URL: ${colored('<tunnel URL>', 'cyan')}`,
       `Daemon auth token: ${colored('proxy-secret', 'yellow')}`,
     ].join('\n'),
   );
