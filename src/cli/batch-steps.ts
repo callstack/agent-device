@@ -4,6 +4,7 @@ import { readInputFromCli } from '../commands/cli-grammar.ts';
 import { isCommandName, type CommandName } from '../commands/command-metadata.ts';
 import type { CliFlags } from '../utils/cli-flags.ts';
 import { AppError } from '../utils/errors.ts';
+import { isRecord } from '../utils/parsing.ts';
 
 type LegacyCliBatchStep = {
   command: CommandName;
@@ -55,14 +56,7 @@ function legacyStepToStructuredStep(legacyStep: LegacyCliBatchStep): BatchStep {
 }
 
 function isStructuredBatchStepShape(step: unknown): step is Record<string, unknown> & BatchStep {
-  return (
-    step !== null &&
-    typeof step === 'object' &&
-    !Array.isArray(step) &&
-    'input' in step &&
-    !('positionals' in step) &&
-    !('flags' in step)
-  );
+  return isRecord(step) && 'input' in step && !('positionals' in step) && !('flags' in step);
 }
 
 function readStructuredBatchStep(
@@ -78,15 +72,14 @@ function readStructuredBatchStep(
 }
 
 function readLegacyCliBatchStep(step: unknown, stepNumber: number): LegacyCliBatchStep {
-  if (!step || typeof step !== 'object' || Array.isArray(step)) {
+  if (!isRecord(step)) {
     throw new AppError('INVALID_ARGS', `Invalid batch step ${stepNumber}.`);
   }
-  const record = step as Record<string, unknown>;
-  assertLegacyBatchStepKeys(record, stepNumber);
-  const command = readLegacyCommand(record.command, stepNumber);
-  const positionals = readLegacyPositionals(record.positionals, stepNumber);
-  const flags = readLegacyFlags(record.flags, stepNumber);
-  const runtime = readRuntimeHints(record.runtime, stepNumber);
+  assertLegacyBatchStepKeys(step, stepNumber);
+  const command = readLegacyCommand(step.command, stepNumber);
+  const positionals = readLegacyPositionals(step.positionals, stepNumber);
+  const flags = readLegacyFlags(step.flags, stepNumber);
+  const runtime = readRuntimeHints(step.runtime, stepNumber);
   return {
     command,
     ...(positionals === undefined ? {} : { positionals }),
@@ -130,10 +123,10 @@ function readLegacyPositionals(value: unknown, stepNumber: number): string[] | u
 
 function readLegacyFlags(value: unknown, stepNumber: number): Record<string, unknown> | undefined {
   if (value === undefined) return undefined;
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  if (!isRecord(value)) {
     throw new AppError('INVALID_ARGS', `Batch step ${stepNumber} flags must be an object.`);
   }
-  return value as Record<string, unknown>;
+  return value;
 }
 
 function readRuntimeHints(value: unknown, stepNumber: number): SessionRuntimeHints | undefined {

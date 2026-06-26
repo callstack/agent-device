@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { readApplePlistJson } from './tool-provider.ts';
 import { parseXmlDocumentSync, visitXmlPlistEntries, type XmlNode } from './xml.ts';
+import { isRecord } from '../../utils/parsing.ts';
 
 const XCTESTRUN_PRODUCT_REFERENCE_KEYS = new Set([
   'ProductPaths',
@@ -129,18 +130,10 @@ function collectConfiguredTestTargets(parsed: Record<string, unknown>): Record<s
 
   const targets: Record<string, unknown>[] = [];
   for (const config of testConfigurations) {
-    if (config === null || typeof config !== 'object' || Array.isArray(config)) {
-      continue;
-    }
-    const configRecord = config as Record<string, unknown>;
-    const testTargets = configRecord.TestTargets;
+    if (!isRecord(config)) continue;
+    const testTargets = config.TestTargets;
     if (Array.isArray(testTargets)) {
-      targets.push(
-        ...testTargets.filter(
-          (target): target is Record<string, unknown> =>
-            target !== null && typeof target === 'object' && !Array.isArray(target),
-        ),
-      );
+      targets.push(...testTargets.filter(isRecord));
     }
   }
   return targets;
@@ -148,11 +141,7 @@ function collectConfiguredTestTargets(parsed: Record<string, unknown>): Record<s
 
 function collectLegacyTestTargets(parsed: Record<string, unknown>): Record<string, unknown>[] {
   return Object.values(parsed).filter(
-    (value): value is Record<string, unknown> =>
-      value !== null &&
-      typeof value === 'object' &&
-      !Array.isArray(value) &&
-      'TestBundlePath' in value,
+    (value): value is Record<string, unknown> => isRecord(value) && 'TestBundlePath' in value,
   );
 }
 

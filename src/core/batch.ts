@@ -1,5 +1,6 @@
 import { daemonRuntimeSchema, type DaemonRequest, type DaemonResponse } from '../contracts.ts';
 import { AppError, asAppError } from '../utils/errors.ts';
+import { isRecord } from '../utils/parsing.ts';
 import { DEFAULT_BATCH_MAX_STEPS } from '../batch-contract.ts';
 import {
   BATCH_BLOCKED_COMMANDS,
@@ -140,8 +141,8 @@ export function validateAndNormalizeBatchSteps(
 
   const normalized: NormalizedBatchStep[] = [];
   for (let index = 0; index < steps.length; index += 1) {
-    const step = steps[index] as Partial<DaemonBatchStep>;
-    if (!step || typeof step !== 'object') {
+    const step = steps[index];
+    if (!isRecord(step)) {
       throw new AppError('INVALID_ARGS', `Invalid batch step at index ${index}.`);
     }
     const unknownKeys = Object.keys(step).filter((key) => !batchAllowedStepKeys.has(key));
@@ -167,10 +168,7 @@ export function validateAndNormalizeBatchSteps(
         `Batch step ${index + 1} positionals must contain only strings.`,
       );
     }
-    if (
-      step.flags !== undefined &&
-      (typeof step.flags !== 'object' || Array.isArray(step.flags) || !step.flags)
-    ) {
+    if (step.flags !== undefined && !isRecord(step.flags)) {
       throw new AppError('INVALID_ARGS', `Batch step ${index + 1} flags must be an object.`);
     }
     normalized.push({

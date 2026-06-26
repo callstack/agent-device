@@ -1,5 +1,5 @@
 import type { ScreenshotOverlayRef } from './snapshot.ts';
-import { readPoint, readRect } from './parsing.ts';
+import { isRecord, readPoint, readRect } from './parsing.ts';
 
 export type ScreenshotResultData = {
   path?: string;
@@ -7,11 +7,10 @@ export type ScreenshotResultData = {
 };
 
 export function readScreenshotResultData(value: unknown): ScreenshotResultData | undefined {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const record = value as Record<string, unknown>;
-  const path = typeof record.path === 'string' ? record.path : undefined;
-  const overlayRefs = Array.isArray(record.overlayRefs)
-    ? record.overlayRefs.flatMap((entry) => {
+  if (!isRecord(value)) return undefined;
+  const path = typeof value.path === 'string' ? value.path : undefined;
+  const overlayRefs = Array.isArray(value.overlayRefs)
+    ? value.overlayRefs.flatMap((entry) => {
         const overlayRef = readScreenshotOverlayRef(entry);
         return overlayRef ? [overlayRef] : [];
       })
@@ -23,16 +22,15 @@ export function readScreenshotResultData(value: unknown): ScreenshotResultData |
 }
 
 function readScreenshotOverlayRef(value: unknown): ScreenshotOverlayRef | undefined {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const record = value as Record<string, unknown>;
-  const ref = typeof record.ref === 'string' && record.ref.length > 0 ? record.ref : undefined;
-  const rect = readRect(record, 'rect');
-  const overlayRect = readRect(record, 'overlayRect');
-  const center = readPoint(record, 'center');
+  if (!isRecord(value)) return undefined;
+  const ref = typeof value.ref === 'string' && value.ref.length > 0 ? value.ref : undefined;
+  const rect = readRect(value, 'rect');
+  const overlayRect = readRect(value, 'overlayRect');
+  const center = readPoint(value, 'center');
   if (!ref || !rect || !overlayRect || !center) return undefined;
   return {
     ref,
-    ...(typeof record.label === 'string' && record.label.length > 0 ? { label: record.label } : {}),
+    ...(typeof value.label === 'string' && value.label.length > 0 ? { label: value.label } : {}),
     rect,
     overlayRect,
     center,

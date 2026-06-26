@@ -46,7 +46,7 @@ type NetworkCliResult = {
   include?: NetworkIncludeMode;
   scannedLines?: number;
   matchedLines?: number;
-  entries: readonly NetworkCliEntry[];
+  entries?: readonly NetworkCliEntry[];
   notes?: readonly string[];
 };
 
@@ -65,11 +65,12 @@ function logsCliOutput(data: LogsCliResult): CliOutput {
 
 function networkCliOutput(data: NetworkCliResult): CliOutput {
   const lines: string[] = [];
+  const entries = data.entries ?? [];
   if (data.path) lines.push(data.path);
-  if (data.entries.length === 0) {
+  if (entries.length === 0) {
     lines.push('No recent HTTP(s) entries found.');
   } else {
-    for (const entry of data.entries) {
+    for (const entry of entries) {
       lines.push(...formatNetworkEntry(entry));
     }
   }
@@ -103,8 +104,8 @@ function formatActionFields(data: LogsActionFields): string | undefined {
   );
 }
 
-function formatActionField(key: string, value: true | number | undefined): string {
-  return value === undefined ? '' : `${key}=${value}`;
+function formatActionField(key: string, value: true | number | null | undefined): string {
+  return value == null ? '' : `${key}=${value}`;
 }
 
 function formatNetworkEntry(entry: NetworkCliEntry): string[] {
@@ -143,7 +144,7 @@ function formatKeyValueFields<T extends object, K extends Extract<keyof T, strin
   fields: readonly K[],
 ): string | undefined {
   const text = fields
-    .map((key) => (data[key] !== undefined ? `${key}=${data[key]}` : ''))
+    .map((key) => (data[key] !== undefined && data[key] !== null ? `${key}=${data[key]}` : ''))
     .filter(Boolean)
     .join(' ');
   return text || undefined;

@@ -362,32 +362,21 @@ function collectConfiguredTestTargets(parsed) {
   if (!Array.isArray(testConfigurations)) return [];
   const targets = [];
   for (const config of testConfigurations) {
-    if (
-      config === null ||
-      typeof config !== 'object' ||
-      Array.isArray(config) ||
-      !Array.isArray(config.TestTargets)
-    ) {
+    if (!isRecord(config) || !Array.isArray(config.TestTargets)) {
       continue;
     }
-    targets.push(
-      ...config.TestTargets.filter(
-        (target) => target !== null && typeof target === 'object' && !Array.isArray(target),
-      ),
-    );
+    targets.push(...config.TestTargets.filter(isRecord));
   }
   return targets;
 }
 
 function collectLegacyTestTargets(parsed) {
-  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
-  return Object.values(parsed).filter(
-    (value) =>
-      value !== null &&
-      typeof value === 'object' &&
-      !Array.isArray(value) &&
-      'TestBundlePath' in value,
-  );
+  if (!isRecord(parsed)) return [];
+  return Object.values(parsed).filter((value) => isRecord(value) && 'TestBundlePath' in value);
+}
+
+function isRecord(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function collectXctestrunProductReferenceValuesFromTarget(target) {

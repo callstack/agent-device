@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { isRecord } from '../../../utils/parsing.ts';
 import type {
   AppleImage,
   CrashArtifact,
@@ -64,14 +65,8 @@ function readIpsFrameMatches(rawThreads: unknown[], images: AppleImage[]): IpsFr
 }
 
 function readIpsFrameRecords(thread: unknown): Record<string, unknown>[] {
-  if (!thread || typeof thread !== 'object') return [];
-  const frames = (thread as Record<string, unknown>).frames;
-  return Array.isArray(frames)
-    ? frames.filter(
-        (frame): frame is Record<string, unknown> =>
-          frame !== null && typeof frame === 'object' && !Array.isArray(frame),
-      )
-    : [];
+  if (!isRecord(thread) || !Array.isArray(thread.frames)) return [];
+  return thread.frames.filter(isRecord);
 }
 
 function readIpsFrameMatch(
@@ -113,18 +108,17 @@ function writeIpsFrameSymbol(frame: Record<string, unknown>, symbol: string): vo
 }
 
 function readIpsImage(value: unknown, index: number): AppleImage[] {
-  if (!value || typeof value !== 'object') return [];
-  const record = value as Record<string, unknown>;
-  const uuid = normalizeUuid(readString(record.uuid));
-  const base = readBigIntField(record, 'base', 'IPS usedImages');
+  if (!isRecord(value)) return [];
+  const uuid = normalizeUuid(readString(value.uuid));
+  const base = readBigIntField(value, 'base', 'IPS usedImages');
   if (!uuid || base === undefined) return [];
-  const pathValue = readString(record.path);
+  const pathValue = readString(value.path);
   return [
     {
       index,
-      name: readString(record.name) ?? (pathValue ? path.basename(pathValue) : `image-${index}`),
+      name: readString(value.name) ?? (pathValue ? path.basename(pathValue) : `image-${index}`),
       uuid,
-      arch: readString(record.arch),
+      arch: readString(value.arch),
       base,
       path: pathValue,
     },

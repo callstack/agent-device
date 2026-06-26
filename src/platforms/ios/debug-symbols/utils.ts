@@ -1,4 +1,5 @@
 import { AppError } from '../../../utils/errors.ts';
+import { isRecord } from '../../../utils/parsing.ts';
 
 const UUID_RE = /^[0-9a-fA-F-]{32,36}$/;
 
@@ -35,9 +36,7 @@ export function compactJoin(values: (string | undefined)[]): string | undefined 
 export function readJsonRecord(text: string): Record<string, unknown> | null {
   try {
     const value = JSON.parse(text);
-    return value !== null && typeof value === 'object' && !Array.isArray(value)
-      ? (value as Record<string, unknown>)
-      : null;
+    return isRecord(value) ? value : null;
   } catch {
     return null;
   }

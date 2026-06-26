@@ -1,4 +1,5 @@
 import type { CommandRequestResult } from '../../client-types.ts';
+import { isRecord } from '../../utils/parsing.ts';
 import type { CliOutput } from '../command-contract.ts';
 import { resultOutput, type CliOutputFormatter } from '../output-common.ts';
 
@@ -14,21 +15,12 @@ export const perfCliOutputFormatters = {
 function formatPerfCliOutput(data: Record<string, unknown>): string {
   const nativeOutput = formatNativePerfOutput(data);
   if (nativeOutput) return nativeOutput;
-  const artifact =
-    data.artifact !== null && typeof data.artifact === 'object' && !Array.isArray(data.artifact)
-      ? (data.artifact as Record<string, unknown>)
-      : undefined;
+  const artifact = isRecord(data.artifact) ? data.artifact : undefined;
   if (artifact) {
     return formatMemoryArtifactSummary(artifact);
   }
-  const metrics =
-    data.metrics !== null && typeof data.metrics === 'object' && !Array.isArray(data.metrics)
-      ? (data.metrics as Record<string, unknown>)
-      : undefined;
-  const fps =
-    metrics?.fps !== null && typeof metrics?.fps === 'object' && !Array.isArray(metrics.fps)
-      ? (metrics.fps as Record<string, unknown>)
-      : undefined;
+  const metrics = isRecord(data.metrics) ? data.metrics : undefined;
+  const fps = isRecord(metrics?.fps) ? metrics.fps : undefined;
   const resourceSummary = buildResourcePerfSummary(metrics);
   if (!fps) {
     return formatPerfUnavailable(resourceSummary, 'missing frame metric');
@@ -129,16 +121,8 @@ function readString(value: unknown): string | undefined {
 }
 
 function formatNativePerfFrameHealth(data: Record<string, unknown>): string {
-  const summary =
-    data.summary !== null && typeof data.summary === 'object' && !Array.isArray(data.summary)
-      ? (data.summary as Record<string, unknown>)
-      : undefined;
-  const frameHealth =
-    summary?.frameHealth !== null &&
-    typeof summary?.frameHealth === 'object' &&
-    !Array.isArray(summary.frameHealth)
-      ? (summary.frameHealth as Record<string, unknown>)
-      : undefined;
+  const summary = isRecord(data.summary) ? data.summary : undefined;
+  const frameHealth = isRecord(summary?.frameHealth) ? summary.frameHealth : undefined;
   if (!frameHealth || frameHealth.available !== true) return '';
   const droppedFramePercent = readFiniteNumber(frameHealth.droppedFramePercent);
   const droppedFrameCount = readFiniteNumber(frameHealth.droppedFrameCount);
@@ -191,9 +175,8 @@ function formatSampleWindow(sampleWindowMs: number | undefined): string {
 function formatWorstFrameWindows(fps: Record<string, unknown>): string[] {
   if (!Array.isArray(fps.worstWindows)) return [];
   return fps.worstWindows.flatMap((entry) => {
-    if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return [];
-    const window = entry as Record<string, unknown>;
-    const line = formatWorstFrameWindow(window);
+    if (!isRecord(entry)) return [];
+    const line = formatWorstFrameWindow(entry);
     return line ? [line] : [];
   });
 }
@@ -214,16 +197,8 @@ function formatWorstFrameWindow(window: Record<string, unknown>): string | undef
 function buildResourcePerfSummary(
   metrics: Record<string, unknown> | undefined,
 ): string | undefined {
-  const cpu =
-    metrics?.cpu !== null && typeof metrics?.cpu === 'object' && !Array.isArray(metrics.cpu)
-      ? (metrics.cpu as Record<string, unknown>)
-      : undefined;
-  const memory =
-    metrics?.memory !== null &&
-    typeof metrics?.memory === 'object' &&
-    !Array.isArray(metrics.memory)
-      ? (metrics.memory as Record<string, unknown>)
-      : undefined;
+  const cpu = isRecord(metrics?.cpu) ? metrics.cpu : undefined;
+  const memory = isRecord(metrics?.memory) ? metrics.memory : undefined;
   const parts = [formatCpuPerfSummary(cpu), formatMemoryPerfSummary(memory)].filter(
     (part): part is string => Boolean(part),
   );

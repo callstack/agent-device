@@ -6,6 +6,7 @@ import {
 } from '../../batch-policy.ts';
 import type { DaemonBatchStep } from '../../core/batch.ts';
 import { AppError } from '../../utils/errors.ts';
+import { isRecord } from '../../utils/parsing.ts';
 import { request } from '../cli-grammar/common.ts';
 import type { CommandInput, DaemonCommandRequest, DaemonWriter } from '../cli-grammar/types.ts';
 import { buildRequestFlags } from '../command-flags.ts';
@@ -64,10 +65,10 @@ function readBatchDaemonStep(
 }
 
 function readBatchStepRecord(step: unknown, stepNumber: number): Record<string, unknown> {
-  if (!step || typeof step !== 'object' || Array.isArray(step)) {
+  if (!isRecord(step)) {
     throw new AppError('INVALID_ARGS', `Invalid batch step ${stepNumber}.`);
   }
-  return step as Record<string, unknown>;
+  return step;
 }
 
 function readBatchStepCommand(
@@ -79,7 +80,7 @@ function readBatchStepCommand(
 
 function readBatchStepInput(record: Record<string, unknown>, stepNumber: number): CommandInput {
   const input = record.input;
-  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+  if (!isRecord(input)) {
     throw new AppError('INVALID_ARGS', `Batch step ${stepNumber} input must be an object.`);
   }
   return input as CommandInput;

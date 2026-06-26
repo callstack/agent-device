@@ -21,6 +21,7 @@ import {
   type CommandFieldMap,
   type InferCommandInput,
 } from '../command-input.ts';
+import { isRecord } from '../../utils/parsing.ts';
 
 export type BatchCommandStep = {
   command: string;
@@ -146,18 +147,18 @@ function readBatchStepCommand(
 }
 
 function readBatchStepRecord(step: unknown, stepNumber: number): Record<string, unknown> {
-  if (!step || typeof step !== 'object' || Array.isArray(step)) {
+  if (!isRecord(step)) {
     throw new Error(`Invalid batch step ${stepNumber}.`);
   }
-  return step as Record<string, unknown>;
+  return step;
 }
 
 function readBatchStepInput(record: Record<string, unknown>, stepNumber: number) {
   const input = record.input;
-  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+  if (!isRecord(input)) {
     throw new Error(`Batch step ${stepNumber} input must be an object.`);
   }
-  return input as Record<string, unknown>;
+  return input;
 }
 
 function readBatchStepRuntimeProperty(

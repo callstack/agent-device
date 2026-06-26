@@ -7,6 +7,7 @@ import type {
   SymbolicatedAddress,
   TextFrameMatch,
 } from './types.ts';
+import { isRecord } from '../../../utils/parsing.ts';
 import {
   addressKey,
   compactJoin,
@@ -73,12 +74,7 @@ function readIpsBundleId(
   payload: Record<string, unknown>,
   header: Record<string, unknown> | null,
 ): string | undefined {
-  const bundleInfo =
-    payload.bundleInfo !== null &&
-    typeof payload.bundleInfo === 'object' &&
-    !Array.isArray(payload.bundleInfo)
-      ? (payload.bundleInfo as Record<string, unknown>)
-      : undefined;
+  const bundleInfo = isRecord(payload.bundleInfo) ? payload.bundleInfo : undefined;
   return firstString(bundleInfo?.CFBundleIdentifier, header?.bundleID);
 }
 
@@ -86,12 +82,7 @@ function readIpsVersion(
   payload: Record<string, unknown>,
   header: Record<string, unknown> | null,
 ): string | undefined {
-  const bundleInfo =
-    payload.bundleInfo !== null &&
-    typeof payload.bundleInfo === 'object' &&
-    !Array.isArray(payload.bundleInfo)
-      ? (payload.bundleInfo as Record<string, unknown>)
-      : undefined;
+  const bundleInfo = isRecord(payload.bundleInfo) ? payload.bundleInfo : undefined;
   return firstString(bundleInfo?.CFBundleShortVersionString, header?.app_version);
 }
 
@@ -110,10 +101,7 @@ function readIpsTimestamp(
 }
 
 function readIpsExceptionType(exception: unknown): string | undefined {
-  if (exception === null || typeof exception !== 'object' || Array.isArray(exception)) {
-    return undefined;
-  }
-  return readString((exception as Record<string, unknown>).type);
+  return isRecord(exception) ? readString(exception.type) : undefined;
 }
 
 function readIpsHeader(header: string | undefined): Record<string, unknown> | null {
@@ -125,32 +113,21 @@ function readIpsCrashedThread(payload: Record<string, unknown>): number | undefi
   if (faultingThread !== undefined) return faultingThread;
   const threads = Array.isArray(payload.threads) ? payload.threads : [];
   const triggeredIndex = threads.findIndex(
-    (thread) =>
-      thread !== null &&
-      typeof thread === 'object' &&
-      !Array.isArray(thread) &&
-      (thread as Record<string, unknown>).triggered === true,
+    (thread) => isRecord(thread) && thread.triggered === true,
   );
   return triggeredIndex === -1 ? undefined : triggeredIndex;
 }
 
 function readIpsExceptionCodes(exception: unknown): string | undefined {
-  if (exception === null || typeof exception !== 'object' || Array.isArray(exception)) {
-    return undefined;
-  }
-  const record = exception as Record<string, unknown>;
-  return firstString(record.codes, record.rawCodes);
+  return isRecord(exception) ? firstString(exception.codes, exception.rawCodes) : undefined;
 }
 
 function readIpsTerminationReason(termination: unknown): string | undefined {
-  if (termination === null || typeof termination !== 'object' || Array.isArray(termination)) {
-    return undefined;
-  }
-  const record = termination as Record<string, unknown>;
+  if (!isRecord(termination)) return undefined;
   return compactJoin([
-    readString(record.namespace),
-    readString(record.code),
-    readString(record.reason),
+    readString(termination.namespace),
+    readString(termination.code),
+    readString(termination.reason),
   ]);
 }
 
