@@ -11,6 +11,7 @@ export type {
   BatchFlags,
   BatchInvoke,
   BatchRequest,
+  BatchRunResponse,
   BatchRunResult,
   DaemonBatchStep,
   BatchStepResult,

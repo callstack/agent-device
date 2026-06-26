@@ -7,7 +7,6 @@ import {
   buildBatchStepFlags,
   runBatch,
   validateAndNormalizeBatchSteps,
-  type BatchStepResult,
 } from '../../batch.ts';
 import type { DaemonRequest } from '../../contracts.ts';
 
@@ -43,9 +42,8 @@ test('public batch entrypoint exports daemon-compatible orchestration helpers', 
   assert.equal(response.ok, true);
   assert.deepEqual(seenCommands, ['open', 'wait']);
   if (response.ok) {
-    assert.equal(response.data?.total, 2);
-    const results = response.data?.results as BatchStepResult[];
-    assert.equal(results[0]?.command, 'open');
+    assert.equal(response.data.total, 2);
+    assert.equal(response.data.results[0]?.command, 'open');
   }
 });
 

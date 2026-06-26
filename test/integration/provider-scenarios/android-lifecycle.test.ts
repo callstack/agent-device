@@ -1104,10 +1104,7 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
     ...selection,
   });
   assert.equal(batch.executed, 1);
-  assert.equal(
-    (batch.results as Array<{ data?: { count?: number } }> | undefined)?.[0]?.data?.count,
-    2,
-  );
+  assert.equal(batch.results[0]?.data.count, 2);
 
   const replayPath = path.join(tempRoot, 'settings-search.ad');
   fs.writeFileSync(

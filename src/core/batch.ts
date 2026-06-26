@@ -55,11 +55,18 @@ export type BatchRunResult = Record<string, unknown> & {
   results: BatchStepResult[];
 };
 
+export type BatchRunResponse =
+  | {
+      ok: true;
+      data: BatchRunResult;
+    }
+  | Extract<DaemonResponse, { ok: false }>;
+
 export async function runBatch(
   req: BatchRequest,
   sessionName: string,
   invoke: BatchInvoke,
-): Promise<DaemonResponse> {
+): Promise<BatchRunResponse> {
   const flags = readBatchFlags(req.flags);
   const batchOnError = flags?.batchOnError ?? 'stop';
   if (batchOnError !== 'stop') {
