@@ -24,15 +24,15 @@ const audioProbePageScriptFunctions = [
 
 export function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
   const scriptBody = audioProbePageScriptFunctions.map((fn) => `${fn.toString()};`).join('');
-  const optionsJsonLiteral = JSON.stringify(
-    JSON.stringify({
-      action: options.action,
-      durationMs: finiteNumberOrUndefined(options.durationMs),
-      bucketMs: finiteNumberOrUndefined(options.bucketMs),
-    }),
+  const optionsJsonLiteral = escapeUnsafeCodeString(
+    JSON.stringify(
+      JSON.stringify({
+        action: options.action,
+        durationMs: finiteNumberOrUndefined(options.durationMs),
+        bucketMs: finiteNumberOrUndefined(options.bucketMs),
+      }),
+    ),
   );
-  // lgtm[js/code-injection] agent-browser eval requires a code string; scriptBody is built
-  // from local static functions, and runtime options are parsed from a JSON string literal.
   return `(()=>{${scriptBody}return ${audioProbeEvalScript.name}(JSON.parse(${optionsJsonLiteral}))})()`;
 }
 
@@ -63,6 +63,28 @@ type AudioProbePageStats = { rms: number; peak: number };
 
 declare const window: AudioProbePageRecord;
 declare const document: { querySelectorAll(selector: string): any[] };
+
+const unsafeCodeStringCharacters: Record<string, string> = {
+  '<': '\\u003C',
+  '>': '\\u003E',
+  '/': '\\u002F',
+  '\b': '\\b',
+  '\f': '\\f',
+  '\n': '\\n',
+  '\r': '\\r',
+  '\t': '\\t',
+  '\u0000': '\\0',
+  '\u2028': '\\u2028',
+  '\u2029': '\\u2029',
+};
+
+function escapeUnsafeCodeString(value: string): string {
+  let escaped = '';
+  for (const character of value) {
+    escaped += unsafeCodeStringCharacters[character] ?? character;
+  }
+  return escaped;
+}
 
 function finiteNumberOrUndefined(value: number | undefined): number | undefined {
   return Number.isFinite(value) ? value : undefined;
