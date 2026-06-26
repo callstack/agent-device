@@ -31,6 +31,8 @@ export function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string
       bucketMs: finiteNumberOrUndefined(options.bucketMs),
     }),
   );
+  // lgtm[js/code-injection] agent-browser eval requires a code string; scriptBody is built
+  // from local static functions, and runtime options are parsed from a JSON string literal.
   return `(()=>{${scriptBody}return ${audioProbeEvalScript.name}(JSON.parse(${optionsJsonLiteral}))})()`;
 }
 
