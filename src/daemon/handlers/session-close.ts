@@ -1,15 +1,9 @@
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { isApplePlatform, type DeviceInfo } from '../../utils/device.ts';
-import { runMacOsAlertAction } from '../../platforms/ios/macos-helper.ts';
 import { dispatchCommand } from '../../core/dispatch.ts';
 import { contextFromFlags } from '../context.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
-import { stopAppLog } from '../app-log.ts';
-import { stopIosRunnerSession } from '../../platforms/ios/runner-client.ts';
-import { cleanupAppleXctracePerfCapture } from '../../platforms/ios/perf-xctrace.ts';
-import { cleanupAndroidNativePerfSession } from '../../platforms/android/perf.ts';
-import { stopAndroidSnapshotHelperSessionForDevice } from '../../platforms/android/snapshot-helper.ts';
 import { clearRuntimeHintsFromApp, hasRuntimeTransportHints } from '../runtime-hints.ts';
 import { cleanupRetainedMaterializedPathsForSession } from '../materialized-path-registry.ts';
 import {
@@ -26,6 +20,14 @@ import {
 } from './session-device-utils.ts';
 import { errorResponse } from './response.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
+import { releaseSessionLease } from '../lease-lifecycle.ts';
+import {
+  stopAppleRunnerForClose,
+  stopSessionAndroidNativePerfCapture,
+  stopSessionAndroidSnapshotHelper,
+  stopSessionAppLog,
+  stopSessionApplePerfCapture,
+} from '../session-teardown.ts';
 
 async function maybeShutdownSessionTarget(params: {
   device: DeviceInfo;
@@ -37,70 +39,12 @@ async function maybeShutdownSessionTarget(params: {
   return await shutdownDeviceTarget(device);
 }
 
-async function stopAppleRunnerForClose(session: SessionState): Promise<void> {
-  await stopIosRunnerSession(session.device.id);
-  if (session.device.platform !== 'macos') {
-    return;
-  }
-
-  const dismissOptions =
-    session.surface === 'frontmost-app'
-      ? { surface: 'frontmost-app' as const }
-      : session.appBundleId
-        ? { bundleId: session.appBundleId }
-        : {};
-  await runMacOsAlertAction('dismiss', dismissOptions).catch((error) => {
-    emitDiagnostic({
-      level: 'debug',
-      phase: 'macos_close_alert_dismiss_failed',
-      data: {
-        session: session.name,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    });
-  });
-}
-
 function shouldRetainAppleRunnerAfterClose(req: DaemonRequest, session: SessionState): boolean {
   return isIosSimulator(session.device) && !req.flags?.shutdown && !session.recording;
 }
 
 function shouldStopAppleRunnerBeforeTargetedClose(session: SessionState): boolean {
   return isApplePlatform(session.device.platform) && !isIosSimulator(session.device);
-}
-
-async function stopSessionApplePerfCapture(session: SessionState): Promise<void> {
-  if (!session.applePerf?.active) return;
-  await cleanupAppleXctracePerfCapture(session.applePerf.active);
-  session.applePerf = { ...(session.applePerf ?? {}), active: undefined };
-}
-
-async function stopSessionAndroidNativePerfCapture(session: SessionState): Promise<void> {
-  const active = session.nativePerf?.android;
-  if (!active) return;
-  await cleanupAndroidNativePerfSession(session.device, active);
-  session.nativePerf = { ...(session.nativePerf ?? {}), android: undefined };
-}
-
-async function stopSessionAndroidSnapshotHelper(session: SessionState): Promise<void> {
-  if (session.device.platform !== 'android') return;
-  await stopAndroidSnapshotHelperSessionForDevice(session.device);
-}
-
-export async function teardownSessionResources(
-  session: SessionState,
-  sessionName: string,
-): Promise<void> {
-  if (session.appLog) {
-    await stopAppLog(session.appLog);
-  }
-  await stopSessionApplePerfCapture(session);
-  await stopSessionAndroidNativePerfCapture(session);
-  await stopSessionAndroidSnapshotHelper(session);
-  if (isApplePlatform(session.device.platform)) {
-    await stopAppleRunnerForClose(session);
-  }
-  await cleanupRetainedMaterializedPathsForSession(sessionName).catch(() => {});
 }
 
 export async function handleCloseCommand(params: {
@@ -116,9 +60,7 @@ export async function handleCloseCommand(params: {
     return await closeWithoutSession(req, logPath);
   }
   try {
-    if (session.appLog) {
-      await stopAppLog(session.appLog);
-    }
+    await stopSessionAppLog(session);
     await stopSessionApplePerfCapture(session);
     await stopSessionAndroidNativePerfCapture(session);
     await stopSessionAndroidSnapshotHelper(session);
@@ -170,7 +112,7 @@ export async function handleCloseCommand(params: {
     // Always release the device lease and drop the session, even if teardown
     // above threw: a failed close must not strand device ownership until the
     // inactivity expiry. The original error still propagates after finally.
-    releaseSessionLease(session, leaseRegistry);
+    releaseSessionLease({ session, leaseRegistry });
     sessionStore.delete(sessionName);
   }
   const shutdownResult = await maybeShutdownSessionTarget({
@@ -187,29 +129,6 @@ export async function handleCloseCommand(params: {
     };
   }
   return { ok: true, data: { session: session.name, ...successText(`Closed: ${session.name}`) } };
-}
-
-function releaseSessionLease(session: SessionState, leaseRegistry: LeaseRegistry): void {
-  const lease = session.lease;
-  if (!lease) return;
-  const result = leaseRegistry.releaseLease({
-    leaseId: lease.leaseId,
-    tenantId: lease.tenantId,
-    runId: lease.runId,
-    backend: lease.leaseBackend,
-    leaseProvider: lease.leaseProvider,
-    deviceKey: lease.deviceKey,
-    clientId: lease.clientId,
-  });
-  emitDiagnostic({
-    level: 'info',
-    phase: 'session_lease_released',
-    data: {
-      session: session.name,
-      leaseId: lease.leaseId,
-      released: result.released,
-    },
-  });
 }
 
 function shouldDispatchPlatformClose(req: DaemonRequest, session: SessionState): boolean {

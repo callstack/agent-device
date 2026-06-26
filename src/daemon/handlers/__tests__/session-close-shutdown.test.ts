@@ -49,7 +49,7 @@ vi.mock('../session-device-utils.ts', async (importOriginal) => {
 });
 
 import { handleSessionCommands } from '../session.ts';
-import { teardownSessionResources } from '../session-close.ts';
+import { teardownSessionResources } from '../../session-teardown.ts';
 import { shutdownSimulator } from '../../../platforms/ios/simulator.ts';
 import { runCmd } from '../../../utils/exec.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';

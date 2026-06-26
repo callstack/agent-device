@@ -7,7 +7,7 @@ import { createDaemonHttpServer } from './daemon/http-server.ts';
 import { trackDownloadableArtifact } from './daemon/artifact-tracking.ts';
 import { LeaseRegistry } from './daemon/lease-registry.ts';
 import { createRequestHandler } from './daemon/request-router.ts';
-import { teardownSessionResources } from './daemon/handlers/session-close.ts';
+import { teardownSessionResources } from './daemon/session-teardown.ts';
 import { closeDaemonServers } from './daemon/server-shutdown.ts';
 import type { SessionState } from './daemon/types.ts';
 import {

@@ -10,11 +10,12 @@ import type { DaemonCommandContext } from './context.ts';
 import { contextFromFlags as contextFromFlagsWithLog } from './context.ts';
 import { assertSessionSelectorMatches } from './session-selector.ts';
 import { resolveEffectiveSessionName } from './session-routing.ts';
+import { scopeRequestSession } from './request-admission.ts';
 import {
-  assertRequestLeaseAdmission,
-  assertRequestLeaseAdmissionPreflight,
-  scopeRequestSession,
-} from './request-admission.ts';
+  admitRequestLeaseForLockedScope,
+  assertLockedLeaseAdmissionPreflight,
+  cleanupExpiredLeasedSession,
+} from './lease-lifecycle.ts';
 import {
   prepareLockedRequestBinding,
   resolveRequestExecutionLockKeys,
@@ -35,7 +36,7 @@ import {
   type SessionStore,
 } from './session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
-import { teardownSessionResources } from './handlers/session-close.ts';
+import { teardownSessionResources } from './session-teardown.ts';
 
 // Production daemon wiring owns one LeaseRegistry per process; scoping locks by registry keeps
 // test and embedded routers isolated without changing process-level serialization there.
@@ -108,7 +109,7 @@ export async function createRequestExecutionScope(params: {
       runnerLogPath,
     },
   });
-  assertRequestLeaseAdmissionPreflight(scopedReq);
+  assertLockedLeaseAdmissionPreflight(scopedReq);
   const executionLockKeys = shouldLockSessionExecution(command)
     ? await resolveRequestExecutionLockKeys({ req: scopedReq, sessionName, sessionStore })
     : [];
@@ -123,7 +124,12 @@ export async function createRequestExecutionScope(params: {
     throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
     runAdmitted: async (task) => {
       throwIfRequestCanceled(scopedReq.meta?.requestId);
-      await cleanupExpiredLeasedSession({ sessionName, sessionStore, leaseRegistry });
+      await cleanupExpiredLeasedSession({
+        sessionName,
+        sessionStore,
+        leaseRegistry,
+        teardownSession: teardownSessionResources,
+      });
       scopedReq = admitRequestLeaseForLockedScope({
         req: scopedReq,
         sessionName,
@@ -144,73 +150,6 @@ export async function createRequestExecutionScope(params: {
     },
   };
   return scope;
-}
-
-function admitRequestLeaseForLockedScope(params: {
-  req: DaemonRequest;
-  sessionName: string;
-  sessionStore: SessionStore;
-  leaseRegistry: LeaseRegistry;
-}): DaemonRequest {
-  const { sessionName, sessionStore, leaseRegistry } = params;
-  const existingSession = sessionStore.get(sessionName);
-  const activeLease = assertRequestLeaseAdmission(params.req, leaseRegistry, existingSession);
-  if (!activeLease) return params.req;
-
-  const nextReq = {
-    ...params.req,
-    internal: {
-      ...params.req.internal,
-      admittedLease: activeLease,
-    },
-  };
-  if (existingSession?.lease) {
-    sessionStore.set(sessionName, {
-      ...existingSession,
-      lease: {
-        ...existingSession.lease,
-        leaseBackend: activeLease.backend,
-        expiresAt: activeLease.expiresAt,
-      },
-    });
-  }
-  return nextReq;
-}
-
-async function cleanupExpiredLeasedSession(params: {
-  sessionName: string;
-  sessionStore: SessionStore;
-  leaseRegistry: LeaseRegistry;
-}): Promise<boolean> {
-  const session = params.sessionStore.get(params.sessionName);
-  const lease = session?.lease;
-  if (!session || !lease) return false;
-  const expiredLease = params.leaseRegistry.consumeExpiredLease(lease.leaseId);
-  if (!expiredLease) return false;
-  emitDiagnostic({
-    level: 'info',
-    phase: 'leased_session_expired',
-    data: {
-      reason: 'LEASE_EXPIRED',
-      leaseId: lease.leaseId,
-      session: session.name,
-      deviceKey: lease.deviceKey,
-    },
-  });
-  await teardownSessionResources(session, session.name).catch((error) => {
-    emitDiagnostic({
-      level: 'debug',
-      phase: 'leased_session_expiry_cleanup_failed',
-      data: {
-        reason: 'LEASE_EXPIRED',
-        leaseId: lease.leaseId,
-        session: session.name,
-        error: error instanceof Error ? error.message : String(error),
-      },
-    });
-  });
-  params.sessionStore.delete(session.name);
-  return true;
 }
 
 async function withRequestExecutionLocks<T>(
