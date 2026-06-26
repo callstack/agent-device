@@ -71,6 +71,7 @@ export type CliFlags = CloudProviderProfileFields &
     iosXctestEnvDir?: string;
     deviceHub?: boolean;
     androidDeviceAllowlist?: string;
+    remote?: boolean;
     session?: string;
     metroHost?: string;
     metroPort?: number;
@@ -677,6 +678,13 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--android-device-allowlist <serials>',
     usageDescription: 'Comma/space separated Android serial allowlist for discovery/selection',
+  },
+  {
+    key: 'remote',
+    names: ['--remote'],
+    type: 'boolean',
+    usageLabel: '--remote',
+    usageDescription: 'Doctor: check remote connection setup instead of local device inventory',
   },
   {
     key: 'activity',

@@ -8,6 +8,7 @@ export type DoctorOptions = {
   metroPort: number;
   kind: DoctorKind;
   shouldProbeMetro: boolean;
+  remote: boolean;
 };
 
 export type DoctorCheck = {

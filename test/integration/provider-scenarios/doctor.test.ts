@@ -17,7 +17,7 @@ import {
   withProviderScenarioTempDir,
 } from './harness.ts';
 
-test('Provider-backed integration doctor infers Android RN/Metro readiness through daemon route', async () => {
+test('Provider-backed integration doctor infers Android RN/Metro readiness through daemon route without resolving a default device', async () => {
   const server = await startMetroStatusServer();
   const adbCalls: string[][] = [];
   const adbProvider: AndroidAdbProvider = {
@@ -52,9 +52,10 @@ test('Provider-backed integration doctor infers Android RN/Metro readiness throu
             const data = response.json.result.data;
             assert.equal(data.status, 'pass');
             assert.equal(data.kind, 'react-native');
+            assertDoctorCheck(data, 'device', 'pass');
             assertDoctorCheck(data, 'metro', 'pass');
-            assertDoctorCheck(data, 'android-reverse', 'pass');
-            assert.deepEqual(adbCalls, [['reverse', '--list']]);
+            assertNoDoctorCheck(data, 'android-reverse');
+            assert.deepEqual(adbCalls, []);
           },
         ),
     );
@@ -95,6 +96,50 @@ test('Provider-backed integration doctor runs predictably for supported platform
   );
 });
 
+test('Provider-backed integration doctor --remote skips local device inventory', async () => {
+  let inventoryCalls = 0;
+
+  await withProviderScenarioResource(
+    async () =>
+      await createProviderScenarioHarness({
+        deviceInventoryProvider: async () => {
+          inventoryCalls += 1;
+          return [PROVIDER_SCENARIO_ANDROID];
+        },
+      }),
+    async (daemon) => {
+      const response = await daemon.callCommand('doctor', [], {
+        remote: true,
+        daemonBaseUrl: 'https://example.invalid/agent-device',
+        daemonAuthToken: 'secret',
+      });
+      assertRpcOk(response);
+      const data = response.json.result.data;
+      assert.equal(data.status, 'pass');
+      assertDoctorCheck(data, 'remote-connection', 'pass');
+      assertNoDoctorCheck(data, 'device');
+      assert.equal(inventoryCalls, 0);
+    },
+  );
+});
+
+test('Provider-backed integration doctor --remote fails without remote scope', async () => {
+  await withProviderScenarioResource(
+    async () =>
+      await createProviderScenarioHarness({
+        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+      }),
+    async (daemon) => {
+      const response = await daemon.callCommand('doctor', [], { remote: true });
+      assertRpcOk(response);
+      const data = response.json.result.data;
+      assert.equal(data.status, 'fail');
+      assertDoctorCheck(data, 'remote-connection', 'fail');
+      assertNoDoctorCheck(data, 'device');
+    },
+  );
+});
+
 function writePackageJson(dir: string, value: Record<string, unknown>): void {
   fs.writeFileSync(`${dir}/package.json`, `${JSON.stringify(value)}\n`);
 }
@@ -107,6 +152,14 @@ function assertDoctorCheck(
   const check = data.checks.find((entry) => entry.id === id);
   assert.ok(check, `missing ${id}: ${JSON.stringify(data.checks)}`);
   assert.equal(check.status, status);
+}
+
+function assertNoDoctorCheck(data: { checks: Array<{ id: string }> }, id: string): void {
+  assert.equal(
+    data.checks.some((entry) => entry.id === id),
+    false,
+    `unexpected ${id}: ${JSON.stringify(data.checks)}`,
+  );
 }
 
 function androidDoctorAdbResult(

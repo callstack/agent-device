@@ -103,10 +103,11 @@ test('parseArgs recognizes command-specific flag combinations', async () => {
     },
     {
       label: 'doctor remote session',
-      argv: ['doctor', '--session', 'remote-ios', '--remote-config', './remote.json'],
+      argv: ['doctor', '--remote', '--session', 'remote-ios', '--remote-config', './remote.json'],
       strictFlags: true,
       assertParsed: (parsed) => {
         assert.equal(parsed.command, 'doctor');
+        assert.equal(parsed.flags.remote, true);
         assert.equal(parsed.flags.session, 'remote-ios');
         assert.equal(parsed.flags.remoteConfig, './remote.json');
       },
@@ -1841,6 +1842,7 @@ test('usageForCommand resolves react-native help topic', () => {
   assert.match(help, /For app\/package launches, run metro prepare/);
   assert.match(help, /agent-device doctor --platform android/);
   assert.match(help, /agent-device doctor --platform ios/);
+  assert.match(help, /agent-device doctor --remote --remote-config \.\/remote\.json/);
   assert.match(help, /same host context that owns Metro/);
   assert.match(help, /sandbox probe is not authoritative/);
   assert.match(help, /adb reverse only affects Android device-to-host traffic/);

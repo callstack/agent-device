@@ -6,7 +6,7 @@ import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { appendAndroidChecks } from './session-doctor-android.ts';
 import { appendAppChecks } from './session-doctor-app.ts';
-import { appendDeviceCheck, platformScopeChecks } from './session-doctor-device.ts';
+import { appendDeviceInventoryCheck, platformScopeChecks } from './session-doctor-device.ts';
 import { probeMetro } from './session-doctor-metro.ts';
 import {
   readDoctorOptions,
@@ -44,11 +44,26 @@ export async function handleDoctorCommand(params: {
       summary: `agent-device ${readVersion()} using ${stateDir}`,
       evidence: { version: readVersion(), stateDir },
     },
-    ...remoteConnectionChecks(req),
-    ...sessionChecks(sessionStore, sessionName, session),
+    ...remoteConnectionChecks(req, { required: options.remote }),
+    ...sessionChecks(sessionStore, sessionName, session, { remote: options.remote }),
   );
 
-  const device = await appendDeviceCheck(checks, req, session);
+  if (options.remote) {
+    const status = summarizeDoctorStatus(checks);
+    return {
+      ok: true,
+      data: {
+        status,
+        summary: doctorSummary(status),
+        kind: options.kind,
+        targetApp: options.targetApp,
+        checks: sortChecks(checks),
+      },
+    };
+  }
+
+  const inventory = await appendDeviceInventoryCheck(checks, req, session);
+  const device = session?.device;
   if (device) {
     appendDoctorChecks(checks, ...platformScopeChecks(device, options));
     await appendAppChecks(checks, { device, session, targetApp: options.targetApp });
@@ -71,8 +86,8 @@ export async function handleDoctorCommand(params: {
       status,
       summary: doctorSummary(status),
       kind: options.kind,
-      platform: device?.platform,
-      target: device?.target ?? 'mobile',
+      platform: device?.platform ?? inventory?.platform,
+      target: device?.target ?? inventory?.target,
       targetApp: options.targetApp,
       metro: options.shouldProbeMetro
         ? { host: options.metroHost, port: options.metroPort }

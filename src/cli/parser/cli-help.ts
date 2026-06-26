@@ -555,6 +555,7 @@ React Native dev loop:
   Before QA/dogfood runs, use doctor to separate environment setup from app failures:
     agent-device doctor --platform android
     agent-device doctor --platform ios
+    agent-device doctor --remote --remote-config ./remote.json
   For "start from screen X" flows, prefer open --relaunch before the first snapshot so the app does not reuse a prior in-progress navigation state.
   JS-only change with Metro connected:
     agent-device metro reload

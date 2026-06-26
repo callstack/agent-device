@@ -20,18 +20,32 @@ export function readDoctorOptions(
     metroHost,
     metroPort,
     kind,
+    remote: req.flags?.remote === true,
     shouldProbeMetro: shouldProbeMetro(req, kind),
   };
 }
 
-export function remoteConnectionChecks(req: DaemonRequest): DoctorCheck[] {
+export function remoteConnectionChecks(
+  req: DaemonRequest,
+  options: { required?: boolean } = {},
+): DoctorCheck[] {
   const evidence = remoteConnectionEvidence(req);
-  if (!evidence) return [];
+  if (!evidence) {
+    if (!options.required) return [];
+    return [
+      {
+        id: 'remote-connection',
+        status: 'fail',
+        summary: 'No remote daemon/session scope is configured.',
+        hint: 'Use connect --remote-config <path>, --remote-config <path>, or direct --daemon-base-url/--daemon-auth-token flags.',
+      },
+    ];
+  }
   return [
     {
       id: 'remote-connection',
-      status: 'info',
-      summary: 'Remote daemon/session scope is active.',
+      status: options.required ? 'pass' : 'info',
+      summary: 'Remote daemon/session scope is configured.',
       evidence,
     },
   ];
@@ -41,6 +55,7 @@ export function sessionChecks(
   sessionStore: SessionStore,
   sessionName: string,
   session: SessionState | undefined,
+  options: { remote?: boolean } = {},
 ): DoctorCheck[] {
   const sameDeviceSessions = session
     ? sessionStore
@@ -59,7 +74,9 @@ export function sessionChecks(
       {
         id: 'session',
         status: 'info',
-        summary: `No active session named ${sessionName}. Doctor will use the selected device.`,
+        summary: options.remote
+          ? `No active session named ${sessionName}. Remote doctor will use configured remote scope.`
+          : `No active session named ${sessionName}. Doctor will use device inventory only.`,
         hint: 'This is expected before a run. Use open when app foreground state matters.',
       },
     ];

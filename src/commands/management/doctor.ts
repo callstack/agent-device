@@ -1,5 +1,6 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
+import * as commandInput from '../command-input.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { commonInputFromFlags, direct } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
@@ -10,7 +11,11 @@ import { managementCliOutputFormatters } from './output.ts';
 const doctorCommandMetadata = defineFieldCommandMetadata(
   'doctor',
   'Diagnose device, app, Metro, and React Native readiness before a run.',
-  {},
+  {
+    remote: commandInput.booleanField(
+      'Check remote connection setup instead of local device inventory.',
+    ),
+  },
 );
 
 const doctorCommandDefinition = defineExecutableCommand(doctorCommandMetadata, (client, input) =>
@@ -18,14 +23,16 @@ const doctorCommandDefinition = defineExecutableCommand(doctorCommandMetadata, (
 );
 
 const doctorCliSchema = {
-  usageOverride: 'doctor [--platform ios|android|macos|linux|web|apple]',
+  usageOverride: 'doctor [--platform ios|android|macos|linux|web|apple] [--remote]',
   helpDescription:
-    'Read-only preflight for QA and dogfood runs. Reports device readiness, active sessions, app discovery from the active session, Metro reachability inferred from cwd/runtime, and obvious React Native overlay blockers from the current session snapshot. Default output is compact; use --json for full checks and evidence.',
+    'Read-only preflight for QA and dogfood runs. Reports local device inventory, active sessions, app discovery from the active session, Metro reachability inferred from cwd/runtime, and obvious React Native overlay blockers from the current session snapshot. Use --remote to check remote connection setup without probing local devices. Default output is compact; use --json for full checks and evidence.',
   summary: 'Preflight device, app, Metro, and RN/Expo readiness',
+  allowedFlags: ['remote'],
 } as const satisfies CommandSchemaOverride;
 
 const doctorCliReader: CliReader = (_positionals, flags) => ({
   ...commonInputFromFlags(flags),
+  remote: flags.remote,
 });
 
 const doctorDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.doctor);
