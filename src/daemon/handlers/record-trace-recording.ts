@@ -26,7 +26,7 @@ import { errorResponse } from './response.ts';
 import { deriveAndroidChunkOutPath } from './record-trace-android-chunks.ts';
 import {
   resolveRecordingBackendForDevice,
-  resolveRecordingBackendForRecording,
+  stopActiveRecording,
 } from './record-trace-recording-backends.ts';
 import type { RecordTraceDeps, RecordingBase } from './record-trace-types.ts';
 import { resolveImplicitSessionScope, resolvePublicSessionName } from '../session-routing.ts';
@@ -187,9 +187,7 @@ async function stopRecording(params: {
   const stopRequestedAt = Date.now();
   const invalidatedReason = recording.invalidatedReason;
   activeSession.recording = undefined;
-  const backend = resolveRecordingBackendForRecording(recording);
-
-  const stopError = await backend.stop({
+  const stopError = await stopActiveRecording({
     req,
     activeSession,
     device,

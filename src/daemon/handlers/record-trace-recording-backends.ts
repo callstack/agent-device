@@ -24,6 +24,8 @@ import {
 import type { RecordTraceDeps, RecordingBase } from './record-trace-types.ts';
 
 type ActiveRecording = NonNullable<SessionState['recording']>;
+type RecordingPlatform = ActiveRecording['platform'];
+type RecordingFor<P extends RecordingPlatform> = Extract<ActiveRecording, { platform: P }>;
 
 type RecordingOutputPathContext = {
   req: DaemonRequest;
@@ -41,25 +43,36 @@ type RecordingStartContext = {
   resolvedOut: string;
 };
 
-type RecordingStopContext = {
+type RecordingStopContext<P extends RecordingPlatform = RecordingPlatform> = {
   req: DaemonRequest;
   activeSession: SessionState;
   device: SessionState['device'];
   logPath?: string;
   deps: RecordTraceDeps;
-  recording: ActiveRecording;
+  recording: RecordingFor<P>;
   stopRequestedAt: number;
 };
 
-export type RecordingBackend = {
+// A backend is parameterized by the recording tag it owns, so its `stop` receives an
+// already-narrowed recording — no `recording as Extract<ActiveRecording, ...>` casts.
+// `start` stays wide because the device platform does not map 1:1 to a recording tag
+// (e.g. an iOS device resolves to either the `ios` or `ios-device-runner` recording).
+export type RecordingBackend<P extends RecordingPlatform = RecordingPlatform> = {
   validateStart?: (req: DaemonRequest) => DaemonResponse | null;
   resolveOutputPath: (context: RecordingOutputPathContext) => string;
   start: (context: RecordingStartContext) => Promise<DaemonResponse | ActiveRecording>;
-  stop: (context: RecordingStopContext) => Promise<DaemonResponse | null>;
+  stop: (context: RecordingStopContext<P>) => Promise<DaemonResponse | null>;
   cleanupRecordOnlySession?: (session: SessionState) => Promise<void>;
 };
 
-export function resolveRecordingBackendForDevice(device: SessionState['device']): RecordingBackend {
+// Device-resolution view: a backend selected before any recording exists exposes only the
+// start/output/cleanup surface; stop is dispatched per active recording's tag via
+// stopActiveRecording, which is why omitting it keeps the per-tag backends assignable here.
+type RecordingStartBackend = Omit<RecordingBackend, 'stop'>;
+
+export function resolveRecordingBackendForDevice(
+  device: SessionState['device'],
+): RecordingStartBackend {
   if (device.platform === 'web') return webRecordingBackend;
   if (device.platform === 'android') return androidRecordingBackend;
   if (device.platform === 'macos') return macOsRecordingBackend;
@@ -68,18 +81,19 @@ export function resolveRecordingBackendForDevice(device: SessionState['device'])
   return unsupportedRecordingBackend;
 }
 
-export function resolveRecordingBackendForRecording(recording: ActiveRecording): RecordingBackend {
+export function stopActiveRecording(context: RecordingStopContext): Promise<DaemonResponse | null> {
+  const { recording } = context;
   switch (recording.platform) {
     case 'android':
-      return androidRecordingBackend;
+      return androidRecordingBackend.stop({ ...context, recording });
     case 'ios':
-      return iosSimulatorRecordingBackend;
+      return iosSimulatorRecordingBackend.stop({ ...context, recording });
     case 'ios-device-runner':
-      return iosDeviceRecordingBackend;
+      return iosDeviceRecordingBackend.stop({ ...context, recording });
     case 'macos-runner':
-      return macOsRecordingBackend;
+      return macOsRecordingBackend.stop({ ...context, recording });
     case 'web':
-      return webRecordingBackend;
+      return webRecordingBackend.stop({ ...context, recording });
   }
 
   const exhaustive: never = recording;
@@ -98,7 +112,7 @@ function resolveWebRecordingOutputPath({ req }: RecordingOutputPathContext): str
     : appendRecordingExtensionWhenMissing(requestedPath, WEB_RECORDING_EXTENSION);
 }
 
-const webRecordingBackend: RecordingBackend = {
+const webRecordingBackend: RecordingBackend<'web'> = {
   validateStart: (req) => validateWebRecordingFlags(req),
   resolveOutputPath: resolveWebRecordingOutputPath,
   start: async ({ activeSession, recordingBase, resolvedOut }) => {
@@ -125,10 +139,7 @@ const webRecordingBackend: RecordingBackend = {
       showTouches: false,
     };
   },
-  stop: async ({ recording }) =>
-    await stopWebRecording({
-      recording: recording as Extract<ActiveRecording, { platform: 'web' }>,
-    }),
+  stop: async ({ recording }) => await stopWebRecording({ recording }),
   cleanupRecordOnlySession: async () => {
     try {
       await resolveWebProvider().close();
@@ -138,7 +149,7 @@ const webRecordingBackend: RecordingBackend = {
   },
 };
 
-const iosDeviceRecordingBackend: RecordingBackend = {
+const iosDeviceRecordingBackend: RecordingBackend<'ios-device-runner'> = {
   resolveOutputPath: resolveNativeRecordingOutputPath,
   start: async ({
     req,
@@ -176,11 +187,11 @@ const iosDeviceRecordingBackend: RecordingBackend = {
       device,
       logPath,
       deps,
-      recording: recording as Extract<ActiveRecording, { platform: 'ios-device-runner' }>,
+      recording,
     }),
 };
 
-const macOsRecordingBackend: RecordingBackend = {
+const macOsRecordingBackend: RecordingBackend<'macos-runner'> = {
   resolveOutputPath: resolveNativeRecordingOutputPath,
   start: async ({ req, activeSession, device, logPath, deps, fpsFlag, recordingBase }) => {
     const appBundleId = normalizeAppBundleId(activeSession);
@@ -208,11 +219,11 @@ const macOsRecordingBackend: RecordingBackend = {
       device,
       logPath,
       deps,
-      recording: recording as Extract<ActiveRecording, { platform: 'macos-runner' }>,
+      recording,
     }),
 };
 
-const iosSimulatorRecordingBackend: RecordingBackend = {
+const iosSimulatorRecordingBackend: RecordingBackend<'ios'> = {
   resolveOutputPath: resolveNativeRecordingOutputPath,
   start: async ({ req, activeSession, device, logPath, deps, recordingBase, resolvedOut }) =>
     await startIosSimulatorRecording({
@@ -227,12 +238,12 @@ const iosSimulatorRecordingBackend: RecordingBackend = {
   stop: async ({ deps, recording, stopRequestedAt }) =>
     await stopIosSimulatorRecording({
       deps,
-      recording: recording as Extract<ActiveRecording, { platform: 'ios' }>,
+      recording,
       stopRequestedAt,
     }),
 };
 
-const androidRecordingBackend: RecordingBackend = {
+const androidRecordingBackend: RecordingBackend<'android'> = {
   resolveOutputPath: resolveNativeRecordingOutputPath,
   start: async ({ device, recordingBase }) =>
     await startAndroidRecording({ device, recordingBase }),
@@ -240,7 +251,7 @@ const androidRecordingBackend: RecordingBackend = {
     await stopAndroidRecording({
       deps,
       device,
-      recording: recording as Extract<ActiveRecording, { platform: 'android' }>,
+      recording,
       stopRequestedAt,
     }),
 };
