@@ -15,6 +15,10 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
       'agent-device-provider-scenario-web',
       'png',
     );
+    const recordingPath = createProviderScenarioTempPath(
+      'agent-device-provider-scenario-web-recording',
+      'webm',
+    );
 
     try {
       const devices = await daemon.client().devices.list({ platform: 'web' });
@@ -29,6 +33,12 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
           command: 'open',
           positionals: [WEB_URL],
           flags: { platform: 'web' },
+        },
+        {
+          name: 'start web recording',
+          command: 'record',
+          positionals: ['start', recordingPath],
+          expectData: { recording: 'started', outPath: recordingPath },
         },
         {
           name: 'capture interactive web snapshot',
@@ -123,6 +133,12 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
             assertPngFile(screenshotPath);
           },
         },
+        {
+          name: 'stop web recording',
+          command: 'record',
+          positionals: ['stop'],
+          expectData: { recording: 'stopped', outPath: recordingPath },
+        },
       ]);
 
       const actions = daemon.session()?.actions ?? [];
@@ -158,6 +174,7 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
       assert.equal(close.statusCode, 200, JSON.stringify(close.json));
 
       assertFlatToolCall(semanticCalls, ['web', 'open', WEB_URL, '']);
+      assertFlatToolCall(semanticCalls, ['web', 'recordStart', recordingPath]);
       assertFlatToolCall(semanticCalls, ['web', 'snapshot', 'true', '']);
       assertFlatToolCall(semanticCalls, ['web', 'clickRef', '@e4']);
       assertFlatToolCall(semanticCalls, ['web', 'fillRef', '@e3', 'qa@example.test', '1']);
@@ -172,9 +189,11 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
         'false',
         'app',
       ]);
+      assertFlatToolCall(semanticCalls, ['web', 'recordStop']);
       assertFlatToolCall(semanticCalls, ['web', 'close', WEB_URL]);
     } finally {
       fs.rmSync(screenshotPath, { force: true });
+      fs.rmSync(recordingPath, { force: true });
     }
   });
 }, 10_000);

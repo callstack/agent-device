@@ -1,5 +1,13 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import type { SessionStore } from '../session-store.ts';
+import {
+  appendRecordingExtensionWhenMissing,
+  defaultRecordingPath,
+  WEB_RECORDING_EXTENSION,
+} from '../../recording/output-path.ts';
+import { resolveWebProvider } from '../../platforms/web/provider.ts';
 import { errorResponse } from './response.ts';
 import { startAndroidRecording, stopAndroidRecording } from './record-trace-android.ts';
 import {
@@ -44,12 +52,15 @@ type RecordingStopContext = {
 };
 
 export type RecordingBackend = {
+  validateStart?: (req: DaemonRequest) => DaemonResponse | null;
   resolveOutputPath: (context: RecordingOutputPathContext) => string;
   start: (context: RecordingStartContext) => Promise<DaemonResponse | ActiveRecording>;
   stop: (context: RecordingStopContext) => Promise<DaemonResponse | null>;
+  cleanupRecordOnlySession?: (session: SessionState) => Promise<void>;
 };
 
 export function resolveRecordingBackendForDevice(device: SessionState['device']): RecordingBackend {
+  if (device.platform === 'web') return webRecordingBackend;
   if (device.platform === 'android') return androidRecordingBackend;
   if (device.platform === 'macos') return macOsRecordingBackend;
   if (device.platform === 'ios' && device.kind === 'device') return iosDeviceRecordingBackend;
@@ -67,6 +78,8 @@ export function resolveRecordingBackendForRecording(recording: ActiveRecording):
       return iosDeviceRecordingBackend;
     case 'macos-runner':
       return macOsRecordingBackend;
+    case 'web':
+      return webRecordingBackend;
   }
 
   const exhaustive: never = recording;
@@ -75,8 +88,55 @@ export function resolveRecordingBackendForRecording(recording: ActiveRecording):
 
 function resolveNativeRecordingOutputPath({ req }: RecordingOutputPathContext): string {
   const requestedPath = req.positionals?.[1];
-  return requestedPath ?? `./recording-${Date.now()}.mp4`;
+  return requestedPath ?? defaultRecordingPath(undefined);
 }
+
+function resolveWebRecordingOutputPath({ req }: RecordingOutputPathContext): string {
+  const requestedPath = req.positionals?.[1];
+  return requestedPath === undefined
+    ? defaultRecordingPath('web')
+    : appendRecordingExtensionWhenMissing(requestedPath, WEB_RECORDING_EXTENSION);
+}
+
+const webRecordingBackend: RecordingBackend = {
+  validateStart: (req) => validateWebRecordingFlags(req),
+  resolveOutputPath: resolveWebRecordingOutputPath,
+  start: async ({ activeSession, recordingBase, resolvedOut }) => {
+    const startError = validateWebRecordingOutputPath(resolvedOut);
+    if (startError) {
+      return startError;
+    }
+    if (activeSession.recordOnlySession) {
+      return errorResponse(
+        'INVALID_ARGS',
+        'record on web requires an active browser session; run open <url> --platform web first',
+      );
+    }
+    const provider = resolveWebProvider();
+    if (!provider.startRecording) {
+      return errorResponse('UNSUPPORTED_OPERATION', 'record is not supported by this web provider');
+    }
+    await provider.startRecording(resolvedOut);
+    return {
+      ...recordingBase,
+      outPath: resolvedOut,
+      startedAt: Date.now(),
+      platform: 'web',
+      showTouches: false,
+    };
+  },
+  stop: async ({ recording }) =>
+    await stopWebRecording({
+      recording: recording as Extract<ActiveRecording, { platform: 'web' }>,
+    }),
+  cleanupRecordOnlySession: async () => {
+    try {
+      await resolveWebProvider().close();
+    } catch {
+      // Best effort cleanup; deleting the daemon session still releases agent-device state.
+    }
+  },
+};
 
 const iosDeviceRecordingBackend: RecordingBackend = {
   resolveOutputPath: resolveNativeRecordingOutputPath,
@@ -192,3 +252,68 @@ const unsupportedRecordingBackend: RecordingBackend = {
   stop: async () =>
     errorResponse('UNSUPPORTED_OPERATION', 'record is not supported on this device'),
 };
+
+function webRecordingUnsupportedFlags(req: DaemonRequest): string[] {
+  const unsupported: string[] = [];
+  if (req.flags?.fps !== undefined) unsupported.push('--fps');
+  if (req.flags?.quality !== undefined) unsupported.push('--quality');
+  if (req.flags?.screenshotMaxSize !== undefined) unsupported.push('--max-size');
+  if (req.flags?.hideTouches !== undefined) unsupported.push('--hide-touches');
+  return unsupported;
+}
+
+function validateWebRecordingFlags(req: DaemonRequest): DaemonResponse | null {
+  const unsupportedWebFlags = webRecordingUnsupportedFlags(req);
+  if (unsupportedWebFlags.length > 0) {
+    return errorResponse(
+      'INVALID_ARGS',
+      `web recordings do not support ${unsupportedWebFlags.join(', ')}; agent-browser records WebM directly`,
+    );
+  }
+  return null;
+}
+
+function validateWebRecordingOutputPath(outPath: string): DaemonResponse | null {
+  if (path.extname(outPath).toLowerCase() !== WEB_RECORDING_EXTENSION) {
+    return errorResponse(
+      'INVALID_ARGS',
+      `web recordings must use a ${WEB_RECORDING_EXTENSION} output path`,
+    );
+  }
+  return null;
+}
+
+function removeInvalidRecordingOutput(outPath: string): void {
+  try {
+    fs.rmSync(outPath, { force: true });
+  } catch {
+    // Best effort: the error response still reports the failed finalization.
+  }
+}
+
+async function stopWebRecording(params: {
+  recording: Extract<ActiveRecording, { platform: 'web' }>;
+}): Promise<DaemonResponse | null> {
+  const { recording } = params;
+  const provider = resolveWebProvider();
+  if (!provider.stopRecording) {
+    return errorResponse('UNSUPPORTED_OPERATION', 'record is not supported by this web provider');
+  }
+  await provider.stopRecording();
+  if (!hasNonEmptyFile(recording.outPath)) {
+    removeInvalidRecordingOutput(recording.outPath);
+    return errorResponse(
+      'COMMAND_FAILED',
+      `failed to stop recording: ${recording.outPath} was not finalized into a WebM video`,
+    );
+  }
+  return null;
+}
+
+function hasNonEmptyFile(outPath: string): boolean {
+  try {
+    return fs.statSync(outPath).size > 0;
+  } catch {
+    return false;
+  }
+}

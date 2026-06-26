@@ -96,6 +96,10 @@ async function startRecording(params: {
   const qualityFlag = req.flags?.quality;
   const maxSizeFlag = req.flags?.screenshotMaxSize;
   const backend = resolveRecordingBackendForDevice(device);
+  const platformValidationError = backend.validateStart?.(req) ?? null;
+  if (platformValidationError) {
+    return platformValidationError;
+  }
   if (
     fpsFlag !== undefined &&
     (!Number.isInteger(fpsFlag) ||
@@ -275,15 +279,17 @@ function deriveClientTelemetryPath(
   return deriveRecordingTelemetryPath(recording.clientOutPath);
 }
 
-function releaseRecordOnlySession(
+async function releaseRecordOnlySession(
   sessionStore: SessionStore,
   sessionName: string,
   session: SessionState,
   options: { writeLog?: boolean } = {},
-): void {
+): Promise<void> {
   if (!session.recordOnlySession) {
     return;
   }
+  const backend = resolveRecordingBackendForDevice(session.device);
+  await backend.cleanupRecordOnlySession?.(session);
   if (options.writeLog) {
     sessionStore.writeSessionLog(session);
   }
@@ -328,7 +334,7 @@ export async function handleRecordCommand(params: {
 
   const response = await stopRecording({ req, activeSession, device, logPath, deps });
   if (!response.ok) {
-    releaseRecordOnlySession(sessionStore, sessionName, activeSession);
+    await releaseRecordOnlySession(sessionStore, sessionName, activeSession);
     return response;
   }
 
@@ -342,6 +348,6 @@ export async function handleRecordCommand(params: {
       showTouches: response.data?.showTouches,
     },
   });
-  releaseRecordOnlySession(sessionStore, sessionName, activeSession, { writeLog: true });
+  await releaseRecordOnlySession(sessionStore, sessionName, activeSession, { writeLog: true });
   return response;
 }

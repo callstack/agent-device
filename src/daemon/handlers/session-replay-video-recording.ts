@@ -6,6 +6,10 @@ import { sleep } from '../../utils/timeouts.ts';
 import { handleRecordCommand } from './record-trace-recording.ts';
 import { appendReplayTestTimingEvent } from './session-test-runtime.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime.ts';
+import {
+  defaultRecordingPath,
+  recordingExtensionForPlatform,
+} from '../../recording/output-path.ts';
 
 const REPLAY_TEST_VIDEO_RECORDING_PREROLL_MS = 1_000;
 const REPLAY_TEST_VIDEO_RECORDING_TAIL_MS = 3_000;
@@ -36,9 +40,10 @@ export async function startReplayTestVideoRecordingIfReady(
   const activeSession = sessionStore.get(sessionName);
   if (!activeSession || activeSession.recording) return undefined;
 
+  const extension = recordingExtensionForPlatform(activeSession.device.platform);
   const videoPath = artifactsDir
-    ? path.join(artifactsDir, 'recording.mp4')
-    : `./recording-${Date.now()}.mp4`;
+    ? path.join(artifactsDir, `recording${extension}`)
+    : defaultRecordingPath(activeSession.device.platform);
   appendVideoTimingEvent(tracePath, {
     type: 'video_recording_start',
     session: sessionName,

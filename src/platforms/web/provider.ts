@@ -32,6 +32,8 @@ export type WebSnapshotResult = {
 export type WebProvider = {
   open(target: string, options?: WebOpenOptions): Promise<void>;
   close(target?: string): Promise<void>;
+  startRecording?(outPath: string): Promise<void>;
+  stopRecording?(): Promise<void>;
   snapshot(options?: WebSnapshotOptions): Promise<WebSnapshotResult>;
   screenshot(outPath: string, options?: WebScreenshotOptions): Promise<void>;
   setViewport(width: number, height: number): Promise<void>;

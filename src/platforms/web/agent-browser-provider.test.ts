@@ -26,6 +26,7 @@ test('agent-browser provider maps supported operations to session-scoped JSON co
 
     await withCommandExecutorOverride(recordingExecutor(calls), async () => {
       await provider.open('https://example.test');
+      const startRecording = await provider.startRecording?.('/tmp/clip.webm');
       await provider.screenshot('/tmp/page.png', { fullscreen: true });
       await provider.setViewport(1280, 900);
       await provider.click(10.4, 20.6);
@@ -36,13 +37,18 @@ test('agent-browser provider maps supported operations to session-scoped JSON co
       await provider.scroll('down', { pixels: 400 });
       const scrollResult = await provider.scroll('up', { pixels: 100, durationMs: 120 });
       assert.deepEqual(scrollResult, { durationMs: 120 });
+      const stopRecording = await provider.stopRecording?.();
       await provider.close();
+
+      assert.equal(startRecording, undefined);
+      assert.equal(stopRecording, undefined);
     });
 
     assert.deepEqual(
       calls.map((call) => call.args),
       [
         ['open', 'https://example.test', '--json', '--session', 'web-session'],
+        ['record', 'start', '/tmp/clip.webm', '--json', '--session', 'web-session'],
         ['screenshot', '--full', '/tmp/page.png', '--json', '--session', 'web-session'],
         ['set', 'viewport', '1280', '900', '--json', '--session', 'web-session'],
         ['mouse', 'move', '10', '21', '--json', '--session', 'web-session'],
@@ -60,6 +66,7 @@ test('agent-browser provider maps supported operations to session-scoped JSON co
         ['scroll', 'up', '34', '--json', '--session', 'web-session'],
         ['scroll', 'up', '33', '--json', '--session', 'web-session'],
         ['scroll', 'up', '33', '--json', '--session', 'web-session'],
+        ['record', 'stop', '--json', '--session', 'web-session'],
         ['close', '--json', '--session', 'web-session'],
       ],
     );

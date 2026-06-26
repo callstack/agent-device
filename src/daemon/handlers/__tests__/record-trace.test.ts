@@ -63,8 +63,10 @@ import {
   trimRecordingStart,
   overlayRecordingTouches,
 } from '../../../recording/overlay.ts';
+import { resolveTargetDevice } from '../../../core/dispatch.ts';
 import { runCmd, runCmdBackground } from '../../../utils/exec.ts';
 import { isPlayableVideo, waitForStableFile } from '../../../utils/video.ts';
+import { withWebProvider, type WebProvider } from '../../../platforms/web/provider.ts';
 
 type RunnerCall = {
   command: string;
@@ -79,6 +81,7 @@ type RunnerCall = {
 const mockRunCmd = vi.mocked(runCmd);
 const mockRunCmdBackground = vi.mocked(runCmdBackground);
 const mockRunIosRunnerCommand = vi.mocked(runIosRunnerCommand);
+const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
 const mockResizeRecording = vi.mocked(resizeRecording);
 const mockTrimRecordingStart = vi.mocked(trimRecordingStart);
 const mockOverlayRecordingTouches = vi.mocked(overlayRecordingTouches);
@@ -123,6 +126,34 @@ function makeIosSimulatorSession(name: string): SessionState {
     kind: 'simulator',
     booted: true,
   });
+}
+
+function makeWebSession(name: string): SessionState {
+  return makeSession(name, {
+    platform: 'web',
+    id: 'agent-browser-chrome',
+    name: 'Agent Browser Chrome',
+    kind: 'device',
+    target: 'desktop',
+    booted: true,
+  });
+}
+
+function makeWebProvider(overrides: Partial<WebProvider> = {}): WebProvider {
+  return {
+    open: async () => {},
+    close: async () => {},
+    startRecording: async () => {},
+    stopRecording: async () => {},
+    snapshot: async () => ({ nodes: [] }),
+    screenshot: async () => {},
+    setViewport: async () => {},
+    click: async () => {},
+    fill: async () => {},
+    typeText: async () => {},
+    scroll: async () => {},
+    ...overrides,
+  };
 }
 
 function makeIosSimulatorRecordingSession(
@@ -309,6 +340,238 @@ test('record stop keeps normal app session open when stop validation fails', asy
   expect(response?.ok).toBe(false);
   expect(sessionStore.get(sessionName)).toBe(session);
   expect(sessionStore.get(sessionName)?.recording).toBeUndefined();
+});
+
+test('record start and stop web recording keep the requested artifact path stable', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'web-recording-stable-path';
+  const session = makeWebSession(sessionName);
+  sessionStore.set(sessionName, session);
+  const outPath = path.join(os.tmpdir(), `${sessionName}.webm`);
+  const calls: string[] = [];
+  const provider = makeWebProvider({
+    startRecording: async (path) => {
+      calls.push(`start:${path}`);
+    },
+    stopRecording: async () => {
+      calls.push('stop');
+      fs.writeFileSync(outPath, 'webm');
+    },
+  });
+
+  try {
+    await withWebProvider(provider, async () => {
+      const start = await runRecordCommand({
+        sessionStore,
+        sessionName,
+        positionals: ['start', outPath],
+      });
+      const stop = await runRecordCommand({
+        sessionStore,
+        sessionName,
+        positionals: ['stop'],
+      });
+
+      expect(start?.ok).toBe(true);
+      expect((start as any).data?.outPath).toBe(outPath);
+      expect(stop?.ok).toBe(true);
+      expect((stop as any).data?.outPath).toBe(outPath);
+      expect((stop as any).data?.artifacts?.[0]?.path).toBe(outPath);
+    });
+    expect(calls).toEqual([`start:${outPath}`, 'stop']);
+  } finally {
+    fs.rmSync(outPath, { force: true });
+  }
+});
+
+test('record start web appends .webm to extensionless paths before delegating', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'web-recording-extensionless';
+  const session = makeWebSession(sessionName);
+  sessionStore.set(sessionName, session);
+  const requestedPath = path.join(os.tmpdir(), sessionName);
+  const expectedPath = `${requestedPath}.webm`;
+  const calls: string[] = [];
+  const provider = makeWebProvider({
+    startRecording: async (path) => {
+      calls.push(path);
+      fs.writeFileSync(path, 'webm');
+    },
+  });
+
+  try {
+    await withWebProvider(provider, async () => {
+      const start = await runRecordCommand({
+        sessionStore,
+        sessionName,
+        positionals: ['start', requestedPath],
+      });
+
+      expect(start?.ok).toBe(true);
+      expect((start as any).data?.outPath).toBe(expectedPath);
+    });
+    expect(calls).toEqual([expectedPath]);
+  } finally {
+    fs.rmSync(expectedPath, { force: true });
+  }
+});
+
+test('record start web rejects non-WebM output paths before delegating', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'web-recording-mp4';
+  const session = makeWebSession(sessionName);
+  sessionStore.set(sessionName, session);
+  const provider = makeWebProvider({
+    startRecording: async () => {
+      throw new Error('should not delegate invalid web recording path');
+    },
+  });
+
+  await withWebProvider(provider, async () => {
+    const start = await runRecordCommand({
+      sessionStore,
+      sessionName,
+      positionals: ['start', path.join(os.tmpdir(), `${sessionName}.mp4`)],
+    });
+
+    expect(start?.ok).toBe(false);
+    if (!start || start.ok) {
+      throw new Error(`expected web recording start failure, got ${JSON.stringify(start)}`);
+    }
+    expect(start.error.code).toBe('INVALID_ARGS');
+    expect(start.error.message).toMatch(/\.webm output path/);
+  });
+});
+
+test('record start web rejects native recording flags before delegating', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'web-recording-native-flags';
+  const session = makeWebSession(sessionName);
+  sessionStore.set(sessionName, session);
+  const provider = makeWebProvider({
+    startRecording: async () => {
+      throw new Error('should not delegate unsupported web recording flags');
+    },
+  });
+
+  await withWebProvider(provider, async () => {
+    const start = await runRecordCommand({
+      sessionStore,
+      sessionName,
+      positionals: ['start', path.join(os.tmpdir(), `${sessionName}.webm`)],
+      flags: { fps: 0, quality: 'high', screenshotMaxSize: 1024, hideTouches: true },
+    });
+
+    expect(start?.ok).toBe(false);
+    if (!start || start.ok) {
+      throw new Error(`expected web recording start failure, got ${JSON.stringify(start)}`);
+    }
+    expect(start.error.code).toBe('INVALID_ARGS');
+    expect(start.error.message).toContain('--fps, --quality, --max-size, --hide-touches');
+  });
+});
+
+test('record start web requires an existing browser session', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'web-recording-no-open';
+  mockResolveTargetDevice.mockResolvedValueOnce({
+    platform: 'web',
+    id: 'agent-browser-chrome',
+    name: 'Agent Browser Chrome',
+    kind: 'device',
+    target: 'desktop',
+    booted: true,
+  });
+
+  const response = await runRecordCommand({
+    sessionStore,
+    sessionName,
+    positionals: ['start', path.join(os.tmpdir(), `${sessionName}.webm`)],
+  });
+
+  expect(response?.ok).toBe(false);
+  if (!response || response.ok) {
+    throw new Error(`expected web recording start failure, got ${JSON.stringify(response)}`);
+  }
+  expect(response.error.code).toBe('INVALID_ARGS');
+  expect(response.error.message).toMatch(/run open <url> --platform web first/);
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+});
+
+test('record stop closes record-only web sessions during cleanup', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'web-recording-record-only-cleanup';
+  const session = makeWebSession(sessionName);
+  session.recordOnlySession = true;
+  const outPath = path.join(os.tmpdir(), `${sessionName}.webm`);
+  session.recording = {
+    platform: 'web',
+    outPath,
+    startedAt: Date.now(),
+    showTouches: false,
+    gestureEvents: [],
+  };
+  sessionStore.set(sessionName, session);
+  const calls: string[] = [];
+  const provider = makeWebProvider({
+    close: async () => {
+      calls.push('close');
+    },
+    stopRecording: async () => {
+      calls.push('stop');
+      fs.writeFileSync(outPath, 'webm');
+    },
+  });
+
+  try {
+    await withWebProvider(provider, async () => {
+      const response = await runRecordCommand({
+        sessionStore,
+        sessionName,
+        positionals: ['stop'],
+      });
+
+      expect(response?.ok).toBe(true);
+    });
+    expect(calls).toEqual(['stop', 'close']);
+    expect(sessionStore.get(sessionName)).toBeUndefined();
+  } finally {
+    fs.rmSync(outPath, { force: true });
+  }
+});
+
+test('record stop rejects web recording when agent-browser does not finalize the file', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'web-recording-missing-file';
+  const session = makeWebSession(sessionName);
+  sessionStore.set(sessionName, session);
+  const outPath = path.join(os.tmpdir(), `${sessionName}.webm`);
+  const provider = makeWebProvider();
+
+  try {
+    await withWebProvider(provider, async () => {
+      const start = await runRecordCommand({
+        sessionStore,
+        sessionName,
+        positionals: ['start', outPath],
+      });
+      const stop = await runRecordCommand({
+        sessionStore,
+        sessionName,
+        positionals: ['stop'],
+      });
+
+      expect(start?.ok).toBe(true);
+      expect(stop?.ok).toBe(false);
+      if (!stop || stop.ok) {
+        throw new Error(`expected web recording stop failure, got ${JSON.stringify(stop)}`);
+      }
+      expect(stop.error.message).toMatch(/not finalized into a WebM video/);
+      expect(fs.existsSync(outPath)).toBe(false);
+    });
+  } finally {
+    fs.rmSync(outPath, { force: true });
+  }
 });
 
 test('record start resolves relative output path from request cwd', async () => {
@@ -1933,7 +2196,7 @@ test('record start falls back to /data/local/tmp when /sdcard is unavailable on 
   expect(response?.ok).toBe(true);
   const recording = sessionStore.get(sessionName)?.recording;
   expect(recording?.platform).toBe('android');
-  expect(recording?.remotePath ?? '').toMatch(
+  expect(recording?.platform === 'android' ? recording.remotePath : '').toMatch(
     /^\/data\/local\/tmp\/agent-device-recording-\d+\.mp4$/,
   );
 });

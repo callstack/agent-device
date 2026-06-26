@@ -42,6 +42,7 @@ const LINUX_DEVICE: KindMatrix = { device: true };
 const LINUX_NONE: KindMatrix = {};
 const WEB_DEVICE: KindMatrix = { device: true };
 const WEB_RUNTIME_COMMANDS = ['open', 'close'] as const;
+const WEB_RECORDING_COMMANDS = ['record'] as const;
 const WEB_QUERY_COMMANDS = [
   'find',
   'get',
@@ -55,6 +56,7 @@ const WEB_INTERACTION_COMMANDS = ['click', 'fill', 'focus', 'press', 'scroll', '
 const WEB_SETTING_COMMANDS = ['viewport'] as const;
 const WEB_SUPPORTED_COMMANDS = new Set<string>([
   ...WEB_RUNTIME_COMMANDS,
+  ...WEB_RECORDING_COMMANDS,
   ...WEB_QUERY_COMMANDS,
   ...WEB_INTERACTION_COMMANDS,
   ...WEB_SETTING_COMMANDS,

@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { createAgentDeviceClient } from '../../../src/client.ts';
+import { prepareRemoteRequestArtifacts } from '../../../src/daemon-artifacts.ts';
 import { createDaemonProxyServer } from '../../../src/daemon-proxy.ts';
 import { normalizeAgentDeviceError } from '../../../src/utils/errors.ts';
 import {
@@ -588,6 +589,59 @@ test('Provider-backed integration remote daemon client materializes artifacts an
     await closeLoopbackServer(server);
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
+});
+
+test('remote web recording defaults client and daemon artifact paths to WebM', async () => {
+  const prepared = await prepareRemoteRequestArtifacts(
+    {
+      session: 'default',
+      command: 'record',
+      positionals: ['start'],
+      flags: { platform: 'web' },
+      meta: { cwd: '/tmp/project' },
+    },
+    { baseUrl: 'http://127.0.0.1:1', token: 'remote-token' },
+  );
+
+  assert.equal(prepared.positionals[0], 'start');
+  assert.match(String(prepared.positionals[1] ?? ''), /^\/tmp\/agent-device-recording-.*\.webm$/);
+  assert.match(
+    prepared.clientArtifactPaths?.outPath ?? '',
+    /^\/tmp\/project\/recording-\d+\.webm$/,
+  );
+});
+
+test('remote web recording appends WebM extension to extensionless client paths', async () => {
+  const prepared = await prepareRemoteRequestArtifacts(
+    {
+      session: 'default',
+      command: 'record',
+      positionals: ['start', 'recording'],
+      flags: { platform: 'web' },
+      meta: { cwd: '/tmp/project' },
+    },
+    { baseUrl: 'http://127.0.0.1:1', token: 'remote-token' },
+  );
+
+  assert.equal(prepared.positionals[0], 'start');
+  assert.match(String(prepared.positionals[1] ?? ''), /^\/tmp\/agent-device-recording-.*\.webm$/);
+  assert.equal(prepared.clientArtifactPaths?.outPath, '/tmp/project/recording.webm');
+});
+
+test('remote recording without platform or requested path lets daemon choose session-specific default', async () => {
+  const prepared = await prepareRemoteRequestArtifacts(
+    {
+      session: 'default',
+      command: 'record',
+      positionals: ['start'],
+      flags: {},
+      meta: { cwd: '/tmp/project' },
+    },
+    { baseUrl: 'http://127.0.0.1:1', token: 'remote-token' },
+  );
+
+  assert.deepEqual(prepared.positionals, ['start']);
+  assert.equal(prepared.clientArtifactPaths, undefined);
 });
 
 test('Provider-backed integration daemon proxy forwards remote client RPC commands', async (t) => {

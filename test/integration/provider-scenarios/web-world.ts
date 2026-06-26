@@ -40,6 +40,13 @@ export async function createWebDesktopWorld(): Promise<WebDesktopWorld> {
     close: async (target) => {
       semanticCalls.push(['web', 'close', target ?? '']);
     },
+    startRecording: async (outPath) => {
+      semanticCalls.push(['web', 'recordStart', outPath]);
+      fs.writeFileSync(outPath, 'webm');
+    },
+    stopRecording: async () => {
+      semanticCalls.push(['web', 'recordStop']);
+    },
     snapshot: async (options) => {
       semanticCalls.push([
         'web',

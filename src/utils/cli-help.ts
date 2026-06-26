@@ -281,12 +281,14 @@ Validation and evidence:
     agent-device click @e12 --platform web
     agent-device fill @e13 "qa@example.com" --platform web
     agent-device wait text "Welcome" 3000 --platform web
+    agent-device record start ./artifacts/web-flow.webm --platform web
     agent-device network dump 25 --include headers --platform web
     agent-device screenshot ./artifacts/web-home.png --platform web
     agent-device screenshot ./artifacts/web-full.png --platform web --fullscreen
     agent-device viewport 1280 900 --platform web
+    agent-device record stop --platform web
     agent-device close --platform web
-  Minimal web support is for browser sessions with open, snapshot, find, get, is, click/press, fill/type, wait, network dump, screenshot, close, and replay over those commands. Use agent-browser directly for browser-specific features that agent-device does not surface, such as tab/devtools management, advanced page scripting, network routing/HAR, or raw browser debugging.
+  Minimal web support is for browser sessions with open, snapshot, find, get, is, click/press, fill/type, wait, network dump, screenshot, record start/stop with WebM output, close, and replay over those commands. Use agent-browser directly for browser-specific features that agent-device does not surface, such as tab/devtools management, advanced page scripting, network routing/HAR, or raw browser debugging.
   macOS menu bar: open ... --platform macos --surface menubar; snapshot -i --platform macos --surface menubar.
   Maestro full-suite validation on explicit connected devices uses one test command with a comma-separated --device list and --shard-all. Use --shard-split only when splitting suite entries across devices:
     agent-device test ./e2e/maestro --maestro --device udid1,emulator-5554 --shard-all 2
@@ -753,14 +755,16 @@ First-slice loop:
   agent-device click @e12 --platform web
   agent-device fill @e13 "qa@example.com" --platform web
   agent-device wait text "Welcome" 3000 --platform web
+  agent-device record start ./artifacts/web-flow.webm --platform web
   agent-device network dump 25 --include headers --platform web
   agent-device screenshot ./artifacts/web-home.png --platform web
   agent-device screenshot ./artifacts/web-full.png --platform web --fullscreen
   agent-device viewport 1280 900 --platform web
+  agent-device record stop --platform web
   agent-device close --platform web
 
 Supported in agent-device web sessions:
-  open <url>, snapshot -i, get text/attrs, is visible/exists/text, find text/selector, click/press @ref or selector, fill/type @ref or selector, wait text/selector, network dump, screenshot, close, and replay scripts made from those commands.
+  open <url>, snapshot -i, get text/attrs, is visible/exists/text, find text/selector, click/press @ref or selector, fill/type @ref or selector, wait text/selector, network dump, screenshot, record start/stop with WebM output, close, and replay scripts made from those commands.
 
 Out of scope for agent-device web support:
   Browser runtime debugging, tabs/windows/devtools control, network routing/interception/HAR, storage/cookie management, arbitrary page scripting, downloads/uploads, multi-page orchestration, and agent-browser-specific diagnostics. Use agent-browser directly for those browser-specific workflows.

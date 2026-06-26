@@ -37,6 +37,12 @@ export function createAgentBrowserWebProvider(
     async close() {
       await runJson(['close']);
     },
+    async startRecording(outPath) {
+      await runJson(['record', 'start', outPath]);
+    },
+    async stopRecording() {
+      await runJson(['record', 'stop']);
+    },
     async snapshot(snapshotOptions) {
       return await captureAgentBrowserSnapshot(runJson, snapshotOptions);
     },

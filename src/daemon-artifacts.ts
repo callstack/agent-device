@@ -6,6 +6,10 @@ import { pipeline } from 'node:stream/promises';
 import { AppError } from './utils/errors.ts';
 import type { DaemonArtifact, DaemonRequest, DaemonResponse } from './daemon/types.ts';
 import { buildDaemonHttpAuthHeaders } from './daemon/http-contract.ts';
+import {
+  appendRecordingExtensionWhenMissing,
+  recordingExtensionForPlatform,
+} from './recording/output-path.ts';
 import { uploadArtifact } from './upload-client.ts';
 
 // Mirrors the current daemon RPC timeout, but artifact download timeouts may diverge.
@@ -214,15 +218,41 @@ function prepareRemoteArtifactCommand(
     };
   }
   if (req.command === 'record' && (positionals[0] ?? '').toLowerCase() === 'start') {
-    const localPath = resolveClientArtifactOutputPath(req, 'outPath', '.mp4', 1);
+    if (!recordingHasRequestedClientPath(req) && req.flags?.platform === undefined) {
+      return null;
+    }
+    const fallbackExtension = recordingFallbackExtension(req);
+    const localPath = normalizeRecordingClientArtifactPath(
+      resolveClientArtifactOutputPath(req, 'outPath', fallbackExtension, 1),
+      req,
+    );
     return {
       field: 'outPath',
       localPath,
       positionalIndex: 1,
-      positionalPath: buildRemoteTempArtifactPath('recording', path.extname(localPath) || '.mp4'),
+      positionalPath: buildRemoteTempArtifactPath(
+        'recording',
+        path.extname(localPath) || fallbackExtension,
+      ),
     };
   }
   return null;
+}
+
+function recordingFallbackExtension(req: Omit<DaemonRequest, 'token'>): string {
+  return recordingExtensionForPlatform(req.flags?.platform);
+}
+
+function recordingHasRequestedClientPath(req: Omit<DaemonRequest, 'token'>): boolean {
+  return hasNonEmptyString(req.positionals?.[1]) || hasNonEmptyString(req.flags?.out);
+}
+
+function normalizeRecordingClientArtifactPath(
+  localPath: string,
+  req: Omit<DaemonRequest, 'token'>,
+): string {
+  if (req.flags?.platform !== 'web') return localPath;
+  return appendRecordingExtensionWhenMissing(localPath, recordingFallbackExtension(req));
 }
 
 function resolveClientArtifactOutputPath(
@@ -233,8 +263,12 @@ function resolveClientArtifactOutputPath(
 ): string {
   const requested = req.positionals?.[positionalIndex] ?? req.flags?.out;
   const fallbackName = `${field === 'path' ? 'screenshot' : 'recording'}-${Date.now()}${fallbackExtension}`;
-  const rawPath = requested && requested.trim().length > 0 ? requested : fallbackName;
+  const rawPath = hasNonEmptyString(requested) ? requested : fallbackName;
   return path.isAbsolute(rawPath) ? rawPath : path.resolve(req.meta?.cwd ?? process.cwd(), rawPath);
+}
+
+function hasNonEmptyString(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
 function buildRemoteTempArtifactPath(prefix: string, extension: string): string {
