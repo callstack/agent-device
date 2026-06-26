@@ -426,6 +426,28 @@ test('audio probe validates daemon duration bounds', async () => {
   assert.equal(provider.probeAudio.mock.calls.length, 0);
 });
 
+test('audio probe rejects non-web sessions in daemon handler', async () => {
+  const sessionStore = makeSessionStore('agent-device-session-observability-audio-');
+  sessionStore.set('android', makeAndroidSession('android'));
+  const response = await handleSessionObservabilityCommands({
+    req: {
+      token: 't',
+      session: 'android',
+      command: 'audio',
+      positionals: ['probe', 'status'],
+      flags: {},
+    },
+    sessionName: 'android',
+    sessionStore,
+  });
+
+  assert.equal(response?.ok, false);
+  if (response && !response.ok) {
+    assert.equal(response.error.code, 'UNSUPPORTED_OPERATION');
+    assert.match(response.error.message, /web browser sessions only/);
+  }
+});
+
 test('audio probe validates daemon bucket bounds', async () => {
   const provider = makeAudioWebProvider();
   const response = await runAudioCommand(['probe', 'start', '1000', '99'], provider);

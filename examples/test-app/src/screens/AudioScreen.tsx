@@ -1,7 +1,7 @@
 import { createElement, useEffect, useRef, useState } from 'react';
 import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { InlineBadge, ScreenTitle, SectionCard } from '../components';
+import { ActionButton, InlineBadge, ScreenTitle, SectionCard } from '../components';
 import { useAppColors, type AppColors } from '../theme';
 
 type BrowserAudioElement = {
@@ -20,31 +20,44 @@ export function AudioScreen() {
   const styles = createStyles(colors);
   const audioRef = useRef<BrowserAudioElement | null>(null);
   const playbackRef = useRef<SamplePlayback | null>(null);
-  const [playbackState, setPlaybackState] = useState<'ready' | 'playing' | 'paused' | 'ended'>(
-    'ready',
-  );
+  const [playbackState, setPlaybackState] = useState<
+    'ready' | 'playing' | 'paused' | 'ended' | 'error'
+  >('ready');
 
   useEffect(() => {
-    return () => stopSample('ended');
+    return () => {
+      playbackRef.current?.stop();
+      playbackRef.current = null;
+      const audio = audioRef.current;
+      if (audio) {
+        audio.pause();
+        audio.srcObject = null;
+      }
+    };
   }, []);
 
   function playSample() {
     const audio = audioRef.current;
     if (!audio) return;
     stopSample('ready');
-    const playback = createClassicLoopStream(() => {
+    const playback = createBeepStream(() => {
       stopSample('ended');
     });
     playbackRef.current = playback;
     audio.srcObject = playback.stream;
-    void audio.play().then(() => setPlaybackState('playing'));
+    void audio
+      .play()
+      .then(() => setPlaybackState('playing'))
+      .catch(() => {
+        stopSample('error');
+      });
   }
 
   function pauseSample() {
     stopSample('paused');
   }
 
-  function stopSample(nextState: 'ready' | 'paused' | 'ended') {
+  function stopSample(nextState: 'ready' | 'paused' | 'ended' | 'error') {
     const audio = audioRef.current;
     playbackRef.current?.stop();
     playbackRef.current = null;
@@ -64,55 +77,45 @@ export function AudioScreen() {
         testID="audio-title"
       />
 
-      <SectionCard subtitle="Generated tracker-style loop, 8 seconds." title="Classic loop">
+      <SectionCard subtitle="Generated browser beep, 6 seconds." title="Audio sample">
         {Platform.OS === 'web' ? (
-          <View style={styles.player} testID="classic-audio-card">
+          <View style={styles.player} testID="audio-sample-card">
             {createElement('audio', {
-              'aria-label': 'Classic sample audio',
+              'aria-label': 'Sample audio',
               controls: true,
               loop: false,
               onPause: () => {
-                if (playbackState === 'playing') setPlaybackState('paused');
+                if (playbackRef.current) setPlaybackState('paused');
               },
               onPlay: () => setPlaybackState('playing'),
               ref: (node: BrowserAudioElement | null) => {
                 audioRef.current = node;
               },
               style: { width: '100%' },
-              'data-testid': 'classic-audio',
+              'data-testid': 'sample-audio',
             })}
 
-            <View style={styles.statusRow}>
+            <View style={styles.statusRow} testID="audio-playback-state">
               <InlineBadge
-                label={playbackState === 'playing' ? 'Playing' : playbackState}
-                tone={playbackState === 'playing' ? 'success' : 'neutral'}
+                label={playbackLabel(playbackState)}
+                tone={
+                  playbackState === 'playing'
+                    ? 'success'
+                    : playbackState === 'error'
+                      ? 'danger'
+                      : 'neutral'
+                }
               />
-              <Text style={styles.statusText} testID="audio-playback-state">
-                {playbackState}
-              </Text>
             </View>
 
             <View style={styles.actionRow}>
-              {createElement(
-                'button',
-                {
-                  'aria-label': 'Start sample',
-                  onClick: playSample,
-                  style: webButtonStyle(colors, 'primary'),
-                  'data-testid': 'start-audio',
-                },
-                'Start sample',
-              )}
-              {createElement(
-                'button',
-                {
-                  'aria-label': 'Pause',
-                  onClick: pauseSample,
-                  style: webButtonStyle(colors, 'secondary'),
-                  'data-testid': 'pause-audio',
-                },
-                'Pause',
-              )}
+              <ActionButton label="Start sample" onPress={playSample} testID="start-audio" />
+              <ActionButton
+                kind="secondary"
+                label="Pause"
+                onPress={pauseSample}
+                testID="pause-audio"
+              />
             </View>
           </View>
         ) : (
@@ -125,72 +128,48 @@ export function AudioScreen() {
   );
 }
 
-function webButtonStyle(colors: AppColors, kind: 'primary' | 'secondary') {
-  return {
-    backgroundColor: kind === 'primary' ? colors.text : 'transparent',
-    border: `1px solid ${kind === 'primary' ? colors.text : colors.lineStrong}`,
-    borderRadius: 4,
-    color: kind === 'primary' ? colors.surface : colors.text,
-    cursor: 'pointer',
-    fontSize: 15,
-    fontWeight: 600,
-    padding: '13px 16px',
-  };
+function playbackLabel(state: 'ready' | 'playing' | 'paused' | 'ended' | 'error'): string {
+  return state === 'error' ? 'Playback blocked' : state === 'playing' ? 'Playing' : state;
 }
 
-function createClassicLoopStream(onEnded: () => void): SamplePlayback {
+function createBeepStream(onEnded: () => void): SamplePlayback {
   const webkitAudio = window as Window & { webkitAudioContext?: typeof AudioContext };
   const AudioContextCtor = window.AudioContext ?? webkitAudio.webkitAudioContext;
   if (!AudioContextCtor) throw new Error('Web Audio API is not available.');
   const context = new AudioContextCtor();
   const destination = context.createMediaStreamDestination();
-  const master = context.createGain();
-  const durationSeconds = 8;
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  const durationSeconds = 6;
   const startAt = context.currentTime + 0.03;
-  const melody = [196, 247, 294, 330, 392, 330, 294, 247, 220, 262, 330, 392, 494, 392, 330, 262];
+  const endAt = startAt + durationSeconds;
 
-  master.gain.value = 0.55;
-  master.connect(destination);
+  oscillator.type = 'square';
+  oscillator.frequency.setValueAtTime(440, startAt);
+  gain.gain.setValueAtTime(0.0001, startAt);
+  gain.gain.exponentialRampToValueAtTime(0.35, startAt + 0.05);
+  gain.gain.setValueAtTime(0.35, endAt - 0.08);
+  gain.gain.exponentialRampToValueAtTime(0.0001, endAt);
+  oscillator.connect(gain);
+  gain.connect(destination);
+  oscillator.start(startAt);
+  oscillator.stop(endAt + 0.01);
   void context.resume();
-
-  for (let step = 0; step < durationSeconds * 4; step += 1) {
-    const noteStart = startAt + step * 0.25;
-    const frequency = melody[step % melody.length] ?? 220;
-    scheduleTone(context, master, frequency, noteStart, 0.2, 0.42);
-    if (step % 4 === 0) scheduleTone(context, master, 98, noteStart, 0.22, 0.25);
-    if (step % 2 === 0) scheduleTone(context, master, 1760, noteStart, 0.04, 0.08);
-  }
 
   const endTimer = window.setTimeout(onEnded, durationSeconds * 1000);
   return {
     stream: destination.stream,
     stop: () => {
       window.clearTimeout(endTimer);
+      try {
+        oscillator.stop();
+      } catch {
+        // The scheduled stop may already have fired.
+      }
       destination.stream.getTracks().forEach((track) => track.stop());
       void context.close();
     },
   };
-}
-
-function scheduleTone(
-  context: AudioContext,
-  output: AudioNode,
-  frequency: number,
-  startAt: number,
-  duration: number,
-  volume: number,
-): void {
-  const oscillator = context.createOscillator();
-  const gain = context.createGain();
-  oscillator.type = 'square';
-  oscillator.frequency.setValueAtTime(frequency, startAt);
-  gain.gain.setValueAtTime(0.0001, startAt);
-  gain.gain.exponentialRampToValueAtTime(volume, startAt + 0.015);
-  gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
-  oscillator.connect(gain);
-  gain.connect(output);
-  oscillator.start(startAt);
-  oscillator.stop(startAt + duration + 0.01);
 }
 
 function createStyles(colors: AppColors) {

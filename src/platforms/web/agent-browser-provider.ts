@@ -115,6 +115,10 @@ function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
   const note = (probe, message) => {
     if (!probe.notes.includes(message)) probe.notes.push(message);
   };
+  const scopeNote =
+    'Audio probe samples HTML media elements exposed to Web Audio; it is not whole-tab or system audio capture.';
+  const routingNote =
+    'URL-backed media elements may be routed through the probe AudioContext while they are observed.';
   const mediaElements = () => Array.from(document.querySelectorAll('audio,video'));
   const stopProbe = (probe, reason) => {
     if (!probe || probe.state === 'stopped') return probe;
@@ -251,9 +255,7 @@ function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
         sourceCount: 0,
         rmsDbfs: [],
         peakDbfs: [],
-        notes: [
-          'Audio probe samples HTML media elements exposed to Web Audio; it is not whole-tab or system audio capture.'
-        ],
+        notes: [scopeNote, routingNote],
       };
     }
     return {
@@ -277,10 +279,7 @@ function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
       startedAt: new Date(probe.startedAt).toISOString(),
       stoppedAt: probe.stoppedAt ? new Date(probe.stoppedAt).toISOString() : undefined,
       reason: probe.reason,
-      notes: [
-        'Audio probe samples HTML media elements exposed to Web Audio; it is not whole-tab or system audio capture.',
-        ...probe.notes,
-      ],
+      notes: [scopeNote, routingNote, ...probe.notes],
     };
   };
   const action = options.action || 'status';
