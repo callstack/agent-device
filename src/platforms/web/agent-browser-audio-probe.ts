@@ -24,10 +24,10 @@ const audioProbePageScriptFunctions = [
 
 export function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
   const scriptBody = audioProbePageScriptFunctions.map((fn) => `${fn.toString()};`).join('');
-  const action = readAudioProbeEvalAction(options.action);
+  const action = audioProbeEvalActionLiteral(options.action);
   const durationMs = finiteNumberLiteralOrUndefined(options.durationMs);
   const bucketMs = finiteNumberLiteralOrUndefined(options.bucketMs);
-  return `(()=>{${scriptBody}return ${audioProbeEvalScript.name}({action:${JSON.stringify(action)},durationMs:${durationMs},bucketMs:${bucketMs}})})()`;
+  return `(()=>{${scriptBody}return ${audioProbeEvalScript.name}({action:${action},durationMs:${durationMs},bucketMs:${bucketMs}})})()`;
 }
 
 export function normalizeAgentBrowserAudioProbeResult(data: unknown): WebAudioProbeResult {
@@ -58,16 +58,16 @@ type AudioProbePageStats = { rms: number; peak: number };
 declare const window: AudioProbePageRecord;
 declare const document: { querySelectorAll(selector: string): any[] };
 
-function readAudioProbeEvalAction(
+function audioProbeEvalActionLiteral(
   action: WebAudioProbeOptions['action'],
-): WebAudioProbeOptions['action'] {
+): "'start'" | "'stop'" | "'status'" {
   switch (action) {
     case 'start':
-      return 'start';
+      return "'start'";
     case 'stop':
-      return 'stop';
+      return "'stop'";
     default:
-      return 'status';
+      return "'status'";
   }
 }
 
