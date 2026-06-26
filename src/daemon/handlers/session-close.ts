@@ -115,58 +115,64 @@ export async function handleCloseCommand(params: {
   if (!session) {
     return await closeWithoutSession(req, logPath);
   }
-  if (session.appLog) {
-    await stopAppLog(session.appLog);
-  }
-  await stopSessionApplePerfCapture(session);
-  await stopSessionAndroidNativePerfCapture(session);
-  await stopSessionAndroidSnapshotHelper(session);
-  if (shouldDispatchPlatformClose(req, session)) {
-    if (shouldStopAppleRunnerBeforeTargetedClose(session)) {
-      await stopAppleRunnerForClose(session);
+  try {
+    if (session.appLog) {
+      await stopAppLog(session.appLog);
     }
-    await dispatchCommand(session.device, 'close', req.positionals ?? [], req.flags?.out, {
-      ...contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath),
+    await stopSessionApplePerfCapture(session);
+    await stopSessionAndroidNativePerfCapture(session);
+    await stopSessionAndroidSnapshotHelper(session);
+    if (shouldDispatchPlatformClose(req, session)) {
+      if (shouldStopAppleRunnerBeforeTargetedClose(session)) {
+        await stopAppleRunnerForClose(session);
+      }
+      await dispatchCommand(session.device, 'close', req.positionals ?? [], req.flags?.out, {
+        ...contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath),
+      });
+      await settleIosSimulator(session.device, IOS_SIMULATOR_POST_CLOSE_SETTLE_MS);
+    }
+    if (
+      isApplePlatform(session.device.platform) &&
+      !shouldRetainAppleRunnerAfterClose(req, session)
+    ) {
+      // The targeted close path stops before dispatch to avoid runner/app races.
+      // Stop again here for idempotent cleanup, and keep cleanup-sensitive closes explicit.
+      await stopAppleRunnerForClose(session);
+    } else if (isApplePlatform(session.device.platform)) {
+      emitDiagnostic({
+        level: 'debug',
+        phase: 'ios_runner_retained_after_close',
+        data: {
+          session: session.name,
+          deviceId: session.device.id,
+        },
+      });
+    }
+    const runtime = sessionStore.getRuntimeHints(sessionName);
+    if (hasRuntimeTransportHints(runtime) && session.appBundleId) {
+      await clearRuntimeHintsFromApp({
+        device: session.device,
+        appId: session.appBundleId,
+      }).catch(() => {});
+    }
+    sessionStore.recordAction(session, {
+      command: 'close',
+      positionals: req.positionals ?? [],
+      flags: req.flags ?? {},
+      result: { session: session.name, ...successText(`Closed: ${session.name}`) },
     });
-    await settleIosSimulator(session.device, IOS_SIMULATOR_POST_CLOSE_SETTLE_MS);
+    if (req.flags?.saveScript) {
+      session.recordSession = true;
+    }
+    sessionStore.writeSessionLog(session);
+    await cleanupRetainedMaterializedPathsForSession(sessionName).catch(() => {});
+  } finally {
+    // Always release the device lease and drop the session, even if teardown
+    // above threw: a failed close must not strand device ownership until the
+    // inactivity expiry. The original error still propagates after finally.
+    releaseSessionLease(session, leaseRegistry);
+    sessionStore.delete(sessionName);
   }
-  if (
-    isApplePlatform(session.device.platform) &&
-    !shouldRetainAppleRunnerAfterClose(req, session)
-  ) {
-    // The targeted close path stops before dispatch to avoid runner/app races.
-    // Stop again here for idempotent cleanup, and keep cleanup-sensitive closes explicit.
-    await stopAppleRunnerForClose(session);
-  } else if (isApplePlatform(session.device.platform)) {
-    emitDiagnostic({
-      level: 'debug',
-      phase: 'ios_runner_retained_after_close',
-      data: {
-        session: session.name,
-        deviceId: session.device.id,
-      },
-    });
-  }
-  const runtime = sessionStore.getRuntimeHints(sessionName);
-  if (hasRuntimeTransportHints(runtime) && session.appBundleId) {
-    await clearRuntimeHintsFromApp({
-      device: session.device,
-      appId: session.appBundleId,
-    }).catch(() => {});
-  }
-  sessionStore.recordAction(session, {
-    command: 'close',
-    positionals: req.positionals ?? [],
-    flags: req.flags ?? {},
-    result: { session: session.name, ...successText(`Closed: ${session.name}`) },
-  });
-  if (req.flags?.saveScript) {
-    session.recordSession = true;
-  }
-  sessionStore.writeSessionLog(session);
-  await cleanupRetainedMaterializedPathsForSession(sessionName).catch(() => {});
-  releaseSessionLease(session, leaseRegistry);
-  sessionStore.delete(sessionName);
   const shutdownResult = await maybeShutdownSessionTarget({
     device: session.device,
     shutdownRequested: req.flags?.shutdown,
