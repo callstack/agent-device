@@ -9,7 +9,6 @@ export type DeviceLease = {
   runId: string;
   backend: LeaseBackend;
   leaseProvider?: string;
-  provider?: string;
   deviceKey?: string;
   clientId?: string;
   createdAt: number;
@@ -30,8 +29,7 @@ export type LeaseRegistryOptions = {
 export type AllocateLeaseRequest = {
   tenantId: string;
   runId: string;
-  backend?: LeaseBackend;
-  provider?: string;
+  leaseBackend?: LeaseBackend;
   leaseProvider?: string;
   deviceKey?: string;
   clientId?: string;
@@ -42,8 +40,7 @@ export type HeartbeatLeaseRequest = {
   leaseId: string;
   tenantId?: string;
   runId?: string;
-  backend?: LeaseBackend;
-  provider?: string;
+  leaseBackend?: LeaseBackend;
   leaseProvider?: string;
   deviceKey?: string;
   clientId?: string;
@@ -54,19 +51,17 @@ export type ReleaseLeaseRequest = {
   leaseId: string;
   tenantId?: string;
   runId?: string;
-  backend?: LeaseBackend;
-  provider?: string;
+  leaseBackend?: LeaseBackend;
   leaseProvider?: string;
   deviceKey?: string;
   clientId?: string;
 };
 
 export type AdmissionRequest = {
-  tenantId: string | undefined;
-  runId: string | undefined;
-  leaseId: string | undefined;
-  backend?: LeaseBackend;
-  provider?: string;
+  tenantId?: string;
+  runId?: string;
+  leaseId?: string;
+  leaseBackend?: LeaseBackend;
   leaseProvider?: string;
   deviceKey?: string;
   clientId?: string;
@@ -75,8 +70,16 @@ export type AdmissionRequest = {
 type LeaseScopeMatchRequest = {
   tenantId?: string;
   runId?: string;
-  backend?: LeaseBackend;
-  provider?: string;
+  leaseBackend?: LeaseBackend;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
+};
+
+type NormalizedLeaseScopeMatchRequest = {
+  tenantId?: string;
+  runId?: string;
+  leaseBackend?: LeaseBackend;
   leaseProvider?: string;
   deviceKey?: string;
   clientId?: string;
@@ -123,16 +126,8 @@ function normalizeClientId(raw: string | undefined): string | undefined {
   return normalizeAgentIdentifier(raw, 'client id', 128);
 }
 
-function normalizeLeaseProviderFields(request: {
-  provider?: string;
-  leaseProvider?: string;
-}): string | undefined {
-  const provider = normalizeAgentIdentifier(request.provider, 'lease provider', 64);
-  const leaseProvider = normalizeAgentIdentifier(request.leaseProvider, 'lease provider', 64);
-  if (provider && leaseProvider && provider !== leaseProvider) {
-    throw new AppError('INVALID_ARGS', 'Conflicting lease provider values.');
-  }
-  return leaseProvider ?? provider;
+function normalizeLeaseProvider(raw: string | undefined): string | undefined {
+  return normalizeAgentIdentifier(raw, 'lease provider', 64);
 }
 
 function normalizeAgentIdentifier(
@@ -157,9 +152,8 @@ function leaseRequiresOwnerScope(lease: DeviceLease): boolean {
 
 function hasRequiredOwnerScope(lease: DeviceLease, request: LeaseScopeMatchRequest): boolean {
   if (!request.tenantId || !request.runId) return false;
-  const provider = request.leaseProvider ?? request.provider;
   return [
-    [lease.leaseProvider, provider],
+    [lease.leaseProvider, request.leaseProvider],
     [lease.deviceKey, request.deviceKey],
     [lease.clientId, request.clientId],
   ].every(([leaseValue, requestValue]) => !leaseValue || Boolean(requestValue));
@@ -192,8 +186,8 @@ export class LeaseRegistry {
   }
 
   allocateLease(request: AllocateLeaseRequest): DeviceLease {
-    const backend = normalizeLeaseBackend(request.backend);
-    const provider = normalizeLeaseProviderFields(request);
+    const backend = normalizeLeaseBackend(request.leaseBackend);
+    const leaseProvider = normalizeLeaseProvider(request.leaseProvider);
     const deviceKey = normalizeDeviceKey(request.deviceKey);
     const clientId = normalizeClientId(request.clientId);
     const tenantId = normalizeTenantId(request.tenantId);
@@ -212,7 +206,7 @@ export class LeaseRegistry {
     }
     this.cleanupExpiredLeases();
     const leaseTtlMs = this.resolveLeaseTtlMs(request.ttlMs);
-    const bindingKey = this.bindingKey({ tenantId, runId, backend, provider, deviceKey });
+    const bindingKey = this.bindingKey({ tenantId, runId, backend, leaseProvider, deviceKey });
     const existingId = this.runBindings.get(bindingKey);
     if (existingId) {
       const existingLease = this.leases.get(existingId);
@@ -222,7 +216,7 @@ export class LeaseRegistry {
       }
       this.runBindings.delete(bindingKey);
     }
-    this.assertDeviceAvailable({ backend, provider, deviceKey });
+    this.assertDeviceAvailable({ backend, leaseProvider, deviceKey });
     this.enforceCapacity(backend);
     const now = this.now();
     const lease: DeviceLease = {
@@ -230,7 +224,7 @@ export class LeaseRegistry {
       tenantId,
       runId,
       backend,
-      ...(provider ? { leaseProvider: provider, provider } : {}),
+      ...(leaseProvider ? { leaseProvider } : {}),
       ...(deviceKey ? { deviceKey } : {}),
       ...(clientId ? { clientId } : {}),
       createdAt: now,
@@ -267,7 +261,7 @@ export class LeaseRegistry {
   }
 
   assertLeaseAdmission(request: AdmissionRequest): void {
-    const backend = normalizeLeaseBackend(request.backend);
+    const backend = normalizeLeaseBackend(request.leaseBackend);
     const tenantId = normalizeTenantId(request.tenantId);
     if (!tenantId) {
       throw new AppError('INVALID_ARGS', 'tenant isolation requires tenant id.');
@@ -285,8 +279,7 @@ export class LeaseRegistry {
     this.assertOptionalScopeMatch(lease, {
       tenantId,
       runId,
-      backend,
-      provider: request.provider,
+      leaseBackend: backend,
       leaseProvider: request.leaseProvider,
       deviceKey: request.deviceKey,
       clientId: request.clientId,
@@ -372,8 +365,7 @@ export class LeaseRegistry {
     return {
       tenantId: request.tenantId,
       runId: request.runId,
-      backend: request.backend,
-      provider: request.provider,
+      leaseBackend: request.leaseBackend,
       leaseProvider: request.leaseProvider,
       deviceKey: request.deviceKey,
       clientId: request.clientId,
@@ -398,7 +390,7 @@ export class LeaseRegistry {
         tenantId: lease.tenantId,
         runId: lease.runId,
         backend: lease.backend,
-        provider: lease.leaseProvider,
+        leaseProvider: lease.leaseProvider,
         deviceKey: lease.deviceKey,
       }),
       lease.leaseId,
@@ -415,7 +407,7 @@ export class LeaseRegistry {
         tenantId: lease.tenantId,
         runId: lease.runId,
         backend: lease.backend,
-        provider: lease.leaseProvider,
+        leaseProvider: lease.leaseProvider,
         deviceKey: lease.deviceKey,
       }),
     );
@@ -429,14 +421,14 @@ export class LeaseRegistry {
     tenantId: string;
     runId: string;
     backend: LeaseBackend;
-    provider?: string;
+    leaseProvider?: string;
     deviceKey?: string;
   }): string {
     return JSON.stringify([
       params.tenantId,
       params.runId,
       params.backend,
-      params.provider ?? DEFAULT_LEASE_PROVIDER,
+      params.leaseProvider ?? DEFAULT_LEASE_PROVIDER,
       params.deviceKey ?? '*',
     ]);
   }
@@ -454,12 +446,12 @@ export class LeaseRegistry {
 
   private assertDeviceAvailable(params: {
     backend: LeaseBackend;
-    provider?: string;
+    leaseProvider?: string;
     deviceKey?: string;
   }): void {
     const deviceBindingKey = this.deviceBindingKey({
       backend: params.backend,
-      leaseProvider: params.provider,
+      leaseProvider: params.leaseProvider,
       deviceKey: params.deviceKey,
     });
     if (!deviceBindingKey) return;
@@ -490,19 +482,21 @@ export class LeaseRegistry {
     }
   }
 
-  // fallow-ignore-next-line complexity
-  private assertOptionalScopeMatch(
-    lease: DeviceLease,
-    request: {
-      tenantId?: string;
-      runId?: string;
-      backend?: LeaseBackend;
-      provider?: string;
-      leaseProvider?: string;
-      deviceKey?: string;
-      clientId?: string;
-    },
-  ): void {
+  private assertOptionalScopeMatch(lease: DeviceLease, request: LeaseScopeMatchRequest): void {
+    const normalized = this.normalizeOptionalScopeMatchRequest(request);
+    if (
+      (normalized.tenantId && lease.tenantId !== normalized.tenantId) ||
+      (normalized.runId && lease.runId !== normalized.runId) ||
+      (normalized.leaseBackend && lease.backend !== normalized.leaseBackend)
+    ) {
+      this.throwScopeMismatch();
+    }
+    this.assertOptionalLeaseIdentityMatch(lease, normalized);
+  }
+
+  private normalizeOptionalScopeMatchRequest(
+    request: LeaseScopeMatchRequest,
+  ): NormalizedLeaseScopeMatchRequest {
     const tenantId = normalizeTenantId(request.tenantId);
     const runId = normalizeRunId(request.runId);
     if (request.tenantId && !tenantId) {
@@ -517,29 +511,25 @@ export class LeaseRegistry {
         'Invalid run id. Use 1-128 chars: letters, numbers, dot, underscore, hyphen.',
       );
     }
-    const backend = request.backend ? normalizeLeaseBackend(request.backend) : undefined;
-    const provider = normalizeLeaseProviderFields(request);
-    const deviceKey = normalizeDeviceKey(request.deviceKey);
-    const clientId = normalizeClientId(request.clientId);
-    if (
-      (tenantId && lease.tenantId !== tenantId) ||
-      (runId && lease.runId !== runId) ||
-      (backend && lease.backend !== backend)
-    ) {
-      this.throwScopeMismatch();
-    }
-    this.assertOptionalLeaseIdentityMatch(lease, { provider, deviceKey, clientId });
+    return {
+      tenantId,
+      runId,
+      leaseBackend: request.leaseBackend ? normalizeLeaseBackend(request.leaseBackend) : undefined,
+      leaseProvider: normalizeLeaseProvider(request.leaseProvider),
+      deviceKey: normalizeDeviceKey(request.deviceKey),
+      clientId: normalizeClientId(request.clientId),
+    };
   }
 
   private assertOptionalLeaseIdentityMatch(
     lease: DeviceLease,
     request: {
-      provider?: string;
+      leaseProvider?: string;
       deviceKey?: string;
       clientId?: string;
     },
   ): void {
-    if (request.provider && lease.leaseProvider !== request.provider) {
+    if (request.leaseProvider && lease.leaseProvider !== request.leaseProvider) {
       this.throwScopeMismatch();
     }
     if (request.deviceKey && lease.deviceKey !== request.deviceKey) {

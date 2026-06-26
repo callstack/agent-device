@@ -91,8 +91,7 @@ export function resolveRunnerLogicalLeaseContext(
     clientId: readNonEmptyString(meta?.clientId),
     tenantId: readNonEmptyString(meta?.tenantId),
     runId: readNonEmptyString(meta?.runId),
-    leaseProvider:
-      readNonEmptyString(meta?.leaseProvider) ?? readNonEmptyString(meta?.leaseBackend),
+    leaseProvider: readNonEmptyString(meta?.leaseProvider),
     deviceKey: readNonEmptyString(meta?.deviceKey),
   });
   return Object.keys(context).length > 0 ? context : undefined;

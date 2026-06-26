@@ -27,6 +27,27 @@ export type LeaseDiagnosticsContext = Omit<LeaseScope, 'leaseTtlMs'>;
 
 export type LeaseRpcCommand = 'lease_allocate' | 'lease_heartbeat' | 'lease_release';
 
+export type LeaseAllocateRequestScope = {
+  tenantId: string;
+  runId: string;
+  leaseBackend?: LeaseBackend;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
+  ttlMs?: number;
+};
+
+export type LeaseScopedRequestScope = {
+  leaseId: string;
+  tenantId?: string;
+  runId?: string;
+  leaseBackend?: LeaseBackend;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
+  ttlMs?: number;
+};
+
 type LeaseRequestLike = {
   flags?: Record<string, unknown>;
   meta?: {
@@ -105,6 +126,29 @@ export function leaseScopeToCommandFlags(scope: LeaseScope): Record<string, unkn
   });
 }
 
+export function leaseScopeToAllocateRequest(scope: LeaseScope): LeaseAllocateRequestScope {
+  return stripUndefined({
+    tenantId: scope.tenantId ?? '',
+    runId: scope.runId ?? '',
+    leaseBackend: scope.leaseBackend,
+    leaseProvider: scope.leaseProvider,
+    deviceKey: scope.deviceKey,
+    clientId: scope.clientId,
+    ttlMs: scope.leaseTtlMs,
+  }) as LeaseAllocateRequestScope;
+}
+
+export function leaseScopeToHeartbeatRequest(scope: LeaseScope): LeaseScopedRequestScope {
+  return leaseScopeToScopedRequest(scope);
+}
+
+export function leaseScopeToReleaseRequest(
+  scope: LeaseScope,
+): Omit<LeaseScopedRequestScope, 'ttlMs'> {
+  const { ttlMs: _ttlMs, ...request } = leaseScopeToScopedRequest(scope);
+  return request;
+}
+
 export function leaseScopeToLeaseRpcParams(
   scope: LeaseScope,
   command: LeaseRpcCommand,
@@ -120,7 +164,6 @@ export function leaseScopeToLeaseRpcParams(
     tenantId: scope.tenantId,
     runId: scope.runId,
     leaseProvider: scope.leaseProvider,
-    provider: scope.leaseProvider,
     clientId: scope.clientId,
     deviceKey: scope.deviceKey,
   });
@@ -185,6 +228,19 @@ export function isProxyLeaseScope(scope: LeaseScope): boolean {
 export function findMissingProxyLeaseFields(scope: LeaseScope): string[] {
   if (!isProxyLeaseScope(scope)) return [];
   return REQUIRED_PROXY_LEASE_FIELDS.filter((field) => !scope[field]);
+}
+
+function leaseScopeToScopedRequest(scope: LeaseScope): LeaseScopedRequestScope {
+  return stripUndefined({
+    leaseId: scope.leaseId ?? '',
+    tenantId: scope.tenantId,
+    runId: scope.runId,
+    leaseBackend: scope.leaseBackend,
+    leaseProvider: scope.leaseProvider,
+    deviceKey: scope.deviceKey,
+    clientId: scope.clientId,
+    ttlMs: scope.leaseTtlMs,
+  }) as LeaseScopedRequestScope;
 }
 
 function readFlagString(

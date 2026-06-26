@@ -332,7 +332,7 @@ test('provider lease admission succeeds without a device key', async () => {
   const lease = leaseRegistry.allocateLease({
     tenantId: 'tenant-a',
     runId: 'run-1',
-    backend: 'android-instance',
+    leaseBackend: 'android-instance',
     leaseProvider: 'limrun',
   });
   sessionStore.set(

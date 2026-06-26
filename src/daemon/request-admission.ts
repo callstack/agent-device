@@ -8,6 +8,7 @@ import {
   resolveLeaseScope,
   resolveRequestOrSessionLeaseScope,
 } from './lease-context.ts';
+import { leaseScopeToHeartbeatRequest } from '../core/lease-scope.ts';
 import type { DeviceLease, LeaseRegistry } from './lease-registry.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
 
@@ -72,27 +73,14 @@ export function assertRequestLeaseAdmission(
   }
   assertRequestSessionLeaseMatches(requestLeaseScope, sessionLease);
   const leaseScope = resolveRequestOrSessionLeaseScope(req, session);
-  leaseRegistry.assertLeaseAdmission({
-    tenantId: leaseScope.tenantId,
-    runId: leaseScope.runId,
-    leaseId: leaseScope.leaseId,
-    backend: leaseScope.leaseBackend,
-    leaseProvider: leaseScope.leaseProvider,
-    deviceKey: leaseScope.deviceKey,
-    clientId: leaseScope.clientId,
-  });
-  return leaseRegistry.heartbeatLease({
-    leaseId: leaseScope.leaseId ?? '',
-    tenantId: leaseScope.tenantId,
-    runId: leaseScope.runId,
-    backend: leaseScope.leaseBackend,
-    leaseProvider: leaseScope.leaseProvider,
-    deviceKey: leaseScope.deviceKey,
-    clientId: leaseScope.clientId,
-    ttlMs:
+  const heartbeatLeaseScope = {
+    ...leaseScope,
+    leaseTtlMs:
       leaseScope.leaseTtlMs ??
       (isProxyLeaseScope(leaseScope) ? DEFAULT_PROXY_LEASE_TTL_MS : undefined),
-  });
+  };
+  leaseRegistry.assertLeaseAdmission(leaseScopeToHeartbeatRequest(leaseScope));
+  return leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(heartbeatLeaseScope));
 }
 
 export function assertRequestLeaseAdmissionPreflight(req: DaemonRequest): void {

@@ -27,124 +27,43 @@ import type { LeaseBackend } from '../../contracts.ts';
 import type { CliFlags } from '../../utils/cli-flags.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 
-// fallow-ignore-next-line complexity
 export const connectCommand: ClientCommandHandler = async ({ positionals, flags, client }) => {
   const stateDir = resolveDaemonPaths(flags.stateDir).baseDir;
   const provider = readConnectProvider(positionals);
-  if (provider && flags.remoteConfig) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'connect provider positional and --remote-config are mutually exclusive.',
-    );
-  }
-  const resolved = flags.remoteConfig
-    ? resolveRemoteConnectFlags(flags)
-    : provider === 'proxy' || shouldUseProxyConnectShortcut(flags)
-      ? resolveProxyConnectProfile({
-          flags,
-          stateDir,
-          cwd: process.cwd(),
-          env: process.env,
-        })
-      : await resolveCloudConnectProfile({
-          flags,
-          stateDir,
-          cwd: process.cwd(),
-          env: process.env,
-        });
+  assertConnectProviderUsage(provider, flags);
+  const resolved = await resolveConnectProfile({ provider, flags, stateDir });
   const connectFlags = resolved.flags;
   const connectionMetadata = readRemoteConfigConnectionMetadata(resolved.remoteConfigPath);
-  const tenant = connectFlags.tenant;
-  const runId = connectFlags.runId;
-  if (!tenant) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'connect requires tenant in remote config or via --tenant <id>.',
-    );
-  }
-  if (!runId) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'connect requires runId in remote config or via --run-id <id>.',
-    );
-  }
-  if (!connectFlags.daemonBaseUrl) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'connect requires daemonBaseUrl in remote config, config, env, or --daemon-base-url.',
-    );
-  }
-
-  const activeState = connectFlags.session ? null : readActiveConnectionState({ stateDir });
-  const session = connectFlags.session ?? activeState?.session ?? createRemoteSessionName(stateDir);
-  const remoteConfigHash = hashRemoteConfigFile(resolved.remoteConfigPath);
-  const daemon = buildDaemonState(connectFlags);
-  const previous =
-    activeState?.session === session
-      ? activeState
-      : readRemoteConnectionState({ stateDir, session });
-  if (
-    previous &&
-    !isCompatibleConnection(previous, {
-      flags: connectFlags,
-      session,
-      remoteConfigPath: resolved.remoteConfigPath,
-      remoteConfigHash,
-      desiredLeaseBackend: resolveRequestedLeaseBackend(connectFlags),
-      connection: connectionMetadata,
-      daemon,
-    })
-  ) {
-    if (!connectFlags.force) {
-      throw new AppError(
-        'INVALID_ARGS',
-        'A different remote connection is already active for this session. Re-run connect with --force to replace it.',
-        { session, remoteConfig: previous.remoteConfigPath },
-      );
-    }
-  }
-
-  const now = new Date().toISOString();
-  const state: RemoteConnectionState = {
-    version: 1,
-    session,
+  const scope = readRequiredConnectScope(connectFlags);
+  const context = resolveConnectContext({
+    stateDir,
+    flags: connectFlags,
     remoteConfigPath: resolved.remoteConfigPath,
-    remoteConfigHash,
-    daemon,
-    tenant,
-    runId,
-    leaseId: previous && !connectFlags.force ? previous.leaseId : undefined,
-    leaseBackend:
-      previous && !connectFlags.force
-        ? previous.leaseBackend
-        : resolveRequestedLeaseBackend(connectFlags),
-    leaseProvider:
-      connectionMetadata?.leaseProvider ??
-      (previous && !connectFlags.force ? previous.leaseProvider : undefined),
-    clientId:
-      connectionMetadata?.clientId ??
-      (previous && !connectFlags.force ? previous.clientId : undefined),
-    deviceKey: previous && !connectFlags.force ? previous.deviceKey : connectionMetadata?.deviceKey,
-    platform:
-      connectFlags.platform ?? (previous && !connectFlags.force ? previous.platform : undefined),
-    target: connectFlags.target ?? (previous && !connectFlags.force ? previous.target : undefined),
-    runtime: previous && !connectFlags.force ? previous.runtime : undefined,
-    metro: previous && !connectFlags.force ? previous.metro : undefined,
-    connectedAt: previous && !connectFlags.force ? previous.connectedAt : now,
-    updatedAt: now,
-  };
+  });
+  assertCompatibleConnectionOrForce(context.previous, {
+    flags: connectFlags,
+    session: context.session,
+    remoteConfigPath: resolved.remoteConfigPath,
+    remoteConfigHash: context.remoteConfigHash,
+    desiredLeaseBackend: resolveRequestedLeaseBackend(connectFlags),
+    connection: connectionMetadata,
+    daemon: context.daemon,
+  });
+  const state = buildConnectedState({
+    flags: connectFlags,
+    scope,
+    connectionMetadata,
+    context,
+    remoteConfigPath: resolved.remoteConfigPath,
+  });
   writeRemoteConnectionState({ stateDir, state });
-  if (previous && connectFlags.force) {
-    await stopMetroCleanup(previous.metro);
-    await stopReactDevtoolsCleanup({ stateDir, state: previous });
-    await releasePreviousLease(client, previous);
-  }
+  await cleanupForcedPreviousConnection(client, stateDir, connectFlags, context.previous);
   const leasePreparation = buildLeasePreparationNotice(state);
   const runtimePreparation = buildRuntimePreparationNotice(connectFlags, state);
 
   writeCommandOutput(connectFlags, serializeConnectionState(state, runtimePreparation), () =>
     [
-      `Connected remote session "${session}" tenant "${tenant}" run "${runId}" ${
+      `Connected remote session "${context.session}" tenant "${scope.tenant}" run "${scope.runId}" ${
         state.leaseId ? `lease ${state.leaseId}` : 'lease pending'
       }`,
       leasePreparation?.message,
@@ -155,6 +74,177 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
   );
   return true;
 };
+
+async function resolveConnectProfile(options: {
+  provider?: 'proxy';
+  flags: CliFlags;
+  stateDir: string;
+}): Promise<{ flags: CliFlags; remoteConfigPath: string }> {
+  const { provider, flags, stateDir } = options;
+  if (flags.remoteConfig) return resolveRemoteConnectFlags(flags);
+  if (provider === 'proxy' || shouldUseProxyConnectShortcut(flags)) {
+    return resolveProxyConnectProfile({
+      flags,
+      stateDir,
+      cwd: process.cwd(),
+      env: process.env,
+    });
+  }
+  return await resolveCloudConnectProfile({
+    flags,
+    stateDir,
+    cwd: process.cwd(),
+    env: process.env,
+  });
+}
+
+function assertConnectProviderUsage(provider: 'proxy' | undefined, flags: CliFlags): void {
+  if (!provider || !flags.remoteConfig) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    'connect provider positional and --remote-config are mutually exclusive.',
+  );
+}
+
+function readRequiredConnectScope(flags: CliFlags): { tenant: string; runId: string } {
+  if (!flags.tenant) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'connect requires tenant in remote config or via --tenant <id>.',
+    );
+  }
+  if (!flags.runId) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'connect requires runId in remote config or via --run-id <id>.',
+    );
+  }
+  if (!flags.daemonBaseUrl) {
+    throw new AppError(
+      'INVALID_ARGS',
+      'connect requires daemonBaseUrl in remote config, config, env, or --daemon-base-url.',
+    );
+  }
+  return { tenant: flags.tenant, runId: flags.runId };
+}
+
+type ConnectContext = {
+  session: string;
+  remoteConfigHash: string;
+  daemon: RemoteConnectionState['daemon'];
+  previous: RemoteConnectionState | null;
+};
+
+function resolveConnectContext(options: {
+  stateDir: string;
+  flags: CliFlags;
+  remoteConfigPath: string;
+}): ConnectContext {
+  const { stateDir, flags, remoteConfigPath } = options;
+  const activeState = flags.session ? null : readActiveConnectionState({ stateDir });
+  const session = flags.session ?? activeState?.session ?? createRemoteSessionName(stateDir);
+  const previous =
+    activeState?.session === session
+      ? activeState
+      : readRemoteConnectionState({ stateDir, session });
+  return {
+    session,
+    previous,
+    remoteConfigHash: hashRemoteConfigFile(remoteConfigPath),
+    daemon: buildDaemonState(flags),
+  };
+}
+
+function assertCompatibleConnectionOrForce(
+  previous: RemoteConnectionState | null,
+  options: Parameters<typeof isCompatibleConnection>[1],
+): void {
+  if (!previous || isCompatibleConnection(previous, options)) return;
+  if (options.flags.force) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    'A different remote connection is already active for this session. Re-run connect with --force to replace it.',
+    { session: options.session, remoteConfig: previous.remoteConfigPath },
+  );
+}
+
+function buildConnectedState(options: {
+  flags: CliFlags;
+  scope: { tenant: string; runId: string };
+  connectionMetadata?: RemoteConnectionRequestMetadata;
+  context: ConnectContext;
+  remoteConfigPath: string;
+}): RemoteConnectionState {
+  const { flags, scope, connectionMetadata, context, remoteConfigPath } = options;
+  const previous = shouldReusePreviousConnectionState(flags, context.previous)
+    ? context.previous
+    : null;
+  const now = new Date().toISOString();
+  const leaseBinding = buildConnectionLeaseBinding(flags, previous, connectionMetadata);
+  const runtimeBinding = buildConnectionRuntimeBinding(flags, previous, now);
+  return {
+    version: 1,
+    session: context.session,
+    remoteConfigPath,
+    remoteConfigHash: context.remoteConfigHash,
+    daemon: context.daemon,
+    tenant: scope.tenant,
+    runId: scope.runId,
+    ...leaseBinding,
+    ...runtimeBinding,
+    updatedAt: now,
+  };
+}
+
+function buildConnectionLeaseBinding(
+  flags: CliFlags,
+  previous: RemoteConnectionState | null,
+  connectionMetadata: RemoteConnectionRequestMetadata | undefined,
+): Pick<
+  RemoteConnectionState,
+  'clientId' | 'deviceKey' | 'leaseBackend' | 'leaseId' | 'leaseProvider'
+> {
+  return {
+    leaseId: previous?.leaseId,
+    leaseBackend: previous?.leaseBackend ?? resolveRequestedLeaseBackend(flags),
+    leaseProvider: connectionMetadata?.leaseProvider ?? previous?.leaseProvider,
+    clientId: connectionMetadata?.clientId ?? previous?.clientId,
+    deviceKey: previous?.deviceKey ?? connectionMetadata?.deviceKey,
+  };
+}
+
+function buildConnectionRuntimeBinding(
+  flags: CliFlags,
+  previous: RemoteConnectionState | null,
+  now: string,
+): Pick<RemoteConnectionState, 'connectedAt' | 'metro' | 'platform' | 'runtime' | 'target'> {
+  return {
+    platform: flags.platform ?? previous?.platform,
+    target: flags.target ?? previous?.target,
+    runtime: previous?.runtime,
+    metro: previous?.metro,
+    connectedAt: previous?.connectedAt ?? now,
+  };
+}
+
+function shouldReusePreviousConnectionState(
+  flags: CliFlags,
+  previous: RemoteConnectionState | null,
+): previous is RemoteConnectionState {
+  return Boolean(previous && !flags.force);
+}
+
+async function cleanupForcedPreviousConnection(
+  client: Parameters<ClientCommandHandler>[0]['client'],
+  stateDir: string,
+  flags: CliFlags,
+  previous: RemoteConnectionState | null,
+): Promise<void> {
+  if (!previous || !flags.force) return;
+  await stopMetroCleanup(previous.metro);
+  await stopReactDevtoolsCleanup({ stateDir, state: previous });
+  await releasePreviousLease(client, previous);
+}
 
 function resolveRemoteConnectFlags(flags: CliFlags): {
   flags: CliFlags;
@@ -336,31 +426,44 @@ function isCompatibleConnection(
   },
 ): boolean {
   return (
-    state.remoteConfigPath === options.remoteConfigPath &&
-    state.remoteConfigHash === options.remoteConfigHash &&
-    state.session === options.session &&
-    state.tenant === options.flags.tenant &&
-    state.runId === options.flags.runId &&
-    (options.desiredLeaseBackend === undefined ||
-      state.leaseBackend === options.desiredLeaseBackend) &&
-    (options.flags.platform === undefined || state.platform === options.flags.platform) &&
-    (options.flags.target === undefined || state.target === options.flags.target) &&
-    (options.connection?.leaseProvider === undefined ||
-      state.leaseProvider === options.connection.leaseProvider) &&
-    (options.connection?.clientId === undefined ||
-      state.clientId === options.connection.clientId) &&
+    requiredConnectionFieldsMatch(state, options) &&
+    optionalConnectionFieldsMatch(state, options) &&
     isSameDaemonState(state.daemon, options.daemon)
   );
+}
+
+function requiredConnectionFieldsMatch(
+  state: RemoteConnectionState,
+  options: Parameters<typeof isCompatibleConnection>[1],
+): boolean {
+  return [
+    [state.remoteConfigPath, options.remoteConfigPath],
+    [state.remoteConfigHash, options.remoteConfigHash],
+    [state.session, options.session],
+    [state.tenant, options.flags.tenant],
+    [state.runId, options.flags.runId],
+  ].every(([left, right]) => left === right);
+}
+
+function optionalConnectionFieldsMatch(
+  state: RemoteConnectionState,
+  options: Parameters<typeof isCompatibleConnection>[1],
+): boolean {
+  return [
+    [state.leaseBackend, options.desiredLeaseBackend],
+    [state.platform, options.flags.platform],
+    [state.target, options.flags.target],
+    [state.leaseProvider, options.connection?.leaseProvider],
+    [state.clientId, options.connection?.clientId],
+  ].every(([left, right]) => right === undefined || left === right);
 }
 
 function isSameDaemonState(
   a: RemoteConnectionState['daemon'],
   b: RemoteConnectionState['daemon'],
 ): boolean {
-  return (
-    (a?.baseUrl ?? undefined) === (b?.baseUrl ?? undefined) &&
-    (a?.transport ?? undefined) === (b?.transport ?? undefined) &&
-    (a?.serverMode ?? undefined) === (b?.serverMode ?? undefined)
+  return (['baseUrl', 'transport', 'serverMode'] as const).every(
+    (key) => (a?.[key] ?? undefined) === (b?.[key] ?? undefined),
   );
 }
 

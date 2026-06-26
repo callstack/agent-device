@@ -1,4 +1,5 @@
 import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { leaseScopeToReleaseRequest } from '../core/lease-scope.ts';
 import type { LeaseRegistry } from './lease-registry.ts';
 import { buildSessionLeaseFromRequest, type SessionLease } from './lease-context.ts';
 import {
@@ -98,15 +99,17 @@ export function releaseSessionLease(params: {
 }): void {
   const lease = params.session.lease;
   if (!lease) return;
-  const result = params.leaseRegistry.releaseLease({
-    leaseId: lease.leaseId,
-    tenantId: lease.tenantId,
-    runId: lease.runId,
-    backend: lease.leaseBackend,
-    leaseProvider: lease.leaseProvider,
-    deviceKey: lease.deviceKey,
-    clientId: lease.clientId,
-  });
+  const result = params.leaseRegistry.releaseLease(
+    leaseScopeToReleaseRequest({
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.leaseBackend,
+      leaseProvider: lease.leaseProvider,
+      deviceKey: lease.deviceKey,
+      clientId: lease.clientId,
+    }),
+  );
   emitDiagnostic({
     level: 'info',
     phase: 'session_lease_released',

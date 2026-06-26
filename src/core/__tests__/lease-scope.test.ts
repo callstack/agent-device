@@ -77,7 +77,7 @@ test('leaseScopeFromRequest prefers metadata and falls back to legacy flags', ()
   );
 });
 
-test('leaseScopeToLeaseRpcParams preserves provider alias and command-specific fields', () => {
+test('leaseScopeToLeaseRpcParams projects canonical provider and command-specific fields', () => {
   const scope = leaseScopeFromOptions({
     tenant: 'tenant-a',
     runId: 'run-1',
@@ -101,7 +101,6 @@ test('leaseScopeToLeaseRpcParams preserves provider alias and command-specific f
       tenantId: 'tenant-a',
       runId: 'run-1',
       leaseProvider: 'proxy',
-      provider: 'proxy',
       clientId: 'client-a',
       deviceKey: 'android:emulator-5554',
       ttlMs: 60_000,
@@ -119,7 +118,6 @@ test('leaseScopeToLeaseRpcParams preserves provider alias and command-specific f
       tenantId: 'tenant-a',
       runId: 'run-1',
       leaseProvider: 'proxy',
-      provider: 'proxy',
       clientId: 'client-a',
       deviceKey: 'android:emulator-5554',
       leaseId: 'lease-1',

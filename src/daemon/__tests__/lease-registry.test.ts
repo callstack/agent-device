@@ -108,7 +108,7 @@ test('device-aware allocation is idempotent per tenant/run/backend/provider/devi
   const first = registry.allocateLease({
     tenantId: 'tenant-a',
     runId: 'run-1',
-    backend: 'ios-instance',
+    leaseBackend: 'ios-instance',
     leaseProvider: 'proxy',
     deviceKey: 'device-1',
     clientId: 'client-a',
@@ -118,7 +118,7 @@ test('device-aware allocation is idempotent per tenant/run/backend/provider/devi
   const second = registry.allocateLease({
     tenantId: 'tenant-a',
     runId: 'run-1',
-    backend: 'ios-instance',
+    leaseBackend: 'ios-instance',
     leaseProvider: 'proxy',
     deviceKey: 'device-1',
     clientId: 'client-a',
@@ -126,7 +126,6 @@ test('device-aware allocation is idempotent per tenant/run/backend/provider/devi
 
   assert.equal(second.leaseId, first.leaseId);
   assert.equal(second.leaseProvider, 'proxy');
-  assert.equal(second.provider, 'proxy');
   assert.equal(second.deviceKey, 'device-1');
   assert.equal(second.clientId, 'client-a');
   assert.equal(second.heartbeatAt, 3_000);
@@ -138,7 +137,7 @@ test('same backend/provider/device rejects conflicting active lease', () => {
   registry.allocateLease({
     tenantId: 'tenant-a',
     runId: 'run-1',
-    backend: 'ios-instance',
+    leaseBackend: 'ios-instance',
     leaseProvider: 'proxy',
     deviceKey: 'device-1',
   });
@@ -147,7 +146,7 @@ test('same backend/provider/device rejects conflicting active lease', () => {
     registry.allocateLease({
       tenantId: 'tenant-b',
       runId: 'run-2',
-      backend: 'ios-instance',
+      leaseBackend: 'ios-instance',
       leaseProvider: 'proxy',
       deviceKey: 'device-1',
     }),
@@ -167,21 +166,21 @@ test('device leases are isolated by provider and device key', () => {
   const proxy = registry.allocateLease({
     tenantId: 'tenant-a',
     runId: 'run-1',
-    backend: 'ios-instance',
+    leaseBackend: 'ios-instance',
     leaseProvider: 'proxy',
     deviceKey: 'device-1',
   });
   const limrun = registry.allocateLease({
     tenantId: 'tenant-b',
     runId: 'run-2',
-    backend: 'ios-instance',
+    leaseBackend: 'ios-instance',
     leaseProvider: 'limrun',
     deviceKey: 'device-1',
   });
   const secondDevice = registry.allocateLease({
     tenantId: 'tenant-c',
     runId: 'run-3',
-    backend: 'ios-instance',
+    leaseBackend: 'ios-instance',
     leaseProvider: 'proxy',
     deviceKey: 'device-2',
   });
@@ -301,7 +300,7 @@ test('expired device lease releases device binding for new clients', () => {
   const first = registry.allocateLease({
     tenantId: 'tenant-a',
     runId: 'run-1',
-    backend: 'ios-instance',
+    leaseBackend: 'ios-instance',
     leaseProvider: 'proxy',
     deviceKey: 'device-1',
   });
@@ -310,7 +309,7 @@ test('expired device lease releases device binding for new clients', () => {
   const second = registry.allocateLease({
     tenantId: 'tenant-b',
     runId: 'run-2',
-    backend: 'ios-instance',
+    leaseBackend: 'ios-instance',
     leaseProvider: 'proxy',
     deviceKey: 'device-1',
   });

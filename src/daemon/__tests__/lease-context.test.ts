@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import {
   buildLeaseDiagnosticsContext,
   buildSessionLeaseFromRequest,
+  resolveRunnerLogicalLeaseContext,
   resolveRequestOrSessionLeaseScope,
   type SessionLease,
 } from '../lease-context.ts';
@@ -110,4 +111,21 @@ test('buildLeaseDiagnosticsContext strips ttl and empty fields', () => {
     deviceKey: 'device-1',
   });
   assert.equal(buildLeaseDiagnosticsContext({}), undefined);
+});
+
+test('resolveRunnerLogicalLeaseContext keeps lease backend separate from provider', () => {
+  const context = resolveRunnerLogicalLeaseContext({
+    meta: {
+      leaseId: 'lease-1',
+      leaseBackend: 'ios-instance',
+      tenantId: 'tenant-a',
+      runId: 'run-1',
+    },
+  });
+
+  assert.deepEqual(context, {
+    leaseId: 'lease-1',
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+  });
 });

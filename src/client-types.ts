@@ -270,7 +270,6 @@ export type Lease = {
   runId: string;
   backend: LeaseBackend;
   leaseProvider?: string;
-  provider?: string;
   deviceKey?: string;
   clientId?: string;
   createdAt?: number;

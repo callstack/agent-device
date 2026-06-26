@@ -383,7 +383,6 @@ function normalizeLease(data: Record<string, unknown>): Lease {
     runId: readRequiredString(rawLease, 'runId'),
     backend: readRequiredString(rawLease, 'backend') as Lease['backend'],
     leaseProvider: readOptionalString(rawLease, 'leaseProvider'),
-    provider: readOptionalString(rawLease, 'provider') as Lease['provider'],
     clientId: readOptionalString(rawLease, 'clientId'),
     deviceKey: readOptionalString(rawLease, 'deviceKey'),
     createdAt: typeof rawLease.createdAt === 'number' ? rawLease.createdAt : undefined,

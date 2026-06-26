@@ -289,30 +289,43 @@ function safeStateName(value: string): string {
   return `${safe}-${suffix}`;
 }
 
-// fallow-ignore-next-line complexity
 function isRemoteConnectionState(value: unknown): value is RemoteConnectionState {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const record = value as Record<string, unknown>;
   return (
     record.version === 1 &&
-    typeof record.session === 'string' &&
-    typeof record.remoteConfigPath === 'string' &&
-    typeof record.remoteConfigHash === 'string' &&
-    (record.daemon === undefined ||
-      (typeof record.daemon === 'object' &&
-        record.daemon !== null &&
-        !Array.isArray(record.daemon) &&
-        isRemoteConnectionDaemonState(record.daemon))) &&
-    typeof record.tenant === 'string' &&
-    typeof record.runId === 'string' &&
-    (record.leaseId === undefined || typeof record.leaseId === 'string') &&
-    (record.leaseBackend === undefined || typeof record.leaseBackend === 'string') &&
-    (record.leaseProvider === undefined || typeof record.leaseProvider === 'string') &&
-    (record.deviceKey === undefined || typeof record.deviceKey === 'string') &&
-    (record.clientId === undefined || typeof record.clientId === 'string') &&
-    typeof record.connectedAt === 'string' &&
-    typeof record.updatedAt === 'string'
+    hasStringFields(record, [
+      'session',
+      'remoteConfigPath',
+      'remoteConfigHash',
+      'tenant',
+      'runId',
+      'connectedAt',
+      'updatedAt',
+    ]) &&
+    hasOptionalStringFields(record, [
+      'leaseId',
+      'leaseBackend',
+      'leaseProvider',
+      'deviceKey',
+      'clientId',
+    ]) &&
+    isOptionalRemoteConnectionDaemonState(record.daemon)
   );
+}
+
+function hasStringFields(record: Record<string, unknown>, fields: string[]): boolean {
+  return fields.every((field) => typeof record[field] === 'string');
+}
+
+function hasOptionalStringFields(record: Record<string, unknown>, fields: string[]): boolean {
+  return fields.every((field) => record[field] === undefined || typeof record[field] === 'string');
+}
+
+function isOptionalRemoteConnectionDaemonState(value: unknown): boolean {
+  if (value === undefined) return true;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return isRemoteConnectionDaemonState(value);
 }
 
 function isRemoteConnectionDaemonState(value: object): boolean {

@@ -679,7 +679,6 @@ test('proxy open resolves device key before allocating lease', async () => {
           runId: request.runId,
           backend: request.leaseBackend ?? 'ios-instance',
           leaseProvider: request.leaseProvider,
-          provider: request.leaseProvider,
           clientId: request.clientId,
           deviceKey: request.deviceKey,
         };
@@ -1435,6 +1434,7 @@ test('deferred materialization stops the new Metro companion if state persistenc
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
   fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+  let releaseRequest: Parameters<AgentDeviceClient['leases']['release']>[0] | undefined;
   writeRemoteConnectionState({
     stateDir,
     state: {
@@ -1487,7 +1487,12 @@ test('deferred materialization stops the new Metro companion if state persistenc
           metroPublicBaseUrl: 'https://sandbox.example.test',
           metroProxyBaseUrl: 'https://proxy.example.test',
         },
-        client: createTestClient(),
+        client: createTestClient({
+          release: async (request) => {
+            releaseRequest = request;
+            return { released: true };
+          },
+        }),
       }),
     writeFailure,
   );
@@ -1498,6 +1503,10 @@ test('deferred materialization stops the new Metro companion if state persistenc
     profileKey: remoteConfigPath,
     consumerKey: 'adc-android',
   });
+  assert.equal(releaseRequest?.leaseId, 'lease-1');
+  assert.equal(releaseRequest?.tenant, 'acme');
+  assert.equal(releaseRequest?.runId, 'run-123');
+  assert.equal(releaseRequest?.leaseBackend, 'android-instance');
 
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });

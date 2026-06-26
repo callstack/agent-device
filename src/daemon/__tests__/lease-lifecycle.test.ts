@@ -90,7 +90,7 @@ test('releaseSessionLease releases with the stored session owner scope', () => {
   const lease = leaseRegistry.allocateLease({
     tenantId: 'tenant-a',
     runId: 'run-1',
-    backend: 'ios-instance',
+    leaseBackend: 'ios-instance',
     leaseProvider: 'proxy',
     deviceKey: 'ios:SIM-001',
     clientId: 'client-a',
@@ -117,7 +117,7 @@ test('resolveSessionLeaseForRequest prefers admitted lease and falls back to exi
   const lease = leaseRegistry.allocateLease({
     tenantId: 'tenant-a',
     runId: 'run-1',
-    backend: 'ios-instance',
+    leaseBackend: 'ios-instance',
     leaseProvider: 'proxy',
     deviceKey: 'ios:SIM-001',
     clientId: 'client-a',
