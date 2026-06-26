@@ -18,7 +18,7 @@ export function readScreenshotResultData(value: unknown): ScreenshotResultData |
     : undefined;
   return {
     ...(path ? { path } : {}),
-    ...(overlayRefs && overlayRefs.length > 0 ? { overlayRefs } : {}),
+    ...(overlayRefs ? { overlayRefs } : {}),
   };
 }
 
@@ -26,9 +26,9 @@ function readScreenshotOverlayRef(value: unknown): ScreenshotOverlayRef | undefi
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return undefined;
   const record = value as Record<string, unknown>;
   const ref = typeof record.ref === 'string' && record.ref.length > 0 ? record.ref : undefined;
-  const rect = readRect(record.rect);
-  const overlayRect = readRect(record.overlayRect);
-  const center = readPoint(record.center);
+  const rect = readRect(record, 'rect');
+  const overlayRect = readRect(record, 'overlayRect');
+  const center = readPoint(record, 'center');
   if (!ref || !rect || !overlayRect || !center) return undefined;
   return {
     ref,

@@ -7,7 +7,7 @@ import { createAgentDevice, localCommandPolicy } from '../runtime.ts';
 import { dispatchCommand } from '../core/dispatch.ts';
 import { screenshotFlagsFromOptions, screenshotOptionsFromFlags } from '../contracts/screenshot.ts';
 import { AppError } from '../utils/errors.ts';
-import { readScreenshotResultData } from '../utils/screenshot-overlay-refs.ts';
+import { readScreenshotResultData } from '../utils/screenshot-result.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { SessionState } from './types.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';

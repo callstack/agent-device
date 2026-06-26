@@ -1,12 +1,6 @@
 import type { AlertAction, AlertInfo } from './alert-contract.ts';
 import type { AppsFilter } from './contracts/app-inventory.ts';
-import type {
-  Point,
-  ScreenshotOverlayRef,
-  SnapshotNode,
-  SnapshotOptions,
-  SnapshotState,
-} from './utils/snapshot.ts';
+import type { Point, SnapshotNode, SnapshotOptions, SnapshotState } from './utils/snapshot.ts';
 import type { NetworkIncludeMode } from './contracts.ts';
 import type { DeviceTarget, Platform, PlatformSelector } from './utils/device.ts';
 import type { BackMode } from './core/back-mode.ts';
@@ -22,6 +16,7 @@ import type {
   SnapshotCaptureAnnotations,
   SnapshotCaptureFreshness,
 } from './snapshot-capture-annotations.ts';
+import type { ScreenshotResultData } from './utils/screenshot-result.ts';
 
 export type AgentDeviceBackendPlatform = Platform;
 
@@ -78,10 +73,7 @@ export type BackendScreenshotOptions = {
   surface?: SessionSurface;
 };
 
-export type BackendScreenshotResult = {
-  path?: string;
-  overlayRefs?: ScreenshotOverlayRef[];
-};
+export type BackendScreenshotResult = ScreenshotResultData;
 
 export type BackendActionResult = Record<string, unknown> | void;
 

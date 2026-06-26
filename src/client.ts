@@ -24,7 +24,7 @@ import {
   readSnapshotNodes,
   resolveSessionName,
 } from './client-normalizers.ts';
-import { readScreenshotResultData } from './utils/screenshot-overlay-refs.ts';
+import { readScreenshotResultData } from './utils/screenshot-result.ts';
 import type {
   AgentDeviceClient,
   AgentDeviceClientConfig,
