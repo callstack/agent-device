@@ -5,10 +5,16 @@ import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
 import type { AndroidAdbExecutor } from '../../../platforms/android/adb-executor.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import { makeAndroidSession, makeIosSession } from '../../../__tests__/test-utils/index.ts';
+import {
+  makeAndroidSession,
+  makeIosSession,
+  makeSession,
+  WEB_DESKTOP_DEVICE,
+} from '../../../__tests__/test-utils/index.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import type { AppleXctracePerfCapture } from '../../../platforms/apple/core/perf-xctrace.ts';
 import type { DaemonResponse } from '../../types.ts';
+import { withWebProvider, type WebProvider } from '../../../platforms/web/provider.ts';
 
 const applePerfMocks = vi.hoisted(() => ({
   startAppleXctracePerfCapture: vi.fn(),
@@ -410,6 +416,42 @@ test('network dump accepts explicit include flag and rejects conflicting values'
     assert.equal(conflictResponse.error.code, 'INVALID_ARGS');
     assert.match(conflictResponse.error.message, /both positionally and via --include/i);
   }
+});
+
+test('audio probe validates daemon duration bounds', async () => {
+  const provider = makeAudioWebProvider();
+  const response = await runAudioCommand(['probe', 'start', '99', '1000'], provider);
+
+  assertInvalidArgs(response, /duration must be an integer in range 100..120000/);
+  assert.equal(provider.probeAudio.mock.calls.length, 0);
+});
+
+test('audio probe validates daemon bucket bounds', async () => {
+  const provider = makeAudioWebProvider();
+  const response = await runAudioCommand(['probe', 'start', '1000', '99'], provider);
+
+  assertInvalidArgs(response, /bucket must be an integer in range 100..10000/);
+  assert.equal(provider.probeAudio.mock.calls.length, 0);
+});
+
+test('audio probe rejects timing positionals for status', async () => {
+  const provider = makeAudioWebProvider();
+  const response = await runAudioCommand(['probe', 'status', '1000'], provider);
+
+  assertInvalidArgs(response, /only supported with audio probe start/);
+  assert.equal(provider.probeAudio.mock.calls.length, 0);
+});
+
+test('audio probe forwards daemon millisecond timing to web provider', async () => {
+  const provider = makeAudioWebProvider();
+  const response = await runAudioCommand(['probe', 'start', '7500', '500'], provider);
+
+  assert.equal(response?.ok, true);
+  assert.deepEqual(provider.probeAudio.mock.calls[0]?.[0], {
+    action: 'start',
+    durationMs: 7500,
+    bucketMs: 500,
+  });
 });
 
 test('perf memory sample routes to memory-only Android sampler', async () => {
@@ -936,6 +978,70 @@ function readAndroidNativePerfState(
   sessionName: string,
 ): string | undefined {
   return sessionStore.get(sessionName)?.nativePerf?.android?.state;
+}
+
+async function runAudioCommand(
+  positionals: string[],
+  provider: WebProvider = makeAudioWebProvider(),
+): Promise<DaemonResponse | null> {
+  const sessionStore = makeSessionStore('agent-device-session-observability-audio-');
+  sessionStore.set('web', makeSession('web', { device: WEB_DESKTOP_DEVICE }));
+  return await withWebProvider(
+    provider,
+    async () =>
+      await handleSessionObservabilityCommands({
+        req: {
+          token: 't',
+          session: 'web',
+          command: 'audio',
+          positionals,
+          flags: {},
+        },
+        sessionName: 'web',
+        sessionStore,
+      }),
+  );
+}
+
+function assertInvalidArgs(response: DaemonResponse | null, message: RegExp): void {
+  assert.equal(response?.ok, false);
+  if (response && !response.ok) {
+    assert.equal(response.error.code, 'INVALID_ARGS');
+    assert.match(response.error.message, message);
+  }
+}
+
+function makeAudioWebProvider(): WebProvider & {
+  probeAudio: ReturnType<typeof vi.fn<NonNullable<WebProvider['probeAudio']>>>;
+} {
+  const probeAudio = vi.fn<NonNullable<WebProvider['probeAudio']>>(async (options) => ({
+    audio: 'probe',
+    state: options.action === 'start' ? 'running' : 'stopped',
+    active: options.action === 'start',
+    heard: false,
+    source: 'media-elements',
+    backend: 'test',
+    durationMs: options.durationMs ?? 10_000,
+    elapsedMs: 0,
+    bucketMs: options.bucketMs ?? 1_000,
+    sampleCount: 0,
+    mediaElementCount: 0,
+    sourceCount: 0,
+    rmsDbfs: [],
+    peakDbfs: [],
+  }));
+  return {
+    open: async () => {},
+    close: async () => {},
+    snapshot: async () => ({ nodes: [] }),
+    screenshot: async () => {},
+    setViewport: async () => {},
+    click: async () => {},
+    fill: async () => {},
+    typeText: async () => {},
+    scroll: async () => {},
+    probeAudio,
+  };
 }
 
 type MockAdbResult = Awaited<ReturnType<AndroidAdbExecutor>>;

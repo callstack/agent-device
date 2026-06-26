@@ -270,7 +270,7 @@ Validation and evidence:
   Remote lifecycle: cloud, remote-config, direct proxy, and limrun use the same flow: connect, open, commands, close, disconnect.
   Remote config profile: agent-device connect --remote-config ./remote-config.json; then run normal commands and disconnect.
   Direct proxy to a Mac you control: cloud/Linux clients can use local/proxy iOS devices through the proxied Mac. Run agent-device connect proxy --daemon-base-url <proxy-agent-device-url> first. Device leases are automatic on open and expire after five minutes of inactivity.
-  Web: agent-device uses a managed, pinned agent-browser backend as an implementation detail. Use --platform web when a browser step belongs inside an agent-device session, replay, batch, MCP, or typed-client flow; use agent-browser directly for standalone web automation. Run agent-device web setup before first use, then agent-device web doctor for backend health checks. Web automation requires Node 24+.
+  Web: agent-device uses a managed, pinned agent-browser backend as an implementation detail. Use --platform web when a browser step belongs inside an agent-device session, replay, batch, MCP, or typed-client flow; use agent-browser directly for standalone web automation. Run agent-device web setup before first use, then agent-device web doctor for backend health checks. Web automation requires Node 24+. For audio probe start, the first timing positional is duration in seconds and the second is bucket size in milliseconds.
     agent-device web setup
     agent-device web doctor
     agent-device open https://example.com --platform web
@@ -784,6 +784,7 @@ Planning rule:
   For web command plans, output only agent-device command lines. Do not add prose, numbering, Markdown fences, shell pipes, or agent-browser commands unless the task is explicitly standalone browser automation outside agent-device.
 
 First-slice loop:
+  Audio probe start uses duration seconds first, then bucket milliseconds.
   agent-device web setup
   agent-device web doctor
   agent-device open https://example.com --platform web

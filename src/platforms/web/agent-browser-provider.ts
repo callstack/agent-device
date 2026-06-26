@@ -156,6 +156,9 @@ function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
       if (!window[sourceKey]) window[sourceKey] = new WeakMap();
       let source = window[sourceKey].get(element);
       if (!source) {
+        // createMediaElementSource permanently moves this element through the
+        // shared probe AudioContext. We keep that context open and reconnect the
+        // source to destination on stop so audible playback survives the probe.
         source = probe.context.createMediaElementSource(element);
         window[sourceKey].set(element, source);
       }
@@ -261,7 +264,10 @@ function buildAudioProbeEvalScript(options: WebAudioProbeOptions): string {
       source: 'media-elements',
       backend: 'agent-browser',
       durationMs: probe.durationMs,
-      elapsedMs: Math.max(0, Math.min(now() - probe.startedAt, probe.durationMs)),
+      elapsedMs: Math.max(
+        0,
+        Math.min((probe.stoppedAt || now()) - probe.startedAt, probe.durationMs)
+      ),
       bucketMs: probe.bucketMs,
       sampleCount: probe.rmsDbfs.length,
       mediaElementCount: mediaCount,

@@ -254,6 +254,63 @@ test('agent-browser provider probes page audio through eval', async () => {
   });
 });
 
+test('agent-browser provider generated audio probe script samples streams discovered after start', async () => {
+  await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
+    const calls: AgentBrowserCall[] = [];
+    const page = createAudioProbeScriptPage();
+    const executor = async (cmd: string, args: string[]): Promise<ExecResult> => {
+      calls.push({ cmd, args });
+      assert.equal(args[0], 'eval');
+      const script = args[1];
+      if (typeof script !== 'string') throw new Error('Expected generated eval script');
+      if (calls.length === 2) page.audio.srcObject = page.stream;
+      return jsonResult({
+        success: true,
+        data: {
+          origin: 'http://localhost:19006',
+          result: page.evaluate(script),
+        },
+      });
+    };
+
+    const start = await withCommandExecutorOverride(
+      executor,
+      async () =>
+        await provider.probeAudio?.({
+          action: 'start',
+          durationMs: 5000,
+          bucketMs: 1000,
+          source: 'media-elements',
+        }),
+    );
+    const status = await withCommandExecutorOverride(
+      executor,
+      async () =>
+        await provider.probeAudio?.({
+          action: 'status',
+          durationMs: 5000,
+          bucketMs: 1000,
+          source: 'media-elements',
+        }),
+    );
+
+    assert.equal(start?.sourceCount, 0);
+    assert.equal(start?.sampleCount, 0);
+    assert.equal(status?.heard, true);
+    assert.equal(status?.sourceCount, 1);
+    assert.deepEqual(status?.rmsDbfs, [-6]);
+    assert.deepEqual(status?.peakDbfs, [-6]);
+    assert.equal(page.createdStreamSources, 1);
+    assert.deepEqual(
+      calls.map((call) => call.args.slice(0, 3)),
+      [
+        ['eval', calls[0]?.args[1] ?? '', '--json'],
+        ['eval', calls[1]?.args[1] ?? '', '--json'],
+      ],
+    );
+  });
+});
+
 test('agent-browser provider surfaces stale ref failures during requested snapshot geometry lookup', async () => {
   await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
     await assert.rejects(
@@ -482,4 +539,138 @@ function jsonResult(value: unknown, exitCode = 0): ExecResult {
 
 function expectedSelectAllShortcut(): string {
   return process.platform === 'darwin' ? 'Meta+a' : 'Control+a';
+}
+
+type AudioProbeScriptPage = {
+  audio: { currentSrc: string; readyState: number; src: string; srcObject: FakeMediaStream | null };
+  createdStreamSources: number;
+  evaluate: (script: string) => unknown;
+  stream: FakeMediaStream;
+};
+
+type FakeMediaStream = {
+  getAudioTracks: () => Array<Record<string, never>>;
+};
+
+type FakeTimer = {
+  active: boolean;
+};
+
+class FakeAudioNode {
+  readonly connections: FakeAudioNode[] = [];
+
+  connect(target: FakeAudioNode): FakeAudioNode {
+    this.connections.push(target);
+    return target;
+  }
+
+  disconnect(): void {
+    this.connections.length = 0;
+  }
+}
+
+class FakeAnalyserNode extends FakeAudioNode {
+  fftSize = 0;
+
+  getFloatTimeDomainData(buffer: Float32Array): void {
+    buffer.fill(0.5);
+  }
+}
+
+class FakeAudioContext {
+  readonly destination = new FakeAudioNode();
+  private readonly onMediaStreamSource: () => void;
+  state: 'running' | 'closed' = 'running';
+
+  constructor(onMediaStreamSource: () => void) {
+    this.onMediaStreamSource = onMediaStreamSource;
+  }
+
+  createAnalyser(): FakeAnalyserNode {
+    return new FakeAnalyserNode();
+  }
+
+  createGain(): FakeAudioNode & { gain: { value: number } } {
+    return Object.assign(new FakeAudioNode(), { gain: { value: 1 } });
+  }
+
+  createMediaElementSource(): FakeAudioNode {
+    return new FakeAudioNode();
+  }
+
+  createMediaStreamSource(): FakeAudioNode {
+    this.onMediaStreamSource();
+    return new FakeAudioNode();
+  }
+
+  close(): Promise<void> {
+    this.state = 'closed';
+    return Promise.resolve();
+  }
+
+  resume(): Promise<void> {
+    this.state = 'running';
+    return Promise.resolve();
+  }
+}
+
+function createAudioProbeScriptPage(): AudioProbeScriptPage {
+  const timers = new Set<FakeTimer>();
+  const audio = {
+    currentSrc: '',
+    readyState: 0,
+    src: '',
+    srcObject: null as FakeMediaStream | null,
+  };
+  const stream = { getAudioTracks: () => [{}] };
+  let createdStreamSources = 0;
+  const windowObject: Record<string, unknown> = {
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  };
+  windowObject.AudioContext = class extends FakeAudioContext {
+    constructor() {
+      super(() => {
+        createdStreamSources += 1;
+      });
+    }
+  };
+  const documentObject = {
+    querySelectorAll: (selector: string) => (selector === 'audio,video' ? [audio] : []),
+  };
+  const setTimer = (): FakeTimer => {
+    const timer = { active: true };
+    timers.add(timer);
+    return timer;
+  };
+  const clearTimer = (timer: FakeTimer | undefined): void => {
+    if (timer) timer.active = false;
+  };
+
+  return {
+    audio,
+    get createdStreamSources() {
+      return createdStreamSources;
+    },
+    stream,
+    evaluate(script: string): unknown {
+      const run = new Function(
+        'window',
+        'document',
+        'setInterval',
+        'clearInterval',
+        'setTimeout',
+        'clearTimeout',
+        `return ${script};`,
+      ) as (
+        window: Record<string, unknown>,
+        document: typeof documentObject,
+        setInterval: () => FakeTimer,
+        clearInterval: (timer: FakeTimer | undefined) => void,
+        setTimeout: () => FakeTimer,
+        clearTimeout: (timer: FakeTimer | undefined) => void,
+      ) => unknown;
+      return run(windowObject, documentObject, setTimer, clearTimer, setTimer, clearTimer);
+    },
+  };
 }
