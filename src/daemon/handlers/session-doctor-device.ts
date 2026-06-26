@@ -28,6 +28,8 @@ type DoctorInventoryFailure = {
   code?: string;
 };
 
+type DoctorInventoryGroup = 'android' | 'apple' | 'linux' | 'web';
+
 export async function appendDeviceInventoryCheck(
   checks: DoctorCheck[],
   req: DaemonRequest,
@@ -155,10 +157,12 @@ function deviceInventorySummary(
     return `No ${deviceInventoryLabel(selector)} devices found.`;
   }
   const booted = devices.filter((device) => device.booted === true).length;
-  return `${devices.length} ${deviceInventoryLabel(selector)} ${plural(
+  const summary = `${devices.length} ${deviceInventoryLabel(selector)} ${plural(
     devices.length,
     'device',
-  )} available; ${booted} booted.`;
+  )} available; ${booted} booted`;
+  const platformBreakdown = deviceInventorySummaryBreakdown(devices, selector);
+  return platformBreakdown ? `${summary} (${platformBreakdown}).` : `${summary}.`;
 }
 
 function deviceInventoryLabel(
@@ -173,6 +177,42 @@ function inventoryFailureSummary(failures: DoctorInventoryFailure[]): string {
     .slice(0, 2)
     .map((failure) => `${platformLabel(failure.platform)} inventory failed: ${failure.message}`)
     .join('; ');
+}
+
+function deviceInventorySummaryBreakdown(
+  devices: DeviceInfo[],
+  selector: Pick<DeviceInventoryRequest, 'platform' | 'target'>,
+): string | undefined {
+  if (selector.platform || selector.target) return undefined;
+  const groups = deviceInventoryGroups(devices);
+  return (['android', 'apple', 'linux', 'web'] as const)
+    .flatMap((group) => {
+      const entry = groups[group];
+      return entry.available > 0
+        ? [`${entry.label} ${entry.available} available, ${entry.booted} booted`]
+        : [];
+    })
+    .join('; ');
+}
+
+function deviceInventoryGroups(
+  devices: DeviceInfo[],
+): Record<DoctorInventoryGroup, { label: string; available: number; booted: number }> {
+  const groups = {
+    android: { label: 'Android', available: 0, booted: 0 },
+    apple: { label: 'Apple', available: 0, booted: 0 },
+    linux: { label: 'Linux', available: 0, booted: 0 },
+    web: { label: 'web', available: 0, booted: 0 },
+  };
+  for (const device of devices) {
+    const group =
+      device.platform === 'ios' || device.platform === 'macos'
+        ? groups.apple
+        : groups[device.platform];
+    group.available += 1;
+    if (device.booted === true) group.booted += 1;
+  }
+  return groups;
 }
 
 function platformLabel(platform: PlatformSelector): string {
