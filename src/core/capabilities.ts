@@ -26,6 +26,10 @@ export type CommandCapability = {
   web?: KindMatrix;
 };
 
+export const isHostSystemAudioProbeDevice = (device: DeviceInfo): boolean =>
+  device.platform === 'macos' ||
+  (device.platform === 'ios' && device.kind === 'simulator') ||
+  (device.platform === 'android' && device.kind === 'emulator');
 const WEB_DEVICE: KindMatrix = { device: true };
 const WEB_RUNTIME_COMMANDS = ['open', 'close'] as const;
 const WEB_RECORDING_COMMANDS = ['record'] as const;

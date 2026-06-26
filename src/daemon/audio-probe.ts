@@ -1,7 +1,12 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { normalizeAudioProbeRecord, type AudioProbeResult } from '../audio-probe-result.ts';
-import { startHostSystemAudioProbeProcess } from '../platforms/host-system-audio.ts';
+import {
+  emptyAudioProbeResult,
+  normalizeAudioProbeRecord,
+  type AudioProbeResult,
+} from '../audio-probe-result.ts';
+import { isHostSystemAudioProbeDevice } from '../core/capabilities.ts';
+import { startMacOsAudioProbeProcess } from '../platforms/ios/macos-helper.ts';
 import { AppError } from '../utils/errors.ts';
 import { sleep } from '../utils/timeouts.ts';
 import type { SessionStore } from './session-store.ts';
@@ -18,13 +23,7 @@ export type HostAudioProbeCommand = {
   bucketMs: number;
 };
 
-export function usesHostSystemAudioProbe(device: SessionState['device']): boolean {
-  return (
-    device.platform === 'macos' ||
-    (device.platform === 'ios' && device.kind === 'simulator') ||
-    (device.platform === 'android' && device.kind === 'emulator')
-  );
-}
+export const usesHostSystemAudioProbe = isHostSystemAudioProbeDevice;
 
 export async function runHostSystemAudioProbeCommand(
   request: HostAudioProbeCommand,
@@ -36,7 +35,7 @@ export async function runHostSystemAudioProbeCommand(
       request.sessionStore.ensureSessionDir(request.sessionName),
       'audio-probe.json',
     );
-    const probe = await startHostSystemAudioProbeProcess({
+    const probe = await startMacOsAudioProbeProcess({
       durationMs: request.durationMs,
       bucketMs: request.bucketMs,
       statusPath,
@@ -147,22 +146,14 @@ function finalizeHostSystemAudioProbeStatus(
   const elapsedMs = Math.min(probe.durationMs, Math.max(0, Date.now() - probe.startedAt));
   const base =
     status ??
-    ({
-      audio: 'probe',
-      state: 'stopped',
-      active: false,
-      heard: false,
+    emptyAudioProbeResult({
       source: 'system-audio',
       backend: HOST_AUDIO_BACKEND,
       durationMs: probe.durationMs,
-      elapsedMs: 0,
       bucketMs: probe.bucketMs,
-      sampleCount: 0,
       sourceCount: 1,
-      rmsDbfs: [],
-      peakDbfs: [],
       notes: hostSystemAudioProbeNotes(device),
-    } as AudioProbeResult);
+    });
   return {
     ...base,
     state: 'stopped',
@@ -178,26 +169,19 @@ function buildHostSystemAudioProbeFallback(
   state: 'running' | 'stopped',
   reason?: string,
 ): AudioProbeResult {
-  return {
-    audio: 'probe',
+  return emptyAudioProbeResult({
     state,
-    active: state === 'running',
-    heard: false,
     source: 'system-audio',
     backend: HOST_AUDIO_BACKEND,
     durationMs: request.durationMs,
-    elapsedMs: 0,
     bucketMs: request.bucketMs,
-    sampleCount: 0,
     sourceCount: 0,
-    rmsDbfs: [],
-    peakDbfs: [],
     reason,
     notes: [
       ...hostSystemAudioProbeNotes(request.session.device),
       'No active host audio probe is running.',
     ],
-  };
+  });
 }
 
 function hostSystemAudioProbeNotes(device: SessionState['device']): string[] {

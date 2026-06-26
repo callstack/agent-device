@@ -33,6 +33,41 @@ export type NormalizeAudioProbeRecordOptions = {
   notes?: string[];
 };
 
+export type EmptyAudioProbeResultOptions = {
+  source: AudioProbeSource;
+  backend: string;
+  durationMs: number;
+  bucketMs: number;
+  state?: 'running' | 'stopped';
+  elapsedMs?: number;
+  mediaElementCount?: number;
+  sourceCount?: number;
+  reason?: string;
+  notes?: string[];
+};
+
+export function emptyAudioProbeResult(options: EmptyAudioProbeResultOptions): AudioProbeResult {
+  const state = options.state ?? 'stopped';
+  return {
+    audio: 'probe',
+    state,
+    active: state === 'running',
+    heard: false,
+    source: options.source,
+    backend: options.backend,
+    durationMs: options.durationMs,
+    elapsedMs: options.elapsedMs ?? 0,
+    bucketMs: options.bucketMs,
+    sampleCount: 0,
+    mediaElementCount: options.mediaElementCount,
+    sourceCount: options.sourceCount ?? 0,
+    rmsDbfs: [],
+    peakDbfs: [],
+    reason: options.reason,
+    notes: options.notes,
+  };
+}
+
 export function normalizeAudioProbeRecord(
   value: unknown,
   options: NormalizeAudioProbeRecordOptions,
