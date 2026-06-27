@@ -19,6 +19,10 @@ const metadataPath = path.join(derivedPath, '.agent-device-runner-cache.json');
 
 const DEFAULT_IOS_RUNNER_APP_BUNDLE_ID = 'com.callstack.agentdevice.runner';
 
+function isTruthy(value) {
+  return ['1', 'true', 'TRUE', 'yes', 'YES', 'on', 'ON'].includes(String(value ?? ''));
+}
+
 function readPackageVersion() {
   try {
     const pkg = JSON.parse(fs.readFileSync(path.join(projectRoot, 'package.json'), 'utf8'));
@@ -196,11 +200,14 @@ function resolveSigningBuildSettings() {
 }
 
 function resolveSandboxBuildArgs() {
+  const swiftFlags = isTruthy(process.env.AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS)
+    ? '$(inherited) -disable-sandbox -D AGENT_DEVICE_RUNNER_UNIT_TESTS'
+    : '$(inherited) -disable-sandbox';
   return [
     '-IDEPackageSupportDisableManifestSandbox=1',
     '-IDEPackageSupportDisablePluginExecutionSandbox=1',
     'ENABLE_USER_SCRIPT_SANDBOXING=NO',
-    'OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox',
+    `OTHER_SWIFT_FLAGS=${swiftFlags}`,
   ];
 }
 

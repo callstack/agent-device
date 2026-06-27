@@ -304,6 +304,7 @@ extension RunnerTests {
   }
 }
 
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
 // MARK: - In-bundle unit tests
 
 extension RunnerTests {
@@ -423,3 +424,4 @@ extension RunnerTests {
     XCTAssertEqual(payload.snapshotQuality?.reasonCode, "ax-rejected")
   }
 }
+#endif

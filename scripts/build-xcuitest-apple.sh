@@ -93,6 +93,11 @@ if is_truthy "${AGENT_DEVICE_IOS_CLEAN_DERIVED:-}"; then
   rm -rf "$CLEAN_PATH"
 fi
 
+SWIFT_FLAGS='$(inherited) -disable-sandbox'
+if is_truthy "${AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS:-}"; then
+  SWIFT_FLAGS="$SWIFT_FLAGS -D AGENT_DEVICE_RUNNER_UNIT_TESTS"
+fi
+
 xcodebuild build-for-testing \
   -project "$PROJECT_PATH" \
   -scheme "$SCHEME" \
@@ -108,7 +113,7 @@ xcodebuild build-for-testing \
   -IDEPackageSupportDisableManifestSandbox=1 \
   -IDEPackageSupportDisablePluginExecutionSandbox=1 \
   ENABLE_USER_SCRIPT_SANDBOXING=NO \
-  OTHER_SWIFT_FLAGS='$(inherited) -disable-sandbox' \
+  OTHER_SWIFT_FLAGS="$SWIFT_FLAGS" \
   $SIGNING_BUILD_SETTINGS
 
 node --experimental-strip-types scripts/patch-xcuitest-runner-icon.ts "$DERIVED_PATH"

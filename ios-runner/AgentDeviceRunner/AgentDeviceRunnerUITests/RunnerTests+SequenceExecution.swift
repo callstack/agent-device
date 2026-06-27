@@ -273,6 +273,7 @@ extension RunnerTests {
   }
 }
 
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
 // MARK: - In-bundle unit tests (device-free)
 
 extension RunnerTests {
@@ -448,3 +449,4 @@ extension RunnerTests {
     return try! JSONDecoder().decode(Command.self, from: data)
   }
 }
+#endif

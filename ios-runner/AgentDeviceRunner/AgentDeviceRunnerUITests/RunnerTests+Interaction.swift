@@ -1265,6 +1265,7 @@ extension RunnerTests {
     return element.exists ? element : nil
   }
 
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
   // Identity in portrait/unknown, 90° per landscape, 180° upside-down.
   func testNativeSynthesizedPointRotatesByInterfaceOrientation() {
     let portrait = CGRect(x: 0, y: 0, width: 834, height: 1210)
@@ -1333,4 +1334,5 @@ extension RunnerTests {
     XCTAssertEqual(events.count, 1)
     XCTAssertEqual(events.first?.vertical, -200)
   }
+#endif
 }

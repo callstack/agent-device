@@ -426,6 +426,7 @@ extension RunnerTests {
     )
   }
 
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
   func testSnapshotAccessibilityUnavailableMarksSparseSnapshotRunnerFatal() {
     currentApp = app
     currentBundleId = "com.example.app"
@@ -468,6 +469,7 @@ extension RunnerTests {
     XCTAssertTrue(failure.message.contains("\(Self.rawSnapshotMaxNodes) nodes"))
     XCTAssertEqual(failure.hint, Self.rawSnapshotTooLargeHint)
   }
+#endif
 
   private func interactiveRootNode(rect: CGRect) -> SnapshotNode {
     SnapshotNode(

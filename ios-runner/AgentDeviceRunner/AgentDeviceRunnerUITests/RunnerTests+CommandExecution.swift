@@ -130,6 +130,7 @@ extension RunnerTests {
     return Response(ok: true, data: data)
   }
 
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
   func testGestureResponseIncludesSynthesizedTapFallbackDiagnostics() {
     let response = gestureResponse(
       message: "tapped",
@@ -180,6 +181,7 @@ extension RunnerTests {
     )
     XCTAssertNil(xctestRecordedFailureResponse(command: tapCommand, response: runnerFatalResponse))
   }
+#endif
 
   func execute(command: Command) throws -> Response {
     if command.command == .status {

@@ -208,6 +208,7 @@ extension RunnerTests {
   }
 }
 
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
 // MARK: - In-bundle unit tests
 
 extension RunnerTests {
@@ -325,3 +326,4 @@ extension RunnerTests {
     XCTAssertFalse(labels.contains("Admin settings"))
   }
 }
+#endif

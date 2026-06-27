@@ -64,6 +64,7 @@ extension RunnerTests {
     return type
   }
 
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
   func testFlatSnapshotFilterDecisionMatrixCoversOptions() {
     let visibleContent = FlatSnapshotFilterNode(
       isRoot: false,
@@ -164,4 +165,5 @@ extension RunnerTests {
       "private AX marks scroll containers as interactive candidates"
     )
   }
+#endif
 }
