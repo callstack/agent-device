@@ -104,6 +104,14 @@ missing/renamed command **compiles fine and fails only at runtime**.
 > tools, the CLI schema, and the batch writer from **one array**. The fix is to *extend* this proven seam, not
 > invent one.
 
+**Compose, don't collapse (ADR 0003).** "One registration" must **not** become "one flat public object that
+owns everything." Daemon route/policy is a deliberately separate, internally-owned concern
+([ADR 0003](../docs/adr/0003-daemon-command-registry.md)). The descriptor **composes facets owned by their
+domains** — a public `surface` facet (`src/commands/**`), a `capability` facet (`src/core/capabilities`), and a
+`daemon` facet **owned under `src/daemon/`** — and *projects* each into its consumer. The daemon registry stays
+the sole exposer of its predicate interface (`isLeaseAdmissionExempt`, `shouldLockSessionExecution`, …); only how
+its backing table is *built* changes, never how it is *read*. See §5.2 for the binding invariants.
+
 ### Axis B — No `PlatformPlugin` (the platform smear)
 
 `Platform` is `'ios' | 'macos' | 'android' | 'linux' | 'web'` (a bare union in `utils/device.ts`). **231
@@ -272,26 +280,51 @@ function isCommandSupportedOnDevice(cmd, device) {
 from a runtime `Map`). The registry is asserted exhaustive against it, and the three *runtime* lists collapse —
 but "add a platform" still touches the `device.ts` union line.
 
-### 5.2 `CommandDescriptor` (the command axis) — *extends* the existing facet, additively
+**Apple is the first real plugin — and owns an `AppleOS` leaf axis.** The Apple plugin owns `apple` (today's
+`ios`+`macos`) and discriminates `ios | ipados | tvos | watchos | visionos | macos` via an `appleOs` field —
+**not** six `Platform` literals (which would collide with the cross-platform `target` axis). The XCTest runner
+already builds `ios|macos|tvos` and ~85% of `platforms/ios` is already the OS-agnostic Apple engine, so this is
+mostly relocate-and-rename for iOS/iPadOS/tvOS/macOS; visionOS is scoped net-new work and watchOS is an
+explicit unsupported sentinel (XCUITest can't drive it). Full plan:
+[apple-platform-consolidation.md](./apple-platform-consolidation.md).
+
+### 5.2 `CommandDescriptor` (the command axis) — *facet composition*, honoring ADR 0003
+
+One registration **composes facets whose type + ownership stay in their domain module** — this is "compose
+with [ADR 0003](../docs/adr/0003-daemon-command-registry.md)", not "collapse daemon policy into a public
+registry."
 
 ```ts
-// src/commands/descriptor/types.ts
-export type CommandDescriptor<Name extends string = string> = CommandFacet<Name> & {  // ← reuse the proven spine
-  capability?: CommandCapability;                       // → BASE_COMMAND_CAPABILITY_MATRIX
-  daemon: { route: DaemonCommandRoute } & DaemonCommandTraits;  // → DAEMON_COMMAND_DESCRIPTORS (closures move, not flatten)
-  batchable?: boolean;                                  // → STRUCTURED_BATCH_COMMAND_NAMES
-  mcp?: { expose: boolean; outputSchema?: JsonSchema }; // → MCP tool list + per-command output schema
-  invoke: CommandFacet<Name>['definition']['invoke'];   // cross-process client  (KEEP distinct...
-  execute?: (ctx, input: CommandResult<Name>) => Promise<CommandResult<Name>>; // ...from in-daemon — never collapse the boundary)
-};
+// src/commands/<family>/press.ts — the single registration site (kills cross-table drift)
+export const press = defineCommand({
+  surface:    pressSurface,       // owned by src/commands/**       (identity, cliReader, schema, mcp)
+  capability: pressCapability,    // owned by src/core/capabilities
+  daemon:     pressDaemon,        // owned by src/daemon/   ← ADR 0003 ownership PRESERVED
+  result:     {} as PressResult,  // typed CommandResult
+});
 
-// derive.ts — pure folds; each one replaces a hand table:
-const PUBLIC_COMMANDS   = descriptors.map(d => d.name);
-const CAPABILITY_MATRIX = Object.fromEntries(descriptors.flatMap(d => d.capability ? [[d.name, d.capability]] : []));
-const DAEMON_ROUTES     = Object.fromEntries(descriptors.map(d => [d.name, d.daemon]));
-const BATCH_ALLOWLIST   = descriptors.filter(d => d.batchable).map(d => d.name);
-const DISPATCH: { [N in CommandDescriptor['name']]: CommandDescriptor<N>['execute'] } = /* total map: missing = compile error */;
+// src/daemon/command-policy/press.ts — DAEMON-owned facet (lives UNDER src/daemon/, not commands/)
+export const pressDaemon = defineDaemonFacet('press', {
+  route: 'interaction', replayScopedAction: true, androidBlockingDialogGuard: true,
+  // allowSessionlessDefaultDevice / skipSessionlessProviderDevice closures stay here, verbatim
+});
+
+// Projections BUILD each consumer's table; they never restate identity:
+const DAEMON_REGISTRY   = buildDaemonRegistry(commands.map(c => c.daemon));   // built under src/daemon/
+const CAPABILITY_MATRIX = Object.fromEntries(commands.map(c => [c.name, c.capability]));
+const BATCH_ALLOWLIST   = commands.filter(c => c.surface.batchable).map(c => c.name);
+const DISPATCH: { [N in Command]: Execute<N> } = /* total map: a missing handler is a compile error */;
+// getDaemonCommandRoute / isLeaseAdmissionExempt / shouldLockSessionExecution … UNCHANGED for callers.
 ```
+
+**The four invariants (from the [ADR 0003 amendment](../docs/adr/0003-daemon-command-registry.md)) the design
+must satisfy:**
+1. Daemon traits **owned under `src/daemon/`**, composed in — never inlined as fields on the public contract.
+2. **Predicate interface unchanged** — derivation changes how the table is *built*, not how it is *read*.
+3. **No leakage** — public projections (catalog/CLI/MCP/help/capability) are type-prevented from reading
+   daemon-only traits, and vice versa.
+4. **One declaration per concern, enforced by types** — a missing/duplicate facet is a *compile error*
+   (replacing today's "aligned by convention").
 
 ### 5.3 Typed-result spine
 
@@ -355,10 +388,10 @@ a step can't ship alone, the plan has failed.
 
 | Phase | Step | Risk | Payoff |
 |---|---|---|---|
-| **0 · confidence builders** (behaviorless) | (a) parse-at-boundary on MCP/HTTP edge; (b) make capability lookup exhaustive/throwing for unknown platforms; (c) generic `RecordingBackend<P>` → delete 5 casts; (d) collapse the 3 platform allow-lists + 5-layer batch validation | low | correctness/security; builds muscle memory; touches no identity table |
+| **0 · confidence builders** (behaviorless) | **(b) ✅ shipped** — exhaustive capability platform selection; **(c) ✅ shipped** — generic `RecordingBackend<P>` (5 casts deleted); (a) parse-at-boundary on MCP/HTTP edge; (d) collapse the 3 platform allow-lists + 5-layer batch validation | low | correctness/security; builds muscle memory; touches no identity table |
 | **1 · command spine** | (a) **invert the import graph** — `commandRegistry` becomes root, `command-catalog`/`capabilities`/`daemon-registry`/`batch-policy` derive (parity-tested, no deletion yet); (b) promote each family's facet → `CommandDescriptor` additively; (c) replace the 24-arm switch with the total map, arm-by-arm | **med** (the import-cycle inversion is the real first-week blocker: `command-catalog` has ~95 importers and the facet imports `AgentDeviceClient` today) | finishes a proven seam; add-command → ~2 files; enables everything below |
 | **2 · typed results** (the parity oracle) | (a) `CommandResultMap` with `Record` default, migrate per-command from real runner payloads; (b) graft `TypedError`; fold the disowned 'generic' family into `handlers/` **last**; (c) kill the `client-types.ts` mirror (~550 LOC) | med (must be per-command, never a big-bang retype of 203 files) | the safety net the platform unwind needs; biggest single LOC win |
-| **3 · platform plugin** (now safe) | (a) define `PlatformPlugin`, **lazy** factories (cold-start benchmark guards latency); (b) move capability columns onto plugin grants, **porting every `supports()` closure verbatim**, pinned by the table-equivalence test before deletion; (c) **last & most-gated:** unwind macOS out of iOS (keep an `apple-shared/` runner byte-identical), gated behind the sim-validation request-counting harness | **high** (touches the shared XCTest runner) | add-platform wiring → ~3 files; kills the 231-branch smear |
+| **3 · platform plugin** (now safe) | (a) define `PlatformPlugin`, **lazy** factories (cold-start benchmark guards latency); (b) move capability columns onto plugin grants, **porting every `supports()` closure verbatim**, pinned by the table-equivalence test before deletion; (c) **last & most-gated:** unwind macOS out of iOS (keep an `apple-shared/` runner byte-identical), gated behind the sim-validation request-counting harness. The **Apple plugin is the first instance** and owns the `AppleOS` leaves — see [apple-platform-consolidation.md](./apple-platform-consolidation.md) | **high** (touches the shared XCTest runner) | add-platform wiring → ~3 files; kills the 231-branch smear |
 | **4 · agent-cost** (opt-in) | (a) `ResponseView.toView` with `default`==today; `responseLevel` knob defaulting to `default`; (b) typed `BatchStepResult` → intermediate steps digest; per-command MCP `outputSchema`; generalize zero-load fast-paths | med (wire-shape risk vs Maestro — strictly opt-in) | the north-star-#2 token/latency wins |
 | **5 · layering + legacy** (quiet windows) | intent-folder moves + utils extraction as pure path codemods; at next major drop the ~175 LOC of legacy aliases/barrels | low-per-step, high-diff | scoped ownership + import lint; merge-pain risk → land fast, small |
 
@@ -390,7 +423,75 @@ grants; bundling the folder reorg with the registry work (maximizes diff-noise a
 
 ---
 
-## 8. The one-line version
+## 8. Before / after — the command axis
+
+(The platform-axis before/after diagrams live in
+[apple-platform-consolidation.md](./apple-platform-consolidation.md), since Apple is its first instance.)
+
+```
+BEFORE — a command's identity is RESTATED in ~10 hand-synced tables, aligned "by convention"
+─────────────────────────────────────────────────────────────────────────────────────────────
+
+   command "press" = a bare string shared by every table below (no compile-time link between them)
+
+   PUBLIC surface              DAEMON-INTERNAL              DERIVED-BY-HAND
+   ─────────────────           ──────────────────           ──────────────────
+   • command-catalog.ts        • daemon-command-            • client-types.ts (Options/Result
+     (public identity)           registry.ts                  mirror, ~550 LOC)
+   • commands/** contracts       route + policy traits      • core/dispatch.ts (24-arm switch,
+     (cliReader / daemonWriter)  ✔ ADR 0003: own file,         default: throw)
+   • capabilities.ts             internal-only,             • client.ts wrappers
+     (apple/android matrix)      predicate interface        • batch-policy.ts allowlist
+                                 (isLeaseAdmissionExempt,
+                                  shouldLockSessionExec…)
+                                        ▲
+                                        └── consumed by 8 daemon request modules
+
+   ⇒ add/rename a command = touch ~10 files; a missed table compiles fine and fails at RUNTIME (drift)
+   ✔ ADR 0003 already isolated daemon policy correctly — the problem is everything ELSE is also separate
+```
+
+```
+AFTER — ONE registration composes DOMAIN-OWNED facets; the ~10 tables become DERIVED projections
+─────────────────────────────────────────────────────────────────────────────────────────────────────
+
+   src/commands/<family>/press.ts
+   defineCommand({                          each facet's TYPE + OWNERSHIP stays in its domain module
+      surface:    … ,  ─────────────────►   src/commands/**        (identity, cli, schema, mcp)
+      capability: … ,  ─────────────────►   src/core/capabilities
+      daemon:     … ,  ─────────────────►   src/daemon/    ◄── ADR 0003 ownership PRESERVED
+      result:     … ,  ─────────────────►   typed CommandResult
+   })
+   single registration site · a missing/duplicate facet = COMPILE ERROR (drift killed structurally)
+            │
+            ▼  pure projections — they BUILD each table, they don't restate it
+   ┌──────────────────────────────────────────────────────────────────────────────────────────┐
+   │  catalog · capability matrix · batch allowlist · dispatch map · client types               │ ← PUBLIC views
+   │  daemon-command-registry ── still exposes the SAME predicates; the 8 callers are UNCHANGED  │ ← daemon view
+   └──────────────────────────────────────────────────────────────────────────────────────────┘
+
+   ADR 0003 invariants held:
+     (1) daemon traits OWNED under src/daemon/, never inlined into the public command surface
+     (2) predicate interface unchanged — derivation changes how the table is BUILT, not how it is READ
+     (3) public projections type-prevented from reading daemon-only traits (no leakage)
+     (4) one declaration per concern, enforced by the type system (was "aligned by convention")
+```
+
+**The two axes are the same thesis** — replace *"identity smeared across many tables/branches"* with *"one
+registration → everything else derives or looks up"*:
+
+```
+   PLATFORM axis                                  COMMAND axis
+   ─────────────                                  ─────────────
+   PlatformPlugin registry (§5.1)                 CommandDescriptor registry (§5.2)
+     └─ Apple plugin ──owns──► appleOs              └─ defineCommand(...) ──derives──► catalog,
+        { ios … macos … visionos }                    capability, daemon-registry, batch, dispatch,
+   (apple-platform-consolidation.md)                  client-types   (daemonFacet honors ADR 0003)
+```
+
+---
+
+## 9. The one-line version
 
 > Give the two things this product grows by — **platforms** and **commands** — each *one file you extend*, make
 > every other table *derive* from those two, type the results so the derivations are sound, and never touch the
