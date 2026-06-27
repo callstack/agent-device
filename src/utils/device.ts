@@ -1,7 +1,7 @@
 import { AppError } from './errors.ts';
 
 export type ApplePlatform = 'ios' | 'macos';
-const PLATFORMS = ['ios', 'macos', 'android', 'linux', 'web'] as const;
+export const PLATFORMS = ['ios', 'macos', 'android', 'linux', 'web'] as const;
 export type Platform = (typeof PLATFORMS)[number];
 export const PLATFORM_SELECTORS = [...PLATFORMS, 'apple'] as const;
 export type PlatformSelector = (typeof PLATFORM_SELECTORS)[number];
@@ -44,6 +44,12 @@ export function isApplePlatform(
   platform: Platform | PlatformSelector | undefined,
 ): platform is ApplePlatform | 'apple' {
   return platform === 'apple' || platform === 'ios' || platform === 'macos';
+}
+
+export function isPlatform(value: unknown): value is Platform {
+  // Leaf-platform membership derived from the canonical PLATFORMS tuple (excludes the
+  // `apple` selector, which is not a concrete device platform).
+  return (PLATFORMS as readonly unknown[]).includes(value);
 }
 
 export function matchesPlatformSelector(

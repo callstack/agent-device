@@ -1,7 +1,9 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
+  isPlatform,
   matchesPlatformSelector,
+  PLATFORMS,
   resolveApplePlatformName,
   resolveAppleSimulatorSetPathForSelector,
   resolveDevice,
@@ -13,6 +15,16 @@ test('matchesPlatformSelector resolves apple selector across Apple platforms', (
   assert.equal(matchesPlatformSelector('ios', 'apple'), true);
   assert.equal(matchesPlatformSelector('macos', 'apple'), true);
   assert.equal(matchesPlatformSelector('android', 'apple'), false);
+});
+
+test('isPlatform accepts exactly the canonical PLATFORMS tuple', () => {
+  for (const platform of PLATFORMS) {
+    assert.equal(isPlatform(platform), true);
+  }
+  // The `apple` selector is not a concrete leaf platform.
+  assert.equal(isPlatform('apple'), false);
+  assert.equal(isPlatform('windows'), false);
+  assert.equal(isPlatform(undefined), false);
 });
 
 test('resolveApplePlatformName resolves tv and desktop targets', () => {

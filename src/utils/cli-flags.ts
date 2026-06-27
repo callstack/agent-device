@@ -3,7 +3,7 @@ import type { RecordingExportQuality } from '../core/recording-export-quality.ts
 import type { BackMode } from '../core/back-mode.ts';
 import type { ClickButton } from '../core/click-button.ts';
 import type { SwipePattern } from '../core/scroll-gesture.ts';
-import type { DeviceTarget, PlatformSelector } from './device.ts';
+import { PLATFORM_SELECTORS, type DeviceTarget, type PlatformSelector } from './device.ts';
 import type {
   DaemonInstallSource,
   DaemonServerMode,
@@ -344,8 +344,8 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     key: 'platform',
     names: ['--platform'],
     type: 'enum',
-    enumValues: ['ios', 'macos', 'android', 'linux', 'web', 'apple'],
-    usageLabel: '--platform ios|macos|android|linux|web|apple',
+    enumValues: PLATFORM_SELECTORS,
+    usageLabel: `--platform ${PLATFORM_SELECTORS.join('|')}`,
     usageDescription: 'Platform to target (`apple` aliases the Apple automation backend)',
   },
   {
