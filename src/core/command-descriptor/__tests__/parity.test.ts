@@ -2,18 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { STRUCTURED_BATCH_COMMAND_NAMES } from '../../../batch-policy.ts';
 import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
-import { BASE_COMMAND_CAPABILITY_MATRIX, type CommandCapability } from '../../capabilities.ts';
+import { BASE_COMMAND_CAPABILITY_MATRIX } from '../../capabilities.ts';
 import {
   DAEMON_COMMAND_DESCRIPTORS,
   type DaemonCommandDescriptor,
 } from '../../../daemon/daemon-command-registry.ts';
 import type { DaemonRequest } from '../../../daemon/types.ts';
-import type { DeviceInfo } from '../../../utils/device.ts';
-import {
-  deriveCapabilityMatrix,
-  deriveDaemonCommandDescriptors,
-  deriveStructuredBatchCommandNames,
-} from '../derive.ts';
+import { deriveDaemonCommandDescriptors, deriveStructuredBatchCommandNames } from '../derive.ts';
 import { commandDescriptors } from '../registry.ts';
 
 // Function-valued traits cannot be deep-equaled across re-authored closures, so
@@ -23,7 +18,6 @@ const DAEMON_FUNCTION_TRAITS = [
   'allowSessionlessDefaultDevice',
   'skipSessionlessProviderDevice',
 ] as const;
-const CAPABILITY_FUNCTION_TRAITS = ['supports', 'unsupportedHint'] as const;
 
 // Public commands that intentionally have no daemon route — they live only in the
 // capability/batch tables, so the daemon registry has never covered them.
@@ -32,13 +26,18 @@ const UNROUTED_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.installFromSource,
 ]);
 
-function stripFunctions<T extends Record<string, unknown>>(value: T): Partial<T> {
-  const result: Record<string, unknown> = {};
-  for (const [key, entry] of Object.entries(value)) {
-    if (typeof entry !== 'function') result[key] = entry;
-  }
-  return result as Partial<T>;
-}
+// Public commands that intentionally carry no capability entry — pure control-plane
+// or always-admitted commands, so the capability matrix has never covered them.
+const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
+  PUBLIC_COMMANDS.appState,
+  PUBLIC_COMMANDS.batch,
+  PUBLIC_COMMANDS.devices,
+  PUBLIC_COMMANDS.gesture,
+  PUBLIC_COMMANDS.prepare,
+  PUBLIC_COMMANDS.replay,
+  PUBLIC_COMMANDS.test,
+  PUBLIC_COMMANDS.trace,
+]);
 
 function makeRequest(command: string, positionals: string[] = []): DaemonRequest {
   return { command, token: 'parity-token', session: 'parity-session', positionals, flags: {} };
@@ -57,24 +56,6 @@ function sampleRequests(command: string): DaemonRequest[] {
     { ...makeRequest(PUBLIC_COMMANDS.test), flags: { shardSplit: 1 } },
   ];
 }
-
-function device(partial: Partial<DeviceInfo> & Pick<DeviceInfo, 'platform' | 'kind'>): DeviceInfo {
-  return { id: 'parity-id', name: 'parity-device', ...partial };
-}
-
-const SAMPLE_DEVICES: DeviceInfo[] = [
-  device({ platform: 'ios', kind: 'simulator' }),
-  device({ platform: 'ios', kind: 'simulator', target: 'tv' }),
-  device({ platform: 'ios', kind: 'device' }),
-  device({ platform: 'ios', kind: 'device', target: 'tv' }),
-  device({ platform: 'macos', kind: 'device' }),
-  device({ platform: 'macos', kind: 'simulator' }),
-  device({ platform: 'android', kind: 'emulator' }),
-  device({ platform: 'android', kind: 'device' }),
-  device({ platform: 'android', kind: 'simulator' }),
-  device({ platform: 'linux', kind: 'device' }),
-  device({ platform: 'web', kind: 'device' }),
-];
 
 test('derived daemon registry holds its routing invariants', () => {
   // The daemon registry is now BUILT from these derived descriptors (the
@@ -120,40 +101,31 @@ test('derived daemon descriptors preserve closure traits by presence and behavio
   }
 });
 
-test('derived capability matrix matches the hand table (non-function fields)', () => {
-  const derived = deriveCapabilityMatrix(commandDescriptors);
-  assert.deepEqual(
-    Object.keys(derived).sort(),
-    Object.keys(BASE_COMMAND_CAPABILITY_MATRIX).sort(),
-    'capability command coverage',
-  );
-  for (const [command, live] of Object.entries(BASE_COMMAND_CAPABILITY_MATRIX)) {
-    assert.deepEqual(
-      stripFunctions(derived[command] as CommandCapability),
-      stripFunctions(live),
-      `${command} non-function capability fields`,
+test('capability matrix holds its admission invariants', () => {
+  // BASE_COMMAND_CAPABILITY_MATRIX is now BUILT from these derived descriptors
+  // (the hand-authored literal was deleted after #906 proved byte-equality,
+  // including the supports/unsupportedHint closures across the sample-device
+  // matrix), so a derived-vs-BASE comparison would be a tautology. Instead assert
+  // the invariants the admission path depends on: every entry is selectable (has a
+  // platform bucket or a supports predicate) and the public-command coverage floor
+  // is unchanged.
+  const entries = Object.entries(BASE_COMMAND_CAPABILITY_MATRIX);
+  assert.ok(entries.length > 0, 'capability matrix present');
+
+  for (const [command, capability] of entries) {
+    const hasPlatformBucket = Boolean(
+      capability.apple || capability.android || capability.linux || capability.web,
+    );
+    assert.ok(
+      hasPlatformBucket || typeof capability.supports === 'function',
+      `${command} has a platform bucket or a supports predicate`,
     );
   }
-});
 
-test('derived capability matrix preserves supports/unsupportedHint by presence and behavior', () => {
-  const derived = deriveCapabilityMatrix(commandDescriptors);
-  for (const [command, live] of Object.entries(BASE_COMMAND_CAPABILITY_MATRIX)) {
-    const derivedCapability = derived[command] as CommandCapability;
-    for (const trait of CAPABILITY_FUNCTION_TRAITS) {
-      const derivedFn = derivedCapability[trait] as ((device: DeviceInfo) => unknown) | undefined;
-      const liveFn = live[trait] as ((device: DeviceInfo) => unknown) | undefined;
-      assert.equal(typeof derivedFn, typeof liveFn, `${command} ${trait} presence`);
-      if (typeof liveFn === 'function' && typeof derivedFn === 'function') {
-        for (const sample of SAMPLE_DEVICES) {
-          assert.equal(
-            derivedFn(sample),
-            liveFn(sample),
-            `${command} ${trait} on ${sample.platform}/${sample.kind}/${sample.target ?? 'mobile'}`,
-          );
-        }
-      }
-    }
+  const covered = new Set(Object.keys(BASE_COMMAND_CAPABILITY_MATRIX));
+  for (const command of Object.values(PUBLIC_COMMANDS)) {
+    if (NO_CAPABILITY_PUBLIC_COMMANDS.has(command)) continue;
+    assert.ok(covered.has(command), `capability matrix covers public command ${command}`);
   }
 });
 
