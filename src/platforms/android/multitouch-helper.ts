@@ -16,6 +16,12 @@ import {
   type AndroidTouchGestureRequest,
 } from './adb-executor.ts';
 import { getAndroidScreenSize, swipeAndroid } from './input-actions.ts';
+import {
+  parseInstrumentationRecords,
+  readAndroidHelperManifestInteger,
+  readAndroidHelperManifestLiteral,
+  readInstrumentationResultNumber,
+} from './instrumentation-helper.ts';
 
 const ANDROID_MULTITOUCH_HELPER_NAME = 'android-multitouch-helper';
 const ANDROID_MULTITOUCH_HELPER_PACKAGE = 'com.callstack.agentdevice.multitouchhelper';
@@ -401,7 +407,7 @@ export async function runAndroidMultiTouchHelperGesture(options: {
 }
 
 export function parseAndroidMultiTouchHelperOutput(output: string): Record<string, unknown> {
-  const finalResult = parseInstrumentationResults(output).find(
+  const finalResult = parseInstrumentationRecords(output).results.find(
     (record) => record.agentDeviceProtocol === ANDROID_MULTITOUCH_HELPER_PROTOCOL,
   );
   if (!finalResult) {
@@ -423,8 +429,8 @@ export function parseAndroidMultiTouchHelperOutput(output: string): Record<strin
   return {
     kind: finalResult.kind,
     helperApiVersion: finalResult.helperApiVersion,
-    injectedEvents: readOptionalNumber(finalResult.injectedEvents),
-    elapsedMs: readOptionalNumber(finalResult.elapsedMs),
+    injectedEvents: readInstrumentationResultNumber(finalResult.injectedEvents),
+    elapsedMs: readInstrumentationResultNumber(finalResult.elapsedMs),
   };
 }
 
@@ -432,33 +438,6 @@ function readHelperErrorMessage(finalResult: Record<string, string>): string {
   return finalResult.message && finalResult.message !== 'null'
     ? finalResult.message
     : finalResult.errorType || 'Android multi-touch helper returned an error';
-}
-
-function parseInstrumentationResults(output: string): Array<Record<string, string>> {
-  const results: Array<Record<string, string>> = [];
-  let current: Record<string, string> | null = null;
-  for (const line of output.split(/\r?\n/)) {
-    if (line.startsWith('INSTRUMENTATION_RESULT: ')) {
-      current ??= {};
-      readKeyValue(line.slice('INSTRUMENTATION_RESULT: '.length), current);
-    } else if (line.startsWith('INSTRUMENTATION_CODE: ') && current) {
-      results.push(current);
-      current = null;
-    }
-  }
-  if (current) results.push(current);
-  return results;
-}
-
-function readKeyValue(line: string, target: Record<string, string>): void {
-  const separator = line.indexOf('=');
-  if (separator >= 0) target[line.slice(0, separator)] = line.slice(separator + 1);
-}
-
-function readOptionalNumber(value: string | undefined): number | undefined {
-  if (value === undefined) return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 async function resolveAndroidMultiTouchHelperArtifact(): Promise<AndroidMultiTouchHelperArtifact> {
@@ -622,23 +601,15 @@ function readString(value: unknown, field: string): string {
 }
 
 function readNumber(value: unknown, field: string): number {
-  if (!Number.isInteger(value)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Android multi-touch helper manifest ${field} must be an integer.`,
-    );
-  }
-  return value as number;
+  return readAndroidHelperManifestInteger(value, field, 'multi-touch helper');
 }
 
-function readLiteral<T extends string>(value: unknown, field: string, expected: T): T {
-  if (value !== expected) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Android multi-touch helper manifest ${field} must be "${expected}".`,
-    );
-  }
-  return expected;
+function readLiteral<const Value extends string>(
+  value: unknown,
+  field: string,
+  expected: Value,
+): Value {
+  return readAndroidHelperManifestLiteral(value, field, expected, 'multi-touch helper');
 }
 
 function readSha256(value: unknown): string {

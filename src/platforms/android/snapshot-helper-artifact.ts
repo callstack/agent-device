@@ -5,6 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '../../utils/errors.ts';
 import {
+  readAndroidHelperManifestInteger,
+  readAndroidHelperManifestLiteral,
+} from './instrumentation-helper.ts';
+import {
   ANDROID_SNAPSHOT_HELPER_NAME,
   ANDROID_SNAPSHOT_HELPER_OUTPUT_FORMAT,
   ANDROID_SNAPSHOT_HELPER_PROTOCOL,
@@ -149,6 +153,18 @@ export function parseAndroidSnapshotHelperManifest(value: unknown): AndroidSnaps
   };
 }
 
+function readNumber(value: unknown, field: string): number {
+  return readAndroidHelperManifestInteger(value, field, 'snapshot helper');
+}
+
+function readLiteral<const Value extends string>(
+  value: unknown,
+  field: string,
+  expected: Value,
+): Value {
+  return readAndroidHelperManifestLiteral(value, field, expected, 'snapshot helper');
+}
+
 export function readAndroidSnapshotHelperInstallOptions(
   manifest: AndroidSnapshotHelperManifest,
 ): AndroidSnapshotHelperInstallOptions {
@@ -281,30 +297,6 @@ function readOptionalString(value: unknown): string | undefined {
 function readOptionalNullableString(value: unknown, field: string): string | null {
   if (value === null) return null;
   return readString(value, field);
-}
-
-function readNumber(value: unknown, field: string): number {
-  if (typeof value !== 'number' || !Number.isInteger(value)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Android snapshot helper manifest ${field} must be an integer.`,
-    );
-  }
-  return value;
-}
-
-function readLiteral<const Value extends string>(
-  value: unknown,
-  field: string,
-  expected: Value,
-): Value {
-  if (value !== expected) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Android snapshot helper manifest ${field} must be "${expected}".`,
-    );
-  }
-  return expected;
 }
 
 function readStringArray(value: unknown, field: string): string[] {
