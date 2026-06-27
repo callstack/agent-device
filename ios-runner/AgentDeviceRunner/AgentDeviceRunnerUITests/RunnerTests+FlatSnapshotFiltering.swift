@@ -7,10 +7,6 @@ struct FlatSnapshotFilterNode {
   let valueText: String?
   let visible: Bool
 
-  var hasContent: Bool {
-    return !label.isEmpty || !identifier.isEmpty || valueText != nil
-  }
-
   func matchesScope(_ scope: String) -> Bool {
     let haystack = [label, identifier, valueText ?? ""].joined(separator: "\n")
     return haystack.localizedCaseInsensitiveContains(scope)

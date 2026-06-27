@@ -12,7 +12,6 @@ extension RunnerTests {
 
   enum TextEntryTiming {
     static let focusTimeout: TimeInterval = 0.4
-    static let repairReadinessTimeout: TimeInterval = 1.0
     static let readinessTimeout: TimeInterval = 2.0
     static let hardwareKeyboardFallbackTimeout: TimeInterval = 0.35
     static let pollInterval: TimeInterval = 0.02
