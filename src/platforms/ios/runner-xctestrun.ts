@@ -893,8 +893,8 @@ function evaluateRunnerCacheMetadata(
 
 function comparableRunnerCacheMetadata(
   metadata: RunnerXctestrunCacheMetadata,
-): RunnerXctestrunCacheMetadata {
-  const { artifacts: _artifacts, ...comparable } = metadata;
+): Omit<RunnerXctestrunCacheMetadata, 'artifacts' | 'packageVersion'> {
+  const { artifacts: _artifacts, packageVersion: _packageVersion, ...comparable } = metadata;
   return comparable;
 }
 

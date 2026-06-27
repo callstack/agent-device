@@ -15,6 +15,7 @@ import {
   markRunnerXctestrunArtifactBadForRun,
   prepareXctestrunWithEnv,
   resolveExpectedRunnerCacheMetadata,
+  resolveRunnerDerivedPath,
   resolveXcodebuildSimulatorDeviceSetPath,
   scoreXctestrunCandidate,
 } from '../runner-xctestrun.ts';
@@ -282,6 +283,33 @@ test('setup metadata script matches expected iOS simulator cache metadata', asyn
     }
   });
 }, 15_000);
+
+test('runner cache key ignores package version but honors toolchain and SDK changes', () => {
+  const metadata = resolveExpectedRunnerCacheMetadata(iosSimulator);
+  const basePath = resolveRunnerDerivedPath(iosSimulator, metadata);
+
+  assert.equal(
+    resolveRunnerDerivedPath(iosSimulator, {
+      ...metadata,
+      packageVersion: `${metadata.packageVersion}-next`,
+    }),
+    basePath,
+  );
+  assert.notEqual(
+    resolveRunnerDerivedPath(iosSimulator, {
+      ...metadata,
+      xcodeBuildVersion: `${metadata.xcodeBuildVersion}-other`,
+    }),
+    basePath,
+  );
+  assert.notEqual(
+    resolveRunnerDerivedPath(iosSimulator, {
+      ...metadata,
+      sdkBuildVersion: `${metadata.sdkBuildVersion}-other`,
+    }),
+    basePath,
+  );
+});
 
 function writeExecutable(filePath: string, contents: string): void {
   fs.writeFileSync(filePath, `${contents}\n`, { mode: 0o755 });
