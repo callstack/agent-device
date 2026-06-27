@@ -25,6 +25,13 @@ const DAEMON_FUNCTION_TRAITS = [
 ] as const;
 const CAPABILITY_FUNCTION_TRAITS = ['supports', 'unsupportedHint'] as const;
 
+// Public commands that intentionally have no daemon route — they live only in the
+// capability/batch tables, so the daemon registry has never covered them.
+const UNROUTED_PUBLIC_COMMANDS = new Set<string>([
+  PUBLIC_COMMANDS.appSwitcher,
+  PUBLIC_COMMANDS.installFromSource,
+]);
+
 function stripFunctions<T extends Record<string, unknown>>(value: T): Partial<T> {
   const result: Record<string, unknown> = {};
   for (const [key, entry] of Object.entries(value)) {
@@ -69,19 +76,27 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
   device({ platform: 'web', kind: 'device' }),
 ];
 
-test('derived daemon descriptors match the hand table (non-function traits, in order)', () => {
+test('derived daemon registry holds its routing invariants', () => {
+  // The daemon registry is now BUILT from these derived descriptors (the
+  // hand-authored literal was deleted after #906 proved byte-equality), so a
+  // derived-vs-DAEMON_COMMAND_DESCRIPTORS comparison would be a tautology.
+  // Instead assert the structural invariants the daemon depends on: every
+  // descriptor has a route, command names are unique, and the command set still
+  // covers every public command (the prior coverage floor).
   const derived = deriveDaemonCommandDescriptors(commandDescriptors);
-  assert.equal(derived.length, DAEMON_COMMAND_DESCRIPTORS.length, 'descriptor count');
-  for (let index = 0; index < derived.length; index++) {
-    const live = DAEMON_COMMAND_DESCRIPTORS[index] as DaemonCommandDescriptor;
-    const next = derived[index];
-    assert.ok(next, `index ${index} derived descriptor present`);
-    assert.equal(next.command, live.command, `index ${index} command order`);
-    assert.deepEqual(
-      stripFunctions(next),
-      stripFunctions(live),
-      `${live.command} non-function daemon traits`,
-    );
+  assert.ok(derived.length > 0, 'derived descriptors present');
+
+  const names = derived.map((descriptor) => descriptor.command);
+  assert.equal(new Set(names).size, names.length, 'no duplicate daemon command names');
+
+  for (const descriptor of derived) {
+    assert.ok(descriptor.route, `${descriptor.command} has a route`);
+  }
+
+  const nameSet = new Set(names);
+  for (const command of Object.values(PUBLIC_COMMANDS)) {
+    if (UNROUTED_PUBLIC_COMMANDS.has(command)) continue;
+    assert.ok(nameSet.has(command), `daemon registry covers public command ${command}`);
   }
 });
 
