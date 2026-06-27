@@ -34,6 +34,7 @@ import {
   loadGenericRequestHandlerModule,
   runRequestHandlerChain,
 } from './request-handler-chain.ts';
+import type { LeaseLifecycleProvider } from './handlers/lease.ts';
 import {
   createRequestExecutionScope,
   type LockedRequestScope,
@@ -43,7 +44,6 @@ import {
 import { buildRequestFinishedEvent, shouldRecordEventForRequest } from './session-event-log.ts';
 import { canRunReplayScopedAction } from './daemon-command-registry.ts';
 import { createAgentBrowserWebProvider } from '../platforms/web/agent-browser-provider.ts';
-import type { LeaseLifecycleProvider } from './handlers/lease.ts';
 import { openWebSessionNames } from './web-session-names.ts';
 
 // ---------------------------------------------------------------------------

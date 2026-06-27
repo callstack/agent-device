@@ -22,6 +22,7 @@ export type RemoteConfigMetroOptions = {
   metroRuntimeFile?: string;
   metroNoReuseExisting?: boolean;
   metroNoInstallDeps?: boolean;
+  launchUrl?: string;
 };
 
 export type RemoteConnectionProfileFields = {
@@ -142,6 +143,7 @@ export const REMOTE_CONFIG_FIELD_SPECS = [
   { key: 'metroRuntimeFile', type: 'string', path: true },
   { key: 'metroNoReuseExisting', type: 'boolean' },
   { key: 'metroNoInstallDeps', type: 'boolean' },
+  { key: 'launchUrl', type: 'string' },
 ] as const satisfies readonly RemoteConfigFieldSpec[];
 
 const REMOTE_CONFIG_LEASE_FIELD_SPECS = [

@@ -235,6 +235,56 @@ test('react-devtools stop cleans up remote companion', async () => {
   });
 });
 
+test('react-devtools start configures direct remote port reverse', async () => {
+  const configureDirectPortReverse = vi.fn(async () => undefined);
+  vi.mocked(runCmdStreaming).mockResolvedValueOnce({
+    exitCode: 0,
+    stdout: '',
+    stderr: '',
+  });
+
+  const exitCode = await runReactDevtoolsCommand(['start'], {
+    stateDir: '/tmp/agent-device-state',
+    session: 'default',
+    flags: {
+      ...remoteBridgeScope,
+      metroProxyBaseUrl: undefined,
+      leaseBackend: 'android-instance',
+      remoteConfig: '/tmp/remote.json',
+      session: 'default',
+    },
+    configureDirectPortReverse,
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(configureDirectPortReverse.mock.calls.length, 1);
+  assertNoRemoteCompanion();
+});
+
+test('react-devtools start keeps bridge-backed Android on companion tunnel', async () => {
+  const env = { ...process.env };
+  const configureDirectPortReverse = vi.fn(async () => undefined);
+  mockRemoteCompanionSuccess();
+
+  const exitCode = await runReactDevtoolsCommand(['start'], {
+    stateDir: '/tmp/agent-device-state',
+    session: 'default',
+    cwd: '/tmp/project',
+    env,
+    flags: {
+      ...remoteBridgeScope,
+      leaseBackend: 'android-instance',
+      remoteConfig: '/tmp/remote.json',
+      session: 'default',
+    },
+    configureDirectPortReverse,
+  });
+
+  assert.equal(exitCode, 0);
+  assert.equal(configureDirectPortReverse.mock.calls.length, 0);
+  assertRemoteCompanionStarted(env);
+});
+
 test('react-devtools skips companion for non-bridge remote sessions', async () => {
   await runStatusWithoutCompanion({
     ...remoteBridgeScope,

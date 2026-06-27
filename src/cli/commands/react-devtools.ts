@@ -27,6 +27,7 @@ type ReactDevtoolsCommandOptions = {
   session?: string;
   cwd?: string;
   env?: NodeJS.ProcessEnv;
+  configureDirectPortReverse?: () => Promise<void>;
 };
 
 type RemoteBridgeConfig = {
@@ -155,6 +156,20 @@ async function withRemoteDevtoolsCompanion<T>(
   return await action();
 }
 
+function shouldConfigureDirectReverse(
+  args: string[],
+  options: ReactDevtoolsCommandOptions,
+): boolean {
+  if (args[0] !== 'start') return false;
+  const { flags } = options;
+  if (!flags) return false;
+  return (
+    isRemoteBridgeBackend(flags.leaseBackend) &&
+    flags.metroProxyBaseUrl === undefined &&
+    options.configureDirectPortReverse !== undefined
+  );
+}
+
 export async function runReactDevtoolsCommand(
   args: string[],
   options: ReactDevtoolsCommandOptions = {},
@@ -162,6 +177,9 @@ export async function runReactDevtoolsCommand(
   const cwd = options.cwd ?? process.cwd();
   const env = options.env ?? process.env;
   const exitCode = await withRemoteDevtoolsCompanion(args, options, async () => {
+    if (shouldConfigureDirectReverse(args, options)) {
+      await options.configureDirectPortReverse?.();
+    }
     const result = await runCmdStreaming('npm', buildReactDevtoolsNpmExecArgs(args), {
       cwd,
       env,

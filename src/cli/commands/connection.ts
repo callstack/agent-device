@@ -19,11 +19,12 @@ import {
   connectProviderNamesForError,
   connectionProviderLeaseKind,
   connectionProviderRequiresRemoteDaemon,
+  isCloudWebDriverConnectProvider,
   isConnectProviderName,
-  isDirectDeviceConnectProvider,
   type ConnectProvider,
 } from '../connection/provider-policy.ts';
 import { resolveCloudWebDriverConnectProfile } from '../connection/cloud-webdriver-profile.ts';
+import { resolveLimrunConnectProfile } from '../connection/limrun-profile.ts';
 import { resolveProxyConnectProfile } from '../connection/proxy-profile.ts';
 import {
   hasDeferredMetroConfig,
@@ -93,7 +94,7 @@ async function resolveConnectProfile(options: {
 }): Promise<{ flags: CliFlags; remoteConfigPath: string }> {
   const { provider, flags, stateDir } = options;
   if (flags.remoteConfig) return resolveRemoteConnectFlags(flags);
-  if (isDirectDeviceConnectProvider(provider)) {
+  if (isCloudWebDriverConnectProvider(provider)) {
     return resolveCloudWebDriverConnectProfile({
       provider,
       flags,
@@ -104,6 +105,14 @@ async function resolveConnectProfile(options: {
   }
   if (provider === 'proxy' || (!provider && shouldUseProxyConnectShortcut(flags))) {
     return resolveProxyConnectProfile({
+      flags,
+      stateDir,
+      cwd: process.cwd(),
+      env: process.env,
+    });
+  }
+  if (provider === 'limrun') {
+    return resolveLimrunConnectProfile({
       flags,
       stateDir,
       cwd: process.cwd(),

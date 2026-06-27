@@ -55,6 +55,138 @@ test('connect without remote config generates one from cloud connection profile'
   }
 });
 
+test('connect limrun generates a local daemon remote profile', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-limrun-'));
+  const stateDir = path.join(tempRoot, '.state');
+  vi.stubEnv('LIMRUN_API_KEY', 'lim_test_key');
+
+  try {
+    await captureConnectStdout(async () => {
+      await connectCommand({
+        positionals: ['limrun'],
+        flags: {
+          json: true,
+          help: false,
+          version: false,
+          stateDir,
+          platform: 'android',
+          tenant: 'team-a',
+          runId: 'run-a',
+          session: 'limrun-android',
+        },
+        client: {} as AgentDeviceClient,
+      });
+    });
+
+    const state = readRequiredActiveState(stateDir);
+    assert.equal(state.session, 'limrun-android');
+    assert.equal(state.tenant, 'team-a');
+    assert.equal(state.runId, 'run-a');
+    assert.equal(state.leaseBackend, 'android-instance');
+    assert.equal(state.leaseProvider, 'limrun');
+    assert.equal(state.platform, 'android');
+    assert.equal(state.daemon?.baseUrl, undefined);
+    assert.match(
+      state.remoteConfigPath,
+      /remote-connections\/generated\/limrun-[a-f0-9]{16}\.json$/,
+    );
+    assert.deepEqual(readGeneratedConfigKeys(state.remoteConfigPath), [
+      'daemonTransport',
+      'leaseBackend',
+      'leaseProvider',
+      'platform',
+      'runId',
+      'session',
+      'sessionIsolation',
+      'stateDir',
+      'target',
+      'tenant',
+    ]);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('connect limrun persists deferred Metro bridge settings', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-limrun-metro-'));
+  const stateDir = path.join(tempRoot, '.state');
+  vi.stubEnv('LIMRUN_API_KEY', 'lim_test_key');
+
+  try {
+    await captureConnectStdout(async () => {
+      await connectCommand({
+        positionals: ['limrun'],
+        flags: {
+          json: true,
+          help: false,
+          version: false,
+          stateDir,
+          platform: 'ios',
+          tenant: 'team-a',
+          runId: 'run-a',
+          session: 'limrun-ios',
+          metroProjectRoot: '/tmp/app',
+          metroKind: 'expo',
+          metroProxyBaseUrl: 'https://metro.agent-device.dev',
+          metroBearerToken: 'adc_live_test',
+          metroPreparePort: 8082,
+          launchUrl: 'exp://127.0.0.1:8082',
+        },
+        client: {} as AgentDeviceClient,
+      });
+    });
+
+    const state = readRequiredActiveState(stateDir);
+    assert.equal(state.leaseBackend, 'ios-instance');
+    assert.equal(state.leaseProvider, 'limrun');
+    assert.equal(state.platform, 'ios');
+    assert.deepEqual(readGeneratedConfig(state.remoteConfigPath), {
+      daemonTransport: 'auto',
+      launchUrl: 'exp://127.0.0.1:8082',
+      leaseBackend: 'ios-instance',
+      leaseProvider: 'limrun',
+      metroKind: 'expo',
+      metroPreparePort: 8082,
+      metroProjectRoot: '/tmp/app',
+      metroProxyBaseUrl: 'https://metro.agent-device.dev',
+      platform: 'ios',
+      runId: 'run-a',
+      session: 'limrun-ios',
+      sessionIsolation: 'tenant',
+      stateDir,
+      target: 'mobile',
+      tenant: 'team-a',
+    });
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('connect limrun requires LIMRUN_API_KEY', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-limrun-env-'));
+  const stateDir = path.join(tempRoot, '.state');
+  vi.stubEnv('LIMRUN_API_KEY', '');
+  vi.stubEnv('LIM_API_KEY', '');
+
+  try {
+    await assert.rejects(
+      connectCommand({
+        positionals: ['limrun'],
+        flags: {
+          json: true,
+          help: false,
+          version: false,
+          stateDir,
+        },
+        client: {} as AgentDeviceClient,
+      }),
+      /connect limrun requires LIMRUN_API_KEY/,
+    );
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
 test('connect without remote config rejects legacy remoteConfig string profile response', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-cloud-legacy-'));
   const stateDir = path.join(tempRoot, '.state');
@@ -251,8 +383,7 @@ function fetchProfileUrl(fetchMock: ReturnType<typeof vi.fn>): string | undefine
 }
 
 async function connectWithGeneratedCloudProfile(stateDir: string): Promise<void> {
-  const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
-  try {
+  await captureConnectStdout(async () => {
     await connectCommand({
       positionals: [],
       flags: {
@@ -263,6 +394,13 @@ async function connectWithGeneratedCloudProfile(stateDir: string): Promise<void>
       },
       client: {} as AgentDeviceClient,
     });
+  });
+}
+
+async function captureConnectStdout(task: () => Promise<void>): Promise<void> {
+  const stdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+  try {
+    await task();
   } finally {
     stdoutWrite.mockRestore();
   }

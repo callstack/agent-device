@@ -24,6 +24,7 @@ export type LeaseRegistryOptions = {
   minLeaseTtlMs?: number;
   maxLeaseTtlMs?: number;
   now?: () => number;
+  onLeaseExpired?: (lease: DeviceLease) => void;
 };
 
 export type AllocateLeaseRequest = {
@@ -214,6 +215,7 @@ export class LeaseRegistry {
   private readonly minLeaseTtlMs: number;
   private readonly maxLeaseTtlMs: number;
   private readonly now: () => number;
+  private readonly onLeaseExpired?: (lease: DeviceLease) => void;
 
   constructor(options: LeaseRegistryOptions = {}) {
     this.maxActiveSimulatorLeases = Number.isInteger(options.maxActiveSimulatorLeases)
@@ -229,6 +231,7 @@ export class LeaseRegistry {
       ? Math.max(this.minLeaseTtlMs, Number(options.maxLeaseTtlMs))
       : MAX_LEASE_TTL_MS;
     this.now = options.now ?? (() => Date.now());
+    this.onLeaseExpired = options.onLeaseExpired;
   }
 
   allocateLease(request: AllocateLeaseRequest): DeviceLease {
@@ -345,7 +348,9 @@ export class LeaseRegistry {
       if (lease.expiresAt > now) continue;
       this.leases.delete(lease.leaseId);
       this.unbindLease(lease);
-      expired.push({ ...lease });
+      const expiredLease = { ...lease };
+      expired.push(expiredLease);
+      this.onLeaseExpired?.(expiredLease);
     }
     return expired;
   }
@@ -357,7 +362,9 @@ export class LeaseRegistry {
     if (!lease || lease.expiresAt > this.now()) return undefined;
     this.leases.delete(lease.leaseId);
     this.unbindLease(lease);
-    return { ...lease };
+    const expiredLease = { ...lease };
+    this.onLeaseExpired?.(expiredLease);
+    return expiredLease;
   }
 
   private cleanupExpiredLeases(): void {

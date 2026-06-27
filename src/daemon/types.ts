@@ -51,6 +51,7 @@ type DaemonRequestMeta = Omit<PublicDaemonRequestMeta, 'installSource' | 'lockPl
   installSource?: DaemonInstallSource;
   lockPlatform?: PlatformSelector;
   leaseBackend?: LeaseBackend;
+  leaseProvider?: string;
 };
 
 export type DaemonOpenLifecycle = {

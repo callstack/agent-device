@@ -4,13 +4,20 @@ import {
   type CloudWebDriverKnownProviderName,
 } from '../../cloud-webdriver/providers.ts';
 
-export type ConnectProvider = 'cloud' | 'proxy' | CloudWebDriverKnownProviderName;
+export type DirectDeviceConnectProvider = CloudWebDriverKnownProviderName | 'limrun';
+export type ConnectProvider = 'cloud' | 'proxy' | DirectDeviceConnectProvider;
 
 export function isConnectProviderName(value: string | undefined): value is ConnectProvider {
-  return value === 'cloud' || value === 'proxy' || isCloudWebDriverProviderName(value);
+  return value === 'cloud' || value === 'proxy' || isDirectDeviceConnectProvider(value);
 }
 
-export function isDirectDeviceConnectProvider(
+function isDirectDeviceConnectProvider(
+  provider: string | undefined,
+): provider is DirectDeviceConnectProvider {
+  return provider === 'limrun' || isCloudWebDriverProviderName(provider);
+}
+
+export function isCloudWebDriverConnectProvider(
   provider: string | undefined,
 ): provider is CloudWebDriverKnownProviderName {
   return isCloudWebDriverProviderName(provider);
@@ -22,6 +29,7 @@ export function connectProviderNamesForError(): string {
     'proxy',
     CLOUD_WEBDRIVER_PROVIDERS.browserStack,
     CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+    'limrun',
   ].join(', ');
 }
 

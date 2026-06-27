@@ -15,5 +15,6 @@ export function readMetroProfileFields(flags: CliFlags): RemoteConfigMetroOption
     metroRuntimeFile: flags.metroRuntimeFile,
     metroNoReuseExisting: flags.metroNoReuseExisting,
     metroNoInstallDeps: flags.metroNoInstallDeps,
+    launchUrl: flags.launchUrl,
   };
 }
