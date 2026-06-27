@@ -158,6 +158,14 @@ function statusCodeForNormalizedError(code: string): number {
   }
 }
 
+// Map a thrown boundary error to its JSON-RPC error code. Invalid params (malformed
+// wire input rejected before the request reaches the handler) is JSON-RPC -32602, to
+// match the explicit `Invalid params` sibling checks below; everything else is the
+// generic application error -32000.
+function jsonRpcCodeForNormalizedError(code: string): number {
+  return code === 'INVALID_ARGS' ? -32602 : -32000;
+}
+
 function resolveToken(params: Record<string, unknown>, headers: IncomingHttpHeaders): string {
   const authHeader = typeof headers.authorization === 'string' ? headers.authorization : '';
   const bearerToken = authHeader.toLowerCase().startsWith('bearer ')
@@ -384,13 +392,36 @@ function toReleaseMaterializedPathsDaemonRequest(
   };
 }
 
+// The runtime schema reports failures with an internal JSON-path prefix
+// (e.g. `$.positionals: Expected an array`). Strip the `$` sigil so the wire message
+// stays user-facing without leaking the schema's internal path representation.
+function cleanSchemaParseMessage(message: string): string {
+  const separator = message.indexOf(': ');
+  if (separator === -1 || !message.startsWith('$')) return message;
+  const field = message.slice(0, separator).replace(/^\$\.?/, '');
+  const detail = message.slice(separator + 2);
+  return field ? `${field}: ${detail}` : detail;
+}
+
+// Validate the command params at the boundary so malformed client input is rejected as
+// INVALID_ARGS (-> JSON-RPC -32602 / HTTP 400) instead of leaking as an internal 500.
+function parseCommandRpcParams(params: Record<string, unknown>): CommandRpcParams {
+  try {
+    return commandRpcParamsSchema.parse(params);
+  } catch (error) {
+    const detail =
+      error instanceof Error ? cleanSchemaParseMessage(error.message) : 'invalid command params';
+    throw new AppError('INVALID_ARGS', `Invalid params: ${detail}`);
+  }
+}
+
 function methodToDaemonRequest(
   method: string,
   params: Record<string, unknown>,
   headers: IncomingHttpHeaders,
 ): DaemonRequest {
   if (COMMAND_RPC_METHODS.has(method)) {
-    return toDaemonRequest(commandRpcParamsSchema.parse(params), headers);
+    return toDaemonRequest(parseCommandRpcParams(params), headers);
   }
   if (INSTALL_FROM_SOURCE_RPC_METHODS.has(method)) {
     return toInstallFromSourceDaemonRequest(params, headers);
@@ -684,16 +715,17 @@ export async function createDaemonHttpServer(options: {
       } catch (error) {
         handlerCompleted = true;
         const normalized = normalizeError(error);
+        const rpcErrorCode = jsonRpcCodeForNormalizedError(normalized.code);
         if (res.headersSent) {
           writeRpcResponseEnvelope(
             res,
-            createRpcError(rpcRequest.id ?? null, -32000, normalized.message, normalized),
+            createRpcError(rpcRequest.id ?? null, rpcErrorCode, normalized.message, normalized),
           );
           return;
         }
         sendJson(
           res,
-          createRpcError(rpcRequest.id ?? null, -32000, normalized.message, normalized),
+          createRpcError(rpcRequest.id ?? null, rpcErrorCode, normalized.message, normalized),
           statusCodeForNormalizedError(normalized.code),
         );
       } finally {
