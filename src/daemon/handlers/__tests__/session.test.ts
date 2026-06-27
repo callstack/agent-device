@@ -306,6 +306,46 @@ test('devices filters Apple-family platform selectors', async () => {
   }
 });
 
+test('devices omits internal appleOs from the public inventory projection', async () => {
+  const sessionStore = makeSessionStore();
+  mockListAndroidDevices.mockResolvedValue([]);
+  mockListAppleDevices.mockResolvedValue([
+    {
+      platform: 'ios' as const,
+      id: 'sim-1',
+      name: 'iPad Pro 11-inch (M4)',
+      kind: 'simulator' as const,
+      target: 'mobile' as const,
+      appleOs: 'ipados' as const,
+      booted: true,
+      simulatorSetPath: '/tmp/agent-device-sim-set',
+    },
+  ]);
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'devices',
+      positionals: [],
+      flags: { platform: 'ios' },
+    },
+    sessionName: 'default',
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok).toBeTruthy();
+  if (response?.ok) {
+    const devices = response.data?.devices as Array<Record<string, unknown>> | undefined;
+    expect(devices).toHaveLength(1);
+    expect(devices?.[0]).not.toHaveProperty('appleOs');
+    expect(devices?.[0]).not.toHaveProperty('simulatorSetPath');
+    expect(devices?.[0]?.id).toBe('sim-1');
+  }
+});
+
 test('batch stops on first failing step with partial results', async () => {
   const sessionStore = makeSessionStore();
   const response = await handleSessionCommands({

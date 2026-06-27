@@ -22,6 +22,10 @@ type SimctlDeviceRecord = {
   udid: string;
   state: string;
   isAvailable: boolean;
+  // Stable simulator device-type id (e.g.
+  // com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M4). Preferred over
+  // the user-editable display name when classifying the Apple OS.
+  deviceTypeIdentifier?: string;
 };
 
 type SimctlListDevicesPayload = {
@@ -208,7 +212,9 @@ function parseSimctlAppleDevices(
         name: device.name,
         kind: 'simulator',
         target,
-        appleOs: resolveAppleOs(target, [device.name]),
+        // Prefer the stable device-type id so a user-renamed iPad simulator is
+        // still tagged iPadOS; fall back to the display name when it is absent.
+        appleOs: resolveAppleOs(target, [device.deviceTypeIdentifier ?? '', device.name]),
         booted: device.state === 'Booted',
         ...(simulatorSetPath ? { simulatorSetPath } : {}),
       });

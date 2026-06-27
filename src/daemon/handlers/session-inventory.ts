@@ -88,8 +88,11 @@ export async function handleSessionInventoryCommands(params: {
       const filtered = req.flags?.target
         ? platformFiltered.filter((device) => (device.target ?? 'mobile') === req.flags?.target)
         : platformFiltered;
+      // Keep appleOs internal-only for now: it is discovery groundwork and the
+      // public `devices` shape is not yet meant to expose it. Surfacing it (so
+      // agents can tell iPad from iPhone) should be a deliberate later change.
       const publicDevices = filtered.map(
-        ({ simulatorSetPath: _simulatorSetPath, ...device }) => device,
+        ({ simulatorSetPath: _simulatorSetPath, appleOs: _appleOs, ...device }) => device,
       );
       return { ok: true, data: { devices: publicDevices } };
     } catch (err) {

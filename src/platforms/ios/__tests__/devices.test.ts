@@ -221,6 +221,45 @@ test('listAppleDevices tags iPhone simulators and the host Mac with appleOs', as
   assert.equal(byId.get('host-macos-local'), 'macos');
 });
 
+test('listAppleDevices tags renamed iPad simulators as iPadOS from deviceTypeIdentifier', async () => {
+  mockRunCommand = async (_cmd, args) => {
+    if (args.includes('simctl') && args.includes('list') && args.includes('devices')) {
+      return {
+        stdout: JSON.stringify({
+          devices: {
+            'com.apple.CoreSimulator.SimRuntime.iOS-18-0': [
+              {
+                // Display name no longer mentions "iPad" (user-renamed), so the
+                // classification must come from deviceTypeIdentifier.
+                name: 'Work Tablet',
+                udid: 'sim-renamed-ipad',
+                state: 'Shutdown',
+                isAvailable: true,
+                deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M4',
+              },
+            ],
+          },
+        }),
+        stderr: '',
+        exitCode: 0,
+      };
+    }
+    throw new Error(`unexpected xcrun args: ${args.join(' ')}`);
+  };
+
+  const devices = await withMockedPlatform(
+    'darwin',
+    async () =>
+      await withMockedAppleTools(
+        async () => await listAppleDevices({ simulatorSetPath: '/tmp/agent-device-sim-set' }),
+      ),
+  );
+
+  const ipad = devices.find((device) => device.id === 'sim-renamed-ipad');
+  assert.equal(ipad?.target, 'mobile');
+  assert.equal(ipad?.appleOs, 'ipados');
+});
+
 test('listAppleDevices supplements unsupported devicectl entries with xctrace physical devices', async () => {
   mockRunCommand = async (_cmd, args) => {
     if (args.join(' ') === 'simctl list devices -j') {
