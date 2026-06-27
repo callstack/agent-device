@@ -95,7 +95,7 @@
     "package:android-multitouch-helper": "sh ./scripts/package-android-multitouch-helper.sh $(node -p \"require('./package.json').version\") .tmp/android-multitouch-helper",
     "package:android-multitouch-helper:npm": "rm -rf android-multitouch-helper/dist && sh ./scripts/package-android-multitouch-helper.sh $(node -p \"require('./package.json').version\") android-multitouch-helper/dist",
     "build:macos-helper": "swift build -c release --package-path macos-helper",
-    "build:all": "pnpm build:node && AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS=1 pnpm build:xcuitest",
+    "build:all": "pnpm build:node && pnpm build:xcuitest",
     "ad": "node bin/agent-device.mjs",
     "size": "node scripts/size-report.mjs",
     "size:markdown": "node scripts/size-report.mjs --json .tmp/size-report.json --markdown .tmp/size-report.md",

@@ -37,6 +37,25 @@ jobs:
             exit 1
           fi
 
+  swift-runner-unit-compile:
+    name: Swift Runner Unit Compile
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Compile Swift runner unit-test surface
+        uses: ./.github/actions/setup-apple-replay
+        with:
+          derived-path: ${{ github.workspace }}/.tmp/swift-runner-unit-derived
+          cache-key-prefix: swift-runner-unit
+          build-command: AGENT_DEVICE_XCUITEST_INCLUDE_UNIT_TESTS=1 pnpm build:xcuitest:macos
+          xcuitest-platform: macos
+
   no-test-di-seams:
     name: No test-only DI seams
     runs-on: ubuntu-latest
