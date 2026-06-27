@@ -27,8 +27,3 @@ export type PlatformDescriptor = {
   capabilityBucket: CapabilityBucket;
   isApple: boolean;
 };
-
-/** Identity helper that pins each entry to the {@link PlatformDescriptor} shape. */
-export function definePlatformDescriptor(descriptor: PlatformDescriptor): PlatformDescriptor {
-  return descriptor;
-}
