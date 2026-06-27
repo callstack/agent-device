@@ -44,12 +44,15 @@ import type { PerfAction, PerfArea, PerfKind, PerfSubject } from './contracts/pe
 import type { AlertAction, AlertInfo } from './alert-contract.ts';
 import type { DebugSymbolsOptions, DebugSymbolsResult } from './contracts/debug-symbols.ts';
 import type { RemoteConnectionProfileFields } from './remote-config-schema.ts';
+import type { CommandResult } from './core/command-descriptor/command-result.ts';
 
 export type { FindLocator } from './utils/finders.ts';
 export type { CompanionTunnelScope, MetroBridgeScope } from './client-companion-tunnel-contract.ts';
 export type { AppsFilter } from './contracts/app-inventory.ts';
 export type { AlertAction, AlertInfo, AlertPlatform, AlertSource } from './alert-contract.ts';
 export type { DebugSymbolsOptions, DebugSymbolsResult } from './contracts/debug-symbols.ts';
+export type { BootCommandResult, ShutdownCommandResult } from './contracts/device.ts';
+export type { ViewportCommandResult } from './contracts/viewport.ts';
 
 export type AgentDeviceDaemonTransport = (
   req: Omit<DaemonRequest, 'token'>,
@@ -520,11 +523,6 @@ export type ViewportCommandOptions = DeviceCommandBaseOptions & {
   height: number;
 };
 
-export type ViewportCommandResult = CommandRequestResult & {
-  width: number;
-  height: number;
-};
-
 export type AgentDeviceCommandClient = {
   wait: (options: WaitCommandOptions) => Promise<WaitCommandResult>;
   alert: (options?: AlertCommandOptions) => Promise<AlertCommandResult>;
@@ -537,7 +535,7 @@ export type AgentDeviceCommandClient = {
   clipboard: (options: ClipboardCommandOptions) => Promise<ClipboardCommandResult>;
   reactNative: (options: ReactNativeCommandOptions) => Promise<CommandRequestResult>;
   prepare: (options: PrepareCommandOptions) => Promise<CommandRequestResult>;
-  viewport: (options: ViewportCommandOptions) => Promise<ViewportCommandResult>;
+  viewport: (options: ViewportCommandOptions) => Promise<CommandResult<'viewport'>>;
 };
 
 type SelectorSnapshotCommandOptions = Pick<CaptureSnapshotOptions, 'depth' | 'scope' | 'raw'>;
@@ -942,8 +940,8 @@ export type AgentDeviceClient = {
     list: (
       options?: AgentDeviceRequestOverrides & AgentDeviceSelectionOptions,
     ) => Promise<AgentDeviceDevice[]>;
-    boot: (options?: DeviceBootOptions) => Promise<CommandRequestResult>;
-    shutdown: (options?: DeviceShutdownOptions) => Promise<CommandRequestResult>;
+    boot: (options?: DeviceBootOptions) => Promise<CommandResult<'boot'>>;
+    shutdown: (options?: DeviceShutdownOptions) => Promise<CommandResult<'shutdown'>>;
   };
   sessions: {
     list: (options?: AgentDeviceRequestOverrides) => Promise<AgentDeviceSession[]>;

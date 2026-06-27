@@ -4,6 +4,8 @@ import type {
   LongPressCommandResult,
   PressCommandResult,
 } from '../../../contracts/interaction.ts';
+import type { BootCommandResult, ShutdownCommandResult } from '../../../contracts/device.ts';
+import type { ViewportCommandResult } from '../../../contracts/viewport.ts';
 import type { CommandResult, CommandResultMap } from '../command-result.ts';
 
 /**
@@ -19,7 +21,17 @@ test('seeded CommandResult entries resolve to their existing contract result typ
   const press: Equal<CommandResult<'press'>, PressCommandResult> = true;
   const fill: Equal<CommandResult<'fill'>, FillCommandResult> = true;
   const longPress: Equal<CommandResult<'longpress'>, LongPressCommandResult> = true;
-  expect([press, fill, longPress]).toEqual([true, true, true]);
+  const boot: Equal<CommandResult<'boot'>, BootCommandResult> = true;
+  const shutdown: Equal<CommandResult<'shutdown'>, ShutdownCommandResult> = true;
+  const viewport: Equal<CommandResult<'viewport'>, ViewportCommandResult> = true;
+  expect([press, fill, longPress, boot, shutdown, viewport]).toEqual([
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+  ]);
 });
 
 test('unmigrated commands fall back to the untyped Record bag, keeping the union total', () => {
@@ -30,6 +42,9 @@ test('unmigrated commands fall back to the untyped Record bag, keeping the union
 });
 
 test('CommandResultMap is seeded only from already-existing contract result types', () => {
-  const keys: Equal<keyof CommandResultMap, 'press' | 'fill' | 'longpress'> = true;
+  const keys: Equal<
+    keyof CommandResultMap,
+    'press' | 'fill' | 'longpress' | 'boot' | 'shutdown' | 'viewport'
+  > = true;
   expect(keys).toBe(true);
 });

@@ -43,8 +43,8 @@ import type {
   Lease,
   MaterializationReleaseOptions,
   MetroPrepareOptions,
-  ViewportCommandResult,
 } from './client-types.ts';
+import type { CommandResult } from './core/command-descriptor/command-result.ts';
 import { readSerializedSnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
 import { readSnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 import type { CommandFlags } from './core/dispatch-context.ts';
@@ -111,7 +111,8 @@ export function createAgentDeviceClient(
       clipboard: async (options) => await executeCommand('clipboard', options),
       reactNative: async (options) => await executeCommand('react-native', options),
       prepare: async (options) => await executeCommand('prepare', options),
-      viewport: async (options) => await executeCommand<ViewportCommandResult>('viewport', options),
+      viewport: async (options) =>
+        await executeCommand<CommandResult<'viewport'>>('viewport', options),
     },
     devices: {
       list: async (options = {}) => {
@@ -119,8 +120,9 @@ export function createAgentDeviceClient(
         const devices = Array.isArray(data.devices) ? data.devices : [];
         return devices.map(normalizeDevice);
       },
-      boot: async (options = {}) => await executeCommand('boot', options),
-      shutdown: async (options = {}) => await executeCommand('shutdown', options),
+      boot: async (options = {}) => await executeCommand<CommandResult<'boot'>>('boot', options),
+      shutdown: async (options = {}) =>
+        await executeCommand<CommandResult<'shutdown'>>('shutdown', options),
     },
     sessions: {
       list: async (options = {}) => await listSessions(options),

@@ -3,26 +3,32 @@ import type {
   LongPressCommandResult,
   PressCommandResult,
 } from '../../contracts/interaction.ts';
+import type { BootCommandResult, ShutdownCommandResult } from '../../contracts/device.ts';
+import type { ViewportCommandResult } from '../../contracts/viewport.ts';
 
 /**
  * The additive typed-result spine (ADR-0008, Phase 1 step 6).
  *
- * Maps a command name to the *already-existing* per-command result type from
- * `src/contracts/*`. It is SEEDED, not exhaustive: only commands whose accurate
- * result shape already lives in the contracts layer are listed here. Today that
- * is the interaction trio (`press` / `fill` / `longpress`); screenshot, perf,
- * logs and friends have no contracts-layer result type yet, so they are
- * deliberately omitted rather than given an invented shape.
+ * Maps a command name to the per-command result type from `src/contracts/*`. It
+ * is SEEDED, not exhaustive: a command is listed here only once its accurate,
+ * closed result shape lives in the contracts layer. Commands whose daemon
+ * handler spreads dynamic/Record data (screenshot overlays, gesture
+ * visualization, perf, logs, …) are deliberately omitted rather than given an
+ * invented shape.
  *
- * This map is dormant: nothing reads it yet. It exists as the foundation that
- * later slices consume to derive `client-types.ts` and delete the hand-authored
- * `*Result` mirror — the same dormant-but-proven pattern as the #906 descriptor
- * registry and the #910 dispatch map this slice is stacked on.
+ * Phase 2 batch 1 wires the first map entries into the public client return
+ * types: `boot` / `shutdown` (closed device-lifecycle results) and `viewport`
+ * (closed `{ width, height, message }`) join the seed interaction trio
+ * (`press` / `fill` / `longpress`). Each entry is grounded in a re-read of the
+ * handler's literal return; see the per-type docstrings for the file source.
  */
 export interface CommandResultMap {
   press: PressCommandResult;
   fill: FillCommandResult;
   longpress: LongPressCommandResult;
+  boot: BootCommandResult;
+  shutdown: ShutdownCommandResult;
+  viewport: ViewportCommandResult;
 }
 
 /**
