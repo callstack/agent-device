@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { CommandFlags } from '../../core/dispatch.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { handleRecordCommand } from './record-trace-recording.ts';
 import { errorResponse } from './response.ts';
+import { recordSessionAction } from './handler-utils.ts';
 
 export async function handleRecordTraceCommands(params: {
   req: DaemonRequest;
@@ -37,11 +37,9 @@ export async function handleRecordTraceCommands(params: {
       fs.mkdirSync(path.dirname(resolvedOut), { recursive: true });
       fs.appendFileSync(resolvedOut, '');
       session.trace = { outPath: resolvedOut, startedAt: Date.now() };
-      sessionStore.recordAction(session, {
-        command,
-        positionals: req.positionals ?? [],
-        flags: (req.flags ?? {}) as CommandFlags,
-        result: { action: 'start', outPath: resolvedOut },
+      recordSessionAction(sessionStore, session, req, command, {
+        action: 'start',
+        outPath: resolvedOut,
       });
       return { ok: true, data: { trace: 'started', outPath: resolvedOut } };
     }
@@ -60,12 +58,7 @@ export async function handleRecordTraceCommands(params: {
       outPath = resolvedOut;
     }
     session.trace = undefined;
-    sessionStore.recordAction(session, {
-      command,
-      positionals: req.positionals ?? [],
-      flags: (req.flags ?? {}) as CommandFlags,
-      result: { action: 'stop', outPath },
-    });
+    recordSessionAction(sessionStore, session, req, command, { action: 'stop', outPath });
     return { ok: true, data: { trace: 'stopped', outPath } };
   }
 

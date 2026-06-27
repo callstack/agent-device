@@ -1,5 +1,4 @@
 import { dispatchCommand } from '../../core/dispatch.ts';
-import { isCommandSupportedOnDevice } from '../../core/capabilities.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import {
   analyzeReactNativeOverlay,
@@ -14,7 +13,7 @@ import {
   type SnapshotQualityVerdict,
 } from '../../utils/snapshot-quality.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse, noActiveSessionError, requireCommandSupported } from './response.ts';
 import { captureSnapshotForSession } from './interaction-snapshot.ts';
 import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';
 import { readSnapshotNodesReferenceFrame } from './interaction-touch-reference-frame.ts';
@@ -28,13 +27,11 @@ export async function handleReactNativeCommands(
   if (!parsed.ok) return parsed.response;
 
   const session = sessionStore.get(sessionName);
-  if (!session) return errorResponse('SESSION_NOT_FOUND', 'No active session. Run open first.');
-  if (!isCommandSupportedOnDevice(PUBLIC_COMMANDS.reactNative, session.device)) {
-    return errorResponse(
-      'UNSUPPORTED_OPERATION',
-      'react-native dismiss-overlay is not supported on this device',
-    );
-  }
+  if (!session) return noActiveSessionError();
+  const unsupported = requireCommandSupported(PUBLIC_COMMANDS.reactNative, session.device, {
+    message: 'react-native dismiss-overlay is not supported on this device',
+  });
+  if (unsupported) return unsupported;
 
   try {
     const snapshot = await captureSnapshotForSession(

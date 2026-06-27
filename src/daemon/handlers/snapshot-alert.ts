@@ -1,4 +1,3 @@
-import { isCommandSupportedOnDevice } from '../../core/capabilities.ts';
 import {
   ALERT_ACTION_RETRY_MS,
   ALERT_POLL_INTERVAL_MS as POLL_INTERVAL_MS,
@@ -14,7 +13,7 @@ import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { recordIfSession } from './snapshot-session.ts';
 import { parseTimeout } from '../../utils/parse-timeout.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse, requireCommandSupported } from './response.ts';
 
 type HandleAlertCommandParams = {
   req: DaemonRequest;
@@ -45,9 +44,8 @@ export async function handleAlertCommand(
       surface: session.surface,
     };
   })();
-  if (!isCommandSupportedOnDevice('alert', device)) {
-    return errorResponse('UNSUPPORTED_OPERATION', 'alert is not supported on this device');
-  }
+  const unsupported = requireCommandSupported('alert', device);
+  if (unsupported) return unsupported;
   if (device.platform === 'android') {
     const timeoutMs = parseTimeout(req.positionals?.[1]) ?? DEFAULT_TIMEOUT_MS;
     return recordAlertResponse(

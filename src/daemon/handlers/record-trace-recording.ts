@@ -1,8 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { sleep } from '../../utils/timeouts.ts';
-import { resolveTargetDevice, type CommandFlags } from '../../core/dispatch.ts';
-import { isCommandSupportedOnDevice } from '../../core/capabilities.ts';
+import { resolveTargetDevice } from '../../core/dispatch.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonArtifact, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
@@ -22,7 +21,8 @@ import {
   recordingQualityInputToExportQuality,
 } from '../../core/recording-export-quality.ts';
 import { resolveRecordingProvider } from '../recording-provider.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse, requireCommandSupported } from './response.ts';
+import { recordSessionAction } from './handler-utils.ts';
 import { deriveAndroidChunkOutPath } from './record-trace-android-chunks.ts';
 import {
   resolveRecordingBackendForDevice,
@@ -123,9 +123,8 @@ async function startRecording(params: {
   if (maxSizeFlag !== undefined && (!Number.isInteger(maxSizeFlag) || maxSizeFlag < 1)) {
     return errorResponse('INVALID_ARGS', 'max-size must be a positive integer');
   }
-  if (!isCommandSupportedOnDevice('record', device)) {
-    return errorResponse('UNSUPPORTED_OPERATION', 'record is not supported on this device');
-  }
+  const unsupported = requireCommandSupported('record', device);
+  if (unsupported) return unsupported;
 
   const outPath = backend.resolveOutputPath({ req });
   const resolvedOut = SessionStore.expandHome(outPath, req.meta?.cwd);
@@ -152,11 +151,9 @@ async function startRecording(params: {
   activeSession.recording = recording;
   sessionStore.set(sessionName, activeSession);
   const sessionStateDir = sessionStore.ensureSessionDir(sessionName);
-  sessionStore.recordAction(activeSession, {
-    command: req.command,
-    positionals: req.positionals ?? [],
-    flags: (req.flags ?? {}) as CommandFlags,
-    result: { action: 'start', showTouches: recording.showTouches },
+  recordSessionAction(sessionStore, activeSession, req, req.command, {
+    action: 'start',
+    showTouches: recording.showTouches,
   });
 
   return {
@@ -336,15 +333,10 @@ export async function handleRecordCommand(params: {
     return response;
   }
 
-  sessionStore.recordAction(activeSession, {
-    command: req.command,
-    positionals: req.positionals ?? [],
-    flags: (req.flags ?? {}) as CommandFlags,
-    result: {
-      action: 'stop',
-      outPath: response.data?.outPath,
-      showTouches: response.data?.showTouches,
-    },
+  recordSessionAction(sessionStore, activeSession, req, req.command, {
+    action: 'stop',
+    outPath: response.data?.outPath,
+    showTouches: response.data?.showTouches,
   });
   await releaseRecordOnlySession(sessionStore, sessionName, activeSession, { writeLog: true });
   return response;

@@ -6,9 +6,8 @@ import { refSnapshotFlagGuardResponse } from './interaction-flags.ts';
 import { dispatchGetViaRuntime, dispatchIsViaRuntime } from '../selector-runtime.ts';
 import { createInteractionRuntime } from './interaction-runtime.ts';
 import { finalizeTouchInteraction } from './interaction-common.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse, noActiveSessionError, requireCommandSupported } from './response.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { isCommandSupportedOnDevice } from '../../core/capabilities.ts';
 import { normalizeError } from '../../utils/errors.ts';
 import { successText } from '../../utils/success-text.ts';
 import {
@@ -50,10 +49,9 @@ async function dispatchTypeViaRuntime(
 ): Promise<DaemonResponse> {
   const { sessionName, sessionStore } = params;
   const session = sessionStore.get(sessionName);
-  if (!session) return errorResponse('SESSION_NOT_FOUND', 'No active session. Run open first.');
-  if (!isCommandSupportedOnDevice(PUBLIC_COMMANDS.type, session.device)) {
-    return errorResponse('UNSUPPORTED_OPERATION', 'type is not supported on this device');
-  }
+  if (!session) return noActiveSessionError();
+  const unsupported = requireCommandSupported(PUBLIC_COMMANDS.type, session.device);
+  if (unsupported) return unsupported;
   const recordingRecoveryResponse = await recoverAndroidRecordingDialogForType(session);
   if (recordingRecoveryResponse) return recordingRecoveryResponse;
 

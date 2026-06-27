@@ -18,7 +18,8 @@ import {
 } from '../../core/interaction-targeting.ts';
 import { isSnapshotNodeInteractionBlocked } from '../../utils/snapshot-occlusion.ts';
 import { readTextForNode } from './interaction-read.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse, noActiveSessionError } from './response.ts';
+import { recordSessionAction } from './handler-utils.ts';
 import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts';
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
 import { createSelectorCaptureRuntime } from '../selector-capture-runtime.ts';
@@ -88,7 +89,7 @@ export async function handleFindCommands(params: {
   const session = sessionStore.get(sessionName);
   const isReadOnly = isReadOnlyFindAction(action);
   if (!session && !isReadOnly) {
-    return errorResponse('SESSION_NOT_FOUND', 'No active session. Run open first.');
+    return noActiveSessionError();
   }
   const device = session?.device ?? (await resolveTargetDevice(req.flags ?? {}));
   if (!session) {
@@ -428,14 +429,14 @@ async function handleFindWait(
     const match = findBestMatchesByLocator(nodes, locator, query, { requireRect: false })
       .matches[0];
     if (match) {
-      if (session) {
-        sessionStore.recordAction(session, {
-          command,
-          positionals: req.positionals ?? [],
-          flags: publicFlags,
-          result: { found: true, waitedMs: Date.now() - start },
-        });
-      }
+      recordSessionAction(
+        sessionStore,
+        session,
+        req,
+        command,
+        { found: true, waitedMs: Date.now() - start },
+        { flags: publicFlags },
+      );
       return { ok: true, data: { found: true, waitedMs: Date.now() - start } };
     }
     await sleep(300);
@@ -446,14 +447,7 @@ async function handleFindWait(
 
 async function handleFindExists(ctx: FindContext): Promise<DaemonResponse> {
   const { req, sessionStore, session, command, publicFlags } = ctx;
-  if (session) {
-    sessionStore.recordAction(session, {
-      command,
-      positionals: req.positionals ?? [],
-      flags: publicFlags,
-      result: { found: true },
-    });
-  }
+  recordSessionAction(sessionStore, session, req, command, { found: true }, { flags: publicFlags });
   return { ok: true, data: { found: true } };
 }
 
@@ -469,27 +463,27 @@ async function handleFindGetText(ctx: FindContext, match: ResolvedMatch): Promis
     contextFromFlags: (flags, appBundleId, traceLogPath) =>
       contextFromFlags(logPath, flags, appBundleId, traceLogPath),
   });
-  if (session) {
-    sessionStore.recordAction(session, {
-      command,
-      positionals: req.positionals ?? [],
-      flags: publicFlags,
-      result: { ref: match.ref, action: 'get text', text },
-    });
-  }
+  recordSessionAction(
+    sessionStore,
+    session,
+    req,
+    command,
+    { ref: match.ref, action: 'get text', text },
+    { flags: publicFlags },
+  );
   return { ok: true, data: { ref: match.ref, text, node: match.node } };
 }
 
 async function handleFindGetAttrs(ctx: FindContext, match: ResolvedMatch): Promise<DaemonResponse> {
   const { req, sessionStore, session, command, publicFlags } = ctx;
-  if (session) {
-    sessionStore.recordAction(session, {
-      command,
-      positionals: req.positionals ?? [],
-      flags: publicFlags,
-      result: { ref: match.ref, action: 'get attrs' },
-    });
-  }
+  recordSessionAction(
+    sessionStore,
+    session,
+    req,
+    command,
+    { ref: match.ref, action: 'get attrs' },
+    { flags: publicFlags },
+  );
   return { ok: true, data: { ref: match.ref, node: match.node } };
 }
 
@@ -514,14 +508,14 @@ async function handleFindClick(ctx: FindContext, match: ResolvedMatch): Promise<
     matchData.x = matchCoords.x;
     matchData.y = matchCoords.y;
   }
-  if (session) {
-    sessionStore.recordAction(session, {
-      command,
-      positionals: req.positionals ?? [],
-      flags: publicFlags,
-      result: { ref: match.ref, action: 'click', locator, query },
-    });
-  }
+  recordSessionAction(
+    sessionStore,
+    session,
+    req,
+    command,
+    { ref: match.ref, action: 'click', locator, query },
+    { flags: publicFlags },
+  );
   return { ok: true, data: matchData };
 }
 
@@ -542,14 +536,14 @@ async function handleFindFill(
     flags: match.actionFlags,
   });
   if (!response.ok) return response;
-  if (session) {
-    sessionStore.recordAction(session, {
-      command,
-      positionals: req.positionals ?? [],
-      flags: publicFlags,
-      result: { ref: match.ref, action: 'fill' },
-    });
-  }
+  recordSessionAction(
+    sessionStore,
+    session,
+    req,
+    command,
+    { ref: match.ref, action: 'fill' },
+    { flags: publicFlags },
+  );
   return response;
 }
 
@@ -617,14 +611,14 @@ function rejectCoveredFindMatch(match: ResolvedMatch, interaction: string): Daem
 
 function recordFindAction(ctx: FindContext, match: ResolvedMatch, action: string): void {
   const { req, sessionStore, session, command, publicFlags } = ctx;
-  if (session) {
-    sessionStore.recordAction(session, {
-      command,
-      positionals: req.positionals ?? [],
-      flags: publicFlags,
-      result: { ref: match.ref, action },
-    });
-  }
+  recordSessionAction(
+    sessionStore,
+    session,
+    req,
+    command,
+    { ref: match.ref, action },
+    { flags: publicFlags },
+  );
 }
 
 // --- Helpers ---

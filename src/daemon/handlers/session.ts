@@ -1,5 +1,4 @@
 import { dispatchCommand } from '../../core/dispatch.ts';
-import { isCommandSupportedOnDevice } from '../../core/capabilities.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { resolvePayloadInput } from '../../utils/payload-input.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
@@ -17,7 +16,8 @@ import {
   handleReleaseMaterializedPathsCommand,
 } from './install-source.ts';
 import { requireSessionOrExplicitSelector, resolveCommandDevice } from './session-device-utils.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse, requireCommandSupported } from './response.ts';
+import { recordSessionAction } from './handler-utils.ts';
 import { handleRuntimeCommand } from './session-runtime-command.ts';
 import { handleOpenCommand } from './session-open.ts';
 import {
@@ -171,9 +171,8 @@ async function runSessionOrSelectorDispatch(params: {
     flags,
     ensureReady: true,
   });
-  if (!isCommandSupportedOnDevice(command, device)) {
-    return errorResponse('UNSUPPORTED_OPERATION', `${command} is not supported on this device`);
-  }
+  const unsupported = requireCommandSupported(command, device);
+  if (unsupported) return unsupported;
 
   const result = await dispatchCommand(device, command, positionals, req.flags?.out, {
     ...contextFromFlags(logPath, req.flags, session?.appBundleId, session?.trace?.outPath),
@@ -182,11 +181,8 @@ async function runSessionOrSelectorDispatch(params: {
     const nextSession = deriveNextSession
       ? await deriveNextSession(session, result, device)
       : session;
-    sessionStore.recordAction(nextSession, {
-      command,
+    recordSessionAction(sessionStore, nextSession, req, command, result ?? {}, {
       positionals: recordPositionals ?? positionals,
-      flags: req.flags ?? {},
-      result: result ?? {},
     });
     if (nextSession !== session) {
       sessionStore.set(sessionName, nextSession);
@@ -218,9 +214,8 @@ async function handleClipboardCommand(params: {
     flags,
     ensureReady: true,
   });
-  if (!isCommandSupportedOnDevice(PUBLIC_COMMANDS.clipboard, device)) {
-    return errorResponse('UNSUPPORTED_OPERATION', 'clipboard is not supported on this device');
-  }
+  const unsupported = requireCommandSupported(PUBLIC_COMMANDS.clipboard, device);
+  if (unsupported) return unsupported;
 
   const result = await dispatchCommand(
     device,
@@ -231,14 +226,7 @@ async function handleClipboardCommand(params: {
       ...contextFromFlags(logPath, req.flags, session?.appBundleId, session?.trace?.outPath),
     },
   );
-  if (session) {
-    sessionStore.recordAction(session, {
-      command: req.command,
-      positionals: req.positionals ?? [],
-      flags: req.flags ?? {},
-      result: result ?? {},
-    });
-  }
+  recordSessionAction(sessionStore, session, req, req.command, result ?? {});
   return { ok: true, data: { platform: device.platform, ...(result ?? {}) } };
 }
 

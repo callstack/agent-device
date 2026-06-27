@@ -6,6 +6,7 @@ import { AppError, normalizeError } from '../utils/errors.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './types.ts';
 import { SessionStore } from './session-store.ts';
+import { noActiveSessionError } from './handlers/response.ts';
 import {
   type AndroidAdbProviderResolver,
   type AppleRunnerProviderResolver,
@@ -230,13 +231,7 @@ async function dispatchGenericForLockedScope(params: {
   const { lockedScope, logPath, sessionStore } = params;
   const session = sessionStore.get(lockedScope.sessionName);
   if (!session) {
-    return lockedScope.finalize({
-      ok: false,
-      error: {
-        code: 'SESSION_NOT_FOUND',
-        message: 'No active session. Run open first.',
-      },
-    });
+    return lockedScope.finalize(noActiveSessionError());
   }
 
   const dispatchResponse = await dispatchGenericCommand({

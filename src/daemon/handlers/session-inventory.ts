@@ -1,4 +1,3 @@
-import { isCommandSupportedOnDevice } from '../../core/capabilities.ts';
 import { listDeviceInventory } from '../../core/dispatch-resolve.ts';
 import { assertResolvedAppsFilter } from '../../contracts/app-inventory.ts';
 import { asAppError } from '../../utils/errors.ts';
@@ -17,7 +16,7 @@ import { resolveSessionRunnerLogPath, SessionStore } from '../session-store.ts';
 import { listAndroidApps } from '../../platforms/android/app-lifecycle.ts';
 import { listIosApps } from '../../platforms/ios/apps.ts';
 import { requireSessionOrExplicitSelector, resolveCommandDevice } from './session-device-utils.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse, requireCommandSupported } from './response.ts';
 import { resolveImplicitSessionScope, sessionMatchesScope } from '../session-routing.ts';
 
 export async function handleSessionInventoryCommands(params: {
@@ -112,9 +111,8 @@ export async function handleSessionInventoryCommands(params: {
       flags,
       ensureReady: true,
     });
-    if (!isCommandSupportedOnDevice('apps', device)) {
-      return errorResponse('UNSUPPORTED_OPERATION', 'apps is not supported on this device');
-    }
+    const unsupported = requireCommandSupported('apps', device);
+    if (unsupported) return unsupported;
 
     const appsFilter = assertResolvedAppsFilter(req.flags?.appsFilter);
     if (isApplePlatform(device.platform)) {

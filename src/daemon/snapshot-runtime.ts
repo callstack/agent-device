@@ -1,12 +1,11 @@
 import type { AgentDeviceBackend, BackendSnapshotResult } from '../backend.ts';
 import type { CommandSessionRecord } from '../runtime.ts';
 import { createAgentDevice } from '../runtime.ts';
-import { isCommandSupportedOnDevice } from '../core/capabilities.ts';
 import { AppError } from '../utils/errors.ts';
 import type { SnapshotDiffSummary } from '../utils/snapshot-diff.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from './types.ts';
 import { SessionStore } from './session-store.ts';
-import { errorResponse } from './handlers/response.ts';
+import { errorResponse, requireCommandSupported } from './handlers/response.ts';
 import { captureSnapshot, resolveSnapshotScope } from './handlers/snapshot-capture.ts';
 import { snapshotCaptureAnnotationsFrom } from '../snapshot-capture-annotations.ts';
 import {
@@ -110,9 +109,10 @@ async function dispatchSnapshotRuntimeCommand(
 ): Promise<DaemonResponse> {
   const { req, sessionName, logPath, sessionStore } = params;
   const { session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
-  if (!isCommandSupportedOnDevice(params.command, device)) {
-    return errorResponse('UNSUPPORTED_OPERATION', params.unsupportedMessage);
-  }
+  const unsupported = requireCommandSupported(params.command, device, {
+    message: params.unsupportedMessage,
+  });
+  if (unsupported) return unsupported;
   const resolvedScope = resolveSnapshotScope(req.flags?.snapshotScope, session);
   if (!resolvedScope.ok) return resolvedScope;
   const iosAppSessionGuard = requireIosAppSessionForSnapshot(params.command, session, device);

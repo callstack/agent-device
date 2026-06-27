@@ -14,6 +14,7 @@ import { createDaemonRuntimePolicy } from '../runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from '../runtime-session.ts';
 import { resolveWebProvider, type WebProvider } from '../../platforms/web/provider.ts';
 import { stripAtPrefix } from './interaction-touch-targets.ts';
+import { NO_ACTIVE_SESSION_MESSAGE } from './response.ts';
 
 export function createInteractionRuntime(
   params: InteractionHandlerParams & {
@@ -21,7 +22,7 @@ export function createInteractionRuntime(
   },
 ) {
   const session = params.sessionStore.get(params.sessionName);
-  if (!session) throw new AppError('SESSION_NOT_FOUND', 'No active session. Run open first.');
+  if (!session) throw new AppError('SESSION_NOT_FOUND', NO_ACTIVE_SESSION_MESSAGE);
   return createAgentDevice({
     backend: createInteractionBackend({ ...params, session }),
     ...createDaemonRuntimePolicy('interaction commands', { plural: true }),

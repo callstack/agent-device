@@ -1,4 +1,3 @@
-import { isCommandSupportedOnDevice } from '../../core/capabilities.ts';
 import { resolveTargetDevice, type CommandFlags } from '../../core/dispatch.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 import { getRequestSignal } from '../request-cancel.ts';
@@ -14,7 +13,8 @@ import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { resolveInstallFromSourceResultTarget } from '../../client-shared.ts';
 import { AppError, normalizeError } from '../../utils/errors.ts';
 import { withSuccessText } from '../../utils/success-text.ts';
-import { errorResponse } from './response.ts';
+import { requireCommandSupported } from './response.ts';
+import { recordSessionAction } from './handler-utils.ts';
 
 type PreparedInstallArtifact = {
   archivePath?: string;
@@ -121,15 +121,7 @@ function recordInstallFromSourceAction(params: {
   data: InstallFromSourceResult & Record<string, unknown>;
 }): void {
   const { session, sessionStore, req, data } = params;
-  if (!session) {
-    return;
-  }
-  sessionStore.recordAction(session, {
-    command: 'install_source',
-    positionals: [],
-    flags: req.flags ?? {},
-    result: data,
-  });
+  recordSessionAction(sessionStore, session, req, 'install_source', data, { positionals: [] });
 }
 
 export async function handleInstallFromSourceCommand(params: {
@@ -146,12 +138,10 @@ export async function handleInstallFromSourceCommand(params: {
       session,
       flags: req.flags,
     });
-    if (!isCommandSupportedOnDevice('install', device)) {
-      return errorResponse(
-        'UNSUPPORTED_OPERATION',
-        'install_from_source is not supported on this device',
-      );
-    }
+    const unsupported = requireCommandSupported('install', device, {
+      message: 'install_from_source is not supported on this device',
+    });
+    if (unsupported) return unsupported;
 
     const requestSignal = getRequestSignal(req.meta?.requestId);
     const completeInstall = async (

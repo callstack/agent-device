@@ -1,4 +1,3 @@
-import { isCommandSupportedOnDevice } from '../../core/capabilities.ts';
 import { asAppError } from '../../utils/errors.ts';
 import { isApplePlatform, type DeviceInfo } from '../../utils/device.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
@@ -12,7 +11,7 @@ import {
   resolveCommandDevice,
   selectorTargetsSessionDevice,
 } from './session-device-utils.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse, requireCommandSupported } from './response.ts';
 
 async function ensureAndroidEmulatorBoot(params: {
   avdName: string;
@@ -239,9 +238,8 @@ export async function handleSessionStateCommands(params: {
       }
     }
 
-    if (!isCommandSupportedOnDevice('boot', device)) {
-      return errorResponse('UNSUPPORTED_OPERATION', 'boot is not supported on this device');
-    }
+    const unsupported = requireCommandSupported('boot', device);
+    if (unsupported) return unsupported;
 
     return {
       ok: true,
@@ -267,12 +265,10 @@ export async function handleSessionStateCommands(params: {
       flags,
       session: activeSession,
     });
-    if (!isCommandSupportedOnDevice('shutdown', device)) {
-      return errorResponse(
-        'UNSUPPORTED_OPERATION',
-        'shutdown is supported only for Apple simulators and Android emulators.',
-      );
-    }
+    const unsupported = requireCommandSupported('shutdown', device, {
+      message: 'shutdown is supported only for Apple simulators and Android emulators.',
+    });
+    if (unsupported) return unsupported;
 
     if (
       activeSession &&

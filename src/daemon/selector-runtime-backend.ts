@@ -3,11 +3,10 @@ import type {
   BackendSnapshotOptions,
   BackendSnapshotResult,
 } from '../backend.ts';
-import { isCommandSupportedOnDevice } from '../core/capabilities.ts';
 import { resolveTargetDevice, type CommandFlags } from '../core/dispatch.ts';
 import { createAgentDevice } from '../runtime.ts';
 import { isApplePlatform } from '../utils/device.ts';
-import { errorResponse } from './handlers/response.ts';
+import { noActiveSessionError, requireCommandSupported } from './handlers/response.ts';
 import type { SnapshotNode } from '../utils/snapshot.ts';
 import { findNodeByLabel } from '../utils/snapshot-processing.ts';
 import { runIosRunnerCommand } from '../platforms/ios/runner-client.ts';
@@ -73,20 +72,13 @@ export async function createSelectorRuntime(
   if (!session && options.requireSession) {
     return {
       ok: false,
-      response: errorResponse('SESSION_NOT_FOUND', 'No active session. Run open first.'),
+      response: noActiveSessionError(),
     };
   }
   const device = session?.device ?? (await resolveTargetDevice(params.req.flags ?? {}));
   if (!session) await ensureDeviceReady(device);
-  if (!isCommandSupportedOnDevice(options.capability, device)) {
-    return {
-      ok: false,
-      response: errorResponse(
-        'UNSUPPORTED_OPERATION',
-        `${options.capability} is not supported on this device`,
-      ),
-    };
-  }
+  const unsupported = requireCommandSupported(options.capability, device);
+  if (unsupported) return { ok: false, response: unsupported };
   return {
     ok: true,
     runtime: createSelectorRuntimeForDevice({

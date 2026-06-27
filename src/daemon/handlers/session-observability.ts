@@ -1,4 +1,3 @@
-import { isCommandSupportedOnDevice } from '../../core/capabilities.ts';
 import {
   isPerfAction,
   isPerfArea,
@@ -33,7 +32,7 @@ import {
   buildPerfResponseData,
 } from './session-perf.ts';
 import { handleNativePerfCommand as handleAndroidNativePerfCommand } from './session-native-perf.ts';
-import { errorResponse, type DaemonFailureResponse } from './response.ts';
+import { errorResponse, requireCommandSupported, type DaemonFailureResponse } from './response.ts';
 import { handleNativePerfCommand as handleAppleNativePerfCommand } from './session-perf-xctrace.ts';
 import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '../../contracts.ts';
 import type { LogBackend } from '../network-log.ts';
@@ -299,9 +298,8 @@ async function handleLogsCommand(params: ObservabilityParams): Promise<DaemonRes
   if (!session) {
     return errorResponse('SESSION_NOT_FOUND', 'logs requires an active session');
   }
-  if (!isCommandSupportedOnDevice('logs', session.device)) {
-    return errorResponse('UNSUPPORTED_OPERATION', 'logs is not supported on this device');
-  }
+  const unsupported = requireCommandSupported('logs', session.device);
+  if (unsupported) return unsupported;
 
   const request = resolveLogsCommandRequest(req);
   if (!request.ok) return request;
@@ -569,9 +567,8 @@ function resolveNetworkCommandRequest(
   if (!session) {
     return errorResponse('SESSION_NOT_FOUND', 'network requires an active session');
   }
-  if (!isCommandSupportedOnDevice('network', session.device)) {
-    return errorResponse('UNSUPPORTED_OPERATION', 'network is not supported on this device');
-  }
+  const unsupported = requireCommandSupported('network', session.device);
+  if (unsupported) return unsupported;
 
   const action = (req.positionals?.[0] ?? 'dump').toLowerCase();
   if (!NETWORK_ACTIONS.includes(action as (typeof NETWORK_ACTIONS)[number])) {

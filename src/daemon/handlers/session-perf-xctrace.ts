@@ -10,6 +10,7 @@ import {
 } from '../../platforms/ios/perf-xctrace.ts';
 import { PERF_AREA_ERROR_MESSAGE } from '../../contracts/perf.ts';
 import { errorResponse, type DaemonFailureResponse } from './response.ts';
+import { recordSessionAction } from './handler-utils.ts';
 
 type NativePerfParams = {
   req: DaemonRequest;
@@ -271,12 +272,7 @@ function recordNativePerfAction(
   session: SessionState,
   data: Record<string, unknown>,
 ): void {
-  params.sessionStore.recordAction(session, {
-    command: 'perf',
-    positionals: params.req.positionals ?? [],
-    flags: params.req.flags ?? {},
-    result: data,
-  });
+  recordSessionAction(params.sessionStore, session, params.req, 'perf', data);
 }
 
 function resolveNativePerfOutPath(params: NativePerfParams, request: NativePerfRequest): string {

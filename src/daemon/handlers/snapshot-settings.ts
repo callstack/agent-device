@@ -1,4 +1,3 @@
-import { isCommandSupportedOnDevice } from '../../core/capabilities.ts';
 import {
   getUnsupportedMacOsSettingMessage,
   isMacOsSettingSupported,
@@ -9,7 +8,7 @@ import { contextFromFlags } from '../context.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { recordIfSession } from './snapshot-session.ts';
-import { errorResponse, type DaemonFailureResponse } from './response.ts';
+import { errorResponse, requireCommandSupported, type DaemonFailureResponse } from './response.ts';
 
 type ParsedSettingsArgs = {
   setting: string;
@@ -78,9 +77,8 @@ export async function handleSettingsCommand(
     latitude,
     longitude,
   } = parsed;
-  if (!isCommandSupportedOnDevice('settings', device)) {
-    return errorResponse('UNSUPPORTED_OPERATION', 'settings is not supported on this device');
-  }
+  const unsupported = requireCommandSupported('settings', device);
+  if (unsupported) return unsupported;
   if (device.platform === 'macos' && !isMacOsSettingSupported(setting)) {
     return errorResponse('INVALID_ARGS', getUnsupportedMacOsSettingMessage(setting));
   }

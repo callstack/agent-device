@@ -19,6 +19,7 @@ import {
   settleIosSimulator,
 } from './session-device-utils.ts';
 import { errorResponse } from './response.ts';
+import { recordSessionAction } from './handler-utils.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import { releaseSessionLease } from '../lease-lifecycle.ts';
 import {
@@ -97,11 +98,9 @@ export async function handleCloseCommand(params: {
         appId: session.appBundleId,
       }).catch(() => {});
     }
-    sessionStore.recordAction(session, {
-      command: 'close',
-      positionals: req.positionals ?? [],
-      flags: req.flags ?? {},
-      result: { session: session.name, ...successText(`Closed: ${session.name}`) },
+    recordSessionAction(sessionStore, session, req, 'close', {
+      session: session.name,
+      ...successText(`Closed: ${session.name}`),
     });
     if (req.flags?.saveScript) {
       session.recordSession = true;

@@ -1,4 +1,3 @@
-import { isCommandSupportedOnDevice } from '../../core/capabilities.ts';
 import type { GestureReferenceFrame } from '../../core/scroll-gesture.ts';
 import {
   buttonTag,
@@ -25,7 +24,7 @@ import {
   resolveDirectTouchReferenceFrameSafely,
 } from './interaction-touch-reference-frame.ts';
 import { unsupportedMacOsDesktopSurfaceInteraction } from './interaction-touch-policy.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse, noActiveSessionError, requireCommandSupported } from './response.ts';
 import {
   assertAndroidPressStayedInApp,
   isAndroidEscapeError,
@@ -79,7 +78,7 @@ async function dispatchTargetedTouchViaRuntime(
 ): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore } = params;
   const session = sessionStore.get(sessionName);
-  if (!session) return errorResponse('SESSION_NOT_FOUND', 'No active session. Run open first.');
+  if (!session) return noActiveSessionError();
 
   const commandLabel = command === 'click' ? 'click' : command;
   const capabilityCommand = command === 'longpress' ? 'longpress' : 'press';
@@ -88,12 +87,8 @@ async function dispatchTargetedTouchViaRuntime(
     commandLabel,
   );
   if (unsupportedSurfaceResponse) return unsupportedSurfaceResponse;
-  if (!isCommandSupportedOnDevice(capabilityCommand, session.device)) {
-    return errorResponse(
-      'UNSUPPORTED_OPERATION',
-      `${capabilityCommand} is not supported on this device`,
-    );
-  }
+  const unsupported = requireCommandSupported(capabilityCommand, session.device);
+  if (unsupported) return unsupported;
 
   const clickButton = resolveClickButton(req.flags);
   const resultButtonTag = buttonTag(clickButton);
@@ -410,11 +405,10 @@ async function dispatchFillViaRuntime(
   if (session) {
     const unsupportedSurfaceResponse = unsupportedMacOsDesktopSurfaceInteraction(session, 'fill');
     if (unsupportedSurfaceResponse) return unsupportedSurfaceResponse;
+    const unsupported = requireCommandSupported('fill', session.device);
+    if (unsupported) return unsupported;
   }
-  if (session && !isCommandSupportedOnDevice('fill', session.device)) {
-    return errorResponse('UNSUPPORTED_OPERATION', 'fill is not supported on this device');
-  }
-  if (!session) return errorResponse('SESSION_NOT_FOUND', 'No active session. Run open first.');
+  if (!session) return noActiveSessionError();
 
   const parsedTarget = parseFillTarget(req.positionals ?? []);
   if (!parsedTarget.ok) return parsedTarget.response;
@@ -529,7 +523,7 @@ async function dispatchRuntimeInteraction<
   },
 ): Promise<DaemonResponse> {
   const session = params.sessionStore.get(params.sessionName);
-  if (!session) return errorResponse('SESSION_NOT_FOUND', 'No active session. Run open first.');
+  if (!session) return noActiveSessionError();
   const runtime = createInteractionRuntime(params);
   const actionStartedAt = Date.now();
   try {

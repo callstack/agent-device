@@ -1,11 +1,10 @@
 import { parseWaitPositionals } from '../core/wait-positionals.ts';
 import type { WaitParsed } from '../core/wait-positionals.ts';
-import { isCommandSupportedOnDevice } from '../core/capabilities.ts';
 import { AppError, asAppError, normalizeError } from '../utils/errors.ts';
 import type { SnapshotNode } from '../utils/snapshot.ts';
 import { runIosRunnerCommand } from '../platforms/ios/runner-client.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
-import { errorResponse } from './handlers/response.ts';
+import { errorResponse, requireCommandSupported } from './handlers/response.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from './handlers/snapshot-session.ts';
 import { parseFindArgs, type FindAction } from '../utils/finders.ts';
 import { splitIsSelectorArgs } from './selectors.ts';
@@ -201,8 +200,9 @@ export async function dispatchWaitViaRuntime(
   const parsed = parseWaitPositionals(req.positionals ?? []);
   if (!parsed) return errorResponse('INVALID_ARGS', 'wait requires a duration or text');
   const { session, device } = await resolveSessionDevice(sessionStore, sessionName, req.flags);
-  if (parsed.kind !== 'sleep' && !isCommandSupportedOnDevice('wait', device)) {
-    return errorResponse('UNSUPPORTED_OPERATION', 'wait is not supported on this device');
+  if (parsed.kind !== 'sleep') {
+    const unsupported = requireCommandSupported('wait', device);
+    if (unsupported) return unsupported;
   }
   if (parsed.kind === 'selector') {
     const directResponse = await dispatchDirectIosSelectorWait({
