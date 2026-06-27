@@ -13,7 +13,7 @@ export type DaemonCommandRoute =
 
 export type SessionCommandKind = 'inventory' | 'state' | 'observability' | 'replay';
 
-type DaemonCommandDescriptor = {
+export type DaemonCommandDescriptor = {
   command: string;
   route: DaemonCommandRoute;
   sessionKind?: SessionCommandKind;
@@ -46,7 +46,7 @@ const ADMISSION_AND_LOCK_EXEMPT = {
   sessionExecutionLockExempt: true,
 } as const;
 
-const DAEMON_COMMAND_DESCRIPTORS = [
+export const DAEMON_COMMAND_DESCRIPTORS = [
   ...descriptors(
     'lease',
     ADMISSION_AND_LOCK_EXEMPT,

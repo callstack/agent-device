@@ -79,7 +79,7 @@ const APP_INSTALL_CAPABILITY = {
   supports: isNotMacOs,
 } as const satisfies CommandCapability;
 
-const BASE_COMMAND_CAPABILITY_MATRIX: Record<string, CommandCapability> = {
+export const BASE_COMMAND_CAPABILITY_MATRIX: Record<string, CommandCapability> = {
   // Apple simulator-only.
   alert: {
     // macOS desktop targets report kind=device, so this stays enabled here and the
