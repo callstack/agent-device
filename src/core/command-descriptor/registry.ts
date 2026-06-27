@@ -6,7 +6,7 @@ import {
 import type { CommandCapability } from '../capabilities.ts';
 import type { DaemonRequest } from '../../daemon/types.ts';
 import type { DeviceInfo } from '../../utils/device.ts';
-import { type CommandDescriptor, defineCommandDescriptor } from './types.ts';
+import type { CommandDescriptor } from './types.ts';
 
 // ---------------------------------------------------------------------------
 // Daemon request-policy trait bundles — copied VERBATIM from
@@ -90,7 +90,7 @@ const APP_INSTALL_CAPABILITY = {
 // live only in the capability/batch hand tables).
 // ---------------------------------------------------------------------------
 
-const RAW_COMMAND_DESCRIPTORS: readonly Omit<CommandDescriptor, 'mcpExposed'>[] = [
+const RAW_COMMAND_DESCRIPTORS = [
   // -- lease (route: lease) --
   {
     name: INTERNAL_COMMANDS.leaseAllocate,
@@ -536,19 +536,22 @@ const RAW_COMMAND_DESCRIPTORS: readonly Omit<CommandDescriptor, 'mcpExposed'>[] 
     capability: APP_INSTALL_CAPABILITY,
     batchable: true,
   },
-];
+] as const satisfies readonly Omit<CommandDescriptor, 'mcpExposed'>[];
 
 const MCP_EXPOSED_COMMAND_NAMES = new Set<string>(listMcpExposedCommandNames());
 
 /**
- * The additive single source of truth (ADR-0008, Phase 1 step 1). Dormant: no
- * consumer reads it yet. Proven byte-equal to the live hand tables by
- * `__tests__/parity.test.ts`.
+ * The additive single source of truth (ADR-0008, Phase 1 step 1). Proven
+ * byte-equal to the live hand tables by `__tests__/parity.test.ts`.
+ *
+ * The `as const` on {@link RAW_COMMAND_DESCRIPTORS} flows through this `.map`,
+ * so each entry keeps its literal `name`. That is what makes the {@link Command}
+ * union below a precise set of command-name literals rather than `string`.
  */
-export const commandDescriptors: readonly CommandDescriptor[] = RAW_COMMAND_DESCRIPTORS.map(
-  (descriptor) =>
-    defineCommandDescriptor({
-      ...descriptor,
-      mcpExposed: MCP_EXPOSED_COMMAND_NAMES.has(descriptor.name),
-    }),
-);
+export const commandDescriptors = RAW_COMMAND_DESCRIPTORS.map((descriptor) => ({
+  ...descriptor,
+  mcpExposed: MCP_EXPOSED_COMMAND_NAMES.has(descriptor.name),
+})) satisfies readonly CommandDescriptor[];
+
+/** The literal union of every registered command name. */
+export type Command = (typeof commandDescriptors)[number]['name'];

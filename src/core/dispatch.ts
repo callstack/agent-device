@@ -87,7 +87,130 @@ export async function dispatchCommand(
   );
 }
 
-// fallow-ignore-next-line complexity
+/**
+ * The exact set of commands routed by {@link dispatchKnownCommand}. Hand-authored
+ * to match the former `switch` cases verbatim: it is NOT the registry's `generic`
+ * daemon route (that set is both narrower — e.g. it has no `open`/`type`/`read` —
+ * and includes `gesture`, which dispatch never handled), and `swipe-preset` /
+ * `read` are not registry command names at all. Keeping it explicit makes the
+ * dispatch surface self-describing and lets the `Record` below enforce coverage.
+ */
+type DispatchCommand =
+  | 'open'
+  | 'close'
+  | 'press'
+  | 'swipe'
+  | 'swipe-preset'
+  | 'pan'
+  | 'fling'
+  | 'longpress'
+  | 'focus'
+  | 'type'
+  | 'fill'
+  | 'scroll'
+  | 'pinch'
+  | 'rotate-gesture'
+  | 'transform-gesture'
+  | 'trigger-app-event'
+  | 'screenshot'
+  | 'viewport'
+  | 'back'
+  | 'home'
+  | 'rotate'
+  | 'app-switcher'
+  | 'clipboard'
+  | 'keyboard'
+  | 'settings'
+  | 'push'
+  | 'snapshot'
+  | 'read';
+
+type DispatchHandlerArgs = {
+  device: DeviceInfo;
+  interactor: Interactor;
+  positionals: string[];
+  outPath: string | undefined;
+  context: DispatchContext | undefined;
+  runnerCtx: RunnerContext;
+};
+
+type DispatchHandler = (args: DispatchHandlerArgs) => Promise<Record<string, unknown> | void>;
+
+/**
+ * Registry-driven exhaustive dispatch table. The `Record<DispatchCommand, …>`
+ * type forces every dispatch command to have a handler — a missing entry is a
+ * COMPILE error, which replaces the former runtime `default: throw` as the
+ * coverage safety net. Each entry routes to the IDENTICAL handler with the
+ * IDENTICAL arguments the `switch` used, so dispatch stays strictly behaviorless.
+ */
+const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
+  open: ({ device, interactor, positionals, context }) =>
+    handleOpenCommand(device, interactor, positionals, context),
+  close: async ({ device, interactor, positionals }) => {
+    const app = positionals[0];
+    if (!app) {
+      if (device.platform === 'web') {
+        await interactor.close('');
+      }
+      return { closed: 'session', ...successText('Closed session') };
+    }
+    await interactor.close(app);
+    return { app, ...successText(`Closed: ${app}`) };
+  },
+  press: ({ device, interactor, positionals, context }) =>
+    handlePressCommand(device, interactor, positionals, context),
+  swipe: ({ device, interactor, positionals, context }) =>
+    handleSwipeCommand(device, interactor, positionals, context),
+  'swipe-preset': ({ device, interactor, positionals, context }) =>
+    handleSwipePresetCommand(device, interactor, positionals, context),
+  pan: ({ interactor, positionals }) => handlePanCommand(interactor, positionals),
+  fling: ({ interactor, positionals }) => handleFlingCommand(interactor, positionals),
+  longpress: ({ interactor, positionals }) => handleLongPressCommand(interactor, positionals),
+  focus: ({ interactor, positionals }) => handleFocusCommand(interactor, positionals),
+  type: ({ interactor, positionals, context }) =>
+    handleTypeCommand(interactor, positionals, context),
+  fill: ({ interactor, positionals, context }) =>
+    handleFillCommand(interactor, positionals, context),
+  scroll: ({ interactor, positionals, context }) =>
+    handleScrollCommand(interactor, positionals, context),
+  pinch: ({ device, interactor, positionals, context }) =>
+    handlePinchCommand(device, interactor, positionals, context),
+  'rotate-gesture': ({ device, interactor, positionals }) =>
+    handleRotateGestureCommand(device, interactor, positionals),
+  'transform-gesture': ({ device, interactor, positionals }) =>
+    handleTransformGestureCommand(device, interactor, positionals),
+  'trigger-app-event': ({ device, interactor, positionals, context }) =>
+    handleTriggerAppEventCommand(device, interactor, positionals, context),
+  screenshot: ({ interactor, positionals, outPath, context }) =>
+    handleScreenshotCommand(interactor, positionals, outPath, context),
+  viewport: ({ interactor, positionals }) => handleViewportCommand(interactor, positionals),
+  back: async ({ interactor, context }) => {
+    await interactor.back(context?.backMode);
+    return { action: 'back', mode: context?.backMode ?? 'in-app', ...successText('Back') };
+  },
+  home: async ({ interactor }) => {
+    await interactor.home();
+    return { action: 'home', ...successText('Home') };
+  },
+  rotate: async ({ interactor, positionals }) => {
+    const orientation = parseDeviceRotation(positionals[0]);
+    await interactor.rotate(orientation);
+    return { action: 'rotate', orientation, ...successText(`Rotated to ${orientation}`) };
+  },
+  'app-switcher': async ({ interactor }) => {
+    await interactor.appSwitcher();
+    return { action: 'app-switcher', ...successText('Opened app switcher') };
+  },
+  clipboard: ({ interactor, positionals }) => handleClipboardCommand(interactor, positionals),
+  keyboard: ({ device, positionals, context, runnerCtx }) =>
+    handleKeyboardCommand(device, positionals, context, runnerCtx),
+  settings: ({ device, interactor, positionals, context }) =>
+    handleSettingsCommand(device, interactor, positionals, context),
+  push: ({ device, positionals, context }) => handlePushCommand(device, positionals, context),
+  snapshot: ({ interactor, context }) => handleSnapshotCommand(interactor, context),
+  read: ({ device, positionals, context }) => handleReadCommand(device, positionals, context),
+};
+
 async function dispatchKnownCommand(
   device: DeviceInfo,
   interactor: Interactor,
@@ -97,81 +220,16 @@ async function dispatchKnownCommand(
   context: DispatchContext | undefined,
   runnerCtx: RunnerContext,
 ): Promise<Record<string, unknown> | void> {
-  switch (command) {
-    case 'open':
-      return await handleOpenCommand(device, interactor, positionals, context);
-    case 'close': {
-      const app = positionals[0];
-      if (!app) {
-        if (device.platform === 'web') {
-          await interactor.close('');
-        }
-        return { closed: 'session', ...successText('Closed session') };
-      }
-      await interactor.close(app);
-      return { app, ...successText(`Closed: ${app}`) };
-    }
-    case 'press':
-      return await handlePressCommand(device, interactor, positionals, context);
-    case 'swipe':
-      return await handleSwipeCommand(device, interactor, positionals, context);
-    case 'swipe-preset':
-      return await handleSwipePresetCommand(device, interactor, positionals, context);
-    case 'pan':
-      return await handlePanCommand(interactor, positionals);
-    case 'fling':
-      return await handleFlingCommand(interactor, positionals);
-    case 'longpress':
-      return await handleLongPressCommand(interactor, positionals);
-    case 'focus':
-      return await handleFocusCommand(interactor, positionals);
-    case 'type':
-      return await handleTypeCommand(interactor, positionals, context);
-    case 'fill':
-      return await handleFillCommand(interactor, positionals, context);
-    case 'scroll':
-      return await handleScrollCommand(interactor, positionals, context);
-    case 'pinch':
-      return await handlePinchCommand(device, interactor, positionals, context);
-    case 'rotate-gesture':
-      return await handleRotateGestureCommand(device, interactor, positionals);
-    case 'transform-gesture':
-      return await handleTransformGestureCommand(device, interactor, positionals);
-    case 'trigger-app-event':
-      return await handleTriggerAppEventCommand(device, interactor, positionals, context);
-    case 'screenshot':
-      return await handleScreenshotCommand(interactor, positionals, outPath, context);
-    case 'viewport':
-      return await handleViewportCommand(interactor, positionals);
-    case 'back':
-      await interactor.back(context?.backMode);
-      return { action: 'back', mode: context?.backMode ?? 'in-app', ...successText('Back') };
-    case 'home':
-      await interactor.home();
-      return { action: 'home', ...successText('Home') };
-    case 'rotate': {
-      const orientation = parseDeviceRotation(positionals[0]);
-      await interactor.rotate(orientation);
-      return { action: 'rotate', orientation, ...successText(`Rotated to ${orientation}`) };
-    }
-    case 'app-switcher':
-      await interactor.appSwitcher();
-      return { action: 'app-switcher', ...successText('Opened app switcher') };
-    case 'clipboard':
-      return await handleClipboardCommand(interactor, positionals);
-    case 'keyboard':
-      return await handleKeyboardCommand(device, positionals, context, runnerCtx);
-    case 'settings':
-      return await handleSettingsCommand(device, interactor, positionals, context);
-    case 'push':
-      return await handlePushCommand(device, positionals, context);
-    case 'snapshot':
-      return await handleSnapshotCommand(interactor, context);
-    case 'read':
-      return await handleReadCommand(device, positionals, context);
-    default:
-      throw new AppError('INVALID_ARGS', `Unknown command: ${command}`);
+  // `Object.hasOwn` keeps the lookup behaviorless: any unknown command —
+  // including inherited keys like `toString` — falls through to the same
+  // `INVALID_ARGS` error the former `default:` branch threw.
+  const handler = Object.hasOwn(DISPATCH_HANDLERS, command)
+    ? DISPATCH_HANDLERS[command as DispatchCommand]
+    : undefined;
+  if (!handler) {
+    throw new AppError('INVALID_ARGS', `Unknown command: ${command}`);
   }
+  return await handler({ device, interactor, positionals, outPath, context, runnerCtx });
 }
 
 // ---------------------------------------------------------------------------
