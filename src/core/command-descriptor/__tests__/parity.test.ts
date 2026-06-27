@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import {
-  STRUCTURED_BATCH_COMMAND_NAMES,
-  type StructuredBatchCommandName,
-} from '../../../batch-policy.ts';
+import { STRUCTURED_BATCH_COMMAND_NAMES } from '../../../batch-policy.ts';
 import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
 import { BASE_COMMAND_CAPABILITY_MATRIX } from '../../capabilities.ts';
 import {
@@ -132,56 +129,6 @@ test('capability matrix holds its admission invariants', () => {
   }
 });
 
-// Exhaustive map over the StructuredBatchCommandName union. The compiler errors
-// if a union member is missing a key OR a non-member key is added, so its keys
-// ARE the union at type level — giving us a runtime handle on the (otherwise
-// hand-authored) union to compare against the derived allowlist.
-const STRUCTURED_BATCH_UNION_MEMBERS: Record<StructuredBatchCommandName, true> = {
-  [PUBLIC_COMMANDS.devices]: true,
-  [PUBLIC_COMMANDS.boot]: true,
-  [PUBLIC_COMMANDS.shutdown]: true,
-  [PUBLIC_COMMANDS.apps]: true,
-  [PUBLIC_COMMANDS.open]: true,
-  [PUBLIC_COMMANDS.close]: true,
-  [PUBLIC_COMMANDS.install]: true,
-  [PUBLIC_COMMANDS.reinstall]: true,
-  [PUBLIC_COMMANDS.installFromSource]: true,
-  [PUBLIC_COMMANDS.push]: true,
-  [PUBLIC_COMMANDS.triggerAppEvent]: true,
-  [PUBLIC_COMMANDS.snapshot]: true,
-  [PUBLIC_COMMANDS.screenshot]: true,
-  [PUBLIC_COMMANDS.diff]: true,
-  [PUBLIC_COMMANDS.wait]: true,
-  [PUBLIC_COMMANDS.alert]: true,
-  [PUBLIC_COMMANDS.settings]: true,
-  [PUBLIC_COMMANDS.click]: true,
-  [PUBLIC_COMMANDS.press]: true,
-  [PUBLIC_COMMANDS.longPress]: true,
-  [PUBLIC_COMMANDS.swipe]: true,
-  [PUBLIC_COMMANDS.focus]: true,
-  [PUBLIC_COMMANDS.type]: true,
-  [PUBLIC_COMMANDS.fill]: true,
-  [PUBLIC_COMMANDS.scroll]: true,
-  [PUBLIC_COMMANDS.get]: true,
-  [PUBLIC_COMMANDS.gesture]: true,
-  [PUBLIC_COMMANDS.is]: true,
-  [PUBLIC_COMMANDS.find]: true,
-  [PUBLIC_COMMANDS.perf]: true,
-  [PUBLIC_COMMANDS.logs]: true,
-  [PUBLIC_COMMANDS.network]: true,
-  [PUBLIC_COMMANDS.record]: true,
-  [PUBLIC_COMMANDS.trace]: true,
-  [PUBLIC_COMMANDS.test]: true,
-  [PUBLIC_COMMANDS.appState]: true,
-  [PUBLIC_COMMANDS.back]: true,
-  [PUBLIC_COMMANDS.home]: true,
-  [PUBLIC_COMMANDS.rotate]: true,
-  [PUBLIC_COMMANDS.appSwitcher]: true,
-  [PUBLIC_COMMANDS.keyboard]: true,
-  [PUBLIC_COMMANDS.clipboard]: true,
-  [PUBLIC_COMMANDS.reactNative]: true,
-};
-
 // Control-plane / non-batchable commands that must never enter the allowlist.
 const NON_BATCHABLE_COMMANDS = [
   PUBLIC_COMMANDS.batch,
@@ -195,27 +142,21 @@ const NON_BATCHABLE_COMMANDS = [
   'transform-gesture',
 ];
 
-test('structured-batch allowlist is built from descriptors and matches the kept union', () => {
+test('structured-batch allowlist is built from descriptors', () => {
   const derived = deriveStructuredBatchCommandNames(commandDescriptors);
 
   // No duplicates in the derived allowlist.
   assert.equal(new Set(derived).size, derived.length, 'no duplicate batchable names');
 
   // The exported allowlist is now BUILT from these derived descriptors, so it is
-  // the derived list (order included) — guards the wiring, not a tautology of
-  // membership.
+  // the derived list (order included) — guards the wiring. (The narrow
+  // StructuredBatchCommandName union now DERIVES from the same `batchable: true`
+  // entries via Extract, so an exhaustive-union membership check would be a
+  // tautology; `tsc` enforces the type, this guards the value.)
   assert.deepEqual(
     [...STRUCTURED_BATCH_COMMAND_NAMES],
     derived,
     'exported allowlist is built from the descriptors',
-  );
-
-  // Membership equals the kept StructuredBatchCommandName union (proves the
-  // narrow type the consumers rely on did not drift from the runtime value).
-  assert.deepEqual(
-    [...new Set(derived)].sort(),
-    Object.keys(STRUCTURED_BATCH_UNION_MEMBERS).sort(),
-    'derived membership equals the kept union',
   );
 
   // Every batchable command is a real public command (no internal/control name leaks in).
