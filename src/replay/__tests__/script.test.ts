@@ -7,6 +7,7 @@ import { AppError } from '../../utils/errors.ts';
 import {
   parseReplayScriptDetailed,
   readReplayScriptMetadata,
+  REPLAY_METADATA_PLATFORMS,
   writeReplayScript,
 } from '../script.ts';
 import type { SessionAction, SessionState } from '../../daemon/types.ts';
@@ -278,6 +279,24 @@ test('readReplayScriptMetadata ignores non-concrete platform aliases', () => {
   const metadata = readReplayScriptMetadata(
     'context platform=apple device="Host Mac"\nopen "Demo"\n',
   );
+
+  assert.equal(metadata.platform, undefined);
+});
+
+test('REPLAY_METADATA_PLATFORMS is exactly the non-web leaf platforms', () => {
+  assert.deepEqual([...REPLAY_METADATA_PLATFORMS].sort(), ['android', 'ios', 'linux', 'macos']);
+});
+
+test('readReplayScriptMetadata accepts every concrete leaf platform', () => {
+  for (const platform of ['ios', 'android', 'macos', 'linux'] as const) {
+    const metadata = readReplayScriptMetadata(`context platform=${platform}\nopen "Demo"\n`);
+
+    assert.equal(metadata.platform, platform);
+  }
+});
+
+test('readReplayScriptMetadata drops unsupported web platform', () => {
+  const metadata = readReplayScriptMetadata('context platform=web device="Browser"\nopen "Demo"\n');
 
   assert.equal(metadata.platform, undefined);
 });

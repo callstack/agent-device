@@ -3,6 +3,7 @@ import { AppError } from '../utils/errors.ts';
 import { recordingQualityInputToExportQuality } from '../core/recording-export-quality.ts';
 import { readScreenshotScriptFlag } from '../contracts/screenshot.ts';
 import type { DeviceTarget, PlatformSelector } from '../utils/device.ts';
+import { PLATFORM_SELECTORS } from '../utils/device.ts';
 import { parseReplayOpenFlags } from './open-script.ts';
 import { formatPortableActionLine } from './script-formatting.ts';
 import type { SessionAction, SessionState } from '../daemon/types.ts';
@@ -14,14 +15,15 @@ import {
 } from './script-utils.ts';
 import { REPLAY_VAR_KEY_RE } from './vars.ts';
 
-type ReplayScriptPlatform = Exclude<PlatformSelector, 'apple'>;
+// Replay metadata `context platform=` lines only support concrete leaf
+// platforms. 'apple' is an alias (resolved to a leaf), and 'web' is not yet a
+// supported replay target, so both are excluded — keep the type and the runtime
+// allow-list derived from the same canonical PLATFORM_SELECTORS source.
+type ReplayScriptPlatform = Exclude<PlatformSelector, 'apple' | 'web'>;
 
-const REPLAY_METADATA_PLATFORMS = new Set<ReplayScriptPlatform>([
-  'ios',
-  'android',
-  'macos',
-  'linux',
-]);
+export const REPLAY_METADATA_PLATFORMS = new Set<ReplayScriptPlatform>(
+  PLATFORM_SELECTORS.filter((p): p is ReplayScriptPlatform => p !== 'apple' && p !== 'web'),
+);
 const REPLAY_METADATA_TARGETS = new Set<DeviceTarget>(['mobile', 'tv', 'desktop']);
 
 export type ReplayScriptMetadata = {
