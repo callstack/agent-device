@@ -31,6 +31,13 @@ wiring cheap and make *half-wired* platforms a compile error — they do not mak
 reduction is real but modest (~**-1k to -3k LOC**, dominated by deleting the `client-types.ts` mirror); the
 *real* prize is **files-per-change** and **type safety**, not raw line count.
 
+**Decision records:** the two axes are now ADRs — [ADR 0008](../docs/adr/0008-command-descriptor-registry.md)
+(command descriptor, composing with ADR 0003) and
+[ADR 0009](../docs/adr/0009-apple-platform-consolidation.md) (Apple / `AppleOS`).
+**Status (2026-06):** Phase 0 (type-safety, parse-at-boundary, derived allow-lists, `AppleOS` groundwork,
+replay derivation) and the Tier-A dedup sweep are merged. The next gateway is the command-descriptor spine
+(§5.2, ADR 0008); everything substantive cascades from it.
+
 ---
 
 ## 1. Mind map — the codebase today
