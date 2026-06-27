@@ -1,7 +1,12 @@
-import { daemonRuntimeSchema, type DaemonRequest, type DaemonResponse } from '../contracts.ts';
+import { type DaemonRequest, type DaemonResponse } from '../contracts.ts';
 import { AppError, asAppError } from '../utils/errors.ts';
 import { isRecord } from '../utils/parsing.ts';
-import { DEFAULT_BATCH_MAX_STEPS } from '../batch-contract.ts';
+import {
+  DEFAULT_BATCH_MAX_STEPS,
+  assertBatchStepCount,
+  isValidBatchMaxSteps,
+  parseBatchStepRuntime,
+} from '../batch-contract.ts';
 import {
   BATCH_BLOCKED_COMMANDS,
   BATCH_DAEMON_STEP_KEYS,
@@ -74,7 +79,7 @@ export async function runBatch(
     return batchErrorResponse('INVALID_ARGS', `Unsupported batch on-error mode: ${batchOnError}.`);
   }
   const batchMaxSteps = flags?.batchMaxSteps ?? DEFAULT_BATCH_MAX_STEPS;
-  if (!Number.isInteger(batchMaxSteps) || batchMaxSteps < 1 || batchMaxSteps > 1000) {
+  if (!isValidBatchMaxSteps(batchMaxSteps)) {
     return batchErrorResponse(
       'INVALID_ARGS',
       `Invalid batch max-steps: ${String(flags?.batchMaxSteps)}`,
@@ -132,12 +137,7 @@ export function validateAndNormalizeBatchSteps(
   if (!Array.isArray(steps) || steps.length === 0) {
     throw new AppError('INVALID_ARGS', 'batch requires a non-empty batchSteps array.');
   }
-  if (steps.length > maxSteps) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `batch has ${steps.length} steps; max allowed is ${maxSteps}.`,
-    );
-  }
+  assertBatchStepCount(steps.length, maxSteps);
 
   const normalized: NormalizedBatchStep[] = [];
   for (let index = 0; index < steps.length; index += 1) {
@@ -175,22 +175,10 @@ export function validateAndNormalizeBatchSteps(
       command,
       positionals: positionals as string[],
       flags: (step.flags ?? {}) as Record<string, unknown>,
-      runtime: readBatchStepRuntime(step.runtime, index + 1),
+      runtime: parseBatchStepRuntime(step.runtime, index + 1),
     });
   }
   return normalized;
-}
-
-function readBatchStepRuntime(value: unknown, stepNumber: number): DaemonRequest['runtime'] {
-  if (value === undefined) return undefined;
-  try {
-    return daemonRuntimeSchema.parse(value);
-  } catch (error) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Batch step ${stepNumber} runtime is invalid: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
 }
 
 export function buildBatchStepFlags(

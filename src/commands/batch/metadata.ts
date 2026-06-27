@@ -1,5 +1,13 @@
-import { DEFAULT_BATCH_MAX_STEPS } from '../../batch-contract.ts';
-import { daemonRuntimeSchema, type SessionRuntimeHints } from '../../contracts.ts';
+import {
+  DEFAULT_BATCH_MAX_STEPS,
+  assertBatchStepCount,
+  isValidBatchMaxSteps,
+  parseBatchStepRuntime,
+  readBatchStepInputObject,
+  readBatchStepRecord,
+  type BatchStepErrorFactory,
+} from '../../batch-contract.ts';
+import { type SessionRuntimeHints } from '../../contracts.ts';
 import {
   STRUCTURED_BATCH_COMMAND_NAMES,
   readStructuredBatchCommandName,
@@ -21,7 +29,8 @@ import {
   type CommandFieldMap,
   type InferCommandInput,
 } from '../command-input.ts';
-import { isRecord } from '../../utils/parsing.ts';
+
+const batchPlainError: BatchStepErrorFactory = (message) => new Error(message);
 
 export type BatchCommandStep = {
   command: string;
@@ -99,12 +108,10 @@ function batchStepSchema(nestedCommands: readonly string[]): JsonSchema {
 function readBatchInput(input: unknown, fields: ReturnType<typeof batchFields>): BatchInput {
   const parsed = readFieldInput(input, fields);
   const maxSteps = parsed.maxSteps ?? DEFAULT_BATCH_MAX_STEPS;
-  if (!Number.isInteger(maxSteps) || maxSteps < 1 || maxSteps > 1000) {
+  if (!isValidBatchMaxSteps(maxSteps)) {
     throw new Error(`Invalid batch maxSteps: ${String(parsed.maxSteps)}`);
   }
-  if (parsed.steps.length > maxSteps) {
-    throw new Error(`batch has ${parsed.steps.length} steps; max allowed is ${maxSteps}.`);
-  }
+  assertBatchStepCount(parsed.steps.length, maxSteps, batchPlainError);
   return {
     ...parsed,
   };
@@ -122,11 +129,11 @@ function readBatchStep(
   stepNumber: number,
   nestedCommands: readonly string[],
 ): BatchCommandStep {
-  const record = readBatchStepRecord(step, stepNumber);
+  const record = readBatchStepRecord(step, stepNumber, batchPlainError);
   assertAllowedKeys(record, ['command', 'input', 'runtime'], `Batch step ${stepNumber}`);
   return {
     command: readBatchStepCommand(record, stepNumber, nestedCommands),
-    input: readBatchStepInput(record, stepNumber),
+    input: readBatchStepInputObject(record, stepNumber, batchPlainError),
     ...readBatchStepRuntimeProperty(record, stepNumber),
   };
 }
@@ -146,32 +153,10 @@ function readBatchStepCommand(
   return command;
 }
 
-function readBatchStepRecord(step: unknown, stepNumber: number): Record<string, unknown> {
-  if (!isRecord(step)) {
-    throw new Error(`Invalid batch step ${stepNumber}.`);
-  }
-  return step;
-}
-
-function readBatchStepInput(record: Record<string, unknown>, stepNumber: number) {
-  const input = record.input;
-  if (!isRecord(input)) {
-    throw new Error(`Batch step ${stepNumber} input must be an object.`);
-  }
-  return input;
-}
-
 function readBatchStepRuntimeProperty(
   record: Record<string, unknown>,
   stepNumber: number,
 ): Pick<BatchCommandStep, 'runtime'> {
-  const runtime = record.runtime;
-  if (runtime === undefined) return {};
-  try {
-    return { runtime: daemonRuntimeSchema.parse(runtime) };
-  } catch (error) {
-    throw new Error(
-      `Batch step ${stepNumber} runtime is invalid: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
+  const runtime = parseBatchStepRuntime(record.runtime, stepNumber, batchPlainError);
+  return runtime === undefined ? {} : { runtime };
 }

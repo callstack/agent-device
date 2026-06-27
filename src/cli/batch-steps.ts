@@ -1,5 +1,6 @@
 import type { BatchStep } from '../client-types.ts';
-import { daemonRuntimeSchema, type SessionRuntimeHints } from '../contracts.ts';
+import { type SessionRuntimeHints } from '../contracts.ts';
+import { parseBatchStepRuntime } from '../batch-contract.ts';
 import { readInputFromCli } from '../commands/cli-grammar.ts';
 import { isCommandName, type CommandName } from '../commands/command-metadata.ts';
 import type { CliFlags } from '../utils/cli-flags.ts';
@@ -63,7 +64,7 @@ function readStructuredBatchStep(
   step: Record<string, unknown> & BatchStep,
   stepNumber: number,
 ): BatchStep {
-  const runtime = readRuntimeHints(step.runtime, stepNumber);
+  const runtime = parseBatchStepRuntime(step.runtime, stepNumber);
   const { runtime: _runtime, ...rest } = step;
   return {
     ...rest,
@@ -79,7 +80,7 @@ function readLegacyCliBatchStep(step: unknown, stepNumber: number): LegacyCliBat
   const command = readLegacyCommand(step.command, stepNumber);
   const positionals = readLegacyPositionals(step.positionals, stepNumber);
   const flags = readLegacyFlags(step.flags, stepNumber);
-  const runtime = readRuntimeHints(step.runtime, stepNumber);
+  const runtime = parseBatchStepRuntime(step.runtime, stepNumber);
   return {
     command,
     ...(positionals === undefined ? {} : { positionals }),
@@ -127,18 +128,6 @@ function readLegacyFlags(value: unknown, stepNumber: number): Record<string, unk
     throw new AppError('INVALID_ARGS', `Batch step ${stepNumber} flags must be an object.`);
   }
   return value;
-}
-
-function readRuntimeHints(value: unknown, stepNumber: number): SessionRuntimeHints | undefined {
-  if (value === undefined) return undefined;
-  try {
-    return daemonRuntimeSchema.parse(value);
-  } catch (error) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Batch step ${stepNumber} runtime is invalid: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
 }
 
 function cliFlagsFromBatchStep(flags: Record<string, unknown> | undefined): CliFlags {

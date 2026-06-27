@@ -1,12 +1,15 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { daemonRuntimeSchema, type DaemonRequest } from '../../contracts.ts';
 import {
   STRUCTURED_BATCH_COMMAND_NAMES,
   readStructuredBatchCommandName,
 } from '../../batch-policy.ts';
+import {
+  parseBatchStepRuntime,
+  readBatchStepInputObject,
+  readBatchStepRecord,
+} from '../../batch-contract.ts';
 import type { DaemonBatchStep } from '../../core/batch.ts';
 import { AppError } from '../../utils/errors.ts';
-import { isRecord } from '../../utils/parsing.ts';
 import { request } from '../cli-grammar/common.ts';
 import type { CommandInput, DaemonCommandRequest, DaemonWriter } from '../cli-grammar/types.ts';
 import { buildRequestFlags } from '../command-flags.ts';
@@ -53,8 +56,8 @@ function readBatchDaemonStep(
 ): DaemonBatchStep {
   const record = readBatchStepRecord(step, stepNumber);
   const command = readBatchStepCommand(record, stepNumber);
-  const input = readBatchStepInput(record, stepNumber);
-  const runtime = readBatchStepRuntime(record, stepNumber);
+  const input = readBatchStepInputObject(record, stepNumber) as CommandInput;
+  const runtime = parseBatchStepRuntime(record.runtime, stepNumber);
   const prepared = prepareDaemonCommandRequest(command, input, stepNumber);
   return {
     command: prepared.command,
@@ -64,40 +67,9 @@ function readBatchDaemonStep(
   };
 }
 
-function readBatchStepRecord(step: unknown, stepNumber: number): Record<string, unknown> {
-  if (!isRecord(step)) {
-    throw new AppError('INVALID_ARGS', `Invalid batch step ${stepNumber}.`);
-  }
-  return step;
-}
-
 function readBatchStepCommand(
   record: Record<string, unknown>,
   stepNumber: number,
 ): BatchCommandName {
   return readStructuredBatchCommandName(record.command, stepNumber);
-}
-
-function readBatchStepInput(record: Record<string, unknown>, stepNumber: number): CommandInput {
-  const input = record.input;
-  if (!isRecord(input)) {
-    throw new AppError('INVALID_ARGS', `Batch step ${stepNumber} input must be an object.`);
-  }
-  return input as CommandInput;
-}
-
-function readBatchStepRuntime(
-  record: Record<string, unknown>,
-  stepNumber: number,
-): DaemonRequest['runtime'] {
-  const runtime = record.runtime;
-  if (runtime === undefined) return undefined;
-  try {
-    return daemonRuntimeSchema.parse(runtime);
-  } catch (error) {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Batch step ${stepNumber} runtime is invalid: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
 }
