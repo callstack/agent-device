@@ -239,6 +239,17 @@ function optionalString(
   return value === undefined ? undefined : expectString(value, `${path}.${key}`);
 }
 
+function optionalStringArray(
+  record: Record<string, unknown>,
+  key: string,
+  path: string,
+): string[] | undefined {
+  const value = record[key];
+  if (value === undefined) return undefined;
+  const items = expectArray(value, `${path}.${key}`);
+  return items.map((item, index) => expectString(item, `${path}.${key}[${String(index)}]`));
+}
+
 function optionalDeviceKey(
   record: Record<string, unknown>,
   key: string,
@@ -545,5 +556,25 @@ export const jsonRpcRequestSchema = schema<JsonRpcRequestEnvelope>((input, path)
     id: parseJsonRpcId(record, path),
     method: optionalString(record, 'method', path),
     params: record.params,
+  };
+});
+
+export type CommandRpcParams = Partial<DaemonRequest>;
+
+// Validates the `params` object of a command JSON-RPC request at the daemon's HTTP
+// boundary so attacker-controlled wire input is parsed instead of force-cast. The
+// control fields (token/session/command/positionals) are checked here; the richer
+// flags/runtime/meta shapes are only confirmed to be objects and validated in depth
+// by the session open handler downstream.
+export const commandRpcParamsSchema = schema<CommandRpcParams>((input, path) => {
+  const record = expectObject(input, path);
+  return {
+    token: optionalString(record, 'token', path),
+    session: optionalString(record, 'session', path),
+    command: optionalString(record, 'command', path),
+    positionals: optionalStringArray(record, 'positionals', path),
+    flags: optionalObject(record, 'flags', path),
+    runtime: optionalObject(record, 'runtime', path) as SessionRuntimeHints | undefined,
+    meta: optionalObject(record, 'meta', path) as DaemonRequestMeta | undefined,
   };
 });

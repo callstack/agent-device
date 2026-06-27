@@ -3,7 +3,13 @@ import fs from 'node:fs';
 import { AppError, normalizeError, toAppErrorCode } from '../utils/errors.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
-import type { JsonRpcId, JsonRpcRequestEnvelope, LeaseBackend } from '../contracts.ts';
+import type {
+  CommandRpcParams,
+  JsonRpcId,
+  JsonRpcRequestEnvelope,
+  LeaseBackend,
+} from '../contracts.ts';
+import { commandRpcParamsSchema } from '../contracts.ts';
 import type { DaemonInstallSource, DaemonInvokeFn, DaemonRequest } from './types.ts';
 import { normalizeTenantId } from './config.ts';
 import {
@@ -165,20 +171,17 @@ function resolveToken(params: Record<string, unknown>, headers: IncomingHttpHead
   return paramToken ?? headerToken ?? bearerToken ?? '';
 }
 
-function toDaemonRequest(
-  params: Partial<DaemonRequest>,
-  headers: IncomingHttpHeaders,
-): DaemonRequest {
-  const raw = params as Record<string, unknown>;
+function toDaemonRequest(params: CommandRpcParams, headers: IncomingHttpHeaders): DaemonRequest {
   return {
-    token: resolveToken(raw, headers),
+    token: resolveToken(params as Record<string, unknown>, headers),
     session: params.session ?? 'default',
     command: params.command ?? '',
-    positionals: Array.isArray(params.positionals) ? params.positionals : [],
-    flags: params.flags,
-    // JSON-RPC params are untyped here; runtime shape is validated in the session open handler.
+    positionals: params.positionals ?? [],
+    // flags/runtime/meta are validated as objects at the boundary; their full shape is
+    // validated in the session open handler downstream.
+    flags: params.flags as DaemonRequest['flags'],
     runtime: params.runtime,
-    meta: params.meta,
+    meta: params.meta as DaemonRequest['meta'],
   };
 }
 
@@ -387,7 +390,7 @@ function methodToDaemonRequest(
   headers: IncomingHttpHeaders,
 ): DaemonRequest {
   if (COMMAND_RPC_METHODS.has(method)) {
-    return toDaemonRequest(params as unknown as Partial<DaemonRequest>, headers);
+    return toDaemonRequest(commandRpcParamsSchema.parse(params), headers);
   }
   if (INSTALL_FROM_SOURCE_RPC_METHODS.has(method)) {
     return toInstallFromSourceDaemonRequest(params, headers);

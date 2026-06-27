@@ -66,7 +66,7 @@ test('MCP stdio payload queue serializes separate messages', async () => {
   const completions = new Map<JsonRpcId, (response: unknown) => void>();
   const queue = createMcpPayloadQueue({
     handlePayload: async (message) => {
-      const id = Array.isArray(message) ? null : (message.id ?? null);
+      const id = Array.isArray(message) ? null : ((message as { id?: JsonRpcId }).id ?? null);
       started.push(id);
       return await new Promise((resolve) => completions.set(id, resolve));
     },
