@@ -8,7 +8,7 @@ import {
   type PrepareIosRunnerResult,
 } from '../../platforms/ios/runner-client.ts';
 import type { DeviceInfo } from '../../utils/device.ts';
-import { isApplePlatform, normalizePlatformSelector } from '../../utils/device.ts';
+import { isApplePlatform } from '../../utils/device.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { contextFromFlags } from '../context.ts';
@@ -304,7 +304,7 @@ export async function handleSessionCommands(params: {
       keyboardAction === 'dismiss' || keyboardAction === 'enter' || keyboardAction === 'return';
     if (!session && needsForegroundIosApp) {
       const flags = req.flags ?? {};
-      const normalizedPlatform = normalizePlatformSelector(flags.platform);
+      const normalizedPlatform = flags.platform;
       if (normalizedPlatform === 'ios') {
         return errorResponse(
           'SESSION_NOT_FOUND',

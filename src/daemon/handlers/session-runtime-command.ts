@@ -1,4 +1,3 @@
-import { normalizePlatformSelector } from '../../utils/device.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { clearRuntimeHintsFromApp, hasRuntimeTransportHints } from '../runtime-hints.ts';
@@ -44,7 +43,7 @@ export async function handleRuntimeCommand(params: {
   }
 
   const platform = toRuntimePlatform(
-    normalizePlatformSelector(req.flags?.platform) ?? current?.platform ?? session?.device.platform,
+    req.flags?.platform ?? current?.platform ?? session?.device.platform,
   );
   if (!platform) {
     return errorResponse(

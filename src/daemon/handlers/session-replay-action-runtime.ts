@@ -6,7 +6,7 @@ import {
   type ReplayVarScope,
 } from '../../replay/vars.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
-import { mergeParentFlags } from './handler-utils.ts';
+import { mergeParentFlags } from '../../core/batch.ts';
 import { invokeMaestroRuntimeCommand } from '../../compat/maestro/runtime.ts';
 import { invokeMaestroRunFlowWhenControl } from '../../compat/maestro/runtime-flow.ts';
 import {

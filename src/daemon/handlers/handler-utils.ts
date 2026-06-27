@@ -2,8 +2,6 @@ import type { CommandFlags } from '../../core/dispatch.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 
-export { mergeParentFlags } from '../../core/batch.ts';
-
 /**
  * Record a session action if a session is active. No-op when session is undefined.
  */

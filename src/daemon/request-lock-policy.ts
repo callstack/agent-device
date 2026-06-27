@@ -7,14 +7,14 @@ import {
   type SessionSelectorConflict,
   type SessionSelectorConflictKey,
 } from './session-selector.ts';
-import { isApplePlatform, normalizePlatformSelector } from '../utils/device.ts';
+import { isApplePlatform, type PlatformSelector } from '../utils/device.ts';
 import { buildSessionRecoveryHint, describeSessionDevice } from './session-recovery-hints.ts';
 import { shellQuoteIfNeeded } from '../utils/shell-quote.ts';
 import { hasLockableDeviceSelector, hasSelectorValue } from './device-selector-intent.ts';
 import { canOverrideLockPolicySelector } from './daemon-command-registry.ts';
 
 type LockPlatform = NonNullable<DaemonRequest['meta']>['lockPlatform'];
-type NormalizedLockPlatform = NonNullable<ReturnType<typeof normalizePlatformSelector>>;
+type NormalizedLockPlatform = NonNullable<PlatformSelector>;
 
 export function applyRequestLockPolicy(
   req: DaemonRequest,
@@ -141,11 +141,11 @@ function listFreshSessionConflicts(
   // participate in the first binding for the locked platform; concrete device
   // existence and identity remain the target resolver's job.
   const conflicts: SessionSelectorConflict[] = [];
-  const normalizedLockPlatform = normalizePlatformSelector(lockPlatform);
+  const normalizedLockPlatform = lockPlatform;
   if (
     flags.platform !== undefined &&
     normalizedLockPlatform &&
-    platformSelectorsConflict(normalizePlatformSelector(flags.platform), normalizedLockPlatform)
+    platformSelectorsConflict(flags.platform, normalizedLockPlatform)
   ) {
     conflicts.push({ key: 'platform', value: flags.platform });
   }
@@ -158,8 +158,8 @@ function listFreshSessionConflicts(
 }
 
 function platformSelectorsConflict(
-  requested: ReturnType<typeof normalizePlatformSelector>,
-  locked: ReturnType<typeof normalizePlatformSelector>,
+  requested: PlatformSelector | undefined,
+  locked: PlatformSelector | undefined,
 ): boolean {
   if (!requested || !locked) return false;
   if (requested === locked) return false;
@@ -235,7 +235,7 @@ function freshSessionSelectorKeysForPlatform(
 }
 
 function isAppleDesktopSelector(flags: CommandFlags): boolean {
-  return flags.target === 'desktop' || normalizePlatformSelector(flags.platform) === 'macos';
+  return flags.target === 'desktop' || flags.platform === 'macos';
 }
 
 function stripSessionConflicts(flags: CommandFlags, conflicts: SessionSelectorConflict[]): void {

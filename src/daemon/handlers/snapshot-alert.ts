@@ -1,5 +1,10 @@
 import { isCommandSupportedOnDevice } from '../../core/capabilities.ts';
-import type { AlertAction } from '../../alert-contract.ts';
+import {
+  ALERT_ACTION_RETRY_MS,
+  ALERT_POLL_INTERVAL_MS as POLL_INTERVAL_MS,
+  DEFAULT_ALERT_TIMEOUT_MS as DEFAULT_TIMEOUT_MS,
+  type AlertAction,
+} from '../../alert-contract.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import { runIosRunnerCommand } from '../../platforms/ios/runner-client.ts';
 import { runMacOsAlertAction } from '../../platforms/ios/macos-helper.ts';
@@ -8,12 +13,7 @@ import { AppError } from '../../utils/errors.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { recordIfSession } from './snapshot-session.ts';
-import {
-  ALERT_ACTION_RETRY_MS,
-  DEFAULT_TIMEOUT_MS,
-  parseTimeout,
-  POLL_INTERVAL_MS,
-} from './parse-utils.ts';
+import { parseTimeout } from '../../utils/parse-timeout.ts';
 import { errorResponse } from './response.ts';
 
 type HandleAlertCommandParams = {

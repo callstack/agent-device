@@ -1,7 +1,7 @@
 import { AppError } from '../utils/errors.ts';
 import type { CommandFlags } from '../core/dispatch.ts';
 import type { SessionState } from './types.ts';
-import { matchesPlatformSelector, normalizePlatformSelector } from '../utils/device.ts';
+import { matchesPlatformSelector } from '../utils/device.ts';
 import { parseSerialAllowlist } from '../utils/device-isolation.ts';
 import { buildSessionRecoveryHint, describeSessionDevice } from './session-recovery-hints.ts';
 
@@ -43,7 +43,7 @@ export function listSessionSelectorConflicts(
   const mismatches: SessionSelectorConflict[] = [];
   const device = session.device;
 
-  const normalizedPlatform = normalizePlatformSelector(flags.platform);
+  const normalizedPlatform = flags.platform;
   if (normalizedPlatform && !matchesPlatformSelector(device.platform, normalizedPlatform)) {
     mismatches.push({ key: 'platform', value: flags.platform! });
   }

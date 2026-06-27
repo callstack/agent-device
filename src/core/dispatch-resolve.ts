@@ -2,7 +2,6 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import { AppError } from '../utils/errors.ts';
 import {
   isApplePlatform,
-  normalizePlatformSelector,
   resolveDevice,
   resolveAppleSimulatorSetPathForSelector,
   type DeviceInfo,
@@ -112,7 +111,7 @@ function hasExplicitAppleDeviceSelector(selector: AppleDeviceSelector): boolean 
 }
 
 export async function resolveTargetDevice(flags: ResolveDeviceFlags): Promise<DeviceInfo> {
-  const normalizedPlatform = normalizePlatformSelector(flags.platform);
+  const normalizedPlatform = flags.platform;
   const iosSimulatorSetPath = resolveAppleSimulatorSetPathForSelector({
     simulatorSetPath: resolveIosSimulatorDeviceSetPath(flags.iosSimulatorDeviceSet),
     platform: normalizedPlatform,

@@ -16,7 +16,6 @@ export function resolveEffectiveSessionName(
   if (hasExplicitSessionFlag(req)) return requested;
   const scope = resolveImplicitSessionScope(req);
   if (scope) return formatScopedSessionName(scope.id, requested);
-  if (requested !== 'default') return requested;
   return requested;
 }
 

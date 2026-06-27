@@ -1,6 +1,6 @@
 import { isCommandSupportedOnDevice } from '../../core/capabilities.ts';
 import { asAppError } from '../../utils/errors.ts';
-import { isApplePlatform, normalizePlatformSelector, type DeviceInfo } from '../../utils/device.ts';
+import { isApplePlatform, type DeviceInfo } from '../../utils/device.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
@@ -36,7 +36,7 @@ async function handleAppStateCommand(params: {
   const { req, sessionName, sessionStore } = params;
   const session = sessionStore.get(sessionName);
   const flags = req.flags ?? {};
-  const normalizedPlatform = normalizePlatformSelector(flags.platform);
+  const normalizedPlatform = flags.platform;
 
   if (!session && hasExplicitSessionFlag(flags)) {
     const message =
@@ -147,8 +147,7 @@ export async function handleSessionStateCommands(params: {
     const guard = requireSessionOrExplicitSelector(req.command, session, flags);
     if (guard) return guard;
 
-    const normalizedPlatform =
-      normalizePlatformSelector(flags.platform) ?? session?.device.platform;
+    const normalizedPlatform = flags.platform ?? session?.device.platform;
     const targetsAndroid = normalizedPlatform === 'android';
     const wantsAndroidHeadless = flags.headless === true;
     if (wantsAndroidHeadless && !targetsAndroid) {

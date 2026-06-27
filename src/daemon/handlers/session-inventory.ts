@@ -4,9 +4,9 @@ import { assertResolvedAppsFilter } from '../../contracts/app-inventory.ts';
 import { asAppError } from '../../utils/errors.ts';
 import {
   isApplePlatform,
-  normalizePlatformSelector,
   resolveAppleSimulatorSetPathForSelector,
   type DeviceInfo,
+  type PlatformSelector,
 } from '../../utils/device.ts';
 import {
   resolveAndroidSerialAllowlist,
@@ -63,7 +63,7 @@ export async function handleSessionInventoryCommands(params: {
       const androidSerialAllowlist = resolveAndroidSerialAllowlist(
         req.flags?.androidDeviceAllowlist,
       );
-      const requestedPlatform = normalizePlatformSelector(req.flags?.platform);
+      const requestedPlatform = req.flags?.platform;
       const iosSimulatorSetPath = resolveAppleSimulatorSetPathForSelector({
         simulatorSetPath: resolveIosSimulatorDeviceSetPath(req.flags?.iosSimulatorDeviceSet),
         platform: requestedPlatform,
@@ -145,7 +145,7 @@ export async function handleSessionInventoryCommands(params: {
 
 function matchesRequestedPlatform(
   device: DeviceInfo,
-  requestedPlatform: ReturnType<typeof normalizePlatformSelector>,
+  requestedPlatform: PlatformSelector | undefined,
 ): boolean {
   if (!requestedPlatform) return true;
   if (requestedPlatform === 'apple') return isApplePlatform(device.platform);
