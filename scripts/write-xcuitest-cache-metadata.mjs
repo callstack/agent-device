@@ -8,7 +8,9 @@ const args = process.argv.slice(2);
 const [platform, derivedPath, destination] = args;
 
 if (!platform || !derivedPath || !destination) {
-  console.error('Usage: write-xcuitest-cache-metadata.mjs <ios|macos|tvos> <derived> <destination>');
+  console.error(
+    'Usage: write-xcuitest-cache-metadata.mjs <ios|macos|tvos> <derived> <destination>',
+  );
   process.exit(1);
 }
 
@@ -145,12 +147,14 @@ function resolveRunnerSdkName() {
 
 function runAppleToolFingerprintCommand(command, args) {
   try {
-    return execFileSync(command, args, {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-      timeout: 5000,
-      maxBuffer: 128 * 1024,
-    }).trim() || 'unknown';
+    return (
+      execFileSync(command, args, {
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+        timeout: 5000,
+        maxBuffer: 128 * 1024,
+      }).trim() || 'unknown'
+    );
   } catch {
     return 'unknown';
   }
@@ -164,19 +168,13 @@ function parseXcodeVersionOutput(output) {
 }
 
 function resolveRunnerToolchainFingerprint() {
-  const xcode = parseXcodeVersionOutput(
-    runAppleToolFingerprintCommand('xcodebuild', ['-version']),
-  );
+  const xcode = parseXcodeVersionOutput(runAppleToolFingerprintCommand('xcodebuild', ['-version']));
   const sdkName = resolveRunnerSdkName();
   return {
     xcodeVersion: xcode.version,
     xcodeBuildVersion: xcode.buildVersion,
     sdkName,
-    sdkVersion: runAppleToolFingerprintCommand('xcrun', [
-      '--sdk',
-      sdkName,
-      '--show-sdk-version',
-    ]),
+    sdkVersion: runAppleToolFingerprintCommand('xcrun', ['--sdk', sdkName, '--show-sdk-version']),
     sdkBuildVersion: runAppleToolFingerprintCommand('xcrun', [
       '--sdk',
       sdkName,
@@ -222,7 +220,13 @@ const metadata = {
     `AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID=${testBundleId}`,
   ],
   runnerSigningBuildSettings: resolveSigningBuildSettings(),
-  runnerPerformanceBuildSettings: ['COMPILER_INDEX_STORE_ENABLE=NO', 'ENABLE_CODE_COVERAGE=NO'],
+  runnerPerformanceBuildSettings: [
+    'COMPILER_INDEX_STORE_ENABLE=NO',
+    'ENABLE_CODE_COVERAGE=NO',
+    'ONLY_ACTIVE_ARCH=YES',
+    'ENABLE_PREVIEWS=NO',
+    'ENABLE_DEBUG_DYLIB=NO',
+  ],
   runnerSandboxBuildArgs: resolveSandboxBuildArgs(),
 };
 
@@ -301,9 +305,8 @@ function scoreXctestrunCandidate(candidatePath) {
         ? 100
         : 0;
   } else if (platform === 'macos') {
-    score += basename.includes('macos') || candidatePath.includes(`${path.sep}macos${path.sep}`)
-      ? 100
-      : 0;
+    score +=
+      basename.includes('macos') || candidatePath.includes(`${path.sep}macos${path.sep}`) ? 100 : 0;
   }
   return score;
 }

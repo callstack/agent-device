@@ -417,6 +417,7 @@ extension RunnerTests {
     app: XCUIApplication,
     wasVisible: Bool
   ) -> (wasVisible: Bool, pressed: Bool, visible: Bool) {
+#if os(iOS)
     let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
       element.tap()
       element.typeText(XCUIKeyboardKey.return.rawValue)
@@ -430,6 +431,9 @@ extension RunnerTests {
     }
     sleepFor(0.2)
     return (wasVisible: wasVisible, pressed: true, visible: isKeyboardVisible(app: app))
+#else
+    return (wasVisible: wasVisible, pressed: false, visible: false)
+#endif
   }
 
   private func singleTextEntryElement(app: XCUIApplication) -> XCUIElement? {

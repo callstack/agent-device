@@ -492,6 +492,9 @@ test('resolveRunnerPerformanceBuildSettings disables indexing and code coverage'
   assert.deepEqual(resolveRunnerPerformanceBuildSettings(), [
     'COMPILER_INDEX_STORE_ENABLE=NO',
     'ENABLE_CODE_COVERAGE=NO',
+    'ONLY_ACTIVE_ARCH=YES',
+    'ENABLE_PREVIEWS=NO',
+    'ENABLE_DEBUG_DYLIB=NO',
   ]);
 });
 

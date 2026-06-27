@@ -1493,7 +1493,13 @@ export function resolveRunnerBundleBuildSettings(env: NodeJS.ProcessEnv = proces
 }
 
 export function resolveRunnerPerformanceBuildSettings(): string[] {
-  return ['COMPILER_INDEX_STORE_ENABLE=NO', 'ENABLE_CODE_COVERAGE=NO'];
+  return [
+    'COMPILER_INDEX_STORE_ENABLE=NO',
+    'ENABLE_CODE_COVERAGE=NO',
+    'ONLY_ACTIVE_ARCH=YES',
+    'ENABLE_PREVIEWS=NO',
+    'ENABLE_DEBUG_DYLIB=NO',
+  ];
 }
 
 export function resolveRunnerSandboxBuildArgs(): string[] {
