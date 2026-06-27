@@ -1,6 +1,10 @@
 import { AppError } from './errors.ts';
 
 export type ApplePlatform = 'ios' | 'macos';
+// Explicit, stored Apple operating system. All six literals are reserved so the
+// type is stable as platform support grows, but discovery only ever populates
+// the four currently supported ones ('ios' | 'ipados' | 'tvos' | 'macos').
+export type AppleOS = 'ios' | 'ipados' | 'tvos' | 'watchos' | 'visionos' | 'macos';
 export const PLATFORMS = ['ios', 'macos', 'android', 'linux', 'web'] as const;
 export type Platform = (typeof PLATFORMS)[number];
 export const PLATFORM_SELECTORS = [...PLATFORMS, 'apple'] as const;
@@ -16,6 +20,9 @@ export type DeviceInfo = {
   name: string;
   kind: DeviceKind;
   target?: DeviceTarget;
+  // Explicit Apple OS discriminant populated at discovery for Apple devices.
+  // Optional so legacy records (and non-Apple platforms) remain valid.
+  appleOs?: AppleOS;
   booted?: boolean;
   simulatorSetPath?: string;
 };
@@ -63,10 +70,29 @@ export function matchesPlatformSelector(
 
 export function resolveApplePlatformName(
   platformOrTarget: ApplePlatform | DeviceTarget | undefined,
+  appleOs?: AppleOS,
 ): 'iOS' | 'tvOS' | 'macOS' {
+  // Prefer the explicit, stored Apple OS when present; legacy records without
+  // it keep resolving through the existing target-based inference below.
+  if (appleOs) return resolveRunnerPlatformNameForAppleOs(appleOs);
   if (platformOrTarget === 'macos' || platformOrTarget === 'desktop') return 'macOS';
   if (platformOrTarget === 'tv') return 'tvOS';
   return 'iOS';
+}
+
+function resolveRunnerPlatformNameForAppleOs(appleOs: AppleOS): 'iOS' | 'tvOS' | 'macOS' {
+  switch (appleOs) {
+    case 'tvos':
+      return 'tvOS';
+    case 'macos':
+      return 'macOS';
+    // iOS and iPadOS share the single iOS runner profile/SDK. watchOS/visionOS
+    // are reserved in the type but never produced by discovery; defaulting them
+    // to the iOS profile keeps any future record on a valid runner profile
+    // without introducing a new one.
+    default:
+      return 'iOS';
+  }
 }
 
 export function resolveAppleSimulatorSetPathForSelector(params: {

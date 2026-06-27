@@ -10,6 +10,7 @@ export function buildHostMacDevice(): DeviceInfo {
     name: os.hostname(),
     kind: 'device',
     target: 'desktop',
+    appleOs: 'macos',
     booted: true,
   };
 }

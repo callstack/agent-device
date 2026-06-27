@@ -84,7 +84,9 @@ export function resolveRunnerPlatformName(device: DeviceInfo): RunnerApplePlatfo
   if (device.platform === 'macos') {
     return 'macOS';
   }
-  return resolveApplePlatformName(device.target);
+  // Prefer the stored Apple OS discriminant; fall back to target-based inference
+  // for legacy records that predate it. iPadOS maps to the iOS runner profile.
+  return resolveApplePlatformName(device.target, device.appleOs);
 }
 
 export function resolveRunnerSdkName(

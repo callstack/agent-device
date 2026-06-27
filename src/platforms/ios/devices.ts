@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '../../utils/errors.ts';
-import type { DeviceInfo, DeviceTarget } from '../../utils/device.ts';
+import type { AppleOS, DeviceInfo, DeviceTarget } from '../../utils/device.ts';
 import { resolveIosSimulatorDeviceSetPath } from '../../utils/device-isolation.ts';
 import { buildHostMacDevice } from '../macos/devices.ts';
 import { buildSimctlArgs } from './simctl.ts';
@@ -12,6 +12,7 @@ export { createLocalAppleToolProvider, withAppleToolProvider } from './tool-prov
 
 const IOS_DEVICECTL_LIST_TIMEOUT_MS = 8_000;
 const APPLE_PRODUCT_TYPE_PATTERN = /^(iphone|ipad|ipod|appletv)/i;
+const APPLE_IPAD_PATTERN = /ipad/i;
 const APPLE_MOBILE_LABEL_PATTERN = /\b(iphone|ipad|ipod)\b/i;
 const APPLE_TV_PRODUCT_TYPE_PATTERN = /^appletv/i;
 const APPLE_TV_LABEL_HINTS = ['apple tv', 'appletv', 'tvos'] as const;
@@ -87,6 +88,21 @@ function resolveAppleTargetFromLabel(value: string): DeviceTarget | null {
   if (isAppleTvLabel(value)) return 'tv';
   if (isAppleMobileLabel(value)) return 'mobile';
   return null;
+}
+
+/**
+ * Derives the explicit Apple OS discriminant at discovery from the already
+ * resolved device target plus any available descriptors (product type and/or
+ * names). This is strictly additive metadata: it never widens discovery
+ * filters and never changes runner SDK/destination selection.
+ *
+ * tv targets map to tvOS; mobile targets split into iPadOS (when an iPad
+ * descriptor is present) and iOS otherwise.
+ */
+function resolveAppleOs(target: DeviceTarget, descriptors: string[]): AppleOS {
+  if (target === 'tv') return 'tvos';
+  if (descriptors.some((descriptor) => APPLE_IPAD_PATTERN.test(descriptor))) return 'ipados';
+  return 'ios';
 }
 
 export function isAppleProductType(productType: string): boolean {
@@ -185,12 +201,14 @@ function parseSimctlAppleDevices(
     if (!isSupportedAppleRuntime(runtime)) continue;
     for (const device of runtimes) {
       if (!device.isAvailable) continue;
+      const target = resolveAppleTargetFromRuntime(runtime);
       devices.push({
         platform: 'ios',
         id: device.udid,
         name: device.name,
         kind: 'simulator',
-        target: resolveAppleTargetFromRuntime(runtime),
+        target,
+        appleOs: resolveAppleOs(target, [device.name]),
         booted: device.state === 'Booted',
         ...(simulatorSetPath ? { simulatorSetPath } : {}),
       });
@@ -206,12 +224,17 @@ function mapDevicectlAppleDevices(payload: DevicectlListDevicesPayload): DeviceI
     const id = device.hardwareProperties?.udid ?? device.identifier ?? '';
     const name = device.name ?? device.deviceProperties?.name ?? id;
     if (!id) continue;
+    const target = resolveAppleTargetFromDevicectlDevice(device);
     devices.push({
       platform: 'ios',
       id,
       name,
       kind: 'device',
-      target: resolveAppleTargetFromDevicectlDevice(device),
+      target,
+      appleOs: resolveAppleOs(target, [
+        resolveDevicectlAppleProductType(device),
+        ...resolveDevicectlAppleLabels(device),
+      ]),
       booted: true,
     });
   }
@@ -247,6 +270,7 @@ export function parseXctracePhysicalAppleDevices(output: string): DeviceInfo[] {
       name,
       kind: 'device',
       target,
+      appleOs: resolveAppleOs(target, [name]),
       // xctrace lists currently connected devices in the "Devices" section.
       // The "Devices Offline" section is excluded above, so treating these as
       // booted preserves the existing physical-device selection semantics.

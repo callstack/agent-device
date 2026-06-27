@@ -105,6 +105,7 @@ test('parseXctracePhysicalAppleDevices parses only physical devices from the Dev
       name: 'My iPhone',
       kind: 'device',
       target: 'mobile',
+      appleOs: 'ios',
       booted: true,
     },
     {
@@ -113,9 +114,111 @@ test('parseXctracePhysicalAppleDevices parses only physical devices from the Dev
       name: 'Living Room Apple TV',
       kind: 'device',
       target: 'tv',
+      appleOs: 'tvos',
       booted: true,
     },
   ]);
+});
+
+test('parseXctracePhysicalAppleDevices tags physical iPads as iPadOS', () => {
+  const parsed = parseXctracePhysicalAppleDevices(
+    ['== Devices ==', 'Studio iPad Pro [ipad-udid-1]'].join('\n'),
+  );
+  assert.deepEqual(parsed, [
+    {
+      platform: 'ios',
+      id: 'ipad-udid-1',
+      name: 'Studio iPad Pro',
+      kind: 'device',
+      target: 'mobile',
+      appleOs: 'ipados',
+      booted: true,
+    },
+  ]);
+});
+
+test('listAppleDevices tags devicectl iPad product types as iPadOS', async () => {
+  mockRunCommand = async (_cmd, args) => {
+    if (args.join(' ') === 'simctl list devices -j') {
+      return { stdout: createSimctlDevicesPayload(), stderr: '', exitCode: 0 };
+    }
+
+    if (args[0] === 'devicectl' && args[1] === 'list' && args[2] === 'devices') {
+      const jsonPath = String(args[4]);
+      await fs.writeFile(
+        jsonPath,
+        JSON.stringify({
+          result: {
+            devices: [
+              {
+                name: 'Field iPad',
+                hardwareProperties: { platform: 'iOS', udid: 'ipad-1', productType: 'iPad14,3' },
+              },
+            ],
+          },
+        }),
+        'utf8',
+      );
+      return { stdout: '', stderr: '', exitCode: 0 };
+    }
+
+    if (args.join(' ') === 'xctrace list devices') {
+      return { stdout: '', stderr: '', exitCode: 0 };
+    }
+
+    throw new Error(`unexpected xcrun args: ${args.join(' ')}`);
+  };
+
+  const devices = await withMockedPlatform(
+    'darwin',
+    async () => await withMockedAppleTools(async () => await listAppleDevices()),
+  );
+
+  const iPad = devices.find((device) => device.id === 'ipad-1');
+  assert.equal(iPad?.target, 'mobile');
+  assert.equal(iPad?.appleOs, 'ipados');
+});
+
+test('listAppleDevices tags iPhone simulators and the host Mac with appleOs', async () => {
+  mockRunCommand = async (_cmd, args) => {
+    if (args.includes('simctl') && args.includes('list') && args.includes('devices')) {
+      return {
+        stdout: JSON.stringify({
+          devices: {
+            'com.apple.CoreSimulator.SimRuntime.iOS-18-0': [
+              { name: 'iPhone 16', udid: 'sim-iphone', state: 'Booted', isAvailable: true },
+              {
+                name: 'iPad Pro 11-inch (M4)',
+                udid: 'sim-ipad',
+                state: 'Shutdown',
+                isAvailable: true,
+              },
+            ],
+            'com.apple.CoreSimulator.SimRuntime.tvOS-18-0': [
+              { name: 'Apple TV 4K', udid: 'sim-tv', state: 'Shutdown', isAvailable: true },
+            ],
+          },
+        }),
+        stderr: '',
+        exitCode: 0,
+      };
+    }
+    throw new Error(`unexpected xcrun args: ${args.join(' ')}`);
+  };
+
+  const devices = await withMockedPlatform(
+    'darwin',
+    async () =>
+      await withMockedAppleTools(
+        async () => await listAppleDevices({ simulatorSetPath: '/tmp/agent-device-sim-set' }),
+      ),
+  );
+
+  const byId = new Map(devices.map((device) => [device.id, device.appleOs]));
+  assert.equal(byId.get('sim-iphone'), 'ios');
+  assert.equal(byId.get('sim-ipad'), 'ipados');
+  assert.equal(byId.get('sim-tv'), 'tvos');
+  assert.equal(byId.get('host-macos-local'), 'macos');
 });
 
 test('listAppleDevices supplements unsupported devicectl entries with xctrace physical devices', async () => {

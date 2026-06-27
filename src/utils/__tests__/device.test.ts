@@ -35,6 +35,28 @@ test('resolveApplePlatformName resolves tv and desktop targets', () => {
   assert.equal(resolveApplePlatformName(undefined), 'iOS');
 });
 
+test('resolveApplePlatformName prefers the explicit appleOs over target inference', () => {
+  // iOS and iPadOS both resolve to the single iOS runner profile.
+  assert.equal(resolveApplePlatformName('mobile', 'ios'), 'iOS');
+  assert.equal(resolveApplePlatformName('mobile', 'ipados'), 'iOS');
+  assert.equal(resolveApplePlatformName('tv', 'tvos'), 'tvOS');
+  assert.equal(resolveApplePlatformName('desktop', 'macos'), 'macOS');
+});
+
+test('resolveApplePlatformName appleOs wins even when it disagrees with the legacy target', () => {
+  // A stored discriminant takes precedence; this guards the preference order.
+  assert.equal(resolveApplePlatformName('mobile', 'tvos'), 'tvOS');
+  assert.equal(resolveApplePlatformName('tv', 'ios'), 'iOS');
+});
+
+test('resolveApplePlatformName falls back to target inference for legacy records', () => {
+  // Records without appleOs (undefined) must resolve byte-identically to before.
+  assert.equal(resolveApplePlatformName('mobile', undefined), 'iOS');
+  assert.equal(resolveApplePlatformName('tv', undefined), 'tvOS');
+  assert.equal(resolveApplePlatformName('desktop', undefined), 'macOS');
+  assert.equal(resolveApplePlatformName('macos', undefined), 'macOS');
+});
+
 test('resolveAppleSimulatorSetPathForSelector ignores simulator scoping for desktop selectors', () => {
   assert.equal(
     resolveAppleSimulatorSetPathForSelector({
