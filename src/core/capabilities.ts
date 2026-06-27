@@ -1,5 +1,7 @@
 import { deriveCapabilityMatrix } from './command-descriptor/derive.ts';
 import { commandDescriptors } from './command-descriptor/registry.ts';
+import { deriveCapabilityForPlatform } from './platform-descriptor/derive.ts';
+import { platformDescriptors } from './platform-descriptor/registry.ts';
 import type { DeviceInfo } from '../utils/device.ts';
 
 type KindMatrix = {
@@ -67,29 +69,19 @@ function addWebCommandCapabilities(
   return result;
 }
 
-// Exhaustive platform -> capability-bucket selection. Switching over the full Platform
-// union (instead of an if/else ladder that funnels every unmatched platform into
-// `capability.web`) makes adding a new Platform a compile error here, so a future
-// platform can no longer silently inherit web's capability matrix.
+// Platform -> capability-bucket selection, folded from the additive
+// platform-descriptor registry (ADR-0009, Phase 3 step 1). The hand-authored
+// switch was deleted after `platform-descriptor/__tests__/parity.test.ts` proved
+// deriveCapabilityForPlatform is byte-equal to it across all five platforms. The
+// registry's compile-time totality keeps the prior safety: adding a new Platform
+// without a descriptor row is a compile error, so it can no longer silently
+// inherit web's capability matrix. The registry only type-imports CommandCapability
+// from here, so this value-level dependency does not form a runtime cycle.
 function selectCapabilityForPlatform(
   capability: CommandCapability,
   platform: DeviceInfo['platform'],
 ): KindMatrix | undefined {
-  switch (platform) {
-    case 'ios':
-    case 'macos':
-      return capability.apple;
-    case 'android':
-      return capability.android;
-    case 'linux':
-      return capability.linux;
-    case 'web':
-      return capability.web;
-    default: {
-      const exhaustive: never = platform;
-      return exhaustive;
-    }
-  }
+  return deriveCapabilityForPlatform(platformDescriptors, capability, platform);
 }
 
 export function isCommandSupportedOnDevice(command: string, device: DeviceInfo): boolean {
