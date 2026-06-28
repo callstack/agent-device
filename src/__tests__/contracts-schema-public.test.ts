@@ -2,7 +2,13 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError } from '../index.ts';
+import {
+  AppError,
+  type BootCommandResult,
+  type CommandResult,
+  type ShutdownCommandResult,
+  type ViewportCommandResult,
+} from '../index.ts';
 import {
   defaultHintForCode,
   daemonCommandRequestSchema,
@@ -85,6 +91,44 @@ test('public contract schemas validate daemon requests and lease payloads', () =
   assert.equal(release.leaseId, 'lease-1');
   assert.deepEqual(centerOfRect(rect), { x: 3, y: 4 });
   assert.equal(node.ref, 'e1');
+});
+
+test('public root exports typed command result contracts', () => {
+  const boot = {
+    platform: 'ios',
+    target: 'mobile',
+    device: 'iPhone 17',
+    id: 'booted-device',
+    kind: 'simulator',
+    booted: true,
+  } satisfies BootCommandResult;
+  const bootFromMap: CommandResult<'boot'> = boot;
+
+  const shutdown = {
+    platform: 'ios',
+    target: 'mobile',
+    device: 'iPhone 17',
+    id: 'shutdown-device',
+    kind: 'simulator',
+    shutdown: {
+      success: true,
+      exitCode: 0,
+      stdout: '',
+      stderr: '',
+    },
+  } satisfies ShutdownCommandResult;
+  const shutdownFromMap: CommandResult<'shutdown'> = shutdown;
+
+  const viewport = {
+    width: 390,
+    height: 844,
+    message: 'Viewport is 390x844',
+  } satisfies ViewportCommandResult;
+  const viewportFromMap: CommandResult<'viewport'> = viewport;
+
+  assert.equal(bootFromMap.booted, true);
+  assert.equal(shutdownFromMap.shutdown.success, true);
+  assert.equal(viewportFromMap.width, 390);
 });
 
 test('public daemon request schema accepts GitHub Actions artifact install sources', () => {

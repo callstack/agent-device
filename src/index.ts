@@ -20,6 +20,10 @@ export type {
 
 export type { AppErrorCode, NormalizedError } from './utils/errors.ts';
 
+export type { CommandResult } from './core/command-descriptor/command-result.ts';
+export type { BootCommandResult, ShutdownCommandResult } from './contracts/device.ts';
+export type { ViewportCommandResult } from './contracts/viewport.ts';
+
 export type {
   AgentDeviceClient,
   AgentDeviceClientConfig,
