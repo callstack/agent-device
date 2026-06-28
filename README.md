@@ -105,6 +105,7 @@ Snapshots come from the app's accessibility tree, so high-quality labels, roles,
 
 - [Verifying mobile apps with agent-device](https://youtu.be/kZDU-k5r9kE)
 - [Using agent-device in an AI coding workflow](https://youtu.be/dfVG_aNPkW4)
+- [Cloud agents that test mobile apps on real devices](https://youtu.be/r5P0detC4bs?is=_KB6SZbLFRB1au_z)
 
 ## Where To Run agent-device
 
