@@ -32,7 +32,16 @@ export type ReplayTestProgressEvent = {
   deviceId?: string;
 };
 
-export type RequestProgressEvent = ReplayTestSuiteProgressEvent | ReplayTestProgressEvent;
+export type CommandProgressEvent = {
+  type: 'command';
+  status: 'progress';
+  message: string;
+};
+
+export type RequestProgressEvent =
+  | ReplayTestSuiteProgressEvent
+  | ReplayTestProgressEvent
+  | CommandProgressEvent;
 export type RequestProgressSink = (event: RequestProgressEvent) => void;
 export type ReplayTestActionProgressContext = Omit<
   ReplayTestProgressEvent,

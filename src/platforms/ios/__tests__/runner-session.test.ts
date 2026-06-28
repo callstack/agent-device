@@ -5,6 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
 import { IOS_DEVICE, IOS_SIMULATOR } from '../../../__tests__/test-utils/index.ts';
+import {
+  type RequestProgressEvent,
+  withRequestProgressSink,
+} from '../../../daemon/request-progress.ts';
 import { AppError } from '../../../utils/errors.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
 import type { RunnerSession } from '../runner-session-types.ts';
@@ -609,6 +613,56 @@ test('runner session starts xcodebuild through provider seams and reuses an aliv
     sessionId: session.sessionId,
     alive: true,
   });
+});
+
+test('runner session emits XCTest startup progress only after a runner rebuild', async () => {
+  const rebuiltDevice = { ...IOS_SIMULATOR, id: 'runner-session-rebuilt-progress-sim' };
+  const rebuiltEvents: RequestProgressEvent[] = [];
+
+  await withRequestProgressSink(
+    (event) => rebuiltEvents.push(event),
+    async () => {
+      await ensureRunnerSession(rebuiltDevice, {});
+    },
+  );
+
+  assert.deepEqual(rebuiltEvents, [
+    {
+      type: 'command',
+      status: 'progress',
+      message: 'Starting XCTest runner...',
+    },
+  ]);
+
+  await abortAllIosRunnerSessions();
+  vi.clearAllMocks();
+  mockEnsureXctestrunArtifact.mockResolvedValue({
+    xctestrunPath: '/tmp/cached-runner.xctestrun',
+    derived: '/tmp/derived',
+    cache: 'hit',
+    artifact: 'valid',
+    buildMs: 0,
+    xctestrunPathSource: 'manifest',
+  });
+  mockGetFreePort.mockResolvedValue(8123);
+  mockPrepareXctestrunWithEnv.mockResolvedValue({
+    xctestrunPath: '/tmp/session-runner.xctestrun',
+    jsonPath: '/tmp/session-runner.json',
+  });
+  mockAcquireXcodebuildSimulatorSetRedirect.mockResolvedValue({ release: mockRedirectRelease });
+  mockRunCmdBackground.mockReturnValue(makeBackgroundRunner(4242));
+  mockWaitForRunner.mockResolvedValue(runnerResponse({ uptimeMs: 1 }));
+
+  const cachedDevice = { ...IOS_SIMULATOR, id: 'runner-session-cached-progress-sim' };
+  const cachedEvents: RequestProgressEvent[] = [];
+  await withRequestProgressSink(
+    (event) => cachedEvents.push(event),
+    async () => {
+      await ensureRunnerSession(cachedDevice, {});
+    },
+  );
+
+  assert.deepEqual(cachedEvents, []);
 });
 
 test('runner session startup diagnostics include logical lease context', async () => {

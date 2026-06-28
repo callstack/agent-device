@@ -11,6 +11,7 @@ import { isEnvTruthy } from '../../utils/retry.ts';
 import type { DeviceInfo } from '../../utils/device.ts';
 import type { DefinedEnvMap as EnvMap } from '../../utils/env-map.ts';
 import { withKeyedLock } from '../../utils/keyed-lock.ts';
+import { emitRequestProgress } from '../../daemon/request-progress.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { findProjectRoot, readVersion } from '../../utils/version.ts';
 import { resolveRunnerBuildFailureHint } from './runner-contract.ts';
@@ -631,6 +632,11 @@ async function buildXctestrunArtifact(params: {
   }
 
   const buildStartedAt = Date.now();
+  emitRequestProgress({
+    type: 'command',
+    status: 'progress',
+    message: 'Building Apple runner...',
+  });
   await buildRunnerXctestrun(device, projectPath, derived, options);
   const buildMs = Math.max(0, Date.now() - buildStartedAt);
 

@@ -109,6 +109,30 @@ test('network dump prints parsed entries and metadata', async () => {
   assert.match(result.stderr, /best-effort parser/);
 });
 
+test('non-json commands opt into generic progress streaming', async () => {
+  const result = await runCliCapture(['snapshot'], async () => ({
+    ok: true,
+    data: { nodes: [], truncated: false },
+  }));
+
+  assert.equal(result.code, null);
+  assert.equal(result.calls.length, 1);
+  assert.equal(result.calls[0]?.command, 'snapshot');
+  assert.equal(result.calls[0]?.meta?.requestProgress, 'command');
+});
+
+test('json commands do not opt into progress streaming', async () => {
+  const result = await runCliCapture(['snapshot', '--json'], async () => ({
+    ok: true,
+    data: { nodes: [], truncated: false },
+  }));
+
+  assert.equal(result.code, null);
+  assert.equal(result.calls.length, 1);
+  assert.equal(result.calls[0]?.command, 'snapshot');
+  assert.equal(result.calls[0]?.meta?.requestProgress, undefined);
+});
+
 test('test command prints suite summary and exits non-zero on failures', async () => {
   const result = await runCliCapture(['test', './suite'], async () => makeReplaySuiteResponse());
 

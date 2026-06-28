@@ -6,7 +6,7 @@ import type { RequestProgressEvent } from './daemon/request-progress.ts';
 import { consumeTextLines } from './utils/line-stream.ts';
 import {
   createReplayTestProgressRenderer,
-  type ReplayTestProgressRenderer,
+  type ReplayTestProgressRender,
 } from './cli-test-progress.ts';
 import {
   isDaemonProgressEnvelope,
@@ -14,17 +14,29 @@ import {
   shouldStreamRequestProgress,
 } from './daemon/request-progress-protocol.ts';
 
-function createRequestProgressRenderer(req: DaemonRequest): ReplayTestProgressRenderer {
-  return createReplayTestProgressRenderer({
+type RequestProgressRenderer = {
+  render(event: RequestProgressEvent): ReplayTestProgressRender | undefined;
+};
+
+function createRequestProgressRenderer(req: DaemonRequest): RequestProgressRenderer {
+  const replayProgressRenderer = createReplayTestProgressRenderer({
     verbose: Boolean(req.flags?.verbose || req.meta?.debug),
     liveProgress: shouldRenderLiveProgress(),
     columns: process.stderr.columns,
   });
+  return {
+    render(event) {
+      if (event.type === 'command') {
+        return { text: event.message, newline: true };
+      }
+      return replayProgressRenderer.render(event);
+    },
+  };
 }
 
 function writeRequestProgressEvent(
   event: RequestProgressEvent,
-  renderer: ReplayTestProgressRenderer,
+  renderer: RequestProgressRenderer,
 ): void {
   const output = renderer.render(event);
   if (!output) return;

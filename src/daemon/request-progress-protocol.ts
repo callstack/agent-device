@@ -12,7 +12,7 @@ export type DaemonResponseEnvelope<TResponse = DaemonResponse> = {
 };
 
 export function shouldStreamRequestProgress(req: Pick<DaemonRequest, 'meta'>): boolean {
-  return req.meta?.requestProgress === 'replay-test';
+  return req.meta?.requestProgress === 'replay-test' || req.meta?.requestProgress === 'command';
 }
 
 export function isDaemonProgressEnvelope(value: unknown): value is DaemonProgressEnvelope {

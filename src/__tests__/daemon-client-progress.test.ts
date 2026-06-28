@@ -129,6 +129,52 @@ test('readDaemonSocketProgressResponse parses split progress lines before respon
   }
 });
 
+test('readDaemonSocketProgressResponse renders generic command progress', async () => {
+  const socket = createMockSocket();
+  const req: DaemonRequest = {
+    session: 'default',
+    command: 'snapshot',
+    positionals: [],
+    flags: {},
+    token: 'secret',
+    meta: { requestId: 'req-command-progress', requestProgress: 'command' },
+  };
+  let stderr = '';
+  const originalStderrWrite = process.stderr.write.bind(process.stderr);
+
+  try {
+    (process.stderr as any).write = ((chunk: unknown) => {
+      stderr += String(chunk);
+      return true;
+    }) as typeof process.stderr.write;
+
+    const responsePromise = readSocketProgressResponse(socket, req);
+    socket.emit(
+      'data',
+      `${JSON.stringify({
+        type: 'progress',
+        event: {
+          type: 'command',
+          status: 'progress',
+          message: 'Building Apple runner...',
+        },
+      })}\n`,
+    );
+    socket.emit(
+      'data',
+      `${JSON.stringify({
+        type: 'response',
+        response: { ok: true, data: { via: 'command-progress' } },
+      })}\n`,
+    );
+
+    assert.deepEqual(await responsePromise, { ok: true, data: { via: 'command-progress' } });
+    assert.equal(stderr, 'Building Apple runner...\n');
+  } finally {
+    process.stderr.write = originalStderrWrite;
+  }
+});
+
 test('readDaemonSocketProgressResponse rewrites live progress and clears it for final result', async () => {
   const socket = createMockSocket();
   const req: DaemonRequest = {

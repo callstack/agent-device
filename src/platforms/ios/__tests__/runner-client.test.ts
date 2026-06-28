@@ -30,6 +30,10 @@ vi.mock('../runner-macos-products.ts', async () => {
 });
 
 import type { DeviceInfo } from '../../../utils/device.ts';
+import {
+  type RequestProgressEvent,
+  withRequestProgressSink,
+} from '../../../daemon/request-progress.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
 import { AppError } from '../../../utils/errors.ts';
 import { isReadOnlyRunnerCommand } from '../runner-command-traits.ts';
@@ -1288,6 +1292,43 @@ test('ensureXctestrunArtifact passes sandbox-disabling settings to xcodebuild', 
   assert.equal(args.includes('-IDEPackageSupportDisablePluginExecutionSandbox=1'), true);
   assert.equal(args.includes('ENABLE_USER_SCRIPT_SANDBOXING=NO'), true);
   assert.equal(args.includes('OTHER_SWIFT_FLAGS=$(inherited) -disable-sandbox'), true);
+});
+
+test('ensureXctestrunArtifact emits build progress on cache miss', async () => {
+  const projectRoot = repoRoot;
+  const tmpDir = await makeProjectTmpDir();
+  const derivedPath = path.join(tmpDir, 'custom-derived');
+  const rebuiltXctestrunPath = path.join(derivedPath, 'Build', 'Products', 'rebuilt.xctestrun');
+  const events: RequestProgressEvent[] = [];
+
+  withRunnerDerivedPathEnv(derivedPath);
+
+  mockRunCmdStreaming.mockImplementationOnce(async () => {
+    await fs.promises.mkdir(path.join(derivedPath, 'Build', 'Products', 'Runner.app'), {
+      recursive: true,
+    });
+    writeXctestrunFixture(rebuiltXctestrunPath, {
+      projectRoot,
+      productRelativePaths: ['Runner.app'],
+    });
+  });
+
+  const result = await withRequestProgressSink(
+    (event) => events.push(event),
+    async () =>
+      await ensureXctestrunArtifact(iosSimulator, {
+        forceRunnerXctestrunRebuild: true,
+      }),
+  );
+
+  assert.equal(result.xctestrunPath, rebuiltXctestrunPath);
+  assert.deepEqual(events, [
+    {
+      type: 'command',
+      status: 'progress',
+      message: 'Building Apple runner...',
+    },
+  ]);
 });
 
 test('ensureXctestrunArtifact stress-recovers after a bad restored artifact', async () => {

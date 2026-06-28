@@ -5,6 +5,7 @@ import { Deadline } from '../../utils/retry.ts';
 import type { DeviceInfo } from '../../utils/device.ts';
 import type { RunnerLogicalLeaseContext } from '../../core/runner-lease-context.ts';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
+import { emitRequestProgress } from '../../daemon/request-progress.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { buildSimctlArgsForDevice } from './simctl.ts';
 import { runAppleToolCommand, runXcrun } from './tool-provider.ts';
@@ -192,6 +193,13 @@ async function startRunnerSessionWithLease(
     resolveRunnerDestination(device),
   ];
   try {
+    if (xctestrunArtifact.buildMs > 0) {
+      emitRequestProgress({
+        type: 'command',
+        status: 'progress',
+        message: 'Starting XCTest runner...',
+      });
+    }
     ({ child, wait: testPromise } = await measureRunnerStartupStep(
       startupTimings,
       'launch_xcodebuild',

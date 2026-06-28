@@ -558,13 +558,13 @@ function createCliDaemonTransport(options: {
   transport: AgentDeviceDaemonTransport;
 }): AgentDeviceDaemonTransport {
   const { command, flags, transport } = options;
-  if (command !== 'test' || flags.json) return transport;
+  if (flags.json) return transport;
   return async (req) =>
     await transport({
       ...req,
       meta: {
         ...req.meta,
-        requestProgress: 'replay-test',
+        requestProgress: command === 'test' ? 'replay-test' : 'command',
       },
     });
 }

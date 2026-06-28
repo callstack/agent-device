@@ -80,7 +80,7 @@ export type DaemonRequestMeta = {
   materializationId?: string;
   lockPolicy?: DaemonLockPolicy;
   lockPlatform?: PlatformSelector;
-  requestProgress?: 'replay-test';
+  requestProgress?: 'replay-test' | 'command';
 };
 
 export type DaemonRequest = {
