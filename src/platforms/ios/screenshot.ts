@@ -40,6 +40,14 @@ type SimulatorScreenshotFlowDeps = {
   shouldFallbackToRunner: (error: unknown) => boolean;
 };
 
+type SimulatorScreenshotFlowOptions = {
+  skipBootCheck?: boolean;
+};
+
+type IosScreenshotOptions = {
+  skipSimulatorBootCheck?: boolean;
+};
+
 const defaultSimulatorScreenshotFlowDeps: SimulatorScreenshotFlowDeps = {
   ensureBooted: ensureBootedSimulator,
   prepareStatusBarForScreenshot: prepareSimulatorStatusBarForScreenshot,
@@ -53,6 +61,7 @@ export async function screenshotIos(
   appBundleId?: string,
   fullscreen?: boolean,
   runnerOptions?: AppleRunnerCommandOptions,
+  options: IosScreenshotOptions = {},
 ): Promise<void> {
   if (device.platform === 'macos') {
     await captureScreenshotViaRunner(device, outPath, appBundleId, fullscreen, runnerOptions);
@@ -66,6 +75,7 @@ export async function screenshotIos(
       fullscreen,
       undefined,
       runnerOptions,
+      { skipBootCheck: options.skipSimulatorBootCheck },
     );
     return;
   }
@@ -93,6 +103,7 @@ export async function captureSimulatorScreenshotWithFallback(
   fullscreenOrDeps?: boolean | SimulatorScreenshotFlowDeps,
   deps: SimulatorScreenshotFlowDeps = defaultSimulatorScreenshotFlowDeps,
   runnerOptions?: AppleRunnerCommandOptions,
+  options: SimulatorScreenshotFlowOptions = {},
 ): Promise<void> {
   if (device.kind !== 'simulator') {
     throw new AppError(
@@ -105,7 +116,9 @@ export async function captureSimulatorScreenshotWithFallback(
   const effectiveDeps =
     typeof fullscreenOrDeps === 'object' && fullscreenOrDeps !== null ? fullscreenOrDeps : deps;
 
-  await effectiveDeps.ensureBooted(device);
+  if (!options.skipBootCheck) {
+    await effectiveDeps.ensureBooted(device);
+  }
   let restoreStatusBar = async () => {};
   try {
     restoreStatusBar = await effectiveDeps.prepareStatusBarForScreenshot(device);

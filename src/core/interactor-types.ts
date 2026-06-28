@@ -43,6 +43,7 @@ export type ScreenshotOptions = {
   fullscreen?: boolean;
   stabilize?: boolean;
   surface?: SessionSurface;
+  skipIosSimulatorBootCheck?: boolean;
 };
 
 export type ElementSelectorKey = 'id' | 'label' | 'text' | 'value';

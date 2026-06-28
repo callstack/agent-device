@@ -50,6 +50,7 @@ export type DispatchContext = ScreenshotDispatchFlags & {
   snapshotScope?: string;
   snapshotRaw?: boolean;
   snapshotIncludeRects?: boolean;
+  skipIosSimulatorBootCheck?: boolean;
   count?: number;
   intervalMs?: number;
   delayMs?: number;

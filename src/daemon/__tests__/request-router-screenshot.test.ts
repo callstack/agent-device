@@ -129,6 +129,27 @@ test('default screenshot temp directory is cleaned when capture fails', async ()
   expect(fs.existsSync(path.dirname(capturedPath!))).toBe(false);
 });
 
+test('session-backed iOS simulator screenshots skip redundant boot probe', async () => {
+  const session = makeIosSession('ios');
+  const outPath = path.join(os.tmpdir(), 'agent-device-ios-session-screenshot.png');
+  let capturedContext: Parameters<typeof dispatchCommand>[4];
+
+  mockDispatch.mockImplementation(async (_device, _command, _positionals, _outPath, context) => {
+    capturedContext = context;
+    return { path: outPath };
+  });
+
+  await dispatchScreenshotViaRuntime({
+    session,
+    sessionName: session.name,
+    outPath,
+    outputPlacement: 'positional',
+    dispatchContext: {},
+  });
+
+  expect(capturedContext?.skipIosSimulatorBootCheck).toBe(true);
+});
+
 test('router serializes concurrent commands for the same device across sessions', async () => {
   const sessionStore = makeSessionStore('agent-device-router-screenshot-');
   sessionStore.set('session-a', makeSession('session-a'));

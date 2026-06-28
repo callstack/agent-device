@@ -47,7 +47,9 @@ export function createAppleInteractor(
         });
         return;
       }
-      await screenshotIos(device, outPath, options?.appBundleId, options?.fullscreen, runnerOpts);
+      await screenshotIos(device, outPath, options?.appBundleId, options?.fullscreen, runnerOpts, {
+        skipSimulatorBootCheck: options?.skipIosSimulatorBootCheck,
+      });
     },
     snapshot: async (options) => {
       const result = readAppleSnapshotResult(

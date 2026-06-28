@@ -784,6 +784,26 @@ test('captureSimulatorScreenshotWithFallback continues when status bar preparati
   assert.equal(mockRunIosRunnerCommand.mock.calls.length, 0);
 });
 
+test('captureSimulatorScreenshotWithFallback can skip session-backed simulator boot probe', async () => {
+  mockEnsureBootedSimulator.mockRejectedValue(new Error('should not probe boot state'));
+  mockPrepareStatusBarForScreenshot.mockResolvedValue(async () => {});
+  mockRetryWithPolicy.mockResolvedValue(undefined);
+
+  await captureSimulatorScreenshotWithFallback(
+    IOS_TEST_SIMULATOR,
+    '/tmp/out.png',
+    'com.example.app',
+    undefined,
+    undefined,
+    undefined,
+    { skipBootCheck: true },
+  );
+
+  assert.equal(mockEnsureBootedSimulator.mock.calls.length, 0);
+  assert.equal(mockRetryWithPolicy.mock.calls.length, 1);
+  assert.equal(mockRunIosRunnerCommand.mock.calls.length, 0);
+});
+
 test('captureSimulatorScreenshotWithFallback ignores status bar restore failures', async () => {
   mockPrepareStatusBarForScreenshot.mockResolvedValue(async () => {
     throw new AppError('COMMAND_FAILED', 'status_bar clear failed');

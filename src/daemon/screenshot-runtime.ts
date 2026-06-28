@@ -57,6 +57,9 @@ function createDispatchScreenshotBackend(params: {
         ...dispatchContext,
         ...screenshotFlagsFromOptions(options),
         surface: options?.surface,
+        skipIosSimulatorBootCheck:
+          dispatchContext.skipIosSimulatorBootCheck ??
+          (session.device.platform === 'ios' && session.device.kind === 'simulator'),
       };
       if (outputPlacement === 'out') {
         return readScreenshotResultData(

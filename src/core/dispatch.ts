@@ -340,6 +340,7 @@ async function handleScreenshotCommand(
     fullscreen: screenshotOptions.fullscreen,
     stabilize: screenshotOptions.stabilize,
     surface: context?.surface,
+    skipIosSimulatorBootCheck: context?.skipIosSimulatorBootCheck,
   });
   return { path: screenshotPath, ...successText(`Saved screenshot: ${screenshotPath}`) };
 }
