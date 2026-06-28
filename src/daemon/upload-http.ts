@@ -9,6 +9,7 @@ import {
 } from './resumable-upload.ts';
 import { receiveUpload } from './upload.ts';
 import { sendRestJsonError } from './http-errors.ts';
+import { readNodeHttpRequestBody } from '../utils/node-http.ts';
 
 type UploadHttpRoute = 'upload' | 'preflight' | 'direct' | 'finalize';
 
@@ -71,14 +72,7 @@ async function handleUpload(
     });
     if (!auth) return;
 
-    const result = await receiveUpload(req);
-    const uploadId = trackUploadedArtifact({
-      artifactPath: result.artifactPath,
-      tempDir: result.tempDir,
-      tenantId: auth.tenantId,
-    });
-
-    sendJson(res, { ok: true, uploadId });
+    sendUploadedArtifactResponse(res, await receiveUpload(req), auth.tenantId);
   } catch (error) {
     sendRestJsonError(res, normalizeError(error));
   }
@@ -172,14 +166,11 @@ async function handleUploadFinalize(
     if (!auth) return;
 
     const body = await readRestJsonBody(req, 64 * 1024);
-    const result = await finalizeResumableUpload(readRequiredText(body, 'uploadId'), auth.tenantId);
-    const uploadId = trackUploadedArtifact({
-      artifactPath: result.artifactPath,
-      tempDir: result.tempDir,
-      tenantId: auth.tenantId,
-    });
-
-    sendJson(res, { ok: true, uploadId });
+    sendUploadedArtifactResponse(
+      res,
+      await finalizeResumableUpload(readRequiredText(body, 'uploadId'), auth.tenantId),
+      auth.tenantId,
+    );
   } catch (error) {
     sendRestJsonError(res, normalizeError(error));
   }
@@ -191,22 +182,26 @@ function sendJson(res: http.ServerResponse, body: Record<string, unknown>): void
   res.end(JSON.stringify(body));
 }
 
+function sendUploadedArtifactResponse(
+  res: http.ServerResponse,
+  result: { artifactPath: string; tempDir: string },
+  tenantId: string | undefined,
+): void {
+  const uploadId = trackUploadedArtifact({
+    artifactPath: result.artifactPath,
+    tempDir: result.tempDir,
+    tenantId,
+  });
+  sendJson(res, { ok: true, uploadId });
+}
+
 async function readRestJsonBody(
   req: http.IncomingMessage,
   maxBodyBytes: number,
 ): Promise<Record<string, unknown>> {
-  const chunks: Buffer[] = [];
-  let bodyBytes = 0;
-  for await (const chunk of req) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    bodyBytes += buffer.length;
-    if (bodyBytes > maxBodyBytes) {
-      throw new AppError('INVALID_ARGS', 'Request body is too large.');
-    }
-    chunks.push(buffer);
-  }
-
-  const raw = Buffer.concat(chunks).toString('utf8');
+  const raw = (
+    await readNodeHttpRequestBody(req, maxBodyBytes, 'Request body is too large.')
+  ).toString('utf8');
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {

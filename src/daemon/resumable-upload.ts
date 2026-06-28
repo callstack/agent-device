@@ -223,24 +223,35 @@ function parseContentRange(
 ): { start: number; end: number } | undefined {
   const raw = Array.isArray(value) ? value[0] : value;
   if (!raw) return undefined;
+  const range = readContentRange(raw);
+  if (!range || !isValidContentRange(range, sizeBytes)) {
+    throw new AppError('INVALID_ARGS', 'Invalid content-range header');
+  }
+  return { start: range.start, end: range.end };
+}
+
+function readContentRange(raw: string): { start: number; end: number; size: number } | null {
   const match = raw.match(/^bytes (\d+)-(\d+)\/(\d+)$/);
-  if (!match) {
-    throw new AppError('INVALID_ARGS', 'Invalid content-range header');
-  }
-  const start = Number(match[1]);
-  const end = Number(match[2]);
-  const size = Number(match[3]);
-  if (
-    !Number.isSafeInteger(start) ||
-    !Number.isSafeInteger(end) ||
-    !Number.isSafeInteger(size) ||
-    start < 0 ||
-    end < start ||
-    size !== sizeBytes
-  ) {
-    throw new AppError('INVALID_ARGS', 'Invalid content-range header');
-  }
-  return { start, end };
+  if (!match) return null;
+  return {
+    start: Number(match[1]),
+    end: Number(match[2]),
+    size: Number(match[3]),
+  };
+}
+
+function isValidContentRange(
+  range: { start: number; end: number; size: number },
+  sizeBytes: number,
+): boolean {
+  return (
+    Number.isSafeInteger(range.start) &&
+    Number.isSafeInteger(range.end) &&
+    Number.isSafeInteger(range.size) &&
+    range.start >= 0 &&
+    range.end >= range.start &&
+    range.size === sizeBytes
+  );
 }
 
 function buildResumableUploadKey(options: BeginResumableUploadOptions): string {

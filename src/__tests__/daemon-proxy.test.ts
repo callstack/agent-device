@@ -243,59 +243,8 @@ test('daemon proxy streams uploads and artifact downloads with upstream daemon t
 test('daemon proxy forwards resumable upload routes and rewrites direct upload tickets', async (t) => {
   if (await skipWhenLoopbackUnavailable(t)) return;
 
-  let directAuth = '';
-  let directTokenHeader = '';
-  let directContentRange = '';
-  let directBody = '';
-  let finalizeAuth = '';
-  const upstream = http.createServer((req, res) => {
-    if (req.method === 'GET' && req.url === '/health') {
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ ok: true }));
-      return;
-    }
-    if (req.method === 'POST' && req.url === '/upload/preflight') {
-      res.setHeader('content-type', 'application/json');
-      res.end(
-        JSON.stringify({
-          ok: true,
-          cacheHit: false,
-          uploadId: 'upload-1',
-          upload: {
-            url: 'http://127.0.0.1:65535/upload/direct/upload-1',
-            headers: {
-              authorization: 'Bearer daemon-secret',
-              'x-agent-device-token': 'daemon-secret',
-              'content-type': 'application/octet-stream',
-            },
-          },
-        }),
-      );
-      return;
-    }
-    if (req.method === 'PUT' && req.url === '/upload/direct/upload-1') {
-      directAuth = String(req.headers.authorization ?? '');
-      directTokenHeader = String(req.headers['x-agent-device-token'] ?? '');
-      directContentRange = String(req.headers['content-range'] ?? '');
-      req.setEncoding('utf8');
-      req.on('data', (chunk) => {
-        directBody += chunk;
-      });
-      req.on('end', () => {
-        res.statusCode = 200;
-        res.end('ok');
-      });
-      return;
-    }
-    if (req.method === 'POST' && req.url === '/upload/finalize') {
-      finalizeAuth = String(req.headers.authorization ?? '');
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ ok: true, uploadId: 'tracked-upload-1' }));
-      return;
-    }
-    res.statusCode = 404;
-    res.end('not found');
-  });
+  const capture: ResumableUploadProxyCapture = {};
+  const upstream = createResumableUploadProxyUpstream(capture);
   const proxy = createDaemonProxyServer({
     upstreamBaseUrl: `http://127.0.0.1:${await listenOnLoopback(upstream)}`,
     upstreamToken: 'daemon-secret',
@@ -304,57 +253,166 @@ test('daemon proxy forwards resumable upload routes and rewrites direct upload t
 
   try {
     const proxyPort = await listenOnLoopback(proxy);
-    const preflight = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/upload/preflight`, {
-      method: 'POST',
-      headers: {
-        authorization: 'Bearer proxy-secret',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({
-        sha256: crypto.createHash('sha256').update('resumed').digest('hex'),
-        fileName: 'demo.apk',
-        sizeBytes: 7,
-        artifactType: 'file',
-      }),
-    });
-    assert.equal(preflight.status, 200);
-    const preflightBody = (await preflight.json()) as {
-      upload?: { url?: string; headers?: Record<string, string> };
-    };
-    assert.match(
-      preflightBody.upload?.url ?? '',
-      new RegExp(`^http://127\\.0\\.0\\.1:${proxyPort}/agent-device/upload/direct/upload-1$`),
-    );
-    assert.equal(preflightBody.upload?.headers?.authorization, 'Bearer proxy-secret');
-    assert.equal(preflightBody.upload?.headers?.['x-agent-device-token'], 'proxy-secret');
-
-    const direct = await fetch(preflightBody.upload?.url ?? '', {
-      method: 'PUT',
-      headers: {
-        ...(preflightBody.upload?.headers ?? {}),
-        'content-range': 'bytes 3-6/7',
-      },
-      body: Buffer.from('umed'),
-    });
-    assert.equal(direct.status, 200);
-    assert.equal(directAuth, 'Bearer daemon-secret');
-    assert.equal(directTokenHeader, 'daemon-secret');
-    assert.equal(directContentRange, 'bytes 3-6/7');
-    assert.equal(directBody, 'umed');
-
-    const finalize = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/upload/finalize`, {
-      method: 'POST',
-      headers: {
-        authorization: 'Bearer proxy-secret',
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify({ uploadId: 'upload-1' }),
-    });
-    assert.equal(finalize.status, 200);
-    assert.deepEqual(await finalize.json(), { ok: true, uploadId: 'tracked-upload-1' });
-    assert.equal(finalizeAuth, 'Bearer daemon-secret');
+    const ticket = await requestRewrittenUploadTicket(proxyPort);
+    await assertDirectUploadUsesDaemonToken(ticket, capture);
+    await assertFinalizeUsesDaemonToken(proxyPort, capture);
   } finally {
     await closeLoopbackServer(proxy);
     await closeLoopbackServer(upstream);
   }
 });
+
+type RewrittenUploadTicket = {
+  url: string;
+  headers: Record<string, string>;
+};
+
+type ResumableUploadProxyCapture = {
+  directAuth?: string;
+  directTokenHeader?: string;
+  directContentRange?: string;
+  directBody?: string;
+  finalizeAuth?: string;
+};
+
+async function requestRewrittenUploadTicket(proxyPort: number): Promise<RewrittenUploadTicket> {
+  const preflight = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/upload/preflight`, {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer proxy-secret',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({
+      sha256: crypto.createHash('sha256').update('resumed').digest('hex'),
+      fileName: 'demo.apk',
+      sizeBytes: 7,
+      artifactType: 'file',
+    }),
+  });
+  assert.equal(preflight.status, 200);
+
+  const body = (await preflight.json()) as {
+    upload?: { url?: string; headers?: Record<string, string> };
+  };
+  const ticket = readUploadTicket(body);
+  assert.match(
+    ticket.url,
+    new RegExp(`^http://127\\.0\\.0\\.1:${proxyPort}/agent-device/upload/direct/upload-1$`),
+  );
+  assert.equal(ticket.headers.authorization, 'Bearer proxy-secret');
+  assert.equal(ticket.headers['x-agent-device-token'], 'proxy-secret');
+  return ticket;
+}
+
+function readUploadTicket(body: {
+  upload?: { url?: string; headers?: Record<string, string> };
+}): RewrittenUploadTicket {
+  if (!body.upload?.url) throw new Error('missing upload url');
+  return {
+    url: body.upload.url,
+    headers: body.upload.headers ?? {},
+  };
+}
+
+async function assertDirectUploadUsesDaemonToken(
+  ticket: RewrittenUploadTicket,
+  capture: ResumableUploadProxyCapture,
+): Promise<void> {
+  const direct = await fetch(ticket.url, {
+    method: 'PUT',
+    headers: {
+      ...ticket.headers,
+      'content-range': 'bytes 3-6/7',
+    },
+    body: Buffer.from('umed'),
+  });
+  assert.equal(direct.status, 200);
+  assert.equal(capture.directAuth, 'Bearer daemon-secret');
+  assert.equal(capture.directTokenHeader, 'daemon-secret');
+  assert.equal(capture.directContentRange, 'bytes 3-6/7');
+  assert.equal(capture.directBody, 'umed');
+}
+
+async function assertFinalizeUsesDaemonToken(
+  proxyPort: number,
+  capture: ResumableUploadProxyCapture,
+): Promise<void> {
+  const finalize = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/upload/finalize`, {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer proxy-secret',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ uploadId: 'upload-1' }),
+  });
+  assert.equal(finalize.status, 200);
+  assert.deepEqual(await finalize.json(), { ok: true, uploadId: 'tracked-upload-1' });
+  assert.equal(capture.finalizeAuth, 'Bearer daemon-secret');
+}
+
+function createResumableUploadProxyUpstream(capture: ResumableUploadProxyCapture): http.Server {
+  return http.createServer((req, res) => {
+    const route = `${req.method ?? ''} ${req.url ?? ''}`;
+    if (route === 'GET /health') return sendResumableProxyHealth(res);
+    if (route === 'POST /upload/preflight') return sendResumableProxyPreflight(res);
+    if (route === 'PUT /upload/direct/upload-1') {
+      return receiveResumableProxyDirectUpload(req, res, capture);
+    }
+    if (route === 'POST /upload/finalize') return sendResumableProxyFinalize(req, res, capture);
+    res.statusCode = 404;
+    res.end('not found');
+  });
+}
+
+function sendResumableProxyHealth(res: http.ServerResponse): void {
+  res.setHeader('content-type', 'application/json');
+  res.end(JSON.stringify({ ok: true }));
+}
+
+function sendResumableProxyPreflight(res: http.ServerResponse): void {
+  res.setHeader('content-type', 'application/json');
+  res.end(
+    JSON.stringify({
+      ok: true,
+      cacheHit: false,
+      uploadId: 'upload-1',
+      upload: {
+        url: 'http://127.0.0.1:65535/upload/direct/upload-1',
+        headers: {
+          authorization: 'Bearer daemon-secret',
+          'x-agent-device-token': 'daemon-secret',
+          'content-type': 'application/octet-stream',
+        },
+      },
+    }),
+  );
+}
+
+function receiveResumableProxyDirectUpload(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  capture: ResumableUploadProxyCapture,
+): void {
+  capture.directAuth = String(req.headers.authorization ?? '');
+  capture.directTokenHeader = String(req.headers['x-agent-device-token'] ?? '');
+  capture.directContentRange = String(req.headers['content-range'] ?? '');
+  capture.directBody = '';
+  req.setEncoding('utf8');
+  req.on('data', (chunk) => {
+    capture.directBody += chunk;
+  });
+  req.on('end', () => {
+    res.statusCode = 200;
+    res.end('ok');
+  });
+}
+
+function sendResumableProxyFinalize(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  capture: ResumableUploadProxyCapture,
+): void {
+  capture.finalizeAuth = String(req.headers.authorization ?? '');
+  res.setHeader('content-type', 'application/json');
+  res.end(JSON.stringify({ ok: true, uploadId: 'tracked-upload-1' }));
+}

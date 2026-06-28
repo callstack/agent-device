@@ -3,6 +3,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { randomUUID } from 'node:crypto';
 import { AppError, normalizeError } from './utils/errors.ts';
+import { readNodeHttpRequestBody } from './utils/node-http.ts';
 import { timingSafeStringEqual } from './utils/timing-safe-equal.ts';
 import {
   DAEMON_HTTP_BASE_PATH,
@@ -66,7 +67,13 @@ async function handleProxyRequest(
 
   let rpcBody: string | undefined;
   if (route === '/rpc') {
-    rpcBody = (await readBodyBuffer(req, options.maxRpcBodyBytes)).toString('utf8');
+    rpcBody = (
+      await readNodeHttpRequestBody(
+        req,
+        options.maxRpcBodyBytes,
+        'Proxy request body is too large.',
+      )
+    ).toString('utf8');
   }
 
   if (!isAuthorized(req, options.clientToken, rpcBody)) {
@@ -118,22 +125,55 @@ async function forwardProxyRequest(params: {
     ...(body ? { body, duplex: 'half' as const } : {}),
   });
 
+  await sendProxyResponse({ req, res, route, response, clientToken: options.clientToken });
+}
+
+async function sendProxyResponse(params: {
+  req: IncomingMessage;
+  res: ServerResponse;
+  route: string;
+  response: Response;
+  clientToken: string;
+}): Promise<void> {
+  const { req, res, route, response, clientToken } = params;
   res.statusCode = response.status;
+  copyProxyResponseHeaders(response, res);
+  ensureProxyRequestId(req, res);
+
+  if (shouldRewriteUploadProxyResponse(route)) {
+    await sendRewrittenUploadPreflightResponse({ req, res, response, clientToken });
+    return;
+  }
+
+  await pipeProxyResponseBody(response, res);
+}
+
+function copyProxyResponseHeaders(response: Response, res: ServerResponse): void {
   for (const name of FORWARDED_RESPONSE_HEADERS) {
     const value = response.headers.get(name);
     if (value) res.setHeader(name, value);
   }
+}
+
+function ensureProxyRequestId(req: IncomingMessage, res: ServerResponse): void {
   if (!res.hasHeader('x-request-id')) {
     res.setHeader('x-request-id', resolveRequestId(req));
   }
+}
 
-  if (shouldRewriteUploadProxyResponse(route)) {
-    const text = await response.text();
-    res.setHeader('content-type', response.headers.get('content-type') ?? 'application/json');
-    res.end(rewriteUploadPreflightResponse(text, req, options.clientToken));
-    return;
-  }
+async function sendRewrittenUploadPreflightResponse(params: {
+  req: IncomingMessage;
+  res: ServerResponse;
+  response: Response;
+  clientToken: string;
+}): Promise<void> {
+  const { req, res, response, clientToken } = params;
+  const text = await response.text();
+  res.setHeader('content-type', response.headers.get('content-type') ?? 'application/json');
+  res.end(rewriteUploadPreflightResponse(text, req, clientToken));
+}
 
+async function pipeProxyResponseBody(response: Response, res: ServerResponse): Promise<void> {
   if (!response.body) {
     res.end();
     return;
@@ -279,20 +319,6 @@ function resolveRequestId(req: IncomingMessage): string {
   const header = req.headers['x-request-id'];
   if (typeof header === 'string' && header.trim()) return header.trim().slice(0, 128);
   return randomUUID();
-}
-
-async function readBodyBuffer(req: IncomingMessage, maxBodyBytes: number): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  let bodyBytes = 0;
-  for await (const chunk of req) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    bodyBytes += buffer.length;
-    if (bodyBytes > maxBodyBytes) {
-      throw new AppError('INVALID_ARGS', 'Proxy request body is too large.');
-    }
-    chunks.push(buffer);
-  }
-  return Buffer.concat(chunks);
 }
 
 function sendUnauthorized(res: ServerResponse, route: string, rpcId: unknown): void {
