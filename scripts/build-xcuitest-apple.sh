@@ -25,19 +25,53 @@ is_truthy() {
 resolve_default_destination() {
   case "$PLATFORM" in
     ios)
-      printf '%s\n' 'generic/platform=iOS Simulator'
+      resolve_simulator_destination 'iOS' 'iPhone' || printf '%s\n' 'generic/platform=iOS Simulator'
       ;;
     macos)
       printf 'platform=macOS,arch=%s\n' "$(uname -m)"
       ;;
     tvos)
-      printf '%s\n' 'generic/platform=tvOS Simulator'
+      resolve_simulator_destination 'tvOS' 'Apple TV' || printf '%s\n' 'generic/platform=tvOS Simulator'
       ;;
     *)
       echo "Unsupported AGENT_DEVICE_XCUITEST_PLATFORM: $PLATFORM" >&2
       exit 1
       ;;
   esac
+}
+
+resolve_simulator_destination() {
+  command -v node >/dev/null 2>&1 || return 1
+  node -e '
+const { execFileSync } = require("node:child_process");
+const platformName = process.argv[1];
+const deviceNamePattern = new RegExp(process.argv[2]);
+const platformNameLower = platformName.toLowerCase();
+try {
+  const output = execFileSync("xcrun", ["simctl", "list", "devices", "available", "-j"], {
+    encoding: "utf8",
+    stdio: ["ignore", "pipe", "ignore"],
+    timeout: 3000,
+  });
+  const parsed = JSON.parse(output);
+  const devices = Object.entries(parsed.devices ?? {})
+    .filter(([runtime]) => runtime.toLowerCase().includes(platformNameLower))
+    .flatMap(([, runtimeDevices]) => Array.isArray(runtimeDevices) ? runtimeDevices : [])
+    .filter(
+      (device) =>
+        device &&
+        device.isAvailable !== false &&
+        typeof device.udid === "string" &&
+        typeof device.name === "string" &&
+        deviceNamePattern.test(device.name),
+    );
+  const selected = devices.find((device) => device.state === "Booted") ?? devices[0];
+  if (!selected) process.exit(1);
+  console.log(`platform=${platformName} Simulator,id=${selected.udid}`);
+} catch {
+  process.exit(1);
+}
+' "$1" "$2"
 }
 
 resolve_default_derived_path() {
