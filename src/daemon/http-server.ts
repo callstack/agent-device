@@ -22,12 +22,7 @@ import {
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { sleep } from '../utils/timeouts.ts';
-import {
-  cleanupDownloadableArtifact,
-  prepareDownloadableArtifact,
-  trackUploadedArtifact,
-} from './artifact-tracking.ts';
-import { receiveUpload } from './upload.ts';
+import { cleanupDownloadableArtifact, prepareDownloadableArtifact } from './artifact-tracking.ts';
 import { type RequestProgressEvent, withRequestProgressSink } from './request-progress.ts';
 import {
   serializeDaemonProgressEnvelope,
@@ -35,6 +30,8 @@ import {
   shouldStreamRequestProgress,
 } from './request-progress-protocol.ts';
 import { buildDaemonHealthPayload } from './http-health.ts';
+import { sendRestJsonError, statusCodeForNormalizedError } from './http-errors.ts';
+import { handleUploadHttpRoute, isUploadHttpRoute } from './upload-http.ts';
 
 type JsonRpcRequest = JsonRpcRequestEnvelope;
 
@@ -143,19 +140,6 @@ function writeRpcResponseEnvelope(
   if (res.destroyed) return;
   res.write(serializeDaemonRpcResponseEnvelope(response));
   res.end();
-}
-
-function statusCodeForNormalizedError(code: string): number {
-  switch (code) {
-    case 'INVALID_ARGS':
-      return 400;
-    case 'UNAUTHORIZED':
-      return 401;
-    case 'SESSION_NOT_FOUND':
-      return 404;
-    default:
-      return 500;
-  }
 }
 
 // Map a thrown boundary error to its JSON-RPC error code. Invalid params (malformed
@@ -541,8 +525,20 @@ export async function createDaemonHttpServer(options: {
       return;
     }
 
-    if (req.method === 'POST' && req.url === '/upload') {
-      handleUpload(req, res, authHook, token);
+    if (isUploadHttpRoute(req)) {
+      void handleUploadHttpRoute({
+        req,
+        res,
+        token: resolveToken({}, req.headers),
+        authorize: async (request) =>
+          await authorizeAuxiliaryHttpRequest({
+            req: request.req,
+            res: request.res,
+            authHook,
+            expectedToken: token,
+            daemonRequest: request.daemonRequest,
+          }),
+      });
       return;
     }
 
@@ -735,41 +731,6 @@ export async function createDaemonHttpServer(options: {
   });
 }
 
-async function handleUpload(
-  req: http.IncomingMessage,
-  res: http.ServerResponse,
-  authHook: HttpAuthHook | null,
-  expectedToken?: string,
-): Promise<void> {
-  try {
-    const auth = await authorizeAuxiliaryHttpRequest({
-      req,
-      res,
-      authHook,
-      expectedToken,
-      daemonRequest: {
-        command: 'upload',
-        positionals: [],
-      },
-    });
-    if (!auth) return;
-
-    const result = await receiveUpload(req);
-    const uploadId = trackUploadedArtifact({
-      artifactPath: result.artifactPath,
-      tempDir: result.tempDir,
-      tenantId: auth.tenantId,
-    });
-
-    res.statusCode = 200;
-    res.setHeader('content-type', 'application/json');
-    res.end(JSON.stringify({ ok: true, uploadId }));
-  } catch (error) {
-    const normalized = normalizeError(error);
-    sendRestJsonError(res, normalized);
-  }
-}
-
 async function handleArtifactDownload(
   req: http.IncomingMessage,
   res: http.ServerResponse,
@@ -900,15 +861,6 @@ async function authorizeAuxiliaryHttpRequest(params: {
   }
 
   return { tenantId: authResult.tenantId };
-}
-
-function sendRestJsonError(
-  res: http.ServerResponse,
-  normalized: ReturnType<typeof normalizeError>,
-): void {
-  res.statusCode = statusCodeForNormalizedError(normalized.code);
-  res.setHeader('content-type', 'application/json');
-  res.end(JSON.stringify({ ok: false, error: normalized.message, code: normalized.code }));
 }
 
 function enforceDaemonToken(

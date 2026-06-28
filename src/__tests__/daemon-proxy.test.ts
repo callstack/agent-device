@@ -1,5 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import http from 'node:http';
 import { createDaemonProxyServer } from '../daemon-proxy.ts';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '../daemon/http-health.ts';
@@ -233,6 +234,125 @@ test('daemon proxy streams uploads and artifact downloads with upstream daemon t
     assert.equal(artifact.headers.get('x-request-id'), 'upstream-request-1');
     assert.equal(artifactAuth, 'Bearer daemon-secret');
     assert.equal(artifactTokenHeader, 'daemon-secret');
+  } finally {
+    await closeLoopbackServer(proxy);
+    await closeLoopbackServer(upstream);
+  }
+});
+
+test('daemon proxy forwards resumable upload routes and rewrites direct upload tickets', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  let directAuth = '';
+  let directTokenHeader = '';
+  let directContentRange = '';
+  let directBody = '';
+  let finalizeAuth = '';
+  const upstream = http.createServer((req, res) => {
+    if (req.method === 'GET' && req.url === '/health') {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/upload/preflight') {
+      res.setHeader('content-type', 'application/json');
+      res.end(
+        JSON.stringify({
+          ok: true,
+          cacheHit: false,
+          uploadId: 'upload-1',
+          upload: {
+            url: 'http://127.0.0.1:65535/upload/direct/upload-1',
+            headers: {
+              authorization: 'Bearer daemon-secret',
+              'x-agent-device-token': 'daemon-secret',
+              'content-type': 'application/octet-stream',
+            },
+          },
+        }),
+      );
+      return;
+    }
+    if (req.method === 'PUT' && req.url === '/upload/direct/upload-1') {
+      directAuth = String(req.headers.authorization ?? '');
+      directTokenHeader = String(req.headers['x-agent-device-token'] ?? '');
+      directContentRange = String(req.headers['content-range'] ?? '');
+      req.setEncoding('utf8');
+      req.on('data', (chunk) => {
+        directBody += chunk;
+      });
+      req.on('end', () => {
+        res.statusCode = 200;
+        res.end('ok');
+      });
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/upload/finalize') {
+      finalizeAuth = String(req.headers.authorization ?? '');
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ ok: true, uploadId: 'tracked-upload-1' }));
+      return;
+    }
+    res.statusCode = 404;
+    res.end('not found');
+  });
+  const proxy = createDaemonProxyServer({
+    upstreamBaseUrl: `http://127.0.0.1:${await listenOnLoopback(upstream)}`,
+    upstreamToken: 'daemon-secret',
+    clientToken: 'proxy-secret',
+  });
+
+  try {
+    const proxyPort = await listenOnLoopback(proxy);
+    const preflight = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/upload/preflight`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer proxy-secret',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        sha256: crypto.createHash('sha256').update('resumed').digest('hex'),
+        fileName: 'demo.apk',
+        sizeBytes: 7,
+        artifactType: 'file',
+      }),
+    });
+    assert.equal(preflight.status, 200);
+    const preflightBody = (await preflight.json()) as {
+      upload?: { url?: string; headers?: Record<string, string> };
+    };
+    assert.match(
+      preflightBody.upload?.url ?? '',
+      new RegExp(`^http://127\\.0\\.0\\.1:${proxyPort}/agent-device/upload/direct/upload-1$`),
+    );
+    assert.equal(preflightBody.upload?.headers?.authorization, 'Bearer proxy-secret');
+    assert.equal(preflightBody.upload?.headers?.['x-agent-device-token'], 'proxy-secret');
+
+    const direct = await fetch(preflightBody.upload?.url ?? '', {
+      method: 'PUT',
+      headers: {
+        ...(preflightBody.upload?.headers ?? {}),
+        'content-range': 'bytes 3-6/7',
+      },
+      body: Buffer.from('umed'),
+    });
+    assert.equal(direct.status, 200);
+    assert.equal(directAuth, 'Bearer daemon-secret');
+    assert.equal(directTokenHeader, 'daemon-secret');
+    assert.equal(directContentRange, 'bytes 3-6/7');
+    assert.equal(directBody, 'umed');
+
+    const finalize = await fetch(`http://127.0.0.1:${proxyPort}/agent-device/upload/finalize`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer proxy-secret',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ uploadId: 'upload-1' }),
+    });
+    assert.equal(finalize.status, 200);
+    assert.deepEqual(await finalize.json(), { ok: true, uploadId: 'tracked-upload-1' });
+    assert.equal(finalizeAuth, 'Bearer daemon-secret');
   } finally {
     await closeLoopbackServer(proxy);
     await closeLoopbackServer(upstream);

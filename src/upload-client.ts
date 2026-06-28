@@ -77,20 +77,18 @@ export async function uploadArtifact(options: UploadArtifactOptions): Promise<st
       return preflight.uploadId;
     }
     if (preflight?.kind === 'direct-upload') {
-      try {
-        await uploadDirectArtifact(prepared.payloadPath, preflight);
-        return await finalizeDirectUpload({
-          normalizedBase,
-          token: options.token,
-          uploadId: preflight.uploadId,
-        });
-      } catch {
-        return await uploadLegacyArtifact({
-          normalizedBase,
-          token: options.token,
-          artifact: prepared,
-        });
-      }
+      const directUpload = await tryDirectUploadWithResume({
+        normalizedBase,
+        token: options.token,
+        artifact: prepared,
+        preflight,
+      });
+      if (directUpload) return directUpload;
+      return await uploadLegacyArtifact({
+        normalizedBase,
+        token: options.token,
+        artifact: prepared,
+      });
     }
 
     return await uploadLegacyArtifact({
@@ -101,6 +99,54 @@ export async function uploadArtifact(options: UploadArtifactOptions): Promise<st
   } finally {
     prepared.cleanup();
   }
+}
+
+async function tryDirectUploadWithResume(options: {
+  normalizedBase: string;
+  token: string;
+  artifact: PreparedUploadArtifact;
+  preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>;
+}): Promise<string | undefined> {
+  const uploadOnce = async (
+    preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>,
+  ): Promise<string> => {
+    await uploadDirectArtifact(options.artifact.payloadPath, preflight);
+    return await finalizeDirectUpload({
+      normalizedBase: options.normalizedBase,
+      token: options.token,
+      uploadId: preflight.uploadId,
+    });
+  };
+
+  try {
+    return await uploadOnce(options.preflight);
+  } catch (error) {
+    if (!shouldRetryDirectUpload(error)) return undefined;
+    const retryPreflight = await requestUploadPreflight({
+      normalizedBase: options.normalizedBase,
+      token: options.token,
+      artifact: options.artifact,
+    });
+    if (retryPreflight?.kind === 'cache-hit') {
+      return retryPreflight.uploadId;
+    }
+    if (retryPreflight?.kind === 'direct-upload') {
+      try {
+        return await uploadOnce(retryPreflight);
+      } catch {
+        return undefined;
+      }
+    }
+    return undefined;
+  }
+}
+
+function shouldRetryDirectUpload(error: unknown): boolean {
+  if (!(error instanceof AppError)) return true;
+  return (
+    error.message === 'Failed to upload artifact with direct upload ticket' ||
+    error.message === 'Direct artifact upload timed out'
+  );
 }
 
 async function prepareUploadArtifact(

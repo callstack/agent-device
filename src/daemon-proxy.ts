@@ -10,6 +10,11 @@ import {
   buildDaemonHttpUrl,
 } from './daemon/http-contract.ts';
 import { buildDaemonHealthPayload } from './daemon/http-health.ts';
+import {
+  isSupportedProxyUploadRoute,
+  rewriteUploadPreflightResponse,
+  shouldRewriteUploadProxyResponse,
+} from './daemon-proxy-upload.ts';
 
 export type DaemonProxyOptions = {
   upstreamBaseUrl: string;
@@ -23,7 +28,14 @@ export type DaemonProxyOptions = {
 const DEFAULT_MAX_RPC_BODY_BYTES = 1024 * 1024;
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 5 * 60 * 1000;
 const DAEMON_PROXY_PREFIX = `${DAEMON_HTTP_BASE_PATH}/`;
-const FORWARDED_REQUEST_HEADERS = ['content-type', 'x-artifact-type', 'x-artifact-filename'];
+const FORWARDED_REQUEST_HEADERS = [
+  'content-type',
+  'content-range',
+  'x-artifact-type',
+  'x-artifact-filename',
+  'x-artifact-hash',
+  'x-artifact-hash-algorithm',
+];
 const FORWARDED_RESPONSE_HEADERS = ['content-type', 'content-disposition', 'x-request-id'];
 
 export function createDaemonProxyServer(options: DaemonProxyOptions): http.Server {
@@ -115,6 +127,13 @@ async function forwardProxyRequest(params: {
     res.setHeader('x-request-id', resolveRequestId(req));
   }
 
+  if (shouldRewriteUploadProxyResponse(route)) {
+    const text = await response.text();
+    res.setHeader('content-type', response.headers.get('content-type') ?? 'application/json');
+    res.end(rewriteUploadPreflightResponse(text, req, options.clientToken));
+    return;
+  }
+
   if (!response.body) {
     res.end();
     return;
@@ -167,7 +186,7 @@ function resolveProxyRoute(requestUrl: string): string {
 
 function isSupportedDaemonRoute(route: string, method: string | undefined): boolean {
   if (route === '/rpc') return method === 'POST';
-  if (route === '/upload') return method === 'POST';
+  if (isSupportedProxyUploadRoute(route, method)) return true;
   if (route.startsWith('/artifacts/')) return method === 'GET';
   return false;
 }

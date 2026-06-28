@@ -607,6 +607,86 @@ test('uploadArtifact resumes a direct upload from the server-reported offset', a
   }
 });
 
+test('uploadArtifact re-preflights and resumes after an interrupted direct upload', async () => {
+  const content = 'direct-upload-interrupted-payload';
+  const artifactPath = createTempFile('app.apk', content);
+  const resumeOffset = 8;
+  const requests: string[] = [];
+  let preflightAttempts = 0;
+  let uploadAttempts = 0;
+  let resumedUploadBody = '';
+
+  const server = await startServer(async (req, res) => {
+    requests.push(`${req.method} ${req.url}`);
+    if (req.method === 'POST' && req.url === '/upload/preflight') {
+      preflightAttempts += 1;
+      await readRequestBody(req);
+      sendJson(res, {
+        ok: true,
+        cacheHit: false,
+        uploadId: 'resume-after-error-ticket',
+        upload: {
+          url: `${server.baseUrl}/resumable-upload-after-error`,
+          headers: {
+            'x-signed-ticket': 'resume-after-error-ticket-header',
+          },
+        },
+      });
+      return;
+    }
+    if (req.method === 'PUT' && req.url === '/resumable-upload-after-error') {
+      uploadAttempts += 1;
+      if (uploadAttempts === 1) {
+        req.destroy(new Error('simulated low-connectivity interruption'));
+        return;
+      }
+      if (uploadAttempts === 2) {
+        assert.equal(req.headers['content-range'], undefined);
+        res.statusCode = 308;
+        res.setHeader('x-upload-offset', String(resumeOffset));
+        res.end();
+        return;
+      }
+
+      assert.equal(
+        req.headers['content-range'],
+        `bytes ${resumeOffset}-${Buffer.byteLength(content) - 1}/${Buffer.byteLength(content)}`,
+      );
+      resumedUploadBody = (await readRequestBody(req)).toString('utf8');
+      res.statusCode = 200;
+      res.end('ok');
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/upload/finalize') {
+      sendJson(res, { ok: true, uploadId: 'upload-resumed-after-error' });
+      return;
+    }
+    res.statusCode = 404;
+    res.end('not found');
+  });
+
+  try {
+    const uploadId = await uploadArtifact({
+      localPath: artifactPath,
+      baseUrl: server.baseUrl,
+      token: TEST_TOKEN,
+    });
+    assert.equal(uploadId, 'upload-resumed-after-error');
+    assert.equal(preflightAttempts, 2);
+    assert.equal(resumedUploadBody, content.slice(resumeOffset));
+    assert.deepEqual(requests, [
+      'POST /upload/preflight',
+      'PUT /resumable-upload-after-error',
+      'POST /upload/preflight',
+      'PUT /resumable-upload-after-error',
+      'PUT /resumable-upload-after-error',
+      'POST /upload/finalize',
+    ]);
+  } finally {
+    await server.close();
+  }
+});
+
 test('uploadArtifact preflights and legacy-uploads compressed app bundle directories', async () => {
   const tempRoot = createTempDir();
   const appPath = path.join(tempRoot, 'Sample.app');

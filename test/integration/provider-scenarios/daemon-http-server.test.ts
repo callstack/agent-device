@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { AppError } from '../../../src/utils/errors.ts';
-import { trackDownloadableArtifact } from '../../../src/daemon/artifact-tracking.ts';
+import {
+  cleanupUploadedArtifact,
+  prepareUploadedArtifact,
+  trackDownloadableArtifact,
+} from '../../../src/daemon/artifact-tracking.ts';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '../../../src/daemon/http-health.ts';
 import { createDaemonHttpServer } from '../../../src/daemon/http-server.ts';
 import { emitRequestProgress } from '../../../src/daemon/request-progress.ts';
@@ -516,6 +521,91 @@ test('Provider-backed integration daemon HTTP server accepts uploads and streams
   } finally {
     await closeLoopbackServer(server);
     fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('Provider-backed integration daemon HTTP server resumes direct uploads before finalize', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'daemon HTTP integration coverage')) {
+    return;
+  }
+
+  const content = Buffer.from('fake-apk-resumable-content');
+  const server = await createDaemonHttpServer({
+    token: 'provider-scenario-token',
+    handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
+  });
+  let trackedUploadId = '';
+
+  try {
+    const port = await listenOnLoopback(server);
+    const preflight = await fetch(`http://127.0.0.1:${port}/upload/preflight`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer provider-scenario-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({
+        sha256: crypto.createHash('sha256').update(content).digest('hex'),
+        fileName: 'demo.apk',
+        sizeBytes: content.length,
+        artifactType: 'file',
+        platform: 'android',
+        contentType: 'application/octet-stream',
+      }),
+    });
+    assert.equal(preflight.status, 200);
+    const preflightBody = (await preflight.json()) as {
+      uploadId?: string;
+      upload?: { url?: string; headers?: Record<string, string> };
+    };
+    assert.equal(typeof preflightBody.uploadId, 'string');
+    assert.equal(typeof preflightBody.upload?.url, 'string');
+    if (!preflightBody.upload?.url) throw new Error('missing upload url');
+    const uploadUrl = preflightBody.upload.url;
+    const uploadHeaders = preflightBody.upload.headers ?? {};
+
+    const firstChunk = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: uploadHeaders,
+      body: content.subarray(0, 9),
+    });
+    assert.equal(firstChunk.status, 308);
+    assert.equal(firstChunk.headers.get('x-upload-offset'), '9');
+
+    const restartFromZero = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: uploadHeaders,
+      body: content,
+    });
+    assert.equal(restartFromZero.status, 308);
+    assert.equal(restartFromZero.headers.get('x-upload-offset'), '9');
+
+    const resumed = await fetch(uploadUrl, {
+      method: 'PUT',
+      headers: {
+        ...uploadHeaders,
+        'content-range': `bytes 9-${content.length - 1}/${content.length}`,
+      },
+      body: content.subarray(9),
+    });
+    assert.equal(resumed.status, 200);
+
+    const finalize = await fetch(`http://127.0.0.1:${port}/upload/finalize`, {
+      method: 'POST',
+      headers: {
+        authorization: 'Bearer provider-scenario-token',
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ uploadId: preflightBody.uploadId }),
+    });
+    assert.equal(finalize.status, 200);
+    const finalizeBody = (await finalize.json()) as { uploadId?: string };
+    trackedUploadId = finalizeBody.uploadId ?? '';
+    assert.equal(typeof trackedUploadId, 'string');
+    assert.deepEqual(fs.readFileSync(prepareUploadedArtifact(trackedUploadId)), content);
+  } finally {
+    if (trackedUploadId) cleanupUploadedArtifact(trackedUploadId);
+    await closeLoopbackServer(server);
   }
 });
 
