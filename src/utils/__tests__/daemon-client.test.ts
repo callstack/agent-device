@@ -103,8 +103,10 @@ async function captureInteractiveStderr(callback: () => Promise<void>): Promise<
   const mutableStderr = stderr as unknown as Record<string, unknown>;
   const originalIsTTY = Object.getOwnPropertyDescriptor(stderr, 'isTTY');
   const originalWrite = process.stderr.write.bind(process.stderr);
+  const originalCi = process.env.CI;
   let output = '';
   Object.defineProperty(stderr, 'isTTY', { configurable: true, value: true });
+  delete process.env.CI;
   (process.stderr as any).write = ((chunk: unknown) => {
     output += String(chunk);
     return true;
@@ -114,6 +116,8 @@ async function captureInteractiveStderr(callback: () => Promise<void>): Promise<
     return output;
   } finally {
     process.stderr.write = originalWrite;
+    if (originalCi === undefined) delete process.env.CI;
+    else process.env.CI = originalCi;
     if (originalIsTTY) Object.defineProperty(stderr, 'isTTY', originalIsTTY);
     else delete mutableStderr.isTTY;
   }
