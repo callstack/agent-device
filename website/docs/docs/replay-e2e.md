@@ -113,7 +113,7 @@ agent-device test ./workflows --reporter '["./scripts/replay-reporter.mjs",{"out
 
 Reporter options can use either the compact `path:{"key":"value"}` form or the JSON tuple form `["path", options]`. The tuple form also works for built-ins, for example `--reporter '["junit",{"output":"./tmp/junit.xml"}]'`, and avoids ambiguous path parsing.
 
-Reporter modules can export a reporter object, `reporter`, `createReporter`, or a default factory. Factories receive parsed JSON options and load context. Reporter hooks receive an IO context with `cwd`, `writeStdout`, `writeStderr`, `mkdir`, and `writeFile` helpers:
+Reporter modules can export a reporter object, `reporter`, `createReporter`, or a default factory. Factories receive parsed JSON options and load context. Reporter hooks receive an IO context with `writeStdout`, `mkdir`, and `writeFile` helpers:
 
 ```js
 // scripts/replay-reporter.mjs

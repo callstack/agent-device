@@ -3,9 +3,7 @@ import type { ReplaySuiteResult } from '../daemon/types.ts';
 
 export type ReplayTestReporterContext = {
   debug?: boolean;
-  cwd: string;
   writeStdout(text: string): void;
-  writeStderr(text: string): void;
   mkdir(path: string): void;
   writeFile(path: string, contents: string): void;
 };

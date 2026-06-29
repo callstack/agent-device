@@ -28,8 +28,12 @@ export const createJunitReplayTestReporter: ReplayTestReporterFactory = (options
 };
 
 function readJunitReportPath(options: unknown): string {
+  if (typeof options === 'string' && options.trim().length > 0) {
+    return options;
+  }
   if (options && typeof options === 'object' && !Array.isArray(options)) {
-    const output = (options as Record<string, unknown>).output;
+    const output =
+      (options as Record<string, unknown>).output ?? (options as Record<string, unknown>).path;
     if (typeof output === 'string' && output.trim().length > 0) {
       return output;
     }

@@ -15,7 +15,7 @@ test('parses built-in reporter shorthand specs', () => {
     kind: 'builtin',
     name: 'junit',
     raw: 'junit:./report.xml',
-    options: { output: './report.xml' },
+    options: './report.xml',
   });
 });
 
@@ -51,15 +51,13 @@ test('expands implicit and compatibility reporter defaults', () => {
     {
       kind: 'builtin',
       name: 'junit',
-      raw: '["junit",{"output":"./report.xml"}]',
-      options: { output: './report.xml' },
+      raw: 'junit:./report.xml',
+      options: './report.xml',
     },
   ]);
 });
 
 test('rejects invalid reporter specs', () => {
-  assert.throws(() => parseReplayTestReporterSpec('junit'), /requires an output path/);
-  assert.throws(() => parseReplayTestReporterSpec('["junit",{}]'), /requires an output path/);
-  assert.throws(() => parseReplayTestReporterSpec('["default",{}]'), /does not accept options/);
   assert.throws(() => parseReplayTestReporterSpec('["default",{},{}]'), /must contain/);
+  assert.throws(() => parseReplayTestReporterSpec('unknown'), /Unknown test reporter/);
 });

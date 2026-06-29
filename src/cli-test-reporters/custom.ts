@@ -79,19 +79,11 @@ function validateCustomReplayTestReporter(
     throw new AppError('INVALID_ARGS', `Custom test reporter ${modulePath} must define name.`);
   }
   for (const hook of OPTIONAL_REPORTER_HOOKS) {
-    validateOptionalReporterHook(candidate, modulePath, hook);
+    if (candidate[hook] === undefined || typeof candidate[hook] === 'function') continue;
+    throw new AppError(
+      'INVALID_ARGS',
+      `Custom test reporter ${modulePath} ${hook} must be a function.`,
+    );
   }
   return candidate as ReplayTestReporter;
-}
-
-function validateOptionalReporterHook(
-  reporter: Partial<ReplayTestReporter>,
-  modulePath: string,
-  hook: (typeof OPTIONAL_REPORTER_HOOKS)[number],
-): void {
-  if (reporter[hook] === undefined || typeof reporter[hook] === 'function') return;
-  throw new AppError(
-    'INVALID_ARGS',
-    `Custom test reporter ${modulePath} ${hook} must be a function.`,
-  );
 }

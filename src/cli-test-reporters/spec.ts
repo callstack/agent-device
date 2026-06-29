@@ -5,15 +5,9 @@ export type BuiltInReplayTestReporterName = 'default' | 'junit';
 export type ReplayTestReporterSpec =
   | {
       kind: 'builtin';
-      name: 'default';
+      name: BuiltInReplayTestReporterName;
       raw: string;
-      options?: undefined;
-    }
-  | {
-      kind: 'builtin';
-      name: 'junit';
-      raw: string;
-      options: { output: string };
+      options?: unknown;
     }
   | {
       kind: 'custom';
@@ -35,42 +29,28 @@ export function buildReplayTestReporterSpecs(options: {
         : [parseReplayTestReporterSpec('default')];
 
   if (options.reportJunit) {
-    specs.push(parseReplayTestReporterSpec(['junit', { output: options.reportJunit }]));
+    specs.push(parseReplayTestReporterSpec(`junit:${options.reportJunit}`));
   }
 
   return specs;
 }
 
-export function parseReplayTestReporterSpec(
-  spec: string | [string, unknown],
-): ReplayTestReporterSpec {
-  if (Array.isArray(spec)) {
-    return parseTupleReplayTestReporterSpec(spec, JSON.stringify(spec));
-  }
-
+export function parseReplayTestReporterSpec(spec: string): ReplayTestReporterSpec {
   const trimmed = spec.trim();
   if (!trimmed) {
     throw new AppError('INVALID_ARGS', 'Test reporter spec cannot be empty.');
   }
 
   if (trimmed.startsWith('[')) {
-    return parseJsonTupleReplayTestReporterSpec(trimmed);
+    const [name, options] = readReporterTuple(trimmed);
+    return createReporterSpec(name, options, trimmed);
   }
 
   const { name, value } = splitReplayTestReporterSpec(trimmed);
-  if (isCustomReplayTestReporterName(name)) {
-    return {
-      kind: 'custom',
-      modulePath: name,
-      raw: trimmed,
-      options: readCustomReporterOptions(name, value),
-    };
-  }
-
-  return parseBuiltInReplayTestReporterSpec(name, value, trimmed);
+  return createReporterSpec(name, readShorthandOptions(name, value), trimmed);
 }
 
-function parseJsonTupleReplayTestReporterSpec(spec: string): ReplayTestReporterSpec {
+function readReporterTuple(spec: string): [string, unknown] {
   let parsed: unknown;
   try {
     parsed = JSON.parse(spec);
@@ -81,41 +61,27 @@ function parseJsonTupleReplayTestReporterSpec(spec: string): ReplayTestReporterS
   if (!Array.isArray(parsed)) {
     throw new AppError('INVALID_ARGS', 'JSON reporter spec must be an array.');
   }
-  return parseTupleReplayTestReporterSpec(parsed, spec);
-}
-
-function parseTupleReplayTestReporterSpec(tuple: unknown[], raw: string): ReplayTestReporterSpec {
-  const [name, options] = tuple;
+  const [name, options] = parsed;
   if (typeof name !== 'string' || name.trim().length === 0) {
     throw new AppError(
       'INVALID_ARGS',
       'Reporter tuple first entry must be a reporter name or path.',
     );
   }
-  if (tuple.length > 2) {
+  if (parsed.length > 2) {
     throw new AppError('INVALID_ARGS', 'Reporter tuple must contain [nameOrPath, options].');
   }
-  const reporterName = name.trim();
-  if (isCustomReplayTestReporterName(reporterName)) {
-    return { kind: 'custom', modulePath: reporterName, raw, options };
-  }
-  return parseBuiltInReplayTestReporterSpec(reporterName, options, raw);
+  return [name.trim(), options];
 }
 
-function parseBuiltInReplayTestReporterSpec(
-  name: string,
-  value: unknown,
-  raw: string,
-): ReplayTestReporterSpec {
-  if (name === 'default') {
-    if (value !== undefined) {
-      throw new AppError('INVALID_ARGS', 'The default test reporter does not accept options.');
-    }
-    return { kind: 'builtin', name, raw };
+function createReporterSpec(name: string, options: unknown, raw: string): ReplayTestReporterSpec {
+  if (isCustomReplayTestReporterName(name)) {
+    return { kind: 'custom', modulePath: name, raw, options };
   }
-
-  if (name === 'junit') {
-    return { kind: 'builtin', name, raw, options: readJunitReporterOptions(value) };
+  if (name === 'default' || name === 'junit') {
+    return options === undefined
+      ? { kind: 'builtin', name, raw }
+      : { kind: 'builtin', name, raw, options };
   }
 
   throw new AppError(
@@ -124,24 +90,7 @@ function parseBuiltInReplayTestReporterSpec(
   );
 }
 
-function readJunitReporterOptions(value: unknown): { output: string } {
-  if (typeof value === 'string' && value.trim().length > 0) {
-    return { output: value };
-  }
-  if (value && typeof value === 'object' && !Array.isArray(value)) {
-    const output =
-      (value as Record<string, unknown>).output ?? (value as Record<string, unknown>).path;
-    if (typeof output === 'string' && output.trim().length > 0) {
-      return { output };
-    }
-  }
-  throw new AppError(
-    'INVALID_ARGS',
-    'The junit test reporter requires an output path. Use --reporter junit:<path>.',
-  );
-}
-
-function readCustomReporterOptions(modulePath: string, value: string | undefined): unknown {
+function readShorthandOptions(modulePath: string, value: string | undefined): unknown {
   if (value === undefined) return undefined;
   if (!value.startsWith('{')) return value;
   try {

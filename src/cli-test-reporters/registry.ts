@@ -1,5 +1,4 @@
 import type { ReplaySuiteResult } from '../daemon/types.ts';
-import { AppError } from '../utils/errors.ts';
 import { createCustomReplayTestReporter } from './custom.ts';
 import { createDefaultReplayTestReporter } from './default.ts';
 import { getReplayTestExitCode } from './format.ts';
@@ -57,9 +56,8 @@ async function resolveReplayTestReporter(
     return await createCustomReplayTestReporter(spec);
   }
 
-  const factory = BUILT_IN_REPLAY_TEST_REPORTERS[spec.name];
-  if (!factory) {
-    throw new AppError('INVALID_ARGS', `Unknown built-in test reporter "${spec.name}".`);
-  }
-  return await factory(spec.options, { spec: spec.raw, modulePath: spec.name });
+  return await BUILT_IN_REPLAY_TEST_REPORTERS[spec.name](spec.options, {
+    spec: spec.raw,
+    modulePath: spec.name,
+  });
 }

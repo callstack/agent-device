@@ -27,9 +27,7 @@ export async function renderReplayTestResponse(options: {
 function createReplayTestReporterContext(options: { debug?: boolean }): ReplayTestReporterContext {
   return {
     debug: options.debug,
-    cwd: process.cwd(),
     writeStdout: (text) => process.stdout.write(text),
-    writeStderr: (text) => process.stderr.write(text),
     mkdir: (directory) => fs.mkdirSync(directory, { recursive: true }),
     writeFile: (filePath, contents) => fs.writeFileSync(filePath, contents, 'utf8'),
   };
