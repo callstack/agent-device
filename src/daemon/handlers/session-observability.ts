@@ -1,7 +1,4 @@
-import {
-  isCommandSupportedOnDevice,
-  isHostSystemAudioProbeDevice,
-} from '../../core/capabilities.ts';
+import { isCommandSupportedOnDevice } from '../../core/capabilities.ts';
 import {
   isPerfAction,
   isPerfArea,
@@ -622,7 +619,7 @@ function resolveNetworkIncludeMode(
 async function handleAudioCommand(params: ObservabilityParams): Promise<DaemonResponse> {
   const request = resolveAudioCommandRequest(params);
   if (!request.ok) return request;
-  if (isHostSystemAudioProbeDevice(request.session.device)) {
+  if (usesHostSystemAudioProbe(request.session)) {
     return await handleHostSystemAudioCommand(params, request);
   }
   const provider = resolveWebProvider();
@@ -637,7 +634,6 @@ async function handleAudioCommand(params: ObservabilityParams): Promise<DaemonRe
         action: request.probeAction,
         durationMs: request.durationMs,
         bucketMs: request.bucketMs,
-        source: 'media-elements',
       }),
     };
   } catch (error) {
@@ -685,6 +681,10 @@ type ResolvedAudioCommandRequest = Extract<
   ReturnType<typeof resolveAudioCommandRequest>,
   { ok: true }
 >;
+
+function usesHostSystemAudioProbe(session: SessionState): boolean {
+  return session.device.platform !== 'web';
+}
 
 async function handleHostSystemAudioCommand(
   params: ObservabilityParams,

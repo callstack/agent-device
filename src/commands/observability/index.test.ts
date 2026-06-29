@@ -42,7 +42,6 @@ describe('observability command interface', () => {
       probeAction: 'start',
       durationMs: 7500,
       bucketMs: 500,
-      source: 'media-elements',
     });
     expect(
       audioDaemonWriter({

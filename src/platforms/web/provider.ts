@@ -36,7 +36,6 @@ export type WebAudioProbeOptions = {
   action: WebAudioProbeAction;
   durationMs?: number;
   bucketMs?: number;
-  source?: 'media-elements';
 };
 
 export type WebAudioProbeResult = AudioProbeResult & {

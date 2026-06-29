@@ -223,7 +223,6 @@ test('agent-browser provider probes page audio through eval', async () => {
           action: 'start',
           durationMs: 7500,
           bucketMs: 500,
-          source: 'media-elements',
         }),
     );
 
@@ -280,7 +279,6 @@ test('agent-browser provider generated audio probe script samples streams discov
           action: 'start',
           durationMs: 5000,
           bucketMs: 1000,
-          source: 'media-elements',
         }),
     );
     const status = await withCommandExecutorOverride(
@@ -290,7 +288,6 @@ test('agent-browser provider generated audio probe script samples streams discov
           action: 'status',
           durationMs: 5000,
           bucketMs: 1000,
-          source: 'media-elements',
         }),
     );
 
