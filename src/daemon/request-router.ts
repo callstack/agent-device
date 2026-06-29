@@ -113,6 +113,11 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
           wallClockMs: Date.now() - start,
           runnerRoundTrips: countDiagnosticEventsByPhase(RUNNER_ROUND_TRIP_PHASES),
         };
+        // Generic, command-agnostic: only the node-tree commands (snapshot) put a
+        // `nodes` array on response.data, so this reads as a number there and is
+        // omitted everywhere else.
+        const nodes = response.data?.nodes;
+        if (Array.isArray(nodes)) cost.nodeCount = nodes.length;
         return { ok: true, data: { ...(response.data ?? {}), cost } };
       },
     );

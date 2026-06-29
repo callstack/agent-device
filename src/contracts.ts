@@ -102,7 +102,14 @@ export type DaemonArtifact = {
   path?: string;
 };
 
-export type ResponseCost = { wallClockMs: number; runnerRoundTrips: number };
+export type ResponseCost = {
+  wallClockMs: number;
+  runnerRoundTrips: number;
+  // Number of UI/accessibility nodes in the response, when the command returns a
+  // node tree (e.g. snapshot). Absent for commands that produce no nodes, so an
+  // agent can size a snapshot before re-fetching at a different depth/scope.
+  nodeCount?: number;
+};
 
 export type DaemonResponseData = Record<string, unknown> & {
   artifacts?: DaemonArtifact[];

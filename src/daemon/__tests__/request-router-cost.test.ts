@@ -118,6 +118,8 @@ test('(b) flag-on additive-only: cost block is the ONLY delta vs flag-off', asyn
     runnerRoundTrips: 0,
   });
   expect(cost?.wallClockMs).toBeGreaterThanOrEqual(0);
+  // This payload has no node tree, so nodeCount is omitted entirely.
+  expect('nodeCount' in (cost ?? {})).toBe(false);
 
   // Deleting the single added key must leave a payload deep-equal to flag-off.
   delete respFlagOn.data?.cost;
@@ -145,6 +147,38 @@ test('(c) runnerRoundTrips counts real iOS-runner round-trip diagnostics in scop
   // 1 preflight + 2 command_send = 3; the _skipped marker and unrelated phases
   // are excluded.
   expect(resp.data?.cost?.runnerRoundTrips).toBe(3);
+});
+
+test('(c2) nodeCount reports the node-tree size whenever data carries a nodes array, additive-only', async () => {
+  const { sessionStore, handler } = makeHandler();
+  sessionStore.set('cost-session', makeIosSession('cost-session'));
+
+  // The nodeCount read is command-agnostic: it triggers on any response.data that
+  // carries a `nodes` array (in production only the snapshot node-tree commands
+  // do). We drive it through the generic dispatch path with a node-bearing payload.
+  const nodeTreePayload = {
+    nodes: [
+      { ref: 'e1', type: 'Button', label: 'A' },
+      { ref: 'e2', type: 'Button', label: 'B' },
+      { ref: 'e3', type: 'Text', label: 'C' },
+    ],
+    truncated: false,
+  };
+  mockDispatch.mockImplementation(async () => structuredClone(nodeTreePayload));
+
+  const respFlagOff = await handler(baseRequest());
+  const respFlagOn = await handler(baseRequest({ meta: { includeCost: true } }));
+
+  expect(respFlagOff.ok).toBe(true);
+  expect(respFlagOn.ok).toBe(true);
+  if (!respFlagOff.ok || !respFlagOn.ok) return;
+
+  expect(respFlagOn.data?.cost?.nodeCount).toBe(3);
+  // Deleting the cost block leaves a payload deep-equal to flag-off: nodeCount is
+  // a pure read of the existing `nodes` array, never a mutation of the payload.
+  delete respFlagOn.data?.cost;
+  expect(respFlagOn.data).toEqual(respFlagOff.data);
+  expect(respFlagOff.data).toEqual(nodeTreePayload);
 });
 
 test('(d) error path: a failing request with includeCost:true produces NO cost', async () => {
