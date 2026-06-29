@@ -15,31 +15,15 @@ test('parses built-in reporter shorthand specs', () => {
     kind: 'builtin',
     name: 'junit',
     raw: 'junit:./report.xml',
-    options: './report.xml',
+    outputPath: './report.xml',
   });
 });
 
-test('parses JSON tuple reporter specs', () => {
-  assert.deepEqual(parseReplayTestReporterSpec('["junit",{"output":"./report.xml"}]'), {
-    kind: 'builtin',
-    name: 'junit',
-    raw: '["junit",{"output":"./report.xml"}]',
-    options: { output: './report.xml' },
-  });
-  assert.deepEqual(parseReplayTestReporterSpec('["./reporter.mjs",{"output":"./out.txt"}]'), {
+test('parses custom reporter paths', () => {
+  assert.deepEqual(parseReplayTestReporterSpec('./reporter.mjs'), {
     kind: 'custom',
     modulePath: './reporter.mjs',
-    raw: '["./reporter.mjs",{"output":"./out.txt"}]',
-    options: { output: './out.txt' },
-  });
-});
-
-test('parses custom reporter shorthand options', () => {
-  assert.deepEqual(parseReplayTestReporterSpec('./reporter.mjs:{"output":"./out.txt"}'), {
-    kind: 'custom',
-    modulePath: './reporter.mjs',
-    raw: './reporter.mjs:{"output":"./out.txt"}',
-    options: { output: './out.txt' },
+    raw: './reporter.mjs',
   });
 });
 
@@ -52,12 +36,11 @@ test('expands implicit and compatibility reporter defaults', () => {
       kind: 'builtin',
       name: 'junit',
       raw: 'junit:./report.xml',
-      options: './report.xml',
+      outputPath: './report.xml',
     },
   ]);
 });
 
 test('rejects invalid reporter specs', () => {
-  assert.throws(() => parseReplayTestReporterSpec('["default",{},{}]'), /must contain/);
   assert.throws(() => parseReplayTestReporterSpec('unknown'), /Unknown test reporter/);
 });

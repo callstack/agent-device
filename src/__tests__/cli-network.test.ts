@@ -697,7 +697,7 @@ test('test command supports explicit reporter lists', async () => {
 
   try {
     const result = await runCliCapture(
-      ['test', './suite', '--reporter', JSON.stringify(['junit', { output: reportPath }])],
+      ['test', './suite', '--reporter', `junit:${reportPath}`],
       async () => makeReplaySuiteResponse(),
     );
 
@@ -710,7 +710,7 @@ test('test command supports explicit reporter lists', async () => {
   }
 });
 
-test('test command loads custom reporter modules with JSON options', async () => {
+test('test command loads custom reporter modules', async () => {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-custom-reporter-test-'));
   const reporterPath = path.join(tmpDir, 'custom-reporter.mjs');
   const outputPath = path.join(tmpDir, 'custom-report.json');
@@ -720,11 +720,11 @@ test('test command loads custom reporter modules with JSON options', async () =>
       reporterPath,
       [
         "import fs from 'node:fs';",
-        'export default function createReporter(options) {',
+        'export default function createReporter() {',
         '  return {',
-        "    name: 'custom-json',",
+        "    name: 'custom-file',",
         '    onSuiteEnd(suite) {',
-        '      fs.writeFileSync(options.output, JSON.stringify({ total: suite.total, failed: suite.failed }), "utf8");',
+        `      fs.writeFileSync(${JSON.stringify(outputPath)}, JSON.stringify({ total: suite.total, failed: suite.failed }), "utf8");`,
         '    },',
         '    getExitCode() { return 0; },',
         '  };',
@@ -733,8 +733,7 @@ test('test command loads custom reporter modules with JSON options', async () =>
       'utf8',
     );
 
-    const reporterSpec = JSON.stringify([reporterPath, { output: outputPath }]);
-    const result = await runCliCapture(['test', './suite', '--reporter', reporterSpec], async () =>
+    const result = await runCliCapture(['test', './suite', '--reporter', reporterPath], async () =>
       makeReplaySuiteResponse(),
     );
 

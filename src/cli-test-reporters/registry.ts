@@ -3,21 +3,8 @@ import { createCustomReplayTestReporter } from './custom.ts';
 import { createDefaultReplayTestReporter } from './default.ts';
 import { getReplayTestExitCode } from './format.ts';
 import { createJunitReplayTestReporter } from './junit.ts';
-import {
-  buildReplayTestReporterSpecs,
-  type BuiltInReplayTestReporterName,
-  type ReplayTestReporterSpec,
-} from './spec.ts';
-import type {
-  ReplayTestReporter,
-  ReplayTestReporterContext,
-  ReplayTestReporterFactory,
-} from './types.ts';
-
-const BUILT_IN_REPLAY_TEST_REPORTERS = {
-  default: createDefaultReplayTestReporter,
-  junit: createJunitReplayTestReporter,
-} satisfies Record<BuiltInReplayTestReporterName, ReplayTestReporterFactory>;
+import { buildReplayTestReporterSpecs, type ReplayTestReporterSpec } from './spec.ts';
+import type { ReplayTestReporter, ReplayTestReporterContext } from './types.ts';
 
 export async function resolveReplayTestReporters(options: {
   reporters?: string[];
@@ -55,9 +42,6 @@ async function resolveReplayTestReporter(
   if (spec.kind === 'custom') {
     return await createCustomReplayTestReporter(spec);
   }
-
-  return await BUILT_IN_REPLAY_TEST_REPORTERS[spec.name](spec.options, {
-    spec: spec.raw,
-    modulePath: spec.name,
-  });
+  if (spec.name === 'default') return createDefaultReplayTestReporter();
+  return createJunitReplayTestReporter(spec.outputPath);
 }

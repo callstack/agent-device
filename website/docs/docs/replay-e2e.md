@@ -107,22 +107,18 @@ Custom reporters are CLI-only presentation adapters. The daemon still returns th
 
 ```bash
 agent-device test ./workflows --reporter ./scripts/replay-reporter.mjs
-agent-device test ./workflows --reporter './scripts/replay-reporter.mjs:{"output":"./tmp/report.txt"}'
-agent-device test ./workflows --reporter '["./scripts/replay-reporter.mjs",{"output":"./tmp/report.txt"}]'
 ```
 
-Reporter options can use either the compact `path:{"key":"value"}` form or the JSON tuple form `["path", options]`. The tuple form also works for built-ins, for example `--reporter '["junit",{"output":"./tmp/junit.xml"}]'`, and avoids ambiguous path parsing.
-
-Reporter modules can export a reporter object, `reporter`, `createReporter`, or a default factory. Factories receive parsed JSON options and load context. Reporter hooks receive an IO context with `writeStdout`, `mkdir`, and `writeFile` helpers:
+Reporter modules can export a reporter object, `reporter`, `createReporter`, or a default factory. Factories receive load context. Reporter hooks receive an IO context with `writeStdout`, `mkdir`, and `writeFile` helpers:
 
 ```js
 // scripts/replay-reporter.mjs
-export default function createReporter(options, loadContext) {
+export default function createReporter(loadContext) {
   return {
     name: 'summary-file',
     onSuiteEnd(suite, context) {
       context.writeFile(
-        options.output,
+        './tmp/report.txt',
         JSON.stringify(
           {
             total: suite.total,
@@ -147,7 +143,7 @@ TypeScript reporters can import the public types from `agent-device`:
 ```ts
 import type { ReplayTestReporterFactory } from 'agent-device';
 
-const createReporter: ReplayTestReporterFactory = (options) => ({
+const createReporter: ReplayTestReporterFactory = () => ({
   name: 'typed-reporter',
   onSuiteEnd(suite) {
     // Write artifacts, annotations, or summaries from suite.

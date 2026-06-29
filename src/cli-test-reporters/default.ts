@@ -2,8 +2,7 @@ import type { ReplaySuiteResult } from '../daemon/types.ts';
 import { replayTestFailureStepLines } from '../cli-test-trace.ts';
 import { formatDurationSeconds } from '../utils/duration-format.ts';
 import { colorize, supportsColor } from '../utils/output.ts';
-import { AppError } from '../utils/errors.ts';
-import type { ReplayTestReporterContext, ReplayTestReporterFactory } from './types.ts';
+import type { ReplayTestReporter, ReplayTestReporterContext } from './types.ts';
 import {
   getReplayTestExitCode,
   isDefinedString,
@@ -18,16 +17,13 @@ import {
   type PassedReplayTestResult,
 } from './format.ts';
 
-export const createDefaultReplayTestReporter: ReplayTestReporterFactory = (options) => {
-  if (options !== undefined) {
-    throw new AppError('INVALID_ARGS', 'The default test reporter does not accept options.');
-  }
+export function createDefaultReplayTestReporter(): ReplayTestReporter {
   return {
     name: 'default',
     onSuiteEnd: (suite, context) => renderReplayTestSummary(suite, context),
     getExitCode: getReplayTestExitCode,
   };
-};
+}
 
 function renderReplayTestSummary(
   data: ReplaySuiteResult,

@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type { ReplaySuiteResult, ReplaySuiteTestResult } from '../daemon/types.ts';
 import { AppError } from '../utils/errors.ts';
-import type { ReplayTestReporterContext, ReplayTestReporterFactory } from './types.ts';
+import type { ReplayTestReporter, ReplayTestReporterContext } from './types.ts';
 import {
   appendOptionalLine,
   appendReplayErrorDetails,
@@ -18,26 +18,17 @@ import {
   type FailedReplayTestResult,
 } from './format.ts';
 
-export const createJunitReplayTestReporter: ReplayTestReporterFactory = (options) => {
-  const reportPath = readJunitReportPath(options);
+export function createJunitReplayTestReporter(reportPath: string | undefined): ReplayTestReporter {
+  const outputPath = readJunitReportPath(reportPath);
   return {
     name: 'junit',
-    onSuiteEnd: (suite, context) => writeReplayJunitReport(reportPath, suite, context),
+    onSuiteEnd: (suite, context) => writeReplayJunitReport(outputPath, suite, context),
     getExitCode: getReplayTestExitCode,
   };
-};
+}
 
-function readJunitReportPath(options: unknown): string {
-  if (typeof options === 'string' && options.trim().length > 0) {
-    return options;
-  }
-  if (options && typeof options === 'object' && !Array.isArray(options)) {
-    const output =
-      (options as Record<string, unknown>).output ?? (options as Record<string, unknown>).path;
-    if (typeof output === 'string' && output.trim().length > 0) {
-      return output;
-    }
-  }
+function readJunitReportPath(reportPath: string | undefined): string {
+  if (reportPath && reportPath.trim().length > 0) return reportPath;
   throw new AppError(
     'INVALID_ARGS',
     'The junit test reporter requires an output path. Use --reporter junit:<path>.',

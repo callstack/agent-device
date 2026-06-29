@@ -1,19 +1,21 @@
 import { AppError } from '../utils/errors.ts';
 
-export type BuiltInReplayTestReporterName = 'default' | 'junit';
-
 export type ReplayTestReporterSpec =
   | {
       kind: 'builtin';
-      name: BuiltInReplayTestReporterName;
+      name: 'default';
       raw: string;
-      options?: unknown;
+    }
+  | {
+      kind: 'builtin';
+      name: 'junit';
+      raw: string;
+      outputPath?: string;
     }
   | {
       kind: 'custom';
       modulePath: string;
       raw: string;
-      options: unknown;
     };
 
 export function buildReplayTestReporterSpecs(options: {
@@ -41,47 +43,21 @@ export function parseReplayTestReporterSpec(spec: string): ReplayTestReporterSpe
     throw new AppError('INVALID_ARGS', 'Test reporter spec cannot be empty.');
   }
 
-  if (trimmed.startsWith('[')) {
-    const [name, options] = readReporterTuple(trimmed);
-    return createReporterSpec(name, options, trimmed);
+  if (isCustomReplayTestReporterName(trimmed)) {
+    return { kind: 'custom', modulePath: trimmed, raw: trimmed };
   }
 
   const { name, value } = splitReplayTestReporterSpec(trimmed);
-  return createReporterSpec(name, readShorthandOptions(name, value), trimmed);
-}
-
-function readReporterTuple(spec: string): [string, unknown] {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(spec);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new AppError('INVALID_ARGS', `Invalid JSON reporter tuple: ${message}`);
+  if (name === 'default') {
+    if (value !== undefined) {
+      throw new AppError('INVALID_ARGS', 'The default test reporter does not accept options.');
+    }
+    return { kind: 'builtin', name, raw: trimmed };
   }
-  if (!Array.isArray(parsed)) {
-    throw new AppError('INVALID_ARGS', 'JSON reporter spec must be an array.');
-  }
-  const [name, options] = parsed;
-  if (typeof name !== 'string' || name.trim().length === 0) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Reporter tuple first entry must be a reporter name or path.',
-    );
-  }
-  if (parsed.length > 2) {
-    throw new AppError('INVALID_ARGS', 'Reporter tuple must contain [nameOrPath, options].');
-  }
-  return [name.trim(), options];
-}
-
-function createReporterSpec(name: string, options: unknown, raw: string): ReplayTestReporterSpec {
-  if (isCustomReplayTestReporterName(name)) {
-    return { kind: 'custom', modulePath: name, raw, options };
-  }
-  if (name === 'default' || name === 'junit') {
-    return options === undefined
-      ? { kind: 'builtin', name, raw }
-      : { kind: 'builtin', name, raw, options };
+  if (name === 'junit') {
+    return value === undefined
+      ? { kind: 'builtin', name, raw: trimmed }
+      : { kind: 'builtin', name, raw: trimmed, outputPath: value };
   }
 
   throw new AppError(
@@ -90,29 +66,7 @@ function createReporterSpec(name: string, options: unknown, raw: string): Replay
   );
 }
 
-function readShorthandOptions(modulePath: string, value: string | undefined): unknown {
-  if (value === undefined) return undefined;
-  if (!value.startsWith('{')) return value;
-  try {
-    return JSON.parse(value);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new AppError(
-      'INVALID_ARGS',
-      `Invalid JSON options for custom test reporter ${modulePath}: ${message}`,
-    );
-  }
-}
-
 function splitReplayTestReporterSpec(spec: string): { name: string; value?: string } {
-  const optionsSeparator = spec.indexOf(':{');
-  if (optionsSeparator >= 0) {
-    return {
-      name: spec.slice(0, optionsSeparator).trim(),
-      value: spec.slice(optionsSeparator + 1),
-    };
-  }
-
   const separatorIndex = spec.indexOf(':');
   if (separatorIndex < 0) return { name: spec.trim() };
   return {

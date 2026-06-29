@@ -25,6 +25,5 @@ export type ReplayTestReporter = {
 };
 
 export type ReplayTestReporterFactory = (
-  options: unknown,
   context: ReplayTestReporterLoadContext,
 ) => ReplayTestReporter | Promise<ReplayTestReporter>;

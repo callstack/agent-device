@@ -23,7 +23,7 @@ export async function createCustomReplayTestReporter(
   const modulePath = resolveCustomReporterModulePath(spec.modulePath);
   const module = await importCustomReporterModule(modulePath);
   const factory = readCustomReporterFactory(module, spec.modulePath);
-  const reporter = await factory(spec.options, { spec: spec.raw, modulePath });
+  const reporter = await factory({ spec: spec.raw, modulePath });
   return validateCustomReplayTestReporter(reporter, spec.modulePath);
 }
 
