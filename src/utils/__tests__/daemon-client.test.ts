@@ -558,8 +558,8 @@ test('sendToDaemon prints replay test progress before the socket response', asyn
     });
 
     assert.deepEqual(response, { ok: true, data: { via: 'socket' } });
-    assert.match(stderr, /✓ "Login flow" in 01-login\.ad \(1\.23s\)/);
-    assert.equal(stderr.match(/✓ "Login flow" in 01-login\.ad \(1\.23s\)/g)?.length, 1);
+    assert.match(stderr, /✓ Login flow 1\.23s/);
+    assert.equal(stderr.match(/✓ Login flow 1\.23s/g)?.length, 1);
     assert.match(stderr, /steps \(attempt 2\):/);
     assert.match(stderr, /open "Demo" \(line 3, 0\.25s\)/);
     assert.match(stderr, /assertVisible "text=\\"Home\\"" "3000" \(line 4, 0\.75s\)/);
@@ -663,7 +663,7 @@ test('sendToDaemon prints replay test progress before the HTTP NDJSON response',
       assert.deepEqual(response, { ok: true, data: { via: 'http-progress' } });
     });
     assert.deepEqual(seenPaths, ['GET /agent-device/health', 'POST /agent-device/rpc']);
-    assert.match(stderr, /✓ "Payments flow" in 02-payments\.ad \(2\.50s\)/);
+    assert.match(stderr, /✓ Payments flow 2\.50s/);
   } finally {
     (http as unknown as { request: typeof http.request }).request = originalHttpRequest;
     process.stderr.write = originalStderrWrite;
