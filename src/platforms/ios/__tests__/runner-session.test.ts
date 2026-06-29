@@ -782,6 +782,10 @@ test('runner session startup rejects live foreign runner lease', async () => {
     );
     assert.doesNotMatch(
       String((thrown as { details?: Record<string, unknown> }).details?.hint),
+      /AGENT_DEVICE_STATE_DIR=\/tmp\/agent-device-owner\./,
+    );
+    assert.doesNotMatch(
+      String((thrown as { details?: Record<string, unknown> }).details?.hint),
       /Current daemon state dir/,
     );
     assert.equal(mockRunCmdBackground.mock.calls.length, 0);
@@ -840,6 +844,10 @@ test('runner session busy error includes logical lease context after admission',
   assert.match(
     String(thrown.details?.hint),
     /Runner owner: PID \d+ with AGENT_DEVICE_STATE_DIR=\/tmp\/agent-device-owner/,
+  );
+  assert.doesNotMatch(
+    String(thrown.details?.hint),
+    /AGENT_DEVICE_STATE_DIR=\/tmp\/agent-device-owner\./,
   );
   assert.equal(mockRunCmdBackground.mock.calls.length, 0);
 });

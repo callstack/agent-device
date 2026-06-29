@@ -188,22 +188,27 @@ function buildBusyRunnerLeaseHint(
   lease: RunnerLease,
   logicalLeaseContext?: RunnerLogicalLeaseContext,
 ): string {
-  const owner = `PID ${lease.ownerPid}`;
-  const stateDir = lease.ownerStateDir ? ` with AGENT_DEVICE_STATE_DIR=${lease.ownerStateDir}` : '';
+  const owner = buildRunnerOwnerHint(lease);
   const cleanup = buildBusyRunnerLeaseCleanupHint(lease);
   if (logicalLeaseContext) {
     return [
       cleanup,
-      `Runner owner: ${owner}${stateDir}.`,
+      owner,
       'The device is busy because another active device lease owns it, or the runner is owned by another daemon/process after lease admission.',
       'Retry after the owning session closes or after the five-minute inactivity lease expires.',
     ].join(' ');
   }
   return [
     cleanup,
-    `Runner owner: ${owner}${stateDir}.`,
+    owner,
     'If the runner is still active, wait for it to finish. Do not run prepare ios-runner from another daemon/client to recover this.',
   ].join(' ');
+}
+
+function buildRunnerOwnerHint(lease: RunnerLease): string {
+  const owner = `Runner owner: PID ${lease.ownerPid}`;
+  if (lease.ownerStateDir) return `${owner} with AGENT_DEVICE_STATE_DIR=${lease.ownerStateDir}`;
+  return `${owner}.`;
 }
 
 function buildBusyRunnerLeaseCleanupHint(lease: RunnerLease): string {
