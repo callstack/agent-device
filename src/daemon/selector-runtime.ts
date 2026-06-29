@@ -3,6 +3,7 @@ import type { WaitParsed } from '../core/wait-positionals.ts';
 import { AppError, asAppError, normalizeError } from '../utils/errors.ts';
 import type { SnapshotNode } from '../utils/snapshot.ts';
 import { runIosRunnerCommand } from '../platforms/ios/runner-client.ts';
+import { buildAppleRunnerRequestOptions } from './apple-runner-options.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { errorResponse, requireCommandSupported } from './handlers/response.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from './handlers/snapshot-session.ts';
@@ -356,15 +357,11 @@ async function queryDirectIosSelector(
       selectorValue: selector.value,
       appBundleId: session.appBundleId,
     },
-    {
-      verbose: Boolean(params.req.flags?.verbose),
+    buildAppleRunnerRequestOptions({
+      req: params.req,
       logPath: params.logPath,
       traceLogPath: session.trace?.outPath,
-      requestId: params.req.meta?.requestId,
-      iosXctestrunFile: params.req.flags?.iosXctestrunFile,
-      iosXctestDerivedDataPath: params.req.flags?.iosXctestDerivedDataPath,
-      iosXctestEnvDir: params.req.flags?.iosXctestEnvDir,
-    },
+    }),
   );
   const found = data.found === true;
   const node = readDirectIosSelectorNode(data);

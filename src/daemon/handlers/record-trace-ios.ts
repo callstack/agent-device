@@ -3,6 +3,7 @@ import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { IOS_RUNNER_CONTAINER_BUNDLE_IDS } from '../../platforms/ios/runner-client.ts';
 import { formatRecordTraceError } from '../record-trace-errors.ts';
+import { buildAppleRunnerRequestOptions } from '../apple-runner-options.ts';
 import type { RecordTraceDeps, RecordingBase } from './record-trace-types.ts';
 import { finalizeRecordingOverlay } from './record-trace-finalize.ts';
 import { errorResponse } from './response.ts';
@@ -38,15 +39,11 @@ export function getIosRunnerOptions(
   logPath: string | undefined,
   session: SessionState,
 ) {
-  return {
-    verbose: req.flags?.verbose,
+  return buildAppleRunnerRequestOptions({
+    req,
     logPath,
     traceLogPath: session.trace?.outPath,
-    requestId: req.meta?.requestId,
-    iosXctestrunFile: req.flags?.iosXctestrunFile,
-    iosXctestDerivedDataPath: req.flags?.iosXctestDerivedDataPath,
-    iosXctestEnvDir: req.flags?.iosXctestEnvDir,
-  };
+  });
 }
 
 function resolveIosRecordingTrimStartMs(

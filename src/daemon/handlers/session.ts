@@ -11,6 +11,7 @@ import { isApplePlatform } from '../../utils/device.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { contextFromFlags } from '../context.ts';
+import { buildAppleRunnerRequestOptions } from '../apple-runner-options.ts';
 import {
   handleInstallFromSourceCommand,
   handleReleaseMaterializedPathsCommand,
@@ -90,17 +91,15 @@ function buildPrepareIosRunnerOptions(
 ): Parameters<typeof prepareIosRunner>[1] {
   const buildTimeoutMs = readPrepareIosRunnerBuildTimeoutMs(req);
   return {
-    verbose: req.flags?.verbose,
-    logPath,
-    traceLogPath: session?.trace?.outPath,
+    ...buildAppleRunnerRequestOptions({
+      req,
+      logPath,
+      traceLogPath: session?.trace?.outPath,
+    }),
     cleanStaleBundles: true,
     startupTimeoutMs: resolvePrepareIosRunnerStartupTimeoutMs(req.flags?.timeoutMs),
-    requestId: req.meta?.requestId,
     buildTimeoutMs,
     healthTimeoutMs: Math.min(buildTimeoutMs, PREPARE_IOS_RUNNER_HEALTH_TIMEOUT_MS),
-    iosXctestrunFile: req.flags?.iosXctestrunFile,
-    iosXctestDerivedDataPath: req.flags?.iosXctestDerivedDataPath,
-    iosXctestEnvDir: req.flags?.iosXctestEnvDir,
   };
 }
 

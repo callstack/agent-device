@@ -11,6 +11,7 @@ import { handleAndroidAlert } from '../../platforms/android/alert.ts';
 import { AppError } from '../../utils/errors.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
+import { buildAppleRunnerRequestOptions } from '../apple-runner-options.ts';
 import { recordIfSession } from './snapshot-session.ts';
 import { parseTimeout } from '../../utils/parse-timeout.ts';
 import { errorResponse, requireCommandSupported } from './response.ts';
@@ -61,15 +62,11 @@ export async function handleAlertCommand(
     return await handleNativeAlertCommand(params, action, runAlert);
   }
 
-  const runnerOptions = {
-    verbose: req.flags?.verbose,
+  const runnerOptions = buildAppleRunnerRequestOptions({
+    req,
     logPath,
     traceLogPath: session?.trace?.outPath,
-    requestId: req.meta?.requestId,
-    iosXctestrunFile: req.flags?.iosXctestrunFile,
-    iosXctestDerivedDataPath: req.flags?.iosXctestDerivedDataPath,
-    iosXctestEnvDir: req.flags?.iosXctestEnvDir,
-  };
+  });
   const runAlert: NativeAlertRunner = async (alertAction) =>
     await runIosRunnerCommand(
       device,

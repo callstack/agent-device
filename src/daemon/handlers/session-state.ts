@@ -4,7 +4,7 @@ import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 import { shutdownDeviceTarget } from '../target-shutdown.ts';
-import { prewarmIosRunnerCache } from '../../platforms/ios/runner-client.ts';
+import { createIosRunnerCachePrewarmOnColdBoot } from '../apple-runner-options.ts';
 import {
   hasExplicitSessionFlag,
   requireSessionOrExplicitSelector,
@@ -237,18 +237,12 @@ export async function handleSessionStateCommands(params: {
       const shouldEnsureReady = device.platform !== 'android' || device.booted !== true;
       if (shouldEnsureReady) {
         await ensureDeviceReady(device, {
-          onIosSimulatorColdBootStart:
-            device.platform === 'ios' && device.kind === 'simulator'
-              ? (bootingDevice) =>
-                  prewarmIosRunnerCache(bootingDevice, {
-                    verbose: flags.verbose,
-                    logPath,
-                    requestId: req.meta?.requestId,
-                    iosXctestrunFile: flags.iosXctestrunFile,
-                    iosXctestDerivedDataPath: flags.iosXctestDerivedDataPath,
-                    iosXctestEnvDir: flags.iosXctestEnvDir,
-                  })
-              : undefined,
+          onIosSimulatorColdBootStart: createIosRunnerCachePrewarmOnColdBoot({
+            req,
+            logPath,
+            device,
+            enabled: true,
+          }),
         });
       }
     }

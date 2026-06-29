@@ -4,10 +4,13 @@ import type { SessionSurface } from '../../core/session-surface.ts';
 import { contextFromFlags } from '../context.ts';
 import { createRequestCanceledError, isRequestCanceled } from '../request-cancel.ts';
 import {
-  prewarmIosRunnerCache,
   prewarmIosRunnerSession,
   stopIosRunnerSession,
 } from '../../platforms/ios/runner-client.ts';
+import {
+  buildAppleRunnerSessionOptions,
+  createIosRunnerCacheColdBootPrewarmForOpen,
+} from '../apple-runner-options.ts';
 import { applyRuntimeHintsToApp } from '../runtime-hints.ts';
 import type { DeviceInfo } from '../../utils/device.ts';
 import type { DaemonRequest, DaemonResponse, SessionRuntimeHints, SessionState } from '../types.ts';
@@ -122,60 +125,6 @@ function buildStartupPerfSample(
   };
 }
 
-function shouldPrewarmIosRunnerCacheDuringBoot(params: {
-  device: DeviceInfo;
-  surface: SessionSurface;
-  openTarget: string | undefined;
-}): boolean {
-  const { device, surface, openTarget } = params;
-  return (
-    device.platform === 'ios' &&
-    device.kind === 'simulator' &&
-    surface === 'app' &&
-    Boolean(openTarget) &&
-    !isDeepLinkTarget(openTarget ?? '')
-  );
-}
-
-function prewarmIosRunnerCacheDuringBoot(params: {
-  req: DaemonRequest;
-  logPath: string;
-  device: DeviceInfo;
-  traceLogPath?: string;
-}): void {
-  const { req, logPath, device, traceLogPath } = params;
-  prewarmIosRunnerCache(device, {
-    verbose: req.flags?.verbose,
-    logPath,
-    traceLogPath,
-    requestId: req.meta?.requestId,
-    iosXctestrunFile: req.flags?.iosXctestrunFile,
-    iosXctestDerivedDataPath: req.flags?.iosXctestDerivedDataPath,
-    iosXctestEnvDir: req.flags?.iosXctestEnvDir,
-  });
-}
-
-function createIosRunnerCacheColdBootPrewarm(params: {
-  req: DaemonRequest;
-  logPath: string;
-  device: DeviceInfo;
-  surface: SessionSurface;
-  openTarget: string | undefined;
-  traceLogPath?: string;
-}): ((device: DeviceInfo) => void) | undefined {
-  const { req, logPath, device, surface, openTarget, traceLogPath } = params;
-  if (!shouldPrewarmIosRunnerCacheDuringBoot({ device, surface, openTarget })) {
-    return undefined;
-  }
-  return (bootingDevice) =>
-    prewarmIosRunnerCacheDuringBoot({
-      req,
-      logPath,
-      device: bootingDevice,
-      traceLogPath,
-    });
-}
-
 // fallow-ignore-next-line complexity
 async function completeOpenCommand(params: {
   req: DaemonRequest;
@@ -239,23 +188,12 @@ async function completeOpenCommand(params: {
   timing.runtimeHintsDurationMs = Math.max(0, Date.now() - runtimeHintsStartedAtMs);
   const shouldPrewarmIosRunner =
     device.platform === 'ios' && surface === 'app' && openPositionals.length > 0;
-  const runnerPrewarmOptions = {
-    verbose: req.flags?.verbose,
+  const runnerPrewarmOptions = buildAppleRunnerSessionOptions({
+    req,
     logPath,
+    appBundleId: sessionAppBundleId,
     traceLogPath,
-    requestId: req.meta?.requestId,
-    runnerLeaseContext: contextFromFlags(
-      logPath,
-      req.flags,
-      sessionAppBundleId,
-      traceLogPath,
-      req.meta?.requestId,
-      req.meta,
-    ).runnerLeaseContext,
-    iosXctestrunFile: req.flags?.iosXctestrunFile,
-    iosXctestDerivedDataPath: req.flags?.iosXctestDerivedDataPath,
-    iosXctestEnvDir: req.flags?.iosXctestEnvDir,
-  };
+  });
   const shouldPrewarmRunnerBeforeOpen = req.flags?.maestro?.prewarmRunnerBeforeOpen === true;
   let runnerPrewarm: Promise<void> | undefined;
   if (shouldPrewarmIosRunner && sessionAppBundleId) {
@@ -475,7 +413,7 @@ export async function handleOpenCommand(params: {
       surface: surfaceResult,
       openTarget,
       existingSession: session,
-      onIosSimulatorColdBootStart: createIosRunnerCacheColdBootPrewarm({
+      onIosSimulatorColdBootStart: createIosRunnerCacheColdBootPrewarmForOpen({
         req,
         logPath,
         device,
@@ -574,7 +512,7 @@ export async function handleOpenCommand(params: {
       device,
       surface: surfaceResult,
       openTarget,
-      onIosSimulatorColdBootStart: createIosRunnerCacheColdBootPrewarm({
+      onIosSimulatorColdBootStart: createIosRunnerCacheColdBootPrewarmForOpen({
         req,
         logPath,
         device,

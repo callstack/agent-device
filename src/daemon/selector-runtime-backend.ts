@@ -10,6 +10,7 @@ import { noActiveSessionError, requireCommandSupported } from './handlers/respon
 import type { SnapshotNode } from '../utils/snapshot.ts';
 import { findNodeByLabel } from '../utils/snapshot-processing.ts';
 import { runIosRunnerCommand } from '../platforms/ios/runner-client.ts';
+import { buildAppleRunnerRequestOptions } from './apple-runner-options.ts';
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
 import { contextFromFlags } from './context.ts';
@@ -200,17 +201,11 @@ function buildAppleRunnerFindTextOptions(
   params: SelectorRuntimeDeviceParams,
   target: AppleRunnerFindTextTarget,
 ) {
-  const flags = params.req.flags ?? {};
-  const meta = params.req.meta ?? {};
-  return {
-    verbose: flags.verbose,
+  return buildAppleRunnerRequestOptions({
+    req: params.req,
     logPath: params.logPath,
     traceLogPath: target.traceLogPath,
-    requestId: meta.requestId,
-    iosXctestrunFile: flags.iosXctestrunFile,
-    iosXctestDerivedDataPath: flags.iosXctestDerivedDataPath,
-    iosXctestEnvDir: flags.iosXctestEnvDir,
-  };
+  });
 }
 
 async function findTextInWaitSnapshot(

@@ -60,47 +60,37 @@ export async function runIosRunnerCommand(
   return provider.runCommand(device, runnerCommand, options);
 }
 
-type PrewarmIosRunnerSessionOptions = RunnerSessionOptions & {
+type PrewarmIosRunnerOptions = RunnerSessionOptions & {
   propagateError?: boolean;
 };
 
 export function prewarmIosRunnerCache(
   device: DeviceInfo,
-  options: PrewarmIosRunnerSessionOptions = {},
+  options: PrewarmIosRunnerOptions = {},
 ): Promise<void> | undefined {
   if (device.platform !== 'ios') {
     return undefined;
   }
-  const { propagateError = false, ...runnerOptions } = options;
-  const prewarm = ensureXctestrunArtifact(device, runnerOptions)
-    .then(() => {})
-    .catch((error: unknown) => {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'ios_runner_cache_prewarm_failed',
-        data: {
-          deviceId: device.id,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-      if (propagateError) {
-        throw error;
-      }
-    });
-  void prewarm;
-  return prewarm;
+  return runBestEffortIosRunnerPrewarm({
+    device,
+    options,
+    failurePhase: 'ios_runner_cache_prewarm_failed',
+    task: async (runnerOptions) => {
+      await ensureXctestrunArtifact(device, runnerOptions);
+    },
+  });
 }
 
 export function prewarmIosRunnerSession(
   device: DeviceInfo,
-  options: PrewarmIosRunnerSessionOptions = {},
+  options: PrewarmIosRunnerOptions = {},
 ): Promise<void> | undefined {
   if (device.platform !== 'ios') {
     return undefined;
   }
-  const { propagateError = false, ...runnerOptions } = options;
-  const provider = resolveAppleRunnerRuntime(device, runnerOptions);
-  if (!provider.prewarm) {
+  const provider = resolveAppleRunnerRuntime(device, options);
+  const prewarmRunner = provider.prewarm;
+  if (!prewarmRunner) {
     emitDiagnostic({
       level: 'debug',
       phase: 'ios_runner_session_prewarm_unavailable',
@@ -108,22 +98,37 @@ export function prewarmIosRunnerSession(
     });
     return undefined;
   }
-  const prewarm = provider
-    .prewarm(device, runnerOptions)
-    .then(() => {})
-    .catch((error: unknown) => {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'ios_runner_session_prewarm_failed',
-        data: {
-          deviceId: device.id,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-      if (propagateError) {
-        throw error;
-      }
+  return runBestEffortIosRunnerPrewarm({
+    device,
+    options,
+    failurePhase: 'ios_runner_session_prewarm_failed',
+    task: async (taskOptions) => {
+      await prewarmRunner(device, taskOptions);
+    },
+  });
+}
+
+function runBestEffortIosRunnerPrewarm(params: {
+  device: DeviceInfo;
+  options: PrewarmIosRunnerOptions;
+  failurePhase: 'ios_runner_cache_prewarm_failed' | 'ios_runner_session_prewarm_failed';
+  task: (options: RunnerSessionOptions) => Promise<void>;
+}): Promise<void> {
+  const { device, options, failurePhase, task } = params;
+  const { propagateError = false, ...runnerOptions } = options;
+  const prewarm = task(runnerOptions).catch((error: unknown) => {
+    emitDiagnostic({
+      level: 'warn',
+      phase: failurePhase,
+      data: {
+        deviceId: device.id,
+        error: error instanceof Error ? error.message : String(error),
+      },
     });
+    if (propagateError) {
+      throw error;
+    }
+  });
   void prewarm;
   return prewarm;
 }
