@@ -14,7 +14,7 @@ export async function renderReplayTestResponse(options: {
   reportJunit?: string;
 }): Promise<number> {
   const { suite, json, debug, reporter, reportJunit } = options;
-  const reporters = resolveReplayTestReporters({ reporters: reporter, reportJunit, json });
+  const reporters = await resolveReplayTestReporters({ reporters: reporter, reportJunit, json });
   await runReplayTestReporters(reporters, suite, { debug });
   if (json) {
     printJson({ success: true, data: suite });

@@ -2071,6 +2071,10 @@ test('command usage describes test suite flags', () => {
   assert.match(help, /--retries <n>/);
   assert.match(help, /--record-video/);
   assert.match(help, /--artifacts-dir <path>/);
+  assert.match(help, /--reporter <name\[:options\]>/);
+  assert.match(help, /custom reporters are file paths/);
+  assert.match(help, /--report-junit <path>/);
+  assert.match(help, /compatibility alias for --reporter junit:<path>/);
   assert.doesNotMatch(help, /test --verbose prints per-test step timings without debug logs/);
 });
 

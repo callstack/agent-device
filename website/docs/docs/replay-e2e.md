@@ -87,6 +87,7 @@ agent-device test ./workflows
 agent-device test "./workflows/**/*.ad" --platform android
 agent-device test ./workflows --timeout 60000 --retries 1
 agent-device test ./workflows --artifacts-dir ./tmp/agent-device-artifacts
+agent-device test ./workflows --reporter default --reporter junit:./tmp/junit.xml
 ```
 
 - `test` discovers `.ad` files from files, directories, or globs and runs them serially.
@@ -97,7 +98,65 @@ agent-device test ./workflows --artifacts-dir ./tmp/agent-device-artifacts
 - `replay-timing.ndjson` records attempt, cleanup, and per-step start/stop events with durations. Upload it from CI even for passing runs when comparing local and CI performance.
 - Timeouts are cooperative: the runner marks the attempt failed at the timeout boundary, then gives the underlying replay a short grace period to stop before session cleanup.
 - The default text reporter streams one-line `pass`, `fail`, or `skip` progress on stderr as each suite entry finishes or retries. Each line includes current/total suite position and elapsed seconds such as `pass 3/6 ... duration=12.34s`, then the final summary prints failed tests and passed-on-retry flaky tests; use `--verbose` to print every final result.
+- `--reporter` is repeatable. Built-ins are `default` for the console summary and `junit:<path>` for JUnit XML. Passing any explicit reporter list replaces the implicit default reporter, so include `--reporter default` when you also want terminal output. `--report-junit <path>` remains a compatibility alias for `--reporter junit:<path>`.
 - When `--fail-fast` and retries are both set, the current test still consumes its retries before the suite stops.
+
+### Custom test reporters
+
+Custom reporters are CLI-only presentation adapters. The daemon still returns the structured replay suite result; reporters run in the local CLI process after the suite finishes.
+
+```bash
+agent-device test ./workflows --reporter ./scripts/replay-reporter.mjs
+agent-device test ./workflows --reporter './scripts/replay-reporter.mjs:{"output":"./tmp/report.txt"}'
+```
+
+Reporter modules can export a reporter object, `reporter`, `createReporter`, or a default factory. Factories receive parsed JSON options and load context:
+
+```js
+// scripts/replay-reporter.mjs
+import fs from 'node:fs';
+
+export default function createReporter(options, context) {
+  return {
+    name: 'summary-file',
+    onSuiteEnd(suite) {
+      fs.writeFileSync(
+        options.output,
+        JSON.stringify(
+          {
+            total: suite.total,
+            passed: suite.passed,
+            failed: suite.failed,
+            modulePath: context.modulePath,
+          },
+          null,
+          2,
+        ),
+      );
+    },
+    getExitCode(suite) {
+      return suite.failed > 0 ? 1 : 0;
+    },
+  };
+}
+```
+
+TypeScript reporters can import the public types from `agent-device`:
+
+```ts
+import type { ReplayTestReporterFactory } from 'agent-device';
+
+const createReporter: ReplayTestReporterFactory = (options) => ({
+  name: 'typed-reporter',
+  onSuiteEnd(suite) {
+    // Write artifacts, annotations, or summaries from suite.
+  },
+});
+
+export default createReporter;
+```
+
+The supported hook today is final-result reporting through `onSuiteEnd`. `getExitCode` can override whether the finished suite exits successfully; when no reporter supplies one, failed tests exit with `1`. The `onProgress` hook is part of the reporter interface for live reporters, but the CLI currently invokes reporters after the suite result is available.
 
 ## Parametrise `.ad` scripts
 

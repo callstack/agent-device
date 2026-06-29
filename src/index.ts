@@ -20,6 +20,13 @@ export type {
 
 export type { AppErrorCode, NormalizedError } from './utils/errors.ts';
 
+export type {
+  ReplayTestReporter,
+  ReplayTestReporterContext,
+  ReplayTestReporterFactory,
+  ReplayTestReporterLoadContext,
+} from './cli-test-reporters/types.ts';
+
 export type { CommandResult } from './core/command-descriptor/command-result.ts';
 export type { BootCommandResult, ShutdownCommandResult } from './contracts/device.ts';
 export type { ViewportCommandResult } from './contracts/viewport.ts';
