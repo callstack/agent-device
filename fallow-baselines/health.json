@@ -524,7 +524,7 @@
         "count": 1
       }
     },
-    "src/utils/__tests__/screenshot-diff.test.ts": {
+    "src/screenshot-diff/__tests__/screenshot-diff.test.ts": {
       "crap_high": {
         "count": 1
       }
@@ -578,12 +578,12 @@
         "count": 1
       }
     },
-    "src/utils/screenshot-diff-non-text.ts": {
+    "src/screenshot-diff/screenshot-diff-non-text.ts": {
       "crap_high": {
         "count": 1
       }
     },
-    "src/utils/screenshot-diff.ts": {
+    "src/screenshot-diff/screenshot-diff.ts": {
       "complexity_high": {
         "count": 1
       }

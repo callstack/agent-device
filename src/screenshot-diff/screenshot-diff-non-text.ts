@@ -1,4 +1,4 @@
-import type { Rect } from './snapshot.ts';
+import type { Rect } from '../utils/snapshot.ts';
 import { findConnectedMaskComponents } from './screenshot-diff-components.ts';
 import type { ScreenshotOcrAnalysis, ScreenshotOcrBlock } from './screenshot-diff-ocr.ts';
 import type { ScreenshotDiffRegion } from './screenshot-diff-regions.ts';
@@ -10,7 +10,7 @@ import {
   squaredDistance,
   unionRects,
   type ImageDimensions,
-} from './screenshot-geometry.ts';
+} from '../utils/screenshot-geometry.ts';
 
 export type ScreenshotNonTextDelta = {
   index: number;

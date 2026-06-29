@@ -1,5 +1,5 @@
-import type { Rect } from './snapshot.ts';
-import { runCmd, whichCmd } from './exec.ts';
+import type { Rect } from '../utils/snapshot.ts';
+import { runCmd, whichCmd } from '../utils/exec.ts';
 
 export type MovementRange = { min: number; max: number };
 import {
@@ -9,7 +9,7 @@ import {
   unionRects,
   type NormalizedPoint,
   type NormalizedRect,
-} from './screenshot-geometry.ts';
+} from '../utils/screenshot-geometry.ts';
 
 export type ScreenshotOcrBlock = {
   text: string;

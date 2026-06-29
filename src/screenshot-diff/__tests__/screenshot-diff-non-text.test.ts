@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { summarizeNonTextDiffDeltas } from '../screenshot-diff-non-text.ts';
-import { normalizedRect } from '../screenshot-geometry.ts';
+import { normalizedRect } from '../../utils/screenshot-geometry.ts';
 
 function paintMaskRect(
   mask: Uint8Array,

@@ -1,4 +1,4 @@
-import type { PNG } from './png.ts';
+import type { PNG } from '../utils/png.ts';
 import type { ScreenshotDiffRegion } from './screenshot-diff-regions.ts';
 
 const REGION_BORDER_COLOR = [0, 187, 255, 255] as const;

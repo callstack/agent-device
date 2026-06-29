@@ -1,12 +1,12 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { AppError } from '../utils/errors.ts';
-import { PNG } from './png.ts';
+import { PNG } from '../utils/png.ts';
 import {
   computeScreenshotDiffPixelsAsync,
   decodePngAsync,
   encodePngAsync,
-} from './png-worker-client.ts';
+} from '../utils/png-worker-client.ts';
 import { annotateDiffRegions } from './screenshot-diff-region-overlay.ts';
 import {
   summarizeNonTextDiffDeltas,
@@ -14,7 +14,7 @@ import {
 } from './screenshot-diff-non-text.ts';
 import { summarizeScreenshotOcr, type ScreenshotOcrSummary } from './screenshot-diff-ocr.ts';
 import { summarizeDiffRegions, type ScreenshotDiffRegion } from './screenshot-diff-regions.ts';
-import type { ImageDimensions } from './screenshot-geometry.ts';
+import type { ImageDimensions } from '../utils/screenshot-geometry.ts';
 
 export type ScreenshotDimensionMismatch = {
   expected: ImageDimensions;

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { PNG } from '../png.ts';
+import { PNG } from '../../utils/png.ts';
 import { compareScreenshots } from '../screenshot-diff.ts';
 
 function tmpDir(): string {

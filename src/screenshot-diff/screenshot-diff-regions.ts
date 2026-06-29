@@ -1,6 +1,6 @@
-import type { PNG } from './png.ts';
-import type { Rect } from './snapshot.ts';
-import { normalizedRect, type NormalizedRect } from './screenshot-geometry.ts';
+import type { PNG } from '../utils/png.ts';
+import type { Rect } from '../utils/snapshot.ts';
+import { normalizedRect, type NormalizedRect } from '../utils/screenshot-geometry.ts';
 import { findConnectedMaskComponents } from './screenshot-diff-components.ts';
 import { splitLargeDiffRegions } from './screenshot-diff-region-split.ts';
 import type { MutableDiffRegion } from './screenshot-diff-region-types.ts';

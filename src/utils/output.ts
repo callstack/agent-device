@@ -14,9 +14,9 @@ import {
   type SnapshotUnchanged,
   type SnapshotVisibility,
 } from './snapshot.ts';
-import type { MovementRange } from './screenshot-diff-ocr.ts';
-import type { ScreenshotDiffResult } from './screenshot-diff.ts';
-import type { ScreenshotDiffRegion } from './screenshot-diff-regions.ts';
+import type { MovementRange } from '../screenshot-diff/screenshot-diff-ocr.ts';
+import type { ScreenshotDiffResult } from '../screenshot-diff/screenshot-diff.ts';
+import type { ScreenshotDiffRegion } from '../screenshot-diff/screenshot-diff-regions.ts';
 import { styleText } from 'node:util';
 import { buildMobileSnapshotPresentation } from './mobile-snapshot-semantics.ts';
 

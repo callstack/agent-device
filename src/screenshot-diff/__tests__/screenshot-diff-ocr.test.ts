@@ -9,7 +9,7 @@ import {
   summarizeScreenshotOcr,
   summarizeOcrMovementClusters,
 } from '../screenshot-diff-ocr.ts';
-import { normalizedRect } from '../screenshot-geometry.ts';
+import { normalizedRect } from '../../utils/screenshot-geometry.ts';
 
 test('parseTesseractTsv groups word rows into text line blocks', () => {
   const blocks = parseTesseractTsv(

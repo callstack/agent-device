@@ -10,8 +10,11 @@ import type {
 } from '../../../io.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { AppError } from '../../../utils/errors.ts';
-import { compareScreenshots, type ScreenshotDiffResult } from '../../../utils/screenshot-diff.ts';
-import { attachCurrentOverlayMatches } from '../../../utils/screenshot-diff-overlay-matches.ts';
+import {
+  compareScreenshots,
+  type ScreenshotDiffResult,
+} from '../../../screenshot-diff/screenshot-diff.ts';
+import { attachCurrentOverlayMatches } from '../../../screenshot-diff/screenshot-diff-overlay-matches.ts';
 import type { RuntimeCommand } from '../../runtime-types.ts';
 import {
   createCommandTempFile,
