@@ -762,4 +762,5 @@ test('parseMaestroReplayFlow parses the test-app Maestro suite fixture', () => {
       '__maestroAssertVisible',
     ],
   );
+  assert.equal(parsed.actions[0]?.flags.clearAppState, true);
 });

@@ -4,7 +4,8 @@ env:
   CHECKOUT_EMAIL: ada@example.com
   PICKUP_TAPS: '2'
 onFlowStart:
-  - launchApp
+  - launchApp:
+      clearState: true
   - assertVisible: Agent Device Tester
 onFlowComplete:
   - assertVisible: Delivery choices
