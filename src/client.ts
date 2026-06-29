@@ -103,14 +103,16 @@ export function createAgentDeviceClient(
     command: {
       wait: async (options) => await executeCommand('wait', options),
       alert: async (options = {}) => await executeCommand('alert', options),
-      appState: async (options = {}) => await executeCommand('appstate', options),
+      appState: async (options = {}) =>
+        await executeCommand<CommandResult<'appstate'>>('appstate', options),
       back: async (options = {}) => await executeCommand<CommandResult<'back'>>('back', options),
       home: async (options = {}) => await executeCommand<CommandResult<'home'>>('home', options),
       rotate: async (options) => await executeCommand<CommandResult<'rotate'>>('rotate', options),
       appSwitcher: async (options = {}) =>
         await executeCommand<CommandResult<'app-switcher'>>('app-switcher', options),
       keyboard: async (options = {}) => await executeCommand('keyboard', options),
-      clipboard: async (options) => await executeCommand('clipboard', options),
+      clipboard: async (options) =>
+        await executeCommand<CommandResult<'clipboard'>>('clipboard', options),
       reactNative: async (options) => await executeCommand('react-native', options),
       prepare: async (options) => await executeCommand('prepare', options),
       viewport: async (options) =>

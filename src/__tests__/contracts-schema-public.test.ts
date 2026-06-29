@@ -4,8 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   AppError,
+  type AppStateCommandResult,
   type BackCommandResult,
   type BootCommandResult,
+  type ClipboardCommandResult,
   type CommandResult,
   type RotateCommandResult,
   type ShutdownCommandResult,
@@ -142,11 +144,30 @@ test('public root exports typed command result contracts', () => {
   } satisfies RotateCommandResult;
   const rotateFromMap: CommandResult<'rotate'> = rotate;
 
+  const clipboard = {
+    action: 'write',
+    textLength: 11,
+    message: 'Clipboard updated',
+  } satisfies ClipboardCommandResult;
+  const clipboardFromMap: CommandResult<'clipboard'> = clipboard;
+
+  const appstate = {
+    platform: 'android',
+    package: 'com.example.demo',
+    activity: 'com.example.demo.MainActivity',
+  } satisfies AppStateCommandResult;
+  const appstateFromMap: CommandResult<'appstate'> = appstate;
+
   assert.equal(bootFromMap.booted, true);
   assert.equal(shutdownFromMap.shutdown.success, true);
   assert.equal(viewportFromMap.width, 390);
   assert.equal(backFromMap.mode, 'in-app');
   assert.equal(rotateFromMap.orientation, 'portrait');
+  assert.equal(clipboardFromMap.action === 'write' ? clipboardFromMap.textLength : -1, 11);
+  assert.equal(
+    appstateFromMap.platform === 'android' ? appstateFromMap.package : '',
+    'com.example.demo',
+  );
 });
 
 test('public daemon request schema accepts GitHub Actions artifact install sources', () => {

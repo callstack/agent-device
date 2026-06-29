@@ -59,6 +59,8 @@ export type {
   HomeCommandResult,
   RotateCommandResult,
 } from './contracts/navigation.ts';
+export type { ClipboardCommandResult } from './contracts/clipboard.ts';
+export type { AppStateCommandResult } from './contracts/app-state.ts';
 
 export type AgentDeviceDaemonTransport = (
   req: Omit<DaemonRequest, 'token'>,
@@ -473,16 +475,6 @@ export type AlertCommandResult = DaemonResponseData & {
   items?: string[];
 };
 
-export type AppStateCommandResult = DaemonResponseData & {
-  platform?: Platform;
-  appName?: string;
-  appBundleId?: string;
-  package?: string;
-  activity?: string;
-  source?: 'session';
-  surface?: SessionSurface;
-};
-
 export type KeyboardCommandResult = DaemonResponseData & {
   platform?: 'android' | 'ios';
   action?: 'status' | 'dismiss' | 'enter';
@@ -497,16 +489,6 @@ export type KeyboardCommandResult = DaemonResponseData & {
   dismissed?: boolean;
   attempts?: number;
 };
-
-export type ClipboardCommandResult =
-  | (DaemonResponseData & {
-      action: 'read';
-      text: string;
-    })
-  | (DaemonResponseData & {
-      action: 'write';
-      textLength: number;
-    });
 
 export type ReactNativeCommandOptions = DeviceCommandBaseOptions & {
   action: 'dismiss-overlay';
@@ -525,13 +507,13 @@ export type ViewportCommandOptions = DeviceCommandBaseOptions & {
 export type AgentDeviceCommandClient = {
   wait: (options: WaitCommandOptions) => Promise<WaitCommandResult>;
   alert: (options?: AlertCommandOptions) => Promise<AlertCommandResult>;
-  appState: (options?: AppStateCommandOptions) => Promise<AppStateCommandResult>;
+  appState: (options?: AppStateCommandOptions) => Promise<CommandResult<'appstate'>>;
   back: (options?: BackCommandOptions) => Promise<CommandResult<'back'>>;
   home: (options?: HomeCommandOptions) => Promise<CommandResult<'home'>>;
   rotate: (options: RotateCommandOptions) => Promise<CommandResult<'rotate'>>;
   appSwitcher: (options?: AppSwitcherCommandOptions) => Promise<CommandResult<'app-switcher'>>;
   keyboard: (options?: KeyboardCommandOptions) => Promise<KeyboardCommandResult>;
-  clipboard: (options: ClipboardCommandOptions) => Promise<ClipboardCommandResult>;
+  clipboard: (options: ClipboardCommandOptions) => Promise<CommandResult<'clipboard'>>;
   reactNative: (options: ReactNativeCommandOptions) => Promise<CommandRequestResult>;
   prepare: (options: PrepareCommandOptions) => Promise<CommandRequestResult>;
   viewport: (options: ViewportCommandOptions) => Promise<CommandResult<'viewport'>>;

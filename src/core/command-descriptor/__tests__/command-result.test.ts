@@ -12,6 +12,8 @@ import type {
   HomeCommandResult,
   RotateCommandResult,
 } from '../../../contracts/navigation.ts';
+import type { ClipboardCommandResult } from '../../../contracts/clipboard.ts';
+import type { AppStateCommandResult } from '../../../contracts/app-state.ts';
 import type { CommandResult, CommandResultMap } from '../command-result.ts';
 
 /**
@@ -34,6 +36,8 @@ test('seeded CommandResult entries resolve to their existing contract result typ
   const back: Equal<CommandResult<'back'>, BackCommandResult> = true;
   const rotate: Equal<CommandResult<'rotate'>, RotateCommandResult> = true;
   const appSwitcher: Equal<CommandResult<'app-switcher'>, AppSwitcherCommandResult> = true;
+  const clipboard: Equal<CommandResult<'clipboard'>, ClipboardCommandResult> = true;
+  const appstate: Equal<CommandResult<'appstate'>, AppStateCommandResult> = true;
   expect([
     press,
     fill,
@@ -45,7 +49,9 @@ test('seeded CommandResult entries resolve to their existing contract result typ
     back,
     rotate,
     appSwitcher,
-  ]).toEqual([true, true, true, true, true, true, true, true, true, true]);
+    clipboard,
+    appstate,
+  ]).toEqual([true, true, true, true, true, true, true, true, true, true, true, true]);
 });
 
 test('unmigrated commands fall back to the untyped Record bag, keeping the union total', () => {
@@ -68,6 +74,8 @@ test('CommandResultMap is seeded only from already-existing contract result type
     | 'back'
     | 'rotate'
     | 'app-switcher'
+    | 'clipboard'
+    | 'appstate'
   > = true;
   expect(keys).toBe(true);
 });

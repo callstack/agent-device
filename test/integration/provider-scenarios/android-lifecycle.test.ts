@@ -533,6 +533,7 @@ async function runAndroidSetupAndInstallWorkflow(
   assert.equal(braceFilePush.json.result.data.extrasCount, 1);
 
   const clipboard = await client.command.clipboard({ action: 'read', ...selection });
+  if (clipboard.action !== 'read') throw new Error('expected clipboard read result');
   assert.equal(clipboard.text, 'hello');
 
   const clipboardWrite = await client.command.clipboard({
@@ -540,12 +541,14 @@ async function runAndroidSetupAndInstallWorkflow(
     text: 'android otp',
     ...selection,
   });
+  if (clipboardWrite.action !== 'write') throw new Error('expected clipboard write result');
   assert.equal(clipboardWrite.textLength, 11);
 
   const clipboardAfterWrite = await client.command.clipboard({
     action: 'read',
     ...selection,
   });
+  if (clipboardAfterWrite.action !== 'read') throw new Error('expected clipboard read result');
   assert.equal(clipboardAfterWrite.text, 'android otp');
 
   const keyboard = await client.command.keyboard({ action: 'status', ...selection });

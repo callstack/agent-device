@@ -11,6 +11,8 @@ import type {
   HomeCommandResult,
   RotateCommandResult,
 } from '../../contracts/navigation.ts';
+import type { ClipboardCommandResult } from '../../contracts/clipboard.ts';
+import type { AppStateCommandResult } from '../../contracts/app-state.ts';
 
 /**
  * The additive typed-result spine (ADR-0008, Phase 1 step 6).
@@ -22,11 +24,12 @@ import type {
  * visualization, perf, logs, …) are deliberately omitted rather than given an
  * invented shape.
  *
- * Batch 1 wired `boot` / `shutdown` / `viewport` alongside the seed interaction
- * trio (`press` / `fill` / `longpress`). Batch 2 adds the closed navigation/
- * action commands `home` / `back` / `rotate` / `app-switcher` (each a fixed
- * `{ action, …, message }`). Each entry is grounded in a re-read of the handler's
- * literal return; see the per-type docstrings for the file source.
+ * Batches 1-2 wired `boot` / `shutdown` / `viewport` and the navigation/action
+ * commands `home` / `back` / `rotate` / `app-switcher` alongside the seed
+ * interaction trio. Batch 3 adds `clipboard` (a closed `read`/`write` union) and
+ * `appstate` (a closed `platform` union — Apple session state with the iOS-only
+ * device locators, or Android package/activity). Each entry is grounded in a
+ * re-read of the handler's literal return; see the per-type docstrings.
  */
 export interface CommandResultMap {
   press: PressCommandResult;
@@ -39,6 +42,8 @@ export interface CommandResultMap {
   back: BackCommandResult;
   rotate: RotateCommandResult;
   'app-switcher': AppSwitcherCommandResult;
+  clipboard: ClipboardCommandResult;
+  appstate: AppStateCommandResult;
 }
 
 /**
