@@ -132,9 +132,9 @@ pnpm test-app:maestro:ios
 pnpm test-app:maestro:android
 ```
 
-The Maestro flow config includes `appId`, so the suite launches the app inside
-each test attempt. Start Metro first when the installed development build needs
-the local bundle.
+The Maestro flow includes `launchApp`, so the suite launches the app inside each
+test attempt. Start Metro first when the installed development build needs the
+local bundle.
 
 The suite intentionally covers the compat layer syntax used by public Maestro suites:
 `runFlow` file/inline blocks, `when.platform`, config hooks, deterministic `repeat.times`,

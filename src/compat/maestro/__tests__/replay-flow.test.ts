@@ -740,7 +740,9 @@ test('parseMaestroReplayFlow parses the test-app Maestro suite fixture', () => {
   assert.deepEqual(
     parsed.actions.map((entry) => entry.command),
     [
+      'open',
       '__maestroAssertVisible',
+      '__maestroScrollUntilVisible',
       '__maestroTapOn',
       '__maestroAssertVisible',
       '__maestroTapOn',

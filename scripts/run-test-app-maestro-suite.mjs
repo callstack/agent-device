@@ -38,7 +38,7 @@ for (let index = 2; index < process.argv.length; index += 1) {
   }
   if (arg === '--open') {
     console.error(
-      'The test-app Maestro suite no longer supports --open. The Maestro flow appId launches the app for each test attempt.',
+      'The test-app Maestro suite no longer supports --open. The Maestro flow launches the app for each test attempt.',
     );
     process.exit(1);
   }
@@ -69,7 +69,7 @@ function runAgentDevice(args) {
 
 runAgentDevice([
   'test',
-  options.flowDir,
+  ...flows,
   '--maestro',
   '--platform',
   options.platform,

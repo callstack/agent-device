@@ -1,4 +1,7 @@
 ---
+- scrollUntilVisible:
+    element:
+      id: home-open-form
 - tapOn:
     id: home-open-form
 - assertVisible: Checkout form
