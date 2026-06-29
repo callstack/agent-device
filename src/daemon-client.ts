@@ -3,7 +3,7 @@ import type {
   DaemonResponse as SharedDaemonResponse,
 } from './daemon/types.ts';
 import { createRequestId, emitDiagnostic, withDiagnosticTimer } from './utils/diagnostics.ts';
-import { PUBLIC_COMMANDS } from './command-catalog.ts';
+import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from './command-catalog.ts';
 import { prepareRemoteRequestArtifacts } from './daemon-artifacts.ts';
 import {
   cleanupDaemonAfterRequest,
@@ -38,6 +38,7 @@ export async function sendToDaemon(req: Omit<DaemonRequest, 'token'>): Promise<D
   );
   const info = daemon.info;
   const preparedRemoteRequest = await prepareRemoteRequestArtifacts(req, info);
+  writeInstallInProgressNotice(req.command);
 
   const request: DaemonRequest = {
     ...req,
@@ -93,6 +94,21 @@ export async function sendToDaemon(req: Omit<DaemonRequest, 'token'>): Promise<D
   } finally {
     await cleanupDaemonAfterRequest(req, daemon, settings);
   }
+}
+
+function writeInstallInProgressNotice(command: string | undefined): void {
+  if (!isInstallLikeCommand(command) || process.stderr.isTTY !== true || process.env.CI) return;
+  process.stderr.write(
+    command === PUBLIC_COMMANDS.reinstall ? 'Reinstalling...\n' : 'Installing...\n',
+  );
+}
+
+function isInstallLikeCommand(command: string | undefined): boolean {
+  return (
+    command === PUBLIC_COMMANDS.install ||
+    command === PUBLIC_COMMANDS.reinstall ||
+    command === INTERNAL_COMMANDS.installSource
+  );
 }
 
 export function resolveDaemonRequestTimeoutMs(

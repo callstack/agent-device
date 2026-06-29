@@ -98,6 +98,27 @@ function mockEventHttpRequest(
   };
 }
 
+async function captureInteractiveStderr(callback: () => Promise<void>): Promise<string> {
+  const stderr = process.stderr as typeof process.stderr & { isTTY?: boolean };
+  const mutableStderr = stderr as unknown as Record<string, unknown>;
+  const originalIsTTY = Object.getOwnPropertyDescriptor(stderr, 'isTTY');
+  const originalWrite = process.stderr.write.bind(process.stderr);
+  let output = '';
+  Object.defineProperty(stderr, 'isTTY', { configurable: true, value: true });
+  (process.stderr as any).write = ((chunk: unknown) => {
+    output += String(chunk);
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    await callback();
+    return output;
+  } finally {
+    process.stderr.write = originalWrite;
+    if (originalIsTTY) Object.defineProperty(stderr, 'isTTY', originalIsTTY);
+    else delete mutableStderr.isTTY;
+  }
+}
+
 function respondToHealthcheck(options: Record<string, any>, res: MockHttpResponse): boolean {
   if (options.method !== 'GET') return false;
   res.emit('end');
@@ -1152,6 +1173,37 @@ test('sendToDaemon preserves explicit remote install paths without uploading', a
       assert.equal((rpcRequest as any)?.params?.positionals?.[1], '/srv/builds/Sample.apk');
       assert.equal((rpcRequest as any)?.params?.meta?.uploadedArtifactId, undefined);
     });
+  } finally {
+    restoreHttpRequest();
+  }
+});
+
+test('sendToDaemon prints installing notice before remote install RPC completes', async () => {
+  const restoreHttpRequest = mockEventHttpRequest(({ options, res }) => {
+    if (respondToHealthcheck(options, res)) {
+      return;
+    }
+
+    emitJsonRpcResult(res, 'req-installing-notice', {
+      ok: true,
+      data: { source: 'remote-daemon' },
+    });
+  });
+
+  try {
+    const stderr = await captureInteractiveStderr(async () => {
+      await withRemoteDaemonEnv(async () => {
+        await sendToDaemon({
+          session: 'default',
+          command: 'install',
+          positionals: ['remote:/srv/builds/Sample.apk'],
+          flags: {},
+          meta: { requestId: 'req-installing-notice' },
+        });
+      });
+    });
+
+    assert.match(stderr, /Installing\.\.\.\n/);
   } finally {
     restoreHttpRequest();
   }
