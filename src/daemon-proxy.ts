@@ -11,11 +11,6 @@ import {
   buildDaemonHttpUrl,
 } from './daemon/http-contract.ts';
 import { buildDaemonHealthPayload } from './daemon/http-health.ts';
-import {
-  isSupportedProxyUploadRoute,
-  rewriteUploadPreflightResponse,
-  shouldRewriteUploadProxyResponse,
-} from './daemon-proxy-upload.ts';
 
 export type DaemonProxyOptions = {
   upstreamBaseUrl: string;
@@ -140,7 +135,7 @@ async function sendProxyResponse(params: {
   copyProxyResponseHeaders(response, res);
   ensureProxyRequestId(req, res);
 
-  if (shouldRewriteUploadProxyResponse(route)) {
+  if (isUploadPreflightRoute(route)) {
     await sendRewrittenUploadPreflightResponse({ req, res, response, clientToken });
     return;
   }
@@ -171,6 +166,69 @@ async function sendRewrittenUploadPreflightResponse(params: {
   const text = await response.text();
   res.setHeader('content-type', response.headers.get('content-type') ?? 'application/json');
   res.end(rewriteUploadPreflightResponse(text, req, clientToken));
+}
+
+function rewriteUploadPreflightResponse(
+  body: string,
+  req: IncomingMessage,
+  clientToken: string,
+): string {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body) as unknown;
+  } catch {
+    return body;
+  }
+
+  if (!parsed || typeof parsed !== 'object') return body;
+  const record = parsed as { upload?: { url?: unknown; headers?: unknown } };
+  if (!record.upload || typeof record.upload.url !== 'string') {
+    return body;
+  }
+
+  const rewrittenUrl = rewriteUploadDirectUrl(record.upload.url, req);
+  if (!rewrittenUrl) return body;
+
+  const headers =
+    record.upload.headers && typeof record.upload.headers === 'object'
+      ? { ...(record.upload.headers as Record<string, unknown>) }
+      : {};
+  Object.assign(headers, buildDaemonHttpAuthHeaders(clientToken));
+
+  return JSON.stringify({
+    ...(parsed as Record<string, unknown>),
+    upload: {
+      ...record.upload,
+      url: rewrittenUrl,
+      headers,
+    },
+  });
+}
+
+function rewriteUploadDirectUrl(upstreamUrl: string, req: IncomingMessage): string | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(upstreamUrl);
+  } catch {
+    return null;
+  }
+
+  if (!parsed.pathname.startsWith('/upload/')) {
+    return null;
+  }
+
+  const host = typeof req.headers.host === 'string' ? req.headers.host : '';
+  if (!host) return null;
+
+  const requestPath = new URL(req.url ?? '/', 'http://127.0.0.1').pathname;
+  const uploadIndex = requestPath.lastIndexOf('/upload/preflight');
+  const uploadPrefix = uploadIndex >= 0 ? requestPath.slice(0, uploadIndex) : '';
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  const proto = Array.isArray(forwardedProto) ? forwardedProto[0] : forwardedProto;
+  const rewritten = new URL(`${proto || 'http'}://${host}`);
+  rewritten.pathname = `${uploadPrefix}${parsed.pathname}`;
+  rewritten.search = parsed.search;
+  return rewritten.toString();
 }
 
 async function pipeProxyResponseBody(response: Response, res: ServerResponse): Promise<void> {
@@ -226,9 +284,21 @@ function resolveProxyRoute(requestUrl: string): string {
 
 function isSupportedDaemonRoute(route: string, method: string | undefined): boolean {
   if (route === '/rpc') return method === 'POST';
-  if (isSupportedProxyUploadRoute(route, method)) return true;
+  if (isSupportedUploadRoute(route, method)) return true;
   if (route.startsWith('/artifacts/')) return method === 'GET';
   return false;
+}
+
+function isSupportedUploadRoute(route: string, method: string | undefined): boolean {
+  if (route === '/upload') return method === 'POST';
+  if (isUploadPreflightRoute(route)) return method === 'POST';
+  if (route === '/upload/finalize') return method === 'POST';
+  if (route.startsWith('/upload/direct/')) return method === 'PUT';
+  return false;
+}
+
+function isUploadPreflightRoute(route: string): boolean {
+  return route === '/upload/preflight';
 }
 
 function buildUpstreamUrl(upstreamBaseUrl: string, route: string, rawUrl: string): URL {
