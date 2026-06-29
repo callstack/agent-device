@@ -5,6 +5,9 @@
     "version": "1.0.0",
     "orientation": "default",
     "userInterfaceStyle": "automatic",
+    "buildCacheProvider": {
+      "plugin": "expo-build-disk-cache"
+    },
     "plugins": ["expo-router"],
     "ios": {
       "supportsTablet": true,

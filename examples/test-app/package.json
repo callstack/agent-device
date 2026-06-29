@@ -26,6 +26,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
+    "expo-build-disk-cache": "^0.7.4",
     "typescript": "~6.0.3"
   }
 }
