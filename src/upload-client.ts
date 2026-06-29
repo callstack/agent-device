@@ -10,6 +10,11 @@ import { AppError } from './utils/errors.ts';
 import { readNodeHttpResponseBody } from './utils/node-http.ts';
 import { runCmd } from './utils/exec.ts';
 import { buildDaemonHttpAuthHeaders } from './daemon/http-contract.ts';
+import {
+  createUploadProgressTransform,
+  type UploadProgressSink,
+  type UploadProgressStage,
+} from './upload-progress.ts';
 
 const UPLOAD_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
 const UPLOAD_PREFLIGHT_TIMEOUT_MS = 30 * 1000;
@@ -22,6 +27,7 @@ type UploadArtifactOptions = {
   baseUrl: string;
   token: string;
   platform?: string;
+  onProgress?: UploadProgressSink;
 };
 
 type PreparedUploadArtifact = {
@@ -82,12 +88,20 @@ export async function uploadArtifact(options: UploadArtifactOptions): Promise<st
         token: options.token,
         artifact: prepared,
         preflight,
+        onProgress: options.onProgress,
       });
       if (directUpload) return directUpload;
+      options.onProgress?.({
+        type: 'fallback',
+        from: 'direct',
+        to: 'legacy',
+        fileName: prepared.fileName,
+      });
       return await uploadLegacyArtifact({
         normalizedBase,
         token: options.token,
         artifact: prepared,
+        onProgress: options.onProgress,
       });
     }
 
@@ -95,6 +109,7 @@ export async function uploadArtifact(options: UploadArtifactOptions): Promise<st
       normalizedBase,
       token: options.token,
       artifact: prepared,
+      onProgress: options.onProgress,
     });
   } finally {
     prepared.cleanup();
@@ -106,11 +121,12 @@ async function tryDirectUploadWithResume(options: {
   token: string;
   artifact: PreparedUploadArtifact;
   preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>;
+  onProgress?: UploadProgressSink;
 }): Promise<string | undefined> {
   const uploadOnce = async (
     preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>,
   ): Promise<string> => {
-    await uploadDirectArtifact(options.artifact.payloadPath, preflight);
+    await uploadDirectArtifact(options.artifact, preflight, options.onProgress);
     return await finalizeDirectUpload({
       normalizedBase: options.normalizedBase,
       token: options.token,
@@ -223,6 +239,7 @@ async function uploadLegacyArtifact(options: {
   normalizedBase: string;
   token: string;
   artifact: PreparedUploadArtifact;
+  onProgress?: UploadProgressSink;
 }): Promise<string> {
   const { normalizedBase, token, artifact } = options;
   const uploadUrl = new URL('upload', normalizedBase);
@@ -246,6 +263,11 @@ async function uploadLegacyArtifact(options: {
     timeoutHint: 'The upload to the remote daemon exceeded the 5-minute timeout.',
     errorMessage: 'Failed to upload artifact to remote daemon',
     errorHint: 'Verify the remote daemon is reachable and supports artifact uploads.',
+    progress: {
+      stage: 'legacy',
+      fileName: artifact.fileName,
+      onProgress: options.onProgress,
+    },
   });
 
   try {
@@ -331,17 +353,23 @@ function isStringRecord(value: unknown): value is Record<string, string> {
 }
 
 async function uploadDirectArtifact(
-  payloadPath: string,
+  artifact: PreparedUploadArtifact,
   ticket: Extract<UploadPreflightResult, { kind: 'direct-upload' }>,
+  onProgress: UploadProgressSink | undefined,
 ): Promise<void> {
   const response = await streamFileToHttpRequest({
     url: new URL(ticket.url),
     method: 'PUT',
     headers: ticket.headers,
-    payloadPath,
+    payloadPath: artifact.payloadPath,
     timeoutMessage: 'Direct artifact upload timed out',
     timeoutHint: 'The direct upload ticket did not accept the artifact within the timeout.',
     errorMessage: 'Failed to upload artifact with direct upload ticket',
+    progress: {
+      stage: 'direct',
+      fileName: artifact.fileName,
+      onProgress,
+    },
   });
 
   if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -361,6 +389,7 @@ async function streamFileToHttpRequest(options: {
   timeoutHint?: string;
   errorMessage: string;
   errorHint?: string;
+  progress?: UploadStreamProgressOptions;
 }): Promise<{ statusCode: number; statusMessage?: string; body: string }> {
   return await streamFileToHttpRequestAttempt({
     ...options,
@@ -381,10 +410,12 @@ async function streamFileToHttpRequestAttempt(options: {
   errorHint?: string;
   redirectCount: number;
   startOffset: number;
+  progress?: UploadStreamProgressOptions;
 }): Promise<{ statusCode: number; statusMessage?: string; body: string }> {
   const transport = options.url.protocol === 'https:' ? https : http;
   const payloadSize = fs.statSync(options.payloadPath).size;
   const headers = buildUploadRequestHeaders(options.headers, options.startOffset, payloadSize);
+  emitUploadAttemptStarted(options.progress, options.startOffset, payloadSize);
 
   return await new Promise((resolve, reject) => {
     let responseReceived = false;
@@ -488,6 +519,13 @@ async function streamFileToHttpRequestAttempt(options: {
 
     void pipeline(
       fs.createReadStream(options.payloadPath, { start: options.startOffset }),
+      createUploadProgressTransform({
+        stage: options.progress?.stage ?? 'legacy',
+        fileName: options.progress?.fileName ?? path.basename(options.payloadPath),
+        startOffset: options.startOffset,
+        totalBytes: payloadSize,
+        onProgress: options.progress?.onProgress,
+      }),
       req,
     ).catch((err: unknown) => {
       if (responseReceived) return;
@@ -495,6 +533,26 @@ async function streamFileToHttpRequestAttempt(options: {
       const error = err instanceof Error ? err : new Error(String(err));
       reject(new AppError('COMMAND_FAILED', 'Failed to read local artifact', {}, error));
     });
+  });
+}
+
+type UploadStreamProgressOptions = {
+  stage: UploadProgressStage;
+  fileName: string;
+  onProgress?: UploadProgressSink;
+};
+
+function emitUploadAttemptStarted(
+  progress: UploadStreamProgressOptions | undefined,
+  startOffset: number,
+  totalBytes: number,
+): void {
+  progress?.onProgress?.({
+    type: startOffset > 0 ? 'resume' : 'start',
+    stage: progress.stage,
+    fileName: progress.fileName,
+    transferredBytes: startOffset,
+    totalBytes,
   });
 }
 

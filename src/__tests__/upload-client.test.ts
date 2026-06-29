@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { once } from 'node:events';
 import { uploadArtifact } from '../upload-client.ts';
+import type { UploadProgressEvent } from '../upload-progress.ts';
 import { runCmdSync, withCommandExecutorOverride } from '../utils/exec.ts';
 
 const TEST_TOKEN = 'agent-device-upload-test-token';
@@ -117,6 +118,7 @@ test('uploadArtifact falls back to upload when preflight is unsupported', async 
   const artifactPath = createTempFile('app.apk', content);
   const expectedHash = sha256(content);
   const requests: string[] = [];
+  const progressEvents: UploadProgressEvent[] = [];
 
   const server = await startServer(async (req, res) => {
     requests.push(`${req.method} ${req.url}`);
@@ -142,9 +144,28 @@ test('uploadArtifact falls back to upload when preflight is unsupported', async 
       localPath: artifactPath,
       baseUrl: server.baseUrl,
       token: TEST_TOKEN,
+      onProgress: (event) => progressEvents.push(event),
     });
     assert.equal(uploadId, 'upload-legacy');
     assert.deepEqual(requests, ['POST /upload/preflight', 'POST /upload']);
+    assert.deepEqual(
+      progressEvents.map((event) => event.type),
+      ['start', 'progress'],
+    );
+    assert.deepEqual(progressEvents[0], {
+      type: 'start',
+      stage: 'legacy',
+      fileName: 'app.apk',
+      transferredBytes: 0,
+      totalBytes: Buffer.byteLength(content),
+    });
+    assert.deepEqual(progressEvents[1], {
+      type: 'progress',
+      stage: 'legacy',
+      fileName: 'app.apk',
+      transferredBytes: Buffer.byteLength(content),
+      totalBytes: Buffer.byteLength(content),
+    });
   } finally {
     await server.close();
   }

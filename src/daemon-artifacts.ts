@@ -11,6 +11,7 @@ import {
   recordingExtensionForPlatform,
 } from './recording/output-path.ts';
 import { uploadArtifact } from './upload-client.ts';
+import { createStderrUploadProgressReporter, type UploadProgressSink } from './upload-progress.ts';
 
 // Mirrors the current daemon RPC timeout, but artifact download timeouts may diverge.
 const REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS = 90_000;
@@ -37,6 +38,7 @@ export async function prepareRemoteRequestArtifacts(
   let installSource = req.meta?.installSource;
   const clientArtifactPaths: Record<string, string> = {};
   let uploadedArtifactId: string | undefined;
+  const uploadProgress = createStderrUploadProgressReporter();
 
   if (!isRemoteDaemon(info)) {
     return createPreparedRemoteRequest({
@@ -49,7 +51,7 @@ export async function prepareRemoteRequestArtifacts(
   }
 
   flags = applyRemoteArtifactCommand(req, positionals, flags, clientArtifactPaths);
-  const remoteInstallSource = await prepareRemoteInstallSource(req, info);
+  const remoteInstallSource = await prepareRemoteInstallSource(req, info, uploadProgress);
   if (remoteInstallSource) {
     installSource = remoteInstallSource.installSource;
     uploadedArtifactId = remoteInstallSource.uploadedArtifactId ?? uploadedArtifactId;
@@ -65,7 +67,12 @@ export async function prepareRemoteRequestArtifacts(
     });
 
   if (req.command !== 'install' && req.command !== 'reinstall') return baseResult();
-  const installPackageResult = await prepareRemoteInstallPackage(req, info, positionals);
+  const installPackageResult = await prepareRemoteInstallPackage(
+    req,
+    info,
+    positionals,
+    uploadProgress,
+  );
   uploadedArtifactId = installPackageResult ?? uploadedArtifactId;
   return baseResult();
 }
@@ -74,6 +81,7 @@ async function prepareRemoteInstallPackage(
   req: Omit<DaemonRequest, 'token'>,
   info: DaemonArtifactEndpoint,
   positionals: string[],
+  onProgress: UploadProgressSink | undefined,
 ): Promise<string | undefined> {
   const pathIndex = positionals.length === 1 ? 0 : 1;
   const rawPath = positionals[pathIndex];
@@ -91,6 +99,7 @@ async function prepareRemoteInstallPackage(
     baseUrl: info.baseUrl!,
     token: info.token,
     platform: req.flags?.platform,
+    onProgress,
   });
 }
 
@@ -142,6 +151,7 @@ function createPreparedRemoteRequest(
 async function prepareRemoteInstallSource(
   req: Omit<DaemonRequest, 'token'>,
   info: DaemonArtifactEndpoint,
+  onProgress: UploadProgressSink | undefined,
 ): Promise<{
   installSource: NonNullable<DaemonRequest['meta']>['installSource'];
   uploadedArtifactId?: string;
@@ -181,6 +191,7 @@ async function prepareRemoteInstallSource(
     baseUrl: info.baseUrl!,
     token: info.token,
     platform: req.flags?.platform,
+    onProgress,
   });
   return {
     installSource: {
