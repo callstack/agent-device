@@ -379,18 +379,19 @@ function readReplayResponseSnapshotDiagnostics(response: DaemonResponse | undefi
 
 function replayTestShardResultMetadata(
   shard: ReplayTestShardContext | undefined,
-): Pick<ReplaySuiteTestFailed, 'shardIndex' | 'shardCount' | 'deviceId'> {
+): Pick<ReplaySuiteTestFailed, 'shardIndex' | 'shardCount' | 'deviceId' | 'deviceName'> {
   return replayTestProgressShardMetadata(shard);
 }
 
 function replayTestProgressShardMetadata(
   shard: ReplayTestShardContext | undefined,
-): Pick<ReplaySuiteTestFailed, 'shardIndex' | 'shardCount' | 'deviceId'> {
+): Pick<ReplaySuiteTestFailed, 'shardIndex' | 'shardCount' | 'deviceId' | 'deviceName'> {
   return shard
     ? {
         shardIndex: shard.shardIndex,
         shardCount: shard.shardCount,
         deviceId: shard.device.id,
+        deviceName: shard.device.name,
       }
     : {};
 }

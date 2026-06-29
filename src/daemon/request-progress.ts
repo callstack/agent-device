@@ -30,6 +30,7 @@ export type ReplayTestProgressEvent = {
   shardIndex?: number;
   shardCount?: number;
   deviceId?: string;
+  deviceName?: string;
 };
 
 export type CommandProgressEvent = {

@@ -509,6 +509,12 @@ test('test --shard-all runs each runnable entry on each selected device', async 
     'emulator-5556',
     'emulator-5556',
   ]);
+  expect(tests.map((entry) => entry.deviceName)).toEqual([
+    'Pixel 8',
+    'Pixel 8',
+    'Pixel 8 Pro',
+    'Pixel 8 Pro',
+  ]);
   expect(tests.map((entry) => entry.artifactsDir)).toEqual([
     expect.stringContaining(`${path.sep}shard-1${path.sep}01-login`),
     expect.stringContaining(`${path.sep}shard-1${path.sep}02-pay`),
@@ -567,6 +573,9 @@ test('test --shard-split distributes runnable entries by modulo and keeps skips 
   expect(tests.filter((entry) => entry.status === 'passed').map((entry) => entry.deviceId)).toEqual(
     ['emulator-5554', 'emulator-5554', 'emulator-5556'],
   );
+  expect(
+    tests.filter((entry) => entry.status === 'passed').map((entry) => entry.deviceName),
+  ).toEqual(['Pixel 8', 'Pixel 8', 'Pixel 8 Pro']);
   expect(invoked.map((req) => req.flags?.serial).sort()).toEqual([
     'emulator-5554',
     'emulator-5554',

@@ -123,7 +123,7 @@ test('readDaemonSocketProgressResponse parses split progress lines before respon
     assert.deepEqual(await responsePromise, { ok: true, data: { via: 'socket-progress' } });
     assert.equal(socket.encoding, 'utf8');
     assert.equal(socket.ended, true);
-    assert.match(stderr, /✓ "Login flow" in 01-login\.ad \(1\.23s\)/);
+    assert.match(stderr, /✓ Login flow \(1\.23s\)/);
   } finally {
     process.stderr.write = originalStderrWrite;
   }
@@ -237,11 +237,9 @@ test('readDaemonSocketProgressResponse rewrites live progress and clears it for 
     socket.emit('data', `${progress(3)}\n${progress(4)}\n${pass}\n${responseLine}\n`);
 
     assert.deepEqual(await responsePromise, { ok: true, data: { via: 'socket-progress' } });
-    assert.ok(stderr.includes('\r\u001B[2K⊙ "Tab View - Co..." in tab-view-coverflow.yml [3/10]'));
-    assert.ok(stderr.includes('\r\u001B[2K⊙ "Tab View - Co..." in tab-view-coverflow.yml [4/10]'));
-    assert.ok(
-      stderr.includes('\r\u001B[2K✓ "Tab View - Coverflow" in tab-view-coverflow.yml (17.8s)\n'),
-    );
+    assert.ok(stderr.includes('\r\u001B[2K⊙ Tab View - Coverflow [3/10]'));
+    assert.ok(stderr.includes('\r\u001B[2K⊙ Tab View - Coverflow [4/10]'));
+    assert.ok(stderr.includes('\r\u001B[2K✓ Tab View - Coverflow (17.8s)\n'));
   } finally {
     if (typeof originalCi === 'string') process.env.CI = originalCi;
     else delete process.env.CI;
@@ -308,7 +306,7 @@ test('readDaemonSocketProgressResponse suppresses live progress outside interact
     socket.emit('data', `${progress}\n${pass}\n${responseLine}\n`);
 
     assert.deepEqual(await responsePromise, { ok: true, data: { via: 'socket-progress' } });
-    assert.equal(stderr, '✓ "Tab View - Coverflow" in tab-view-coverflow.yml (17.8s)\n');
+    assert.equal(stderr, '✓ Tab View - Coverflow (17.8s)\n');
   } finally {
     process.stderr.write = originalStderrWrite;
   }

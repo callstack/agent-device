@@ -76,6 +76,7 @@ export type ReplaySuiteTestPassed = {
   shardIndex?: number;
   shardCount?: number;
   deviceId?: string;
+  deviceName?: string;
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
 };
 
@@ -91,6 +92,7 @@ export type ReplaySuiteTestFailed = {
   shardIndex?: number;
   shardCount?: number;
   deviceId?: string;
+  deviceName?: string;
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
 };
 

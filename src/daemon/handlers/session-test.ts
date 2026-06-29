@@ -230,6 +230,7 @@ function buildUnexpectedShardFailure(
     shardIndex: shard.shardIndex,
     shardCount: shard.shardCount,
     deviceId: shard.device.id,
+    deviceName: shard.device.name,
   };
 }
 

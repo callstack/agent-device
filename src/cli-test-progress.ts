@@ -88,15 +88,16 @@ function formatReplayTestLiveProgressLine(
 ): string {
   const title = event.title?.trim();
   const file = path.basename(event.file);
-  const shardSuffix = formatReplayTestProgressShardSuffix(event);
+  const useColor = supportsColor(process.stderr);
+  const shardSuffix = formatReplayTestProgressShardSuffix(event, { useColor });
   const stepIndex = event.stepIndex ?? 0;
   const stepTotal = event.stepTotal ?? 0;
   const suffix = `${shardSuffix} [${stepIndex}/${stepTotal}]`;
   const prefix = '⊙ ';
   if (!title) return trimToColumns(`${prefix}${file}${suffix}`, options.columns);
 
-  const titlePrefix = `${prefix}"`;
-  const titleSuffix = `" in ${file}${suffix}`;
+  const titlePrefix = prefix;
+  const titleSuffix = suffix;
   const availableTitleColumns = Math.max(
     0,
     resolveColumns(options.columns) - titlePrefix.length - titleSuffix.length,
@@ -112,6 +113,9 @@ function addReplayTestCaseDetailLines(
 ): void {
   if (options.verbose && event.status === 'fail') return;
   const message = event.message?.replace(/\s+/g, ' ').trim();
+  if (event.status === 'fail' && event.title?.trim()) {
+    lines.push(`    file: ${path.basename(event.file)}`);
+  }
   if (message) {
     lines.push(`    ${event.status === 'fail' ? `failed at: ${message}` : message}`);
   }
@@ -122,18 +126,19 @@ function addReplayTestCaseDetailLines(
 }
 
 function formatReplayTestCaseSummaryLine(event: ReplayTestCaseProgressEvent): string {
+  const useColor = supportsColor(process.stderr);
   const statusLabel = formatReplayTestProgressStatusLabel(event);
   const name = formatReplayTestProgressName(event);
-  const shardSuffix = formatReplayTestProgressShardSuffix(event);
+  const shardSuffix = formatReplayTestProgressShardSuffix(event, { useColor });
   const durationSuffix =
-    event.durationMs !== undefined ? ` (${formatReplayProgressDuration(event)})` : '';
+    event.durationMs !== undefined ? ` (${formatReplayProgressDuration(event, { useColor })})` : '';
   return `${statusLabel} ${name}${shardSuffix}${durationSuffix}`;
 }
 
 function formatReplayTestProgressName(event: ReplayTestCaseProgressEvent): string {
   const title = event.title?.trim();
   const file = path.basename(event.file);
-  return title ? `${JSON.stringify(title)} in ${file}` : file;
+  return title ? title : file;
 }
 
 function formatReplayTestProgressStatusLabel(event: ReplayTestCaseProgressEvent): string {
@@ -151,15 +156,30 @@ function colorizeProgressMarker(text: string, format: Parameters<typeof colorize
   return colorize(text, format, { validateStream: false });
 }
 
-function formatReplayTestProgressShardSuffix(event: ReplayTestCaseProgressEvent): string {
+function formatReplayTestProgressShardSuffix(
+  event: ReplayTestCaseProgressEvent,
+  options: { useColor?: boolean } = {},
+): string {
   if (typeof event.shardIndex !== 'number') return '';
   const shardCount = typeof event.shardCount === 'number' ? event.shardCount : '?';
-  const device = typeof event.deviceId === 'string' ? ` ${event.deviceId}` : '';
-  return ` [shard ${event.shardIndex + 1}/${shardCount}${device}]`;
+  const device = replayTestProgressShardDeviceName(event);
+  const suffix = ` [${event.shardIndex + 1}/${shardCount}${device ? ` ${device}` : ''}]`;
+  return options.useColor ? colorizeProgressMarker(suffix, 'dim') : suffix;
 }
 
-function formatReplayProgressDuration(event: ReplayTestCaseProgressEvent): string {
-  return formatDurationSeconds(event.durationMs ?? 0);
+function replayTestProgressShardDeviceName(event: ReplayTestCaseProgressEvent): string | undefined {
+  const name = event.deviceName?.trim();
+  if (name) return name;
+  const id = event.deviceId?.trim();
+  return id || undefined;
+}
+
+function formatReplayProgressDuration(
+  event: ReplayTestCaseProgressEvent,
+  options: { useColor?: boolean } = {},
+): string {
+  const duration = formatDurationSeconds(event.durationMs ?? 0);
+  return options.useColor ? colorizeProgressMarker(duration, 'cyan') : duration;
 }
 
 function isReplayTestCompletionProgressEvent(event: ReplayTestCaseProgressEvent): boolean {

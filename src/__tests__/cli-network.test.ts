@@ -142,6 +142,7 @@ test('test command prints suite summary and exits non-zero on failures', async (
   assert.doesNotMatch(result.stderr, /Running replay suite\.\.\./);
   assert.doesNotMatch(result.stdout, /✓ 01-pass\.ad \(0\.01s\)/);
   assert.doesNotMatch(result.stdout, /⨯ "Checkout failure" in 02-fail\.ad/);
+  assert.match(result.stdout, /Failures:\n  Checkout failure\n    file: 02-fail\.ad/);
   assert.match(result.stdout, /Replay failed at step 1 \(open Demo\): boom/);
   assert.match(result.stdout, /artifacts: \/tmp\/test-artifacts\/02-fail/);
   assert.doesNotMatch(result.stdout, /SKIP \/tmp\/03-skip\.ad/);
@@ -388,13 +389,13 @@ test('test command reports flaky passed-on-retry cases in the default summary', 
   assert.doesNotMatch(result.stdout, /FLAKY/);
   assert.doesNotMatch(
     result.stdout,
-    /^✓ "Authentication flow" in auth-flow\.yml \(passed attempt 17\.5s, total 112\.2s\)$/m,
+    /^✓ Authentication flow \(passed attempt 17\.5s, total 112\.2s\)$/m,
   );
   assert.match(result.stdout, /Test summary: 1 passed, 0 failed, 1 flaky in 0\.025s/);
   assert.match(result.stdout, /Flaky tests:/);
   assert.match(
     result.stdout,
-    /✓ "Authentication flow" in auth-flow\.yml after 2 attempts \(passed attempt 17\.5s, total 112\.2s\)/,
+    /✓ Authentication flow after 2 attempts \(passed attempt 17\.5s, total 112\.2s\)/,
   );
   assert.match(
     result.stdout,
