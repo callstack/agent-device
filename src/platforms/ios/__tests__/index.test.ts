@@ -804,6 +804,82 @@ test('captureSimulatorScreenshotWithFallback can skip session-backed simulator b
   assert.equal(mockRunIosRunnerCommand.mock.calls.length, 0);
 });
 
+test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after shutdown screenshot failure', async () => {
+  const ensureBooted = vi.fn(async () => {});
+  const prepareStatusBarForScreenshot = vi.fn(async () => async () => {});
+  let captureAttempts = 0;
+  const captureWithRetry = vi.fn(async () => {
+    captureAttempts += 1;
+    if (captureAttempts === 1) {
+      throw new AppError('COMMAND_FAILED', 'simctl screenshot failed', {
+        stderr: 'Unable to boot device in current state: Shutdown',
+        args: ['simctl', 'io', 'sim-1', 'screenshot', '/tmp/out.png'],
+      });
+    }
+  });
+  const captureWithRunner = vi.fn(async () => {});
+
+  await captureSimulatorScreenshotWithFallback(
+    IOS_TEST_SIMULATOR,
+    '/tmp/out.png',
+    'com.example.app',
+    undefined,
+    {
+      ensureBooted,
+      prepareStatusBarForScreenshot,
+      captureWithRetry,
+      captureWithRunner,
+      shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
+    },
+    undefined,
+    { skipBootCheck: true },
+  );
+
+  assert.equal(ensureBooted.mock.calls.length, 1);
+  assert.equal(captureWithRetry.mock.calls.length, 2);
+  assert.equal(captureWithRunner.mock.calls.length, 0);
+});
+
+test('captureSimulatorScreenshotWithFallback keeps runner fallback after skipped-check boot recovery', async () => {
+  const ensureBooted = vi.fn(async () => {});
+  const prepareStatusBarForScreenshot = vi.fn(async () => async () => {});
+  let captureAttempts = 0;
+  const captureWithRetry = vi.fn(async () => {
+    captureAttempts += 1;
+    if (captureAttempts === 1) {
+      throw new AppError('COMMAND_FAILED', 'simctl screenshot failed', {
+        stderr: 'Unable to boot device in current state: Shutdown',
+        args: ['simctl', 'io', 'sim-1', 'screenshot', '/tmp/out.png'],
+      });
+    }
+    throw new AppError('COMMAND_FAILED', 'xcrun timed out after 20000ms', {
+      args: ['simctl', 'io', 'sim-1', 'screenshot', '/tmp/out.png'],
+      timeoutMs: 20_000,
+    });
+  });
+  const captureWithRunner = vi.fn(async () => {});
+
+  await captureSimulatorScreenshotWithFallback(
+    IOS_TEST_SIMULATOR,
+    '/tmp/out.png',
+    'com.example.app',
+    undefined,
+    {
+      ensureBooted,
+      prepareStatusBarForScreenshot,
+      captureWithRetry,
+      captureWithRunner,
+      shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
+    },
+    undefined,
+    { skipBootCheck: true },
+  );
+
+  assert.equal(ensureBooted.mock.calls.length, 1);
+  assert.equal(captureWithRetry.mock.calls.length, 2);
+  assert.equal(captureWithRunner.mock.calls.length, 1);
+});
+
 test('captureSimulatorScreenshotWithFallback ignores status bar restore failures', async () => {
   mockPrepareStatusBarForScreenshot.mockResolvedValue(async () => {
     throw new AppError('COMMAND_FAILED', 'status_bar clear failed');

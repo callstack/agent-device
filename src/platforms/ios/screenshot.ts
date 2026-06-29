@@ -130,10 +130,20 @@ export async function captureSimulatorScreenshotWithFallback(
       await effectiveDeps.captureWithRetry(device, outPath);
       return;
     } catch (error) {
-      if (!effectiveDeps.shouldFallbackToRunner(error)) {
-        throw error;
+      let screenshotError = error;
+      if (options.skipBootCheck && shouldEnsureBootedAfterSimulatorScreenshotFailure(error)) {
+        await effectiveDeps.ensureBooted(device);
+        try {
+          await effectiveDeps.captureWithRetry(device, outPath);
+          return;
+        } catch (retryError) {
+          screenshotError = retryError;
+        }
       }
-      emitScreenshotFallbackDiagnostic(device, 'simctl_screenshot', error);
+      if (!effectiveDeps.shouldFallbackToRunner(screenshotError)) {
+        throw screenshotError;
+      }
+      emitScreenshotFallbackDiagnostic(device, 'simctl_screenshot', screenshotError);
     }
     await effectiveDeps.captureWithRunner(device, outPath, appBundleId, fullscreen, runnerOptions);
   } finally {
@@ -393,10 +403,7 @@ export function resolveSimulatorRunnerScreenshotCandidatePaths(
 export function shouldFallbackToRunnerForIosScreenshot(error: unknown): boolean {
   if (!(error instanceof AppError)) return false;
   if (error.code !== 'COMMAND_FAILED') return false;
-  const details = (error.details ?? {}) as { stdout?: unknown; stderr?: unknown };
-  const stdout = typeof details.stdout === 'string' ? details.stdout : '';
-  const stderr = typeof details.stderr === 'string' ? details.stderr : '';
-  const combined = `${error.message}\n${stdout}\n${stderr}`.toLowerCase();
+  const combined = commandFailureText(error);
   return (
     combined.includes("unknown option '--device'") ||
     (combined.includes('unknown subcommand') && combined.includes('screenshot')) ||
@@ -407,13 +414,7 @@ export function shouldFallbackToRunnerForIosScreenshot(error: unknown): boolean 
 export function shouldRetryIosSimulatorScreenshot(error: unknown): boolean {
   if (!(error instanceof AppError)) return false;
   if (error.code !== 'COMMAND_FAILED') return false;
-  const details = (error.details ?? {}) as { stdout?: unknown; stderr?: unknown; args?: unknown };
-  const stdout = typeof details.stdout === 'string' ? details.stdout : '';
-  const stderr = typeof details.stderr === 'string' ? details.stderr : '';
-  const args = Array.isArray(details.args)
-    ? details.args.filter((value): value is string => typeof value === 'string').join(' ')
-    : '';
-  const combined = `${error.message}\n${stdout}\n${stderr}\n${args}`.toLowerCase();
+  const combined = commandFailureText(error);
   return (
     combined.includes('timeout waiting for screen surfaces') ||
     (combined.includes('nsposixerrordomain') &&
@@ -421,6 +422,30 @@ export function shouldRetryIosSimulatorScreenshot(error: unknown): boolean {
       combined.includes('screenshot')) ||
     (combined.includes('timed out') && combined.includes('screenshot'))
   );
+}
+
+function shouldEnsureBootedAfterSimulatorScreenshotFailure(error: unknown): boolean {
+  if (!(error instanceof AppError)) return false;
+  if (error.code !== 'COMMAND_FAILED') return false;
+  const combined = commandFailureText(error);
+  return (
+    combined.includes('not booted') ||
+    combined.includes('current state: shutdown') ||
+    combined.includes('current state is shutdown') ||
+    combined.includes('current state=shutdown') ||
+    combined.includes('state: shutdown') ||
+    combined.includes('state=shutdown')
+  );
+}
+
+function commandFailureText(error: AppError): string {
+  const details = (error.details ?? {}) as { stdout?: unknown; stderr?: unknown; args?: unknown };
+  const stdout = typeof details.stdout === 'string' ? details.stdout : '';
+  const stderr = typeof details.stderr === 'string' ? details.stderr : '';
+  const args = Array.isArray(details.args)
+    ? details.args.filter((value): value is string => typeof value === 'string').join(' ')
+    : '';
+  return `${error.message}\n${stdout}\n${stderr}\n${args}`.toLowerCase();
 }
 
 export { prepareSimulatorStatusBarForScreenshot } from './screenshot-status-bar.ts';
