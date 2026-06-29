@@ -95,6 +95,65 @@ test('MCP tool schemas add MCP client config fields at the MCP boundary', () => 
     (devicesTool.inputSchema.properties?.mcpOutputFormat as { enum?: unknown[] } | undefined)?.enum,
     ['optimized', 'json'],
   );
+  assert.equal(
+    (devicesTool.inputSchema.properties?.includeCost as { type?: string } | undefined)?.type,
+    'boolean',
+  );
+});
+
+test('MCP includeCost:true opts into agent-cost: sets client.cost, strips the arg, surfaces cost', async () => {
+  const createdConfigs: unknown[] = [];
+  const calls: unknown[] = [];
+  const executor = createCommandToolExecutor({
+    createClient: (config) => {
+      createdConfigs.push(config);
+      return {} as AgentDeviceClient;
+    },
+    runCommand: async (_client, name, input) => {
+      calls.push({ name, input });
+      return { message: `Ran ${name}`, cost: { wallClockMs: 42 } };
+    },
+  });
+
+  const result = await executor.execute('wait', { includeCost: true });
+
+  // includeCost maps to the client `cost` config (→ meta.includeCost on the daemon).
+  assert.deepEqual(createdConfigs, [{ cost: true }]);
+  // includeCost is an MCP-boundary field and must not leak into the command input.
+  assert.deepEqual(calls, [{ name: 'wait', input: {} }]);
+  // The daemon-provided cost rides through structuredContent unchanged.
+  assert.deepEqual(result.structuredContent, { message: 'Ran wait', cost: { wallClockMs: 42 } });
+});
+
+test('MCP includeCost absent/false leaves the request shape untouched (no cost config)', async () => {
+  const createdConfigs: unknown[] = [];
+  const executor = createCommandToolExecutor({
+    createClient: (config) => {
+      createdConfigs.push(config);
+      return {} as AgentDeviceClient;
+    },
+    runCommand: async () => ({ message: 'ok' }),
+  });
+
+  const absent = await executor.execute('wait', {});
+  const explicitFalse = await executor.execute('wait', { includeCost: false });
+
+  // Neither path sets `cost` on the client config; both are byte-identical configs.
+  assert.deepEqual(createdConfigs, [{}, {}]);
+  assert.deepEqual(absent.structuredContent, { message: 'ok' });
+  assert.equal(JSON.stringify(absent), JSON.stringify(explicitFalse));
+});
+
+test('MCP includeCost rejects non-boolean values at the boundary', async () => {
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async () => ({}),
+  });
+
+  await assert.rejects(
+    executor.execute('wait', { includeCost: 'yes' }),
+    /Expected includeCost to be a boolean\./,
+  );
 });
 
 test('MCP session tool exposes state-dir resolution without a daemon round-trip', async () => {

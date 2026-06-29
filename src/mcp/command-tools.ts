@@ -105,11 +105,18 @@ function readMcpToolConfig(input: unknown): McpToolConfig {
 
 function readClientConfig(record: Record<string, unknown>): AgentDeviceClientConfig {
   const stateDir = record.stateDir;
+  const includeCost = record.includeCost;
   const client: AgentDeviceClientConfig = {};
   if (stateDir !== undefined && (typeof stateDir !== 'string' || stateDir.length === 0)) {
     throw new Error('Expected stateDir to be a non-empty string.');
   }
   if (typeof stateDir === 'string') client.stateDir = stateDir;
+  if (includeCost !== undefined && typeof includeCost !== 'boolean') {
+    throw new Error('Expected includeCost to be a boolean.');
+  }
+  // Only set when explicitly true so the default request shape is untouched
+  // (cost rides on response.data → structuredContent only when opted in).
+  if (includeCost === true) client.cost = true;
   return client;
 }
 
@@ -126,6 +133,7 @@ function stripMcpConfigFields(input: unknown): unknown {
   const {
     stateDir: _stateDir,
     mcpOutputFormat: _mcpOutputFormat,
+    includeCost: _includeCost,
     ...commandInput
   } = input as Record<string, unknown>;
   return commandInput;
@@ -142,6 +150,11 @@ function withMcpConfigSchema(schema: JsonSchema): JsonSchema {
         enum: ['optimized', 'json'],
         description:
           'MCP text content format. Defaults to optimized agent-friendly text; use json for JSON text. Structured content is always returned separately.',
+      },
+      includeCost: {
+        type: 'boolean',
+        description:
+          'Include per-command agent-cost (cost.wallClockMs, …) in structuredContent. Defaults to off; the default response shape is unchanged.',
       },
     },
   };
