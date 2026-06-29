@@ -1,17 +1,8 @@
-import type { SnapshotNode } from './snapshot.ts';
+import type { SnapshotNode, SnapshotQualityVerdict } from './snapshot.ts';
 
-/**
- * Structured quality verdict computed once by the iOS runner's snapshot capture plan.
- * The daemon renders it; it never re-derives degradation from node shapes.
- */
-export type SnapshotQualityVerdict = {
-  state: 'healthy' | 'recovered' | 'sparse';
-  backend: 'tree' | 'queries' | 'private-ax';
-  reason?: string;
-  reasonCode?: 'ax-rejected' | 'sparse-tree' | 'budget' | 'no-nodes' | 'capture-failed';
-  effectiveDepth?: number;
-  collapsedLeafIndexes?: number[];
-};
+// The type lives in snapshot.ts (the foundational type module) to avoid a cyclic
+// import with SnapshotNode; re-exported here so existing callers are unaffected.
+export type { SnapshotQualityVerdict } from './snapshot.ts';
 
 const SNAPSHOT_QUALITY_STATES = new Set<SnapshotQualityVerdict['state']>([
   'healthy',

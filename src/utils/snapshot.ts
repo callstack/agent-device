@@ -1,4 +1,19 @@
-import type { SnapshotQualityVerdict } from './snapshot-quality.ts';
+/**
+ * Structured quality verdict computed once by the iOS runner's snapshot capture plan.
+ * The daemon renders it; it never re-derives degradation from node shapes.
+ *
+ * Defined here (the foundational snapshot type module) rather than in
+ * snapshot-quality.ts so SnapshotNode can reference it without a cyclic import;
+ * snapshot-quality.ts (the validation logic) re-exports it for existing callers.
+ */
+export type SnapshotQualityVerdict = {
+  state: 'healthy' | 'recovered' | 'sparse';
+  backend: 'tree' | 'queries' | 'private-ax';
+  reason?: string;
+  reasonCode?: 'ax-rejected' | 'sparse-tree' | 'budget' | 'no-nodes' | 'capture-failed';
+  effectiveDepth?: number;
+  collapsedLeafIndexes?: number[];
+};
 
 export type Rect = {
   x: number;
