@@ -268,10 +268,12 @@ type RewrittenUploadTicket = {
 };
 
 type ResumableUploadProxyCapture = {
-  directAuth?: string;
-  directTokenHeader?: string;
-  directContentRange?: string;
-  directBody?: string;
+  direct?: {
+    auth: string;
+    token: string;
+    contentRange: string;
+    body: string;
+  };
   finalizeAuth?: string;
 };
 
@@ -327,10 +329,12 @@ async function assertDirectUploadUsesDaemonToken(
     body: Buffer.from('umed'),
   });
   assert.equal(direct.status, 200);
-  assert.equal(capture.directAuth, 'Bearer daemon-secret');
-  assert.equal(capture.directTokenHeader, 'daemon-secret');
-  assert.equal(capture.directContentRange, 'bytes 3-6/7');
-  assert.equal(capture.directBody, 'umed');
+  assert.deepEqual(capture.direct, {
+    auth: 'Bearer daemon-secret',
+    token: 'daemon-secret',
+    contentRange: 'bytes 3-6/7',
+    body: 'umed',
+  });
 }
 
 async function assertFinalizeUsesDaemonToken(
@@ -351,68 +355,61 @@ async function assertFinalizeUsesDaemonToken(
 }
 
 function createResumableUploadProxyUpstream(capture: ResumableUploadProxyCapture): http.Server {
+  const routes: Record<string, (req: http.IncomingMessage, res: http.ServerResponse) => void> = {
+    'GET /health': (_req, res) => {
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ ok: true }));
+    },
+    'POST /upload/preflight': (_req, res) => {
+      res.setHeader('content-type', 'application/json');
+      res.end(
+        JSON.stringify({
+          ok: true,
+          cacheHit: false,
+          uploadId: 'upload-1',
+          upload: {
+            url: 'http://127.0.0.1:65535/upload/direct/upload-1',
+            headers: {
+              authorization: 'Bearer daemon-secret',
+              'x-agent-device-token': 'daemon-secret',
+              'content-type': 'application/octet-stream',
+            },
+          },
+        }),
+      );
+    },
+    'PUT /upload/direct/upload-1': (req, res) => {
+      const direct = {
+        auth: String(req.headers.authorization ?? ''),
+        token: String(req.headers['x-agent-device-token'] ?? ''),
+        contentRange: String(req.headers['content-range'] ?? ''),
+        body: '',
+      };
+      capture.direct = direct;
+      req.setEncoding('utf8');
+      req.on('data', (chunk) => {
+        direct.body += chunk;
+      });
+      req.on('end', () => {
+        res.statusCode = 200;
+        res.end('ok');
+      });
+    },
+    'POST /upload/finalize': (req, res) => {
+      capture.finalizeAuth = String(req.headers.authorization ?? '');
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ ok: true, uploadId: 'tracked-upload-1' }));
+    },
+  };
+
   return http.createServer((req, res) => {
     const route = `${req.method ?? ''} ${req.url ?? ''}`;
-    if (route === 'GET /health') return sendResumableProxyHealth(res);
-    if (route === 'POST /upload/preflight') return sendResumableProxyPreflight(res);
-    if (route === 'PUT /upload/direct/upload-1') {
-      return receiveResumableProxyDirectUpload(req, res, capture);
+    const handler = routes[route];
+    if (handler) {
+      handler(req, res);
+    } else {
+      res.statusCode = 404;
+      res.end('not found');
     }
-    if (route === 'POST /upload/finalize') return sendResumableProxyFinalize(req, res, capture);
-    res.statusCode = 404;
-    res.end('not found');
   });
-}
-
-function sendResumableProxyHealth(res: http.ServerResponse): void {
-  res.setHeader('content-type', 'application/json');
-  res.end(JSON.stringify({ ok: true }));
-}
-
-function sendResumableProxyPreflight(res: http.ServerResponse): void {
-  res.setHeader('content-type', 'application/json');
-  res.end(
-    JSON.stringify({
-      ok: true,
-      cacheHit: false,
-      uploadId: 'upload-1',
-      upload: {
-        url: 'http://127.0.0.1:65535/upload/direct/upload-1',
-        headers: {
-          authorization: 'Bearer daemon-secret',
-          'x-agent-device-token': 'daemon-secret',
-          'content-type': 'application/octet-stream',
-        },
-      },
-    }),
-  );
-}
-
-function receiveResumableProxyDirectUpload(
-  req: http.IncomingMessage,
-  res: http.ServerResponse,
-  capture: ResumableUploadProxyCapture,
-): void {
-  capture.directAuth = String(req.headers.authorization ?? '');
-  capture.directTokenHeader = String(req.headers['x-agent-device-token'] ?? '');
-  capture.directContentRange = String(req.headers['content-range'] ?? '');
-  capture.directBody = '';
-  req.setEncoding('utf8');
-  req.on('data', (chunk) => {
-    capture.directBody += chunk;
-  });
-  req.on('end', () => {
-    res.statusCode = 200;
-    res.end('ok');
-  });
-}
-
-function sendResumableProxyFinalize(
-  req: http.IncomingMessage,
-  res: http.ServerResponse,
-  capture: ResumableUploadProxyCapture,
-): void {
-  capture.finalizeAuth = String(req.headers.authorization ?? '');
-  res.setHeader('content-type', 'application/json');
-  res.end(JSON.stringify({ ok: true, uploadId: 'tracked-upload-1' }));
 }
