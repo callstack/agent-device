@@ -1,4 +1,5 @@
 import type { JsonSchema } from '../commands/command-contract.ts';
+import type { CommandResultMap } from '../core/command-descriptor/command-result.ts';
 import { booleanSchema, looseObjectSchema, stringSchema } from '../commands/command-input.ts';
 import { BACK_MODES } from '../core/back-mode.ts';
 import { DEVICE_ROTATIONS } from '../core/device-rotation.ts';
@@ -6,14 +7,16 @@ import { SESSION_SURFACES } from '../core/session-surface.ts';
 import { DEVICE_TARGETS, PLATFORMS } from '../utils/device.ts';
 
 /**
- * Hand-authored, PARTIAL-coverage registry of per-command MCP `outputSchema`s,
- * keyed by the daemon command NAME. It mirrors the typed-result spine
- * `CommandResultMap` (src/core/command-descriptor/command-result.ts) one-for-one:
- * a command appears here ONLY when its accurate, closed result shape lives in the
- * contracts layer (src/contracts/*). The genuinely-dynamic commands (snapshot
- * overlays, gestures, perf, logs, …) are intentionally absent — their tools stay
- * byte-identical to today (no `outputSchema` key), exactly as `CommandResultMap`
- * omits them rather than inventing a shape.
+ * Hand-authored registry of per-command MCP `outputSchema`s, keyed by the daemon
+ * command NAME. It is type-tied to the typed-result spine `CommandResultMap`
+ * (src/core/command-descriptor/command-result.ts) via
+ * `satisfies Record<keyof CommandResultMap, JsonSchema>`, so the one-for-one
+ * invariant is compiler-enforced: a new `CommandResultMap` entry without a schema
+ * here is a missing-key error, and a typo'd/extra key is an excess-property error.
+ * The genuinely-dynamic commands (snapshot overlays, gestures, perf, logs, …) are
+ * absent from BOTH maps — their tools stay byte-identical to today (no
+ * `outputSchema` key), exactly as `CommandResultMap` omits them rather than
+ * inventing a shape.
  *
  * There is no type→JSON-Schema generator in this repo, so every schema below is
  * authored by hand from the matching contract type. Two invariants:
@@ -180,7 +183,7 @@ const targetShutdownResultSchema: JsonSchema = objectSchema(
   ['success', 'exitCode', 'stdout', 'stderr'],
 );
 
-export const COMMAND_OUTPUT_SCHEMAS: Partial<Record<string, JsonSchema>> = {
+export const COMMAND_OUTPUT_SCHEMAS = {
   // src/contracts/interaction.ts
   press: interactionResultSchema({
     properties: { backendResult: backendResultSchema, message: stringSchema() },
@@ -301,4 +304,4 @@ export const COMMAND_OUTPUT_SCHEMAS: Partial<Record<string, JsonSchema>> = {
     },
     ['platform', 'action'],
   ),
-};
+} satisfies Record<keyof CommandResultMap, JsonSchema>;

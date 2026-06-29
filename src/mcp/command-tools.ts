@@ -39,7 +39,12 @@ export function listCommandTools(): Array<{
   outputSchema?: JsonSchema;
 }> {
   return listMcpCommandMetadata().map((definition) => {
-    const outputSchema = COMMAND_OUTPUT_SCHEMAS[definition.name];
+    // The registry is keyed by the typed-result commands only (CommandResultMap),
+    // so guard the lookup; untyped tools resolve to no outputSchema.
+    const outputSchema =
+      definition.name in COMMAND_OUTPUT_SCHEMAS
+        ? COMMAND_OUTPUT_SCHEMAS[definition.name as keyof typeof COMMAND_OUTPUT_SCHEMAS]
+        : undefined;
     return {
       name: definition.name,
       description: definition.description,
