@@ -9,7 +9,7 @@ Accepted
 Apple support is modeled asymmetrically and is physically smeared across an `ios` directory that is really
 the shared Apple engine. `Platform` carries `ios` and `macos` as separate literals, but tvOS is not a
 platform at all — it is `platform: 'ios' + target: 'tv'`, with the OS name reconstructed late and lossily by
-`resolveApplePlatformName` (`src/utils/device.ts`). Meanwhile ~697 LOC of macOS code lives inside
+`resolveApplePlatformName` (`src/kernel/device.ts`). Meanwhile ~697 LOC of macOS code lives inside
 `src/platforms/ios/`, `src/platforms/macos/devices.ts` is a 19-line stub that the iOS discovery imports (the
 dependency arrow points backwards), and the Apple interactor in `src/core/interactors/apple.ts` reaches into
 `platforms/ios`. A four-investigator survey found that ~85% of `platforms/ios` (the runner stack,

@@ -139,7 +139,7 @@ Command-only flags (like `find --first`) that do not flow to the platform layer 
 - Use `keyboard dismiss` for iOS keyboard dismissal; it may tap safe native controls such as `Done` but must not fall back to system back navigation.
 - Do not remove shared snapshot/session model behavior without full migration.
 - Command/device support must come from `src/core/capabilities.ts`.
-- Apple-family target changes must keep `src/utils/device.ts`, `src/core/capabilities.ts`, `src/core/dispatch-resolve.ts`, `src/platforms/ios/devices.ts`, and `src/platforms/ios/runner-xctestrun.ts` in sync.
+- Apple-family target changes must keep `src/kernel/device.ts`, `src/core/capabilities.ts`, `src/core/dispatch-resolve.ts`, `src/platforms/ios/devices.ts`, and `src/platforms/ios/runner-xctestrun.ts` in sync.
 - iOS simulator-set scoping is iOS-specific: do not let `iosSimulatorDeviceSet` hide the host macOS desktop target when `--platform macos` or `--target desktop` is requested.
 - If Swift runner code changes, run `pnpm build:xcuitest`.
 - Use `inferFillText` and `uniqueStrings` from `src/daemon/action-utils.ts`.
@@ -157,7 +157,7 @@ Command-only flags (like `find --first`) that do not flow to the platform layer 
 - Request diagnostics belong in `sessions/<effective-session>/requests/<request-id>.ndjson` once the effective session is resolved. The top-level daemon log is for daemon lifecycle/startup and pre-session failures.
 - Session artifact paths are centralized in `src/daemon/session-store.ts`; do not hand-build session log paths in handlers.
 - Do not add ad-hoc stderr/file logging where diagnostics helpers apply.
-- Normalize user-facing failures via `src/utils/errors.ts` (`normalizeError`).
+- Normalize user-facing failures via `src/kernel/errors.ts` (`normalizeError`).
 - Failure payload contract: `code`, `message`, `hint`, `diagnosticId`, `logPath`, `details`.
 - User-facing errors should be short and actionable: say what failed, why when known, and how to recover. Put recovery steps in `hint` when the action is not obvious, for example restart/retry, use plain screenshot when AX state is unavailable, navigate with coordinates, or inspect logs.
 - If an interaction unexpectedly takes 5+ seconds, inspect the relevant daemon log before attributing it to the app. Check the session `--state-dir` `daemon.log` or the failure `logPath` for runner restart, stale session recovery, AX failure, transport retry, or command timeout evidence.

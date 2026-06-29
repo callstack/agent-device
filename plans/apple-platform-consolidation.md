@@ -28,7 +28,7 @@ each OS to its own `Platform` literal. Reasons from the code:
 BEFORE — Apple support is smeared across an "iOS" folder that is really the Apple engine
 ─────────────────────────────────────────────────────────────────────────────────────────
 
-DeviceInfo (src/utils/device.ts)
+DeviceInfo (src/kernel/device.ts)
   platform: ios | macos | android | linux | web     ← macOS is its OWN literal …
   kind:     simulator | emulator | device
   target?:  mobile | tv | desktop                   ← … but tvOS = ios + target:'tv'  (asymmetric!)
