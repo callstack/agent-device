@@ -99,11 +99,12 @@ test('formatReplayTestProgressEvent renders pass, retry, fail, and skip cases', 
         maxAttempts: 2,
         durationMs: 9_876,
         message: 'assertVisible failed',
+        hint: 'Run pnpm clean:daemon and retry',
         session: 'maestro-test:test:suite:3:attempt-2',
         artifactsDir: '/tmp/replay-suite/payment',
       },
       expected:
-        /^⨯ Payment flow \(9\.88s\)\n    file: 03-payment\.ad\n    failed at: assertVisible failed\n    session: maestro-test:test:suite:3:attempt-2\n    artifacts: \/tmp\/replay-suite\/payment$/,
+        /^⨯ Payment flow \(9\.88s\)\n    file: 03-payment\.ad\n    failed at: assertVisible failed\n    hint: Run pnpm clean:daemon and retry\n    session: maestro-test:test:suite:3:attempt-2\n    artifacts: \/tmp\/replay-suite\/payment$/,
     },
     {
       event: {

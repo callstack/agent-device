@@ -25,6 +25,7 @@ export type ReplayTestProgressEvent = {
   durationMs?: number;
   retrying?: boolean;
   message?: string;
+  hint?: string;
   session?: string;
   artifactsDir?: string;
   shardIndex?: number;

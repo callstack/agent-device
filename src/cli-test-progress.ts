@@ -116,6 +116,7 @@ function addReplayTestCaseDetailLines(
   const messageLine = replayTestProgressMessageLine(event);
   if (fileLine) lines.push(fileLine);
   if (messageLine) lines.push(messageLine);
+  appendReplayTestProgressHintLine(lines, event);
   lines.push(...replayTestProgressFailureContextLines(event));
 }
 
@@ -136,6 +137,14 @@ function replayTestProgressMessageLine(event: ReplayTestCaseProgressEvent): stri
   const message = event.message?.replace(/\s+/g, ' ').trim();
   if (!message) return undefined;
   return `    ${event.status === 'fail' ? `failed at: ${message}` : message}`;
+}
+
+function appendReplayTestProgressHintLine(
+  lines: string[],
+  event: ReplayTestCaseProgressEvent,
+): void {
+  const hint = event.hint?.replace(/\s+/g, ' ').trim();
+  if (event.status === 'fail' && hint) lines.push(`    hint: ${hint}`);
 }
 
 function replayTestProgressFailureContextLines(event: ReplayTestCaseProgressEvent): string[] {

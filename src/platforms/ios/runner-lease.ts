@@ -195,17 +195,34 @@ function buildBusyRunnerLeaseHint(
     currentStateDir && currentStateDir !== lease.ownerStateDir
       ? ` Current daemon state dir is ${currentStateDir}.`
       : '';
+  const cleanup = buildBusyRunnerLeaseCleanupHint(lease);
   if (logicalLeaseContext) {
     return [
       `The device is busy because another active device lease owns it, or the runner is owned by another daemon/process after lease admission. Runner owner: ${owner}${stateDir}.${current}`,
       'Retry after the owning session closes or after the five-minute inactivity lease expires.',
-      'If this persists after expiry, inspect the runner owner details and clean the stale daemon state on the machine with simulator access.',
+      cleanup,
     ].join(' ');
   }
   return [
     `Runner owner details: ${owner}${stateDir}.${current} Retry after the owning runner finishes.`,
-    'Do not run prepare ios-runner from another daemon/client to recover this; a live foreign runner lease cannot be released by the remote client.',
+    cleanup,
+    'Do not run prepare ios-runner from another daemon/client to recover this; use the owning daemon cleanup command above.',
   ].join(' ');
+}
+
+function buildBusyRunnerLeaseCleanupHint(lease: RunnerLease): string {
+  if (lease.ownerStateDir) {
+    return `If it is stuck, run ${formatEnvAssignment('AGENT_DEVICE_STATE_DIR', lease.ownerStateDir)} pnpm clean:daemon from this agent-device checkout, then retry.`;
+  }
+  return 'If it is stuck, stop the owning daemon or run pnpm clean:daemon in the owning agent-device checkout, then retry.';
+}
+
+function formatEnvAssignment(name: string, value: string): string {
+  return `${name}=${shellQuote(value)}`;
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
 export async function cleanupOwnedRunnerLease(

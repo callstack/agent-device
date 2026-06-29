@@ -776,6 +776,10 @@ test('runner session startup rejects live foreign runner lease', async () => {
       String((thrown as { details?: Record<string, unknown> }).details?.hint),
       /PID \d+ with AGENT_DEVICE_STATE_DIR=\/tmp\/agent-device-owner/,
     );
+    assert.match(
+      String((thrown as { details?: Record<string, unknown> }).details?.hint),
+      /AGENT_DEVICE_STATE_DIR='\/tmp\/agent-device-owner' pnpm clean:daemon/,
+    );
     assert.equal(mockRunCmdBackground.mock.calls.length, 0);
     assert.equal(
       mockRunAppleToolCommand.mock.calls.some((call) => call[0] === 'pkill'),
