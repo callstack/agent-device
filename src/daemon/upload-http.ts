@@ -22,7 +22,13 @@ type UploadHttpRoute =
 
 type UploadPreflightBody = Pick<
   BeginResumableUploadOptions,
-  'artifactType' | 'contentType' | 'fileName' | 'platform' | 'sha256' | 'sizeBytes'
+  | 'artifactType'
+  | 'contentType'
+  | 'fileName'
+  | 'platform'
+  | 'sha256'
+  | 'sizeBytes'
+  | 'uploadAttemptId'
 >;
 
 type UploadFinalizeBody = {
@@ -242,6 +248,7 @@ async function readRestJsonBody(
 function readUploadPreflightBody(record: Record<string, unknown>): UploadPreflightBody {
   return {
     sha256: readRequiredText(record, 'sha256'),
+    uploadAttemptId: readRequiredText(record, 'uploadAttemptId'),
     fileName: readRequiredText(record, 'fileName'),
     sizeBytes: readRequiredInteger(record, 'sizeBytes'),
     artifactType: readRequiredArtifactType(record),

@@ -545,6 +545,7 @@ test('Provider-backed integration daemon HTTP server resumes direct uploads befo
         'content-type': 'application/json',
       },
       body: JSON.stringify({
+        uploadAttemptId: 'resume-before-finalize',
         sha256: crypto.createHash('sha256').update(content).digest('hex'),
         fileName: 'demo.apk',
         sizeBytes: content.length,
@@ -605,6 +606,95 @@ test('Provider-backed integration daemon HTTP server resumes direct uploads befo
     assert.deepEqual(fs.readFileSync(prepareUploadedArtifact(trackedUploadId)), content);
   } finally {
     if (trackedUploadId) cleanupUploadedArtifact(trackedUploadId);
+    await closeLoopbackServer(server);
+  }
+});
+
+test('Provider-backed integration daemon HTTP server isolates same-artifact upload attempts', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'daemon HTTP integration coverage')) {
+    return;
+  }
+
+  const content = Buffer.from('same-apk-content');
+  const server = await createDaemonHttpServer({
+    token: 'provider-scenario-token',
+    handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
+  });
+  const trackedUploadIds: string[] = [];
+
+  try {
+    const port = await listenOnLoopback(server);
+    const requestPreflight = async (uploadAttemptId: string) => {
+      const response = await fetch(`http://127.0.0.1:${port}/upload/preflight`, {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer provider-scenario-token',
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          uploadAttemptId,
+          sha256: crypto.createHash('sha256').update(content).digest('hex'),
+          fileName: 'demo.apk',
+          sizeBytes: content.length,
+          artifactType: 'file',
+          platform: 'android',
+          contentType: 'application/octet-stream',
+        }),
+      });
+      assert.equal(response.status, 200);
+      const body = (await response.json()) as {
+        uploadId?: string;
+        upload?: { url?: string; headers?: Record<string, string> };
+      };
+      assert.equal(typeof body.uploadId, 'string');
+      assert.equal(typeof body.upload?.url, 'string');
+      if (!body.uploadId || !body.upload?.url) throw new Error('missing upload ticket');
+      return {
+        uploadId: body.uploadId,
+        uploadUrl: body.upload.url,
+        uploadHeaders: body.upload.headers ?? {},
+      };
+    };
+
+    const first = await requestPreflight('same-artifact-first');
+    const second = await requestPreflight('same-artifact-second');
+    assert.notEqual(first.uploadId, second.uploadId);
+    assert.notEqual(first.uploadUrl, second.uploadUrl);
+
+    const firstChunk = await fetch(first.uploadUrl, {
+      method: 'PUT',
+      headers: first.uploadHeaders,
+      body: content.subarray(0, 5),
+    });
+    assert.equal(firstChunk.status, 308);
+    assert.equal(firstChunk.headers.get('x-upload-offset'), '5');
+
+    const secondComplete = await fetch(second.uploadUrl, {
+      method: 'PUT',
+      headers: second.uploadHeaders,
+      body: content,
+    });
+    assert.equal(secondComplete.status, 200);
+
+    const secondFinalize = await finalizeUpload(port, second.uploadId);
+    trackedUploadIds.push(secondFinalize);
+    assert.deepEqual(fs.readFileSync(prepareUploadedArtifact(secondFinalize)), content);
+
+    const firstComplete = await fetch(first.uploadUrl, {
+      method: 'PUT',
+      headers: {
+        ...first.uploadHeaders,
+        'content-range': `bytes 5-${content.length - 1}/${content.length}`,
+      },
+      body: content.subarray(5),
+    });
+    assert.equal(firstComplete.status, 200);
+
+    const firstFinalize = await finalizeUpload(port, first.uploadId);
+    trackedUploadIds.push(firstFinalize);
+    assert.deepEqual(fs.readFileSync(prepareUploadedArtifact(firstFinalize)), content);
+  } finally {
+    for (const uploadId of trackedUploadIds) cleanupUploadedArtifact(uploadId);
     await closeLoopbackServer(server);
   }
 });
@@ -694,6 +784,22 @@ async function callRpc(
     status: response.status,
     body: (await response.json()) as RpcResponse['body'],
   };
+}
+
+async function finalizeUpload(port: number, uploadId: string): Promise<string> {
+  const response = await fetch(`http://127.0.0.1:${port}/upload/finalize`, {
+    method: 'POST',
+    headers: {
+      authorization: 'Bearer provider-scenario-token',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify({ uploadId }),
+  });
+  assert.equal(response.status, 200);
+  const body = (await response.json()) as { uploadId?: string };
+  const finalizedUploadId = body.uploadId;
+  if (typeof finalizedUploadId !== 'string') throw new Error('missing finalized upload id');
+  return finalizedUploadId;
 }
 
 async function callRawRpc(port: number, body: string): Promise<RpcResponse> {

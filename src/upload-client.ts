@@ -71,12 +71,14 @@ type UploadPreflightResult =
 export async function uploadArtifact(options: UploadArtifactOptions): Promise<string> {
   const prepared = await prepareUploadArtifact(options.localPath, options.platform);
   const normalizedBase = options.baseUrl.endsWith('/') ? options.baseUrl : `${options.baseUrl}/`;
+  const uploadAttemptId = randomUUID();
 
   try {
     const preflight = await requestUploadPreflight({
       normalizedBase,
       token: options.token,
       artifact: prepared,
+      uploadAttemptId,
     });
 
     if (preflight?.kind === 'cache-hit') {
@@ -88,6 +90,7 @@ export async function uploadArtifact(options: UploadArtifactOptions): Promise<st
         token: options.token,
         artifact: prepared,
         preflight,
+        uploadAttemptId,
         onProgress: options.onProgress,
       });
       if (directUpload) return directUpload;
@@ -121,6 +124,7 @@ async function tryDirectUploadWithResume(options: {
   token: string;
   artifact: PreparedUploadArtifact;
   preflight: Extract<UploadPreflightResult, { kind: 'direct-upload' }>;
+  uploadAttemptId: string;
   onProgress?: UploadProgressSink;
 }): Promise<string | undefined> {
   const uploadOnce = async (
@@ -142,6 +146,7 @@ async function tryDirectUploadWithResume(options: {
       normalizedBase: options.normalizedBase,
       token: options.token,
       artifact: options.artifact,
+      uploadAttemptId: options.uploadAttemptId,
     });
     if (retryPreflight?.kind === 'cache-hit') {
       return retryPreflight.uploadId;
@@ -286,6 +291,7 @@ async function requestUploadPreflight(options: {
   normalizedBase: string;
   token: string;
   artifact: PreparedUploadArtifact;
+  uploadAttemptId: string;
 }): Promise<UploadPreflightResult | undefined> {
   const preflightUrl = new URL('upload/preflight', options.normalizedBase);
   const headers: Record<string, string> = {
@@ -298,6 +304,7 @@ async function requestUploadPreflight(options: {
     headers,
     signal: AbortSignal.timeout(UPLOAD_PREFLIGHT_TIMEOUT_MS),
     body: JSON.stringify({
+      uploadAttemptId: options.uploadAttemptId,
       sha256: options.artifact.sha256,
       fileName: options.artifact.fileName,
       sizeBytes: options.artifact.sizeBytes,

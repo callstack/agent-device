@@ -31,6 +31,7 @@ test('uploadArtifact returns preflight uploadId without uploading bytes on cache
       assert.equal(req.headers.authorization, `Bearer ${TEST_TOKEN}`);
       assert.equal(req.headers['x-agent-device-token'], TEST_TOKEN);
       const body = JSON.parse((await readRequestBody(req)).toString('utf8')) as {
+        uploadAttemptId: string;
         sha256: string;
         fileName: string;
         sizeBytes: number;
@@ -38,6 +39,7 @@ test('uploadArtifact returns preflight uploadId without uploading bytes on cache
         platform: string;
         contentType: string;
       };
+      assert.equal(typeof body.uploadAttemptId, 'string');
       assert.equal(body.sha256, expectedHash);
       assert.equal(body.fileName, 'app.apk');
       assert.equal(body.sizeBytes, Buffer.byteLength(content));
@@ -398,17 +400,20 @@ test('uploadArtifact uses direct upload ticket and finalize flow', async () => {
   const expectedHash = sha256(content);
   const requests: string[] = [];
   let directUploadBody = '';
+  const progressEvents: UploadProgressEvent[] = [];
 
   const server = await startServer(async (req, res) => {
     requests.push(`${req.method} ${req.url}`);
     if (req.method === 'POST' && req.url === '/upload/preflight') {
       const body = JSON.parse((await readRequestBody(req)).toString('utf8')) as {
+        uploadAttemptId: string;
         sha256: string;
         fileName: string;
         artifactType: string;
         platform: string;
         contentType: string;
       };
+      assert.equal(typeof body.uploadAttemptId, 'string');
       assert.equal(body.sha256, expectedHash);
       assert.equal(body.fileName, 'app.apk');
       assert.equal(body.artifactType, 'file');
@@ -454,9 +459,28 @@ test('uploadArtifact uses direct upload ticket and finalize flow', async () => {
       localPath: artifactPath,
       baseUrl: server.baseUrl,
       token: TEST_TOKEN,
+      onProgress: (event) => progressEvents.push(event),
     });
     assert.equal(uploadId, 'upload-finalized');
     assert.equal(directUploadBody, content);
+    assert.deepEqual(
+      progressEvents.map((event) => event.type),
+      ['start', 'progress'],
+    );
+    assert.deepEqual(progressEvents[0], {
+      type: 'start',
+      stage: 'direct',
+      fileName: 'app.apk',
+      transferredBytes: 0,
+      totalBytes: Buffer.byteLength(content),
+    });
+    assert.deepEqual(progressEvents[1], {
+      type: 'progress',
+      stage: 'direct',
+      fileName: 'app.apk',
+      transferredBytes: Buffer.byteLength(content),
+      totalBytes: Buffer.byteLength(content),
+    });
     assert.deepEqual(requests, [
       'POST /upload/preflight',
       'PUT /signed-upload',
@@ -554,6 +578,7 @@ test('uploadArtifact resumes a direct upload from the server-reported offset', a
   let uploadAttempts = 0;
   let firstUploadBody = '';
   let resumedUploadBody = '';
+  const progressEvents: UploadProgressEvent[] = [];
 
   const server = await startServer(async (req, res) => {
     requests.push(`${req.method} ${req.url}`);
@@ -613,10 +638,29 @@ test('uploadArtifact resumes a direct upload from the server-reported offset', a
       localPath: artifactPath,
       baseUrl: server.baseUrl,
       token: TEST_TOKEN,
+      onProgress: (event) => progressEvents.push(event),
     });
     assert.equal(uploadId, 'upload-resumed');
     assert.equal(firstUploadBody, content);
     assert.equal(resumedUploadBody, content.slice(resumeOffset));
+    assert.deepEqual(
+      progressEvents.map((event) => event.type),
+      ['start', 'progress', 'resume', 'progress'],
+    );
+    assert.deepEqual(progressEvents[0], {
+      type: 'start',
+      stage: 'direct',
+      fileName: 'app.apk',
+      transferredBytes: 0,
+      totalBytes: Buffer.byteLength(content),
+    });
+    assert.deepEqual(progressEvents[2], {
+      type: 'resume',
+      stage: 'direct',
+      fileName: 'app.apk',
+      transferredBytes: resumeOffset,
+      totalBytes: Buffer.byteLength(content),
+    });
     assert.deepEqual(requests, [
       'POST /upload/preflight',
       'PUT /resumable-upload',
@@ -634,6 +678,7 @@ test('uploadArtifact re-preflights and resumes after an interrupted direct uploa
   const resumeOffset = 8;
   const requests: string[] = [];
   let preflightAttempts = 0;
+  const uploadAttemptIds: string[] = [];
   let uploadAttempts = 0;
   let resumedUploadBody = '';
 
@@ -641,7 +686,10 @@ test('uploadArtifact re-preflights and resumes after an interrupted direct uploa
     requests.push(`${req.method} ${req.url}`);
     if (req.method === 'POST' && req.url === '/upload/preflight') {
       preflightAttempts += 1;
-      await readRequestBody(req);
+      const body = JSON.parse((await readRequestBody(req)).toString('utf8')) as {
+        uploadAttemptId: string;
+      };
+      uploadAttemptIds.push(body.uploadAttemptId);
       sendJson(res, {
         ok: true,
         cacheHit: false,
@@ -694,6 +742,9 @@ test('uploadArtifact re-preflights and resumes after an interrupted direct uploa
     });
     assert.equal(uploadId, 'upload-resumed-after-error');
     assert.equal(preflightAttempts, 2);
+    assert.equal(uploadAttemptIds.length, 2);
+    assert.equal(typeof uploadAttemptIds[0], 'string');
+    assert.equal(uploadAttemptIds[0], uploadAttemptIds[1]);
     assert.equal(resumedUploadBody, content.slice(resumeOffset));
     assert.deepEqual(requests, [
       'POST /upload/preflight',

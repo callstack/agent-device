@@ -21,6 +21,7 @@ type UploadArtifactType = 'file' | 'app-bundle';
 export type BeginResumableUploadOptions = {
   baseUrl: string;
   tokenHeaders: Record<string, string>;
+  uploadAttemptId: string;
   sha256: string;
   fileName: string;
   sizeBytes: number;
@@ -147,6 +148,9 @@ function validateResumableUploadOptions(options: BeginResumableUploadOptions): v
   }
   validateArtifactContentLength(String(options.sizeBytes));
   sanitizeArtifactFilename(options.fileName);
+  if (!options.uploadAttemptId.trim()) {
+    throw new AppError('INVALID_ARGS', 'uploadAttemptId is required');
+  }
 }
 
 function createResumableUploadEntry(
@@ -251,6 +255,7 @@ function isValidContentRange(
 function buildResumableUploadKey(options: BeginResumableUploadOptions): string {
   return [
     options.tenantId ?? '',
+    options.uploadAttemptId,
     options.sha256.toLowerCase(),
     String(options.sizeBytes),
     sanitizeArtifactFilename(options.fileName),

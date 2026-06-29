@@ -285,6 +285,7 @@ async function requestRewrittenUploadTicket(proxyPort: number): Promise<Rewritte
       'content-type': 'application/json',
     },
     body: JSON.stringify({
+      uploadAttemptId: 'proxy-resumable-upload-test',
       sha256: crypto.createHash('sha256').update('resumed').digest('hex'),
       fileName: 'demo.apk',
       sizeBytes: 7,
