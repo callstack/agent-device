@@ -213,9 +213,9 @@ function buildRunnerOwnerHint(lease: RunnerLease): string {
 
 function buildBusyRunnerLeaseCleanupHint(lease: RunnerLease): string {
   if (lease.ownerStateDir) {
-    return `If it is stuck, run ${formatEnvAssignment('AGENT_DEVICE_STATE_DIR', lease.ownerStateDir)} pnpm clean:daemon from this agent-device checkout, then retry.`;
+    return `If it is stuck, stop the owning agent-device daemon for ${formatEnvAssignment('AGENT_DEVICE_STATE_DIR', lease.ownerStateDir)} and retry.`;
   }
-  return 'If it is stuck, stop the owning daemon or run pnpm clean:daemon in the owning agent-device checkout, then retry.';
+  return 'If it is stuck, stop the owning agent-device daemon and retry.';
 }
 
 function formatEnvAssignment(name: string, value: string): string {

@@ -1391,7 +1391,8 @@ test('usageForCommand documents prepare ios-runner', () => {
   assert.match(help, /--timeout <ms>/);
   assert.match(help, /XCTest runner/);
   assert.match(help, /separate daemon/);
-  assert.match(help, /clean:daemon after prepare/);
+  assert.match(help, /stop the prepare daemon before replay\/test/);
+  assert.doesNotMatch(help, /clean:daemon|pnpm/);
   assert.match(
     help,
     /not a recovery step for "runner already owned by another agent-device daemon"/,

@@ -32,7 +32,7 @@ const prepareCliSchema = {
   usageOverride: 'prepare ios-runner --platform ios|macos [--timeout <ms>]',
   listUsageOverride: 'prepare',
   helpDescription:
-    'Prepare platform helper infrastructure. ios-runner builds/reuses, starts, and health-checks the XCTest runner so later Apple snapshots and interactions do not pay first-use startup cost. In CI, run it after boot/install and before replay/test; if replay/test starts a separate daemon, run clean:daemon after prepare to release the prepared runner lease. It is not a recovery step for "runner already owned by another agent-device daemon"; stop or clean the owning daemon on the Mac with simulator access instead. Runner build/start output is written to the session runner.log; daemon.log is for daemon lifecycle/startup issues.',
+    'Prepare platform helper infrastructure. ios-runner builds/reuses, starts, and health-checks the XCTest runner so later Apple snapshots and interactions do not pay first-use startup cost. In CI, run it after boot/install and before replay/test; if replay/test starts a separate daemon, stop the prepare daemon before replay/test so it does not keep the prepared runner lease. It is not a recovery step for "runner already owned by another agent-device daemon"; stop the owning daemon on the Mac with simulator access instead. Runner build/start output is written to the session runner.log; daemon.log is for daemon lifecycle/startup issues.',
   summary:
     'Pre-warm platform helpers, especially the iOS/macOS XCTest runner before Apple automation',
   positionalArgs: ['ios-runner'],
