@@ -6,6 +6,7 @@ import {
   listMcpCommandMetadata,
   type CommandName,
 } from '../commands/command-metadata.ts';
+import { COMMAND_OUTPUT_SCHEMAS } from './command-output-schemas.ts';
 
 export type ToolResult = {
   isError: boolean;
@@ -35,12 +36,19 @@ export function listCommandTools(): Array<{
   name: string;
   description: string;
   inputSchema: JsonSchema;
+  outputSchema?: JsonSchema;
 }> {
-  return listMcpCommandMetadata().map((definition) => ({
-    name: definition.name,
-    description: definition.description,
-    inputSchema: withMcpConfigSchema(definition.inputSchema),
-  }));
+  return listMcpCommandMetadata().map((definition) => {
+    const outputSchema = COMMAND_OUTPUT_SCHEMAS[definition.name];
+    return {
+      name: definition.name,
+      description: definition.description,
+      inputSchema: withMcpConfigSchema(definition.inputSchema),
+      // Only typed commands carry an outputSchema; untyped tools stay
+      // byte-identical to today (no key at all), additive-only.
+      ...(outputSchema ? { outputSchema } : {}),
+    };
+  });
 }
 
 export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): CommandToolExecutor {

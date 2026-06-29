@@ -156,6 +156,72 @@ test('MCP includeCost rejects non-boolean values at the boundary', async () => {
   );
 });
 
+test('MCP typed commands advertise an outputSchema with the contract discriminant', () => {
+  const tools = listCommandTools();
+
+  // keyboard is a flat closed shape: platform + action discriminants at the top.
+  const keyboard = tools.find((tool) => tool.name === 'keyboard');
+  assert.ok(keyboard);
+  assert.ok(keyboard.outputSchema);
+  assert.equal(keyboard.outputSchema.type, 'object');
+  assert.deepEqual(
+    (keyboard.outputSchema.properties?.action as { enum?: unknown[] } | undefined)?.enum,
+    ['status', 'dismiss', 'enter'],
+  );
+  assert.deepEqual(
+    (keyboard.outputSchema.properties?.platform as { enum?: unknown[] } | undefined)?.enum,
+    ['android', 'ios'],
+  );
+
+  // clipboard is a discriminated union on `action`, modeled as oneOf branches.
+  const clipboard = tools.find((tool) => tool.name === 'clipboard');
+  assert.ok(clipboard);
+  assert.ok(clipboard.outputSchema);
+  const clipboardActions = (clipboard.outputSchema.oneOf ?? []).map(
+    (branch) => (branch.properties?.action as { const?: unknown } | undefined)?.const,
+  );
+  assert.deepEqual(clipboardActions, ['read', 'write']);
+});
+
+test('MCP untyped tools stay byte-identical: no outputSchema key', () => {
+  const tools = listCommandTools();
+
+  // snapshot is intentionally absent from the typed registry (dynamic shape).
+  const snapshot = tools.find((tool) => tool.name === 'snapshot');
+  assert.ok(snapshot);
+  assert.equal('outputSchema' in snapshot, false);
+
+  // devices is likewise untyped.
+  const devices = tools.find((tool) => tool.name === 'devices');
+  assert.ok(devices);
+  assert.equal('outputSchema' in devices, false);
+});
+
+test('MCP boot structuredContent is consistent with its advertised outputSchema', async () => {
+  const bootResult = {
+    platform: 'ios',
+    target: 'mobile',
+    device: 'iPhone 16',
+    id: 'UDID-123',
+    kind: 'simulator',
+    booted: true,
+  };
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async () => bootResult,
+  });
+
+  const bootTool = listCommandTools().find((tool) => tool.name === 'boot');
+  assert.ok(bootTool?.outputSchema);
+  const required = bootTool.outputSchema.required ?? [];
+  for (const key of required) {
+    assert.ok(key in bootResult, `boot result is missing required outputSchema key: ${key}`);
+  }
+
+  const result = await executor.execute('boot', {});
+  assert.deepEqual(result.structuredContent, bootResult);
+});
+
 test('MCP session tool exposes state-dir resolution without a daemon round-trip', async () => {
   const sessionTool = listCommandTools().find((tool) => tool.name === 'session');
   assert.ok(sessionTool);
