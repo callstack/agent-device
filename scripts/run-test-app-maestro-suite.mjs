@@ -11,7 +11,6 @@ const options = {
   platform: 'ios',
   session: 'test-app-maestro',
   flowDir: path.join(repoRoot, 'examples', 'test-app', 'maestro'),
-  openTarget: '',
   close: false,
   passthrough: [],
 };
@@ -37,10 +36,11 @@ for (let index = 2; index < process.argv.length; index += 1) {
     index += 1;
     continue;
   }
-  if (arg === '--open' && process.argv[index + 1]) {
-    options.openTarget = process.argv[index + 1];
-    index += 1;
-    continue;
+  if (arg === '--open') {
+    console.error(
+      'The test-app Maestro suite no longer supports --open. The Maestro flow appId launches the app for each test attempt.',
+    );
+    process.exit(1);
   }
   if (arg === '--close') {
     options.close = true;
@@ -65,11 +65,6 @@ function runAgentDevice(args) {
     cwd: repoRoot,
     stdio: 'inherit',
   });
-}
-
-if (options.openTarget) {
-  runAgentDevice(['open', options.openTarget, '--platform', options.platform, ...options.passthrough]);
-  runAgentDevice(['wait', 'Agent Device Tester', '30000', '--platform', options.platform, ...options.passthrough]);
 }
 
 runAgentDevice([

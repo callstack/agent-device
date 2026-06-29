@@ -128,16 +128,13 @@ The Maestro prototype suite lives in `examples/test-app/maestro` and runs throug
 `agent-device replay --maestro`:
 
 ```bash
-pnpm test-app:maestro:ios -- --open "Agent Device Tester"
-pnpm test-app:maestro:android -- --open "Agent Device Tester"
-```
-
-When the development build is already open and connected to Metro, omit
-`--open` and run the suite against the existing session:
-
-```bash
 pnpm test-app:maestro:ios
+pnpm test-app:maestro:android
 ```
+
+The Maestro flow config includes `appId`, so the suite launches the app inside
+each test attempt. Start Metro first when the installed development build needs
+the local bundle.
 
 The suite intentionally covers the compat layer syntax used by public Maestro suites:
 `runFlow` file/inline blocks, `when.platform`, config hooks, deterministic `repeat.times`,
