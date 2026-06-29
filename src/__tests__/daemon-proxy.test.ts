@@ -355,61 +355,80 @@ async function assertFinalizeUsesDaemonToken(
 }
 
 function createResumableUploadProxyUpstream(capture: ResumableUploadProxyCapture): http.Server {
-  const routes: Record<string, (req: http.IncomingMessage, res: http.ServerResponse) => void> = {
-    'GET /health': (_req, res) => {
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ ok: true }));
-    },
-    'POST /upload/preflight': (_req, res) => {
-      res.setHeader('content-type', 'application/json');
-      res.end(
-        JSON.stringify({
-          ok: true,
-          cacheHit: false,
-          uploadId: 'upload-1',
-          upload: {
-            url: 'http://127.0.0.1:65535/upload/direct/upload-1',
-            headers: {
-              authorization: 'Bearer daemon-secret',
-              'x-agent-device-token': 'daemon-secret',
-              'content-type': 'application/octet-stream',
-            },
-          },
-        }),
-      );
-    },
-    'PUT /upload/direct/upload-1': (req, res) => {
-      const direct = {
-        auth: String(req.headers.authorization ?? ''),
-        token: String(req.headers['x-agent-device-token'] ?? ''),
-        contentRange: String(req.headers['content-range'] ?? ''),
-        body: '',
-      };
-      capture.direct = direct;
-      req.setEncoding('utf8');
-      req.on('data', (chunk) => {
-        direct.body += chunk;
-      });
-      req.on('end', () => {
-        res.statusCode = 200;
-        res.end('ok');
-      });
-    },
-    'POST /upload/finalize': (req, res) => {
-      capture.finalizeAuth = String(req.headers.authorization ?? '');
-      res.setHeader('content-type', 'application/json');
-      res.end(JSON.stringify({ ok: true, uploadId: 'tracked-upload-1' }));
-    },
-  };
-
   return http.createServer((req, res) => {
     const route = `${req.method ?? ''} ${req.url ?? ''}`;
-    const handler = routes[route];
-    if (handler) {
-      handler(req, res);
-    } else {
-      res.statusCode = 404;
-      res.end('not found');
+    switch (route) {
+      case 'GET /health':
+        sendUploadProxyHealth(res);
+        return;
+      case 'POST /upload/preflight':
+        sendUploadProxyPreflight(res);
+        return;
+      case 'PUT /upload/direct/upload-1':
+        captureUploadProxyDirectRequest(req, res, capture);
+        return;
+      case 'POST /upload/finalize':
+        sendUploadProxyFinalize(req, res, capture);
+        return;
+      default:
+        res.statusCode = 404;
+        res.end('not found');
     }
   });
+}
+
+function sendUploadProxyHealth(res: http.ServerResponse): void {
+  res.setHeader('content-type', 'application/json');
+  res.end(JSON.stringify({ ok: true }));
+}
+
+function sendUploadProxyPreflight(res: http.ServerResponse): void {
+  res.setHeader('content-type', 'application/json');
+  res.end(
+    JSON.stringify({
+      ok: true,
+      cacheHit: false,
+      uploadId: 'upload-1',
+      upload: {
+        url: 'http://127.0.0.1:65535/upload/direct/upload-1',
+        headers: {
+          authorization: 'Bearer daemon-secret',
+          'x-agent-device-token': 'daemon-secret',
+          'content-type': 'application/octet-stream',
+        },
+      },
+    }),
+  );
+}
+
+function captureUploadProxyDirectRequest(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  capture: ResumableUploadProxyCapture,
+): void {
+  const direct = {
+    auth: String(req.headers.authorization ?? ''),
+    token: String(req.headers['x-agent-device-token'] ?? ''),
+    contentRange: String(req.headers['content-range'] ?? ''),
+    body: '',
+  };
+  capture.direct = direct;
+  req.setEncoding('utf8');
+  req.on('data', (chunk) => {
+    direct.body += chunk;
+  });
+  req.on('end', () => {
+    res.statusCode = 200;
+    res.end('ok');
+  });
+}
+
+function sendUploadProxyFinalize(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  capture: ResumableUploadProxyCapture,
+): void {
+  capture.finalizeAuth = String(req.headers.authorization ?? '');
+  res.setHeader('content-type', 'application/json');
+  res.end(JSON.stringify({ ok: true, uploadId: 'tracked-upload-1' }));
 }
