@@ -272,6 +272,7 @@ export async function handleSessionCommands(params: {
     return await handleSessionStateCommands({
       req,
       sessionName,
+      logPath,
       sessionStore,
     });
   }

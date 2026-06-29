@@ -98,6 +98,8 @@ export function validatePreResolvedOpenRequest(params: {
   return null;
 }
 
+export type IosSimulatorColdBootStartHandler = (device: DeviceInfo) => void;
+
 export async function prepareOpenCommandDetails(params: {
   req: DaemonRequest;
   sessionName: string;
@@ -106,10 +108,21 @@ export async function prepareOpenCommandDetails(params: {
   surface: SessionSurface;
   openTarget: string | undefined;
   existingSession?: SessionState;
+  onIosSimulatorColdBootStart?: IosSimulatorColdBootStartHandler;
 }): Promise<PreparedOpenCommandDetailsResult> {
-  const { req, sessionName, sessionStore, device, surface, openTarget, existingSession } = params;
+  const {
+    req,
+    sessionName,
+    sessionStore,
+    device,
+    surface,
+    openTarget,
+    existingSession,
+    onIosSimulatorColdBootStart,
+  } = params;
   await ensureDeviceReady(device, {
     deviceHub: req.flags?.deviceHub === true,
+    onIosSimulatorColdBootStart,
   });
   const { appBundleId, appName } = await resolvePreparedOpenIdentity({
     device,

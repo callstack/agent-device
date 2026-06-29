@@ -77,7 +77,10 @@ test('open returns and creates the session state directory', async () => {
   const response = await handler(openRequest('session-a', { platform: 'ios' }, 'req-open-state'));
 
   expect(response.ok).toBe(true);
-  expect(mockEnsureDeviceReady.mock.calls[0]?.[1]).toEqual({ deviceHub: false });
+  expect(mockEnsureDeviceReady.mock.calls[0]?.[1]).toEqual({
+    deviceHub: false,
+    onIosSimulatorColdBootStart: undefined,
+  });
   if (response.ok) {
     expect(response.data?.session).toBe('session-a');
     expect(response.data?.sessionStateDir).toEqual(expect.stringContaining('session-a'));

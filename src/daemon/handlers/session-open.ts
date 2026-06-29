@@ -4,6 +4,7 @@ import type { SessionSurface } from '../../core/session-surface.ts';
 import { contextFromFlags } from '../context.ts';
 import { createRequestCanceledError, isRequestCanceled } from '../request-cancel.ts';
 import {
+  prewarmIosRunnerCache,
   prewarmIosRunnerSession,
   stopIosRunnerSession,
 } from '../../platforms/ios/runner-client.ts';
@@ -119,6 +120,60 @@ function buildStartupPerfSample(
     appTarget,
     appBundleId,
   };
+}
+
+function shouldPrewarmIosRunnerCacheDuringBoot(params: {
+  device: DeviceInfo;
+  surface: SessionSurface;
+  openTarget: string | undefined;
+}): boolean {
+  const { device, surface, openTarget } = params;
+  return (
+    device.platform === 'ios' &&
+    device.kind === 'simulator' &&
+    surface === 'app' &&
+    Boolean(openTarget) &&
+    !isDeepLinkTarget(openTarget ?? '')
+  );
+}
+
+function prewarmIosRunnerCacheDuringBoot(params: {
+  req: DaemonRequest;
+  logPath: string;
+  device: DeviceInfo;
+  traceLogPath?: string;
+}): void {
+  const { req, logPath, device, traceLogPath } = params;
+  prewarmIosRunnerCache(device, {
+    verbose: req.flags?.verbose,
+    logPath,
+    traceLogPath,
+    requestId: req.meta?.requestId,
+    iosXctestrunFile: req.flags?.iosXctestrunFile,
+    iosXctestDerivedDataPath: req.flags?.iosXctestDerivedDataPath,
+    iosXctestEnvDir: req.flags?.iosXctestEnvDir,
+  });
+}
+
+function createIosRunnerCacheColdBootPrewarm(params: {
+  req: DaemonRequest;
+  logPath: string;
+  device: DeviceInfo;
+  surface: SessionSurface;
+  openTarget: string | undefined;
+  traceLogPath?: string;
+}): ((device: DeviceInfo) => void) | undefined {
+  const { req, logPath, device, surface, openTarget, traceLogPath } = params;
+  if (!shouldPrewarmIosRunnerCacheDuringBoot({ device, surface, openTarget })) {
+    return undefined;
+  }
+  return (bootingDevice) =>
+    prewarmIosRunnerCacheDuringBoot({
+      req,
+      logPath,
+      device: bootingDevice,
+      traceLogPath,
+    });
 }
 
 // fallow-ignore-next-line complexity
@@ -372,6 +427,7 @@ async function prepareOpenDispatchSession(params: {
   return { type: 'session', session: sessionStore.get(sessionName) ?? provisionalSession };
 }
 
+// fallow-ignore-next-line complexity
 export async function handleOpenCommand(params: {
   req: DaemonRequest;
   sessionName: string;
@@ -419,6 +475,14 @@ export async function handleOpenCommand(params: {
       surface: surfaceResult,
       openTarget,
       existingSession: session,
+      onIosSimulatorColdBootStart: createIosRunnerCacheColdBootPrewarm({
+        req,
+        logPath,
+        device,
+        surface: surfaceResult,
+        openTarget,
+        traceLogPath: session.trace?.outPath,
+      }),
     });
     if (details.type === 'response') {
       return details.response;
@@ -510,6 +574,13 @@ export async function handleOpenCommand(params: {
       device,
       surface: surfaceResult,
       openTarget,
+      onIosSimulatorColdBootStart: createIosRunnerCacheColdBootPrewarm({
+        req,
+        logPath,
+        device,
+        surface: surfaceResult,
+        openTarget,
+      }),
     });
     if (details.type === 'response') {
       return details.response;

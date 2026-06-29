@@ -22,6 +22,7 @@ type OpenIosSimulatorAppOptions = {
 type EnsureBootedSimulatorOptions = {
   deviceHub?: boolean;
   focusExisting?: boolean;
+  onColdBootStart?: (device: DeviceInfo) => void;
 };
 
 export function requireSimulatorDevice(device: DeviceInfo, command: string): void {
@@ -58,6 +59,7 @@ export async function ensureBootedSimulator(
     }
     return;
   }
+  options.onColdBootStart?.(device);
 
   const deadline = Deadline.fromTimeoutMs(IOS_BOOT_TIMEOUT_MS);
   let bootResult:

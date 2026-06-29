@@ -15,6 +15,7 @@ import {
   type AppleRunnerCommandOptions,
   type AppleRunnerProvider,
 } from './runner-provider.ts';
+import { ensureXctestrunArtifact } from './runner-xctestrun.ts';
 import {
   executeRunnerCommand,
   prepareLocalIosRunner,
@@ -62,6 +63,33 @@ export async function runIosRunnerCommand(
 type PrewarmIosRunnerSessionOptions = RunnerSessionOptions & {
   propagateError?: boolean;
 };
+
+export function prewarmIosRunnerCache(
+  device: DeviceInfo,
+  options: PrewarmIosRunnerSessionOptions = {},
+): Promise<void> | undefined {
+  if (device.platform !== 'ios') {
+    return undefined;
+  }
+  const { propagateError = false, ...runnerOptions } = options;
+  const prewarm = ensureXctestrunArtifact(device, runnerOptions)
+    .then(() => {})
+    .catch((error: unknown) => {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'ios_runner_cache_prewarm_failed',
+        data: {
+          deviceId: device.id,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      if (propagateError) {
+        throw error;
+      }
+    });
+  void prewarm;
+  return prewarm;
+}
 
 export function prewarmIosRunnerSession(
   device: DeviceInfo,

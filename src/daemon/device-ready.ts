@@ -17,6 +17,7 @@ const readyCache = new Map<string, number>();
 export type DeviceReadyOptions = {
   deviceHub?: boolean;
   focusExisting?: boolean;
+  onIosSimulatorColdBootStart?: (device: DeviceInfo) => void;
 };
 
 export async function ensureDeviceReady(
@@ -38,6 +39,7 @@ export async function ensureDeviceReady(
       await ensureBootedSimulator(device, {
         deviceHub: options.deviceHub,
         focusExisting: options.focusExisting,
+        onColdBootStart: options.onIosSimulatorColdBootStart,
       });
       markDeviceReady(cacheKey);
       return;

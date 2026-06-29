@@ -556,6 +556,24 @@ test('ensureBootedSimulator opens Simulator after cold boot by default', async (
   );
 });
 
+test('ensureBootedSimulator runs cold boot callback only before cold boot', async () => {
+  const onColdBootStart = vi.fn();
+  mockRunCmdResponses({
+    'xcrun simctl list devices -j': simulatorStateSequence('Shutdown', 'Booted'),
+    'xcrun simctl boot sim-1': OK_RESULT,
+    'xcrun simctl bootstatus sim-1 -b': OK_RESULT,
+    'open -a Simulator': OK_RESULT,
+  });
+
+  await ensureBootedSimulator(IOS_TEST_SIMULATOR, {
+    focusExisting: true,
+    onColdBootStart,
+  });
+
+  assert.equal(onColdBootStart.mock.calls.length, 1);
+  assert.deepEqual(onColdBootStart.mock.calls[0], [IOS_TEST_SIMULATOR]);
+});
+
 test('openIosSimulatorApp opens Simulator by default', async () => {
   mockRunCmdResponses({
     'open -a Simulator': OK_RESULT,
@@ -605,6 +623,18 @@ test('ensureBootedSimulator opens Simulator when already booted by default', asy
       ['open', '-a Simulator'],
     ],
   );
+});
+
+test('ensureBootedSimulator skips cold boot callback when already booted', async () => {
+  const onColdBootStart = vi.fn();
+  mockRunCmdResponses({
+    'xcrun simctl list devices -j': simulatorListDevicesResult('Booted'),
+    'open -a Simulator': OK_RESULT,
+  });
+
+  await ensureBootedSimulator(IOS_TEST_SIMULATOR, { focusExisting: true, onColdBootStart });
+
+  assert.equal(onColdBootStart.mock.calls.length, 0);
 });
 
 test('ensureBootedSimulator opens Device Hub without activation when already booted and opted in', async () => {

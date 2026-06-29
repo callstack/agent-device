@@ -22,6 +22,7 @@ vi.mock('../../../platforms/ios/runner-client.ts', async (importOriginal) => {
       connectMs: 3,
       healthCheckMs: 3,
     })),
+    prewarmIosRunnerCache: vi.fn(),
     prewarmIosRunnerSession: vi.fn(),
     stopIosRunnerSession: vi.fn(async () => {}),
   };
@@ -101,6 +102,7 @@ import { ensureDeviceReady } from '../../device-ready.ts';
 import { applyRuntimeHintsToApp, clearRuntimeHintsFromApp } from '../../runtime-hints.ts';
 import {
   prepareIosRunner,
+  prewarmIosRunnerCache,
   prewarmIosRunnerSession,
   stopIosRunnerSession,
 } from '../../../platforms/ios/runner-client.ts';
@@ -125,6 +127,7 @@ const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintsToApp);
 const mockClearRuntimeHints = vi.mocked(clearRuntimeHintsFromApp);
 const mockPrewarmIosRunnerSession = vi.mocked(prewarmIosRunnerSession);
+const mockPrewarmIosRunnerCache = vi.mocked(prewarmIosRunnerCache);
 const mockPrepareIosRunner = vi.mocked(prepareIosRunner);
 const mockStopIosRunner = vi.mocked(stopIosRunnerSession);
 const mockDismissMacOsAlert = vi.mocked(runMacOsAlertAction);
@@ -157,6 +160,7 @@ beforeEach(() => {
   mockClearRuntimeHints.mockReset();
   mockClearRuntimeHints.mockResolvedValue(undefined);
   mockPrewarmIosRunnerSession.mockReset();
+  mockPrewarmIosRunnerCache.mockReset();
   mockPrepareIosRunner.mockReset();
   mockPrepareIosRunner.mockResolvedValue({
     runner: { currentUptimeMs: 42 },
@@ -889,7 +893,19 @@ test('boot prefers explicit device selector over active session device', async (
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
-  expect(mockEnsureDeviceReady).toHaveBeenCalledWith(expect.objectContaining({ id: 'sim-2' }));
+  expect(mockEnsureDeviceReady).toHaveBeenCalledWith(
+    expect.objectContaining({ id: 'sim-2' }),
+    expect.any(Object),
+  );
+  const onColdBootStart = mockEnsureDeviceReady.mock.calls[0]?.[1]?.onIosSimulatorColdBootStart;
+  expect(onColdBootStart).toBeTypeOf('function');
+  onColdBootStart?.(selectedDevice);
+  expect(mockPrewarmIosRunnerCache).toHaveBeenCalledWith(
+    selectedDevice,
+    expect.objectContaining({
+      logPath: expect.stringMatching(/daemon\.log$/),
+    }),
+  );
   if (response && response.ok) {
     expect(response.data?.platform).toBe('ios');
     expect(response.data?.id).toBe('sim-2');
@@ -2174,7 +2190,10 @@ test('open custom URL on existing iOS simulator session preserves app bundle id 
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
-  expect(mockEnsureDeviceReady.mock.calls[0]?.[1]).toEqual({ deviceHub: false });
+  expect(mockEnsureDeviceReady.mock.calls[0]?.[1]).toEqual({
+    deviceHub: false,
+    onIosSimulatorColdBootStart: undefined,
+  });
   const updated = sessionStore.get(sessionName);
   expect(updated?.appBundleId).toBe('com.example.app');
   expect(updated?.appName).toBe('myapp://item/42');
@@ -2223,6 +2242,49 @@ test('open custom URL on fresh iOS simulator session infers app bundle id from U
   expect(updated?.appBundleId).toBe('org.reactnavigation.playground');
   expect(updated?.appName).toBe('rne://navigator-layout');
   expect(dispatchedContext?.appBundleId).toBe('org.reactnavigation.playground');
+  expect(mockPrewarmIosRunnerSession).toHaveBeenCalledTimes(1);
+});
+
+test('open iOS simulator app prewarms runner cache during cold boot', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-simulator-cold-boot-cache-prewarm';
+  const device: SessionState['device'] = {
+    platform: 'ios',
+    id: 'sim-1',
+    name: 'iPhone 17 Pro',
+    kind: 'simulator',
+    booted: false,
+  };
+  mockResolveTargetDevice.mockResolvedValue(device);
+  mockResolveIosApp.mockResolvedValueOnce('com.example.app');
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'open',
+      positionals: ['Demo'],
+      flags: { platform: 'ios', udid: 'sim-1' },
+      meta: { requestId: 'open-request' },
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response).toBeTruthy();
+  expect(response?.ok).toBe(true);
+  const onColdBootStart = mockEnsureDeviceReady.mock.calls[0]?.[1]?.onIosSimulatorColdBootStart;
+  expect(onColdBootStart).toBeTypeOf('function');
+  onColdBootStart?.(device);
+  expect(mockPrewarmIosRunnerCache).toHaveBeenCalledWith(
+    device,
+    expect.objectContaining({
+      logPath: expect.stringMatching(/daemon\.log$/),
+      requestId: 'open-request',
+    }),
+  );
   expect(mockPrewarmIosRunnerSession).toHaveBeenCalledTimes(1);
 });
 

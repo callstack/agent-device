@@ -13,6 +13,7 @@ test('boot rejects --headless outside Android directly', async () => {
       flags: { platform: 'ios', headless: true },
     },
     sessionName: 'default',
+    logPath: '/tmp/daemon.log',
     sessionStore: makeSessionStore('agent-device-session-state-'),
   });
 
@@ -34,6 +35,7 @@ test('appstate returns missing-session error for explicit session flag', async (
       flags: { platform: 'ios', session: 'named' },
     },
     sessionName: 'named',
+    logPath: '/tmp/daemon.log',
     sessionStore: makeSessionStore('agent-device-session-state-'),
   });
 
@@ -55,6 +57,7 @@ test('appstate rejects web before Android app-state backend dispatch', async () 
       flags: { platform: 'web' },
     },
     sessionName: 'default',
+    logPath: '/tmp/daemon.log',
     sessionStore: makeSessionStore('agent-device-session-state-'),
   });
 
