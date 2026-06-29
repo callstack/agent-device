@@ -332,7 +332,6 @@ export function buildFlags(options: InternalRequestOptions): CommandFlags {
     retries: options.retries,
     recordVideo: options.recordVideo,
     artifactsDir: options.artifactsDir,
-    reportJunit: options.reportJunit,
     shardAll: options.shardAll,
     shardSplit: options.shardSplit,
     findFirst: options.findFirst,

@@ -754,6 +754,7 @@ export type ReplayTestOptions = AgentDeviceRequestOverrides &
     retries?: number;
     recordVideo?: boolean;
     artifactsDir?: string;
+    /** @deprecated Use the CLI --reporter junit:<path> or --report-junit <path>. */
     reportJunit?: string;
     shardAll?: number;
     shardSplit?: number;
@@ -903,7 +904,6 @@ type CommandExecutionOptions = Partial<ScreenshotRequestFlags> & {
   retries?: number;
   recordVideo?: boolean;
   artifactsDir?: string;
-  reportJunit?: string;
   shardAll?: number;
   shardSplit?: number;
   findFirst?: boolean;

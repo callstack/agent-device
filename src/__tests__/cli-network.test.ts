@@ -664,6 +664,7 @@ test('test command writes JUnit report with failure metadata', async () => {
     );
 
     assert.equal(result.code, 1);
+    assert.equal(result.calls[0]?.flags?.reportJunit, undefined);
     const xml = await fs.readFile(reportPath, 'utf8');
     assert.match(
       xml,
@@ -685,6 +686,25 @@ test('test command writes JUnit report with failure metadata', async () => {
     );
     assert.match(xml, /flaky: true/);
     assert.match(xml, /<skipped message="not runnable" \/>/);
+  } finally {
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+test('test command supports explicit reporter lists', async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-reporter-test-'));
+  const reportPath = path.join(tmpDir, 'replays.junit.xml');
+
+  try {
+    const result = await runCliCapture(
+      ['test', './suite', '--reporter', `junit:${reportPath}`],
+      async () => makeReplaySuiteResponse(),
+    );
+
+    assert.equal(result.code, 1);
+    assert.doesNotMatch(result.stdout, /Test summary:/);
+    const xml = await fs.readFile(reportPath, 'utf8');
+    assert.match(xml, /<testsuite name="agent-device replay suite" tests="3" failures="1"/);
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
   }

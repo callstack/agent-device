@@ -26,7 +26,7 @@ export async function runGenericClientBackedCommand({
   if (cliOutput) {
     writeCliOutput(flags, cliOutput);
   } else {
-    const exitCode = writeGenericCliOutput(command, flags, result, { debug });
+    const exitCode = await writeGenericCliOutput(command, flags, result, { debug });
     if (exitCode !== 0) {
       process.exit(exitCode);
     }
@@ -39,12 +39,13 @@ function writeGenericCliOutput(
   flags: CliFlags,
   data: CommandRequestResult,
   options: { debug?: boolean } = {},
-): number {
+): Promise<number> | number {
   if (command === 'test') {
     return renderReplayTestResponse({
       suite: data as ReplaySuiteResult,
       debug: options.debug,
       json: flags.json,
+      reporter: flags.reporter,
       reportJunit: flags.reportJunit,
     });
   }

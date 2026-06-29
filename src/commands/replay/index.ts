@@ -52,7 +52,6 @@ export const testCommandMetadata = defineFieldCommandMetadata(
     retries: integerField(),
     recordVideo: booleanField(),
     artifactsDir: stringField(),
-    reportJunit: stringField(),
     shardAll: integerField(),
     shardSplit: integerField(),
   },
@@ -92,6 +91,7 @@ const testCliSchema = {
     'retries',
     'recordVideo',
     'artifactsDir',
+    'reporter',
     'reportJunit',
     'shardAll',
     'shardSplit',
@@ -117,7 +117,6 @@ export const testCliReader: CliReader = (positionals, flags) => ({
   retries: flags.retries,
   recordVideo: flags.recordVideo,
   artifactsDir: flags.artifactsDir,
-  reportJunit: flags.reportJunit,
   shardAll: flags.shardAll,
   shardSplit: flags.shardSplit,
 });
@@ -133,7 +132,7 @@ export const replayDaemonWriter: DaemonWriter = (input) =>
 
 export const testDaemonWriter: DaemonWriter = (input) =>
   request(TEST_COMMAND_NAME, input.paths ?? [], {
-    ...input,
+    ...stripReplayTestPresentationInput(input),
     replayUpdate: input.update,
     replayBackend: readReplayBackend(input),
     replayEnv: input.env,
@@ -165,6 +164,13 @@ export const replayCommandFamily = defineCommandFamilyFromFacets({
 
 function readReplayBackend(input: CommandInput): string | undefined {
   return input.backend ?? (input.maestro === true ? 'maestro' : undefined);
+}
+
+function stripReplayTestPresentationInput(input: CommandInput): CommandInput {
+  const daemonInput = { ...input };
+  delete daemonInput.reporter;
+  delete daemonInput.reportJunit;
+  return daemonInput;
 }
 
 function collectReplayClientShellEnv(env: NodeJS.ProcessEnv): Record<string, string> {

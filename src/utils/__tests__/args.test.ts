@@ -147,6 +147,10 @@ test('parseArgs recognizes command-specific flag combinations', async () => {
         '2',
         '--artifacts-dir',
         '.agent-device/test-artifacts',
+        '--reporter',
+        'default',
+        '--reporter',
+        'junit:.agent-device/test-artifacts/junit.xml',
       ],
       strictFlags: true,
       assertParsed: (parsed) => {
@@ -158,6 +162,10 @@ test('parseArgs recognizes command-specific flag combinations', async () => {
         assert.equal(parsed.flags.timeoutMs, 60000);
         assert.equal(parsed.flags.retries, 2);
         assert.equal(parsed.flags.artifactsDir, '.agent-device/test-artifacts');
+        assert.deepEqual(parsed.flags.reporter, [
+          'default',
+          'junit:.agent-device/test-artifacts/junit.xml',
+        ]);
       },
     },
     {

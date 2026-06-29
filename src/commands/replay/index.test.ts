@@ -77,7 +77,6 @@ describe('replay command interface', () => {
           retries: 2,
           recordVideo: true,
           artifactsDir: './artifacts',
-          reportJunit: './junit.xml',
           shardAll: 4,
           shardSplit: 2,
         }),
@@ -92,7 +91,6 @@ describe('replay command interface', () => {
       retries: 2,
       recordVideo: true,
       artifactsDir: './artifacts',
-      reportJunit: './junit.xml',
       shardAll: 4,
       shardSplit: 2,
     });
@@ -118,12 +116,18 @@ describe('replay command interface', () => {
       },
     });
 
-    expect(testDaemonWriter({ paths: ['./suite.ad'], maestro: true })).toMatchObject({
+    const testRequest = testDaemonWriter({
+      paths: ['./suite.ad'],
+      maestro: true,
+      reportJunit: './junit.xml',
+    });
+    expect(testRequest).toMatchObject({
       command: 'test',
       positionals: ['./suite.ad'],
       options: {
         replayBackend: 'maestro',
       },
     });
+    expect(testRequest.options).not.toHaveProperty('reportJunit');
   });
 });

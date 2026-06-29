@@ -119,6 +119,7 @@ export type CliFlags = RemoteConfigMetroOptions &
     retries?: number;
     recordVideo?: boolean;
     artifactsDir?: string;
+    reporter?: string[];
     reportJunit?: string;
     shardAll?: number;
     shardSplit?: number;
@@ -943,11 +944,20 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription: 'Test: root directory for suite artifacts',
   },
   {
+    key: 'reporter',
+    names: ['--reporter'],
+    type: 'string',
+    multiple: true,
+    usageLabel: '--reporter <name[:options]>',
+    usageDescription:
+      'Test: add a replay suite reporter; built-ins are default and junit:<path> (repeatable)',
+  },
+  {
     key: 'reportJunit',
     names: ['--report-junit'],
     type: 'string',
     usageLabel: '--report-junit <path>',
-    usageDescription: 'Test: write a JUnit XML report for the replay suite',
+    usageDescription: 'Test: compatibility alias for --reporter junit:<path>',
   },
   {
     key: 'shardAll',
