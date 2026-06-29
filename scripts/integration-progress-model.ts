@@ -276,6 +276,7 @@ function summarizeProviderScenarioFlagExclusions() {
         'snapshotForceFull',
         'baseline',
         'threshold',
+        'reporter',
         'reportJunit',
         'replayMaestro',
         'replayExportFormat',

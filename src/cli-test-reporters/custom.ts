@@ -19,6 +19,12 @@ type CustomReporterSpec = {
   options: unknown;
 };
 
+const OPTIONAL_REPORTER_HOOKS = [
+  'onProgress',
+  'onSuiteEnd',
+  'getExitCode',
+] as const satisfies readonly (keyof ReplayTestReporter)[];
+
 export function isCustomReplayTestReporterSpec(spec: string): boolean {
   const modulePath = readCustomReporterModulePath(spec);
   return (
@@ -111,23 +117,20 @@ function validateCustomReplayTestReporter(
   if (typeof candidate.name !== 'string' || candidate.name.trim().length === 0) {
     throw new AppError('INVALID_ARGS', `Custom test reporter ${modulePath} must define name.`);
   }
-  if (candidate.onProgress !== undefined && typeof candidate.onProgress !== 'function') {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Custom test reporter ${modulePath} onProgress must be a function.`,
-    );
-  }
-  if (candidate.onSuiteEnd !== undefined && typeof candidate.onSuiteEnd !== 'function') {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Custom test reporter ${modulePath} onSuiteEnd must be a function.`,
-    );
-  }
-  if (candidate.getExitCode !== undefined && typeof candidate.getExitCode !== 'function') {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Custom test reporter ${modulePath} getExitCode must be a function.`,
-    );
+  for (const hook of OPTIONAL_REPORTER_HOOKS) {
+    validateOptionalReporterHook(candidate, modulePath, hook);
   }
   return candidate as ReplayTestReporter;
+}
+
+function validateOptionalReporterHook(
+  reporter: Partial<ReplayTestReporter>,
+  modulePath: string,
+  hook: (typeof OPTIONAL_REPORTER_HOOKS)[number],
+): void {
+  if (reporter[hook] === undefined || typeof reporter[hook] === 'function') return;
+  throw new AppError(
+    'INVALID_ARGS',
+    `Custom test reporter ${modulePath} ${hook} must be a function.`,
+  );
 }
