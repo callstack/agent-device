@@ -4,8 +4,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   AppError,
+  type BackCommandResult,
   type BootCommandResult,
   type CommandResult,
+  type RotateCommandResult,
   type ShutdownCommandResult,
   type ViewportCommandResult,
 } from '../index.ts';
@@ -126,9 +128,25 @@ test('public root exports typed command result contracts', () => {
   } satisfies ViewportCommandResult;
   const viewportFromMap: CommandResult<'viewport'> = viewport;
 
+  const back = {
+    action: 'back',
+    mode: 'in-app',
+    message: 'Back',
+  } satisfies BackCommandResult;
+  const backFromMap: CommandResult<'back'> = back;
+
+  const rotate = {
+    action: 'rotate',
+    orientation: 'portrait',
+    message: 'Rotated to portrait',
+  } satisfies RotateCommandResult;
+  const rotateFromMap: CommandResult<'rotate'> = rotate;
+
   assert.equal(bootFromMap.booted, true);
   assert.equal(shutdownFromMap.shutdown.success, true);
   assert.equal(viewportFromMap.width, 390);
+  assert.equal(backFromMap.mode, 'in-app');
+  assert.equal(rotateFromMap.orientation, 'portrait');
 });
 
 test('public daemon request schema accepts GitHub Actions artifact install sources', () => {

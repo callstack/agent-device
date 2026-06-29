@@ -5,6 +5,12 @@ import type {
 } from '../../contracts/interaction.ts';
 import type { BootCommandResult, ShutdownCommandResult } from '../../contracts/device.ts';
 import type { ViewportCommandResult } from '../../contracts/viewport.ts';
+import type {
+  AppSwitcherCommandResult,
+  BackCommandResult,
+  HomeCommandResult,
+  RotateCommandResult,
+} from '../../contracts/navigation.ts';
 
 /**
  * The additive typed-result spine (ADR-0008, Phase 1 step 6).
@@ -16,11 +22,11 @@ import type { ViewportCommandResult } from '../../contracts/viewport.ts';
  * visualization, perf, logs, …) are deliberately omitted rather than given an
  * invented shape.
  *
- * Phase 2 batch 1 wires the first map entries into the public client return
- * types: `boot` / `shutdown` (closed device-lifecycle results) and `viewport`
- * (closed `{ width, height, message }`) join the seed interaction trio
- * (`press` / `fill` / `longpress`). Each entry is grounded in a re-read of the
- * handler's literal return; see the per-type docstrings for the file source.
+ * Batch 1 wired `boot` / `shutdown` / `viewport` alongside the seed interaction
+ * trio (`press` / `fill` / `longpress`). Batch 2 adds the closed navigation/
+ * action commands `home` / `back` / `rotate` / `app-switcher` (each a fixed
+ * `{ action, …, message }`). Each entry is grounded in a re-read of the handler's
+ * literal return; see the per-type docstrings for the file source.
  */
 export interface CommandResultMap {
   press: PressCommandResult;
@@ -29,6 +35,10 @@ export interface CommandResultMap {
   boot: BootCommandResult;
   shutdown: ShutdownCommandResult;
   viewport: ViewportCommandResult;
+  home: HomeCommandResult;
+  back: BackCommandResult;
+  rotate: RotateCommandResult;
+  'app-switcher': AppSwitcherCommandResult;
 }
 
 /**

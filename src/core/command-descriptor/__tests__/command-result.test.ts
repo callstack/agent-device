@@ -6,6 +6,12 @@ import type {
 } from '../../../contracts/interaction.ts';
 import type { BootCommandResult, ShutdownCommandResult } from '../../../contracts/device.ts';
 import type { ViewportCommandResult } from '../../../contracts/viewport.ts';
+import type {
+  AppSwitcherCommandResult,
+  BackCommandResult,
+  HomeCommandResult,
+  RotateCommandResult,
+} from '../../../contracts/navigation.ts';
 import type { CommandResult, CommandResultMap } from '../command-result.ts';
 
 /**
@@ -24,14 +30,22 @@ test('seeded CommandResult entries resolve to their existing contract result typ
   const boot: Equal<CommandResult<'boot'>, BootCommandResult> = true;
   const shutdown: Equal<CommandResult<'shutdown'>, ShutdownCommandResult> = true;
   const viewport: Equal<CommandResult<'viewport'>, ViewportCommandResult> = true;
-  expect([press, fill, longPress, boot, shutdown, viewport]).toEqual([
-    true,
-    true,
-    true,
-    true,
-    true,
-    true,
-  ]);
+  const home: Equal<CommandResult<'home'>, HomeCommandResult> = true;
+  const back: Equal<CommandResult<'back'>, BackCommandResult> = true;
+  const rotate: Equal<CommandResult<'rotate'>, RotateCommandResult> = true;
+  const appSwitcher: Equal<CommandResult<'app-switcher'>, AppSwitcherCommandResult> = true;
+  expect([
+    press,
+    fill,
+    longPress,
+    boot,
+    shutdown,
+    viewport,
+    home,
+    back,
+    rotate,
+    appSwitcher,
+  ]).toEqual([true, true, true, true, true, true, true, true, true, true]);
 });
 
 test('unmigrated commands fall back to the untyped Record bag, keeping the union total', () => {
@@ -44,7 +58,16 @@ test('unmigrated commands fall back to the untyped Record bag, keeping the union
 test('CommandResultMap is seeded only from already-existing contract result types', () => {
   const keys: Equal<
     keyof CommandResultMap,
-    'press' | 'fill' | 'longpress' | 'boot' | 'shutdown' | 'viewport'
+    | 'press'
+    | 'fill'
+    | 'longpress'
+    | 'boot'
+    | 'shutdown'
+    | 'viewport'
+    | 'home'
+    | 'back'
+    | 'rotate'
+    | 'app-switcher'
   > = true;
   expect(keys).toBe(true);
 });

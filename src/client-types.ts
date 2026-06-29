@@ -53,6 +53,12 @@ export type { AlertAction, AlertInfo, AlertPlatform, AlertSource } from './alert
 export type { DebugSymbolsOptions, DebugSymbolsResult } from './contracts/debug-symbols.ts';
 export type { BootCommandResult, ShutdownCommandResult } from './contracts/device.ts';
 export type { ViewportCommandResult } from './contracts/viewport.ts';
+export type {
+  AppSwitcherCommandResult,
+  BackCommandResult,
+  HomeCommandResult,
+  RotateCommandResult,
+} from './contracts/navigation.ts';
 
 export type AgentDeviceDaemonTransport = (
   req: Omit<DaemonRequest, 'token'>,
@@ -467,10 +473,6 @@ export type AlertCommandResult = DaemonResponseData & {
   items?: string[];
 };
 
-type CommandActionResult<T extends string> = DaemonResponseData & {
-  action?: T;
-};
-
 export type AppStateCommandResult = DaemonResponseData & {
   platform?: Platform;
   appName?: string;
@@ -480,18 +482,6 @@ export type AppStateCommandResult = DaemonResponseData & {
   source?: 'session';
   surface?: SessionSurface;
 };
-
-export type BackCommandResult = CommandActionResult<'back'> & {
-  mode?: BackMode;
-};
-
-export type HomeCommandResult = CommandActionResult<'home'>;
-
-export type RotateCommandResult = CommandActionResult<'rotate'> & {
-  orientation?: RotateCommandOptions['orientation'];
-};
-
-export type AppSwitcherCommandResult = CommandActionResult<'app-switcher'>;
 
 export type KeyboardCommandResult = DaemonResponseData & {
   platform?: 'android' | 'ios';
@@ -536,10 +526,10 @@ export type AgentDeviceCommandClient = {
   wait: (options: WaitCommandOptions) => Promise<WaitCommandResult>;
   alert: (options?: AlertCommandOptions) => Promise<AlertCommandResult>;
   appState: (options?: AppStateCommandOptions) => Promise<AppStateCommandResult>;
-  back: (options?: BackCommandOptions) => Promise<BackCommandResult>;
-  home: (options?: HomeCommandOptions) => Promise<HomeCommandResult>;
-  rotate: (options: RotateCommandOptions) => Promise<RotateCommandResult>;
-  appSwitcher: (options?: AppSwitcherCommandOptions) => Promise<AppSwitcherCommandResult>;
+  back: (options?: BackCommandOptions) => Promise<CommandResult<'back'>>;
+  home: (options?: HomeCommandOptions) => Promise<CommandResult<'home'>>;
+  rotate: (options: RotateCommandOptions) => Promise<CommandResult<'rotate'>>;
+  appSwitcher: (options?: AppSwitcherCommandOptions) => Promise<CommandResult<'app-switcher'>>;
   keyboard: (options?: KeyboardCommandOptions) => Promise<KeyboardCommandResult>;
   clipboard: (options: ClipboardCommandOptions) => Promise<ClipboardCommandResult>;
   reactNative: (options: ReactNativeCommandOptions) => Promise<CommandRequestResult>;
