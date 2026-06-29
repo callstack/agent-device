@@ -37,6 +37,7 @@ import {
 } from './request-execution-scope.ts';
 import { canRunReplayScopedAction } from './daemon-command-registry.ts';
 import { createAgentBrowserWebProvider } from '../platforms/web/agent-browser-provider.ts';
+import type { LeaseLifecycleProvider } from './handlers/lease.ts';
 
 // ---------------------------------------------------------------------------
 // Request handler API
@@ -65,6 +66,8 @@ export type RequestRouterDeps = {
   appLogProvider?: AppLogProviderResolver;
   recordingProvider?: RecordingProviderResolver;
   deviceInventoryProvider?: DeviceInventoryProvider;
+  leaseLifecycleProvider?: LeaseLifecycleProvider;
+  providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
   trackDownloadableArtifact: (opts: {
     artifactPath: string;
     tenantId?: string;
@@ -85,6 +88,8 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     appLogProvider,
     recordingProvider,
     deviceInventoryProvider,
+    leaseLifecycleProvider,
+    providerDeviceRuntimeScope,
     trackDownloadableArtifact,
   } = deps;
   const { sessionStore, leaseRegistry } = deps;
@@ -154,12 +159,17 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       });
       if (locked.type === 'response') return locked.response;
       const lockedScope = locked.scope;
-      const executeLocked = async (providerScope: RequestPlatformProviderScope) =>
-        await executeLockedRequest({
-          lockedScope,
-          providerScope,
-          allowReplayActions: inheritedProviderScope === undefined,
-        });
+      const executeLocked = async (providerScope: RequestPlatformProviderScope) => {
+        const runLockedRequest = async () =>
+          await executeLockedRequest({
+            lockedScope,
+            providerScope,
+            allowReplayActions: inheritedProviderScope === undefined,
+          });
+        return providerDeviceRuntimeScope
+          ? await providerDeviceRuntimeScope(runLockedRequest)
+          : await runLockedRequest();
+      };
 
       return inheritedProviderScope
         ? await executeLocked(inheritedProviderScope)
@@ -200,6 +210,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       logPath: lockedScope.logPath,
       sessionStore,
       leaseRegistry,
+      leaseLifecycleProvider,
       invoke: handleRequest,
       invokeReplayAction: allowReplayActions
         ? createReplayScopedActionInvoker(lockedScope, providerScope)

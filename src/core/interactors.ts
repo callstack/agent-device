@@ -1,11 +1,22 @@
 import type { DeviceInfo } from '../utils/device.ts';
 import { AppError } from '../utils/errors.ts';
+import { getProviderDeviceInteractor, isActiveProviderDevice } from '../provider-device-runtime.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 
 export async function getInteractor(
   device: DeviceInfo,
   runnerContext: RunnerContext,
 ): Promise<Interactor> {
+  if (isActiveProviderDevice(device)) {
+    const providerInteractor = getProviderDeviceInteractor(device);
+    if (providerInteractor) return providerInteractor;
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      'Provider device runtime does not have an active interactor for this device.',
+      { deviceId: device.id, platform: device.platform },
+    );
+  }
+
   switch (device.platform) {
     case 'android': {
       const { createAndroidInteractor } = await import('./interactors/android.ts');

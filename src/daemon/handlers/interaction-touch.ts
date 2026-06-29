@@ -46,7 +46,10 @@ import {
   readSimpleIosSelectorTarget,
   type DirectIosSelectorTarget,
 } from '../direct-ios-selector.ts';
-import { ensureAndroidBlockingSystemDialogReady } from '../android-system-dialog.ts';
+import {
+  ensureAndroidBlockingSystemDialogReady,
+  type AndroidBlockingDialogReadinessResult,
+} from '../android-system-dialog.ts';
 
 export async function handleTouchInteractionCommands(
   params: InteractionHandlerParams & {
@@ -148,6 +151,7 @@ async function dispatchTargetedTouchViaRuntime(
         durationMs,
       }),
     afterRun: async (result) => {
+      if (session.lease?.leaseProvider) return;
       await assertAndroidPressStayedInApp(
         session,
         formatTouchTargetLabel(parsedTarget.target, result),
@@ -527,18 +531,15 @@ async function dispatchRuntimeInteraction<
   const runtime = createInteractionRuntime(params);
   const actionStartedAt = Date.now();
   try {
-    const readiness = await ensureAndroidBlockingSystemDialogReady({
+    const { readiness, runtimeResult } = await runWithAndroidDialogReadinessCheck(
       session,
-      command: params.req.command,
-      phase: 'before-command',
-    });
-    const runtimeResult = await options.run(runtime);
-    await options.afterRun?.(runtimeResult);
-    await ensureAndroidBlockingSystemDialogReady({
-      session,
-      command: params.req.command,
-      phase: 'after-command',
-    });
+      params.req.command,
+      async () => {
+        const result = await options.run(runtime);
+        await options.afterRun?.(result);
+        return result;
+      },
+    );
     const actionFinishedAt = Date.now();
     const { result, responseData } = await options.buildPayloads(runtimeResult);
     if (readiness.status === 'recovered') {
@@ -563,6 +564,31 @@ async function dispatchRuntimeInteraction<
     if (isAndroidEscapeError(appError)) throw appError;
     return appErrorResponse(error);
   }
+}
+
+async function runWithAndroidDialogReadinessCheck<TResult>(
+  session: SessionState,
+  command: string,
+  run: () => Promise<TResult>,
+): Promise<{
+  readiness: AndroidBlockingDialogReadinessResult;
+  runtimeResult: TResult;
+}> {
+  if (session.lease?.leaseProvider) {
+    return { readiness: { status: 'clear' }, runtimeResult: await run() };
+  }
+  const readiness = await ensureAndroidBlockingSystemDialogReady({
+    session,
+    command,
+    phase: 'before-command',
+  });
+  const runtimeResult = await run();
+  await ensureAndroidBlockingSystemDialogReady({
+    session,
+    command,
+    phase: 'after-command',
+  });
+  return { readiness, runtimeResult };
 }
 
 async function refreshAndroidRefSnapshotIfFreshnessActive(

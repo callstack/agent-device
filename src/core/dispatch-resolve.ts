@@ -22,9 +22,14 @@ type ResolveDeviceFlags = Pick<
   | 'device'
   | 'udid'
   | 'serial'
+  | 'leaseId'
   | 'iosSimulatorDeviceSet'
   | 'androidDeviceAllowlist'
->;
+> & {
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
+};
 
 const resolveTargetDeviceCacheScope = new AsyncLocalStorage<Map<string, DeviceInfo>>();
 const deviceInventoryProviderScope = new AsyncLocalStorage<DeviceInventoryProvider>();
@@ -144,6 +149,12 @@ export async function resolveTargetDevice(flags: ResolveDeviceFlags): Promise<De
         udid: flags.udid,
         serial: flags.serial,
       };
+      const leaseScope = {
+        leaseId: flags.leaseId,
+        leaseProvider: flags.leaseProvider,
+        deviceKey: flags.deviceKey,
+        clientId: flags.clientId,
+      };
       if (selector.target && !selector.platform) {
         throw new AppError(
           'INVALID_ARGS',
@@ -153,6 +164,7 @@ export async function resolveTargetDevice(flags: ResolveDeviceFlags): Promise<De
 
       const injectedDevices = await readInjectedDeviceInventory({
         ...selector,
+        ...leaseScope,
         iosSimulatorSetPath,
         androidSerialAllowlist: androidSerialAllowlist
           ? Array.from(androidSerialAllowlist).sort()
@@ -175,6 +187,7 @@ export async function resolveTargetDevice(flags: ResolveDeviceFlags): Promise<De
 
       const devices = await listLocalDeviceInventory({
         ...selector,
+        ...leaseScope,
         iosSimulatorSetPath,
         androidSerialAllowlist: androidSerialAllowlist
           ? Array.from(androidSerialAllowlist).sort()
@@ -268,6 +281,10 @@ function buildResolveTargetDeviceCacheKey(params: {
     device: flags.device,
     udid: flags.udid,
     serial: flags.serial,
+    leaseId: flags.leaseId,
+    leaseProvider: flags.leaseProvider,
+    deviceKey: flags.deviceKey,
+    clientId: flags.clientId,
     iosSimulatorSetPath,
     androidSerialAllowlist: androidSerialAllowlist
       ? Array.from(androidSerialAllowlist).sort()

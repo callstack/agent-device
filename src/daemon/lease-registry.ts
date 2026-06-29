@@ -293,7 +293,7 @@ export class LeaseRegistry {
     return this.refreshLease(lease, leaseTtlMs);
   }
 
-  releaseLease(request: ReleaseLeaseRequest): { released: boolean } {
+  releaseLease(request: ReleaseLeaseRequest): { released: boolean; lease?: DeviceLease } {
     const leaseId = this.normalizeRequiredLeaseId(request.leaseId);
     this.cleanupExpiredLeases();
     const lease = this.leases.get(leaseId);
@@ -304,7 +304,7 @@ export class LeaseRegistry {
     this.assertOptionalScopeMatch(lease, request);
     this.leases.delete(leaseId);
     this.unbindLease(lease);
-    return { released: true };
+    return { released: true, lease: { ...lease } };
   }
 
   assertLeaseAdmission(request: AdmissionRequest): void {

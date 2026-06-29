@@ -5,6 +5,7 @@ import { promises as fs } from 'node:fs';
 import { AppError } from '../utils/errors.ts';
 import { resolveIosDevicectlHint, IOS_DEVICECTL_DEFAULT_HINT } from '../platforms/ios/devicectl.ts';
 import { runXcrun } from '../platforms/ios/tool-provider.ts';
+import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 
 const IOS_DEVICE_READY_TIMEOUT_MS = 15_000;
 const IOS_DEVICE_READY_COMMAND_TIMEOUT_BUFFER_MS = 3_000;
@@ -24,6 +25,8 @@ export async function ensureDeviceReady(
   device: DeviceInfo,
   options: DeviceReadyOptions = {},
 ): Promise<void> {
+  if (isActiveProviderDevice(device)) return;
+
   const cacheKey = deviceReadyCacheKey(device);
   const cachedUntil = readyCache.get(cacheKey);
   if (cachedUntil !== undefined) {

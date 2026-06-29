@@ -26,6 +26,13 @@ export type CommandFlags = Omit<CliFlags, DaemonExcludedCliFlag> & {
   kind?: string;
   maestro?: MaestroRuntimeFlags;
   postGestureStabilization?: boolean;
+  leaseProvider?: string;
+  provider?: string;
+  deviceKey?: string;
+  clientId?: string;
+  devicePort?: number;
+  hostPort?: number;
+  portReverseName?: string;
   replayBackend?: string;
   shardCount?: number;
   shardIndex?: number;

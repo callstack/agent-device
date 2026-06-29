@@ -3,6 +3,7 @@ import type { AndroidAdbExecutor } from '../platforms/android/adb-executor.ts';
 import { AppError } from '../utils/errors.ts';
 import { getDaemonCommandRoute } from './daemon-command-registry.ts';
 import type { DaemonCommandContext } from './context.ts';
+import type { LeaseLifecycleProvider } from './handlers/lease.ts';
 import type { LeaseRegistry } from './lease-registry.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './types.ts';
@@ -21,6 +22,7 @@ type RequestHandlerChainParams = {
   logPath: string;
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
+  leaseLifecycleProvider?: LeaseLifecycleProvider;
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;
   androidAdbExecutor?: AndroidAdbExecutor;
@@ -59,7 +61,11 @@ async function runLeaseHandler(params: RequestHandlerChainParams): Promise<Daemo
   return expectHandlerResponse(
     params.req.command,
     'lease',
-    await handleLeaseCommands({ req: params.req, leaseRegistry: params.leaseRegistry }),
+    await handleLeaseCommands({
+      req: params.req,
+      leaseRegistry: params.leaseRegistry,
+      leaseLifecycleProvider: params.leaseLifecycleProvider,
+    }),
   );
 }
 

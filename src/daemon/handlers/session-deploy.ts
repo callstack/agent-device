@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { installProviderDeviceApp } from '../../provider-device-runtime.ts';
 import { cleanupUploadedArtifact, prepareUploadedArtifact } from '../artifact-tracking.ts';
 import type { DeviceInfo } from '../../utils/device.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
@@ -53,10 +54,26 @@ type DeployCommandResult = IosDeployCommandResult | AndroidDeployCommandResult;
 
 export const defaultReinstallOps: ReinstallOps = {
   ios: async (device, app, appPath) => {
+    const providerResult = await installProviderDeviceApp(device, app, appPath, {
+      relaunch: true,
+      appIdentifierHint: app,
+    });
+    if (providerResult) {
+      return { bundleId: providerResult.bundleId ?? providerResult.launchTarget ?? app };
+    }
+
     const { reinstallIosApp } = await import('../../platforms/ios/apps.ts');
     return await reinstallIosApp(device, app, appPath);
   },
   android: async (device, app, appPath) => {
+    const providerResult = await installProviderDeviceApp(device, app, appPath, {
+      relaunch: true,
+      packageNameHint: app,
+    });
+    if (providerResult) {
+      return { package: providerResult.packageName ?? providerResult.launchTarget ?? app };
+    }
+
     const { reinstallAndroidApp } = await import('../../platforms/android/app-lifecycle.ts');
     return await reinstallAndroidApp(device, app, appPath);
   },
@@ -64,6 +81,17 @@ export const defaultReinstallOps: ReinstallOps = {
 
 export const defaultInstallOps: InstallOps = {
   ios: async (device, app, appPath) => {
+    const providerResult = await installProviderDeviceApp(device, app, appPath, {
+      appIdentifierHint: app,
+    });
+    if (providerResult) {
+      return {
+        bundleId: providerResult.bundleId,
+        appName: providerResult.appName,
+        launchTarget: providerResult.launchTarget,
+      };
+    }
+
     const { installIosApp } = await import('../../platforms/ios/apps.ts');
     const result = await installIosApp(device, appPath, { appIdentifierHint: app });
     return {
@@ -73,6 +101,17 @@ export const defaultInstallOps: InstallOps = {
     };
   },
   android: async (device, _app, appPath) => {
+    const providerResult = await installProviderDeviceApp(device, _app, appPath, {
+      packageNameHint: _app,
+    });
+    if (providerResult) {
+      return {
+        package: providerResult.packageName,
+        appName: providerResult.appName,
+        launchTarget: providerResult.launchTarget,
+      };
+    }
+
     const { installAndroidApp } = await import('../../platforms/android/app-lifecycle.ts');
     const result = await installAndroidApp(device, appPath);
     return {

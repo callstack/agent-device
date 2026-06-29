@@ -6,6 +6,10 @@ export type DeviceInventoryRequest = {
   deviceName?: string;
   udid?: string;
   serial?: string;
+  leaseId?: string;
+  leaseProvider?: string;
+  deviceKey?: string;
+  clientId?: string;
   iosSimulatorSetPath?: string;
   androidSerialAllowlist?: string[];
 };

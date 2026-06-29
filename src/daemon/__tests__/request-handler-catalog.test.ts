@@ -142,6 +142,60 @@ test('lease handler preserves device-aware lease fields', async () => {
   assert.equal(heartbeatLease.leaseProvider, 'proxy');
 });
 
+test('lease release calls provider hook using the released lease without heartbeat mutation', async () => {
+  const leaseRegistry = new LeaseRegistry();
+  const releaseCalls: string[] = [];
+  const allocateResponse = await handleLeaseCommands({
+    req: {
+      command: INTERNAL_COMMANDS.leaseAllocate,
+      token: 'test-token',
+      session: 'catalog-test',
+      meta: {
+        tenantId: 'tenant-a',
+        runId: 'run-a',
+        leaseBackend: 'android-instance',
+        leaseProvider: 'fake-provider',
+        leaseTtlMs: 20_000,
+      },
+      positionals: [],
+    },
+    leaseRegistry,
+  });
+  assert.equal(allocateResponse?.ok, true);
+  const lease = readLeaseResponse(allocateResponse);
+
+  const releaseResponse = await handleLeaseCommands({
+    req: {
+      command: INTERNAL_COMMANDS.leaseRelease,
+      token: 'test-token',
+      session: 'catalog-test',
+      meta: {
+        tenantId: 'tenant-a',
+        runId: 'run-a',
+        leaseId: lease.leaseId,
+        leaseBackend: 'android-instance',
+        leaseProvider: 'fake-provider',
+        leaseTtlMs: 1,
+      },
+      positionals: [],
+    },
+    leaseRegistry,
+    leaseLifecycleProvider: {
+      release: async (releasedLease) => {
+        releaseCalls.push(releasedLease.leaseId);
+        return { provider: releasedLease.leaseProvider };
+      },
+    },
+  });
+
+  assert.equal(releaseResponse?.ok, true);
+  assert.deepEqual(releaseCalls, [lease.leaseId]);
+  assert.deepEqual(releaseResponse.data, {
+    released: true,
+    provider: { provider: 'fake-provider' },
+  });
+});
+
 function catalogCommandsForRoute(route: Exclude<DaemonCommandRoute, 'generic'>): string[] {
   return [...Object.values(PUBLIC_COMMANDS), ...Object.values(INTERNAL_COMMANDS)].filter(
     (command) => getDaemonCommandRoute(command) === route,

@@ -7,11 +7,17 @@ export type ProviderScenarioState = {
   response(name: string): ProviderScenarioRpcResult;
 };
 
+export type ProviderScenarioDefaults = {
+  flags?: DaemonRequest['flags'];
+  meta?: DaemonRequest['meta'];
+};
+
 export type ProviderScenarioStep = {
   name: string;
   command: string;
   positionals?: string[];
   flags?: DaemonRequest['flags'];
+  meta?: DaemonRequest['meta'];
   expectStatus?: number;
   expectData?: Record<string, unknown>;
   assert?: (
@@ -23,6 +29,7 @@ export type ProviderScenarioStep = {
 export async function runProviderScenario(
   daemon: Pick<ProviderScenarioHarness, 'callCommand'>,
   steps: readonly ProviderScenarioStep[],
+  defaults: ProviderScenarioDefaults = {},
 ): Promise<ProviderScenarioState> {
   const responses = new Map<string, ProviderScenarioRpcResult>();
 
@@ -38,13 +45,29 @@ export async function runProviderScenario(
   };
 
   for (const step of steps) {
-    const response = await daemon.callCommand(step.command, step.positionals, step.flags);
+    const response = await daemon.callCommand(
+      step.command,
+      step.positionals,
+      {
+        ...defaults.flags,
+        ...step.flags,
+      },
+      {
+        meta: mergeRequestObject(defaults.meta, step.meta),
+      },
+    );
     const expectedStatus = step.expectStatus ?? 200;
     assert.equal(
       response.statusCode,
       expectedStatus,
       `${step.name} expected status ${expectedStatus}: ${JSON.stringify(response.json)}`,
     );
+    if (expectedStatus === 200) {
+      assert.ok(
+        response.json?.result,
+        `${step.name} returned JSON-RPC error: ${JSON.stringify(response.json?.error)}`,
+      );
+    }
     if (step.expectData) {
       assertDataContains(step.name, response, step.expectData);
     }
@@ -55,13 +78,25 @@ export async function runProviderScenario(
   return state;
 }
 
+function mergeRequestObject<T extends object>(
+  base: T | undefined,
+  override: T | undefined,
+): T | undefined {
+  if (!base) return override;
+  if (!override) return base;
+  return { ...base, ...override };
+}
+
 function assertDataContains(
   name: string,
   response: ProviderScenarioRpcResult,
   expected: Record<string, unknown>,
 ): void {
   const data = response.json?.result?.data;
-  assert.ok(data && typeof data === 'object', `${name} did not return result data`);
+  assert.ok(
+    data && typeof data === 'object',
+    `${name} did not return result data: ${JSON.stringify(response.json)}`,
+  );
   for (const [key, value] of Object.entries(expected)) {
     assert.deepEqual(data[key], value, `${name} result data mismatch for ${key}`);
   }

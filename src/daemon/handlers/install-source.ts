@@ -1,3 +1,7 @@
+import {
+  installProviderDeviceInstallablePath,
+  type ProviderDeviceInstallResult,
+} from '../../provider-device-runtime.ts';
 import { resolveTargetDevice, type CommandFlags } from '../../core/dispatch.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 import { getRequestSignal } from '../request-cancel.ts';
@@ -31,6 +35,17 @@ type InstallFromSourceResult = {
   installablePath?: string;
   materializationId?: string;
   materializationExpiresAt?: string;
+};
+
+type CompleteInstallFromSourceParams = {
+  prepared: PreparedInstallArtifact;
+  retention: ReturnType<typeof resolveRetainMaterializedPaths>;
+  req: DaemonRequest;
+  resolvedSourceCleanup: () => void;
+  session: SessionState | undefined;
+  sessionName: string;
+  sessionStore: SessionStore;
+  buildResult(retained: RetainedMaterializedPaths | undefined): Promise<InstallFromSourceResult>;
 };
 
 function normalizePlatform(platform: CommandFlags['platform']): 'ios' | 'android' | undefined {
@@ -144,94 +159,167 @@ export async function handleInstallFromSourceCommand(params: {
     if (unsupported) return unsupported;
 
     const requestSignal = getRequestSignal(req.meta?.requestId);
-    const completeInstall = async (
-      prepared: PreparedInstallArtifact,
-      buildResult: (
-        retained: RetainedMaterializedPaths | undefined,
-      ) => Promise<InstallFromSourceResult>,
-    ): Promise<DaemonResponse> => {
-      let retained: RetainedMaterializedPaths | undefined;
-      try {
-        retained = await maybeRetainInstallArtifact({
-          prepared,
-          retention,
-          req,
-          session,
-          sessionName,
-        });
-        const result = await buildResult(retained);
-        const data = withSuccessText(result, buildInstallFromSourceMessage(result));
-        recordInstallFromSourceAction({ session, sessionStore, req, data });
-        return { ok: true, data };
-      } catch (error) {
-        if (retained) {
-          await cleanupRetainedMaterializedPaths(
-            retained.materializationId,
-            req.meta?.tenantId,
-          ).catch(() => {});
-        }
-        throw error;
-      } finally {
-        await prepared.cleanup();
-        resolvedSource.cleanup();
-      }
-    };
-
     if (device.platform === 'ios') {
-      const { installIosInstallablePath } = await import('../../platforms/ios/apps.ts');
       const { prepareIosInstallArtifact } = await import('../../platforms/ios/install-artifact.ts');
       const prepared = await prepareIosInstallArtifact(resolvedSource.source, {
         signal: requestSignal,
       });
-      return await completeInstall(prepared, async (retained) => {
-        await installIosInstallablePath(device, prepared.installablePath);
-        if (!prepared.bundleId) {
-          throw new AppError(
-            'COMMAND_FAILED',
-            'Installed iOS app identity could not be resolved from the artifact',
-          );
-        }
-        return {
-          ...retainedInstallResultFields(retained),
-          bundleId: prepared.bundleId,
-          ...(prepared.appName ? { appName: prepared.appName } : {}),
-          launchTarget: prepared.bundleId,
-        };
+      return await completeInstallFromSource({
+        prepared,
+        retention,
+        req,
+        resolvedSourceCleanup: () => resolvedSource.cleanup(),
+        session,
+        sessionName,
+        sessionStore,
+        buildResult: async (retained) =>
+          await installPreparedIosArtifact(device, prepared, retained),
       });
     }
 
     const { prepareAndroidInstallArtifact } =
       await import('../../platforms/android/install-artifact.ts');
-    const { installAndroidInstallablePathAndResolvePackageName } =
-      await import('../../platforms/android/app-lifecycle.ts');
     const prepared = await prepareAndroidInstallArtifact(resolvedSource.source, {
       signal: requestSignal,
     });
-    return await completeInstall(prepared, async (retained) => {
-      const packageName = await installAndroidInstallablePathAndResolvePackageName(
-        device,
-        prepared.installablePath,
-        prepared.packageName,
-      );
-      if (!packageName) {
-        throw new AppError(
-          'COMMAND_FAILED',
-          'Installed Android app identity could not be resolved from the artifact or device state',
-        );
-      }
-      const { inferAndroidAppName } = await import('../../platforms/android/app-lifecycle.ts');
-      const appName = inferAndroidAppName(packageName);
-      return {
-        ...retainedInstallResultFields(retained),
-        packageName,
-        ...(appName ? { appName } : {}),
-        launchTarget: packageName,
-      };
+    return await completeInstallFromSource({
+      prepared,
+      retention,
+      req,
+      resolvedSourceCleanup: () => resolvedSource.cleanup(),
+      session,
+      sessionName,
+      sessionStore,
+      buildResult: async (retained) =>
+        await installPreparedAndroidArtifact(device, prepared, retained),
     });
   } catch (error) {
     const normalized = normalizeError(error);
     return { ok: false, error: normalized };
   }
+}
+
+async function completeInstallFromSource(
+  params: CompleteInstallFromSourceParams,
+): Promise<DaemonResponse> {
+  let retained: RetainedMaterializedPaths | undefined;
+  try {
+    retained = await maybeRetainInstallArtifact(params);
+    const result = await params.buildResult(retained);
+    const data = withSuccessText(result, buildInstallFromSourceMessage(result));
+    recordInstallFromSourceAction({
+      session: params.session,
+      sessionStore: params.sessionStore,
+      req: params.req,
+      data,
+    });
+    return { ok: true, data };
+  } catch (error) {
+    if (retained) {
+      await cleanupRetainedMaterializedPaths(
+        retained.materializationId,
+        params.req.meta?.tenantId,
+      ).catch(() => {});
+    }
+    throw error;
+  } finally {
+    await params.prepared.cleanup();
+    params.resolvedSourceCleanup();
+  }
+}
+
+async function installPreparedIosArtifact(
+  device: SessionState['device'],
+  prepared: PreparedInstallArtifact & { bundleId?: string; appName?: string },
+  retained: RetainedMaterializedPaths | undefined,
+): Promise<InstallFromSourceResult> {
+  const providerResult = await installProviderDeviceInstallablePath(
+    device,
+    prepared.installablePath,
+    { appIdentifierHint: prepared.bundleId },
+  );
+  if (!providerResult) {
+    const { installIosInstallablePath } = await import('../../platforms/ios/apps.ts');
+    await installIosInstallablePath(device, prepared.installablePath);
+  }
+  return buildIosInstallFromSourceResult(prepared, providerResult, retained);
+}
+
+async function installPreparedAndroidArtifact(
+  device: SessionState['device'],
+  prepared: PreparedInstallArtifact & { packageName?: string },
+  retained: RetainedMaterializedPaths | undefined,
+): Promise<InstallFromSourceResult> {
+  const providerResult = await installProviderDeviceInstallablePath(
+    device,
+    prepared.installablePath,
+    { packageNameHint: prepared.packageName },
+  );
+  const packageName = await resolveAndroidPackageName(device, prepared, providerResult);
+  const { inferAndroidAppName } = await import('../../platforms/android/app-lifecycle.ts');
+  const appName = inferAndroidAppName(packageName);
+  return {
+    ...retainedInstallResultFields(retained),
+    packageName,
+    ...optionalAppNameField(providerResult?.appName ?? appName),
+    launchTarget: providerResult?.launchTarget ?? packageName,
+  };
+}
+
+function buildIosInstallFromSourceResult(
+  prepared: PreparedInstallArtifact & { bundleId?: string; appName?: string },
+  providerResult: ProviderDeviceInstallResult | undefined,
+  retained: RetainedMaterializedPaths | undefined,
+): InstallFromSourceResult {
+  const bundleId = resolveIosBundleId(prepared, providerResult);
+  const appName = providerResult?.appName ?? prepared.appName;
+  return {
+    ...retainedInstallResultFields(retained),
+    bundleId,
+    ...optionalAppNameField(appName),
+    launchTarget: providerResult?.launchTarget ?? bundleId,
+  };
+}
+
+function resolveIosBundleId(
+  prepared: PreparedInstallArtifact & { bundleId?: string },
+  providerResult: ProviderDeviceInstallResult | undefined,
+): string {
+  const bundleId = providerResult?.bundleId ?? prepared.bundleId;
+  if (bundleId) return bundleId;
+  throw new AppError(
+    'COMMAND_FAILED',
+    'Installed iOS app identity could not be resolved from the artifact',
+  );
+}
+
+function optionalAppNameField(appName: string | undefined): { appName?: string } {
+  return appName ? { appName } : {};
+}
+
+async function resolveAndroidPackageName(
+  device: SessionState['device'],
+  prepared: PreparedInstallArtifact & { packageName?: string },
+  providerResult: ProviderDeviceInstallResult | undefined,
+): Promise<string> {
+  const providerPackageName = providerResult?.packageName ?? providerResult?.launchTarget;
+  if (providerPackageName) {
+    return providerPackageName;
+  }
+  const { installAndroidInstallablePathAndResolvePackageName } =
+    await import('../../platforms/android/app-lifecycle.ts');
+  const packageName = await installAndroidInstallablePathAndResolvePackageName(
+    device,
+    prepared.installablePath,
+    prepared.packageName,
+  );
+  if (!packageName) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Installed Android app identity could not be resolved from the artifact or device state',
+    );
+  }
+  return packageName;
 }
 
 function buildInstallFromSourceMessage(result: {

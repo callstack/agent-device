@@ -50,7 +50,7 @@ test('heartbeatLease extends active lease and releaseLease is idempotent', () =>
   assert.equal(heartbeat.expiresAt, 25_000);
 
   const released = registry.releaseLease({ leaseId: lease.leaseId });
-  assert.deepEqual(released, { released: true });
+  assert.deepEqual(released, { released: true, lease: heartbeat });
   const releasedAgain = registry.releaseLease({ leaseId: lease.leaseId });
   assert.deepEqual(releasedAgain, { released: false });
 });
