@@ -111,18 +111,39 @@ function addReplayTestCaseDetailLines(
   event: ReplayTestCaseProgressEvent,
   options: ReplayTestProgressFormatOptions,
 ): void {
-  if (options.verbose && event.status === 'fail') return;
+  if (shouldSuppressReplayTestCaseDetailLines(event, options)) return;
+  const fileLine = replayTestProgressFailureFileLine(event);
+  const messageLine = replayTestProgressMessageLine(event);
+  if (fileLine) lines.push(fileLine);
+  if (messageLine) lines.push(messageLine);
+  lines.push(...replayTestProgressFailureContextLines(event));
+}
+
+function shouldSuppressReplayTestCaseDetailLines(
+  event: ReplayTestCaseProgressEvent,
+  options: ReplayTestProgressFormatOptions,
+): boolean {
+  return options.verbose === true && event.status === 'fail';
+}
+
+function replayTestProgressFailureFileLine(event: ReplayTestCaseProgressEvent): string | undefined {
+  return event.status === 'fail' && event.title?.trim()
+    ? `    file: ${path.basename(event.file)}`
+    : undefined;
+}
+
+function replayTestProgressMessageLine(event: ReplayTestCaseProgressEvent): string | undefined {
   const message = event.message?.replace(/\s+/g, ' ').trim();
-  if (event.status === 'fail' && event.title?.trim()) {
-    lines.push(`    file: ${path.basename(event.file)}`);
-  }
-  if (message) {
-    lines.push(`    ${event.status === 'fail' ? `failed at: ${message}` : message}`);
-  }
-  if (event.status === 'fail' && !event.retrying) {
-    if (event.session) lines.push(`    session: ${event.session}`);
-    if (event.artifactsDir) lines.push(`    artifacts: ${event.artifactsDir}`);
-  }
+  if (!message) return undefined;
+  return `    ${event.status === 'fail' ? `failed at: ${message}` : message}`;
+}
+
+function replayTestProgressFailureContextLines(event: ReplayTestCaseProgressEvent): string[] {
+  if (event.status !== 'fail' || event.retrying) return [];
+  const lines: string[] = [];
+  if (event.session) lines.push(`    session: ${event.session}`);
+  if (event.artifactsDir) lines.push(`    artifacts: ${event.artifactsDir}`);
+  return lines;
 }
 
 function formatReplayTestCaseSummaryLine(event: ReplayTestCaseProgressEvent): string {
