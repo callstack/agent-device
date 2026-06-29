@@ -146,7 +146,7 @@ test('test command prints suite summary and exits non-zero on failures', async (
   assert.match(result.stdout, /Replay failed at step 1 \(open Demo\): boom/);
   assert.match(result.stdout, /artifacts: \/tmp\/test-artifacts\/02-fail/);
   assert.doesNotMatch(result.stdout, /SKIP \/tmp\/03-skip\.ad/);
-  assert.match(result.stdout, /Test summary: 1 passed, 1 failed in 0\.025s/);
+  assert.match(result.stdout, /Test summary: 1 passed \(3\), 1 failed in 0\.025s/);
 });
 
 test('test command --verbose prints all test statuses', async () => {
@@ -159,7 +159,44 @@ test('test command --verbose prints all test statuses', async () => {
   assert.doesNotMatch(result.stderr, /Running replay suite\.\.\./);
   assert.doesNotMatch(result.stdout, /✓ 01-pass\.ad \(0\.01s\)/);
   assert.doesNotMatch(result.stdout, /SKIP 03-skip\.ad/);
-  assert.match(result.stdout, /Test summary: 1 passed, 1 failed in 0\.025s/);
+  assert.match(result.stdout, /Test summary: 1 passed \(3\), 1 failed in 0\.025s/);
+});
+
+test('test command colors suite summary segments when color is enabled', async () => {
+  const result = await runCliCapture(
+    ['test', './suite'],
+    async () => ({
+      ok: true,
+      data: {
+        total: 1,
+        executed: 1,
+        passed: 1,
+        failed: 0,
+        skipped: 0,
+        notRun: 0,
+        durationMs: 25,
+        failures: [],
+        tests: [
+          {
+            file: '/tmp/01-pass.ad',
+            session: 'default:test:suite:1',
+            status: 'passed',
+            durationMs: 25,
+            attempts: 1,
+          },
+        ],
+      },
+    }),
+    { env: { FORCE_COLOR: '1', NO_COLOR: undefined } },
+  );
+
+  assert.equal(result.code, null);
+  assert.ok(
+    result.stdout.includes(
+      'Test summary: \u001B[32m1 passed\u001B[39m \u001B[2m(1)\u001B[22m in \u001B[33m0.025s\u001B[39m',
+    ),
+  );
+  assert.doesNotMatch(result.stdout, /0 failed/);
 });
 
 test('test command --verbose omits step telemetry for passing tests without debug mode', async () => {
@@ -391,7 +428,7 @@ test('test command reports flaky passed-on-retry cases in the default summary', 
     result.stdout,
     /^✓ Authentication flow \(passed attempt 17\.5s, total 112\.2s\)$/m,
   );
-  assert.match(result.stdout, /Test summary: 1 passed, 0 failed, 1 flaky in 0\.025s/);
+  assert.match(result.stdout, /Test summary: 1 passed \(1\), 1 flaky in 0\.025s/);
   assert.match(result.stdout, /Flaky tests:/);
   assert.match(
     result.stdout,
