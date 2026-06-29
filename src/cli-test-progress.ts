@@ -161,7 +161,7 @@ function formatReplayTestCaseSummaryLine(event: ReplayTestCaseProgressEvent): st
   const name = formatReplayTestProgressName(event);
   const shardSuffix = formatReplayTestProgressShardSuffix(event, { useColor });
   const durationSuffix =
-    event.durationMs !== undefined ? ` (${formatReplayProgressDuration(event, { useColor })})` : '';
+    event.durationMs !== undefined ? ` ${formatReplayProgressDuration(event, { useColor })}` : '';
   return `${statusLabel} ${name}${shardSuffix}${durationSuffix}`;
 }
 
@@ -209,7 +209,7 @@ function formatReplayProgressDuration(
   options: { useColor?: boolean } = {},
 ): string {
   const duration = formatDurationSeconds(event.durationMs ?? 0);
-  return options.useColor ? colorizeProgressMarker(duration, 'cyan') : duration;
+  return options.useColor ? colorizeProgressMarker(duration, 'yellow') : duration;
 }
 
 function isReplayTestCompletionProgressEvent(event: ReplayTestCaseProgressEvent): boolean {
