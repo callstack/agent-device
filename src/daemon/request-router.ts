@@ -6,7 +6,8 @@ import { AppError, normalizeError, retriableForErrorCode } from '../kernel/error
 import { supportedPlatformsForCommand } from '../core/capabilities.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
 import type { DaemonError, ResponseCost } from '../contracts.ts';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './types.ts';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, DaemonResponseData } from './types.ts';
+import { RESPONSE_VIEWS } from './response-views.ts';
 import { SessionStore } from './session-store.ts';
 import { noActiveSessionError } from './handlers/response.ts';
 import {
@@ -116,23 +117,9 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         if (!response.ok) {
           return { ok: false, error: enrichDaemonError(req.command, response.error) };
         }
-        // Phase 4 (agent-cost) graft: cost is purely additive and opt-in. With
-        // the flag off the serialized DaemonResponse is byte-identical to today
-        // (Maestro `.ad` recompare diffs it). Mirrors the conditional
-        // `registerDownloadableArtifacts` spread in request-finalization. Runs
-        // inside the diagnostics scope so it can read this request's accumulated
-        // runner-round-trip tally.
-        if (!req.meta?.includeCost) return response;
-        const cost: ResponseCost = {
-          wallClockMs: Date.now() - start,
-          runnerRoundTrips: countDiagnosticEventsByPhase(RUNNER_ROUND_TRIP_PHASES),
-        };
-        // Generic, command-agnostic: only the node-tree commands (snapshot) put a
-        // `nodes` array on response.data, so this reads as a number there and is
-        // omitted everywhere else.
-        const nodes = response.data?.nodes;
-        if (Array.isArray(nodes)) cost.nodeCount = nodes.length;
-        return { ok: true, data: { ...(response.data ?? {}), cost } };
+        // Phase 4 (agent-cost) grafts on the success path. Runs inside the
+        // diagnostics scope so cost can read this request's runner-round-trip tally.
+        return applyAgentCostGrafts(req, response, start);
       },
     );
   }
@@ -338,4 +325,46 @@ function enrichDaemonError(command: string, error: DaemonError): DaemonError {
     ...(retriable !== undefined ? { retriable } : {}),
     ...(supportedOn !== undefined ? { supportedOn } : {}),
   };
+}
+
+// Phase 4 (agent-cost) success-path grafts: a leveled response view and an
+// opt-in cost block, both purely additive. With responseLevel `default` (or
+// unset) AND no registered view AND no --cost, the original `response` object is
+// returned unchanged — byte-identical to today (Maestro `.ad` recompare safe).
+function applyAgentCostGrafts(
+  req: DaemonRequest,
+  response: Extract<DaemonResponse, { ok: true }>,
+  startedAt: number,
+): DaemonResponse {
+  const viewed = applyResponseLevelView(req, response);
+  if (!req.meta?.includeCost) return viewed;
+  const cost = buildResponseCost(response.data, startedAt);
+  return { ok: true, data: { ...(viewed.data ?? {}), cost } };
+}
+
+// Returns the response untouched when responseLevel is `default` (or unset) or no
+// view is registered for the command — preserving today's byte-exact wire shape.
+function applyResponseLevelView(
+  req: DaemonRequest,
+  response: Extract<DaemonResponse, { ok: true }>,
+): Extract<DaemonResponse, { ok: true }> {
+  const level = req.meta?.responseLevel ?? 'default';
+  if (level === 'default') return response;
+  const view = RESPONSE_VIEWS[req.command];
+  return view ? { ok: true, data: view(response.data ?? {}, level) } : response;
+}
+
+function buildResponseCost(
+  originalData: DaemonResponseData | undefined,
+  startedAt: number,
+): ResponseCost {
+  const cost: ResponseCost = {
+    wallClockMs: Date.now() - startedAt,
+    runnerRoundTrips: countDiagnosticEventsByPhase(RUNNER_ROUND_TRIP_PHASES),
+  };
+  // nodeCount reads the ORIGINAL node tree (the digest view may have already
+  // collapsed `data.nodes`), so the count stays accurate.
+  const nodes = originalData?.nodes;
+  if (Array.isArray(nodes)) cost.nodeCount = nodes.length;
+  return cost;
 }

@@ -58,10 +58,17 @@ export type SessionIsolationMode = (typeof SESSION_ISOLATION_MODES)[number];
 export const NETWORK_INCLUDE_MODES = ['summary', 'headers', 'body', 'all'] as const;
 export type NetworkIncludeMode = (typeof NETWORK_INCLUDE_MODES)[number];
 
+// Agent-cost leveled response views (Phase 4). `default` == today's exact wire
+// shape (Maestro `.ad` recompare safe); `digest` is a token-cheap view; `full`
+// is the richest view (== default until a command surfaces extra detail).
+export const RESPONSE_LEVELS = ['digest', 'default', 'full'] as const;
+export type ResponseLevel = (typeof RESPONSE_LEVELS)[number];
+
 export type DaemonRequestMeta = {
   requestId?: string;
   debug?: boolean;
   includeCost?: boolean;
+  responseLevel?: ResponseLevel;
   cwd?: string;
   sessionExplicit?: boolean;
   tenantId?: string;
@@ -447,6 +454,7 @@ export const daemonCommandRequestSchema = schema<DaemonRequest>((input, path) =>
             requestId: optionalString(meta, 'requestId', `${path}.meta`),
             debug: optionalBoolean(meta, 'debug', `${path}.meta`),
             includeCost: optionalBoolean(meta, 'includeCost', `${path}.meta`),
+            responseLevel: optionalEnum(meta, 'responseLevel', RESPONSE_LEVELS, `${path}.meta`),
             cwd: optionalString(meta, 'cwd', `${path}.meta`),
             sessionExplicit: optionalBoolean(meta, 'sessionExplicit', `${path}.meta`),
             tenantId: optionalString(meta, 'tenantId', `${path}.meta`),

@@ -4,14 +4,16 @@ import type { BackMode } from '../core/back-mode.ts';
 import type { ClickButton } from '../core/click-button.ts';
 import type { SwipePattern } from '../core/scroll-gesture.ts';
 import { PLATFORM_SELECTORS, type DeviceTarget, type PlatformSelector } from '../kernel/device.ts';
-import type {
-  DaemonInstallSource,
-  DaemonServerMode,
-  DaemonTransportPreference,
-  LeaseBackend,
-  NetworkIncludeMode,
-  SessionRuntimeHints,
-  SessionIsolationMode,
+import {
+  type DaemonInstallSource,
+  type DaemonServerMode,
+  type DaemonTransportPreference,
+  type LeaseBackend,
+  type NetworkIncludeMode,
+  RESPONSE_LEVELS,
+  type ResponseLevel,
+  type SessionRuntimeHints,
+  type SessionIsolationMode,
 } from '../contracts.ts';
 import type { RemoteConfigMetroOptions } from '../remote-config-schema.ts';
 import {
@@ -66,6 +68,7 @@ export type CliFlags = RemoteConfigMetroOptions &
     launchUrl?: string;
     verbose?: boolean;
     cost?: boolean;
+    responseLevel?: ResponseLevel;
     snapshotInteractiveOnly?: boolean;
     snapshotDiff?: boolean;
     snapshotDepth?: number;
@@ -785,6 +788,15 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription: 'Include per-command wall-clock latency (cost.wallClockMs) in the response',
   },
   {
+    key: 'responseLevel',
+    names: ['--level'],
+    type: 'enum',
+    enumValues: RESPONSE_LEVELS,
+    usageLabel: '--level digest|default|full',
+    usageDescription:
+      'Response detail level: digest (token-cheap), default (today), or full. Default keeps the wire shape unchanged.',
+  },
+  {
     key: 'json',
     names: ['--json'],
     type: 'boolean',
@@ -1156,6 +1168,7 @@ export const GLOBAL_FLAG_KEYS = new Set<FlagKey>([
   'version',
   'verbose',
   'cost',
+  'responseLevel',
 ]);
 
 const flagDefinitionByName = new Map<string, FlagDefinition>();

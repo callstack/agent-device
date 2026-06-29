@@ -8,6 +8,7 @@ import type {
   DaemonResponse,
   LeaseBackend,
   NetworkIncludeMode,
+  ResponseLevel,
   SessionIsolationMode,
   SessionRuntimeHints,
 } from './contracts.ts';
@@ -79,6 +80,7 @@ export type AgentDeviceClientConfig = RemoteConnectionProfileFields & {
   cwd?: string;
   debug?: boolean;
   cost?: boolean;
+  responseLevel?: ResponseLevel;
   iosXctestrunFile?: string;
   iosXctestDerivedDataPath?: string;
   iosXctestEnvDir?: string;
@@ -106,6 +108,7 @@ export type AgentDeviceRequestOverrides = Pick<
   | 'cwd'
   | 'debug'
   | 'cost'
+  | 'responseLevel'
   | 'iosXctestrunFile'
   | 'iosXctestDerivedDataPath'
   | 'iosXctestEnvDir'
