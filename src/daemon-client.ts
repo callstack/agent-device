@@ -48,6 +48,7 @@ export async function sendToDaemon(req: Omit<DaemonRequest, 'token'>): Promise<D
       ...(req.meta ?? {}),
       requestId,
       debug,
+      includeCost: req.meta?.includeCost,
       cwd: req.meta?.cwd,
       sessionExplicit: req.meta?.sessionExplicit,
       tenantId: req.meta?.tenantId ?? req.flags?.tenant,

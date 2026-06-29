@@ -252,6 +252,7 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
           lockPlatform: binding.defaultPlatform,
           cwd: process.cwd(),
           debug: debugOutputEnabled,
+          cost: currentFlags.cost,
         });
         let parsedBatchSteps: BatchStep[] | undefined;
         if (command === 'batch') {

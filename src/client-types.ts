@@ -69,6 +69,7 @@ export type AgentDeviceClientConfig = RemoteConnectionProfileFields & {
   runtime?: SessionRuntimeHints;
   cwd?: string;
   debug?: boolean;
+  cost?: boolean;
   iosXctestrunFile?: string;
   iosXctestDerivedDataPath?: string;
   iosXctestEnvDir?: string;
@@ -95,6 +96,7 @@ export type AgentDeviceRequestOverrides = Pick<
   | 'leaseTtlMs'
   | 'cwd'
   | 'debug'
+  | 'cost'
   | 'iosXctestrunFile'
   | 'iosXctestDerivedDataPath'
   | 'iosXctestEnvDir'

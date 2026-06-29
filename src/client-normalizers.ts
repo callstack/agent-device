@@ -352,6 +352,7 @@ export function buildMeta(options: InternalRequestOptions): DaemonRequest['meta'
     cwd: options.cwd,
     sessionExplicit: options.session !== undefined,
     debug: options.debug,
+    includeCost: options.cost,
     lockPolicy: options.lockPolicy,
     lockPlatform: options.lockPlatform,
     ...leaseScopeToRequestMeta(leaseScope),

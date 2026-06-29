@@ -4,6 +4,7 @@ import {
 } from '../core/dispatch-resolve.ts';
 import { AppError, normalizeError } from '../utils/errors.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
+import type { ResponseCost } from '../contracts.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './types.ts';
 import { SessionStore } from './session-store.ts';
 import { noActiveSessionError } from './handlers/response.ts';
@@ -79,8 +80,9 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   const { sessionStore, leaseRegistry } = deps;
 
   async function handleRequest(req: DaemonRequest): Promise<DaemonResponse> {
+    const start = Date.now();
     const debug = Boolean(req.meta?.debug || req.flags?.verbose);
-    return await withDiagnosticsScope(
+    const response = await withDiagnosticsScope(
       {
         session: req.session,
         requestId: req.meta?.requestId,
@@ -107,6 +109,13 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         }
       },
     );
+    // Phase 4 (agent-cost) graft: cost is purely additive and opt-in. With the
+    // flag off — or on an error response — the serialized DaemonResponse is
+    // byte-identical to today (Maestro `.ad` recompare diffs it). Mirrors the
+    // conditional `registerDownloadableArtifacts` spread in request-finalization.
+    if (!req.meta?.includeCost || !response.ok) return response;
+    const cost: ResponseCost = { wallClockMs: Date.now() - start };
+    return { ok: true, data: { ...(response.data ?? {}), cost } };
   }
 
   async function executeRequestScope(

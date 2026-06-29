@@ -65,6 +65,7 @@ export type CliFlags = RemoteConfigMetroOptions &
     bundleUrl?: string;
     launchUrl?: string;
     verbose?: boolean;
+    cost?: boolean;
     snapshotInteractiveOnly?: boolean;
     snapshotDiff?: boolean;
     snapshotDepth?: number;
@@ -776,6 +777,13 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
       'Enable debug diagnostics; test --verbose prints per-test step timings without debug logs',
   },
   {
+    key: 'cost',
+    names: ['--cost'],
+    type: 'boolean',
+    usageLabel: '--cost',
+    usageDescription: 'Include per-command wall-clock latency (cost.wallClockMs) in the response',
+  },
+  {
     key: 'json',
     names: ['--json'],
     type: 'boolean',
@@ -1131,7 +1139,14 @@ export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS = flagKeys(
   'noRecord',
 );
 
-export const GLOBAL_FLAG_KEYS = new Set<FlagKey>(['json', 'config', 'help', 'version', 'verbose']);
+export const GLOBAL_FLAG_KEYS = new Set<FlagKey>([
+  'json',
+  'config',
+  'help',
+  'version',
+  'verbose',
+  'cost',
+]);
 
 const flagDefinitionByName = new Map<string, FlagDefinition>();
 for (const definition of FLAG_DEFINITIONS) {

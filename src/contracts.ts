@@ -61,6 +61,7 @@ export type NetworkIncludeMode = (typeof NETWORK_INCLUDE_MODES)[number];
 export type DaemonRequestMeta = {
   requestId?: string;
   debug?: boolean;
+  includeCost?: boolean;
   cwd?: string;
   sessionExplicit?: boolean;
   tenantId?: string;
@@ -101,8 +102,11 @@ export type DaemonArtifact = {
   path?: string;
 };
 
+export type ResponseCost = { wallClockMs: number };
+
 export type DaemonResponseData = Record<string, unknown> & {
   artifacts?: DaemonArtifact[];
+  cost?: ResponseCost;
 };
 
 export type DaemonError = {
@@ -423,6 +427,7 @@ export const daemonCommandRequestSchema = schema<DaemonRequest>((input, path) =>
         : {
             requestId: optionalString(meta, 'requestId', `${path}.meta`),
             debug: optionalBoolean(meta, 'debug', `${path}.meta`),
+            includeCost: optionalBoolean(meta, 'includeCost', `${path}.meta`),
             cwd: optionalString(meta, 'cwd', `${path}.meta`),
             sessionExplicit: optionalBoolean(meta, 'sessionExplicit', `${path}.meta`),
             tenantId: optionalString(meta, 'tenantId', `${path}.meta`),
