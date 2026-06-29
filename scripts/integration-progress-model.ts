@@ -221,6 +221,7 @@ function summarizeProviderScenarioFlagExclusions() {
         'help',
         'version',
         'verbose',
+        'cost',
       ],
     },
     {
