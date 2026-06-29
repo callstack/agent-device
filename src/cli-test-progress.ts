@@ -90,9 +90,8 @@ function formatReplayTestLiveProgressLine(
   const file = path.basename(event.file);
   const useColor = supportsColor(process.stderr);
   const shardSuffix = formatReplayTestProgressShardSuffix(event, { useColor });
-  const stepIndex = event.stepIndex ?? 0;
-  const stepTotal = event.stepTotal ?? 0;
-  const suffix = `${shardSuffix} [${stepIndex}/${stepTotal}]`;
+  const stepSuffix = formatReplayTestLiveProgressStepSuffix(event, { useColor });
+  const suffix = `${shardSuffix}${stepSuffix}`;
   const prefix = '⊙ ';
   if (!title) return trimToColumns(`${prefix}${file}${suffix}`, options.columns);
 
@@ -104,6 +103,16 @@ function formatReplayTestLiveProgressLine(
   );
   const formattedTitle = trimToColumns(title, availableTitleColumns);
   return trimToColumns(`${titlePrefix}${formattedTitle}${titleSuffix}`, options.columns);
+}
+
+function formatReplayTestLiveProgressStepSuffix(
+  event: ReplayTestCaseProgressEvent,
+  options: { useColor?: boolean } = {},
+): string {
+  const stepIndex = event.stepIndex ?? 0;
+  const stepTotal = event.stepTotal ?? 0;
+  const suffix = ` [${stepIndex}/${stepTotal}]`;
+  return options.useColor ? colorizeProgressMarker(suffix, 'dim') : suffix;
 }
 
 function addReplayTestCaseDetailLines(
