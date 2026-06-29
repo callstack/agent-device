@@ -147,12 +147,6 @@ function validateResumableUploadOptions(options: BeginResumableUploadOptions): v
   }
   validateArtifactContentLength(String(options.sizeBytes));
   sanitizeArtifactFilename(options.fileName);
-  if (options.artifactType !== 'file' && options.artifactType !== 'app-bundle') {
-    throw new AppError(
-      'INVALID_ARGS',
-      `Invalid artifactType: ${options.artifactType}. Must be "file" or "app-bundle".`,
-    );
-  }
 }
 
 function createResumableUploadEntry(

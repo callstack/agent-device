@@ -3,6 +3,7 @@ import { AppError, normalizeError } from '../utils/errors.ts';
 import type { DaemonRequest } from './types.ts';
 import { trackUploadedArtifact } from './artifact-tracking.ts';
 import {
+  type BeginResumableUploadOptions,
   beginResumableUpload,
   finalizeResumableUpload,
   receiveResumableUploadChunk,
@@ -11,7 +12,22 @@ import { receiveUpload } from './upload.ts';
 import { sendRestJsonError } from './http-errors.ts';
 import { readNodeHttpRequestBody } from '../utils/node-http.ts';
 
-type UploadHttpRoute = 'upload' | 'preflight' | 'direct' | 'finalize';
+const DIRECT_UPLOAD_PATH_PREFIX = '/upload/direct/';
+
+type UploadHttpRoute =
+  | { kind: 'upload' }
+  | { kind: 'preflight' }
+  | { kind: 'direct'; uploadId: string }
+  | { kind: 'finalize' };
+
+type UploadPreflightBody = Pick<
+  BeginResumableUploadOptions,
+  'artifactType' | 'contentType' | 'fileName' | 'platform' | 'sha256' | 'sizeBytes'
+>;
+
+type UploadFinalizeBody = {
+  uploadId: string;
+};
 
 type AuxiliaryHttpAuthorizer = (params: {
   req: http.IncomingMessage;
@@ -40,12 +56,12 @@ async function handleUploadHttpRoute(
   authorize: AuxiliaryHttpAuthorizer,
   token: string,
 ): Promise<void> {
-  switch (route) {
+  switch (route.kind) {
     case 'preflight':
       await handleUploadPreflight(req, res, authorize, token);
       return;
     case 'direct':
-      await handleResumableUpload(req, res, authorize);
+      await handleResumableUpload(route.uploadId, req, res, authorize);
       return;
     case 'finalize':
       await handleUploadFinalize(req, res, authorize);
@@ -57,10 +73,15 @@ async function handleUploadHttpRoute(
 }
 
 function resolveUploadHttpRoute(req: http.IncomingMessage): UploadHttpRoute | null {
-  if (req.method === 'POST' && req.url === '/upload/preflight') return 'preflight';
-  if (req.method === 'PUT' && req.url?.startsWith('/upload/direct/')) return 'direct';
-  if (req.method === 'POST' && req.url === '/upload/finalize') return 'finalize';
-  if (req.method === 'POST' && req.url === '/upload') return 'upload';
+  if (req.method === 'POST' && req.url === '/upload/preflight') return { kind: 'preflight' };
+  if (req.method === 'PUT' && req.url?.startsWith(DIRECT_UPLOAD_PATH_PREFIX)) {
+    return {
+      kind: 'direct',
+      uploadId: req.url.slice(DIRECT_UPLOAD_PATH_PREFIX.length).replace(/\?.*$/, ''),
+    };
+  }
+  if (req.method === 'POST' && req.url === '/upload/finalize') return { kind: 'finalize' };
+  if (req.method === 'POST' && req.url === '/upload') return { kind: 'upload' };
   return null;
 }
 
@@ -104,15 +125,11 @@ async function handleUploadPreflight(
     if (!auth) return;
 
     const body = await readRestJsonBody(req, 64 * 1024);
+    const preflight = readUploadPreflightBody(body);
     const upload = beginResumableUpload({
       baseUrl: resolveHttpRequestBaseUrl(req),
       tokenHeaders: buildUploadTicketAuthHeaders(token),
-      sha256: readRequiredText(body, 'sha256'),
-      fileName: readRequiredText(body, 'fileName'),
-      sizeBytes: readRequiredInteger(body, 'sizeBytes'),
-      artifactType: readRequiredArtifactType(body),
-      platform: readOptionalText(body, 'platform'),
-      contentType: readOptionalText(body, 'contentType'),
+      ...preflight,
       tenantId: auth.tenantId,
     });
 
@@ -123,11 +140,11 @@ async function handleUploadPreflight(
 }
 
 async function handleResumableUpload(
+  uploadId: string,
   req: http.IncomingMessage,
   res: http.ServerResponse,
   authorize: AuxiliaryHttpAuthorizer,
 ): Promise<void> {
-  const uploadId = req.url?.slice('/upload/direct/'.length).split('?')[0] ?? '';
   try {
     const auth = await authorize({
       req,
@@ -174,9 +191,10 @@ async function handleUploadFinalize(
     if (!auth) return;
 
     const body = await readRestJsonBody(req, 64 * 1024);
+    const finalize = readUploadFinalizeBody(body);
     sendUploadedArtifactResponse(
       res,
-      await finalizeResumableUpload(readRequiredText(body, 'uploadId'), auth.tenantId),
+      await finalizeResumableUpload(finalize.uploadId, auth.tenantId),
       auth.tenantId,
     );
   } catch (error) {
@@ -219,6 +237,23 @@ async function readRestJsonBody(
   } catch (error) {
     throw new AppError('INVALID_ARGS', 'Invalid JSON request body', {}, error);
   }
+}
+
+function readUploadPreflightBody(record: Record<string, unknown>): UploadPreflightBody {
+  return {
+    sha256: readRequiredText(record, 'sha256'),
+    fileName: readRequiredText(record, 'fileName'),
+    sizeBytes: readRequiredInteger(record, 'sizeBytes'),
+    artifactType: readRequiredArtifactType(record),
+    platform: readOptionalText(record, 'platform'),
+    contentType: readOptionalText(record, 'contentType'),
+  };
+}
+
+function readUploadFinalizeBody(record: Record<string, unknown>): UploadFinalizeBody {
+  return {
+    uploadId: readRequiredText(record, 'uploadId'),
+  };
 }
 
 function readRequiredText(record: Record<string, unknown>, key: string): string {
