@@ -1,4 +1,4 @@
-import { asAppError } from '../utils/errors.ts';
+import { asAppError } from '../kernel/errors.ts';
 
 export type BootFailureReason =
   | 'IOS_BOOT_TIMEOUT'

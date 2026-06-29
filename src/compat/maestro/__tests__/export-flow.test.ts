@@ -1,6 +1,6 @@
 import { parseAllDocuments } from 'yaml';
 import { describe, expect, test } from 'vitest';
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import { exportReplayScriptToMaestro } from '../export-flow.ts';
 
 describe('exportReplayScriptToMaestro', () => {

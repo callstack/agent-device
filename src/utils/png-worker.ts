@@ -1,5 +1,5 @@
 import { parentPort } from 'node:worker_threads';
-import { normalizeError } from './errors.ts';
+import { normalizeError } from '../kernel/errors.ts';
 import { PNG } from './png-codec.ts';
 import { decodePng } from './png.ts';
 import { computeScreenshotDiffPixels } from './screenshot-diff-pixels.ts';

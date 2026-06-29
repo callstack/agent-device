@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import { fillAndroid, typeAndroid } from '../input-actions.ts';
 import { withAndroidAdbProvider, type AndroidAdbExecutor } from '../adb-executor.ts';
 import {

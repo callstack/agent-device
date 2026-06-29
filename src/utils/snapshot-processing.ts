@@ -1,4 +1,4 @@
-import type { Platform } from './device.ts';
+import type { Platform } from '../kernel/device.ts';
 import type { RawSnapshotNode, SnapshotNode, SnapshotState } from '../kernel/snapshot.ts';
 import { extractReadableText, normalizeType } from './text-surface.ts';
 

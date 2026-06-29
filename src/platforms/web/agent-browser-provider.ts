@@ -1,5 +1,5 @@
 import { runCmd } from '../../utils/exec.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import type { Rect } from '../../kernel/snapshot.ts';
 import { normalizeAgentBrowserNetworkRequests } from './agent-browser-network.ts';

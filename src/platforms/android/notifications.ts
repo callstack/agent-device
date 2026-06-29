@@ -1,5 +1,5 @@
-import { AppError } from '../../utils/errors.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import { AppError } from '../../kernel/errors.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import { runAndroidAdb } from './adb.ts';
 
 type AndroidBroadcastPayload = {

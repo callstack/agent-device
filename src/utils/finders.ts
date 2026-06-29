@@ -1,5 +1,5 @@
 import type { SnapshotNode } from '../kernel/snapshot.ts';
-import { AppError } from './errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import { tryParseSelectorChain, type SelectorChain } from './selectors-parse.ts';
 
 export const FIND_LOCATORS = ['any', 'text', 'label', 'value', 'role', 'id'] as const;

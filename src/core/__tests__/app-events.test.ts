@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { parseTriggerAppEventArgs } from '../app-events.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 
 test('parseTriggerAppEventArgs validates event name format', () => {
   assert.throws(

@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import type { RunnerCallOptions, RunnerContext } from '../../core/interactor-types.ts';
 import type { ScrollDirection } from '../../core/scroll-gesture.ts';
 import type { RunnerCommand } from './runner-contract.ts';

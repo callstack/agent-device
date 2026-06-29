@@ -1,8 +1,8 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import type { RunnerCommand } from '../../platforms/ios/runner-client.ts';
-import type { DeviceInfo } from '../device.ts';
-import { AppError } from '../errors.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
+import { AppError } from '../../kernel/errors.ts';
 
 vi.mock('../../platforms/ios/runner-client.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../platforms/ios/runner-client.ts')>();

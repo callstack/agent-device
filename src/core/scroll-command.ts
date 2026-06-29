@@ -1,4 +1,4 @@
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 
 export const SCROLL_DURATION_MAX_MS = 10_000;
 

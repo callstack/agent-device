@@ -5,7 +5,7 @@
  * (press, type, scroll…) does not re-run `which` on every call.
  */
 
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { resolveLinuxToolProvider, type LinuxToolProvider } from './tool-provider.ts';
 
 export type DisplayServer = 'wayland' | 'x11';

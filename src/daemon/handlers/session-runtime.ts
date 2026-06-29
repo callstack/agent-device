@@ -1,5 +1,5 @@
-import { AppError, asAppError } from '../../utils/errors.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import { AppError, asAppError } from '../../kernel/errors.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import type { CommandFlags } from '../../core/dispatch.ts';
 import type { DaemonRequest, SessionRuntimeHints, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';

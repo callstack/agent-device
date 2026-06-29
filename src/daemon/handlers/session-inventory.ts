@@ -1,12 +1,12 @@
 import { listDeviceInventory } from '../../core/dispatch-resolve.ts';
 import { assertResolvedAppsFilter } from '../../contracts/app-inventory.ts';
-import { asAppError } from '../../utils/errors.ts';
+import { asAppError } from '../../kernel/errors.ts';
 import {
   isApplePlatform,
   resolveAppleSimulatorSetPathForSelector,
   type DeviceInfo,
   type PlatformSelector,
-} from '../../utils/device.ts';
+} from '../../kernel/device.ts';
 import {
   resolveAndroidSerialAllowlist,
   resolveIosSimulatorDeviceSetPath,

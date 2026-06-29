@@ -7,7 +7,7 @@ import {
 import { snapshotAndroid } from '../platforms/android/snapshot.ts';
 import { runAndroidAdb } from '../platforms/android/adb.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import { centerOfRect, attachRefs, type SnapshotNode } from '../kernel/snapshot.ts';
 import { sleep } from '../utils/timeouts.ts';
 import { pruneGroupNodes } from '../utils/snapshot-processing.ts';

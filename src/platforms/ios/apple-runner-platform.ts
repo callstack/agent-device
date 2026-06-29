@@ -1,5 +1,5 @@
-import { AppError } from '../../utils/errors.ts';
-import { isApplePlatform, resolveApplePlatformName, type DeviceInfo } from '../../utils/device.ts';
+import { AppError } from '../../kernel/errors.ts';
+import { isApplePlatform, resolveApplePlatformName, type DeviceInfo } from '../../kernel/device.ts';
 
 export type RunnerApplePlatformName = 'iOS' | 'tvOS' | 'macOS';
 

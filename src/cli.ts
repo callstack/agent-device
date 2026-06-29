@@ -1,5 +1,5 @@
 import { parseRawArgs, usage, usageForCommand } from './utils/args.ts';
-import { asAppError, AppError, normalizeError } from './utils/errors.ts';
+import { asAppError, AppError, normalizeError } from './kernel/errors.ts';
 import { printHumanError, printJson } from './utils/output.ts';
 import { readVersion } from './utils/version.ts';
 import { pathToFileURL } from 'node:url';

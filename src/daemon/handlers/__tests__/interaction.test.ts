@@ -4,7 +4,7 @@ import type { SessionStore } from '../../session-store.ts';
 import type { SessionState } from '../../types.ts';
 import type { CommandFlags } from '../../../core/dispatch.ts';
 import { attachRefs, type SnapshotBackend } from '../../../kernel/snapshot.ts';
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import { buildSnapshotState } from '../snapshot-capture.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import {

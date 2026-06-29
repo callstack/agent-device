@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { createDaemonProxyServer } from '../../daemon-proxy.ts';
 import { buildDaemonHttpBaseUrl } from '../../daemon/http-contract.ts';
 import { ensureDaemon, resolveClientSettings } from '../../daemon-client-lifecycle.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { colorize, supportsColor } from '../../utils/output.ts';
 import type { CliFlags } from '../../utils/cli-flags.ts';
 import { writeCommandOutput } from './shared.ts';

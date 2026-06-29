@@ -14,7 +14,7 @@ import { handleSessionCommands } from '../session.ts';
 import { healReplayAction } from '../session-replay-heal.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionAction } from '../../types.ts';
-import type { DeviceInfo } from '../../../utils/device.ts';
+import type { DeviceInfo } from '../../../kernel/device.ts';
 import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
 import { ensureDeviceReady } from '../../device-ready.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';

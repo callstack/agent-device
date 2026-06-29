@@ -1,5 +1,5 @@
-import { AppError } from './errors.ts';
-import type { DeviceKind, DeviceTarget, Platform } from './device.ts';
+import { AppError } from '../kernel/errors.ts';
+import type { DeviceKind, DeviceTarget, Platform } from '../kernel/device.ts';
 import type { Point, Rect } from '../kernel/snapshot.ts';
 
 function readRequired<T>(

@@ -4,7 +4,7 @@ import type { Socket } from 'node:net';
 import { test } from 'vitest';
 import type { DaemonRequest, DaemonResponse } from '../daemon/types.ts';
 import { readDaemonSocketProgressResponse } from '../daemon-client-progress.ts';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 
 type MockSocket = EventEmitter & {
   ended: boolean;

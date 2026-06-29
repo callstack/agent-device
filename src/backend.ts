@@ -2,7 +2,7 @@ import type { AlertAction, AlertInfo } from './alert-contract.ts';
 import type { AppsFilter } from './contracts/app-inventory.ts';
 import type { Point, SnapshotNode, SnapshotOptions, SnapshotState } from './kernel/snapshot.ts';
 import type { NetworkIncludeMode } from './contracts.ts';
-import type { DeviceTarget, Platform, PlatformSelector } from './utils/device.ts';
+import type { DeviceTarget, Platform, PlatformSelector } from './kernel/device.ts';
 import type { BackMode } from './core/back-mode.ts';
 import type { RepeatedInput } from './commands/command-input.ts';
 import type { ClickButton } from './core/click-button.ts';

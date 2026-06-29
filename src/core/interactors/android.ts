@@ -29,7 +29,7 @@ import { setAndroidSetting } from '../../platforms/android/settings.ts';
 import { snapshotAndroid } from '../../platforms/android/snapshot.ts';
 import { screenshotAndroid } from '../../platforms/android/screenshot.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import type { Interactor } from '../interactor-types.ts';
 import { snapshotCaptureAnnotationsFrom } from '../../snapshot-capture-annotations.ts';
 

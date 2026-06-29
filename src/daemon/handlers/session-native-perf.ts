@@ -15,7 +15,7 @@ import {
   type AndroidNativePerfKind,
   type AndroidNativePerfSession,
 } from '../../platforms/android/perf.ts';
-import { AppError, normalizeError } from '../../utils/errors.ts';
+import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { errorResponse, type DaemonFailureResponse } from './response.ts';

@@ -1,5 +1,5 @@
 import type { ArtifactAdapter } from '../io.ts';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 
 export function createUnsupportedArtifactAdapter(
   label: string,

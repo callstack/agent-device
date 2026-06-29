@@ -1,6 +1,6 @@
 import { isDeepLinkTarget } from '../../core/open-target.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import type { DaemonRequest, DaemonResponse, SessionRuntimeHints, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import {
@@ -15,7 +15,7 @@ import {
   resolveAndroidPackageForOpen,
   resolveSessionAppBundleIdForTarget,
 } from './session-open-target.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { errorResponse } from './response.ts';
 import {
   resolveMacOsSurfaceAppState,

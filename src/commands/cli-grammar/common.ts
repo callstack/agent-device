@@ -5,7 +5,7 @@ import type {
 } from '../../client-types.ts';
 import { splitSelectorFromArgs } from '../../utils/selectors-parse.ts';
 import type { CliFlags } from '../../utils/cli-flags.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { compactRecord, type SelectorSnapshotInput } from '../command-input.ts';
 import type {
   DaemonWriter,

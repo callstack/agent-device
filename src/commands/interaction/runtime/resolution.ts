@@ -1,4 +1,4 @@
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import type { Point, SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
 import { findNodeByRef, normalizeRef } from '../../../kernel/snapshot.ts';
 import { resolveRectCenter } from '../../../utils/rect-center.ts';

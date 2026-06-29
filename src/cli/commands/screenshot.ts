@@ -1,5 +1,5 @@
 import { formatScreenshotDiffText, formatSnapshotDiffText } from '../../utils/output.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { resolveUserPath } from '../../utils/path-resolution.ts';
 import type { AgentDeviceBackend } from '../../backend.ts';
 import type { AgentDeviceClient, CaptureScreenshotResult } from '../../client.ts';

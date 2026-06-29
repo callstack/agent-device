@@ -11,7 +11,7 @@ import {
 import { withTargetDeviceResolutionScope } from '../../core/dispatch-resolve.ts';
 import { createLocalAppleToolProvider, runXcrun } from '../../platforms/ios/tool-provider.ts';
 import { resolveWebProvider, type WebProvider } from '../../platforms/web/provider.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import { withRequestPlatformProviderScope } from '../request-platform-providers.ts';
 import type { DaemonRequest } from '../types.ts';
 

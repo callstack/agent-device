@@ -7,7 +7,7 @@ import { test } from 'vitest';
 import { createAgentDeviceClient } from '../../../src/client.ts';
 import { prepareRemoteRequestArtifacts } from '../../../src/daemon-artifacts.ts';
 import { createDaemonProxyServer } from '../../../src/daemon-proxy.ts';
-import { normalizeAgentDeviceError } from '../../../src/utils/errors.ts';
+import { normalizeAgentDeviceError } from '../../../src/kernel/errors.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,

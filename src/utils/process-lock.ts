@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError } from './errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import { isProcessAlive, readProcessStartTime } from './process-identity.ts';
 import { sleep } from './timeouts.ts';
 

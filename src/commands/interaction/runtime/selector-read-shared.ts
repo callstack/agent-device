@@ -3,7 +3,7 @@ import type {
   CommandContext,
   CommandSessionRecord,
 } from '../../../runtime-contract.ts';
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import type { SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
 import { findNodeByRef, normalizeRef } from '../../../kernel/snapshot.ts';
 import { isSparseSnapshotQualityVerdict } from '../../../utils/snapshot-quality.ts';

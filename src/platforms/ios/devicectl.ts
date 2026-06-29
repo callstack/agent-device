@@ -2,8 +2,8 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { DeviceInfo } from '../../utils/device.ts';
-import { AppError } from '../../utils/errors.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
+import { AppError } from '../../kernel/errors.ts';
 
 import { IOS_DEVICECTL_TIMEOUT_MS } from './config.ts';
 import { runXcrun } from './tool-provider.ts';

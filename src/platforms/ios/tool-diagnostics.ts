@@ -1,4 +1,4 @@
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 
 export function extractAppleToolErrorMeta(error: unknown): Record<string, unknown> {
   if (!(error instanceof AppError)) {

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage } from 'node:http';
 import { pipeline } from 'node:stream/promises';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import { extractTarInstallableArtifact } from './artifact-archive.ts';
 import {
   createArtifactTempDir,

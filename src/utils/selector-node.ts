@@ -1,4 +1,4 @@
-import type { Platform } from './device.ts';
+import type { Platform } from '../kernel/device.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { isFillableType } from './snapshot-processing.ts';
 

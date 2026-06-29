@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { installProviderDeviceApp } from '../../provider-device-runtime.ts';
 import { cleanupUploadedArtifact, prepareUploadedArtifact } from '../artifact-tracking.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { recordSessionAction } from './handler-utils.ts';

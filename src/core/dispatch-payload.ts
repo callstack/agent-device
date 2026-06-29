@@ -1,5 +1,5 @@
 import { promises as fs } from 'node:fs';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import { resolvePayloadInput } from '../utils/payload-input.ts';
 
 export async function readNotificationPayload(

@@ -7,7 +7,7 @@ import {
 } from './artifact-archive.ts';
 import { createArtifactTempDir, downloadArtifactToTempDir } from './artifact-download.ts';
 import { readInfoPlistString } from '../platforms/ios/plist.ts';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 
 export type MaterializeArtifactParams = {
   platform: 'ios' | 'android';

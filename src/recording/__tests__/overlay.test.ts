@@ -28,7 +28,7 @@ vi.mock('../../utils/video.ts', () => ({
 }));
 
 import { overlayRecordingTouches, resizeRecording } from '../overlay.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { runCmd } from '../../utils/exec.ts';
 
 function helperScriptArgs(): string[] {

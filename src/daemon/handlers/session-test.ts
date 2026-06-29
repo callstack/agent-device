@@ -1,4 +1,4 @@
-import { asAppError, normalizeError } from '../../utils/errors.ts';
+import { asAppError, normalizeError } from '../../kernel/errors.ts';
 import { errorResponse } from './response.ts';
 import type {
   DaemonRequest,

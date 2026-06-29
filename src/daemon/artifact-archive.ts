@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import { runCmd } from '../utils/exec.ts';
 
 export async function extractTarInstallableArtifact(params: {

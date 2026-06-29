@@ -11,7 +11,7 @@ import {
   type PerfArea,
   type PerfKind,
 } from '../../contracts/perf.ts';
-import { AppError, normalizeError } from '../../utils/errors.ts';
+import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { resolveWebProvider } from '../../platforms/web/provider.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from '../types.ts';

@@ -1,5 +1,5 @@
-import type { DeviceInfo } from '../../utils/device.ts';
-import { AppError } from '../../utils/errors.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { Deadline, retryWithPolicy } from '../../utils/retry.ts';
 import { bootFailureHint, classifyBootFailure } from '../boot-diagnostics.ts';
 

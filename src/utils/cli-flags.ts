@@ -3,7 +3,7 @@ import type { RecordingExportQuality } from '../core/recording-export-quality.ts
 import type { BackMode } from '../core/back-mode.ts';
 import type { ClickButton } from '../core/click-button.ts';
 import type { SwipePattern } from '../core/scroll-gesture.ts';
-import { PLATFORM_SELECTORS, type DeviceTarget, type PlatformSelector } from './device.ts';
+import { PLATFORM_SELECTORS, type DeviceTarget, type PlatformSelector } from '../kernel/device.ts';
 import type {
   DaemonInstallSource,
   DaemonServerMode,

@@ -96,7 +96,7 @@ import {
 } from '../../materialized-path-registry.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
 import { ensureDeviceReady } from '../../device-ready.ts';
 import { applyRuntimeHintsToApp, clearRuntimeHintsFromApp } from '../../runtime-hints.ts';

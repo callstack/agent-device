@@ -1,5 +1,5 @@
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import { isProcessAlive, isProcessGroupAlive } from '../../utils/process-identity.ts';
 import { cleanupTempFile, waitForRunner } from './runner-transport.ts';
 import { withRunnerCommandId, type RunnerCommand } from './runner-contract.ts';

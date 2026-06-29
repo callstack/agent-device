@@ -11,7 +11,7 @@ import type {
   SessionIsolationMode,
   SessionRuntimeHints,
 } from './contracts.ts';
-import type { DeviceKind, DeviceTarget, Platform, PlatformSelector } from './utils/device.ts';
+import type { DeviceKind, DeviceTarget, Platform, PlatformSelector } from './kernel/device.ts';
 import type { BackMode } from './core/back-mode.ts';
 import type { ClickButton } from './core/click-button.ts';
 import type { RecordingExportQuality } from './core/recording-export-quality.ts';

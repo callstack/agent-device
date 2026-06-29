@@ -1,8 +1,8 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AppError } from '../../utils/errors.ts';
-import type { AppleOS, DeviceInfo, DeviceTarget } from '../../utils/device.ts';
+import { AppError } from '../../kernel/errors.ts';
+import type { AppleOS, DeviceInfo, DeviceTarget } from '../../kernel/device.ts';
 import { resolveIosSimulatorDeviceSetPath } from '../../utils/device-isolation.ts';
 import { buildHostMacDevice } from '../macos/devices.ts';
 import { buildSimctlArgs } from './simctl.ts';

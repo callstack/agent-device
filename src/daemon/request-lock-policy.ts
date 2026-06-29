@@ -1,4 +1,4 @@
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import type { CommandFlags } from '../core/dispatch.ts';
 import type { SessionState, DaemonRequest } from './types.ts';
 import {
@@ -7,7 +7,7 @@ import {
   type SessionSelectorConflict,
   type SessionSelectorConflictKey,
 } from './session-selector.ts';
-import { isApplePlatform, type PlatformSelector } from '../utils/device.ts';
+import { isApplePlatform, type PlatformSelector } from '../kernel/device.ts';
 import { buildSessionRecoveryHint, describeSessionDevice } from './session-recovery-hints.ts';
 import { shellQuoteIfNeeded } from '../utils/shell-quote.ts';
 import { hasLockableDeviceSelector, hasSelectorValue } from './device-selector-intent.ts';

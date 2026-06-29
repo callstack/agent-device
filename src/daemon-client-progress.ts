@@ -1,6 +1,6 @@
 import http from 'node:http';
 import type { Socket } from 'node:net';
-import { AppError } from './utils/errors.ts';
+import { AppError } from './kernel/errors.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon/types.ts';
 import type { RequestProgressEvent } from './daemon/request-progress.ts';
 import { consumeTextLines } from './utils/line-stream.ts';

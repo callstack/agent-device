@@ -1,4 +1,4 @@
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 
 export type AppsFilter = 'user-installed' | 'all';
 

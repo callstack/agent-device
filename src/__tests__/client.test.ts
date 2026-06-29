@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createAgentDeviceClient, type AgentDeviceClientConfig } from '../client.ts';
 import { runCommand } from '../commands/command-surface.ts';
 import type { DaemonRequest, DaemonResponse } from '../contracts.ts';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 
 function createTransport(
   handler: (req: Omit<DaemonRequest, 'token'>) => Promise<DaemonResponse> | DaemonResponse,

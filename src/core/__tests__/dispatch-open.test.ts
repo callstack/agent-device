@@ -1,8 +1,8 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { dispatchCommand } from '../dispatch.ts';
-import { AppError } from '../../utils/errors.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import { AppError } from '../../kernel/errors.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import { openIosApp, setIosSetting } from '../../platforms/ios/apps.ts';
 import { openAndroidApp } from '../../platforms/android/app-lifecycle.ts';
 import { setAndroidSetting } from '../../platforms/android/settings.ts';

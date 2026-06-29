@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { AppError, normalizeError, toAppErrorCode } from '../errors.ts';
+import { AppError, normalizeError, toAppErrorCode } from '../../kernel/errors.ts';
 
 test('normalizeError adds default hint and strips diagnostic metadata from details', () => {
   const err = new AppError('COMMAND_FAILED', 'runner failed', {

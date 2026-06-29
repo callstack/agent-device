@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { runCmdSync } from '../../utils/exec.ts';
 import { cleanupMaterializedArtifact, materializeArtifact } from '../artifact-materialization.ts';
 

@@ -1,6 +1,6 @@
 import http, { type IncomingHttpHeaders } from 'node:http';
 import fs from 'node:fs';
-import { AppError, normalizeError, toAppErrorCode } from '../utils/errors.ts';
+import { AppError, normalizeError, toAppErrorCode } from '../kernel/errors.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
 import type {

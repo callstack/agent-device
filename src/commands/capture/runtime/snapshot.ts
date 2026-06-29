@@ -8,7 +8,7 @@ import {
   type SnapshotCaptureAnnotations,
 } from '../../../snapshot-capture-annotations.ts';
 import { renderSnapshotQualityWarnings } from '../../../utils/snapshot-quality.ts';
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import { buildSnapshotDiff, countSnapshotComparableLines } from '../../../utils/snapshot-diff.ts';
 import type { SnapshotDiffLine, SnapshotDiffSummary } from '../../../utils/snapshot-diff.ts';
 import type {

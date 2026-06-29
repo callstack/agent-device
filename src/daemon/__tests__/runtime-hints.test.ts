@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import {
   applyRuntimeHintsToApp,
   clearRuntimeHintsFromApp,
   resolveRuntimeTransportHints,
 } from '../runtime-hints.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 
 async function withMockedAdb(
   run: (ctx: {

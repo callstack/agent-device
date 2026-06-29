@@ -24,7 +24,7 @@ import {
   PROXY_REMOTE_LEASE_TTL_MS,
 } from '../cli/commands/connection-runtime.ts';
 import { stopMetroCompanion } from '../client-metro-companion.ts';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import {
   hashRemoteConfigFile,
   readActiveConnectionState,

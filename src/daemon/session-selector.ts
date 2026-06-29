@@ -1,7 +1,7 @@
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import type { CommandFlags } from '../core/dispatch.ts';
 import type { SessionState } from './types.ts';
-import { matchesPlatformSelector } from '../utils/device.ts';
+import { matchesPlatformSelector } from '../kernel/device.ts';
 import { parseSerialAllowlist } from '../utils/device-isolation.ts';
 import { buildSessionRecoveryHint, describeSessionDevice } from './session-recovery-hints.ts';
 

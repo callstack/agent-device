@@ -5,7 +5,7 @@ import type {
 } from '../backend.ts';
 import { resolveTargetDevice, type CommandFlags } from '../core/dispatch.ts';
 import { createAgentDevice } from '../runtime.ts';
-import { isApplePlatform } from '../utils/device.ts';
+import { isApplePlatform } from '../kernel/device.ts';
 import { noActiveSessionError, requireCommandSupported } from './handlers/response.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { findNodeByLabel } from '../utils/snapshot-processing.ts';

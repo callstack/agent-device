@@ -1,5 +1,5 @@
 import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { isApplePlatform } from '../utils/device.ts';
+import { isApplePlatform } from '../kernel/device.ts';
 import { runMacOsAlertAction } from '../platforms/ios/macos-helper.ts';
 import { stopAppLog } from './app-log.ts';
 import { stopIosRunnerSession } from '../platforms/ios/runner-client.ts';

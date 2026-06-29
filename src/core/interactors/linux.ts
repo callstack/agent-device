@@ -1,4 +1,4 @@
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import {
   backLinux,

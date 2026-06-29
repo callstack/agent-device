@@ -1,5 +1,5 @@
-export type { AppErrorCode } from './utils/errors.ts';
-export { defaultHintForCode, normalizeError } from './utils/errors.ts';
+export type { AppErrorCode } from './kernel/errors.ts';
+export { defaultHintForCode, normalizeError } from './kernel/errors.ts';
 export type {
   DebugSymbolsCrashFrame,
   DebugSymbolsCrashSummary,
@@ -7,8 +7,8 @@ export type {
   DebugSymbolsOptions,
   DebugSymbolsResult,
 } from './contracts/debug-symbols.ts';
-import type { PlatformSelector } from './utils/device.ts';
-import { PLATFORM_SELECTORS } from './utils/device.ts';
+import type { PlatformSelector } from './kernel/device.ts';
+import { PLATFORM_SELECTORS } from './kernel/device.ts';
 
 export type SessionRuntimeHints = {
   platform?: 'ios' | 'android';

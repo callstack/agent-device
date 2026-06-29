@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { dispatchCommand } from '../dispatch.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { ANDROID_EMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 
 test('dispatch type rejects ref-shaped first positional with a repair hint', async () => {

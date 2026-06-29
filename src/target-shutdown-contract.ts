@@ -1,4 +1,4 @@
-import type { NormalizedError } from './utils/errors.ts';
+import type { NormalizedError } from './kernel/errors.ts';
 
 export type TargetShutdownResult = {
   success: boolean;

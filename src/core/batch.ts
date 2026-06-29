@@ -1,5 +1,5 @@
 import { type DaemonRequest, type DaemonResponse } from '../contracts.ts';
-import { AppError, asAppError } from '../utils/errors.ts';
+import { AppError, asAppError } from '../kernel/errors.ts';
 import { isRecord } from '../utils/parsing.ts';
 import {
   DEFAULT_BATCH_MAX_STEPS,

@@ -27,8 +27,8 @@ import {
 } from '../perf-xctrace.ts';
 import { parseAppleFramePerfSample } from '../perf-frame.ts';
 import { runCmd, runCmdBackground } from '../../../utils/exec.ts';
-import type { DeviceInfo } from '../../../utils/device.ts';
-import { AppError } from '../../../utils/errors.ts';
+import type { DeviceInfo } from '../../../kernel/device.ts';
+import { AppError } from '../../../kernel/errors.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockRunCmdBackground = vi.mocked(runCmdBackground);

@@ -5,7 +5,7 @@ import type {
   LeaseBackend,
   SessionIsolationMode,
 } from './contracts.ts';
-import { PLATFORM_SELECTORS, type DeviceTarget, type PlatformSelector } from './utils/device.ts';
+import { PLATFORM_SELECTORS, type DeviceTarget, type PlatformSelector } from './kernel/device.ts';
 import type { MetroPrepareKind } from './client-metro.ts';
 
 export type RemoteConfigMetroOptions = {

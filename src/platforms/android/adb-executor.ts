@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Readable, Writable } from 'node:stream';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import {
   runCmd,
   runCmdBackground,
@@ -11,7 +11,7 @@ import {
   type ExecOptions,
   type ExecResult,
 } from '../../utils/exec.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 
 export type AndroidAdbExecutorOptions = Pick<
   ExecOptions,

@@ -1,5 +1,5 @@
 import type { SessionAction } from '../../daemon/types.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { MAESTRO_COMPAT_TRACKER_URL, MAESTRO_NEW_ISSUE_URL } from './support-matrix.ts';
 import type { MaestroCommand, MaestroFlowConfig, MaestroParseContext } from './types.ts';
 

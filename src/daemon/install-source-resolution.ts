@@ -1,4 +1,4 @@
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import type { MaterializeInstallSource } from '../platforms/install-source.ts';
 import { cleanupUploadedArtifact, prepareUploadedArtifact } from './artifact-tracking.ts';
 import type { DaemonInstallSource, DaemonRequest } from './types.ts';

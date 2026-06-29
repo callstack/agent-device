@@ -9,7 +9,7 @@ import {
   type RequestProgressEvent,
   withRequestProgressSink,
 } from '../../../daemon/request-progress.ts';
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
 import type { RunnerSession } from '../runner-session-types.ts';
 

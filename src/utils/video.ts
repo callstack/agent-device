@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { AppError } from './errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import { runCmd } from './exec.ts';
 import { buildSwiftToolEnv, compileSwiftSourceText } from './swift-cache.ts';
 import { sleep } from './timeouts.ts';

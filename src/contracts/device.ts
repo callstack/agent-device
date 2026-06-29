@@ -1,4 +1,4 @@
-import type { DeviceKind, DeviceTarget, Platform } from '../utils/device.ts';
+import type { DeviceKind, DeviceTarget, Platform } from '../kernel/device.ts';
 import type { TargetShutdownResult } from '../target-shutdown-contract.ts';
 
 /**

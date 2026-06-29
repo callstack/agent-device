@@ -1,9 +1,9 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { withRetry } from '../../utils/retry.ts';
-import { AppError, normalizeError, toAppErrorCode } from '../../utils/errors.ts';
+import { AppError, normalizeError, toAppErrorCode } from '../../kernel/errors.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import { findProjectRoot, readVersion } from '../../utils/version.ts';
 import {
   attachRefs,

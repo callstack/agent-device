@@ -1,4 +1,4 @@
-import type { Platform } from '../../utils/device.ts';
+import type { Platform } from '../../kernel/device.ts';
 import type { PlatformDescriptor } from './types.ts';
 
 /**

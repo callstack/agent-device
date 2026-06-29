@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { AppsFilter } from '../../contracts/app-inventory.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { filterAppleAppsByBundlePrefix } from './app-filter.ts';
 import type { IosAppInfo } from './app-info.ts';
 import type { AppleMacOsHostProvider, AppleToolCommandExecutor } from './tool-provider-types.ts';

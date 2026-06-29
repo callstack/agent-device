@@ -1,5 +1,5 @@
-import type { DeviceInfo } from '../utils/device.ts';
-import { AppError } from '../utils/errors.ts';
+import type { DeviceInfo } from '../kernel/device.ts';
+import { AppError } from '../kernel/errors.ts';
 import { getProviderDeviceInteractor, isActiveProviderDevice } from '../provider-device-runtime.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 

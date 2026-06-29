@@ -1,8 +1,8 @@
 import { parseSessionSurface, type SessionSurface } from '../../core/session-surface.ts';
 import { resolveFrontmostMacOsApp } from '../../platforms/ios/macos-helper.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import type { SessionRuntimeHints, SessionState } from '../types.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { successText } from '../../utils/success-text.ts';
 import type { StartupPerfSample } from './session-startup-metrics.ts';
 

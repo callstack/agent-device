@@ -2,7 +2,7 @@ import { deriveCapabilityMatrix } from './command-descriptor/derive.ts';
 import { commandDescriptors } from './command-descriptor/registry.ts';
 import { deriveCapabilityForPlatform } from './platform-descriptor/derive.ts';
 import { platformDescriptors } from './platform-descriptor/registry.ts';
-import type { DeviceInfo } from '../utils/device.ts';
+import type { DeviceInfo } from '../kernel/device.ts';
 
 type KindMatrix = {
   simulator?: boolean;

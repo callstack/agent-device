@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { SessionAction } from '../../daemon/types.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { convertMaestroCommandWithLine } from './command-mapper.ts';
 import { parseMaestroYamlDocuments } from './flow-yaml.ts';
 import { MAESTRO_RUNTIME_COMMAND } from './runtime-commands.ts';

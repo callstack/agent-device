@@ -1,10 +1,10 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { AppError, normalizeError } from '../../utils/errors.ts';
+import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { findProjectRoot, readVersion } from '../../utils/version.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import type { TransformGestureParams } from '../../core/scroll-gesture.ts';
 import {
   installAndroidAdbPackage,

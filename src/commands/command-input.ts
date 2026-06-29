@@ -9,7 +9,7 @@ import {
   PLATFORM_SELECTORS,
   type DeviceTarget,
   type PlatformSelector,
-} from '../utils/device.ts';
+} from '../kernel/device.ts';
 import type { JsonSchema } from './command-contract.ts';
 
 const INTERACTION_TARGET_KINDS = ['ref', 'selector', 'point'] as const;

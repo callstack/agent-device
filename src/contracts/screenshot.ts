@@ -1,4 +1,4 @@
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 
 export const SCREENSHOT_COMMAND_FLAG_KEYS = [
   'out',

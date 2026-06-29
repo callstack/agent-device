@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { readApplePlistJson, runAppleToolCommand } from './tool-provider.ts';
 
 const ICON_PLIST_KEYS = ['CFBundleIcons', 'CFBundleIcons~ipad'] as const;

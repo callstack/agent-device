@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
 import type { SessionAction } from '../../daemon/types.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { runCmdSync } from '../../utils/exec.ts';
 import { MAESTRO_RUNTIME_COMMAND } from './runtime-commands.ts';
 import {

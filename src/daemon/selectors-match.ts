@@ -1,4 +1,4 @@
-import type { Platform } from '../utils/device.ts';
+import type { Platform } from '../kernel/device.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { isNodeEditable, isNodeVisible } from '../utils/selector-node.ts';
 import { extractNodeText, normalizeType } from '../utils/snapshot-processing.ts';

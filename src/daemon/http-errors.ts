@@ -1,5 +1,5 @@
 import type http from 'node:http';
-import { normalizeError } from '../utils/errors.ts';
+import { normalizeError } from '../kernel/errors.ts';
 
 export type NormalizedHttpError = ReturnType<typeof normalizeError>;
 

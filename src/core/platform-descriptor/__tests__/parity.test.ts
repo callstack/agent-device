@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { isApplePlatform, PLATFORMS, type Platform } from '../../../utils/device.ts';
+import { isApplePlatform, PLATFORMS, type Platform } from '../../../kernel/device.ts';
 import type { CommandCapability } from '../../capabilities.ts';
 import { deriveApplePlatforms, deriveCapabilityForPlatform } from '../derive.ts';
 import { platformDescriptors } from '../registry.ts';

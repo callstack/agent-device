@@ -1,5 +1,5 @@
-import type { DeviceInfo } from '../utils/device.ts';
-import { AppError, asAppError } from '../utils/errors.ts';
+import type { DeviceInfo } from '../kernel/device.ts';
+import { AppError, asAppError } from '../kernel/errors.ts';
 import type { SessionRuntimeHints } from './types.ts';
 import {
   resolveRuntimeTransportHints,

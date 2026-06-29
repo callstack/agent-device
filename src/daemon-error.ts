@@ -1,4 +1,4 @@
-import { AppError, toAppErrorCode } from './utils/errors.ts';
+import { AppError, toAppErrorCode } from './kernel/errors.ts';
 import type { DaemonError } from './contracts.ts';
 
 export function throwDaemonError(error: DaemonError): never {

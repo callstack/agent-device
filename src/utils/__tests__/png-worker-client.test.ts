@@ -1,6 +1,6 @@
 import { afterAll, test } from 'vitest';
 import assert from 'node:assert/strict';
-import { AppError } from '../errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { PNG } from '../png-codec.ts';
 import {
   computeScreenshotDiffPixelsAsync,

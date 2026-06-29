@@ -2,7 +2,7 @@ import http, { type IncomingMessage, type ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { randomUUID } from 'node:crypto';
-import { AppError, normalizeError } from './utils/errors.ts';
+import { AppError, normalizeError } from './kernel/errors.ts';
 import { readNodeHttpRequestBody } from './utils/node-http.ts';
 import { timingSafeStringEqual } from './utils/timing-safe-equal.ts';
 import {

@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { parseReplayInput } from '../replay-input.ts';
 
 test('parseReplayInput routes compat replay scripts through the selected parser', () => {

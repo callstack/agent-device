@@ -20,7 +20,7 @@ import {
 } from '../dispatch-interactions.ts';
 import type { Interactor } from '../interactor-types.ts';
 import type { RunnerCommand } from '../../platforms/ios/runner-contract.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 
 vi.mock('../../platforms/ios/macos-helper.ts', async (importOriginal) => {

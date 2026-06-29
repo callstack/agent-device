@@ -5,7 +5,7 @@ import type {
   BackendSnapshotResult,
 } from '../../backend.ts';
 import { createAgentDevice } from '../../runtime.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import type { SessionState } from '../types.ts';
 import { setSessionSnapshot } from '../session-snapshot.ts';
 import type { InteractionHandlerParams } from './interaction-common.ts';

@@ -4,7 +4,7 @@ import path from 'node:path';
 import type { DaemonResponse, SessionState } from './types.ts';
 import { dispatchCommand } from '../core/dispatch.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { normalizeError, type NormalizedError } from '../utils/errors.ts';
+import { normalizeError, type NormalizedError } from '../kernel/errors.ts';
 import type { ScreenshotOverlayRef } from '../kernel/snapshot.ts';
 import { contextFromFlags } from './context.ts';
 import { annotateScreenshotWithRefs } from './screenshot-overlay.ts';

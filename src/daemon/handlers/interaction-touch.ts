@@ -10,7 +10,7 @@ import type {
   LongPressCommandResult,
   PressCommandResult,
 } from '../../contracts/interaction.ts';
-import { asAppError, normalizeError } from '../../utils/errors.ts';
+import { asAppError, normalizeError } from '../../kernel/errors.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import {
   buildTouchVisualizationResult,

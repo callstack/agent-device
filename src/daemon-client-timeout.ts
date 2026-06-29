@@ -1,4 +1,4 @@
-import { AppError } from './utils/errors.ts';
+import { AppError } from './kernel/errors.ts';
 import { runCmdSync } from './utils/exec.ts';
 import { emitDiagnostic } from './utils/diagnostics.ts';
 import { isAgentDeviceDaemonProcess } from './utils/process-identity.ts';

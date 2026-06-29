@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import pathModule from 'node:path';
-import { AppError } from '../utils/errors.ts';
-import type { DeviceInfo } from '../utils/device.ts';
+import { AppError } from '../kernel/errors.ts';
+import type { DeviceInfo } from '../kernel/device.ts';
 import { getInteractor } from './interactors.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import { isDeepLinkTarget } from './open-target.ts';

@@ -1,4 +1,4 @@
-import type { Platform } from '../utils/device.ts';
+import type { Platform } from '../kernel/device.ts';
 import type { SnapshotNode, SnapshotState } from '../kernel/snapshot.ts';
 import { matchesSelector } from './selectors-match.ts';
 import type { Selector, SelectorChain } from './selectors-parse.ts';

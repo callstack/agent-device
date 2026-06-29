@@ -1,6 +1,6 @@
 import { Worker } from 'node:worker_threads';
 import { emitDiagnostic } from './diagnostics.ts';
-import { AppError, toAppErrorCode } from './errors.ts';
+import { AppError, toAppErrorCode } from '../kernel/errors.ts';
 import { resolveInternalEntryModulePath } from './internal-entry.ts';
 import { PNG } from './png-codec.ts';
 import { decodePng } from './png.ts';

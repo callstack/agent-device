@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { DeviceInfo } from '../../../utils/device.ts';
+import type { DeviceInfo } from '../../../kernel/device.ts';
 import { withCommandExecutorOverride } from '../../../utils/exec.ts';
 import {
   __resetRunnerToolchainFingerprintCacheForTests,

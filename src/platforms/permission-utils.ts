@@ -1,4 +1,4 @@
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 
 export type PermissionAction = 'grant' | 'deny' | 'reset';
 export type PermissionTarget =

@@ -1,5 +1,5 @@
-import { asAppError } from '../../utils/errors.ts';
-import { isApplePlatform, type DeviceInfo } from '../../utils/device.ts';
+import { asAppError } from '../../kernel/errors.ts';
+import { isApplePlatform, type DeviceInfo } from '../../kernel/device.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { ensureDeviceReady } from '../device-ready.ts';

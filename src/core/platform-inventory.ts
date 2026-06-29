@@ -1,4 +1,4 @@
-import type { DeviceInfo, DeviceTarget, PlatformSelector } from '../utils/device.ts';
+import type { DeviceInfo, DeviceTarget, PlatformSelector } from '../kernel/device.ts';
 
 export type DeviceInventoryRequest = {
   platform?: PlatformSelector;

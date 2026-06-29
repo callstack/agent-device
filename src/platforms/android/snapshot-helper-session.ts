@@ -1,7 +1,7 @@
 import net from 'node:net';
 import type { AndroidAdbProcess } from './adb-executor.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
-import { AppError } from '../../utils/errors.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_OUTPUT_FORMAT,

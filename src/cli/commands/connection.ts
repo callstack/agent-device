@@ -12,7 +12,7 @@ import {
   type RemoteConnectionState,
   type RemoteConnectionRequestMetadata,
 } from '../../remote-connection-state.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { resolveCloudConnectProfile } from '../cloud-connection-profile.ts';
 import { resolveProxyConnectProfile } from '../proxy-connection-profile.ts';
 import {

@@ -1,4 +1,4 @@
-import { AppError } from './errors.ts';
+import { AppError } from '../kernel/errors.ts';
 
 /**
  * Membership guard for an `as const` string tuple (the single source of truth for

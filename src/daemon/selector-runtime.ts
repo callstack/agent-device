@@ -1,6 +1,6 @@
 import { parseWaitPositionals } from '../core/wait-positionals.ts';
 import type { WaitParsed } from '../core/wait-positionals.ts';
-import { AppError, asAppError, normalizeError } from '../utils/errors.ts';
+import { AppError, asAppError, normalizeError } from '../kernel/errors.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { runIosRunnerCommand } from '../platforms/ios/runner-client.ts';
 import { buildAppleRunnerRequestOptions } from './apple-runner-options.ts';

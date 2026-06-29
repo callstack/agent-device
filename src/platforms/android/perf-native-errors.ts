@@ -1,4 +1,4 @@
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import type { AndroidNativePerfKind } from './perf-native-types.ts';
 
 export function annotateAndroidNativePerfError(

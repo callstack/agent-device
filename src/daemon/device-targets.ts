@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '../utils/device.ts';
+import type { DeviceInfo } from '../kernel/device.ts';
 
 export function isIosSimulator(device: DeviceInfo): boolean {
   return device.platform === 'ios' && device.kind === 'simulator';

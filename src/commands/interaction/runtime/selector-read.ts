@@ -11,7 +11,7 @@ import {
   type SnapshotQualityVerdict,
 } from '../../../utils/snapshot-quality.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import {
   findSelectorChainMatch,
   formatSelectorFailure,

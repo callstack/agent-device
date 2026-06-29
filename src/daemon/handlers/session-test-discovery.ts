@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError } from '../../utils/errors.ts';
-import { isApplePlatform, type PlatformSelector } from '../../utils/device.ts';
+import { AppError } from '../../kernel/errors.ts';
+import { isApplePlatform, type PlatformSelector } from '../../kernel/device.ts';
 import { resolveRequestTrackingId } from '../request-cancel.ts';
 import { SessionStore } from '../session-store.ts';
 import { readReplayScriptMetadata, type ReplayScriptMetadata } from '../../replay/script.ts';

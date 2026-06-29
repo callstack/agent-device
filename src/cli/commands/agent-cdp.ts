@@ -1,5 +1,5 @@
 import { runCmdStreaming } from '../../utils/exec.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { isRemoteBridgeBackend } from './remote-bridge.ts';
 import type { SessionRuntimeHints } from '../../contracts.ts';
 import type { CliFlags } from '../../utils/cli-flags.ts';

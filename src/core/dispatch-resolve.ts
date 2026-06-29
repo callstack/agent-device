@@ -1,5 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import {
   isApplePlatform,
   resolveDevice,
@@ -7,7 +7,7 @@ import {
   type DeviceInfo,
   type DeviceTarget,
   type PlatformSelector,
-} from '../utils/device.ts';
+} from '../kernel/device.ts';
 import { withDiagnosticTimer } from '../utils/diagnostics.ts';
 import {
   resolveAndroidSerialAllowlist,

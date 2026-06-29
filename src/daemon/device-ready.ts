@@ -1,8 +1,8 @@
-import type { DeviceInfo } from '../utils/device.ts';
+import type { DeviceInfo } from '../kernel/device.ts';
 import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import { resolveIosDevicectlHint, IOS_DEVICECTL_DEFAULT_HINT } from '../platforms/ios/devicectl.ts';
 import { runXcrun } from '../platforms/ios/tool-provider.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';

@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { RunnerLogicalLeaseContext } from '../../core/runner-lease-context.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import type { RunnerCommand } from './runner-contract.ts';
 import type {
   RunnerXctestrunArtifactState,

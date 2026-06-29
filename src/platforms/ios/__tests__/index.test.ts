@@ -75,9 +75,9 @@ import {
 import { runIosRunnerCommand } from '../runner-client.ts';
 import { iosRunnerOverrides } from '../interactions.ts';
 import { IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from '../config.ts';
-import type { DeviceInfo } from '../../../utils/device.ts';
+import type { DeviceInfo } from '../../../kernel/device.ts';
 import { withDiagnosticsScope } from '../../../utils/diagnostics.ts';
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import { runCmd } from '../../../utils/exec.ts';
 import { retryWithPolicy } from '../../../utils/retry.ts';
 import { parseIosDeviceAppsPayload, parseIosDeviceProcessesPayload } from '../devicectl.ts';

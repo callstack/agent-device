@@ -3,7 +3,7 @@ import {
   setupManagedAgentBrowser,
   type AgentBrowserToolStatus,
 } from '../../platforms/web/agent-browser-tool.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import type { CliFlags } from '../../utils/cli-flags.ts';
 import { printJson } from '../../utils/output.ts';
 

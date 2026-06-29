@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { type CommandFlags } from '../../core/dispatch.ts';
 import { parseReplayInput } from '../../compat/replay-input.ts';
-import { asAppError } from '../../utils/errors.ts';
+import { asAppError } from '../../kernel/errors.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
 import { emitRequestProgress, readReplayTestActionProgress } from '../request-progress.ts';
 import { SessionStore } from '../session-store.ts';

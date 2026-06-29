@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import { runCliCapture, type CapturedCliRun } from './cli-capture.ts';
 
 function runCliWithDaemonStartupFailure(argv: string[]): Promise<CapturedCliRun> {

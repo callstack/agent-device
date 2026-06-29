@@ -7,9 +7,9 @@ import {
   resolveApplePlatformName,
   resolveAppleSimulatorSetPathForSelector,
   resolveDevice,
-} from '../device.ts';
-import type { DeviceInfo } from '../device.ts';
-import { AppError } from '../errors.ts';
+} from '../../kernel/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
+import { AppError } from '../../kernel/errors.ts';
 
 test('matchesPlatformSelector resolves apple selector across Apple platforms', () => {
   assert.equal(matchesPlatformSelector('ios', 'apple'), true);

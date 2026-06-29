@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 
 vi.mock('../../platforms/ios/simulator.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../platforms/ios/simulator.ts')>();

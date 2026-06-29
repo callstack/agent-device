@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import {
   resolveAndroidAdbExecutor,
   type AndroidAdbExecutorOptions,

@@ -1,4 +1,4 @@
-import { AppError } from './errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import { emitDiagnostic } from './diagnostics.ts';
 
 type RetryOptions = {

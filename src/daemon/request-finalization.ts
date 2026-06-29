@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { AppError, normalizeError, toAppErrorCode } from '../utils/errors.ts';
+import { AppError, normalizeError, toAppErrorCode } from '../kernel/errors.ts';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,

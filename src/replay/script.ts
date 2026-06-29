@@ -1,9 +1,9 @@
 import fs from 'node:fs';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import { recordingQualityInputToExportQuality } from '../core/recording-export-quality.ts';
 import { readScreenshotScriptFlag } from '../contracts/screenshot.ts';
-import type { DeviceTarget, PlatformSelector } from '../utils/device.ts';
-import { PLATFORM_SELECTORS } from '../utils/device.ts';
+import type { DeviceTarget, PlatformSelector } from '../kernel/device.ts';
+import { PLATFORM_SELECTORS } from '../kernel/device.ts';
 import { parseReplayOpenFlags } from './open-script.ts';
 import { formatPortableActionLine } from './script-formatting.ts';
 import type { SessionAction, SessionState } from '../daemon/types.ts';

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { Platform, PlatformSelector } from '../utils/device.ts';
+import type { Platform, PlatformSelector } from '../kernel/device.ts';
 
 const DEFAULT_RECORDING_EXTENSION = '.mp4';
 export const WEB_RECORDING_EXTENSION = '.webm';

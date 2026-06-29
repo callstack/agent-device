@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AppError } from './utils/errors.ts';
+import { AppError } from './kernel/errors.ts';
 
 export type FileInputRef =
   | {

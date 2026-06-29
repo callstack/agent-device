@@ -1,5 +1,5 @@
 import { withRetry } from '../../utils/retry.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { type RunnerSessionOptions, validateRunnerDevice } from './runner-session.ts';
 import {

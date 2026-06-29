@@ -1,5 +1,5 @@
-import type { DeviceInfo } from '../utils/device.ts';
-import { AppError } from '../utils/errors.ts';
+import type { DeviceInfo } from '../kernel/device.ts';
+import { AppError } from '../kernel/errors.ts';
 
 const APP_EVENT_NAME_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
 const MAX_APP_EVENT_PAYLOAD_BYTES = 8 * 1024;

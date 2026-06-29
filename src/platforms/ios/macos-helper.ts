@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { resolveExecutableOverridePath } from '../../utils/exec.ts';
 import type { SessionSurface } from '../../core/session-surface.ts';
 import {

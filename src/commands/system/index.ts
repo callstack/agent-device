@@ -2,7 +2,7 @@ import type { ClipboardCommandOptions } from '../../client-types.ts';
 import type { BackMode } from '../../core/back-mode.ts';
 import { BACK_MODES } from '../../core/back-mode.ts';
 import { parseDeviceRotation, DEVICE_ROTATIONS } from '../../core/device-rotation.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';

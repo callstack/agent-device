@@ -1,5 +1,5 @@
 import type { SessionAction } from '../../daemon/types.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { convertLaunchApp, convertStopApp } from './device-actions.ts';
 import {
   convertDoubleTapOn,

@@ -1,5 +1,5 @@
-import { AppError } from '../utils/errors.ts';
-import type { DeviceInfo } from '../utils/device.ts';
+import { AppError } from '../kernel/errors.ts';
+import type { DeviceInfo } from '../kernel/device.ts';
 import { successText, withSuccessText } from '../utils/success-text.ts';
 import { findMistargetedTypeRefToken } from '../utils/type-target-warning.ts';
 import {

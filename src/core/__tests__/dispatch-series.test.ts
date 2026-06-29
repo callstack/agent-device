@@ -6,8 +6,8 @@ import {
   shouldUseIosPressSequence,
   chunkRunnerSequenceStepsByBudget,
 } from '../dispatch-series.ts';
-import { AppError } from '../../utils/errors.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import { AppError } from '../../kernel/errors.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 
 const iosDevice: DeviceInfo = { platform: 'ios', id: 'test', name: 'iPhone', kind: 'simulator' };
 const androidDevice: DeviceInfo = {

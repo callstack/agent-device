@@ -1,6 +1,6 @@
 export { createAgentDeviceClient } from './client.ts';
 export { createLocalArtifactAdapter } from './io.ts';
-export { AppError, isAgentDeviceError, normalizeAgentDeviceError } from './utils/errors.ts';
+export { AppError, isAgentDeviceError, normalizeAgentDeviceError } from './kernel/errors.ts';
 export { centerOfRect } from './kernel/snapshot.ts';
 
 export type {
@@ -18,7 +18,7 @@ export type {
   TemporaryFile,
 } from './io.ts';
 
-export type { AppErrorCode, NormalizedError } from './utils/errors.ts';
+export type { AppErrorCode, NormalizedError } from './kernel/errors.ts';
 
 export type {
   ReplayTestReporter,

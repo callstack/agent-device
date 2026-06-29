@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 
 vi.mock('../../utils/exec.ts', () => ({
   runCmd: vi.fn(),

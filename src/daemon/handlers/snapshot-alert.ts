@@ -8,7 +8,7 @@ import { sleep } from '../../utils/timeouts.ts';
 import { runIosRunnerCommand } from '../../platforms/ios/runner-client.ts';
 import { runMacOsAlertAction } from '../../platforms/ios/macos-helper.ts';
 import { handleAndroidAlert } from '../../platforms/android/alert.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { buildAppleRunnerRequestOptions } from '../apple-runner-options.ts';

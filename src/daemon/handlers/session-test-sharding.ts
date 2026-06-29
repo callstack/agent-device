@@ -8,8 +8,8 @@ import {
   matchesPlatformSelector,
   resolveAppleSimulatorSetPathForSelector,
   type DeviceInfo,
-} from '../../utils/device.ts';
-import { AppError } from '../../utils/errors.ts';
+} from '../../kernel/device.ts';
+import { AppError } from '../../kernel/errors.ts';
 import type { CommandFlags } from '../../core/dispatch.ts';
 
 export type ReplayTestShardMode = 'all' | 'split';

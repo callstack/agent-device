@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import { PNG } from '../utils/png.ts';
 import {
   computeScreenshotDiffPixelsAsync,

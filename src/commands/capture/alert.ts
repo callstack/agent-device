@@ -13,7 +13,7 @@ import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { messageOutput } from '../output-common.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 
 const ALERT_COMMAND_NAME = 'alert';
 

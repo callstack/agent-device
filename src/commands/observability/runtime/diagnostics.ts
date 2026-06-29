@@ -8,7 +8,7 @@ import type {
   BackendReadLogsOptions,
 } from '../../../backend.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import { requireIntInRange } from '../../../utils/validation.ts';
 import { formatLogsResult, formatNetworkResult, formatPerfResult } from './diagnostics-format.ts';
 import type {

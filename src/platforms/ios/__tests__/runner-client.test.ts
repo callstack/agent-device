@@ -29,13 +29,13 @@ vi.mock('../runner-macos-products.ts', async () => {
   };
 });
 
-import type { DeviceInfo } from '../../../utils/device.ts';
+import type { DeviceInfo } from '../../../kernel/device.ts';
 import {
   type RequestProgressEvent,
   withRequestProgressSink,
 } from '../../../daemon/request-progress.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import { isReadOnlyRunnerCommand } from '../runner-command-traits.ts';
 import { withRunnerCommandId, type RunnerCommand } from '../runner-contract.ts';
 import {

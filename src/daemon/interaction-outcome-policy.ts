@@ -1,5 +1,5 @@
 import { dispatchCommand, type CommandFlags } from '../core/dispatch.ts';
-import { isMobilePlatform } from '../utils/device.ts';
+import { isMobilePlatform } from '../kernel/device.ts';
 import type { SnapshotNode, SnapshotState } from '../kernel/snapshot.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { contextFromFlags } from './context.ts';

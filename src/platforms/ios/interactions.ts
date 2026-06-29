@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import { assertScrollGestureInput, type ScrollDirection } from '../../core/scroll-gesture.ts';
 import { normalizeScrollDurationMs, SCROLL_DURATION_MAX_MS } from '../../core/scroll-command.ts';
 import { runIosRunnerCommand } from './runner-client.ts';

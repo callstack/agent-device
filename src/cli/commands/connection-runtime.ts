@@ -2,7 +2,7 @@ import { resolveDaemonPaths } from '../../daemon/config.ts';
 import { stopReactDevtoolsCompanion } from '../../client-react-devtools-companion.ts';
 import { stopMetroTunnel } from '../../metro.ts';
 import { resolveRemoteConfigProfile } from '../../remote-config.ts';
-import { resolveDevice, type DeviceInfo } from '../../utils/device.ts';
+import { resolveDevice, type DeviceInfo } from '../../kernel/device.ts';
 import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
 import type { MetroBridgeScope } from '../../client-companion-tunnel-contract.ts';
 import {
@@ -16,7 +16,7 @@ import {
 } from '../../remote-connection-state.ts';
 import { profileToCliFlags } from '../../utils/remote-config.ts';
 import type { BatchStep } from '../../client-types.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import type { LeaseBackend, SessionRuntimeHints } from '../../contracts.ts';
 import type { CliFlags } from '../../utils/cli-flags.ts';
 import type { AgentDeviceClient, Lease } from '../../client.ts';

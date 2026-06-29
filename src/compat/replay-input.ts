@@ -1,5 +1,5 @@
 import type { CommandFlags } from '../core/dispatch.ts';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import {
   collectReplayShellEnv,
   parseReplayCliEnvEntries,

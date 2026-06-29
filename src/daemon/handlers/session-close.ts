@@ -1,5 +1,5 @@
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { isApplePlatform, type DeviceInfo } from '../../utils/device.ts';
+import { isApplePlatform, type DeviceInfo } from '../../kernel/device.ts';
 import { dispatchCommand } from '../../core/dispatch.ts';
 import { contextFromFlags } from '../context.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';

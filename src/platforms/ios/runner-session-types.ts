@@ -1,6 +1,6 @@
 import type { RunnerLogicalLeaseContext } from '../../core/runner-lease-context.ts';
 import type { ExecResult, ExecBackgroundResult } from '../../utils/exec.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import type { RunnerXctestrunArtifact } from './runner-xctestrun.ts';
 import type { RunnerLease } from './runner-lease.ts';
 

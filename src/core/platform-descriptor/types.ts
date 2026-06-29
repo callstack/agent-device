@@ -1,4 +1,4 @@
-import type { Platform } from '../../utils/device.ts';
+import type { Platform } from '../../kernel/device.ts';
 
 /**
  * The capability-bucket key a leaf {@link Platform} reads from a
@@ -18,9 +18,9 @@ export type CapabilityBucket = 'apple' | 'android' | 'linux' | 'web';
  *  - `isApple`          — whether the platform is an Apple platform
  *                         (mirrors `isApplePlatform` for leaf platforms).
  *
- * `Platform` stays sourced from `utils/device.ts`; the registry only
+ * `Platform` stays sourced from `kernel/device.ts`; the registry only
  * `satisfies`-checks against it (it does not become its source), which keeps the
- * utils→core layering one-directional and avoids an import cycle.
+ * core→kernel layering one-directional and avoids an import cycle.
  */
 export type PlatformDescriptor = {
   platform: Platform;

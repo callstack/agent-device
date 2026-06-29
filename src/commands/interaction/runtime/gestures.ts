@@ -1,4 +1,4 @@
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import type { Point, Rect, SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
 import { centerOfRect } from '../../../kernel/snapshot.ts';
 import {

@@ -1,6 +1,6 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { SNAPSHOT_FLAGS } from '../../utils/cli-flags.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import {
   booleanField,
   integerField,

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { normalizeError } from '../../utils/errors.ts';
+import { normalizeError } from '../../kernel/errors.ts';
 import {
   clearRequestCanceled,
   getRequestSignal,

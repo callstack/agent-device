@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { runCmd } from '../utils/exec.ts';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import type { CliFlags } from '../utils/cli-flags.ts';
 import type { EnvMap } from '../utils/env-map.ts';
 import { readCloudJsonResponse } from './cloud-response.ts';

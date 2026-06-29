@@ -1,5 +1,5 @@
 import { startDaemonRuntime } from './daemon-runtime.ts';
-import { asAppError } from './utils/errors.ts';
+import { asAppError } from './kernel/errors.ts';
 
 void startDaemonRuntime().catch((error) => {
   const appErr = asAppError(error);

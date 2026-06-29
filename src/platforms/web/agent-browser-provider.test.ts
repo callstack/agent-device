@@ -6,7 +6,7 @@ import { test } from 'vitest';
 import { createAgentBrowserWebProvider } from './agent-browser-provider.ts';
 import type { WebSnapshotResult } from './provider.ts';
 import { withCommandExecutorOverride, type ExecResult } from '../../utils/exec.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import {
   buildSelectorChainForNode,
   parseSelectorChain,

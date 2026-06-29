@@ -5,7 +5,7 @@ import type {
   MetroReloadOptions,
   MetroReloadResult,
 } from '../../client-types.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import {
   booleanField,

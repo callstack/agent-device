@@ -1,5 +1,5 @@
-import { asAppError, normalizeError } from '../../utils/errors.ts';
-import { isApplePlatform } from '../../utils/device.ts';
+import { asAppError, normalizeError } from '../../kernel/errors.ts';
+import { isApplePlatform } from '../../kernel/device.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import {

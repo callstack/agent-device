@@ -11,7 +11,7 @@ vi.mock('../../../utils/exec.ts', async (importOriginal) => {
 const execActual =
   await vi.importActual<typeof import('../../../utils/exec.ts')>('../../../utils/exec.ts');
 
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import { runCmdDetached } from '../../../utils/exec.ts';
 import {
   ensureAndroidEmulatorBooted,

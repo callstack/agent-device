@@ -1,5 +1,5 @@
 import type { PerfOptions } from '../../client-types.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import { enumField, stringField } from '../command-input.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';

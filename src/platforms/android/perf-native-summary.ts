@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import { sampleAndroidFramePerf } from './perf-frame.ts';
 import type {
   AndroidNativePerfFrameHealthSummary,

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { IncomingMessage } from 'node:http';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import { extractTarInstallableArtifact } from './artifact-archive.ts';
 import {
   createArtifactTempDir,

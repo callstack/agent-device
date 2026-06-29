@@ -9,7 +9,7 @@ import type {
   MetroBridgeRuntimePayload,
   MetroRuntimeHints,
 } from './metro-types.ts';
-import { AppError } from './utils/errors.ts';
+import { AppError } from './kernel/errors.ts';
 import { runCmdSync, runCmdDetached } from './utils/exec.ts';
 import { resolveUserPath } from './utils/path-resolution.ts';
 import { waitForProcessExit } from './utils/process-identity.ts';

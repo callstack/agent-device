@@ -8,7 +8,7 @@ vi.mock('../../../utils/exec.ts', async (importOriginal) => {
 
 import { runCmd, whichCmd } from '../../../utils/exec.ts';
 import { readLinuxClipboard, writeLinuxClipboard } from '../clipboard.ts';
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockWhichCmd = vi.mocked(whichCmd);

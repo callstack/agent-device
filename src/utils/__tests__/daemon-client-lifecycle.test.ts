@@ -34,7 +34,7 @@ import {
   listenOnLoopback,
   supportsLoopbackBind,
 } from '../../__tests__/test-utils/index.ts';
-import { AppError } from '../errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { runCmdDetachedMonitored, runCmdSync } from '../exec.ts';
 import { readProcessStartTime } from '../process-identity.ts';
 import { sleep } from '../timeouts.ts';

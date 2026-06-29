@@ -1,5 +1,5 @@
-import type { DeviceInfo } from '../../utils/device.ts';
-import { AppError } from '../../utils/errors.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 import { resolveTargetDevice } from '../../core/dispatch.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';

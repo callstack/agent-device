@@ -4,7 +4,7 @@ import { parseBatchStepRuntime } from '../batch-contract.ts';
 import { readInputFromCli } from '../commands/cli-grammar.ts';
 import { isCommandName, type CommandName } from '../commands/command-metadata.ts';
 import type { CliFlags } from '../utils/cli-flags.ts';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import { isRecord } from '../utils/parsing.ts';
 
 type LegacyCliBatchStep = {

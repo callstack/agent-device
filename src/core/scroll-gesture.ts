@@ -1,4 +1,4 @@
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import { defineStringEnum } from '../utils/string-enum.ts';
 import type { Rect, SnapshotNode } from '../kernel/snapshot.ts';
 

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError } from './errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import { mergeDefinedFlags } from './merge-flags.ts';
 import { type CliFlags, type FlagKey } from './cli-flags.ts';
 import { expandUserHomePath, resolveUserPath } from './path-resolution.ts';

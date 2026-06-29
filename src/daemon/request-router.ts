@@ -2,7 +2,7 @@ import {
   type DeviceInventoryProvider,
   withTargetDeviceResolutionScope,
 } from '../core/dispatch-resolve.ts';
-import { AppError, normalizeError, retriableForErrorCode } from '../utils/errors.ts';
+import { AppError, normalizeError, retriableForErrorCode } from '../kernel/errors.ts';
 import { supportedPlatformsForCommand } from '../core/capabilities.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
 import type { DaemonError, ResponseCost } from '../contracts.ts';

@@ -1,5 +1,5 @@
 import type { IncomingMessage } from 'node:http';
-import { AppError } from './errors.ts';
+import { AppError } from '../kernel/errors.ts';
 
 export function readNodeHttpResponseBody(res: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {

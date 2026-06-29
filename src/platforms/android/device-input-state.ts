@@ -1,6 +1,6 @@
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
-import { AppError } from '../../utils/errors.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { isClipboardShellUnsupported, sleep } from './adb.ts';
 import { resolveAndroidAdbExecutor, type AndroidAdbExecutor } from './adb-executor.ts';
 import {

@@ -3,7 +3,7 @@ import type { CommandInput, DaemonCommandRequest, DaemonWriter } from './cli-gra
 import { findCommandMetadata } from './command-metadata.ts';
 import { readMetadataCommandFlags } from './command-flags.ts';
 import { listCommandFamilyDaemonWriters } from './family/registry.ts';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 
 const daemonWriters: Record<string, DaemonWriter> = {
   ...listCommandFamilyDaemonWriters(),

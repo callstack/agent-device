@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import { parseMaestroReplayFlow } from '../replay-flow.ts';
 
 test('parseMaestroReplayFlow converts a supported Maestro command subset', () => {

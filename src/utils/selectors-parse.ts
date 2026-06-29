@@ -1,4 +1,4 @@
-import { AppError } from './errors.ts';
+import { AppError } from '../kernel/errors.ts';
 
 export type SelectorKey =
   | 'id'

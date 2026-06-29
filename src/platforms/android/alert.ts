@@ -4,11 +4,11 @@ import {
   ALERT_POLL_INTERVAL_MS,
   DEFAULT_ALERT_TIMEOUT_MS,
 } from '../../alert-contract.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { successText } from '../../utils/success-text.ts';
 import { sleep } from '../../utils/timeouts.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import {
   chooseAndroidAlertButton,
   findAndroidAlertCandidate,

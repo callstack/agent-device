@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import type { ClickButton } from '../../core/click-button.ts';
 import type { DeviceRotation } from '../../core/device-rotation.ts';
 import type { ScrollDirection } from '../../core/scroll-gesture.ts';

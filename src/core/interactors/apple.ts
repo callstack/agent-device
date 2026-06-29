@@ -15,8 +15,8 @@ import {
 import { runMacOsScreenshotAction } from '../../platforms/ios/macos-helper.ts';
 import { runIosRunnerCommand } from '../../platforms/ios/runner-client.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
-import { AppError } from '../../utils/errors.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
+import { AppError } from '../../kernel/errors.ts';
 import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
 import type { Interactor, RunnerContext } from '../interactor-types.ts';
 import {

@@ -12,7 +12,7 @@ import {
   createIosRunnerCacheColdBootPrewarmForOpen,
 } from '../apple-runner-options.ts';
 import { applyRuntimeHintsToApp } from '../runtime-hints.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import type { DaemonRequest, DaemonResponse, SessionRuntimeHints, SessionState } from '../types.ts';
 import {
   resolveSessionRequestLogPath,

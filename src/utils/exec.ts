@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawn, spawnSync, type ChildProcess, type StdioOptions } from 'node:child_process';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { AppError } from './errors.ts';
+import { AppError } from '../kernel/errors.ts';
 
 export type ExecResult = {
   stdout: string;

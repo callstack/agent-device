@@ -8,7 +8,7 @@ import {
   type RemoteConfigProfileOptions,
   type ResolvedRemoteConfigProfile,
 } from './remote-config-schema.ts';
-import { AppError } from './utils/errors.ts';
+import { AppError } from './kernel/errors.ts';
 import { resolveUserPath } from './utils/path-resolution.ts';
 import { parseSourceValue } from './utils/source-value.ts';
 

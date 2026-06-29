@@ -1,4 +1,4 @@
-import type { Platform } from '../../utils/device.ts';
+import type { Platform } from '../../kernel/device.ts';
 import type { CommandCapability } from '../capabilities.ts';
 import type { CapabilityBucket, PlatformDescriptor } from './types.ts';
 
@@ -9,7 +9,7 @@ import type { CapabilityBucket, PlatformDescriptor } from './types.ts';
  * switch is deleted.
  *
  * This module only TYPE-imports from {@link CommandCapability} (erased at runtime
- * under `verbatimModuleSyntax`) and from `utils/device.ts`, so wiring it into
+ * under `verbatimModuleSyntax`) and from `kernel/device.ts`, so wiring it into
  * `capabilities.ts` forms no runtime cycle — mirroring `command-descriptor/derive.ts`.
  */
 

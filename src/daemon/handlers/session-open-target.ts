@@ -3,7 +3,7 @@ import {
   isWebUrl,
   resolveIosDeviceDeepLinkBundleId,
 } from '../../core/open-target.ts';
-import { isApplePlatform, type DeviceInfo } from '../../utils/device.ts';
+import { isApplePlatform, type DeviceInfo } from '../../kernel/device.ts';
 
 async function resolveIosBundleIdForOpen(
   device: DeviceInfo,

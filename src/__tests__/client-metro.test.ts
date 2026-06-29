@@ -9,7 +9,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { prepareMetroRuntime, reloadMetro } from '../client-metro.ts';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import { isProcessAlive, waitForProcessExit } from '../utils/process-identity.ts';
 
 const TEST_TOKEN = 'agent-device-proxy-test-token';

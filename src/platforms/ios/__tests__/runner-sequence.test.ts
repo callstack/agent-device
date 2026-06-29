@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import {
   MAX_RUNNER_SEQUENCE_STEPS,
   SEQUENCEABLE_RUNNER_STEP_KINDS,

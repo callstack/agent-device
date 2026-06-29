@@ -25,9 +25,9 @@ import { pushAndroidNotification } from '../notifications.ts';
 import { setAndroidSetting } from '../settings.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import { parseAndroidLaunchablePackages } from '../app-parsers.ts';
-import type { DeviceInfo } from '../../../utils/device.ts';
+import type { DeviceInfo } from '../../../kernel/device.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import { androidUiNodes, parseUiHierarchy } from '../ui-hierarchy.ts';
 
 async function withMockedAdb(

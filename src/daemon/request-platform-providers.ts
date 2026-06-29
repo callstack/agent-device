@@ -10,7 +10,7 @@ import type {
 } from '../platforms/ios/tool-provider.ts';
 import type { LinuxToolProvider } from '../platforms/linux/tool-provider.ts';
 import type { WebProvider } from '../platforms/web/provider.ts';
-import { isApplePlatform, type DeviceInfo } from '../utils/device.ts';
+import { isApplePlatform, type DeviceInfo } from '../kernel/device.ts';
 import type { AppLogProvider } from './app-log.ts';
 import { hasExplicitDeviceSelector } from './device-selector-intent.ts';
 import type { RecordingProvider } from './recording-provider.ts';

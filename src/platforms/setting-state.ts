@@ -1,4 +1,4 @@
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 
 export function parseSettingState(state: string): boolean {
   const normalized = state.toLowerCase();

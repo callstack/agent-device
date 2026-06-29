@@ -10,7 +10,7 @@ import {
   readFillTargetFromPositionals,
   readInteractionTargetFromPositionals,
 } from '../../core/interaction-positionals.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import type { ScrollInputDirection } from './runtime/gestures.ts';
 import {
   commonInputFromFlags,

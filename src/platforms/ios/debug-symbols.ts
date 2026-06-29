@@ -5,7 +5,7 @@ import { matchImagesToDsyms, readDsymPaths, readDsymSlices } from './debug-symbo
 import { summarizeCrashArtifact } from './debug-symbols/report.ts';
 import { resolveAppleTools, symbolicateAddresses } from './debug-symbols/symbolication.ts';
 import type { DebugSymbolsOptions, DebugSymbolsResult } from '../../contracts/debug-symbols.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 
 export type {
   DebugSymbolsCrashFrame,

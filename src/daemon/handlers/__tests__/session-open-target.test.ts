@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import type { DeviceInfo } from '../../../utils/device.ts';
+import type { DeviceInfo } from '../../../kernel/device.ts';
 
 vi.mock('../../../platforms/android/app-lifecycle.ts', () => ({
   getAndroidAppState: vi.fn(),

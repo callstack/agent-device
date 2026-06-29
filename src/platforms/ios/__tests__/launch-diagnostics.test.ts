@@ -5,7 +5,7 @@ import {
   classifyLaunchFailure,
   launchFailureHint,
 } from '../launch-diagnostics.ts';
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 
 test('isSimulatorLaunchFBSError identifies FBS code=4 errors', () => {
   const error = new AppError('COMMAND_FAILED', 'xcrun exited with code 4', {

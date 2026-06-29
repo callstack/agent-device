@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { dispatchCommand } from '../dispatch.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { MACOS_DEVICE, TVOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 
 test('dispatch pinch rejects helper-backed macOS surfaces', async () => {

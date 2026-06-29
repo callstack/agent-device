@@ -9,7 +9,7 @@ import {
   captureAndroidLogcatWithAdb,
   streamAndroidLogcatWithAdb,
 } from '../platforms/android/logcat.ts';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import {
   clearPidFile,
   readStoredAppLogProcessMeta,

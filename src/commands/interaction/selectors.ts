@@ -1,7 +1,7 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { FindOptions, IsOptions } from '../../client-types.ts';
 import type { CliFlags } from '../../utils/cli-flags.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import {
   direct,
   optionalCliNumber,

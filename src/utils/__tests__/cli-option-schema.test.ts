@@ -7,7 +7,7 @@ import {
   parseOptionValueFromSource,
   resolveSourceValueDefinition,
 } from '../cli-option-schema.ts';
-import { AppError } from '../errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { REMOTE_CONFIG_FIELD_SPECS, getRemoteConfigEnvNames } from '../../remote-config-schema.ts';
 
 test('option schema exposes config/env metadata for global options', () => {

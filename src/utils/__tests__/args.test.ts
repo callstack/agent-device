@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { parseArgs, usage, usageForCommand } from '../args.ts';
-import { AppError } from '../errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { listCapabilityCommands } from '../../core/capabilities.ts';
 import { listCapabilityCheckedCommandNames, listCliCommandNames } from '../../command-catalog.ts';
 import { getCliCommandSchema } from '../command-schema.ts';

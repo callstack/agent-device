@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runCmd } from '../utils/exec.ts';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import { buildSwiftToolEnv, compileSwiftSourceFile } from '../utils/swift-cache.ts';
 import { waitForPlayableVideo, waitForStableFile } from '../utils/video.ts';
 import {

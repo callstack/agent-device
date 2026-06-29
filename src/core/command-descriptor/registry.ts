@@ -5,7 +5,7 @@ import {
 } from '../../command-catalog.ts';
 import type { CommandCapability } from '../capabilities.ts';
 import type { DaemonRequest } from '../../daemon/types.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import type { CommandDescriptor } from './types.ts';
 
 // ---------------------------------------------------------------------------

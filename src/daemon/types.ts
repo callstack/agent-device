@@ -15,7 +15,7 @@ import type { GestureReferenceFrame, ScrollDirection } from '../core/scroll-gest
 import type { LogBackend } from './network-log.ts';
 import type { SessionSurface } from '../core/session-surface.ts';
 import type { RecordingExportQuality } from '../core/recording-export-quality.ts';
-import type { DeviceInfo, Platform, PlatformSelector } from '../utils/device.ts';
+import type { DeviceInfo, Platform, PlatformSelector } from '../kernel/device.ts';
 import type { ExecBackgroundResult, ExecResult } from '../utils/exec.ts';
 import type { SnapshotState } from '../kernel/snapshot.ts';
 import type { AppLogState } from './app-log-process.ts';

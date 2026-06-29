@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import type { RemoteConfigProfile } from '../remote-config-schema.ts';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import type { CliFlags } from '../utils/cli-flags.ts';
 import type { EnvMap } from '../utils/env-map.ts';
 import { resolveCloudAccessForConnect } from './auth-session.ts';

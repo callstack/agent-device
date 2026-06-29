@@ -1,4 +1,4 @@
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import type { SessionAction } from '../daemon/types.ts';
 
 export type ReplayVarScope = {

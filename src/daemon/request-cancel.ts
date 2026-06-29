@@ -1,4 +1,4 @@
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 
 const canceledRequestIds = new Set<string>();
 const requestAbortControllers = new Map<string, AbortController>();

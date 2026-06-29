@@ -1,5 +1,5 @@
 import type { SnapshotBackend } from './kernel/snapshot.ts';
-import type { Platform } from './utils/device.ts';
+import type { Platform } from './kernel/device.ts';
 import { isRecord } from './utils/parsing.ts';
 
 const SLOW_SNAPSHOT_P95_WARNING_MS = 1_500;

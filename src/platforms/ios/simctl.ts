@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import type { ExecOptions, ExecResult } from '../../utils/exec.ts';
 import { resolveIosSimulatorDeviceSetPath } from '../../utils/device-isolation.ts';
 import { runXcrun } from './tool-provider.ts';

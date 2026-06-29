@@ -553,7 +553,7 @@
         "count": 1
       }
     },
-    "src/utils/device.ts": {
+    "src/kernel/device.ts": {
       "complexity_moderate": {
         "count": 1
       }
@@ -723,7 +723,7 @@
     "src/utils/text-surface.ts:high impact",
     "src/utils/selector-build.ts:high impact",
     "src/core/batch.ts:complexity",
-    "src/utils/device.ts:high impact",
+    "src/kernel/device.ts:high impact",
     "src/daemon/network-log.ts:high impact",
     "src/commands/cli-grammar/selectors.ts:untested risk",
     "src/platforms/ios/xml.ts:high impact",

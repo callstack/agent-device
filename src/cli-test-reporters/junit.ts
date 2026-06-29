@@ -1,6 +1,6 @@
 import path from 'node:path';
 import type { ReplaySuiteResult, ReplaySuiteTestResult } from '../daemon/types.ts';
-import { AppError } from '../utils/errors.ts';
+import { AppError } from '../kernel/errors.ts';
 import type { ReplayTestReporter, ReplayTestReporterContext } from './types.ts';
 import {
   appendOptionalLine,

@@ -1,4 +1,4 @@
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import type { ClickButton } from '../../../core/click-button.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { isFillableType } from '../../../utils/snapshot-processing.ts';

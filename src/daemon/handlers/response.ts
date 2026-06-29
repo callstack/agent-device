@@ -1,5 +1,5 @@
 import { isCommandSupportedOnDevice, unsupportedHintForDevice } from '../../core/capabilities.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import type { DaemonResponse } from '../types.ts';
 
 export type DaemonFailureResponse = Extract<DaemonResponse, { ok: false }>;

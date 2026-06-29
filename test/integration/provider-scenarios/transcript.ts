@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { isDeepStrictEqual } from 'node:util';
-import type { Platform } from '../../../src/utils/device.ts';
+import type { Platform } from '../../../src/kernel/device.ts';
 
 export interface ProviderScenarioProviderScope {
   deviceId?: string;

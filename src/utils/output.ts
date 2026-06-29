@@ -3,7 +3,7 @@ import {
   buildAndroidHelperPresentationInput,
   type AndroidHelperPresentationInput,
 } from './android-helper-snapshot-presentation.ts';
-import { AppError, normalizeError, type NormalizedError } from './errors.ts';
+import { AppError, normalizeError, type NormalizedError } from '../kernel/errors.ts';
 import { detectPossibleRepeatedNavSubtree } from './repeated-nav-subtree.ts';
 import { buildSnapshotDisplayLines, formatSnapshotLine } from './snapshot-lines.ts';
 import {

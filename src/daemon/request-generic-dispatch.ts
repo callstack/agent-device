@@ -24,7 +24,7 @@ import {
   recordTouchVisualizationEvent,
 } from './recording-gestures.ts';
 import { markPostGestureStabilization } from './post-gesture-stabilization.ts';
-import { normalizeError } from '../utils/errors.ts';
+import { normalizeError } from '../kernel/errors.ts';
 import { shouldGuardAndroidBlockingDialog } from './daemon-command-registry.ts';
 
 const GESTURE_PLATFORM_COMMANDS: Readonly<Record<string, string>> = {

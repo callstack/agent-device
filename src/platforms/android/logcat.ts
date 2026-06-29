@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import type { AndroidAdbExecutor, AndroidAdbProcess, AndroidAdbProvider } from './adb-executor.ts';
 
 export type AndroidLogcatCaptureOptions = {

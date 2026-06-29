@@ -1,4 +1,4 @@
-import { asAppError } from '../../utils/errors.ts';
+import { asAppError } from '../../kernel/errors.ts';
 import type { ReplayVarScope } from '../../replay/vars.ts';
 import type { DaemonInvokeFn, DaemonResponse } from '../../daemon/types.ts';
 import { executeRunScriptFile } from './run-script.ts';

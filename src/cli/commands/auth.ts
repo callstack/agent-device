@@ -1,5 +1,5 @@
 import { resolveDaemonPaths } from '../../daemon/config.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { loginWithDeviceAuth, removeCliSession, summarizeCliSession } from '../auth-session.ts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';

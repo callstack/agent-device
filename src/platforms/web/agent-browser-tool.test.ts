@@ -5,7 +5,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { resolveAgentBrowserTool } from './agent-browser-tool.ts';
 import { installFakeManagedAgentBrowser } from './__tests__/test-utils.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 
 test('managed agent-browser tool reports actionable guidance when install is missing', async () => {
   const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-web-tool-'));

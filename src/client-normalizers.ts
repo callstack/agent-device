@@ -1,10 +1,10 @@
 import type { CommandFlags } from './core/dispatch.ts';
 import { screenshotFlagsFromOptions } from './contracts/screenshot.ts';
 import type { DaemonRequest, SessionRuntimeHints } from './daemon/types.ts';
-import { AppError, type NormalizedError } from './utils/errors.ts';
+import { AppError, type NormalizedError } from './kernel/errors.ts';
 import type { SnapshotNode } from './kernel/snapshot.ts';
 import { buildAppIdentifiers, buildDeviceIdentifiers } from './client-shared.ts';
-import { isPlatform } from './utils/device.ts';
+import { isPlatform } from './kernel/device.ts';
 import {
   leaseScopeFromOptions,
   leaseScopeToCommandFlags,

@@ -1,6 +1,6 @@
 import net from 'node:net';
 import type { Server as HttpServer } from 'node:http';
-import { AppError, normalizeError } from '../utils/errors.ts';
+import { AppError, normalizeError } from '../kernel/errors.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './types.ts';
 import {
   clearRequestCanceled,

@@ -1,4 +1,4 @@
-import type { Platform } from '../../utils/device.ts';
+import type { Platform } from '../../kernel/device.ts';
 import type { ElementSelectorKey } from '../../core/interactor-types.ts';
 import type { Rect, SnapshotNode, SnapshotState } from '../../kernel/snapshot.ts';
 import { parseSelectorChain } from '../../daemon/selectors.ts';

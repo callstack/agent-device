@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { resolveRunnerDestination, resolveRunnerPlatformName } from '../apple-runner-platform.ts';
-import type { DeviceInfo } from '../../../utils/device.ts';
+import type { DeviceInfo } from '../../../kernel/device.ts';
 
 function iosSim(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
   return {

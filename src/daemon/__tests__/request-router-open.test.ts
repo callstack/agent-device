@@ -10,8 +10,8 @@ import { dispatchCommand } from '../../core/dispatch.ts';
 import { createRequestHandler } from '../request-router.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
-import { AppError } from '../../utils/errors.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);

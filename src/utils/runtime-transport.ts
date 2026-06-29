@@ -1,6 +1,6 @@
 import { URL } from 'node:url';
 import type { SessionRuntimeHints } from '../contracts.ts';
-import { AppError } from './errors.ts';
+import { AppError } from '../kernel/errors.ts';
 
 export type ResolvedRuntimeTransport = {
   host: string;

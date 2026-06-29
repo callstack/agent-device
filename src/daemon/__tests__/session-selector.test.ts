@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { assertSessionSelectorMatches } from '../session-selector.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import type { SessionState } from '../types.ts';
 
 function makeSession(overrides?: Partial<SessionState>): SessionState {

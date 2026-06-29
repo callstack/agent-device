@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { DeviceInfo } from '../../utils/device.ts';
-import { AppError } from '../../utils/errors.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { splitNonEmptyTrimmedLines } from '../../utils/parsing.ts';
 import { resolveAndroidAdbExecutor, type AndroidAdbExecutor } from './adb-executor.ts';
 import { parseNumericToken } from './perf-parsing.ts';

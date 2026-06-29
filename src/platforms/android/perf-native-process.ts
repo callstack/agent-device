@@ -1,4 +1,4 @@
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import type { AndroidAdbExecutor } from './adb-executor.ts';
 import { buildAndroidNativeToolUnavailableHint } from './perf-native-errors.ts';
 import { ANDROID_PERF_TIMEOUT_MS, type AndroidNativePerfKind } from './perf-native-types.ts';

@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { dispatchCommand } from '../dispatch.ts';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { ANDROID_EMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 
 test('dispatch push reports missing payload file as INVALID_ARGS', async () => {

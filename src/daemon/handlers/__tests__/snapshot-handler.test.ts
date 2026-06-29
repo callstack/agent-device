@@ -8,7 +8,7 @@ import { withSessionlessRunnerCleanup } from '../snapshot-session.ts';
 import { captureSnapshot } from '../snapshot-capture.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { SessionState } from '../../types.ts';
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import { buildSnapshotSignatures } from '../../android-snapshot-freshness.ts';
 import { buildInteractionSurfaceSignature } from '../../interaction-outcome-policy.ts';
 import { buildSnapshotPresentationKey } from '../../../kernel/snapshot.ts';

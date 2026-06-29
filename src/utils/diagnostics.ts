@@ -3,7 +3,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { redactDiagnosticData } from './redaction.ts';
+import { redactDiagnosticData } from '../kernel/redaction.ts';
 
 type DiagnosticLevel = 'info' | 'warn' | 'error' | 'debug';
 

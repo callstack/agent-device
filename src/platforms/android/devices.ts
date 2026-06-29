@@ -1,8 +1,8 @@
 import { runCmd, runCmdDetached, whichCmd } from '../../utils/exec.ts';
 import type { ExecResult } from '../../utils/exec.ts';
 import { sleep } from '../../utils/timeouts.ts';
-import { AppError, asAppError } from '../../utils/errors.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import { AppError, asAppError } from '../../kernel/errors.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import { Deadline, retryWithPolicy } from '../../utils/retry.ts';
 import { resolveAndroidSerialAllowlist } from '../../utils/device-isolation.ts';
 import { bootFailureHint, classifyBootFailure } from '../boot-diagnostics.ts';

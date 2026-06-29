@@ -8,7 +8,7 @@ import { createInteractionRuntime } from './interaction-runtime.ts';
 import { finalizeTouchInteraction } from './interaction-common.ts';
 import { errorResponse, noActiveSessionError, requireCommandSupported } from './response.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { normalizeError } from '../../utils/errors.ts';
+import { normalizeError } from '../../kernel/errors.ts';
 import { successText } from '../../utils/success-text.ts';
 import {
   ensureAndroidBlockingSystemDialogReady,

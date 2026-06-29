@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import assert from 'node:assert/strict';
 import { listLinuxDevices } from '../../../src/platforms/linux/devices.ts';
 import { createLocalLinuxToolProvider } from '../../../src/platforms/linux/tool-provider.ts';
-import type { DeviceInfo } from '../../../src/utils/device.ts';
+import type { DeviceInfo } from '../../../src/kernel/device.ts';
 import { validPng } from './assertions.ts';
 import { PROVIDER_SCENARIO_LINUX } from './fixtures.ts';
 import {

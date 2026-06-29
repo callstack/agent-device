@@ -1,5 +1,5 @@
 import os from 'node:os';
-import type { DeviceInfo } from '../../utils/device.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 
 const HOST_MAC_DEVICE_ID = 'host-macos-local';
 

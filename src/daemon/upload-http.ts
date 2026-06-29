@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { AppError, normalizeError } from '../utils/errors.ts';
+import { AppError, normalizeError } from '../kernel/errors.ts';
 import type { DaemonRequest } from './types.ts';
 import { trackUploadedArtifact } from './artifact-tracking.ts';
 import {

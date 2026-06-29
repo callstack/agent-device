@@ -1,4 +1,4 @@
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 
 // Shared primitives for the Android instrumentation helpers (snapshot + multi-touch).
 // Both helpers drive `am instrument -w` and parse the resulting

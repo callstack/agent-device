@@ -1,5 +1,5 @@
 import { parseAllDocuments, stringify } from 'yaml';
-import { AppError } from '../../utils/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 
 export function parseMaestroYamlDocuments(script: string): unknown[] {
   const documents = parseAllDocuments(script);

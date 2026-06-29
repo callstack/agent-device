@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { DeviceInfo } from '../utils/device.ts';
-import { AppError } from '../utils/errors.ts';
+import type { DeviceInfo } from '../kernel/device.ts';
+import { AppError } from '../kernel/errors.ts';
 import { runCmd } from '../utils/exec.ts';
 import { runXcrun } from '../platforms/ios/tool-provider.ts';
 import { runAndroidAdb } from '../platforms/android/adb.ts';

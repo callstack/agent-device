@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test, expect } from 'vitest';
 import type { SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
-import { AppError } from '../../../utils/errors.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import {
   extractMaestroVisibleTextQuery,
   readMaestroSelectorPlatform,

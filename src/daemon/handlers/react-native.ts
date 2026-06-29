@@ -4,7 +4,7 @@ import {
   analyzeReactNativeOverlay,
   type ReactNativeOverlayDismissTarget,
 } from '../../core/react-native-overlay.ts';
-import { normalizeError } from '../../utils/errors.ts';
+import { normalizeError } from '../../kernel/errors.ts';
 import { stripUndefined } from '../../utils/parsing.ts';
 import { successText } from '../../utils/success-text.ts';
 import type { SnapshotState } from '../../kernel/snapshot.ts';
