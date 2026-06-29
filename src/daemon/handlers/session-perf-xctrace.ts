@@ -1,4 +1,5 @@
 import { asAppError, normalizeError } from '../../utils/errors.ts';
+import { isApplePlatform } from '../../utils/device.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import {
@@ -40,7 +41,7 @@ export async function handleNativePerfCommand(
       'Android native profiling belongs to the Android perf rollout; Apple xctrace perf supports iOS and macOS sessions only.',
     );
   }
-  if (session.device.platform !== 'ios' && session.device.platform !== 'macos') {
+  if (!isApplePlatform(session.device.platform)) {
     return errorResponse(
       'UNSUPPORTED_OPERATION',
       `Apple xctrace perf is not supported on ${session.device.platform}.`,

@@ -3,14 +3,14 @@ import {
   isWebUrl,
   resolveIosDeviceDeepLinkBundleId,
 } from '../../core/open-target.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import { isApplePlatform, type DeviceInfo } from '../../utils/device.ts';
 
 async function resolveIosBundleIdForOpen(
   device: DeviceInfo,
   openTarget: string | undefined,
   currentAppBundleId?: string,
 ): Promise<string | undefined> {
-  if ((device.platform !== 'ios' && device.platform !== 'macos') || !openTarget) return undefined;
+  if (!isApplePlatform(device.platform) || !openTarget) return undefined;
   if (isDeepLinkTarget(openTarget)) {
     if (device.platform === 'macos') return undefined;
     if (device.kind === 'device') {

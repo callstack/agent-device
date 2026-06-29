@@ -1,4 +1,5 @@
 import { emitDiagnostic } from '../utils/diagnostics.ts';
+import { isMobilePlatform } from '../utils/device.ts';
 import type { CommandFlags } from '../core/dispatch.ts';
 import type { SnapshotState } from '../utils/snapshot.ts';
 import { sleep } from '../utils/timeouts.ts';
@@ -97,5 +98,5 @@ function isPostGestureStabilizingAction(
 }
 
 function supportsPostGestureStabilization(platform: SessionState['device']['platform']): boolean {
-  return platform === 'ios' || platform === 'android';
+  return isMobilePlatform(platform);
 }

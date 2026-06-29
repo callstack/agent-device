@@ -4,6 +4,7 @@ import {
   resolveIosSimulatorDeviceSetPath,
 } from '../../utils/device-isolation.ts';
 import {
+  isMobilePlatform,
   matchesPlatformSelector,
   resolveAppleSimulatorSetPathForSelector,
   type DeviceInfo,
@@ -179,7 +180,7 @@ function resolveExplicitShardDevices(
 
 function isImplicitShardDevice(device: DeviceInfo, flags: CommandFlags | undefined): boolean {
   if (!isShardDeviceCandidate(device, flags)) return false;
-  if (device.platform !== 'ios' && device.platform !== 'android') return false;
+  if (!isMobilePlatform(device.platform)) return false;
   return device.booted !== false;
 }
 

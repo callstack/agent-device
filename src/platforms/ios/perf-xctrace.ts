@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { DeviceInfo } from '../../utils/device.ts';
+import { isApplePlatform, type DeviceInfo } from '../../utils/device.ts';
 import { AppError } from '../../utils/errors.ts';
 import { runCmdBackground, type ExecBackgroundResult, type ExecResult } from '../../utils/exec.ts';
 import { uniqueStrings } from '../../daemon/action-utils.ts';
@@ -209,7 +209,7 @@ async function resolveAppleXctracePerfTarget(
   device: DeviceInfo,
   appBundleId: string,
 ): Promise<{ pids: number[]; processNames: string[] }> {
-  if (device.platform !== 'ios' && device.platform !== 'macos') {
+  if (!isApplePlatform(device.platform)) {
     throw new AppError('UNSUPPORTED_OPERATION', 'Apple xctrace perf is not supported on Android.', {
       platform: device.platform,
       hint: 'Android native profiling belongs to the Android perf rollout and is not implemented under Apple xctrace.',

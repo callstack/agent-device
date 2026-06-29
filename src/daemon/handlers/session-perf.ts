@@ -1,6 +1,7 @@
 import path from 'node:path';
 import type { SessionAction, SessionState } from '../types.ts';
 import { AppError, normalizeError } from '../../utils/errors.ts';
+import { isApplePlatform } from '../../utils/device.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import {
   ANDROID_HPROF_SNAPSHOT_DESCRIPTION,
@@ -546,7 +547,7 @@ function buildUnsupportedMemorySnapshotGuidance(
       hint: 'Use perf memory snapshot --kind android-hprof for Android Java heap artifacts.',
     };
   }
-  if (session.device.platform === 'ios' || session.device.platform === 'macos') {
+  if (isApplePlatform(session.device.platform)) {
     return {
       reason: `Apple perf memory snapshot supports memgraph, not ${kind}.`,
       hint: 'Use perf memory snapshot --kind memgraph for supported Apple app sessions.',
@@ -570,7 +571,7 @@ function buildMemorySnapshotSupport(session: SessionState): Record<string, unkno
         'Deferred until Android Perfetto/heapprofd plumbing is available in the perf trace slice.',
     };
   }
-  if (session.device.platform !== 'ios' && session.device.platform !== 'macos') {
+  if (!isApplePlatform(session.device.platform)) {
     return {
       platform: session.device.platform,
       defaultKind: 'memgraph',

@@ -1,5 +1,5 @@
 import { AppError } from '../../utils/errors.ts';
-import { resolveApplePlatformName, type DeviceInfo } from '../../utils/device.ts';
+import { isApplePlatform, resolveApplePlatformName, type DeviceInfo } from '../../utils/device.ts';
 
 export type RunnerApplePlatformName = 'iOS' | 'tvOS' | 'macOS';
 
@@ -75,7 +75,7 @@ const RUNNER_PLATFORM_PROFILES: Record<RunnerApplePlatformName, RunnerPlatformPr
 };
 
 export function resolveRunnerPlatformName(device: DeviceInfo): RunnerApplePlatformName {
-  if (device.platform !== 'ios' && device.platform !== 'macos') {
+  if (!isApplePlatform(device.platform)) {
     throw new AppError(
       'UNSUPPORTED_PLATFORM',
       `Unsupported platform for Apple runner: ${device.platform}`,

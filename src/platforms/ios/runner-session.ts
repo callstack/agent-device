@@ -2,7 +2,7 @@ import { AppError, toAppErrorCode } from '../../utils/errors.ts';
 import { runCmdBackground, type ExecResult, type ExecBackgroundResult } from '../../utils/exec.ts';
 import { withKeyedLock } from '../../utils/keyed-lock.ts';
 import { Deadline } from '../../utils/retry.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
+import { isApplePlatform, type DeviceInfo } from '../../utils/device.ts';
 import type { RunnerLogicalLeaseContext } from '../../core/runner-lease-context.ts';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
@@ -478,7 +478,7 @@ async function verifyDeveloperModeForIosRunner(device: DeviceInfo): Promise<void
 }
 
 export function validateRunnerDevice(device: DeviceInfo): void {
-  if (device.platform !== 'ios' && device.platform !== 'macos') {
+  if (!isApplePlatform(device.platform)) {
     throw new AppError(
       'UNSUPPORTED_PLATFORM',
       `Unsupported platform for iOS runner: ${device.platform}`,

@@ -45,6 +45,11 @@ export function isApplePlatform(
   return platform === 'apple' || platform === 'ios' || platform === 'macos';
 }
 
+export function isMobilePlatform(platform: Platform): boolean {
+  // Leaf-platform family predicate: the two phone/tablet device platforms.
+  return platform === 'ios' || platform === 'android';
+}
+
 export function isPlatform(value: unknown): value is Platform {
   // Leaf-platform membership derived from the canonical PLATFORMS tuple (excludes the
   // `apple` selector, which is not a concrete device platform).

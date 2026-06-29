@@ -1,4 +1,5 @@
 import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
+import { isMobilePlatform } from '../../utils/device.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import { runMacOsSnapshotAction } from '../../platforms/ios/macos-helper.ts';
 import { snapshotLinux } from '../../platforms/linux/snapshot.ts';
@@ -105,10 +106,7 @@ async function capturePostActionAwareSnapshot(
       pendingInteractionOutcome,
     );
   }
-  if (
-    (params.device.platform === 'ios' || params.device.platform === 'android') &&
-    params.session?.postGestureStabilization
-  ) {
+  if (isMobilePlatform(params.device.platform) && params.session?.postGestureStabilization) {
     return await capturePostGestureAwareSnapshot({ ...params, session: params.session });
   }
   const freshness = getActiveAndroidSnapshotFreshness(params.session);

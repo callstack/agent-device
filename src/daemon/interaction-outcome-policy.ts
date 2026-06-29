@@ -1,4 +1,5 @@
 import { dispatchCommand, type CommandFlags } from '../core/dispatch.ts';
+import { isMobilePlatform } from '../utils/device.ts';
 import type { SnapshotNode, SnapshotState } from '../utils/snapshot.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { contextFromFlags } from './context.ts';
@@ -187,7 +188,7 @@ export function areInteractionSurfaceSignaturesStable(
 }
 
 function supportsInteractionOutcomePolicy(session: SessionState): boolean {
-  return session.device.platform === 'ios' || session.device.platform === 'android';
+  return isMobilePlatform(session.device.platform);
 }
 
 function retryCommandForTap(command: string): string | undefined {

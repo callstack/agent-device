@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '../../utils/errors.ts';
-import type { PlatformSelector } from '../../utils/device.ts';
+import { isApplePlatform, type PlatformSelector } from '../../utils/device.ts';
 import { resolveRequestTrackingId } from '../request-cancel.ts';
 import { SessionStore } from '../session-store.ts';
 import { readReplayScriptMetadata, type ReplayScriptMetadata } from '../../replay/script.ts';
@@ -298,7 +298,7 @@ function looksLikeGlob(value: string): boolean {
 
 function matchesPlatformFilter(filter: PlatformSelector, candidate: PlatformSelector): boolean {
   if (filter === 'apple') {
-    return candidate === 'apple' || candidate === 'ios' || candidate === 'macos';
+    return isApplePlatform(candidate);
   }
   return candidate === filter;
 }
