@@ -31,6 +31,11 @@ type DiagnosticsScope = DiagnosticsScopeOptions & {
   diagnosticId: string;
   events: DiagnosticEvent[];
   liveWrittenEventCount: number;
+  // Running per-phase emit tally. Unlike `events`, this is NOT cleared by
+  // `flushDiagnosticsToSessionFile`, so consumers (e.g. the agent-cost graft)
+  // can count phase occurrences for the whole request even in debug mode where
+  // events are streamed out and reset mid-flight.
+  phaseCounts: Map<string, number>;
 };
 
 const diagnosticsStorage = new AsyncLocalStorage<DiagnosticsScope>();
@@ -52,6 +57,7 @@ export async function withDiagnosticsScope<T>(
     diagnosticId: createDiagnosticId(),
     events: [],
     liveWrittenEventCount: 0,
+    phaseCounts: new Map(),
   };
   return await diagnosticsStorage.run(scope, fn);
 }
@@ -80,6 +86,22 @@ export function getDiagnosticsMeta(): {
   };
 }
 
+/**
+ * Sum the number of diagnostic events emitted in the current scope whose phase
+ * is one of `phases`. Backed by the flush-surviving `phaseCounts` tally, so it
+ * stays accurate for the whole request even under `--debug` (where `events` is
+ * streamed out and reset). Returns 0 when called outside a diagnostics scope.
+ */
+export function countDiagnosticEventsByPhase(phases: readonly string[]): number {
+  const scope = diagnosticsStorage.getStore();
+  if (!scope) return 0;
+  let total = 0;
+  for (const phase of phases) {
+    total += scope.phaseCounts.get(phase) ?? 0;
+  }
+  return total;
+}
+
 export function emitDiagnostic(event: {
   level?: DiagnosticLevel;
   phase: string;
@@ -99,6 +121,7 @@ export function emitDiagnostic(event: {
     data: event.data ? redactDiagnosticData(event.data) : undefined,
   };
   scope.events.push(payload);
+  scope.phaseCounts.set(event.phase, (scope.phaseCounts.get(event.phase) ?? 0) + 1);
   if (!scope.debug) return;
   const fileLine = `${JSON.stringify(payload)}\n`;
   try {

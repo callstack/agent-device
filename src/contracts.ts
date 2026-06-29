@@ -102,7 +102,7 @@ export type DaemonArtifact = {
   path?: string;
 };
 
-export type ResponseCost = { wallClockMs: number };
+export type ResponseCost = { wallClockMs: number; runnerRoundTrips: number };
 
 export type DaemonResponseData = Record<string, unknown> & {
   artifacts?: DaemonArtifact[];

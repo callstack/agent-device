@@ -20,6 +20,7 @@ import {
   withRequestPlatformProviderScope,
 } from './request-platform-providers.ts';
 import {
+  countDiagnosticEventsByPhase,
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,
@@ -40,6 +41,15 @@ import { createAgentBrowserWebProvider } from '../platforms/web/agent-browser-pr
 // ---------------------------------------------------------------------------
 // Request handler API
 // ---------------------------------------------------------------------------
+
+// Diagnostic phases emitted once per real iOS-runner round-trip. `..._command_send`
+// is the command itself; `..._readiness_preflight` is the pre-command uptime probe
+// (a real network round-trip). The `..._skipped` / `..._recovered` markers do NOT
+// hit the runner and are intentionally excluded.
+const RUNNER_ROUND_TRIP_PHASES = [
+  'ios_runner_command_send',
+  'ios_runner_readiness_preflight',
+] as const;
 
 export type RequestRouterDeps = {
   logPath: string;
@@ -82,7 +92,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   async function handleRequest(req: DaemonRequest): Promise<DaemonResponse> {
     const start = Date.now();
     const debug = Boolean(req.meta?.debug || req.flags?.verbose);
-    const response = await withDiagnosticsScope(
+    return await withDiagnosticsScope(
       {
         session: req.session,
         requestId: req.meta?.requestId,
@@ -91,31 +101,40 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         logPath,
       },
       async () => {
-        if (!timingSafeStringEqual(req.token, token)) {
-          return unauthorizedResponse();
-        }
-
-        try {
-          return await withTargetDeviceResolutionScope(deviceInventoryProvider, async () => {
-            const scope = await createRequestExecutionScope({
-              req,
-              sessionStore,
-              leaseRegistry,
-            });
-            return await executeRequestScope(scope);
-          });
-        } catch (error) {
-          return finalizeThrownRequestError(error);
-        }
+        const response = await runRequestWithinScope(req);
+        // Phase 4 (agent-cost) graft: cost is purely additive and opt-in. With
+        // the flag off — or on an error response — the serialized DaemonResponse
+        // is byte-identical to today (Maestro `.ad` recompare diffs it). Mirrors
+        // the conditional `registerDownloadableArtifacts` spread in
+        // request-finalization. Runs inside the diagnostics scope so it can read
+        // this request's accumulated runner-round-trip tally.
+        if (!req.meta?.includeCost || !response.ok) return response;
+        const cost: ResponseCost = {
+          wallClockMs: Date.now() - start,
+          runnerRoundTrips: countDiagnosticEventsByPhase(RUNNER_ROUND_TRIP_PHASES),
+        };
+        return { ok: true, data: { ...(response.data ?? {}), cost } };
       },
     );
-    // Phase 4 (agent-cost) graft: cost is purely additive and opt-in. With the
-    // flag off — or on an error response — the serialized DaemonResponse is
-    // byte-identical to today (Maestro `.ad` recompare diffs it). Mirrors the
-    // conditional `registerDownloadableArtifacts` spread in request-finalization.
-    if (!req.meta?.includeCost || !response.ok) return response;
-    const cost: ResponseCost = { wallClockMs: Date.now() - start };
-    return { ok: true, data: { ...(response.data ?? {}), cost } };
+  }
+
+  async function runRequestWithinScope(req: DaemonRequest): Promise<DaemonResponse> {
+    if (!timingSafeStringEqual(req.token, token)) {
+      return unauthorizedResponse();
+    }
+
+    try {
+      return await withTargetDeviceResolutionScope(deviceInventoryProvider, async () => {
+        const scope = await createRequestExecutionScope({
+          req,
+          sessionStore,
+          leaseRegistry,
+        });
+        return await executeRequestScope(scope);
+      });
+    } catch (error) {
+      return finalizeThrownRequestError(error);
+    }
   }
 
   async function executeRequestScope(
