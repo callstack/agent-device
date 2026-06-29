@@ -101,3 +101,22 @@ export function unsupportedHintForDevice(command: string, device: DeviceInfo): s
 export function listCapabilityCommands(): string[] {
   return Object.keys(COMMAND_CAPABILITY_MATRIX).sort();
 }
+
+/**
+ * The platform families that DO support `command`, derived from the capability
+ * matrix (a family counts when it has at least one supported device kind). Used
+ * by the typed-error graft to populate `DaemonError.supportedOn` on platform
+ * mismatches. Returns `[]` for commands with no capability row (supported
+ * everywhere) so callers can omit the signal.
+ */
+export function supportedPlatformsForCommand(command: string): string[] {
+  const capability = COMMAND_CAPABILITY_MATRIX[command];
+  if (!capability) return [];
+  const families: Array<keyof CommandCapability> = ['apple', 'android', 'linux', 'web'];
+  const supported: string[] = [];
+  for (const family of families) {
+    const kinds = capability[family] as KindMatrix | undefined;
+    if (kinds && Object.values(kinds).some((value) => value === true)) supported.push(family);
+  }
+  return supported;
+}

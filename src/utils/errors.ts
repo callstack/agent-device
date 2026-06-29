@@ -144,6 +144,24 @@ function stripDiagnosticMeta(
   return Object.keys(output).length > 0 ? output : undefined;
 }
 
+/**
+ * Conservative retriability policy for the Phase 2 typed-error graft. Returns
+ * `true` only for codes that are clearly transient (a retry can succeed without
+ * the caller changing anything) and `undefined` for ambiguous/deterministic
+ * codes — so the error wire shape is unchanged unless we have a confident answer.
+ * Intentionally small; extend as codes gain a clear retriability verdict.
+ */
+export function retriableForErrorCode(code: string): boolean | undefined {
+  switch (code) {
+    // The device is healthy but currently leased/busy — the same request can
+    // succeed once it frees up.
+    case 'DEVICE_IN_USE':
+      return true;
+    default:
+      return undefined;
+  }
+}
+
 export function defaultHintForCode(code: string): string | undefined {
   switch (code) {
     case 'INVALID_ARGS':

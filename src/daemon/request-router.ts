@@ -2,9 +2,10 @@ import {
   type DeviceInventoryProvider,
   withTargetDeviceResolutionScope,
 } from '../core/dispatch-resolve.ts';
-import { AppError, normalizeError } from '../utils/errors.ts';
+import { AppError, normalizeError, retriableForErrorCode } from '../utils/errors.ts';
+import { supportedPlatformsForCommand } from '../core/capabilities.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
-import type { ResponseCost } from '../contracts.ts';
+import type { DaemonError, ResponseCost } from '../contracts.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './types.ts';
 import { SessionStore } from './session-store.ts';
 import { noActiveSessionError } from './handlers/response.ts';
@@ -102,13 +103,21 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       },
       async () => {
         const response = await runRequestWithinScope(req);
+        // Phase 2 (typed errors) graft: enrich error responses with additive,
+        // machine-readable signals — `supportedOn` for platform mismatches and
+        // `retriable` for transient failures — so an agent self-corrects without a
+        // wasted round-trip. Returned unchanged when neither applies, so the
+        // default error wire shape is preserved.
+        if (!response.ok) {
+          return { ok: false, error: enrichDaemonError(req.command, response.error) };
+        }
         // Phase 4 (agent-cost) graft: cost is purely additive and opt-in. With
-        // the flag off — or on an error response — the serialized DaemonResponse
-        // is byte-identical to today (Maestro `.ad` recompare diffs it). Mirrors
-        // the conditional `registerDownloadableArtifacts` spread in
-        // request-finalization. Runs inside the diagnostics scope so it can read
-        // this request's accumulated runner-round-trip tally.
-        if (!req.meta?.includeCost || !response.ok) return response;
+        // the flag off the serialized DaemonResponse is byte-identical to today
+        // (Maestro `.ad` recompare diffs it). Mirrors the conditional
+        // `registerDownloadableArtifacts` spread in request-finalization. Runs
+        // inside the diagnostics scope so it can read this request's accumulated
+        // runner-round-trip tally.
+        if (!req.meta?.includeCost) return response;
         const cost: ResponseCost = {
           wallClockMs: Date.now() - start,
           runnerRoundTrips: countDiagnosticEventsByPhase(RUNNER_ROUND_TRIP_PHASES),
@@ -300,4 +309,22 @@ function finalizeThrownRequestError(error: unknown): DaemonResponse {
     logPath: logPathOnFailure,
   });
   return { ok: false, error: normalizedError };
+}
+
+// Phase 2 typed-error graft: add machine-readable signals to an error response.
+// Returns the error unchanged unless a signal applies, so the default wire shape
+// is preserved for the common codes.
+function enrichDaemonError(command: string, error: DaemonError): DaemonError {
+  const supportedPlatforms =
+    error.code === 'UNSUPPORTED_OPERATION' || error.code === 'UNSUPPORTED_PLATFORM'
+      ? supportedPlatformsForCommand(command)
+      : [];
+  const supportedOn = supportedPlatforms.length > 0 ? supportedPlatforms.join(', ') : undefined;
+  const retriable = retriableForErrorCode(error.code);
+  if (supportedOn === undefined && retriable === undefined) return error;
+  return {
+    ...error,
+    ...(retriable !== undefined ? { retriable } : {}),
+    ...(supportedOn !== undefined ? { supportedOn } : {}),
+  };
 }
