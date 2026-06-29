@@ -24,7 +24,7 @@ export function isFlakyReplayTestResult(
 export function replayTestDisplayNameWithFile(result: ReplaySuiteTestResult): string {
   const title = replayTestTitle(result);
   const filename = path.basename(result.file);
-  const base = title && title.length > 0 ? `${JSON.stringify(title)} in ${filename}` : filename;
+  const base = title && title.length > 0 ? title : filename;
   return `${base}${formatReplayTestShardSuffix(result)}`;
 }
 
@@ -39,6 +39,10 @@ export function replayArtifactsLine(
   return 'artifactsDir' in result && result.artifactsDir
     ? `${label}: ${result.artifactsDir}`
     : undefined;
+}
+
+export function replayTestFailureFileLine(result: FailedReplayTestResult): string | undefined {
+  return replayTestTitle(result) ? `file: ${path.basename(result.file)}` : undefined;
 }
 
 export function replayErrorHintLine(error: ReplayTestError): string | undefined {
@@ -96,6 +100,10 @@ export function appendReplayTestShardMetadata(
     lines,
     typeof result.deviceId === 'string' ? `deviceId: ${result.deviceId}` : undefined,
   );
+  appendOptionalLine(
+    lines,
+    typeof result.deviceName === 'string' ? `deviceName: ${result.deviceName}` : undefined,
+  );
 }
 
 export function replayTestWarningLines(result: ReplaySuiteTestResult): string[] {
@@ -132,6 +140,13 @@ function replayTestTitle(result: ReplaySuiteTestResult): string | undefined {
 export function formatReplayTestShardSuffix(result: ReplaySuiteTestResult): string {
   if (!('shardIndex' in result) || typeof result.shardIndex !== 'number') return '';
   const shardCount = typeof result.shardCount === 'number' ? result.shardCount : '?';
-  const device = typeof result.deviceId === 'string' ? ` ${result.deviceId}` : '';
-  return ` [shard ${result.shardIndex + 1}/${shardCount}${device}]`;
+  const device = replayTestShardDeviceName(result);
+  return ` [${result.shardIndex + 1}/${shardCount}${device ? ` ${device}` : ''}]`;
+}
+
+function replayTestShardDeviceName(result: ReplaySuiteTestResult): string | undefined {
+  const name = 'deviceName' in result ? result.deviceName?.trim() : undefined;
+  if (name) return name;
+  const id = 'deviceId' in result ? result.deviceId?.trim() : undefined;
+  return id || undefined;
 }

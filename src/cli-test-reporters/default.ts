@@ -13,6 +13,7 @@ import {
   replayErrorHintLine,
   replayErrorLogLine,
   replayTestDisplayNameWithFile,
+  replayTestFailureFileLine,
   type FailedReplayTestResult,
   type PassedReplayTestResult,
 } from './format.ts';
@@ -37,9 +38,29 @@ function renderReplayTestSummary(
 
 function formatReplayTestSummaryLine(data: ReplaySuiteResult, flakyCount: number): string {
   const durationMs = typeof data.durationMs === 'number' ? data.durationMs : undefined;
+  const useColor = supportsColor();
+  const passed = formatReplaySummaryPassed(data.passed, { useColor });
+  const total = formatReplaySummaryTotal(data.total, { useColor });
+  const failedSuffix = data.failed > 0 ? `, ${data.failed} failed` : '';
   const flakySuffix = flakyCount > 0 ? `, ${flakyCount} flaky` : '';
-  const durationSuffix = durationMs !== undefined ? ` in ${formatDurationSeconds(durationMs)}` : '';
-  return `Test summary: ${data.passed} passed, ${data.failed} failed${flakySuffix}${durationSuffix}`;
+  const durationSuffix =
+    durationMs !== undefined ? ` in ${formatReplayDuration(durationMs, { useColor })}` : '';
+  return `Test summary: ${passed} ${total}${failedSuffix}${flakySuffix}${durationSuffix}`;
+}
+
+function formatReplaySummaryPassed(passed: number, options: { useColor?: boolean } = {}): string {
+  const text = `${passed} passed`;
+  return options.useColor ? colorize(text, 'green') : text;
+}
+
+function formatReplaySummaryTotal(total: number, options: { useColor?: boolean } = {}): string {
+  const text = `(${total})`;
+  return options.useColor ? colorize(text, 'dim') : text;
+}
+
+function formatReplayDuration(durationMs: number, options: { useColor?: boolean } = {}): string {
+  const duration = formatDurationSeconds(durationMs);
+  return options.useColor ? colorize(duration, 'yellow') : duration;
 }
 
 function replayFlakyStatusIcon(): string {
@@ -97,6 +118,8 @@ function renderReplayFailureBody(
   context: ReplayTestReporterContext,
   indent: string,
 ): void {
+  const fileLine = replayTestFailureFileLine(result);
+  if (fileLine) context.writeStdout(`${indent}${fileLine}\n`);
   context.writeStdout(`${indent}${result.error?.message ?? 'Unknown test failure'}\n`);
   for (const line of replayFailureConsoleLines(result)) {
     context.writeStdout(`${indent}${line}\n`);
