@@ -21,6 +21,7 @@ import type { LeaseBackend, SessionRuntimeHints } from '../../contracts.ts';
 import type { CliFlags } from '../../utils/cli-flags.ts';
 import type { AgentDeviceClient, Lease } from '../../client.ts';
 import type { MetroPrepareKind } from '../../client-metro.ts';
+import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 
 const leaseDeferredCommands = new Set([
   'connect',
@@ -31,6 +32,12 @@ const leaseDeferredCommands = new Set([
   'session',
 ]);
 const runtimeDeferredCommands = new Set(['open']);
+const proxyLeaseAllocatingCommands: ReadonlySet<string> = new Set([
+  PUBLIC_COMMANDS.open,
+  PUBLIC_COMMANDS.install,
+  PUBLIC_COMMANDS.reinstall,
+  INTERNAL_COMMANDS.installSource,
+]);
 export const PROXY_REMOTE_LEASE_TTL_MS = 5 * 60 * 1000;
 
 export async function materializeRemoteConnectionForCommand(options: {
@@ -661,7 +668,7 @@ async function resolveProxyLeaseState(options: {
   flags: CliFlags;
   leaseBackend?: LeaseBackend;
 }): Promise<{ state: RemoteConnectionState; device?: DeviceInfo }> {
-  if (options.command !== 'open') {
+  if (!proxyLeaseAllocatingCommands.has(options.command)) {
     if (options.state.leaseId && options.state.deviceKey) return { state: options.state };
     throw new AppError(
       'INVALID_ARGS',

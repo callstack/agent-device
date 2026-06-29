@@ -701,6 +701,73 @@ test('proxy open resolves device key before allocating lease', async () => {
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('proxy install allocates a device lease before dispatch', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-proxy-install-'));
+  const stateDir = path.join(tempRoot, '.state');
+  const remoteConfigPath = path.join(tempRoot, 'remote.json');
+  fs.writeFileSync(remoteConfigPath, JSON.stringify({ daemonBaseUrl: 'https://daemon.example' }));
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      version: 1,
+      session: 'adc-proxy',
+      remoteConfigPath,
+      remoteConfigHash: hashRemoteConfigFile(remoteConfigPath),
+      daemon: { baseUrl: 'https://daemon.example' },
+      tenant: 'proxy',
+      runId: 'proxy-client-1',
+      leaseProvider: 'proxy',
+      clientId: 'client-1',
+      connectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  });
+  let allocateRequest: Parameters<AgentDeviceClient['leases']['allocate']>[0] | undefined;
+
+  const materialized = await materializeRemoteConnectionForCommand({
+    command: 'install',
+    flags: {
+      json: true,
+      help: false,
+      version: false,
+      stateDir,
+      remoteConfig: remoteConfigPath,
+      daemonBaseUrl: 'https://daemon.example',
+      tenant: 'proxy',
+      runId: 'proxy-client-1',
+      session: 'adc-proxy',
+      platform: 'android',
+    },
+    client: createTestClient({
+      allocate: async (request) => {
+        allocateRequest = request;
+        return {
+          leaseId: 'android-lease-1',
+          tenantId: request.tenant,
+          runId: request.runId,
+          backend: request.leaseBackend ?? 'android-instance',
+          leaseProvider: request.leaseProvider,
+          clientId: request.clientId,
+          deviceKey: request.deviceKey,
+        };
+      },
+    }),
+  });
+
+  assert.equal(allocateRequest?.leaseProvider, 'proxy');
+  assert.equal(allocateRequest?.clientId, 'client-1');
+  assert.equal(allocateRequest?.deviceKey, 'android:mobile:emulator-5554');
+  assert.equal(allocateRequest?.ttlMs, PROXY_REMOTE_LEASE_TTL_MS);
+  assert.equal(allocateRequest?.leaseBackend, 'android-instance');
+  assert.equal(materialized.flags.leaseId, 'android-lease-1');
+  assert.equal(materialized.flags.serial, 'emulator-5554');
+  const state = readRemoteConnectionState({ stateDir, session: 'adc-proxy' });
+  assert.equal(state?.leaseId, 'android-lease-1');
+  assert.equal(state?.deviceKey, 'android:mobile:emulator-5554');
+  assert.equal(state?.leaseProvider, 'proxy');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('proxy commands without active device lease fail before allocation', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-proxy-closed-'));
   const stateDir = path.join(tempRoot, '.state');

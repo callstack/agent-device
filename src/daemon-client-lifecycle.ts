@@ -163,7 +163,7 @@ async function ensureRemoteDaemon(settings: DaemonClientSettings): Promise<Ensur
   }
   throw new AppError('COMMAND_FAILED', 'Remote daemon is unavailable', {
     daemonBaseUrl: settings.remoteBaseUrl,
-    hint: 'Verify AGENT_DEVICE_DAEMON_BASE_URL points to a reachable daemon with GET /health and POST /rpc.',
+    hint: 'Verify AGENT_DEVICE_DAEMON_BASE_URL points to a reachable daemon with GET /health and POST /rpc. If this CLI was connected with connect proxy, run agent-device disconnect to return to the local daemon.',
   });
 }
 

@@ -871,6 +871,37 @@ test('sendToDaemon rejects remote daemon RPC protocol mismatches before RPC', as
   }
 });
 
+test('sendToDaemon hints to disconnect when a remote daemon is unavailable', async () => {
+  const restoreHttpRequest = mockEventHttpRequest(({ res }) => {
+    res.statusCode = 503;
+    res.emit('end');
+  });
+
+  try {
+    await withRemoteDaemonEnv(async () => {
+      let error: unknown;
+      try {
+        await sendToDaemon({
+          session: 'default',
+          command: 'session',
+          positionals: ['list'],
+          flags: {},
+          meta: { requestId: 'req-remote-unavailable' },
+        });
+      } catch (caught) {
+        error = caught;
+      }
+
+      assert.ok(error instanceof Error);
+      assert.equal((error as any).code, 'COMMAND_FAILED');
+      assert.equal(error.message, 'Remote daemon is unavailable');
+      assert.match(String((error as any).details?.hint ?? ''), /agent-device disconnect/);
+    });
+  } finally {
+    restoreHttpRequest();
+  }
+});
+
 test('sendToDaemon sends lease helpers as top-level JSON-RPC methods over HTTP', async () => {
   const rpcRequests: Record<string, unknown>[] = [];
   const originalHttpRequest = http.request;
