@@ -36,12 +36,6 @@ for (let index = 2; index < process.argv.length; index += 1) {
     index += 1;
     continue;
   }
-  if (arg === '--open') {
-    console.error(
-      'The test-app Maestro suite no longer supports --open. The Maestro flow launches the app for each test attempt.',
-    );
-    process.exit(1);
-  }
   if (arg === '--close') {
     options.close = true;
     continue;
