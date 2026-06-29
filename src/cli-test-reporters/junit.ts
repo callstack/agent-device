@@ -1,8 +1,7 @@
-import fs from 'node:fs';
 import path from 'node:path';
 import type { ReplaySuiteResult, ReplaySuiteTestResult } from '../daemon/types.ts';
 import { AppError } from '../utils/errors.ts';
-import type { ReplayTestReporter } from './types.ts';
+import type { ReplayTestReporterContext, ReplayTestReporterFactory } from './types.ts';
 import {
   appendOptionalLine,
   appendReplayErrorDetails,
@@ -19,19 +18,37 @@ import {
   type FailedReplayTestResult,
 } from './format.ts';
 
-export function createJunitReplayTestReporter(reportPath: string): ReplayTestReporter {
+export const createJunitReplayTestReporter: ReplayTestReporterFactory = (options) => {
+  const reportPath = readJunitReportPath(options);
   return {
     name: 'junit',
-    onSuiteEnd: (suite) => writeReplayJunitReport(reportPath, suite),
+    onSuiteEnd: (suite, context) => writeReplayJunitReport(reportPath, suite, context),
     getExitCode: getReplayTestExitCode,
   };
+};
+
+function readJunitReportPath(options: unknown): string {
+  if (options && typeof options === 'object' && !Array.isArray(options)) {
+    const output = (options as Record<string, unknown>).output;
+    if (typeof output === 'string' && output.trim().length > 0) {
+      return output;
+    }
+  }
+  throw new AppError(
+    'INVALID_ARGS',
+    'The junit test reporter requires an output path. Use --reporter junit:<path>.',
+  );
 }
 
-function writeReplayJunitReport(reportPath: string, suite: ReplaySuiteResult): void {
+function writeReplayJunitReport(
+  reportPath: string,
+  suite: ReplaySuiteResult,
+  context: ReplayTestReporterContext,
+): void {
   const directory = path.dirname(reportPath);
   try {
-    fs.mkdirSync(directory, { recursive: true });
-    fs.writeFileSync(reportPath, buildReplayJunitXml(suite), 'utf8');
+    context.mkdir(directory);
+    context.writeFile(reportPath, buildReplayJunitXml(suite));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new AppError(

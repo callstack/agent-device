@@ -697,7 +697,7 @@ test('test command supports explicit reporter lists', async () => {
 
   try {
     const result = await runCliCapture(
-      ['test', './suite', '--reporter', `junit:${reportPath}`],
+      ['test', './suite', '--reporter', JSON.stringify(['junit', { output: reportPath }])],
       async () => makeReplaySuiteResponse(),
     );
 
@@ -733,7 +733,7 @@ test('test command loads custom reporter modules with JSON options', async () =>
       'utf8',
     );
 
-    const reporterSpec = `${reporterPath}:${JSON.stringify({ output: outputPath })}`;
+    const reporterSpec = JSON.stringify([reporterPath, { output: outputPath }]);
     const result = await runCliCapture(['test', './suite', '--reporter', reporterSpec], async () =>
       makeReplaySuiteResponse(),
     );

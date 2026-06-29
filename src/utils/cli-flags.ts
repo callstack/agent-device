@@ -948,9 +948,9 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     names: ['--reporter'],
     type: 'string',
     multiple: true,
-    usageLabel: '--reporter <name[:options]>',
+    usageLabel: '--reporter <spec>',
     usageDescription:
-      'Test: add a replay suite reporter; built-ins are default and junit:<path>; custom reporters are file paths with optional :<json> options (repeatable)',
+      'Test: add a replay suite reporter; use default, junit:<path>, a custom reporter path, or JSON [nameOrPath, options] (repeatable)',
   },
   {
     key: 'reportJunit',

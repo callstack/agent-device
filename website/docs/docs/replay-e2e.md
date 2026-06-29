@@ -108,26 +108,27 @@ Custom reporters are CLI-only presentation adapters. The daemon still returns th
 ```bash
 agent-device test ./workflows --reporter ./scripts/replay-reporter.mjs
 agent-device test ./workflows --reporter './scripts/replay-reporter.mjs:{"output":"./tmp/report.txt"}'
+agent-device test ./workflows --reporter '["./scripts/replay-reporter.mjs",{"output":"./tmp/report.txt"}]'
 ```
 
-Reporter modules can export a reporter object, `reporter`, `createReporter`, or a default factory. Factories receive parsed JSON options and load context:
+Reporter options can use either the compact `path:{"key":"value"}` form or the JSON tuple form `["path", options]`. The tuple form also works for built-ins, for example `--reporter '["junit",{"output":"./tmp/junit.xml"}]'`, and avoids ambiguous path parsing.
+
+Reporter modules can export a reporter object, `reporter`, `createReporter`, or a default factory. Factories receive parsed JSON options and load context. Reporter hooks receive an IO context with `cwd`, `writeStdout`, `writeStderr`, `mkdir`, and `writeFile` helpers:
 
 ```js
 // scripts/replay-reporter.mjs
-import fs from 'node:fs';
-
-export default function createReporter(options, context) {
+export default function createReporter(options, loadContext) {
   return {
     name: 'summary-file',
-    onSuiteEnd(suite) {
-      fs.writeFileSync(
+    onSuiteEnd(suite, context) {
+      context.writeFile(
         options.output,
         JSON.stringify(
           {
             total: suite.total,
             passed: suite.passed,
             failed: suite.failed,
-            modulePath: context.modulePath,
+            modulePath: loadContext.modulePath,
           },
           null,
           2,
@@ -156,6 +157,8 @@ const createReporter: ReplayTestReporterFactory = (options) => ({
 export default createReporter;
 ```
 
+The CLI loads reporter modules with Node dynamic `import()`. Use `.mjs` or `.js` files at runtime; for TypeScript, compile the reporter to JavaScript before passing it to `--reporter`. Loading `.ts` files directly depends on Node's type-stripping behavior and is not part of the supported reporter contract.
+
 The supported hook today is final-result reporting through `onSuiteEnd`. `getExitCode` can override whether the finished suite exits successfully; when no reporter supplies one, failed tests exit with `1`. The `onProgress` hook is part of the reporter interface for live reporters, but the CLI currently invokes reporters after the suite result is available.
 
 ## Parametrise `.ad` scripts
@@ -174,12 +177,12 @@ click "label=${APP_ID}"
 
 ### Precedence
 
-| Source | Priority | Example |
-|---|---|---|
-| CLI `-e KEY=VALUE` | highest | `agent-device test flow.ad -e APP_ID=demo` |
-| Shell env prefixed `AD_VAR_` | | `AD_VAR_APP_ID=demo agent-device test flow.ad` (imported as `APP_ID`) |
-| Script `env KEY=VALUE` | | `env APP_ID=settings` in header |
-| Built-ins | runtime | `AD_PLATFORM`, `AD_SESSION`, `AD_FILENAME`, `AD_DEVICE`, `AD_ARTIFACTS` |
+| Source                       | Priority | Example                                                                 |
+| ---------------------------- | -------- | ----------------------------------------------------------------------- |
+| CLI `-e KEY=VALUE`           | highest  | `agent-device test flow.ad -e APP_ID=demo`                              |
+| Shell env prefixed `AD_VAR_` |          | `AD_VAR_APP_ID=demo agent-device test flow.ad` (imported as `APP_ID`)   |
+| Script `env KEY=VALUE`       |          | `env APP_ID=settings` in header                                         |
+| Built-ins                    | runtime  | `AD_PLATFORM`, `AD_SESSION`, `AD_FILENAME`, `AD_DEVICE`, `AD_ARTIFACTS` |
 
 ### Built-ins
 

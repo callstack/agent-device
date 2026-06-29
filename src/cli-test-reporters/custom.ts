@@ -2,21 +2,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { AppError } from '../utils/errors.ts';
-import type {
-  ReplayTestReporter,
-  ReplayTestReporterFactory,
-  ReplayTestReporterLoadContext,
-} from './types.ts';
+import type { ReplayTestReporter, ReplayTestReporterFactory } from './types.ts';
+import type { ReplayTestReporterSpec } from './spec.ts';
 
 type CustomReporterModule = {
   default?: unknown;
   createReporter?: unknown;
   reporter?: unknown;
-};
-
-type CustomReporterSpec = {
-  modulePath: string;
-  options: unknown;
 };
 
 const OPTIONAL_REPORTER_HOOKS = [
@@ -25,61 +17,30 @@ const OPTIONAL_REPORTER_HOOKS = [
   'getExitCode',
 ] as const satisfies readonly (keyof ReplayTestReporter)[];
 
-export function isCustomReplayTestReporterSpec(spec: string): boolean {
-  const modulePath = readCustomReporterModulePath(spec);
-  return (
-    modulePath.startsWith('.') ||
-    modulePath.startsWith('/') ||
-    modulePath.startsWith('~') ||
-    modulePath.startsWith('file:')
-  );
+export async function createCustomReplayTestReporter(
+  spec: Extract<ReplayTestReporterSpec, { kind: 'custom' }>,
+): Promise<ReplayTestReporter> {
+  const modulePath = resolveCustomReporterModulePath(spec.modulePath);
+  const module = await importCustomReporterModule(modulePath);
+  const factory = readCustomReporterFactory(module, spec.modulePath);
+  const reporter = await factory(spec.options, { spec: spec.raw, modulePath });
+  return validateCustomReplayTestReporter(reporter, spec.modulePath);
 }
 
-export async function createCustomReplayTestReporter(spec: string): Promise<ReplayTestReporter> {
-  const customSpec = splitCustomReplayTestReporterSpec(spec);
-  const modulePath = resolveCustomReporterModulePath(customSpec.modulePath);
-  const module = await importCustomReporterModule(modulePath);
+function readCustomReporterFactory(
+  module: CustomReporterModule,
+  modulePath: string,
+): ReplayTestReporterFactory {
   const exported = module.createReporter ?? module.default ?? module.reporter;
   if (!exported) {
     throw new AppError(
       'INVALID_ARGS',
-      `Custom test reporter ${customSpec.modulePath} must export default, createReporter, or reporter.`,
+      `Custom test reporter ${modulePath} must export default, createReporter, or reporter.`,
     );
   }
-
-  const reporter =
-    typeof exported === 'function'
-      ? await (exported as ReplayTestReporterFactory)(customSpec.options, {
-          spec,
-          modulePath,
-        } satisfies ReplayTestReporterLoadContext)
-      : exported;
-
-  return validateCustomReplayTestReporter(reporter, customSpec.modulePath);
-}
-
-function splitCustomReplayTestReporterSpec(spec: string): CustomReporterSpec {
-  const optionsSeparator = spec.indexOf(':{');
-  if (optionsSeparator < 0) return { modulePath: spec.trim(), options: undefined };
-  const modulePath = readCustomReporterModulePath(spec);
-  const rawOptions = spec.slice(optionsSeparator + 1);
-  if (!modulePath) {
-    throw new AppError('INVALID_ARGS', 'Custom test reporter path cannot be empty.');
-  }
-  try {
-    return { modulePath, options: JSON.parse(rawOptions) };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new AppError(
-      'INVALID_ARGS',
-      `Invalid JSON options for custom test reporter ${modulePath}: ${message}`,
-    );
-  }
-}
-
-function readCustomReporterModulePath(spec: string): string {
-  const optionsSeparator = spec.indexOf(':{');
-  return (optionsSeparator < 0 ? spec : spec.slice(0, optionsSeparator)).trim();
+  return typeof exported === 'function'
+    ? (exported as ReplayTestReporterFactory)
+    : () => exported as ReplayTestReporter;
 }
 
 function resolveCustomReporterModulePath(modulePath: string): string {

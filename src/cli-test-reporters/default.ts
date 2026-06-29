@@ -2,7 +2,8 @@ import type { ReplaySuiteResult } from '../daemon/types.ts';
 import { replayTestFailureStepLines } from '../cli-test-trace.ts';
 import { formatDurationSeconds } from '../utils/duration-format.ts';
 import { colorize, supportsColor } from '../utils/output.ts';
-import type { ReplayTestReporter } from './types.ts';
+import { AppError } from '../utils/errors.ts';
+import type { ReplayTestReporterContext, ReplayTestReporterFactory } from './types.ts';
 import {
   getReplayTestExitCode,
   isDefinedString,
@@ -17,19 +18,25 @@ import {
   type PassedReplayTestResult,
 } from './format.ts';
 
-export function createDefaultReplayTestReporter(): ReplayTestReporter {
+export const createDefaultReplayTestReporter: ReplayTestReporterFactory = (options) => {
+  if (options !== undefined) {
+    throw new AppError('INVALID_ARGS', 'The default test reporter does not accept options.');
+  }
   return {
     name: 'default',
-    onSuiteEnd: (suite, context) => renderReplayTestSummary(suite, { debug: context.debug }),
+    onSuiteEnd: (suite, context) => renderReplayTestSummary(suite, context),
     getExitCode: getReplayTestExitCode,
   };
-}
+};
 
-function renderReplayTestSummary(data: ReplaySuiteResult, options: { debug?: boolean } = {}): void {
+function renderReplayTestSummary(
+  data: ReplaySuiteResult,
+  context: ReplayTestReporterContext,
+): void {
   const flaky = data.tests.filter(isFlakyReplayTestResult);
-  process.stdout.write(`${formatReplayTestSummaryLine(data, flaky.length)}\n`);
-  renderFailureDetails(data.tests.filter(isFailedReplayTestResult), { debug: options.debug });
-  renderFlakyTestSummary(flaky);
+  context.writeStdout(`${formatReplayTestSummaryLine(data, flaky.length)}\n`);
+  renderFailureDetails(data.tests.filter(isFailedReplayTestResult), context);
+  renderFlakyTestSummary(flaky, context);
 }
 
 function formatReplayTestSummaryLine(data: ReplaySuiteResult, flakyCount: number): string {
@@ -53,12 +60,15 @@ function replayFailureConsoleLines(result: FailedReplayTestResult): string[] {
   ].filter(isDefinedString);
 }
 
-function renderFlakyTestSummary(results: PassedReplayTestResult[]): void {
+function renderFlakyTestSummary(
+  results: PassedReplayTestResult[],
+  context: ReplayTestReporterContext,
+): void {
   if (results.length === 0) return;
-  process.stdout.write('\n');
-  process.stdout.write('Flaky tests:\n');
+  context.writeStdout('\n');
+  context.writeStdout('Flaky tests:\n');
   for (const result of results) {
-    process.stdout.write(
+    context.writeStdout(
       `  ${replayFlakyStatusIcon()} ${replayTestDisplayNameWithFile(result)} after ${result.attempts} attempts${formatFlakyReplayDurationSuffix(result)}\n`,
     );
     for (const failure of result.attemptFailures ?? []) {
@@ -66,7 +76,7 @@ function renderFlakyTestSummary(results: PassedReplayTestResult[]): void {
         typeof failure.durationMs === 'number'
           ? ` (${formatDurationSeconds(failure.durationMs)})`
           : '';
-      process.stdout.write(
+      context.writeStdout(
         `    attempt ${failure.attempt} failed${attemptDuration}: ${failure.message}\n`,
       );
     }
@@ -75,29 +85,29 @@ function renderFlakyTestSummary(results: PassedReplayTestResult[]): void {
 
 function renderFailureDetails(
   results: FailedReplayTestResult[],
-  options: { debug?: boolean } = {},
+  context: ReplayTestReporterContext,
 ): void {
   if (results.length === 0) return;
-  process.stdout.write('\n');
-  process.stdout.write('Failures:\n');
+  context.writeStdout('\n');
+  context.writeStdout('Failures:\n');
   for (const result of results) {
-    process.stdout.write(`  ${replayTestDisplayNameWithFile(result)}\n`);
-    renderReplayFailureBody(result, { debug: options.debug, indent: '    ' });
+    context.writeStdout(`  ${replayTestDisplayNameWithFile(result)}\n`);
+    renderReplayFailureBody(result, context, '    ');
   }
 }
 
 function renderReplayFailureBody(
   result: FailedReplayTestResult,
-  options: { debug?: boolean; indent: string },
+  context: ReplayTestReporterContext,
+  indent: string,
 ): void {
-  const { debug, indent } = options;
-  process.stdout.write(`${indent}${result.error?.message ?? 'Unknown test failure'}\n`);
+  context.writeStdout(`${indent}${result.error?.message ?? 'Unknown test failure'}\n`);
   for (const line of replayFailureConsoleLines(result)) {
-    process.stdout.write(`${indent}${line}\n`);
+    context.writeStdout(`${indent}${line}\n`);
   }
-  if (!debug) return;
+  if (!context.debug) return;
   for (const line of replayTestFailureStepLines(result)) {
-    process.stdout.write(`${indent}${line}\n`);
+    context.writeStdout(`${indent}${line}\n`);
   }
 }
 
