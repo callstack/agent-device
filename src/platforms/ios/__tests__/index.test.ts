@@ -713,12 +713,15 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after retry ex
 
   try {
     const outPath = path.join(tmpDir, 'out.png');
-    await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, outPath, 'com.example.app', {
-      ensureBooted: ensureBootedSimulator,
-      prepareStatusBarForScreenshot: prepareStatusBarForScreenshot,
-      captureWithRetry: captureSimulatorScreenshotWithRetry,
-      captureWithRunner: captureScreenshotViaRunner,
-      shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
+    await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, outPath, {
+      appBundleId: 'com.example.app',
+      deps: {
+        ensureBooted: ensureBootedSimulator,
+        prepareStatusBarForScreenshot: prepareStatusBarForScreenshot,
+        captureWithRetry: captureSimulatorScreenshotWithRetry,
+        captureWithRunner: captureScreenshotViaRunner,
+        shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
+      },
     });
     assert.equal(ensureBootedCalls, 1);
     assert.equal(mockRetryWithPolicy.mock.calls.length, 1);
@@ -754,12 +757,15 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after simctl s
 
   try {
     const outPath = path.join(tmpDir, 'out.png');
-    await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, outPath, 'com.example.app', {
-      ensureBooted: ensureBootedSimulator,
-      prepareStatusBarForScreenshot: prepareStatusBarForScreenshot,
-      captureWithRetry: captureSimulatorScreenshotWithRetry,
-      captureWithRunner: captureScreenshotViaRunner,
-      shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
+    await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, outPath, {
+      appBundleId: 'com.example.app',
+      deps: {
+        ensureBooted: ensureBootedSimulator,
+        prepareStatusBarForScreenshot: prepareStatusBarForScreenshot,
+        captureWithRetry: captureSimulatorScreenshotWithRetry,
+        captureWithRunner: captureScreenshotViaRunner,
+        shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
+      },
     });
     assert.equal(mockRunIosRunnerCommand.mock.calls.length, 1);
     assert.equal(await fs.readFile(outPath, 'utf8'), 'runner-timeout');
@@ -775,11 +781,9 @@ test('captureSimulatorScreenshotWithFallback continues when status bar preparati
   mockEnsureBootedSimulator.mockResolvedValue(undefined);
   mockOpenIosSimulatorApp.mockResolvedValue(undefined);
   mockRetryWithPolicy.mockResolvedValue(undefined);
-  await captureSimulatorScreenshotWithFallback(
-    IOS_TEST_SIMULATOR,
-    '/tmp/out.png',
-    'com.example.app',
-  );
+  await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
+    appBundleId: 'com.example.app',
+  });
   assert.equal(mockRetryWithPolicy.mock.calls.length > 0, true);
   assert.equal(mockRunIosRunnerCommand.mock.calls.length, 0);
 });
@@ -789,15 +793,10 @@ test('captureSimulatorScreenshotWithFallback can skip session-backed simulator b
   mockPrepareStatusBarForScreenshot.mockResolvedValue(async () => {});
   mockRetryWithPolicy.mockResolvedValue(undefined);
 
-  await captureSimulatorScreenshotWithFallback(
-    IOS_TEST_SIMULATOR,
-    '/tmp/out.png',
-    'com.example.app',
-    undefined,
-    undefined,
-    undefined,
-    { skipBootCheck: true },
-  );
+  await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
+    appBundleId: 'com.example.app',
+    skipBootCheck: true,
+  });
 
   assert.equal(mockEnsureBootedSimulator.mock.calls.length, 0);
   assert.equal(mockRetryWithPolicy.mock.calls.length, 1);
@@ -819,21 +818,17 @@ test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after
   });
   const captureWithRunner = vi.fn(async () => {});
 
-  await captureSimulatorScreenshotWithFallback(
-    IOS_TEST_SIMULATOR,
-    '/tmp/out.png',
-    'com.example.app',
-    undefined,
-    {
+  await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
+    appBundleId: 'com.example.app',
+    skipBootCheck: true,
+    deps: {
       ensureBooted,
       prepareStatusBarForScreenshot,
       captureWithRetry,
       captureWithRunner,
       shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
     },
-    undefined,
-    { skipBootCheck: true },
-  );
+  });
 
   assert.equal(ensureBooted.mock.calls.length, 1);
   assert.equal(captureWithRetry.mock.calls.length, 2);
@@ -859,21 +854,17 @@ test('captureSimulatorScreenshotWithFallback keeps runner fallback after skipped
   });
   const captureWithRunner = vi.fn(async () => {});
 
-  await captureSimulatorScreenshotWithFallback(
-    IOS_TEST_SIMULATOR,
-    '/tmp/out.png',
-    'com.example.app',
-    undefined,
-    {
+  await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
+    appBundleId: 'com.example.app',
+    skipBootCheck: true,
+    deps: {
       ensureBooted,
       prepareStatusBarForScreenshot,
       captureWithRetry,
       captureWithRunner,
       shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
     },
-    undefined,
-    { skipBootCheck: true },
-  );
+  });
 
   assert.equal(ensureBooted.mock.calls.length, 1);
   assert.equal(captureWithRetry.mock.calls.length, 2);
@@ -887,11 +878,9 @@ test('captureSimulatorScreenshotWithFallback ignores status bar restore failures
   mockEnsureBootedSimulator.mockResolvedValue(undefined);
   mockOpenIosSimulatorApp.mockResolvedValue(undefined);
   mockRetryWithPolicy.mockResolvedValue(undefined);
-  await captureSimulatorScreenshotWithFallback(
-    IOS_TEST_SIMULATOR,
-    '/tmp/out.png',
-    'com.example.app',
-  );
+  await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
+    appBundleId: 'com.example.app',
+  });
   assert.equal(mockRetryWithPolicy.mock.calls.length > 0, true);
   assert.equal(mockRunIosRunnerCommand.mock.calls.length, 0);
 });
@@ -929,18 +918,16 @@ test('captureSimulatorScreenshotWithFallback emits fallback diagnostic before us
           }
           throw new Error(`Unexpected xcrun args: ${args.join(' ')}`);
         });
-        await captureSimulatorScreenshotWithFallback(
-          IOS_TEST_SIMULATOR,
-          '/tmp/out.png',
-          'com.example.app',
-          {
+        await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
+          appBundleId: 'com.example.app',
+          deps: {
             ensureBooted: ensureBootedSimulator,
             prepareStatusBarForScreenshot: prepareStatusBarForScreenshot,
             captureWithRetry: captureSimulatorScreenshotWithRetry,
             captureWithRunner: captureScreenshotViaRunner,
             shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
           },
-        );
+        });
       },
     );
 
@@ -981,7 +968,9 @@ test('captureSimulatorScreenshotWithFallback uses simulator runner fallback by d
 
   try {
     const outPath = path.join(tmpDir, 'out.png');
-    await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, outPath, 'com.example.app');
+    await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, outPath, {
+      appBundleId: 'com.example.app',
+    });
     assert.equal(mockRunIosRunnerCommand.mock.calls.length, 1);
     assert.equal(await fs.readFile(outPath, 'utf8'), 'default-fallback');
   } finally {

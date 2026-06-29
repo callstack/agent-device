@@ -41,11 +41,11 @@ type SimulatorScreenshotFlowDeps = {
 };
 
 type SimulatorScreenshotFlowOptions = {
+  appBundleId?: string;
+  fullscreen?: boolean;
+  runnerOptions?: AppleRunnerCommandOptions;
   skipBootCheck?: boolean;
-};
-
-type IosScreenshotOptions = {
-  skipSimulatorBootCheck?: boolean;
+  deps?: SimulatorScreenshotFlowDeps;
 };
 
 const defaultSimulatorScreenshotFlowDeps: SimulatorScreenshotFlowDeps = {
@@ -58,25 +58,20 @@ const defaultSimulatorScreenshotFlowDeps: SimulatorScreenshotFlowDeps = {
 export async function screenshotIos(
   device: DeviceInfo,
   outPath: string,
-  appBundleId?: string,
-  fullscreen?: boolean,
-  runnerOptions?: AppleRunnerCommandOptions,
-  options: IosScreenshotOptions = {},
+  options: Omit<SimulatorScreenshotFlowOptions, 'deps'> = {},
 ): Promise<void> {
   if (device.platform === 'macos') {
-    await captureScreenshotViaRunner(device, outPath, appBundleId, fullscreen, runnerOptions);
+    await captureScreenshotViaRunner(
+      device,
+      outPath,
+      options.appBundleId,
+      options.fullscreen,
+      options.runnerOptions,
+    );
     return;
   }
   if (device.kind === 'simulator') {
-    await captureSimulatorScreenshotWithFallback(
-      device,
-      outPath,
-      appBundleId,
-      fullscreen,
-      undefined,
-      runnerOptions,
-      { skipBootCheck: options.skipSimulatorBootCheck },
-    );
+    await captureSimulatorScreenshotWithFallback(device, outPath, options);
     return;
   }
 
@@ -93,16 +88,18 @@ export async function screenshotIos(
     emitScreenshotFallbackDiagnostic(device, 'devicectl_screenshot', error);
   }
 
-  await captureScreenshotViaRunner(device, outPath, appBundleId, fullscreen, runnerOptions);
+  await captureScreenshotViaRunner(
+    device,
+    outPath,
+    options.appBundleId,
+    options.fullscreen,
+    options.runnerOptions,
+  );
 }
 
 export async function captureSimulatorScreenshotWithFallback(
   device: DeviceInfo,
   outPath: string,
-  appBundleId?: string,
-  fullscreenOrDeps?: boolean | SimulatorScreenshotFlowDeps,
-  deps: SimulatorScreenshotFlowDeps = defaultSimulatorScreenshotFlowDeps,
-  runnerOptions?: AppleRunnerCommandOptions,
   options: SimulatorScreenshotFlowOptions = {},
 ): Promise<void> {
   if (device.kind !== 'simulator') {
@@ -112,40 +109,44 @@ export async function captureSimulatorScreenshotWithFallback(
     );
   }
 
-  const fullscreen = typeof fullscreenOrDeps === 'boolean' ? fullscreenOrDeps : undefined;
-  const effectiveDeps =
-    typeof fullscreenOrDeps === 'object' && fullscreenOrDeps !== null ? fullscreenOrDeps : deps;
+  const deps = options.deps ?? defaultSimulatorScreenshotFlowDeps;
 
   if (!options.skipBootCheck) {
-    await effectiveDeps.ensureBooted(device);
+    await deps.ensureBooted(device);
   }
   let restoreStatusBar = async () => {};
   try {
-    restoreStatusBar = await effectiveDeps.prepareStatusBarForScreenshot(device);
+    restoreStatusBar = await deps.prepareStatusBarForScreenshot(device);
   } catch (error) {
     emitStatusBarDiagnostic(device, 'prepare_failed', error);
   }
   try {
     try {
-      await effectiveDeps.captureWithRetry(device, outPath);
+      await deps.captureWithRetry(device, outPath);
       return;
     } catch (error) {
       let screenshotError = error;
       if (options.skipBootCheck && shouldEnsureBootedAfterSimulatorScreenshotFailure(error)) {
-        await effectiveDeps.ensureBooted(device);
+        await deps.ensureBooted(device);
         try {
-          await effectiveDeps.captureWithRetry(device, outPath);
+          await deps.captureWithRetry(device, outPath);
           return;
         } catch (retryError) {
           screenshotError = retryError;
         }
       }
-      if (!effectiveDeps.shouldFallbackToRunner(screenshotError)) {
+      if (!deps.shouldFallbackToRunner(screenshotError)) {
         throw screenshotError;
       }
       emitScreenshotFallbackDiagnostic(device, 'simctl_screenshot', screenshotError);
     }
-    await effectiveDeps.captureWithRunner(device, outPath, appBundleId, fullscreen, runnerOptions);
+    await deps.captureWithRunner(
+      device,
+      outPath,
+      options.appBundleId,
+      options.fullscreen,
+      options.runnerOptions,
+    );
   } finally {
     await restoreStatusBar().catch((error) =>
       emitStatusBarDiagnostic(device, 'restore_failed', error),

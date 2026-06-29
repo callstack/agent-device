@@ -47,8 +47,11 @@ export function createAppleInteractor(
         });
         return;
       }
-      await screenshotIos(device, outPath, options?.appBundleId, options?.fullscreen, runnerOpts, {
-        skipSimulatorBootCheck: options?.skipIosSimulatorBootCheck,
+      await screenshotIos(device, outPath, {
+        appBundleId: options?.appBundleId,
+        fullscreen: options?.fullscreen,
+        runnerOptions: runnerOpts,
+        skipBootCheck: options?.skipIosSimulatorBootCheck,
       });
     },
     snapshot: async (options) => {
