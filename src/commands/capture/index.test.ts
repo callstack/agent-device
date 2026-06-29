@@ -97,6 +97,20 @@ describe('capture command interface', () => {
     });
   });
 
+  test('reads and writes screenshot status-bar normalization flag', () => {
+    const input = screenshotCliReader(['page.png'], flags({ screenshotNormalizeStatusBar: true }));
+    expect(input).toMatchObject({
+      path: 'page.png',
+      normalizeStatusBar: true,
+    });
+    expect(screenshotDaemonWriter(input)).toMatchObject({
+      command: 'screenshot',
+      options: {
+        screenshotNormalizeStatusBar: true,
+      },
+    });
+  });
+
   test('reads diff snapshot input only', () => {
     expect(
       diffCliReader(['snapshot'], flags({ snapshotDepth: 4, out: './diff.json' })),

@@ -68,7 +68,10 @@ import {
   resolveSimulatorRunnerScreenshotCandidatePaths,
 } from '../screenshot.ts';
 import { ensureBootedSimulator, openIosSimulatorApp } from '../simulator.ts';
-import { prepareSimulatorStatusBarForScreenshot as prepareStatusBarForScreenshot } from '../screenshot-status-bar.ts';
+import {
+  invalidateSimulatorStatusBarOverrideCache,
+  prepareSimulatorStatusBarForScreenshot as prepareStatusBarForScreenshot,
+} from '../screenshot-status-bar.ts';
 import { runIosRunnerCommand } from '../runner-client.ts';
 import { iosRunnerOverrides } from '../interactions.ts';
 import { IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from '../config.ts';
@@ -157,6 +160,7 @@ const mockPrepareStatusBarForScreenshot = vi.mocked(prepareStatusBarForScreensho
 
 beforeEach(() => {
   vi.resetAllMocks();
+  invalidateSimulatorStatusBarOverrideCache(IOS_TEST_SIMULATOR);
   mockRunCmd.mockImplementation(execActual.runCmd);
   mockRetryWithPolicy.mockImplementation(retryActual.retryWithPolicy);
   mockRunIosRunnerCommand.mockImplementation(runnerActual.runIosRunnerCommand);
@@ -783,7 +787,9 @@ test('captureSimulatorScreenshotWithFallback continues when status bar preparati
   mockRetryWithPolicy.mockResolvedValue(undefined);
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
     appBundleId: 'com.example.app',
+    normalizeStatusBar: true,
   });
+  assert.equal(mockPrepareStatusBarForScreenshot.mock.calls.length, 1);
   assert.equal(mockRetryWithPolicy.mock.calls.length > 0, true);
   assert.equal(mockRunIosRunnerCommand.mock.calls.length, 0);
 });
@@ -795,7 +801,7 @@ test('captureSimulatorScreenshotWithFallback can skip session-backed simulator b
 
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
     appBundleId: 'com.example.app',
-    skipBootCheck: true,
+    skipIosSimulatorBootCheck: true,
   });
 
   assert.equal(mockEnsureBootedSimulator.mock.calls.length, 0);
@@ -820,7 +826,7 @@ test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after
 
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
     appBundleId: 'com.example.app',
-    skipBootCheck: true,
+    skipIosSimulatorBootCheck: true,
     deps: {
       ensureBooted,
       prepareStatusBarForScreenshot,
@@ -856,7 +862,7 @@ test('captureSimulatorScreenshotWithFallback keeps runner fallback after skipped
 
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
     appBundleId: 'com.example.app',
-    skipBootCheck: true,
+    skipIosSimulatorBootCheck: true,
     deps: {
       ensureBooted,
       prepareStatusBarForScreenshot,
@@ -880,7 +886,24 @@ test('captureSimulatorScreenshotWithFallback ignores status bar restore failures
   mockRetryWithPolicy.mockResolvedValue(undefined);
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
     appBundleId: 'com.example.app',
+    normalizeStatusBar: true,
   });
+  assert.equal(mockPrepareStatusBarForScreenshot.mock.calls.length, 1);
+  assert.equal(mockRetryWithPolicy.mock.calls.length > 0, true);
+  assert.equal(mockRunIosRunnerCommand.mock.calls.length, 0);
+});
+
+test('captureSimulatorScreenshotWithFallback skips status bar normalization by default', async () => {
+  mockPrepareStatusBarForScreenshot.mockResolvedValue(async () => {});
+  mockEnsureBootedSimulator.mockResolvedValue(undefined);
+  mockOpenIosSimulatorApp.mockResolvedValue(undefined);
+  mockRetryWithPolicy.mockResolvedValue(undefined);
+
+  await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
+    appBundleId: 'com.example.app',
+  });
+
+  assert.equal(mockPrepareStatusBarForScreenshot.mock.calls.length, 0);
   assert.equal(mockRetryWithPolicy.mock.calls.length > 0, true);
   assert.equal(mockRunIosRunnerCommand.mock.calls.length, 0);
 });
@@ -1045,6 +1068,45 @@ exit 1
         'simctl status_bar sim-1 override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100',
         'simctl status_bar sim-1 clear',
         'simctl status_bar sim-1 override --dataNetwork hide --wifiMode failed --wifiBars 0 --cellularMode failed --cellularBars 0 --operatorName No Service',
+      ]);
+    },
+  );
+});
+
+test('prepareSimulatorStatusBarForScreenshot skips known redundant status bar commands', async () => {
+  await withMockedXcrun(
+    'agent-device-ios-status-bar-no-overrides-test-',
+    `#!/bin/sh
+echo "$*" >> "$AGENT_DEVICE_TEST_ARGS_FILE"
+if [ "$1" = "simctl" ] && [ "$2" = "status_bar" ] && [ "$4" = "list" ]; then
+  cat <<'OUT'
+Current Status Bar Overrides:
+=============================
+OUT
+  exit 0
+fi
+if [ "$1" = "simctl" ] && [ "$2" = "status_bar" ] && [ "$4" = "clear" ]; then
+  exit 0
+fi
+if [ "$1" = "simctl" ] && [ "$2" = "status_bar" ] && [ "$4" = "override" ]; then
+  exit 0
+fi
+echo "unexpected xcrun args: $*" >&2
+exit 1
+`,
+    async ({ argsLogPath }) => {
+      const restoreFirst = await prepareSimulatorStatusBarForScreenshot(IOS_TEST_SIMULATOR);
+      await restoreFirst();
+      const restoreSecond = await prepareSimulatorStatusBarForScreenshot(IOS_TEST_SIMULATOR);
+      await restoreSecond();
+
+      const logLines = (await fs.readFile(argsLogPath, 'utf8')).trim().split('\n').filter(Boolean);
+      assert.deepEqual(logLines, [
+        'simctl status_bar sim-1 list',
+        'simctl status_bar sim-1 override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100',
+        'simctl status_bar sim-1 clear',
+        'simctl status_bar sim-1 override --time 9:41 --dataNetwork wifi --wifiMode active --wifiBars 3 --batteryState charged --batteryLevel 100',
+        'simctl status_bar sim-1 clear',
       ]);
     },
   );

@@ -70,6 +70,7 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
     ...(outputPath ? { out: { kind: 'path', path: outputPath } } : {}),
     threshold: parseCliThreshold(flags.threshold),
     overlayRefs: flags.overlayRefs,
+    normalizeStatusBar: flags.screenshotNormalizeStatusBar,
     surface: flags.surface,
   });
 
@@ -89,6 +90,7 @@ function createClientScreenshotBackend(
         session: context.session,
         overlayRefs: options?.overlayRefs,
         fullscreen: options?.fullscreen,
+        normalizeStatusBar: options?.normalizeStatusBar,
         stabilize: options?.stabilize,
         surface: options?.surface,
       });

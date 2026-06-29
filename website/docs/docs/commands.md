@@ -762,6 +762,7 @@ agent-device screenshot                 # Auto filename
 agent-device screenshot page.png        # Explicit screenshot path
 agent-device screenshot page.png --max-size 1024  # Downscale longest edge for agent-friendly artifacts
 agent-device screenshot page.png --overlay-refs  # Draw current @eN refs and target rectangles onto the PNG
+agent-device screenshot baseline.png --normalize-status-bar  # Normalize iOS simulator chrome for reusable diff baselines
 agent-device screenshot page.png --platform web --fullscreen  # On web, --fullscreen/--full/-f captures the entire document
 agent-device viewport 1280 900 --platform web                # Resize the active web viewport for fixed-layout or 100vh apps
 agent-device screenshot textedit.png    # App-session window capture on macOS
@@ -781,8 +782,9 @@ agent-device record stop                # Stop active recording
 - Recordings always produce a video artifact. When touch visualization is enabled, they also produce a gesture telemetry sidecar that can be used for post-processing or inspection.
 - `screenshot --max-size <px>` preserves aspect ratio and only downscales when the saved PNG's longest edge is larger than the requested size.
 - `screenshot --overlay-refs` captures a fresh full snapshot and burns visible `@eN` refs plus their target rectangles into the saved PNG.
+- `screenshot --normalize-status-bar` temporarily normalizes iOS simulator status-bar chrome for deterministic screenshot baselines; ordinary screenshots leave the simulator's current chrome visible.
 - `screenshot --max-size <px> --overlay-refs` writes a smaller image and draws refs for that final image size; avoid very small max sizes when text, icons, or labels need to remain readable.
-- `diff screenshot` compares the current live screenshot to `--baseline`, or compares `--baseline` to an optional saved `current.png` path without requiring an active session, then prints ranked changed regions with screen-space rectangles, shape, size, density, average color, and luminance, and writes a diff PNG with a light grayscale current-screen context, red-tinted changed pixels, and outlined changed regions when `--out` is provided. JSON also includes normalized bounds.
+- `diff screenshot` compares the current live screenshot to `--baseline`, or compares `--baseline` to an optional saved `current.png` path without requiring an active session, then prints ranked changed regions with screen-space rectangles, shape, size, density, average color, and luminance, and writes a diff PNG with a light grayscale current-screen context, red-tinted changed pixels, and outlined changed regions when `--out` is provided. Live iOS simulator diffs normalize status-bar chrome by default; use `screenshot --normalize-status-bar` when capturing reusable baselines. JSON also includes normalized bounds.
 - If `tesseract` is installed, `diff screenshot` also adds best-effort OCR text deltas, movement clusters, and bbox size-change hints to the text and JSON output. OCR improves descriptions only; it does not change the pixel comparison or the diff PNG.
 - When OCR is available, `diff screenshot` also reports best-effort non-text visual deltas by masking OCR text boxes out of the diff and clustering remaining residuals. These are hints for icons, controls, and separators, not semantic icon recognition.
 - `diff screenshot --overlay-refs` additionally writes a separate current-screen overlay guide for live captures without using that annotated image for the pixel comparison. If current-screen refs intersect changed regions, the output lists the best ref matches under those regions. Saved-image comparisons do not have live accessibility refs, so `--overlay-refs` is unavailable when a `current.png` path is provided.

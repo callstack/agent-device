@@ -293,6 +293,11 @@ function summarizeProviderScenarioFlagExclusions() {
       owner: 'handler and Android platform unit tests',
       keys: ['headless'],
     },
+    {
+      name: 'Apple screenshot status-bar normalization',
+      owner: 'iOS platform and screenshot-diff runtime tests',
+      keys: ['screenshotNormalizeStatusBar'],
+    },
   ];
 }
 

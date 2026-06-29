@@ -65,6 +65,10 @@ import {
   writeMacOsClipboardText,
 } from './macos-apps.ts';
 import { runMacOsPermissionAction, type MacOsPermissionTarget } from './macos-helper.ts';
+import {
+  invalidateSimulatorStatusBarOverrideCache,
+  rememberClearedStatusBarOverrides,
+} from './screenshot-status-bar.ts';
 export {
   screenshotIos,
   shouldFallbackToRunnerForIosScreenshot,
@@ -566,6 +570,7 @@ export async function setIosSetting(
       const enabled = parseSettingState(state);
       const mode = enabled ? 'active' : 'failed';
       await runSimctl(device, ['status_bar', device.id, 'override', '--wifiMode', mode]);
+      invalidateSimulatorStatusBarOverrideCache(device);
       return;
     }
     case 'airplane': {
@@ -588,8 +593,10 @@ export async function setIosSetting(
           '--operatorName',
           '',
         ]);
+        invalidateSimulatorStatusBarOverrideCache(device);
       } else {
         await runSimctl(device, ['status_bar', device.id, 'clear']);
+        rememberClearedStatusBarOverrides(device);
       }
       return;
     }

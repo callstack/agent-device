@@ -58,6 +58,7 @@ test('runtime diff screenshot captures live current image and cleans temporary c
     assert.equal(typeof capturedCurrentPath, 'string');
     assert.equal(fs.existsSync(capturedCurrentPath!), false);
     assert.equal(capturedOptions?.surface, 'menubar');
+    assert.equal(capturedOptions?.normalizeStatusBar, true);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

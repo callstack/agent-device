@@ -26,6 +26,7 @@ const screenshotCommandMetadata = defineFieldCommandMetadata(
     fullscreen: booleanField(),
     maxSize: integerField(),
     stabilize: booleanField(),
+    normalizeStatusBar: booleanField(),
     surface: enumField(SESSION_SURFACES),
   },
 );
@@ -37,7 +38,7 @@ const screenshotCommandDefinition = defineExecutableCommand(
 
 const screenshotCliSchema = {
   helpDescription:
-    'Capture screenshot (web defaults to the viewport; use --fullscreen, --full, or -f for the entire page. macOS app sessions default to the app window; use --fullscreen for full desktop, --max-size to downscale, --overlay-refs to annotate current refs, or --no-stabilize for low-latency Android capture loops)',
+    'Capture screenshot (web defaults to the viewport; use --fullscreen, --full, or -f for the entire page. macOS app sessions default to the app window; use --fullscreen for full desktop, --max-size to downscale, --overlay-refs to annotate current refs, --normalize-status-bar for deterministic iOS simulator chrome, or --no-stabilize for low-latency Android capture loops)',
   summary:
     'Capture screenshot with optional web full-page, desktop, downscale, or ref overlay modes',
   positionalArgs: ['path?'],

@@ -43,8 +43,9 @@ type SimulatorScreenshotFlowDeps = {
 type SimulatorScreenshotFlowOptions = {
   appBundleId?: string;
   fullscreen?: boolean;
+  normalizeStatusBar?: boolean;
   runnerOptions?: AppleRunnerCommandOptions;
-  skipBootCheck?: boolean;
+  skipIosSimulatorBootCheck?: boolean;
   deps?: SimulatorScreenshotFlowDeps;
 };
 
@@ -111,14 +112,16 @@ export async function captureSimulatorScreenshotWithFallback(
 
   const deps = options.deps ?? defaultSimulatorScreenshotFlowDeps;
 
-  if (!options.skipBootCheck) {
+  if (!options.skipIosSimulatorBootCheck) {
     await deps.ensureBooted(device);
   }
   let restoreStatusBar = async () => {};
-  try {
-    restoreStatusBar = await deps.prepareStatusBarForScreenshot(device);
-  } catch (error) {
-    emitStatusBarDiagnostic(device, 'prepare_failed', error);
+  if (options.normalizeStatusBar === true) {
+    try {
+      restoreStatusBar = await deps.prepareStatusBarForScreenshot(device);
+    } catch (error) {
+      emitStatusBarDiagnostic(device, 'prepare_failed', error);
+    }
   }
   try {
     try {
@@ -126,7 +129,10 @@ export async function captureSimulatorScreenshotWithFallback(
       return;
     } catch (error) {
       let screenshotError = error;
-      if (options.skipBootCheck && shouldEnsureBootedAfterSimulatorScreenshotFailure(error)) {
+      if (
+        options.skipIosSimulatorBootCheck &&
+        shouldEnsureBootedAfterSimulatorScreenshotFailure(error)
+      ) {
         await deps.ensureBooted(device);
         try {
           await deps.captureWithRetry(device, outPath);

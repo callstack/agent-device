@@ -372,6 +372,7 @@ export type CaptureScreenshotOptions = AgentDeviceRequestOverrides & {
   fullscreen?: boolean;
   maxSize?: number;
   stabilize?: boolean;
+  normalizeStatusBar?: boolean;
   surface?: SessionSurface;
 };
 

@@ -338,6 +338,7 @@ async function handleScreenshotCommand(
   await interactor.screenshot(screenshotPath, {
     appBundleId: context?.appBundleId,
     fullscreen: screenshotOptions.fullscreen,
+    normalizeStatusBar: screenshotOptions.normalizeStatusBar,
     stabilize: screenshotOptions.stabilize,
     surface: context?.surface,
     skipIosSimulatorBootCheck: context?.skipIosSimulatorBootCheck,

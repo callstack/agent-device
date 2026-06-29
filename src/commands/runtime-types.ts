@@ -30,6 +30,7 @@ export type ScreenshotCommandOptions = CommandContext & {
   overlayRefs?: boolean;
   maxSize?: number;
   stabilize?: boolean;
+  normalizeStatusBar?: boolean;
   appId?: string;
   appBundleId?: string;
   surface?: SessionSurface;

@@ -6,12 +6,14 @@ export const SCREENSHOT_COMMAND_FLAG_KEYS = [
   'screenshotFullscreen',
   'screenshotMaxSize',
   'screenshotNoStabilize',
+  'screenshotNormalizeStatusBar',
 ] as const;
 
 export const SCREENSHOT_ACTION_FLAG_KEYS = [
   'screenshotFullscreen',
   'screenshotMaxSize',
   'screenshotNoStabilize',
+  'screenshotNormalizeStatusBar',
 ] as const;
 
 type ScreenshotSpecificFlagKey = (typeof SCREENSHOT_ACTION_FLAG_KEYS)[number];
@@ -50,6 +52,14 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
     usageDescription:
       'Screenshot: skip Android demo-mode/status-bar stabilization and settle delay for low-latency capture loops',
   },
+  {
+    key: 'screenshotNormalizeStatusBar',
+    names: ['--normalize-status-bar'],
+    type: 'boolean',
+    usageLabel: '--normalize-status-bar',
+    usageDescription:
+      'Screenshot: on iOS simulators temporarily normalize status-bar chrome for deterministic screenshot diffs',
+  },
 ];
 
 export type ScreenshotRequestFlags = {
@@ -58,16 +68,20 @@ export type ScreenshotRequestFlags = {
   screenshotFullscreen?: boolean;
   screenshotMaxSize?: number;
   screenshotNoStabilize?: boolean;
+  screenshotNormalizeStatusBar?: boolean;
 };
 
 export type ScreenshotDispatchFlags = Pick<
   ScreenshotRequestFlags,
-  'screenshotFullscreen' | 'screenshotNoStabilize'
+  'screenshotFullscreen' | 'screenshotNoStabilize' | 'screenshotNormalizeStatusBar'
 >;
 
 export type ScreenshotRuntimeFlags = Pick<
   ScreenshotRequestFlags,
-  'screenshotFullscreen' | 'screenshotMaxSize' | 'screenshotNoStabilize'
+  | 'screenshotFullscreen'
+  | 'screenshotMaxSize'
+  | 'screenshotNoStabilize'
+  | 'screenshotNormalizeStatusBar'
 >;
 
 export type ScreenshotPublicOptions = {
@@ -75,6 +89,7 @@ export type ScreenshotPublicOptions = {
   fullscreen?: boolean;
   maxSize?: number;
   stabilize?: boolean;
+  normalizeStatusBar?: boolean;
 };
 
 export type ScreenshotRuntimeOptions = {
@@ -82,6 +97,7 @@ export type ScreenshotRuntimeOptions = {
   fullscreen?: boolean;
   maxSize?: number;
   stabilize?: boolean;
+  normalizeStatusBar?: boolean;
 };
 
 export function screenshotOptionsFromFlags(
@@ -92,6 +108,7 @@ export function screenshotOptionsFromFlags(
     fullscreen: flags?.screenshotFullscreen,
     maxSize: flags?.screenshotMaxSize,
     stabilize: flags?.screenshotNoStabilize ? false : undefined,
+    normalizeStatusBar: flags?.screenshotNormalizeStatusBar,
   });
 }
 
@@ -104,6 +121,8 @@ export function screenshotFlagsFromOptions(
     screenshotMaxSize: options.screenshotMaxSize ?? options.maxSize,
     screenshotNoStabilize:
       options.screenshotNoStabilize ?? (options.stabilize === false ? true : undefined),
+    screenshotNormalizeStatusBar:
+      options.screenshotNormalizeStatusBar ?? options.normalizeStatusBar,
   });
 }
 
@@ -116,6 +135,7 @@ export function appendScreenshotScriptFlags(
     parts.push('--max-size', String(flags.screenshotMaxSize));
   }
   if (flags?.screenshotNoStabilize) parts.push('--no-stabilize');
+  if (flags?.screenshotNormalizeStatusBar) parts.push('--normalize-status-bar');
 }
 
 export function readScreenshotScriptFlag(params: {
@@ -131,6 +151,10 @@ export function readScreenshotScriptFlag(params: {
   }
   if (token === '--no-stabilize') {
     flags.screenshotNoStabilize = true;
+    return { handled: true, nextIndex: index };
+  }
+  if (token === '--normalize-status-bar') {
+    flags.screenshotNormalizeStatusBar = true;
     return { handled: true, nextIndex: index };
   }
   if (token === '--max-size') {

@@ -41,6 +41,7 @@ export type { BackMode };
 export type ScreenshotOptions = {
   appBundleId?: string;
   fullscreen?: boolean;
+  normalizeStatusBar?: boolean;
   stabilize?: boolean;
   surface?: SessionSurface;
   skipIosSimulatorBootCheck?: boolean;

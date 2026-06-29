@@ -30,6 +30,7 @@ export type DiffScreenshotCommandOptions = CommandContext & {
   currentOverlayOut?: FileOutputRef;
   threshold?: number;
   overlayRefs?: boolean;
+  normalizeStatusBar?: boolean;
   surface?: BackendScreenshotOptions['surface'];
 };
 
@@ -131,7 +132,7 @@ async function captureLiveCurrentScreenshot(
     ext: '.png',
   });
   try {
-    await captureScreenshot(runtime, options, temp.path, screenshotSurfaceOptions(options));
+    await captureScreenshot(runtime, options, temp.path, liveDiffScreenshotOptions(options));
   } catch (error) {
     await temp.cleanup();
     throw error;
@@ -162,7 +163,7 @@ async function maybeAttachCurrentOverlay(
   try {
     const overlayResult = await captureScreenshot(runtime, options, overlayOutput.path, {
       overlayRefs: true,
-      ...screenshotSurfaceOptions(options),
+      ...liveDiffScreenshotOptions(options),
     });
     const overlayArtifact = await overlayOutput.publish();
     if (overlayArtifact) artifacts.push(overlayArtifact);
@@ -208,10 +209,13 @@ async function captureScreenshot(
   );
 }
 
-function screenshotSurfaceOptions(
-  options: Pick<DiffScreenshotCommandOptions, 'surface'>,
+function liveDiffScreenshotOptions(
+  options: Pick<DiffScreenshotCommandOptions, 'normalizeStatusBar' | 'surface'>,
 ): BackendScreenshotOptions {
-  return options.surface ? { surface: options.surface } : {};
+  return {
+    normalizeStatusBar: options.normalizeStatusBar ?? true,
+    ...(options.surface ? { surface: options.surface } : {}),
+  };
 }
 
 function resolveCurrentOverlayOutputRef(

@@ -70,6 +70,7 @@ export type BackendScreenshotOptions = {
   fullscreen?: boolean;
   overlayRefs?: boolean;
   stabilize?: boolean;
+  normalizeStatusBar?: boolean;
   surface?: SessionSurface;
 };
 

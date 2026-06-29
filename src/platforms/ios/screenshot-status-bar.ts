@@ -58,20 +58,28 @@ function runSimctl(device: DeviceInfo, args: string[], options?: ExecOptions) {
   return runSimctlForDevice(device, args, options);
 }
 
+const devicesKnownWithoutStatusBarOverrides = new Set<string>();
+
 export async function prepareSimulatorStatusBarForScreenshot(
   device: DeviceInfo,
 ): Promise<() => Promise<void>> {
   let previousOverrides: RestorableStatusBarOverrides | null = null;
   let canRestorePreviousOverrides = false;
-  try {
-    previousOverrides = await readSimulatorStatusBarOverrides(device);
+  if (hasKnownClearedStatusBarOverrides(device)) {
     canRestorePreviousOverrides = true;
-  } catch (error) {
-    emitStatusBarDiagnostic(device, 'snapshot_failed', error);
+  } else {
+    try {
+      previousOverrides = await readSimulatorStatusBarOverrides(device);
+      canRestorePreviousOverrides = true;
+    } catch (error) {
+      emitStatusBarDiagnostic(device, 'snapshot_failed', error);
+    }
   }
 
   try {
-    await clearSimulatorStatusBarOverride(device);
+    if (!canRestorePreviousOverrides || previousOverrides) {
+      await clearSimulatorStatusBarOverride(device);
+    }
     await applySimulatorStatusBarOverrideArgs(device, DETERMINISTIC_SCREENSHOT_STATUS_BAR_ARGS);
   } catch (error) {
     emitStatusBarDiagnostic(device, 'prepare_failed', error);
@@ -90,11 +98,31 @@ async function restoreSimulatorStatusBarOverrides(
   overrides: RestorableStatusBarOverrides | null,
 ): Promise<void> {
   await clearSimulatorStatusBarOverride(device);
-  if (!overrides) return;
+  if (!overrides) {
+    rememberClearedStatusBarOverrides(device);
+    return;
+  }
   await applySimulatorStatusBarOverrideArgs(
     device,
     buildRestorableStatusBarOverrideArgs(overrides),
   );
+  invalidateSimulatorStatusBarOverrideCache(device);
+}
+
+export function invalidateSimulatorStatusBarOverrideCache(device: DeviceInfo): void {
+  devicesKnownWithoutStatusBarOverrides.delete(statusBarOverrideCacheKey(device));
+}
+
+export function rememberClearedStatusBarOverrides(device: DeviceInfo): void {
+  devicesKnownWithoutStatusBarOverrides.add(statusBarOverrideCacheKey(device));
+}
+
+function hasKnownClearedStatusBarOverrides(device: DeviceInfo): boolean {
+  return devicesKnownWithoutStatusBarOverrides.has(statusBarOverrideCacheKey(device));
+}
+
+function statusBarOverrideCacheKey(device: DeviceInfo): string {
+  return `${device.platform}:${device.kind}:${device.id}`;
 }
 
 async function readSimulatorStatusBarOverrides(

@@ -51,7 +51,8 @@ export function createAppleInteractor(
         appBundleId: options?.appBundleId,
         fullscreen: options?.fullscreen,
         runnerOptions: runnerOpts,
-        skipBootCheck: options?.skipIosSimulatorBootCheck,
+        normalizeStatusBar: options?.normalizeStatusBar,
+        skipIosSimulatorBootCheck: options?.skipIosSimulatorBootCheck,
       });
     },
     snapshot: async (options) => {

@@ -1003,6 +1003,7 @@ test('parseArgs recognizes screenshot flags', () => {
       '--max-size',
       '1024',
       '--no-stabilize',
+      '--normalize-status-bar',
     ],
     {
       strictFlags: true,
@@ -1013,6 +1014,7 @@ test('parseArgs recognizes screenshot flags', () => {
   assert.equal(parsed.flags.screenshotFullscreen, true);
   assert.equal(parsed.flags.screenshotMaxSize, 1024);
   assert.equal(parsed.flags.screenshotNoStabilize, true);
+  assert.equal(parsed.flags.screenshotNormalizeStatusBar, true);
 });
 
 test('usageForCommand documents screenshot web aliases and stabilization flags', () => {
@@ -1022,6 +1024,15 @@ test('usageForCommand documents screenshot web aliases and stabilization flags',
   assert.match(help, /entire page/i);
   assert.match(help, /--no-stabilize/);
   assert.match(help, /low-latency Android capture loops/);
+  assert.match(help, /--normalize-status-bar/);
+  assert.match(help, /deterministic iOS simulator chrome/);
+});
+
+test('usageForCommand documents screenshot diff normalization', () => {
+  const help = usageForCommand('diff');
+  if (help === null) throw new Error('Expected diff help text');
+  assert.match(help, /Live iOS simulator screenshot diffs normalize status-bar chrome by default/);
+  assert.match(help, /screenshot --normalize-status-bar/);
 });
 
 test('parseArgs recognizes viewport command', () => {
