@@ -61,6 +61,7 @@ export type {
 } from './contracts/navigation.ts';
 export type { ClipboardCommandResult } from './contracts/clipboard.ts';
 export type { AppStateCommandResult } from './contracts/app-state.ts';
+export type { KeyboardCommandResult } from './contracts/keyboard.ts';
 
 export type AgentDeviceDaemonTransport = (
   req: Omit<DaemonRequest, 'token'>,
@@ -475,21 +476,6 @@ export type AlertCommandResult = DaemonResponseData & {
   items?: string[];
 };
 
-export type KeyboardCommandResult = DaemonResponseData & {
-  platform?: 'android' | 'ios';
-  action?: 'status' | 'dismiss' | 'enter';
-  visible?: boolean;
-  inputType?: string | null;
-  inputMethodPackage?: string | null;
-  type?: string | null;
-  focusedPackage?: string | null;
-  focusedResourceId?: string | null;
-  inputOwner?: 'app' | 'ime' | 'unknown';
-  wasVisible?: boolean;
-  dismissed?: boolean;
-  attempts?: number;
-};
-
 export type ReactNativeCommandOptions = DeviceCommandBaseOptions & {
   action: 'dismiss-overlay';
 };
@@ -512,7 +498,7 @@ export type AgentDeviceCommandClient = {
   home: (options?: HomeCommandOptions) => Promise<CommandResult<'home'>>;
   rotate: (options: RotateCommandOptions) => Promise<CommandResult<'rotate'>>;
   appSwitcher: (options?: AppSwitcherCommandOptions) => Promise<CommandResult<'app-switcher'>>;
-  keyboard: (options?: KeyboardCommandOptions) => Promise<KeyboardCommandResult>;
+  keyboard: (options?: KeyboardCommandOptions) => Promise<CommandResult<'keyboard'>>;
   clipboard: (options: ClipboardCommandOptions) => Promise<CommandResult<'clipboard'>>;
   reactNative: (options: ReactNativeCommandOptions) => Promise<CommandRequestResult>;
   prepare: (options: PrepareCommandOptions) => Promise<CommandRequestResult>;

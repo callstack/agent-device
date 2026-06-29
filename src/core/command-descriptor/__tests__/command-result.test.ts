@@ -14,6 +14,7 @@ import type {
 } from '../../../contracts/navigation.ts';
 import type { ClipboardCommandResult } from '../../../contracts/clipboard.ts';
 import type { AppStateCommandResult } from '../../../contracts/app-state.ts';
+import type { KeyboardCommandResult } from '../../../contracts/keyboard.ts';
 import type { CommandResult, CommandResultMap } from '../command-result.ts';
 
 /**
@@ -38,6 +39,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
   const appSwitcher: Equal<CommandResult<'app-switcher'>, AppSwitcherCommandResult> = true;
   const clipboard: Equal<CommandResult<'clipboard'>, ClipboardCommandResult> = true;
   const appstate: Equal<CommandResult<'appstate'>, AppStateCommandResult> = true;
+  const keyboard: Equal<CommandResult<'keyboard'>, KeyboardCommandResult> = true;
   expect([
     press,
     fill,
@@ -51,7 +53,8 @@ test('seeded CommandResult entries resolve to their existing contract result typ
     appSwitcher,
     clipboard,
     appstate,
-  ]).toEqual([true, true, true, true, true, true, true, true, true, true, true, true]);
+    keyboard,
+  ]).toEqual([true, true, true, true, true, true, true, true, true, true, true, true, true]);
 });
 
 test('unmigrated commands fall back to the untyped Record bag, keeping the union total', () => {
@@ -76,6 +79,7 @@ test('CommandResultMap is seeded only from already-existing contract result type
     | 'app-switcher'
     | 'clipboard'
     | 'appstate'
+    | 'keyboard'
   > = true;
   expect(keys).toBe(true);
 });

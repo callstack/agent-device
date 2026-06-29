@@ -110,7 +110,8 @@ export function createAgentDeviceClient(
       rotate: async (options) => await executeCommand<CommandResult<'rotate'>>('rotate', options),
       appSwitcher: async (options = {}) =>
         await executeCommand<CommandResult<'app-switcher'>>('app-switcher', options),
-      keyboard: async (options = {}) => await executeCommand('keyboard', options),
+      keyboard: async (options = {}) =>
+        await executeCommand<CommandResult<'keyboard'>>('keyboard', options),
       clipboard: async (options) =>
         await executeCommand<CommandResult<'clipboard'>>('clipboard', options),
       reactNative: async (options) => await executeCommand('react-native', options),
