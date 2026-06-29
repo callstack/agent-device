@@ -324,14 +324,16 @@ function writeRemoteSuccess(
 }
 
 function writeInstallSuccess(res: http.ServerResponse, payload: RemoteRpcRequest): void {
+  const positionals = payload.params?.positionals ?? [];
+  const appPath = positionals.length === 1 ? positionals[0] : positionals[1];
   writeJson(res, 200, {
     jsonrpc: '2.0',
     id: payload.id,
     result: {
       ok: true,
       data: {
-        app: payload.params?.positionals?.[0],
-        appPath: payload.params?.positionals?.[1],
+        app: positionals.length === 1 ? 'com.example.demo' : positionals[0],
+        appPath,
         platform: 'android',
         package: 'com.example.demo',
       },
@@ -456,7 +458,6 @@ async function assertInstallUpload(
   uploadRequests: UploadRequest[],
 ): Promise<void> {
   const install = await client.apps.install({
-    app: 'Demo',
     appPath: paths.localApkPath,
     platform: 'android',
   });
@@ -469,7 +470,7 @@ async function assertInstallUpload(
 
   const installRpc = rpcRequests.at(-1);
   assert.equal(installRpc?.params?.command, 'install');
-  assert.equal(installRpc?.params?.positionals?.[1], paths.localApkPath);
+  assert.deepEqual(installRpc?.params?.positionals, [paths.localApkPath]);
   assert.equal(installRpc?.params?.meta?.uploadedArtifactId, 'upload-demo.apk');
 }
 

@@ -75,10 +75,11 @@ async function prepareRemoteInstallPackage(
   info: DaemonArtifactEndpoint,
   positionals: string[],
 ): Promise<string | undefined> {
-  const rawPath = positionals[1];
+  const pathIndex = positionals.length === 1 ? 0 : 1;
+  const rawPath = positionals[pathIndex];
   if (rawPath === undefined) return undefined;
   if (rawPath.startsWith('remote:')) {
-    positionals[1] = rawPath.slice('remote:'.length);
+    positionals[pathIndex] = rawPath.slice('remote:'.length);
     return undefined;
   }
 

@@ -33,6 +33,7 @@ import type {
   AgentDeviceDaemonTransport,
   AppCloseOptions,
   AppDeployOptions,
+  AppInstallOptions,
   AppInstallFromSourceOptions,
   AppListOptions,
   AppOpenOptions,
@@ -142,7 +143,7 @@ export function createAgentDeviceClient(
       },
     },
     apps: {
-      install: async (options: AppDeployOptions) =>
+      install: async (options: AppInstallOptions) =>
         normalizeDeployResult(
           await executeCommand('install', options),
           resolveRequestSession(options),

@@ -177,6 +177,12 @@ export type SessionCloseResult = {
   identifiers: AgentDeviceIdentifiers;
 };
 
+export type AppInstallOptions = AgentDeviceRequestOverrides &
+  AgentDeviceSelectionOptions & {
+    app?: string;
+    appPath: string;
+  };
+
 export type AppDeployOptions = AgentDeviceRequestOverrides &
   AgentDeviceSelectionOptions & {
     app: string;
@@ -955,7 +961,7 @@ export type AgentDeviceClient = {
     ) => Promise<SessionCloseResult>;
   };
   apps: {
-    install: (options: AppDeployOptions) => Promise<AppDeployResult>;
+    install: (options: AppInstallOptions) => Promise<AppDeployResult>;
     reinstall: (options: AppDeployOptions) => Promise<AppDeployResult>;
     installFromSource: (
       options: AppInstallFromSourceOptions,

@@ -95,14 +95,9 @@ export async function handleAppDeployCommand(params: {
   const flags = req.flags ?? {};
   const guard = requireSessionOrExplicitSelector(command, session, flags);
   if (guard) return guard;
-  const app = req.positionals?.[0]?.trim();
-  const appPathInput = req.positionals?.[1]?.trim();
-  if (!app || !appPathInput) {
-    return errorResponse(
-      'INVALID_ARGS',
-      `${command} requires: ${command} <app> <path-to-app-binary>`,
-    );
-  }
+  const deployTarget = resolveDeployTarget(command, req.positionals ?? []);
+  if (!deployTarget.ok) return deployTarget.response;
+  const { app, appPathInput } = deployTarget;
   const uploadedArtifactId = req.meta?.uploadedArtifactId;
 
   try {
@@ -120,50 +115,10 @@ export async function handleAppDeployCommand(params: {
     const unsupported = requireCommandSupported(command, device);
     if (unsupported) return unsupported;
 
-    let result: DeployCommandResult;
-
-    if (device.platform === 'ios') {
-      const iosResult = await deployOps.ios(device, app, appPath);
-      const bundleId = iosResult.bundleId;
-      result = bundleId
-        ? {
-            app,
-            appPath,
-            platform: 'ios',
-            appId: bundleId,
-            bundleId,
-            appName: iosResult.appName,
-            launchTarget: iosResult.launchTarget,
-          }
-        : {
-            app,
-            appPath,
-            platform: 'ios',
-            appName: iosResult.appName,
-            launchTarget: iosResult.launchTarget,
-          };
-    } else {
-      const androidResult = await deployOps.android(device, app, appPath);
-      const pkg = androidResult.package;
-      result = pkg
-        ? {
-            app,
-            appPath,
-            platform: 'android',
-            appId: pkg,
-            package: pkg,
-            packageName: pkg,
-            appName: androidResult.appName,
-            launchTarget: androidResult.launchTarget,
-          }
-        : {
-            app,
-            appPath,
-            platform: 'android',
-            appName: androidResult.appName,
-            launchTarget: androidResult.launchTarget,
-          };
-    }
+    const result =
+      device.platform === 'ios'
+        ? buildIosDeployResult(app, appPath, await deployOps.ios(device, app, appPath))
+        : buildAndroidDeployResult(app, appPath, await deployOps.android(device, app, appPath));
 
     const data = withSuccessText(result, buildDeployMessage(result));
     recordSessionAction(sessionStore, session, req, command, data);
@@ -177,4 +132,67 @@ export async function handleAppDeployCommand(params: {
 
 function buildDeployMessage(result: DeployCommandResult): string {
   return `Installed: ${result.appName ?? resolveDeployResultTarget(result)}`;
+}
+
+function buildIosDeployResult(
+  app: string,
+  appPath: string,
+  iosResult: Awaited<ReturnType<AppDeployOps['ios']>>,
+): IosDeployCommandResult {
+  const bundleId = iosResult.bundleId;
+  const resultApp = app || bundleId || iosResult.launchTarget || appPath;
+  return {
+    app: resultApp,
+    appPath,
+    platform: 'ios',
+    ...(bundleId ? { appId: bundleId, bundleId } : {}),
+    appName: iosResult.appName,
+    launchTarget: iosResult.launchTarget,
+  };
+}
+
+function buildAndroidDeployResult(
+  app: string,
+  appPath: string,
+  androidResult: Awaited<ReturnType<AppDeployOps['android']>>,
+): AndroidDeployCommandResult {
+  const pkg = androidResult.package;
+  const resultApp = app || pkg || androidResult.launchTarget || appPath;
+  return {
+    app: resultApp,
+    appPath,
+    platform: 'android',
+    ...(pkg ? { appId: pkg, package: pkg, packageName: pkg } : {}),
+    appName: androidResult.appName,
+    launchTarget: androidResult.launchTarget,
+  };
+}
+
+function resolveDeployTarget(
+  command: 'install' | 'reinstall',
+  positionals: string[],
+): { ok: true; app: string; appPathInput: string } | { ok: false; response: DaemonResponse } {
+  const first = positionals[0]?.trim();
+  const second = positionals[1]?.trim();
+  if (command === 'install') {
+    const appPathInput = second ?? first;
+    if (!appPathInput) {
+      return {
+        ok: false,
+        response: errorResponse('INVALID_ARGS', 'install requires: install <path-to-app-binary>'),
+      };
+    }
+    return { ok: true, app: second ? (first ?? '') : '', appPathInput };
+  }
+
+  if (!first || !second) {
+    return {
+      ok: false,
+      response: errorResponse(
+        'INVALID_ARGS',
+        'reinstall requires: reinstall <app> <path-to-app-binary>',
+      ),
+    };
+  }
+  return { ok: true, app: first, appPathInput: second };
 }

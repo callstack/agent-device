@@ -185,6 +185,51 @@ test('install omits app id fields when platform op cannot resolve them', async (
   }
 });
 
+test('install accepts path without app id hint', async () => {
+  const sessionStore = makeStore();
+  const session = makeSession('default', {
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator',
+    booted: true,
+  });
+  sessionStore.set('default', session);
+  mockResolveTargetDevice.mockResolvedValue(session.device!);
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-install-path-only-'));
+  const appPath = path.join(tempRoot, 'Sample.apk');
+  fs.writeFileSync(appPath, 'placeholder');
+
+  mockDefaultInstallOpsAndroid.mockImplementation(async (_device, app, pathToBinary) => {
+    expect(app).toBe('');
+    expect(pathToBinary).toBe(appPath);
+    return { package: 'com.example.detected' };
+  });
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: 'default',
+      command: 'install',
+      positionals: [appPath],
+      flags: {},
+    },
+    sessionName: 'default',
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+    invoke,
+  });
+
+  expect(response).toBeTruthy();
+  if (!response) return;
+  expect(response.ok).toBe(true);
+  if (response.ok) {
+    expect(response.data?.app).toBe('com.example.detected');
+    expect(response.data?.appId).toBe('com.example.detected');
+    expect(response.data?.package).toBe('com.example.detected');
+    expect(response.data?.appPath).toBe(appPath);
+  }
+});
+
 test('reinstall resolves uploaded artifacts by id and cleans temp files after completion', async () => {
   const sessionStore = makeStore();
   const session = makeSession('default', {

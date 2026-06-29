@@ -384,6 +384,14 @@ test('parseArgs accepts install command args', () => {
   assert.deepEqual(parsed.positionals, ['com.example.app', './build/app.apk']);
 });
 
+test('parseArgs accepts install with artifact path only', () => {
+  const parsed = parseArgs(['install', './build/app.apk'], {
+    strictFlags: true,
+  });
+  assert.equal(parsed.command, 'install');
+  assert.deepEqual(parsed.positionals, ['./build/app.apk']);
+});
+
 test('parseArgs accepts install-from-source url and repeated headers', () => {
   const parsed = parseArgs(
     [

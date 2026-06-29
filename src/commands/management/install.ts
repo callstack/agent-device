@@ -26,7 +26,7 @@ import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { managementCliOutputFormatters } from './output.ts';
 
 const installCommandMetadata = defineFieldCommandMetadata('install', 'Install an app binary.', {
-  app: requiredField(stringField()),
+  app: stringField('Optional app identifier hint.'),
   appPath: requiredField(stringField('Path to app binary.')),
 });
 
@@ -66,7 +66,9 @@ const installFromSourceCommandDefinition = defineExecutableCommand(
 );
 
 const installCliSchema = {
-  positionalArgs: ['app', 'path'],
+  usageOverride: 'install <path> | install <app> <path>',
+  listUsageOverride: 'install <path>',
+  positionalArgs: ['appOrPath', 'path?'],
 } as const satisfies CommandSchemaOverride;
 
 const reinstallCliSchema = {
@@ -84,11 +86,10 @@ const installFromSourceCliSchema = {
   allowedFlags: ['header', 'githubActionsArtifact', 'installSource', 'retainPaths', 'retentionMs'],
 } as const satisfies CommandSchemaOverride;
 
-const installCliReader: CliReader = (positionals, flags) =>
-  installInputFromCli(positionals, flags, 'install');
+const installCliReader: CliReader = (positionals, flags) => installInputFromCli(positionals, flags);
 
 const reinstallCliReader: CliReader = (positionals, flags) =>
-  installInputFromCli(positionals, flags, 'reinstall');
+  reinstallInputFromCli(positionals, flags);
 
 const installFromSourceCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
@@ -98,7 +99,7 @@ const installFromSourceCliReader: CliReader = (positionals, flags) => ({
 });
 
 const installDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.install, (input) =>
-  requiredPair(input.app, input.appPath),
+  installPositionals(input.app, input.appPath),
 );
 
 const reinstallDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.reinstall, (input) =>
@@ -149,16 +150,27 @@ export const installManagementCommandFacets = [
   installFromSourceCommandFacet,
 ] as const;
 
-function installInputFromCli(
-  positionals: string[],
-  flags: CliFlags,
-  command: 'install' | 'reinstall',
-): Record<string, unknown> {
+function installInputFromCli(positionals: string[], flags: CliFlags): Record<string, unknown> {
+  const [first, second] = positionals;
+  const hasExplicitApp = second !== undefined;
   return {
     ...commonInputFromFlags(flags),
-    app: requiredString(positionals[0], `${command} requires app`),
-    appPath: requiredString(positionals[1], `${command} requires path`),
+    ...(hasExplicitApp ? { app: requiredString(first, 'install requires app') } : {}),
+    appPath: requiredString(hasExplicitApp ? second : first, 'install requires path'),
   };
+}
+
+function reinstallInputFromCli(positionals: string[], flags: CliFlags): Record<string, unknown> {
+  return {
+    ...commonInputFromFlags(flags),
+    app: requiredString(positionals[0], 'reinstall requires app'),
+    appPath: requiredString(positionals[1], 'reinstall requires path'),
+  };
+}
+
+function installPositionals(app: unknown, appPath: unknown): string[] {
+  const path = requiredDaemonString(appPath, 'missing app path');
+  return typeof app === 'string' && app.length > 0 ? [app, path] : [path];
 }
 
 function requiredPair(first: unknown, second: unknown): string[] {
