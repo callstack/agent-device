@@ -13,7 +13,7 @@ import {
   type SnapshotNode,
   type SnapshotUnchanged,
   type SnapshotVisibility,
-} from './snapshot.ts';
+} from '../kernel/snapshot.ts';
 import type { MovementRange } from '../screenshot-diff/screenshot-diff-ocr.ts';
 import type { ScreenshotDiffResult } from '../screenshot-diff/screenshot-diff.ts';
 import type { ScreenshotDiffRegion } from '../screenshot-diff/screenshot-diff-regions.ts';

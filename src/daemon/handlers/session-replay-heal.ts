@@ -1,6 +1,6 @@
 import { dispatchCommand } from '../../core/dispatch.ts';
 import { setSessionSnapshot } from '../session-snapshot.ts';
-import type { RawSnapshotNode, SnapshotBackend, SnapshotState } from '../../utils/snapshot.ts';
+import type { RawSnapshotNode, SnapshotBackend, SnapshotState } from '../../kernel/snapshot.ts';
 import {
   buildSelectorChainForNode,
   resolveSelectorChain,

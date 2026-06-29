@@ -1,7 +1,7 @@
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { isMobilePlatform } from '../utils/device.ts';
 import type { CommandFlags } from '../core/dispatch.ts';
-import type { SnapshotState } from '../utils/snapshot.ts';
+import type { SnapshotState } from '../kernel/snapshot.ts';
 import { sleep } from '../utils/timeouts.ts';
 import {
   areInteractionSurfaceSignaturesStable,

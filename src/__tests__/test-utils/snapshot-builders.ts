@@ -1,4 +1,4 @@
-import { attachRefs, type RawSnapshotNode, type SnapshotState } from '../../utils/snapshot.ts';
+import { attachRefs, type RawSnapshotNode, type SnapshotState } from '../../kernel/snapshot.ts';
 
 export function buildNodes(raw: RawSnapshotNode[]) {
   return attachRefs(raw);

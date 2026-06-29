@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon/types.ts';
-import type { SnapshotState } from '../../../utils/snapshot.ts';
+import type { SnapshotState } from '../../../kernel/snapshot.ts';
 import {
   invokeMaestroSwipeScreen,
   invokeMaestroSwipeOn,

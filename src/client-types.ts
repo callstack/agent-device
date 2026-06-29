@@ -26,7 +26,7 @@ import type { ScrollInputDirection } from './commands/interaction/runtime/gestur
 import type { LogAction } from './contracts/logs.ts';
 import type { SessionSurface } from './core/session-surface.ts';
 import type { FindLocator } from './utils/finders.ts';
-import type { SnapshotNode, SnapshotUnchanged, SnapshotVisibility } from './utils/snapshot.ts';
+import type { SnapshotNode, SnapshotUnchanged, SnapshotVisibility } from './kernel/snapshot.ts';
 import type { ScreenshotResultData } from './utils/screenshot-result.ts';
 import type {
   MetroPrepareKind,

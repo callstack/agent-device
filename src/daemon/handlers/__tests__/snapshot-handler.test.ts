@@ -11,7 +11,7 @@ import type { SessionState } from '../../types.ts';
 import { AppError } from '../../../utils/errors.ts';
 import { buildSnapshotSignatures } from '../../android-snapshot-freshness.ts';
 import { buildInteractionSurfaceSignature } from '../../interaction-outcome-policy.ts';
-import { buildSnapshotPresentationKey } from '../../../utils/snapshot.ts';
+import { buildSnapshotPresentationKey } from '../../../kernel/snapshot.ts';
 import { snapshotCliOutput } from '../../../commands/capture/output.ts';
 import type { CaptureSnapshotResult } from '../../../client-types.ts';
 

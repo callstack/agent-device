@@ -1,4 +1,4 @@
-import type { SnapshotNode } from '../utils/snapshot.ts';
+import type { SnapshotNode } from '../kernel/snapshot.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { captureSnapshot } from './handlers/snapshot-capture.ts';
 import { errorResponse } from './handlers/response.ts';

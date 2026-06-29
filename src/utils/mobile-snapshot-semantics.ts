@@ -1,6 +1,6 @@
 import { isRectVisibleInViewport, resolveViewportRect } from './rect-visibility.ts';
 import { inferVerticalScrollIndicatorDirections } from './scroll-indicator.ts';
-import type { HiddenContentHint, Rect, SnapshotNode } from './snapshot.ts';
+import type { HiddenContentHint, Rect, SnapshotNode } from '../kernel/snapshot.ts';
 import { buildSnapshotNodeMap, displayNodeLabel } from './snapshot-tree.ts';
 import { isScrollableNodeLike } from './scrollable.ts';
 

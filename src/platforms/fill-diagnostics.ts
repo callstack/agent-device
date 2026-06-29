@@ -1,4 +1,4 @@
-import type { Rect } from '../utils/snapshot.ts';
+import type { Rect } from '../kernel/snapshot.ts';
 
 /**
  * Cross-platform metadata for fill verification diagnostics.

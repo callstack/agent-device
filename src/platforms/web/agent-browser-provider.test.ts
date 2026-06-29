@@ -12,7 +12,7 @@ import {
   parseSelectorChain,
   resolveSelectorChain,
 } from '../../daemon/selectors.ts';
-import { attachRefs } from '../../utils/snapshot.ts';
+import { attachRefs } from '../../kernel/snapshot.ts';
 import { installFakeManagedAgentBrowser } from './__tests__/test-utils.ts';
 
 type AgentBrowserCall = {

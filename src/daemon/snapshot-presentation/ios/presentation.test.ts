@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { attachRefs, type RawSnapshotNode } from '../../../utils/snapshot.ts';
+import { attachRefs, type RawSnapshotNode } from '../../../kernel/snapshot.ts';
 import { buildSnapshotVisibility } from '../../../utils/snapshot-visibility.ts';
 import { presentIosInteractiveSnapshot } from './index.ts';
 

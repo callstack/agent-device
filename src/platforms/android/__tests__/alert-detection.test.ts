@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { chooseAndroidAlertButton, findAndroidAlertCandidate } from '../alert-detection.ts';
-import type { RawSnapshotNode } from '../../../utils/snapshot.ts';
+import type { RawSnapshotNode } from '../../../kernel/snapshot.ts';
 
 test('chooseAndroidAlertButton prefers platform ids over ambiguous labels', () => {
   const candidate = findAndroidAlertCandidate([

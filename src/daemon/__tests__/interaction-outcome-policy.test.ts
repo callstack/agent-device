@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { SnapshotState } from '../../utils/snapshot.ts';
+import type { SnapshotState } from '../../kernel/snapshot.ts';
 import {
   buildInteractionSurfaceSignature,
   classifyInteractionSurfaceChange,

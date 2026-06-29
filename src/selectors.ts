@@ -1,6 +1,6 @@
 export type { Selector, SelectorChain } from './utils/selectors-parse.ts';
 export type { SelectorDiagnostics, SelectorResolution } from './daemon/selectors.ts';
-export type { SnapshotNode } from './utils/snapshot.ts';
+export type { SnapshotNode } from './kernel/snapshot.ts';
 
 export {
   isSelectorToken,

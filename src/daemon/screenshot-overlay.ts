@@ -5,7 +5,7 @@ import {
   type ScreenshotOverlayRef,
   type SnapshotNode,
   type SnapshotState,
-} from '../utils/snapshot.ts';
+} from '../kernel/snapshot.ts';
 import type { PNG } from '../utils/png.ts';
 import { decodePngAsync, encodePngAsync } from '../utils/png-worker-client.ts';
 import { analyzeReactNativeOverlay } from '../core/react-native-overlay.ts';

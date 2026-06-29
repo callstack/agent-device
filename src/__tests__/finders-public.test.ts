@@ -6,7 +6,7 @@ import {
   normalizeText,
   parseFindArgs,
 } from '../finders.ts';
-import type { SnapshotNode } from '../utils/snapshot.ts';
+import type { SnapshotNode } from '../kernel/snapshot.ts';
 
 function makeNode(ref: string, label?: string): SnapshotNode {
   return {

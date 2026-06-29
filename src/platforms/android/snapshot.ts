@@ -10,7 +10,7 @@ import {
   type HiddenContentHint,
   type RawSnapshotNode,
   type SnapshotOptions,
-} from '../../utils/snapshot.ts';
+} from '../../kernel/snapshot.ts';
 import { isScrollableType } from '../../utils/scrollable.ts';
 import { deriveMobileSnapshotHiddenContentHints } from '../../utils/mobile-snapshot-semantics.ts';
 import {

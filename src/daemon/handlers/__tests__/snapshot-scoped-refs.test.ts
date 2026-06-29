@@ -1,6 +1,6 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import { handleSnapshotCommands } from '../snapshot.ts';
-import type { RawSnapshotNode, SnapshotState } from '../../../utils/snapshot.ts';
+import type { RawSnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeAndroidSession } from '../../../__tests__/test-utils/index.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';

@@ -1,4 +1,4 @@
-import type { SnapshotNode } from '../snapshot.ts';
+import type { SnapshotNode } from '../../kernel/snapshot.ts';
 
 export function isRootNode(node: SnapshotNode): boolean {
   return typeof node.parentIndex !== 'number';

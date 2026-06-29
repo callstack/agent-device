@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, expect } from 'vitest';
-import type { SnapshotNode, SnapshotState } from '../../../utils/snapshot.ts';
+import type { SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
 import { AppError } from '../../../utils/errors.ts';
 import {
   extractMaestroVisibleTextQuery,

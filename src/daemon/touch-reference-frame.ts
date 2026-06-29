@@ -1,5 +1,5 @@
 import { inferGestureReferenceFrame, type GestureReferenceFrame } from '../core/scroll-gesture.ts';
-import type { SnapshotState } from '../utils/snapshot.ts';
+import type { SnapshotState } from '../kernel/snapshot.ts';
 
 export type TouchReferenceFrame = GestureReferenceFrame;
 

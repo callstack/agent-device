@@ -1,6 +1,6 @@
 import type { Platform } from '../../utils/device.ts';
 import type { ElementSelectorKey } from '../../core/interactor-types.ts';
-import type { Rect, SnapshotNode, SnapshotState } from '../../utils/snapshot.ts';
+import type { Rect, SnapshotNode, SnapshotState } from '../../kernel/snapshot.ts';
 import { parseSelectorChain } from '../../daemon/selectors.ts';
 import { matchesSelector } from '../../daemon/selectors-match.ts';
 import { evaluateIsPredicate } from '../../utils/selector-is-predicates.ts';

@@ -10,7 +10,7 @@ import {
 import { invokeMaestroSwipeScreen, invokeMaestroTapOn } from '../runtime-interactions.ts';
 import { rememberMaestroRecoverableInteraction } from '../runtime-support.ts';
 import type { DaemonRequest, DaemonResponse } from '../../../daemon/types.ts';
-import type { SnapshotState } from '../../../utils/snapshot.ts';
+import type { SnapshotState } from '../../../kernel/snapshot.ts';
 
 afterEach(() => {
   vi.restoreAllMocks();

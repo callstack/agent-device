@@ -1,4 +1,4 @@
-import type { RawSnapshotNode, SnapshotNode } from './snapshot.ts';
+import type { RawSnapshotNode, SnapshotNode } from '../kernel/snapshot.ts';
 
 export function normalizeSnapshotTree(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
   const originalToNormalizedIndex = new Map<number, number>();

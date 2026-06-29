@@ -184,8 +184,8 @@ export type JsonRpcRequestEnvelope<TParams = unknown> = {
   params?: TParams;
 };
 
-export { centerOfRect } from './utils/snapshot.ts';
-export type { Rect, SnapshotNode } from './utils/snapshot.ts';
+export { centerOfRect } from './kernel/snapshot.ts';
+export type { Rect, SnapshotNode } from './kernel/snapshot.ts';
 
 type RuntimeSchema<T> = {
   parse(input: unknown): T;

@@ -2,7 +2,7 @@ import { AppError } from '../../../utils/errors.ts';
 import type { ClickButton } from '../../../core/click-button.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { isFillableType } from '../../../utils/snapshot-processing.ts';
-import type { Point } from '../../../utils/snapshot.ts';
+import type { Point } from '../../../kernel/snapshot.ts';
 import { requireIntInRange } from '../../../utils/validation.ts';
 import { successText } from '../../../utils/success-text.ts';
 import { findMistargetedTypeRefToken } from '../../../utils/type-target-warning.ts';

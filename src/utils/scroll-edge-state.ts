@@ -5,7 +5,12 @@ import {
 import { AppError } from './errors.ts';
 import { isScrollableNodeLike } from './scrollable.ts';
 import type { ScrollDirection } from '../core/scroll-gesture.ts';
-import type { HiddenContentHint, Point, RawSnapshotNode, SnapshotNode } from './snapshot.ts';
+import type {
+  HiddenContentHint,
+  Point,
+  RawSnapshotNode,
+  SnapshotNode,
+} from '../kernel/snapshot.ts';
 
 export type ScrollEdge = 'top' | 'bottom';
 

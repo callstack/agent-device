@@ -1,4 +1,4 @@
-import type { RawSnapshotNode } from '../../../utils/snapshot.ts';
+import type { RawSnapshotNode } from '../../../kernel/snapshot.ts';
 import { normalizeType } from '../../../utils/snapshot-processing.ts';
 import {
   findLargestViewportRect,

@@ -1,5 +1,5 @@
-import type { RawSnapshotNode, Rect } from './snapshot.ts';
-import { centerOfRect } from './snapshot.ts';
+import type { RawSnapshotNode, Rect } from '../kernel/snapshot.ts';
+import { centerOfRect } from '../kernel/snapshot.ts';
 import { areRectsApproximatelyEqual, normalizeRect } from './rect-center.ts';
 import { containsPoint } from './rect-visibility.ts';
 import { normalizeType } from './text-surface.ts';

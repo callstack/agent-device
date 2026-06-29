@@ -1,4 +1,4 @@
-import type { SnapshotNode } from './snapshot.ts';
+import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { AppError } from './errors.ts';
 import { tryParseSelectorChain, type SelectorChain } from './selectors-parse.ts';
 

@@ -12,7 +12,7 @@ import {
   type RawSnapshotNode,
   type SnapshotBackend,
   type SnapshotState,
-} from '../../utils/snapshot.ts';
+} from '../../kernel/snapshot.ts';
 import { annotateCoveredSnapshotNodes } from '../../utils/snapshot-occlusion.ts';
 import { normalizeSnapshotTree } from '../../utils/snapshot-tree.ts';
 export { buildSnapshotVisibility } from '../../utils/snapshot-visibility.ts';

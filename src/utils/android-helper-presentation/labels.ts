@@ -1,4 +1,4 @@
-import type { SnapshotNode } from '../snapshot.ts';
+import type { SnapshotNode } from '../../kernel/snapshot.ts';
 import { displayNodeLabel } from '../snapshot-tree.ts';
 
 export function visibleNodeLabel(node: SnapshotNode): string {

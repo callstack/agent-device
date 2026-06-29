@@ -1,4 +1,4 @@
-import type { SnapshotState } from '../utils/snapshot.ts';
+import type { SnapshotState } from '../kernel/snapshot.ts';
 import type { SessionState } from './types.ts';
 
 export function setSessionSnapshot(session: SessionState, snapshot: SnapshotState): void {

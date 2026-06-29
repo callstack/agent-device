@@ -1,6 +1,6 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import { dispatchCommand } from '../../core/dispatch.ts';
-import { buildSnapshotPresentationKey } from '../../utils/snapshot.ts';
+import { buildSnapshotPresentationKey } from '../../kernel/snapshot.ts';
 import { makeIosSession } from '../../__tests__/test-utils/index.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { createSelectorCaptureRuntime } from '../selector-capture-runtime.ts';

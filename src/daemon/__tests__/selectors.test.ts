@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import type { SnapshotState } from '../../utils/snapshot.ts';
+import type { SnapshotState } from '../../kernel/snapshot.ts';
 import {
   findSelectorChainMatch,
   parseSelectorChain,

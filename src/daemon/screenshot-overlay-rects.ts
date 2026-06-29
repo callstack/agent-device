@@ -1,4 +1,4 @@
-import type { Rect } from '../utils/snapshot.ts';
+import type { Rect } from '../kernel/snapshot.ts';
 
 export function hasPositiveRect(rect: Rect | undefined): rect is Rect {
   return Boolean(rect && rect.width > 0 && rect.height > 0);

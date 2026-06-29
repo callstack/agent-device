@@ -1,4 +1,4 @@
-import type { RawSnapshotNode, Rect } from '../../utils/snapshot.ts';
+import type { RawSnapshotNode, Rect } from '../../kernel/snapshot.ts';
 import {
   isJsonObject,
   readBooleanProperty,

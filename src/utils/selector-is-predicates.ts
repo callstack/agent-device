@@ -1,5 +1,5 @@
 import type { Platform } from './device.ts';
-import type { SnapshotState } from './snapshot.ts';
+import type { SnapshotState } from '../kernel/snapshot.ts';
 import { isNodeVisibleInEffectiveViewport } from './mobile-snapshot-semantics.ts';
 import { isNodeEditable, isNodeVisible } from './selector-node.ts';
 import {

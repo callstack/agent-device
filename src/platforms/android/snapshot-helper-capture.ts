@@ -1,5 +1,5 @@
 import { AppError } from '../../utils/errors.ts';
-import type { SnapshotOptions } from '../../utils/snapshot.ts';
+import type { SnapshotOptions } from '../../kernel/snapshot.ts';
 import {
   parseInstrumentationRecords,
   readInstrumentationResultBoolean,

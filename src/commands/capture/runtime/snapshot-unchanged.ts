@@ -4,7 +4,7 @@ import {
   type SnapshotNode,
   type SnapshotState,
   type SnapshotUnchanged,
-} from '../../../utils/snapshot.ts';
+} from '../../../kernel/snapshot.ts';
 
 type SnapshotIdentity = {
   previousAppBundleId?: string;

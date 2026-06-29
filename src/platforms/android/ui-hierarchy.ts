@@ -1,4 +1,4 @@
-import type { RawSnapshotNode, Rect, SnapshotOptions } from '../../utils/snapshot.ts';
+import type { RawSnapshotNode, Rect, SnapshotOptions } from '../../kernel/snapshot.ts';
 import { isScrollableType } from '../../utils/scrollable.ts';
 import { intersectArea } from '../../utils/screenshot-geometry.ts';
 

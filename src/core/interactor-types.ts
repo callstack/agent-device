@@ -9,7 +9,7 @@ import type {
   RawSnapshotNode,
   SnapshotBackend,
   SnapshotOptions as BaseSnapshotOptions,
-} from '../utils/snapshot.ts';
+} from '../kernel/snapshot.ts';
 
 export type RunnerContext = {
   requestId?: string;

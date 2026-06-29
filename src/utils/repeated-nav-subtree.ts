@@ -1,4 +1,4 @@
-import type { Rect, SnapshotNode } from './snapshot.ts';
+import type { Rect, SnapshotNode } from '../kernel/snapshot.ts';
 import { normalizeRepeatedNodeLabel } from './snapshot-label-signals.ts';
 import { displayNodeLabel } from './snapshot-tree.ts';
 

@@ -1,7 +1,7 @@
 export { createAgentDeviceClient } from './client.ts';
 export { createLocalArtifactAdapter } from './io.ts';
 export { AppError, isAgentDeviceError, normalizeAgentDeviceError } from './utils/errors.ts';
-export { centerOfRect } from './utils/snapshot.ts';
+export { centerOfRect } from './kernel/snapshot.ts';
 
 export type {
   ArtifactAdapter,
@@ -121,4 +121,4 @@ export type {
   SnapshotNode,
   SnapshotVisibility,
   SnapshotVisibilityReason,
-} from './utils/snapshot.ts';
+} from './kernel/snapshot.ts';

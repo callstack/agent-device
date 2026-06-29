@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '../../utils/device.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import type { Rect } from '../../utils/snapshot.ts';
+import type { Rect } from '../../kernel/snapshot.ts';
 import {
   buildFillFailureDetails,
   type FillFailureDetails,

@@ -1,6 +1,6 @@
 import { AppError } from '../utils/errors.ts';
 import { defineStringEnum } from '../utils/string-enum.ts';
-import type { Rect, SnapshotNode } from '../utils/snapshot.ts';
+import type { Rect, SnapshotNode } from '../kernel/snapshot.ts';
 
 export const SCROLL_DIRECTIONS = ['up', 'down', 'left', 'right'] as const;
 export type ScrollDirection = (typeof SCROLL_DIRECTIONS)[number];

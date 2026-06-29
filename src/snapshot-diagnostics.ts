@@ -1,4 +1,4 @@
-import type { SnapshotBackend } from './utils/snapshot.ts';
+import type { SnapshotBackend } from './kernel/snapshot.ts';
 import type { Platform } from './utils/device.ts';
 import { isRecord } from './utils/parsing.ts';
 

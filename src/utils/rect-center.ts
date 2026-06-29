@@ -1,4 +1,4 @@
-import { centerOfRect, type Point, type Rect } from './snapshot.ts';
+import { centerOfRect, type Point, type Rect } from '../kernel/snapshot.ts';
 
 const RECT_COMPARE_FIELDS = ['x', 'y', 'width', 'height'] as const;
 const RECT_EQUALITY_TOLERANCE = 0.5;

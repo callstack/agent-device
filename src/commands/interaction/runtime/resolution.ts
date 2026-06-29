@@ -1,6 +1,6 @@
 import { AppError } from '../../../utils/errors.ts';
-import type { Point, SnapshotNode, SnapshotState } from '../../../utils/snapshot.ts';
-import { findNodeByRef, normalizeRef } from '../../../utils/snapshot.ts';
+import type { Point, SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
+import { findNodeByRef, normalizeRef } from '../../../kernel/snapshot.ts';
 import { resolveRectCenter } from '../../../utils/rect-center.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import {

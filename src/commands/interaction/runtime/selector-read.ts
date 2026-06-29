@@ -4,8 +4,8 @@ import {
   type FindAction,
   type FindLocator,
 } from '../../../utils/finders.ts';
-import type { SnapshotNode } from '../../../utils/snapshot.ts';
-import { findNodeByRef, normalizeRef } from '../../../utils/snapshot.ts';
+import type { SnapshotNode } from '../../../kernel/snapshot.ts';
+import { findNodeByRef, normalizeRef } from '../../../kernel/snapshot.ts';
 import {
   isSparseSnapshotQualityVerdict,
   type SnapshotQualityVerdict,

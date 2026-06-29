@@ -1,4 +1,4 @@
-import type { RawSnapshotNode } from '../../utils/snapshot.ts';
+import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from './adb-executor.ts';
 import type { AndroidSnapshotAnalysis } from './ui-hierarchy.ts';
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';

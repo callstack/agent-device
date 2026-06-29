@@ -1,5 +1,5 @@
 import type { CommandFlags } from '../../core/dispatch.ts';
-import type { SnapshotState } from '../../utils/snapshot.ts';
+import type { SnapshotState } from '../../kernel/snapshot.ts';
 import type { GestureReferenceFrame } from '../../core/scroll-gesture.ts';
 import type { DaemonCommandContext } from '../context.ts';
 import { recordTouchVisualizationEvent } from '../recording-gestures.ts';

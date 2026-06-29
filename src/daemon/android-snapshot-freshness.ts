@@ -1,4 +1,4 @@
-import type { SnapshotState } from '../utils/snapshot.ts';
+import type { SnapshotState } from '../kernel/snapshot.ts';
 import type { AndroidSnapshotFreshness, SessionState } from './types.ts';
 
 export type { AndroidSnapshotFreshness } from './types.ts';

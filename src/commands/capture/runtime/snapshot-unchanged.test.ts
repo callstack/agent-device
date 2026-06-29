@@ -3,7 +3,7 @@ import {
   buildUnchangedSnapshotMetadata,
   ensureSnapshotPresentationKey,
 } from './snapshot-unchanged.ts';
-import type { SnapshotState } from '../../../utils/snapshot.ts';
+import type { SnapshotState } from '../../../kernel/snapshot.ts';
 
 function snapshot(
   label: string,

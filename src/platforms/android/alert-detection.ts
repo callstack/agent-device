@@ -1,4 +1,4 @@
-import { centerOfRect, type RawSnapshotNode } from '../../utils/snapshot.ts';
+import { centerOfRect, type RawSnapshotNode } from '../../kernel/snapshot.ts';
 import type { AlertInfo, AlertSource } from '../../alert-contract.ts';
 
 type AndroidAlertButtonRole = 'accept' | 'dismiss' | 'neutral';

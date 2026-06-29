@@ -1,5 +1,5 @@
 import type { RecordingGestureEvent, SessionState } from './types.ts';
-import type { SnapshotState } from '../utils/snapshot.ts';
+import type { SnapshotState } from '../kernel/snapshot.ts';
 import {
   resolveGestureDurationMs,
   resolveGestureOffsetMs,

@@ -1,7 +1,7 @@
 import type { CommandFlags } from '../../core/dispatch.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
-import type { SnapshotState } from '../../utils/snapshot.ts';
+import type { SnapshotState } from '../../kernel/snapshot.ts';
 import type { ContextFromFlags } from './interaction-common.ts';
 import { captureSnapshot } from './snapshot-capture.ts';
 import { setSessionSnapshot } from '../session-snapshot.ts';

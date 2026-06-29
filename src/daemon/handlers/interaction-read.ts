@@ -2,7 +2,7 @@ import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { extractNodeReadText } from '../../utils/snapshot-processing.ts';
 import type { SessionState } from '../types.ts';
-import type { SnapshotNode } from '../../utils/snapshot.ts';
+import type { SnapshotNode } from '../../kernel/snapshot.ts';
 import { prefersValueForReadableText } from '../../utils/text-surface.ts';
 import type { ContextFromFlags } from './interaction-common.ts';
 import { resolveRectCenter } from './interaction-targeting.ts';

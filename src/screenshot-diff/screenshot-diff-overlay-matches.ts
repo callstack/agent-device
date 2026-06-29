@@ -2,7 +2,7 @@ import type {
   ScreenshotDiffRegion,
   ScreenshotDiffRegionOverlayMatch,
 } from './screenshot-diff-regions.ts';
-import type { Rect, ScreenshotOverlayRef } from '../utils/snapshot.ts';
+import type { Rect, ScreenshotOverlayRef } from '../kernel/snapshot.ts';
 import { intersectArea } from '../utils/screenshot-geometry.ts';
 
 const MAX_MATCHES_PER_REGION = 3;

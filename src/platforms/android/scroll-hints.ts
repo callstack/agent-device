@@ -1,4 +1,4 @@
-import type { HiddenContentHint, RawSnapshotNode, Rect } from '../../utils/snapshot.ts';
+import type { HiddenContentHint, RawSnapshotNode, Rect } from '../../kernel/snapshot.ts';
 import { isScrollableType } from '../../utils/scrollable.ts';
 
 type ViewNode = {

@@ -1,4 +1,4 @@
-import type { Point, SnapshotNode } from '../utils/snapshot.ts';
+import type { Point, SnapshotNode } from '../kernel/snapshot.ts';
 
 export type SelectorTarget = {
   kind: 'selector';

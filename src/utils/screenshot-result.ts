@@ -1,4 +1,4 @@
-import type { ScreenshotOverlayRef } from './snapshot.ts';
+import type { ScreenshotOverlayRef } from '../kernel/snapshot.ts';
 import { isRecord, parsePoint, parseRect } from './parsing.ts';
 
 export type ScreenshotResultData = {

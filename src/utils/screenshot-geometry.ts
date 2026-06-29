@@ -1,4 +1,4 @@
-import type { Point, Rect } from './snapshot.ts';
+import type { Point, Rect } from '../kernel/snapshot.ts';
 
 export type ImageDimensions = { width: number; height: number };
 

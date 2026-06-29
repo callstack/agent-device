@@ -1,4 +1,4 @@
-import type { Rect } from '../utils/snapshot.ts';
+import type { Rect } from '../kernel/snapshot.ts';
 import { findConnectedMaskComponents } from './screenshot-diff-components.ts';
 import type { ScreenshotOcrAnalysis, ScreenshotOcrBlock } from './screenshot-diff-ocr.ts';
 import type { ScreenshotDiffRegion } from './screenshot-diff-regions.ts';

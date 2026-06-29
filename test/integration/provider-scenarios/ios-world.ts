@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DeviceInventoryRequest } from '../../../src/core/dispatch-resolve.ts';
-import type { RawSnapshotNode } from '../../../src/utils/snapshot.ts';
+import type { RawSnapshotNode } from '../../../src/kernel/snapshot.ts';
 import type { ProviderScenarioTranscript } from './transcript.ts';
 import {
   createDemoIosApp,

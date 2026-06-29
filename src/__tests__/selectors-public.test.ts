@@ -14,7 +14,7 @@ import {
   type SelectorDiagnostics,
   type SelectorResolution,
 } from '../selectors.ts';
-import type { SnapshotNode } from '../utils/snapshot.ts';
+import type { SnapshotNode } from '../kernel/snapshot.ts';
 
 const nodes: SnapshotNode[] = [
   {

@@ -17,7 +17,7 @@ import type { SessionSurface } from '../core/session-surface.ts';
 import type { RecordingExportQuality } from '../core/recording-export-quality.ts';
 import type { DeviceInfo, Platform, PlatformSelector } from '../utils/device.ts';
 import type { ExecBackgroundResult, ExecResult } from '../utils/exec.ts';
-import type { SnapshotState } from '../utils/snapshot.ts';
+import type { SnapshotState } from '../kernel/snapshot.ts';
 import type { AppLogState } from './app-log-process.ts';
 import type { DeviceLease } from './lease-registry.ts';
 import type { AndroidNativePerfSession } from '../platforms/android/perf.ts';

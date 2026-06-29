@@ -7,7 +7,7 @@ import {
 import { normalizeError } from '../../utils/errors.ts';
 import { stripUndefined } from '../../utils/parsing.ts';
 import { successText } from '../../utils/success-text.ts';
-import type { SnapshotState } from '../../utils/snapshot.ts';
+import type { SnapshotState } from '../../kernel/snapshot.ts';
 import {
   isSparseSnapshotQualityVerdict,
   type SnapshotQualityVerdict,

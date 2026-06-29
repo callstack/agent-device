@@ -11,7 +11,7 @@ import type {
 import type { DaemonFailureResponse } from '../../daemon/handlers/response.ts';
 import type { ReplayActionBlockInvoker } from '../../replay/control-flow-runtime.ts';
 import type { ReplayVarScope } from '../../replay/vars.ts';
-import type { Point, SnapshotState } from '../../utils/snapshot.ts';
+import type { Point, SnapshotState } from '../../kernel/snapshot.ts';
 
 export type ReplayBaseRequest = Omit<DaemonRequest, 'command' | 'positionals'>;
 

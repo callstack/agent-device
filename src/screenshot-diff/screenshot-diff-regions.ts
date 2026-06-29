@@ -1,5 +1,5 @@
 import type { PNG } from '../utils/png.ts';
-import type { Rect } from '../utils/snapshot.ts';
+import type { Rect } from '../kernel/snapshot.ts';
 import { normalizedRect, type NormalizedRect } from '../utils/screenshot-geometry.ts';
 import { findConnectedMaskComponents } from './screenshot-diff-components.ts';
 import { splitLargeDiffRegions } from './screenshot-diff-region-split.ts';

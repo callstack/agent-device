@@ -10,7 +10,7 @@ import {
   localCommandPolicy,
 } from '../../../runtime.ts';
 import { AppError } from '../../../utils/errors.ts';
-import type { Point, SnapshotState } from '../../../utils/snapshot.ts';
+import type { Point, SnapshotState } from '../../../kernel/snapshot.ts';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
 
 test('runtime click taps an explicit point without requiring a snapshot', async () => {

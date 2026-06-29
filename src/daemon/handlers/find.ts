@@ -6,7 +6,7 @@ import {
   parseFindSelectorExpression,
   type FindLocator,
 } from '../../utils/finders.ts';
-import { centerOfRect, type SnapshotState } from '../../utils/snapshot.ts';
+import { centerOfRect, type SnapshotState } from '../../kernel/snapshot.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { contextFromFlags } from '../context.ts';

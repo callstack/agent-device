@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { evaluateIsPredicate } from '../selector-is-predicates.ts';
-import type { SnapshotNode } from '../snapshot.ts';
+import type { SnapshotNode } from '../../kernel/snapshot.ts';
 
 test('visible predicate treats zero-height hittable Android nodes as hidden', () => {
   const nodes: SnapshotNode[] = [

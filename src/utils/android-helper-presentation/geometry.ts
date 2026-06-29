@@ -1,4 +1,4 @@
-import type { Rect } from '../snapshot.ts';
+import type { Rect } from '../../kernel/snapshot.ts';
 
 export function hasRenderableArea(rect: Rect): boolean {
   return rect.width > 0 && rect.height > 0;

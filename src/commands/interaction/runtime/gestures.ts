@@ -1,6 +1,6 @@
 import { AppError } from '../../../utils/errors.ts';
-import type { Point, Rect, SnapshotNode, SnapshotState } from '../../../utils/snapshot.ts';
-import { centerOfRect } from '../../../utils/snapshot.ts';
+import type { Point, Rect, SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
+import { centerOfRect } from '../../../kernel/snapshot.ts';
 import {
   buildSwipePresetGesturePlan,
   parseSwipePreset,

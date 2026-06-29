@@ -4,7 +4,7 @@ import {
   type RawSnapshotNode,
   type Rect,
   type SnapshotNode,
-} from '../utils/snapshot.ts';
+} from '../kernel/snapshot.ts';
 
 type ReactNativeOverlayNode = Pick<
   RawSnapshotNode,

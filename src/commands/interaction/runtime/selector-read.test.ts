@@ -13,7 +13,7 @@ import {
   type CommandSessionStore,
 } from '../../../runtime.ts';
 import { ref, selector } from '../../index.ts';
-import type { SnapshotState } from '../../../utils/snapshot.ts';
+import type { SnapshotState } from '../../../kernel/snapshot.ts';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
 
 test('runtime get reads text from a selector target', async () => {
