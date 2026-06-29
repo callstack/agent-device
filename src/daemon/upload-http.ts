@@ -19,33 +19,41 @@ type AuxiliaryHttpAuthorizer = (params: {
   daemonRequest: Pick<DaemonRequest, 'command' | 'positionals'>;
 }) => Promise<{ tenantId?: string } | null>;
 
-export async function handleUploadHttpRoute(params: {
+export function tryHandleUploadHttpRoute(params: {
   req: http.IncomingMessage;
   res: http.ServerResponse;
   authorize: AuxiliaryHttpAuthorizer;
   token: string;
-}): Promise<boolean> {
+}): boolean {
   const { req, res, authorize, token } = params;
-  switch (resolveUploadHttpRoute(req)) {
-    case 'preflight':
-      await handleUploadPreflight(req, res, authorize, token);
-      return true;
-    case 'direct':
-      await handleResumableUpload(req, res, authorize);
-      return true;
-    case 'finalize':
-      await handleUploadFinalize(req, res, authorize);
-      return true;
-    case 'upload':
-      await handleUpload(req, res, authorize);
-      return true;
-    default:
-      return false;
-  }
+  const route = resolveUploadHttpRoute(req);
+  if (route === null) return false;
+
+  void handleUploadHttpRoute(route, req, res, authorize, token);
+  return true;
 }
 
-export function isUploadHttpRoute(req: http.IncomingMessage): boolean {
-  return resolveUploadHttpRoute(req) !== null;
+async function handleUploadHttpRoute(
+  route: UploadHttpRoute,
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  authorize: AuxiliaryHttpAuthorizer,
+  token: string,
+): Promise<void> {
+  switch (route) {
+    case 'preflight':
+      await handleUploadPreflight(req, res, authorize, token);
+      return;
+    case 'direct':
+      await handleResumableUpload(req, res, authorize);
+      return;
+    case 'finalize':
+      await handleUploadFinalize(req, res, authorize);
+      return;
+    case 'upload':
+      await handleUpload(req, res, authorize);
+      return;
+  }
 }
 
 function resolveUploadHttpRoute(req: http.IncomingMessage): UploadHttpRoute | null {

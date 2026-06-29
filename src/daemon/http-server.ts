@@ -31,7 +31,7 @@ import {
 } from './request-progress-protocol.ts';
 import { buildDaemonHealthPayload } from './http-health.ts';
 import { sendRestJsonError, statusCodeForNormalizedError } from './http-errors.ts';
-import { handleUploadHttpRoute, isUploadHttpRoute } from './upload-http.ts';
+import { tryHandleUploadHttpRoute } from './upload-http.ts';
 
 type JsonRpcRequest = JsonRpcRequestEnvelope;
 
@@ -525,8 +525,8 @@ export async function createDaemonHttpServer(options: {
       return;
     }
 
-    if (isUploadHttpRoute(req)) {
-      void handleUploadHttpRoute({
+    if (
+      tryHandleUploadHttpRoute({
         req,
         res,
         token: resolveToken({}, req.headers),
@@ -538,7 +538,8 @@ export async function createDaemonHttpServer(options: {
             expectedToken: token,
             daemonRequest: request.daemonRequest,
           }),
-      });
+      })
+    ) {
       return;
     }
 
