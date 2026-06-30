@@ -6,6 +6,7 @@ import type { CliOutput } from '../../commands/command-contract.ts';
 import type { ReplaySuiteResult } from '../../daemon/types.ts';
 import type { CliFlags } from '../../utils/cli-flags.ts';
 import { readCommandMessage } from '../../utils/success-text.ts';
+import { isNonDefaultResponseLevel } from '../../contracts.ts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientBackedCliCommandName } from '../../command-catalog.ts';
 import type { ClientCommandParams } from './router-types.ts';
@@ -23,6 +24,14 @@ export async function runGenericClientBackedCommand({
     positionals,
     flags,
   });
+  // A non-default responseLevel returns a leveled payload (e.g. the snapshot
+  // digest { nodeCount, refs }) that the per-command CLI formatters assume away —
+  // they serialize the default shape and drop the digest fields. Emit the leveled
+  // payload verbatim instead.
+  if (isNonDefaultResponseLevel(flags.responseLevel)) {
+    writeCommandOutput(flags, result, () => JSON.stringify(result, null, 2));
+    return true;
+  }
   if (cliOutput) {
     writeCliOutput(flags, cliOutput);
   } else {

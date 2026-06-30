@@ -274,6 +274,12 @@ export function createAgentDeviceClient(
       snapshot: async (options: CaptureSnapshotOptions = {}) => {
         const session = resolveRequestSession(options);
         const data = await executeCommand<Record<string, unknown>>('snapshot', options);
+        // A non-default responseLevel returns the leveled snapshot digest
+        // ({ nodeCount, refs, … }); normalizeSnapshotResult expects the full
+        // `nodes` tree and would collapse it to an empty snapshot. Pass the
+        // leveled payload through verbatim. (Mirrors capture.screenshot; the
+        // caller opted into the level, so the runtime value is the leveled shape.)
+        if (isLeveledResponse(options)) return data as unknown as CaptureSnapshotResult;
         return normalizeSnapshotResult(data, session);
       },
       screenshot: async (options: CaptureScreenshotOptions = {}) => {

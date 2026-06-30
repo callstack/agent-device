@@ -852,3 +852,27 @@ test('capture.screenshot normalizes the default-level result (unchanged)', async
   assert.equal(result.path, '/tmp/shot.png');
   assert.deepEqual(result.identifiers, { session: 'qa' });
 });
+
+test('capture.snapshot passes a digest (non-default level) payload through unnormalized', async () => {
+  const digest = {
+    nodeCount: 3,
+    refs: [{ ref: 'e1', label: 'Login' }],
+    truncated: false,
+  };
+  const setup = createTransport(async (req) => {
+    assert.equal(req.command, 'snapshot');
+    assert.equal(req.meta?.responseLevel, 'digest'); // the level reached the daemon
+    return { ok: true, data: digest };
+  });
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const result = await client.capture.snapshot({ responseLevel: 'digest' });
+
+  // The digest SURVIVES the client path: nodeCount/refs are preserved and the
+  // default normalizer (which expects `nodes` and would yield an empty snapshot
+  // plus `identifiers`) is skipped.
+  const asRecord = result as Record<string, unknown>;
+  assert.deepEqual(asRecord, digest);
+  assert.equal(asRecord.nodeCount, 3);
+  assert.ok(!('identifiers' in asRecord));
+});
