@@ -1,5 +1,6 @@
 import { formatScreenshotDiffText, formatSnapshotDiffText } from '../../utils/output.ts';
 import { AppError } from '../../kernel/errors.ts';
+import { isNonDefaultResponseLevel } from '../../contracts.ts';
 import { resolveUserPath } from '../../utils/path-resolution.ts';
 import type { AgentDeviceBackend } from '../../backend.ts';
 import type { AgentDeviceClient, CaptureScreenshotResult } from '../../client.ts';
@@ -17,6 +18,13 @@ export const screenshotCommand: ClientCommandHandler = async ({ positionals, fla
     positionals,
     flags,
   })) as CaptureScreenshotResult;
+  // A non-default responseLevel returns a leveled (digest) payload — overlayCount,
+  // artifacts, leveled overlayRefs. Rebuilding the default { path, overlayRefs }
+  // shape would drop those, so emit the leveled payload verbatim.
+  if (isNonDefaultResponseLevel(flags.responseLevel)) {
+    writeCommandOutput(flags, result, () => JSON.stringify(result, null, 2));
+    return true;
+  }
   const data = {
     path: result.path,
     ...(result.overlayRefs ? { overlayRefs: result.overlayRefs } : {}),

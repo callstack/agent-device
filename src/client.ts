@@ -47,7 +47,7 @@ import type {
   MetroPrepareOptions,
 } from './client-types.ts';
 import type { CommandResult } from './core/command-descriptor/command-result.ts';
-import type { ResponseLevel } from './contracts.ts';
+import { isNonDefaultResponseLevel, type ResponseLevel } from './contracts.ts';
 import { readSerializedSnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
 import { readSnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 import type { CommandFlags } from './core/dispatch-context.ts';
@@ -61,10 +61,8 @@ export function createAgentDeviceClient(
   // A non-default responseLevel (digest/full) makes the daemon return a leveled
   // shape; the per-command client normalizers assume the default shape, so the
   // capture methods pass the leveled payload through unnormalized instead.
-  const isLeveledResponse = (options: { responseLevel?: ResponseLevel }): boolean => {
-    const level = options.responseLevel ?? config.responseLevel;
-    return level !== undefined && level !== 'default';
-  };
+  const isLeveledResponse = (options: { responseLevel?: ResponseLevel }): boolean =>
+    isNonDefaultResponseLevel(options.responseLevel ?? config.responseLevel);
 
   const execute = async (
     command: string,

@@ -64,6 +64,15 @@ export type NetworkIncludeMode = (typeof NETWORK_INCLUDE_MODES)[number];
 export const RESPONSE_LEVELS = ['digest', 'default', 'full'] as const;
 export type ResponseLevel = (typeof RESPONSE_LEVELS)[number];
 
+/**
+ * Whether a response level changes the wire shape from today's default. Used by
+ * the client/CLI/MCP rendering boundaries to pass a leveled payload through
+ * verbatim instead of running it through default-shape formatters.
+ */
+export function isNonDefaultResponseLevel(level: ResponseLevel | undefined): boolean {
+  return level !== undefined && level !== 'default';
+}
+
 export type DaemonRequestMeta = {
   requestId?: string;
   debug?: boolean;
