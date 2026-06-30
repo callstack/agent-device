@@ -113,6 +113,18 @@ export function createCloudWebDriverRuntime(
   return new CloudWebDriverRuntime(options);
 }
 
+export function buildCloudWebDriverBaseCapabilities(
+  platform: CloudWebDriverPlatform,
+  deviceName: string,
+  configured: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    platformName: platform === 'ios' ? 'iOS' : 'Android',
+    'appium:deviceName': deviceName,
+    ...configured,
+  };
+}
+
 class CloudWebDriverRuntime implements ProviderDeviceRuntime {
   readonly provider: string;
   readonly leaseLifecycle: LeaseLifecycleProvider;
@@ -303,11 +315,11 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
       deviceName: this.options.deviceName,
       auth: this.options.auth,
       headers: this.options.headers,
-      webdriverCapabilities: {
-        platformName: this.options.platform === 'ios' ? 'iOS' : 'Android',
-        'appium:deviceName': this.options.deviceName,
-        ...configured,
-      },
+      webdriverCapabilities: buildCloudWebDriverBaseCapabilities(
+        this.options.platform,
+        this.options.deviceName,
+        configured,
+      ),
     };
   }
 

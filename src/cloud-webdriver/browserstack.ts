@@ -66,6 +66,16 @@ export type BrowserStackWebDriverRuntimeOptions = {
   prepareSession?: CloudWebDriverRuntimeOptions['prepareSession'];
 };
 
+export type BrowserStackCapabilitiesOptions = {
+  deviceName: string;
+  osVersion: string;
+  app?: string;
+  projectName?: string;
+  buildName: string;
+  sessionName: string;
+  configured?: Record<string, unknown>;
+};
+
 export function getBrowserStackWebDriverCapabilities(
   platform: CloudWebDriverPlatform,
 ): CloudWebDriverProviderCapabilities {
@@ -94,7 +104,16 @@ export function createBrowserStackWebDriverRuntime(
       username: options.username,
       accessKey: options.accessKey,
     },
-    webdriverCapabilities: (lease) => browserStackCapabilities(options, lease),
+    webdriverCapabilities: (lease) =>
+      buildBrowserStackCapabilities({
+        deviceName: options.deviceName,
+        osVersion: options.osVersion,
+        app: options.app,
+        projectName: options.projectName,
+        buildName: resolveLeaseValue(options.buildName, lease) ?? lease.runId,
+        sessionName: resolveLeaseValue(options.sessionName, lease) ?? lease.leaseId,
+        configured: resolveConfiguredBrowserStackCapabilities(options, lease),
+      }),
     uploadApp: createBrowserStackUploadApp({
       username: options.username,
       accessKey: options.accessKey,
@@ -178,25 +197,29 @@ export function createBrowserStackUploadApp(
   };
 }
 
-function browserStackCapabilities(
-  options: BrowserStackWebDriverRuntimeOptions,
-  lease: DeviceLease,
+export function buildBrowserStackCapabilities(
+  options: BrowserStackCapabilitiesOptions,
 ): Record<string, unknown> {
-  const configured =
-    typeof options.webdriverCapabilities === 'function'
-      ? options.webdriverCapabilities(lease)
-      : (options.webdriverCapabilities ?? {});
   return {
     device: options.deviceName,
     os_version: options.osVersion,
     ...(options.app ? { app: options.app } : {}),
     'bstack:options': {
       ...(options.projectName ? { projectName: options.projectName } : {}),
-      buildName: resolveLeaseValue(options.buildName, lease) ?? lease.runId,
-      sessionName: resolveLeaseValue(options.sessionName, lease) ?? lease.leaseId,
+      buildName: options.buildName,
+      sessionName: options.sessionName,
     },
-    ...configured,
+    ...(options.configured ?? {}),
   };
+}
+
+function resolveConfiguredBrowserStackCapabilities(
+  options: BrowserStackWebDriverRuntimeOptions,
+  lease: DeviceLease,
+): Record<string, unknown> {
+  return typeof options.webdriverCapabilities === 'function'
+    ? options.webdriverCapabilities(lease)
+    : (options.webdriverCapabilities ?? {});
 }
 
 async function fetchBrowserStackSessionDetails(

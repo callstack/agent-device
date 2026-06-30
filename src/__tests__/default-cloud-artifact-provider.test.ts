@@ -72,6 +72,16 @@ test('default cloud artifact provider maps AWS Device Farm historical sessions v
   assert.equal(calls[1]?.includes('LOG'), true);
 });
 
+test('default cloud artifact provider ignores lookups without a provider session id', async () => {
+  const provider = createDefaultCloudArtifactProvider({});
+
+  const result = await provider.listCloudArtifacts?.({
+    provider: 'browserstack',
+  });
+
+  assert.equal(result, undefined);
+});
+
 test('default cloud artifact provider does not treat broad aws as a provider name', async () => {
   const provider = createDefaultCloudArtifactProvider({});
 

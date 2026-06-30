@@ -144,14 +144,10 @@ export type AwsCliDeviceFarmClientOptions = {
 export function createAwsCliDeviceFarmClient(
   options: AwsCliDeviceFarmClientOptions = {},
 ): AwsDeviceFarmClient {
-  const regionArgs = options.region ? ['--region', options.region] : [];
-  const awsCommand = options.awsCommand ?? 'aws';
+  const runDeviceFarmJson = createAwsDeviceFarmCommandRunner(options);
   return {
     createRemoteAccessSession: async (input) => {
-      const args = [
-        'devicefarm',
-        'create-remote-access-session',
-        ...regionArgs,
+      const json = await runDeviceFarmJson('create-remote-access-session', [
         '--project-arn',
         input.projectArn,
         '--device-arn',
@@ -161,48 +157,19 @@ export function createAwsCliDeviceFarmClient(
         ...(input.appArn ? ['--app-arn', input.appArn] : []),
         ...(input.interactionMode ? ['--interaction-mode', input.interactionMode] : []),
         ...(input.configuration ? ['--configuration', JSON.stringify(input.configuration)] : []),
-        '--output',
-        'json',
-      ];
-      const json = await runAwsJson(awsCommand, args);
+      ]);
       return readRemoteAccessSession(json);
     },
     getRemoteAccessSession: async (arn) => {
-      const json = await runAwsJson(awsCommand, [
-        'devicefarm',
-        'get-remote-access-session',
-        ...regionArgs,
-        '--arn',
-        arn,
-        '--output',
-        'json',
-      ]);
+      const json = await runDeviceFarmJson('get-remote-access-session', ['--arn', arn]);
       return readRemoteAccessSession(json);
     },
     stopRemoteAccessSession: async (arn) => {
-      const json = await runAwsJson(awsCommand, [
-        'devicefarm',
-        'stop-remote-access-session',
-        ...regionArgs,
-        '--arn',
-        arn,
-        '--output',
-        'json',
-      ]);
+      const json = await runDeviceFarmJson('stop-remote-access-session', ['--arn', arn]);
       return readRemoteAccessSession(json);
     },
     listArtifacts: async (arn, type) => {
-      const json = await runAwsJson(awsCommand, [
-        'devicefarm',
-        'list-artifacts',
-        ...regionArgs,
-        '--arn',
-        arn,
-        '--type',
-        type,
-        '--output',
-        'json',
-      ]);
+      const json = await runDeviceFarmJson('list-artifacts', ['--arn', arn, '--type', type]);
       return readAwsArtifacts(json);
     },
   };
@@ -310,6 +277,22 @@ async function waitForRunningRemoteAccessSession(
 async function runAwsJson(command: string, args: string[]): Promise<unknown> {
   const result = await runCmd(command, args, { maxBuffer: 10 * 1024 * 1024 });
   return JSON.parse(result.stdout) as unknown;
+}
+
+function createAwsDeviceFarmCommandRunner(
+  options: AwsCliDeviceFarmClientOptions,
+): (subcommand: string, args: string[]) => Promise<unknown> {
+  const regionArgs = options.region ? ['--region', options.region] : [];
+  const awsCommand = options.awsCommand ?? 'aws';
+  return async (subcommand, args) =>
+    await runAwsJson(awsCommand, [
+      'devicefarm',
+      subcommand,
+      ...regionArgs,
+      ...args,
+      '--output',
+      'json',
+    ]);
 }
 
 function readRemoteAccessSession(value: unknown): AwsDeviceFarmRemoteAccessSession {

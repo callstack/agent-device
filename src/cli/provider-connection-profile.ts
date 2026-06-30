@@ -6,6 +6,7 @@ import { AppError } from '../kernel/errors.ts';
 import type { PlatformSelector } from '../kernel/device.ts';
 import type { CliFlags } from '../utils/cli-flags.ts';
 import type { EnvMap } from '../utils/env-map.ts';
+import { readMetroProfileFields } from './connection-profile-fields.ts';
 import { persistAndResolveGeneratedProfile } from './generated-remote-config.ts';
 import { resolveRequestedLeaseBackend } from './commands/connection-runtime.ts';
 
@@ -33,18 +34,7 @@ export function resolveCloudWebDriverConnectProfile(options: {
     target: options.flags.target ?? 'mobile',
     session: options.flags.session,
     ...providerConfig,
-    metroProjectRoot: options.flags.metroProjectRoot,
-    metroKind: options.flags.metroKind,
-    metroPublicBaseUrl: options.flags.metroPublicBaseUrl,
-    metroProxyBaseUrl: options.flags.metroProxyBaseUrl,
-    metroPreparePort: options.flags.metroPreparePort,
-    metroListenHost: options.flags.metroListenHost,
-    metroStatusHost: options.flags.metroStatusHost,
-    metroStartupTimeoutMs: options.flags.metroStartupTimeoutMs,
-    metroProbeTimeoutMs: options.flags.metroProbeTimeoutMs,
-    metroRuntimeFile: options.flags.metroRuntimeFile,
-    metroNoReuseExisting: options.flags.metroNoReuseExisting,
-    metroNoInstallDeps: options.flags.metroNoInstallDeps,
+    ...readMetroProfileFields(options.flags),
   };
   return persistAndResolveGeneratedProfile({
     stateDir: options.stateDir,
@@ -119,33 +109,33 @@ function awsDeviceFarmProfileFields(options: {
   flags: CliFlags;
   env?: EnvMap;
 }): RemoteConfigProfile {
+  const { env, flags } = options;
   const platform = requireCloudWebDriverPlatform(
-    options.flags.platform,
+    flags.platform,
     'connect aws-device-farm requires --platform ios|android.',
   );
   return {
     platform,
-    device: options.flags.device,
-    awsProjectArn: requireFlag(
-      options.flags.awsProjectArn ??
-        options.env?.AGENT_DEVICE_AWS_DEVICE_FARM_PROJECT_ARN ??
-        options.env?.AWS_DEVICE_FARM_PROJECT_ARN,
+    device: flags.device,
+    awsProjectArn: requireAwsProfileValue(
+      flags.awsProjectArn,
+      env,
+      ['AGENT_DEVICE_AWS_DEVICE_FARM_PROJECT_ARN', 'AWS_DEVICE_FARM_PROJECT_ARN'],
       'connect aws-device-farm requires --aws-project-arn <arn> or AWS_DEVICE_FARM_PROJECT_ARN.',
     ),
-    awsDeviceArn: requireFlag(
-      options.flags.awsDeviceArn ??
-        options.env?.AGENT_DEVICE_AWS_DEVICE_FARM_DEVICE_ARN ??
-        options.env?.AWS_DEVICE_FARM_DEVICE_ARN,
+    awsDeviceArn: requireAwsProfileValue(
+      flags.awsDeviceArn,
+      env,
+      ['AGENT_DEVICE_AWS_DEVICE_FARM_DEVICE_ARN', 'AWS_DEVICE_FARM_DEVICE_ARN'],
       'connect aws-device-farm requires --aws-device-arn <arn> or AWS_DEVICE_FARM_DEVICE_ARN.',
     ),
-    awsAppArn:
-      options.flags.awsAppArn ??
-      options.env?.AGENT_DEVICE_AWS_DEVICE_FARM_APP_ARN ??
-      options.env?.AWS_DEVICE_FARM_APP_ARN,
-    awsRegion:
-      options.flags.awsRegion ?? options.env?.AWS_REGION ?? options.env?.AWS_DEFAULT_REGION,
-    awsInteractionMode: options.flags.awsInteractionMode,
-    providerSessionName: options.flags.providerSessionName,
+    awsAppArn: readAwsProfileValue(flags.awsAppArn, env, [
+      'AGENT_DEVICE_AWS_DEVICE_FARM_APP_ARN',
+      'AWS_DEVICE_FARM_APP_ARN',
+    ]),
+    awsRegion: readAwsProfileValue(flags.awsRegion, env, ['AWS_REGION', 'AWS_DEFAULT_REGION']),
+    awsInteractionMode: flags.awsInteractionMode,
+    providerSessionName: flags.providerSessionName,
   };
 }
 
@@ -166,6 +156,24 @@ function requireEnv(env: EnvMap | undefined, name: string, command: string): str
   const value = env?.[name];
   if (value) return value;
   throw new AppError('INVALID_ARGS', `${command} requires ${name} in the environment.`);
+}
+
+function requireAwsProfileValue(
+  flagValue: string | undefined,
+  env: EnvMap | undefined,
+  envNames: readonly string[],
+  message: string,
+): string {
+  return requireFlag(readAwsProfileValue(flagValue, env, envNames), message);
+}
+
+function readAwsProfileValue(
+  flagValue: string | undefined,
+  env: EnvMap | undefined,
+  envNames: readonly string[],
+): string | undefined {
+  if (flagValue) return flagValue;
+  return envNames.map((name) => env?.[name]).find((value): value is string => Boolean(value));
 }
 
 function buildCloudWebDriverClientId(

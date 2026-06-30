@@ -7,7 +7,7 @@ import http, {
 } from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
-import { createCloudWebDriverRuntime } from '../../../src/cloud-webdriver.ts';
+import { createCloudWebDriverRuntime } from '../../../src/cloud-webdriver/runtime.ts';
 import { createDefaultCloudWebDriverProviderRuntimes } from '../../../src/cloud-webdriver/provider-runtimes.ts';
 import { parseWebDriverSource } from '../../../src/cloud-webdriver/webdriver-source.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS } from '../../../src/cloud-webdriver/providers.ts';

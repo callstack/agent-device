@@ -3,6 +3,7 @@ import type { RemoteConfigProfile } from '../remote/remote-config-schema.ts';
 import { AppError } from '../kernel/errors.ts';
 import type { CliFlags } from './parser/cli-flags.ts';
 import type { EnvMap } from '../utils/env-map.ts';
+import { readMetroProfileFields } from './connection-profile-fields.ts';
 import { persistAndResolveGeneratedProfile } from './generated-remote-config.ts';
 import { resolveRequestedLeaseBackend } from './commands/connection-runtime.ts';
 
@@ -38,22 +39,11 @@ export function resolveProxyConnectProfile(options: {
     iosSimulatorDeviceSet: options.flags.iosSimulatorDeviceSet,
     androidDeviceAllowlist: options.flags.androidDeviceAllowlist,
     session: options.flags.session,
-    metroProjectRoot: options.flags.metroProjectRoot,
-    metroKind: options.flags.metroKind,
-    metroPublicBaseUrl: options.flags.metroPublicBaseUrl,
-    metroProxyBaseUrl: options.flags.metroProxyBaseUrl,
     // Secrets must never be persisted in the generated (non-secret) profile.
     // Mirror the cloud path, which keeps daemonAuthToken in-memory only: the
     // bearer token survives this connect via the returned flags below, and
     // later commands re-supply it through AGENT_DEVICE_METRO_BEARER_TOKEN.
-    metroPreparePort: options.flags.metroPreparePort,
-    metroListenHost: options.flags.metroListenHost,
-    metroStatusHost: options.flags.metroStatusHost,
-    metroStartupTimeoutMs: options.flags.metroStartupTimeoutMs,
-    metroProbeTimeoutMs: options.flags.metroProbeTimeoutMs,
-    metroRuntimeFile: options.flags.metroRuntimeFile,
-    metroNoReuseExisting: options.flags.metroNoReuseExisting,
-    metroNoInstallDeps: options.flags.metroNoInstallDeps,
+    ...readMetroProfileFields(options.flags),
   };
   return persistAndResolveGeneratedProfile({
     stateDir: options.stateDir,

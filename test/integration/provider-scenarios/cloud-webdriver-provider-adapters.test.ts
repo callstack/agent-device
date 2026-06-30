@@ -10,15 +10,17 @@ import { test } from 'vitest';
 import {
   createAwsCliDeviceFarmClient,
   createAwsDeviceFarmWebDriverRuntime,
-  createBrowserStackWebDriverRuntime,
   getAwsDeviceFarmWebDriverCapabilities,
-  getBrowserStackWebDriverCapabilities,
   listAwsDeviceFarmCloudArtifacts,
-  listBrowserStackCloudArtifacts,
   selectAwsDeviceFarmWebDriverEndpoint,
-  uploadBrowserStackApp,
   type AwsDeviceFarmClient,
-} from '../../../src/cloud-webdriver.ts';
+} from '../../../src/cloud-webdriver/aws-device-farm.ts';
+import {
+  createBrowserStackWebDriverRuntime,
+  getBrowserStackWebDriverCapabilities,
+  listBrowserStackCloudArtifacts,
+  uploadBrowserStackApp,
+} from '../../../src/cloud-webdriver/browserstack.ts';
 import type { DeviceLease } from '../../../src/daemon/lease-registry.ts';
 import { withCommandExecutorOverride } from '../../../src/utils/exec.ts';
 import { withProviderScenarioResource, withProviderScenarioTempDir } from './harness.ts';

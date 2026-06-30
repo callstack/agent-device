@@ -14,12 +14,17 @@ import {
   BROWSERSTACK_APP_AUTOMATE_ENDPOINT,
   BROWSERSTACK_APP_UPLOAD_ENDPOINT,
   BROWSERSTACK_CAPABILITY_OVERRIDES,
+  buildBrowserStackCapabilities,
   createBrowserStackUploadApp,
   listBrowserStackCloudArtifacts,
   uploadBrowserStackApp,
 } from './browserstack.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS, type CloudWebDriverKnownProviderName } from './providers.ts';
-import { createCloudWebDriverRuntime, type CloudWebDriverPlatform } from './runtime.ts';
+import {
+  buildCloudWebDriverBaseCapabilities,
+  createCloudWebDriverRuntime,
+  type CloudWebDriverPlatform,
+} from './runtime.ts';
 
 export type DefaultCloudWebDriverArtifactEnv = {
   BROWSERSTACK_USERNAME?: string;
@@ -108,14 +113,14 @@ export const CLOUD_WEBDRIVER_PROVIDER_DEFINITIONS: readonly CloudWebDriverProvid
               accessKey,
               endpoint: env.BROWSERSTACK_APP_UPLOAD_ENDPOINT ?? BROWSERSTACK_APP_UPLOAD_ENDPOINT,
             }),
-            webdriverCapabilities: browserStackCapabilities({
-              platform,
+            webdriverCapabilities: buildBrowserStackCapabilities({
               deviceName,
               osVersion,
               app,
               projectName: readFlag(request, 'providerProject'),
               buildName: readFlag(request, 'providerBuild') ?? lease.runId,
               sessionName: readFlag(request, 'providerSessionName') ?? lease.leaseId,
+              configured: buildCloudWebDriverBaseCapabilities(platform, deviceName),
             }),
           };
         },
@@ -240,29 +245,6 @@ function requireRequest(req: DaemonRequest | undefined, providerLabel: string): 
     'INVALID_ARGS',
     `${providerLabel} lease allocation requires provider profile flags on the request.`,
   );
-}
-
-function browserStackCapabilities(options: {
-  platform: CloudWebDriverPlatform;
-  deviceName: string;
-  osVersion: string;
-  app: string;
-  projectName?: string;
-  buildName: string;
-  sessionName: string;
-}): Record<string, unknown> {
-  return {
-    platformName: options.platform === 'ios' ? 'iOS' : 'Android',
-    'appium:deviceName': options.deviceName,
-    device: options.deviceName,
-    os_version: options.osVersion,
-    app: options.app,
-    'bstack:options': {
-      ...(options.projectName ? { projectName: options.projectName } : {}),
-      buildName: options.buildName,
-      sessionName: options.sessionName,
-    },
-  };
 }
 
 function requireRequestPlatform(req: DaemonRequest, providerLabel: string): CloudWebDriverPlatform {
