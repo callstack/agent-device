@@ -232,8 +232,22 @@ function summarizeProviderScenarioFlagExclusions() {
     },
     {
       name: 'cloud artifact provider lookup',
-      owner: 'cloud artifact provider, CLI output, and cloud WebDriver provider scenario tests',
-      keys: ['provider', 'providerSessionId'],
+      owner:
+        'cloud provider profile, artifact provider, CLI output, and cloud WebDriver provider scenario tests',
+      keys: [
+        'provider',
+        'providerSessionId',
+        'providerApp',
+        'providerOsVersion',
+        'providerProject',
+        'providerBuild',
+        'providerSessionName',
+        'awsProjectArn',
+        'awsDeviceArn',
+        'awsAppArn',
+        'awsRegion',
+        'awsInteractionMode',
+      ],
     },
     {
       name: 'Metro and React Native runtime preparation',
