@@ -21,6 +21,10 @@ import { createRequestHandler } from '../request-router.ts';
 import type { SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import {
+  createProviderDeviceRuntimeRequestProviders,
+  type ProviderDeviceRuntime,
+} from '../../provider-device-runtime.ts';
 
 vi.mock('../../platforms/android/snapshot.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../platforms/android/snapshot.ts')>();
@@ -173,4 +177,47 @@ test('generic Android gesture commands continue when recording dialog inspection
   expect(execCalls).toEqual([]);
   expect(openAndroidApp).not.toHaveBeenCalled();
   expect(snapshotCalls).toBe(1);
+});
+
+test('generic Android gesture commands skip local dialog recovery for provider devices', async () => {
+  snapshotCalls = 0;
+  snapshotMode = 'blocking-dialog';
+  execCalls.length = 0;
+  dispatchCalls.length = 0;
+
+  const sessionStore = makeSessionStore('agent-device-router-android-modal-provider-');
+  const session = makeAndroidSession('default');
+  sessionStore.set('default', session);
+
+  const runtime: ProviderDeviceRuntime = {
+    provider: 'webdriver-fake',
+    leaseLifecycle: {},
+    deviceInventoryProvider: async () => [session.device],
+    ownsDevice: (device) => device.id === session.device.id,
+    getInteractor: () => undefined,
+    shutdown: async () => {},
+  };
+  const providers = createProviderDeviceRuntimeRequestProviders([runtime]);
+
+  const handler = createRequestHandler({
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    providerDeviceRuntimeScope: providers.providerDeviceRuntimeScope,
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'scroll',
+    positionals: ['down', '0.55'],
+    meta: { requestId: 'req-android-modal-provider' },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(dispatchCalls).toEqual([['scroll', 'down', '0.55']]);
+  expect(execCalls).toEqual([]);
+  expect(snapshotCalls).toBe(0);
 });

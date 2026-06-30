@@ -26,6 +26,7 @@ import {
 import { markPostGestureStabilization } from './post-gesture-stabilization.ts';
 import { normalizeError } from '../kernel/errors.ts';
 import { shouldGuardAndroidBlockingDialog } from './daemon-command-registry.ts';
+import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 
 const GESTURE_PLATFORM_COMMANDS: Readonly<Record<string, string>> = {
   pan: 'pan',
@@ -136,6 +137,9 @@ async function ensureNoAndroidBlockingDialogReady(
   if (session.device.platform !== 'android' || !shouldGuardAndroidBlockingDialog(platformCommand)) {
     return { status: 'clear' };
   }
+  if (isActiveProviderDevice(session.device)) {
+    return { status: 'clear' };
+  }
   try {
     return await ensureAndroidBlockingSystemDialogReady({
       session,
@@ -155,6 +159,7 @@ async function ensureGenericCommandReady(
   if (unsupported) return unsupported;
   if (
     session.device.platform !== 'android' ||
+    isActiveProviderDevice(session.device) ||
     !session.recording ||
     platformCommand === 'record' ||
     (await recoverAndroidBlockingSystemDialog({ session })).status !== 'failed'
