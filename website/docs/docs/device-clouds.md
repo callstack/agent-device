@@ -1,11 +1,11 @@
 ---
-title: Hosted Device Providers
-description: Configure BrowserStack and AWS Device Farm so agents can connect without interactive login.
+title: Device Clouds & Farms
+description: Connect agents to BrowserStack device clouds and AWS Device Farm without interactive login.
 ---
 
-# Hosted Device Providers
+# Device Clouds & Farms
 
-Use hosted provider connections when the agent should drive BrowserStack App Automate or AWS Device Farm remote access through the local `agent-device` daemon:
+Use device cloud and device farm connections when the agent should drive BrowserStack App Automate or AWS Device Farm remote access through the local `agent-device` daemon:
 
 ```bash
 agent-device connect browserstack ...
@@ -16,7 +16,7 @@ These providers are not remote `agent-device` daemons. `connect browserstack` an
 
 ## Interface Summary
 
-Hosted providers have one setup model and three ways to drive the resulting session:
+Device cloud providers have one setup model and three ways to drive the resulting session:
 
 | Interface         | What it does well                                                                                              | How provider setup works                                                                                                                                                                  |
 | ----------------- | -------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

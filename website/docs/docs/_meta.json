@@ -45,9 +45,9 @@
     "label": "Remote Proxy"
   },
   {
-    "name": "hosted-device-providers",
+    "name": "device-clouds",
     "type": "file",
-    "label": "Hosted Device Providers"
+    "label": "Device Clouds"
   },
   {
     "name": "security-trust",
