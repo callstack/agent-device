@@ -40,6 +40,12 @@ export type CloudArtifactsQuery = {
   providerSessionId?: string;
 };
 
+export type CloudProviderSessionResult = {
+  provider?: string;
+  providerSessionId?: string;
+  cloudArtifacts?: CloudArtifactsResult;
+} & Record<string, unknown>;
+
 /**
  * Return undefined only when this provider implementation does not handle the query.
  * Return a CloudArtifactsResult with status "unavailable" when the provider handled the

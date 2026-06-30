@@ -16,10 +16,7 @@ export function resolveCloudWebDriverConnectProfile(options: {
   cwd: string;
   env?: EnvMap;
 }): { flags: CliFlags; remoteConfigPath: string } {
-  const providerConfig =
-    options.provider === CLOUD_WEBDRIVER_PROVIDERS.browserStack
-      ? browserStackProfileFields(options)
-      : awsDeviceFarmProfileFields(options);
+  const providerConfig = requireConnectProfileBuilder(options.provider)(options);
   const clientId = buildCloudWebDriverClientId(
     options.provider,
     options.stateDir,
@@ -57,6 +54,32 @@ export function resolveCloudWebDriverConnectProfile(options: {
     env: options.env,
     flags: options.flags,
   });
+}
+
+type ConnectProfileBuilder = (options: { flags: CliFlags; env?: EnvMap }) => RemoteConfigProfile;
+
+const CLOUD_WEBDRIVER_CONNECT_PROFILE_BUILDERS: readonly {
+  provider: CloudWebDriverKnownProviderName;
+  buildProfileFields: ConnectProfileBuilder;
+}[] = [
+  {
+    provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+    buildProfileFields: browserStackProfileFields,
+  },
+  {
+    provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+    buildProfileFields: awsDeviceFarmProfileFields,
+  },
+];
+
+function requireConnectProfileBuilder(
+  provider: CloudWebDriverKnownProviderName,
+): ConnectProfileBuilder {
+  const builder = CLOUD_WEBDRIVER_CONNECT_PROFILE_BUILDERS.find(
+    (entry) => entry.provider === provider,
+  )?.buildProfileFields;
+  if (builder) return builder;
+  throw new AppError('INVALID_ARGS', `Unsupported cloud WebDriver provider "${provider}".`);
 }
 
 function browserStackProfileFields(options: {

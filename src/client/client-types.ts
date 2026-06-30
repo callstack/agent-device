@@ -49,7 +49,7 @@ import type {
   RemoteConnectionProfileFields,
 } from '../remote/remote-config-schema.ts';
 import type { CommandResult } from '../core/command-descriptor/command-result.ts';
-import type { CloudArtifactsResult } from '../cloud-artifacts.ts';
+import type { CloudArtifactsResult, CloudProviderSessionResult } from '../cloud-artifacts.ts';
 
 export type { FindLocator } from '../utils/finders.ts';
 export type { CompanionTunnelScope, MetroBridgeScope } from './client-companion-tunnel-contract.ts';
@@ -201,7 +201,7 @@ export type StartupPerfSample = {
 export type SessionCloseResult = {
   session: string;
   shutdown?: TargetShutdownResult;
-  provider?: Record<string, unknown>;
+  provider?: CloudProviderSessionResult;
   identifiers: AgentDeviceIdentifiers;
 };
 
@@ -960,7 +960,7 @@ export type AgentDeviceClient = {
     heartbeat: (options: LeaseScopedOptions) => Promise<Lease>;
     release: (
       options: LeaseScopedOptions,
-    ) => Promise<{ released: boolean; provider?: Record<string, unknown> }>;
+    ) => Promise<{ released: boolean; provider?: CloudProviderSessionResult }>;
   };
   metro: {
     prepare: (options: MetroPrepareOptions) => Promise<MetroPrepareResult>;

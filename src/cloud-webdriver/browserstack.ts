@@ -25,11 +25,12 @@ import {
 } from './webdriver-utils.ts';
 
 const BROWSERSTACK_PROVIDER = CLOUD_WEBDRIVER_PROVIDERS.browserStack;
-const BROWSERSTACK_APP_AUTOMATE_ENDPOINT = 'https://hub-cloud.browserstack.com/wd/hub/';
-const BROWSERSTACK_APP_UPLOAD_ENDPOINT = 'https://api-cloud.browserstack.com/app-automate/upload';
+export const BROWSERSTACK_APP_AUTOMATE_ENDPOINT = 'https://hub-cloud.browserstack.com/wd/hub/';
+export const BROWSERSTACK_APP_UPLOAD_ENDPOINT =
+  'https://api-cloud.browserstack.com/app-automate/upload';
 const BROWSERSTACK_SESSION_DETAILS_ENDPOINT =
   'https://api-cloud.browserstack.com/app-automate/sessions';
-const BROWSERSTACK_CAPABILITY_OVERRIDES = {
+export const BROWSERSTACK_CAPABILITY_OVERRIDES = {
   install: {
     support: 'partial',
     note: 'Local app artifacts are uploaded to BrowserStack App Automate, then installed with Appium.',
@@ -62,6 +63,7 @@ export type BrowserStackWebDriverRuntimeOptions = {
   sessionDetailsEndpoint?: string | URL;
   deviceId?: CloudWebDriverRuntimeOptions['deviceId'];
   requestPolicy?: CloudWebDriverRuntimeOptions['requestPolicy'];
+  prepareSession?: CloudWebDriverRuntimeOptions['prepareSession'];
 };
 
 export function getBrowserStackWebDriverCapabilities(
@@ -101,6 +103,7 @@ export function createBrowserStackWebDriverRuntime(
     listArtifacts: async ({ provider, providerSessionId }) =>
       await listBrowserStackCloudArtifacts(provider, providerSessionId, artifactOptions),
     deviceId: options.deviceId,
+    prepareSession: options.prepareSession,
     requestPolicy: options.requestPolicy,
     capabilityOverrides: BROWSERSTACK_CAPABILITY_OVERRIDES,
   });
@@ -161,7 +164,7 @@ export async function uploadBrowserStackApp(
   return appUrl;
 }
 
-function createBrowserStackUploadApp(
+export function createBrowserStackUploadApp(
   options: Required<BrowserStackUploadOptions>,
 ): CloudWebDriverUploadApp {
   return async ({ appPath, options: installOptions }) => {

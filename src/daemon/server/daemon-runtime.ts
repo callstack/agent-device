@@ -7,8 +7,10 @@ import { createDaemonHttpServer } from './http-server.ts';
 import { trackDownloadableArtifact } from '../artifact-tracking.ts';
 import { createDefaultCloudArtifactProvider } from '../../default-cloud-artifact-provider.ts';
 import { createDefaultCloudWebDriverProviderRuntimes } from '../../cloud-webdriver/provider-runtimes.ts';
-import { createProviderDeviceRuntimeRequestProviders } from '../../provider-device-runtime.ts';
-import type { CloudArtifactProvider } from '../../cloud-artifacts.ts';
+import {
+  composeCloudArtifactProviders,
+  createProviderDeviceRuntimeRequestProviders,
+} from '../../provider-device-runtime.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from '../request-router.ts';
 import { teardownSessionResources } from '../session-teardown.ts';
@@ -283,23 +285,5 @@ export async function startDaemonRuntime(
     shutdown,
     socketPort,
     token,
-  };
-}
-
-function composeCloudArtifactProviders(
-  ...providers: Array<CloudArtifactProvider | undefined>
-): CloudArtifactProvider | undefined {
-  const activeProviders = providers.filter(
-    (provider): provider is CloudArtifactProvider => provider !== undefined,
-  );
-  if (activeProviders.length === 0) return undefined;
-  return {
-    listCloudArtifacts: async (query) => {
-      for (const provider of activeProviders) {
-        const result = await provider.listCloudArtifacts?.(query);
-        if (result) return result;
-      }
-      return undefined;
-    },
   };
 }

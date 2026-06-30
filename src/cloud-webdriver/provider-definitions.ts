@@ -1,22 +1,25 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { CloudArtifactsResult } from '../cloud-artifacts.ts';
-import type { DeviceLease } from '../daemon/lease-registry.ts';
 import type { DaemonRequest } from '../daemon/types.ts';
 import { AppError } from '../kernel/errors.ts';
 import type { ProviderDeviceRuntime } from '../provider-device-runtime.ts';
 import {
+  AWS_DEVICE_FARM_CAPABILITY_OVERRIDES,
   createAwsCliDeviceFarmClient,
-  createAwsDeviceFarmWebDriverRuntime,
+  createAwsDeviceFarmPrepareSession,
   listAwsDeviceFarmCloudArtifacts,
 } from './aws-device-farm.ts';
 import {
-  createBrowserStackWebDriverRuntime,
+  BROWSERSTACK_APP_AUTOMATE_ENDPOINT,
+  BROWSERSTACK_APP_UPLOAD_ENDPOINT,
+  BROWSERSTACK_CAPABILITY_OVERRIDES,
+  createBrowserStackUploadApp,
   listBrowserStackCloudArtifacts,
   uploadBrowserStackApp,
 } from './browserstack.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS, type CloudWebDriverKnownProviderName } from './providers.ts';
-import type { CloudWebDriverPlatform } from './runtime.ts';
+import { createCloudWebDriverRuntime, type CloudWebDriverPlatform } from './runtime.ts';
 
 export type DefaultCloudWebDriverArtifactEnv = {
   BROWSERSTACK_USERNAME?: string;
@@ -39,11 +42,7 @@ export type DefaultCloudWebDriverProviderRuntimeEnv = DefaultCloudWebDriverArtif
 
 export type CloudWebDriverProviderDefinition = {
   provider: CloudWebDriverKnownProviderName;
-  createRuntime: (params: {
-    req: DaemonRequest;
-    lease: DeviceLease;
-    env: DefaultCloudWebDriverProviderRuntimeEnv;
-  }) => Promise<ProviderDeviceRuntime> | ProviderDeviceRuntime;
+  createRuntime: (env: DefaultCloudWebDriverProviderRuntimeEnv) => ProviderDeviceRuntime;
   listArtifactsFromEnv: (
     providerSessionId: string,
     env: DefaultCloudWebDriverArtifactEnv,
@@ -53,42 +52,74 @@ export type CloudWebDriverProviderDefinition = {
 export const CLOUD_WEBDRIVER_PROVIDER_DEFINITIONS: readonly CloudWebDriverProviderDefinition[] = [
   {
     provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
-    createRuntime: async ({ req, lease, env }) => {
-      const username = requireEnv(env, 'BROWSERSTACK_USERNAME', 'BrowserStack');
-      const accessKey = requireEnv(env, 'BROWSERSTACK_ACCESS_KEY', 'BrowserStack');
-      const platform = requireRequestPlatform(req, 'BrowserStack');
-      const deviceName = requireFlag(req, 'device', 'BrowserStack requires --device <name>.');
-      const osVersion = requireFlag(
-        req,
-        'providerOsVersion',
-        'BrowserStack requires --provider-os-version <version>.',
-      );
-      const app = await resolveBrowserStackAppReference({
-        app: requireFlag(
-          req,
-          'providerApp',
-          'BrowserStack requires --provider-app <bs://app-id-or-local-path>.',
-        ),
-        cwd: req.meta?.cwd,
-        username,
-        accessKey,
-        uploadEndpoint: env.BROWSERSTACK_APP_UPLOAD_ENDPOINT,
-      });
-      return createBrowserStackWebDriverRuntime({
-        username,
-        accessKey,
-        platform,
-        deviceName,
-        osVersion,
-        app,
-        projectName: readFlag(req, 'providerProject'),
-        buildName: readFlag(req, 'providerBuild') ?? lease.runId,
-        sessionName: readFlag(req, 'providerSessionName') ?? lease.leaseId,
-        endpoint: env.BROWSERSTACK_WEBDRIVER_ENDPOINT,
-        uploadEndpoint: env.BROWSERSTACK_APP_UPLOAD_ENDPOINT,
-        sessionDetailsEndpoint: env.BROWSERSTACK_SESSION_DETAILS_ENDPOINT,
-      });
-    },
+    createRuntime: (env) =>
+      createCloudWebDriverRuntime({
+        provider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+        platform: 'android',
+        deviceName: 'BrowserStack device',
+        endpoint: env.BROWSERSTACK_WEBDRIVER_ENDPOINT ?? BROWSERSTACK_APP_AUTOMATE_ENDPOINT,
+        capabilityOverrides: BROWSERSTACK_CAPABILITY_OVERRIDES,
+        listArtifacts: async ({ provider, providerSessionId }) => {
+          const username = requireEnv(env, 'BROWSERSTACK_USERNAME', 'BrowserStack artifact lookup');
+          const accessKey = requireEnv(
+            env,
+            'BROWSERSTACK_ACCESS_KEY',
+            'BrowserStack artifact lookup',
+          );
+          return await listBrowserStackCloudArtifacts(provider, providerSessionId, {
+            username,
+            accessKey,
+            endpoint: env.BROWSERSTACK_SESSION_DETAILS_ENDPOINT,
+          });
+        },
+        prepareSession: async ({ req, lease, base }) => {
+          const request = requireRequest(req, 'BrowserStack');
+          const username = requireEnv(env, 'BROWSERSTACK_USERNAME', 'BrowserStack');
+          const accessKey = requireEnv(env, 'BROWSERSTACK_ACCESS_KEY', 'BrowserStack');
+          const platform = requireRequestPlatform(request, 'BrowserStack');
+          const deviceName = requireFlag(
+            request,
+            'device',
+            'BrowserStack requires --device <name>.',
+          );
+          const osVersion = requireFlag(
+            request,
+            'providerOsVersion',
+            'BrowserStack requires --provider-os-version <version>.',
+          );
+          const app = await resolveBrowserStackAppReference({
+            app: requireFlag(
+              request,
+              'providerApp',
+              'BrowserStack requires --provider-app <bs://app-id-or-local-path>.',
+            ),
+            cwd: request.meta?.cwd,
+            username,
+            accessKey,
+            uploadEndpoint: env.BROWSERSTACK_APP_UPLOAD_ENDPOINT,
+          });
+          return {
+            ...base,
+            platform,
+            deviceName,
+            auth: { username, accessKey },
+            uploadApp: createBrowserStackUploadApp({
+              username,
+              accessKey,
+              endpoint: env.BROWSERSTACK_APP_UPLOAD_ENDPOINT ?? BROWSERSTACK_APP_UPLOAD_ENDPOINT,
+            }),
+            webdriverCapabilities: browserStackCapabilities({
+              platform,
+              deviceName,
+              osVersion,
+              app,
+              projectName: readFlag(request, 'providerProject'),
+              buildName: readFlag(request, 'providerBuild') ?? lease.runId,
+              sessionName: readFlag(request, 'providerSessionName') ?? lease.leaseId,
+            }),
+          };
+        },
+      }),
     listArtifactsFromEnv: async (providerSessionId, env) => {
       const username = requireEnv(env, 'BROWSERSTACK_USERNAME', 'BrowserStack artifact lookup');
       const accessKey = requireEnv(env, 'BROWSERSTACK_ACCESS_KEY', 'BrowserStack artifact lookup');
@@ -105,34 +136,55 @@ export const CLOUD_WEBDRIVER_PROVIDER_DEFINITIONS: readonly CloudWebDriverProvid
   },
   {
     provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
-    createRuntime: ({ req, lease, env }) => {
-      const platform = requireRequestPlatform(req, 'AWS Device Farm');
-      return createAwsDeviceFarmWebDriverRuntime({
-        projectArn: requireAwsValue(
-          req,
-          env,
-          'awsProjectArn',
-          'AGENT_DEVICE_AWS_DEVICE_FARM_PROJECT_ARN',
-          'AWS_DEVICE_FARM_PROJECT_ARN',
-        ),
-        deviceArn: requireAwsValue(
-          req,
-          env,
-          'awsDeviceArn',
-          'AGENT_DEVICE_AWS_DEVICE_FARM_DEVICE_ARN',
-          'AWS_DEVICE_FARM_DEVICE_ARN',
-        ),
-        appArn:
-          readFlag(req, 'awsAppArn') ??
-          env.AGENT_DEVICE_AWS_DEVICE_FARM_APP_ARN ??
-          env.AWS_DEVICE_FARM_APP_ARN,
-        region: readFlag(req, 'awsRegion') ?? env.AWS_REGION ?? env.AWS_DEFAULT_REGION,
-        platform,
-        deviceName: readFlag(req, 'device') ?? 'AWS Device Farm device',
-        sessionName: readFlag(req, 'providerSessionName') ?? lease.leaseId,
-        interactionMode: readAwsInteractionMode(req),
-      });
-    },
+    createRuntime: (env) =>
+      createCloudWebDriverRuntime({
+        provider: CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm,
+        endpoint: 'http://127.0.0.1/',
+        platform: 'android',
+        deviceName: 'AWS Device Farm device',
+        capabilityOverrides: AWS_DEVICE_FARM_CAPABILITY_OVERRIDES,
+        listArtifacts: async ({ provider, providerSessionId }) => {
+          const client = createAwsCliDeviceFarmClient({
+            region:
+              env.AWS_REGION ??
+              env.AWS_DEFAULT_REGION ??
+              readAwsRegionFromDeviceFarmArn(providerSessionId ?? ''),
+          });
+          return await listAwsDeviceFarmCloudArtifacts(provider, providerSessionId, client);
+        },
+        prepareSession: async ({ req, lease, base }) => {
+          const request = requireRequest(req, 'AWS Device Farm');
+          const platform = requireRequestPlatform(request, 'AWS Device Farm');
+          const sessionOptions = {
+            client: createAwsCliDeviceFarmClient({
+              region: readFlag(request, 'awsRegion') ?? env.AWS_REGION ?? env.AWS_DEFAULT_REGION,
+            }),
+            projectArn: requireAwsValue(
+              request,
+              env,
+              'awsProjectArn',
+              'AGENT_DEVICE_AWS_DEVICE_FARM_PROJECT_ARN',
+              'AWS_DEVICE_FARM_PROJECT_ARN',
+            ),
+            deviceArn: requireAwsValue(
+              request,
+              env,
+              'awsDeviceArn',
+              'AGENT_DEVICE_AWS_DEVICE_FARM_DEVICE_ARN',
+              'AWS_DEVICE_FARM_DEVICE_ARN',
+            ),
+            appArn:
+              readFlag(request, 'awsAppArn') ??
+              env.AGENT_DEVICE_AWS_DEVICE_FARM_APP_ARN ??
+              env.AWS_DEVICE_FARM_APP_ARN,
+            platform,
+            deviceName: readFlag(request, 'device') ?? 'AWS Device Farm device',
+            sessionName: readFlag(request, 'providerSessionName') ?? lease.leaseId,
+            interactionMode: readAwsInteractionMode(request),
+          };
+          return await createAwsDeviceFarmPrepareSession(sessionOptions)({ lease, req, base });
+        },
+      }),
     listArtifactsFromEnv: async (providerSessionId, env) => {
       const client = createAwsCliDeviceFarmClient({
         region:
@@ -180,6 +232,37 @@ async function resolveBrowserStackAppReference(options: {
 
 function isProviderAppReference(value: string): boolean {
   return value.startsWith('bs://') || /^https?:\/\//.test(value);
+}
+
+function requireRequest(req: DaemonRequest | undefined, providerLabel: string): DaemonRequest {
+  if (req) return req;
+  throw new AppError(
+    'INVALID_ARGS',
+    `${providerLabel} lease allocation requires provider profile flags on the request.`,
+  );
+}
+
+function browserStackCapabilities(options: {
+  platform: CloudWebDriverPlatform;
+  deviceName: string;
+  osVersion: string;
+  app: string;
+  projectName?: string;
+  buildName: string;
+  sessionName: string;
+}): Record<string, unknown> {
+  return {
+    platformName: options.platform === 'ios' ? 'iOS' : 'Android',
+    'appium:deviceName': options.deviceName,
+    device: options.deviceName,
+    os_version: options.osVersion,
+    app: options.app,
+    'bstack:options': {
+      ...(options.projectName ? { projectName: options.projectName } : {}),
+      buildName: options.buildName,
+      sessionName: options.sessionName,
+    },
+  };
 }
 
 function requireRequestPlatform(req: DaemonRequest, providerLabel: string): CloudWebDriverPlatform {

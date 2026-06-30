@@ -20,6 +20,7 @@ import { AppError } from '../../kernel/errors.ts';
 import type { LeaseBackend, SessionRuntimeHints } from '../../kernel/contracts.ts';
 import type { CliFlags } from '../parser/cli-flags.ts';
 import type { AgentDeviceClient, Lease } from '../../client/client.ts';
+import type { CloudProviderSessionResult } from '../../cloud-artifacts.ts';
 import type { MetroPrepareKind } from '../../metro/client-metro.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { isCloudWebDriverProviderName } from '../../cloud-webdriver/providers.ts';
@@ -458,7 +459,7 @@ export async function stopReactDevtoolsCleanup(options: {
 export async function releaseRemoteConnectionLease(
   client: AgentDeviceClient,
   state: RemoteConnectionState,
-): Promise<{ released: boolean; provider?: Record<string, unknown> }> {
+): Promise<{ released: boolean; provider?: CloudProviderSessionResult }> {
   if (!state.leaseId) return { released: false };
   const result = await client.leases.release({
     tenant: state.tenant,

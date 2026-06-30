@@ -7,6 +7,7 @@ import type { DeviceInventoryProvider } from '../core/dispatch-resolve.ts';
 import type { Interactor } from '../core/interactor-types.ts';
 import type { LeaseLifecycleProvider } from '../daemon/handlers/lease.ts';
 import type { DeviceLease } from '../daemon/lease-registry.ts';
+import type { DaemonRequest } from '../daemon/types.ts';
 import type {
   ProviderDeviceInstallOptions,
   ProviderDeviceInstallResult,
@@ -73,6 +74,7 @@ export type CloudWebDriverListArtifacts = (params: {
 
 export type CloudWebDriverPrepareSession = (params: {
   lease: DeviceLease;
+  req?: DaemonRequest;
   base: CloudWebDriverBaseSession;
 }) => Promise<CloudWebDriverPreparedSession>;
 
@@ -100,6 +102,7 @@ type WebDriverProviderSession = {
   client: WebDriverClient;
   interactor: Interactor;
   prepared: CloudWebDriverPreparedSession;
+  capabilities: CloudWebDriverProviderCapabilities;
   webDriverSessionId: string;
   providerSessionId: string;
 };
@@ -129,7 +132,7 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
       overrides: options.capabilityOverrides,
     });
     this.leaseLifecycle = {
-      allocate: async (lease) => await this.allocate(lease),
+      allocate: async (lease, context) => await this.allocate(lease, context?.req),
       heartbeat: async (lease) => this.heartbeat(lease),
       release: async (lease) => await this.release(lease),
     };
@@ -181,9 +184,13 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
     this.sessionsByLeaseId.clear();
   }
 
-  private async allocate(lease: DeviceLease): Promise<Record<string, unknown> | undefined> {
+  private async allocate(
+    lease: DeviceLease,
+    req?: DaemonRequest,
+  ): Promise<Record<string, unknown> | undefined> {
     if (lease.leaseProvider !== this.provider) return undefined;
-    const prepared = await this.prepareSession(lease);
+    if (this.sessionsByLeaseId.has(lease.leaseId)) return this.heartbeat(lease);
+    const prepared = await this.prepareSession(lease, req);
     const client = new WebDriverClient({
       endpoint: prepared.endpoint,
       auth: prepared.auth,
@@ -193,17 +200,19 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
     const session = await this.createSessionWithPreparedCleanup(client, prepared);
     const device = this.deviceForLease(lease, prepared);
     const providerSessionId = prepared.providerSessionId ?? session.sessionId;
+    const capabilities = this.capabilitiesForPlatform(prepared.platform);
     this.sessionsByLeaseId.set(lease.leaseId, {
       lease,
       device,
       client,
       prepared,
+      capabilities,
       webDriverSessionId: session.sessionId,
       providerSessionId,
       interactor: createWebDriverInteractor({
         client,
         backend: snapshotBackendForPlatform(prepared.platform),
-        capabilities: this.capabilities,
+        capabilities,
       }),
     });
     return {
@@ -211,7 +220,7 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
       deviceId: device.id,
       sessionId: session.sessionId,
       providerSessionId,
-      capabilities: this.capabilities,
+      capabilities,
       ...prepared.providerData,
     };
   }
@@ -262,9 +271,24 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
     });
   }
 
-  private async prepareSession(lease: DeviceLease): Promise<CloudWebDriverPreparedSession> {
+  private async prepareSession(
+    lease: DeviceLease,
+    req: DaemonRequest | undefined,
+  ): Promise<CloudWebDriverPreparedSession> {
     const base = this.baseSessionForLease(lease);
-    return this.options.prepareSession ? await this.options.prepareSession({ lease, base }) : base;
+    return this.options.prepareSession
+      ? await this.options.prepareSession({ lease, req, base })
+      : base;
+  }
+
+  private capabilitiesForPlatform(
+    platform: CloudWebDriverPlatform,
+  ): CloudWebDriverProviderCapabilities {
+    return createCloudWebDriverCapabilities({
+      provider: this.provider,
+      platform,
+      overrides: this.options.capabilityOverrides,
+    });
   }
 
   private baseSessionForLease(lease: DeviceLease): CloudWebDriverBaseSession {
@@ -312,10 +336,10 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
     appPath: string,
     options?: ProviderDeviceInstallOptions,
   ): Promise<CloudWebDriverUploadResult | undefined> {
-    if (!capabilitySupported(this.capabilities, 'install')) {
+    if (!capabilitySupported(session.capabilities, 'install')) {
       throw new AppError(
         'UNSUPPORTED_OPERATION',
-        unsupportedCapabilityMessage(this.capabilities, 'install'),
+        unsupportedCapabilityMessage(session.capabilities, 'install'),
         { provider: this.provider, deviceId: device.id, platform: device.platform },
       );
     }

@@ -24,7 +24,7 @@ import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
 import { resolveLeaseValue, type LeaseValue } from './webdriver-utils.ts';
 
 const AWS_DEVICE_FARM_PROVIDER = CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm;
-const AWS_DEVICE_FARM_CAPABILITY_OVERRIDES = {
+export const AWS_DEVICE_FARM_CAPABILITY_OVERRIDES = {
   install: {
     support: 'unsupported',
     note: 'Pass appArn when creating the remote access session; local artifact upload/install is not implemented.',
@@ -97,6 +97,7 @@ export type AwsDeviceFarmWebDriverRuntimeOptions = {
   configuration?: AwsCreateRemoteAccessSessionInput['configuration'];
   deviceId?: CloudWebDriverRuntimeOptions['deviceId'];
   requestPolicy?: CloudWebDriverRuntimeOptions['requestPolicy'];
+  prepareSession?: CloudWebDriverRuntimeOptions['prepareSession'];
 };
 
 export function getAwsDeviceFarmWebDriverCapabilities(
@@ -121,12 +122,14 @@ export function createAwsDeviceFarmWebDriverRuntime(
     platform,
     deviceName,
     webdriverCapabilities: options.webdriverCapabilities,
-    prepareSession: createAwsDeviceFarmPrepareSession({
-      ...options,
-      platform,
-      deviceName,
-      client,
-    }),
+    prepareSession:
+      options.prepareSession ??
+      createAwsDeviceFarmPrepareSession({
+        ...options,
+        platform,
+        deviceName,
+        client,
+      }),
     deviceId: options.deviceId,
     requestPolicy: options.requestPolicy,
     capabilityOverrides: AWS_DEVICE_FARM_CAPABILITY_OVERRIDES,
@@ -205,7 +208,7 @@ export function createAwsCliDeviceFarmClient(
   };
 }
 
-function createAwsDeviceFarmPrepareSession(
+export function createAwsDeviceFarmPrepareSession(
   options: Required<
     Pick<
       AwsDeviceFarmWebDriverRuntimeOptions,
