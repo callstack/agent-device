@@ -1878,6 +1878,7 @@ test('disconnect without a session uses active connection state', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-disconnect-active-'));
   const stateDir = path.join(tempRoot, '.state');
   const remoteConfigPath = path.join(tempRoot, 'remote.json');
+  const closedSessions: Array<{ session: string | undefined; shutdown: boolean | undefined }> = [];
   fs.writeFileSync(remoteConfigPath, '{}');
   writeRemoteConnectionState({
     stateDir,
@@ -1905,10 +1906,19 @@ test('disconnect without a session uses active connection state', async () => {
         stateDir,
         shutdown: true,
       },
-      client: createTestClient(),
+      client: createTestClient({
+        closeSession: async (options) => {
+          closedSessions.push({ session: options?.session, shutdown: options?.shutdown });
+          return {
+            session: options?.session ?? 'default',
+            identifiers: { session: options?.session ?? 'default' },
+          };
+        },
+      }),
     });
   });
 
+  assert.deepEqual(closedSessions, [{ session: 'adc-android', shutdown: true }]);
   assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-android' }), null);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });

@@ -315,7 +315,9 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
 
   let providerData: Record<string, unknown> | undefined;
   try {
-    providerData = (await client.sessions.close({ shutdown: flags.shutdown })).provider;
+    providerData = (
+      await client.sessions.close({ session: connectedSession, shutdown: flags.shutdown })
+    ).provider;
   } catch {
     // Disconnect is idempotent; the session may already be closed.
   }

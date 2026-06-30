@@ -93,7 +93,6 @@ export type {
   FindOptions,
   FocusOptions,
   GetOptions,
-  HomeCommandOptions,
   HomeCommandResult,
   InteractionTarget,
   IsOptions,

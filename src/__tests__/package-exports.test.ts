@@ -27,7 +27,6 @@ const supportedSubpaths = [
   './remote-config',
   './install-source',
   './android-adb',
-  './android-snapshot-helper',
   './contracts',
   './selectors',
   './finders',
