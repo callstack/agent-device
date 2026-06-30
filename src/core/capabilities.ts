@@ -1,8 +1,16 @@
 import { deriveCapabilityMatrix } from './command-descriptor/derive.ts';
 import { commandDescriptors } from './command-descriptor/registry.ts';
-import { deriveCapabilityForPlatform } from './platform-descriptor/derive.ts';
-import { platformDescriptors } from './platform-descriptor/registry.ts';
+import { tryGetPlugin } from './platform-plugin/plugin.ts';
+import { registerBuiltinPlatformPlugins } from './platform-plugin/register-builtins.ts';
 import type { DeviceInfo } from '../kernel/device.ts';
+
+// Populate the PlatformPlugin registry once at module load (idempotent; registers
+// only lazy closures, so no leaf code is imported and CLI cold-start is unaffected
+// — mirrors the same call in `core/interactors.ts`). `isCommandSupportedOnDevice`
+// reads each platform's capability bucket from this registry, and the admission
+// path reaches it (e.g. `daemon/handlers/response.ts`) without necessarily having
+// loaded `core/interactors.ts` first, so the registry must be populated here.
+registerBuiltinPlatformPlugins();
 
 type KindMatrix = {
   simulator?: boolean;
@@ -69,25 +77,23 @@ function addWebCommandCapabilities(
   return result;
 }
 
-// Platform -> capability-bucket selection, folded from the additive
-// platform-descriptor registry (ADR-0009, Phase 3 step 1). The hand-authored
-// switch was deleted after `platform-descriptor/__tests__/parity.test.ts` proved
-// deriveCapabilityForPlatform is byte-equal to it across all five platforms. The
-// registry's compile-time totality keeps the prior safety: adding a new Platform
-// without a descriptor row is a compile error, so it can no longer silently
-// inherit web's capability matrix. The registry only type-imports CommandCapability
-// from here, so this value-level dependency does not form a runtime cycle.
-function selectCapabilityForPlatform(
-  capability: CommandCapability,
-  platform: DeviceInfo['platform'],
-): KindMatrix | undefined {
-  return deriveCapabilityForPlatform(platformDescriptors, capability, platform);
-}
-
 export function isCommandSupportedOnDevice(command: string, device: DeviceInfo): boolean {
   const capability = COMMAND_CAPABILITY_MATRIX[command];
   if (!capability) return true;
-  const byPlatform = selectCapabilityForPlatform(capability, device.platform);
+  // Platform -> capability-bucket selection now flows through the single
+  // PlatformPlugin registry (ADR-0009, Phase 3 step b.1): the bucket a leaf
+  // platform reads from a CommandCapability is the owning plugin's
+  // `capability.bucket`. This replaces the former `selectCapabilityForPlatform`
+  // fold over `platformDescriptors`; the plugin bucket is proven byte-for-byte
+  // equal to that derivation by `platform-plugin/__tests__/parity.test.ts`, and
+  // `__tests__/capability-plugin-routing-parity.test.ts` pins that this swap leaves
+  // `isCommandSupportedOnDevice` unchanged across the full command x device matrix.
+  // `tryGetPlugin` returns undefined only for an unregistered platform — the same
+  // "no bucket -> unsupported" fall-through the fold produced for a platform with
+  // no capability family (perfect-shape §5.1's `if (!plugin) return false`).
+  const plugin = tryGetPlugin(device.platform);
+  if (!plugin) return false;
+  const byPlatform = capability[plugin.capability.bucket];
   if (!byPlatform) return false;
   if (capability.supports && !capability.supports(device)) return false;
   const kind = (device.kind ?? 'unknown') as keyof KindMatrix;
