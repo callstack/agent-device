@@ -17,7 +17,7 @@ export async function forceStopAndroidAppWithAdb(
   await adb(['shell', 'am', 'force-stop', packageName]);
 }
 
-export async function resolveAndroidLaunchComponentWithAdb(
+async function resolveAndroidLaunchComponentWithAdb(
   adb: AndroidAdbExecutor,
   packageName: string,
   categories: string[] = [ANDROID_LAUNCHER_CATEGORY],

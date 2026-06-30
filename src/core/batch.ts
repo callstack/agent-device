@@ -13,15 +13,11 @@ import {
   parseBatchStepRuntime,
 } from '../batch-contract.ts';
 import {
-  BATCH_BLOCKED_COMMANDS,
   BATCH_DAEMON_STEP_KEYS,
   INHERITED_PARENT_FLAG_KEYS,
   assertBatchRuntimeCommandAllowed,
   normalizeBatchCommandName,
 } from '../batch-policy.ts';
-
-export { DEFAULT_BATCH_MAX_STEPS };
-export { BATCH_BLOCKED_COMMANDS, INHERITED_PARENT_FLAG_KEYS };
 
 const batchAllowedStepKeys = new Set<string>(BATCH_DAEMON_STEP_KEYS);
 
@@ -193,7 +189,7 @@ export function validateAndNormalizeBatchSteps(
   return normalized;
 }
 
-export function buildBatchStepFlags(
+function buildBatchStepFlags(
   parentFlags: BatchFlags | Record<string, unknown> | undefined,
   stepFlags: DaemonBatchStep['flags'] | Record<string, unknown> | undefined,
 ): BatchFlags {

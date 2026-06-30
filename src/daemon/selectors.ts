@@ -4,7 +4,6 @@ export type { SelectorDiagnostics, SelectorResolution } from './selectors-resolv
 export {
   parseSelectorChain,
   tryParseSelectorChain,
-  isSelectorToken,
   splitSelectorFromArgs,
   splitIsSelectorArgs,
 } from './selectors-parse.ts';

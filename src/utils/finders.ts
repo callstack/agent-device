@@ -99,7 +99,7 @@ export function normalizeText(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
-export function normalizeRole(value: string): string {
+function normalizeRole(value: string): string {
   let normalized = value.trim();
   if (!normalized) return '';
   const lastSegment = normalized.split('.').pop() ?? normalized;

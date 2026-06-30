@@ -45,15 +45,15 @@ export type DaemonInstallSource =
         }
     ));
 
-export const DAEMON_LOCK_POLICIES = ['reject', 'strip'] as const;
+const DAEMON_LOCK_POLICIES = ['reject', 'strip'] as const;
 export type DaemonLockPolicy = (typeof DAEMON_LOCK_POLICIES)[number];
-export const LEASE_BACKENDS = ['ios-simulator', 'ios-instance', 'android-instance'] as const;
+const LEASE_BACKENDS = ['ios-simulator', 'ios-instance', 'android-instance'] as const;
 export type LeaseBackend = (typeof LEASE_BACKENDS)[number];
-export const DAEMON_SERVER_MODES = ['socket', 'http', 'dual'] as const;
+const DAEMON_SERVER_MODES = ['socket', 'http', 'dual'] as const;
 export type DaemonServerMode = (typeof DAEMON_SERVER_MODES)[number];
-export const DAEMON_TRANSPORT_PREFERENCES = ['auto', 'socket', 'http'] as const;
+const DAEMON_TRANSPORT_PREFERENCES = ['auto', 'socket', 'http'] as const;
 export type DaemonTransportPreference = (typeof DAEMON_TRANSPORT_PREFERENCES)[number];
-export const SESSION_ISOLATION_MODES = ['none', 'tenant'] as const;
+const SESSION_ISOLATION_MODES = ['none', 'tenant'] as const;
 export type SessionIsolationMode = (typeof SESSION_ISOLATION_MODES)[number];
 export const NETWORK_INCLUDE_MODES = ['summary', 'headers', 'body', 'all'] as const;
 export type NetworkIncludeMode = (typeof NETWORK_INCLUDE_MODES)[number];

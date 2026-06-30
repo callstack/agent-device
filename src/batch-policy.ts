@@ -30,7 +30,7 @@ export type StructuredBatchCommandName = Extract<
 export const STRUCTURED_BATCH_COMMAND_NAMES: readonly StructuredBatchCommandName[] =
   deriveStructuredBatchCommandNames(commandDescriptors) as readonly StructuredBatchCommandName[];
 
-export const BATCH_BLOCKED_COMMANDS: ReadonlySet<string> = new Set(['batch', 'replay']);
+const BATCH_BLOCKED_COMMANDS: ReadonlySet<string> = new Set(['batch', 'replay']);
 
 export const BATCH_DAEMON_STEP_KEYS = ['command', 'positionals', 'flags', 'runtime'] as const;
 

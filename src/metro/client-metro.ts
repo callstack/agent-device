@@ -226,10 +226,7 @@ function parsePort(value: number | string | undefined, fallback: number): number
   return parsed;
 }
 
-export function buildMetroRuntimeHints(
-  baseUrl: string,
-  platform: 'ios' | 'android',
-): MetroRuntimeHints {
+function buildMetroRuntimeHints(baseUrl: string, platform: 'ios' | 'android'): MetroRuntimeHints {
   return {
     platform,
     bundleUrl: buildBundleUrl(baseUrl, platform),
