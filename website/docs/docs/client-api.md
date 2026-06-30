@@ -19,9 +19,9 @@ Public subpath API exposed for Node consumers:
 - `agent-device/io`
   - artifact adapter types, file input refs, and file output refs
 - `agent-device/metro`
-  - `buildBundleUrl(baseUrl, options?)`
+  - `buildBundleUrl(baseUrl, platform)`
   - `normalizeBaseUrl(baseUrl)`
-  - `resolveRuntimeTransport(options)`
+  - `resolveRuntimeTransport(runtime)`
   - types: `MetroBridgeDescriptor`, `MetroTunnelRequestMessage`, `MetroTunnelResponseMessage`
 - `agent-device/batch`
   - `runBatch(req, sessionName, invoke)`
@@ -227,8 +227,9 @@ Use `agent-device/batch` when a bridge or in-process runner receives daemon-shap
 
 ```ts
 import { runBatch } from 'agent-device/batch';
-import type { BatchRequest } from 'agent-device/batch';
 import type { DaemonResponse } from 'agent-device/contracts';
+
+type BatchRequest = Parameters<typeof runBatch>[0];
 
 async function handleBatch(req: BatchRequest): Promise<DaemonResponse> {
   return await runBatch(req, req.session ?? 'default', async (stepReq) => {
