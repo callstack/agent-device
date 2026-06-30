@@ -62,7 +62,7 @@ Successful and failed responses use the same top-level envelope:
   "ok": false,
   "error": {
     "code": "UNSUPPORTED_OPERATION",
-    "message": "Unable to dismiss the iOS keyboard without a native dismiss gesture or control"
+    "message": "Unable to dismiss the iOS keyboard without a safe native dismiss control"
   }
 }
 ```

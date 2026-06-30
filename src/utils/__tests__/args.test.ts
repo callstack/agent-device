@@ -1110,8 +1110,9 @@ test('usageForCommand supports legacy long-press alias', () => {
 test('usageForCommand documents keyboard dismissal flow', () => {
   const help = usageForCommand('keyboard');
   assert.equal(help === null, false);
-  assert.match(help ?? '', /focus the field by id\/ref first/);
-  assert.match(help ?? '', /keyboard dismiss reports unsupported/);
+  assert.match(help ?? '', /To hide the keyboard, use keyboard dismiss/);
+  assert.match(help ?? '', /taps safe controls like Done/);
+  assert.match(help ?? '', /UNSUPPORTED_OPERATION/);
 });
 
 test('usageForCommand supports metrics alias', () => {
@@ -1434,7 +1435,11 @@ test('usageForCommand resolves workflow help topic', () => {
   assert.match(help, /iOS Allow Paste prompt cannot be exercised under XCUITest/);
   assert.match(help, /Empty replacement is not a supported clear-field command/);
   assert.match(help, /do not plan fill <target> ""/);
-  assert.match(help, /prefer keyboard dismiss before manually pressing visible Done/);
+  assert.match(help, /To hide the keyboard, use keyboard dismiss/);
+  assert.match(
+    help,
+    /press a visible app control such as Done only when that is the intended fallback/,
+  );
   assert.match(help, /UNSUPPORTED_OPERATION/);
   assert.match(help, /Stateful commands within one session must run serially/);
   assert.match(

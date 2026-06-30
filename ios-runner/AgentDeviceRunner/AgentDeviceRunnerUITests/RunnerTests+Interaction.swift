@@ -355,25 +355,10 @@ extension RunnerTests {
     let visible = isKeyboardVisible(app: app)
     return (wasVisible: true, dismissed: !visible, visible: visible)
 #else
-    let keyboard = app.keyboards.firstMatch
-    keyboard.swipeDown()
-    sleepFor(0.2)
-    if !isKeyboardVisible(app: app) {
-      return (wasVisible: true, dismissed: true, visible: false)
-    }
-
     if tapKeyboardDismissControl(app: app) {
       sleepFor(0.2)
       let visible = isKeyboardVisible(app: app)
       return (wasVisible: true, dismissed: !visible, visible: visible)
-    }
-
-    if tapKeyboardReturnControl(app: app, allowCoordinateFallback: true) {
-      sleepFor(0.2)
-      let visible = isKeyboardVisible(app: app)
-      if !visible {
-        return (wasVisible: true, dismissed: true, visible: false)
-      }
     }
 
     return (wasVisible: true, dismissed: false, visible: isKeyboardVisible(app: app))
@@ -478,7 +463,7 @@ extension RunnerTests {
         label,
         label
       )
-      let toolbarButtons = app.toolbars.buttons
+      let toolbarButtons = app.descendants(matching: .button)
         .matching(toolbarButtonPredicate)
         .allElementsBoundByIndex
       if let hittable = toolbarButtons.first(where: {
@@ -492,10 +477,7 @@ extension RunnerTests {
 #endif
   }
 
-  private func tapKeyboardReturnControl(
-    app: XCUIApplication,
-    allowCoordinateFallback: Bool = false
-  ) -> Bool {
+  private func tapKeyboardReturnControl(app: XCUIApplication) -> Bool {
 #if os(iOS)
     for label in ["return", "Return", "Enter", "Go", "Search", "Next", "Done", "Send", "Join"] {
       let candidates = [
@@ -505,21 +487,6 @@ extension RunnerTests {
       if let hittable = candidates.first(where: { $0.exists && $0.isHittable }) {
         hittable.tap()
         return true
-      }
-      if allowCoordinateFallback,
-         let keyboardFrame = visibleKeyboardFrame(app: app),
-         let framed = candidates.first(where: {
-           guard $0.exists else { return false }
-           let frame = $0.frame
-           return !frame.isEmpty && keyboardFrame.contains(CGPoint(x: frame.midX, y: frame.midY))
-         }) {
-        let frame = framed.frame
-        switch tapAt(app: app, x: frame.midX, y: frame.midY) {
-        case .performed:
-          return true
-        case .unsupported:
-          return false
-        }
       }
     }
 #endif
