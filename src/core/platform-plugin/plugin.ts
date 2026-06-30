@@ -3,21 +3,6 @@ import type { DeviceInfo, Platform, PlatformSelector } from '../../kernel/device
 import type { Interactor, RunnerContext } from '../interactor-types.ts';
 import type { DeviceInventoryRequest } from '../platform-inventory.ts';
 import type { CapabilityBucket } from '../platform-descriptor/types.ts';
-// Daemon-owned facet types are TYPE-ONLY imports (erased under verbatimModuleSyntax),
-// so referencing them here forms no runtime cycle — mirroring the established pattern
-// in src/core/command-descriptor/registry.ts, which type-imports from src/daemon. The
-// `providers` / `recording` / `appLog` / `perf` facets are DECLARED here so the plugin
-// shape matches plans/perfect-shape.md §5.1, but are intentionally left UNPOPULATED by
-// the builtins in this foundation slice; wiring them is Phase 3 step (b)/(c) work (see
-// plans/phase3-platform-plugin-progress.md) and must port the daemon column logic
-// verbatim, pinned by a table-equivalence parity test before any hand table is deleted.
-import type { PlatformProviderResolvers } from '../../daemon/request-platform-providers.ts';
-import type {
-  IosSimulatorRecordingRequest,
-  RecordingProcess,
-} from '../../daemon/recording-provider.ts';
-import type { AppLogResult, AppLogStartRequest } from '../../daemon/app-log.ts';
-import type { LogBackend } from '../../daemon/network-log.ts';
 
 /**
  * The platform-plugin contract (plans/perfect-shape.md §5.1, ADR-0009).
@@ -32,6 +17,13 @@ import type { LogBackend } from '../../daemon/network-log.ts';
  * Imports are TYPE-ONLY; the concrete leaf code is reached through LAZY dynamic
  * `import()` inside `createInteractor` / `discoverDevices`, preserving the
  * CLI cold-start laziness that today's `getInteractor` switch relies on.
+ *
+ * Step-a scope: this contract intentionally contains ONLY the facets this slice
+ * genuinely implements and parity-tests. The daemon-owned columns
+ * (`providers` / `recording` / `appLog` / `perf`) are NOT declared here — they
+ * arrive in step (b), typed against PLATFORM-NEUTRAL, daemon-owned wrappers
+ * (not the iOS-simulator-shaped provider seam). See
+ * plans/phase3-platform-plugin-progress.md.
  */
 export type PlatformPlugin = {
   /** Plugin/family id; also the capability-matrix bucket key for its platforms. */
@@ -55,17 +47,6 @@ export type PlatformPlugin = {
     readonly bucket: CapabilityBucket;
     supportsByDefault?(device: DeviceInfo): boolean;
   };
-  /** DECLARED for step (b); unpopulated in this foundation slice. See module header. */
-  readonly providers?: () => Partial<PlatformProviderResolvers>;
-  /** DECLARED for step (b); unpopulated in this foundation slice. See module header. */
-  readonly recording?: { start(request: IosSimulatorRecordingRequest): RecordingProcess };
-  /** DECLARED for step (b); unpopulated in this foundation slice. See module header. */
-  readonly appLog?: {
-    start(request: AppLogStartRequest): Promise<AppLogResult>;
-    logBackend(device: DeviceInfo): LogBackend;
-  };
-  /** DECLARED for step (c); unpopulated in this foundation slice. See module header. */
-  readonly perf?: { collect(device: DeviceInfo): Promise<Record<string, unknown>> };
 };
 
 // The single registry instance: leaf platform -> owning plugin. A family plugin

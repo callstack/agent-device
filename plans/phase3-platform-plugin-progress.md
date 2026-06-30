@@ -27,6 +27,15 @@
   web/apple plugins reuse the SAME instance/predicate (no divergent copy).
 - Parity test `src/core/platform-plugin/__tests__/parity.test.ts`.
 
+**Contract scope (step-a discipline):** the `PlatformPlugin` type carries ONLY the facets this slice actually
+implements and parity-tests — `id`, `platforms`, `familySelector?`, `createInteractor`, `discoverDevices`,
+`capability { bucket, supportsByDefault? }`. The daemon-owned columns (`providers` / `recording` / `appLog` /
+`perf`) are deliberately NOT declared yet. An earlier draft declared a `recording?: { start(req:
+IosSimulatorRecordingRequest): RecordingProcess }` facet; that was REMOVED because it baked the
+iOS-simulator provider seam into the contract (it cannot represent the Android / web / macOS-runner /
+iOS-device-runner / stop-path recording contracts, which need the daemon recording context, not
+`{device,outPath} -> child/wait`). Those facets arrive in step (b), platform-neutral — see §b.3.
+
 **Placement note (deviation from §5.1's `src/platforms/plugin.ts`):** the registry lives under
 `src/core/platform-plugin/` — mirroring the existing `src/core/platform-descriptor/` and
 `src/core/command-descriptor/` foundations (#905–911), and because everything it wraps today
@@ -76,22 +85,26 @@ These encode the irreducible device nuance and live today in `src/core/command-d
   plugin — **do not rewrite the predicate bodies.** Pin with a closure-equivalence test (same inputs → same
   boolean / same hint string) before deleting any hand site.
 
-### (b.3) Daemon columns onto the (already declared) plugin facets
+### (b.3) INTRODUCE the daemon-column facets (platform-neutral) onto the plugin
 
-The plugin type already DECLARES `providers` / `recording` / `appLog` / `perf` (unpopulated). Populate each by
-wrapping the existing daemon branch, pinned by a parity test, then route the daemon lookup through
-`getPlugin(...)`:
+Step (a) deliberately ships **no** `providers` / `recording` / `appLog` / `perf` facets (an earlier draft's
+iOS-shaped `recording` facet was removed — see "Contract scope" above). Step (b) ADDS each facet to the
+`PlatformPlugin` type, **typed against a PLATFORM-NEUTRAL, daemon-owned wrapper** — never the
+`IosSimulatorRecordingRequest` provider seam — then populates it by wrapping the existing daemon branch, pins
+it with a table-equivalence parity test, and only then routes the daemon lookup through `getPlugin(...)`:
 
-| Facet | Hand branch to wrap (file:line) | Parity oracle |
-|---|---|---|
-| `providers` | `REQUEST_PLATFORM_PROVIDER_DESCRIPTORS` `src/daemon/request-platform-providers.ts:117-233` (per-platform `resolve` gates) | each resolver returns the same provider/`undefined` per sample device |
-| `recording` | `resolveRecordingBackendForDevice` / `stopActiveRecording` `src/daemon/handlers/record-trace-recording-backends.ts:73-101`; `RecordingProvider` `src/daemon/recording-provider.ts:16-18` (de-iOS-name `startIosSimulatorRecording`) | same backend tag per device; same stop dispatch per recording tag |
-| `appLog` | `resolveLogBackend` `src/daemon/app-log.ts:179-185`; `startLocalAppLog` if-chain `:344-375` | same `LogBackend` + same start path per device |
-| `perf` | `buildPerfResponseData` `src/daemon/handlers/session-perf.ts:109-131`; `supportsPlatformPerfMetrics` `:324-329`; native-perf Android gate `src/daemon/handlers/session-native-perf.ts:34-39` | same metrics/support per device |
+| Facet | Hand branch to wrap (file:line) | Neutral wrapper the facet must be typed against | Parity oracle |
+|---|---|---|---|
+| `providers` | `REQUEST_PLATFORM_PROVIDER_DESCRIPTORS` `src/daemon/request-platform-providers.ts:117-233` (per-platform `resolve` gates) | `() => Partial<PlatformProviderResolvers>` (already platform-neutral) | each resolver returns the same provider/`undefined` per sample device |
+| `recording` | `resolveRecordingBackendForDevice` / `stopActiveRecording` `src/daemon/handlers/record-trace-recording-backends.ts:73-101` | a daemon-owned `RecordingBackend` start+stop context carrying **session, deps, fps flag, recording base, resolved output path** for `start` and the **recording tag** for `stop` — NOT `{device,outPath} -> child/wait`; `startIosSimulatorRecording` (`src/daemon/recording-provider.ts:16-18`) is **de-iOS-named** here | same backend tag per device; same stop dispatch per recording tag |
+| `appLog` | `resolveLogBackend` `src/daemon/app-log.ts:179-185`; `startLocalAppLog` if-chain `:344-375` | the existing `AppLogStartRequest` (carries device/appBundleId/outPath) + `LogBackend` resolver | same `LogBackend` + same start path per device |
+| `perf` | `buildPerfResponseData` `src/daemon/handlers/session-perf.ts:109-131`; `supportsPlatformPerfMetrics` `:324-329`; native-perf Android gate `src/daemon/handlers/session-native-perf.ts:34-39` | the daemon perf request/response context | same metrics/support per device |
 
-**Layering caveat:** the daemon facets reference daemon-owned types. When populated, the plugin's home likely
-moves to `src/platforms/` (so `daemon → platforms` stays the allowed direction), which is why step (b.3) is
-naturally sequenced WITH step (c)'s relocation. Until then the daemon branches stay the source of truth.
+**Layering caveat:** these facets reference daemon-owned types, so the facet types must live in / be imported
+the right direction. When populated, the plugin's home likely moves to `src/platforms/` (so `daemon →
+platforms` stays the allowed direction), which is why step (b.3) is naturally sequenced WITH step (c)'s
+relocation. Until each facet is populated AND a real call-site routed through it with a passing parity test,
+the daemon branches stay the source of truth and the facet is NOT added to the contract.
 
 ---
 
