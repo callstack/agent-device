@@ -1,12 +1,12 @@
-import { buildPrimaryEnvVarName } from './utils/source-value.ts';
+import { buildPrimaryEnvVarName } from '../utils/source-value.ts';
 import type {
   DaemonServerMode,
   DaemonTransportPreference,
   LeaseBackend,
   SessionIsolationMode,
-} from './kernel/contracts.ts';
-import { PLATFORM_SELECTORS, type DeviceTarget, type PlatformSelector } from './kernel/device.ts';
-import type { MetroPrepareKind } from './metro/client-metro.ts';
+} from '../kernel/contracts.ts';
+import { PLATFORM_SELECTORS, type DeviceTarget, type PlatformSelector } from '../kernel/device.ts';
+import type { MetroPrepareKind } from '../metro/client-metro.ts';
 
 export type RemoteConfigMetroOptions = {
   metroProjectRoot?: string;

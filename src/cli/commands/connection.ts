@@ -1,6 +1,6 @@
 import crypto from 'node:crypto';
 import { resolveDaemonPaths } from '../../daemon/config.ts';
-import { resolveRemoteConfigProfile } from '../../remote-config.ts';
+import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 import {
   buildRemoteConnectionDaemonState,
   fingerprint,
@@ -11,7 +11,7 @@ import {
   writeRemoteConnectionState,
   type RemoteConnectionState,
   type RemoteConnectionRequestMetadata,
-} from '../../remote-connection-state.ts';
+} from '../../remote/remote-connection-state.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { resolveCloudConnectProfile } from '../cloud-connection-profile.ts';
 import { resolveProxyConnectProfile } from '../proxy-connection-profile.ts';

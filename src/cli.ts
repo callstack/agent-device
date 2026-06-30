@@ -31,7 +31,7 @@ import { maybeRunUpgradeNotifier } from './utils/update-check.ts';
 import {
   resolveRemoteConnectionDefaults,
   type RemoteConnectionRequestMetadata,
-} from './remote-connection-state.ts';
+} from './remote/remote-connection-state.ts';
 import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
 import type { CliFlags, FlagKey } from './utils/cli-flags.ts';
 import type { SessionRuntimeHints } from './kernel/contracts.ts';

@@ -5,8 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { createAgentDeviceClient } from '../../../src/client.ts';
-import { prepareRemoteRequestArtifacts } from '../../../src/daemon-artifacts.ts';
-import { createDaemonProxyServer } from '../../../src/daemon-proxy.ts';
+import { prepareRemoteRequestArtifacts } from '../../../src/remote/daemon-artifacts.ts';
+import { createDaemonProxyServer } from '../../../src/remote/daemon-proxy.ts';
 import { normalizeAgentDeviceError } from '../../../src/kernel/errors.ts';
 import {
   closeLoopbackServer,

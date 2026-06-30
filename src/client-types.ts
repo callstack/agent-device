@@ -44,7 +44,7 @@ export type { TargetShutdownResult } from './target-shutdown-contract.ts';
 import type { PerfAction, PerfArea, PerfKind, PerfSubject } from './contracts/perf.ts';
 import type { AlertAction } from './alert-contract.ts';
 import type { DebugSymbolsOptions, DebugSymbolsResult } from './contracts/debug-symbols.ts';
-import type { RemoteConnectionProfileFields } from './remote-config-schema.ts';
+import type { RemoteConnectionProfileFields } from './remote/remote-config-schema.ts';
 import type { CommandResult } from './core/command-descriptor/command-result.ts';
 
 export type { FindLocator } from './utils/finders.ts';

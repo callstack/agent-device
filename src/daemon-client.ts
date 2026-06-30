@@ -4,7 +4,7 @@ import type {
 } from './daemon/types.ts';
 import { createRequestId, emitDiagnostic, withDiagnosticTimer } from './utils/diagnostics.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from './command-catalog.ts';
-import { prepareRemoteRequestArtifacts } from './daemon-artifacts.ts';
+import { prepareRemoteRequestArtifacts } from './remote/daemon-artifacts.ts';
 import {
   cleanupDaemonAfterRequest,
   ensureDaemon,
@@ -13,7 +13,7 @@ import {
 import { sendRequest } from './daemon-client-transport.ts';
 
 export { computeDaemonCodeSignature } from './daemon/code-signature.ts';
-export { downloadRemoteArtifact } from './daemon-artifacts.ts';
+export { downloadRemoteArtifact } from './remote/daemon-artifacts.ts';
 export {
   cleanupFailedDaemonStartupMetadata,
   resolveDaemonStartupHint,

@@ -37,7 +37,7 @@ export default defineConfig({
         'src/core/interactor-types.ts',
         'src/index.ts',
         'src/install-source.ts',
-        'src/remote-config.ts',
+        'src/remote/remote-config.ts',
         'src/selectors.ts',
       ],
     },

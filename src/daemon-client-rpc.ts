@@ -1,7 +1,7 @@
 import { AppError, toAppErrorCode } from './kernel/errors.ts';
 import { createRequestId } from './utils/diagnostics.ts';
 import type { DaemonRequest, DaemonResponse } from './daemon/types.ts';
-import { materializeRemoteArtifacts } from './daemon-artifacts.ts';
+import { materializeRemoteArtifacts } from './remote/daemon-artifacts.ts';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import {
   leaseScopeFromRequest,

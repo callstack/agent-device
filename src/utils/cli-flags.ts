@@ -15,7 +15,7 @@ import {
   type SessionRuntimeHints,
   type SessionIsolationMode,
 } from '../kernel/contracts.ts';
-import type { RemoteConfigMetroOptions } from '../remote-config-schema.ts';
+import type { RemoteConfigMetroOptions } from '../remote/remote-config-schema.ts';
 import {
   SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS,
   type ScreenshotRequestFlags,

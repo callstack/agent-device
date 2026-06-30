@@ -7,7 +7,7 @@ import {
   hashRemoteConfigFile,
   readActiveConnectionState,
   readRemoteConnectionState,
-} from '../remote-connection-state.ts';
+} from '../remote/remote-connection-state.ts';
 import { runCliCapture, type CapturedDaemonRequest } from './cli-capture.ts';
 
 function makeTempWorkspace(): { root: string; home: string; project: string } {

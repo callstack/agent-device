@@ -3,15 +3,15 @@ import http from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
 import { pipeline } from 'node:stream/promises';
-import { AppError } from './kernel/errors.ts';
-import type { DaemonArtifact, DaemonRequest, DaemonResponse } from './daemon/types.ts';
-import { buildDaemonHttpAuthHeaders } from './daemon/http-contract.ts';
+import { AppError } from '../kernel/errors.ts';
+import type { DaemonArtifact, DaemonRequest, DaemonResponse } from '../daemon/types.ts';
+import { buildDaemonHttpAuthHeaders } from '../daemon/http-contract.ts';
 import {
   appendRecordingExtensionWhenMissing,
   recordingExtensionForPlatform,
-} from './recording/output-path.ts';
+} from '../recording/output-path.ts';
 import { uploadArtifact } from './upload-client.ts';
-import { createStderrUploadProgressReporter, type UploadProgressSink } from './upload-progress.ts';
+import { createStderrUploadProgressReporter, type UploadProgressSink } from '../upload-progress.ts';
 
 // Mirrors the current daemon RPC timeout, but artifact download timeouts may diverge.
 const REMOTE_ARTIFACT_DOWNLOAD_TIMEOUT_MS = 90_000;

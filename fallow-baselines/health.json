@@ -151,7 +151,7 @@
         "count": 1
       }
     },
-    "src/daemon-artifacts.ts": {
+    "src/remote/daemon-artifacts.ts": {
       "crap_moderate": {
         "count": 2
       }
@@ -506,7 +506,7 @@
         "count": 1
       }
     },
-    "src/remote-config-core.ts": {
+    "src/remote/remote-config-core.ts": {
       "complexity_high": {
         "count": 1
       },
@@ -514,12 +514,12 @@
         "count": 1
       }
     },
-    "src/remote-connection-state.ts": {
+    "src/remote/remote-connection-state.ts": {
       "crap_high": {
         "count": 1
       }
     },
-    "src/upload-client.ts": {
+    "src/remote/upload-client.ts": {
       "crap_moderate": {
         "count": 1
       }

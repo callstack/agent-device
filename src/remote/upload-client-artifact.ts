@@ -4,8 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { Writable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
-import { AppError } from './kernel/errors.ts';
-import { runCmd } from './utils/exec.ts';
+import { AppError } from '../kernel/errors.ts';
+import { runCmd } from '../utils/exec.ts';
 
 const ARTIFACT_HASH_ALGORITHM = 'sha256';
 const DEFAULT_CONTENT_TYPE = 'application/octet-stream';

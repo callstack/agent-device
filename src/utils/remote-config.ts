@@ -1,6 +1,9 @@
 import type { CliFlags } from './cli-flags.ts';
-import { REMOTE_CONFIG_FIELD_SPECS, type RemoteConfigProfile } from '../remote-config-schema.ts';
-import { resolveRemoteConfigProfile } from '../remote-config-core.ts';
+import {
+  REMOTE_CONFIG_FIELD_SPECS,
+  type RemoteConfigProfile,
+} from '../remote/remote-config-schema.ts';
+import { resolveRemoteConfigProfile } from '../remote/remote-config-core.ts';
 
 // Remote config can supply defaults for any supported CLI flag that exists in the profile schema.
 // Command validation later strips unsupported defaults for the active command.

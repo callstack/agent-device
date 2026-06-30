@@ -8,9 +8,9 @@ import {
   type RemoteConfigProfileOptions,
   type ResolvedRemoteConfigProfile,
 } from './remote-config-schema.ts';
-import { AppError } from './kernel/errors.ts';
-import { resolveUserPath } from './utils/path-resolution.ts';
-import { parseSourceValue } from './utils/source-value.ts';
+import { AppError } from '../kernel/errors.ts';
+import { resolveUserPath } from '../utils/path-resolution.ts';
+import { parseSourceValue } from '../utils/source-value.ts';
 
 function readRemoteConfigFile(options: RemoteConfigProfileOptions): ResolvedRemoteConfigProfile {
   const env = options.env ?? process.env;

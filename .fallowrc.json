@@ -6,7 +6,7 @@
     "src/io.ts",
     "src/artifacts.ts",
     "src/metro/metro.ts",
-    "src/remote-config.ts",
+    "src/remote/remote-config.ts",
     "src/install-source.ts",
     "src/android-adb.ts",
     "src/android-snapshot-helper.ts",

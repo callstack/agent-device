@@ -9,7 +9,7 @@ import {
   hashRemoteConfigFile,
   readActiveConnectionState,
   type RemoteConnectionState,
-} from '../remote-connection-state.ts';
+} from '../remote/remote-connection-state.ts';
 import type { AgentDeviceClient } from '../client.ts';
 
 vi.mock('../cli/auth-session.ts', () => ({

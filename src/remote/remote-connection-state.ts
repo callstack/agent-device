@@ -2,15 +2,15 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { resolveRemoteConfigPath, resolveRemoteConfigProfile } from './remote-config-core.ts';
-import { AppError } from './kernel/errors.ts';
-import { emitDiagnostic } from './utils/diagnostics.ts';
-import type { CliFlags } from './utils/cli-flags.ts';
-import type { LeaseBackend, SessionRuntimeHints } from './kernel/contracts.ts';
+import { AppError } from '../kernel/errors.ts';
+import { emitDiagnostic } from '../utils/diagnostics.ts';
+import type { CliFlags } from '../utils/cli-flags.ts';
+import type { LeaseBackend, SessionRuntimeHints } from '../kernel/contracts.ts';
 import {
   leaseScopeFromOptions,
   leaseScopeToCommandFlags,
   leaseScopeToConnectionMetadata,
-} from './core/lease-scope.ts';
+} from '../core/lease-scope.ts';
 
 export type RemoteConnectionState = {
   version: 1;

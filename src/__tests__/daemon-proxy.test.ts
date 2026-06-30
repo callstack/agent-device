@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import http from 'node:http';
-import { createDaemonProxyServer } from '../daemon-proxy.ts';
+import { createDaemonProxyServer } from '../remote/daemon-proxy.ts';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '../daemon/http-health.ts';
 import {
   closeLoopbackServer,

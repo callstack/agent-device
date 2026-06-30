@@ -11,7 +11,10 @@ vi.mock('../cli/commands/react-devtools.ts', () => ({
 import { runCli } from '../cli.ts';
 import { runReactDevtoolsCommand } from '../cli/commands/react-devtools.ts';
 import { installIsolatedCliTestEnv } from './cli-test-env.ts';
-import { hashRemoteConfigFile, writeRemoteConnectionState } from '../remote-connection-state.ts';
+import {
+  hashRemoteConfigFile,
+  writeRemoteConnectionState,
+} from '../remote/remote-connection-state.ts';
 import type { DaemonResponse } from '../daemon-client.ts';
 
 afterEach(() => {

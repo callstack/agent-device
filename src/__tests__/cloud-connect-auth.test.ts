@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { connectCommand } from '../cli/commands/connection.ts';
 import { resolveCloudAccessForConnect } from '../cli/auth-session.ts';
-import { readActiveConnectionState } from '../remote-connection-state.ts';
+import { readActiveConnectionState } from '../remote/remote-connection-state.ts';
 import type { AgentDeviceClient } from '../client.ts';
 
 afterEach(() => {

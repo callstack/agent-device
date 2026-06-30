@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { resolveRemoteConfigProfile, resolveRemoteConfigPath } from '../remote-config.ts';
+import { resolveRemoteConfigProfile, resolveRemoteConfigPath } from '../remote/remote-config.ts';
 
 test('public remote-config helpers resolve file paths and merged profiles', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-remote-config-public-'));

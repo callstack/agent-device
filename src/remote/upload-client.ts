@@ -1,9 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import { AppError } from './kernel/errors.ts';
-import { buildDaemonHttpAuthHeaders } from './daemon/http-contract.ts';
+import { AppError } from '../kernel/errors.ts';
+import { buildDaemonHttpAuthHeaders } from '../daemon/http-contract.ts';
 import { prepareUploadArtifact, type PreparedUploadArtifact } from './upload-client-artifact.ts';
-import { isRetryableUploadStreamError, streamFileToHttpRequest } from './upload-stream.ts';
-import type { UploadProgressSink } from './upload-progress.ts';
+import { isRetryableUploadStreamError, streamFileToHttpRequest } from '../upload-stream.ts';
+import type { UploadProgressSink } from '../upload-progress.ts';
 
 const UPLOAD_PREFLIGHT_TIMEOUT_MS = 30 * 1000;
 const ARTIFACT_HASH_ALGORITHM = 'sha256';

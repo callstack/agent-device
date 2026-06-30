@@ -15,7 +15,10 @@ vi.mock('../cli/commands/agent-cdp.ts', async (importOriginal) => {
 import { runCli } from '../cli.ts';
 import { runAgentCdpCommand } from '../cli/commands/agent-cdp.ts';
 import { installIsolatedCliTestEnv } from './cli-test-env.ts';
-import { hashRemoteConfigFile, writeRemoteConnectionState } from '../remote-connection-state.ts';
+import {
+  hashRemoteConfigFile,
+  writeRemoteConnectionState,
+} from '../remote/remote-connection-state.ts';
 import type { DaemonResponse } from '../daemon-client.ts';
 
 afterEach(() => {
