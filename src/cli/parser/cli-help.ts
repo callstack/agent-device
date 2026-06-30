@@ -659,6 +659,11 @@ Providers:
   BrowserStack: agent-device connect browserstack stores a local provider profile and creates the App Automate session on first open.
   AWS Device Farm: agent-device connect aws-device-farm stores a local provider profile and creates the remote access session on first open.
 
+Hosted provider interfaces:
+  CLI is the canonical bootstrap path: connect browserstack/aws-device-farm, then use normal open/snapshot/click/close/artifacts/disconnect commands.
+  JavaScript can skip persisted connect state by passing leaseProvider plus provider fields to createAgentDeviceClient or per-command options.
+  MCP exposes operational tools such as open, snapshot, click, close, and artifacts. It does not expose connect/disconnect; run CLI connect first in the same state dir before relying on MCP tools.
+
 Direct proxy flow for a remote Mac/simulator:
   On the Mac with simulator/device access:
     agent-device proxy --port 4310
