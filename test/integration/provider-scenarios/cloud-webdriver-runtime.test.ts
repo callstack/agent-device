@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import http, { type IncomingMessage, type ServerResponse } from 'node:http';
+import http, {
+  type IncomingHttpHeaders,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import { createCloudWebDriverRuntime } from '../../../src/cloud-webdriver.ts';
@@ -20,6 +24,7 @@ const WEBDRIVER_PROVIDER = 'webdriver-fake';
 type WebDriverHttpCall = {
   method: string;
   path: string;
+  headers: IncomingHttpHeaders;
   body?: unknown;
 };
 
@@ -267,6 +272,11 @@ function assertWebDriverCalls(
     args: [{ appId: 'com.example.demo', bundleId: 'com.example.demo' }],
   });
   assert.deepEqual(calls[7]?.body, { text: 'hello cloud', value: Array.from('hello cloud') });
+  for (const call of calls) {
+    assert.equal(call.headers['x-agent-device-client'], 'agent-device-cli');
+    assert.equal(typeof call.headers['x-agent-device-version'], 'string');
+    assert.notEqual(call.headers['x-agent-device-version'], '');
+  }
 }
 
 class FakeWebDriverServer {
@@ -302,6 +312,7 @@ class FakeWebDriverServer {
     const call: WebDriverHttpCall = {
       method: req.method ?? 'GET',
       path: req.url ?? '/',
+      headers: req.headers,
     };
     const body = await readJsonBody(req);
     if (body !== undefined) call.body = body;

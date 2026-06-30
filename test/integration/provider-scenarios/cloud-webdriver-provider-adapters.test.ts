@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import http, { type IncomingMessage, type ServerResponse } from 'node:http';
+import http, {
+  type IncomingHttpHeaders,
+  type IncomingMessage,
+  type ServerResponse,
+} from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import {
@@ -22,6 +26,7 @@ import { withProviderScenarioResource, withProviderScenarioTempDir } from './har
 type HttpCall = {
   method: string;
   path: string;
+  headers: IncomingHttpHeaders;
   body?: unknown;
 };
 
@@ -120,6 +125,7 @@ test('AWS Device Farm adapter selects WebDriver endpoint and stops remote access
       'list:arn:aws:devicefarm:session/fake:LOG',
     ]);
     assert.equal(server.calls[0]?.path, '/wd/hub/session');
+    assertAgentDeviceHeaders(server.calls[0]?.headers);
     assert.equal(server.calls.at(-1)?.path, '/wd/hub/session/wd-1');
   });
 }, 15_000);
@@ -216,6 +222,7 @@ test('BrowserStack upload helper returns uploaded app reference', async () => {
       });
       assert.equal(appUrl, 'bs://uploaded-app');
       assert.equal(server.calls[0]?.path, '/app-automate/upload');
+      assertAgentDeviceHeaders(server.calls[0]?.headers);
     });
   });
 }, 15_000);
@@ -326,7 +333,7 @@ test('AWS CLI Device Farm client maps remote access commands', async () => {
 });
 
 function assertBrowserStackCalls(calls: readonly HttpCall[], lease: DeviceLease): void {
-  assert.equal(calls[0]?.path, '/wd/hub/session');
+  assertCallPathAndHeaders(calls, 0, '/wd/hub/session');
   assert.deepEqual(calls[0]?.body, {
     capabilities: {
       alwaysMatch: {
@@ -343,11 +350,27 @@ function assertBrowserStackCalls(calls: readonly HttpCall[], lease: DeviceLease)
       },
     },
   });
-  assert.equal(calls[1]?.path, '/app-automate/upload');
-  assert.equal(calls[2]?.path, '/wd/hub/session/wd-1/appium/device/install_app');
+  assertCallPathAndHeaders(calls, 1, '/app-automate/upload');
+  assertCallPathAndHeaders(calls, 2, '/wd/hub/session/wd-1/appium/device/install_app');
   assert.deepEqual(calls[2]?.body, { appPath: 'bs://uploaded-app' });
-  assert.equal(calls.at(-2)?.path, '/wd/hub/session/wd-1');
-  assert.equal(calls.at(-1)?.path, '/app-automate/sessions/wd-1.json');
+  assertCallPathAndHeaders(calls, -2, '/wd/hub/session/wd-1');
+  assertCallPathAndHeaders(calls, -1, '/app-automate/sessions/wd-1.json');
+}
+
+function assertCallPathAndHeaders(
+  calls: readonly HttpCall[],
+  index: number,
+  expectedPath: string,
+): void {
+  const call = index < 0 ? calls.at(index) : calls[index];
+  assert.equal(call?.path, expectedPath);
+  assertAgentDeviceHeaders(call?.headers);
+}
+
+function assertAgentDeviceHeaders(headers: IncomingHttpHeaders | undefined): void {
+  assert.equal(headers?.['x-agent-device-client'], 'agent-device-cli');
+  assert.equal(typeof headers?.['x-agent-device-version'], 'string');
+  assert.notEqual(headers?.['x-agent-device-version'], '');
 }
 
 class FakeAwsDeviceFarmClient implements AwsDeviceFarmClient {
@@ -456,6 +479,7 @@ class FakeCloudProviderServer {
     this.calls.push({
       method: req.method ?? 'GET',
       path: req.url ?? '/',
+      headers: req.headers,
       ...(body === undefined ? {} : { body }),
     });
     this.respond(req, res);

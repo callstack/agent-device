@@ -15,6 +15,7 @@ import type { ProviderDeviceRuntime } from '../provider-device-runtime.ts';
 import type { DeviceLease } from '../daemon/lease-registry.ts';
 import { AppError } from '../kernel/errors.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
+import { agentDeviceRequestHeaders } from './request-headers.ts';
 
 const BROWSERSTACK_PROVIDER = CLOUD_WEBDRIVER_PROVIDERS.browserStack;
 const BROWSERSTACK_APP_AUTOMATE_ENDPOINT = 'https://hub-cloud.browserstack.com/wd/hub/';
@@ -136,6 +137,7 @@ export async function uploadBrowserStackApp(
   const response = await fetch(options.endpoint ?? BROWSERSTACK_APP_UPLOAD_ENDPOINT, {
     method: 'POST',
     headers: {
+      ...agentDeviceRequestHeaders(),
       Authorization: browserStackAuthHeader(options),
     },
     body: form,
@@ -208,6 +210,7 @@ async function fetchBrowserStackSessionDetails(
   );
   const response = await fetch(endpoint, {
     headers: {
+      ...agentDeviceRequestHeaders(),
       Authorization: browserStackAuthHeader(options),
     },
   });

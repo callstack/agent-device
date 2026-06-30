@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import { AppError } from '../kernel/errors.ts';
+import { agentDeviceRequestHeaders } from './request-headers.ts';
 
 export type WebDriverAuth = {
   username: string;
@@ -49,6 +50,7 @@ export class WebDriverClient {
   constructor(options: WebDriverClientOptions) {
     this.endpoint = withTrailingSlash(new URL(options.endpoint));
     this.headers = {
+      ...agentDeviceRequestHeaders(),
       ...(options.auth ? { Authorization: basicAuth(options.auth) } : {}),
       ...options.headers,
     };
