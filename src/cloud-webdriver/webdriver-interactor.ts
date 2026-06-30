@@ -9,13 +9,14 @@ import type { DeviceRotation } from '../core/device-rotation.ts';
 import type { ScrollDirection, TransformGestureParams } from '../core/scroll-gesture.ts';
 import type { SettingOptions } from '../platforms/permission-utils.ts';
 import { AppError } from '../kernel/errors.ts';
+import { buildScrollGesturePlan } from '../core/scroll-gesture.ts';
 import {
   capabilitySupported,
   unsupportedCapabilityMessage,
   type CloudWebDriverOperation,
   type CloudWebDriverProviderCapabilities,
 } from './capabilities.ts';
-import { scrollEnd, scrollStart, touchPointer } from './webdriver-gestures.ts';
+import { touchPointer } from './webdriver-gestures.ts';
 import type { WebDriverClient } from './webdriver-client.ts';
 import { parseWebDriverSource } from './webdriver-source.ts';
 
@@ -172,13 +173,17 @@ class WebDriverInteractor implements Interactor {
     options?: { amount?: number; pixels?: number; durationMs?: number },
   ): Promise<Record<string, unknown>> {
     this.requireSupport('scroll');
-    const distance = options?.pixels ?? options?.amount ?? 300;
     const durationMs = options?.durationMs ?? 350;
     const rect = await this.client.windowRect();
-    const start = scrollStart(direction, distance, rect);
-    const end = scrollEnd(direction, distance, rect);
-    await this.swipe(start.x, start.y, end.x, end.y, durationMs);
-    return { backend: 'webdriver', direction, distance, durationMs };
+    const plan = buildScrollGesturePlan({
+      direction,
+      amount: options?.amount,
+      pixels: options?.pixels,
+      referenceWidth: rect.width,
+      referenceHeight: rect.height,
+    });
+    await this.swipe(plan.x1, plan.y1, plan.x2, plan.y2, durationMs);
+    return { backend: 'webdriver', ...plan, distance: plan.pixels, durationMs };
   }
 
   async pinch(_scale: number, _x?: number, _y?: number): Promise<Record<string, unknown> | void> {

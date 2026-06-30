@@ -369,7 +369,7 @@ function assertWebDriverCalls(
   });
   assert.deepEqual(calls[1]?.body, { appPath });
   assert.deepEqual(calls[2]?.body, { appId: 'com.example.demo' });
-  assert.deepEqual(calls[7]?.body, { text: 'hello cloud', value: Array.from('hello cloud') });
+  assert.deepEqual(calls[7]?.body, { value: Array.from('hello cloud') });
   assert.deepEqual(calls[10]?.body, {
     actions: [
       {
@@ -377,9 +377,9 @@ function assertWebDriverCalls(
         id: 'swipe',
         parameters: { pointerType: 'touch' },
         actions: [
-          { type: 'pointerMove', duration: 0, x: 540, y: 860 },
+          { type: 'pointerMove', duration: 0, x: 540, y: 1060 },
           { type: 'pointerDown', button: 0 },
-          { type: 'pointerMove', duration: 350, x: 540, y: 1060 },
+          { type: 'pointerMove', duration: 350, x: 540, y: 860 },
           { type: 'pointerUp', button: 0 },
         ],
       },

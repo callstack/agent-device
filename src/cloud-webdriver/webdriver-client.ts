@@ -116,10 +116,7 @@ export class WebDriverClient {
   }
 
   async sendKeys(text: string): Promise<void> {
-    await this.sessionRequest('POST', '/keys', {
-      text,
-      value: Array.from(text),
-    });
+    await this.sessionRequest('POST', '/keys', { value: Array.from(text) });
   }
 
   async back(): Promise<void> {
