@@ -4,7 +4,7 @@ import { booleanSchema, looseObjectSchema, stringSchema } from '../commands/comm
 import { BACK_MODES } from '../core/back-mode.ts';
 import { DEVICE_ROTATIONS } from '../core/device-rotation.ts';
 import { SESSION_SURFACES } from '../core/session-surface.ts';
-import { DEVICE_TARGETS, PLATFORMS } from '../utils/device.ts';
+import { DEVICE_TARGETS, PLATFORMS } from '../kernel/device.ts';
 
 /**
  * Hand-authored registry of per-command MCP `outputSchema`s, keyed by the daemon
