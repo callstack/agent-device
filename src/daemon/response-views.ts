@@ -1,5 +1,5 @@
 import type { ResponseLevel } from '../contracts.ts';
-import type { SnapshotNode } from '../kernel/snapshot.ts';
+import type { ScreenshotOverlayRef, SnapshotNode } from '../kernel/snapshot.ts';
 import type { DaemonResponseData } from './types.ts';
 
 /**
@@ -36,6 +36,35 @@ function snapshotView(data: DaemonResponseData, level: ResponseLevel): DaemonRes
   };
 }
 
+const DIGEST_OVERLAY_LIMIT = 12;
+
+/**
+ * Token-cheap screenshot digest: the captured `path` (the primary result), the
+ * total overlay-ref count, and the first N overlay refs leveled down to
+ * `{ ref, label }`. The per-overlay geometry (`rect`/`overlayRect`/`center`) —
+ * the token sink that `--overlay-refs` emits when many nodes are annotated — is
+ * dropped and the list is capped. `artifacts` (the client's image-retrieval
+ * handle, grafted on by request finalization) is preserved when present so the
+ * screenshot stays fetchable. `full` returns today's shape unchanged (nothing
+ * richer is computed yet).
+ */
+function screenshotView(data: DaemonResponseData, level: ResponseLevel): DaemonResponseData {
+  if (level !== 'digest') return data;
+  const overlays = Array.isArray(data.overlayRefs)
+    ? (data.overlayRefs as ScreenshotOverlayRef[])
+    : [];
+  const overlayRefs = overlays
+    .slice(0, DIGEST_OVERLAY_LIMIT)
+    .map((overlay) => ({ ref: overlay.ref, label: overlay.label }));
+  return {
+    ...(typeof data.path === 'string' ? { path: data.path } : {}),
+    overlayCount: overlays.length,
+    overlayRefs,
+    ...(data.artifacts !== undefined ? { artifacts: data.artifacts } : {}),
+  };
+}
+
 export const RESPONSE_VIEWS: Record<string, ResponseView> = {
   snapshot: snapshotView,
+  screenshot: screenshotView,
 };
