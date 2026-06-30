@@ -21,22 +21,18 @@ import {
 import { createAwsDeviceFarmWebDriverRuntime } from './aws-device-farm.ts';
 import { createBrowserStackWebDriverRuntime, uploadBrowserStackApp } from './browserstack.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS, type CloudWebDriverKnownProviderName } from './providers.ts';
+import type { DefaultCloudWebDriverArtifactEnv } from './provider-registry.ts';
 import type { CloudWebDriverPlatform } from './runtime.ts';
 
-export type DefaultCloudWebDriverProviderRuntimeEnv = {
-  BROWSERSTACK_USERNAME?: string;
-  BROWSERSTACK_ACCESS_KEY?: string;
+export type DefaultCloudWebDriverProviderRuntimeEnv = DefaultCloudWebDriverArtifactEnv & {
   BROWSERSTACK_WEBDRIVER_ENDPOINT?: string;
   BROWSERSTACK_APP_UPLOAD_ENDPOINT?: string;
-  BROWSERSTACK_SESSION_DETAILS_ENDPOINT?: string;
   AGENT_DEVICE_AWS_DEVICE_FARM_PROJECT_ARN?: string;
   AWS_DEVICE_FARM_PROJECT_ARN?: string;
   AGENT_DEVICE_AWS_DEVICE_FARM_DEVICE_ARN?: string;
   AWS_DEVICE_FARM_DEVICE_ARN?: string;
   AGENT_DEVICE_AWS_DEVICE_FARM_APP_ARN?: string;
   AWS_DEVICE_FARM_APP_ARN?: string;
-  AWS_REGION?: string;
-  AWS_DEFAULT_REGION?: string;
 };
 
 export function createDefaultCloudWebDriverProviderRuntimes(

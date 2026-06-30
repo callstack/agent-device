@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { CloudArtifact, CloudArtifactsResult } from '../cloud-artifacts.ts';
 import {
   createCloudWebDriverCapabilities,
+  type CloudWebDriverCapabilityOverrides,
   type CloudWebDriverProviderCapabilities,
 } from './capabilities.ts';
 import {
@@ -16,12 +17,32 @@ import type { DeviceLease } from '../daemon/lease-registry.ts';
 import { AppError } from '../kernel/errors.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
 import { agentDeviceRequestHeaders } from './request-headers.ts';
+import {
+  basicAuthHeader,
+  resolveLeaseValue,
+  trimTrailingSlash,
+  type LeaseValue,
+} from './webdriver-utils.ts';
 
 const BROWSERSTACK_PROVIDER = CLOUD_WEBDRIVER_PROVIDERS.browserStack;
 const BROWSERSTACK_APP_AUTOMATE_ENDPOINT = 'https://hub-cloud.browserstack.com/wd/hub/';
 const BROWSERSTACK_APP_UPLOAD_ENDPOINT = 'https://api-cloud.browserstack.com/app-automate/upload';
 const BROWSERSTACK_SESSION_DETAILS_ENDPOINT =
   'https://api-cloud.browserstack.com/app-automate/sessions';
+const BROWSERSTACK_CAPABILITY_OVERRIDES = {
+  install: {
+    support: 'partial',
+    note: 'Local app artifacts are uploaded to BrowserStack App Automate, then installed with Appium.',
+  },
+  portReverse: {
+    support: 'unsupported',
+    note: 'Use BrowserStack Local for network tunneling; agent-device port reverse is not available.',
+  },
+  artifacts: {
+    support: 'supported',
+    note: 'BrowserStack session details expose provider-hosted video, Appium logs, device logs, and dashboard links.',
+  },
+} as const satisfies CloudWebDriverCapabilityOverrides;
 
 export type BrowserStackWebDriverRuntimeOptions = {
   username: string;
@@ -31,8 +52,8 @@ export type BrowserStackWebDriverRuntimeOptions = {
   osVersion: string;
   app?: string;
   projectName?: string;
-  buildName?: string | ((lease: DeviceLease) => string);
-  sessionName?: string | ((lease: DeviceLease) => string);
+  buildName?: LeaseValue<string>;
+  sessionName?: LeaseValue<string>;
   webdriverCapabilities?:
     | Record<string, unknown>
     | ((lease: DeviceLease) => Record<string, unknown>);
@@ -49,20 +70,7 @@ export function getBrowserStackWebDriverCapabilities(
   return createCloudWebDriverCapabilities({
     provider: BROWSERSTACK_PROVIDER,
     platform,
-    overrides: {
-      install: {
-        support: 'partial',
-        note: 'Local app artifacts are uploaded to BrowserStack App Automate, then installed with Appium.',
-      },
-      portReverse: {
-        support: 'unsupported',
-        note: 'Use BrowserStack Local for network tunneling; agent-device port reverse is not available.',
-      },
-      artifacts: {
-        support: 'supported',
-        note: 'BrowserStack session details expose provider-hosted video, Appium logs, device logs, and dashboard links.',
-      },
-    },
+    overrides: BROWSERSTACK_CAPABILITY_OVERRIDES,
   });
 }
 
@@ -94,7 +102,7 @@ export function createBrowserStackWebDriverRuntime(
       await listBrowserStackCloudArtifacts(provider, providerSessionId, artifactOptions),
     deviceId: options.deviceId,
     requestPolicy: options.requestPolicy,
-    capabilityOverrides: getBrowserStackWebDriverCapabilities(options.platform).operations,
+    capabilityOverrides: BROWSERSTACK_CAPABILITY_OVERRIDES,
   });
 }
 
@@ -138,7 +146,7 @@ export async function uploadBrowserStackApp(
     method: 'POST',
     headers: {
       ...agentDeviceRequestHeaders(),
-      Authorization: browserStackAuthHeader(options),
+      Authorization: basicAuthHeader(options),
     },
     body: form,
   });
@@ -181,24 +189,11 @@ function browserStackCapabilities(
     ...(options.app ? { app: options.app } : {}),
     'bstack:options': {
       ...(options.projectName ? { projectName: options.projectName } : {}),
-      buildName: resolveBrowserStackLabel(options.buildName, lease) ?? lease.runId,
-      sessionName: resolveBrowserStackLabel(options.sessionName, lease) ?? lease.leaseId,
+      buildName: resolveLeaseValue(options.buildName, lease) ?? lease.runId,
+      sessionName: resolveLeaseValue(options.sessionName, lease) ?? lease.leaseId,
     },
     ...configured,
   };
-}
-
-function resolveBrowserStackLabel(
-  value: string | ((lease: DeviceLease) => string) | undefined,
-  lease: DeviceLease,
-): string | undefined {
-  return typeof value === 'function' ? value(lease) : value;
-}
-
-function browserStackAuthHeader(
-  options: Pick<BrowserStackUploadOptions, 'username' | 'accessKey'>,
-): string {
-  return `Basic ${Buffer.from(`${options.username}:${options.accessKey}`).toString('base64')}`;
 }
 
 async function fetchBrowserStackSessionDetails(
@@ -211,7 +206,7 @@ async function fetchBrowserStackSessionDetails(
   const response = await fetch(endpoint, {
     headers: {
       ...agentDeviceRequestHeaders(),
-      Authorization: browserStackAuthHeader(options),
+      Authorization: basicAuthHeader(options),
     },
   });
   const json = (await response.json()) as unknown;
@@ -285,12 +280,6 @@ function browserStackUrlArtifact(
   const url = details[field];
   if (typeof url !== 'string' || url.length === 0) return undefined;
   return { provider, providerSessionId, kind, name, url, availability: 'ready' };
-}
-
-function trimTrailingSlash(value: string): string {
-  let end = value.length;
-  while (end > 0 && value.charCodeAt(end - 1) === 47) end -= 1;
-  return value.slice(0, end);
 }
 
 function readBrowserStackAppUrl(value: unknown): string | undefined {

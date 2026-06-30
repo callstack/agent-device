@@ -65,7 +65,6 @@ export type CloudWebDriverPreparedSession = CloudWebDriverBaseSession & {
 
 export type CloudWebDriverListArtifacts = (params: {
   provider: string;
-  phase: 'active' | 'released' | 'lookup';
   lease?: DeviceLease;
   device?: DeviceInfo;
   webDriverSessionId?: string;
@@ -241,7 +240,7 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
     if (!session) return undefined;
     this.sessionsByLeaseId.delete(lease.leaseId);
     const cleanup = await this.closeSession(session);
-    const artifacts = await this.safeListArtifacts(session, 'released');
+    const artifacts = await this.safeListArtifacts(session);
     return {
       provider: this.provider,
       providerSessionId: session.providerSessionId,
@@ -255,11 +254,10 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
   ): Promise<CloudArtifactsResult | undefined> {
     if (query.provider !== this.provider) return undefined;
     const session = query.leaseId ? this.sessionsByLeaseId.get(query.leaseId) : undefined;
-    if (session) return await this.safeListArtifacts(session, 'active');
+    if (session) return await this.safeListArtifacts(session);
     if (!query.providerSessionId || !this.options.listArtifacts) return undefined;
     return await this.options.listArtifacts({
       provider: this.provider,
-      phase: 'lookup',
       providerSessionId: query.providerSessionId,
     });
   }
@@ -347,14 +345,12 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
 
   private async safeListArtifacts(
     session: WebDriverProviderSession,
-    phase: 'active' | 'released',
   ): Promise<CloudArtifactsResult | undefined> {
     const listArtifacts = session.prepared.listArtifacts ?? this.options.listArtifacts;
     if (!listArtifacts) return undefined;
     try {
       return await listArtifacts({
         provider: this.provider,
-        phase,
         lease: session.lease,
         device: session.device,
         webDriverSessionId: session.webDriverSessionId,

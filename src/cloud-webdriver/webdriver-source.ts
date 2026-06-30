@@ -1,33 +1,41 @@
 import type { RawSnapshotNode } from '../kernel/snapshot.ts';
+import { parseBounds } from '../platforms/android/ui-hierarchy.ts';
+import { parseXmlDocumentSync, type XmlNode } from '../utils/xml.ts';
 
 export function parseWebDriverSource(source: string): RawSnapshotNode[] {
+  const roots = parseXmlDocumentSync(source);
   const nodes: RawSnapshotNode[] = [];
-  const stack: number[] = [];
-  const tagPattern = /<\s*(\/?)([A-Za-z][\w:.-]*)([^>]*?)(\/?)\s*>/g;
-  let match: RegExpExecArray | null;
-  while ((match = tagPattern.exec(source))) {
-    const closing = match[1] === '/';
-    const tagName = match[2] ?? 'Element';
-    const attributes = match[3] ?? '';
-    if (closing) {
-      stack.pop();
-      continue;
-    }
-    const attrs = parseXmlAttributes(attributes);
-    const selfClosing = match[4] === '/' || attributes.trimEnd().endsWith('/');
-    if (Object.keys(attrs).length === 0) continue;
-    const parentIndex = stack.at(-1);
-    const node = sourceNodeFromAttributes(
-      nodes.length,
-      tagName,
-      attrs,
-      parentIndex,
-      parentIndex === undefined ? 0 : (nodes[parentIndex]?.depth ?? 0) + 1,
-    );
-    nodes.push(node);
-    if (!selfClosing) stack.push(node.index);
+  for (const root of roots) {
+    appendSourceNodes(nodes, root);
   }
   return nodes;
+}
+
+function appendSourceNodes(
+  nodes: RawSnapshotNode[],
+  xmlNode: XmlNode,
+  parentIndex?: number,
+  depth = 0,
+): void {
+  const currentIndex =
+    Object.keys(xmlNode.attributes).length === 0
+      ? parentIndex
+      : appendSourceNode(nodes, xmlNode, parentIndex, depth);
+  const childDepth = currentIndex === parentIndex ? depth : depth + 1;
+  for (const child of xmlNode.children) {
+    appendSourceNodes(nodes, child, currentIndex, childDepth);
+  }
+}
+
+function appendSourceNode(
+  nodes: RawSnapshotNode[],
+  xmlNode: XmlNode,
+  parentIndex: number | undefined,
+  depth: number,
+): number {
+  const index = nodes.length;
+  nodes.push(sourceNodeFromAttributes(index, xmlNode.name, xmlNode.attributes, parentIndex, depth));
+  return index;
 }
 
 function sourceNodeFromAttributes(
@@ -58,18 +66,8 @@ function sourceNodeFromAttributes(
   };
 }
 
-function parseXmlAttributes(input: string): Record<string, string> {
-  const attrs: Record<string, string> = {};
-  const attrPattern = /([:\w.-]+)\s*=\s*"([^"]*)"/g;
-  let match: RegExpExecArray | null;
-  while ((match = attrPattern.exec(input))) {
-    attrs[match[1] ?? ''] = decodeXmlEntities(match[2] ?? '');
-  }
-  return attrs;
-}
-
 function rectFromAttributes(attrs: Record<string, string>): RawSnapshotNode['rect'] | undefined {
-  const bounds = parseAndroidBounds(attrs.bounds);
+  const bounds = parseBounds(attrs.bounds ?? null);
   if (bounds) return bounds;
   const x = numberAttribute(attrs.x);
   const y = numberAttribute(attrs.y);
@@ -79,17 +77,6 @@ function rectFromAttributes(attrs: Record<string, string>): RawSnapshotNode['rec
     return undefined;
   }
   return { x, y, width, height };
-}
-
-function parseAndroidBounds(value: string | undefined): RawSnapshotNode['rect'] | undefined {
-  if (!value) return undefined;
-  const match = /^\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]$/.exec(value);
-  if (!match) return undefined;
-  const [x1, y1, x2, y2] = match.slice(1).map(Number);
-  if (x1 === undefined || y1 === undefined || x2 === undefined || y2 === undefined) {
-    return undefined;
-  }
-  return { x: x1, y: y1, width: Math.max(0, x2 - x1), height: Math.max(0, y2 - y1) };
 }
 
 function firstAttribute(
@@ -120,13 +107,4 @@ function numberAttribute(value: string | undefined): number | undefined {
 
 function roleFromType(type: string, attrs: Record<string, string>): string | undefined {
   return nonEmpty(attrs.class) ?? nonEmpty(type.replace(/^XCUIElementType/, '').toLowerCase());
-}
-
-function decodeXmlEntities(value: string): string {
-  return value
-    .replaceAll('&quot;', '"')
-    .replaceAll('&apos;', "'")
-    .replaceAll('&lt;', '<')
-    .replaceAll('&gt;', '>')
-    .replaceAll('&amp;', '&');
 }

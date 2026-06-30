@@ -9,6 +9,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { createCloudWebDriverRuntime } from '../../../src/cloud-webdriver.ts';
 import { createDefaultCloudWebDriverProviderRuntimes } from '../../../src/cloud-webdriver/provider-runtimes.ts';
+import { parseWebDriverSource } from '../../../src/cloud-webdriver/webdriver-source.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS } from '../../../src/cloud-webdriver/providers.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import type { DeviceLease } from '../../../src/daemon/lease-registry.ts';
@@ -150,6 +151,20 @@ test('default BrowserStack provider runtime builds sessions from daemon request 
   }
 }, 15_000);
 
+test('WebDriver source parser reuses hardened XML parsing', () => {
+  const nodes = parseWebDriverSource(
+    '<hierarchy><node text="A &gt; B" resource-id="login" bounds="[0,0][10,10]" displayed="true" /></hierarchy>',
+  );
+
+  assert.equal(nodes[0]?.label, 'A > B');
+  assert.equal(nodes[0]?.identifier, 'login');
+  assert.deepEqual(nodes[0]?.rect, { x: 0, y: 0, width: 10, height: 10 });
+  assert.throws(
+    () => parseWebDriverSource('<node __proto__="polluted" text="x" />'),
+    /Unsupported XML attribute name "__proto__"/,
+  );
+});
+
 async function createCloudWebDriverWorld() {
   const server = await FakeWebDriverServer.start();
   let artifactFailuresRemaining = 0;
@@ -276,6 +291,13 @@ function cloudWebDriverScenarioSteps(appPath: string, lease: DeviceLease): Provi
       },
     },
     {
+      name: 'scroll',
+      command: 'scroll',
+      positionals: ['down'],
+      flags: { pixels: 200 },
+      expectData: { direction: 'down', distance: 200 },
+    },
+    {
       name: 'artifacts',
       command: 'artifacts',
       expectData: {
@@ -326,6 +348,9 @@ function assertWebDriverCalls(
       'DELETE /wd/hub/session/wd-1/actions',
       'POST /wd/hub/session/wd-1/keys',
       'GET /wd/hub/session/wd-1/source',
+      'GET /wd/hub/session/wd-1/window/rect',
+      'POST /wd/hub/session/wd-1/actions',
+      'DELETE /wd/hub/session/wd-1/actions',
       'DELETE /wd/hub/session/wd-1',
     ],
   );
@@ -348,6 +373,21 @@ function assertWebDriverCalls(
     args: [{ appId: 'com.example.demo', bundleId: 'com.example.demo' }],
   });
   assert.deepEqual(calls[7]?.body, { text: 'hello cloud', value: Array.from('hello cloud') });
+  assert.deepEqual(calls[10]?.body, {
+    actions: [
+      {
+        type: 'pointer',
+        id: 'swipe',
+        parameters: { pointerType: 'touch' },
+        actions: [
+          { type: 'pointerMove', duration: 0, x: 540, y: 860 },
+          { type: 'pointerDown', button: 0 },
+          { type: 'pointerMove', duration: 350, x: 540, y: 1060 },
+          { type: 'pointerUp', button: 0 },
+        ],
+      },
+    ],
+  });
   for (const call of calls) {
     assert.equal(call.headers['x-agent-device-client'], 'agent-device-cli');
     assert.equal(typeof call.headers['x-agent-device-version'], 'string');
@@ -413,6 +453,10 @@ class FakeWebDriverServer {
           '<node text="Login" resource-id="com.example:id/login" bounds="[10,20][110,70]" displayed="true" />' +
           '</node></hierarchy>',
       });
+      return;
+    }
+    if (call.method === 'GET' && call.path === '/wd/hub/session/wd-1/window/rect') {
+      writeJson(res, { value: { x: 0, y: 0, width: 1080, height: 1920 } });
       return;
     }
     if (call.method === 'DELETE' && call.path === '/wd/hub/session/wd-1/actions') {

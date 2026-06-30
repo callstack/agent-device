@@ -174,8 +174,9 @@ class WebDriverInteractor implements Interactor {
     this.requireSupport('scroll');
     const distance = options?.pixels ?? options?.amount ?? 300;
     const durationMs = options?.durationMs ?? 350;
-    const start = scrollStart(direction, distance);
-    const end = scrollEnd(direction, distance);
+    const rect = await this.client.windowRect();
+    const start = scrollStart(direction, distance, rect);
+    const end = scrollEnd(direction, distance, rect);
     await this.swipe(start.x, start.y, end.x, end.y, durationMs);
     return { backend: 'webdriver', direction, distance, durationMs };
   }

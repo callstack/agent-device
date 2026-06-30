@@ -1,5 +1,6 @@
 import {
   createCloudWebDriverCapabilities,
+  type CloudWebDriverCapabilityOverrides,
   type CloudWebDriverProviderCapabilities,
 } from './capabilities.ts';
 import { createCloudWebDriverRuntime } from './runtime.ts';
@@ -17,10 +18,26 @@ import type {
 import type { DeviceLease } from '../daemon/lease-registry.ts';
 import type { ProviderDeviceRuntime } from '../provider-device-runtime.ts';
 import { runCmd } from '../utils/exec.ts';
+import { sleep } from '../utils/timeouts.ts';
 import { AppError } from '../kernel/errors.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
+import { resolveLeaseValue, type LeaseValue } from './webdriver-utils.ts';
 
 const AWS_DEVICE_FARM_PROVIDER = CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm;
+const AWS_DEVICE_FARM_CAPABILITY_OVERRIDES = {
+  install: {
+    support: 'unsupported',
+    note: 'Pass appArn when creating the remote access session; local artifact upload/install is not implemented.',
+  },
+  portReverse: {
+    support: 'unsupported',
+    note: 'AWS Device Farm remote access does not expose agent-device port reverse.',
+  },
+  artifacts: {
+    support: 'supported',
+    note: 'AWS Device Farm remote access exposes provider-hosted video, Appium logs, and device logs after session completion.',
+  },
+} as const satisfies CloudWebDriverCapabilityOverrides;
 
 export {
   listAwsDeviceFarmCloudArtifacts,
@@ -69,7 +86,7 @@ export type AwsDeviceFarmWebDriverRuntimeOptions = {
   platform?: CloudWebDriverPlatform;
   deviceName?: string;
   appArn?: string;
-  sessionName?: string | ((lease: DeviceLease) => string);
+  sessionName?: LeaseValue<string>;
   webdriverCapabilities?:
     | Record<string, unknown>
     | ((lease: DeviceLease) => Record<string, unknown>);
@@ -88,20 +105,7 @@ export function getAwsDeviceFarmWebDriverCapabilities(
   return createCloudWebDriverCapabilities({
     provider: AWS_DEVICE_FARM_PROVIDER,
     platform,
-    overrides: {
-      install: {
-        support: 'unsupported',
-        note: 'Pass appArn when creating the remote access session; local artifact upload/install is not implemented.',
-      },
-      portReverse: {
-        support: 'unsupported',
-        note: 'AWS Device Farm remote access does not expose agent-device port reverse.',
-      },
-      artifacts: {
-        support: 'supported',
-        note: 'AWS Device Farm remote access exposes provider-hosted video, Appium logs, and device logs after session completion.',
-      },
-    },
+    overrides: AWS_DEVICE_FARM_CAPABILITY_OVERRIDES,
   });
 }
 
@@ -125,7 +129,7 @@ export function createAwsDeviceFarmWebDriverRuntime(
     }),
     deviceId: options.deviceId,
     requestPolicy: options.requestPolicy,
-    capabilityOverrides: getAwsDeviceFarmWebDriverCapabilities(platform).operations,
+    capabilityOverrides: AWS_DEVICE_FARM_CAPABILITY_OVERRIDES,
   });
 }
 
@@ -215,7 +219,7 @@ function createAwsDeviceFarmPrepareSession(
       projectArn: options.projectArn,
       deviceArn: options.deviceArn,
       appArn: options.appArn,
-      name: resolveAwsSessionName(options.sessionName, lease),
+      name: resolveLeaseValue(options.sessionName, lease) ?? `agent-device-${lease.leaseId}`,
       interactionMode: options.interactionMode,
       configuration: options.configuration,
     });
@@ -289,7 +293,7 @@ async function waitForRunningRemoteAccessSession(
         result: last.result,
       });
     }
-    await delay(pollIntervalMs);
+    await sleep(pollIntervalMs);
     last = await options.client.getRemoteAccessSession(arn);
   }
   throw new AppError('COMMAND_FAILED', 'Timed out waiting for AWS Device Farm remote access.', {
@@ -298,14 +302,6 @@ async function waitForRunningRemoteAccessSession(
     result: last.result,
     timeoutMs,
   });
-}
-
-function resolveAwsSessionName(
-  value: string | ((lease: DeviceLease) => string) | undefined,
-  lease: DeviceLease,
-): string {
-  if (typeof value === 'function') return value(lease);
-  return value ?? `agent-device-${lease.leaseId}`;
 }
 
 async function runAwsJson(command: string, args: string[]): Promise<unknown> {
@@ -326,8 +322,4 @@ function readRemoteAccessSession(value: unknown): AwsDeviceFarmRemoteAccessSessi
     });
   }
   return session as AwsDeviceFarmRemoteAccessSession;
-}
-
-async function delay(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
 }

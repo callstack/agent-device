@@ -411,7 +411,7 @@ function readXmlAttr(attrs: Map<string, string>, name: string): string | null {
   return attrs.get(name) ?? null;
 }
 
-function parseBounds(bounds: string | null): Rect | undefined {
+export function parseBounds(bounds: string | null): Rect | undefined {
   if (!bounds) return undefined;
   const match = /\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]/.exec(bounds);
   if (!match) return undefined;

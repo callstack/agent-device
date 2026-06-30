@@ -1,6 +1,8 @@
 import fs from 'node:fs/promises';
 import { AppError } from '../kernel/errors.ts';
+import { sleep } from '../utils/timeouts.ts';
 import { agentDeviceRequestHeaders } from './request-headers.ts';
+import { basicAuthHeader, trimLeadingSlash, withTrailingSlash } from './webdriver-utils.ts';
 
 export type WebDriverAuth = {
   username: string;
@@ -23,6 +25,13 @@ export type WebDriverRequestPolicy = {
 export type WebDriverSession = {
   sessionId: string;
   capabilities: Record<string, unknown>;
+};
+
+export type WebDriverWindowRect = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 };
 
 export type W3CActionSequence = {
@@ -51,7 +60,7 @@ export class WebDriverClient {
     this.endpoint = withTrailingSlash(new URL(options.endpoint));
     this.headers = {
       ...agentDeviceRequestHeaders(),
-      ...(options.auth ? { Authorization: basicAuth(options.auth) } : {}),
+      ...(options.auth ? { Authorization: basicAuthHeader(options.auth) } : {}),
       ...options.headers,
     };
     this.requestPolicy = {
@@ -129,6 +138,10 @@ export class WebDriverClient {
     await fs.writeFile(outPath, Buffer.from(value, 'base64'));
   }
 
+  async windowRect(): Promise<WebDriverWindowRect> {
+    return readWindowRect(await this.sessionRequest('GET', '/window/rect'));
+  }
+
   async executeScript(script: string, args: unknown[] = []): Promise<unknown> {
     return await this.sessionRequest('POST', '/execute/sync', { script, args });
   }
@@ -166,7 +179,7 @@ export class WebDriverClient {
         if (!isRetriableWebDriverError(error) || attempt >= retryAttempts) {
           throw error;
         }
-        await delay(this.requestPolicy.retryDelayMs);
+        await sleep(this.requestPolicy.retryDelayMs);
       }
     }
     throw lastError;
@@ -190,6 +203,35 @@ export class WebDriverClient {
     }
     return readWebDriverValue(payload);
   }
+}
+
+function readWindowRect(value: unknown): WebDriverWindowRect {
+  if (!value || typeof value !== 'object') {
+    throw new AppError('COMMAND_FAILED', 'WebDriver window rect response was empty.');
+  }
+  const record = value as Record<string, unknown>;
+  const rect = {
+    x: readFiniteNumber(record, 'x'),
+    y: readFiniteNumber(record, 'y'),
+    width: readFiniteNumber(record, 'width'),
+    height: readFiniteNumber(record, 'height'),
+  };
+  if (
+    rect.x === undefined ||
+    rect.y === undefined ||
+    rect.width === undefined ||
+    rect.height === undefined
+  ) {
+    throw new AppError('COMMAND_FAILED', 'WebDriver window rect response was invalid.', {
+      response: record,
+    });
+  }
+  return rect as WebDriverWindowRect;
+}
+
+function readFiniteNumber(record: Record<string, unknown>, key: string): number | undefined {
+  const value = record[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function normalizeCapabilities(capabilities: Record<string, unknown>): Record<string, unknown> {
@@ -255,23 +297,4 @@ function isRetriableWebDriverError(error: unknown): boolean {
     return typeof status === 'number' && status >= 500;
   }
   return error instanceof TypeError || (error instanceof Error && error.name === 'TimeoutError');
-}
-
-async function delay(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function trimLeadingSlash(path: string): string {
-  return path.replace(/^\/+/, '');
-}
-
-function withTrailingSlash(url: URL): URL {
-  if (url.pathname.endsWith('/')) return url;
-  const copy = new URL(url);
-  copy.pathname = `${copy.pathname}/`;
-  return copy;
-}
-
-function basicAuth(auth: WebDriverAuth): string {
-  return `Basic ${Buffer.from(`${auth.username}:${auth.accessKey}`).toString('base64')}`;
 }
