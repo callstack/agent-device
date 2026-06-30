@@ -119,6 +119,12 @@ export class WebDriverClient {
     await this.sessionRequest('POST', '/keys', { value: Array.from(text) });
   }
 
+  async hideKeyboard(): Promise<void> {
+    await this.sessionRequest('POST', '/appium/device/hide_keyboard', undefined, {
+      retryAttempts: 0,
+    });
+  }
+
   async back(): Promise<void> {
     await this.sessionRequest('POST', '/back');
   }

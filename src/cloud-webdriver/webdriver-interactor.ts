@@ -174,6 +174,7 @@ class WebDriverInteractor implements Interactor {
   ): Promise<Record<string, unknown>> {
     this.requireSupport('scroll');
     const durationMs = options?.durationMs ?? 350;
+    await this.client.hideKeyboard().catch(() => undefined);
     const rect = await this.client.windowRect();
     const plan = buildScrollGesturePlan({
       direction,

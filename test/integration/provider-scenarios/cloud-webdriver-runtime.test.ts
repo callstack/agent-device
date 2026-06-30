@@ -348,6 +348,7 @@ function assertWebDriverCalls(
       'DELETE /wd/hub/session/wd-1/actions',
       'POST /wd/hub/session/wd-1/keys',
       'GET /wd/hub/session/wd-1/source',
+      'POST /wd/hub/session/wd-1/appium/device/hide_keyboard',
       'GET /wd/hub/session/wd-1/window/rect',
       'POST /wd/hub/session/wd-1/actions',
       'DELETE /wd/hub/session/wd-1/actions',
@@ -370,7 +371,8 @@ function assertWebDriverCalls(
   assert.deepEqual(calls[1]?.body, { appPath });
   assert.deepEqual(calls[2]?.body, { appId: 'com.example.demo' });
   assert.deepEqual(calls[7]?.body, { value: Array.from('hello cloud') });
-  assert.deepEqual(calls[10]?.body, {
+  assert.equal(calls[9]?.body, undefined);
+  assert.deepEqual(calls[11]?.body, {
     actions: [
       {
         type: 'pointer',
