@@ -14,11 +14,19 @@ export function basicAuthHeader(credentials: { username: string; accessKey: stri
 }
 
 export function trimLeadingSlash(value: string): string {
-  return value.replace(/^\/+/, '');
+  let firstNonSlash = 0;
+  while (firstNonSlash < value.length && value.charCodeAt(firstNonSlash) === 47) {
+    firstNonSlash += 1;
+  }
+  return firstNonSlash === 0 ? value : value.slice(firstNonSlash);
 }
 
 export function trimTrailingSlash(value: string): string {
-  return value.replace(/\/+$/, '');
+  let lastNonSlash = value.length - 1;
+  while (lastNonSlash >= 0 && value.charCodeAt(lastNonSlash) === 47) {
+    lastNonSlash -= 1;
+  }
+  return lastNonSlash === value.length - 1 ? value : value.slice(0, lastNonSlash + 1);
 }
 
 export function withTrailingSlash(url: URL): URL {
