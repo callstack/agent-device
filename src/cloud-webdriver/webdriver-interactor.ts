@@ -17,7 +17,8 @@ import {
   type CloudWebDriverProviderCapabilities,
 } from './capabilities.ts';
 import { touchPointer } from './webdriver-gestures.ts';
-import type { WebDriverClient } from './webdriver-client.ts';
+import type { RawSnapshotNode } from '../kernel/snapshot.ts';
+import type { WebDriverClient, WebDriverWindowRect } from './webdriver-client.ts';
 import { parseWebDriverSource } from './webdriver-source.ts';
 
 export type WebDriverInteractorOptions = {
@@ -175,7 +176,7 @@ class WebDriverInteractor implements Interactor {
     this.requireSupport('scroll');
     const durationMs = options?.durationMs ?? 350;
     await this.client.hideKeyboard().catch(() => undefined);
-    const rect = await this.client.windowRect();
+    const rect = await this.scrollGestureFrame();
     const plan = buildScrollGesturePlan({
       direction,
       amount: options?.amount,
@@ -183,8 +184,21 @@ class WebDriverInteractor implements Interactor {
       referenceWidth: rect.width,
       referenceHeight: rect.height,
     });
-    await this.swipe(plan.x1, plan.y1, plan.x2, plan.y2, durationMs);
-    return { backend: 'webdriver', ...plan, distance: plan.pixels, durationMs };
+    const absolutePlan = {
+      ...plan,
+      x1: plan.x1 + rect.x,
+      y1: plan.y1 + rect.y,
+      x2: plan.x2 + rect.x,
+      y2: plan.y2 + rect.y,
+    };
+    await this.swipe(
+      absolutePlan.x1,
+      absolutePlan.y1,
+      absolutePlan.x2,
+      absolutePlan.y2,
+      durationMs,
+    );
+    return { backend: 'webdriver', ...absolutePlan, distance: plan.pixels, durationMs };
   }
 
   async pinch(_scale: number, _x?: number, _y?: number): Promise<Record<string, unknown> | void> {
@@ -266,6 +280,22 @@ class WebDriverInteractor implements Interactor {
     await this.client.releaseActions().catch(() => undefined);
   }
 
+  private async scrollGestureFrame(): Promise<WebDriverWindowRect> {
+    const sourceFrame = await this.sourceScrollFrame().catch(() => undefined);
+    if (sourceFrame) return sourceFrame;
+    return await this.client.windowRect();
+  }
+
+  private async sourceScrollFrame(): Promise<WebDriverWindowRect | undefined> {
+    const nodes = parseWebDriverSource(await this.client.source());
+    const rect = nodes
+      .flatMap((node) =>
+        isScrollableSourceNode(node) && isUsableScrollRect(node.rect) ? [node.rect] : [],
+      )
+      .sort((left, right) => right.width * right.height - left.width * left.height)[0];
+    return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : undefined;
+  }
+
   private requireSupport(operation: CloudWebDriverOperation): void {
     if (capabilitySupported(this.capabilities, operation)) return;
     this.unsupported(operation);
@@ -282,4 +312,16 @@ class WebDriverInteractor implements Interactor {
       },
     );
   }
+}
+
+function isScrollableSourceNode(node: RawSnapshotNode): boolean {
+  const type = node.type?.toLowerCase() ?? '';
+  return (
+    node.visibleToUser !== false &&
+    (type.includes('scrollview') || type.includes('listview') || type.includes('recyclerview'))
+  );
+}
+
+function isUsableScrollRect(rect: RawSnapshotNode['rect']): rect is WebDriverWindowRect {
+  return !!rect && rect.width >= 50 && rect.height >= 50;
 }

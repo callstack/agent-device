@@ -349,7 +349,7 @@ function assertWebDriverCalls(
       'POST /wd/hub/session/wd-1/keys',
       'GET /wd/hub/session/wd-1/source',
       'POST /wd/hub/session/wd-1/appium/device/hide_keyboard',
-      'GET /wd/hub/session/wd-1/window/rect',
+      'GET /wd/hub/session/wd-1/source',
       'POST /wd/hub/session/wd-1/actions',
       'DELETE /wd/hub/session/wd-1/actions',
       'DELETE /wd/hub/session/wd-1',
@@ -379,9 +379,9 @@ function assertWebDriverCalls(
         id: 'swipe',
         parameters: { pointerType: 'touch' },
         actions: [
-          { type: 'pointerMove', duration: 0, x: 540, y: 1060 },
+          { type: 'pointerMove', duration: 0, x: 540, y: 988 },
           { type: 'pointerDown', button: 0 },
-          { type: 'pointerMove', duration: 350, x: 540, y: 860 },
+          { type: 'pointerMove', duration: 350, x: 540, y: 788 },
           { type: 'pointerUp', button: 0 },
         ],
       },
@@ -450,6 +450,7 @@ class FakeWebDriverServer {
         value:
           '<hierarchy><node text="Root" bounds="[0,0][100,40]" displayed="true">' +
           '<node text="Login" resource-id="com.example:id/login" bounds="[10,20][110,70]" displayed="true" />' +
+          '<android.widget.ListView resource-id="com.example:id/results" bounds="[0,279][1080,1496]" displayed="true" />' +
           '</node></hierarchy>',
       });
       return;
