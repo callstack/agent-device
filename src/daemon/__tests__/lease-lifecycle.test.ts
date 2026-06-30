@@ -85,7 +85,7 @@ test('cleanupExpiredLeasedSession consumes expired lease and deletes the session
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
 });
 
-test('releaseSessionLease releases with the stored session owner scope', () => {
+test('releaseSessionLease releases with the stored session owner scope', async () => {
   const leaseRegistry = new LeaseRegistry();
   const lease = leaseRegistry.allocateLease({
     tenantId: 'tenant-a',
@@ -107,9 +107,16 @@ test('releaseSessionLease releases with the stored session owner scope', () => {
     },
   });
 
-  releaseSessionLease({ session, leaseRegistry });
+  const provider = await releaseSessionLease({
+    session,
+    leaseRegistry,
+    leaseLifecycleProvider: {
+      release: async (lease) => ({ provider: lease.leaseProvider }),
+    },
+  });
 
   expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
+  expect(provider).toEqual({ provider: 'proxy' });
 });
 
 test('resolveSessionLeaseForRequest prefers admitted lease and falls back to existing lease', () => {

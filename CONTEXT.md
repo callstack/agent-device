@@ -4,6 +4,14 @@
 
 - Provider-backed integration scenario: device-free integration test that runs the real daemon request path and replaces only external device or host tool execution.
 - Provider: request-scoped adapter interface for external device, runner, or host tool execution.
+- Cloud WebDriver runtime: package-shaped `ProviderDeviceRuntime` implementation that maps a
+  cloud-owned Appium/WebDriver session into agent-device lease, inventory, install, interactor, and
+  release hooks without adding provider-specific branches to daemon routing. Cloud WebDriver
+  adapters must expose explicit command capabilities because snapshots come from Appium page source
+  rather than agent-device native iOS runner or Android helper backends.
+- CloudArtifact: provider-hosted session output such as video, Appium logs, device logs, automation
+  logs, or provider dashboard links. Cloud artifacts stay under the `cloudArtifacts` response field
+  so they do not collide with daemon-managed local/downloadable `artifacts`.
 - Provider transcript: exact record of provider calls used when a test must verify platform command translation.
 - Scenario transcript: command-level integration flow that describes user-visible behavior through daemon commands.
 - In-process provider scenario harness: integration runner that invokes the daemon request handler directly without opening an HTTP listener.

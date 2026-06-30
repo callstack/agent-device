@@ -16,6 +16,7 @@ import type {
   CommandRequestResult,
   SessionCloseResult,
 } from '../../client/client-types.ts';
+import type { CloudArtifactsResult } from '../../cloud-artifacts.ts';
 import { readCommandMessage } from '../../utils/success-text.ts';
 import type { CliOutput } from '../command-contract.ts';
 import {
@@ -73,6 +74,19 @@ function closeCliOutput(result: AppCloseResult | SessionCloseResult): CliOutput 
   return messageCliOutput(serializeCloseResult(result));
 }
 
+function artifactsCliOutput(result: CloudArtifactsResult): CliOutput {
+  const emptyText = [result.message ?? `No cloud artifacts available for ${result.provider}.`];
+  const retryCommand = formatCloudArtifactsRetryCommand(result);
+  if (retryCommand) emptyText.push(`Retry: ${retryCommand}`);
+  return {
+    data: result,
+    text:
+      result.cloudArtifacts.length > 0
+        ? result.cloudArtifacts.map(formatCloudArtifactLine).join('\n')
+        : emptyText.join('\n'),
+  };
+}
+
 function deployCliOutput(result: AppDeployResult): CliOutput {
   return messageCliOutput(serializeDeployResult(result));
 }
@@ -111,6 +125,7 @@ export const managementCliOutputFormatters = {
       appsFilter: input.appsFilter as Parameters<typeof appsCliOutput>[0]['appsFilter'],
     }),
   session: resultOutput(sessionCliOutput),
+  artifacts: resultOutput(artifactsCliOutput),
   open: resultOutput(openCliOutput),
   close: resultOutput(closeCliOutput),
   install: resultOutput(deployCliOutput),
@@ -125,4 +140,15 @@ function formatDeviceLine(device: AgentDeviceDevice): string {
   const target = device.target ? ` target=${device.target}` : '';
   const booted = typeof device.booted === 'boolean' ? ` booted=${device.booted}` : '';
   return `${device.name} (${device.platform}${kind}${target})${booted}`;
+}
+
+function formatCloudArtifactLine(artifact: CloudArtifactsResult['cloudArtifacts'][number]): string {
+  const url = artifact.url ? ` ${artifact.url}` : '';
+  const availability = artifact.availability ? ` ${artifact.availability}` : '';
+  return `${artifact.kind}: ${artifact.name}${availability}${url}`;
+}
+
+function formatCloudArtifactsRetryCommand(result: CloudArtifactsResult): string | undefined {
+  if (!result.providerSessionId) return undefined;
+  return `agent-device artifacts ${result.providerSessionId} --provider ${result.provider} --json`;
 }

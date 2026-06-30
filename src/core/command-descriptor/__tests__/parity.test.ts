@@ -30,6 +30,7 @@ const UNROUTED_PUBLIC_COMMANDS = new Set<string>([
 // or always-admitted commands, so the capability matrix has never covered them.
 const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.appState,
+  PUBLIC_COMMANDS.artifacts,
   PUBLIC_COMMANDS.batch,
   PUBLIC_COMMANDS.devices,
   PUBLIC_COMMANDS.gesture,

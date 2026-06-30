@@ -231,6 +231,11 @@ function summarizeProviderScenarioFlagExclusions() {
       keys: ['force', 'noLogin', 'sessionLock', 'sessionLocked', 'sessionLockConflicts'],
     },
     {
+      name: 'cloud artifact provider lookup',
+      owner: 'cloud artifact provider, CLI output, and cloud WebDriver provider scenario tests',
+      keys: ['provider', 'providerSessionId'],
+    },
+    {
       name: 'Metro and React Native runtime preparation',
       owner: 'Metro companion integration and parser tests',
       keys: [

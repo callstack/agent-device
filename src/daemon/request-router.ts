@@ -6,6 +6,7 @@ import { AppError, normalizeError, retriableForErrorCode } from '../kernel/error
 import { supportedPlatformsForCommand } from '../core/capabilities.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
 import type { DaemonError, ResponseCost } from '../kernel/contracts.ts';
+import type { CloudArtifactProvider } from '../cloud-artifacts.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, DaemonResponseData } from './types.ts';
 import { RESPONSE_VIEWS } from './response-views.ts';
 import { SessionStore } from './session-store.ts';
@@ -60,6 +61,7 @@ export type RequestRouterDeps = {
   recordingProvider?: RecordingProviderResolver;
   deviceInventoryProvider?: DeviceInventoryProvider;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
+  cloudArtifactProvider?: CloudArtifactProvider;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
   trackDownloadableArtifact: (opts: {
     artifactPath: string;
@@ -82,6 +84,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
     recordingProvider,
     deviceInventoryProvider,
     leaseLifecycleProvider,
+    cloudArtifactProvider,
     providerDeviceRuntimeScope,
     trackDownloadableArtifact,
   } = deps;
@@ -198,6 +201,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
       sessionStore,
       leaseRegistry,
       leaseLifecycleProvider,
+      cloudArtifactProvider,
       invoke: handleRequest,
       invokeReplayAction: allowReplayActions
         ? createReplayScopedActionInvoker(lockedScope, providerScope)

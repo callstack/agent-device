@@ -289,8 +289,9 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
   }
   const connectedSession = state.session;
 
+  let providerData: Record<string, unknown> | undefined;
   try {
-    await client.sessions.close({ shutdown: flags.shutdown });
+    providerData = (await client.sessions.close({ shutdown: flags.shutdown })).provider;
   } catch {
     // Disconnect is idempotent; the session may already be closed.
   }
@@ -299,7 +300,9 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
   let released = false;
   if (state.leaseId) {
     try {
-      released = await releaseRemoteConnectionLease(client, state);
+      const release = await releaseRemoteConnectionLease(client, state);
+      released = release.released;
+      providerData ??= release.provider;
     } catch {
       // Bridges may release on close or be unreachable; local state still needs cleanup.
     }
@@ -307,7 +310,12 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
   removeRemoteConnectionState({ stateDir, session: connectedSession });
   writeCommandOutput(
     flags,
-    { connected: false, session: connectedSession, released },
+    {
+      connected: false,
+      session: connectedSession,
+      released,
+      ...(providerData ? { provider: providerData } : {}),
+    },
     () => `Disconnected remote session "${connectedSession}".`,
   );
   return true;

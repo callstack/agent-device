@@ -457,8 +457,8 @@ export async function stopReactDevtoolsCleanup(options: {
 export async function releaseRemoteConnectionLease(
   client: AgentDeviceClient,
   state: RemoteConnectionState,
-): Promise<boolean> {
-  if (!state.leaseId) return false;
+): Promise<{ released: boolean; provider?: Record<string, unknown> }> {
+  if (!state.leaseId) return { released: false };
   const result = await client.leases.release({
     tenant: state.tenant,
     runId: state.runId,
@@ -472,7 +472,7 @@ export async function releaseRemoteConnectionLease(
     clientId: state.clientId,
     deviceKey: state.deviceKey,
   });
-  return result.released;
+  return result;
 }
 
 export async function releasePreviousLease(

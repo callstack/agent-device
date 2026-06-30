@@ -47,6 +47,8 @@ export type CliFlags = RemoteConfigMetroOptions &
     runId?: string;
     leaseId?: string;
     leaseBackend?: LeaseBackend;
+    provider?: string;
+    providerSessionId?: string;
     force?: boolean;
     noLogin?: boolean;
     kind?: string;
@@ -310,6 +312,20 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     enumValues: ['ios-simulator', 'ios-instance', 'android-instance'],
     usageLabel: '--lease-backend ios-simulator|ios-instance|android-instance',
     usageDescription: 'Lease backend for remote tenant connection admission',
+  },
+  {
+    key: 'provider',
+    names: ['--provider'],
+    type: 'string',
+    usageLabel: '--provider <name>',
+    usageDescription: 'Cloud provider name for provider-scoped commands',
+  },
+  {
+    key: 'providerSessionId',
+    names: ['--provider-session'],
+    type: 'string',
+    usageLabel: '--provider-session <id>',
+    usageDescription: 'Cloud provider session id or ARN',
   },
   {
     key: 'force',

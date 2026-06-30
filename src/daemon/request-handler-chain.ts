@@ -1,4 +1,5 @@
 import type { CommandFlags } from '../core/dispatch.ts';
+import type { CloudArtifactProvider } from '../cloud-artifacts.ts';
 import type { AndroidAdbExecutor } from '../platforms/android/adb-executor.ts';
 import { AppError } from '../kernel/errors.ts';
 import { getDaemonCommandRoute } from './daemon-command-registry.ts';
@@ -23,6 +24,7 @@ type RequestHandlerChainParams = {
   sessionStore: SessionStore;
   leaseRegistry: LeaseRegistry;
   leaseLifecycleProvider?: LeaseLifecycleProvider;
+  cloudArtifactProvider?: CloudArtifactProvider;
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;
   androidAdbExecutor?: AndroidAdbExecutor;
@@ -63,8 +65,11 @@ async function runLeaseHandler(params: RequestHandlerChainParams): Promise<Daemo
     'lease',
     await handleLeaseCommands({
       req: params.req,
+      sessionName: params.sessionName,
+      sessionStore: params.sessionStore,
       leaseRegistry: params.leaseRegistry,
       leaseLifecycleProvider: params.leaseLifecycleProvider,
+      cloudArtifactProvider: params.cloudArtifactProvider,
     }),
   );
 }
@@ -80,6 +85,7 @@ async function runSessionHandler(params: RequestHandlerChainParams): Promise<Dae
       logPath: params.logPath,
       sessionStore: params.sessionStore,
       leaseRegistry: params.leaseRegistry,
+      leaseLifecycleProvider: params.leaseLifecycleProvider,
       invoke: params.invoke,
       invokeReplayAction: params.invokeReplayAction,
       androidAdbExecutor: params.androidAdbExecutor,

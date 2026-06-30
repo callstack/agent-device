@@ -8,6 +8,7 @@ import {
 } from './request-admission.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
+import type { LeaseLifecycleProvider } from './handlers/lease.ts';
 
 export type SessionTeardown = (session: SessionState, sessionName: string) => Promise<void>;
 
@@ -93,12 +94,13 @@ export function resolveSessionLeaseForRequest(params: {
   );
 }
 
-export function releaseSessionLease(params: {
+export async function releaseSessionLease(params: {
   session: SessionState;
   leaseRegistry: LeaseRegistry;
-}): void {
+  leaseLifecycleProvider?: LeaseLifecycleProvider;
+}): Promise<Record<string, unknown> | undefined> {
   const lease = params.session.lease;
-  if (!lease) return;
+  if (!lease) return undefined;
   const result = params.leaseRegistry.releaseLease(
     leaseScopeToReleaseRequest({
       leaseId: lease.leaseId,
@@ -119,4 +121,5 @@ export function releaseSessionLease(params: {
       released: result.released,
     },
   });
+  return result.lease ? await params.leaseLifecycleProvider?.release?.(result.lease) : undefined;
 }

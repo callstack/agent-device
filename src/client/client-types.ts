@@ -46,6 +46,7 @@ import type { AlertAction, AlertInfo } from '../alert-contract.ts';
 import type { DebugSymbolsOptions, DebugSymbolsResult } from '../contracts/debug-symbols.ts';
 import type { RemoteConnectionProfileFields } from '../remote/remote-config-schema.ts';
 import type { CommandResult } from '../core/command-descriptor/command-result.ts';
+import type { CloudArtifactsResult } from '../cloud-artifacts.ts';
 
 export type { FindLocator } from '../utils/finders.ts';
 export type { CompanionTunnelScope, MetroBridgeScope } from './client-companion-tunnel-contract.ts';
@@ -186,7 +187,13 @@ export type StartupPerfSample = {
 export type SessionCloseResult = {
   session: string;
   shutdown?: TargetShutdownResult;
+  provider?: Record<string, unknown>;
   identifiers: AgentDeviceIdentifiers;
+};
+
+export type CloudArtifactsOptions = AgentDeviceRequestOverrides & {
+  provider?: string;
+  providerSessionId?: string;
 };
 
 export type AppInstallOptions = AgentDeviceRequestOverrides &
@@ -894,6 +901,8 @@ export type InternalRequestOptions = AgentDeviceClientConfig &
     materializedPathRetentionMs?: number;
     materializationId?: string;
     leaseTtlMs?: number;
+    provider?: string;
+    providerSessionId?: string;
   };
 
 export type CommandRequestResult = DaemonResponseData;
@@ -915,6 +924,7 @@ export type AgentDeviceClient = {
     close: (
       options?: AgentDeviceRequestOverrides & { shutdown?: boolean },
     ) => Promise<SessionCloseResult>;
+    artifacts: (options?: CloudArtifactsOptions) => Promise<CloudArtifactsResult>;
   };
   apps: {
     install: (options: AppInstallOptions) => Promise<AppDeployResult>;
@@ -934,7 +944,9 @@ export type AgentDeviceClient = {
   leases: {
     allocate: (options: LeaseAllocateOptions) => Promise<Lease>;
     heartbeat: (options: LeaseScopedOptions) => Promise<Lease>;
-    release: (options: LeaseScopedOptions) => Promise<{ released: boolean }>;
+    release: (
+      options: LeaseScopedOptions,
+    ) => Promise<{ released: boolean; provider?: Record<string, unknown> }>;
   };
   metro: {
     prepare: (options: MetroPrepareOptions) => Promise<MetroPrepareResult>;

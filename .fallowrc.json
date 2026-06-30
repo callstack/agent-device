@@ -83,6 +83,10 @@
         "resolveRunnerBundleBuildSettings",
         "assertSafeDerivedCleanup"
       ]
+    },
+    {
+      "file": "src/cloud-webdriver.ts",
+      "exports": ["CLOUD_WEBDRIVER_PROVIDERS"]
     }
   ],
   "usedClassMembers": ["name", "listActiveLeases", "delete", "values", "elapsedMs", "isExpired"],

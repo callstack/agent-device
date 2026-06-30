@@ -107,6 +107,11 @@ const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'lease', ...ADMISSION_AND_LOCK_EXEMPT },
     batchable: false,
   },
+  {
+    name: PUBLIC_COMMANDS.artifacts,
+    daemon: { route: 'lease', ...ADMISSION_AND_LOCK_EXEMPT },
+    batchable: false,
+  },
 
   // -- session (route: session) --
   {

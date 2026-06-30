@@ -40,6 +40,7 @@ import { getSessionCommandKind } from '../daemon-command-registry.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { PREPARE_REQUEST_TIMEOUT_MS } from '../request-timeouts.ts';
 import { Deadline } from '../../utils/retry.ts';
+import type { LeaseLifecycleProvider } from './lease.ts';
 
 async function handlePrepareCommand(params: {
   req: DaemonRequest;
@@ -229,6 +230,7 @@ export async function handleSessionCommands(params: {
   logPath: string;
   sessionStore: SessionStore;
   leaseRegistry?: LeaseRegistry;
+  leaseLifecycleProvider?: LeaseLifecycleProvider;
   invoke: DaemonInvokeFn;
   invokeReplayAction?: DaemonInvokeFn;
   androidAdbExecutor?: AndroidAdbExecutor;
@@ -239,6 +241,7 @@ export async function handleSessionCommands(params: {
     logPath,
     sessionStore,
     leaseRegistry = new LeaseRegistry(),
+    leaseLifecycleProvider,
     invoke,
     invokeReplayAction,
     androidAdbExecutor,
@@ -421,6 +424,7 @@ export async function handleSessionCommands(params: {
       logPath,
       sessionStore,
       leaseRegistry,
+      leaseLifecycleProvider,
     });
   }
 

@@ -1,4 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import type {
+  CloudArtifactProvider,
+  CloudArtifactsQuery,
+  CloudArtifactsResult,
+} from './cloud-artifacts.ts';
 import type { Interactor } from './core/interactor-types.ts';
 import type { DeviceInventoryProvider } from './core/dispatch-resolve.ts';
 import type { LeaseLifecycleProvider } from './daemon/handlers/lease.ts';
@@ -22,6 +27,7 @@ export type ProviderDeviceInstallOptions = {
 export type ProviderDeviceRuntime = {
   provider: string;
   leaseLifecycle: LeaseLifecycleProvider;
+  cloudArtifacts?: CloudArtifactProvider;
   deviceInventoryProvider: DeviceInventoryProvider;
   ownsDevice(device: DeviceInfo): boolean;
   getInteractor(device: DeviceInfo): Interactor | undefined;
@@ -55,6 +61,7 @@ export type ProviderPortReverseOptions = {
 
 export type ProviderDeviceRuntimeRequestProviders = {
   leaseLifecycleProvider?: LeaseLifecycleProvider;
+  cloudArtifactProvider?: CloudArtifactProvider;
   deviceInventoryProvider?: DeviceInventoryProvider;
   providerDeviceRuntimeScope?: <T>(task: () => Promise<T>) => Promise<T>;
 };
@@ -152,6 +159,7 @@ export function createProviderDeviceRuntimeRequestProviders(
 ): ProviderDeviceRuntimeRequestProviders {
   return {
     leaseLifecycleProvider: composeLeaseProvider(runtimes),
+    cloudArtifactProvider: composeCloudArtifactProvider(runtimes),
     deviceInventoryProvider: composeDeviceInventoryProvider(runtimes),
     providerDeviceRuntimeScope: async (task) =>
       await withProviderDeviceRuntimeScope(runtimes, task),
@@ -169,6 +177,15 @@ function composeLeaseProvider(
   };
 }
 
+function composeCloudArtifactProvider(
+  runtimes: ProviderDeviceRuntime[],
+): CloudArtifactProvider | undefined {
+  if (runtimes.length === 0) return undefined;
+  return {
+    listCloudArtifacts: async (query) => await firstCloudArtifactsResult(runtimes, query),
+  };
+}
+
 function composeDeviceInventoryProvider(
   runtimes: ProviderDeviceRuntime[],
 ): DeviceInventoryProvider | undefined {
@@ -181,6 +198,18 @@ function composeDeviceInventoryProvider(
     }
     return null;
   };
+}
+
+async function firstCloudArtifactsResult(
+  runtimes: ProviderDeviceRuntime[],
+  query: CloudArtifactsQuery,
+): Promise<CloudArtifactsResult | undefined> {
+  for (const runtime of runtimes) {
+    if (!runtimeMatchesProvider(runtime, query.provider)) continue;
+    const result = await runtime.cloudArtifacts?.listCloudArtifacts?.(query);
+    if (result) return result;
+  }
+  return undefined;
 }
 
 async function firstProviderResult(

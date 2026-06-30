@@ -50,6 +50,7 @@ import { isNonDefaultResponseLevel, type ResponseLevel } from '../kernel/contrac
 import { readSerializedSnapshotCaptureAnnotations } from '../snapshot-capture-annotations.ts';
 import { readSnapshotDiagnosticsSummary } from '../snapshot-diagnostics.ts';
 import type { CommandFlags } from '../core/dispatch-context.ts';
+import type { CloudArtifactsResult } from '../cloud-artifacts.ts';
 
 export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},
@@ -149,9 +150,12 @@ export function createAgentDeviceClient(
         return {
           session,
           shutdown: normalizeTargetShutdownResult(data.shutdown),
+          provider: readObject(data.provider),
           identifiers: { session },
         };
       },
+      artifacts: async (options = {}) =>
+        await executeCommand<CloudArtifactsResult>('artifacts', options),
     },
     apps: {
       install: async (options: AppInstallOptions) =>
@@ -235,7 +239,7 @@ export function createAgentDeviceClient(
         normalizeLease(await execute(INTERNAL_COMMANDS.leaseHeartbeat, [], options)),
       release: async (options) => {
         const data = await execute(INTERNAL_COMMANDS.leaseRelease, [], options);
-        return { released: data.released === true };
+        return { released: data.released === true, provider: readObject(data.provider) };
       },
     },
     metro: {

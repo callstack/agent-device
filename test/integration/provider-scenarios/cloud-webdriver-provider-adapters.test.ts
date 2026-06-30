@@ -1,0 +1,528 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import http, { type IncomingMessage, type ServerResponse } from 'node:http';
+import path from 'node:path';
+import { test } from 'vitest';
+import {
+  createAwsCliDeviceFarmClient,
+  createAwsDeviceFarmWebDriverRuntime,
+  createBrowserStackWebDriverRuntime,
+  getAwsDeviceFarmWebDriverCapabilities,
+  getBrowserStackWebDriverCapabilities,
+  listAwsDeviceFarmCloudArtifacts,
+  listBrowserStackCloudArtifacts,
+  selectAwsDeviceFarmWebDriverEndpoint,
+  uploadBrowserStackApp,
+  type AwsDeviceFarmClient,
+} from '../../../src/cloud-webdriver.ts';
+import type { DeviceLease } from '../../../src/daemon/lease-registry.ts';
+import { withCommandExecutorOverride } from '../../../src/utils/exec.ts';
+import { withProviderScenarioResource, withProviderScenarioTempDir } from './harness.ts';
+
+type HttpCall = {
+  method: string;
+  path: string;
+  body?: unknown;
+};
+
+test('BrowserStack adapter prepares App Automate capabilities and uploads install artifacts', async () => {
+  await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
+    await withProviderScenarioTempDir('agent-device-browserstack-adapter-', async (tempDir) => {
+      const appPath = path.join(tempDir, 'demo.apk');
+      fs.writeFileSync(appPath, 'fake apk');
+      const lease = makeLease('browserstack');
+      const runtime = createBrowserStackWebDriverRuntime({
+        username: 'user',
+        accessKey: 'key',
+        endpoint: `${server.url}/wd/hub/`,
+        uploadEndpoint: `${server.url}/app-automate/upload`,
+        sessionDetailsEndpoint: `${server.url}/app-automate/sessions`,
+        platform: 'android',
+        deviceName: 'Google Pixel 8',
+        osVersion: '14.0',
+        app: 'bs://preuploaded',
+        projectName: 'agent-device',
+        buildName: (lease) => `build-${lease.runId}`,
+        sessionName: (lease) => `session-${lease.leaseId}`,
+      });
+      try {
+        await runtime.leaseLifecycle.allocate?.(lease);
+        const [device] =
+          (await runtime.deviceInventoryProvider({
+            leaseProvider: 'browserstack',
+            leaseId: lease.leaseId,
+            platform: 'android',
+          })) ?? [];
+        assert.ok(device);
+        await runtime.installApp?.(device, 'com.example.demo', appPath, {
+          packageNameHint: 'com.example.demo',
+        });
+        const release = await runtime.leaseLifecycle.release?.(lease);
+        assert.equal(
+          (release?.cloudArtifacts as { cloudArtifacts?: unknown[] } | undefined)?.cloudArtifacts
+            ?.length,
+          5,
+        );
+      } finally {
+        await runtime.shutdown();
+      }
+      assertBrowserStackCalls(server.calls, lease);
+    });
+  });
+}, 15_000);
+
+test('cloud provider adapters declare command capabilities explicitly', () => {
+  const browserStack = getBrowserStackWebDriverCapabilities('android');
+  assert.equal(browserStack.operations.snapshot.support, 'partial');
+  assert.equal(browserStack.operations.install.support, 'partial');
+  assert.equal(browserStack.operations.artifacts.support, 'supported');
+  assert.equal(browserStack.operations.nativeSnapshotBackend.support, 'unsupported');
+  assert.match(browserStack.operations.portReverse.note ?? '', /BrowserStack Local/);
+
+  const aws = getAwsDeviceFarmWebDriverCapabilities('android');
+  assert.equal(aws.operations.snapshot.support, 'partial');
+  assert.equal(aws.operations.install.support, 'unsupported');
+  assert.equal(aws.operations.artifacts.support, 'supported');
+  assert.match(aws.operations.install.note ?? '', /appArn/);
+  assert.equal(aws.operations.nativeSnapshotBackend.support, 'unsupported');
+});
+
+test('AWS Device Farm adapter selects WebDriver endpoint and stops remote access on release', async () => {
+  await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
+    const lease = makeLease('aws-device-farm');
+    const client = new FakeAwsDeviceFarmClient(`${server.url}/wd/hub/`);
+    const runtime = createAwsDeviceFarmWebDriverRuntime({
+      client,
+      projectArn: 'arn:aws:devicefarm:us-west-2:123:project/project-id',
+      deviceArn: 'arn:aws:devicefarm:us-west-2::device/device-id',
+      platform: 'android',
+      deviceName: 'Google Pixel 8',
+      sessionName: (lease) => `aws-${lease.leaseId}`,
+      pollIntervalMs: 1,
+    });
+    try {
+      const allocation = await runtime.leaseLifecycle.allocate?.(lease);
+      assert.equal(allocation?.awsDeviceFarmSessionArn, client.sessionArn);
+      const release = await runtime.leaseLifecycle.release?.(lease);
+      assert.equal(
+        (release?.cloudArtifacts as { cloudArtifacts?: unknown[] } | undefined)?.cloudArtifacts
+          ?.length,
+        3,
+      );
+    } finally {
+      await runtime.shutdown();
+    }
+    assert.deepEqual(client.calls, [
+      'create:aws-lease1',
+      'get:arn:aws:devicefarm:session/fake',
+      'stop:arn:aws:devicefarm:session/fake',
+      'list:arn:aws:devicefarm:session/fake:FILE',
+      'list:arn:aws:devicefarm:session/fake:LOG',
+    ]);
+    assert.equal(server.calls[0]?.path, '/wd/hub/session');
+    assert.equal(server.calls.at(-1)?.path, '/wd/hub/session/wd-1');
+  });
+}, 15_000);
+
+test('AWS Device Farm adapter rejects local artifact install until upload support exists', async () => {
+  await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
+    await withProviderScenarioTempDir('agent-device-aws-install-unsupported-', async (tempDir) => {
+      const appPath = path.join(tempDir, 'demo.apk');
+      fs.writeFileSync(appPath, 'fake apk');
+      const lease = makeLease('aws-device-farm');
+      const client = new FakeAwsDeviceFarmClient(`${server.url}/wd/hub/`);
+      const runtime = createAwsDeviceFarmWebDriverRuntime({
+        client,
+        projectArn: 'arn:aws:devicefarm:us-west-2:123:project/project-id',
+        deviceArn: 'arn:aws:devicefarm:us-west-2::device/device-id',
+        platform: 'android',
+        deviceName: 'Google Pixel 8',
+        pollIntervalMs: 1,
+      });
+      try {
+        await runtime.leaseLifecycle.allocate?.(lease);
+        const [device] =
+          (await runtime.deviceInventoryProvider({
+            leaseProvider: 'aws-device-farm',
+            leaseId: lease.leaseId,
+            platform: 'android',
+          })) ?? [];
+        assert.ok(device);
+        assert.ok(runtime.installApp);
+        await assert.rejects(
+          () => runtime.installApp!(device, 'com.example.demo', appPath),
+          /local artifact upload\/install is not implemented/,
+        );
+      } finally {
+        await runtime.leaseLifecycle.release?.(lease);
+        await runtime.shutdown();
+      }
+    });
+  });
+}, 15_000);
+
+test('WebDriver session creation retries transient provider failures', async () => {
+  await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
+    server.sessionFailuresRemaining = 1;
+    const lease = makeLease('browserstack');
+    const runtime = createBrowserStackWebDriverRuntime({
+      username: 'user',
+      accessKey: 'key',
+      endpoint: `${server.url}/wd/hub/`,
+      uploadEndpoint: `${server.url}/app-automate/upload`,
+      sessionDetailsEndpoint: `${server.url}/app-automate/sessions`,
+      platform: 'android',
+      deviceName: 'Google Pixel 8',
+      osVersion: '14.0',
+      requestPolicy: {
+        retryAttempts: 1,
+        retryDelayMs: 1,
+      },
+    });
+    try {
+      const allocation = await runtime.leaseLifecycle.allocate?.(lease);
+      assert.equal(allocation?.provider, 'browserstack');
+      await runtime.leaseLifecycle.release?.(lease);
+    } finally {
+      await runtime.shutdown();
+    }
+    assert.equal(server.calls.filter((call) => call.path === '/wd/hub/session').length, 2);
+  });
+}, 15_000);
+
+test('AWS Device Farm endpoint selection skips live-control WebSocket URLs', () => {
+  assert.equal(
+    selectAwsDeviceFarmWebDriverEndpoint({
+      arn: 'arn',
+      remoteDebugUrl: 'wss://live-control.example/socket',
+      endpoints: {
+        video: 'wss://video.example/socket',
+        appium: 'devicefarm-appium.example/wd/hub/',
+      },
+    }),
+    'http://devicefarm-appium.example/wd/hub/',
+  );
+});
+
+test('BrowserStack upload helper returns uploaded app reference', async () => {
+  await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
+    await withProviderScenarioTempDir('agent-device-browserstack-upload-', async (tempDir) => {
+      const appPath = path.join(tempDir, 'demo.apk');
+      fs.writeFileSync(appPath, 'fake apk');
+      const appUrl = await uploadBrowserStackApp(appPath, {
+        username: 'user',
+        accessKey: 'key',
+        endpoint: `${server.url}/app-automate/upload`,
+      });
+      assert.equal(appUrl, 'bs://uploaded-app');
+      assert.equal(server.calls[0]?.path, '/app-automate/upload');
+    });
+  });
+}, 15_000);
+
+test('BrowserStack session details map provider-hosted cloud artifacts', async () => {
+  await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
+    const result = await listBrowserStackCloudArtifacts('browserstack', 'wd-1', {
+      username: 'user',
+      accessKey: 'key',
+      endpoint: `${server.url}/app-automate/sessions`,
+    });
+    assert.equal(result?.status, 'ready');
+    assert.deepEqual(
+      result?.cloudArtifacts.map((artifact) => artifact.kind),
+      ['video', 'appium-log', 'device-log', 'provider-session', 'provider-session'],
+    );
+  });
+});
+
+test('AWS Device Farm artifacts map to shared cloud artifact kinds', async () => {
+  const client = new FakeAwsDeviceFarmClient('http://provider.example/wd/hub/');
+  const result = await listAwsDeviceFarmCloudArtifacts(
+    'aws-device-farm',
+    client.sessionArn,
+    client,
+  );
+  assert.deepEqual(
+    result?.cloudArtifacts.map((artifact) => artifact.kind),
+    ['video', 'device-log', 'appium-log'],
+  );
+});
+
+test('AWS CLI Device Farm client maps remote access commands', async () => {
+  const calls: string[][] = [];
+  const client = createAwsCliDeviceFarmClient({ region: 'us-west-2', awsCommand: 'aws' });
+  await withCommandExecutorOverride(
+    async (cmd, args) => {
+      calls.push([cmd, ...args]);
+      return {
+        stdout: JSON.stringify({ remoteAccessSession: { arn: 'arn', status: 'RUNNING' } }),
+        stderr: '',
+        exitCode: 0,
+      };
+    },
+    async () => {
+      await client.createRemoteAccessSession({
+        projectArn: 'project',
+        deviceArn: 'device',
+        name: 'session',
+      });
+      await client.getRemoteAccessSession('arn');
+      await client.stopRemoteAccessSession('arn');
+      await client.listArtifacts('arn', 'FILE');
+    },
+  );
+  assert.deepEqual(calls, [
+    [
+      'aws',
+      'devicefarm',
+      'create-remote-access-session',
+      '--region',
+      'us-west-2',
+      '--project-arn',
+      'project',
+      '--device-arn',
+      'device',
+      '--name',
+      'session',
+      '--output',
+      'json',
+    ],
+    [
+      'aws',
+      'devicefarm',
+      'get-remote-access-session',
+      '--region',
+      'us-west-2',
+      '--arn',
+      'arn',
+      '--output',
+      'json',
+    ],
+    [
+      'aws',
+      'devicefarm',
+      'stop-remote-access-session',
+      '--region',
+      'us-west-2',
+      '--arn',
+      'arn',
+      '--output',
+      'json',
+    ],
+    [
+      'aws',
+      'devicefarm',
+      'list-artifacts',
+      '--region',
+      'us-west-2',
+      '--arn',
+      'arn',
+      '--type',
+      'FILE',
+      '--output',
+      'json',
+    ],
+  ]);
+});
+
+function assertBrowserStackCalls(calls: readonly HttpCall[], lease: DeviceLease): void {
+  assert.equal(calls[0]?.path, '/wd/hub/session');
+  assert.deepEqual(calls[0]?.body, {
+    capabilities: {
+      alwaysMatch: {
+        platformName: 'Android',
+        'appium:deviceName': 'Google Pixel 8',
+        device: 'Google Pixel 8',
+        os_version: '14.0',
+        app: 'bs://preuploaded',
+        'bstack:options': {
+          projectName: 'agent-device',
+          buildName: 'build-run-a',
+          sessionName: `session-${lease.leaseId}`,
+        },
+      },
+    },
+  });
+  assert.equal(calls[1]?.path, '/app-automate/upload');
+  assert.equal(calls[2]?.path, '/wd/hub/session/wd-1/appium/device/install_app');
+  assert.deepEqual(calls[2]?.body, { appPath: 'bs://uploaded-app' });
+  assert.equal(calls.at(-2)?.path, '/wd/hub/session/wd-1');
+  assert.equal(calls.at(-1)?.path, '/app-automate/sessions/wd-1.json');
+}
+
+class FakeAwsDeviceFarmClient implements AwsDeviceFarmClient {
+  readonly sessionArn = 'arn:aws:devicefarm:session/fake';
+  readonly calls: string[] = [];
+  private readonly webDriverEndpoint: string;
+
+  constructor(webDriverEndpoint: string) {
+    this.webDriverEndpoint = webDriverEndpoint;
+  }
+
+  async createRemoteAccessSession(input: { name: string }) {
+    this.calls.push(`create:${input.name}`);
+    return { arn: this.sessionArn, status: 'PENDING' };
+  }
+
+  async getRemoteAccessSession(arn: string) {
+    this.calls.push(`get:${arn}`);
+    return {
+      arn,
+      status: 'RUNNING',
+      remoteDebugUrl: 'wss://live-control.example/socket',
+      endpoints: {
+        appium: this.webDriverEndpoint,
+      },
+      device: {
+        name: 'Google Pixel 8',
+        platform: 'ANDROID',
+        os: '14',
+      },
+    };
+  }
+
+  async stopRemoteAccessSession(arn: string) {
+    this.calls.push(`stop:${arn}`);
+    return { arn, status: 'STOPPING' };
+  }
+
+  async listArtifacts(arn: string, type: 'FILE' | 'LOG' | 'SCREENSHOT') {
+    this.calls.push(`list:${arn}:${type}`);
+    if (type === 'FILE') {
+      return [
+        {
+          arn: `${arn}/video`,
+          name: 'VIDEO',
+          type: 'VIDEO',
+          extension: 'mp4',
+          url: 'https://aws.example/video.mp4',
+        },
+        {
+          arn: `${arn}/device-log`,
+          name: 'DEVICE_LOG',
+          type: 'DEVICE_LOG',
+          extension: 'log',
+          url: 'https://aws.example/device.log',
+        },
+      ];
+    }
+    if (type === 'LOG') {
+      return [
+        {
+          arn: `${arn}/appium-log`,
+          name: 'APPIUM_SERVER_OUTPUT',
+          type: 'APPIUM_SERVER_OUTPUT',
+          extension: 'log',
+          url: 'https://aws.example/appium.log',
+        },
+      ];
+    }
+    return [];
+  }
+}
+
+class FakeCloudProviderServer {
+  readonly calls: HttpCall[] = [];
+  sessionFailuresRemaining = 0;
+  url = '';
+
+  private readonly server: http.Server;
+
+  private constructor(server: http.Server) {
+    this.server = server;
+  }
+
+  static async start(): Promise<FakeCloudProviderServer> {
+    const instance = new FakeCloudProviderServer(http.createServer());
+    instance.server.on('request', async (req, res) => await instance.handle(req, res));
+    await new Promise<void>((resolve, reject) => {
+      instance.server.once('error', reject);
+      instance.server.listen(0, '127.0.0.1', resolve);
+    });
+    const address = instance.server.address();
+    assert.ok(address && typeof address === 'object');
+    instance.url = `http://127.0.0.1:${address.port}`;
+    return instance;
+  }
+
+  async close(): Promise<void> {
+    await new Promise<void>((resolve, reject) => {
+      this.server.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+
+  private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const body = await readRequestBody(req);
+    this.calls.push({
+      method: req.method ?? 'GET',
+      path: req.url ?? '/',
+      ...(body === undefined ? {} : { body }),
+    });
+    this.respond(req, res);
+  }
+
+  private respond(req: IncomingMessage, res: ServerResponse): void {
+    if (req.method === 'POST' && req.url === '/wd/hub/session') {
+      if (this.sessionFailuresRemaining > 0) {
+        this.sessionFailuresRemaining -= 1;
+        writeJson(res, { value: { message: 'transient provider failure' } }, 503);
+        return;
+      }
+      writeJson(res, { value: { sessionId: 'wd-1', capabilities: {} } });
+      return;
+    }
+    if (req.method === 'POST' && req.url === '/app-automate/upload') {
+      writeJson(res, { app_url: 'bs://uploaded-app' });
+      return;
+    }
+    if (req.method === 'GET' && req.url === '/app-automate/sessions/wd-1.json') {
+      writeJson(res, {
+        automation_session: {
+          video_url: 'https://browserstack.example/video.mp4',
+          appium_logs_url: 'https://browserstack.example/appium.log',
+          device_logs_url: 'https://browserstack.example/device.log',
+          browser_url: 'https://browserstack.example/dashboard',
+          public_url: 'https://browserstack.example/public',
+        },
+      });
+      return;
+    }
+    writeJson(res, { value: null });
+  }
+}
+
+function makeLease(provider: string): DeviceLease {
+  const now = Date.now();
+  return {
+    leaseId: 'lease1',
+    tenantId: 'team-a',
+    runId: 'run-a',
+    backend: 'android-instance',
+    leaseProvider: provider,
+    deviceKey: 'device-a',
+    clientId: 'client-a',
+    createdAt: now,
+    heartbeatAt: now,
+    expiresAt: now + 60_000,
+  };
+}
+
+async function readRequestBody(req: IncomingMessage): Promise<unknown> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of req) {
+    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+  }
+  const buffer = Buffer.concat(chunks);
+  if (isMultipartRequest(req)) return { multipartBytes: buffer.length };
+  const text = buffer.toString('utf8');
+  return text ? (JSON.parse(text) as unknown) : undefined;
+}
+
+function isMultipartRequest(req: IncomingMessage): boolean {
+  return req.headers['content-type']?.startsWith('multipart/form-data') === true;
+}
+
+function writeJson(res: ServerResponse, body: unknown, status = 200): void {
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(body));
+}

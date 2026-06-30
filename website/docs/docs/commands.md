@@ -955,6 +955,20 @@ agent-device session list --json
 - `session list` shows active daemon sessions for the caller's implicit workspace scope, or the explicitly named session scope when `--session` / `AGENT_DEVICE_SESSION` is configured.
 - Use `--json` when you want to inspect or script against the raw session metadata.
 
+## Cloud provider artifacts
+
+```bash
+agent-device artifacts --provider browserstack --provider-session <webdriver-session-id> --json
+agent-device artifacts --provider aws-device-farm --provider-session <remote-access-session-arn> --json
+```
+
+- `artifacts` lists provider-hosted cloud artifacts such as videos, Appium logs, device logs, automation logs, and provider dashboard links.
+- The response uses `cloudArtifacts` so it stays separate from daemon-managed local `artifacts` returned by screenshot, recording, install, replay, and remote materialization flows.
+- Plain text output prints ready provider URLs. Use `--json` when scripts need the structured `cloudArtifacts` array.
+- Historical lookup requires `--provider-session <id>` plus `--provider <name>`. BrowserStack expects `BROWSERSTACK_USERNAME` and `BROWSERSTACK_ACCESS_KEY`; AWS Device Farm uses the AWS CLI credential chain and infers the region from the session ARN when possible.
+- When a cloud runtime is registered in-process by an embedding host, `artifacts` can infer the active provider session from the current lease before disconnect.
+- `disconnect --json` and `close --json` include provider release data when the runtime returns final cloud artifacts after session teardown. Some providers only finalize video/log URLs after the remote session is stopped, so retry `agent-device artifacts <provider-session-id> --provider <name> --json` if the first response is `pending`.
+
 ## iOS physical-device prerequisites
 
 For CLI-discoverable setup guidance, run `agent-device help physical-device`.

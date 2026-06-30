@@ -165,6 +165,7 @@ export function serializeCloseResult(
   return {
     session: result.session,
     ...(result.shutdown ? { shutdown: result.shutdown } : {}),
+    ...('provider' in result && result.provider ? { provider: result.provider } : {}),
     ...successText(result.session ? `Closed: ${result.session}` : 'Closed'),
   };
 }

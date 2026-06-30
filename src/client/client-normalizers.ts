@@ -272,6 +272,8 @@ export function buildFlags(options: InternalRequestOptions): CommandFlags {
     daemonTransport: options.daemonTransport,
     daemonServerMode: options.daemonServerMode,
     ...leaseScopeToCommandFlags(leaseScope),
+    provider: options.provider,
+    providerSessionId: options.providerSessionId,
     sessionIsolation: options.sessionIsolation,
     platform: options.platform,
     target: options.target,

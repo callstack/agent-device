@@ -51,6 +51,14 @@ Public subpath API exposed for Node consumers:
   - types: `MaterializeInstallSource`
 - `agent-device/artifacts`
   - `resolveAndroidArchivePackageName(archivePath)`
+- `agent-device/android-snapshot-helper`
+  - `ensureAndroidSnapshotHelper(options)`
+  - `captureAndroidSnapshotWithHelper(options)`
+  - `parseAndroidSnapshotHelperOutput(output)`
+  - `parseAndroidSnapshotHelperXml(xml, metadata?, options?, maxNodes?)`
+  - `prepareAndroidSnapshotHelperArtifactFromManifestUrl(options)`
+  - `verifyAndroidSnapshotHelperArtifact(artifact)`
+  - types: `AndroidAdbExecutor`, `AndroidSnapshotHelperArtifact`, `AndroidSnapshotHelperManifest`, `AndroidSnapshotHelperOutput`, `AndroidSnapshotHelperParsedSnapshot`
 - `agent-device/android-adb`
   - `createAndroidPortReverseManager(provider)`
   - `captureAndroidLogcatWithAdb(executor, options?)`
@@ -62,7 +70,7 @@ Public subpath API exposed for Node consumers:
   - `getAndroidAppStateWithAdb(executor)`
   - types: `AndroidAdbExecutor`, `AndroidAdbExecutorOptions`, `AndroidPortReverseEndpoint`
 
-The `contracts`, `selectors`, `finders`, `install-source`, `android-adb`, `artifacts`, `batch`, `metro`, `remote-config`, and `io` subpaths are the supported Node entry points. The former compatibility subpaths `agent-device/android-apps` and `agent-device/daemon`, plus hosted-runtime subpaths `agent-device/commands`, `agent-device/backend`, `agent-device/testing/conformance`, and `agent-device/observability`, are no longer published.
+The `contracts`, `selectors`, `finders`, `install-source`, `android-adb`, `artifacts`, `batch`, `metro`, `remote-config`, and `io` subpaths are the supported Node entry points. The former compatibility subpaths `agent-device/android-apps` and `agent-device/daemon`, plus hosted-runtime subpaths `agent-device/cloud-webdriver`, `agent-device/commands`, `agent-device/backend`, `agent-device/testing/conformance`, and `agent-device/observability`, are not published.
 
 ## Basic usage
 
@@ -106,6 +114,42 @@ standalone Simulator app.
 `client.sessions.stateDir()` mirrors `session state-dir` and returns the resolved daemon state directory as a pure local resolution — it never starts
 or contacts the daemon. Pass `{ stateDir }` to resolve an explicit override the same way the CLI resolves `--state-dir`.
 
+`client.sessions.artifacts({ provider, providerSessionId })` mirrors `artifacts --provider ... --provider-session ...` and returns provider-hosted `cloudArtifacts`.
+Use it for BrowserStack or AWS Device Farm session videos/logs after a cloud session has stopped, or omit `providerSessionId` when an embedding host has registered a cloud runtime that can infer the active lease.
+
+```ts
+const result = await client.sessions.artifacts({
+  provider: 'aws-device-farm',
+  providerSessionId: 'arn:aws:devicefarm:us-west-2:123:session/project/session/00000',
+});
+
+for (const artifact of result.cloudArtifacts) {
+  console.log(artifact.kind, artifact.name, artifact.url);
+}
+```
+
+## Device cloud sessions
+
+BrowserStack and AWS Device Farm can be driven through the normal typed client methods. Use the CLI `connect browserstack` / `connect aws-device-farm` flow when you want persisted local connection state. Use direct client config when a Node integration already owns credentials and provider selectors.
+
+```ts
+import { createAgentDeviceClient } from 'agent-device';
+
+const client = createAgentDeviceClient({
+  leaseProvider: 'browserstack',
+  platform: 'android',
+  device: 'Google Pixel 8',
+  providerOsVersion: '14.0',
+  providerApp: 'bs://app-id',
+});
+
+await client.apps.open({ app: 'com.example.app' });
+await client.capture.snapshot({ interactiveOnly: true });
+const closed = await client.sessions.close();
+```
+
+Use `client.sessions.artifacts({ provider, providerSessionId })` with `closed.provider?.providerSessionId` to fetch hosted video/log URLs after close. See [Device Clouds & Farms](/docs/device-clouds) for BrowserStack, AWS Device Farm, CLI, JavaScript, and MCP flows.
+
 ## Web sessions
 
 Typed client commands can target browser sessions with the same command methods by passing
@@ -143,10 +187,7 @@ only when the provider supports `adb reverse` argument semantics. The manager ma
 idempotent for the same owner and rejects conflicting owners for the same local endpoint.
 
 ```ts
-import {
-  getAndroidAppStateWithAdb,
-  listAndroidAppsWithAdb,
-} from 'agent-device/android-adb';
+import { getAndroidAppStateWithAdb, listAndroidAppsWithAdb } from 'agent-device/android-adb';
 
 const provider = {
   exec: async (args, options) => await runAdbThroughRemoteTunnel(args, options),
@@ -306,25 +347,40 @@ Direct Android `.apk` and `.aab` URL sources can still resolve package identity 
 ## Remote Metro helpers
 
 ```ts
-import {
-  buildBundleUrl,
-  normalizeBaseUrl,
-  resolveRuntimeTransport,
-} from 'agent-device/metro';
+import { prepareRemoteMetro, reloadRemoteMetro, stopMetroTunnel } from 'agent-device/metro';
+import { resolveRemoteConfigProfile } from 'agent-device/remote-config';
 
-const bridgeBaseUrl = normalizeBaseUrl('https://bridge.example.test/metro');
-const iosBundleUrl = buildBundleUrl(bridgeBaseUrl, 'ios');
-const androidBundleUrl = buildBundleUrl(bridgeBaseUrl, 'android');
-
-const transport = resolveRuntimeTransport({
-  platform: 'ios',
-  bundleUrl: iosBundleUrl,
+const remoteConfig = resolveRemoteConfigProfile({
+  configPath: './agent-device.remote.json',
+  cwd: process.cwd(),
 });
 
-console.log(iosBundleUrl, androidBundleUrl, transport);
+const prepared = await prepareRemoteMetro({
+  projectRoot: remoteConfig.profile.metroProjectRoot!,
+  kind: remoteConfig.profile.metroKind ?? 'auto',
+  proxyBaseUrl: remoteConfig.profile.metroProxyBaseUrl,
+  proxyBearerToken: remoteConfig.profile.metroBearerToken,
+  bridgeScope: {
+    tenantId: remoteConfig.profile.tenant!,
+    runId: remoteConfig.profile.runId!,
+    leaseId: remoteConfig.profile.leaseId!,
+  },
+  profileKey: remoteConfig.resolvedPath,
+});
+
+console.log(prepared.iosRuntime, prepared.androidRuntime);
+
+await reloadRemoteMetro({
+  runtime: prepared.iosRuntime,
+});
+
+await stopMetroTunnel({
+  projectRoot: remoteConfig.profile.metroProjectRoot!,
+  profileKey: remoteConfig.resolvedPath,
+});
 ```
 
-Use `agent-device/remote-config` for the `RemoteConfigProfile` type, `agent-device/metro` for URL and transport helpers, and `agent-device/contracts` when a server consumer needs daemon request or runtime contract types. For bridged remote Metro, the bridge descriptor supplies cloud iOS wildcard HTTPS hints and Android runtime-route hints.
+Use `agent-device/remote-config` for profile loading and path resolution, `agent-device/metro` for Metro preparation, reload, and tunnel lifecycle, and `agent-device/contracts` when a server consumer needs daemon request or runtime contract types. For bridged remote Metro, `proxyBaseUrl` is the bridge origin and `publicBaseUrl` is optional; the bridge descriptor supplies cloud iOS wildcard HTTPS hints and Android runtime-route hints. `reloadRemoteMetro()` calls Metro's `/reload` endpoint, matching the terminal `r` reload path for connected React Native apps.
 
 ## Selector helpers
 

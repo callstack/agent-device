@@ -62,6 +62,7 @@ test('catalog commands use generic routing only when intentionally passthrough o
 
 test('lease handler executes commands owned by the lease route', async () => {
   const leaseRegistry = new LeaseRegistry();
+  const sessionStore = makeSessionStore('agent-device-lease-route-');
   const allocated = leaseRegistry.allocateLease({ tenantId: 'tenant-a', runId: 'run-a' });
 
   const leaseCommands = [
@@ -83,6 +84,8 @@ test('lease handler executes commands owned by the lease route', async () => {
         },
         positionals: [],
       },
+      sessionName: 'catalog-test',
+      sessionStore,
       leaseRegistry,
     });
 
@@ -92,6 +95,7 @@ test('lease handler executes commands owned by the lease route', async () => {
 
 test('lease handler preserves device-aware lease fields', async () => {
   const leaseRegistry = new LeaseRegistry();
+  const sessionStore = makeSessionStore('agent-device-lease-fields-');
   const allocateResponse = await handleLeaseCommands({
     req: {
       command: INTERNAL_COMMANDS.leaseAllocate,
@@ -107,6 +111,8 @@ test('lease handler preserves device-aware lease fields', async () => {
       },
       positionals: [],
     },
+    sessionName: 'catalog-test',
+    sessionStore,
     leaseRegistry,
   });
 
@@ -132,6 +138,8 @@ test('lease handler preserves device-aware lease fields', async () => {
       },
       positionals: [],
     },
+    sessionName: 'catalog-test',
+    sessionStore,
     leaseRegistry,
   });
 
@@ -144,6 +152,7 @@ test('lease handler preserves device-aware lease fields', async () => {
 
 test('lease release calls provider hook using the released lease without heartbeat mutation', async () => {
   const leaseRegistry = new LeaseRegistry();
+  const sessionStore = makeSessionStore('agent-device-lease-release-');
   const releaseCalls: string[] = [];
   const allocateResponse = await handleLeaseCommands({
     req: {
@@ -159,6 +168,8 @@ test('lease release calls provider hook using the released lease without heartbe
       },
       positionals: [],
     },
+    sessionName: 'catalog-test',
+    sessionStore,
     leaseRegistry,
   });
   assert.equal(allocateResponse?.ok, true);
@@ -179,6 +190,8 @@ test('lease release calls provider hook using the released lease without heartbe
       },
       positionals: [],
     },
+    sessionName: 'catalog-test',
+    sessionStore,
     leaseRegistry,
     leaseLifecycleProvider: {
       release: async (releasedLease) => {

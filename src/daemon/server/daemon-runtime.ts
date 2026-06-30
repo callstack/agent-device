@@ -5,6 +5,7 @@ import { cleanupStaleAppLogProcesses } from '../app-log-process.ts';
 import { resolveDaemonPaths, resolveDaemonServerMode } from '../config.ts';
 import { createDaemonHttpServer } from './http-server.ts';
 import { trackDownloadableArtifact } from '../artifact-tracking.ts';
+import { createDefaultCloudArtifactProvider } from '../../default-cloud-artifact-provider.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from '../request-router.ts';
 import { teardownSessionResources } from '../session-teardown.ts';
@@ -89,6 +90,7 @@ export async function startDaemonRuntime(
     token,
     sessionStore,
     leaseRegistry,
+    cloudArtifactProvider: createDefaultCloudArtifactProvider(env),
     trackDownloadableArtifact,
   });
 
