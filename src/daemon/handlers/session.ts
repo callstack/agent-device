@@ -42,6 +42,7 @@ import { LeaseRegistry } from '../lease-registry.ts';
 const PREPARE_IOS_RUNNER_MIN_STARTUP_TIMEOUT_MS = 45_000;
 const PREPARE_IOS_RUNNER_DEFAULT_BUILD_TIMEOUT_MS = 5 * 60_000;
 const PREPARE_IOS_RUNNER_HEALTH_TIMEOUT_MS = 90_000;
+const PREPARE_IOS_RUNNER_MAX_HEALTH_TIMEOUT_MS = 3 * 60_000;
 
 async function handlePrepareCommand(params: {
   req: DaemonRequest;
@@ -99,7 +100,7 @@ function buildPrepareIosRunnerOptions(
     cleanStaleBundles: true,
     startupTimeoutMs: resolvePrepareIosRunnerStartupTimeoutMs(req.flags?.timeoutMs),
     buildTimeoutMs,
-    healthTimeoutMs: Math.min(buildTimeoutMs, PREPARE_IOS_RUNNER_HEALTH_TIMEOUT_MS),
+    healthTimeoutMs: resolvePrepareIosRunnerHealthTimeoutMs(req.flags?.timeoutMs, buildTimeoutMs),
   };
 }
 
@@ -115,6 +116,24 @@ function readPrepareIosRunnerBuildTimeoutMs(req: DaemonRequest): number {
   return typeof value === 'number' && Number.isFinite(value) && value > 0
     ? value
     : PREPARE_IOS_RUNNER_DEFAULT_BUILD_TIMEOUT_MS;
+}
+
+function resolvePrepareIosRunnerHealthTimeoutMs(
+  timeoutMs: unknown,
+  buildTimeoutMs: number,
+): number {
+  const configuredTimeout =
+    typeof timeoutMs === 'number' && Number.isFinite(timeoutMs) && timeoutMs > 0
+      ? Math.floor(timeoutMs)
+      : undefined;
+  if (!configuredTimeout) {
+    return Math.min(buildTimeoutMs, PREPARE_IOS_RUNNER_HEALTH_TIMEOUT_MS);
+  }
+  return Math.min(
+    buildTimeoutMs,
+    PREPARE_IOS_RUNNER_MAX_HEALTH_TIMEOUT_MS,
+    Math.max(PREPARE_IOS_RUNNER_HEALTH_TIMEOUT_MS, Math.floor(configuredTimeout / 2)),
+  );
 }
 
 function prepareIosRunnerResponseData(

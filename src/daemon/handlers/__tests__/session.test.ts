@@ -2509,7 +2509,7 @@ test('prepare ios-runner starts the XCTest runner on an explicit iOS selector', 
     expect.objectContaining({
       cleanStaleBundles: true,
       buildTimeoutMs: 240000,
-      healthTimeoutMs: 90000,
+      healthTimeoutMs: 120000,
       logPath: expect.stringMatching(/daemon\.log$/),
       requestId: 'prepare-request',
       startupTimeoutMs: 240000,
@@ -2562,7 +2562,7 @@ test('prepare ios-runner starts the XCTest runner on an explicit macOS selector'
     expect.objectContaining({ platform: 'macos', id: 'host-macos-local' }),
     expect.objectContaining({
       buildTimeoutMs: 240000,
-      healthTimeoutMs: 90000,
+      healthTimeoutMs: 120000,
       requestId: 'prepare-macos-request',
     }),
   );
