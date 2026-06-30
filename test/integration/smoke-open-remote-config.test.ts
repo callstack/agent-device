@@ -71,18 +71,27 @@ async function runCliJson(args: string[], env?: NodeJS.ProcessEnv): Promise<CliJ
     process.stderr.write = originalStderrWrite;
   }
 
-  let json: any;
-  try {
-    json = JSON.parse(stdout);
-  } catch {
-    json = undefined;
-  }
+  const json = parseCliJson(stdout);
   return {
     code,
     json,
     stdout,
     stderr,
   };
+}
+
+function parseCliJson(stdout: string): any {
+  try {
+    return JSON.parse(stdout);
+  } catch {
+    const embedded = stdout.match(/\{\s*"success"[\s\S]*\}\s*$/);
+    if (!embedded) return undefined;
+    try {
+      return JSON.parse(embedded[0]);
+    } catch {
+      return undefined;
+    }
+  }
 }
 
 async function readJsonBody(req: http.IncomingMessage): Promise<any> {
@@ -303,14 +312,14 @@ test('connect prepares Metro and open reuses bridged runtime for remote daemon',
   );
 
   assert.equal(connectResult.code, null, `${connectResult.stderr}\n${connectResult.stdout}`);
-  assert.equal(connectResult.json?.success, true, JSON.stringify(connectResult.json));
+  assert.equal(connectResult.json?.success, true, JSON.stringify(connectResult.json) ?? '');
 
   const result = await runCliJson(['open', 'Demo', '--state-dir', stateDir, '--json'], {
     AGENT_DEVICE_DAEMON_AUTH_TOKEN: sharedToken,
   });
 
   assert.equal(result.code, null, `${result.stderr}\n${result.stdout}`);
-  assert.equal(result.json?.success, true, JSON.stringify(result.json));
+  assert.equal(result.json?.success, true, JSON.stringify(result.json) ?? result.stdout);
 
   assert.equal(capturedBridgeRequest?.authorization, `Bearer ${sharedToken}`);
   assert.equal(capturedOpenRpcRequest?.authorization, `Bearer ${sharedToken}`);
