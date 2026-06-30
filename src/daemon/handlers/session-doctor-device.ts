@@ -10,7 +10,7 @@ import {
   type Platform,
   type PlatformSelector,
 } from '../../kernel/device.ts';
-import { normalizeError } from '../../utils/errors.ts';
+import { normalizeError } from '../../kernel/errors.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import type { DoctorCheck, DoctorOptions } from './session-doctor-types.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';

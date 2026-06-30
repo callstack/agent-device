@@ -2,8 +2,8 @@ import {
   resolveAndroidAdbExecutor,
   type AndroidAdbExecutor,
 } from '../../platforms/android/adb-executor.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
-import { normalizeError } from '../../utils/errors.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
+import { normalizeError } from '../../kernel/errors.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';
 import type { DoctorCheck } from './session-doctor-types.ts';
 

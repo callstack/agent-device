@@ -1,7 +1,7 @@
 import { resolveAndroidApp } from '../../platforms/android/app-lifecycle.ts';
-import { resolveIosApp } from '../../platforms/ios/apps.ts';
-import type { DeviceInfo } from '../../utils/device.ts';
-import { normalizeError } from '../../utils/errors.ts';
+import { resolveIosApp } from '../../platforms/apple/core/apps.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
+import { normalizeError } from '../../kernel/errors.ts';
 import type { SessionState } from '../types.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';
 import type { DoctorCheck } from './session-doctor-types.ts';
