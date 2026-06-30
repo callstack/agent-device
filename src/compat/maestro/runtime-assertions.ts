@@ -6,7 +6,7 @@ import type { DaemonFailureResponse } from '../../daemon/handlers/response.ts';
 import type { ReplayVarScope } from '../../replay/vars.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { Point, SnapshotState } from '../../kernel/snapshot.ts';
-import { buildSnapshotDisplayLines } from '../../utils/snapshot-lines.ts';
+import { buildSnapshotDisplayLines } from '../../snapshot/snapshot-lines.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import { pointForMaestroTapOnTarget } from './runtime-geometry.ts';
 import {

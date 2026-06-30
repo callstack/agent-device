@@ -6,7 +6,7 @@ import type {
 import { AppError } from '../../../kernel/errors.ts';
 import type { SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
 import { findNodeByRef, normalizeRef } from '../../../kernel/snapshot.ts';
-import { isSparseSnapshotQualityVerdict } from '../../../utils/snapshot-quality.ts';
+import { isSparseSnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
 import { extractReadableText } from '../../../utils/text-surface.ts';
 import { now, toBackendContext } from '../../runtime-common.ts';
 import { findNodeByLabel } from './selector-read-utils.ts';

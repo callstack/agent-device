@@ -2,7 +2,7 @@ import type { AndroidSnapshotBackendMetadata } from './platforms/android/snapsho
 import {
   readSnapshotQualityVerdict,
   type SnapshotQualityVerdict,
-} from './utils/snapshot-quality.ts';
+} from './snapshot/snapshot-quality.ts';
 
 export type SnapshotCaptureAnalysis = {
   rawNodeCount: number;

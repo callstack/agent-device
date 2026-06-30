@@ -3,7 +3,7 @@ import {
   isReactNativeCollapsedWarningWrapperCandidate,
   isReactNativeCollapsedWarningWrapperWithVisibleBanner,
 } from '../../../core/react-native-overlay.ts';
-import { normalizeType } from '../../../utils/snapshot-processing.ts';
+import { normalizeType } from '../../../snapshot/snapshot-processing.ts';
 import { collectIosScrollIndicatorPresentation } from './scroll.ts';
 import {
   areRectsApproximatelyEqual,

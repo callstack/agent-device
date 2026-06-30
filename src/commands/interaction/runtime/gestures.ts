@@ -16,7 +16,7 @@ import {
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { requireIntInRange } from '../../../utils/validation.ts';
 import { successText } from '../../../utils/success-text.ts';
-import { isNodeVisibleInEffectiveViewport } from '../../../utils/mobile-snapshot-semantics.ts';
+import { isNodeVisibleInEffectiveViewport } from '../../../snapshot/mobile-snapshot-semantics.ts';
 import {
   captureScrollEdgeState,
   formatScrollEdgeMessage,

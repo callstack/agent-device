@@ -7,17 +7,20 @@ import {
   type PublicSnapshotCaptureAnnotations,
   type SnapshotCaptureAnnotations,
 } from '../../../snapshot-capture-annotations.ts';
-import { renderSnapshotQualityWarnings } from '../../../utils/snapshot-quality.ts';
+import { renderSnapshotQualityWarnings } from '../../../snapshot/snapshot-quality.ts';
 import { AppError } from '../../../kernel/errors.ts';
-import { buildSnapshotDiff, countSnapshotComparableLines } from '../../../utils/snapshot-diff.ts';
-import type { SnapshotDiffLine, SnapshotDiffSummary } from '../../../utils/snapshot-diff.ts';
+import {
+  buildSnapshotDiff,
+  countSnapshotComparableLines,
+} from '../../../snapshot/snapshot-diff.ts';
+import type { SnapshotDiffLine, SnapshotDiffSummary } from '../../../snapshot/snapshot-diff.ts';
 import type {
   SnapshotNode,
   SnapshotState,
   SnapshotUnchanged,
   SnapshotVisibility,
 } from '../../../kernel/snapshot.ts';
-import { buildSnapshotVisibility } from '../../../utils/snapshot-visibility.ts';
+import { buildSnapshotVisibility } from '../../../snapshot/snapshot-visibility.ts';
 import { formatReactNativeOverlayWarning } from '../../react-native/overlay.ts';
 import {
   buildUnchangedSnapshotMetadata,
@@ -30,7 +33,7 @@ import type {
 } from '../../runtime-types.ts';
 import { now } from '../../runtime-common.ts';
 
-export type { SnapshotDiffLine, SnapshotDiffSummary } from '../../../utils/snapshot-diff.ts';
+export type { SnapshotDiffLine, SnapshotDiffSummary } from '../../../snapshot/snapshot-diff.ts';
 
 export type SnapshotCommandResult = {
   nodes: SnapshotNode[];

@@ -1,8 +1,8 @@
 import type { Rect, SnapshotNode } from '../kernel/snapshot.ts';
 import { centerOfRect } from '../kernel/snapshot.ts';
 import { containsPoint, pickLargestRect } from '../utils/rect-visibility.ts';
-import { findNearestHittableAncestor, normalizeType } from '../utils/snapshot-processing.ts';
-import { isSnapshotNodeInteractionBlocked } from '../utils/snapshot-occlusion.ts';
+import { findNearestHittableAncestor, normalizeType } from '../snapshot/snapshot-processing.ts';
+import { isSnapshotNodeInteractionBlocked } from '../snapshot/snapshot-occlusion.ts';
 import {
   areRectsApproximatelyEqual,
   normalizeRect,

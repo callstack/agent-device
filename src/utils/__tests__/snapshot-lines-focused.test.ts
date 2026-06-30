@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { formatSnapshotLine } from '../snapshot-lines.ts';
+import { formatSnapshotLine } from '../../snapshot/snapshot-lines.ts';
 
 test('formatSnapshotLine marks focused nodes', () => {
   const line = formatSnapshotLine(

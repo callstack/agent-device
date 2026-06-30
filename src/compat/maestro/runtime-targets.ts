@@ -11,7 +11,7 @@ import {
   findSnapshotAncestor,
   isDescendantOfSnapshotNode,
   normalizeType,
-} from '../../utils/snapshot-processing.ts';
+} from '../../snapshot/snapshot-processing.ts';
 import type { TouchReferenceFrame } from '../../daemon/touch-reference-frame.ts';
 import type { DaemonRequest } from '../../daemon/types.ts';
 import type { Selector, SelectorTerm } from '../../daemon/selectors-parse.ts';

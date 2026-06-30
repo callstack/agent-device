@@ -1,5 +1,5 @@
 import type { SnapshotNode } from '../../kernel/snapshot.ts';
-import { displayNodeLabel } from '../snapshot-tree.ts';
+import { displayNodeLabel } from '../../snapshot/snapshot-tree.ts';
 
 export function visibleNodeLabel(node: SnapshotNode): string {
   const label = displayNodeLabel(node);

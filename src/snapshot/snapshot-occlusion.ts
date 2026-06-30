@@ -1,8 +1,8 @@
 import type { RawSnapshotNode, Rect } from '../kernel/snapshot.ts';
 import { centerOfRect } from '../kernel/snapshot.ts';
-import { areRectsApproximatelyEqual, normalizeRect } from './rect-center.ts';
-import { containsPoint } from './rect-visibility.ts';
-import { normalizeType } from './text-surface.ts';
+import { areRectsApproximatelyEqual, normalizeRect } from '../utils/rect-center.ts';
+import { containsPoint } from '../utils/rect-visibility.ts';
+import { normalizeType } from '../utils/text-surface.ts';
 
 const COVERED_PRESENTATION_HINT = 'covered';
 const OVERLAY_KIND_FRAGMENTS = [

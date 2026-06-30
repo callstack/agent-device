@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
 import { formatScreenshotDiffText, formatSnapshotDiffText, formatSnapshotText } from '../output.ts';
-import { formatRole, formatSnapshotLine } from '../snapshot-lines.ts';
+import { formatRole, formatSnapshotLine } from '../../snapshot/snapshot-lines.ts';
 import { normalizedRect } from '../screenshot-geometry.ts';
 
 const DIFF_DATA = {

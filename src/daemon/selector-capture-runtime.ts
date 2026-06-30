@@ -5,7 +5,7 @@ import {
   snapshotPresentationOptionsFromFlags,
   type SnapshotState,
 } from '../kernel/snapshot.ts';
-import { isSparseSnapshotQualityVerdict } from '../utils/snapshot-quality.ts';
+import { isSparseSnapshotQualityVerdict } from '../snapshot/snapshot-quality.ts';
 import type { DaemonRequest, SessionState } from './types.ts';
 import { SessionStore } from './session-store.ts';
 import { captureSnapshot } from './handlers/snapshot-capture.ts';

@@ -563,7 +563,7 @@
         "count": 1
       }
     },
-    "src/utils/mobile-snapshot-semantics.ts": {
+    "src/snapshot/mobile-snapshot-semantics.ts": {
       "crap_moderate": {
         "count": 2
       }
@@ -603,7 +603,7 @@
         "count": 1
       }
     },
-    "src/utils/snapshot-diff.ts": {
+    "src/snapshot/snapshot-diff.ts": {
       "complexity_moderate": {
         "count": 1
       },
@@ -611,7 +611,7 @@
         "count": 1
       }
     },
-    "src/utils/snapshot-lines.ts": {
+    "src/snapshot/snapshot-lines.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -685,7 +685,7 @@
   "target_keys": [
     "src/daemon/handlers/session.ts:complexity",
     "src/daemon/handlers/session-replay-runtime.ts:high impact",
-    "src/utils/snapshot-processing.ts:high impact",
+    "src/snapshot/snapshot-processing.ts:high impact",
     "src/daemon/handlers/session-device-utils.ts:high impact",
     "src/commands/cli-grammar/common.ts:high impact",
     "src/client-shared.ts:high impact",
@@ -712,7 +712,7 @@
     "src/utils/rect-center.ts:high impact",
     "src/utils/process-identity.ts:high impact",
     "src/daemon/app-log-process.ts:high impact",
-    "src/utils/snapshot-lines.ts:high impact",
+    "src/snapshot/snapshot-lines.ts:high impact",
     "src/daemon/handlers/session-test-sharding.ts:high impact",
     "src/platforms/android/ui-hierarchy.ts:high impact",
     "src/platforms/linux/snapshot.ts:high impact",

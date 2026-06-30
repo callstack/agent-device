@@ -1,7 +1,7 @@
 import {
   deriveMobileSnapshotHiddenContentHints,
   isNodeVisibleInEffectiveViewport,
-} from './mobile-snapshot-semantics.ts';
+} from '../snapshot/mobile-snapshot-semantics.ts';
 import { AppError } from '../kernel/errors.ts';
 import { isScrollableNodeLike } from './scrollable.ts';
 import type { ScrollDirection } from '../core/scroll-gesture.ts';

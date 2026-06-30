@@ -8,7 +8,7 @@ import { createAgentDevice } from '../runtime.ts';
 import { isApplePlatform } from '../kernel/device.ts';
 import { noActiveSessionError, requireCommandSupported } from './handlers/response.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
-import { findNodeByLabel } from '../utils/snapshot-processing.ts';
+import { findNodeByLabel } from '../snapshot/snapshot-processing.ts';
 import { runIosRunnerCommand } from '../platforms/ios/runner-client.ts';
 import { buildAppleRunnerRequestOptions } from './apple-runner-options.ts';
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';

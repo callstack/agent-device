@@ -1,6 +1,6 @@
 import type { Rect, SnapshotNode } from '../kernel/snapshot.ts';
-import { normalizeRepeatedNodeLabel } from './snapshot-label-signals.ts';
-import { displayNodeLabel } from './snapshot-tree.ts';
+import { normalizeRepeatedNodeLabel } from '../snapshot/snapshot-label-signals.ts';
+import { displayNodeLabel } from '../snapshot/snapshot-tree.ts';
 
 export function detectPossibleRepeatedNavSubtree(nodes: SnapshotNode[]): boolean {
   if (nodes.length < 20) {

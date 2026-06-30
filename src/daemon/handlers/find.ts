@@ -11,12 +11,12 @@ import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from
 import { SessionStore } from '../session-store.ts';
 import { contextFromFlags } from '../context.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
-import { extractNodeText } from '../../utils/snapshot-processing.ts';
+import { extractNodeText } from '../../snapshot/snapshot-processing.ts';
 import {
   resolveActionableTouchNode,
   resolveActionableTouchResolution,
 } from '../../core/interaction-targeting.ts';
-import { isSnapshotNodeInteractionBlocked } from '../../utils/snapshot-occlusion.ts';
+import { isSnapshotNodeInteractionBlocked } from '../../snapshot/snapshot-occlusion.ts';
 import { readTextForNode } from './interaction-read.ts';
 import { errorResponse, noActiveSessionError } from './response.ts';
 import { recordSessionAction } from './handler-utils.ts';
@@ -26,7 +26,7 @@ import { createSelectorCaptureRuntime } from '../selector-capture-runtime.ts';
 import {
   isSparseSnapshotQualityVerdict,
   type SnapshotQualityVerdict,
-} from '../../utils/snapshot-quality.ts';
+} from '../../snapshot/snapshot-quality.ts';
 import { resolveSelectorChain, type SelectorChain } from '../../selectors.ts';
 
 export { parseFindArgs } from '../../utils/finders.ts';

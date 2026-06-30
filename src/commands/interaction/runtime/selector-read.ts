@@ -9,7 +9,7 @@ import { findNodeByRef, normalizeRef } from '../../../kernel/snapshot.ts';
 import {
   isSparseSnapshotQualityVerdict,
   type SnapshotQualityVerdict,
-} from '../../../utils/snapshot-quality.ts';
+} from '../../../snapshot/snapshot-quality.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import {

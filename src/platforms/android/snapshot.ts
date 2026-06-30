@@ -12,7 +12,7 @@ import {
   type SnapshotOptions,
 } from '../../kernel/snapshot.ts';
 import { isScrollableType } from '../../utils/scrollable.ts';
-import { deriveMobileSnapshotHiddenContentHints } from '../../utils/mobile-snapshot-semantics.ts';
+import { deriveMobileSnapshotHiddenContentHints } from '../../snapshot/mobile-snapshot-semantics.ts';
 import {
   buildUiHierarchySnapshot,
   parseUiHierarchy,

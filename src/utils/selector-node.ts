@@ -1,6 +1,6 @@
 import type { Platform } from '../kernel/device.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
-import { isFillableType } from './snapshot-processing.ts';
+import { isFillableType } from '../snapshot/snapshot-processing.ts';
 
 export function isNodeVisible(node: SnapshotNode): boolean {
   if (node.hittable === true) return true;

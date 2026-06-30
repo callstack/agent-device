@@ -11,7 +11,7 @@ import type { SnapshotState } from '../../kernel/snapshot.ts';
 import {
   isSparseSnapshotQualityVerdict,
   type SnapshotQualityVerdict,
-} from '../../utils/snapshot-quality.ts';
+} from '../../snapshot/snapshot-quality.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import { errorResponse, noActiveSessionError, requireCommandSupported } from './response.ts';
 import { captureSnapshotForSession } from './interaction-snapshot.ts';

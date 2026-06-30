@@ -2,7 +2,7 @@ import type { SnapshotNode } from '../kernel/snapshot.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { captureSnapshot } from './handlers/snapshot-capture.ts';
 import { errorResponse } from './handlers/response.ts';
-import { normalizeType } from '../utils/snapshot-processing.ts';
+import { normalizeType } from '../snapshot/snapshot-processing.ts';
 
 type WaitCurrentSurfaceParams = {
   req: DaemonRequest;

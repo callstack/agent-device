@@ -1,13 +1,13 @@
 import type { Platform } from '../kernel/device.ts';
 import type { SnapshotState } from '../kernel/snapshot.ts';
-import { isNodeVisibleInEffectiveViewport } from './mobile-snapshot-semantics.ts';
+import { isNodeVisibleInEffectiveViewport } from '../snapshot/mobile-snapshot-semantics.ts';
 import { isNodeEditable, isNodeVisible } from './selector-node.ts';
 import {
   buildSnapshotNodeByIndex,
   extractNodeText,
   findSnapshotAncestor,
   normalizeType,
-} from './snapshot-processing.ts';
+} from '../snapshot/snapshot-processing.ts';
 
 export type IsPredicate = 'visible' | 'hidden' | 'exists' | 'editable' | 'selected' | 'text';
 

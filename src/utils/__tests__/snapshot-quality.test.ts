@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 
-import { readSnapshotQualityVerdict } from '../snapshot-quality.ts';
+import { readSnapshotQualityVerdict } from '../../snapshot/snapshot-quality.ts';
 
 test('readSnapshotQualityVerdict accepts a well-formed verdict', () => {
   const verdict = readSnapshotQualityVerdict({

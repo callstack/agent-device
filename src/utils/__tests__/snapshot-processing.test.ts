@@ -4,7 +4,7 @@ import {
   buildSnapshotNodeByIndex,
   findNearestAncestor,
   findSnapshotAncestor,
-} from '../snapshot-processing.ts';
+} from '../../snapshot/snapshot-processing.ts';
 import type { SnapshotNode } from '../../kernel/snapshot.ts';
 
 test('findSnapshotAncestor walks non-contiguous parent indexes until resolver returns a value', () => {

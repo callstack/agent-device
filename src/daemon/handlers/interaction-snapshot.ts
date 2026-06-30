@@ -5,7 +5,7 @@ import type { SnapshotState } from '../../kernel/snapshot.ts';
 import type { ContextFromFlags } from './interaction-common.ts';
 import { captureSnapshot } from './snapshot-capture.ts';
 import { setSessionSnapshot } from '../session-snapshot.ts';
-import { isSparseSnapshotQualityVerdict } from '../../utils/snapshot-quality.ts';
+import { isSparseSnapshotQualityVerdict } from '../../snapshot/snapshot-quality.ts';
 
 export type CaptureSnapshotForSession = (
   session: SessionState,

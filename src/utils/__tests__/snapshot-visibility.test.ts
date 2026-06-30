@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { buildSnapshotVisibility } from '../snapshot-visibility.ts';
+import { buildSnapshotVisibility } from '../../snapshot/snapshot-visibility.ts';
 import type { SnapshotNode } from '../../kernel/snapshot.ts';
 
 const FULLSCREEN_ROOT = { x: 0, y: 0, width: 390, height: 844 };

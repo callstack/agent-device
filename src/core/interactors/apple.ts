@@ -22,7 +22,7 @@ import type { Interactor, RunnerContext } from '../interactor-types.ts';
 import {
   readSnapshotQualityVerdict,
   type SnapshotQualityVerdict,
-} from '../../utils/snapshot-quality.ts';
+} from '../../snapshot/snapshot-quality.ts';
 
 export function createAppleInteractor(
   device: DeviceInfo,

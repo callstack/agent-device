@@ -9,12 +9,12 @@ import {
   resolveSelectorChain,
 } from '../../../selectors.ts';
 import { buildSelectorChainForNode } from '../../../utils/selector-build.ts';
-import { findNodeByLabel, resolveRefLabel } from '../../../utils/snapshot-processing.ts';
+import { findNodeByLabel, resolveRefLabel } from '../../../snapshot/snapshot-processing.ts';
 import {
   isNodeVisibleInEffectiveViewport,
   resolveEffectiveViewportRect,
-} from '../../../utils/mobile-snapshot-semantics.ts';
-import { isSnapshotNodeInteractionBlocked } from '../../../utils/snapshot-occlusion.ts';
+} from '../../../snapshot/mobile-snapshot-semantics.ts';
+import { isSnapshotNodeInteractionBlocked } from '../../../snapshot/snapshot-occlusion.ts';
 import type {
   InteractionTarget,
   PointTarget,

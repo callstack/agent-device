@@ -1,7 +1,7 @@
 import type { Platform } from '../kernel/device.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { isNodeVisible } from './selector-node.ts';
-import { extractNodeText, normalizeType } from './snapshot-processing.ts';
+import { extractNodeText, normalizeType } from '../snapshot/snapshot-processing.ts';
 
 export function buildSelectorChainForNode(
   node: SnapshotNode,

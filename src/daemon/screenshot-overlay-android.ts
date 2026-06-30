@@ -1,5 +1,5 @@
 import type { Rect, SnapshotNode } from '../kernel/snapshot.ts';
-import { normalizeType } from '../utils/snapshot-processing.ts';
+import { normalizeType } from '../snapshot/snapshot-processing.ts';
 import { hasPositiveRect, rectContains, unionRects } from './screenshot-overlay-rects.ts';
 
 export function resolveAndroidOverlaySourceRect(

@@ -5,7 +5,7 @@ import {
 } from './android-helper-snapshot-presentation.ts';
 import { AppError, normalizeError, type NormalizedError } from '../kernel/errors.ts';
 import { detectPossibleRepeatedNavSubtree } from './repeated-nav-subtree.ts';
-import { buildSnapshotDisplayLines, formatSnapshotLine } from './snapshot-lines.ts';
+import { buildSnapshotDisplayLines, formatSnapshotLine } from '../snapshot/snapshot-lines.ts';
 import {
   isSnapshotBackend,
   usesMobileSnapshotPresentation,
@@ -18,7 +18,7 @@ import type { MovementRange } from '../screenshot-diff/screenshot-diff-ocr.ts';
 import type { ScreenshotDiffResult } from '../screenshot-diff/screenshot-diff.ts';
 import type { ScreenshotDiffRegion } from '../screenshot-diff/screenshot-diff-regions.ts';
 import { styleText } from 'node:util';
-import { buildMobileSnapshotPresentation } from './mobile-snapshot-semantics.ts';
+import { buildMobileSnapshotPresentation } from '../snapshot/mobile-snapshot-semantics.ts';
 
 type JsonResult =
   | { success: true; data?: unknown }

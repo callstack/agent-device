@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { buildSnapshotDiff } from '../../utils/snapshot-diff.ts';
+import { buildSnapshotDiff } from '../../snapshot/snapshot-diff.ts';
 import { buildNodes as nodes } from '../../__tests__/test-utils/snapshot-builders.ts';
 
 test('buildSnapshotDiff reports unchanged lines when snapshots are equal', () => {

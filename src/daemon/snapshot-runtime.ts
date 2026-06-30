@@ -2,7 +2,7 @@ import type { AgentDeviceBackend, BackendSnapshotResult } from '../backend.ts';
 import type { CommandSessionRecord } from '../runtime.ts';
 import { createAgentDevice } from '../runtime.ts';
 import { AppError } from '../kernel/errors.ts';
-import type { SnapshotDiffSummary } from '../utils/snapshot-diff.ts';
+import type { SnapshotDiffSummary } from '../snapshot/snapshot-diff.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from './types.ts';
 import { SessionStore } from './session-store.ts';
 import { errorResponse, requireCommandSupported } from './handlers/response.ts';

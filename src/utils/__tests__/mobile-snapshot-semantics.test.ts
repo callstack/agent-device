@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   buildMobileSnapshotPresentation,
   isNodeVisibleInEffectiveViewport,
-} from '../mobile-snapshot-semantics.ts';
+} from '../../snapshot/mobile-snapshot-semantics.ts';
 import type { SnapshotNode } from '../../kernel/snapshot.ts';
 
 test('mobile presentation keeps only visible nodes and adds off-screen summary fallback', () => {

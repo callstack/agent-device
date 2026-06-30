@@ -1,6 +1,6 @@
 import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { extractNodeReadText } from '../../utils/snapshot-processing.ts';
+import { extractNodeReadText } from '../../snapshot/snapshot-processing.ts';
 import type { SessionState } from '../types.ts';
 import type { SnapshotNode } from '../../kernel/snapshot.ts';
 import { prefersValueForReadableText } from '../../utils/text-surface.ts';

@@ -13,9 +13,9 @@ import {
   type SnapshotBackend,
   type SnapshotState,
 } from '../../kernel/snapshot.ts';
-import { annotateCoveredSnapshotNodes } from '../../utils/snapshot-occlusion.ts';
-import { normalizeSnapshotTree } from '../../utils/snapshot-tree.ts';
-export { buildSnapshotVisibility } from '../../utils/snapshot-visibility.ts';
+import { annotateCoveredSnapshotNodes } from '../../snapshot/snapshot-occlusion.ts';
+import { normalizeSnapshotTree } from '../../snapshot/snapshot-tree.ts';
+export { buildSnapshotVisibility } from '../../snapshot/snapshot-visibility.ts';
 import type { SessionState } from '../types.ts';
 import {
   ANDROID_FRESHNESS_RETRY_DEADLINE_MS,
@@ -41,7 +41,7 @@ import {
   findNodeByLabel,
   pruneGroupNodes,
   resolveRefLabel,
-} from '../../utils/snapshot-processing.ts';
+} from '../../snapshot/snapshot-processing.ts';
 import { errorResponse, type DaemonFailureResponse } from './response.ts';
 import { presentIosInteractiveSnapshot } from '../snapshot-presentation/ios/index.ts';
 import {
