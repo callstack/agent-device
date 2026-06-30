@@ -50,10 +50,6 @@
       "import": "./dist/src/android-adb.js",
       "types": "./dist/src/android-adb.d.ts"
     },
-    "./android-snapshot-helper": {
-      "import": "./dist/src/android-snapshot-helper.js",
-      "types": "./dist/src/android-snapshot-helper.d.ts"
-    },
     "./contracts": {
       "import": "./dist/src/contracts.js",
       "types": "./dist/src/contracts.d.ts"

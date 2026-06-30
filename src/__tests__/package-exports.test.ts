@@ -27,11 +27,11 @@ const supportedSubpaths = [
   './remote-config',
   './install-source',
   './android-adb',
-  './android-snapshot-helper',
   './contracts',
   './selectors',
   './finders',
 ];
+const typeOnlySubpaths = new Set(['./remote-config']);
 
 function exportTarget(subpath: string): { import: string; types: string } {
   const target = pkg.exports[subpath];
@@ -89,6 +89,7 @@ test('every public subpath ships matching import and types targets', () => {
 
 test('every public subpath resolves to a module that exposes named exports', async () => {
   for (const subpath of supportedSubpaths) {
+    if (typeOnlySubpaths.has(subpath)) continue;
     const sourcePath = sourcePathFor(subpath);
     const module = (await import(pathToFileURL(sourcePath).href)) as Record<string, unknown>;
     const namedExports = Object.keys(module).filter((name) => name !== 'default');

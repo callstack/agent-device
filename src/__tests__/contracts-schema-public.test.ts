@@ -2,17 +2,18 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import {
-  AppError,
-  type AppStateCommandResult,
-  type BackCommandResult,
-  type BootCommandResult,
-  type ClipboardCommandResult,
-  type CommandResult,
-  type RotateCommandResult,
-  type ShutdownCommandResult,
-  type ViewportCommandResult,
-} from '../index.ts';
+import { AppError } from '../index.ts';
+import type { CommandResult } from '../core/command-descriptor/command-result.ts';
+import type { AppStateCommandResult } from '../contracts/app-state.ts';
+import type { ClipboardCommandResult } from '../contracts/clipboard.ts';
+import type { BootCommandResult, ShutdownCommandResult } from '../contracts/device.ts';
+import type {
+  AppSwitcherCommandResult,
+  BackCommandResult,
+  HomeCommandResult,
+  RotateCommandResult,
+} from '../contracts/navigation.ts';
+import type { ViewportCommandResult } from '../contracts/viewport.ts';
 import {
   defaultHintForCode,
   daemonCommandRequestSchema,
@@ -97,7 +98,7 @@ test('public contract schemas validate daemon requests and lease payloads', () =
   assert.equal(node.ref, 'e1');
 });
 
-test('public root exports typed command result contracts', () => {
+test('command result contracts are assignable to command result map', () => {
   const boot = {
     platform: 'ios',
     target: 'mobile',
@@ -137,6 +138,18 @@ test('public root exports typed command result contracts', () => {
   } satisfies BackCommandResult;
   const backFromMap: CommandResult<'back'> = back;
 
+  const home = {
+    action: 'home',
+    message: 'Home',
+  } satisfies HomeCommandResult;
+  const homeFromMap: CommandResult<'home'> = home;
+
+  const appSwitcher = {
+    action: 'app-switcher',
+    message: 'App switcher opened',
+  } satisfies AppSwitcherCommandResult;
+  const appSwitcherFromMap: CommandResult<'app-switcher'> = appSwitcher;
+
   const rotate = {
     action: 'rotate',
     orientation: 'portrait',
@@ -162,6 +175,8 @@ test('public root exports typed command result contracts', () => {
   assert.equal(shutdownFromMap.shutdown.success, true);
   assert.equal(viewportFromMap.width, 390);
   assert.equal(backFromMap.mode, 'in-app');
+  assert.equal(homeFromMap.action, 'home');
+  assert.equal(appSwitcherFromMap.action, 'app-switcher');
   assert.equal(rotateFromMap.orientation, 'portrait');
   assert.equal(clipboardFromMap.action === 'write' ? clipboardFromMap.textLength : -1, 11);
   assert.equal(

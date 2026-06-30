@@ -4,10 +4,8 @@ import { test } from 'vitest';
 test('public android-adb entrypoint exposes helpers but not resolver internals', async () => {
   const androidAdb = await import('../android-adb.ts');
 
-  assert.equal(typeof androidAdb.createLocalAndroidAdbProvider, 'function');
   assert.equal(typeof androidAdb.createAndroidPortReverseManager, 'function');
   assert.equal(typeof androidAdb.captureAndroidLogcatWithAdb, 'function');
-  assert.equal(typeof androidAdb.streamAndroidLogcatWithAdb, 'function');
   assert.equal(typeof androidAdb.listAndroidAppsWithAdb, 'function');
   assert.equal(typeof androidAdb.getAndroidAppStateWithAdb, 'function');
   assert.equal(typeof androidAdb.readAndroidClipboardWithAdb, 'function');

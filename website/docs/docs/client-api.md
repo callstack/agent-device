@@ -10,30 +10,31 @@ For remote Metro-backed flows, import the reusable Node APIs instead of spawning
 
 Public subpath API exposed for Node consumers:
 
+- `agent-device`
+  - `createAgentDeviceClient(options?)`
+  - `createLocalArtifactAdapter(options?)`
+  - `AppError`, `isAgentDeviceError(error)`, `normalizeAgentDeviceError(error)`
+  - `centerOfRect(rect)`
+  - root types are limited to the typed client contracts used by hosted adapters, such as `AppListOptions`, `BackCommandOptions`, `ScrollOptions`, and command result types.
 - `agent-device/io`
   - artifact adapter types, file input refs, and file output refs
 - `agent-device/metro`
-  - `prepareRemoteMetro(options)`
-  - `ensureMetroTunnel(options)`
-  - `reloadRemoteMetro(options)`
-  - `stopMetroTunnel(options)`
+  - `buildBundleUrl(baseUrl, options?)`
+  - `normalizeBaseUrl(baseUrl)`
   - `buildIosRuntimeHints(baseUrl)`
   - `buildAndroidRuntimeHints(baseUrl)`
-  - types: `PrepareRemoteMetroOptions`, `PrepareRemoteMetroResult`, `EnsureMetroTunnelOptions`, `EnsureMetroTunnelResult`, `ReloadRemoteMetroOptions`, `ReloadRemoteMetroResult`, `StopMetroTunnelOptions`, `MetroRuntimeHints`, `MetroBridgeResult`
+  - `resolveRuntimeTransport(options)`
+  - types: `MetroBridgeDescriptor`, `MetroTunnelRequestMessage`, `MetroTunnelResponseMessage`
 - `agent-device/batch`
   - `runBatch(req, sessionName, invoke)`
-  - `validateAndNormalizeBatchSteps(steps, maxSteps)`
-  - `buildBatchStepFlags(parentFlags, stepFlags)`
-  - `DEFAULT_BATCH_MAX_STEPS`
-  - `BATCH_BLOCKED_COMMANDS`
-  - `INHERITED_PARENT_FLAG_KEYS`
-  - types: `BatchInvoke`, `BatchRequest`, `DaemonBatchStep`, `BatchStepResult`, `NormalizedBatchStep`
 - `agent-device/remote-config`
-  - `resolveRemoteConfigPath(options)`
-  - `resolveRemoteConfigProfile(options)`
-  - types: `RemoteConfigProfile`, `RemoteConfigProfileOptions`, `ResolvedRemoteConfigProfile`
+  - types: `RemoteConfigProfile`
 - `agent-device/contracts`
-  - types: `SessionRuntimeHints`, `DaemonInstallSource`, `DaemonLockPolicy`, `DaemonRequestMeta`, `DaemonRequest`, `DaemonArtifact`, `DaemonResponseData`, `DaemonError`, `DaemonResponse`
+  - `centerOfRect(rect)`
+  - `daemonCommandRequestSchema`, `daemonRuntimeSchema`, `jsonRpcRequestSchema`
+  - `leaseAllocateSchema`, `leaseHeartbeatSchema`, `leaseReleaseSchema`
+  - `defaultHintForCode(code)`, `normalizeError(error)`
+  - types: `DaemonError`, `DaemonInstallSource`, `DaemonRequest`, `DaemonResponse`, `DaemonResponseData`, `JsonRpcId`, `JsonRpcRequestEnvelope`, `LeaseAllocatePayload`, `LeaseBackend`, `LeaseHeartbeatPayload`, `LeaseReleasePayload`, `SessionRuntimeHints`
 - `agent-device/selectors`
   - `parseSelectorChain(expression)`
   - `tryParseSelectorChain(expression)`
@@ -43,44 +44,27 @@ Public subpath API exposed for Node consumers:
   - `isNodeVisible(node)`
   - `isSelectorToken(token)`
   - `isNodeEditable(node, platform)`
-  - types: `Selector`, `SelectorChain`, `SelectorDiagnostics`, `SelectorResolution`, `SnapshotNode`
+  - types: `SelectorChain`, `SelectorDiagnostics`
 - `agent-device/finders`
   - `findBestMatchesByLocator(nodes, locator, query, requireRectOrOptions)`
-  - `normalizeRole(value)`
-  - `normalizeText(value)`
   - `parseFindArgs(args)`
-  - types: `FindLocator`, `FindMatchOptions`, `SnapshotNode`
+  - types: `FindMatchOptions`
 - `agent-device/install-source`
-  - `ARCHIVE_EXTENSIONS`
-  - `isBlockedIpAddress(address)`
-  - `isBlockedSourceHostname(hostname)`
   - `isTrustedInstallSourceUrl(sourceUrl)`
-  - `materializeInstallablePath(options)`
   - `validateDownloadSourceUrl(url)`
-  - types: `MaterializeInstallSource`, `MaterializedInstallable`
+  - types: `MaterializeInstallSource`
 - `agent-device/artifacts`
   - `resolveAndroidArchivePackageName(archivePath)`
-- `agent-device/android-snapshot-helper`
-  - `ensureAndroidSnapshotHelper(options)`
-  - `captureAndroidSnapshotWithHelper(options)`
-  - `parseAndroidSnapshotHelperOutput(output)`
-  - `parseAndroidSnapshotHelperXml(xml, metadata?, options?, maxNodes?)`
-  - `prepareAndroidSnapshotHelperArtifactFromManifestUrl(options)`
-  - `verifyAndroidSnapshotHelperArtifact(artifact)`
-  - types: `AndroidAdbExecutor`, `AndroidSnapshotHelperArtifact`, `AndroidSnapshotHelperManifest`, `AndroidSnapshotHelperOutput`, `AndroidSnapshotHelperParsedSnapshot`
 - `agent-device/android-adb`
   - `createAndroidPortReverseManager(provider)`
-  - `createLocalAndroidAdbProvider(device)`
   - `captureAndroidLogcatWithAdb(executor, options?)`
-  - `streamAndroidLogcatWithAdb(provider, options?)`
   - `readAndroidClipboardWithAdb(executor)` / `writeAndroidClipboardWithAdb(executor, text)`
   - `getAndroidKeyboardStatusWithAdb(executor)` / `dismissAndroidKeyboardWithAdb(executor)`
-  - `openAndroidAppWithAdb(executor, packageName, options?)`
+  - `openAndroidAppWithAdb(executor, packageName)`
   - `forceStopAndroidAppWithAdb(executor, packageName)`
-  - `resolveAndroidLaunchComponentWithAdb(executor, packageName, categories?)`
-  - `listAndroidAppsWithAdb(executor, options?)`
+  - `listAndroidAppsWithAdb(executor)`
   - `getAndroidAppStateWithAdb(executor)`
-  - types: `AndroidAdbProvider`, `AndroidAdbExecutor`, `AndroidAdbExecutorOptions`, `AndroidAdbExecutorResult`, `AndroidAdbProcess`, `AndroidAdbSpawner`, `AndroidPortReverseProvider`, `AndroidTextInjector`
+  - types: `AndroidAdbExecutor`, `AndroidAdbExecutorOptions`, `AndroidPortReverseEndpoint`
 
 The `contracts`, `selectors`, `finders`, `install-source`, `android-adb`, `artifacts`, `batch`, `metro`, `remote-config`, and `io` subpaths are the supported Node entry points. The former compatibility subpaths `agent-device/android-apps` and `agent-device/daemon`, plus hosted-runtime subpaths `agent-device/commands`, `agent-device/backend`, `agent-device/testing/conformance`, and `agent-device/observability`, are no longer published.
 
@@ -147,69 +131,15 @@ Web automation requires Node 24+. MCP tools use the same command contracts, so t
 inspection adapts managed `agent-browser` request history to the existing network result shape;
 request and response bodies are not exposed by that backend path.
 
-## Android snapshot helper providers
-
-Remote Android providers should import `agent-device/android-snapshot-helper` and inject their own
-ADB-shaped executor. The executor receives arguments after `adb`, so local callers may wrap
-`adb -s <serial>`, while cloud providers can route the same operations through an ADB tunnel.
-Providers that can keep a long-lived instrumentation process should pass an `AndroidAdbProvider`
-with `spawn`; Agent Device will use the persistent helper-session transport and fall back to
-one-shot instrumentation if startup, socket, or protocol validation fails.
-
-Remote Android providers that expose stronger text entry should attach a provider-native
-`AndroidTextInjector` to their `AndroidAdbProvider`. Agent Device prefers that injector for
-`fill`/`type`; without one, local Android text entry uses chunk-safe ASCII shell input and
-reports unsupported non-ASCII/control text explicitly.
-
-```ts
-import {
-  captureAndroidSnapshotWithHelper,
-  ensureAndroidSnapshotHelper,
-  parseAndroidSnapshotHelperXml,
-  prepareAndroidSnapshotHelperArtifactFromManifestUrl,
-} from 'agent-device/android-snapshot-helper';
-
-const helperVersion = '<agent-device version>';
-const manifestUrl =
-  `https://github.com/callstack/agent-device/releases/download/v${helperVersion}/` +
-  `agent-device-android-snapshot-helper-${helperVersion}.manifest.json`;
-
-const artifact = await prepareAndroidSnapshotHelperArtifactFromManifestUrl({
-  manifestUrl,
-});
-
-await ensureAndroidSnapshotHelper({
-  adb: runProviderAdb,
-  artifact,
-  installPolicy: 'missing-or-outdated',
-});
-
-const output = await captureAndroidSnapshotWithHelper({
-  adb: runProviderAdb,
-  timeoutMs: 8000,
-});
-
-const snapshot = parseAndroidSnapshotHelperXml(output.xml, output.metadata);
-```
-
-Helper captures report `metadata.captureMode` as `interactive-windows` when Android returns
-interactive window roots, or `active-window` when the helper falls back to
-`getRootInActiveWindow()`. `metadata.windowCount` is the number of serialized roots.
-
 ## Android ADB providers
 
 Use `agent-device/android-adb` when a bridge owns Android device access but wants upstream command
-behavior for ADB-shaped operations. Executors receive arguments after `adb`; local callers can use
-`createLocalAndroidAdbProvider(device)`, while remote bridges can route the same argument arrays
-through an abstract provider backed by an ADB tunnel, websocket API, or another remote transport.
+behavior for ADB-shaped operations. Executors receive arguments after `adb`, so remote bridges can
+route the same argument arrays through an ADB tunnel, websocket API, or another remote transport.
 
-The provider contract covers normal stdout/stderr commands, binary stdout, stdin, timeout/signal
-cancellation, optional long-running spawn support for logcat-style streams, and optional reverse
-support for port mappings. Public helpers accept an executor/provider directly and do not expose the
-daemon's scoped adb interception internals.
-
-`streamAndroidLogcatWithAdb(provider, options?)` requires `provider.spawn`; exec-only providers can
-use `captureAndroidLogcatWithAdb(executor, options?)`.
+The public helpers accept an executor directly and do not expose the daemon's scoped adb
+interception internals. Use `captureAndroidLogcatWithAdb(executor, options?)` when a bridge needs a
+bounded logcat capture.
 
 Providers can also expose `reverse` for first-class port reverse ownership. Plain executors do not
 advertise reverse support automatically; call `createAndroidPortReverseManager(providerOrExecutor)`
@@ -380,43 +310,25 @@ Direct Android `.apk` and `.aab` URL sources can still resolve package identity 
 
 ```ts
 import {
-  prepareRemoteMetro,
-  reloadRemoteMetro,
-  stopMetroTunnel,
+  buildAndroidRuntimeHints,
+  buildIosRuntimeHints,
+  normalizeBaseUrl,
+  resolveRuntimeTransport,
 } from 'agent-device/metro';
-import { resolveRemoteConfigProfile } from 'agent-device/remote-config';
 
-const remoteConfig = resolveRemoteConfigProfile({
-  configPath: './agent-device.remote.json',
-  cwd: process.cwd(),
+const bridgeBaseUrl = normalizeBaseUrl('https://bridge.example.test/metro');
+const iosRuntime = buildIosRuntimeHints(bridgeBaseUrl);
+const androidRuntime = buildAndroidRuntimeHints(bridgeBaseUrl);
+
+const transport = resolveRuntimeTransport({
+  platform: 'ios',
+  runtime: iosRuntime,
 });
 
-const prepared = await prepareRemoteMetro({
-  projectRoot: remoteConfig.profile.metroProjectRoot!,
-  kind: remoteConfig.profile.metroKind ?? 'auto',
-  proxyBaseUrl: remoteConfig.profile.metroProxyBaseUrl,
-  proxyBearerToken: remoteConfig.profile.metroBearerToken,
-  bridgeScope: {
-    tenantId: remoteConfig.profile.tenant!,
-    runId: remoteConfig.profile.runId!,
-    leaseId: remoteConfig.profile.leaseId!,
-  },
-  profileKey: remoteConfig.resolvedPath,
-});
-
-console.log(prepared.iosRuntime, prepared.androidRuntime);
-
-await reloadRemoteMetro({
-  runtime: prepared.iosRuntime,
-});
-
-await stopMetroTunnel({
-  projectRoot: remoteConfig.profile.metroProjectRoot!,
-  profileKey: remoteConfig.resolvedPath,
-});
+console.log(iosRuntime.bundleUrl, androidRuntime.bundleUrl, transport);
 ```
 
-Use `agent-device/remote-config` for profile loading and path resolution, `agent-device/metro` for Metro preparation, reload, and tunnel lifecycle, and `agent-device/contracts` when a server consumer needs daemon request or runtime contract types. For bridged remote Metro, `proxyBaseUrl` is the bridge origin and `publicBaseUrl` is optional; the bridge descriptor supplies cloud iOS wildcard HTTPS hints and Android runtime-route hints. `reloadRemoteMetro()` calls Metro's `/reload` endpoint, matching the terminal `r` reload path for connected React Native apps.
+Use `agent-device/remote-config` for the `RemoteConfigProfile` type, `agent-device/metro` for URL and runtime-hint helpers, and `agent-device/contracts` when a server consumer needs daemon request or runtime contract types. For bridged remote Metro, the bridge descriptor supplies cloud iOS wildcard HTTPS hints and Android runtime-route hints.
 
 ## Selector helpers
 

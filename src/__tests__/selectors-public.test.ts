@@ -9,10 +9,8 @@ import {
   parseSelectorChain,
   resolveSelectorChain,
   tryParseSelectorChain,
-  type Selector,
   type SelectorChain,
   type SelectorDiagnostics,
-  type SelectorResolution,
 } from '../selectors.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 
@@ -37,7 +35,7 @@ const nodes: SnapshotNode[] = [
 
 test('public selector subpath exposes platform-aware matching helpers', () => {
   const chain: SelectorChain = parseSelectorChain('role=button label="Continue" visible=true');
-  const firstSelector: Selector = chain.selectors[0]!;
+  const firstSelector = chain.selectors[0]!;
   assert.equal(firstSelector.raw, 'role=button label="Continue" visible=true');
   assert.equal(tryParseSelectorChain(chain.raw)?.raw, chain.raw);
   assert.equal(isSelectorToken('visible=true'), true);
@@ -49,7 +47,7 @@ test('public selector subpath exposes platform-aware matching helpers', () => {
   assert.ok(match);
   assert.equal(match.matches, 1);
 
-  const resolved: SelectorResolution | null = resolveSelectorChain(nodes, chain, {
+  const resolved = resolveSelectorChain(nodes, chain, {
     platform: 'android',
     requireRect: true,
   });

@@ -1,11 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import {
-  findBestMatchesByLocator,
-  normalizeRole,
-  normalizeText,
-  parseFindArgs,
-} from '../finders.ts';
+import { findBestMatchesByLocator, parseFindArgs } from '../finders.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 
 function makeNode(ref: string, label?: string): SnapshotNode {
@@ -27,8 +22,6 @@ test('public finders entrypoint re-exports pure helpers', () => {
     requireRect: true,
   });
 
-  assert.equal(normalizeText('  Continue\nNow  '), 'continue now');
-  assert.equal(normalizeRole('XCUIElementTypeApplication.XCUIElementTypeButton'), 'button');
   assert.equal(parsed.action, 'click');
   assert.equal(best.matches.length, 1);
   assert.equal(requireRectLegacy.matches.length, 0);

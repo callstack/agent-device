@@ -138,12 +138,10 @@ export default function createReporter(loadContext) {
 }
 ```
 
-TypeScript reporters can import the public types from `agent-device`:
+Reporter modules export a factory function:
 
 ```ts
-import type { ReplayTestReporterFactory } from 'agent-device';
-
-const createReporter: ReplayTestReporterFactory = () => ({
+const createReporter = () => ({
   name: 'typed-reporter',
   onSuiteEnd(suite) {
     // Write artifacts, annotations, or summaries from suite.

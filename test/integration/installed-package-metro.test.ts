@@ -275,8 +275,6 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
         import { daemonCommandRequestSchema } from 'agent-device/contracts';
         import { createLocalArtifactAdapter as createIoArtifactAdapter } from 'agent-device/io';
         import { buildBundleUrl, buildIosRuntimeHints, normalizeBaseUrl } from 'agent-device/metro';
-        import { resolveRemoteConfigProfile } from 'agent-device/remote-config';
-        const loaded = resolveRemoteConfigProfile({ configPath: ${JSON.stringify(remoteConfigPath)}, cwd: process.cwd() });
         const client = createAgentDeviceClient();
         const removedSubpaths = await Promise.all([
           'agent-device/backend',
@@ -303,8 +301,6 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
             command: 'session_list',
             positionals: []
           }).command,
-          resolvedPath: loaded.resolvedPath,
-          metroProjectRoot: loaded.profile.metroProjectRoot
         }));
       `,
     );
@@ -322,9 +318,6 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       'https://public.example.test/index.bundle?platform=android&dev=true&minify=false',
     );
     assert.equal(imports.parsedCommand, 'session_list');
-    assert.equal(imports.resolvedPath, remoteConfigPath);
-    assert.equal(imports.metroProjectRoot, projectRoot);
-
     const cliStdout = await execFileText(
       process.execPath,
       [
@@ -344,23 +337,6 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
     assert.equal(bridgeRegistered, true);
     assert.equal(bridgeRequestCount >= 2, true);
   } finally {
-    if (installedPackageRoot && remoteConfigPath) {
-      await runNodeModuleJson(
-        consumerRoot,
-        ['--input-type=module', '-e'],
-        `
-          import { stopMetroTunnel } from 'agent-device/metro';
-          import { resolveRemoteConfigPath } from 'agent-device/remote-config';
-          await stopMetroTunnel({
-            projectRoot: ${JSON.stringify(projectRoot)},
-            profileKey: resolveRemoteConfigPath({ configPath: ${JSON.stringify(remoteConfigPath)}, cwd: process.cwd() })
-          });
-          console.log(JSON.stringify({ stopped: true }));
-        `,
-      ).catch(() => {
-        // best effort cleanup for detached companions during test teardown
-      });
-    }
     destroySocket(bridgeSocketRef);
     await closeLoopbackServer(bridgeServer);
     await closeLoopbackServer(metroServer);
