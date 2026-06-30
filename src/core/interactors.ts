@@ -2,6 +2,12 @@ import type { DeviceInfo } from '../kernel/device.ts';
 import { AppError } from '../kernel/errors.ts';
 import { getProviderDeviceInteractor, isActiveProviderDevice } from '../provider-device-runtime.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
+import { getPlugin } from './platform-plugin/plugin.ts';
+import { registerBuiltinPlatformPlugins } from './platform-plugin/register-builtins.ts';
+
+// Populate the platform-plugin registry once, at module load (only registers
+// lazy closures — no leaf code is imported here, so CLI cold-start is unaffected).
+registerBuiltinPlatformPlugins();
 
 export async function getInteractor(
   device: DeviceInfo,
@@ -17,25 +23,10 @@ export async function getInteractor(
     );
   }
 
-  switch (device.platform) {
-    case 'android': {
-      const { createAndroidInteractor } = await import('./interactors/android.ts');
-      return createAndroidInteractor(device);
-    }
-    case 'linux': {
-      const { createLinuxInteractor } = await import('./interactors/linux.ts');
-      return createLinuxInteractor();
-    }
-    case 'web': {
-      const { createWebInteractor } = await import('./interactors/web.ts');
-      return createWebInteractor();
-    }
-    case 'ios':
-    case 'macos': {
-      const { createAppleInteractor } = await import('./interactors/apple.ts');
-      return createAppleInteractor(device, runnerContext);
-    }
-    default:
-      throw new AppError('UNSUPPORTED_PLATFORM', `Unsupported platform: ${device.platform}`);
-  }
+  // Byte-identical replacement for the former per-platform switch: each plugin's
+  // `createInteractor` is the SAME lazy dynamic import + factory call the switch
+  // arm performed, and `getPlugin` throws the SAME `UNSUPPORTED_PLATFORM` AppError
+  // the switch default threw. Registry exhaustiveness (BuiltinPluginsCoverAllPlatforms)
+  // guarantees every leaf `Platform` resolves.
+  return await getPlugin(device.platform).createInteractor(device, runnerContext);
 }

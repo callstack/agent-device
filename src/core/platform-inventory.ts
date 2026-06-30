@@ -14,7 +14,9 @@ export type DeviceInventoryRequest = {
   androidSerialAllowlist?: string[];
 };
 
-const WEB_DESKTOP_DEVICE: DeviceInfo = {
+// Exported so the web platform-plugin's `discoverDevices` reuses the SAME static
+// device instance instead of carrying a divergent copy.
+export const WEB_DESKTOP_DEVICE: DeviceInfo = {
   platform: 'web',
   id: 'agent-browser-chrome',
   name: 'Agent Browser Chrome',
@@ -86,7 +88,9 @@ export async function listLocalDeviceInventory(
   return devices;
 }
 
-function shouldUseHostMacFastPath(selector: {
+// Exported so the Apple platform-plugin's `discoverDevices` reuses the SAME
+// host-mac fast-path predicate instead of carrying a divergent copy.
+export function shouldUseHostMacFastPath(selector: {
   platform?: PlatformSelector;
   target?: DeviceTarget;
 }): boolean {
