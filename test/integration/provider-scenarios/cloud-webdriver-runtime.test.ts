@@ -8,6 +8,8 @@ import http, {
 import path from 'node:path';
 import { test } from 'vitest';
 import { createCloudWebDriverRuntime } from '../../../src/cloud-webdriver.ts';
+import { createDefaultCloudWebDriverProviderRuntimes } from '../../../src/cloud-webdriver/provider-runtimes.ts';
+import { CLOUD_WEBDRIVER_PROVIDERS } from '../../../src/cloud-webdriver/providers.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import type { DeviceLease } from '../../../src/daemon/lease-registry.ts';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
@@ -72,6 +74,80 @@ test('Cloud WebDriver runtime drives provider devices through daemon commands', 
       assertWebDriverCalls(server.calls, lease.leaseId, appPath);
     });
   });
+}, 15_000);
+
+test('default BrowserStack provider runtime builds sessions from daemon request profile flags', async () => {
+  const server = await FakeWebDriverServer.start();
+  const runtimes = createDefaultCloudWebDriverProviderRuntimes({
+    BROWSERSTACK_USERNAME: 'browser-user',
+    BROWSERSTACK_ACCESS_KEY: 'browser-key',
+    BROWSERSTACK_WEBDRIVER_ENDPOINT: `${server.url}/wd/hub/`,
+  });
+  const providers = createProviderDeviceRuntimeRequestProviders(runtimes);
+  const daemon = await createProviderScenarioHarness({
+    ...providers,
+    deviceInventoryProvider: providers.deviceInventoryProvider!,
+  });
+  try {
+    const allocate = await daemon.callCommand(
+      'lease_allocate',
+      [],
+      {
+        tenant: 'team-a',
+        runId: 'run-a',
+        platform: 'android',
+        device: 'Google Pixel 8',
+        providerApp: 'bs://app-id',
+        providerOsVersion: '14.0',
+        providerProject: 'agent-device',
+        providerBuild: 'build-a',
+        providerSessionName: 'session-a',
+      },
+      {
+        meta: {
+          tenantId: 'team-a',
+          runId: 'run-a',
+          leaseBackend: 'android-instance',
+          leaseProvider: CLOUD_WEBDRIVER_PROVIDERS.browserStack,
+          clientId: 'client-a',
+        },
+      },
+    );
+    const data = assertRpcOk<{
+      lease?: DeviceLease;
+      provider?: {
+        provider?: string;
+        sessionId?: string;
+        providerSessionId?: string;
+      };
+    }>(allocate);
+    assert.equal(data.provider?.provider, CLOUD_WEBDRIVER_PROVIDERS.browserStack);
+    assert.equal(data.provider?.providerSessionId, 'wd-1');
+    assert.deepEqual(server.calls[0]?.body, {
+      capabilities: {
+        alwaysMatch: {
+          platformName: 'Android',
+          'appium:deviceName': 'Google Pixel 8',
+          device: 'Google Pixel 8',
+          os_version: '14.0',
+          app: 'bs://app-id',
+          'bstack:options': {
+            projectName: 'agent-device',
+            buildName: 'build-a',
+            sessionName: 'session-a',
+          },
+        },
+      },
+    });
+    assert.equal(
+      server.calls[0]?.headers.authorization,
+      `Basic ${Buffer.from('browser-user:browser-key').toString('base64')}`,
+    );
+  } finally {
+    await daemon.close();
+    await Promise.allSettled(runtimes.map(async (runtime) => await runtime.shutdown()));
+    await server.close();
+  }
 }, 15_000);
 
 async function createCloudWebDriverWorld() {

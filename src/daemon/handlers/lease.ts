@@ -12,9 +12,22 @@ import {
 import { AppError } from '../../kernel/errors.ts';
 
 export type LeaseLifecycleProvider = {
-  allocate?: (lease: DeviceLease) => Promise<Record<string, unknown> | undefined>;
-  heartbeat?: (lease: DeviceLease) => Promise<Record<string, unknown> | undefined>;
-  release?: (lease: DeviceLease) => Promise<Record<string, unknown> | undefined>;
+  allocate?: (
+    lease: DeviceLease,
+    context?: LeaseLifecycleContext,
+  ) => Promise<Record<string, unknown> | undefined>;
+  heartbeat?: (
+    lease: DeviceLease,
+    context?: LeaseLifecycleContext,
+  ) => Promise<Record<string, unknown> | undefined>;
+  release?: (
+    lease: DeviceLease,
+    context?: LeaseLifecycleContext,
+  ) => Promise<Record<string, unknown> | undefined>;
+};
+
+export type LeaseLifecycleContext = {
+  req: DaemonRequest;
 };
 
 type LeaseHandlerArgs = {
@@ -48,7 +61,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
       const lease = leaseRegistry.allocateLease(leaseScopeToAllocateRequest(leaseScope));
       let providerData: Record<string, unknown> | undefined;
       try {
-        providerData = await leaseLifecycleProvider?.allocate?.(lease);
+        providerData = await leaseLifecycleProvider?.allocate?.(lease, { req });
       } catch (error) {
         leaseRegistry.releaseLease(
           leaseScopeToReleaseRequest({
@@ -70,7 +83,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     }
     case 'lease_heartbeat': {
       const lease = leaseRegistry.heartbeatLease(leaseScopeToHeartbeatRequest(leaseScope));
-      const providerData = await leaseLifecycleProvider?.heartbeat?.(lease);
+      const providerData = await leaseLifecycleProvider?.heartbeat?.(lease, { req });
       return {
         ok: true,
         data: { lease, ...(providerData ? { provider: providerData } : {}) },
@@ -79,7 +92,7 @@ export async function handleLeaseCommands(args: LeaseHandlerArgs): Promise<Daemo
     case 'lease_release': {
       const result = leaseRegistry.releaseLease(leaseScopeToReleaseRequest(leaseScope));
       const providerData = result.lease
-        ? await leaseLifecycleProvider?.release?.(result.lease)
+        ? await leaseLifecycleProvider?.release?.(result.lease, { req })
         : undefined;
       return {
         ok: true,

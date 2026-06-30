@@ -726,6 +726,72 @@ test('parseArgs preserves connect proxy provider positional', () => {
   assert.equal(parsed.flags.daemonBaseUrl, 'http://host:4310/agent-device');
 });
 
+test('parseArgs preserves connect cloud provider positional', () => {
+  const parsed = parseArgs(['connect', 'cloud'], { strictFlags: true });
+  assert.equal(parsed.command, 'connect');
+  assert.deepEqual(parsed.positionals, ['cloud']);
+});
+
+test('parseArgs recognizes connect browserstack provider flags', () => {
+  const parsed = parseArgs(
+    [
+      'connect',
+      'browserstack',
+      '--platform',
+      'android',
+      '--device',
+      'Google Pixel 8',
+      '--provider-os-version',
+      '14.0',
+      '--provider-app',
+      'bs://app-id',
+      '--provider-project',
+      'agent-device',
+      '--provider-build',
+      'build-a',
+      '--provider-session-name',
+      'session-a',
+    ],
+    { strictFlags: true },
+  );
+  assert.equal(parsed.command, 'connect');
+  assert.deepEqual(parsed.positionals, ['browserstack']);
+  assert.equal(parsed.flags.providerApp, 'bs://app-id');
+  assert.equal(parsed.flags.providerOsVersion, '14.0');
+  assert.equal(parsed.flags.providerProject, 'agent-device');
+  assert.equal(parsed.flags.providerBuild, 'build-a');
+  assert.equal(parsed.flags.providerSessionName, 'session-a');
+});
+
+test('parseArgs recognizes connect aws-device-farm provider flags', () => {
+  const parsed = parseArgs(
+    [
+      'connect',
+      'aws-device-farm',
+      '--platform',
+      'ios',
+      '--aws-project-arn',
+      'project-arn',
+      '--aws-device-arn',
+      'device-arn',
+      '--aws-app-arn',
+      'app-arn',
+      '--aws-region',
+      'us-west-2',
+      '--aws-interaction-mode',
+      'INTERACTIVE',
+    ],
+    { strictFlags: true },
+  );
+  assert.equal(parsed.command, 'connect');
+  assert.deepEqual(parsed.positionals, ['aws-device-farm']);
+  assert.equal(parsed.flags.awsProjectArn, 'project-arn');
+  assert.equal(parsed.flags.awsDeviceArn, 'device-arn');
+  assert.equal(parsed.flags.awsAppArn, 'app-arn');
+  assert.equal(parsed.flags.awsRegion, 'us-west-2');
+  assert.equal(parsed.flags.awsInteractionMode, 'INTERACTIVE');
+});
+
 test('parseArgs accepts auth management subcommands', () => {
   const status = parseArgs(['auth', 'status'], { strictFlags: true });
   assert.equal(status.command, 'auth');
@@ -1621,10 +1687,16 @@ test('usageForCommand resolves remote help topic', () => {
   assert.match(help, /agent-device connect/);
   assert.match(help, /Remote connection providers use the same lifecycle/);
   assert.match(help, /connect -> open -> commands -> close -> disconnect/);
+  assert.match(help, /agent-device connect cloud discovers the agent-device cloud profile/);
   assert.match(help, /Direct proxy: agent-device connect proxy/);
   assert.match(help, /stores the shared proxy profile and client identity/);
+  assert.match(help, /BrowserStack: agent-device connect browserstack/);
+  assert.match(help, /AWS Device Farm: agent-device connect aws-device-farm/);
   assert.match(help, /agent-device open com\.example\.app --remote-config \.\/remote-config\.json/);
   assert.match(help, /disconnect --remote-config \.\/remote-config\.json/);
+  assert.match(help, /connect browserstack --platform android/);
+  assert.match(help, /connect aws-device-farm --platform android/);
+  assert.match(help, /agent-device artifacts --json/);
   assert.match(help, /Script flow, per-command config/);
   assert.match(help, /Direct proxy flow for a remote Mac/);
   assert.match(help, /agent-device proxy --port 4310/);
@@ -1640,6 +1712,8 @@ test('usageForCommand resolves remote help topic', () => {
   assert.match(help, /Multiple agents can share one proxy/);
   assert.match(help, /disconnect releases local connection state/);
   assert.match(help, /A busy direct-proxy device error means another agent owns the device/);
+  assert.match(help, /BrowserStack and AWS Device Farm through local provider profiles/);
+  assert.match(help, /Generated connection profiles store app\/device selectors and ARNs/);
   assert.match(help, /local\/proxy iOS reports that the runner is already owned/);
   assert.match(help, /same --remote-config to every operational command/);
   assert.match(help, /Do not use --config as a remote profile flag/);

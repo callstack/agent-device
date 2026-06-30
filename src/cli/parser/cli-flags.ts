@@ -19,7 +19,10 @@ import {
   type SessionRuntimeHints,
   type SessionIsolationMode,
 } from '../../kernel/contracts.ts';
-import type { RemoteConfigMetroOptions } from '../../remote/remote-config-schema.ts';
+import type {
+  CloudProviderProfileFields,
+  RemoteConfigMetroOptions,
+} from '../../remote/remote-config-schema.ts';
 import {
   SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS,
   type ScreenshotRequestFlags,
@@ -30,7 +33,8 @@ import {
   formatMaestroSupportedSubsetForCli,
 } from '../../compat/maestro/support-matrix.ts';
 
-export type CliFlags = RemoteConfigMetroOptions &
+export type CliFlags = CloudProviderProfileFields &
+  RemoteConfigMetroOptions &
   ScreenshotRequestFlags & {
     json: boolean;
     config?: string;
@@ -326,6 +330,78 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'string',
     usageLabel: '--provider-session <id>',
     usageDescription: 'Cloud provider session id or ARN',
+  },
+  {
+    key: 'providerApp',
+    names: ['--provider-app'],
+    type: 'string',
+    usageLabel: '--provider-app <ref-or-path>',
+    usageDescription:
+      'Cloud provider app reference or local app path used when creating hosted WebDriver sessions',
+  },
+  {
+    key: 'providerOsVersion',
+    names: ['--provider-os-version', '--os-version'],
+    type: 'string',
+    usageLabel: '--provider-os-version <version>',
+    usageDescription: 'Hosted cloud provider OS version, for example 17 or 14.0',
+  },
+  {
+    key: 'providerProject',
+    names: ['--provider-project'],
+    type: 'string',
+    usageLabel: '--provider-project <name>',
+    usageDescription: 'Hosted cloud provider project label',
+  },
+  {
+    key: 'providerBuild',
+    names: ['--provider-build'],
+    type: 'string',
+    usageLabel: '--provider-build <name>',
+    usageDescription: 'Hosted cloud provider build label',
+  },
+  {
+    key: 'providerSessionName',
+    names: ['--provider-session-name'],
+    type: 'string',
+    usageLabel: '--provider-session-name <name>',
+    usageDescription: 'Hosted cloud provider session label',
+  },
+  {
+    key: 'awsProjectArn',
+    names: ['--aws-project-arn'],
+    type: 'string',
+    usageLabel: '--aws-project-arn <arn>',
+    usageDescription: 'AWS Device Farm project ARN for hosted WebDriver sessions',
+  },
+  {
+    key: 'awsDeviceArn',
+    names: ['--aws-device-arn'],
+    type: 'string',
+    usageLabel: '--aws-device-arn <arn>',
+    usageDescription: 'AWS Device Farm device ARN for hosted WebDriver sessions',
+  },
+  {
+    key: 'awsAppArn',
+    names: ['--aws-app-arn'],
+    type: 'string',
+    usageLabel: '--aws-app-arn <arn>',
+    usageDescription: 'AWS Device Farm app ARN attached to hosted remote access sessions',
+  },
+  {
+    key: 'awsRegion',
+    names: ['--aws-region'],
+    type: 'string',
+    usageLabel: '--aws-region <region>',
+    usageDescription: 'AWS region for Device Farm API calls',
+  },
+  {
+    key: 'awsInteractionMode',
+    names: ['--aws-interaction-mode'],
+    type: 'enum',
+    enumValues: ['INTERACTIVE', 'NO_VIDEO', 'VIDEO_ONLY'],
+    usageLabel: '--aws-interaction-mode INTERACTIVE|NO_VIDEO|VIDEO_ONLY',
+    usageDescription: 'AWS Device Farm remote access interaction mode',
   },
   {
     key: 'force',
@@ -1170,6 +1246,16 @@ export const COMMON_COMMAND_SUPPORTED_FLAG_KEYS = flagKeys(
   'platform',
   'target',
   'device',
+  'providerApp',
+  'providerOsVersion',
+  'providerProject',
+  'providerBuild',
+  'providerSessionName',
+  'awsProjectArn',
+  'awsDeviceArn',
+  'awsAppArn',
+  'awsRegion',
+  'awsInteractionMode',
   'udid',
   'serial',
   'iosSimulatorDeviceSet',

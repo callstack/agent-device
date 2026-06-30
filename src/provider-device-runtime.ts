@@ -6,7 +6,7 @@ import type {
 } from './cloud-artifacts.ts';
 import type { Interactor } from './core/interactor-types.ts';
 import type { DeviceInventoryProvider } from './core/dispatch-resolve.ts';
-import type { LeaseLifecycleProvider } from './daemon/handlers/lease.ts';
+import type { LeaseLifecycleContext, LeaseLifecycleProvider } from './daemon/handlers/lease.ts';
 import type { DeviceLease } from './daemon/lease-registry.ts';
 import type { DeviceInfo } from './kernel/device.ts';
 import { AppError } from './kernel/errors.ts';
@@ -171,9 +171,12 @@ function composeLeaseProvider(
 ): LeaseLifecycleProvider | undefined {
   if (runtimes.length === 0) return undefined;
   return {
-    allocate: async (lease) => await firstProviderResult(runtimes, 'allocate', lease),
-    heartbeat: async (lease) => await firstProviderResult(runtimes, 'heartbeat', lease),
-    release: async (lease) => await firstProviderResult(runtimes, 'release', lease),
+    allocate: async (lease, context) =>
+      await firstProviderResult(runtimes, 'allocate', lease, context),
+    heartbeat: async (lease, context) =>
+      await firstProviderResult(runtimes, 'heartbeat', lease, context),
+    release: async (lease, context) =>
+      await firstProviderResult(runtimes, 'release', lease, context),
   };
 }
 
@@ -216,11 +219,12 @@ async function firstProviderResult(
   runtimes: ProviderDeviceRuntime[],
   method: keyof LeaseLifecycleProvider,
   lease: DeviceLease,
+  context?: LeaseLifecycleContext,
 ): Promise<Record<string, unknown> | undefined> {
   for (const runtime of runtimes) {
     if (!runtimeMatchesProvider(runtime, lease.leaseProvider)) continue;
     const handler = runtime.leaseLifecycle[method];
-    const result = handler ? await handler(lease) : undefined;
+    const result = handler ? await handler(lease, context) : undefined;
     if (result) return result;
   }
   return undefined;

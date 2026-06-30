@@ -31,7 +31,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
   },
   connect: {
     usageOverride:
-      'connect [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]',
+      'connect [cloud|proxy|browserstack|aws-device-farm] [--remote-config <path>] [--daemon-base-url <url>] [--tenant <id>] [--run-id <id>] [--lease-id <id>] [--lease-backend <backend>] [--force] [--no-login]',
     helpDescription:
       'Connect to a remote daemon, authenticate when needed, and save remote session state. AGENT_DEVICE_CLOUD_BASE_URL is the bridge/control-plane API origin; use AGENT_DEVICE_DAEMON_AUTH_TOKEN=adc_live_... for CI/service-token automation.',
     listUsageOverride: 'connect',
@@ -44,6 +44,16 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
       'runId',
       'leaseId',
       'leaseBackend',
+      'providerApp',
+      'providerOsVersion',
+      'providerProject',
+      'providerBuild',
+      'providerSessionName',
+      'awsProjectArn',
+      'awsDeviceArn',
+      'awsAppArn',
+      'awsRegion',
+      'awsInteractionMode',
       'force',
       'noLogin',
     ],
@@ -52,6 +62,7 @@ const SCHEMA_ONLY_CLI_COMMAND_SCHEMAS = {
       'daemonAuthToken',
       'session',
       'platform',
+      'device',
       ...METRO_PREPARE_FLAGS,
       'launchUrl',
     ],

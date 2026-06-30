@@ -14,6 +14,12 @@ import {
 } from '../../remote/remote-connection-state.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { resolveCloudConnectProfile } from '../cloud-connection-profile.ts';
+import {
+  CLOUD_WEBDRIVER_PROVIDERS,
+  isCloudWebDriverProviderName,
+  type CloudWebDriverKnownProviderName,
+} from '../../cloud-webdriver/providers.ts';
+import { resolveCloudWebDriverConnectProfile } from '../provider-connection-profile.ts';
 import { resolveProxyConnectProfile } from '../proxy-connection-profile.ts';
 import {
   hasDeferredMetroConfig,
@@ -35,7 +41,7 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
   const resolved = await resolveConnectProfile({ provider, flags, stateDir });
   const connectFlags = resolved.flags;
   const connectionMetadata = readRemoteConfigConnectionMetadata(resolved.remoteConfigPath);
-  const scope = readRequiredConnectScope(connectFlags);
+  const scope = readRequiredConnectScope(connectFlags, connectionMetadata);
   const context = resolveConnectContext({
     stateDir,
     flags: connectFlags,
@@ -77,13 +83,22 @@ export const connectCommand: ClientCommandHandler = async ({ positionals, flags,
 };
 
 async function resolveConnectProfile(options: {
-  provider?: 'proxy';
+  provider?: ConnectProvider;
   flags: CliFlags;
   stateDir: string;
 }): Promise<{ flags: CliFlags; remoteConfigPath: string }> {
   const { provider, flags, stateDir } = options;
   if (flags.remoteConfig) return resolveRemoteConnectFlags(flags);
-  if (provider === 'proxy' || shouldUseProxyConnectShortcut(flags)) {
+  if (isCloudWebDriverProviderName(provider)) {
+    return resolveCloudWebDriverConnectProfile({
+      provider,
+      flags,
+      stateDir,
+      cwd: process.cwd(),
+      env: process.env,
+    });
+  }
+  if (provider === 'proxy' || (!provider && shouldUseProxyConnectShortcut(flags))) {
     return resolveProxyConnectProfile({
       flags,
       stateDir,
@@ -99,7 +114,9 @@ async function resolveConnectProfile(options: {
   });
 }
 
-function assertConnectProviderUsage(provider: 'proxy' | undefined, flags: CliFlags): void {
+type ConnectProvider = 'cloud' | 'proxy' | CloudWebDriverKnownProviderName;
+
+function assertConnectProviderUsage(provider: ConnectProvider | undefined, flags: CliFlags): void {
   if (!provider || !flags.remoteConfig) return;
   throw new AppError(
     'INVALID_ARGS',
@@ -107,7 +124,10 @@ function assertConnectProviderUsage(provider: 'proxy' | undefined, flags: CliFla
   );
 }
 
-function readRequiredConnectScope(flags: CliFlags): { tenant: string; runId: string } {
+function readRequiredConnectScope(
+  flags: CliFlags,
+  connectionMetadata: RemoteConnectionRequestMetadata | undefined,
+): { tenant: string; runId: string } {
   if (!flags.tenant) {
     throw new AppError(
       'INVALID_ARGS',
@@ -120,7 +140,7 @@ function readRequiredConnectScope(flags: CliFlags): { tenant: string; runId: str
       'connect requires runId in remote config or via --run-id <id>.',
     );
   }
-  if (!flags.daemonBaseUrl) {
+  if (!flags.daemonBaseUrl && !isLocalProviderConnection(connectionMetadata?.leaseProvider)) {
     throw new AppError(
       'INVALID_ARGS',
       'connect requires daemonBaseUrl in remote config, config, env, or --daemon-base-url.',
@@ -281,6 +301,10 @@ function readRemoteConfigConnectionMetadata(
   return Object.values(metadata).some((value) => value !== undefined) ? metadata : undefined;
 }
 
+function isLocalProviderConnection(provider: string | undefined): boolean {
+  return isCloudWebDriverProviderName(provider);
+}
+
 export const disconnectCommand: ClientCommandHandler = async ({ flags, client }) => {
   const { session, stateDir, state } = readRequestedConnectionState(flags);
   if (!state) {
@@ -357,16 +381,18 @@ function createRemoteSessionName(stateDir: string): string {
   return `adc-${Date.now().toString(36)}-${crypto.randomBytes(2).toString('hex')}`;
 }
 
-function readConnectProvider(positionals: string[]): 'proxy' | undefined {
+function readConnectProvider(positionals: string[]): ConnectProvider | undefined {
   const provider = positionals[0];
   if (provider === undefined) return undefined;
   if (positionals.length > 1) {
     throw new AppError('INVALID_ARGS', 'connect accepts at most one provider positional.');
   }
-  if (provider === 'proxy') return provider;
+  if (provider === 'cloud' || provider === 'proxy' || isCloudWebDriverProviderName(provider)) {
+    return provider;
+  }
   throw new AppError(
     'INVALID_ARGS',
-    `Unknown connect provider: ${provider}. Supported providers: proxy.`,
+    `Unknown connect provider: ${provider}. Supported providers: cloud, proxy, ${CLOUD_WEBDRIVER_PROVIDERS.browserStack}, ${CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm}.`,
   );
 }
 
@@ -510,6 +536,21 @@ function buildLeasePreparationNotice(
         'Proxy lease allocation is pending; run open when ready to allocate or refresh the device lease. Devices can inspect inventory but do not allocate a proxy lease.',
     };
   }
+  if (isLocalProviderConnection(state.leaseProvider)) {
+    const nextSteps = [
+      'agent-device open <app-id> --relaunch',
+      'agent-device snapshot -i',
+      'agent-device artifacts --json',
+      'agent-device close',
+    ];
+    return {
+      status: 'deferred',
+      nextSteps,
+      message:
+        `Hosted ${state.leaseProvider} lease allocation is pending; run open when ready to create the provider session. ` +
+        `After close, run "agent-device artifacts --json" to fetch provider video/log links when available.`,
+    };
+  }
   const needsPlatform =
     state.platform === undefined && state.leaseBackend === undefined
       ? ' Add --platform ios|android if the profile does not set a platform.'
@@ -572,6 +613,7 @@ function serializeConnectionState(
     leaseAllocated: Boolean(state.leaseId),
     leaseId: state.leaseId,
     leaseBackend: state.leaseBackend,
+    leaseProvider: state.leaseProvider,
     platform: state.platform,
     target: state.target,
     remoteConfig: state.remoteConfigPath,

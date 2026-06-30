@@ -40,7 +40,21 @@ export type RemoteConnectionProfileFields = {
   clientId?: string;
 };
 
+export type CloudProviderProfileFields = {
+  providerApp?: string;
+  providerOsVersion?: string;
+  providerProject?: string;
+  providerBuild?: string;
+  providerSessionName?: string;
+  awsProjectArn?: string;
+  awsDeviceArn?: string;
+  awsAppArn?: string;
+  awsRegion?: string;
+  awsInteractionMode?: 'INTERACTIVE' | 'NO_VIDEO' | 'VIDEO_ONLY';
+};
+
 export type RemoteConfigProfile = RemoteConfigMetroOptions &
+  CloudProviderProfileFields &
   RemoteConnectionProfileFields & {
     platform?: PlatformSelector;
     target?: DeviceTarget;
@@ -101,6 +115,20 @@ export const REMOTE_CONFIG_FIELD_SPECS = [
   },
   { key: 'androidDeviceAllowlist', type: 'string' },
   { key: 'session', type: 'string' },
+  { key: 'providerApp', type: 'string' },
+  { key: 'providerOsVersion', type: 'string' },
+  { key: 'providerProject', type: 'string' },
+  { key: 'providerBuild', type: 'string' },
+  { key: 'providerSessionName', type: 'string' },
+  { key: 'awsProjectArn', type: 'string' },
+  { key: 'awsDeviceArn', type: 'string' },
+  { key: 'awsAppArn', type: 'string' },
+  { key: 'awsRegion', type: 'string' },
+  {
+    key: 'awsInteractionMode',
+    type: 'enum',
+    enumValues: ['INTERACTIVE', 'NO_VIDEO', 'VIDEO_ONLY'],
+  },
   { key: 'metroProjectRoot', type: 'string', path: true },
   { key: 'metroKind', type: 'enum', enumValues: ['auto', 'react-native', 'expo'] },
   { key: 'metroPublicBaseUrl', type: 'string' },

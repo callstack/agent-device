@@ -44,7 +44,10 @@ export type { TargetShutdownResult } from '../target-shutdown-contract.ts';
 import type { PerfAction, PerfArea, PerfKind, PerfSubject } from '../contracts/perf.ts';
 import type { AlertAction, AlertInfo } from '../alert-contract.ts';
 import type { DebugSymbolsOptions, DebugSymbolsResult } from '../contracts/debug-symbols.ts';
-import type { RemoteConnectionProfileFields } from '../remote/remote-config-schema.ts';
+import type {
+  CloudProviderProfileFields,
+  RemoteConnectionProfileFields,
+} from '../remote/remote-config-schema.ts';
 import type { CommandResult } from '../core/command-descriptor/command-result.ts';
 import type { CloudArtifactsResult } from '../cloud-artifacts.ts';
 
@@ -69,23 +72,24 @@ export type AgentDeviceDaemonTransport = (
   req: Omit<DaemonRequest, 'token'>,
 ) => Promise<DaemonResponse>;
 
-export type AgentDeviceClientConfig = RemoteConnectionProfileFields & {
-  session?: string;
-  lockPolicy?: DaemonLockPolicy;
-  lockPlatform?: PlatformSelector;
-  requestId?: string;
-  sessionIsolation?: SessionIsolationMode;
-  leaseBackend?: LeaseBackend;
-  leaseTtlMs?: number;
-  runtime?: SessionRuntimeHints;
-  cwd?: string;
-  debug?: boolean;
-  cost?: boolean;
-  responseLevel?: ResponseLevel;
-  iosXctestrunFile?: string;
-  iosXctestDerivedDataPath?: string;
-  iosXctestEnvDir?: string;
-};
+export type AgentDeviceClientConfig = RemoteConnectionProfileFields &
+  CloudProviderProfileFields & {
+    session?: string;
+    lockPolicy?: DaemonLockPolicy;
+    lockPlatform?: PlatformSelector;
+    requestId?: string;
+    sessionIsolation?: SessionIsolationMode;
+    leaseBackend?: LeaseBackend;
+    leaseTtlMs?: number;
+    runtime?: SessionRuntimeHints;
+    cwd?: string;
+    debug?: boolean;
+    cost?: boolean;
+    responseLevel?: ResponseLevel;
+    iosXctestrunFile?: string;
+    iosXctestDerivedDataPath?: string;
+    iosXctestEnvDir?: string;
+  };
 
 export type AgentDeviceRequestOverrides = Pick<
   AgentDeviceClientConfig,
@@ -105,6 +109,16 @@ export type AgentDeviceRequestOverrides = Pick<
   | 'leaseProvider'
   | 'deviceKey'
   | 'clientId'
+  | 'providerApp'
+  | 'providerOsVersion'
+  | 'providerProject'
+  | 'providerBuild'
+  | 'providerSessionName'
+  | 'awsProjectArn'
+  | 'awsDeviceArn'
+  | 'awsAppArn'
+  | 'awsRegion'
+  | 'awsInteractionMode'
   | 'leaseTtlMs'
   | 'cwd'
   | 'debug'
