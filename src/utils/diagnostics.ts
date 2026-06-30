@@ -86,6 +86,22 @@ export function getDiagnosticsMeta(): {
   };
 }
 
+/**
+ * Sum the number of diagnostic events emitted in the current scope whose phase
+ * is one of `phases`. Backed by the flush-surviving `phaseCounts` tally, so it
+ * stays accurate for the whole request even under `--debug` (where `events` is
+ * streamed out and reset). Returns 0 when called outside a diagnostics scope.
+ */
+export function countDiagnosticEventsByPhase(phases: readonly string[]): number {
+  const scope = diagnosticsStorage.getStore();
+  if (!scope) return 0;
+  let total = 0;
+  for (const phase of phases) {
+    total += scope.phaseCounts.get(phase) ?? 0;
+  }
+  return total;
+}
+
 export function emitDiagnostic(event: {
   level?: DiagnosticLevel;
   phase: string;

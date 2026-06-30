@@ -120,6 +120,10 @@ export type DaemonArtifact = {
 
 export type ResponseCost = {
   wallClockMs: number;
+  // Number of real iOS-runner round-trips made while serving the request (the
+  // `ios_runner_command_send` + `ios_runner_readiness_preflight` diagnostic
+  // phases). Always present when cost is included; 0 when no runner was hit.
+  runnerRoundTrips: number;
   // Number of UI/accessibility nodes in the response, when the command returns a
   // node tree (e.g. snapshot). Absent for commands that produce no nodes, so an
   // agent can size a snapshot before re-fetching at a different depth/scope.

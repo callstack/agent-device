@@ -22,6 +22,7 @@ import {
   withRequestPlatformProviderScope,
 } from './request-platform-providers.ts';
 import {
+  countDiagnosticEventsByPhase,
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,
@@ -344,12 +345,26 @@ function applyResponseLevelView(
   return view ? { ok: true, data: view(response.data ?? {}, level) } : response;
 }
 
+// Diagnostic phases emitted once per real iOS-runner round-trip. `..._command_send`
+// is the command itself; `..._readiness_preflight` is the pre-command uptime probe
+// (a real network round-trip). The `..._skipped` / `..._recovered` markers do NOT
+// hit the runner and are intentionally excluded.
+const RUNNER_ROUND_TRIP_PHASES = [
+  'ios_runner_command_send',
+  'ios_runner_readiness_preflight',
+] as const;
+
 function buildResponseCost(
   originalData: DaemonResponseData | undefined,
   startedAt: number,
 ): ResponseCost {
   const cost: ResponseCost = {
     wallClockMs: Date.now() - startedAt,
+    // Counts this request's real runner round-trips from the flush-surviving
+    // diagnostics phase tally. Reads 0 when no runner was hit (e.g. a no-op or a
+    // command served entirely from the daemon). Must run inside the request's
+    // diagnostics scope (see `applyAgentCostGrafts` call site).
+    runnerRoundTrips: countDiagnosticEventsByPhase(RUNNER_ROUND_TRIP_PHASES),
   };
   // nodeCount reads the ORIGINAL node tree (the digest view may have already
   // collapsed `data.nodes`), so the count stays accurate.
