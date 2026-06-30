@@ -17,6 +17,7 @@
     "src/daemon.ts",
     "src/utils/png-worker.ts",
     "scripts/patch-xcuitest-runner-icon.ts",
+    "scripts/runner-request-count/run.ts",
     "src/utils/update-check-entry.ts",
     "test/scripts/metro-prepare-packaged-smoke.mjs",
     "test/integration/*.test.ts",

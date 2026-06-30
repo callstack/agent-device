@@ -40,19 +40,14 @@ import {
 import { canRunReplayScopedAction } from './daemon-command-registry.ts';
 import { createAgentBrowserWebProvider } from '../platforms/web/agent-browser-provider.ts';
 import type { LeaseLifecycleProvider } from './handlers/lease.ts';
+// Single source of truth for which diagnostic phases count as a real iOS-runner
+// round-trip — shared with the external ndjson counter used by the
+// runner-request-count CI gate (`scripts/runner-request-count/`).
+import { RUNNER_ROUND_TRIP_PHASES } from './runner-request-count.ts';
 
 // ---------------------------------------------------------------------------
 // Request handler API
 // ---------------------------------------------------------------------------
-
-// Diagnostic phases emitted once per real iOS-runner round-trip. `..._command_send`
-// is the command itself; `..._readiness_preflight` is the pre-command uptime probe
-// (a real network round-trip). The `..._skipped` / `..._recovered` markers do NOT
-// hit the runner and are intentionally excluded.
-const RUNNER_ROUND_TRIP_PHASES = [
-  'ios_runner_command_send',
-  'ios_runner_readiness_preflight',
-] as const;
 
 export type RequestRouterDeps = {
   logPath: string;

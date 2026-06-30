@@ -1,0 +1,10 @@
+{
+  "$comment": "Expected iOS runner request-count baseline for the smoke-ios scenario. This gate proves a runner refactor (e.g. Phase 3 step c) does not add/drop runner round-trips. `established: false` means the gate is NOT armed yet: the harness records observed counts instead of asserting. To arm/regenerate, run on a host with a booted iOS simulator: `node --experimental-strip-types scripts/runner-request-count/run.ts --udid <UDID> --update` (or read the values from the smoke-ios CI step log / uploaded artifact and edit this file), then commit it. Counts: runnerRoundTrips = ios_runner_command_send + ios_runner_readiness_preflight.",
+  "scenario": "test/integration/replays/ios/simulator/01-settings.ad",
+  "established": false,
+  "runnerRoundTrips": 0,
+  "byPhase": {
+    "ios_runner_command_send": 0,
+    "ios_runner_readiness_preflight": 0
+  }
+}

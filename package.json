@@ -98,6 +98,7 @@
     "perf": "node --experimental-strip-types scripts/perf/run.ts",
     "perf:ios": "node --experimental-strip-types scripts/perf/run.ts --platform ios",
     "perf:android": "node --experimental-strip-types scripts/perf/run.ts --platform android",
+    "validate:runner-count": "node --experimental-strip-types scripts/runner-request-count/run.ts",
     "lint": "oxlint . --deny-warnings",
     "format": "node ./node_modules/oxfmt/bin/oxfmt --write src test skills package.json tsconfig.json tsconfig.lib.json rslib.config.ts vitest.config.ts .github/actions/setup-node-pnpm/action.yml .oxlintrc.json .oxfmtrc.json '!test/skillgym/.skillgym-results/**'",
     "format:check": "node ./node_modules/oxfmt/bin/oxfmt --check src test skills package.json tsconfig.json tsconfig.lib.json rslib.config.ts vitest.config.ts .github/actions/setup-node-pnpm/action.yml .oxlintrc.json .oxfmtrc.json '!test/skillgym/.skillgym-results/**'",
