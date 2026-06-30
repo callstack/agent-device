@@ -99,6 +99,10 @@ test('MCP tool schemas add MCP client config fields at the MCP boundary', () => 
     (devicesTool.inputSchema.properties?.includeCost as { type?: string } | undefined)?.type,
     'boolean',
   );
+  assert.deepEqual(
+    (devicesTool.inputSchema.properties?.responseLevel as { enum?: unknown[] } | undefined)?.enum,
+    ['digest', 'default', 'full'],
+  );
 });
 
 test('MCP includeCost:true opts into agent-cost: sets client.cost, strips the arg, surfaces cost', async () => {
@@ -153,6 +157,58 @@ test('MCP includeCost rejects non-boolean values at the boundary', async () => {
   await assert.rejects(
     executor.execute('wait', { includeCost: 'yes' }),
     /Expected includeCost to be a boolean\./,
+  );
+});
+
+test('MCP responseLevel:digest opts into a verbosity level: sets client.responseLevel, strips the arg', async () => {
+  const createdConfigs: unknown[] = [];
+  const calls: unknown[] = [];
+  const executor = createCommandToolExecutor({
+    createClient: (config) => {
+      createdConfigs.push(config);
+      return {} as AgentDeviceClient;
+    },
+    runCommand: async (_client, name, input) => {
+      calls.push({ name, input });
+      return { message: `Ran ${name}` };
+    },
+  });
+
+  const result = await executor.execute('wait', { responseLevel: 'digest' });
+
+  // responseLevel maps to the client `responseLevel` config (→ meta.responseLevel on the daemon).
+  assert.deepEqual(createdConfigs, [{ responseLevel: 'digest' }]);
+  // responseLevel is an MCP-boundary field and must not leak into the command input.
+  assert.deepEqual(calls, [{ name: 'wait', input: {} }]);
+  assert.deepEqual(result.structuredContent, { message: 'Ran wait' });
+});
+
+test('MCP responseLevel absent leaves the request shape untouched (no responseLevel config)', async () => {
+  const createdConfigs: unknown[] = [];
+  const executor = createCommandToolExecutor({
+    createClient: (config) => {
+      createdConfigs.push(config);
+      return {} as AgentDeviceClient;
+    },
+    runCommand: async () => ({ message: 'ok' }),
+  });
+
+  const absent = await executor.execute('wait', {});
+
+  // The absent path never sets `responseLevel`; the config is byte-identical to today.
+  assert.deepEqual(createdConfigs, [{}]);
+  assert.deepEqual(absent.structuredContent, { message: 'ok' });
+});
+
+test('MCP responseLevel rejects unknown values at the boundary', async () => {
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async () => ({}),
+  });
+
+  await assert.rejects(
+    executor.execute('wait', { responseLevel: 'verbose' }),
+    /Expected responseLevel to be one of 'digest', 'default', or 'full'\./,
   );
 });
 

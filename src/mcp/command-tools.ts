@@ -1,5 +1,6 @@
 import type { AgentDeviceClient, AgentDeviceClientConfig } from '../client-types.ts';
 import type { JsonSchema } from '../commands/command-contract.ts';
+import { RESPONSE_LEVELS, type ResponseLevel } from '../contracts.ts';
 import { formatCliOutput } from '../commands/cli-output.ts';
 import {
   isCommandName,
@@ -119,6 +120,7 @@ function readMcpToolConfig(input: unknown): McpToolConfig {
 function readClientConfig(record: Record<string, unknown>): AgentDeviceClientConfig {
   const stateDir = record.stateDir;
   const includeCost = record.includeCost;
+  const responseLevel = record.responseLevel;
   const client: AgentDeviceClientConfig = {};
   if (stateDir !== undefined && (typeof stateDir !== 'string' || stateDir.length === 0)) {
     throw new Error('Expected stateDir to be a non-empty string.');
@@ -130,7 +132,19 @@ function readClientConfig(record: Record<string, unknown>): AgentDeviceClientCon
   // Only set when explicitly true so the default request shape is untouched
   // (cost rides on response.data → structuredContent only when opted in).
   if (includeCost === true) client.cost = true;
+  // Only set when it names a known level so the default request shape is
+  // untouched (responseLevel rides on meta.responseLevel only when opted in).
+  const level = readResponseLevel(responseLevel);
+  if (level !== undefined) client.responseLevel = level;
   return client;
+}
+
+function readResponseLevel(value: unknown): ResponseLevel | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || !(RESPONSE_LEVELS as readonly string[]).includes(value)) {
+    throw new Error("Expected responseLevel to be one of 'digest', 'default', or 'full'.");
+  }
+  return value as ResponseLevel;
 }
 
 function readMcpOutputFormat(outputFormat: unknown): McpOutputFormat {
@@ -147,6 +161,7 @@ function stripMcpConfigFields(input: unknown): unknown {
     stateDir: _stateDir,
     mcpOutputFormat: _mcpOutputFormat,
     includeCost: _includeCost,
+    responseLevel: _responseLevel,
     ...commandInput
   } = input as Record<string, unknown>;
   return commandInput;
@@ -168,6 +183,12 @@ function withMcpConfigSchema(schema: JsonSchema): JsonSchema {
         type: 'boolean',
         description:
           'Include per-command agent-cost (cost.wallClockMs, …) in structuredContent. Defaults to off; the default response shape is unchanged.',
+      },
+      responseLevel: {
+        type: 'string',
+        enum: ['digest', 'default', 'full'],
+        description:
+          'Response verbosity: token-cheap digest / default (today) / full. Defaults to default; the default response shape is unchanged.',
       },
     },
   };
