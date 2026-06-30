@@ -11,6 +11,11 @@ import {
   resolveClientSettings,
 } from './daemon-client-lifecycle.ts';
 import { sendRequest } from './daemon-client-transport.ts';
+import {
+  DAEMON_REQUEST_TIMEOUT_MS,
+  INSTALL_REQUEST_TIMEOUT_MS,
+  PREPARE_REQUEST_TIMEOUT_MS,
+} from '../request-timeouts.ts';
 
 export { computeDaemonCodeSignature } from '../code-signature.ts';
 export { downloadRemoteArtifact } from '../../remote/daemon-artifacts.ts';
@@ -22,12 +27,6 @@ export { canConnectSocket } from './daemon-client-transport.ts';
 export { shouldResetDaemonAfterRequestTimeout } from './daemon-client-timeout.ts';
 export type DaemonRequest = SharedDaemonRequest;
 export type DaemonResponse = SharedDaemonResponse;
-
-const REQUEST_TIMEOUT_MS = 90_000;
-const PREPARE_REQUEST_TIMEOUT_MS = 240_000;
-// Keep this above the longest platform install subprocess timeout so the client
-// envelope does not abort a still-progressing device install first.
-const INSTALL_REQUEST_TIMEOUT_MS = 180_000;
 
 export async function sendToDaemon(req: Omit<DaemonRequest, 'token'>): Promise<DaemonResponse> {
   const requestId = req.meta?.requestId ?? createRequestId();
@@ -123,7 +122,7 @@ export function resolveDaemonRequestTimeoutMs(
   }
   if (req.command === PUBLIC_COMMANDS.prepare) return PREPARE_REQUEST_TIMEOUT_MS;
   if (isInstallLikeCommand(req.command)) return INSTALL_REQUEST_TIMEOUT_MS;
-  return REQUEST_TIMEOUT_MS;
+  return DAEMON_REQUEST_TIMEOUT_MS;
 }
 
 function isExplicitTimeoutCommand(command: string | undefined): boolean {

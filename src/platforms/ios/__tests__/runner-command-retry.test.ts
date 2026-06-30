@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { IOS_SIMULATOR } from '../../../__tests__/test-utils/index.ts';
 import { clearRequestCanceled, markRequestCanceled } from '../../../daemon/request-cancel.ts';
 import { AppError } from '../../../kernel/errors.ts';
+import { Deadline } from '../../../utils/retry.ts';
 import type { RunnerSession } from '../runner-session-types.ts';
 
 const {
@@ -172,6 +173,35 @@ test('prepareIosRunner retries a fresh launch session when the health check cann
       reason: 'Runner did not accept connection',
     },
   );
+});
+
+test('prepareIosRunner spends one shared deadline across setup and health check', async () => {
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(1_000);
+    const session = makeRunnerSession({ port: 8100 });
+    const prepareDeadline = Deadline.fromTimeoutMs(100_000);
+
+    mockEnsureRunnerSession.mockImplementationOnce(async () => {
+      vi.setSystemTime(31_000);
+      return session;
+    });
+    mockExecuteRunnerCommandWithSession.mockResolvedValueOnce({ uptimeMs: 42 });
+
+    const result = await prepareIosRunner(IOS_SIMULATOR, {
+      buildTimeoutMs: 100_000,
+      healthTimeoutMs: 100_000,
+      prepareDeadline,
+      startupTimeoutMs: 100_000,
+    });
+
+    assert.deepEqual(result.runner, { uptimeMs: 42 });
+    assert.equal(mockEnsureRunnerSession.mock.calls[0]?.[1]?.buildTimeoutMs, 100_000);
+    assert.equal(mockEnsureRunnerSession.mock.calls[0]?.[1]?.startupTimeoutMs, 100_000);
+    assert.equal(mockExecuteRunnerCommandWithSession.mock.calls[0]?.[4], 70_000);
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test('prewarmIosRunnerSession proves cached runner health with uptime', async () => {
