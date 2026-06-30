@@ -353,7 +353,10 @@ test('Provider-backed integration Android alert wait polls until a dialog appear
         ...world.selection,
       });
       assert.equal(alertWait.kind, 'alertWait');
-      assert.equal(alertWait.alert?.source, 'permission');
+      // alert now returns the untyped CommandRequestResult bag (its iOS path is a
+      // dynamic runner Record, so the public type is no longer a closed shape).
+      const alertInfo = alertWait.alert as { source?: string } | null | undefined;
+      assert.equal(alertInfo?.source, 'permission');
       assert.ok(snapshotCount >= 2);
     },
   );

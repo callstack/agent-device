@@ -47,7 +47,6 @@ export type {
   AlertCommandOptions,
   AlertInfo,
   AlertPlatform,
-  AlertCommandResult,
   AlertSource,
   AppCloseOptions,
   AppCloseResult,
@@ -119,7 +118,6 @@ export type {
   TraceOptions,
   TypeTextOptions,
   WaitCommandOptions,
-  WaitCommandResult,
 } from './client.ts';
 
 export type {
