@@ -45,6 +45,11 @@
     "label": "Remote Proxy"
   },
   {
+    "name": "hosted-device-providers",
+    "type": "file",
+    "label": "Hosted Device Providers"
+  },
+  {
     "name": "security-trust",
     "type": "file",
     "label": "Security & Trust"

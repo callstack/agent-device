@@ -687,7 +687,7 @@ BrowserStack hosted-device flow:
   agent-device disconnect
 
 AWS Device Farm hosted-device flow:
-  aws login
+  AWS_REGION=us-west-2 AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_SESSION_TOKEN=...
   agent-device connect aws-device-farm --platform android --aws-project-arn <arn> --aws-device-arn <arn> --aws-app-arn <arn>
   agent-device open com.example.app
   agent-device snapshot -i
@@ -712,7 +712,8 @@ Rules:
   Prefer connect --remote-config over --daemon-base-url, --tenant, --run-id, and --lease-id when using a local profile.
   Use agent-device proxy for direct tunnel access to a Mac you control. Expose the printed proxy URL through cloudflared/ngrok, then run agent-device connect proxy with the tunnel URL and printed token before normal commands.
   Use BrowserStack and AWS Device Farm through local provider profiles; they do not accept a remote agent-device daemon URL.
-  Hosted provider credentials stay in environment variables or the provider CLI. Generated connection profiles store app/device selectors and ARNs, not BrowserStack access keys or AWS credentials.
+  Hosted provider credentials must be available before the command starts. BrowserStack uses BROWSERSTACK_USERNAME and BROWSERSTACK_ACCESS_KEY. AWS Device Farm uses the AWS CLI credential chain, including CI-provided AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY/AWS_SESSION_TOKEN, AWS profiles, or web identity role variables.
+  Prefer short-lived AWS role credentials in CI. Generated connection profiles store app/device selectors and ARNs, not BrowserStack access keys or AWS credentials.
   After closing a hosted provider session, run agent-device artifacts --json to retrieve provider video/log/dashboard URLs when the provider has made them available.
   connect proxy stores the connection profile and client identity. Device leases are acquired on open and expire after five minutes without commands.
   Multiple agents can share one proxy when each uses connect proxy, open, commands, close, and disconnect.
