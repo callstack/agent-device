@@ -54,6 +54,7 @@ vi.mock('../session-device-utils.ts', async (importOriginal) => {
 
 import { handleSessionCommands } from '../session.ts';
 import { teardownSessionResources } from '../../session-teardown.ts';
+import { LeaseRegistry } from '../../lease-registry.ts';
 import { shutdownSimulator } from '../../../platforms/apple/core/simulator.ts';
 import { runCmd } from '../../../utils/exec.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
@@ -423,6 +424,57 @@ test('close dispatches web session cleanup without a positional target', async (
     expect.objectContaining({ logPath: expect.stringContaining('daemon.log') }),
   );
   expect(sessionStore.get(sessionName)).toBeUndefined();
+});
+
+test('close deletes local session when provider lease release fails', async () => {
+  const sessionStore = makeSessionStore();
+  const leaseRegistry = new LeaseRegistry();
+  const sessionName = 'provider-release-failure-session';
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseProvider: 'browserstack',
+    deviceKey: 'ios:bs-device',
+    clientId: 'client-a',
+  });
+  sessionStore.set(sessionName, {
+    ...makeSession(sessionName, WEB_DESKTOP_DEVICE),
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      leaseProvider: lease.leaseProvider,
+      deviceKey: lease.deviceKey,
+      clientId: lease.clientId,
+      expiresAt: lease.expiresAt,
+    },
+  });
+
+  await expect(
+    handleSessionCommands({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'close',
+        positionals: [],
+        flags: {},
+      },
+      sessionName,
+      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      sessionStore,
+      leaseRegistry,
+      leaseLifecycleProvider: {
+        release: async () => {
+          throw new AppError('COMMAND_FAILED', 'provider cleanup failed');
+        },
+      },
+      invoke: noopInvoke,
+    }),
+  ).rejects.toThrow('provider cleanup failed');
+
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+  expect(leaseRegistry.listActiveLeases()).toHaveLength(0);
 });
 
 test('daemon session teardown stops active Android native perf capture', async () => {

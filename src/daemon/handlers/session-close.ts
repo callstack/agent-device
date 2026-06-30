@@ -111,11 +111,13 @@ export async function handleCloseCommand(params: {
     sessionStore.writeSessionLog(session);
     await cleanupRetainedMaterializedPathsForSession(sessionName).catch(() => {});
   } finally {
-    // Always release the device lease and drop the session, even if teardown
-    // above threw: a failed close must not strand device ownership until the
-    // inactivity expiry. The original error still propagates after finally.
-    providerData = await releaseSessionLease({ session, leaseRegistry, leaseLifecycleProvider });
-    sessionStore.delete(sessionName);
+    // Always drop the local session, even if provider-side release fails:
+    // a failed close must not strand device ownership until inactivity expiry.
+    try {
+      providerData = await releaseSessionLease({ session, leaseRegistry, leaseLifecycleProvider });
+    } finally {
+      sessionStore.delete(sessionName);
+    }
   }
   const shutdownResult = await maybeShutdownSessionTarget({
     device: session.device,
