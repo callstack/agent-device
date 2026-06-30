@@ -38,6 +38,7 @@ import type {
   AppListOptions,
   AppOpenOptions,
   CaptureScreenshotOptions,
+  CaptureScreenshotResult,
   CaptureSnapshotOptions,
   CaptureSnapshotResult,
   InternalRequestOptions,
@@ -46,6 +47,7 @@ import type {
   MetroPrepareOptions,
 } from './client-types.ts';
 import type { CommandResult } from './core/command-descriptor/command-result.ts';
+import type { ResponseLevel } from './contracts.ts';
 import { readSerializedSnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
 import { readSnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 import type { CommandFlags } from './core/dispatch-context.ts';
@@ -55,6 +57,14 @@ export function createAgentDeviceClient(
   deps: { transport?: AgentDeviceDaemonTransport } = {},
 ): AgentDeviceClient {
   const transport = deps.transport ?? sendToDaemon;
+
+  // A non-default responseLevel (digest/full) makes the daemon return a leveled
+  // shape; the per-command client normalizers assume the default shape, so the
+  // capture methods pass the leveled payload through unnormalized instead.
+  const isLeveledResponse = (options: { responseLevel?: ResponseLevel }): boolean => {
+    const level = options.responseLevel ?? config.responseLevel;
+    return level !== undefined && level !== 'default';
+  };
 
   const execute = async (
     command: string,
@@ -271,6 +281,12 @@ export function createAgentDeviceClient(
       screenshot: async (options: CaptureScreenshotOptions = {}) => {
         const session = resolveRequestSession(options);
         const data = await executeCommand<Record<string, unknown>>('screenshot', options);
+        // A non-default responseLevel returns a leveled (digest) screenshot shape
+        // — `overlayCount`, leveled `overlayRefs`, `artifacts` — that the default
+        // normalizer below would drop. Pass the leveled payload through verbatim.
+        // (The caller opted into a non-default level, so the static type is the
+        // default shape; the runtime value is the leveled payload.)
+        if (isLeveledResponse(options)) return data as unknown as CaptureScreenshotResult;
         const screenshot = readScreenshotResultData(data);
         return {
           path: readRequiredString(data, 'path'),
