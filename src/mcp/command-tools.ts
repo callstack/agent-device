@@ -78,6 +78,7 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
               input: commandInput,
               result,
               outputFormat: config.outputFormat,
+              responseLevel: config.client.responseLevel,
             }),
           },
         ],
@@ -199,8 +200,19 @@ function renderToolText(params: {
   input: unknown;
   result: unknown;
   outputFormat: McpOutputFormat;
+  responseLevel?: ResponseLevel;
 }): string {
-  if (params.outputFormat === 'json') return renderJsonText(params.result);
+  // A non-default responseLevel (digest/full) hands back a leveled payload whose
+  // shape the optimized CLI formatters do not understand (e.g. the snapshot
+  // formatter expects `nodes`, which the digest drops) — rendering it through
+  // them would print misleading text that contradicts `structuredContent`. Emit
+  // the leveled payload verbatim as JSON instead.
+  if (
+    params.outputFormat === 'json' ||
+    (params.responseLevel !== undefined && params.responseLevel !== 'default')
+  ) {
+    return renderJsonText(params.result);
+  }
   const cliOutput = formatCliOutput({
     name: params.name,
     input: params.input,

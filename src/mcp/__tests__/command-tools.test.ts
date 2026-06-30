@@ -59,6 +59,28 @@ test('MCP command tool executor renders optimized snapshot text by default', asy
   assert.doesNotMatch(result.content[0]?.text ?? '', /^\{/);
 });
 
+test('MCP renders a non-default response level as JSON text, not misleading optimized text', async () => {
+  // With responseLevel:digest the daemon returns the digest shape (no `nodes`).
+  // The optimized snapshot formatter expects `nodes` and would print
+  // "Snapshot: 0 nodes" — contradicting structuredContent. The text must instead
+  // be the digest payload verbatim (JSON), even though mcpOutputFormat is optimized.
+  const digest = { nodeCount: 3, refs: [{ ref: 'e1', label: 'Continue' }], truncated: false };
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async () => digest,
+  });
+
+  const result = await executor.execute('snapshot', {
+    mcpOutputFormat: 'optimized',
+    responseLevel: 'digest',
+  });
+
+  assert.deepEqual(result.structuredContent, digest);
+  assert.match(result.content[0]?.text ?? '', /^\{/);
+  assert.deepEqual(JSON.parse(result.content[0]?.text ?? ''), digest);
+  assert.doesNotMatch(result.content[0]?.text ?? '', /Snapshot: 0 nodes/);
+});
+
 test('MCP command tool executor renders JSON text when requested', async () => {
   const executor = createCommandToolExecutor({
     createClient: () => ({}) as AgentDeviceClient,
