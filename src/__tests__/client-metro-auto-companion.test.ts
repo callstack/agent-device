@@ -4,12 +4,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-vi.mock('../client-metro-companion.ts', () => ({
+vi.mock('../metro/client-metro-companion.ts', () => ({
   ensureMetroCompanion: vi.fn(),
 }));
 
-import { ensureMetroCompanion } from '../client-metro-companion.ts';
-import { prepareMetroRuntime } from '../client-metro.ts';
+import { ensureMetroCompanion } from '../metro/client-metro-companion.ts';
+import { prepareMetroRuntime } from '../metro/client-metro.ts';
 
 const TEST_BRIDGE_SCOPE = {
   tenantId: 'tenant-1',

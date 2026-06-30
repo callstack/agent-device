@@ -15,7 +15,7 @@ vi.mock('../utils/process-identity.ts', () => ({
 
 import { runCmdDetached } from '../utils/exec.ts';
 import { waitForProcessExit } from '../utils/process-identity.ts';
-import { prepareMetroRuntime } from '../client-metro.ts';
+import { prepareMetroRuntime } from '../metro/client-metro.ts';
 
 afterEach(() => {
   vi.useRealTimers();

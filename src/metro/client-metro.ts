@@ -1,23 +1,23 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { sleep } from './utils/timeouts.ts';
+import { sleep } from '../utils/timeouts.ts';
 import { ensureMetroCompanion } from './client-metro-companion.ts';
-import type { MetroBridgeScope } from './client-companion-tunnel-contract.ts';
+import type { MetroBridgeScope } from '../client-companion-tunnel-contract.ts';
 import type {
   MetroBridgeDescriptor,
   MetroBridgeResult,
   MetroBridgeRuntimePayload,
   MetroRuntimeHints,
 } from './metro-types.ts';
-import { AppError } from './kernel/errors.ts';
-import { runCmdSync, runCmdDetached } from './utils/exec.ts';
-import { resolveUserPath } from './utils/path-resolution.ts';
-import { waitForProcessExit } from './utils/process-identity.ts';
-import { buildBundleUrl, normalizeBaseUrl } from './utils/url.ts';
+import { AppError } from '../kernel/errors.ts';
+import { runCmdSync, runCmdDetached } from '../utils/exec.ts';
+import { resolveUserPath } from '../utils/path-resolution.ts';
+import { waitForProcessExit } from '../utils/process-identity.ts';
+import { buildBundleUrl, normalizeBaseUrl } from '../utils/url.ts';
 import {
   resolveRuntimeTransportHints,
   type ResolvedRuntimeTransport,
-} from './utils/runtime-transport.ts';
+} from '../utils/runtime-transport.ts';
 
 const DEFAULT_METRO_HOST = 'localhost';
 const DEFAULT_METRO_PORT = 8081;
@@ -28,7 +28,10 @@ export type MetroPrepareKind = 'auto' | 'react-native' | 'expo';
 type ResolvedMetroKind = Exclude<MetroPrepareKind, 'auto'>;
 type EnvSource = NodeJS.ProcessEnv | Record<string, string | undefined>;
 
-export type { CompanionTunnelScope, MetroBridgeScope } from './client-companion-tunnel-contract.ts';
+export type {
+  CompanionTunnelScope,
+  MetroBridgeScope,
+} from '../client-companion-tunnel-contract.ts';
 
 type PackageJsonShape = {
   dependencies?: Record<string, string>;

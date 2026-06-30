@@ -1,8 +1,10 @@
 import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 
-vi.mock('../client-metro.ts', async () => {
-  const actual = await vi.importActual<typeof import('../client-metro.ts')>('../client-metro.ts');
+vi.mock('../metro/client-metro.ts', async () => {
+  const actual = await vi.importActual<typeof import('../metro/client-metro.ts')>(
+    '../metro/client-metro.ts',
+  );
   return {
     ...actual,
     prepareMetroRuntime: vi.fn(),
@@ -10,13 +12,13 @@ vi.mock('../client-metro.ts', async () => {
   };
 });
 
-vi.mock('../client-metro-companion.ts', () => ({
+vi.mock('../metro/client-metro-companion.ts', () => ({
   ensureMetroCompanion: vi.fn(),
   stopMetroCompanion: vi.fn(),
 }));
 
-import { prepareMetroRuntime, reloadMetro } from '../client-metro.ts';
-import { ensureMetroCompanion, stopMetroCompanion } from '../client-metro-companion.ts';
+import { prepareMetroRuntime, reloadMetro } from '../metro/client-metro.ts';
+import { ensureMetroCompanion, stopMetroCompanion } from '../metro/client-metro-companion.ts';
 import {
   buildAndroidRuntimeHints,
   buildIosRuntimeHints,
@@ -25,7 +27,7 @@ import {
   reloadRemoteMetro,
   resolveRuntimeTransport,
   stopMetroTunnel,
-} from '../metro.ts';
+} from '../metro/metro.ts';
 
 const TEST_BRIDGE_SCOPE = {
   tenantId: 'tenant-1',

@@ -26,7 +26,7 @@ export default defineConfig({
           io: 'src/io.ts',
           artifacts: 'src/artifacts.ts',
           batch: 'src/batch.ts',
-          metro: 'src/metro.ts',
+          metro: 'src/metro/metro.ts',
           'remote-config': 'src/remote-config.ts',
           'install-source': 'src/install-source.ts',
           'android-adb': 'src/android-adb.ts',

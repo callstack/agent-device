@@ -22,7 +22,7 @@ import {
   readProcessStartTime,
   waitForProcessExit,
 } from '../utils/process-identity.ts';
-import { ensureMetroCompanion, stopMetroCompanion } from '../client-metro-companion.ts';
+import { ensureMetroCompanion, stopMetroCompanion } from '../metro/client-metro-companion.ts';
 import { ensureReactDevtoolsCompanion } from '../client-react-devtools-companion.ts';
 
 const TEST_BRIDGE_SCOPE = {

@@ -1,6 +1,6 @@
 import { resolveDaemonPaths } from '../../daemon/config.ts';
 import { stopReactDevtoolsCompanion } from '../../client-react-devtools-companion.ts';
-import { stopMetroTunnel } from '../../metro.ts';
+import { stopMetroTunnel } from '../../metro/metro.ts';
 import { resolveRemoteConfigProfile } from '../../remote-config.ts';
 import { resolveDevice, type DeviceInfo } from '../../kernel/device.ts';
 import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
@@ -20,7 +20,7 @@ import { AppError } from '../../kernel/errors.ts';
 import type { LeaseBackend, SessionRuntimeHints } from '../../contracts.ts';
 import type { CliFlags } from '../../utils/cli-flags.ts';
 import type { AgentDeviceClient, Lease } from '../../client.ts';
-import type { MetroPrepareKind } from '../../client-metro.ts';
+import type { MetroPrepareKind } from '../../metro/client-metro.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 
 const leaseDeferredCommands = new Set([

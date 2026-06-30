@@ -6,7 +6,7 @@ import type {
   SessionIsolationMode,
 } from './contracts.ts';
 import { PLATFORM_SELECTORS, type DeviceTarget, type PlatformSelector } from './kernel/device.ts';
-import type { MetroPrepareKind } from './client-metro.ts';
+import type { MetroPrepareKind } from './metro/client-metro.ts';
 
 export type RemoteConfigMetroOptions = {
   metroProjectRoot?: string;

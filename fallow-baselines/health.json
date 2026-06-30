@@ -90,7 +90,7 @@
         "count": 1
       }
     },
-    "src/client-metro.ts": {
+    "src/metro/client-metro.ts": {
       "crap_moderate": {
         "count": 3
       }

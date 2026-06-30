@@ -8,7 +8,7 @@ import type { Socket } from 'node:net';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { prepareMetroRuntime, reloadMetro } from '../client-metro.ts';
+import { prepareMetroRuntime, reloadMetro } from '../metro/client-metro.ts';
 import { AppError } from '../kernel/errors.ts';
 import { isProcessAlive, waitForProcessExit } from '../utils/process-identity.ts';
 

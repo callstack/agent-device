@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-vi.mock('../client-metro-companion.ts', () => ({
+vi.mock('../metro/client-metro-companion.ts', () => ({
   stopMetroCompanion: vi.fn(),
 }));
 
@@ -23,7 +23,7 @@ import {
   materializeRemoteConnectionForCommand,
   PROXY_REMOTE_LEASE_TTL_MS,
 } from '../cli/commands/connection-runtime.ts';
-import { stopMetroCompanion } from '../client-metro-companion.ts';
+import { stopMetroCompanion } from '../metro/client-metro-companion.ts';
 import { AppError } from '../kernel/errors.ts';
 import {
   hashRemoteConfigFile,

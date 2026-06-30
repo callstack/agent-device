@@ -4,8 +4,8 @@ import {
   type CompanionTunnelDefinition,
   type EnsureCompanionTunnelOptions,
   type StopCompanionTunnelOptions,
-} from './client-companion-tunnel.ts';
-import { METRO_COMPANION_RUN_ARG } from './client-companion-tunnel-contract.ts';
+} from '../client-companion-tunnel.ts';
+import { METRO_COMPANION_RUN_ARG } from '../client-companion-tunnel-contract.ts';
 
 const METRO_COMPANION_REGISTER_PATH = '/api/metro/companion/register';
 

@@ -33,7 +33,7 @@ import type {
   MetroPrepareKind,
   PrepareMetroRuntimeResult,
   ReloadMetroResult,
-} from './client-metro.ts';
+} from './metro/client-metro.ts';
 import type { MetroBridgeScope } from './client-companion-tunnel-contract.ts';
 import type { AppsFilter } from './contracts/app-inventory.ts';
 import type { ScreenshotRequestFlags } from './contracts/screenshot.ts';

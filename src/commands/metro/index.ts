@@ -1,4 +1,4 @@
-import type { MetroPrepareKind } from '../../client-metro.ts';
+import type { MetroPrepareKind } from '../../metro/client-metro.ts';
 import type {
   MetroPrepareOptions,
   MetroPrepareResult,
