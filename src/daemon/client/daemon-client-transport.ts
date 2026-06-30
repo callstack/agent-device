@@ -1,22 +1,22 @@
 import net from 'node:net';
 import http from 'node:http';
 import https from 'node:https';
-import { AppError } from './kernel/errors.ts';
-import { readNodeHttpResponseBody } from './utils/node-http.ts';
-import type { DaemonRequest, DaemonResponse } from './daemon/types.ts';
-import { emitDiagnostic } from './utils/diagnostics.ts';
-import type { DaemonPaths, DaemonTransportPreference } from './daemon/config.ts';
+import { AppError } from '../../kernel/errors.ts';
+import { readNodeHttpResponseBody } from '../../utils/node-http.ts';
+import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import type { DaemonPaths, DaemonTransportPreference } from '../config.ts';
 import {
   readDaemonHttpProgressResponse,
   readDaemonSocketProgressResponse,
   shouldReadDaemonProgressStream,
 } from './daemon-client-progress.ts';
-import { buildDaemonHttpAuthHeaders, buildDaemonHttpUrl } from './daemon/http-contract.ts';
+import { buildDaemonHttpAuthHeaders, buildDaemonHttpUrl } from '../http-contract.ts';
 import { buildHttpRpcPayload, handleDaemonHttpResponseBody } from './daemon-client-rpc.ts';
 import { handleRequestTimeout } from './daemon-client-timeout.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
-import { DAEMON_RPC_PROTOCOL_VERSION } from './daemon/http-health.ts';
-import { readVersion } from './utils/version.ts';
+import { DAEMON_RPC_PROTOCOL_VERSION } from '../http-health.ts';
+import { readVersion } from '../../utils/version.ts';
 
 type ResolvedDaemonTransport = 'socket' | 'http';
 

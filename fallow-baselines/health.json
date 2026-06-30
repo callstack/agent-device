@@ -156,25 +156,25 @@
         "count": 2
       }
     },
-    "src/daemon-client-lifecycle.ts": {
-      "complexity_moderate": {
+    "src/daemon/client/daemon-client-lifecycle.ts": {
+      "complexity_high": {
         "count": 1
       },
-      "crap_moderate": {
+      "crap_high": {
         "count": 1
       }
     },
-    "src/daemon-client-metadata.ts": {
+    "src/daemon/client/daemon-client-metadata.ts": {
       "complexity_moderate": {
         "count": 1
       }
     },
-    "src/daemon-client-rpc.ts": {
+    "src/daemon/client/daemon-client-rpc.ts": {
       "crap_moderate": {
         "count": 2
       }
     },
-    "src/daemon-client.ts": {
+    "src/daemon/client/daemon-client.ts": {
       "complexity_moderate": {
         "count": 2
       }

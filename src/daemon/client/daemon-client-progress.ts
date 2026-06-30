@@ -1,18 +1,18 @@
 import http from 'node:http';
 import type { Socket } from 'node:net';
-import { AppError } from './kernel/errors.ts';
-import type { DaemonRequest, DaemonResponse } from './daemon/types.ts';
-import type { RequestProgressEvent } from './daemon/request-progress.ts';
-import { consumeTextLines } from './utils/line-stream.ts';
+import { AppError } from '../../kernel/errors.ts';
+import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { RequestProgressEvent } from '../request-progress.ts';
+import { consumeTextLines } from '../../utils/line-stream.ts';
 import {
   createReplayTestProgressRenderer,
   type ReplayTestProgressRender,
-} from './cli-test-progress.ts';
+} from '../../cli-test-progress.ts';
 import {
   isDaemonProgressEnvelope,
   isDaemonResponseEnvelope,
   shouldStreamRequestProgress,
-} from './daemon/request-progress-protocol.ts';
+} from '../request-progress-protocol.ts';
 
 type RequestProgressRenderer = {
   render(event: RequestProgressEvent): ReplayTestProgressRender | undefined;

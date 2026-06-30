@@ -27,8 +27,8 @@ import {
   computeDaemonCodeSignature,
   sendToDaemon,
   type DaemonRequest,
-} from '../../daemon-client.ts';
-import { sendRequest } from '../../daemon-client-transport.ts';
+} from '../../daemon/client/daemon-client.ts';
+import { sendRequest } from '../../daemon/client/daemon-client-transport.ts';
 import {
   closeLoopbackServer,
   listenOnLoopback,

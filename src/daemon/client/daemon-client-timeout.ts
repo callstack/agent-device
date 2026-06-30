@@ -1,9 +1,9 @@
-import { AppError } from './kernel/errors.ts';
-import { runCmdSync } from './utils/exec.ts';
-import { emitDiagnostic } from './utils/diagnostics.ts';
-import { isAgentDeviceDaemonProcess } from './utils/process-identity.ts';
-import { PUBLIC_COMMANDS } from './command-catalog.ts';
-import type { DaemonPaths } from './daemon/config.ts';
+import { AppError } from '../../kernel/errors.ts';
+import { runCmdSync } from '../../utils/exec.ts';
+import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { isAgentDeviceDaemonProcess } from '../../utils/process-identity.ts';
+import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import type { DaemonPaths } from '../config.ts';
 import {
   removeDaemonInfo,
   removeDaemonLock,

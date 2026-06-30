@@ -1,4 +1,4 @@
-import { sendToDaemon } from '../daemon-client.ts';
+import { sendToDaemon } from '../daemon/client/daemon-client.ts';
 import { prepareMetroRuntime, reloadMetro } from '../metro/client-metro.ts';
 import { resolveDaemonPaths } from '../daemon/config.ts';
 import { symbolicateCrashArtifact } from '../platforms/ios/debug-symbols.ts';

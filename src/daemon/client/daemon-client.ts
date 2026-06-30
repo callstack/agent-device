@@ -1,10 +1,10 @@
 import type {
   DaemonRequest as SharedDaemonRequest,
   DaemonResponse as SharedDaemonResponse,
-} from './daemon/types.ts';
-import { createRequestId, emitDiagnostic, withDiagnosticTimer } from './utils/diagnostics.ts';
-import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from './command-catalog.ts';
-import { prepareRemoteRequestArtifacts } from './remote/daemon-artifacts.ts';
+} from '../types.ts';
+import { createRequestId, emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
+import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { prepareRemoteRequestArtifacts } from '../../remote/daemon-artifacts.ts';
 import {
   cleanupDaemonAfterRequest,
   ensureDaemon,
@@ -12,8 +12,8 @@ import {
 } from './daemon-client-lifecycle.ts';
 import { sendRequest } from './daemon-client-transport.ts';
 
-export { computeDaemonCodeSignature } from './daemon/code-signature.ts';
-export { downloadRemoteArtifact } from './remote/daemon-artifacts.ts';
+export { computeDaemonCodeSignature } from '../code-signature.ts';
+export { downloadRemoteArtifact } from '../../remote/daemon-artifacts.ts';
 export {
   cleanupFailedDaemonStartupMetadata,
   resolveDaemonStartupHint,

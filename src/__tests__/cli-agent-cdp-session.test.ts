@@ -19,7 +19,7 @@ import {
   hashRemoteConfigFile,
   writeRemoteConnectionState,
 } from '../remote/remote-connection-state.ts';
-import type { DaemonResponse } from '../daemon-client.ts';
+import type { DaemonResponse } from '../daemon/client/daemon-client.ts';
 
 afterEach(() => {
   vi.clearAllMocks();

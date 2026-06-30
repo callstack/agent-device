@@ -1,13 +1,13 @@
-import { AppError, toAppErrorCode } from './kernel/errors.ts';
-import { createRequestId } from './utils/diagnostics.ts';
-import type { DaemonRequest, DaemonResponse } from './daemon/types.ts';
-import { materializeRemoteArtifacts } from './remote/daemon-artifacts.ts';
+import { AppError, toAppErrorCode } from '../../kernel/errors.ts';
+import { createRequestId } from '../../utils/diagnostics.ts';
+import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import { materializeRemoteArtifacts } from '../../remote/daemon-artifacts.ts';
 import type { DaemonInfo } from './daemon-client-metadata.ts';
 import {
   leaseScopeFromRequest,
   leaseScopeToLeaseRpcParams,
   type LeaseRpcCommand,
-} from './core/lease-scope.ts';
+} from '../../core/lease-scope.ts';
 
 export function handleDaemonHttpResponseBody(
   body: string,

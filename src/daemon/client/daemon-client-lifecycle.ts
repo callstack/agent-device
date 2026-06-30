@@ -2,11 +2,11 @@ import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { AppError } from './kernel/errors.ts';
-import type { DaemonRequest } from './daemon/types.ts';
-import { runCmdDetachedMonitored, type ExecDetachedExit } from './utils/exec.ts';
-import { findProjectRoot, readVersion } from './utils/version.ts';
-import { emitDiagnostic } from './utils/diagnostics.ts';
+import { AppError } from '../../kernel/errors.ts';
+import type { DaemonRequest } from '../types.ts';
+import { runCmdDetachedMonitored, type ExecDetachedExit } from '../../utils/exec.ts';
+import { findProjectRoot, readVersion } from '../../utils/version.ts';
+import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import {
   resolveDaemonPaths,
   resolveDaemonServerMode,
@@ -14,10 +14,10 @@ import {
   type DaemonPaths,
   type DaemonServerMode,
   type DaemonTransportPreference,
-} from './daemon/config.ts';
-import { computeDaemonCodeSignature } from './daemon/code-signature.ts';
-import { PUBLIC_COMMANDS } from './command-catalog.ts';
-import { sleep } from './utils/timeouts.ts';
+} from '../config.ts';
+import { computeDaemonCodeSignature } from '../code-signature.ts';
+import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { sleep } from '../../utils/timeouts.ts';
 import {
   cleanupFailedDaemonStartupMetadata,
   cleanupStaleDaemonLockIfSafe,

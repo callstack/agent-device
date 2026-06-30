@@ -3,7 +3,7 @@ import { asAppError, AppError, normalizeError } from './kernel/errors.ts';
 import { printHumanError, printJson } from './utils/output.ts';
 import { readVersion } from './utils/version.ts';
 import { pathToFileURL } from 'node:url';
-import { sendToDaemon } from './daemon-client.ts';
+import { sendToDaemon } from './daemon/client/daemon-client.ts';
 import fs from 'node:fs';
 import type { BatchStep } from './client/client-types.ts';
 import {

@@ -21,7 +21,7 @@ import {
   resolveDaemonStartupHint,
   sendToDaemon,
   shouldResetDaemonAfterRequestTimeout,
-} from '../../daemon-client.ts';
+} from '../../daemon/client/daemon-client.ts';
 import { resolveDaemonPaths } from '../../daemon/config.ts';
 import {
   isProcessAlive,

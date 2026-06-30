@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import type { DaemonResponse } from '../daemon-client.ts';
+import type { DaemonResponse } from '../daemon/client/daemon-client.ts';
 import { resolveDaemonPaths } from '../daemon/config.ts';
 import {
   runCliCapture as captureCli,
