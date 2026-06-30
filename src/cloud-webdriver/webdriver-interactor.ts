@@ -17,8 +17,8 @@ import {
   type CloudWebDriverProviderCapabilities,
 } from './capabilities.ts';
 import { touchPointer } from './webdriver-gestures.ts';
-import type { RawSnapshotNode } from '../kernel/snapshot.ts';
 import type { WebDriverClient, WebDriverWindowRect } from './webdriver-client.ts';
+import { scrollFrameFromWebDriverSource } from './webdriver-scroll-frame.ts';
 import { parseWebDriverSource } from './webdriver-source.ts';
 
 export type WebDriverInteractorOptions = {
@@ -281,19 +281,12 @@ class WebDriverInteractor implements Interactor {
   }
 
   private async scrollGestureFrame(): Promise<WebDriverWindowRect> {
-    const sourceFrame = await this.sourceScrollFrame().catch(() => undefined);
+    const sourceFrame = await this.client
+      .source()
+      .then((source) => scrollFrameFromWebDriverSource(source))
+      .catch(() => undefined);
     if (sourceFrame) return sourceFrame;
     return await this.client.windowRect();
-  }
-
-  private async sourceScrollFrame(): Promise<WebDriverWindowRect | undefined> {
-    const nodes = parseWebDriverSource(await this.client.source());
-    const rect = nodes
-      .flatMap((node) =>
-        isScrollableSourceNode(node) && isUsableScrollRect(node.rect) ? [node.rect] : [],
-      )
-      .sort((left, right) => right.width * right.height - left.width * left.height)[0];
-    return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : undefined;
   }
 
   private requireSupport(operation: CloudWebDriverOperation): void {
@@ -312,16 +305,4 @@ class WebDriverInteractor implements Interactor {
       },
     );
   }
-}
-
-function isScrollableSourceNode(node: RawSnapshotNode): boolean {
-  const type = node.type?.toLowerCase() ?? '';
-  return (
-    node.visibleToUser !== false &&
-    (type.includes('scrollview') || type.includes('listview') || type.includes('recyclerview'))
-  );
-}
-
-function isUsableScrollRect(rect: RawSnapshotNode['rect']): rect is WebDriverWindowRect {
-  return !!rect && rect.width >= 50 && rect.height >= 50;
 }

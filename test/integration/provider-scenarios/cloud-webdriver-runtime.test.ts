@@ -9,6 +9,7 @@ import path from 'node:path';
 import { test } from 'vitest';
 import { createCloudWebDriverRuntime } from '../../../src/cloud-webdriver/runtime.ts';
 import { createDefaultCloudWebDriverProviderRuntimes } from '../../../src/cloud-webdriver/provider-runtimes.ts';
+import { scrollFrameFromWebDriverSource } from '../../../src/cloud-webdriver/webdriver-scroll-frame.ts';
 import { parseWebDriverSource } from '../../../src/cloud-webdriver/webdriver-source.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS } from '../../../src/cloud-webdriver/providers.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
@@ -162,6 +163,19 @@ test('WebDriver source parser reuses hardened XML parsing', () => {
   assert.throws(
     () => parseWebDriverSource('<node __proto__="polluted" text="x" />'),
     /Unsupported XML attribute name "__proto__"/,
+  );
+});
+
+test('WebDriver scroll frame prefers visible scrollable containers', () => {
+  assert.deepEqual(
+    scrollFrameFromWebDriverSource(
+      '<hierarchy>' +
+        '<android.widget.FrameLayout bounds="[0,0][1080,2400]" displayed="true" />' +
+        '<android.widget.ListView bounds="[0,393][1080,1496]" displayed="true" />' +
+        '<android.support.v7.widget.RecyclerView bounds="[18,597][1062,1196]" displayed="false" />' +
+        '</hierarchy>',
+    ),
+    { x: 0, y: 393, width: 1080, height: 1103 },
   );
 });
 
