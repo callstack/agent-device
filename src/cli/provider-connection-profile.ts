@@ -1,10 +1,10 @@
 import crypto from 'node:crypto';
 import { CLOUD_WEBDRIVER_PROVIDERS } from '../cloud-webdriver/providers.ts';
 import type { CloudWebDriverKnownProviderName } from '../cloud-webdriver/providers.ts';
-import type { RemoteConfigProfile } from '../remote-config-schema.ts';
+import type { RemoteConfigProfile } from '../remote/remote-config-schema.ts';
 import { AppError } from '../kernel/errors.ts';
 import type { PlatformSelector } from '../kernel/device.ts';
-import type { CliFlags } from '../utils/cli-flags.ts';
+import type { CliFlags } from './parser/cli-flags.ts';
 import type { EnvMap } from '../utils/env-map.ts';
 import { readMetroProfileFields } from './connection-profile-fields.ts';
 import { persistAndResolveGeneratedProfile } from './generated-remote-config.ts';
