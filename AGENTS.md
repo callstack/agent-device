@@ -91,7 +91,7 @@ Single-context repo. Read `CONTEXT.md` for domain language and testing/architect
 ## Exploration & Token Use
 - Prefer these first-pass commands over broad reads:
   - `rg -n "<symbol|command|flag>" src test`
-  - `rg --files src/daemon/handlers src/platforms/ios src/platforms/android`
+  - `rg --files src/daemon/handlers src/platforms/apple src/platforms/ios src/platforms/android`
   - `git diff -- <path>` for active-branch context
   - read `.oxlintrc.json` before treating lint output as source-level bugs
 - For files over 500 LOC, search for the relevant type/function/section first, then read a bounded range.
@@ -105,17 +105,17 @@ Single-context repo. Read `CONTEXT.md` for domain language and testing/architect
 - `open/close/replay/apps/appstate`: `src/daemon/handlers/session.ts` -> `src/daemon/session-store.ts` -> `src/daemon/handlers/__tests__/session.test.ts`
 - `click/fill/get/is`: `src/daemon/handlers/interaction.ts` -> `src/daemon/selectors.ts` -> `src/daemon/handlers/__tests__/interaction.test.ts`
 - `snapshot/wait/settings/alert`: `src/daemon/handlers/snapshot.ts` -> `src/daemon/snapshot-processing.ts` -> `src/daemon/handlers/__tests__/snapshot-handler.test.ts`
-- `record/trace`: `src/daemon/handlers/record-trace.ts` -> `src/platforms/ios/runner-client.ts` -> `src/daemon/handlers/__tests__/record-trace.test.ts`
+- `record/trace`: `src/daemon/handlers/record-trace.ts` -> `src/platforms/apple/core/runner/runner-client.ts` -> `src/daemon/handlers/__tests__/record-trace.test.ts`
 
-## iOS Runner Seams
-- Keep dependency direction clean:
+## Apple Runner Seams
+- The OS-agnostic Apple XCTest runner lives under `src/platforms/apple/core/runner/`. Keep dependency direction clean:
   - `runner-client.ts`: command execution + retry behavior
   - `runner-transport.ts`: connection/probing/HTTP transport
   - `runner-contract.ts`: shared `RunnerCommand` type and runner connect/error helpers
   - `runner-session.ts`: session lifecycle and request/response execution
   - `runner-xctestrun.ts`: xctestrun preparation/build/cache logic
 - `runner-transport.ts` must not import back from `runner-client.ts`.
-- If changing runner connect errors, retry policy, or command typing, start in `src/platforms/ios/runner-contract.ts` before touching client/transport files.
+- If changing runner connect errors, retry policy, or command typing, start in `src/platforms/apple/core/runner/runner-contract.ts` before touching client/transport files.
 
 ## Adding a New CLI Flag
 
@@ -139,7 +139,7 @@ Command-only flags (like `find --first`) that do not flow to the platform layer 
 - Use `keyboard dismiss` for iOS keyboard dismissal; it may tap safe native controls such as `Done` but must not fall back to system back navigation.
 - Do not remove shared snapshot/session model behavior without full migration.
 - Command/device support must come from `src/core/capabilities.ts`.
-- Apple-family target changes must keep `src/kernel/device.ts`, `src/core/capabilities.ts`, `src/core/dispatch-resolve.ts`, `src/platforms/ios/devices.ts`, and `src/platforms/ios/runner-xctestrun.ts` in sync.
+- Apple-family target changes must keep `src/kernel/device.ts`, `src/core/capabilities.ts`, `src/core/dispatch-resolve.ts`, `src/platforms/apple/core/devices.ts`, and `src/platforms/apple/core/runner/runner-xctestrun.ts` in sync.
 - iOS simulator-set scoping is iOS-specific: do not let `iosSimulatorDeviceSet` hide the host macOS desktop target when `--platform macos` or `--target desktop` is requested.
 - If Swift runner code changes, run `pnpm build:xcuitest`.
 - Use `inferFillText` and `uniqueStrings` from `src/daemon/action-utils.ts`.
@@ -243,7 +243,7 @@ Command-only flags (like `find --first`) that do not flow to the platform layer 
 - Inlining `is` predicate logic in handlers.
 - Returning non-normalized user-facing errors.
 - Duplicating logs backend logic in handlers instead of `src/daemon/app-log.ts`.
-- Growing `src/daemon/handlers/session.ts` or `src/platforms/ios/apps.ts` further without extracting Apple-family/macOS-specific helpers first.
+- Growing `src/daemon/handlers/session.ts` or `src/platforms/apple/core/apps.ts` further without extracting Apple-family/macOS-specific helpers first.
 - Reintroducing an npm lockfile or assuming ESLint/Prettier still exist in this repo.
 - Changing `tsconfig.lib.json`/build tooling without running `pnpm check:tooling`; declaration generation is stricter than `tsc --noEmit`.
 
@@ -280,7 +280,7 @@ Command-only flags (like `find --first`) that do not flow to the platform layer 
 - Command identity + command surface: `src/command-catalog.ts`, `src/commands/command-surface.ts`, `src/commands/command-contract.ts`, `src/commands/client-command-contracts.ts`
 - CLI grammar: `src/commands/cli-grammar.ts`, `src/commands/cli-grammar/*`
 - Daemon request projection: `src/commands/command-projection.ts`
-- Platform backends: `src/platforms/ios/*`, `ios-runner/*`, `src/platforms/android/*`
+- Platform backends: `src/platforms/apple/*`, `src/platforms/ios/*`, `ios-runner/*`, `src/platforms/android/*`
 
 ## Pull Requests
 - Before opening PR: ensure no conflict markers/unmerged paths.

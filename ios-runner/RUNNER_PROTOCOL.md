@@ -41,7 +41,7 @@ Examples:
 
 The current command names are defined in:
 
-- [`../src/platforms/ios/runner-client.ts`](../src/platforms/ios/runner-client.ts)
+- [`../src/platforms/apple/core/runner/runner-client.ts`](../src/platforms/apple/core/runner/runner-client.ts)
 - [`AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift`](AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Models.swift)
 
 ## Response Shape

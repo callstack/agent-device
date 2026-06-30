@@ -62,14 +62,6 @@
       "exports": ["installAndroidInstallablePath"]
     },
     {
-      "file": "src/platforms/ios/apps.ts",
-      "exports": ["listSimulatorApps", "uninstallIosApp"]
-    },
-    {
-      "file": "src/platforms/ios/index.ts",
-      "exports": ["listSimulatorApps", "uninstallIosApp"]
-    },
-    {
       "file": "src/platforms/apple/core/apps.ts",
       "exports": ["listSimulatorApps", "uninstallIosApp"]
     },
