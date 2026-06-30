@@ -1,26 +1,12 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import {
-  buildAndroidRuntimeHints,
-  buildBundleUrl,
-  buildIosRuntimeHints,
-  normalizeBaseUrl,
-  resolveRuntimeTransport,
-} from '../metro.ts';
+import { buildBundleUrl, normalizeBaseUrl, resolveRuntimeTransport } from '../metro.ts';
 
-test('public metro entrypoint exposes url and runtime hint helpers', () => {
+test('public metro entrypoint exposes url and transport helpers', () => {
   assert.equal(normalizeBaseUrl('https://bridge.example.test///'), 'https://bridge.example.test');
   assert.equal(
     buildBundleUrl('https://bridge.example.test/', 'ios'),
     'https://bridge.example.test/index.bundle?platform=ios&dev=true&minify=false',
-  );
-  assert.equal(
-    buildIosRuntimeHints('https://public.example.test').bundleUrl,
-    'https://public.example.test/index.bundle?platform=ios&dev=true&minify=false',
-  );
-  assert.equal(
-    buildAndroidRuntimeHints('https://public.example.test').bundleUrl,
-    'https://public.example.test/index.bundle?platform=android&dev=true&minify=false',
   );
   assert.deepEqual(
     resolveRuntimeTransport({
@@ -33,4 +19,11 @@ test('public metro entrypoint exposes url and runtime hint helpers', () => {
       scheme: 'https',
     },
   );
+});
+
+test('public metro entrypoint does not expose runtime hint builders', async () => {
+  const metro = (await import('../metro.ts')) as Record<string, unknown>;
+
+  assert.equal(metro.buildIosRuntimeHints, undefined);
+  assert.equal(metro.buildAndroidRuntimeHints, undefined);
 });

@@ -4,8 +4,4 @@ export type {
   MetroTunnelRequestMessage,
   MetroTunnelResponseMessage,
 } from './metro/metro.ts';
-export {
-  buildAndroidRuntimeHints,
-  buildIosRuntimeHints,
-  resolveRuntimeTransport,
-} from './metro/metro.ts';
+export { resolveRuntimeTransport } from './metro/metro.ts';

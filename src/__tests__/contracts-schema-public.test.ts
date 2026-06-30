@@ -14,16 +14,14 @@ import type {
   RotateCommandResult,
 } from '../contracts/navigation.ts';
 import type { ViewportCommandResult } from '../contracts/viewport.ts';
+import { centerOfRect, defaultHintForCode, normalizeError } from '../contracts.ts';
 import {
-  defaultHintForCode,
   daemonCommandRequestSchema,
   daemonRuntimeSchema,
-  centerOfRect,
   jsonRpcRequestSchema,
   leaseAllocateSchema,
   leaseHeartbeatSchema,
   leaseReleaseSchema,
-  normalizeError,
   type AppErrorCode,
   type Rect,
   type SnapshotNode,
@@ -49,7 +47,18 @@ test('public contracts error helpers do not load diagnostics module', () => {
   assert.doesNotMatch(errorsSource, /node:/);
 });
 
-test('public contract schemas validate daemon requests and lease payloads', () => {
+test('public contract facade does not expose parser schemas', async () => {
+  const publicContracts = (await import('../contracts.ts')) as Record<string, unknown>;
+
+  assert.equal(publicContracts.daemonCommandRequestSchema, undefined);
+  assert.equal(publicContracts.daemonRuntimeSchema, undefined);
+  assert.equal(publicContracts.jsonRpcRequestSchema, undefined);
+  assert.equal(publicContracts.leaseAllocateSchema, undefined);
+  assert.equal(publicContracts.leaseHeartbeatSchema, undefined);
+  assert.equal(publicContracts.leaseReleaseSchema, undefined);
+});
+
+test('internal contract schemas validate daemon requests and lease payloads', () => {
   const runtime = daemonRuntimeSchema.parse({
     platform: 'ios',
     metroHost: '127.0.0.1',
@@ -185,7 +194,7 @@ test('command result contracts are assignable to command result map', () => {
   );
 });
 
-test('public daemon request schema accepts GitHub Actions artifact install sources', () => {
+test('internal daemon request schema accepts GitHub Actions artifact install sources', () => {
   const artifactIdRequest = daemonCommandRequestSchema.parse({
     command: 'install_source',
     positionals: [],
@@ -292,7 +301,7 @@ test('public contract exports normalize and hint app errors', () => {
   );
 });
 
-test('public contract schemas reject invalid payloads', () => {
+test('internal contract schemas reject invalid payloads', () => {
   assert.throws(
     () =>
       daemonCommandRequestSchema.parse({

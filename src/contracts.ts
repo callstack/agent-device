@@ -13,14 +13,4 @@ export type {
   SessionRuntimeHints,
 } from './kernel/contracts.ts';
 
-export {
-  centerOfRect,
-  daemonCommandRequestSchema,
-  daemonRuntimeSchema,
-  defaultHintForCode,
-  jsonRpcRequestSchema,
-  leaseAllocateSchema,
-  leaseHeartbeatSchema,
-  leaseReleaseSchema,
-  normalizeError,
-} from './kernel/contracts.ts';
+export { centerOfRect, defaultHintForCode, normalizeError } from './kernel/contracts.ts';
