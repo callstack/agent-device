@@ -64,7 +64,75 @@ function screenshotView(data: DaemonResponseData, level: ResponseLevel): DaemonR
   };
 }
 
+// The cheap, agent-actionable scalar fields a `find` / `get` selector read can
+// surface (across the exists / wait / text / attrs / click outcomes). Each is
+// copied verbatim into a digest when present; the verbose matched `node` is the
+// only token sink and is handled separately.
+const SELECTOR_DIGEST_SCALAR_FIELDS = [
+  'found',
+  'ref',
+  'selector',
+  'text',
+  'waitedMs',
+  'locator',
+  'query',
+  'x',
+  'y',
+] as const;
+
+// The semantic attributes of a single matched node an agent reasons about. The
+// verbose framing a digest drops — geometry (`rect`), tree indices
+// (`index`/`parentIndex`/`depth`), and process/app plumbing
+// (`pid`/`bundleId`/`appName`/`windowTitle`/`surface`/…) — is intentionally absent.
+const SELECTOR_DIGEST_NODE_FIELDS = [
+  'role',
+  'type',
+  'subrole',
+  'label',
+  'value',
+  'identifier',
+  'enabled',
+  'selected',
+  'focused',
+  'hittable',
+] as const;
+
+function compactSelectorNode(node: SnapshotNode): Record<string, unknown> {
+  const compact: Record<string, unknown> = { ref: node.ref };
+  for (const field of SELECTOR_DIGEST_NODE_FIELDS) {
+    const value = node[field];
+    if (value !== undefined) compact[field] = value;
+  }
+  return compact;
+}
+
+/**
+ * Token-cheap digest shared by the `find` and `get` selector reads, whose wire
+ * shapes overlap (`ref`/`selector` + `text` for a text read, `+ node` for an
+ * attrs read, and the cheap `found`/`waitedMs`/coordinate signals). It keeps the
+ * agent-actionable essentials and collapses the verbose matched `node`:
+ *   • a text read drops `node` entirely — the `text` IS the answer;
+ *   • an attrs read keeps a COMPACT node (semantic attributes only; geometry and
+ *     internal tree/process plumbing dropped).
+ * `full` returns today's shape unchanged (nothing richer is computed yet).
+ */
+function selectorReadView(data: DaemonResponseData, level: ResponseLevel): DaemonResponseData {
+  if (level !== 'digest') return data;
+  const digest: DaemonResponseData = {};
+  for (const field of SELECTOR_DIGEST_SCALAR_FIELDS) {
+    if (data[field] !== undefined) digest[field] = data[field];
+  }
+  // A text read already carries the answer in `text`, so the node is redundant
+  // framing; an attrs read has no `text`, so keep a compacted node instead.
+  if (typeof data.text !== 'string' && data.node && typeof data.node === 'object') {
+    digest.node = compactSelectorNode(data.node as SnapshotNode);
+  }
+  return digest;
+}
+
 export const RESPONSE_VIEWS: Record<string, ResponseView> = {
   snapshot: snapshotView,
   screenshot: screenshotView,
+  find: selectorReadView,
+  get: selectorReadView,
 };

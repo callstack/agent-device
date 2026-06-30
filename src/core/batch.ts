@@ -1,4 +1,9 @@
-import { type DaemonRequest, type DaemonResponse } from '../kernel/contracts.ts';
+import {
+  type DaemonRequest,
+  type DaemonResponse,
+  type ResponseLevel,
+  isNonDefaultResponseLevel,
+} from '../kernel/contracts.ts';
 import { AppError, asAppError } from '../kernel/errors.ts';
 import { isRecord } from '../utils/parsing.ts';
 import {
@@ -90,7 +95,14 @@ export async function runBatch(
     const startedAt = Date.now();
     const partialResults: BatchStepResult[] = [];
     for (const [index, step] of steps.entries()) {
-      const stepResponse = await runBatchStep(req, sessionName, step, invoke, index + 1);
+      const stepResponse = await runBatchStep(
+        req,
+        sessionName,
+        step,
+        invoke,
+        index + 1,
+        index === steps.length - 1,
+      );
       if (!stepResponse.ok) {
         return {
           ok: false,
@@ -208,12 +220,34 @@ export function mergeParentFlags<TFlags extends Record<string, unknown>>(
   return childFlags;
 }
 
+// Phase 4 (agent-cost) batch-step elision. When a non-default response level is
+// requested for the whole batch, INTERMEDIATE steps are forced to `digest` so a
+// multi-step run collapses tokens, while the FINAL step keeps the requested
+// level. With no responseLevel (or `default`) this is a no-op, so the per-step
+// meta is passed through unchanged — byte-identical to today (Maestro `.ad`
+// recompare safe).
+function batchStepResponseLevel(
+  requested: ResponseLevel | undefined,
+  isFinalStep: boolean,
+): ResponseLevel | undefined {
+  if (!isNonDefaultResponseLevel(requested)) return requested;
+  return isFinalStep ? requested : 'digest';
+}
+
+function batchStepMeta(meta: BatchRequest['meta'], isFinalStep: boolean): BatchRequest['meta'] {
+  const requested = meta?.responseLevel;
+  const stepLevel = batchStepResponseLevel(requested, isFinalStep);
+  if (stepLevel === requested) return meta;
+  return { ...meta, responseLevel: stepLevel };
+}
+
 async function runBatchStep(
   req: BatchRequest,
   sessionName: string,
   step: NormalizedBatchStep,
   invoke: BatchInvoke,
   stepNumber: number,
+  isFinalStep: boolean,
 ): Promise<
   | { ok: true; step: number; result: BatchStepResult }
   | {
@@ -241,7 +275,7 @@ async function runBatchStep(
     positionals: step.positionals,
     flags: stepFlags,
     runtime: step.runtime === undefined ? req.runtime : step.runtime,
-    meta: req.meta,
+    meta: batchStepMeta(req.meta, isFinalStep),
   });
   const durationMs = Date.now() - stepStartedAt;
   if (!response.ok) {
