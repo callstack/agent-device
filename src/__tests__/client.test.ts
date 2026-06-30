@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { createAgentDeviceClient, type AgentDeviceClientConfig } from '../client.ts';
+import { createAgentDeviceClient, type AgentDeviceClientConfig } from '../client/client.ts';
 import { runCommand } from '../commands/command-surface.ts';
 import type { DaemonRequest, DaemonResponse } from '../kernel/contracts.ts';
 import { AppError } from '../kernel/errors.ts';

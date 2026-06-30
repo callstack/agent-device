@@ -16,7 +16,7 @@ import type {
   SwipeOptions,
   TransformGestureOptions,
   TypeTextOptions,
-} from '../../client-types.ts';
+} from '../../client/client-types.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import { REPEATED_TOUCH_FLAGS, SELECTOR_SNAPSHOT_FLAGS } from '../../cli/parser/cli-flags.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';

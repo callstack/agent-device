@@ -2,7 +2,7 @@ import type {
   ElementTarget,
   InteractionTarget,
   InternalRequestOptions,
-} from '../../client-types.ts';
+} from '../../client/client-types.ts';
 import { splitSelectorFromArgs } from '../../utils/selectors-parse.ts';
 import type { CliFlags } from '../../cli/parser/cli-flags.ts';
 import { AppError } from '../../kernel/errors.ts';

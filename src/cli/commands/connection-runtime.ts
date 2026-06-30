@@ -1,10 +1,10 @@
 import { resolveDaemonPaths } from '../../daemon/config.ts';
-import { stopReactDevtoolsCompanion } from '../../client-react-devtools-companion.ts';
+import { stopReactDevtoolsCompanion } from '../../client/client-react-devtools-companion.ts';
 import { stopMetroTunnel } from '../../metro/metro.ts';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 import { resolveDevice, type DeviceInfo } from '../../kernel/device.ts';
 import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
-import type { MetroBridgeScope } from '../../client-companion-tunnel-contract.ts';
+import type { MetroBridgeScope } from '../../client/client-companion-tunnel-contract.ts';
 import {
   buildRemoteConnectionDaemonState,
   buildRemoteConnectionRequestMetadata,
@@ -15,11 +15,11 @@ import {
   type RemoteConnectionRequestMetadata,
 } from '../../remote/remote-connection-state.ts';
 import { profileToCliFlags } from '../../utils/remote-config.ts';
-import type { BatchStep } from '../../client-types.ts';
+import type { BatchStep } from '../../client/client-types.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { LeaseBackend, SessionRuntimeHints } from '../../kernel/contracts.ts';
 import type { CliFlags } from '../parser/cli-flags.ts';
-import type { AgentDeviceClient, Lease } from '../../client.ts';
+import type { AgentDeviceClient, Lease } from '../../client/client.ts';
 import type { MetroPrepareKind } from '../../metro/client-metro.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 

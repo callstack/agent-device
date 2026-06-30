@@ -1,4 +1,4 @@
-import type { CommandRequestResult } from '../../client-types.ts';
+import type { CommandRequestResult } from '../../client/client-types.ts';
 import type { CliOutput } from '../command-contract.ts';
 import { messageCliOutput, resultOutput, type CliOutputFormatter } from '../output-common.ts';
 

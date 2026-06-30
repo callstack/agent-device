@@ -6,7 +6,7 @@ vi.mock('../utils/exec.ts', () => ({
   runCmdStreaming: vi.fn(),
 }));
 
-vi.mock('../client-react-devtools-companion.ts', () => ({
+vi.mock('../client/client-react-devtools-companion.ts', () => ({
   ensureReactDevtoolsCompanion: vi.fn(),
   stopReactDevtoolsCompanion: vi.fn(),
 }));
@@ -15,7 +15,7 @@ import { runCmdStreaming } from '../utils/exec.ts';
 import {
   ensureReactDevtoolsCompanion,
   stopReactDevtoolsCompanion,
-} from '../client-react-devtools-companion.ts';
+} from '../client/client-react-devtools-companion.ts';
 import {
   AGENT_REACT_DEVTOOLS_PACKAGE,
   buildReactDevtoolsNpmExecArgs,

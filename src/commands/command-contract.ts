@@ -1,4 +1,4 @@
-import type { AgentDeviceClient } from '../client-types.ts';
+import type { AgentDeviceClient } from '../client/client-types.ts';
 
 export type JsonSchema = {
   type?: string | readonly string[];

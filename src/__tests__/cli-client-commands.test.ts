@@ -12,8 +12,8 @@ import type {
   AppOpenOptions,
   MetroPrepareOptions,
   MetroReloadOptions,
-} from '../client.ts';
-import type { SettingsUpdateOptions } from '../client-types.ts';
+} from '../client/client.ts';
+import type { SettingsUpdateOptions } from '../client/client-types.ts';
 import { AppError } from '../kernel/errors.ts';
 import { resolveCliOptions } from '../utils/cli-options.ts';
 

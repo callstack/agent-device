@@ -13,7 +13,7 @@ import { buildSnapshotSignatures } from '../../android-snapshot-freshness.ts';
 import { buildInteractionSurfaceSignature } from '../../interaction-outcome-policy.ts';
 import { buildSnapshotPresentationKey } from '../../../kernel/snapshot.ts';
 import { snapshotCliOutput } from '../../../commands/capture/output.ts';
-import type { CaptureSnapshotResult } from '../../../client-types.ts';
+import type { CaptureSnapshotResult } from '../../../client/client-types.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();

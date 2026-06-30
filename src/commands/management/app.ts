@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { AppCloseOptions } from '../../client-types.ts';
+import type { AppCloseOptions } from '../../client/client-types.ts';
 import { DEFAULT_APPS_FILTER } from '../../contracts/app-inventory.ts';
 import { SESSION_SURFACES } from '../../core/session-surface.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';

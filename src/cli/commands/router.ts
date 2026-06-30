@@ -1,5 +1,5 @@
 import type { CliFlags } from '../parser/cli-flags.ts';
-import type { AgentDeviceClient } from '../../client.ts';
+import type { AgentDeviceClient } from '../../client/client.ts';
 import {
   isClientBackedCliCommandName,
   type ClientBackedCliCommandName,

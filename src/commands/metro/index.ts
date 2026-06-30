@@ -4,7 +4,7 @@ import type {
   MetroPrepareResult,
   MetroReloadOptions,
   MetroReloadResult,
-} from '../../client-types.ts';
+} from '../../client/client-types.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import {

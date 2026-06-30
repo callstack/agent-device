@@ -14,7 +14,7 @@ import { resolveInstallSource } from '../install-source-resolution.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 
-import { resolveInstallFromSourceResultTarget } from '../../client-shared.ts';
+import { resolveInstallFromSourceResultTarget } from '../../client/client-shared.ts';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { withSuccessText } from '../../utils/success-text.ts';
 import { requireCommandSupported } from './response.ts';

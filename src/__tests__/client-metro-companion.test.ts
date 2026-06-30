@@ -23,7 +23,7 @@ import {
   waitForProcessExit,
 } from '../utils/process-identity.ts';
 import { ensureMetroCompanion, stopMetroCompanion } from '../metro/client-metro-companion.ts';
-import { ensureReactDevtoolsCompanion } from '../client-react-devtools-companion.ts';
+import { ensureReactDevtoolsCompanion } from '../client/client-react-devtools-companion.ts';
 
 const TEST_BRIDGE_SCOPE = {
   tenantId: 'tenant-1',
@@ -41,7 +41,7 @@ function assertCompanionSpawnTarget(): void {
   assert.ok(firstCall, 'expected runCmdDetached to be called');
   assert.equal(firstCall[0], process.execPath);
   assert.ok(
-    firstCall[1].some((arg) => arg.includes('src/companion-tunnel.ts')),
+    firstCall[1].some((arg) => arg.includes('src/client/companion-tunnel.ts')),
     `expected companion entry path in ${JSON.stringify(firstCall[1])}`,
   );
   assert.equal(firstCall[1].at(-1), '--agent-device-run-metro-companion');
@@ -62,7 +62,7 @@ test('companion ownership is profile-scoped and consumer-counted', async () => {
       pid === 111 ? 'start-111' : 'start-222',
     );
     vi.mocked(readProcessCommand).mockImplementation(
-      () => `${process.execPath} src/companion-tunnel.ts --agent-device-run-metro-companion`,
+      () => `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`,
     );
     vi.mocked(waitForProcessExit).mockResolvedValue(true);
     const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
@@ -161,7 +161,7 @@ test('launchUrl changes force a companion respawn for the same profile', async (
       pid === 333 ? 'start-333' : 'start-444',
     );
     vi.mocked(readProcessCommand).mockImplementation(
-      () => `${process.execPath} src/companion-tunnel.ts --agent-device-run-metro-companion`,
+      () => `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`,
     );
     vi.mocked(waitForProcessExit).mockResolvedValue(true);
     const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);
@@ -212,8 +212,8 @@ test('metro and React DevTools companions use distinct profile state paths', asy
     );
     vi.mocked(readProcessCommand).mockImplementation((pid) =>
       pid === 888
-        ? `${process.execPath} src/companion-tunnel.ts --agent-device-run-react-devtools-companion`
-        : `${process.execPath} src/companion-tunnel.ts --agent-device-run-metro-companion`,
+        ? `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-react-devtools-companion`
+        : `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`,
     );
 
     const profileKey = '/tmp/shared-remote.json';
@@ -257,7 +257,7 @@ test('spawned companion uses neutral env names', async () => {
     vi.mocked(runCmdDetached).mockReturnValueOnce(999);
     vi.mocked(readProcessStartTime).mockReturnValue('start-999');
     vi.mocked(readProcessCommand).mockReturnValue(
-      `${process.execPath} src/companion-tunnel.ts --agent-device-run-metro-companion`,
+      `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`,
     );
 
     await ensureMetroCompanion({
@@ -298,7 +298,7 @@ test('state sentinel exists before spawning companion worker', async () => {
     });
     vi.mocked(readProcessStartTime).mockReturnValue('start-1001');
     vi.mocked(readProcessCommand).mockReturnValue(
-      `${process.execPath} src/companion-tunnel.ts --agent-device-run-metro-companion`,
+      `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`,
     );
 
     const spawned = await ensureMetroCompanion({
@@ -333,7 +333,7 @@ test('legacy state without bridge scope is stopped before respawn', async () => 
       `${JSON.stringify({
         pid: 555,
         startTime: 'start-555',
-        command: `${process.execPath} src/companion-tunnel.ts --agent-device-run-metro-companion`,
+        command: `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`,
         serverBaseUrl: 'https://bridge.example.test',
         localBaseUrl: 'http://127.0.0.1:8081',
         tokenHash: 'legacy-token-hash',
@@ -345,7 +345,7 @@ test('legacy state without bridge scope is stopped before respawn', async () => 
     vi.mocked(isProcessAlive).mockReturnValue(true);
     vi.mocked(readProcessStartTime).mockReturnValue('start-555');
     vi.mocked(readProcessCommand).mockReturnValue(
-      `${process.execPath} src/companion-tunnel.ts --agent-device-run-metro-companion`,
+      `${process.execPath} src/client/companion-tunnel.ts --agent-device-run-metro-companion`,
     );
     vi.mocked(waitForProcessExit).mockResolvedValue(true);
     const killSpy = vi.spyOn(process, 'kill').mockImplementation(() => true);

@@ -1,4 +1,4 @@
-import type { InteractionTarget, InternalRequestOptions } from '../../client-types.ts';
+import type { InteractionTarget, InternalRequestOptions } from '../../client/client-types.ts';
 import type { CommandFlags } from '../../core/dispatch-context.ts';
 import type { CliFlags } from '../../cli/parser/cli-flags.ts';
 import type { ClickButton } from '../../core/click-button.ts';

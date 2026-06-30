@@ -5,12 +5,12 @@ import { readVersion } from './utils/version.ts';
 import { pathToFileURL } from 'node:url';
 import { sendToDaemon } from './daemon-client.ts';
 import fs from 'node:fs';
-import type { BatchStep } from './client-types.ts';
+import type { BatchStep } from './client/client-types.ts';
 import {
   createAgentDeviceClient,
   type AgentDeviceClientConfig,
   type AgentDeviceDaemonTransport,
-} from './client.ts';
+} from './client/client.ts';
 import { materializeRemoteConnectionForCommand } from './cli/commands/connection-runtime.ts';
 import { tryRunClientBackedCommand } from './cli/commands/router.ts';
 import { runAgentCdpCommand } from './cli/commands/agent-cdp.ts';

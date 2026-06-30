@@ -1,4 +1,4 @@
-import type { AgentDeviceClient } from '../client-types.ts';
+import type { AgentDeviceClient } from '../client/client-types.ts';
 import { listCommandFamilyDefinitions, type CommandFamilyDefinition } from './family/registry.ts';
 import type { BatchCommandName } from './command-projection.ts';
 import type { CommandName } from './command-metadata.ts';

@@ -1,5 +1,5 @@
-import type { PublicSnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
-import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
+import type { PublicSnapshotCaptureAnnotations } from '../snapshot-capture-annotations.ts';
+import type { SnapshotDiagnosticsSummary } from '../snapshot-diagnostics.ts';
 import type {
   DaemonResponseData,
   DaemonInstallSource,
@@ -11,58 +11,58 @@ import type {
   ResponseLevel,
   SessionIsolationMode,
   SessionRuntimeHints,
-} from './kernel/contracts.ts';
-import type { DeviceKind, DeviceTarget, Platform, PlatformSelector } from './kernel/device.ts';
-import type { BackMode } from './core/back-mode.ts';
-import type { ClickButton } from './core/click-button.ts';
-import type { RecordingExportQuality } from './core/recording-export-quality.ts';
-import type { DeviceRotation } from './core/device-rotation.ts';
+} from '../kernel/contracts.ts';
+import type { DeviceKind, DeviceTarget, Platform, PlatformSelector } from '../kernel/device.ts';
+import type { BackMode } from '../core/back-mode.ts';
+import type { ClickButton } from '../core/click-button.ts';
+import type { RecordingExportQuality } from '../core/recording-export-quality.ts';
+import type { DeviceRotation } from '../core/device-rotation.ts';
 import type {
   ScrollDirection,
   SwipePattern,
   SwipePreset,
   TransformGestureParams,
-} from './core/scroll-gesture.ts';
-import type { ScrollInputDirection } from './commands/interaction/runtime/gestures.ts';
-import type { LogAction } from './contracts/logs.ts';
-import type { SessionSurface } from './core/session-surface.ts';
-import type { FindLocator } from './utils/finders.ts';
-import type { SnapshotNode, SnapshotUnchanged, SnapshotVisibility } from './kernel/snapshot.ts';
-import type { ScreenshotResultData } from './utils/screenshot-result.ts';
+} from '../core/scroll-gesture.ts';
+import type { ScrollInputDirection } from '../commands/interaction/runtime/gestures.ts';
+import type { LogAction } from '../contracts/logs.ts';
+import type { SessionSurface } from '../core/session-surface.ts';
+import type { FindLocator } from '../utils/finders.ts';
+import type { SnapshotNode, SnapshotUnchanged, SnapshotVisibility } from '../kernel/snapshot.ts';
+import type { ScreenshotResultData } from '../utils/screenshot-result.ts';
 import type {
   MetroPrepareKind,
   PrepareMetroRuntimeResult,
   ReloadMetroResult,
-} from './metro/client-metro.ts';
+} from '../metro/client-metro.ts';
 import type { MetroBridgeScope } from './client-companion-tunnel-contract.ts';
-import type { AppsFilter } from './contracts/app-inventory.ts';
-import type { ScreenshotRequestFlags } from './contracts/screenshot.ts';
-import type { BatchRunResult, DaemonBatchStep } from './core/batch.ts';
-export type { BatchRunResult } from './core/batch.ts';
-import type { TargetShutdownResult } from './target-shutdown-contract.ts';
-export type { TargetShutdownResult } from './target-shutdown-contract.ts';
-import type { PerfAction, PerfArea, PerfKind, PerfSubject } from './contracts/perf.ts';
-import type { AlertAction } from './alert-contract.ts';
-import type { DebugSymbolsOptions, DebugSymbolsResult } from './contracts/debug-symbols.ts';
-import type { RemoteConnectionProfileFields } from './remote/remote-config-schema.ts';
-import type { CommandResult } from './core/command-descriptor/command-result.ts';
+import type { AppsFilter } from '../contracts/app-inventory.ts';
+import type { ScreenshotRequestFlags } from '../contracts/screenshot.ts';
+import type { BatchRunResult, DaemonBatchStep } from '../core/batch.ts';
+export type { BatchRunResult } from '../core/batch.ts';
+import type { TargetShutdownResult } from '../target-shutdown-contract.ts';
+export type { TargetShutdownResult } from '../target-shutdown-contract.ts';
+import type { PerfAction, PerfArea, PerfKind, PerfSubject } from '../contracts/perf.ts';
+import type { AlertAction } from '../alert-contract.ts';
+import type { DebugSymbolsOptions, DebugSymbolsResult } from '../contracts/debug-symbols.ts';
+import type { RemoteConnectionProfileFields } from '../remote/remote-config-schema.ts';
+import type { CommandResult } from '../core/command-descriptor/command-result.ts';
 
-export type { FindLocator } from './utils/finders.ts';
+export type { FindLocator } from '../utils/finders.ts';
 export type { CompanionTunnelScope, MetroBridgeScope } from './client-companion-tunnel-contract.ts';
-export type { AppsFilter } from './contracts/app-inventory.ts';
-export type { AlertAction, AlertInfo, AlertPlatform, AlertSource } from './alert-contract.ts';
-export type { DebugSymbolsOptions, DebugSymbolsResult } from './contracts/debug-symbols.ts';
-export type { BootCommandResult, ShutdownCommandResult } from './contracts/device.ts';
-export type { ViewportCommandResult } from './contracts/viewport.ts';
+export type { AppsFilter } from '../contracts/app-inventory.ts';
+export type { AlertAction, AlertInfo, AlertPlatform, AlertSource } from '../alert-contract.ts';
+export type { DebugSymbolsOptions, DebugSymbolsResult } from '../contracts/debug-symbols.ts';
+export type { BootCommandResult, ShutdownCommandResult } from '../contracts/device.ts';
+export type { ViewportCommandResult } from '../contracts/viewport.ts';
 export type {
   AppSwitcherCommandResult,
   BackCommandResult,
   HomeCommandResult,
   RotateCommandResult,
-} from './contracts/navigation.ts';
-export type { ClipboardCommandResult } from './contracts/clipboard.ts';
-export type { AppStateCommandResult } from './contracts/app-state.ts';
-export type { KeyboardCommandResult } from './contracts/keyboard.ts';
+} from '../contracts/navigation.ts';
+export type { ClipboardCommandResult } from '../contracts/clipboard.ts';
+export type { AppStateCommandResult } from '../contracts/app-state.ts';
+export type { KeyboardCommandResult } from '../contracts/keyboard.ts';
 
 export type AgentDeviceDaemonTransport = (
   req: Omit<DaemonRequest, 'token'>,

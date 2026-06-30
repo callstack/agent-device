@@ -1,15 +1,15 @@
-import type { CommandFlags } from './core/dispatch.ts';
-import { screenshotFlagsFromOptions } from './contracts/screenshot.ts';
-import type { DaemonRequest, SessionRuntimeHints } from './daemon/types.ts';
-import { AppError, type NormalizedError } from './kernel/errors.ts';
-import type { SnapshotNode } from './kernel/snapshot.ts';
+import type { CommandFlags } from '../core/dispatch.ts';
+import { screenshotFlagsFromOptions } from '../contracts/screenshot.ts';
+import type { DaemonRequest, SessionRuntimeHints } from '../daemon/types.ts';
+import { AppError, type NormalizedError } from '../kernel/errors.ts';
+import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { buildAppIdentifiers, buildDeviceIdentifiers } from './client-shared.ts';
-import { isPlatform } from './kernel/device.ts';
+import { isPlatform } from '../kernel/device.ts';
 import {
   leaseScopeFromOptions,
   leaseScopeToCommandFlags,
   leaseScopeToRequestMeta,
-} from './core/lease-scope.ts';
+} from '../core/lease-scope.ts';
 import type {
   AgentDeviceDevice,
   AgentDeviceSession,
@@ -32,9 +32,9 @@ import {
   readRequiredPlatform,
   readRequiredString,
   stripUndefined,
-} from './utils/parsing.ts';
+} from '../utils/parsing.ts';
 
-export { readOptionalString, readRequiredString } from './utils/parsing.ts';
+export { readOptionalString, readRequiredString } from '../utils/parsing.ts';
 
 const DEFAULT_SESSION_NAME = 'default';
 

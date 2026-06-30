@@ -13,9 +13,9 @@ import type {
 import {
   publicSnapshotCaptureAnnotations,
   type SnapshotCaptureAnnotations,
-} from './snapshot-capture-annotations.ts';
-import type { Platform } from './kernel/device.ts';
-import { successText, withSuccessText } from './utils/success-text.ts';
+} from '../snapshot-capture-annotations.ts';
+import type { Platform } from '../kernel/device.ts';
+import { successText, withSuccessText } from '../utils/success-text.ts';
 
 export function buildAppIdentifiers(params: {
   session?: string;

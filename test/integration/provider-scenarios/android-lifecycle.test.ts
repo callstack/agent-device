@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
-import type { AgentDeviceClient } from '../../../src/client-types.ts';
+import type { AgentDeviceClient } from '../../../src/client/client-types.ts';
 import {
   arrayEqual,
   assertCommandCall,

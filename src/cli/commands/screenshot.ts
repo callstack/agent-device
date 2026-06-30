@@ -3,7 +3,7 @@ import { AppError } from '../../kernel/errors.ts';
 import { isNonDefaultResponseLevel } from '../../kernel/contracts.ts';
 import { resolveUserPath } from '../../utils/path-resolution.ts';
 import type { AgentDeviceBackend } from '../../backend.ts';
-import type { AgentDeviceClient, CaptureScreenshotResult } from '../../client.ts';
+import type { AgentDeviceClient, CaptureScreenshotResult } from '../../client/client.ts';
 import { createLocalArtifactAdapter } from '../../io.ts';
 import { createAgentDevice, localCommandPolicy } from '../../runtime.ts';
 import { runCliCommand } from '../../commands/cli-runner.ts';

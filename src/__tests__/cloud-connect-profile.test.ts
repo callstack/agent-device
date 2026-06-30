@@ -10,7 +10,7 @@ import {
   readActiveConnectionState,
   type RemoteConnectionState,
 } from '../remote/remote-connection-state.ts';
-import type { AgentDeviceClient } from '../client.ts';
+import type { AgentDeviceClient } from '../client/client.ts';
 
 vi.mock('../cli/auth-session.ts', () => ({
   resolveCloudAccessForConnect: vi.fn(),

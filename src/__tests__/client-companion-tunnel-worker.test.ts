@@ -11,7 +11,7 @@ import { afterEach, test } from 'vitest';
 import {
   buildCompanionPayload,
   runCompanionTunnelWorker,
-} from '../client-companion-tunnel-worker.ts';
+} from '../client/client-companion-tunnel-worker.ts';
 import { closeLoopbackServer, listenOnLoopback } from './test-utils/index.ts';
 
 type Deferred<T> = {
@@ -243,7 +243,11 @@ function spawnMetroCompanionWorker(options: {
   const localBaseUrl = options.localBaseUrl ?? `http://127.0.0.1:${options.localPort}`;
   const companion = spawn(
     process.execPath,
-    ['--experimental-strip-types', 'src/companion-tunnel.ts', '--agent-device-run-metro-companion'],
+    [
+      '--experimental-strip-types',
+      'src/client/companion-tunnel.ts',
+      '--agent-device-run-metro-companion',
+    ],
     {
       cwd: process.cwd(),
       env: {

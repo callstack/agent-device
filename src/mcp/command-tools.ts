@@ -1,4 +1,4 @@
-import type { AgentDeviceClient, AgentDeviceClientConfig } from '../client-types.ts';
+import type { AgentDeviceClient, AgentDeviceClientConfig } from '../client/client-types.ts';
 import type { JsonSchema } from '../commands/command-contract.ts';
 import { RESPONSE_LEVELS, type ResponseLevel } from '../kernel/contracts.ts';
 import { formatCliOutput } from '../commands/cli-output.ts';
@@ -94,7 +94,7 @@ async function createClient(
   config: AgentDeviceClientConfig,
 ): Promise<AgentDeviceClient> {
   if (deps.createClient) return await deps.createClient(config);
-  const { createAgentDeviceClient } = await import('../client.ts');
+  const { createAgentDeviceClient } = await import('../client/client.ts');
   return createAgentDeviceClient(config);
 }
 

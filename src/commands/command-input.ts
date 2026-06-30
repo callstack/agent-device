@@ -3,7 +3,7 @@ import type {
   AgentDeviceSelectionOptions,
   ElementTarget,
   InteractionTarget,
-} from '../client-types.ts';
+} from '../client/client-types.ts';
 import {
   DEVICE_TARGETS,
   PLATFORM_SELECTORS,

@@ -2,7 +2,7 @@ import { runCmdStreaming } from '../../utils/exec.ts';
 import {
   ensureReactDevtoolsCompanion,
   stopReactDevtoolsCompanion,
-} from '../../client-react-devtools-companion.ts';
+} from '../../client/client-react-devtools-companion.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { isRemoteBridgeBackend } from './remote-bridge.ts';
 import type { CliFlags } from '../parser/cli-flags.ts';

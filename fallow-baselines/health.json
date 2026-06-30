@@ -74,7 +74,7 @@
         "count": 1
       }
     },
-    "src/client-companion-tunnel-worker.ts": {
+    "src/client/client-companion-tunnel-worker.ts": {
       "complexity_high": {
         "count": 1
       },
@@ -82,7 +82,7 @@
         "count": 3
       }
     },
-    "src/client-companion-tunnel.ts": {
+    "src/client/client-companion-tunnel.ts": {
       "crap_high": {
         "count": 2
       },
@@ -95,7 +95,7 @@
         "count": 3
       }
     },
-    "src/client-shared.ts": {
+    "src/client/client-shared.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -688,7 +688,7 @@
     "src/snapshot/snapshot-processing.ts:high impact",
     "src/daemon/handlers/session-device-utils.ts:high impact",
     "src/commands/cli-grammar/common.ts:high impact",
-    "src/client-shared.ts:high impact",
+    "src/client/client-shared.ts:high impact",
     "src/replay/script.ts:complexity",
     "src/commands/selector-read-utils.ts:high impact",
     "src/core/interaction-targeting.ts:high impact",
@@ -736,6 +736,6 @@
     "src/platforms/android/app-parsers.ts:high impact",
     "src/utils/source-value.ts:high impact",
     "src/platforms/android/sdk.ts:high impact",
-    "src/client-companion-tunnel-worker.ts:complexity"
+    "src/client/client-companion-tunnel-worker.ts:complexity"
   ]
 }

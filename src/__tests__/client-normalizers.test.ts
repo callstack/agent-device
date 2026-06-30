@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { normalizeOpenDevice } from '../client-normalizers.ts';
+import { normalizeOpenDevice } from '../client/client-normalizers.ts';
 import { PLATFORMS } from '../kernel/device.ts';
 
 test('normalizeOpenDevice accepts exactly the canonical leaf platforms', () => {

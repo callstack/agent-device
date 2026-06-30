@@ -33,7 +33,7 @@ export default defineConfig({
         'src/artifacts.ts',
         'src/batch.ts',
         'src/bin.ts',
-        'src/client-types.ts',
+        'src/client/client-types.ts',
         'src/core/interactor-types.ts',
         'src/index.ts',
         'src/install-source.ts',

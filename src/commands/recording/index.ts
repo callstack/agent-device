@@ -1,4 +1,4 @@
-import type { RecordOptions } from '../../client-types.ts';
+import type { RecordOptions } from '../../client/client-types.ts';
 import { RECORDING_EXPORT_QUALITIES } from '../../core/recording-export-quality.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';

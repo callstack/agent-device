@@ -5,7 +5,7 @@ import {
   serializeInstallFromSourceResult,
   serializeOpenResult,
   serializeSessionListEntry,
-} from '../../client-shared.ts';
+} from '../../client/client-shared.ts';
 import type {
   AgentDeviceDevice,
   AgentDeviceSession,
@@ -15,7 +15,7 @@ import type {
   AppOpenResult,
   CommandRequestResult,
   SessionCloseResult,
-} from '../../client-types.ts';
+} from '../../client/client-types.ts';
 import { readCommandMessage } from '../../utils/success-text.ts';
 import type { CliOutput } from '../command-contract.ts';
 import {

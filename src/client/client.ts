@@ -1,14 +1,14 @@
-import { sendToDaemon } from './daemon-client.ts';
-import { prepareMetroRuntime, reloadMetro } from './metro/client-metro.ts';
-import { resolveDaemonPaths } from './daemon/config.ts';
-import { symbolicateCrashArtifact } from './platforms/ios/debug-symbols.ts';
-import { INTERNAL_COMMANDS } from './command-catalog.ts';
+import { sendToDaemon } from '../daemon-client.ts';
+import { prepareMetroRuntime, reloadMetro } from '../metro/client-metro.ts';
+import { resolveDaemonPaths } from '../daemon/config.ts';
+import { symbolicateCrashArtifact } from '../platforms/ios/debug-symbols.ts';
+import { INTERNAL_COMMANDS } from '../command-catalog.ts';
 import {
   prepareDaemonCommandRequest,
   type DaemonCommandName,
-} from './commands/command-projection.ts';
-import { buildRequestFlags } from './commands/command-flags.ts';
-import { throwDaemonError } from './daemon-error.ts';
+} from '../commands/command-projection.ts';
+import { buildRequestFlags } from '../commands/command-flags.ts';
+import { throwDaemonError } from '../daemon-error.ts';
 import {
   buildMeta,
   normalizeDeployResult,
@@ -25,8 +25,8 @@ import {
   readSnapshotNodes,
   resolveSessionName,
 } from './client-normalizers.ts';
-import { readScreenshotResultData } from './utils/screenshot-result.ts';
-import { isRecord } from './utils/parsing.ts';
+import { readScreenshotResultData } from '../utils/screenshot-result.ts';
+import { isRecord } from '../utils/parsing.ts';
 import type {
   AgentDeviceClient,
   AgentDeviceClientConfig,
@@ -46,11 +46,11 @@ import type {
   MaterializationReleaseOptions,
   MetroPrepareOptions,
 } from './client-types.ts';
-import type { CommandResult } from './core/command-descriptor/command-result.ts';
-import { isNonDefaultResponseLevel, type ResponseLevel } from './kernel/contracts.ts';
-import { readSerializedSnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
-import { readSnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
-import type { CommandFlags } from './core/dispatch-context.ts';
+import type { CommandResult } from '../core/command-descriptor/command-result.ts';
+import { isNonDefaultResponseLevel, type ResponseLevel } from '../kernel/contracts.ts';
+import { readSerializedSnapshotCaptureAnnotations } from '../snapshot-capture-annotations.ts';
+import { readSnapshotDiagnosticsSummary } from '../snapshot-diagnostics.ts';
+import type { CommandFlags } from '../core/dispatch-context.ts';
 
 export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},

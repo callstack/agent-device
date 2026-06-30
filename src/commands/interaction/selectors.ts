@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { FindOptions, IsOptions } from '../../client-types.ts';
+import type { FindOptions, IsOptions } from '../../client/client-types.ts';
 import type { CliFlags } from '../../cli/parser/cli-flags.ts';
 import { AppError } from '../../kernel/errors.ts';
 import {

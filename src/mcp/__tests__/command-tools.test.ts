@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { AgentDeviceClient } from '../../client-types.ts';
+import type { AgentDeviceClient } from '../../client/client-types.ts';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
 
 test('MCP command tool executor hides client creation behind an execution adapter', async () => {

@@ -2,7 +2,7 @@ import type {
   AppStateCommandResult,
   ClipboardCommandResult,
   KeyboardCommandResult,
-} from '../../client-types.ts';
+} from '../../client/client-types.ts';
 import type { CliOutput } from '../command-contract.ts';
 import {
   messageCliOutput,

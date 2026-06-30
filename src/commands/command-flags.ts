@@ -1,7 +1,7 @@
-import { buildFlags } from '../client-normalizers.ts';
+import { buildFlags } from '../client/client-normalizers.ts';
 import type { CommandFlags } from '../core/dispatch-context.ts';
 import { getFlagDefinitions } from '../cli/parser/cli-flags.ts';
-import type { InternalRequestOptions } from '../client-types.ts';
+import type { InternalRequestOptions } from '../client/client-types.ts';
 import type { CommandMetadata } from './command-contract.ts';
 
 const CLI_FLAG_KEYS: ReadonlySet<string> = new Set(

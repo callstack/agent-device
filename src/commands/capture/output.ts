@@ -1,5 +1,5 @@
-import { serializeSnapshotResult } from '../../client-shared.ts';
-import type { CaptureSnapshotResult } from '../../client-types.ts';
+import { serializeSnapshotResult } from '../../client/client-shared.ts';
+import type { CaptureSnapshotResult } from '../../client/client-types.ts';
 import { formatSnapshotText } from '../../utils/output.ts';
 import type { CliOutput } from '../command-contract.ts';
 import { messageOutput, type CliOutputFormatter } from '../output-common.ts';

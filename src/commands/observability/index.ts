@@ -1,4 +1,4 @@
-import type { LogsOptions, NetworkOptions } from '../../client-types.ts';
+import type { LogsOptions, NetworkOptions } from '../../client/client-types.ts';
 import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '../../kernel/contracts.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { parseStringMember } from '../../utils/string-enum.ts';

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { sleep } from '../utils/timeouts.ts';
 import { ensureMetroCompanion } from './client-metro-companion.ts';
-import type { MetroBridgeScope } from '../client-companion-tunnel-contract.ts';
+import type { MetroBridgeScope } from '../client/client-companion-tunnel-contract.ts';
 import type {
   MetroBridgeDescriptor,
   MetroBridgeResult,
@@ -31,7 +31,7 @@ type EnvSource = NodeJS.ProcessEnv | Record<string, string | undefined>;
 export type {
   CompanionTunnelScope,
   MetroBridgeScope,
-} from '../client-companion-tunnel-contract.ts';
+} from '../client/client-companion-tunnel-contract.ts';
 
 type PackageJsonShape = {
   dependencies?: Record<string, string>;

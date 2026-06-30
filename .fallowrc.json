@@ -14,7 +14,7 @@
     "src/selectors.ts",
     "src/finders.ts",
     "src/bin.ts",
-    "src/companion-tunnel.ts",
+    "src/client/companion-tunnel.ts",
     "src/daemon.ts",
     "src/utils/png-worker.ts",
     "scripts/patch-xcuitest-runner-icon.ts",

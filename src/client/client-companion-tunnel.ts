@@ -17,14 +17,14 @@ import {
   ENV_COMPANION_TUNNEL_UNREGISTER_PATH,
 } from './client-companion-tunnel-contract.ts';
 import type { CompanionTunnelScope } from './client-companion-tunnel-contract.ts';
-import { normalizeBaseUrl } from './utils/url.ts';
-import { runCmdDetached } from './utils/exec.ts';
+import { normalizeBaseUrl } from '../utils/url.ts';
+import { runCmdDetached } from '../utils/exec.ts';
 import {
   isProcessAlive,
   readProcessCommand,
   readProcessStartTime,
   waitForProcessExit,
-} from './utils/process-identity.ts';
+} from '../utils/process-identity.ts';
 
 const COMPANION_TUNNEL_TERM_TIMEOUT_MS = 1_000;
 const COMPANION_TUNNEL_KILL_TIMEOUT_MS = 1_000;

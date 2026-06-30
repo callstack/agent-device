@@ -1,4 +1,4 @@
-import type { BatchRunOptions } from '../../client-types.ts';
+import type { BatchRunOptions } from '../../client/client-types.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import { commonInputFromFlags } from '../cli-grammar/common.ts';
 import type { CliReader } from '../cli-grammar/types.ts';

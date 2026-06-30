@@ -1,4 +1,4 @@
-import type { AgentDeviceClient, CommandRequestResult } from '../client.ts';
+import type { AgentDeviceClient, CommandRequestResult } from '../client/client.ts';
 import { formatCliOutput } from './cli-output.ts';
 import { readInputFromCli } from './cli-grammar.ts';
 import { runCommand, type CommandName } from './command-surface.ts';

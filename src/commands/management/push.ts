@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { AppPushOptions, AppTriggerEventOptions } from '../../client-types.ts';
+import type { AppPushOptions, AppTriggerEventOptions } from '../../client/client-types.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import {
   jsonSchemaField,

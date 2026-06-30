@@ -1,4 +1,4 @@
-import type { DebugSymbolsResult } from '../../client-types.ts';
+import type { DebugSymbolsResult } from '../../client/client-types.ts';
 import type { CliOutput } from '../command-contract.ts';
 import { resultOutput, type CliOutputFormatter } from '../output-common.ts';
 
