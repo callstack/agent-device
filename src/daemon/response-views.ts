@@ -64,22 +64,6 @@ function screenshotView(data: DaemonResponseData, level: ResponseLevel): DaemonR
   };
 }
 
-// The cheap, agent-actionable scalar fields a `find` / `get` selector read can
-// surface (across the exists / wait / text / attrs / click outcomes). Each is
-// copied verbatim into a digest when present; the verbose matched `node` is the
-// only token sink and is handled separately.
-const SELECTOR_DIGEST_SCALAR_FIELDS = [
-  'found',
-  'ref',
-  'selector',
-  'text',
-  'waitedMs',
-  'locator',
-  'query',
-  'x',
-  'y',
-] as const;
-
 // The semantic attributes of a single matched node an agent reasons about. The
 // verbose framing a digest drops — geometry (`rect`), tree indices
 // (`index`/`parentIndex`/`depth`), and process/app plumbing
@@ -107,27 +91,33 @@ function compactSelectorNode(node: SnapshotNode): Record<string, unknown> {
 }
 
 /**
- * Token-cheap digest shared by the `find` and `get` selector reads, whose wire
- * shapes overlap (`ref`/`selector` + `text` for a text read, `+ node` for an
- * attrs read, and the cheap `found`/`waitedMs`/coordinate signals). It keeps the
- * agent-actionable essentials and collapses the verbose matched `node`:
- *   • a text read drops `node` entirely — the `text` IS the answer;
- *   • an attrs read keeps a COMPACT node (semantic attributes only; geometry and
- *     internal tree/process plumbing dropped).
- * `full` returns today's shape unchanged (nothing richer is computed yet).
+ * Token-cheap digest shared by the `find` and `get` commands. The ONLY token
+ * sink in their results is the verbose matched `node`, which appears solely on a
+ * selector READ (text / attrs). The view is deliberately CONSERVATIVE: it acts
+ * only on a result that carries such a `node` and otherwise returns the data
+ * UNCHANGED — so the cheap exists/wait/click results AND the mutating
+ * `find fill` / `find focus` / `find type` interaction responses (which can
+ * carry agent-critical signals like `warning` / `message`) are never silently
+ * narrowed.
+ *
+ *   • a text read drops the redundant `node` — the `text` IS the answer;
+ *   • an attrs read compacts the `node` to its semantic attributes only;
+ *
+ * In both cases every OTHER (cheap) field is preserved verbatim. `default` and
+ * `full` return today's shape unchanged (nothing richer is computed yet).
  */
 function selectorReadView(data: DaemonResponseData, level: ResponseLevel): DaemonResponseData {
   if (level !== 'digest') return data;
-  const digest: DaemonResponseData = {};
-  for (const field of SELECTOR_DIGEST_SCALAR_FIELDS) {
-    if (data[field] !== undefined) digest[field] = data[field];
-  }
+  const node = data.node;
+  if (!node || typeof node !== 'object') return data;
   // A text read already carries the answer in `text`, so the node is redundant
-  // framing; an attrs read has no `text`, so keep a compacted node instead.
-  if (typeof data.text !== 'string' && data.node && typeof data.node === 'object') {
-    digest.node = compactSelectorNode(data.node as SnapshotNode);
+  // framing — drop only the node and keep every other (cheap) field.
+  if (typeof data.text === 'string') {
+    const { node: _node, ...rest } = data;
+    return rest;
   }
-  return digest;
+  // An attrs read: compact only the verbose node, keeping every other cheap field.
+  return { ...data, node: compactSelectorNode(node as SnapshotNode) };
 }
 
 export const RESPONSE_VIEWS: Record<string, ResponseView> = {

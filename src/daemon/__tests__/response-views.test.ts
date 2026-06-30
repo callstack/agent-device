@@ -157,6 +157,23 @@ test('find get-text digest keeps ref + text, drops the verbose node', () => {
   expect('node' in digest).toBe(false);
 });
 
+test('a text read keeps every OTHER cheap field (e.g. warning) while dropping the node', () => {
+  const digest = findView!(
+    {
+      ref: '@e7',
+      text: 'Sign in',
+      warning: 'recovered from a blocking dialog',
+      node: MATCHED_NODE,
+    },
+    'digest',
+  );
+  expect(digest).toEqual({
+    ref: '@e7',
+    text: 'Sign in',
+    warning: 'recovered from a blocking dialog',
+  });
+});
+
 test('find get-attrs digest compacts the node to semantic attributes only', () => {
   const digest = findView!({ ref: '@e7', node: MATCHED_NODE }, 'digest');
   expect(digest).toEqual({ ref: '@e7', node: COMPACT_NODE });
@@ -165,15 +182,35 @@ test('find get-attrs digest compacts the node to semantic attributes only', () =
   expect('parentIndex' in (digest.node as Record<string, unknown>)).toBe(false);
 });
 
-test('find exists/wait/click digests keep the cheap actionable signals', () => {
-  expect(findView!({ found: true }, 'digest')).toEqual({ found: true });
-  expect(findView!({ found: true, waitedMs: 320 }, 'digest')).toEqual({
-    found: true,
-    waitedMs: 320,
-  });
-  expect(
-    findView!({ ref: '@e7', locator: 'text', query: 'Sign in', x: 60, y: 42 }, 'digest'),
-  ).toEqual({ ref: '@e7', locator: 'text', query: 'Sign in', x: 60, y: 42 });
+test('an attrs read compacts the node but keeps every other cheap field (e.g. warning)', () => {
+  const digest = getView!({ ref: 'e7', warning: 'partial tree', node: MATCHED_NODE }, 'digest');
+  expect(digest).toEqual({ ref: 'e7', warning: 'partial tree', node: COMPACT_NODE });
+});
+
+// REGRESSION: `find` is registered command-wide, but `find fill/focus/type` return
+// the underlying INTERACTION response (carrying cheap, agent-critical signals like
+// `warning`/`message`), which has no verbose snapshot node. The conservative view
+// must return such a node-less shape UNCHANGED — never allowlist-narrow it.
+test('find fill/focus/type interaction responses pass through UNCHANGED (warning kept)', () => {
+  const fillResponse: DaemonResponseData = {
+    ref: 'e3',
+    text: 'hello',
+    message: 'Filled 5 chars',
+    warning: 'Recovered from a blocking system dialog',
+  };
+  const digest = findView!(fillResponse, 'digest');
+  expect(digest).toBe(fillResponse); // same reference — not narrowed at all
+  expect(digest).toEqual(fillResponse);
+});
+
+test('find exists/wait/click digests pass through the cheap actionable signals', () => {
+  // No verbose node → returned UNCHANGED (same reference).
+  const exists: DaemonResponseData = { found: true };
+  const wait: DaemonResponseData = { found: true, waitedMs: 320 };
+  const click: DaemonResponseData = { ref: '@e7', locator: 'text', query: 'Sign in', x: 60, y: 42 };
+  expect(findView!(exists, 'digest')).toBe(exists);
+  expect(findView!(wait, 'digest')).toBe(wait);
+  expect(findView!(click, 'digest')).toBe(click);
 });
 
 test('get text digest keeps selector + text and drops the node', () => {
