@@ -18,7 +18,7 @@ import type {
   TypeTextOptions,
 } from '../../client-types.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
-import { REPEATED_TOUCH_FLAGS, SELECTOR_SNAPSHOT_FLAGS } from '../../utils/cli-flags.ts';
+import { REPEATED_TOUCH_FLAGS, SELECTOR_SNAPSHOT_FLAGS } from '../../cli/parser/cli-flags.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import {

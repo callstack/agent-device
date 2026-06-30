@@ -16,7 +16,7 @@ import {
   requiredString,
 } from '../cli-grammar/common.ts';
 import type { CliReader, CommandInput, DaemonWriter } from '../cli-grammar/types.ts';
-import { REPLAY_FLAGS } from '../../utils/cli-flags.ts';
+import { REPLAY_FLAGS } from '../../cli/parser/cli-flags.ts';
 
 const REPLAY_COMMAND_NAME = 'replay';
 const TEST_COMMAND_NAME = 'test';

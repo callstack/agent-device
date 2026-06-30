@@ -529,7 +529,7 @@
         "count": 1
       }
     },
-    "src/utils/args.ts": {
+    "src/cli/parser/args.ts": {
       "complexity_critical": {
         "count": 2
       },
@@ -707,7 +707,7 @@
     "src/replay/script-utils.ts:high impact",
     "src/daemon/handlers/session-open-target.ts:high impact",
     "src/utils/selector-is-predicates.ts:high impact",
-    "src/utils/args.ts:high impact",
+    "src/cli/parser/args.ts:high impact",
     "src/daemon/snapshot-presentation/tree.ts:high impact",
     "src/utils/rect-center.ts:high impact",
     "src/utils/process-identity.ts:high impact",

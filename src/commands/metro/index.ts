@@ -20,7 +20,7 @@ import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/typ
 import { defineExecutableCommand } from '../command-contract.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import type { CliReader } from '../cli-grammar/types.ts';
-import { METRO_PREPARE_FLAGS, METRO_RELOAD_FLAGS } from '../../utils/cli-flags.ts';
+import { METRO_PREPARE_FLAGS, METRO_RELOAD_FLAGS } from '../../cli/parser/cli-flags.ts';
 import { metroCliOutputFormatters } from './output.ts';
 
 const METRO_COMMAND_NAME = 'metro';

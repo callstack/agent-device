@@ -1,4 +1,4 @@
-import type { CliFlags, FlagKey } from './cli-flags.ts';
+import type { CliFlags, FlagKey } from '../cli/parser/cli-flags.ts';
 
 export type CommandSchema = {
   helpDescription: string;

@@ -1,5 +1,5 @@
-import { AppError } from '../kernel/errors.ts';
-import { mergeDefinedFlags } from './merge-flags.ts';
+import { AppError } from '../../kernel/errors.ts';
+import { mergeDefinedFlags } from '../../utils/merge-flags.ts';
 import {
   applyCommandDefaults,
   getCommandSchema,
@@ -8,9 +8,9 @@ import {
   type CliFlags,
   type FlagDefinition,
   type FlagKey,
-} from './command-schema.ts';
+} from '../../utils/command-schema.ts';
 import { buildCommandUsageText, buildUsageText } from './cli-help.ts';
-import { isFlagSupportedForCommand } from './cli-option-schema.ts';
+import { isFlagSupportedForCommand } from '../../utils/cli-option-schema.ts';
 
 type ParsedArgs = {
   command: string | null;

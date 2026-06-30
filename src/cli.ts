@@ -1,4 +1,4 @@
-import { parseRawArgs, usage, usageForCommand } from './utils/args.ts';
+import { parseRawArgs, usage, usageForCommand } from './cli/parser/args.ts';
 import { asAppError, AppError, normalizeError } from './kernel/errors.ts';
 import { printHumanError, printJson } from './utils/output.ts';
 import { readVersion } from './utils/version.ts';
@@ -33,7 +33,7 @@ import {
   type RemoteConnectionRequestMetadata,
 } from './remote/remote-connection-state.ts';
 import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
-import type { CliFlags, FlagKey } from './utils/cli-flags.ts';
+import type { CliFlags, FlagKey } from './cli/parser/cli-flags.ts';
 import type { SessionRuntimeHints } from './kernel/contracts.ts';
 
 type CliDeps = {

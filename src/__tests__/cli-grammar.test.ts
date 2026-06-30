@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { readInputFromCli } from '../commands/cli-grammar.ts';
-import type { CliFlags } from '../utils/cli-flags.ts';
+import type { CliFlags } from '../cli/parser/cli-flags.ts';
 
 const BASE_FLAGS: CliFlags = {
   json: false,

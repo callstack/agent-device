@@ -1,9 +1,13 @@
-import { SESSION_SURFACES, type SessionSurface } from '../core/session-surface.ts';
-import type { RecordingExportQuality } from '../core/recording-export-quality.ts';
-import type { BackMode } from '../core/back-mode.ts';
-import type { ClickButton } from '../core/click-button.ts';
-import type { SwipePattern } from '../core/scroll-gesture.ts';
-import { PLATFORM_SELECTORS, type DeviceTarget, type PlatformSelector } from '../kernel/device.ts';
+import { SESSION_SURFACES, type SessionSurface } from '../../core/session-surface.ts';
+import type { RecordingExportQuality } from '../../core/recording-export-quality.ts';
+import type { BackMode } from '../../core/back-mode.ts';
+import type { ClickButton } from '../../core/click-button.ts';
+import type { SwipePattern } from '../../core/scroll-gesture.ts';
+import {
+  PLATFORM_SELECTORS,
+  type DeviceTarget,
+  type PlatformSelector,
+} from '../../kernel/device.ts';
 import {
   type DaemonInstallSource,
   type DaemonServerMode,
@@ -14,17 +18,17 @@ import {
   type ResponseLevel,
   type SessionRuntimeHints,
   type SessionIsolationMode,
-} from '../kernel/contracts.ts';
-import type { RemoteConfigMetroOptions } from '../remote/remote-config-schema.ts';
+} from '../../kernel/contracts.ts';
+import type { RemoteConfigMetroOptions } from '../../remote/remote-config-schema.ts';
 import {
   SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS,
   type ScreenshotRequestFlags,
-} from '../contracts/screenshot.ts';
-import { PERF_KIND_VALUES } from '../contracts/perf.ts';
+} from '../../contracts/screenshot.ts';
+import { PERF_KIND_VALUES } from '../../contracts/perf.ts';
 import {
   MAESTRO_COMPAT_TRACKER_URL,
   formatMaestroSupportedSubsetForCli,
-} from '../compat/maestro/support-matrix.ts';
+} from '../../compat/maestro/support-matrix.ts';
 
 export type CliFlags = RemoteConfigMetroOptions &
   ScreenshotRequestFlags & {

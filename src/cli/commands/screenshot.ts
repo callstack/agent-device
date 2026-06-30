@@ -7,7 +7,7 @@ import type { AgentDeviceClient, CaptureScreenshotResult } from '../../client.ts
 import { createLocalArtifactAdapter } from '../../io.ts';
 import { createAgentDevice, localCommandPolicy } from '../../runtime.ts';
 import { runCliCommand } from '../../commands/cli-runner.ts';
-import type { CliFlags } from '../../utils/cli-flags.ts';
+import type { CliFlags } from '../parser/cli-flags.ts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 

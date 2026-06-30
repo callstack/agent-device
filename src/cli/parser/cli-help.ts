@@ -1,4 +1,4 @@
-import { listCliCommandNames } from '../command-catalog.ts';
+import { listCliCommandNames } from '../../command-catalog.ts';
 import {
   getCliCommandSchema,
   getCommandSchema,
@@ -7,7 +7,7 @@ import {
   type CommandSchema,
   type FlagDefinition,
   type FlagKey,
-} from './command-schema.ts';
+} from '../../utils/command-schema.ts';
 
 const AGENT_WORKFLOWS = [
   {

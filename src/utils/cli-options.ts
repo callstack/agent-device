@@ -1,6 +1,6 @@
-import type { CliFlags } from './cli-flags.ts';
+import type { CliFlags } from '../cli/parser/cli-flags.ts';
 import { mergeDefinedFlags } from './merge-flags.ts';
-import { finalizeParsedArgs, parseRawArgs } from './args.ts';
+import { finalizeParsedArgs, parseRawArgs } from '../cli/parser/args.ts';
 import { resolveConfigBackedFlagDefaults } from './cli-config.ts';
 import { resolveRemoteConfigDefaults } from './remote-config.ts';
 import type { EnvMap } from './env-map.ts';

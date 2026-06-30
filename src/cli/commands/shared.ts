@@ -1,4 +1,4 @@
-import type { CliFlags } from '../../utils/cli-flags.ts';
+import type { CliFlags } from '../parser/cli-flags.ts';
 import { printJson } from '../../utils/output.ts';
 
 export function writeCommandOutput(

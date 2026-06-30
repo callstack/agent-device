@@ -1,6 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { getFlagDefinition } from '../cli-flags.ts';
+import { getFlagDefinition } from '../../cli/parser/cli-flags.ts';
 import { PLATFORM_SELECTORS } from '../../kernel/device.ts';
 
 test('--platform enumValues are derived from the canonical PLATFORM_SELECTORS tuple', () => {

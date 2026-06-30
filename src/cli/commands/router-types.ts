@@ -1,4 +1,4 @@
-import type { CliFlags } from '../../utils/cli-flags.ts';
+import type { CliFlags } from '../parser/cli-flags.ts';
 import type { AgentDeviceClient } from '../../client.ts';
 import type { CliCommandName } from '../../command-catalog.ts';
 

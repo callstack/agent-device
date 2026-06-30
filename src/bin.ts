@@ -32,7 +32,7 @@ function runVersionFastPath(argv: string[]): boolean {
 
 function runNoCommandFastPath(argv: string[]): boolean {
   if (argv.length !== 0) return false;
-  import('./utils/cli-help.ts')
+  import('./cli/parser/cli-help.ts')
     .then(({ buildUsageText }) => {
       process.stdout.write(`${buildUsageText()}\n`);
       process.exit(1);
@@ -45,7 +45,7 @@ function runHelpFastPath(argv: string[]): boolean {
   const helpTarget = resolveSimpleHelpTarget(argv);
   if (helpTarget === undefined) return false;
 
-  import('./utils/cli-help.ts')
+  import('./cli/parser/cli-help.ts')
     .then(({ buildCommandUsageText, buildUsageText }) => {
       if (helpTarget === null) {
         process.stdout.write(`${buildUsageText()}\n`);

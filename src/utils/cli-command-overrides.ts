@@ -2,7 +2,10 @@ import type { CommandName } from '../commands/command-metadata.ts';
 import { listCommandFamilyCliSchemas } from '../commands/family/registry.ts';
 import type { LocalCliCommandName } from '../command-catalog.ts';
 import type { CommandSchema, CommandSchemaOverride } from './cli-command-schema-types.ts';
-import { COMMON_COMMAND_SUPPORTED_FLAG_KEYS, METRO_PREPARE_FLAGS } from './cli-flags.ts';
+import {
+  COMMON_COMMAND_SUPPORTED_FLAG_KEYS,
+  METRO_PREPARE_FLAGS,
+} from '../cli/parser/cli-flags.ts';
 
 type SchemaOnlyCliCommandName = Exclude<LocalCliCommandName, CommandName>;
 

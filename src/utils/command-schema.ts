@@ -11,7 +11,7 @@ import {
   type DaemonExcludedCliFlag,
   type FlagDefinition,
   type FlagKey,
-} from './cli-flags.ts';
+} from '../cli/parser/cli-flags.ts';
 
 export type { CliFlags, DaemonExcludedCliFlag, FlagDefinition, FlagKey };
 export type { CommandSchema, CommandSchemaOverride };

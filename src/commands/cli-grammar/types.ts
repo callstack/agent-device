@@ -1,6 +1,6 @@
 import type { InteractionTarget, InternalRequestOptions } from '../../client-types.ts';
 import type { CommandFlags } from '../../core/dispatch-context.ts';
-import type { CliFlags } from '../../utils/cli-flags.ts';
+import type { CliFlags } from '../../cli/parser/cli-flags.ts';
 import type { ClickButton } from '../../core/click-button.ts';
 import type { DecodedFillTarget } from '../../core/interaction-positionals.ts';
 import type { WaitParsed } from '../../core/wait-positionals.ts';

@@ -1,6 +1,6 @@
 import { buildFlags } from '../client-normalizers.ts';
 import type { CommandFlags } from '../core/dispatch-context.ts';
-import { getFlagDefinitions } from '../utils/cli-flags.ts';
+import { getFlagDefinitions } from '../cli/parser/cli-flags.ts';
 import type { InternalRequestOptions } from '../client-types.ts';
 import type { CommandMetadata } from './command-contract.ts';
 
