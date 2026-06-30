@@ -74,7 +74,7 @@ import {
 } from '../screenshot-status-bar.ts';
 import { runIosRunnerCommand } from '../runner-client.ts';
 import { iosRunnerOverrides } from '../interactions.ts';
-import { IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from '../config.ts';
+import { IOS_DEVICE_INSTALL_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from '../config.ts';
 import type { DeviceInfo } from '../../../kernel/device.ts';
 import { withDiagnosticsScope } from '../../../utils/diagnostics.ts';
 import { AppError } from '../../../kernel/errors.ts';
@@ -1820,6 +1820,26 @@ exit 1
       assert.equal(args.includes('install'), true);
     },
   );
+});
+
+test('installIosInstallablePath on iOS physical device uses extended devicectl install timeout', async () => {
+  mockRunCmd.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
+
+  await installIosInstallablePath(IOS_TEST_DEVICE, '/tmp/Sample.app');
+
+  assert.equal(mockRunCmd.mock.calls.length, 1);
+  assert.equal(mockRunCmd.mock.calls[0]?.[0], 'xcrun');
+  assert.deepEqual(mockRunCmd.mock.calls[0]?.[1], [
+    'devicectl',
+    'device',
+    'install',
+    'app',
+    '--device',
+    'ios-device-1',
+    '/tmp/Sample.app',
+  ]);
+  assert.equal(mockRunCmd.mock.calls[0]?.[2]?.allowFailure, true);
+  assert.equal(mockRunCmd.mock.calls[0]?.[2]?.timeoutMs, IOS_DEVICE_INSTALL_TIMEOUT_MS);
 });
 
 test('installIosApp on iOS physical device accepts .ipa and installs extracted .app payload', async () => {

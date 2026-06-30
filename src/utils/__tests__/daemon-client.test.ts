@@ -224,6 +224,9 @@ test('snapshot uses the standard daemon request timeout with an explicit overrid
     120_000,
   );
   assert.equal(resolveDaemonRequestTimeoutMs({ ...base, command: 'screenshot' }), 90_000);
+  assert.equal(resolveDaemonRequestTimeoutMs({ ...base, command: 'install' }), 180_000);
+  assert.equal(resolveDaemonRequestTimeoutMs({ ...base, command: 'reinstall' }), 180_000);
+  assert.equal(resolveDaemonRequestTimeoutMs({ ...base, command: 'install_source' }), 180_000);
   assert.equal(
     resolveDaemonRequestTimeoutMs({
       ...base,

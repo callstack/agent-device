@@ -37,11 +37,12 @@ type IosDeviceProcessesPayload = {
 export async function runIosDevicectl(
   args: string[],
   context: { action: string; deviceId: string },
+  options: { timeoutMs?: number } = {},
 ): Promise<void> {
   const fullArgs = ['devicectl', ...args];
   const result = await runXcrun(fullArgs, {
     allowFailure: true,
-    timeoutMs: IOS_DEVICECTL_TIMEOUT_MS,
+    timeoutMs: options.timeoutMs ?? IOS_DEVICECTL_TIMEOUT_MS,
   });
   if (result.exitCode === 0) return;
   const stdout = String(result.stdout ?? '');

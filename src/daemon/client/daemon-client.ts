@@ -25,6 +25,9 @@ export type DaemonResponse = SharedDaemonResponse;
 
 const REQUEST_TIMEOUT_MS = 90_000;
 const PREPARE_REQUEST_TIMEOUT_MS = 240_000;
+// Keep this above the longest platform install subprocess timeout so the client
+// envelope does not abort a still-progressing device install first.
+const INSTALL_REQUEST_TIMEOUT_MS = 180_000;
 
 export async function sendToDaemon(req: Omit<DaemonRequest, 'token'>): Promise<DaemonResponse> {
   const requestId = req.meta?.requestId ?? createRequestId();
@@ -119,6 +122,7 @@ export function resolveDaemonRequestTimeoutMs(
     return req.flags.timeoutMs;
   }
   if (req.command === PUBLIC_COMMANDS.prepare) return PREPARE_REQUEST_TIMEOUT_MS;
+  if (isInstallLikeCommand(req.command)) return INSTALL_REQUEST_TIMEOUT_MS;
   return REQUEST_TIMEOUT_MS;
 }
 

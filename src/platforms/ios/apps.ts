@@ -34,6 +34,7 @@ import {
 
 import {
   IOS_APP_LAUNCH_TIMEOUT_MS,
+  IOS_DEVICE_INSTALL_TIMEOUT_MS,
   IOS_DEVICECTL_TIMEOUT_MS,
   IOS_SIMULATOR_TERMINATE_TIMEOUT_MS,
 } from './config.ts';
@@ -459,10 +460,16 @@ export async function installIosInstallablePath(
 ): Promise<void> {
   await iosAppResolutionCache.invalidateWhile(iosAppResolutionScope(device), async () => {
     if (device.kind !== 'simulator') {
-      await runIosDevicectl(['device', 'install', 'app', '--device', device.id, installablePath], {
-        action: 'install iOS app',
-        deviceId: device.id,
-      });
+      await runIosDevicectl(
+        ['device', 'install', 'app', '--device', device.id, installablePath],
+        {
+          action: 'install iOS app',
+          deviceId: device.id,
+        },
+        {
+          timeoutMs: IOS_DEVICE_INSTALL_TIMEOUT_MS,
+        },
+      );
       return;
     }
 
