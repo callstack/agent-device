@@ -292,7 +292,13 @@ async function materializeLeaseForCommand(options: {
     preliminaryLeaseBackend ??
     requireRequestedLeaseBackend(nextFlags, command);
   assertRequestedConnectionScope(state, nextFlags, leaseBackend);
-  const materializedLease = await allocateOrReuseLease(client, nextState, leaseBackend, policy);
+  const materializedLease = await allocateOrReuseLease(
+    client,
+    nextState,
+    leaseBackend,
+    policy,
+    nextFlags,
+  );
   const lease = materializedLease.lease;
   nextFlags.leaseId = lease.leaseId;
   nextFlags.leaseBackend = leaseBackend;
@@ -638,6 +644,7 @@ async function allocateOrReuseLease(
   state: RemoteConnectionState,
   leaseBackend: LeaseBackend,
   policy: ConnectionLeasePolicy,
+  flags: CliFlags,
 ): Promise<{ lease: Lease; acquired: boolean }> {
   if (state.leaseId && state.leaseBackend === leaseBackend) {
     const existing = await heartbeatOrAllocateLease(client, state.leaseId, {
@@ -659,6 +666,21 @@ async function allocateOrReuseLease(
     clientId: state.clientId,
     deviceKey: state.deviceKey,
     ttlMs: policy.ttlMs(state),
+    platform: state.platform ?? flags.platform,
+    target: state.target ?? flags.target,
+    device: flags.device,
+    udid: flags.udid,
+    serial: flags.serial,
+    providerApp: flags.providerApp,
+    providerOsVersion: flags.providerOsVersion,
+    providerProject: flags.providerProject,
+    providerBuild: flags.providerBuild,
+    providerSessionName: flags.providerSessionName,
+    awsProjectArn: flags.awsProjectArn,
+    awsDeviceArn: flags.awsDeviceArn,
+    awsAppArn: flags.awsAppArn,
+    awsRegion: flags.awsRegion,
+    awsInteractionMode: flags.awsInteractionMode,
   });
   return { lease, acquired: true };
 }

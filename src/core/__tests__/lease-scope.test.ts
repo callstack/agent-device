@@ -47,6 +47,9 @@ test('leaseScopeFromOptions normalizes public aliases and projects request meta'
     runId: 'run-1',
     leaseId: 'lease-1',
     leaseBackend: 'ios-instance',
+    leaseProvider: 'proxy',
+    deviceKey: 'ios:SIM-001',
+    clientId: 'client-a',
   });
 });
 

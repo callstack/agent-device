@@ -1335,6 +1335,89 @@ test('deferred materialization allocates pending lease for devices', async () =>
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('deferred provider materialization forwards provider profile fields to lease allocation', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-provider-lease-flags-'));
+  const stateDir = path.join(tempRoot, '.state');
+  const remoteConfigPath = path.join(tempRoot, 'browserstack.json');
+  fs.writeFileSync(
+    remoteConfigPath,
+    JSON.stringify({
+      tenant: 'browserstack',
+      runId: 'browserstack-run',
+      leaseProvider: 'browserstack',
+      leaseBackend: 'android-instance',
+      platform: 'android',
+      device: 'Google Pixel 8',
+      providerOsVersion: '14.0',
+      providerApp: '/tmp/WikipediaSample.apk',
+      providerProject: 'agent-device',
+      providerBuild: 'live-smoke',
+    }),
+  );
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      version: 1,
+      session: 'adc-browserstack',
+      remoteConfigPath,
+      remoteConfigHash: hashRemoteConfigFile(remoteConfigPath),
+      tenant: 'browserstack',
+      runId: 'browserstack-run',
+      leaseBackend: 'android-instance',
+      leaseProvider: 'browserstack',
+      platform: 'android',
+      connectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  });
+  let allocateRequest: Parameters<AgentDeviceClient['leases']['allocate']>[0] | undefined;
+
+  const materialized = await materializeRemoteConnectionForCommand({
+    command: 'open',
+    flags: {
+      json: true,
+      help: false,
+      version: false,
+      stateDir,
+      remoteConfig: remoteConfigPath,
+      tenant: 'browserstack',
+      runId: 'browserstack-run',
+      session: 'adc-browserstack',
+      leaseBackend: 'android-instance',
+      platform: 'android',
+      device: 'Google Pixel 8',
+      providerOsVersion: '14.0',
+      providerApp: '/tmp/WikipediaSample.apk',
+      providerProject: 'agent-device',
+      providerBuild: 'live-smoke',
+    },
+    client: createTestClient({
+      allocate: async (request) => {
+        allocateRequest = request;
+        return {
+          leaseId: 'lease-browserstack',
+          tenantId: request.tenant,
+          runId: request.runId,
+          backend: request.leaseBackend ?? 'android-instance',
+          leaseProvider: request.leaseProvider,
+          clientId: request.clientId,
+          deviceKey: request.deviceKey,
+        };
+      },
+    }),
+  });
+
+  assert.equal(materialized.flags.leaseId, 'lease-browserstack');
+  assert.equal(allocateRequest?.platform, 'android');
+  assert.equal(allocateRequest?.device, 'Google Pixel 8');
+  assert.equal(allocateRequest?.providerApp, '/tmp/WikipediaSample.apk');
+  assert.equal(allocateRequest?.providerOsVersion, '14.0');
+  assert.equal(allocateRequest?.providerProject, 'agent-device');
+  assert.equal(allocateRequest?.providerBuild, 'live-smoke');
+
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('deferred materialization reallocates when the persisted lease is inactive', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-stale-lease-'));
   const stateDir = path.join(tempRoot, '.state');

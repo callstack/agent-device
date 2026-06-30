@@ -321,9 +321,10 @@ export type Lease = {
   expiresAt?: number;
 };
 
-export type LeaseOptions = AgentDeviceRequestOverrides & {
-  ttlMs?: number;
-};
+export type LeaseOptions = AgentDeviceRequestOverrides &
+  AgentDeviceSelectionOptions & {
+    ttlMs?: number;
+  };
 
 export type LeaseAllocateOptions = LeaseOptions & {
   tenant: string;

@@ -92,11 +92,19 @@ export class WebDriverClient {
   }
 
   async activateApp(appId: string): Promise<void> {
-    await this.executeScript('mobile: activateApp', [{ appId, bundleId: appId }]);
+    try {
+      await this.sessionRequest('POST', '/appium/device/activate_app', { appId });
+    } catch {
+      await this.executeScript('mobile: activateApp', [{ appId, bundleId: appId }]);
+    }
   }
 
   async terminateApp(appId: string): Promise<void> {
-    await this.executeScript('mobile: terminateApp', [{ appId, bundleId: appId }]);
+    try {
+      await this.sessionRequest('POST', '/appium/device/terminate_app', { appId });
+    } catch {
+      await this.executeScript('mobile: terminateApp', [{ appId, bundleId: appId }]);
+    }
   }
 
   async performActions(actions: W3CActionSequence[]): Promise<void> {

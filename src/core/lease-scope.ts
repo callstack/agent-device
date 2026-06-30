@@ -123,6 +123,9 @@ export function leaseScopeToCommandFlags(scope: LeaseScope): Record<string, unkn
     runId: scope.runId,
     leaseId: scope.leaseId,
     leaseBackend: scope.leaseBackend,
+    leaseProvider: scope.leaseProvider,
+    deviceKey: scope.deviceKey,
+    clientId: scope.clientId,
   });
 }
 

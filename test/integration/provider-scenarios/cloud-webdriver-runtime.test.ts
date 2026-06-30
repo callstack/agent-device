@@ -341,7 +341,7 @@ function assertWebDriverCalls(
     [
       'POST /wd/hub/session',
       'POST /wd/hub/session/wd-1/appium/device/install_app',
-      'POST /wd/hub/session/wd-1/execute/sync',
+      'POST /wd/hub/session/wd-1/appium/device/activate_app',
       'POST /wd/hub/session/wd-1/actions',
       'DELETE /wd/hub/session/wd-1/actions',
       'POST /wd/hub/session/wd-1/actions',
@@ -368,10 +368,7 @@ function assertWebDriverCalls(
     },
   });
   assert.deepEqual(calls[1]?.body, { appPath });
-  assert.deepEqual(calls[2]?.body, {
-    script: 'mobile: activateApp',
-    args: [{ appId: 'com.example.demo', bundleId: 'com.example.demo' }],
-  });
+  assert.deepEqual(calls[2]?.body, { appId: 'com.example.demo' });
   assert.deepEqual(calls[7]?.body, { text: 'hello cloud', value: Array.from('hello cloud') });
   assert.deepEqual(calls[10]?.body, {
     actions: [
