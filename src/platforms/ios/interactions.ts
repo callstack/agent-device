@@ -1,16 +1,19 @@
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { assertScrollGestureInput, type ScrollDirection } from '../../core/scroll-gesture.ts';
 import { normalizeScrollDurationMs, SCROLL_DURATION_MAX_MS } from '../../core/scroll-command.ts';
-import { runIosRunnerCommand } from './runner-client.ts';
-import { buildRunnerSequenceCommand, parseRunnerSequenceResult } from './runner-sequence.ts';
-import type { RunnerCommand } from './runner-contract.ts';
-import { runMacosDesktopScroll } from './desktop-scroll.ts';
+import { runIosRunnerCommand } from '../apple/core/runner/runner-client.ts';
+import {
+  buildRunnerSequenceCommand,
+  parseRunnerSequenceResult,
+} from '../apple/core/runner/runner-sequence.ts';
+import type { RunnerCommand } from '../apple/core/runner/runner-contract.ts';
+import { runMacosDesktopScroll } from '../apple/os/macos/desktop-scroll.ts';
 import {
   normalizeAppleScrollResult,
   normalizeAppleScrollResultWithResolvedFrame,
   scrollRunnerFields,
   type AppleScrollOptions,
-} from './scroll.ts';
+} from '../apple/core/scroll.ts';
 import type {
   BackMode,
   Interactor,

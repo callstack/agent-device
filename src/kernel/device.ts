@@ -68,7 +68,7 @@ export function matchesPlatformSelector(
 export function resolveApplePlatformName(
   platformOrTarget: ApplePlatform | DeviceTarget | undefined,
   appleOs?: AppleOS,
-): 'iOS' | 'tvOS' | 'macOS' {
+): 'iOS' | 'tvOS' | 'macOS' | 'visionOS' {
   // Prefer the explicit, stored Apple OS when present; legacy records without
   // it keep resolving through the existing target-based inference below.
   if (appleOs) return resolveRunnerPlatformNameForAppleOs(appleOs);
@@ -77,16 +77,20 @@ export function resolveApplePlatformName(
   return 'iOS';
 }
 
-function resolveRunnerPlatformNameForAppleOs(appleOs: AppleOS): 'iOS' | 'tvOS' | 'macOS' {
+function resolveRunnerPlatformNameForAppleOs(
+  appleOs: AppleOS,
+): 'iOS' | 'tvOS' | 'macOS' | 'visionOS' {
   switch (appleOs) {
     case 'tvos':
       return 'tvOS';
     case 'macos':
       return 'macOS';
-    // iOS and iPadOS share the single iOS runner profile/SDK. watchOS/visionOS
-    // are reserved in the type but never produced by discovery; defaulting them
-    // to the iOS profile keeps any future record on a valid runner profile
-    // without introducing a new one.
+    case 'visionos':
+      return 'visionOS';
+    // iOS and iPadOS share the single iOS runner profile/SDK. watchOS remains
+    // reserved in the type but is never produced by discovery; defaulting it to
+    // iOS keeps any future record on a valid runner profile without introducing
+    // watchOS support.
     default:
       return 'iOS';
   }

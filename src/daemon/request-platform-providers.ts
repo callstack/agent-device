@@ -3,11 +3,11 @@ import type { AndroidAdbExecutor, AndroidAdbProvider } from '../platforms/androi
 import type {
   AppleRunnerCommandExecutor,
   AppleRunnerProvider,
-} from '../platforms/ios/runner-provider.ts';
+} from '../platforms/apple/core/runner/runner-provider.ts';
 import type {
   AppleToolCommandExecutor,
   AppleToolProvider,
-} from '../platforms/ios/tool-provider.ts';
+} from '../platforms/apple/core/tool-provider.ts';
 import type { LinuxToolProvider } from '../platforms/linux/tool-provider.ts';
 import type { WebProvider } from '../platforms/web/provider.ts';
 import { isApplePlatform, type DeviceInfo } from '../kernel/device.ts';
@@ -152,7 +152,8 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     },
     async appendWrapper(scopedProviders, wrappers) {
       if (!scopedProviders.appleRunner?.provider) return;
-      const { withAppleRunnerProvider } = await import('../platforms/ios/runner-provider.ts');
+      const { withAppleRunnerProvider } =
+        await import('../platforms/apple/core/runner/runner-provider.ts');
       appendRequestProviderWrapper(wrappers, scopedProviders.appleRunner, (provider, task) =>
         withAppleRunnerProvider(
           provider,
@@ -174,7 +175,7 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     },
     async appendWrapper(scopedProviders, wrappers) {
       if (!scopedProviders.appleTool?.provider) return;
-      const { withAppleToolProvider } = await import('../platforms/ios/tool-provider.ts');
+      const { withAppleToolProvider } = await import('../platforms/apple/core/tool-provider.ts');
       appendRequestProviderWrapper(wrappers, scopedProviders.appleTool, withAppleToolProvider);
     },
   },

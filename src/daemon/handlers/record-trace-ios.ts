@@ -1,7 +1,7 @@
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { IOS_RUNNER_CONTAINER_BUNDLE_IDS } from '../../platforms/ios/runner-client.ts';
+import { IOS_RUNNER_CONTAINER_BUNDLE_IDS } from '../../platforms/apple/core/runner/runner-client.ts';
 import { formatRecordTraceError } from '../record-trace-errors.ts';
 import { buildAppleRunnerRequestOptions } from '../apple-runner-options.ts';
 import type { RecordTraceDeps, RecordingBase } from './record-trace-types.ts';

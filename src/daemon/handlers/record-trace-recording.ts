@@ -8,8 +8,8 @@ import type { DaemonArtifact, DaemonRequest, DaemonResponse, SessionState } from
 import { runCmd } from '../../utils/exec.ts';
 import { isPlayableVideo, waitForStableFile } from '../../utils/video.ts';
 import { deriveRecordingTelemetryPath } from '../recording-telemetry.ts';
-import { runIosRunnerCommand } from '../../platforms/ios/runner-client.ts';
-import { runXcrun } from '../../platforms/ios/tool-provider.ts';
+import { runIosRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
+import { runXcrun } from '../../platforms/apple/core/tool-provider.ts';
 import {
   overlayRecordingTouches,
   resizeRecording,

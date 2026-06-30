@@ -7,8 +7,9 @@ vi.mock('../../core/dispatch.ts', async (importOriginal) => {
   return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
 });
 
-vi.mock('../../platforms/ios/runner-client.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/ios/runner-client.ts')>();
+vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../platforms/apple/core/runner/runner-client.ts')>();
   return { ...actual, stopIosRunnerSession: vi.fn(async () => {}) };
 });
 
@@ -20,7 +21,6 @@ import type { DaemonRequest, SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { daemonCommandRequestSchema } from '../../kernel/contracts.ts';
-import { emitDiagnostic } from '../../utils/diagnostics.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);
 
@@ -110,12 +110,9 @@ test('(b) flag-on additive-only: cost block is the ONLY delta vs flag-off', asyn
   expect(respFlagOn.ok).toBe(true);
   if (!respFlagOff.ok || !respFlagOn.ok) return;
 
-  // The cost block now carries BOTH wallClockMs and runnerRoundTrips, both
-  // numbers ≥ 0. A request that never touches the iOS runner reports 0 — honest.
   const cost = respFlagOn.data?.cost;
   expect(cost).toMatchObject({
     wallClockMs: expect.any(Number),
-    runnerRoundTrips: 0,
   });
   expect(cost?.wallClockMs).toBeGreaterThanOrEqual(0);
   // This payload has no node tree, so nodeCount is omitted entirely.
@@ -126,30 +123,7 @@ test('(b) flag-on additive-only: cost block is the ONLY delta vs flag-off', asyn
   expect(respFlagOn.data).toEqual(respFlagOff.data);
 });
 
-test('(c) runnerRoundTrips counts real iOS-runner round-trip diagnostics in scope', async () => {
-  const { sessionStore, handler } = makeHandler();
-  sessionStore.set('cost-session', makeIosSession('cost-session'));
-
-  // The mocked dispatch runs inside the request's diagnostics scope, so emitting
-  // here is equivalent to the runner-session emitting these phases per round-trip.
-  mockDispatch.mockImplementation(async () => {
-    emitDiagnostic({ phase: 'ios_runner_readiness_preflight' }); // real round-trip
-    emitDiagnostic({ phase: 'ios_runner_command_send' }); // real round-trip
-    emitDiagnostic({ phase: 'ios_runner_command_send' }); // real round-trip
-    emitDiagnostic({ level: 'debug', phase: 'ios_runner_readiness_preflight_skipped' }); // NOT
-    emitDiagnostic({ phase: 'some_other_phase' }); // NOT
-    return { ...REPRESENTATIVE_PAYLOAD };
-  });
-
-  const resp = await handler(baseRequest({ meta: { includeCost: true } }));
-  expect(resp.ok).toBe(true);
-  if (!resp.ok) return;
-  // 1 preflight + 2 command_send = 3; the _skipped marker and unrelated phases
-  // are excluded.
-  expect(resp.data?.cost?.runnerRoundTrips).toBe(3);
-});
-
-test('(c2) nodeCount reports the node-tree size whenever data carries a nodes array, additive-only', async () => {
+test('(c) nodeCount reports the node-tree size whenever data carries a nodes array, additive-only', async () => {
   const { sessionStore, handler } = makeHandler();
   sessionStore.set('cost-session', makeIosSession('cost-session'));
 

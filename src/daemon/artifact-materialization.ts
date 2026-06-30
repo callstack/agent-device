@@ -6,7 +6,7 @@ import {
   resolveTarArchiveRootName,
 } from './artifact-archive.ts';
 import { createArtifactTempDir, downloadArtifactToTempDir } from './artifact-download.ts';
-import { readInfoPlistString } from '../platforms/ios/plist.ts';
+import { readInfoPlistString } from '../platforms/apple/core/plist.ts';
 import { AppError } from '../kernel/errors.ts';
 
 export type MaterializeArtifactParams = {

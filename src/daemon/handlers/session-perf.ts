@@ -26,7 +26,7 @@ import {
   captureAppleMemorySnapshot,
   sampleAppleFramePerf,
   sampleApplePerfMetrics,
-} from '../../platforms/ios/perf.ts';
+} from '../../platforms/apple/core/perf.ts';
 import type { PerfKind } from '../../contracts/perf.ts';
 import { SessionStore } from '../session-store.ts';
 import {

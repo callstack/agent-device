@@ -1,4 +1,4 @@
-import { getRunnerSessionSnapshot } from '../platforms/ios/runner-client.ts';
+import { getRunnerSessionSnapshot } from '../platforms/apple/core/runner/runner-client.ts';
 import type { SessionState } from './types.ts';
 
 export function refreshRecordingHealth(session: SessionState): void {

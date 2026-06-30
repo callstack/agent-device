@@ -4,7 +4,7 @@ import { IOS_SIMULATOR } from '../../../__tests__/test-utils/index.ts';
 import { clearRequestCanceled, markRequestCanceled } from '../../../daemon/request-cancel.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { Deadline } from '../../../utils/retry.ts';
-import type { RunnerSession } from '../runner-session-types.ts';
+import type { RunnerSession } from '../../apple/core/runner/runner-session-types.ts';
 
 const {
   mockEnsureRunnerSession,
@@ -30,9 +30,10 @@ vi.mock('../../../utils/diagnostics.ts', async () => {
   };
 });
 
-vi.mock('../runner-session.ts', async () => {
-  const actual =
-    await vi.importActual<typeof import('../runner-session.ts')>('../runner-session.ts');
+vi.mock('../../apple/core/runner/runner-session.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../apple/core/runner/runner-session.ts')>(
+    '../../apple/core/runner/runner-session.ts',
+  );
   return {
     ...actual,
     ensureRunnerSession: mockEnsureRunnerSession,
@@ -41,9 +42,10 @@ vi.mock('../runner-session.ts', async () => {
   };
 });
 
-vi.mock('../runner-xctestrun.ts', async () => {
-  const actual =
-    await vi.importActual<typeof import('../runner-xctestrun.ts')>('../runner-xctestrun.ts');
+vi.mock('../../apple/core/runner/runner-xctestrun.ts', async () => {
+  const actual = await vi.importActual<
+    typeof import('../../apple/core/runner/runner-xctestrun.ts')
+  >('../../apple/core/runner/runner-xctestrun.ts');
   return {
     ...actual,
     markRunnerXctestrunArtifactBadForRun: mockMarkRunnerXctestrunArtifactBadForRun,
@@ -54,8 +56,8 @@ import {
   prepareIosRunner,
   prewarmIosRunnerSession,
   runIosRunnerCommand,
-} from '../runner-client.ts';
-import type { RunnerXctestrunArtifact } from '../runner-xctestrun.ts';
+} from '../../apple/core/runner/runner-client.ts';
+import type { RunnerXctestrunArtifact } from '../../apple/core/runner/runner-xctestrun.ts';
 
 beforeEach(() => {
   vi.resetAllMocks();

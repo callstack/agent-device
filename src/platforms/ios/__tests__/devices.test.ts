@@ -10,7 +10,7 @@ import {
   parseXctracePhysicalAppleDevices,
   resolveAppleTargetFromDevicectlDevice,
   withAppleToolProvider,
-} from '../devices.ts';
+} from '../../apple/core/devices.ts';
 import type { ExecResult } from '../../../utils/exec.ts';
 
 const toolCalls: Array<[string, string[]]> = [];
@@ -79,6 +79,7 @@ test('isSupportedAppleDevicectlDevice handles renamed AppleTV devices', () => {
 test('apple product type helpers classify iOS and tvOS product families', () => {
   assert.equal(isAppleProductType('iPhone16,2'), true);
   assert.equal(isAppleProductType('AppleTV11,1'), true);
+  assert.equal(isAppleProductType('RealityDevice14,1'), true);
   assert.equal(isAppleTvProductType('AppleTV11,1'), true);
   assert.equal(isAppleTvProductType('iPhone16,2'), false);
 });
@@ -132,6 +133,23 @@ test('parseXctracePhysicalAppleDevices tags physical iPads as iPadOS', () => {
       kind: 'device',
       target: 'mobile',
       appleOs: 'ipados',
+      booted: true,
+    },
+  ]);
+});
+
+test('parseXctracePhysicalAppleDevices tags Apple Vision devices as visionOS', () => {
+  const parsed = parseXctracePhysicalAppleDevices(
+    ['== Devices ==', 'Apple Vision Pro [vision-udid-1]'].join('\n'),
+  );
+  assert.deepEqual(parsed, [
+    {
+      platform: 'ios',
+      id: 'vision-udid-1',
+      name: 'Apple Vision Pro',
+      kind: 'device',
+      target: 'mobile',
+      appleOs: 'visionos',
       booted: true,
     },
   ]);
@@ -219,6 +237,43 @@ test('listAppleDevices tags iPhone simulators and the host Mac with appleOs', as
   assert.equal(byId.get('sim-ipad'), 'ipados');
   assert.equal(byId.get('sim-tv'), 'tvos');
   assert.equal(byId.get('host-macos-local'), 'macos');
+});
+
+test('listAppleDevices tags visionOS simulators', async () => {
+  mockRunCommand = async (_cmd, args) => {
+    if (args.includes('simctl') && args.includes('list') && args.includes('devices')) {
+      return {
+        stdout: JSON.stringify({
+          devices: {
+            'com.apple.CoreSimulator.SimRuntime.xrOS-26-2': [
+              {
+                name: 'Apple Vision Pro',
+                udid: 'sim-vision',
+                state: 'Shutdown',
+                isAvailable: true,
+                deviceTypeIdentifier: 'com.apple.CoreSimulator.SimDeviceType.Apple-Vision-Pro-4K',
+              },
+            ],
+          },
+        }),
+        stderr: '',
+        exitCode: 0,
+      };
+    }
+    throw new Error(`unexpected xcrun args: ${args.join(' ')}`);
+  };
+
+  const devices = await withMockedPlatform(
+    'darwin',
+    async () =>
+      await withMockedAppleTools(
+        async () => await listAppleDevices({ simulatorSetPath: '/tmp/agent-device-sim-set' }),
+      ),
+  );
+
+  const vision = devices.find((device) => device.id === 'sim-vision');
+  assert.equal(vision?.target, 'mobile');
+  assert.equal(vision?.appleOs, 'visionos');
 });
 
 test('listAppleDevices tags renamed iPad simulators as iPadOS from deviceTypeIdentifier', async () => {

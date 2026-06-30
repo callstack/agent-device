@@ -2,7 +2,7 @@ import { parseWaitPositionals } from '../core/wait-positionals.ts';
 import type { WaitParsed } from '../core/wait-positionals.ts';
 import { AppError, asAppError, normalizeError } from '../kernel/errors.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
-import { runIosRunnerCommand } from '../platforms/ios/runner-client.ts';
+import { runIosRunnerCommand } from '../platforms/apple/core/runner/runner-client.ts';
 import { buildAppleRunnerRequestOptions } from './apple-runner-options.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { errorResponse, requireCommandSupported } from './handlers/response.ts';

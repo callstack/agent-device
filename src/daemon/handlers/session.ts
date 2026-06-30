@@ -5,7 +5,7 @@ import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts
 import {
   prepareIosRunner,
   type PrepareIosRunnerResult,
-} from '../../platforms/ios/runner-client.ts';
+} from '../../platforms/apple/core/runner/runner-client.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { isApplePlatform } from '../../kernel/device.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';

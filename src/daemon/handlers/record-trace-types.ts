@@ -1,7 +1,7 @@
 import type { RecordingProvider } from '../recording-provider.ts';
 import type { runCmd } from '../../utils/exec.ts';
 import type { isPlayableVideo, waitForStableFile } from '../../utils/video.ts';
-import type { runIosRunnerCommand } from '../../platforms/ios/runner-client.ts';
+import type { runIosRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import type {
   overlayRecordingTouches,
   resizeRecording,

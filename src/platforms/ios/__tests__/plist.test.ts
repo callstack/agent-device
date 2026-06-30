@@ -10,7 +10,7 @@ vi.mock('../../../utils/exec.ts', async (importOriginal) => {
 });
 
 import { runCmd } from '../../../utils/exec.ts';
-import { readInfoPlistString } from '../plist.ts';
+import { readInfoPlistString } from '../../apple/core/plist.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 

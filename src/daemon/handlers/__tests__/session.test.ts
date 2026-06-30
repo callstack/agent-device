@@ -13,8 +13,9 @@ vi.mock('../../runtime-hints.ts', async (importOriginal) => {
     clearRuntimeHintsFromApp: vi.fn(async () => {}),
   };
 });
-vi.mock('../../../platforms/ios/runner-client.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/ios/runner-client.ts')>();
+vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
   return {
     ...actual,
     prepareIosRunner: vi.fn(async () => ({
@@ -27,8 +28,9 @@ vi.mock('../../../platforms/ios/runner-client.ts', async (importOriginal) => {
     stopIosRunnerSession: vi.fn(async () => {}),
   };
 });
-vi.mock('../../../platforms/ios/macos-helper.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/ios/macos-helper.ts')>();
+vi.mock('../../../platforms/apple/os/macos/helper.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/apple/os/macos/helper.ts')>();
   return { ...actual, runMacOsAlertAction: vi.fn(async () => {}) };
 });
 vi.mock('../session-device-utils.ts', async (importOriginal) => {
@@ -39,8 +41,9 @@ vi.mock('../session-open-target.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../session-open-target.ts')>();
   return { ...actual, resolveAndroidPackageForOpen: vi.fn(async () => undefined) };
 });
-vi.mock('../../../platforms/ios/simulator.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/ios/simulator.ts')>();
+vi.mock('../../../platforms/apple/core/simulator.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/apple/core/simulator.ts')>();
   return { ...actual, getSimulatorState: vi.fn(async () => null), shutdownSimulator: vi.fn() };
 });
 vi.mock('../../../utils/exec.ts', async (importOriginal) => {
@@ -59,12 +62,12 @@ vi.mock('../../../platforms/android/devices.ts', async (importOriginal) => {
     ensureAndroidEmulatorBooted: vi.fn(),
   };
 });
-vi.mock('../../../platforms/ios/devices.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/ios/devices.ts')>();
+vi.mock('../../../platforms/apple/core/devices.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../platforms/apple/core/devices.ts')>();
   return { ...actual, listAppleDevices: vi.fn(async () => []) };
 });
-vi.mock('../../../platforms/ios/apps.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/ios/apps.ts')>();
+vi.mock('../../../platforms/apple/core/apps.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../platforms/apple/core/apps.ts')>();
   return {
     ...actual,
     listIosApps: vi.fn(async () => []),
@@ -105,18 +108,21 @@ import {
   prewarmIosRunnerCache,
   prewarmIosRunnerSession,
   stopIosRunnerSession,
-} from '../../../platforms/ios/runner-client.ts';
-import { runMacOsAlertAction } from '../../../platforms/ios/macos-helper.ts';
+} from '../../../platforms/apple/core/runner/runner-client.ts';
+import { runMacOsAlertAction } from '../../../platforms/apple/os/macos/helper.ts';
 import { settleIosSimulator } from '../session-device-utils.ts';
 import { resolveAndroidPackageForOpen } from '../session-open-target.ts';
 import { runCmd } from '../../../utils/exec.ts';
-import { shutdownSimulator } from '../../../platforms/ios/simulator.ts';
+import { shutdownSimulator } from '../../../platforms/apple/core/simulator.ts';
 import {
   listAndroidDevices,
   ensureAndroidEmulatorBooted,
 } from '../../../platforms/android/devices.ts';
-import { listAppleDevices } from '../../../platforms/ios/devices.ts';
-import { resolveIosApp, resolveIosSimulatorDeepLinkBundleId } from '../../../platforms/ios/apps.ts';
+import { listAppleDevices } from '../../../platforms/apple/core/devices.ts';
+import {
+  resolveIosApp,
+  resolveIosSimulatorDeepLinkBundleId,
+} from '../../../platforms/apple/core/apps.ts';
 import { startAppLog, stopAppLog } from '../../app-log.ts';
 import { defaultInstallOps, defaultReinstallOps } from '../session-deploy.ts';
 import { clearRequestCanceled, markRequestCanceled } from '../../request-cancel.ts';

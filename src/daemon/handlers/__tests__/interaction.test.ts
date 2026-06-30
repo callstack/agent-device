@@ -57,8 +57,9 @@ vi.mock('../interaction-snapshot.ts', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../platforms/ios/runner-client.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/ios/runner-client.ts')>();
+vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
   return {
     ...actual,
     runIosRunnerCommand: mockRunIosRunnerCommand,

@@ -26,10 +26,10 @@ const applePlugin = {
   // inventory if-chain, reusing the SAME predicate (no divergent copy).
   discoverDevices: async (request: DeviceInventoryRequest) => {
     if (shouldUseHostMacFastPath(request)) {
-      const { listMacosDevices } = await import('../../platforms/macos/devices.ts');
+      const { listMacosDevices } = await import('../../platforms/apple/os/macos/devices.ts');
       return await listMacosDevices();
     }
-    const { listAppleDevices } = await import('../../platforms/ios/devices.ts');
+    const { listAppleDevices } = await import('../../platforms/apple/core/devices.ts');
     return await listAppleDevices({
       simulatorSetPath: request.iosSimulatorSetPath,
       udid: request.udid,

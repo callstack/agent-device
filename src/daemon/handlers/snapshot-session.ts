@@ -2,8 +2,8 @@ import { resolveTargetDevice } from '../../core/dispatch.ts';
 import {
   resolveRunnerAppBundleId,
   stopIosRunnerSession,
-} from '../../platforms/ios/runner-client.ts';
-import { closeIosApp } from '../../platforms/ios/apps.ts';
+} from '../../platforms/apple/core/runner/runner-client.ts';
+import { closeIosApp } from '../../platforms/apple/core/apps.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import { ensureDeviceReady } from '../device-ready.ts';

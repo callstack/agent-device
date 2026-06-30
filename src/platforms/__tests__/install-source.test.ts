@@ -16,7 +16,7 @@ import {
 } from '../install-source.ts';
 import * as androidManifest from '../android/manifest.ts';
 import { prepareAndroidInstallArtifact } from '../android/install-artifact.ts';
-import { prepareIosInstallArtifact } from '../ios/install-artifact.ts';
+import { prepareIosInstallArtifact } from '../apple/core/install-artifact.ts';
 
 test('validateDownloadSourceUrl rejects localhost and private literal addresses by default', async () => {
   await assert.rejects(

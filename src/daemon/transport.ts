@@ -53,7 +53,8 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
         try {
           const deadline = Date.now() + disconnectAbortMaxWindowMs;
           while (inFlightRequests > 0 && Date.now() < deadline) {
-            const { abortAllIosRunnerSessions } = await import('../platforms/ios/runner-client.ts');
+            const { abortAllIosRunnerSessions } =
+              await import('../platforms/apple/core/runner/runner-client.ts');
             await abortAllIosRunnerSessions();
             if (inFlightRequests <= 0) break;
             await sleep(disconnectAbortPollIntervalMs);

@@ -353,8 +353,8 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-					SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator appletvos appletvsimulator";
-					TARGETED_DEVICE_FAMILY = "1,2,3";
+					SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator appletvos appletvsimulator xros xrsimulator";
+					TARGETED_DEVICE_FAMILY = "1,2,3,7";
 					TVOS_DEPLOYMENT_TARGET = 15.6;
 			};
 			name = Debug;
@@ -387,8 +387,8 @@
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-					SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator appletvos appletvsimulator";
-					TARGETED_DEVICE_FAMILY = "1,2,3";
+					SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator appletvos appletvsimulator xros xrsimulator";
+					TARGETED_DEVICE_FAMILY = "1,2,3,7";
 					TVOS_DEPLOYMENT_TARGET = 15.6;
 			};
 			name = Release;
@@ -412,8 +412,8 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "AgentDeviceRunnerUITests/AgentDeviceRunnerUITests-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-					SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator appletvos appletvsimulator";
-					TARGETED_DEVICE_FAMILY = "1,2,3";
+					SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator appletvos appletvsimulator xros xrsimulator";
+					TARGETED_DEVICE_FAMILY = "1,2,3,7";
 					TVOS_DEPLOYMENT_TARGET = 15.6;
 				TEST_TARGET_NAME = AgentDeviceRunner;
 			};
@@ -438,8 +438,8 @@
 				SWIFT_OBJC_BRIDGING_HEADER = "AgentDeviceRunnerUITests/AgentDeviceRunnerUITests-Bridging-Header.h";
 				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
 				SWIFT_VERSION = 5.0;
-					SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator appletvos appletvsimulator";
-					TARGETED_DEVICE_FAMILY = "1,2,3";
+					SUPPORTED_PLATFORMS = "macosx iphoneos iphonesimulator appletvos appletvsimulator xros xrsimulator";
+					TARGETED_DEVICE_FAMILY = "1,2,3,7";
 					TVOS_DEPLOYMENT_TARGET = 15.6;
 				TEST_TARGET_NAME = AgentDeviceRunner;
 			};

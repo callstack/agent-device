@@ -19,10 +19,10 @@ vi.mock('../../../utils/exec.ts', async () => {
   };
 });
 
-vi.mock('../runner-macos-products.ts', async () => {
-  const actual = await vi.importActual<typeof import('../runner-macos-products.ts')>(
-    '../runner-macos-products.ts',
-  );
+vi.mock('../../apple/core/runner/runner-macos-products.ts', async () => {
+  const actual = await vi.importActual<
+    typeof import('../../apple/core/runner/runner-macos-products.ts')
+  >('../../apple/core/runner/runner-macos-products.ts');
   return {
     ...actual,
     repairMacOsRunnerProductsIfNeeded: mockRepairMacOsRunnerProductsIfNeeded,
@@ -36,8 +36,11 @@ import {
 } from '../../../daemon/request-progress.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
 import { AppError } from '../../../kernel/errors.ts';
-import { isReadOnlyRunnerCommand } from '../runner-command-traits.ts';
-import { withRunnerCommandId, type RunnerCommand } from '../runner-contract.ts';
+import { isReadOnlyRunnerCommand } from '../../apple/core/runner/runner-command-traits.ts';
+import {
+  withRunnerCommandId,
+  type RunnerCommand,
+} from '../../apple/core/runner/runner-contract.ts';
 import {
   assertSafeDerivedCleanup,
   isRetryableRunnerError,
@@ -49,7 +52,7 @@ import {
   resolveRunnerMaxConcurrentDestinationsFlag,
   resolveRunnerSigningBuildSettings,
   shouldRetryRunnerConnectError,
-} from '../runner-client.ts';
+} from '../../apple/core/runner/runner-client.ts';
 import {
   acquireRunnerXctestrunCacheLock,
   ensureXctestrunArtifact,
@@ -63,8 +66,8 @@ import {
   shouldDeleteRunnerDerivedRootEntry,
   writeRunnerCacheMetadata,
   xctestrunReferencesProjectRoot,
-} from '../runner-xctestrun.ts';
-import { parseRunnerResponse } from '../runner-session.ts';
+} from '../../apple/core/runner/runner-xctestrun.ts';
+import { parseRunnerResponse } from '../../apple/core/runner/runner-session.ts';
 
 const iosSimulator: DeviceInfo = {
   platform: 'ios',

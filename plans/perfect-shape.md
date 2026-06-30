@@ -35,8 +35,8 @@ reduction is real but modest (~**-1k to -3k LOC**, dominated by deleting the `cl
 (command descriptor, composing with ADR 0003) and
 [ADR 0009](../docs/adr/0009-apple-platform-consolidation.md) (Apple / `AppleOS`).
 **Status (2026-06):** Phase 0 (type-safety, parse-at-boundary, derived allow-lists, `AppleOS` groundwork,
-replay derivation) and the Tier-A dedup sweep are merged. The next gateway is the command-descriptor spine
-(§5.2, ADR 0008); everything substantive cascades from it.
+replay derivation), the Tier-A dedup sweep, and the Apple filesystem consolidation are merged. The next gateway
+is the command-descriptor spine (§5.2, ADR 0008); everything substantive cascades from it.
 
 ---
 
@@ -292,8 +292,8 @@ but "add a platform" still touches the `device.ts` union line.
 **not** six `Platform` literals (which would collide with the cross-platform `target` axis). The XCTest runner
 already builds `ios|macos|tvos` and ~85% of `platforms/ios` is already the OS-agnostic Apple engine, so this is
 mostly relocate-and-rename for iOS/iPadOS/tvOS/macOS; visionOS is scoped net-new work and watchOS is an
-explicit unsupported sentinel (XCUITest can't drive it). Full plan:
-[apple-platform-consolidation.md](./apple-platform-consolidation.md).
+explicit unsupported sentinel (XCUITest can't drive it). ADR 0009 owns the AppleOS decision; remaining
+implementation state is tracked in [phase3-platform-plugin-progress.md](./phase3-platform-plugin-progress.md).
 
 ### 5.2 `CommandDescriptor` (the command axis) — *facet composition*, honoring ADR 0003
 
@@ -398,7 +398,7 @@ a step can't ship alone, the plan has failed.
 | **0 · confidence builders** (behaviorless) | **(b) ✅ shipped** — exhaustive capability platform selection; **(c) ✅ shipped** — generic `RecordingBackend<P>` (5 casts deleted); (a) parse-at-boundary on MCP/HTTP edge; (d) collapse the 3 platform allow-lists + 5-layer batch validation | low | correctness/security; builds muscle memory; touches no identity table |
 | **1 · command spine** | (a) **invert the import graph** — `commandRegistry` becomes root, `command-catalog`/`capabilities`/`daemon-registry`/`batch-policy` derive (parity-tested, no deletion yet); (b) promote each family's facet → `CommandDescriptor` additively; (c) replace the 24-arm switch with the total map, arm-by-arm | **med** (the import-cycle inversion is the real first-week blocker: `command-catalog` has ~95 importers and the facet imports `AgentDeviceClient` today) | finishes a proven seam; add-command → ~2 files; enables everything below |
 | **2 · typed results** (the parity oracle) | (a) `CommandResultMap` with `Record` default, migrate per-command from real runner payloads; (b) graft `TypedError`; fold the disowned 'generic' family into `handlers/` **last**; (c) kill the `client-types.ts` mirror (~550 LOC) | med (must be per-command, never a big-bang retype of 203 files) | the safety net the platform unwind needs; biggest single LOC win |
-| **3 · platform plugin** (now safe) | (a) define `PlatformPlugin`, **lazy** factories (cold-start benchmark guards latency); (b) move capability columns onto plugin grants, **porting every `supports()` closure verbatim**, pinned by the table-equivalence test before deletion; (c) **last & most-gated:** unwind macOS out of iOS (keep an `apple-shared/` runner byte-identical), gated behind the sim-validation request-counting harness. The **Apple plugin is the first instance** and owns the `AppleOS` leaves — see [apple-platform-consolidation.md](./apple-platform-consolidation.md) | **high** (touches the shared XCTest runner) | add-platform wiring → ~3 files; kills the 231-branch smear |
+| **3 · platform plugin** (now safe) | (a) define `PlatformPlugin`, **lazy** factories (cold-start benchmark guards latency); (b) move capability columns onto plugin grants, **porting every `supports()` closure verbatim**, pinned by the table-equivalence test before deletion; (c) ✅ unwind macOS and the OS-agnostic Apple engine out of `platforms/ios`; (d) finish Apple plugin facets, tvOS leaf, final `Platform` collapse, and watchOS sentinel last. The **Apple plugin is the first instance** and owns the `AppleOS` leaves — see ADR 0009 and [phase3-platform-plugin-progress.md](./phase3-platform-plugin-progress.md) | **high** (touches shared platform routing and the XCTest runner) | add-platform wiring → ~3 files; kills the 231-branch smear |
 | **4 · agent-cost** (opt-in) | (a) `ResponseView.toView` with `default`==today; `responseLevel` knob defaulting to `default`; (b) typed `BatchStepResult` → intermediate steps digest; per-command MCP `outputSchema`; generalize zero-load fast-paths | med (wire-shape risk vs Maestro — strictly opt-in) | the north-star-#2 token/latency wins |
 | **5 · layering + legacy** (quiet windows) | intent-folder moves + utils extraction as pure path codemods; at next major drop the ~175 LOC of legacy aliases/barrels | low-per-step, high-diff | scoped ownership + import lint; merge-pain risk → land fast, small |
 
@@ -432,8 +432,8 @@ grants; bundling the folder reorg with the registry work (maximizes diff-noise a
 
 ## 8. Before / after — the command axis
 
-(The platform-axis before/after diagrams live in
-[apple-platform-consolidation.md](./apple-platform-consolidation.md), since Apple is its first instance.)
+(The platform-axis decision lives in ADR 0009; current implementation status lives in
+[phase3-platform-plugin-progress.md](./phase3-platform-plugin-progress.md).)
 
 ```
 BEFORE — a command's identity is RESTATED in ~10 hand-synced tables, aligned "by convention"
@@ -493,7 +493,7 @@ registration → everything else derives or looks up"*:
    PlatformPlugin registry (§5.1)                 CommandDescriptor registry (§5.2)
      └─ Apple plugin ──owns──► appleOs              └─ defineCommand(...) ──derives──► catalog,
         { ios … macos … visionos }                    capability, daemon-registry, batch, dispatch,
-   (apple-platform-consolidation.md)                  client-types   (daemonFacet honors ADR 0003)
+   (ADR 0009 / phase3 progress)                       client-types   (daemonFacet honors ADR 0003)
 ```
 
 ---

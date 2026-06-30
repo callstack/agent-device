@@ -794,7 +794,8 @@ async function abortInFlightIosRunnerSessionsWhileDisconnected(
   try {
     const deadline = Date.now() + CLIENT_DISCONNECT_ABORT_MAX_WINDOW_MS;
     while (isRequestCanceled(requestId) && Date.now() < deadline) {
-      const { abortAllIosRunnerSessions } = await import('../platforms/ios/runner-client.ts');
+      const { abortAllIosRunnerSessions } =
+        await import('../platforms/apple/core/runner/runner-client.ts');
       await abortAllIosRunnerSessions();
       if (!isRequestCanceled(requestId)) break;
       await sleep(CLIENT_DISCONNECT_ABORT_POLL_INTERVAL_MS);

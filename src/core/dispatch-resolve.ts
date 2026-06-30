@@ -63,7 +63,7 @@ async function resolveAppleDevice(
   const selected = await resolveAppleDeviceCandidate(devices, selector, context);
 
   if (shouldUseAppleSimulatorFallback(selector, selected)) {
-    const { findBootableIosSimulator } = await import('../platforms/ios/devices.ts');
+    const { findBootableIosSimulator } = await import('../platforms/apple/core/devices.ts');
     const simulator = await findBootableIosSimulator({
       simulatorSetPath: context.simulatorSetPath,
       target: selector.target,

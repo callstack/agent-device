@@ -68,6 +68,28 @@
     {
       "file": "src/platforms/ios/index.ts",
       "exports": ["listSimulatorApps", "uninstallIosApp"]
+    },
+    {
+      "file": "src/platforms/apple/core/apps.ts",
+      "exports": ["listSimulatorApps", "uninstallIosApp"]
+    },
+    {
+      "file": "src/platforms/apple/core/runner/runner-contract.ts",
+      "exports": ["resolveRunnerEarlyExitHint"]
+    },
+    {
+      "file": "src/platforms/apple/core/runner/runner-session.ts",
+      "exports": ["stopAllIosRunnerSessions"]
+    },
+    {
+      "file": "src/platforms/apple/core/runner/runner-xctestrun.ts",
+      "exports": [
+        "resolveRunnerBuildDestination",
+        "resolveRunnerAppBundleId",
+        "resolveRunnerSigningBuildSettings",
+        "resolveRunnerBundleBuildSettings",
+        "assertSafeDerivedCleanup"
+      ]
     }
   ],
   "usedClassMembers": ["name", "listActiveLeases", "delete", "values", "elapsedMs", "isExpired"],

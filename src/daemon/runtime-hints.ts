@@ -10,8 +10,8 @@ import {
   classifyAndroidAppTarget,
   formatAndroidInstalledPackageRequiredMessage,
 } from '../platforms/android/open-target.ts';
-import { buildSimctlArgsForDevice } from '../platforms/ios/simctl.ts';
-import { runXcrun } from '../platforms/ios/tool-provider.ts';
+import { buildSimctlArgsForDevice } from '../platforms/apple/core/simctl.ts';
+import { runXcrun } from '../platforms/apple/core/tool-provider.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 
 const ANDROID_DEV_PREFS_PATH = 'shared_prefs/ReactNativeDevPrefs.xml';

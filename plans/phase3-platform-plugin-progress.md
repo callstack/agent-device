@@ -1,7 +1,7 @@
 # Phase 3 — PlatformPlugin: progress + plan for the risky remainder
 
 > Tracks the platform-axis work from [perfect-shape.md](./perfect-shape.md) §5.1 / §6 (row "3 · platform
-> plugin") and [apple-platform-consolidation.md](./apple-platform-consolidation.md) / ADR-0009.
+> plugin") and ADR-0009.
 
 ## Status
 
@@ -9,7 +9,8 @@
 |---|---|---|
 | **(a)** | `PlatformPlugin` registry + exhaustiveness + parity tests; route `getInteractor` through it | **✅ shipped (this PR — behaviorless)** |
 | **(b)** | Move capability columns + daemon columns onto plugin grants; port `supports()`/`unsupportedHint()` closures verbatim | ⛔ planned — **HUMAN REVIEW ONLY, DO NOT AUTO-MERGE** |
-| **(c)** | Unwind macOS out of `platforms/ios` into an `apple/` family, runner byte-identical | ⛔ planned — **HUMAN REVIEW ONLY, DO NOT AUTO-MERGE** |
+| **(c)** | Unwind macOS and the OS-agnostic Apple engine out of `platforms/ios` into `platforms/apple` | **✅ shipped in #968** |
+| **(d)** | Finish the public Apple leaf model: plugin facets, tvOS leaf, final `Platform` collapse, watchOS sentinel | ⛔ planned — **HUMAN REVIEW ONLY, DO NOT AUTO-MERGE** |
 
 ## Step (a) — what shipped (behaviorless foundation)
 
@@ -108,28 +109,38 @@ the daemon branches stay the source of truth and the facet is NOT added to the c
 
 ---
 
-## Step (c) — unwind macOS out of `platforms/ios`  ⛔ DO NOT AUTO-MERGE (touches the shared XCTest runner)
+## Step (c) — Apple filesystem consolidation ✅ shipped in #968
 
-Per [apple-platform-consolidation.md](./apple-platform-consolidation.md) §"Sequencing" and ADR-0009. **Gated
-behind the sim-validation request-counting harness** (count iOS runner requests via `--debug` per-request
-ndjson; isolate daemons with `--state-dir`) — the runner request count must be unchanged before/after each
-relocation commit.
+This step retired the stale standalone Apple plan by landing the low-risk relocation it described:
 
-1. **macOS leaf relocation** — move `src/platforms/ios/{macos-helper.ts, macos-apps.ts, macos-host-provider.ts,
-   desktop-scroll.ts}` (~797 LOC) into `src/platforms/apple/os/macos/`, and invert the
-   `src/platforms/macos/devices.ts` 19-LOC stub (today `platform-inventory.ts:34` imports it). Pure
-   move + re-export; the AppKit specifics (helper binary, coordinate-pinch, menubar/desktop surfaces) stay in
-   the leaf — NOT flattened into the touch model.
-2. **OS-agnostic engine relocation** — move the `runner/` stack (6,136 LOC, 17 files), `tool-provider`,
-   discovery, snapshot, screenshot, perf, debug-symbols, and `apple-runner-platform.ts` (`RUNNER_PROFILES`)
-   from `platforms/ios` → `platforms/apple/core`. **Byte-identical move** — the runner never needed to know
-   which Apple OS it drives. The runner request-counting harness is the gate here.
-3. **Relocate the plugin + interactor** — `core/platform-plugin/` → `src/platforms/apple/` (plus
-   `core/interactors/apple.ts` → `apple/interactor.ts`), making `getInteractor`'s `core→platforms` routing the
-   final shape. Populate the `providers`/`recording`/`appLog`/`perf` facets from step (b.3) here.
-4. **tvOS promotion** — rename `ios + target:'tv'` to an `apple/os/tvos/` leaf; behavior (XCUIRemote focus,
-   no coordinate tap) already exists. Keep the focus-only interaction contract — do NOT flatten a uniform tap.
-5. (Future) visionOS net-new leaf; watchOS unsupported sentinel; per-`AppleOS` capability data table.
+1. **macOS leaf relocation** — `macos-helper`, macOS app discovery, host provider, desktop scrolling, and the
+   macOS device stub now live under `src/platforms/apple/os/macos/`. AppKit-specific behavior stays isolated
+   and is not flattened into the iOS/tvOS touch model.
+2. **OS-agnostic engine relocation** — the runner stack, tool provider, discovery, snapshot, screenshot, perf,
+   debug-symbols, and runner profile modules now live under `src/platforms/apple/core/`, and internal imports
+   point directly at those Apple modules instead of legacy iOS re-export shims.
+3. **visionOS groundwork** — the runner profile, SDK/platform metadata, Xcode supported-platform list, build
+   script case, discovery tagging, and Swift interaction guard now recognize visionOS. Live spatial-input QA is
+   still future work.
+4. **request-count gate removal** — the runner request-count CI gate and `cost.runnerRoundTrips` runtime surface
+   were removed because successful `main` runs captured zero runner events, so the signal did not prove runner
+   behavior. Apple runner regressions are now guarded by the normal unit/build gates plus live smoke replay.
+
+## Step (d) — remaining Apple leaf/plugin work ⛔ DO NOT AUTO-MERGE
+
+These items are still real work and should not be inferred as done from the filesystem move:
+
+1. **Plugin + interactor placement/facets** — decide whether `core/platform-plugin/` and
+   `core/interactors/apple.ts` should move under `src/platforms/apple/` only when the platform-neutral
+   `providers` / `recording` / `appLog` / `perf` facets from step (b.3) are ready and parity-tested.
+2. **tvOS promotion** — split `ios + target:'tv'` into an explicit tvOS leaf only with tests that preserve the
+   XCUIRemote focus-only contract and unsupported coordinate tap behavior.
+3. **Final public platform collapse** — changing public `Platform` from `ios`/`macos` to `apple` is the
+   highest-diff compatibility step and should remain last.
+4. **watchOS sentinel** — watchOS stays out of scope for now; when modeled, it must be an explicit unsupported
+   sentinel because XCUITest cannot drive watchOS UI.
+5. **Per-`AppleOS` capability tables** — replace scattered Apple predicates only after table-equivalence tests
+   prove byte-for-byte behavior for iOS/iPadOS/tvOS/macOS/visionOS sample devices.
 
 **Do-not-flatten (perfect-shape §7):** the iOS XCTest two-finger synthesis (`RunnerSynthesizedGesture`) and
 adb/idb leaf code stay untouched; the plugin's job is to stop core/daemon BRANCHING on platform, not to

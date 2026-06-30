@@ -7,8 +7,8 @@ import {
   buildRunnerSequenceCommand,
   parseRunnerSequenceResult,
   validateRunnerSequenceSteps,
-} from '../runner-sequence.ts';
-import type { RunnerSequenceStep } from '../runner-contract.ts';
+} from '../../apple/core/runner/runner-sequence.ts';
+import type { RunnerSequenceStep } from '../../apple/core/runner/runner-contract.ts';
 
 function tap(x: number, y: number): RunnerSequenceStep {
   return { kind: 'tap', x, y };

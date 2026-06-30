@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { IOS_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
-import type { RunnerCommand } from '../../../platforms/ios/runner-contract.ts';
+import type { RunnerCommand } from '../../../platforms/apple/core/runner/runner-contract.ts';
 import type { RecordTraceDeps } from '../record-trace-types.ts';
 import { startIosDeviceRecording } from '../record-trace-ios.ts';
 

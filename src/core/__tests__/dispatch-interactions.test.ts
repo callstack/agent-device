@@ -5,8 +5,9 @@ const { mockRunIosRunnerCommand } = vi.hoisted(() => ({
   mockRunIosRunnerCommand: vi.fn(),
 }));
 
-vi.mock('../../platforms/ios/runner-client.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/ios/runner-client.ts')>();
+vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../platforms/apple/core/runner/runner-client.ts')>();
   return { ...actual, runIosRunnerCommand: mockRunIosRunnerCommand };
 });
 
@@ -19,12 +20,12 @@ import {
   handleTransformGestureCommand,
 } from '../dispatch-interactions.ts';
 import type { Interactor } from '../interactor-types.ts';
-import type { RunnerCommand } from '../../platforms/ios/runner-contract.ts';
+import type { RunnerCommand } from '../../platforms/apple/core/runner/runner-contract.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { ANDROID_EMULATOR, IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 
-vi.mock('../../platforms/ios/macos-helper.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/ios/macos-helper.ts')>();
+vi.mock('../../platforms/apple/os/macos/helper.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../platforms/apple/os/macos/helper.ts')>();
   return {
     ...actual,
     runMacOsPressAction: vi.fn(async () => ({})),

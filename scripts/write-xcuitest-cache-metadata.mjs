@@ -9,7 +9,7 @@ const [platform, derivedPath, destination] = args;
 
 if (!platform || !derivedPath || !destination) {
   console.error(
-    'Usage: write-xcuitest-cache-metadata.mjs <ios|macos|tvos> <derived> <destination>',
+    'Usage: write-xcuitest-cache-metadata.mjs <ios|macos|tvos|visionos> <derived> <destination>',
   );
   process.exit(1);
 }
@@ -111,6 +111,7 @@ function resolvePlatformName() {
   if (platform === 'ios') return 'iOS';
   if (platform === 'tvos') return 'tvOS';
   if (platform === 'macos') return 'macOS';
+  if (platform === 'visionos') return 'visionOS';
   throw new Error(`Unsupported platform: ${platform}`);
 }
 
@@ -145,6 +146,9 @@ function resolveRunnerSdkName() {
   if (platformName === 'macOS') return 'macosx';
   if (platformName === 'tvOS') {
     return resolveDeviceKind() === 'simulator' ? 'appletvsimulator' : 'appletvos';
+  }
+  if (platformName === 'visionOS') {
+    return resolveDeviceKind() === 'simulator' ? 'xrsimulator' : 'xros';
   }
   return resolveDeviceKind() === 'simulator' ? 'iphonesimulator' : 'iphoneos';
 }
@@ -314,6 +318,14 @@ function scoreXctestrunCandidate(candidatePath) {
   } else if (platform === 'macos') {
     score +=
       basename.includes('macos') || candidatePath.includes(`${path.sep}macos${path.sep}`) ? 100 : 0;
+  } else if (platform === 'visionos') {
+    score += destination.includes('Simulator')
+      ? basename.includes('xrsimulator')
+        ? 100
+        : 0
+      : basename.includes('xros')
+        ? 100
+        : 0;
   }
   return score;
 }

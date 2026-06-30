@@ -6,7 +6,7 @@ import { createRequestCanceledError, isRequestCanceled } from '../request-cancel
 import {
   prewarmIosRunnerSession,
   stopIosRunnerSession,
-} from '../../platforms/ios/runner-client.ts';
+} from '../../platforms/apple/core/runner/runner-client.ts';
 import {
   buildAppleRunnerSessionOptions,
   createIosRunnerCacheColdBootPrewarmForOpen,

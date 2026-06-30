@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { dispatchCommand } from '../dispatch.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
-import { openIosApp, setIosSetting } from '../../platforms/ios/apps.ts';
+import { openIosApp, setIosSetting } from '../../platforms/apple/core/apps.ts';
 import { openAndroidApp } from '../../platforms/android/app-lifecycle.ts';
 import { setAndroidSetting } from '../../platforms/android/settings.ts';
 import { IOS_SIMULATOR } from '../../__tests__/test-utils/device-fixtures.ts';
 
-vi.mock('../../platforms/ios/apps.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/ios/apps.ts')>();
+vi.mock('../../platforms/apple/core/apps.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../platforms/apple/core/apps.ts')>();
   return {
     ...actual,
     openIosApp: vi.fn(async () => {}),

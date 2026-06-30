@@ -12,20 +12,20 @@ vi.mock('../../../utils/retry.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/retry.ts')>();
   return { ...actual, retryWithPolicy: vi.fn(actual.retryWithPolicy) };
 });
-vi.mock('../runner-client.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../runner-client.ts')>();
+vi.mock('../../apple/core/runner/runner-client.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../apple/core/runner/runner-client.ts')>();
   return { ...actual, runIosRunnerCommand: vi.fn(actual.runIosRunnerCommand) };
 });
-vi.mock('../simulator.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../simulator.ts')>();
+vi.mock('../../apple/core/simulator.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../apple/core/simulator.ts')>();
   return {
     ...actual,
     ensureBootedSimulator: vi.fn(actual.ensureBootedSimulator),
     openIosSimulatorApp: vi.fn(actual.openIosSimulatorApp),
   };
 });
-vi.mock('../screenshot-status-bar.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../screenshot-status-bar.ts')>();
+vi.mock('../../apple/core/screenshot-status-bar.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../apple/core/screenshot-status-bar.ts')>();
   return {
     ...actual,
     prepareSimulatorStatusBarForScreenshot: vi.fn(actual.prepareSimulatorStatusBarForScreenshot),
@@ -36,12 +36,15 @@ const execActual =
   await vi.importActual<typeof import('../../../utils/exec.ts')>('../../../utils/exec.ts');
 const retryActual =
   await vi.importActual<typeof import('../../../utils/retry.ts')>('../../../utils/retry.ts');
-const runnerActual =
-  await vi.importActual<typeof import('../runner-client.ts')>('../runner-client.ts');
-const simulatorActual = await vi.importActual<typeof import('../simulator.ts')>('../simulator.ts');
+const runnerActual = await vi.importActual<
+  typeof import('../../apple/core/runner/runner-client.ts')
+>('../../apple/core/runner/runner-client.ts');
+const simulatorActual = await vi.importActual<typeof import('../../apple/core/simulator.ts')>(
+  '../../apple/core/simulator.ts',
+);
 const screenshotStatusBarActual = await vi.importActual<
-  typeof import('../screenshot-status-bar.ts')
->('../screenshot-status-bar.ts');
+  typeof import('../../apple/core/screenshot-status-bar.ts')
+>('../../apple/core/screenshot-status-bar.ts');
 
 import {
   closeIosApp,
@@ -57,30 +60,36 @@ import {
   setIosSetting,
   shouldFallbackToRunnerForIosScreenshot,
   shouldRetryIosSimulatorScreenshot,
-} from '../apps.ts';
+} from '../../apple/core/apps.ts';
 import { withMockedMacOsHelper } from './macos-helper-test-utils.ts';
-import { quitMacOsApp, resolveMacOsHelperPackageRootFrom } from '../macos-helper.ts';
+import { quitMacOsApp, resolveMacOsHelperPackageRootFrom } from '../../apple/os/macos/helper.ts';
 import {
   captureSimulatorScreenshotWithFallback,
   captureSimulatorScreenshotWithRetry,
   captureScreenshotViaRunner,
   prepareSimulatorStatusBarForScreenshot,
   resolveSimulatorRunnerScreenshotCandidatePaths,
-} from '../screenshot.ts';
-import { ensureBootedSimulator, openIosSimulatorApp } from '../simulator.ts';
+} from '../../apple/core/screenshot.ts';
+import { ensureBootedSimulator, openIosSimulatorApp } from '../../apple/core/simulator.ts';
 import {
   invalidateSimulatorStatusBarOverrideCache,
   prepareSimulatorStatusBarForScreenshot as prepareStatusBarForScreenshot,
-} from '../screenshot-status-bar.ts';
-import { runIosRunnerCommand } from '../runner-client.ts';
+} from '../../apple/core/screenshot-status-bar.ts';
+import { runIosRunnerCommand } from '../../apple/core/runner/runner-client.ts';
 import { iosRunnerOverrides } from '../interactions.ts';
-import { IOS_DEVICE_INSTALL_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from '../config.ts';
+import {
+  IOS_DEVICE_INSTALL_TIMEOUT_MS,
+  IOS_SIMULATOR_TERMINATE_TIMEOUT_MS,
+} from '../../apple/core/config.ts';
 import type { DeviceInfo } from '../../../kernel/device.ts';
 import { withDiagnosticsScope } from '../../../utils/diagnostics.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { runCmd } from '../../../utils/exec.ts';
 import { retryWithPolicy } from '../../../utils/retry.ts';
-import { parseIosDeviceAppsPayload, parseIosDeviceProcessesPayload } from '../devicectl.ts';
+import {
+  parseIosDeviceAppsPayload,
+  parseIosDeviceProcessesPayload,
+} from '../../apple/core/devicectl.ts';
 
 const IOS_TEST_DEVICE: DeviceInfo = {
   platform: 'ios',

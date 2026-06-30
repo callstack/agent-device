@@ -2,13 +2,14 @@ import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 
-vi.mock('../../platforms/ios/runner-client.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/ios/runner-client.ts')>();
+vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../platforms/apple/core/runner/runner-client.ts')>();
   return { ...actual, runIosRunnerCommand: vi.fn() };
 });
 
 import { dispatchCommand } from '../dispatch.ts';
-import { runIosRunnerCommand } from '../../platforms/ios/runner-client.ts';
+import { runIosRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import { ANDROID_EMULATOR, IOS_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
 import { withMockedAdb } from '../../__tests__/test-utils/mocked-binaries.ts';
 

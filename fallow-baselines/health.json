@@ -434,7 +434,7 @@
         "count": 1
       }
     },
-    "src/platforms/ios/apps.ts": {
+    "src/platforms/apple/core/apps.ts": {
       "complexity_high": {
         "count": 1
       },
@@ -442,7 +442,7 @@
         "count": 2
       }
     },
-    "src/platforms/ios/devices.ts": {
+    "src/platforms/apple/core/devices.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -455,12 +455,12 @@
         "count": 1
       }
     },
-    "src/platforms/ios/macos-helper.ts": {
+    "src/platforms/apple/os/macos/helper.ts": {
       "crap_high": {
         "count": 1
       }
     },
-    "src/platforms/ios/perf.ts": {
+    "src/platforms/apple/core/perf.ts": {
       "complexity_high": {
         "count": 1
       },
@@ -468,17 +468,17 @@
         "count": 1
       }
     },
-    "src/platforms/ios/runner-transport.ts": {
+    "src/platforms/apple/core/runner/runner-transport.ts": {
       "crap_high": {
         "count": 1
       }
     },
-    "src/platforms/ios/runner-xctestrun.ts": {
+    "src/platforms/apple/core/runner/runner-xctestrun.ts": {
       "complexity_moderate": {
         "count": 1
       }
     },
-    "src/platforms/ios/screenshot-status-bar.ts": {
+    "src/platforms/apple/core/screenshot-status-bar.ts": {
       "complexity_moderate": {
         "count": 1
       },
@@ -486,12 +486,12 @@
         "count": 2
       }
     },
-    "src/platforms/ios/screenshot.ts": {
+    "src/platforms/apple/core/screenshot.ts": {
       "complexity_moderate": {
         "count": 1
       }
     },
-    "src/platforms/ios/simulator.ts": {
+    "src/platforms/apple/core/simulator.ts": {
       "crap_moderate": {
         "count": 1
       }
@@ -701,7 +701,7 @@
     "src/cli/commands/connection-runtime.ts:complexity",
     "src/daemon/context.ts:high impact",
     "src/utils/success-text.ts:high impact",
-    "src/platforms/ios/apps.ts:complexity",
+    "src/platforms/apple/core/apps.ts:complexity",
     "src/compat/maestro/runtime-targets.ts:high impact",
     "src/utils/timeouts.ts:high impact",
     "src/replay/script-utils.ts:high impact",

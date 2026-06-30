@@ -6,20 +6,23 @@ import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
 import { AppError } from '../../../kernel/errors.ts';
 
-vi.mock('../../../platforms/ios/simulator.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/ios/simulator.ts')>();
+vi.mock('../../../platforms/apple/core/simulator.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/apple/core/simulator.ts')>();
   return { ...actual, shutdownSimulator: vi.fn() };
 });
 vi.mock('../../../utils/exec.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
   return { ...actual, runCmd: vi.fn() };
 });
-vi.mock('../../../platforms/ios/runner-client.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/ios/runner-client.ts')>();
+vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
   return { ...actual, stopIosRunnerSession: vi.fn(async () => {}) };
 });
-vi.mock('../../../platforms/ios/perf-xctrace.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/ios/perf-xctrace.ts')>();
+vi.mock('../../../platforms/apple/core/perf-xctrace.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/apple/core/perf-xctrace.ts')>();
   return { ...actual, cleanupAppleXctracePerfCapture: vi.fn(async () => ({})) };
 });
 vi.mock('../../../platforms/android/perf.ts', async (importOriginal) => {
@@ -31,8 +34,9 @@ vi.mock('../../../platforms/android/snapshot-helper.ts', async (importOriginal) 
     await importOriginal<typeof import('../../../platforms/android/snapshot-helper.ts')>();
   return { ...actual, stopAndroidSnapshotHelperSessionForDevice: vi.fn(async () => {}) };
 });
-vi.mock('../../../platforms/ios/macos-helper.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/ios/macos-helper.ts')>();
+vi.mock('../../../platforms/apple/os/macos/helper.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/apple/os/macos/helper.ts')>();
   return { ...actual, runMacOsAlertAction: vi.fn(async () => {}) };
 });
 vi.mock('../../runtime-hints.ts', async (importOriginal) => {
@@ -50,10 +54,10 @@ vi.mock('../session-device-utils.ts', async (importOriginal) => {
 
 import { handleSessionCommands } from '../session.ts';
 import { teardownSessionResources } from '../../session-teardown.ts';
-import { shutdownSimulator } from '../../../platforms/ios/simulator.ts';
+import { shutdownSimulator } from '../../../platforms/apple/core/simulator.ts';
 import { runCmd } from '../../../utils/exec.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
-import { cleanupAppleXctracePerfCapture } from '../../../platforms/ios/perf-xctrace.ts';
+import { cleanupAppleXctracePerfCapture } from '../../../platforms/apple/core/perf-xctrace.ts';
 import { cleanupAndroidNativePerfSession } from '../../../platforms/android/perf.ts';
 import { stopAndroidSnapshotHelperSessionForDevice } from '../../../platforms/android/snapshot-helper.ts';
 import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/index.ts';

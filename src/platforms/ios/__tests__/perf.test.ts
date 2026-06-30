@@ -18,14 +18,14 @@ import {
   parseApplePsOutput,
   sampleAppleFramePerf,
   sampleApplePerfMetrics,
-} from '../perf.ts';
+} from '../../apple/core/perf.ts';
 import {
   startAppleXctracePerfCapture,
   stopAppleXctracePerfCapture,
   writeAppleXctracePerfReport,
   type AppleXctracePerfCapture,
-} from '../perf-xctrace.ts';
-import { parseAppleFramePerfSample } from '../perf-frame.ts';
+} from '../../apple/core/perf-xctrace.ts';
+import { parseAppleFramePerfSample } from '../../apple/core/perf-frame.ts';
 import { runCmd, runCmdBackground } from '../../../utils/exec.ts';
 import type { DeviceInfo } from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';

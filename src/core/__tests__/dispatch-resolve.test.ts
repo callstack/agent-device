@@ -6,8 +6,8 @@ const { mockFindBootableIosSimulator, mockListAppleDevices } = vi.hoisted(() => 
   mockListAppleDevices: vi.fn(),
 }));
 
-vi.mock('../../platforms/ios/devices.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/ios/devices.ts')>();
+vi.mock('../../platforms/apple/core/devices.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../platforms/apple/core/devices.ts')>();
   return {
     ...actual,
     findBootableIosSimulator: mockFindBootableIosSimulator,

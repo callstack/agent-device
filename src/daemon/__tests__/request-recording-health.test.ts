@@ -1,11 +1,11 @@
 import { test, expect, vi, beforeEach } from 'vitest';
 import type { SessionState } from '../types.ts';
 
-vi.mock('../../platforms/ios/runner-client.ts', () => ({
+vi.mock('../../platforms/apple/core/runner/runner-client.ts', () => ({
   getRunnerSessionSnapshot: vi.fn(),
 }));
 
-import { getRunnerSessionSnapshot } from '../../platforms/ios/runner-client.ts';
+import { getRunnerSessionSnapshot } from '../../platforms/apple/core/runner/runner-client.ts';
 import { refreshRecordingHealth } from '../request-recording-health.ts';
 
 const mockGetRunnerSessionSnapshot = vi.mocked(getRunnerSessionSnapshot);

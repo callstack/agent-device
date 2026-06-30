@@ -7,7 +7,7 @@ SCHEME="AgentDeviceRunner"
 DEFAULT_IOS_RUNNER_APP_BUNDLE_ID="com.callstack.agentdevice.runner"
 
 if [ -z "$PLATFORM" ]; then
-  echo "AGENT_DEVICE_XCUITEST_PLATFORM is required (ios, macos, tvos)" >&2
+  echo "AGENT_DEVICE_XCUITEST_PLATFORM is required (ios, macos, tvos, visionos)" >&2
   exit 1
 fi
 
@@ -32,6 +32,9 @@ resolve_default_destination() {
       ;;
     tvos)
       resolve_simulator_destination 'tvOS' 'Apple TV' || printf '%s\n' 'generic/platform=tvOS Simulator'
+      ;;
+    visionos)
+      resolve_simulator_destination 'visionOS' 'Apple Vision' || printf '%s\n' 'generic/platform=visionOS Simulator'
       ;;
     *)
       echo "Unsupported AGENT_DEVICE_XCUITEST_PLATFORM: $PLATFORM" >&2
@@ -85,6 +88,9 @@ resolve_default_derived_path() {
     tvos)
       printf '%s\n' "$HOME/.agent-device/ios-runner/derived/tvos"
       ;;
+    visionos)
+      printf '%s\n' "$HOME/.agent-device/ios-runner/derived/visionos"
+      ;;
     *)
       echo "Unsupported AGENT_DEVICE_XCUITEST_PLATFORM: $PLATFORM" >&2
       exit 1
@@ -102,7 +108,7 @@ resolve_clean_path() {
     ios)
       printf '%s\n' "$DERIVED_PATH/device"
       ;;
-    macos|tvos)
+    macos|tvos|visionos)
       printf '%s\n' "$DERIVED_PATH"
       ;;
     *)

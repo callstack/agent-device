@@ -1,11 +1,11 @@
-import type { AppleRunnerProvider } from '../../../src/platforms/ios/runner-provider.ts';
-import type { RunnerCommand } from '../../../src/platforms/ios/runner-contract.ts';
+import type { AppleRunnerProvider } from '../../../src/platforms/apple/core/runner/runner-provider.ts';
+import type { RunnerCommand } from '../../../src/platforms/apple/core/runner/runner-contract.ts';
 import type {
   AppleMacOsHostProvider,
   ApplePlistProvider,
   AppleToolProvider,
   AppleToolSubcommandExecutor,
-} from '../../../src/platforms/ios/tool-provider.ts';
+} from '../../../src/platforms/apple/core/tool-provider.ts';
 import type { ExecResult } from '../../../src/utils/exec.ts';
 import type { ProviderScenarioTranscript } from './transcript.ts';
 

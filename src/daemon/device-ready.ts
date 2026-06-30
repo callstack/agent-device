@@ -3,8 +3,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
 import { AppError } from '../kernel/errors.ts';
-import { resolveIosDevicectlHint, IOS_DEVICECTL_DEFAULT_HINT } from '../platforms/ios/devicectl.ts';
-import { runXcrun } from '../platforms/ios/tool-provider.ts';
+import {
+  resolveIosDevicectlHint,
+  IOS_DEVICECTL_DEFAULT_HINT,
+} from '../platforms/apple/core/devicectl.ts';
+import { runXcrun } from '../platforms/apple/core/tool-provider.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 
 const IOS_DEVICE_READY_TIMEOUT_MS = 15_000;
@@ -38,7 +41,7 @@ export async function ensureDeviceReady(
 
   if (device.platform === 'ios') {
     if (device.kind === 'simulator') {
-      const { ensureBootedSimulator } = await import('../platforms/ios/simulator.ts');
+      const { ensureBootedSimulator } = await import('../platforms/apple/core/simulator.ts');
       await ensureBootedSimulator(device, {
         deviceHub: options.deviceHub,
         focusExisting: options.focusExisting,

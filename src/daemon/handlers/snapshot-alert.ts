@@ -5,8 +5,8 @@ import {
   type AlertAction,
 } from '../../alert-contract.ts';
 import { sleep } from '../../utils/timeouts.ts';
-import { runIosRunnerCommand } from '../../platforms/ios/runner-client.ts';
-import { runMacOsAlertAction } from '../../platforms/ios/macos-helper.ts';
+import { runIosRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
+import { runMacOsAlertAction } from '../../platforms/apple/os/macos/helper.ts';
 import { handleAndroidAlert } from '../../platforms/android/alert.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';

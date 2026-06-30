@@ -7,7 +7,7 @@ import type { AndroidAdbExecutor } from '../../../platforms/android/adb-executor
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import { makeAndroidSession, makeIosSession } from '../../../__tests__/test-utils/index.ts';
 import { AppError } from '../../../kernel/errors.ts';
-import type { AppleXctracePerfCapture } from '../../../platforms/ios/perf-xctrace.ts';
+import type { AppleXctracePerfCapture } from '../../../platforms/apple/core/perf-xctrace.ts';
 import type { DaemonResponse } from '../../types.ts';
 
 const applePerfMocks = vi.hoisted(() => ({
@@ -16,8 +16,9 @@ const applePerfMocks = vi.hoisted(() => ({
   writeAppleXctracePerfReport: vi.fn(),
 }));
 
-vi.mock('../../../platforms/ios/perf-xctrace.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/ios/perf-xctrace.ts')>();
+vi.mock('../../../platforms/apple/core/perf-xctrace.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/apple/core/perf-xctrace.ts')>();
   return {
     ...actual,
     startAppleXctracePerfCapture: applePerfMocks.startAppleXctracePerfCapture,

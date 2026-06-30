@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import type { DeviceInfo } from '../../../kernel/device.ts';
 import type { ExecBackgroundResult } from '../../../utils/exec.ts';
 import { AppError } from '../../../kernel/errors.ts';
-import type { RunnerSession } from '../runner-session-types.ts';
+import type { RunnerSession } from '../../apple/core/runner/runner-session-types.ts';
 
 const { mockRunCmd } = vi.hoisted(() => ({
   mockRunCmd: vi.fn(),
@@ -23,7 +23,7 @@ import {
   clearDeviceTunnelIpCache,
   sendRunnerCommandOnce,
   waitForRunner,
-} from '../runner-transport.ts';
+} from '../../apple/core/runner/runner-transport.ts';
 
 const iosSimulator: DeviceInfo = {
   platform: 'ios',

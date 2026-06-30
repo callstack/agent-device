@@ -160,7 +160,8 @@ export async function handleInstallFromSourceCommand(params: {
 
     const requestSignal = getRequestSignal(req.meta?.requestId);
     if (device.platform === 'ios') {
-      const { prepareIosInstallArtifact } = await import('../../platforms/ios/install-artifact.ts');
+      const { prepareIosInstallArtifact } =
+        await import('../../platforms/apple/core/install-artifact.ts');
       const prepared = await prepareIosInstallArtifact(resolvedSource.source, {
         signal: requestSignal,
       });
@@ -239,7 +240,7 @@ async function installPreparedIosArtifact(
     { appIdentifierHint: prepared.bundleId },
   );
   if (!providerResult) {
-    const { installIosInstallablePath } = await import('../../platforms/ios/apps.ts');
+    const { installIosInstallablePath } = await import('../../platforms/apple/core/apps.ts');
     await installIosInstallablePath(device, prepared.installablePath);
   }
   return buildIosInstallFromSourceResult(prepared, providerResult, retained);

@@ -1,7 +1,7 @@
 import { isDeepLinkTarget } from '../core/open-target.ts';
 import type { SessionSurface } from '../core/session-surface.ts';
-import type { AppleRunnerLifecycleOptions } from '../platforms/ios/runner-provider.ts';
-import { prewarmIosRunnerCache } from '../platforms/ios/runner-client.ts';
+import type { AppleRunnerLifecycleOptions } from '../platforms/apple/core/runner/runner-provider.ts';
+import { prewarmIosRunnerCache } from '../platforms/apple/core/runner/runner-client.ts';
 import type { DeviceInfo } from '../kernel/device.ts';
 import { contextFromFlags } from './context.ts';
 import type { DaemonRequest } from './types.ts';

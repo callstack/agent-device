@@ -6,8 +6,8 @@ import {
   isAgentDeviceDaemonProcess,
   stopProcessForTakeover,
 } from '../src/utils/process-identity.ts';
-import { cleanupRunnerLeasesForOwner } from '../src/platforms/ios/runner-lease.ts';
-import { runnerLeaseCleanupAdapter } from '../src/platforms/ios/runner-disposal.ts';
+import { cleanupRunnerLeasesForOwner } from '../src/platforms/apple/core/runner/runner-lease.ts';
+import { runnerLeaseCleanupAdapter } from '../src/platforms/apple/core/runner/runner-disposal.ts';
 
 const DAEMON_TERM_TIMEOUT_MS = 15_000;
 const DAEMON_KILL_TIMEOUT_MS = 2_000;

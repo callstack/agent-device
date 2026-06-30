@@ -9,7 +9,10 @@ import {
   makeSession,
 } from '../../__tests__/test-utils/index.ts';
 import { withTargetDeviceResolutionScope } from '../../core/dispatch-resolve.ts';
-import { createLocalAppleToolProvider, runXcrun } from '../../platforms/ios/tool-provider.ts';
+import {
+  createLocalAppleToolProvider,
+  runXcrun,
+} from '../../platforms/apple/core/tool-provider.ts';
 import { resolveWebProvider, type WebProvider } from '../../platforms/web/provider.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { withRequestPlatformProviderScope } from '../request-platform-providers.ts';

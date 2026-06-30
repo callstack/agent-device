@@ -1,8 +1,8 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '../../kernel/device.ts';
 
-vi.mock('../../platforms/ios/simulator.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/ios/simulator.ts')>();
+vi.mock('../../platforms/apple/core/simulator.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../platforms/apple/core/simulator.ts')>();
   return {
     ...actual,
     getSimulatorState: vi.fn(),
@@ -16,7 +16,7 @@ vi.mock('../../utils/exec.ts', async (importOriginal) => {
 });
 
 import { shutdownDeviceTarget } from '../target-shutdown.ts';
-import { getSimulatorState, shutdownSimulator } from '../../platforms/ios/simulator.ts';
+import { getSimulatorState, shutdownSimulator } from '../../platforms/apple/core/simulator.ts';
 import { runCmd } from '../../utils/exec.ts';
 
 const mockGetSimulatorState = vi.mocked(getSimulatorState);

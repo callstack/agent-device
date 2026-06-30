@@ -49,5 +49,16 @@ preserved). The tvOS focus-only interaction contract (no coordinate `tap`) must 
 and snapshot fidelity is uneven (the deep-RN AX-server fallback is iOS-simulator-only). The final
 `Platform` collapse of `ios`+`macos` into `apple` is the last, highest-diff step.
 
-This composes with ADR 0008 (the descriptor's capability facet) and ADR 0003. The phased sequencing and
-per-OS readiness live in `plans/apple-platform-consolidation.md`; this ADR owns the decision.
+This composes with ADR 0008 (the descriptor's capability facet) and ADR 0003.
+
+Implementation status as of 2026-06:
+
+- Shipped: additive `appleOs` groundwork, the shared Apple engine under `src/platforms/apple/core`, macOS leaf
+  files under `src/platforms/apple/os/macos`, direct internal imports to the Apple modules, and visionOS
+  profile/build/discovery groundwork.
+- Deferred: the public `Platform` collapse from `ios`/`macos` to `apple`, a dedicated tvOS leaf, per-`AppleOS`
+  capability tables, and any watchOS unsupported sentinel. watchOS remains out of scope for the current
+  consolidation.
+
+This ADR owns the architectural decision; implementation progress for the remaining platform-plugin work lives
+in `plans/phase3-platform-plugin-progress.md`.

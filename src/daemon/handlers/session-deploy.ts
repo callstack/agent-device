@@ -62,7 +62,7 @@ export const defaultReinstallOps: ReinstallOps = {
       return { bundleId: providerResult.bundleId ?? providerResult.launchTarget ?? app };
     }
 
-    const { reinstallIosApp } = await import('../../platforms/ios/apps.ts');
+    const { reinstallIosApp } = await import('../../platforms/apple/core/apps.ts');
     return await reinstallIosApp(device, app, appPath);
   },
   android: async (device, app, appPath) => {
@@ -92,7 +92,7 @@ export const defaultInstallOps: InstallOps = {
       };
     }
 
-    const { installIosApp } = await import('../../platforms/ios/apps.ts');
+    const { installIosApp } = await import('../../platforms/apple/core/apps.ts');
     const result = await installIosApp(device, appPath, { appIdentifierHint: app });
     return {
       bundleId: result.bundleId,

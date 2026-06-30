@@ -45,8 +45,8 @@ import {
   MAX_RUNNER_SEQUENCE_STEPS,
   buildRunnerSequenceCommand,
   parseRunnerSequenceResult,
-} from '../platforms/ios/runner-sequence.ts';
-import type { RunnerSequenceStep } from '../platforms/ios/runner-contract.ts';
+} from '../platforms/apple/core/runner/runner-sequence.ts';
+import type { RunnerSequenceStep } from '../platforms/apple/core/runner/runner-contract.ts';
 import type { DispatchContext } from './dispatch-context.ts';
 import type { Interactor, RunnerCallOptions } from './interactor-types.ts';
 
@@ -226,7 +226,7 @@ async function handleMacOsSurfacePress(
       `${clickButton} click is not supported on macOS ${context.surface} sessions.`,
     );
   }
-  const { runMacOsPressAction } = await import('../platforms/ios/macos-helper.ts');
+  const { runMacOsPressAction } = await import('../platforms/apple/os/macos/helper.ts');
   await runMacOsPressAction(x, y, {
     bundleId: context.appBundleId,
     surface: context.surface,
@@ -245,7 +245,7 @@ async function handleAlternateClick(
   if (device.platform === 'linux') {
     return await runLinuxAlternateClick(x, y, button);
   }
-  const { runIosRunnerCommand } = await import('../platforms/ios/runner-client.ts');
+  const { runIosRunnerCommand } = await import('../platforms/apple/core/runner/runner-client.ts');
   await runIosRunnerCommand(
     device,
     {
@@ -346,7 +346,7 @@ async function runIosSequenceChunks(
   steps: RunnerSequenceStep[],
   context: DispatchContext | undefined,
 ): Promise<Record<string, unknown>> {
-  const { runIosRunnerCommand } = await import('../platforms/ios/runner-client.ts');
+  const { runIosRunnerCommand } = await import('../platforms/apple/core/runner/runner-client.ts');
   const chunks = chunkRunnerSequenceStepsByBudget(steps, MAX_RUNNER_SEQUENCE_STEPS);
 
   let firstChunkRunnerResult: Record<string, unknown> | undefined;
@@ -1049,7 +1049,7 @@ export async function handleReadCommand(
     return { action: 'read', text };
   }
   if (device.platform === 'macos' && context?.surface && context.surface !== 'app') {
-    const { runMacOsReadTextAction } = await import('../platforms/ios/macos-helper.ts');
+    const { runMacOsReadTextAction } = await import('../platforms/apple/os/macos/helper.ts');
     const result = await runMacOsReadTextAction(x, y, {
       bundleId: context.appBundleId,
       surface: context.surface,
@@ -1057,7 +1057,7 @@ export async function handleReadCommand(
     return { action: 'read', text: result.text };
   }
   // macOS app sessions run through the XCUITest runner; only desktop/menubar surfaces use the helper.
-  const { runIosRunnerCommand } = await import('../platforms/ios/runner-client.ts');
+  const { runIosRunnerCommand } = await import('../platforms/apple/core/runner/runner-client.ts');
   const result = await runIosRunnerCommand(
     device,
     {

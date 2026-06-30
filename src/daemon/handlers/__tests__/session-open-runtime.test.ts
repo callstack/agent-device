@@ -19,16 +19,17 @@ vi.mock('../../runtime-hints.ts', async (importOriginal) => {
     clearRuntimeHintsFromApp: vi.fn(async () => {}),
   };
 });
-vi.mock('../../../platforms/ios/runner-client.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/ios/runner-client.ts')>();
+vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
   return {
     ...actual,
     prewarmIosRunnerSession: vi.fn(),
     stopIosRunnerSession: vi.fn(async () => {}),
   };
 });
-vi.mock('../../../platforms/ios/apps.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/ios/apps.ts')>();
+vi.mock('../../../platforms/apple/core/apps.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../platforms/apple/core/apps.ts')>();
   return {
     ...actual,
     resolveIosApp: vi.fn(async () => 'com.example.demo'),

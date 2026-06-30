@@ -1,4 +1,4 @@
-import { applyXctestRunnerAppIconFromDerivedPath } from '../src/platforms/ios/runner-icon.ts';
+import { applyXctestRunnerAppIconFromDerivedPath } from '../src/platforms/apple/core/runner/runner-icon.ts';
 
 const [derivedPath] = process.argv.slice(2);
 

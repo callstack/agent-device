@@ -1,7 +1,7 @@
 import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
 import { isMobilePlatform } from '../../kernel/device.ts';
 import { sleep } from '../../utils/timeouts.ts';
-import { runMacOsSnapshotAction } from '../../platforms/ios/macos-helper.ts';
+import { runMacOsSnapshotAction } from '../../platforms/apple/os/macos/helper.ts';
 import { snapshotLinux } from '../../platforms/linux/snapshot.ts';
 import {
   attachRefs,

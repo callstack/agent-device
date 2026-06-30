@@ -1,17 +1,18 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import type { RunnerCommand } from '../../platforms/ios/runner-client.ts';
+import type { RunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
 
-vi.mock('../../platforms/ios/runner-client.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/ios/runner-client.ts')>();
+vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../platforms/apple/core/runner/runner-client.ts')>();
   return { ...actual, runIosRunnerCommand: vi.fn() };
 });
 
 import { getInteractor } from '../../core/interactors.ts';
 import { resolveAppleBackRunnerCommand } from '../../platforms/ios/interactions.ts';
-import { runIosRunnerCommand } from '../../platforms/ios/runner-client.ts';
+import { runIosRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 
 const iosSimulator: DeviceInfo = {
   platform: 'ios',

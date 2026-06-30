@@ -24,7 +24,7 @@ import type { AndroidNativePerfSession } from '../platforms/android/perf.ts';
 import type {
   AppleXctracePerfCapture,
   AppleXctracePerfMode,
-} from '../platforms/ios/perf-xctrace.ts';
+} from '../platforms/apple/core/perf-xctrace.ts';
 import type {
   SnapshotDiagnosticsState,
   SnapshotDiagnosticsSummary,

@@ -11,7 +11,7 @@ import {
 } from '../../../daemon/request-progress.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
-import type { RunnerSession } from '../runner-session-types.ts';
+import type { RunnerSession } from '../../apple/core/runner/runner-session-types.ts';
 
 const {
   mockAcquireXcodebuildSimulatorSetRedirect,
@@ -67,8 +67,10 @@ vi.mock('../../../utils/process-identity.ts', async () => {
   };
 });
 
-vi.mock('../tool-provider.ts', async () => {
-  const actual = await vi.importActual<typeof import('../tool-provider.ts')>('../tool-provider.ts');
+vi.mock('../../apple/core/tool-provider.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../apple/core/tool-provider.ts')>(
+    '../../apple/core/tool-provider.ts',
+  );
   return {
     ...actual,
     runAppleToolCommand: mockRunAppleToolCommand,
@@ -76,9 +78,10 @@ vi.mock('../tool-provider.ts', async () => {
   };
 });
 
-vi.mock('../runner-transport.ts', async () => {
-  const actual =
-    await vi.importActual<typeof import('../runner-transport.ts')>('../runner-transport.ts');
+vi.mock('../../apple/core/runner/runner-transport.ts', async () => {
+  const actual = await vi.importActual<
+    typeof import('../../apple/core/runner/runner-transport.ts')
+  >('../../apple/core/runner/runner-transport.ts');
   return {
     ...actual,
     cleanupTempFile: mockCleanupTempFile,
@@ -88,9 +91,10 @@ vi.mock('../runner-transport.ts', async () => {
   };
 });
 
-vi.mock('../runner-xctestrun.ts', async () => {
-  const actual =
-    await vi.importActual<typeof import('../runner-xctestrun.ts')>('../runner-xctestrun.ts');
+vi.mock('../../apple/core/runner/runner-xctestrun.ts', async () => {
+  const actual = await vi.importActual<
+    typeof import('../../apple/core/runner/runner-xctestrun.ts')
+  >('../../apple/core/runner/runner-xctestrun.ts');
   return {
     ...actual,
     acquireXcodebuildSimulatorSetRedirect: mockAcquireXcodebuildSimulatorSetRedirect,
@@ -109,7 +113,7 @@ import {
   invalidateRunnerSession,
   stopIosRunnerSession,
   validateRunnerDevice,
-} from '../runner-session.ts';
+} from '../../apple/core/runner/runner-session.ts';
 import {
   cleanupRunnerLeasesForOwner,
   RUNNER_OWNER_START_TIME,
@@ -117,7 +121,7 @@ import {
   setRunnerLeaseOwnerStateDir,
   writeRunnerLease,
   type RunnerLease,
-} from '../runner-lease.ts';
+} from '../../apple/core/runner/runner-lease.ts';
 
 beforeEach(async () => {
   await abortAllIosRunnerSessions();

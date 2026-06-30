@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { buildSimctlArgs } from '../platforms/ios/simctl.ts';
+import { buildSimctlArgs } from '../platforms/apple/core/simctl.ts';
 import { runCmd, runCmdBackground } from '../utils/exec.ts';
-import { runXcrun } from '../platforms/ios/tool-provider.ts';
+import { runXcrun } from '../platforms/apple/core/tool-provider.ts';
 import { clearPidFile, writePidFile, type AppLogResult } from './app-log-process.ts';
 import { attachChildToStream, createLineWriter, waitForChildExit } from './app-log-stream.ts';
 

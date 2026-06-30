@@ -122,7 +122,7 @@ extension RunnerTests {
   }
 
   func rotateDevice(to orientationName: String) -> Bool {
-#if os(macOS) || os(tvOS)
+#if os(macOS) || os(tvOS) || os(visionOS)
     return false
 #else
     switch orientationName {

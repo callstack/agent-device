@@ -17,13 +17,19 @@ const ROOT_TRANSIENT_ENTRY_NAMES = new Set([
   'info.plist',
 ]);
 const platforms = process.argv.slice(2);
-const requested = platforms.length > 0 ? platforms : ['ios', 'macos', 'tvos'];
-const supported = new Set(['ios', 'macos', 'tvos']);
+const requested = platforms.length > 0 ? platforms : ['ios', 'macos', 'tvos', 'visionos'];
+const supported = new Set(['ios', 'macos', 'tvos', 'visionos']);
+const DERIVED_PATHS = new Map([
+  ['ios', DERIVED_ROOT],
+  ['macos', path.join(DERIVED_ROOT, 'macos')],
+  ['tvos', path.join(DERIVED_ROOT, 'tvos')],
+  ['visionos', path.join(DERIVED_ROOT, 'visionos')],
+]);
 
 for (const platform of requested) {
   if (!supported.has(platform)) {
     console.error(`Unsupported XCTest cache platform: ${platform}`);
-    console.error('Supported platforms: ios, macos, tvos');
+    console.error('Supported platforms: ios, macos, tvos, visionos');
     process.exitCode = 1;
     continue;
   }
@@ -48,14 +54,7 @@ function cleanDerivedPath(platform, targetPath) {
 }
 
 function resolveDerivedPath(platform) {
-  switch (platform) {
-    case 'ios':
-      return DERIVED_ROOT;
-    case 'macos':
-      return path.join(DERIVED_ROOT, 'macos');
-    case 'tvos':
-      return path.join(DERIVED_ROOT, 'tvos');
-    default:
-      throw new Error(`Unsupported platform: ${platform}`);
-  }
+  const targetPath = DERIVED_PATHS.get(platform);
+  if (targetPath) return targetPath;
+  throw new Error(`Unsupported platform: ${platform}`);
 }

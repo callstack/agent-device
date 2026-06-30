@@ -5,7 +5,7 @@ import {
   resolveAppleRunnerProvider,
   withAppleRunnerProvider,
   type AppleRunnerProvider,
-} from '../runner-provider.ts';
+} from '../../apple/core/runner/runner-provider.ts';
 
 test('scoped Apple runner provider requires matching request id when scoped by request', async () => {
   const calls: string[] = [];

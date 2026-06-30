@@ -33,7 +33,7 @@ export async function listLocalDeviceInventory(
   }
 
   if (shouldUseHostMacFastPath(request)) {
-    const { listMacosDevices } = await import('../platforms/macos/devices.ts');
+    const { listMacosDevices } = await import('../platforms/apple/os/macos/devices.ts');
     return await listMacosDevices();
   }
 
@@ -52,7 +52,7 @@ export async function listLocalDeviceInventory(
   }
 
   if (request.platform) {
-    const { listAppleDevices } = await import('../platforms/ios/devices.ts');
+    const { listAppleDevices } = await import('../platforms/apple/core/devices.ts');
     return await listAppleDevices({
       simulatorSetPath: request.iosSimulatorSetPath,
       udid: request.udid,
@@ -71,7 +71,7 @@ export async function listLocalDeviceInventory(
     );
   } catch {}
   try {
-    const { listAppleDevices } = await import('../platforms/ios/devices.ts');
+    const { listAppleDevices } = await import('../platforms/apple/core/devices.ts');
     devices.push(
       ...(await listAppleDevices({
         simulatorSetPath: request.iosSimulatorSetPath,

@@ -41,6 +41,7 @@ test('resolveApplePlatformName prefers the explicit appleOs over target inferenc
   assert.equal(resolveApplePlatformName('mobile', 'ipados'), 'iOS');
   assert.equal(resolveApplePlatformName('tv', 'tvos'), 'tvOS');
   assert.equal(resolveApplePlatformName('desktop', 'macos'), 'macOS');
+  assert.equal(resolveApplePlatformName('mobile', 'visionos'), 'visionOS');
 });
 
 test('resolveApplePlatformName appleOs wins even when it disagrees with the legacy target', () => {

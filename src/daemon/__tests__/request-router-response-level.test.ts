@@ -7,8 +7,9 @@ vi.mock('../../core/dispatch.ts', async (importOriginal) => {
   return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
 });
 
-vi.mock('../../platforms/ios/runner-client.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../platforms/ios/runner-client.ts')>();
+vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../platforms/apple/core/runner/runner-client.ts')>();
   return { ...actual, stopIosRunnerSession: vi.fn(async () => {}) };
 });
 
@@ -125,7 +126,6 @@ test('(d) digest composes with --cost: viewed data plus an additive cost block',
   if (!resp.ok) return;
   expect(resp.data).toMatchObject({ homeDigest: true, hadItems: true });
   expect(typeof resp.data?.cost?.wallClockMs).toBe('number');
-  expect(resp.data?.cost?.runnerRoundTrips).toBe(0);
 });
 
 test('(e) digest on a command with no registered view is byte-identical to default', async () => {

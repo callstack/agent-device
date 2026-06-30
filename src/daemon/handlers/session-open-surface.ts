@@ -1,5 +1,5 @@
 import { parseSessionSurface, type SessionSurface } from '../../core/session-surface.ts';
-import { resolveFrontmostMacOsApp } from '../../platforms/ios/macos-helper.ts';
+import { resolveFrontmostMacOsApp } from '../../platforms/apple/os/macos/helper.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import type { SessionRuntimeHints, SessionState } from '../types.ts';
 import { AppError } from '../../kernel/errors.ts';

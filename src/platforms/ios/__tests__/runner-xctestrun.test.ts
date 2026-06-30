@@ -18,7 +18,7 @@ import {
   resolveRunnerDerivedPath,
   resolveXcodebuildSimulatorDeviceSetPath,
   scoreXctestrunCandidate,
-} from '../runner-xctestrun.ts';
+} from '../../apple/core/runner/runner-xctestrun.ts';
 
 const iosSimulator: DeviceInfo = {
   platform: 'ios',

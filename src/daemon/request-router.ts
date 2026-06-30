@@ -22,7 +22,6 @@ import {
   withRequestPlatformProviderScope,
 } from './request-platform-providers.ts';
 import {
-  countDiagnosticEventsByPhase,
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,
@@ -40,10 +39,6 @@ import {
 import { canRunReplayScopedAction } from './daemon-command-registry.ts';
 import { createAgentBrowserWebProvider } from '../platforms/web/agent-browser-provider.ts';
 import type { LeaseLifecycleProvider } from './handlers/lease.ts';
-// Single source of truth for which diagnostic phases count as a real iOS-runner
-// round-trip — shared with the external ndjson counter used by the
-// runner-request-count CI gate (`scripts/runner-request-count/`).
-import { RUNNER_ROUND_TRIP_PHASES } from './runner-request-count.ts';
 
 // ---------------------------------------------------------------------------
 // Request handler API
@@ -355,7 +350,6 @@ function buildResponseCost(
 ): ResponseCost {
   const cost: ResponseCost = {
     wallClockMs: Date.now() - startedAt,
-    runnerRoundTrips: countDiagnosticEventsByPhase(RUNNER_ROUND_TRIP_PHASES),
   };
   // nodeCount reads the ORIGINAL node tree (the digest view may have already
   // collapsed `data.nodes`), so the count stays accurate.

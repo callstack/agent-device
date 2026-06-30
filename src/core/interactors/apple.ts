@@ -6,14 +6,14 @@ import {
   screenshotIos,
   setIosSetting,
   writeIosClipboardText,
-} from '../../platforms/ios/apps.ts';
+} from '../../platforms/apple/core/apps.ts';
 import {
   appleRemotePressCommand,
   iosRunnerOverrides,
   resolveAppleBackRunnerCommand,
 } from '../../platforms/ios/interactions.ts';
-import { runMacOsScreenshotAction } from '../../platforms/ios/macos-helper.ts';
-import { runIosRunnerCommand } from '../../platforms/ios/runner-client.ts';
+import { runMacOsScreenshotAction } from '../../platforms/apple/os/macos/helper.ts';
+import { runIosRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';

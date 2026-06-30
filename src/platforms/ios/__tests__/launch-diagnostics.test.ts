@@ -4,7 +4,7 @@ import {
   isSimulatorLaunchFBSError,
   classifyLaunchFailure,
   launchFailureHint,
-} from '../launch-diagnostics.ts';
+} from '../../apple/core/launch-diagnostics.ts';
 import { AppError } from '../../../kernel/errors.ts';
 
 test('isSimulatorLaunchFBSError identifies FBS code=4 errors', () => {

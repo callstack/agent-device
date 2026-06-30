@@ -33,7 +33,7 @@ import {
 } from './daemon/transport.ts';
 import { prewarmPngWorker, terminatePngWorker } from './utils/png-worker-client.ts';
 import { sleep } from './utils/timeouts.ts';
-import { setRunnerLeaseOwnerStateDir } from './platforms/ios/runner-lease.ts';
+import { setRunnerLeaseOwnerStateDir } from './platforms/apple/core/runner/runner-lease.ts';
 
 const DAEMON_SESSION_TEARDOWN_TIMEOUT_MS = 5_000;
 const DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS = 1_000;
@@ -223,7 +223,8 @@ export async function startDaemonRuntime(
     }
     await closeDaemonServers(servers);
     await teardownDaemonSessions();
-    const { stopAllIosRunnerSessions } = await import('./platforms/ios/runner-client.ts');
+    const { stopAllIosRunnerSessions } =
+      await import('./platforms/apple/core/runner/runner-client.ts');
     await stopAllIosRunnerSessions();
     // Best effort: stop the PNG worker so an in-flight job cannot delay exit.
     await Promise.race([

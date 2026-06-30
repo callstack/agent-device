@@ -15,8 +15,9 @@ vi.mock('../../../utils/exec.ts', async (importOriginal) => {
   };
 });
 
-vi.mock('../../../platforms/ios/runner-client.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/ios/runner-client.ts')>();
+vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
   return {
     ...actual,
     runIosRunnerCommand: vi.fn(async () => ({})),
@@ -56,7 +57,7 @@ import { handleRecordTraceCommands } from '../record-trace.ts';
 import { deriveRecordingTelemetryPath } from '../../recording-telemetry.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { SessionState } from '../../types.ts';
-import { runIosRunnerCommand } from '../../../platforms/ios/runner-client.ts';
+import { runIosRunnerCommand } from '../../../platforms/apple/core/runner/runner-client.ts';
 import {
   getRecordingOverlaySupportWarning,
   resizeRecording,

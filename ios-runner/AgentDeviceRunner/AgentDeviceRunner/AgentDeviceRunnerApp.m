@@ -82,6 +82,31 @@ int main(int argc, const char *argv[]) {
 
 @end
 
+#if defined(TARGET_OS_VISION) && TARGET_OS_VISION
+@interface AgentDeviceRunnerSceneDelegate : UIResponder <UIWindowSceneDelegate>
+@property(nonatomic, strong) UIWindow *window;
+@end
+
+@implementation AgentDeviceRunnerSceneDelegate
+
+- (void)scene:(UIScene *)scene
+    willConnectToSession:(UISceneSession *)session
+                 options:(UISceneConnectionOptions *)connectionOptions {
+  (void)session;
+  (void)connectionOptions;
+
+  if (![scene isKindOfClass:UIWindowScene.class]) {
+    return;
+  }
+
+  self.window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
+  self.window.rootViewController = [[AgentDeviceRunnerViewController alloc] init];
+  [self.window makeKeyAndVisible];
+}
+
+@end
+#endif
+
 @interface AgentDeviceRunnerAppDelegate : UIResponder <UIApplicationDelegate>
 @property(nonatomic, strong) UIWindow *window;
 @end
@@ -93,12 +118,32 @@ int main(int argc, const char *argv[]) {
   (void)application;
   (void)launchOptions;
 
+#if defined(TARGET_OS_VISION) && TARGET_OS_VISION
+  return YES;
+#else
   self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
   self.window.rootViewController = [[AgentDeviceRunnerViewController alloc] init];
   [self.window makeKeyAndVisible];
 
   return YES;
+#endif
 }
+
+#if defined(TARGET_OS_VISION) && TARGET_OS_VISION
+- (UISceneConfiguration *)application:(UIApplication *)application
+    configurationForConnectingSceneSession:(UISceneSession *)connectingSceneSession
+                                   options:(UISceneConnectionOptions *)options {
+  (void)application;
+  (void)connectingSceneSession;
+  (void)options;
+
+  UISceneConfiguration *configuration =
+      [[UISceneConfiguration alloc] initWithName:@"Default Configuration"
+                                     sessionRole:UIWindowSceneSessionRoleApplication];
+  configuration.delegateClass = AgentDeviceRunnerSceneDelegate.class;
+  return configuration;
+}
+#endif
 
 @end
 

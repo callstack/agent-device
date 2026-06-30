@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import type { AppleRunnerProvider } from '../../../src/platforms/ios/runner-provider.ts';
+import type { AppleRunnerProvider } from '../../../src/platforms/apple/core/runner/runner-provider.ts';
 import { PROVIDER_SCENARIO_MACOS } from './fixtures.ts';
 import { createProviderScenarioHarness, type ProviderScenarioHarness } from './harness.ts';
 import { createRecordingAppleToolProvider, type FlatToolCall } from './providers.ts';

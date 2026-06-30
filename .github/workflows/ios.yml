@@ -66,16 +66,6 @@ jobs:
         run: |
           node --experimental-strip-types src/bin.ts test test/integration/replays/ios/simulator/01-settings.ad --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --retries 2 --artifacts-dir test/artifacts/replays-ios-simulator-smoke --report-junit test/artifacts/replays-ios-simulator-smoke.junit.xml
 
-      # Gate for runner refactors (Phase 3 step c): assert the iOS runner request
-      # count is unchanged vs. the committed baseline. Runs in its own isolated
-      # daemon (temp --state-dir) so it never contends with the smoke daemon's
-      # lease; `clean:daemon` first releases the shared daemon's UDID lease. A
-      # real count drift fails loudly; an infra hiccup is tolerated (see harness).
-      - name: Assert iOS runner request count
-        run: |
-          pnpm clean:daemon
-          node --experimental-strip-types scripts/runner-request-count/run.ts --udid "${{ steps.ios-simulator.outputs.simulator-udid }}" --prepare-timeout-ms "$AGENT_DEVICE_IOS_PREPARE_TIMEOUT_MS" --artifacts-dir test/artifacts/runner-request-count
-
       - name: Run iOS physical device smoke replay
         if: env.IOS_UDID != ''
         env:

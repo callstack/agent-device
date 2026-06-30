@@ -31,7 +31,8 @@ async function tryResolveIosSimulatorDeepLinkBundleId(
   openTarget: string,
 ): Promise<string | undefined> {
   try {
-    const { resolveIosSimulatorDeepLinkBundleId } = await import('../../platforms/ios/apps.ts');
+    const { resolveIosSimulatorDeepLinkBundleId } =
+      await import('../../platforms/apple/core/apps.ts');
     return await resolveIosSimulatorDeepLinkBundleId(device, openTarget);
   } catch {
     return undefined;
@@ -43,7 +44,7 @@ async function tryResolveIosAppBundleId(
   openTarget: string,
 ): Promise<string | undefined> {
   try {
-    const { resolveIosApp } = await import('../../platforms/ios/apps.ts');
+    const { resolveIosApp } = await import('../../platforms/apple/core/apps.ts');
     return await resolveIosApp(device, openTarget);
   } catch {
     return undefined;

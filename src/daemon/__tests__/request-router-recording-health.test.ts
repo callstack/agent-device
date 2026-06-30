@@ -7,12 +7,12 @@ vi.mock('../../core/dispatch.ts', async (importOriginal) => {
   return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
 });
 
-vi.mock('../../platforms/ios/runner-client.ts', () => ({
+vi.mock('../../platforms/apple/core/runner/runner-client.ts', () => ({
   getRunnerSessionSnapshot: vi.fn(),
 }));
 
 import { dispatchCommand } from '../../core/dispatch.ts';
-import { getRunnerSessionSnapshot } from '../../platforms/ios/runner-client.ts';
+import { getRunnerSessionSnapshot } from '../../platforms/apple/core/runner/runner-client.ts';
 import { createRequestHandler } from '../request-router.ts';
 import type { SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';

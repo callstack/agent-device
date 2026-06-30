@@ -473,7 +473,7 @@ async function handleIosKeyboardCommand(
     );
   }
   if (action === 'enter' || action === 'return') {
-    const { runIosRunnerCommand } = await import('../platforms/ios/runner-client.ts');
+    const { runIosRunnerCommand } = await import('../platforms/apple/core/runner/runner-client.ts');
     const result = await runIosRunnerCommand(
       device,
       { command: 'keyboardReturn', appBundleId: context?.appBundleId },
@@ -487,7 +487,7 @@ async function handleIosKeyboardCommand(
       ...successText('Keyboard enter pressed'),
     };
   }
-  const { runIosRunnerCommand } = await import('../platforms/ios/runner-client.ts');
+  const { runIosRunnerCommand } = await import('../platforms/apple/core/runner/runner-client.ts');
   const result = await runIosRunnerCommand(
     device,
     { command: 'keyboardDismiss', appBundleId: context?.appBundleId },
@@ -590,7 +590,7 @@ async function handlePushCommand(
   }
   const payload = await readNotificationPayload(payloadArg);
   if (device.platform === 'ios') {
-    const { pushIosNotification } = await import('../platforms/ios/apps.ts');
+    const { pushIosNotification } = await import('../platforms/apple/core/apps.ts');
     await pushIosNotification(device, target, payload);
     return {
       platform: 'ios',
