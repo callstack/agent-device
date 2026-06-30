@@ -1,5 +1,5 @@
 import type { LogsOptions, NetworkOptions } from '../../client-types.ts';
-import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '../../contracts.ts';
+import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '../../kernel/contracts.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { parseStringMember } from '../../utils/string-enum.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';

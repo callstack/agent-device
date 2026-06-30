@@ -1,5 +1,5 @@
 import { handleMcpMessage, type JsonRpcMessage } from './router.ts';
-import { jsonRpcRequestSchema, type JsonRpcId } from '../contracts.ts';
+import { jsonRpcRequestSchema, type JsonRpcId } from '../kernel/contracts.ts';
 
 type JsonRpcResponse = Awaited<NonNullable<ReturnType<typeof handleMcpMessage>>>;
 type MessageSink = (payload: unknown) => void;

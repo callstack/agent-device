@@ -1,4 +1,4 @@
-import type { SessionRuntimeHints } from '../contracts.ts';
+import type { SessionRuntimeHints } from '../kernel/contracts.ts';
 import {
   buildMetroRuntimeHints,
   prepareMetroRuntime,

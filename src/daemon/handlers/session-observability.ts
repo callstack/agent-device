@@ -34,7 +34,7 @@ import {
 import { handleNativePerfCommand as handleAndroidNativePerfCommand } from './session-native-perf.ts';
 import { errorResponse, requireCommandSupported, type DaemonFailureResponse } from './response.ts';
 import { handleNativePerfCommand as handleAppleNativePerfCommand } from './session-perf-xctrace.ts';
-import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '../../contracts.ts';
+import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '../../kernel/contracts.ts';
 import type { LogBackend } from '../network-log.ts';
 import {
   LOG_ACTION_VALUES as LOG_ACTIONS,

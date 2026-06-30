@@ -34,7 +34,7 @@ import {
 } from './remote-connection-state.ts';
 import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
 import type { CliFlags, FlagKey } from './utils/cli-flags.ts';
-import type { SessionRuntimeHints } from './contracts.ts';
+import type { SessionRuntimeHints } from './kernel/contracts.ts';
 
 type CliDeps = {
   sendToDaemon: typeof sendToDaemon;

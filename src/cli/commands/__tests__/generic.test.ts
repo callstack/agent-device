@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { createAgentDeviceClient } from '../../../client.ts';
-import type { DaemonResponse } from '../../../contracts.ts';
+import type { DaemonResponse } from '../../../kernel/contracts.ts';
 import type { CliFlags } from '../../../utils/cli-flags.ts';
 import type { ClientBackedCliCommandName } from '../../../command-catalog.ts';
 import { runGenericClientBackedCommand } from '../generic.ts';

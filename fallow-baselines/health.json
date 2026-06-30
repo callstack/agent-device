@@ -133,7 +133,7 @@
         "count": 1
       }
     },
-    "src/contracts.ts": {
+    "src/kernel/contracts.ts": {
       "crap_moderate": {
         "count": 1
       }

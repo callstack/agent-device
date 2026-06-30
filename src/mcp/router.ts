@@ -1,6 +1,6 @@
 import { listCommandTools, commandToolExecutor, type ToolResult } from './command-tools.ts';
 import { readVersion } from '../utils/version.ts';
-import type { JsonRpcId, JsonRpcRequestEnvelope } from '../contracts.ts';
+import type { JsonRpcId, JsonRpcRequestEnvelope } from '../kernel/contracts.ts';
 
 const MCP_SERVER_NAME = 'agent-device';
 const SUPPORTED_PROTOCOL_VERSION = '2025-11-25';

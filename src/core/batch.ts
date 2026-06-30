@@ -1,4 +1,4 @@
-import { type DaemonRequest, type DaemonResponse } from '../contracts.ts';
+import { type DaemonRequest, type DaemonResponse } from '../kernel/contracts.ts';
 import { AppError, asAppError } from '../kernel/errors.ts';
 import { isRecord } from '../utils/parsing.ts';
 import {

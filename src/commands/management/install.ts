@@ -1,5 +1,5 @@
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { DaemonInstallSource } from '../../contracts.ts';
+import type { DaemonInstallSource } from '../../kernel/contracts.ts';
 import type { CliFlags } from '../../utils/cli-flags.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import { AppError } from '../../kernel/errors.ts';

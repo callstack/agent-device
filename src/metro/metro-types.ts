@@ -1,4 +1,4 @@
-import type { SessionRuntimeHints } from '../contracts.ts';
+import type { SessionRuntimeHints } from '../kernel/contracts.ts';
 
 /** Re-export of {@link SessionRuntimeHints} under the Metro-specific alias used by public API consumers. */
 export type MetroRuntimeHints = SessionRuntimeHints;

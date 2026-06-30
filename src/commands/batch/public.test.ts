@@ -8,7 +8,7 @@ import {
   runBatch,
   validateAndNormalizeBatchSteps,
 } from '../../batch.ts';
-import type { DaemonRequest } from '../../contracts.ts';
+import type { DaemonRequest } from '../../kernel/contracts.ts';
 
 test('public batch entrypoint exports daemon-compatible orchestration helpers', async () => {
   const seenCommands: string[] = [];

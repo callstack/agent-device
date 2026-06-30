@@ -8,8 +8,8 @@ import type {
   JsonRpcId,
   JsonRpcRequestEnvelope,
   LeaseBackend,
-} from '../contracts.ts';
-import { commandRpcParamsSchema } from '../contracts.ts';
+} from '../kernel/contracts.ts';
+import { commandRpcParamsSchema } from '../kernel/contracts.ts';
 import type { DaemonInstallSource, DaemonInvokeFn, DaemonRequest } from './types.ts';
 import { normalizeTenantId } from './config.ts';
 import {

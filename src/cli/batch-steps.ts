@@ -1,5 +1,5 @@
 import type { BatchStep } from '../client-types.ts';
-import { type SessionRuntimeHints } from '../contracts.ts';
+import { type SessionRuntimeHints } from '../kernel/contracts.ts';
 import { parseBatchStepRuntime } from '../batch-contract.ts';
 import { readInputFromCli } from '../commands/cli-grammar.ts';
 import { isCommandName, type CommandName } from '../commands/command-metadata.ts';

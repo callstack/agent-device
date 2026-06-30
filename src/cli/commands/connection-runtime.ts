@@ -17,7 +17,7 @@ import {
 import { profileToCliFlags } from '../../utils/remote-config.ts';
 import type { BatchStep } from '../../client-types.ts';
 import { AppError } from '../../kernel/errors.ts';
-import type { LeaseBackend, SessionRuntimeHints } from '../../contracts.ts';
+import type { LeaseBackend, SessionRuntimeHints } from '../../kernel/contracts.ts';
 import type { CliFlags } from '../../utils/cli-flags.ts';
 import type { AgentDeviceClient, Lease } from '../../client.ts';
 import type { MetroPrepareKind } from '../../metro/client-metro.ts';

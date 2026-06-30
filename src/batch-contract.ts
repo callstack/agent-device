@@ -1,4 +1,4 @@
-import { daemonRuntimeSchema, type SessionRuntimeHints } from './contracts.ts';
+import { daemonRuntimeSchema, type SessionRuntimeHints } from './kernel/contracts.ts';
 import { AppError } from './kernel/errors.ts';
 import { isRecord } from './utils/parsing.ts';
 

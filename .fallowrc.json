@@ -10,7 +10,7 @@
     "src/install-source.ts",
     "src/android-adb.ts",
     "src/android-snapshot-helper.ts",
-    "src/contracts.ts",
+    "src/kernel/contracts.ts",
     "src/selectors.ts",
     "src/finders.ts",
     "src/bin.ts",

@@ -4,7 +4,7 @@ import type {
   DaemonTransportPreference,
   LeaseBackend,
   SessionIsolationMode,
-} from './contracts.ts';
+} from './kernel/contracts.ts';
 import { PLATFORM_SELECTORS, type DeviceTarget, type PlatformSelector } from './kernel/device.ts';
 import type { MetroPrepareKind } from './metro/client-metro.ts';
 

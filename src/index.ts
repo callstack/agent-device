@@ -28,7 +28,7 @@ export type {
 } from './cli-test-reporters/types.ts';
 
 export type { CommandResult } from './core/command-descriptor/command-result.ts';
-export type { ResponseLevel } from './contracts.ts';
+export type { ResponseLevel } from './kernel/contracts.ts';
 export type { BootCommandResult, ShutdownCommandResult } from './contracts/device.ts';
 export type { ViewportCommandResult } from './contracts/viewport.ts';
 

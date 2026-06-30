@@ -1,4 +1,4 @@
-import type { LeaseBackend } from '../contracts.ts';
+import type { LeaseBackend } from '../kernel/contracts.ts';
 import { stripUndefined } from '../utils/parsing.ts';
 
 const PROXY_LEASE_PROVIDER = 'proxy';

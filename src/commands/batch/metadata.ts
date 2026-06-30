@@ -7,7 +7,7 @@ import {
   readBatchStepRecord,
   type BatchStepErrorFactory,
 } from '../../batch-contract.ts';
-import { type SessionRuntimeHints } from '../../contracts.ts';
+import { type SessionRuntimeHints } from '../../kernel/contracts.ts';
 import {
   STRUCTURED_BATCH_COMMAND_NAMES,
   readStructuredBatchCommandName,

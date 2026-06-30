@@ -8,8 +8,8 @@ import type {
   DaemonError,
   LeaseBackend,
   SessionRuntimeHints as PublicSessionRuntimeHints,
-} from '../contracts.ts';
-export type { DaemonLockPolicy } from '../contracts.ts';
+} from '../kernel/contracts.ts';
+export type { DaemonLockPolicy } from '../kernel/contracts.ts';
 import type { CommandFlags } from '../core/dispatch.ts';
 import type { GestureReferenceFrame, ScrollDirection } from '../core/scroll-gesture.ts';
 import type { LogBackend } from './network-log.ts';

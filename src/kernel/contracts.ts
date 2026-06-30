@@ -1,14 +1,14 @@
-export type { AppErrorCode } from './kernel/errors.ts';
-export { defaultHintForCode, normalizeError } from './kernel/errors.ts';
+export type { AppErrorCode } from './errors.ts';
+export { defaultHintForCode, normalizeError } from './errors.ts';
 export type {
   DebugSymbolsCrashFrame,
   DebugSymbolsCrashSummary,
   DebugSymbolsImage,
   DebugSymbolsOptions,
   DebugSymbolsResult,
-} from './contracts/debug-symbols.ts';
-import type { PlatformSelector } from './kernel/device.ts';
-import { PLATFORM_SELECTORS } from './kernel/device.ts';
+} from '../contracts/debug-symbols.ts';
+import type { PlatformSelector } from './device.ts';
+import { PLATFORM_SELECTORS } from './device.ts';
 
 export type SessionRuntimeHints = {
   platform?: 'ios' | 'android';
@@ -212,8 +212,8 @@ export type JsonRpcRequestEnvelope<TParams = unknown> = {
   params?: TParams;
 };
 
-export { centerOfRect } from './kernel/snapshot.ts';
-export type { Rect, SnapshotNode } from './kernel/snapshot.ts';
+export { centerOfRect } from './snapshot.ts';
+export type { Rect, SnapshotNode } from './snapshot.ts';
 
 type RuntimeSchema<T> = {
   parse(input: unknown): T;

@@ -6,7 +6,7 @@ import type { CliOutput } from '../../commands/command-contract.ts';
 import type { ReplaySuiteResult } from '../../daemon/types.ts';
 import type { CliFlags } from '../../utils/cli-flags.ts';
 import { readCommandMessage } from '../../utils/success-text.ts';
-import { isNonDefaultResponseLevel } from '../../contracts.ts';
+import { isNonDefaultResponseLevel } from '../../kernel/contracts.ts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientBackedCliCommandName } from '../../command-catalog.ts';
 import type { ClientCommandParams } from './router-types.ts';

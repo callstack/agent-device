@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import type { LeaseBackend } from '../contracts.ts';
+import type { LeaseBackend } from '../kernel/contracts.ts';
 import { AppError } from '../kernel/errors.ts';
 import { normalizeTenantId } from './config.ts';
 

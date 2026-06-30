@@ -11,7 +11,7 @@ import type {
   ResponseLevel,
   SessionIsolationMode,
   SessionRuntimeHints,
-} from './contracts.ts';
+} from './kernel/contracts.ts';
 import type { DeviceKind, DeviceTarget, Platform, PlatformSelector } from './kernel/device.ts';
 import type { BackMode } from './core/back-mode.ts';
 import type { ClickButton } from './core/click-button.ts';

@@ -1,4 +1,4 @@
-import type { ResponseLevel } from '../contracts.ts';
+import type { ResponseLevel } from '../kernel/contracts.ts';
 import type { ScreenshotOverlayRef, SnapshotNode } from '../kernel/snapshot.ts';
 import type { DaemonResponseData } from './types.ts';
 

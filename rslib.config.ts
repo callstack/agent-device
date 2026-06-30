@@ -31,7 +31,7 @@ export default defineConfig({
           'install-source': 'src/install-source.ts',
           'android-adb': 'src/android-adb.ts',
           'android-snapshot-helper': 'src/android-snapshot-helper.ts',
-          contracts: 'src/contracts.ts',
+          contracts: 'src/kernel/contracts.ts',
           selectors: 'src/selectors.ts',
           finders: 'src/finders.ts',
           'internal/bin': 'src/bin.ts',

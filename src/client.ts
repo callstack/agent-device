@@ -47,7 +47,7 @@ import type {
   MetroPrepareOptions,
 } from './client-types.ts';
 import type { CommandResult } from './core/command-descriptor/command-result.ts';
-import { isNonDefaultResponseLevel, type ResponseLevel } from './contracts.ts';
+import { isNonDefaultResponseLevel, type ResponseLevel } from './kernel/contracts.ts';
 import { readSerializedSnapshotCaptureAnnotations } from './snapshot-capture-annotations.ts';
 import { readSnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 import type { CommandFlags } from './core/dispatch-context.ts';

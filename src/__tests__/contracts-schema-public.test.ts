@@ -26,7 +26,7 @@ import {
   type AppErrorCode,
   type Rect,
   type SnapshotNode,
-} from '../contracts.ts';
+} from '../kernel/contracts.ts';
 
 const invalidArgsCode = 'INVALID_ARGS' satisfies AppErrorCode;
 const rect = { x: 1, y: 2, width: 3, height: 4 } satisfies Rect;
