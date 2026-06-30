@@ -37,8 +37,9 @@ vi.mock('../../../platforms/apple/core/perf-xctrace.ts', async (importOriginal) 
     writeAppleXctracePerfReport: applePerfMocks.writeAppleXctracePerfReport,
   };
 });
-vi.mock('../../../platforms/ios/macos-helper.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../platforms/ios/macos-helper.ts')>();
+vi.mock('../../../platforms/apple/os/macos/helper.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/apple/os/macos/helper.ts')>();
   return {
     ...actual,
     startMacOsAudioProbeProcess: macosAudioMocks.startMacOsAudioProbeProcess,

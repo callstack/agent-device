@@ -5,8 +5,8 @@ import {
   normalizeAudioProbeRecord,
   type AudioProbeResult,
 } from '../audio-probe-result.ts';
-import { startMacOsAudioProbeProcess } from '../platforms/ios/macos-helper.ts';
-import { AppError } from '../utils/errors.ts';
+import { startMacOsAudioProbeProcess } from '../platforms/apple/os/macos/helper.ts';
+import { AppError } from '../kernel/errors.ts';
 import { sleep } from '../utils/timeouts.ts';
 import type { SessionStore } from './session-store.ts';
 import type { SessionState } from './types.ts';
