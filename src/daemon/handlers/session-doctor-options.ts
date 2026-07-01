@@ -5,7 +5,27 @@ import type { DoctorCheck, DoctorKind, DoctorOptions } from './session-doctor-ty
 
 const DEFAULT_METRO_HOST = '127.0.0.1';
 const DEFAULT_METRO_PORT = 8081;
-const REMOTE_CONNECTION_FLAG_KEYS = ['daemonBaseUrl', 'tenant', 'runId', 'leaseId'] as const;
+const REMOTE_CONNECTION_FLAG_KEYS = [
+  'daemonBaseUrl',
+  'tenant',
+  'runId',
+  'leaseId',
+  'leaseProvider',
+] as const;
+const REMOTE_PROVIDER_FLAG_KEYS = [
+  'provider',
+  'providerSessionId',
+  'providerApp',
+  'providerOsVersion',
+  'providerProject',
+  'providerBuild',
+  'providerSessionName',
+  'awsProjectArn',
+  'awsDeviceArn',
+  'awsAppArn',
+  'awsRegion',
+  'awsInteractionMode',
+] as const;
 
 export function readDoctorOptions(
   req: DaemonRequest,
@@ -36,8 +56,8 @@ export function remoteConnectionChecks(
       {
         id: 'remote-connection',
         status: 'fail',
-        summary: 'No remote daemon/session scope is configured.',
-        hint: 'Use connect --remote-config <path>, --remote-config <path>, or direct --daemon-base-url/--daemon-auth-token flags.',
+        summary: 'No remote daemon/session or provider scope is configured.',
+        hint: 'Use connect, --remote-config <path>, or direct remote/provider flags for the command.',
       },
     ];
   }
@@ -45,7 +65,7 @@ export function remoteConnectionChecks(
     {
       id: 'remote-connection',
       status: options.required ? 'pass' : 'info',
-      summary: 'Remote daemon/session scope is configured.',
+      summary: 'Remote daemon/session or provider scope is configured.',
       evidence,
     },
   ];
@@ -117,7 +137,7 @@ function shouldProbeMetro(req: DaemonRequest, kind: DoctorKind): boolean {
 
 function remoteConnectionEvidence(req: DaemonRequest): Record<string, unknown> | undefined {
   const configured = Object.fromEntries(
-    REMOTE_CONNECTION_FLAG_KEYS.flatMap((key) =>
+    [...REMOTE_CONNECTION_FLAG_KEYS, ...REMOTE_PROVIDER_FLAG_KEYS].flatMap((key) =>
       typeof req.flags?.[key] === 'string' ? [[key, '<configured>']] : [],
     ),
   );

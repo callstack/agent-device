@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { managementCliOutputFormatters, openCliOutput } from './output.ts';
-import { doctorCliOutput } from './output.ts';
+import { doctorCliOutput, managementCliOutputFormatters, openCliOutput } from './output.ts';
 import { markDoctorProgressRendered } from '../../cli-doctor-output.ts';
 import { withNoColor } from '../../__tests__/test-utils/index.ts';
 

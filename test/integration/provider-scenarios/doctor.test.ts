@@ -182,6 +182,39 @@ test('Provider-backed integration doctor --remote skips local device inventory',
   );
 });
 
+test('Provider-backed integration doctor --remote accepts provider profile scope', async () => {
+  let inventoryCalls = 0;
+
+  await withProviderScenarioResource(
+    async () =>
+      await createProviderScenarioHarness({
+        deviceInventoryProvider: async () => {
+          inventoryCalls += 1;
+          return [PROVIDER_SCENARIO_ANDROID];
+        },
+      }),
+    async (daemon) => {
+      const response = await daemon.callCommand('doctor', [], {
+        remote: true,
+        leaseProvider: 'browserstack',
+        providerApp: 'bs://app-id',
+        providerOsVersion: '14.0',
+      });
+      assertRpcOk(response);
+      const data = response.json.result.data;
+      assert.equal(data.status, 'pass');
+      const remote = assertDoctorCheck(data, 'remote-connection', 'pass');
+      assert.deepEqual(remote.evidence, {
+        leaseProvider: '<configured>',
+        providerApp: '<configured>',
+        providerOsVersion: '<configured>',
+      });
+      assertNoDoctorCheck(data, 'device');
+      assert.equal(inventoryCalls, 0);
+    },
+  );
+});
+
 test('Provider-backed integration doctor --remote fails without remote scope', async () => {
   await withProviderScenarioResource(
     async () =>
