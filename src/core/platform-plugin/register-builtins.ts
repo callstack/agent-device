@@ -18,6 +18,16 @@ const applePlugin = {
   platforms: ['ios', 'macos'],
   familySelector: 'apple',
   capability: { bucket: 'apple' },
+  // Wraps the Apple arm of `resolveLogBackend` verbatim: macOS -> 'macos';
+  // an iOS `device` -> 'ios-device'; every other iOS kind -> 'ios-simulator'.
+  appLog: {
+    resolveBackend: (device: DeviceInfo) =>
+      device.platform === 'macos'
+        ? 'macos'
+        : device.kind === 'device'
+          ? 'ios-device'
+          : 'ios-simulator',
+  },
   createInteractor: async (device: DeviceInfo, runner: RunnerContext) => {
     const { createAppleInteractor } = await import('../interactors/apple.ts');
     return createAppleInteractor(device, runner);
@@ -41,6 +51,8 @@ const androidPlugin = {
   id: 'android',
   platforms: ['android'],
   capability: { bucket: 'android' },
+  // Wraps the Android arm of `resolveLogBackend`: every Android device -> 'android'.
+  appLog: { resolveBackend: () => 'android' },
   createInteractor: async (device: DeviceInfo) => {
     const { createAndroidInteractor } = await import('../interactors/android.ts');
     return createAndroidInteractor(device);

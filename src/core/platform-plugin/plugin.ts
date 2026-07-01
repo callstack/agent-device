@@ -1,5 +1,6 @@
 import { AppError } from '../../kernel/errors.ts';
 import type { DeviceInfo, Platform, PlatformSelector } from '../../kernel/device.ts';
+import type { LogBackend } from '../../daemon/network-log.ts';
 import type { Interactor, RunnerContext } from '../interactor-types.ts';
 import type { DeviceInventoryRequest } from '../platform-inventory.ts';
 import type { CapabilityBucket } from '../platform-descriptor/types.ts';
@@ -18,11 +19,14 @@ import type { CapabilityBucket } from '../platform-descriptor/types.ts';
  * `import()` inside `createInteractor` / `discoverDevices`, preserving the
  * CLI cold-start laziness that today's `getInteractor` switch relies on.
  *
- * Step-a scope: this contract intentionally contains ONLY the facets this slice
- * genuinely implements and parity-tests. The daemon-owned columns
- * (`providers` / `recording` / `appLog` / `perf`) are NOT declared here — they
- * arrive in step (b), typed against PLATFORM-NEUTRAL, daemon-owned wrappers
- * (not the iOS-simulator-shaped provider seam). See
+ * Daemon-owned columns (step b.3, issue #974): each is declared ONLY once it is
+ * populated by wrapping the existing daemon branch AND pinned by a table-equivalence
+ * parity test before a real call-site routes through it. A facet's type stays
+ * PLATFORM-NEUTRAL and daemon-owned (never the iOS-simulator-shaped provider seam):
+ * {@link PlatformPlugin.appLog} carries the neutral {@link LogBackend} resolver
+ * (wraps `resolveLogBackend`, pinned by the daemon app-log routing parity test).
+ * The remaining columns (`providers` / `recording` / `perf`) stay on their daemon
+ * branch as the source of truth until they clear the same gate. See
  * docs/adr/0009-apple-platform-consolidation.md (tracked in issue #974).
  */
 export type PlatformPlugin = {
@@ -46,6 +50,17 @@ export type PlatformPlugin = {
   readonly capability: {
     readonly bucket: CapabilityBucket;
     supportsByDefault?(device: DeviceInfo): boolean;
+  };
+  /**
+   * The daemon app-log facet (issue #974). `resolveBackend` wraps the platform
+   * branch of `src/daemon/app-log.ts`'s `resolveLogBackend`, returning the neutral
+   * {@link LogBackend} tag for `device`. Present only on families that have an
+   * app-log backend (Apple + Android); left `undefined` for linux/web, where the
+   * hand branch historically fell through to the `'android'` default — the daemon
+   * lookup preserves that fallthrough, and the parity test pins the equivalence.
+   */
+  readonly appLog?: {
+    resolveBackend(device: DeviceInfo): LogBackend;
   };
 };
 

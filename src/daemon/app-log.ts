@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { DeviceInfo } from '../kernel/device.ts';
 import { AppError } from '../kernel/errors.ts';
+import { tryGetPlugin } from '../core/platform-plugin/plugin.ts';
+import { registerBuiltinPlatformPlugins } from '../core/platform-plugin/register-builtins.ts';
 import { runCmd } from '../utils/exec.ts';
 import { runXcrun } from '../platforms/apple/core/tool-provider.ts';
 import { runAndroidAdb } from '../platforms/android/adb.ts';
@@ -29,6 +31,12 @@ import {
   type NetworkIncludeMode,
   type LogBackend,
 } from './network-log.ts';
+
+// Populate the PlatformPlugin registry once at module load (idempotent; registers
+// only lazy closures, so no leaf code is imported and CLI cold-start is unaffected
+// — mirrors the same call in `core/capabilities.ts`). `resolveLogBackend` reads the
+// per-platform app-log facet from this registry, so it must be populated first.
+registerBuiltinPlatformPlugins();
 
 export type { AppLogResult } from './app-log-process.ts';
 export type { AppLogState } from './app-log-process.ts';
@@ -177,11 +185,11 @@ export function getAppLogPathMetadata(outPath: string): {
 }
 
 export function resolveLogBackend(device: DeviceInfo): LogBackend {
-  if (device.platform === 'macos') return 'macos';
-  if (device.platform === 'ios') {
-    return device.kind === 'device' ? 'ios-device' : 'ios-simulator';
-  }
-  return 'android';
+  // Routes the platform branch through the PlatformPlugin app-log facet (issue
+  // #974). Apple/Android carry a `resolveBackend`; linux/web (and any unregistered
+  // platform) fall through to the historical `'android'` default. The daemon
+  // app-log routing parity test pins this against the former hand branch.
+  return tryGetPlugin(device.platform)?.appLog?.resolveBackend(device) ?? 'android';
 }
 
 export async function readSessionNetworkCapture(params: {
