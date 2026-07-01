@@ -5,18 +5,17 @@ import {
   normalizeAudioProbeRecord,
   type AudioProbeResult,
 } from '../audio-probe-result.ts';
-import { startMacOsAudioProbeProcess } from '../platforms/apple/os/macos/helper.ts';
+import type { HostAudioProbeBackend } from '../platforms/audio-probe-backend.ts';
 import { AppError } from '../kernel/errors.ts';
 import { sleep } from '../utils/timeouts.ts';
 import type { SessionStore } from './session-store.ts';
 import type { SessionState } from './types.ts';
 
-const HOST_AUDIO_BACKEND = 'macos-screencapturekit';
-
 export type HostAudioProbeCommand = {
   session: SessionState;
   sessionName: string;
   sessionStore: SessionStore;
+  backend: HostAudioProbeBackend;
   probeAction: 'start' | 'status' | 'stop';
   durationMs: number;
   bucketMs: number;
@@ -25,20 +24,24 @@ export type HostAudioProbeCommand = {
 export async function runHostSystemAudioProbeCommand(
   request: HostAudioProbeCommand,
 ): Promise<AudioProbeResult> {
-  const { session, probeAction } = request;
+  const { session, probeAction, backend } = request;
   if (probeAction === 'start') {
     await stopSessionAudioProbe(session, 'restarted');
     const statusPath = path.join(
       request.sessionStore.ensureSessionDir(request.sessionName),
       'audio-probe.json',
     );
-    const probe = await startMacOsAudioProbeProcess({
+    const probe = await backend.start({
       durationMs: request.durationMs,
       bucketMs: request.bucketMs,
       statusPath,
     });
     session.audioProbe = {
-      platform: 'host-system-audio',
+      platform: backend.platform,
+      source: backend.source,
+      backend: backend.backend,
+      sourceCount: backend.sourceCount,
+      notes: backend.notes(session.device),
       child: probe.child,
       wait: probe.wait,
       statusPath,
@@ -75,7 +78,7 @@ export async function stopSessionAudioProbe(
   probe.child.kill('SIGTERM');
   await probe.wait.catch(() => {});
   session.audioProbe = undefined;
-  return finalizeHostSystemAudioProbeStatus(beforeStop, probe, session.device, reason);
+  return finalizeHostSystemAudioProbeStatus(beforeStop, probe, reason);
 }
 
 async function waitForHostSystemAudioProbeStatus(session: SessionState): Promise<AudioProbeResult> {
@@ -110,7 +113,7 @@ async function readHostSystemAudioProbeStatus(
   if (!probe) return undefined;
   try {
     const raw = await fs.readFile(probe.statusPath, 'utf8');
-    return normalizeHostSystemAudioProbeData(JSON.parse(raw), probe, session.device);
+    return normalizeHostSystemAudioProbeData(JSON.parse(raw), probe);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
     throw error;
@@ -120,36 +123,34 @@ async function readHostSystemAudioProbeStatus(
 function normalizeHostSystemAudioProbeData(
   value: unknown,
   probe: NonNullable<SessionState['audioProbe']>,
-  device: SessionState['device'],
 ): AudioProbeResult {
   return normalizeAudioProbeRecord(value, {
-    source: 'system-audio',
-    backend: HOST_AUDIO_BACKEND,
+    source: probe.source,
+    backend: probe.backend,
     durationMs: probe.durationMs,
     elapsedMs: Date.now() - probe.startedAt,
     bucketMs: probe.bucketMs,
     activeFallback: true,
-    sourceCount: 1,
-    notes: hostSystemAudioProbeNotes(device),
+    sourceCount: probe.sourceCount,
+    notes: probe.notes,
   });
 }
 
 function finalizeHostSystemAudioProbeStatus(
   status: AudioProbeResult | undefined,
   probe: NonNullable<SessionState['audioProbe']>,
-  device: SessionState['device'],
   reason: string,
 ): AudioProbeResult {
   const elapsedMs = Math.min(probe.durationMs, Math.max(0, Date.now() - probe.startedAt));
   const base =
     status ??
     emptyAudioProbeResult({
-      source: 'system-audio',
-      backend: HOST_AUDIO_BACKEND,
+      source: probe.source,
+      backend: probe.backend,
       durationMs: probe.durationMs,
       bucketMs: probe.bucketMs,
-      sourceCount: 1,
-      notes: hostSystemAudioProbeNotes(device),
+      sourceCount: probe.sourceCount,
+      notes: probe.notes,
     });
   return {
     ...base,
@@ -168,29 +169,15 @@ function buildHostSystemAudioProbeFallback(
 ): AudioProbeResult {
   return emptyAudioProbeResult({
     state,
-    source: 'system-audio',
-    backend: HOST_AUDIO_BACKEND,
+    source: request.backend.source,
+    backend: request.backend.backend,
     durationMs: request.durationMs,
     bucketMs: request.bucketMs,
     sourceCount: 0,
     reason,
     notes: [
-      ...hostSystemAudioProbeNotes(request.session.device),
+      ...request.backend.notes(request.session.device),
       'No active host audio probe is running.',
     ],
   });
-}
-
-function hostSystemAudioProbeNotes(device: SessionState['device']): string[] {
-  const target =
-    device.platform === 'ios'
-      ? 'iOS simulator'
-      : device.platform === 'android'
-        ? 'Android emulator'
-        : 'macOS session';
-  return [
-    `Audio probe samples host system audio through ScreenCaptureKit for this ${target}; it is not app-instrumented audio.`,
-    'Screen Recording permission is required for host system audio capture.',
-    'Other audible host apps can contribute to the measured buckets.',
-  ];
 }

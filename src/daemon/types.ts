@@ -25,6 +25,7 @@ import type {
   AppleXctracePerfCapture,
   AppleXctracePerfMode,
 } from '../platforms/apple/core/perf-xctrace.ts';
+import type { AudioProbeSource } from '../audio-probe-result.ts';
 import type {
   SnapshotDiagnosticsState,
   SnapshotDiagnosticsSummary,
@@ -271,6 +272,10 @@ export type SessionState = {
   };
   audioProbe?: {
     platform: 'host-system-audio';
+    source: AudioProbeSource;
+    backend: string;
+    sourceCount: number;
+    notes: string[];
     child: SessionRecordingProcessChild;
     wait: Promise<ExecResult>;
     statusPath: string;

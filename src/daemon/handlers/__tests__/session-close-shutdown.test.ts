@@ -410,6 +410,14 @@ test('close stops active host audio probe before deleting session', async () => 
     }),
     audioProbe: {
       platform: 'host-system-audio',
+      source: 'system-audio',
+      backend: 'macos-screencapturekit',
+      sourceCount: 1,
+      notes: [
+        'Audio probe samples host system audio through ScreenCaptureKit for this macOS session; it is not app-instrumented audio.',
+        'Screen Recording permission is required for host system audio capture.',
+        'Other audible host apps can contribute to the measured buckets.',
+      ],
       child: { kill, pid: 1234 },
       wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
       statusPath: path.join(os.tmpdir(), 'missing-audio-probe.json'),

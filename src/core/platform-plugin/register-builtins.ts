@@ -1,5 +1,6 @@
 import { registerPlatformPlugin, type PlatformPlugin } from './plugin.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { isAudioProbeSupportedDevice } from '../../kernel/audio-probe-support.ts';
 import { shouldUseHostMacFastPath, WEB_DESKTOP_DEVICE } from '../platform-inventory.ts';
 import type { Platform, DeviceInfo } from '../../kernel/device.ts';
 import type { DeviceInventoryRequest } from '../platform-inventory.ts';
@@ -12,8 +13,8 @@ import type { RunnerContext } from '../interactor-types.ts';
 // command-facet `supports()` / `unsupportedHint()` closure; the parity gate
 // (src/core/__tests__/capability-plugin-routing-parity.test.ts) pins them
 // behaviorally against an INDEPENDENT verbatim oracle across the full device
-// matrix. Each closure is a no-op (returns `true` / `undefined`) on non-Apple
-// devices, so consulting them only for the Apple family leaves admission unchanged.
+// matrix. Most closures are Apple-only; host audio is shared with Android because
+// Android emulator capture is also gated by the macOS host backend.
 // ---------------------------------------------------------------------------
 
 const isNotMacOs = (device: DeviceInfo): boolean => device.platform !== 'macos';
@@ -25,13 +26,6 @@ const supportsSynthesisGesture = (device: DeviceInfo): boolean =>
   device.platform === 'android' || isIosMobileSimulator(device);
 const supportsAndroidOrIosNonTv = (device: DeviceInfo): boolean =>
   device.platform === 'android' || (device.platform === 'ios' && device.target !== 'tv');
-const supportsHostAudioProbe = (device: DeviceInfo): boolean =>
-  device.platform === 'web' ||
-  (process.platform === 'darwin' &&
-    (device.platform === 'macos' ||
-      (device.platform === 'ios' && device.kind === 'simulator') ||
-      (device.platform === 'android' && device.kind === 'emulator')));
-
 const synthesisGestureUnsupportedHint = (device: DeviceInfo): string | undefined => {
   if (device.platform === 'macos')
     return 'macOS automation has no multi-touch input — this gesture is supported on Android and the iOS simulator only.';
@@ -63,7 +57,7 @@ const APPLE_SUPPORTS_BY_DEFAULT: Record<string, (device: DeviceInfo) => boolean>
     device.platform === 'android' || isMacOsOrAppleSimulator(device),
   [PUBLIC_COMMANDS.settings]: (device) =>
     device.platform === 'android' || device.platform === 'macos' || device.kind === 'simulator',
-  [PUBLIC_COMMANDS.audio]: supportsHostAudioProbe,
+  [PUBLIC_COMMANDS.audio]: isAudioProbeSupportedDevice,
   pinch: supportsSynthesisGesture,
   'rotate-gesture': supportsSynthesisGesture,
   'transform-gesture': supportsSynthesisGesture,
@@ -130,7 +124,7 @@ const androidPlugin = {
   platforms: ['android'],
   capability: {
     bucket: 'android',
-    supportsByDefault: { [PUBLIC_COMMANDS.audio]: supportsHostAudioProbe },
+    supportsByDefault: { [PUBLIC_COMMANDS.audio]: isAudioProbeSupportedDevice },
   },
   // Wraps the Android arm of `resolveLogBackend`: every Android device -> 'android'.
   appLog: { resolveBackend: () => 'android' },

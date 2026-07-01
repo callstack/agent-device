@@ -14,6 +14,10 @@ import {
 } from '../../contracts/perf.ts';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { resolveWebProvider } from '../../platforms/web/provider.ts';
+import {
+  resolveHostAudioProbeBackend,
+  type HostAudioProbeBackend,
+} from '../../platforms/audio-probe-backend.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
@@ -619,8 +623,9 @@ function resolveNetworkIncludeMode(
 async function handleAudioCommand(params: ObservabilityParams): Promise<DaemonResponse> {
   const request = resolveAudioCommandRequest(params);
   if (!request.ok) return request;
-  if (usesHostSystemAudioProbe(request.session)) {
-    return await handleHostSystemAudioCommand(params, request);
+  const hostBackend = await resolveHostAudioProbeBackend(request.session.device);
+  if (hostBackend) {
+    return await handleHostSystemAudioCommand(params, request, hostBackend);
   }
   const provider = resolveWebProvider();
   if (!provider.probeAudio) {
@@ -682,13 +687,10 @@ type ResolvedAudioCommandRequest = Extract<
   { ok: true }
 >;
 
-function usesHostSystemAudioProbe(session: SessionState): boolean {
-  return session.device.platform !== 'web';
-}
-
 async function handleHostSystemAudioCommand(
   params: ObservabilityParams,
   request: ResolvedAudioCommandRequest,
+  backend: HostAudioProbeBackend,
 ): Promise<DaemonResponse> {
   try {
     return {
@@ -697,6 +699,7 @@ async function handleHostSystemAudioCommand(
         session: request.session,
         sessionName: params.sessionName,
         sessionStore: params.sessionStore,
+        backend,
         probeAction: request.probeAction,
         durationMs: request.durationMs,
         bucketMs: request.bucketMs,

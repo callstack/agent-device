@@ -39,11 +39,10 @@ import { registerBuiltinPlatformPlugins } from '../platform-plugin/register-buil
 //   (b.2) the per-command `supports()` / `unsupportedHint()` device closures were
 //         RELOCATED VERBATIM off the command-descriptor facet onto the owning
 //         PlatformPlugin's `capability.supportsByDefault` / `unsupportedHintByDefault`
-//         (perfect-shape §7: relocate, never flatten). This is faithful because every
-//         such closure is a no-op (returns `true` / `undefined`) on non-Apple devices,
-//         so consulting it only for the Apple family — the family that owns the
-//         relocated map — leaves admission unchanged. The independent VERBATIM copies
-//         below are the oracle: they pin (a) that production admission (`isCommand
+//         (perfect-shape §7: relocate, never flatten). Most such closures are Apple
+//         family gates; audio is also an Android gate because Android emulator capture
+//         depends on the macOS host backend. The independent VERBATIM copies below
+//         are the oracle: they pin (a) that production admission (`isCommand
 //         SupportedOnDevice`) and hint output (`unsupportedHintForDevice`) are unchanged
 //         across the full {platform x command x device-kind x target} matrix, and (b)
 //         that the closures now living on the Apple plugin are byte-for-byte behaviorally
