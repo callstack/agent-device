@@ -12,7 +12,7 @@ import type { CloudArtifact } from '../../../src/cloud-artifacts.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import type { DeviceLease } from '../../../src/daemon/lease-registry.ts';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
-import { assertRpcOk } from './assertions.ts';
+import { assertRpcError, assertRpcOk } from './assertions.ts';
 import {
   createProviderScenarioHarness,
   withProviderScenarioResource,
@@ -103,6 +103,33 @@ test('Cloud WebDriver release still returns artifacts when WebDriver session del
     assert.equal(data.provider?.cloudArtifacts?.status, 'ready');
     assert.equal(data.provider?.cloudArtifacts?.cloudArtifacts?.[0]?.kind, 'video');
   });
+}, 15_000);
+
+test('Cloud WebDriver allocation preserves create-session failure when cleanup fails', async () => {
+  let cleanupCalled = false;
+  await withProviderScenarioResource(
+    () =>
+      createCloudWebDriverWorld({
+        cleanup: async () => {
+          cleanupCalled = true;
+          throw new Error('provider cleanup failed');
+        },
+      }),
+    async (world) => {
+      const { daemon, server } = world;
+      server.createSessionFailuresRemaining = 2;
+
+      const allocate = await daemon.callCommand('lease_allocate', [], leaseFlags(), {
+        meta: leaseMeta(),
+      });
+
+      const error = assertRpcError(allocate, 'COMMAND_FAILED', /create session failed/) as {
+        details?: { cleanupError?: unknown };
+      };
+      assert.equal(error.details?.cleanupError, 'provider cleanup failed');
+      assert.equal(cleanupCalled, true);
+    },
+  );
 }, 15_000);
 
 test('default BrowserStack provider runtime builds sessions from daemon request profile flags', async () => {
@@ -206,7 +233,9 @@ test('WebDriver scroll frame prefers visible scrollable containers', () => {
   );
 });
 
-async function createCloudWebDriverWorld() {
+async function createCloudWebDriverWorld(
+  options: { cleanup?: () => Promise<Record<string, unknown> | undefined> } = {},
+) {
   const server = await FakeWebDriverServer.start();
   let artifactFailuresRemaining = 0;
   const runtime = createCloudWebDriverRuntime({
@@ -221,6 +250,9 @@ async function createCloudWebDriverWorld() {
         sessionName: lease.leaseId,
       },
     }),
+    prepareSession: options.cleanup
+      ? async ({ base }) => ({ ...base, cleanup: options.cleanup })
+      : undefined,
     listArtifacts: async ({ provider, providerSessionId }) => {
       if (artifactFailuresRemaining > 0) {
         artifactFailuresRemaining -= 1;
@@ -436,6 +468,7 @@ function assertWebDriverCalls(
 }
 
 class FakeWebDriverServer extends CloudWebDriverTestServer {
+  createSessionFailuresRemaining = 0;
   sessionDeleteFailuresRemaining = 0;
 
   static async start(): Promise<FakeWebDriverServer> {
@@ -444,6 +477,11 @@ class FakeWebDriverServer extends CloudWebDriverTestServer {
 
   protected respond(call: CloudWebDriverHttpCall, res: ServerResponse): void {
     if (call.method === 'POST' && call.path === '/wd/hub/session') {
+      if (this.createSessionFailuresRemaining > 0) {
+        this.createSessionFailuresRemaining -= 1;
+        writeCloudWebDriverTestJson(res, { value: { message: 'create session failed' } }, 500);
+        return;
+      }
       writeCloudWebDriverTestJson(res, {
         value: {
           sessionId: 'wd-1',

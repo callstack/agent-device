@@ -2006,6 +2006,82 @@ test('disconnect without a session uses active connection state', async () => {
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('disconnect human output surfaces provider release warnings and artifact links', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-disconnect-provider-'));
+  const stateDir = path.join(tempRoot, '.state');
+  const remoteConfigPath = path.join(tempRoot, 'remote.json');
+  fs.writeFileSync(remoteConfigPath, '{}');
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      version: 1,
+      session: 'adc-browserstack',
+      remoteConfigPath,
+      remoteConfigHash: hashRemoteConfigFile(remoteConfigPath),
+      tenant: 'browserstack',
+      runId: 'run-123',
+      leaseId: 'lease-1',
+      leaseBackend: 'android-instance',
+      leaseProvider: 'browserstack',
+      connectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  });
+
+  const output = await captureStdout(async () => {
+    await disconnectCommand({
+      positionals: [],
+      flags: {
+        json: false,
+        help: false,
+        version: false,
+        stateDir,
+        session: 'adc-browserstack',
+      },
+      client: createTestClient({
+        closeSession: async () => ({
+          session: 'adc-browserstack',
+          identifiers: { session: 'adc-browserstack' },
+          provider: {
+            provider: 'browserstack',
+            providerSessionId: 'wd-1',
+            warnings: [
+              {
+                code: 'WEBDRIVER_SESSION_DELETE_FAILED',
+                message: 'stale webdriver session',
+              },
+            ],
+            cloudArtifacts: {
+              provider: 'browserstack',
+              providerSessionId: 'wd-1',
+              status: 'ready',
+              cloudArtifacts: [
+                {
+                  provider: 'browserstack',
+                  providerSessionId: 'wd-1',
+                  kind: 'video',
+                  name: 'Session video',
+                  url: 'https://provider.example/video.mp4',
+                  availability: 'ready',
+                },
+              ],
+            },
+          },
+        }),
+      }),
+    });
+  });
+
+  assert.match(output, /Disconnected remote session "adc-browserstack"\./);
+  assert.match(
+    output,
+    /Provider release warning \(WEBDRIVER_SESSION_DELETE_FAILED\): stale webdriver session/,
+  );
+  assert.match(output, /Session video: https:\/\/provider\.example\/video\.mp4/);
+  assert.equal(readRemoteConnectionState({ stateDir, session: 'adc-browserstack' }), null);
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('disconnect releases proxy lease with provider client and device metadata', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-disconnect-proxy-'));
   const stateDir = path.join(tempRoot, '.state');

@@ -255,7 +255,7 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
     try {
       return await client.createSession(prepared.webdriverCapabilities);
     } catch (error) {
-      await prepared.cleanup?.();
+      await cleanupAfterCreateSessionFailure(prepared, error);
       throw error;
     }
   }
@@ -428,4 +428,20 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
+}
+
+async function cleanupAfterCreateSessionFailure(
+  prepared: CloudWebDriverPreparedSession,
+  primaryError: unknown,
+): Promise<void> {
+  try {
+    await prepared.cleanup?.();
+  } catch (cleanupError) {
+    if (primaryError instanceof AppError) {
+      primaryError.details = {
+        ...primaryError.details,
+        cleanupError: errorMessage(cleanupError),
+      };
+    }
+  }
 }

@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import type { CloudArtifact, CloudProviderSessionResult } from '../../cloud-artifacts.ts';
 import { resolveDaemonPaths } from '../../daemon/config.ts';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 import {
@@ -313,7 +314,7 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
   }
   const connectedSession = state.session;
 
-  let providerData: Record<string, unknown> | undefined;
+  let providerData: CloudProviderSessionResult | undefined;
   try {
     providerData = (
       await client.sessions.close({ session: connectedSession, shutdown: flags.shutdown })
@@ -342,7 +343,7 @@ export const disconnectCommand: ClientCommandHandler = async ({ flags, client })
       released,
       ...(providerData ? { provider: providerData } : {}),
     },
-    () => `Disconnected remote session "${connectedSession}".`,
+    () => renderDisconnectOutput(connectedSession, providerData),
   );
   return true;
 };
@@ -381,6 +382,42 @@ function createRemoteSessionName(stateDir: string): string {
     }
   }
   return `adc-${Date.now().toString(36)}-${crypto.randomBytes(2).toString('hex')}`;
+}
+
+function renderDisconnectOutput(
+  session: string,
+  providerData: CloudProviderSessionResult | undefined,
+): string {
+  return [
+    `Disconnected remote session "${session}".`,
+    ...formatProviderReleaseWarnings(providerData),
+    ...formatReadyArtifactLinks(providerData?.cloudArtifacts?.cloudArtifacts),
+  ].join('\n');
+}
+
+function formatProviderReleaseWarnings(
+  providerData: CloudProviderSessionResult | undefined,
+): string[] {
+  const warnings = Array.isArray(providerData?.warnings) ? providerData.warnings : [];
+  return warnings.flatMap((warning) => {
+    const formatted = formatProviderReleaseWarning(warning);
+    return formatted ? [formatted] : [];
+  });
+}
+
+function formatProviderReleaseWarning(warning: unknown): string | undefined {
+  if (!warning || typeof warning !== 'object') return undefined;
+  const entry = warning as { code?: unknown; message?: unknown };
+  if (typeof entry.message !== 'string' || entry.message.length === 0) return undefined;
+  const code = typeof entry.code === 'string' && entry.code.length > 0 ? ` (${entry.code})` : '';
+  return `Provider release warning${code}: ${entry.message}`;
+}
+
+function formatReadyArtifactLinks(artifacts: CloudArtifact[] | undefined): string[] {
+  return (artifacts ?? [])
+    .filter((artifact) => (artifact.availability ?? 'ready') === 'ready' && artifact.url)
+    .slice(0, 3)
+    .map((artifact) => `${artifact.name}: ${artifact.url}`);
 }
 
 function readConnectProvider(positionals: string[]): ConnectProvider | undefined {
