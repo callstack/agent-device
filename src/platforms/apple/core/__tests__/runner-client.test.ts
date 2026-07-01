@@ -601,7 +601,7 @@ test('resolveRunnerBuildFailureHint suggests cache cleanup for non-signing failu
   );
 
   assert.match(hint, /pnpm clean:xcuitest/i);
-  assert.match(hint, /~\/\.agent-device\/ios-runner\/derived/i);
+  assert.match(hint, /~\/\.agent-device\/apple-runner\/derived/i);
 });
 
 test('shouldRetryRunnerConnectError does not retry xcodebuild early-exit errors', () => {
@@ -883,7 +883,7 @@ test('xctestrunReferencesProjectRoot rejects stale worktree artifacts', async ()
   const xctestrunPath = path.join(tmpDir, 'AgentDeviceRunner.xctestrun');
   fs.writeFileSync(
     xctestrunPath,
-    '<plist><dict><key>SourceFilesCommonPathPrefix</key><string>/tmp/other-worktree/agent-device/ios-runner/AgentDeviceRunner</string></dict></plist>',
+    '<plist><dict><key>SourceFilesCommonPathPrefix</key><string>/tmp/other-worktree/agent-device/apple-runner/AgentDeviceRunner</string></dict></plist>',
     'utf8',
   );
 
@@ -922,9 +922,9 @@ test('resolveRunnerDerivedPath keys default cache by runner metadata', () => {
     ),
   });
 
-  assert.match(iosPath, /\/ios-runner\/derived\/ios-simulator\/cache-[a-f0-9]{16}$/);
-  assert.match(tvPath, /\/ios-runner\/derived\/tvos-simulator\/cache-[a-f0-9]{16}$/);
-  assert.match(macPath, /\/ios-runner\/derived\/macos\/cache-[a-f0-9]{16}$/);
+  assert.match(iosPath, /\/apple-runner\/derived\/ios-simulator\/cache-[a-f0-9]{16}$/);
+  assert.match(tvPath, /\/apple-runner\/derived\/tvos-simulator\/cache-[a-f0-9]{16}$/);
+  assert.match(macPath, /\/apple-runner\/derived\/macos\/cache-[a-f0-9]{16}$/);
   assert.notEqual(iosPath, unitTestPath);
 });
 
@@ -934,7 +934,7 @@ test('resolveRunnerDerivedPath reuses cache path for identical runner source fin
   const firstRoot = path.join(tmpDir, 'first');
   const secondRoot = path.join(tmpDir, 'second');
   const runnerRelativePath = path.join(
-    'ios-runner',
+    'apple-runner',
     'AgentDeviceRunner',
     'AgentDeviceRunnerUITests',
     'RunnerTests.swift',
@@ -1103,7 +1103,7 @@ test('ensureXctestrun rebuilds after cached macOS runner repair failure', async 
   const { derivedPath, existingXctestrunPath } = await makeCachedRunnerXctestrun();
   const projectPath = path.join(
     projectRoot,
-    'ios-runner',
+    'apple-runner',
     'AgentDeviceRunner',
     'AgentDeviceRunner.xcodeproj',
   );

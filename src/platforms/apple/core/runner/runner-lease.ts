@@ -287,7 +287,7 @@ function resolveRunnerLeasePath(deviceId: string): string {
 function resolveRunnerLeaseRoot(): string {
   const override = process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR?.trim();
   if (override) return path.resolve(override);
-  return path.join(os.homedir(), '.agent-device', 'ios-runner', 'leases');
+  return path.join(os.homedir(), '.agent-device', 'apple-runner', 'leases');
 }
 
 function listRunnerLeasesForOwner(owner: {

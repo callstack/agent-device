@@ -41,7 +41,7 @@ const XCTEST_DEVICE_SET_BASE_NAME = 'XCTestDevices';
 const XCTEST_DEVICE_SET_BACKUP_SUFFIX = '.agent-device-backup';
 const XCTEST_DEVICE_SET_LEGACY_BACKUP_PREFIX = '.agent-device-xctestdevices-backup-';
 
-const RUNNER_DERIVED_ROOT = path.join(os.homedir(), '.agent-device', 'ios-runner');
+const RUNNER_DERIVED_ROOT = path.join(os.homedir(), '.agent-device', 'apple-runner');
 const RUNNER_CACHE_METADATA_FILE = '.agent-device-runner-cache.json';
 const RUNNER_CACHE_SCHEMA_VERSION = 2;
 const XCTEST_DEVICE_SET_LOCK_TIMEOUT_MS = 30_000;
@@ -622,7 +622,7 @@ async function buildXctestrunArtifact(params: {
   const { device, options, projectRoot, expectedCacheMetadata, derived, cache, reason } = params;
   const projectPath = path.join(
     projectRoot,
-    'ios-runner',
+    'apple-runner',
     'AgentDeviceRunner',
     'AgentDeviceRunner.xcodeproj',
   );
@@ -1056,7 +1056,7 @@ type RunnerSourceFingerprintCacheEntry = {
 const runnerSourceFingerprintCache = new Map<string, RunnerSourceFingerprintCacheEntry>();
 
 function computeRunnerSourceFingerprint(projectRoot: string): string {
-  const runnerRoot = path.join(projectRoot, 'ios-runner', 'AgentDeviceRunner');
+  const runnerRoot = path.join(projectRoot, 'apple-runner', 'AgentDeviceRunner');
   const files = collectRunnerSourceFiles(runnerRoot);
   const fileStatsFingerprint = computeRunnerSourceFileStatsFingerprint(runnerRoot, files);
   const cached = runnerSourceFingerprintCache.get(runnerRoot);

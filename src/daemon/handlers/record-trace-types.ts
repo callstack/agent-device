@@ -1,7 +1,7 @@
 import type { RecordingProvider } from '../recording-provider.ts';
 import type { runCmd } from '../../utils/exec.ts';
 import type { isPlayableVideo, waitForStableFile } from '../../utils/video.ts';
-import type { runIosRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
+import type { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import type {
   overlayRecordingTouches,
   resizeRecording,
@@ -13,7 +13,7 @@ import type { RecordingExportQuality } from '../../core/recording-export-quality
 export type RecordTraceDeps = {
   runCmd: typeof runCmd;
   startIosSimulatorRecording: RecordingProvider['startIosSimulatorRecording'];
-  runIosRunnerCommand: typeof runIosRunnerCommand;
+  runAppleRunnerCommand: typeof runAppleRunnerCommand;
   waitForRecordingTail: (
     recording: RecordingBase & { platform: 'ios' | 'android' },
   ) => Promise<void>;

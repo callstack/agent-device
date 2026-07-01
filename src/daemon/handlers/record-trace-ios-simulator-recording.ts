@@ -58,7 +58,7 @@ export async function startIosSimulatorRecording(params: {
     // standalone uptime command and pair it at the request midpoint.
     try {
       const uptimeRequestStartedAtMs = Date.now();
-      const uptimeResult = await deps.runIosRunnerCommand(
+      const uptimeResult = await deps.runAppleRunnerCommand(
         device,
         {
           command: 'uptime',

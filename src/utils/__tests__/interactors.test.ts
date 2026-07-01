@@ -7,12 +7,12 @@ import { AppError } from '../../kernel/errors.ts';
 vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
   const actual =
     await importOriginal<typeof import('../../platforms/apple/core/runner/runner-client.ts')>();
-  return { ...actual, runIosRunnerCommand: vi.fn() };
+  return { ...actual, runAppleRunnerCommand: vi.fn() };
 });
 
 import { getInteractor } from '../../core/interactors.ts';
 import { resolveAppleBackRunnerCommand } from '../../platforms/ios/interactions.ts';
-import { runIosRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
+import { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 
 const iosSimulator: DeviceInfo = {
   platform: 'ios',
@@ -31,11 +31,11 @@ const tvOsSimulator: DeviceInfo = {
   booted: true,
 };
 
-const mockRunIosRunnerCommand = vi.mocked(runIosRunnerCommand);
+const mockRunAppleRunnerCommand = vi.mocked(runAppleRunnerCommand);
 
 beforeEach(() => {
   vi.restoreAllMocks();
-  mockRunIosRunnerCommand.mockReset();
+  mockRunAppleRunnerCommand.mockReset();
 });
 
 test('resolveAppleBackRunnerCommand defaults plain back to in-app navigation', () => {
@@ -49,7 +49,7 @@ test('resolveAppleBackRunnerCommand maps explicit back modes to runner commands'
 
 test('ios scroll sends a single fused scroll command and reports planned pixels', async () => {
   const commands: RunnerCommand[] = [];
-  mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+  mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     commands.push(command);
     if (command.command === 'scroll') {
       // x2/y2 endpoint travel is 119 here; planned pixels (120) must be preferred.
@@ -86,7 +86,7 @@ test('ios scroll sends a single fused scroll command and reports planned pixels'
 
 test('ios amount-based scroll recomputes pixels from the runner reference frame', async () => {
   const commands: RunnerCommand[] = [];
-  mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+  mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     commands.push(command);
     if (command.command === 'scroll') {
       return {
@@ -117,7 +117,7 @@ test('ios amount-based scroll recomputes pixels from the runner reference frame'
 
 test('tvOS scroll sends only a remotePress command (behavior unchanged)', async () => {
   const commands: RunnerCommand[] = [];
-  mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+  mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     commands.push(command);
     return {};
   });
@@ -132,7 +132,7 @@ test('tvOS scroll sends only a remotePress command (behavior unchanged)', async 
 
 test('tvOS back navigates focus via the remote Menu button, not a coordinate tap', async () => {
   const commands: RunnerCommand[] = [];
-  mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+  mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     commands.push(command);
     return {};
   });
@@ -148,7 +148,7 @@ test('tvOS back navigates focus via the remote Menu button, not a coordinate tap
 
 test('tvOS home navigates focus via the remote Home button', async () => {
   const commands: RunnerCommand[] = [];
-  mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+  mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     commands.push(command);
     return {};
   });
@@ -163,7 +163,7 @@ test('tvOS home navigates focus via the remote Home button', async () => {
 
 test('iOS back keeps the in-app navigation path, not the tvOS remote', async () => {
   const commands: RunnerCommand[] = [];
-  mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+  mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     commands.push(command);
     return {};
   });
@@ -176,7 +176,7 @@ test('iOS back keeps the in-app navigation path, not the tvOS remote', async () 
 });
 
 test('ios scroll rejects non-positive amount before sending any runner command', async () => {
-  mockRunIosRunnerCommand.mockImplementation(async () => ({}));
+  mockRunAppleRunnerCommand.mockImplementation(async () => ({}));
   const interactor = await getInteractor(iosSimulator, { appBundleId: 'com.example.app' });
 
   await assert.rejects(
@@ -186,11 +186,11 @@ test('ios scroll rejects non-positive amount before sending any runner command',
       error.code === 'INVALID_ARGS' &&
       /amount must be a positive number/i.test(error.message),
   );
-  assert.equal(mockRunIosRunnerCommand.mock.calls.length, 0);
+  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });
 
 test('ios scroll without reference dims derives pixels from endpoint travel', async () => {
-  mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+  mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     if (command.command === 'scroll') {
       return { x: 150, y: 450, x2: 150, y2: 150 };
     }
@@ -207,7 +207,7 @@ test('ios scroll without reference dims derives pixels from endpoint travel', as
 
 test('ios fill sends one verified replacement text-entry command at the target coordinates', async () => {
   const commands: RunnerCommand[] = [];
-  mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+  mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     commands.push(command);
     return {};
   });
@@ -230,7 +230,7 @@ test('ios fill sends one verified replacement text-entry command at the target c
 
 test('ios type uses verified append text-entry mode', async () => {
   const commands: RunnerCommand[] = [];
-  mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+  mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     commands.push(command);
     return {};
   });

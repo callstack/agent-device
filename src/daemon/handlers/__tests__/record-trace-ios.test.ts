@@ -23,7 +23,7 @@ test('startIosDeviceRecording stops stale runner recording and retries with the 
     startIosSimulatorRecording: () => {
       throw new Error('not used');
     },
-    runIosRunnerCommand: async (_device, command, options) => {
+    runAppleRunnerCommand: async (_device, command, options) => {
       runnerCalls.push({ command, requestId: options?.requestId });
       if (command.command === 'recordStart' && runnerCalls.length === 1) {
         throw new Error('recording already in progress');

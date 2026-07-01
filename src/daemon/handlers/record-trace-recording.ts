@@ -8,7 +8,7 @@ import type { DaemonArtifact, DaemonRequest, DaemonResponse, SessionState } from
 import { runCmd } from '../../utils/exec.ts';
 import { isPlayableVideo, waitForStableFile } from '../../utils/video.ts';
 import { deriveRecordingTelemetryPath } from '../recording-telemetry.ts';
-import { runIosRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
+import { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import { runXcrun } from '../../platforms/apple/core/tool-provider.ts';
 import {
   overlayRecordingTouches,
@@ -43,7 +43,7 @@ function buildRecordTraceDeps(): RecordTraceDeps {
       cmd === 'xcrun' ? await runXcrun(args, options) : await runCmd(cmd, args, options),
     startIosSimulatorRecording: (request) =>
       resolveRecordingProvider().startIosSimulatorRecording(request),
-    runIosRunnerCommand,
+    runAppleRunnerCommand,
     waitForRecordingTail,
     waitForStableFile,
     isPlayableVideo,

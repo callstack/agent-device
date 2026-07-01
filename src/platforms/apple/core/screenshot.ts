@@ -14,7 +14,7 @@ import {
   IOS_SIMULATOR_SCREENSHOT_TIMEOUT_MS,
 } from './config.ts';
 import { runIosDevicectl } from './devicectl.ts';
-import { runIosRunnerCommand, IOS_RUNNER_CONTAINER_BUNDLE_IDS } from './runner/runner-client.ts';
+import { runAppleRunnerCommand, IOS_RUNNER_CONTAINER_BUNDLE_IDS } from './runner/runner-client.ts';
 import type { AppleRunnerCommandOptions } from './runner/runner-provider.ts';
 import { prepareSimulatorStatusBarForScreenshot } from './screenshot-status-bar.ts';
 import { ensureBootedSimulator } from './simulator.ts';
@@ -194,7 +194,7 @@ export async function captureScreenshotViaRunner(
 ): Promise<void> {
   // Capture with the XCTest runner, then pull from the runner container.
   // Devices use `devicectl ... copy from`; simulators use `simctl get_app_container`.
-  const result = await runIosRunnerCommand(
+  const result = await runAppleRunnerCommand(
     device,
     {
       command: 'screenshot',

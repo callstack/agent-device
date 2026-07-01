@@ -28,7 +28,7 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
     await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
   return {
     ...actual,
-    runIosRunnerCommand: vi.fn(async () => ({})),
+    runAppleRunnerCommand: vi.fn(async () => ({})),
     stopIosRunnerSession: vi.fn(async () => {}),
   };
 });
@@ -43,13 +43,13 @@ vi.mock('../../../platforms/apple/core/apps.ts', async (importOriginal) => {
 
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
-  runIosRunnerCommand,
+  runAppleRunnerCommand,
   stopIosRunnerSession,
 } from '../../../platforms/apple/core/runner/runner-client.ts';
 import { closeIosApp } from '../../../platforms/apple/core/apps.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);
-const mockRunnerCommand = vi.mocked(runIosRunnerCommand);
+const mockRunnerCommand = vi.mocked(runAppleRunnerCommand);
 const mockStopIosRunnerSession = vi.mocked(stopIosRunnerSession);
 const mockCloseIosApp = vi.mocked(closeIosApp);
 

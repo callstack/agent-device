@@ -473,8 +473,9 @@ async function handleIosKeyboardCommand(
     );
   }
   if (action === 'enter' || action === 'return') {
-    const { runIosRunnerCommand } = await import('../platforms/apple/core/runner/runner-client.ts');
-    const result = await runIosRunnerCommand(
+    const { runAppleRunnerCommand } =
+      await import('../platforms/apple/core/runner/runner-client.ts');
+    const result = await runAppleRunnerCommand(
       device,
       { command: 'keyboardReturn', appBundleId: context?.appBundleId },
       runnerCtx,
@@ -487,8 +488,8 @@ async function handleIosKeyboardCommand(
       ...successText('Keyboard enter pressed'),
     };
   }
-  const { runIosRunnerCommand } = await import('../platforms/apple/core/runner/runner-client.ts');
-  const result = await runIosRunnerCommand(
+  const { runAppleRunnerCommand } = await import('../platforms/apple/core/runner/runner-client.ts');
+  const result = await runAppleRunnerCommand(
     device,
     { command: 'keyboardDismiss', appBundleId: context?.appBundleId },
     runnerCtx,

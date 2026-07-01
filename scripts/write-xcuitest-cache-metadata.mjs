@@ -52,7 +52,7 @@ function resolveRunnerTestBundleId() {
 }
 
 function computeRunnerSourceFingerprint() {
-  const runnerRoot = path.join(projectRoot, 'ios-runner', 'AgentDeviceRunner');
+  const runnerRoot = path.join(projectRoot, 'apple-runner', 'AgentDeviceRunner');
   const files = collectRunnerSourceFiles(runnerRoot);
   const hash = crypto.createHash('sha256');
   for (const file of files) {

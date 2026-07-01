@@ -1,7 +1,7 @@
 import { isDeepLinkTarget } from '../core/open-target.ts';
 import type { SessionSurface } from '../core/session-surface.ts';
 import type { AppleRunnerLifecycleOptions } from '../platforms/apple/core/runner/runner-provider.ts';
-import { prewarmIosRunnerCache } from '../platforms/apple/core/runner/runner-client.ts';
+import { prewarmAppleRunnerCache } from '../platforms/apple/core/runner/runner-client.ts';
 import type { DeviceInfo } from '../kernel/device.ts';
 import { contextFromFlags } from './context.ts';
 import type { DaemonRequest } from './types.ts';
@@ -55,7 +55,7 @@ export function buildAppleRunnerSessionOptions(params: {
   };
 }
 
-export function createIosRunnerCachePrewarmOnColdBoot(params: {
+export function createAppleRunnerCachePrewarmOnColdBoot(params: {
   req: Pick<DaemonRequest, 'flags' | 'meta'>;
   logPath: string;
   device: DeviceInfo;
@@ -67,13 +67,13 @@ export function createIosRunnerCachePrewarmOnColdBoot(params: {
     return undefined;
   }
   return (bootingDevice) =>
-    prewarmIosRunnerCache(
+    prewarmAppleRunnerCache(
       bootingDevice,
       buildAppleRunnerRequestOptions({ req, logPath, traceLogPath }),
     );
 }
 
-export function createIosRunnerCacheColdBootPrewarmForOpen(params: {
+export function createAppleRunnerCacheColdBootPrewarmForOpen(params: {
   req: Pick<DaemonRequest, 'flags' | 'meta'>;
   logPath: string;
   device: DeviceInfo;
@@ -82,7 +82,7 @@ export function createIosRunnerCacheColdBootPrewarmForOpen(params: {
   traceLogPath?: string;
 }): ((device: DeviceInfo) => void) | undefined {
   const { req, logPath, device, surface, openTarget, traceLogPath } = params;
-  return createIosRunnerCachePrewarmOnColdBoot({
+  return createAppleRunnerCachePrewarmOnColdBoot({
     req,
     logPath,
     device,

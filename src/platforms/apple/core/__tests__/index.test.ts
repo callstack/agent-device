@@ -14,7 +14,7 @@ vi.mock('../../../../utils/retry.ts', async (importOriginal) => {
 });
 vi.mock('../runner/runner-client.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../runner/runner-client.ts')>();
-  return { ...actual, runIosRunnerCommand: vi.fn(actual.runIosRunnerCommand) };
+  return { ...actual, runAppleRunnerCommand: vi.fn(actual.runAppleRunnerCommand) };
 });
 vi.mock('../simulator.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../simulator.ts')>();
@@ -75,7 +75,7 @@ import {
   invalidateSimulatorStatusBarOverrideCache,
   prepareSimulatorStatusBarForScreenshot as prepareStatusBarForScreenshot,
 } from '../screenshot-status-bar.ts';
-import { runIosRunnerCommand } from '../runner/runner-client.ts';
+import { runAppleRunnerCommand } from '../runner/runner-client.ts';
 import { iosRunnerOverrides } from '../../../ios/interactions.ts';
 import { IOS_DEVICE_INSTALL_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from '../config.ts';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
@@ -121,7 +121,7 @@ const TVOS_TEST_SIMULATOR: DeviceInfo = {
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockRetryWithPolicy = vi.mocked(retryWithPolicy);
-const mockRunIosRunnerCommand = vi.mocked(runIosRunnerCommand);
+const mockRunAppleRunnerCommand = vi.mocked(runAppleRunnerCommand);
 const mockEnsureBootedSimulator = vi.mocked(ensureBootedSimulator);
 const mockOpenIosSimulatorApp = vi.mocked(openIosSimulatorApp);
 
@@ -166,7 +166,7 @@ beforeEach(() => {
   invalidateSimulatorStatusBarOverrideCache(IOS_TEST_SIMULATOR);
   mockRunCmd.mockImplementation(execActual.runCmd);
   mockRetryWithPolicy.mockImplementation(retryActual.retryWithPolicy);
-  mockRunIosRunnerCommand.mockImplementation(runnerActual.runIosRunnerCommand);
+  mockRunAppleRunnerCommand.mockImplementation(runnerActual.runAppleRunnerCommand);
   mockEnsureBootedSimulator.mockImplementation(simulatorActual.ensureBootedSimulator);
   mockOpenIosSimulatorApp.mockImplementation(simulatorActual.openIosSimulatorApp);
   mockPrepareStatusBarForScreenshot.mockImplementation(
@@ -192,7 +192,7 @@ test('resolveMacOsHelperPackageRootFrom finds helper package from source and dis
 });
 
 test('iosRunnerOverrides maps iOS fling duration to synthesized drag', async () => {
-  mockRunIosRunnerCommand.mockResolvedValue({});
+  mockRunAppleRunnerCommand.mockResolvedValue({});
 
   const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
     appBundleId: 'com.example.App',
@@ -200,7 +200,7 @@ test('iosRunnerOverrides maps iOS fling duration to synthesized drag', async () 
 
   await overrides.fling(100, 200, 180, 200, undefined);
 
-  assert.deepEqual(mockRunIosRunnerCommand.mock.calls[0]?.[1], {
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
     command: 'drag',
     x: 100,
     y: 200,
@@ -213,7 +213,7 @@ test('iosRunnerOverrides maps iOS fling duration to synthesized drag', async () 
 });
 
 test('iosRunnerOverrides uses synthesized iOS coordinate taps', async () => {
-  mockRunIosRunnerCommand.mockResolvedValue({});
+  mockRunAppleRunnerCommand.mockResolvedValue({});
 
   const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
     appBundleId: 'com.example.App',
@@ -222,14 +222,14 @@ test('iosRunnerOverrides uses synthesized iOS coordinate taps', async () => {
   await overrides.tap(100, 200);
   await overrides.focus(110, 210);
 
-  assert.deepEqual(mockRunIosRunnerCommand.mock.calls[0]?.[1], {
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
     command: 'tap',
     x: 100,
     y: 200,
     synthesized: true,
     appBundleId: 'com.example.App',
   });
-  assert.deepEqual(mockRunIosRunnerCommand.mock.calls[1]?.[1], {
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[1]?.[1], {
     command: 'tap',
     x: 110,
     y: 210,
@@ -243,7 +243,7 @@ for (const [name, device] of [
   ['tvOS', TVOS_TEST_SIMULATOR],
 ] as const) {
   test(`iosRunnerOverrides keeps ${name} coordinate taps on the standard path`, async () => {
-    mockRunIosRunnerCommand.mockResolvedValue({});
+    mockRunAppleRunnerCommand.mockResolvedValue({});
 
     const { overrides } = iosRunnerOverrides(device, {
       appBundleId: 'com.example.App',
@@ -251,7 +251,7 @@ for (const [name, device] of [
 
     await overrides.tap(100, 200);
 
-    assert.deepEqual(mockRunIosRunnerCommand.mock.calls[0]?.[1], {
+    assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
       command: 'tap',
       x: 100,
       y: 200,
@@ -261,7 +261,7 @@ for (const [name, device] of [
 }
 
 test('iosRunnerOverrides maps iOS swipe and pan durations to synthesized drag', async () => {
-  mockRunIosRunnerCommand.mockResolvedValue({});
+  mockRunAppleRunnerCommand.mockResolvedValue({});
 
   const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
     appBundleId: 'com.example.App',
@@ -271,7 +271,7 @@ test('iosRunnerOverrides maps iOS swipe and pan durations to synthesized drag', 
   await overrides.swipe(100, 200, 180, 200, undefined);
   await overrides.pan(100, 200, 180, 200, 300);
 
-  assert.deepEqual(mockRunIosRunnerCommand.mock.calls[0]?.[1], {
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
     command: 'drag',
     x: 100,
     y: 200,
@@ -281,7 +281,7 @@ test('iosRunnerOverrides maps iOS swipe and pan durations to synthesized drag', 
     synthesized: true,
     appBundleId: 'com.example.App',
   });
-  assert.deepEqual(mockRunIosRunnerCommand.mock.calls[1]?.[1], {
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[1]?.[1], {
     command: 'drag',
     x: 100,
     y: 200,
@@ -291,7 +291,7 @@ test('iosRunnerOverrides maps iOS swipe and pan durations to synthesized drag', 
     synthesized: true,
     appBundleId: 'com.example.App',
   });
-  assert.deepEqual(mockRunIosRunnerCommand.mock.calls[2]?.[1], {
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[2]?.[1], {
     command: 'drag',
     x: 100,
     y: 200,
@@ -308,7 +308,7 @@ for (const [name, device] of [
   ['tvOS', TVOS_TEST_SIMULATOR],
 ] as const) {
   test(`iosRunnerOverrides keeps ${name} drag gestures on the standard path`, async () => {
-    mockRunIosRunnerCommand.mockResolvedValue({});
+    mockRunAppleRunnerCommand.mockResolvedValue({});
 
     const { overrides } = iosRunnerOverrides(device, {
       appBundleId: 'com.example.App',
@@ -318,7 +318,7 @@ for (const [name, device] of [
     await overrides.pan(100, 200, 180, 200, 300);
     await overrides.fling(100, 200, 180, 200, 300);
 
-    assert.deepEqual(mockRunIosRunnerCommand.mock.calls[0]?.[1], {
+    assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
       command: 'drag',
       x: 100,
       y: 200,
@@ -327,7 +327,7 @@ for (const [name, device] of [
       durationMs: 300,
       appBundleId: 'com.example.App',
     });
-    assert.deepEqual(mockRunIosRunnerCommand.mock.calls[1]?.[1], {
+    assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[1]?.[1], {
       command: 'drag',
       x: 100,
       y: 200,
@@ -336,7 +336,7 @@ for (const [name, device] of [
       durationMs: 300,
       appBundleId: 'com.example.App',
     });
-    assert.deepEqual(mockRunIosRunnerCommand.mock.calls[2]?.[1], {
+    assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[2]?.[1], {
       command: 'drag',
       x: 100,
       y: 200,
@@ -351,7 +351,7 @@ for (const [name, device] of [
 test('iosRunnerOverrides maps iOS scroll to a single fused scroll command', async () => {
   // The fused scroll resolves the frame and performs the duration-aware drag in one runner
   // lifecycle command; no separate interactionFrame request is needed.
-  mockRunIosRunnerCommand.mockResolvedValueOnce({
+  mockRunAppleRunnerCommand.mockResolvedValueOnce({
     x: 200,
     y: 640,
     x2: 200,
@@ -366,8 +366,8 @@ test('iosRunnerOverrides maps iOS scroll to a single fused scroll command', asyn
 
   const result = await overrides.scroll('down', { durationMs: 50 });
 
-  assert.equal(mockRunIosRunnerCommand.mock.calls.length, 1);
-  assert.deepEqual(mockRunIosRunnerCommand.mock.calls[0]?.[1], {
+  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 1);
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
     command: 'scroll',
     direction: 'down',
     durationMs: 50,
@@ -386,7 +386,7 @@ test('iosRunnerOverrides maps iOS scroll to a single fused scroll command', asyn
 });
 
 test('iosRunnerOverrides maps tvOS scroll duration to remote press hold duration', async () => {
-  mockRunIosRunnerCommand.mockResolvedValueOnce({
+  mockRunAppleRunnerCommand.mockResolvedValueOnce({
     ok: true,
   });
 
@@ -396,8 +396,8 @@ test('iosRunnerOverrides maps tvOS scroll duration to remote press hold duration
 
   const result = await overrides.scroll('down', { durationMs: 50 });
 
-  assert.equal(mockRunIosRunnerCommand.mock.calls.length, 1);
-  assert.deepEqual(mockRunIosRunnerCommand.mock.calls[0]?.[1], {
+  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 1);
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
     command: 'remotePress',
     remoteButton: 'down',
     durationMs: 50,
@@ -407,7 +407,7 @@ test('iosRunnerOverrides maps tvOS scroll duration to remote press hold duration
 });
 
 test('iosRunnerOverrides maps macOS desktop scroll to a desktop wheel command', async () => {
-  mockRunIosRunnerCommand.mockResolvedValueOnce({
+  mockRunAppleRunnerCommand.mockResolvedValueOnce({
     x: 737.5,
     y: 476.5,
     referenceWidth: 400,
@@ -420,8 +420,8 @@ test('iosRunnerOverrides maps macOS desktop scroll to a desktop wheel command', 
 
   const result = await overrides.scroll('down', { pixels: 200, durationMs: 50 });
 
-  assert.equal(mockRunIosRunnerCommand.mock.calls.length, 1);
-  assert.deepEqual(mockRunIosRunnerCommand.mock.calls[0]?.[1], {
+  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 1);
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
     command: 'desktopScroll',
     direction: 'down',
     pixels: 200,
@@ -446,7 +446,7 @@ test('iosRunnerOverrides rejects macOS desktop scroll duration above the shared 
   await assert.rejects(() => overrides.scroll('down', { pixels: 200, durationMs: 10_001 }), {
     code: 'INVALID_ARGS',
   });
-  assert.equal(mockRunIosRunnerCommand.mock.calls.length, 0);
+  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });
 
 test('AGENT_DEVICE_MACOS_HELPER_BIN rejects relative override paths', async () => {
@@ -740,7 +740,7 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after retry ex
       exitCode: 60,
     }),
   );
-  mockRunIosRunnerCommand.mockResolvedValue({ message: 'tmp/fallback.png' });
+  mockRunAppleRunnerCommand.mockResolvedValue({ message: 'tmp/fallback.png' });
   mockRunCmd.mockImplementation(async (_cmd, args) => {
     if (args.includes('get_app_container')) {
       return { exitCode: 0, stdout: `${containerPath}\n`, stderr: '' };
@@ -762,7 +762,7 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after retry ex
     });
     assert.equal(ensureBootedCalls, 1);
     assert.equal(mockRetryWithPolicy.mock.calls.length, 1);
-    assert.equal(mockRunIosRunnerCommand.mock.calls.length, 1);
+    assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 1);
     assert.equal(await fs.readFile(outPath, 'utf8'), 'runner-image');
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -784,7 +784,7 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after simctl s
       timeoutMs: 20_000,
     }),
   );
-  mockRunIosRunnerCommand.mockResolvedValue({ message: 'tmp/fallback-timeout.png' });
+  mockRunAppleRunnerCommand.mockResolvedValue({ message: 'tmp/fallback-timeout.png' });
   mockRunCmd.mockImplementation(async (_cmd, args) => {
     if (args.includes('get_app_container')) {
       return { exitCode: 0, stdout: `${containerPath}\n`, stderr: '' };
@@ -804,7 +804,7 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after simctl s
         shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
       },
     });
-    assert.equal(mockRunIosRunnerCommand.mock.calls.length, 1);
+    assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 1);
     assert.equal(await fs.readFile(outPath, 'utf8'), 'runner-timeout');
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -824,7 +824,7 @@ test('captureSimulatorScreenshotWithFallback continues when status bar preparati
   });
   assert.equal(mockPrepareStatusBarForScreenshot.mock.calls.length, 1);
   assert.equal(mockRetryWithPolicy.mock.calls.length > 0, true);
-  assert.equal(mockRunIosRunnerCommand.mock.calls.length, 0);
+  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });
 
 test('captureSimulatorScreenshotWithFallback can skip session-backed simulator boot probe', async () => {
@@ -839,7 +839,7 @@ test('captureSimulatorScreenshotWithFallback can skip session-backed simulator b
 
   assert.equal(mockEnsureBootedSimulator.mock.calls.length, 0);
   assert.equal(mockRetryWithPolicy.mock.calls.length, 1);
-  assert.equal(mockRunIosRunnerCommand.mock.calls.length, 0);
+  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });
 
 test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after shutdown screenshot failure', async () => {
@@ -923,7 +923,7 @@ test('captureSimulatorScreenshotWithFallback ignores status bar restore failures
   });
   assert.equal(mockPrepareStatusBarForScreenshot.mock.calls.length, 1);
   assert.equal(mockRetryWithPolicy.mock.calls.length > 0, true);
-  assert.equal(mockRunIosRunnerCommand.mock.calls.length, 0);
+  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });
 
 test('captureSimulatorScreenshotWithFallback skips status bar normalization by default', async () => {
@@ -938,7 +938,7 @@ test('captureSimulatorScreenshotWithFallback skips status bar normalization by d
 
   assert.equal(mockPrepareStatusBarForScreenshot.mock.calls.length, 0);
   assert.equal(mockRetryWithPolicy.mock.calls.length > 0, true);
-  assert.equal(mockRunIosRunnerCommand.mock.calls.length, 0);
+  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });
 
 test('captureSimulatorScreenshotWithFallback emits fallback diagnostic before using runner', async () => {
@@ -967,7 +967,7 @@ test('captureSimulatorScreenshotWithFallback emits fallback diagnostic before us
             timeoutMs: 20_000,
           }),
         );
-        mockRunIosRunnerCommand.mockResolvedValue({ message: 'tmp/diag-fallback.png' });
+        mockRunAppleRunnerCommand.mockResolvedValue({ message: 'tmp/diag-fallback.png' });
         mockRunCmd.mockImplementation(async (_cmd, args) => {
           if (args.includes('get_app_container')) {
             return { exitCode: 0, stdout: `${containerPath}\n`, stderr: '' };
@@ -1014,7 +1014,7 @@ test('captureSimulatorScreenshotWithFallback uses simulator runner fallback by d
       timeoutMs: 20_000,
     }),
   );
-  mockRunIosRunnerCommand.mockResolvedValue({ message: 'tmp/default-fallback.png' });
+  mockRunAppleRunnerCommand.mockResolvedValue({ message: 'tmp/default-fallback.png' });
   mockRunCmd.mockImplementation(async (_cmd, args) => {
     if (args.includes('get_app_container')) {
       return { exitCode: 0, stdout: `${containerPath}\n`, stderr: '' };
@@ -1027,7 +1027,7 @@ test('captureSimulatorScreenshotWithFallback uses simulator runner fallback by d
     await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, outPath, {
       appBundleId: 'com.example.app',
     });
-    assert.equal(mockRunIosRunnerCommand.mock.calls.length, 1);
+    assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 1);
     assert.equal(await fs.readFile(outPath, 'utf8'), 'default-fallback');
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });

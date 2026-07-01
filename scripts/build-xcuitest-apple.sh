@@ -2,7 +2,7 @@
 set -eu
 
 PLATFORM="${AGENT_DEVICE_XCUITEST_PLATFORM:-}"
-PROJECT_PATH="ios-runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj"
+PROJECT_PATH="apple-runner/AgentDeviceRunner/AgentDeviceRunner.xcodeproj"
 SCHEME="AgentDeviceRunner"
 DEFAULT_IOS_RUNNER_APP_BUNDLE_ID="com.callstack.agentdevice.runner"
 
@@ -80,16 +80,16 @@ try {
 resolve_default_derived_path() {
   case "$PLATFORM" in
     ios)
-      printf '%s\n' "$HOME/.agent-device/ios-runner/derived"
+      printf '%s\n' "$HOME/.agent-device/apple-runner/derived"
       ;;
     macos)
-      printf '%s\n' "$HOME/.agent-device/ios-runner/derived/macos"
+      printf '%s\n' "$HOME/.agent-device/apple-runner/derived/macos"
       ;;
     tvos)
-      printf '%s\n' "$HOME/.agent-device/ios-runner/derived/tvos"
+      printf '%s\n' "$HOME/.agent-device/apple-runner/derived/tvos"
       ;;
     visionos)
-      printf '%s\n' "$HOME/.agent-device/ios-runner/derived/visionos"
+      printf '%s\n' "$HOME/.agent-device/apple-runner/derived/visionos"
       ;;
     *)
       echo "Unsupported AGENT_DEVICE_XCUITEST_PLATFORM: $PLATFORM" >&2

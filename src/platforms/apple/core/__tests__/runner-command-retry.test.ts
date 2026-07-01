@@ -55,7 +55,7 @@ vi.mock('../runner/runner-xctestrun.ts', async () => {
 import {
   prepareIosRunner,
   prewarmIosRunnerSession,
-  runIosRunnerCommand,
+  runAppleRunnerCommand,
 } from '../runner/runner-client.ts';
 import type { RunnerXctestrunArtifact } from '../runner/runner-xctestrun.ts';
 
@@ -347,7 +347,7 @@ test('mutating commands restart stale ready sessions when the preflight probe ne
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'Runner did not accept connection'))
     .mockResolvedValueOnce({ message: 'tapped' });
 
-  const result = await runIosRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
+  const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
 
   assert.deepEqual(result, { message: 'tapped' });
   assert.equal(mockEnsureRunnerSession.mock.calls.length, 2);
@@ -370,7 +370,7 @@ test('mutating commands retry startup sessions with stale bundle cleanup', async
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'Runner did not accept connection'))
     .mockResolvedValueOnce({ message: 'tapped' });
 
-  const result = await runIosRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
+  const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
 
   assert.deepEqual(result, { message: 'tapped' });
   assert.equal(mockEnsureRunnerSession.mock.calls.length, 2);
@@ -396,7 +396,7 @@ test('mutating commands restart stale sessions when readiness preflight fails be
     )
     .mockResolvedValueOnce({ message: 'tapped' });
 
-  const result = await runIosRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
+  const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
 
   assert.deepEqual(result, { message: 'tapped' });
   assert.equal(mockEnsureRunnerSession.mock.calls.length, 2);
@@ -421,7 +421,7 @@ test('mutating commands restart stale sessions when readiness preflight times ou
     )
     .mockResolvedValueOnce({ message: 'tapped' });
 
-  const result = await runIosRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
+  const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
 
   assert.deepEqual(result, { message: 'tapped' });
   assert.equal(mockEnsureRunnerSession.mock.calls.length, 2);
@@ -447,7 +447,7 @@ test('mutating commands emit readiness recovery diagnostics after failed preflig
     .mockResolvedValueOnce({ message: 'tapped' });
 
   const diagnostics = await captureDiagnostics(async () => {
-    const result = await runIosRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
+    const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
     assert.deepEqual(result, { message: 'tapped' });
   });
 
@@ -464,7 +464,7 @@ test('mutating commands do not restart or replay after command send failure', as
     .mockResolvedValueOnce({ lifecycleState: 'notAccepted' });
 
   await assert.rejects(() =>
-    runIosRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
   );
 
   assert.equal(mockEnsureRunnerSession.mock.calls.length, 1);
@@ -492,7 +492,7 @@ test('mutating commands recover cached responses before invalidating after comma
       lifecycleResponseJson: JSON.stringify({ ok: true, data: { message: 'tapped' } }),
     });
 
-  const result = await runIosRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
+  const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
 
   assert.deepEqual(result, { message: 'tapped' });
   assert.equal(mockInvalidateRunnerSession.mock.calls.length, 0);
@@ -519,7 +519,7 @@ test('mutating commands keep invalidating when status cannot find the command', 
     });
 
   await assert.rejects(() =>
-    runIosRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
   );
 
   assert.deepEqual(mockInvalidateRunnerSession.mock.calls, [
@@ -542,7 +542,7 @@ test('mutating commands keep invalidating when status recovery probe fails', asy
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'status probe failed'));
 
   await assert.rejects(() =>
-    runIosRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
   );
 
   assert.deepEqual(mockInvalidateRunnerSession.mock.calls, [
@@ -566,7 +566,7 @@ test('mutating commands keep invalidating when status reports an unknown lifecyc
     });
 
   await assert.rejects(
-    () => runIosRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.match(error.message, /lifecycle status was "paused"/);
@@ -596,7 +596,7 @@ test('read-only commands retry when completed status has no retained response', 
     .mockResolvedValueOnce({ lifecycleState: 'completed' })
     .mockResolvedValueOnce({ nodes: [], truncated: false });
 
-  const result = await runIosRunnerCommand(IOS_SIMULATOR, { command: 'snapshot' });
+  const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'snapshot' });
 
   assert.deepEqual(result, { nodes: [], truncated: false });
   assert.equal(mockInvalidateRunnerSession.mock.calls.length, 0);
@@ -620,7 +620,7 @@ test('read-only startup commands use the session startup timeout override', asyn
   mockEnsureRunnerSession.mockResolvedValue(session);
   mockExecuteRunnerCommandWithSession.mockResolvedValue({ currentUptimeMs: 42 });
 
-  const result = await runIosRunnerCommand(
+  const result = await runAppleRunnerCommand(
     IOS_SIMULATOR,
     { command: 'uptime' },
     { startupTimeoutMs: 240_000 },
@@ -639,7 +639,7 @@ test('read-only commands retry when status shows in-flight work', async () => {
     .mockResolvedValueOnce({ lifecycleState: 'started' })
     .mockResolvedValueOnce({ nodes: [], truncated: false });
 
-  const result = await runIosRunnerCommand(IOS_SIMULATOR, { command: 'snapshot' });
+  const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'snapshot' });
 
   assert.deepEqual(result, { nodes: [], truncated: false });
   assert.equal(mockInvalidateRunnerSession.mock.calls.length, 0);
@@ -657,7 +657,7 @@ test('mutating commands report recovery guidance when completed status has no re
     .mockResolvedValueOnce({ lifecycleState: 'completed' });
 
   await assert.rejects(
-    () => runIosRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.match(error.message, /"tap" completed after the transport response was lost/);
@@ -696,7 +696,7 @@ test('mutating commands run status recovery after transport failure when readine
       lifecycleResponseJson: JSON.stringify({ ok: true, data: { message: 'tapped' } }),
     });
 
-  const result = await runIosRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
+  const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 });
 
   assert.deepEqual(result, { message: 'tapped' });
   assert.equal(mockInvalidateRunnerSession.mock.calls.length, 0);
@@ -725,7 +725,7 @@ test('mutating commands include skipped readiness context in lost-response guida
     .mockResolvedValueOnce({ lifecycleState: 'completed' });
 
   await assert.rejects(
-    () => runIosRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.match(String(error.details?.hint), /^This hot command skipped the uptime preflight/);
@@ -754,7 +754,7 @@ test('mutating commands keep conservative invalidation for skipped-preflight fai
     .mockResolvedValueOnce({ lifecycleState: 'paused' });
 
   await assert.rejects(() =>
-    runIosRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
   );
 
   assert.deepEqual(mockInvalidateRunnerSession.mock.calls, [
@@ -781,7 +781,7 @@ test('mutating commands preserve runner failure details from status recovery', a
     });
 
   await assert.rejects(
-    () => runIosRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'AMBIGUOUS_MATCH');
@@ -814,7 +814,7 @@ test('mutating commands use recovery guidance when failed status has no runner h
     });
 
   await assert.rejects(
-    () => runIosRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.message, 'Runner command failed after dispatch');
@@ -841,7 +841,7 @@ test('mutating commands report wait-and-inspect guidance when status shows in-fl
     .mockResolvedValueOnce({ lifecycleState: 'started' });
 
   await assert.rejects(
-    () => runIosRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.match(error.message, /"tap" is still started/);
@@ -873,7 +873,7 @@ test('mutating commands invalidate the retry session without replaying again', a
     .mockResolvedValueOnce({ lifecycleState: 'notAccepted' });
 
   await assert.rejects(() =>
-    runIosRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
+    runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }),
   );
 
   assert.equal(mockEnsureRunnerSession.mock.calls.length, 2);
@@ -909,7 +909,7 @@ test('sequence recovers retained per-step results without resending', async () =
       lifecycleResponseJson: JSON.stringify({ ok: true, data: sequenceData }),
     });
 
-  const result = await runIosRunnerCommand(IOS_SIMULATOR, {
+  const result = await runAppleRunnerCommand(IOS_SIMULATOR, {
     command: 'sequence',
     steps: [
       { kind: 'tap', x: 1, y: 2 },
@@ -944,7 +944,7 @@ test('sequence surfaces a lifecycle failure without replaying', async () => {
 
   await assert.rejects(
     () =>
-      runIosRunnerCommand(IOS_SIMULATOR, {
+      runAppleRunnerCommand(IOS_SIMULATOR, {
         command: 'sequence',
         steps: [
           { kind: 'tap', x: 1, y: 2 },
@@ -978,7 +978,7 @@ test('sequence in-flight after lost response reports no-replay guidance', async 
 
   await assert.rejects(
     () =>
-      runIosRunnerCommand(IOS_SIMULATOR, {
+      runAppleRunnerCommand(IOS_SIMULATOR, {
         command: 'sequence',
         steps: [{ kind: 'tap', x: 1, y: 2 }],
       }),
@@ -1008,7 +1008,7 @@ test('sequence invalidates the session when the status probe fails', async () =>
     .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'status probe failed'));
 
   await assert.rejects(() =>
-    runIosRunnerCommand(IOS_SIMULATOR, {
+    runAppleRunnerCommand(IOS_SIMULATOR, {
       command: 'sequence',
       steps: [{ kind: 'tap', x: 1, y: 2 }],
     }),

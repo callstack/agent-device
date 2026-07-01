@@ -2,7 +2,7 @@ import { parseWaitPositionals } from '../core/wait-positionals.ts';
 import type { WaitParsed } from '../core/wait-positionals.ts';
 import { AppError, asAppError, normalizeError } from '../kernel/errors.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
-import { runIosRunnerCommand } from '../platforms/apple/core/runner/runner-client.ts';
+import { runAppleRunnerCommand } from '../platforms/apple/core/runner/runner-client.ts';
 import { buildAppleRunnerRequestOptions } from './apple-runner-options.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { errorResponse, requireCommandSupported } from './handlers/response.ts';
@@ -349,7 +349,7 @@ async function queryDirectIosSelector(
   session: SessionState,
   selector: DirectIosSelectorTarget,
 ): Promise<DirectIosSelectorQueryResult> {
-  const data = await runIosRunnerCommand(
+  const data = await runAppleRunnerCommand(
     session.device,
     {
       command: 'querySelector',

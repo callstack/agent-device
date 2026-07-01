@@ -52,7 +52,7 @@ runs:
       id: source-hash
       run: |
         set -euo pipefail
-        echo "value=${{ hashFiles('ios-runner/**', 'scripts/build-xcuitest-apple.sh', 'scripts/patch-xcuitest-runner-icon.ts', 'scripts/write-xcuitest-cache-metadata.mjs', 'src/platforms/ios/apple-runner-platform.ts', 'src/platforms/ios/runner-icon.ts', 'src/platforms/ios/runner-xctestrun.ts', 'src/platforms/ios/runner-xctestrun-products.ts', '.github/actions/setup-apple-replay/action.yml', 'package.json', 'pnpm-lock.yaml') }}" >> "$GITHUB_OUTPUT"
+        echo "value=${{ hashFiles('apple-runner/**', 'scripts/build-xcuitest-apple.sh', 'scripts/patch-xcuitest-runner-icon.ts', 'scripts/write-xcuitest-cache-metadata.mjs', 'src/platforms/ios/apple-runner-platform.ts', 'src/platforms/ios/runner-icon.ts', 'src/platforms/ios/runner-xctestrun.ts', 'src/platforms/ios/runner-xctestrun-products.ts', '.github/actions/setup-apple-replay/action.yml', 'package.json', 'pnpm-lock.yaml') }}" >> "$GITHUB_OUTPUT"
       shell: bash
 
     - name: Cache replay prebuilt

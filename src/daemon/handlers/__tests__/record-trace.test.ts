@@ -20,7 +20,7 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
     await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
   return {
     ...actual,
-    runIosRunnerCommand: vi.fn(async () => ({})),
+    runAppleRunnerCommand: vi.fn(async () => ({})),
   };
 });
 
@@ -57,7 +57,7 @@ import { handleRecordTraceCommands } from '../record-trace.ts';
 import { deriveRecordingTelemetryPath } from '../../recording-telemetry.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { SessionState } from '../../types.ts';
-import { runIosRunnerCommand } from '../../../platforms/apple/core/runner/runner-client.ts';
+import { runAppleRunnerCommand } from '../../../platforms/apple/core/runner/runner-client.ts';
 import {
   getRecordingOverlaySupportWarning,
   resizeRecording,
@@ -81,7 +81,7 @@ type RunnerCall = {
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockRunCmdBackground = vi.mocked(runCmdBackground);
-const mockRunIosRunnerCommand = vi.mocked(runIosRunnerCommand);
+const mockRunAppleRunnerCommand = vi.mocked(runAppleRunnerCommand);
 const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
 const mockResizeRecording = vi.mocked(resizeRecording);
 const mockTrimRecordingStart = vi.mocked(trimRecordingStart);
@@ -226,7 +226,7 @@ function setupRunnerRecordingMocks(
   runnerCalls: RunnerCall[],
   runCmdCalls: Array<{ cmd: string; args: string[] }>,
 ): void {
-  mockRunIosRunnerCommand.mockImplementation(async (_device, command, options) => {
+  mockRunAppleRunnerCommand.mockImplementation(async (_device, command, options) => {
     runnerCalls.push({
       command: command.command,
       outPath: command.outPath,
@@ -257,7 +257,7 @@ beforeEach(() => {
   mockRunCmdBackground.mockImplementation(() => {
     throw new Error('runCmdBackground should not be used in this test');
   });
-  mockRunIosRunnerCommand.mockImplementation(async () => ({}));
+  mockRunAppleRunnerCommand.mockImplementation(async () => ({}));
   mockResizeRecording.mockImplementation(async () => {});
   mockTrimRecordingStart.mockImplementation(async () => {});
   mockOverlayRecordingTouches.mockImplementation(async () => {});
@@ -616,8 +616,8 @@ test('record start rejects invalid fps value', async () => {
   const sessionName = 'ios-device-invalid-fps';
   sessionStore.set(sessionName, makeIosDeviceSession(sessionName));
 
-  mockRunIosRunnerCommand.mockImplementation(async () => {
-    throw new Error('runIosRunnerCommand should not be used for invalid args');
+  mockRunAppleRunnerCommand.mockImplementation(async () => {
+    throw new Error('runAppleRunnerCommand should not be used for invalid args');
   });
   mockRunCmdBackground.mockImplementation(() => {
     throw new Error('runCmdBackground should not be used for invalid args');
@@ -642,8 +642,8 @@ test('record start rejects invalid quality value', async () => {
   const sessionName = 'ios-device-invalid-quality';
   sessionStore.set(sessionName, makeIosDeviceSession(sessionName));
 
-  mockRunIosRunnerCommand.mockImplementation(async () => {
-    throw new Error('runIosRunnerCommand should not be used for invalid args');
+  mockRunAppleRunnerCommand.mockImplementation(async () => {
+    throw new Error('runAppleRunnerCommand should not be used for invalid args');
   });
   mockRunCmdBackground.mockImplementation(() => {
     throw new Error('runCmdBackground should not be used for invalid args');
@@ -666,8 +666,8 @@ test('record start on iOS device requires active app session context', async () 
   const sessionName = 'ios-device-no-app';
   sessionStore.set(sessionName, makeIosDeviceSession(sessionName));
 
-  mockRunIosRunnerCommand.mockImplementation(async () => {
-    throw new Error('runIosRunnerCommand should not be used without active app context');
+  mockRunAppleRunnerCommand.mockImplementation(async () => {
+    throw new Error('runAppleRunnerCommand should not be used without active app context');
   });
   mockRunCmdBackground.mockImplementation(() => {
     throw new Error('runCmdBackground should not be used for iOS devices');
@@ -690,7 +690,7 @@ test('record start returns structured error when iOS runner start fails', async 
   const session = makeIosDeviceSession(sessionName, 'com.atebits.Tweetie2');
   sessionStore.set(sessionName, session);
 
-  mockRunIosRunnerCommand.mockImplementation(async () => {
+  mockRunAppleRunnerCommand.mockImplementation(async () => {
     throw new Error('runner disconnected');
   });
   mockRunCmdBackground.mockImplementation(() => {
@@ -719,7 +719,7 @@ test('record start recovers from stale iOS runner recording state', async () => 
 
   const commands: string[] = [];
   let startAttempts = 0;
-  mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+  mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     commands.push(command.command);
     if (command.command === 'recordStart') {
       startAttempts += 1;
@@ -763,7 +763,7 @@ test('record start does not stop recording owned by another session during desyn
   sessionStore.set(sessionName, requesterSession);
 
   const commands: string[] = [];
-  mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+  mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     commands.push(command.command);
     if (command.command === 'recordStart') {
       throw new Error('recording already in progress');
@@ -809,7 +809,7 @@ test('record stop clears iOS runner recording state when runner stop fails', asy
     runCmdCalls.push({ cmd, args });
     return { stdout: '', stderr: '', exitCode: 0 };
   });
-  mockRunIosRunnerCommand.mockImplementation(async () => {
+  mockRunAppleRunnerCommand.mockImplementation(async () => {
     throw new Error('runner disconnected');
   });
   mockRunCmdBackground.mockImplementation(() => {
@@ -1418,7 +1418,7 @@ test('record start does not fail when iOS simulator runner warm-up fails', async
     };
   });
   const runnerCalls: RunnerCall[] = [];
-  mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+  mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     runnerCalls.push({ command: command.command });
     if (command.command === 'snapshot') {
       throw new Error('runner warm-up unavailable');
@@ -1461,7 +1461,7 @@ test('record start anchors gesture clock from simulator warm-up and skips standa
     wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
   }));
   const runnerCalls: RunnerCall[] = [];
-  mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+  mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     runnerCalls.push({ command: command.command });
     if (command.command === 'snapshot') {
       return { currentUptimeMs: 20_000 };
@@ -1506,7 +1506,7 @@ test('record start falls back to standalone uptime when warm response lacks curr
     wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
   }));
   const runnerCalls: RunnerCall[] = [];
-  mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+  mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     runnerCalls.push({ command: command.command });
     if (command.command === 'uptime') {
       return { currentUptimeMs: 30_000 };
@@ -1548,7 +1548,7 @@ test('record start rejects non-finite or non-positive warm anchors', async () =>
       wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
     }));
     const runnerCalls: RunnerCall[] = [];
-    mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+    mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
       runnerCalls.push({ command: command.command });
       if (command.command === 'snapshot') {
         return { currentUptimeMs: badValue };
@@ -1589,7 +1589,7 @@ test('record start degrades to wall-clock when warm anchor missing and uptime fa
     child: { kill: () => {} } as any,
     wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
   }));
-  mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+  mockRunAppleRunnerCommand.mockImplementation(async (_device, command) => {
     if (command.command === 'uptime') {
       throw new Error('uptime unavailable');
     }
@@ -1637,7 +1637,7 @@ test('record start skips iOS simulator runner warm-up when touch overlays are hi
   });
 
   expect(response?.ok).toBe(true);
-  expect(mockRunIosRunnerCommand).not.toHaveBeenCalled();
+  expect(mockRunAppleRunnerCommand).not.toHaveBeenCalled();
   expect(sessionStore.get(sessionName)?.recording?.showTouches).toBe(false);
 });
 

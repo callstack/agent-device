@@ -12,7 +12,7 @@ import { bootFailureHint, classifyBootFailure } from '../../../boot-diagnostics.
 import type { RunnerSession } from './runner-session-types.ts';
 
 const RUNNER_CACHE_RECOVERY_HINT =
-  'If runner build products look stale or corrupted, run `pnpm clean:xcuitest` in a local checkout, or remove ~/.agent-device/ios-runner/derived, then retry.';
+  'If runner build products look stale or corrupted, run `pnpm clean:xcuitest` in a local checkout, or remove ~/.agent-device/apple-runner/derived, then retry.';
 
 export type RunnerCommand = {
   command:

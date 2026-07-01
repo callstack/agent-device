@@ -34,7 +34,7 @@ export type { PrepareIosRunnerOptions, PrepareIosRunnerResult } from './runner-l
 
 // --- Runner command execution ---
 
-export async function runIosRunnerCommand(
+export async function runAppleRunnerCommand(
   device: DeviceInfo,
   command: RunnerCommand,
   options: AppleRunnerCommandOptions = {},
@@ -64,7 +64,7 @@ type PrewarmIosRunnerOptions = RunnerSessionOptions & {
   propagateError?: boolean;
 };
 
-export function prewarmIosRunnerCache(
+export function prewarmAppleRunnerCache(
   device: DeviceInfo,
   options: PrewarmIosRunnerOptions = {},
 ): Promise<void> | undefined {

@@ -280,7 +280,7 @@ Command-only flags (like `find --first`) that do not flow to the platform layer 
 - Command identity + command surface: `src/command-catalog.ts`, `src/commands/command-surface.ts`, `src/commands/command-contract.ts`, `src/commands/client-command-contracts.ts`
 - CLI grammar: `src/commands/cli-grammar.ts`, `src/commands/cli-grammar/*`
 - Daemon request projection: `src/commands/command-projection.ts`
-- Platform backends: `src/platforms/apple/*`, `src/platforms/ios/*`, `ios-runner/*`, `src/platforms/android/*`
+- Platform backends: `src/platforms/apple/*`, `src/platforms/ios/*`, `apple-runner/*`, `src/platforms/android/*`
 
 ## Pull Requests
 - Before opening PR: ensure no conflict markers/unmerged paths.

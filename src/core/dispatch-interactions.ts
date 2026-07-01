@@ -240,8 +240,8 @@ async function handleAlternateClick(
   if (device.platform === 'linux') {
     return await runLinuxAlternateClick(x, y, button);
   }
-  const { runIosRunnerCommand } = await import('../platforms/apple/core/runner/runner-client.ts');
-  await runIosRunnerCommand(
+  const { runAppleRunnerCommand } = await import('../platforms/apple/core/runner/runner-client.ts');
+  await runAppleRunnerCommand(
     device,
     {
       command: 'mouseClick',
@@ -341,7 +341,7 @@ async function runIosSequenceChunks(
   steps: RunnerSequenceStep[],
   context: DispatchContext | undefined,
 ): Promise<Record<string, unknown>> {
-  const { runIosRunnerCommand } = await import('../platforms/apple/core/runner/runner-client.ts');
+  const { runAppleRunnerCommand } = await import('../platforms/apple/core/runner/runner-client.ts');
   const { MAX_RUNNER_SEQUENCE_STEPS, buildRunnerSequenceCommand, parseRunnerSequenceResult } =
     await import('../platforms/apple/core/runner/runner-sequence.ts');
   const chunks = chunkRunnerSequenceStepsByBudget(steps, MAX_RUNNER_SEQUENCE_STEPS);
@@ -352,7 +352,7 @@ async function runIosSequenceChunks(
   const sequenceResults: unknown[] = [];
   let stepOffset = 0;
   for (const chunk of chunks) {
-    const runnerResult = await runIosRunnerCommand(
+    const runnerResult = await runAppleRunnerCommand(
       device,
       buildRunnerSequenceCommand(chunk, context?.appBundleId),
       runnerOptionsFromContext(context),
@@ -1059,8 +1059,8 @@ export async function handleReadCommand(
     return { action: 'read', text: result.text };
   }
   // macOS app sessions run through the XCUITest runner; only desktop/menubar surfaces use the helper.
-  const { runIosRunnerCommand } = await import('../platforms/apple/core/runner/runner-client.ts');
-  const result = await runIosRunnerCommand(
+  const { runAppleRunnerCommand } = await import('../platforms/apple/core/runner/runner-client.ts');
+  const result = await runAppleRunnerCommand(
     device,
     {
       command: 'readText',

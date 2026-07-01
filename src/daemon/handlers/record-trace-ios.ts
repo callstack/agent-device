@@ -69,7 +69,7 @@ async function stopRunnerRecordingBestEffort(params: {
   const appBundleId = normalizeAppBundleId(activeSession);
 
   try {
-    await deps.runIosRunnerCommand(
+    await deps.runAppleRunnerCommand(
       device,
       { command: 'recordStop', appBundleId },
       getIosRunnerOptions(req, logPath, activeSession),
@@ -106,7 +106,7 @@ export async function warmIosSimulatorRunner(params: {
   if (!appBundleId) return undefined;
 
   try {
-    const result = await deps.runIosRunnerCommand(
+    const result = await deps.runAppleRunnerCommand(
       device,
       {
         command: 'snapshot',
@@ -180,7 +180,7 @@ export async function startIosDeviceRecording(params: {
   let runnerStartedAtUptimeMs: number | undefined;
   let targetAppReadyUptimeMs: number | undefined;
   const startRunnerRecording = async () =>
-    deps.runIosRunnerCommand(
+    deps.runAppleRunnerCommand(
       device,
       {
         command: 'recordStart',
@@ -235,7 +235,11 @@ export async function startIosDeviceRecording(params: {
     }
 
     try {
-      await deps.runIosRunnerCommand(device, { command: 'recordStop', appBundleId }, runnerOptions);
+      await deps.runAppleRunnerCommand(
+        device,
+        { command: 'recordStop', appBundleId },
+        runnerOptions,
+      );
     } catch {
       // best effort: stop stale runner recording and retry start
     }
@@ -280,7 +284,7 @@ export async function startMacOsRecording(params: {
   const { req, activeSession, device, logPath, deps, fpsFlag, recordingBase, appBundleId } = params;
 
   try {
-    await deps.runIosRunnerCommand(
+    await deps.runAppleRunnerCommand(
       device,
       {
         command: 'recordStart',

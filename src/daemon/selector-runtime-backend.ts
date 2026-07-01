@@ -9,7 +9,7 @@ import { isApplePlatform } from '../kernel/device.ts';
 import { noActiveSessionError, requireCommandSupported } from './handlers/response.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { findNodeByLabel } from '../snapshot/snapshot-processing.ts';
-import { runIosRunnerCommand } from '../platforms/apple/core/runner/runner-client.ts';
+import { runAppleRunnerCommand } from '../platforms/apple/core/runner/runner-client.ts';
 import { buildAppleRunnerRequestOptions } from './apple-runner-options.ts';
 import { createDaemonRuntimePolicy } from './runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
@@ -177,7 +177,7 @@ async function findTextWithAppleRunner(
 ): Promise<boolean | null> {
   const target = readAppleRunnerFindTextTarget(params);
   if (!target) return null;
-  const result = (await runIosRunnerCommand(
+  const result = (await runAppleRunnerCommand(
     target.device,
     { command: 'findText', text, appBundleId: target.appBundleId },
     buildAppleRunnerFindTextOptions(params, target),

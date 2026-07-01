@@ -13,7 +13,7 @@ import {
 } from '../../platforms/ios/interactions.ts';
 import { appleRemotePressCommand } from '../../platforms/apple/os/tvos/remote.ts';
 import { runMacOsScreenshotAction } from '../../platforms/apple/os/macos/helper.ts';
-import { runIosRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
+import { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
@@ -70,7 +70,7 @@ export function createAppleInteractor(
         await withDiagnosticTimer(
           'snapshot_capture',
           async () =>
-            await runIosRunnerCommand(
+            await runAppleRunnerCommand(
               device,
               {
                 command: 'snapshot',
@@ -101,14 +101,14 @@ export function createAppleInteractor(
     back: async (mode) => {
       if (isTvOsDevice(device)) {
         // tvOS focus-only navigation: the Menu button pops focus, not a coordinate tap.
-        await runIosRunnerCommand(
+        await runAppleRunnerCommand(
           device,
           appleRemotePressCommand('menu', runnerContext.appBundleId),
           runnerOpts,
         );
         return;
       }
-      await runIosRunnerCommand(
+      await runAppleRunnerCommand(
         device,
         {
           command: resolveAppleBackRunnerCommand(mode),
@@ -120,28 +120,28 @@ export function createAppleInteractor(
     home: async () => {
       if (isTvOsDevice(device)) {
         // tvOS focus-only navigation: the Home button drives the remote, not a tap.
-        await runIosRunnerCommand(
+        await runAppleRunnerCommand(
           device,
           appleRemotePressCommand('home', runnerContext.appBundleId),
           runnerOpts,
         );
         return;
       }
-      await runIosRunnerCommand(
+      await runAppleRunnerCommand(
         device,
         { command: 'home', appBundleId: runnerContext.appBundleId },
         runnerOpts,
       );
     },
     rotate: async (orientation) => {
-      await runIosRunnerCommand(
+      await runAppleRunnerCommand(
         device,
         { command: 'rotate', orientation, appBundleId: runnerContext.appBundleId },
         runnerOpts,
       );
     },
     appSwitcher: async () => {
-      await runIosRunnerCommand(
+      await runAppleRunnerCommand(
         device,
         { command: 'appSwitcher', appBundleId: runnerContext.appBundleId },
         runnerOpts,

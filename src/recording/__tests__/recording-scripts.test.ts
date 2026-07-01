@@ -8,7 +8,7 @@ import { getRecordingOverlaySupportWarning } from '../overlay.ts';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const recordingScriptsDir = path.resolve(
   __dirname,
-  '../../../ios-runner/AgentDeviceRunner/RecordingScripts',
+  '../../../apple-runner/AgentDeviceRunner/RecordingScripts',
 );
 const recordingTestSupportDir = path.resolve(__dirname, '../../../test/integration/support');
 const SWIFT_TYPECHECK_TIMEOUT_MS = 60_000;

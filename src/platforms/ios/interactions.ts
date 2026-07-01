@@ -1,7 +1,7 @@
 import { isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
 import { assertScrollGestureInput, type ScrollDirection } from '../../core/scroll-gesture.ts';
 import { normalizeScrollDurationMs, SCROLL_DURATION_MAX_MS } from '../../core/scroll-command.ts';
-import { runIosRunnerCommand } from '../apple/core/runner/runner-client.ts';
+import { runAppleRunnerCommand } from '../apple/core/runner/runner-client.ts';
 import {
   buildRunnerSequenceCommand,
   parseRunnerSequenceResult,
@@ -23,7 +23,7 @@ import type {
 } from '../../core/interactor-types.ts';
 
 export type AppleBackRunnerCommand = 'backInApp' | 'backSystem';
-type RunIosRunnerCommand = typeof runIosRunnerCommand;
+type RunAppleRunnerCommand = typeof runAppleRunnerCommand;
 type RunnerOpts = RunnerCallOptions;
 
 const IOS_SWIPE_DEFAULT_DURATION_MS = 250;
@@ -81,10 +81,10 @@ export function iosRunnerOverrides(
     runnerOpts,
     overrides: {
       tap: async (x, y) => {
-        return await runIosRunnerCommand(device, iosTapCommand(device, ctx, x, y), runnerOpts);
+        return await runAppleRunnerCommand(device, iosTapCommand(device, ctx, x, y), runnerOpts);
       },
       tapElementSelector: async (selector) => {
-        return await runIosRunnerCommand(
+        return await runAppleRunnerCommand(
           device,
           {
             command: 'tap',
@@ -99,7 +99,7 @@ export function iosRunnerOverrides(
       doubleTap: async (x, y) => {
         // One-step `sequence` replaced the retired `tapSeries` double-tap vehicle; parsing the
         // result surfaces a failed step as an AppError instead of an ok-shaped payload.
-        const runnerResult = await runIosRunnerCommand(
+        const runnerResult = await runAppleRunnerCommand(
           device,
           buildRunnerSequenceCommand([{ kind: 'doubleTap', x, y }], ctx.appBundleId),
           runnerOpts,
@@ -108,7 +108,7 @@ export function iosRunnerOverrides(
         return runnerResult;
       },
       swipe: async (x1, y1, x2, y2, durationMs) => {
-        return await runIosRunnerCommand(
+        return await runAppleRunnerCommand(
           device,
           iosDragCommand(device, ctx, x1, y1, x2, y2, durationMs, {
             defaultDurationMs: IOS_SWIPE_DEFAULT_DURATION_MS,
@@ -118,7 +118,7 @@ export function iosRunnerOverrides(
         );
       },
       pan: async (x1, y1, x2, y2, durationMs) => {
-        return await runIosRunnerCommand(
+        return await runAppleRunnerCommand(
           device,
           iosDragCommand(device, ctx, x1, y1, x2, y2, durationMs, {
             defaultDurationMs: 500,
@@ -129,7 +129,7 @@ export function iosRunnerOverrides(
         );
       },
       fling: async (x1, y1, x2, y2, durationMs) => {
-        return await runIosRunnerCommand(
+        return await runAppleRunnerCommand(
           device,
           iosDragCommand(device, ctx, x1, y1, x2, y2, durationMs, {
             defaultDurationMs: 16,
@@ -140,17 +140,17 @@ export function iosRunnerOverrides(
         );
       },
       longPress: async (x, y, durationMs) => {
-        return await runIosRunnerCommand(
+        return await runAppleRunnerCommand(
           device,
           { command: 'longPress', x, y, durationMs, appBundleId: ctx.appBundleId },
           runnerOpts,
         );
       },
       focus: async (x, y) => {
-        return await runIosRunnerCommand(device, iosTapCommand(device, ctx, x, y), runnerOpts);
+        return await runAppleRunnerCommand(device, iosTapCommand(device, ctx, x, y), runnerOpts);
       },
       type: async (text, delayMs) => {
-        await runIosRunnerCommand(
+        await runAppleRunnerCommand(
           device,
           {
             command: 'type',
@@ -163,7 +163,7 @@ export function iosRunnerOverrides(
         );
       },
       fillElementSelector: async (selector, text, delayMs) => {
-        return await runIosRunnerCommand(
+        return await runAppleRunnerCommand(
           device,
           {
             command: 'type',
@@ -179,7 +179,7 @@ export function iosRunnerOverrides(
         );
       },
       fill: async (x, y, text, delayMs) => {
-        return await runIosRunnerCommand(
+        return await runAppleRunnerCommand(
           device,
           {
             command: 'type',
@@ -195,7 +195,7 @@ export function iosRunnerOverrides(
       },
       scroll: async (direction, options) => {
         return await runAppleScroll(
-          runIosRunnerCommand,
+          runAppleRunnerCommand,
           device,
           ctx,
           runnerOpts,
@@ -204,7 +204,7 @@ export function iosRunnerOverrides(
         );
       },
       pinch: async (scale, x, y) => {
-        await runIosRunnerCommand(
+        await runAppleRunnerCommand(
           device,
           {
             command: 'pinch',
@@ -217,7 +217,7 @@ export function iosRunnerOverrides(
         );
       },
       rotateGesture: async (degrees, x, y, velocity) => {
-        await runIosRunnerCommand(
+        await runAppleRunnerCommand(
           device,
           {
             command: 'rotateGesture',
@@ -231,7 +231,7 @@ export function iosRunnerOverrides(
         );
       },
       transformGesture: async (options) => {
-        return await runIosRunnerCommand(
+        return await runAppleRunnerCommand(
           device,
           {
             command: 'transformGesture',
@@ -307,7 +307,7 @@ function iosGestureDurationMs(durationMs: number | undefined, defaultDurationMs:
 }
 
 async function runAppleScroll(
-  runRunnerCommand: RunIosRunnerCommand,
+  runRunnerCommand: RunAppleRunnerCommand,
   device: DeviceInfo,
   ctx: RunnerContext,
   runnerOpts: RunnerOpts,

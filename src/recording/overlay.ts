@@ -14,9 +14,12 @@ function resolveScriptPath(scriptName: string): string {
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
   const scriptCandidates = [
     fileURLToPath(new URL(`./${scriptName}`, import.meta.url)),
-    path.resolve(moduleDir, `../../ios-runner/AgentDeviceRunner/RecordingScripts/${scriptName}`),
-    path.resolve(moduleDir, `../../../ios-runner/AgentDeviceRunner/RecordingScripts/${scriptName}`),
-    path.resolve(process.cwd(), `ios-runner/AgentDeviceRunner/RecordingScripts/${scriptName}`),
+    path.resolve(moduleDir, `../../apple-runner/AgentDeviceRunner/RecordingScripts/${scriptName}`),
+    path.resolve(
+      moduleDir,
+      `../../../apple-runner/AgentDeviceRunner/RecordingScripts/${scriptName}`,
+    ),
+    path.resolve(process.cwd(), `apple-runner/AgentDeviceRunner/RecordingScripts/${scriptName}`),
   ];
 
   for (const candidate of scriptCandidates) {
@@ -26,7 +29,7 @@ function resolveScriptPath(scriptName: string): string {
   }
 
   throw new AppError('COMMAND_FAILED', `Missing recording helper script: ${scriptName}`, {
-    hint: 'Ensure ios-runner/AgentDeviceRunner/RecordingScripts is present in this checkout or bundled with the package.',
+    hint: 'Ensure apple-runner/AgentDeviceRunner/RecordingScripts is present in this checkout or bundled with the package.',
     scriptName,
     searchedPaths: scriptCandidates,
   });

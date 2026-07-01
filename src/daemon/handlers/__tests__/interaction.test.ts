@@ -14,8 +14,8 @@ import {
 } from '../../../__tests__/test-utils/session-factories.ts';
 import { WEB_DESKTOP_DEVICE } from '../../../__tests__/test-utils/device-fixtures.ts';
 
-const { mockRunIosRunnerCommand } = vi.hoisted(() => ({
-  mockRunIosRunnerCommand: vi.fn(),
+const { mockRunAppleRunnerCommand } = vi.hoisted(() => ({
+  mockRunAppleRunnerCommand: vi.fn(),
 }));
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
@@ -62,7 +62,7 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
     await importOriginal<typeof import('../../../platforms/apple/core/runner/runner-client.ts')>();
   return {
     ...actual,
-    runIosRunnerCommand: mockRunIosRunnerCommand,
+    runAppleRunnerCommand: mockRunAppleRunnerCommand,
   };
 });
 
@@ -168,8 +168,8 @@ beforeEach(() => {
   mockGetAndroidScreenSize.mockResolvedValue({ width: 1344, height: 2992 });
   mockCaptureSnapshotForSession.mockReset();
   mockCaptureSnapshotForSession.mockImplementation(emulateCaptureSnapshotForSession);
-  mockRunIosRunnerCommand.mockReset();
-  mockRunIosRunnerCommand.mockResolvedValue({});
+  mockRunAppleRunnerCommand.mockReset();
+  mockRunAppleRunnerCommand.mockResolvedValue({});
 });
 
 test('get text prefers underlying value for text surfaces and avoids recording giant ref labels', async () => {
@@ -271,7 +271,7 @@ test('get text simple iOS id selector uses runner query without snapshot', async
   const sessionStore = makeSessionStore();
   const sessionName = 'get-text-ios-direct-selector';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
-  mockRunIosRunnerCommand.mockResolvedValue({
+  mockRunAppleRunnerCommand.mockResolvedValue({
     found: true,
     text: 'Ada Lovelace',
     nodes: [
@@ -303,7 +303,7 @@ test('get text simple iOS id selector uses runner query without snapshot', async
   });
 
   expect(response?.ok).toBe(true);
-  expect(mockRunIosRunnerCommand).toHaveBeenCalledWith(
+  expect(mockRunAppleRunnerCommand).toHaveBeenCalledWith(
     expect.anything(),
     {
       command: 'querySelector',
@@ -390,7 +390,7 @@ test('get text iOS label selector uses snapshot disambiguation instead of runner
   });
 
   expect(response?.ok).toBe(true);
-  expect(mockRunIosRunnerCommand).not.toHaveBeenCalled();
+  expect(mockRunAppleRunnerCommand).not.toHaveBeenCalled();
   expect(mockDispatch).toHaveBeenCalledTimes(1);
   expect(mockDispatch.mock.calls[0]?.[1]).toBe('snapshot');
   if (response?.ok) {
@@ -403,7 +403,7 @@ test('get text simple iOS id selector does not snapshot-fallback on ambiguous ru
   const sessionStore = makeSessionStore();
   const sessionName = 'get-text-ios-direct-selector-ambiguous';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
-  mockRunIosRunnerCommand.mockRejectedValue(
+  mockRunAppleRunnerCommand.mockRejectedValue(
     new AppError('AMBIGUOUS_MATCH', 'selector matched multiple elements'),
   );
 
@@ -498,7 +498,7 @@ test('click simple iOS id selector uses direct runner selector tap without snaps
   });
 
   expect(response?.ok).toBe(true);
-  expect(mockRunIosRunnerCommand).not.toHaveBeenCalled();
+  expect(mockRunAppleRunnerCommand).not.toHaveBeenCalled();
   expect(mockDispatch).toHaveBeenCalledTimes(1);
   const pressCalls = mockDispatch.mock.calls.filter((call) => call[1] === 'press');
   expect(pressCalls.length).toBe(1);
@@ -2501,7 +2501,7 @@ test('is selected simple iOS id selector uses runner query without snapshot', as
   const sessionStore = makeSessionStore();
   const sessionName = 'is-selected-ios-direct-selector';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
-  mockRunIosRunnerCommand.mockResolvedValue({
+  mockRunAppleRunnerCommand.mockResolvedValue({
     found: true,
     text: 'Pickup',
     nodes: [
@@ -2533,7 +2533,7 @@ test('is selected simple iOS id selector uses runner query without snapshot', as
   });
 
   expect(response?.ok).toBe(true);
-  expect(mockRunIosRunnerCommand).toHaveBeenCalledWith(
+  expect(mockRunAppleRunnerCommand).toHaveBeenCalledWith(
     expect.anything(),
     {
       command: 'querySelector',
@@ -2562,7 +2562,7 @@ test('is simple iOS selector returns false directly when runner predicate fails'
   const sessionStore = makeSessionStore();
   const sessionName = 'is-selected-ios-direct-selector-false';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
-  mockRunIosRunnerCommand.mockResolvedValue({
+  mockRunAppleRunnerCommand.mockResolvedValue({
     found: true,
     nodes: [
       {
@@ -2646,7 +2646,7 @@ test('is simple iOS selector falls back to snapshot while gesture stabilization 
   });
 
   expect(response?.ok).toBe(true);
-  expect(mockRunIosRunnerCommand).not.toHaveBeenCalled();
+  expect(mockRunAppleRunnerCommand).not.toHaveBeenCalled();
   expect(mockDispatch.mock.calls.some((call) => call[1] === 'snapshot')).toBe(true);
 });
 

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-const DERIVED_ROOT = path.join(os.homedir(), '.agent-device', 'ios-runner', 'derived');
+const DERIVED_ROOT = path.join(os.homedir(), '.agent-device', 'apple-runner', 'derived');
 const ROOT_TRANSIENT_ENTRY_NAMES = new Set([
   '.agent-device-runner-cache.json',
   'Build',

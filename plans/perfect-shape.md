@@ -142,7 +142,7 @@ Concrete tells:
 | Debt | Evidence | Est. LOC |
 |---|---|---|
 | `client-types.ts` hand-mirrors every Options/Result | 1027 LOC, 83 interfaces, imports 25 modules to re-declare contracts | ~550 derivable |
-| Every result is `Promise<Record<string,unknown> \| void>` | `DaemonResponseData`, all Interactor methods, `runIosRunnerCommand` | the weakest seam |
+| Every result is `Promise<Record<string,unknown> \| void>` | `DaemonResponseData`, all Interactor methods, `runAppleRunnerCommand` | the weakest seam |
 | `core/dispatch*` leaks platform knowledge | ~16 dynamic `import('../platforms/*')` + ~15 branches | ~120 |
 | Two platform contracts glued by string round-trip | `Interactor` vs `AgentDeviceBackend`, ~30 ops each | ~130 |
 | Batch-step validation reimplemented at 5 layers | `metadata.ts`/`projection.ts` byte-for-byte parallel | ~150 |

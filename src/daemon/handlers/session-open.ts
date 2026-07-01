@@ -9,7 +9,7 @@ import {
 } from '../../platforms/apple/core/runner/runner-client.ts';
 import {
   buildAppleRunnerSessionOptions,
-  createIosRunnerCacheColdBootPrewarmForOpen,
+  createAppleRunnerCacheColdBootPrewarmForOpen,
 } from '../apple-runner-options.ts';
 import { applyRuntimeHintsToApp } from '../runtime-hints.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
@@ -413,7 +413,7 @@ export async function handleOpenCommand(params: {
       surface: surfaceResult,
       openTarget,
       existingSession: session,
-      onIosSimulatorColdBootStart: createIosRunnerCacheColdBootPrewarmForOpen({
+      onIosSimulatorColdBootStart: createAppleRunnerCacheColdBootPrewarmForOpen({
         req,
         logPath,
         device,
@@ -512,7 +512,7 @@ export async function handleOpenCommand(params: {
       device,
       surface: surfaceResult,
       openTarget,
-      onIosSimulatorColdBootStart: createIosRunnerCacheColdBootPrewarmForOpen({
+      onIosSimulatorColdBootStart: createAppleRunnerCacheColdBootPrewarmForOpen({
         req,
         logPath,
         device,

@@ -5,7 +5,7 @@ import {
   type AlertAction,
 } from '../../alert-contract.ts';
 import { sleep } from '../../utils/timeouts.ts';
-import { runIosRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
+import { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import { runMacOsAlertAction } from '../../platforms/apple/os/macos/helper.ts';
 import { handleAndroidAlert } from '../../platforms/android/alert.ts';
 import { AppError } from '../../kernel/errors.ts';
@@ -68,7 +68,7 @@ export async function handleAlertCommand(
     traceLogPath: session?.trace?.outPath,
   });
   const runAlert: NativeAlertRunner = async (alertAction) =>
-    await runIosRunnerCommand(
+    await runAppleRunnerCommand(
       device,
       { command: 'alert', action: alertAction, appBundleId: session?.appBundleId },
       runnerOptions,

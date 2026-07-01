@@ -23,7 +23,7 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
       connectMs: 3,
       healthCheckMs: 3,
     })),
-    prewarmIosRunnerCache: vi.fn(),
+    prewarmAppleRunnerCache: vi.fn(),
     prewarmIosRunnerSession: vi.fn(),
     stopIosRunnerSession: vi.fn(async () => {}),
   };
@@ -105,7 +105,7 @@ import { ensureDeviceReady } from '../../device-ready.ts';
 import { applyRuntimeHintsToApp, clearRuntimeHintsFromApp } from '../../runtime-hints.ts';
 import {
   prepareIosRunner,
-  prewarmIosRunnerCache,
+  prewarmAppleRunnerCache,
   prewarmIosRunnerSession,
   stopIosRunnerSession,
 } from '../../../platforms/apple/core/runner/runner-client.ts';
@@ -133,7 +133,7 @@ const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintsToApp);
 const mockClearRuntimeHints = vi.mocked(clearRuntimeHintsFromApp);
 const mockPrewarmIosRunnerSession = vi.mocked(prewarmIosRunnerSession);
-const mockPrewarmIosRunnerCache = vi.mocked(prewarmIosRunnerCache);
+const mockPrewarmAppleRunnerCache = vi.mocked(prewarmAppleRunnerCache);
 const mockPrepareIosRunner = vi.mocked(prepareIosRunner);
 const mockStopIosRunner = vi.mocked(stopIosRunnerSession);
 const mockDismissMacOsAlert = vi.mocked(runMacOsAlertAction);
@@ -166,7 +166,7 @@ beforeEach(() => {
   mockClearRuntimeHints.mockReset();
   mockClearRuntimeHints.mockResolvedValue(undefined);
   mockPrewarmIosRunnerSession.mockReset();
-  mockPrewarmIosRunnerCache.mockReset();
+  mockPrewarmAppleRunnerCache.mockReset();
   mockPrepareIosRunner.mockReset();
   mockPrepareIosRunner.mockResolvedValue({
     runner: { currentUptimeMs: 42 },
@@ -906,7 +906,7 @@ test('boot prefers explicit device selector over active session device', async (
   const onColdBootStart = mockEnsureDeviceReady.mock.calls[0]?.[1]?.onIosSimulatorColdBootStart;
   expect(onColdBootStart).toBeTypeOf('function');
   onColdBootStart?.(selectedDevice);
-  expect(mockPrewarmIosRunnerCache).toHaveBeenCalledWith(
+  expect(mockPrewarmAppleRunnerCache).toHaveBeenCalledWith(
     selectedDevice,
     expect.objectContaining({
       logPath: expect.stringMatching(/daemon\.log$/),
@@ -2284,7 +2284,7 @@ test('open iOS simulator app prewarms runner cache during cold boot', async () =
   const onColdBootStart = mockEnsureDeviceReady.mock.calls[0]?.[1]?.onIosSimulatorColdBootStart;
   expect(onColdBootStart).toBeTypeOf('function');
   onColdBootStart?.(device);
-  expect(mockPrewarmIosRunnerCache).toHaveBeenCalledWith(
+  expect(mockPrewarmAppleRunnerCache).toHaveBeenCalledWith(
     device,
     expect.objectContaining({
       logPath: expect.stringMatching(/daemon\.log$/),
