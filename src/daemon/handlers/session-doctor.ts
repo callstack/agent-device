@@ -1,13 +1,15 @@
 import path from 'node:path';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import { readVersion } from '../../utils/version.ts';
-import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { appendAndroidChecks } from './session-doctor-android.ts';
 import { appendAppChecks } from './session-doctor-app.ts';
 import {
   appendDeviceInventoryCheck,
+  type DoctorDeviceInventory,
   platformScopeChecks,
   resolveDoctorDeviceForAppCheck,
 } from './session-doctor-device.ts';
@@ -26,7 +28,7 @@ import {
 } from './session-doctor-output.ts';
 import { appendReactNativeOverlayCheck } from './session-doctor-react-native.ts';
 import { appendToolchainChecks } from './session-doctor-toolchain.ts';
-import type { DoctorCheck } from './session-doctor-types.ts';
+import type { DoctorCheck, DoctorOptions } from './session-doctor-types.ts';
 
 export async function handleDoctorCommand(params: {
   req: DaemonRequest;
@@ -54,45 +56,76 @@ export async function handleDoctorCommand(params: {
   );
 
   if (options.remote) {
-    const status = summarizeDoctorStatus(checks);
-    return {
-      ok: true,
-      data: {
-        status,
-        summary: doctorSummary(status),
-        kind: options.kind,
-        targetApp: options.targetApp,
-        checks: sortChecks(checks),
-      },
-    };
+    return doctorResponse(checks, options);
   }
 
   const inventory = await appendDeviceInventoryCheck(checks, req, session);
   await appendToolchainChecks(checks, session?.device.platform ?? inventory?.platform);
+  const appCheckDevice = await appendLocalDoctorChecks({
+    androidAdbExecutor,
+    checks,
+    inventory,
+    options,
+    session,
+  });
+  return doctorResponse(checks, options, { device: appCheckDevice, includeMetro: true, inventory });
+}
+
+function resolveDoctorStateDir(sessionStore: SessionStore, sessionName: string): string {
+  const sessionsDir = path.dirname(sessionStore.resolveSessionDir(sessionName));
+  return path.basename(sessionsDir) === 'sessions' ? path.dirname(sessionsDir) : sessionsDir;
+}
+
+async function appendLocalDoctorChecks(params: {
+  androidAdbExecutor?: AndroidAdbExecutor;
+  checks: DoctorCheck[];
+  inventory: DoctorDeviceInventory | undefined;
+  options: DoctorOptions;
+  session: SessionState | undefined;
+}): Promise<DeviceInfo | undefined> {
+  const { checks, inventory, options, session, androidAdbExecutor } = params;
   const appCheckDevice =
     session?.device ?? resolveDoctorDeviceForAppCheck(checks, inventory, options.targetApp);
-  const device = session?.device;
   if (appCheckDevice) {
-    appendDoctorChecks(checks, ...platformScopeChecks(appCheckDevice, options));
-    await appendAppChecks(checks, {
-      device: appCheckDevice,
-      session,
-      targetApp: options.targetApp,
-    });
-    await appendAndroidChecks(checks, {
-      device: appCheckDevice,
-      metroPort: options.metroPort,
-      shouldProbeMetro: options.shouldProbeMetro,
+    await appendDeviceScopedDoctorChecks(checks, {
       androidAdbExecutor,
+      device: appCheckDevice,
+      options,
+      session,
     });
   }
-  if (session) {
-    appendReactNativeOverlayCheck(checks, session, options);
-  }
+  if (session) appendReactNativeOverlayCheck(checks, session, options);
   if (options.shouldProbeMetro) {
     appendDoctorCheck(checks, await probeMetro(options.metroHost, options.metroPort, options.kind));
   }
+  return appCheckDevice;
+}
 
+async function appendDeviceScopedDoctorChecks(
+  checks: DoctorCheck[],
+  params: {
+    androidAdbExecutor?: AndroidAdbExecutor;
+    device: DeviceInfo;
+    options: DoctorOptions;
+    session: SessionState | undefined;
+  },
+): Promise<void> {
+  const { androidAdbExecutor, device, options, session } = params;
+  appendDoctorChecks(checks, ...platformScopeChecks(device, options));
+  await appendAppChecks(checks, { device, session, targetApp: options.targetApp });
+  await appendAndroidChecks(checks, {
+    androidAdbExecutor,
+    device,
+    metroPort: options.metroPort,
+    shouldProbeMetro: options.shouldProbeMetro,
+  });
+}
+
+function doctorResponse(
+  checks: DoctorCheck[],
+  options: DoctorOptions,
+  scope: { device?: DeviceInfo; includeMetro?: boolean; inventory?: DoctorDeviceInventory } = {},
+): DaemonResponse {
   const status = summarizeDoctorStatus(checks);
   return {
     ok: true,
@@ -100,18 +133,14 @@ export async function handleDoctorCommand(params: {
       status,
       summary: doctorSummary(status),
       kind: options.kind,
-      platform: appCheckDevice?.platform ?? device?.platform ?? inventory?.platform,
-      target: appCheckDevice?.target ?? device?.target ?? inventory?.target,
+      platform: scope.device?.platform ?? scope.inventory?.platform,
+      target: scope.device?.target ?? scope.inventory?.target,
       targetApp: options.targetApp,
-      metro: options.shouldProbeMetro
-        ? { host: options.metroHost, port: options.metroPort }
-        : undefined,
+      metro:
+        scope.includeMetro && options.shouldProbeMetro
+          ? { host: options.metroHost, port: options.metroPort }
+          : undefined,
       checks: sortChecks(checks),
     },
   };
-}
-
-function resolveDoctorStateDir(sessionStore: SessionStore, sessionName: string): string {
-  const sessionsDir = path.dirname(sessionStore.resolveSessionDir(sessionName));
-  return path.basename(sessionsDir) === 'sessions' ? path.dirname(sessionsDir) : sessionsDir;
 }
