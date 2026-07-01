@@ -1,5 +1,6 @@
 import type { CloudArtifact, CloudArtifactsResult } from '../cloud-artifacts.ts';
 import type { AwsDeviceFarmClient } from './aws-device-farm.ts';
+import { cloudArtifactsReadyOrPending } from './artifact-results.ts';
 
 export type AwsDeviceFarmArtifactGroup = 'FILE' | 'LOG' | 'SCREENSHOT';
 
@@ -25,13 +26,12 @@ export async function listAwsDeviceFarmCloudArtifacts(
   const artifacts = groups
     .flat()
     .flatMap((artifact) => mapAwsDeviceFarmArtifact(provider, providerSessionId, artifact));
-  return {
+  return cloudArtifactsReadyOrPending({
     provider,
     providerSessionId,
-    status: artifacts.length > 0 ? 'ready' : 'pending',
-    cloudArtifacts: artifacts,
-    ...(artifacts.length > 0 ? {} : { message: 'AWS Device Farm artifacts are not ready yet.' }),
-  };
+    artifacts,
+    pendingMessage: 'AWS Device Farm artifacts are not ready yet.',
+  });
 }
 
 export function readAwsArtifacts(value: unknown): AwsDeviceFarmArtifact[] {

@@ -1,11 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import http, {
-  type IncomingHttpHeaders,
-  type IncomingMessage,
-  type ServerResponse,
-} from 'node:http';
 import path from 'node:path';
+import type { ServerResponse } from 'node:http';
 import { test } from 'vitest';
 import { createCloudWebDriverRuntime } from '../../../src/cloud-webdriver/runtime.ts';
 import { createDefaultCloudWebDriverProviderRuntimes } from '../../../src/cloud-webdriver/provider-runtimes.ts';
@@ -22,15 +18,13 @@ import {
   withProviderScenarioTempDir,
 } from './harness.ts';
 import { runProviderScenario, type ProviderScenarioStep } from './scenario.ts';
+import {
+  CloudWebDriverTestServer,
+  type CloudWebDriverHttpCall,
+  writeCloudWebDriverTestJson,
+} from './cloud-webdriver-test-server.ts';
 
 const WEBDRIVER_PROVIDER = 'webdriver-fake';
-
-type WebDriverHttpCall = {
-  method: string;
-  path: string;
-  headers: IncomingHttpHeaders;
-  body?: unknown;
-};
 
 test('Cloud WebDriver runtime drives provider devices through daemon commands', async () => {
   await withProviderScenarioResource(createCloudWebDriverWorld, async (world) => {
@@ -346,7 +340,7 @@ function cloudWebDriverScenarioSteps(appPath: string, lease: DeviceLease): Provi
 }
 
 function assertWebDriverCalls(
-  calls: readonly WebDriverHttpCall[],
+  calls: readonly CloudWebDriverHttpCall[],
   leaseId: string,
   appPath: string,
 ): void {
@@ -408,50 +402,14 @@ function assertWebDriverCalls(
   }
 }
 
-class FakeWebDriverServer {
-  readonly calls: WebDriverHttpCall[] = [];
-  url = '';
-
-  private readonly server: http.Server;
-
-  private constructor(server: http.Server) {
-    this.server = server;
-  }
-
+class FakeWebDriverServer extends CloudWebDriverTestServer {
   static async start(): Promise<FakeWebDriverServer> {
-    const instance = new FakeWebDriverServer(http.createServer());
-    instance.server.on('request', async (req, res) => await instance.handle(req, res));
-    await new Promise<void>((resolve, reject) => {
-      instance.server.once('error', reject);
-      instance.server.listen(0, '127.0.0.1', resolve);
-    });
-    const address = instance.server.address();
-    assert.ok(address && typeof address === 'object');
-    instance.url = `http://127.0.0.1:${address.port}`;
-    return instance;
+    return await new FakeWebDriverServer().listen();
   }
 
-  async close(): Promise<void> {
-    await new Promise<void>((resolve, reject) => {
-      this.server.close((error) => (error ? reject(error) : resolve()));
-    });
-  }
-
-  private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const call: WebDriverHttpCall = {
-      method: req.method ?? 'GET',
-      path: req.url ?? '/',
-      headers: req.headers,
-    };
-    const body = await readJsonBody(req);
-    if (body !== undefined) call.body = body;
-    this.calls.push(call);
-    this.respond(call, res);
-  }
-
-  private respond(call: WebDriverHttpCall, res: ServerResponse): void {
+  protected respond(call: CloudWebDriverHttpCall, res: ServerResponse): void {
     if (call.method === 'POST' && call.path === '/wd/hub/session') {
-      writeJson(res, {
+      writeCloudWebDriverTestJson(res, {
         value: {
           sessionId: 'wd-1',
           capabilities: { platformName: 'Android' },
@@ -460,7 +418,7 @@ class FakeWebDriverServer {
       return;
     }
     if (call.method === 'GET' && call.path === '/wd/hub/session/wd-1/source') {
-      writeJson(res, {
+      writeCloudWebDriverTestJson(res, {
         value:
           '<hierarchy><node text="Root" bounds="[0,0][100,40]" displayed="true">' +
           '<node text="Login" resource-id="com.example:id/login" bounds="[10,20][110,70]" displayed="true" />' +
@@ -470,11 +428,11 @@ class FakeWebDriverServer {
       return;
     }
     if (call.method === 'GET' && call.path === '/wd/hub/session/wd-1/window/rect') {
-      writeJson(res, { value: { x: 0, y: 0, width: 1080, height: 1920 } });
+      writeCloudWebDriverTestJson(res, { value: { x: 0, y: 0, width: 1080, height: 1920 } });
       return;
     }
     if (call.method === 'DELETE' && call.path === '/wd/hub/session/wd-1/actions') {
-      writeJson(
+      writeCloudWebDriverTestJson(
         res,
         {
           value: {
@@ -485,7 +443,7 @@ class FakeWebDriverServer {
       );
       return;
     }
-    writeJson(res, { value: null });
+    writeCloudWebDriverTestJson(res, { value: null });
   }
 }
 
@@ -509,18 +467,4 @@ function leaseMeta(leaseId?: string): DaemonRequest['meta'] {
     deviceKey: 'webdriver-android-a',
     clientId: 'client-a',
   };
-}
-
-async function readJsonBody(req: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) {
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-  }
-  const text = Buffer.concat(chunks).toString('utf8');
-  return text ? (JSON.parse(text) as unknown) : undefined;
-}
-
-function writeJson(res: ServerResponse, body: unknown, status = 200): void {
-  res.writeHead(status, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(body));
 }

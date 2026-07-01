@@ -1,10 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import http, {
-  type IncomingHttpHeaders,
-  type IncomingMessage,
-  type ServerResponse,
-} from 'node:http';
+import type { IncomingHttpHeaders, ServerResponse } from 'node:http';
 import path from 'node:path';
 import { test } from 'vitest';
 import {
@@ -24,13 +20,11 @@ import {
 import type { DeviceLease } from '../../../src/daemon/lease-registry.ts';
 import { withCommandExecutorOverride } from '../../../src/utils/exec.ts';
 import { withProviderScenarioResource, withProviderScenarioTempDir } from './harness.ts';
-
-type HttpCall = {
-  method: string;
-  path: string;
-  headers: IncomingHttpHeaders;
-  body?: unknown;
-};
+import {
+  CloudWebDriverTestServer,
+  type CloudWebDriverHttpCall,
+  writeCloudWebDriverTestJson,
+} from './cloud-webdriver-test-server.ts';
 
 test('BrowserStack adapter prepares App Automate capabilities and uploads install artifacts', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
@@ -334,7 +328,10 @@ test('AWS CLI Device Farm client maps remote access commands', async () => {
   ]);
 });
 
-function assertBrowserStackCalls(calls: readonly HttpCall[], lease: DeviceLease): void {
+function assertBrowserStackCalls(
+  calls: readonly CloudWebDriverHttpCall[],
+  lease: DeviceLease,
+): void {
   assertCallPathAndHeaders(calls, 0, '/wd/hub/session');
   assert.deepEqual(calls[0]?.body, {
     capabilities: {
@@ -360,7 +357,7 @@ function assertBrowserStackCalls(calls: readonly HttpCall[], lease: DeviceLease)
 }
 
 function assertCallPathAndHeaders(
-  calls: readonly HttpCall[],
+  calls: readonly CloudWebDriverHttpCall[],
   index: number,
   expectedPath: string,
 ): void {
@@ -446,63 +443,29 @@ class FakeAwsDeviceFarmClient implements AwsDeviceFarmClient {
   }
 }
 
-class FakeCloudProviderServer {
-  readonly calls: HttpCall[] = [];
+class FakeCloudProviderServer extends CloudWebDriverTestServer {
   sessionFailuresRemaining = 0;
-  url = '';
-
-  private readonly server: http.Server;
-
-  private constructor(server: http.Server) {
-    this.server = server;
-  }
 
   static async start(): Promise<FakeCloudProviderServer> {
-    const instance = new FakeCloudProviderServer(http.createServer());
-    instance.server.on('request', async (req, res) => await instance.handle(req, res));
-    await new Promise<void>((resolve, reject) => {
-      instance.server.once('error', reject);
-      instance.server.listen(0, '127.0.0.1', resolve);
-    });
-    const address = instance.server.address();
-    assert.ok(address && typeof address === 'object');
-    instance.url = `http://127.0.0.1:${address.port}`;
-    return instance;
+    return await new FakeCloudProviderServer().listen();
   }
 
-  async close(): Promise<void> {
-    await new Promise<void>((resolve, reject) => {
-      this.server.close((error) => (error ? reject(error) : resolve()));
-    });
-  }
-
-  private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const body = await readRequestBody(req);
-    this.calls.push({
-      method: req.method ?? 'GET',
-      path: req.url ?? '/',
-      headers: req.headers,
-      ...(body === undefined ? {} : { body }),
-    });
-    this.respond(req, res);
-  }
-
-  private respond(req: IncomingMessage, res: ServerResponse): void {
-    if (req.method === 'POST' && req.url === '/wd/hub/session') {
+  protected respond(call: CloudWebDriverHttpCall, res: ServerResponse): void {
+    if (call.method === 'POST' && call.path === '/wd/hub/session') {
       if (this.sessionFailuresRemaining > 0) {
         this.sessionFailuresRemaining -= 1;
-        writeJson(res, { value: { message: 'transient provider failure' } }, 503);
+        writeCloudWebDriverTestJson(res, { value: { message: 'transient provider failure' } }, 503);
         return;
       }
-      writeJson(res, { value: { sessionId: 'wd-1', capabilities: {} } });
+      writeCloudWebDriverTestJson(res, { value: { sessionId: 'wd-1', capabilities: {} } });
       return;
     }
-    if (req.method === 'POST' && req.url === '/app-automate/upload') {
-      writeJson(res, { app_url: 'bs://uploaded-app' });
+    if (call.method === 'POST' && call.path === '/app-automate/upload') {
+      writeCloudWebDriverTestJson(res, { app_url: 'bs://uploaded-app' });
       return;
     }
-    if (req.method === 'GET' && req.url === '/app-automate/sessions/wd-1.json') {
-      writeJson(res, {
+    if (call.method === 'GET' && call.path === '/app-automate/sessions/wd-1.json') {
+      writeCloudWebDriverTestJson(res, {
         automation_session: {
           video_url: 'https://browserstack.example/video.mp4',
           appium_logs_url: 'https://browserstack.example/appium.log',
@@ -513,7 +476,7 @@ class FakeCloudProviderServer {
       });
       return;
     }
-    writeJson(res, { value: null });
+    writeCloudWebDriverTestJson(res, { value: null });
   }
 }
 
@@ -531,24 +494,4 @@ function makeLease(provider: string): DeviceLease {
     heartbeatAt: now,
     expiresAt: now + 60_000,
   };
-}
-
-async function readRequestBody(req: IncomingMessage): Promise<unknown> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of req) {
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-  }
-  const buffer = Buffer.concat(chunks);
-  if (isMultipartRequest(req)) return { multipartBytes: buffer.length };
-  const text = buffer.toString('utf8');
-  return text ? (JSON.parse(text) as unknown) : undefined;
-}
-
-function isMultipartRequest(req: IncomingMessage): boolean {
-  return req.headers['content-type']?.startsWith('multipart/form-data') === true;
-}
-
-function writeJson(res: ServerResponse, body: unknown, status = 200): void {
-  res.writeHead(status, { 'Content-Type': 'application/json' });
-  res.end(JSON.stringify(body));
 }

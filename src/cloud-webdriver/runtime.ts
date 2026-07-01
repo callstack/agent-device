@@ -15,6 +15,7 @@ import type {
 } from '../provider-device-runtime.ts';
 import type { DeviceInfo, Platform } from '../kernel/device.ts';
 import { AppError } from '../kernel/errors.ts';
+import { unavailableCloudArtifactsResult } from './artifact-results.ts';
 import {
   capabilitySupported,
   createCloudWebDriverCapabilities,
@@ -393,13 +394,11 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
         providerSessionId: session.providerSessionId,
       });
     } catch (error) {
-      return {
+      return unavailableCloudArtifactsResult({
         provider: this.provider,
         providerSessionId: session.providerSessionId,
-        status: 'unavailable',
-        cloudArtifacts: [],
-        message: error instanceof Error ? error.message : String(error),
-      };
+        error,
+      });
     }
   }
 }

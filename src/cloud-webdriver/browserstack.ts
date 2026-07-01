@@ -17,6 +17,7 @@ import type { DeviceLease } from '../daemon/lease-registry.ts';
 import { AppError } from '../kernel/errors.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS } from './providers.ts';
 import { agentDeviceRequestHeaders } from './request-headers.ts';
+import { cloudArtifactsReadyOrPending } from './artifact-results.ts';
 import {
   basicAuthHeader,
   resolveLeaseValue,
@@ -142,13 +143,12 @@ export async function listBrowserStackCloudArtifacts(
   if (!providerSessionId) return undefined;
   const details = await fetchBrowserStackSessionDetails(providerSessionId, options);
   const artifacts = mapBrowserStackArtifacts(provider, providerSessionId, details);
-  return {
+  return cloudArtifactsReadyOrPending({
     provider,
     providerSessionId,
-    status: artifacts.length > 0 ? 'ready' : 'pending',
-    cloudArtifacts: artifacts,
-    ...(artifacts.length > 0 ? {} : { message: 'BrowserStack artifacts are not ready yet.' }),
-  };
+    artifacts,
+    pendingMessage: 'BrowserStack artifacts are not ready yet.',
+  });
 }
 
 export type BrowserStackUploadOptions = {
