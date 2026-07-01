@@ -507,6 +507,8 @@ export type PrepareCommandOptions = DeviceCommandBaseOptions & {
 export type DoctorCommandOptions = DeviceCommandBaseOptions & {
   targetApp?: string;
   remote?: boolean;
+  metroHost?: string;
+  metroPort?: number;
 };
 
 export type ViewportCommandOptions = DeviceCommandBaseOptions & {

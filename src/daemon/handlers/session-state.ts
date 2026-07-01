@@ -171,6 +171,7 @@ export async function handleSessionStateCommands(params: {
         session,
         flags,
         ensureReady: false,
+        allowStoppedAndroidAvdPlaceholders: true,
       });
     } catch (error) {
       const appErr = asAppError(error);

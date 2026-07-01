@@ -48,6 +48,10 @@ type AppleDeviceSelector = {
   serial?: string;
 };
 
+type ResolveTargetDeviceOptions = {
+  allowStoppedAndroidAvdPlaceholders?: boolean;
+};
+
 /**
  * Resolves the best iOS device given pre-fetched candidates.  When no explicit
  * device selector was used, physical devices are rejected in favour of a
@@ -115,10 +119,17 @@ function hasExplicitAppleDeviceSelector(selector: AppleDeviceSelector): boolean 
   return Boolean(selector.udid || selector.serial || selector.deviceName);
 }
 
-export async function resolveTargetDevice(flags: ResolveDeviceFlags): Promise<DeviceInfo> {
+export async function resolveTargetDevice(
+  flags: ResolveDeviceFlags,
+  options: ResolveTargetDeviceOptions = {},
+): Promise<DeviceInfo> {
   const inventoryRequest = buildDeviceInventoryRequestFromFlags(flags);
   const { iosSimulatorSetPath, ...selector } = inventoryRequest;
-  const cacheKey = buildResolveTargetDeviceCacheKey(inventoryRequest);
+  const cacheKey = buildResolveTargetDeviceCacheKey(inventoryRequest, options);
+  const selectionContext = {
+    simulatorSetPath: iosSimulatorSetPath,
+    allowStoppedAndroidAvdPlaceholders: options.allowStoppedAndroidAvdPlaceholders,
+  };
   const diagnosticData = {
     platform: inventoryRequest.platform,
     target: flags.target,
@@ -144,7 +155,7 @@ export async function resolveTargetDevice(flags: ResolveDeviceFlags): Promise<De
         }
         return cacheResolvedTargetDevice(
           cacheKey,
-          await resolveDevice(injectedDevices, selector, { simulatorSetPath: iosSimulatorSetPath }),
+          await resolveDevice(injectedDevices, selector, selectionContext),
         );
       }
 
@@ -161,7 +172,7 @@ export async function resolveTargetDevice(flags: ResolveDeviceFlags): Promise<De
 
       return cacheResolvedTargetDevice(
         cacheKey,
-        await resolveDevice(devices, selector, { simulatorSetPath: iosSimulatorSetPath }),
+        await resolveDevice(devices, selector, selectionContext),
       );
     },
     diagnosticData,
@@ -257,6 +268,9 @@ function cacheResolvedTargetDevice(cacheKey: string, device: DeviceInfo): Device
   return device;
 }
 
-function buildResolveTargetDeviceCacheKey(request: DeviceInventoryRequest): string {
-  return JSON.stringify(request);
+function buildResolveTargetDeviceCacheKey(
+  request: DeviceInventoryRequest,
+  options: ResolveTargetDeviceOptions,
+): string {
+  return JSON.stringify({ request, options });
 }

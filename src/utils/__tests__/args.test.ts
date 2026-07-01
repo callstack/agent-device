@@ -114,6 +114,25 @@ test('parseArgs recognizes command-specific flag combinations', async () => {
       },
     },
     {
+      label: 'doctor metro override',
+      argv: [
+        'doctor',
+        '--platform',
+        'android',
+        '--metro-host',
+        '127.0.0.1',
+        '--metro-port',
+        '9090',
+      ],
+      strictFlags: true,
+      assertParsed: (parsed) => {
+        assert.equal(parsed.command, 'doctor');
+        assert.equal(parsed.flags.platform, 'android');
+        assert.equal(parsed.flags.metroHost, '127.0.0.1');
+        assert.equal(parsed.flags.metroPort, 9090);
+      },
+    },
+    {
       label: 'open --platform apple alias',
       argv: ['open', 'Settings', '--platform', 'apple', '--target', 'tv'],
       strictFlags: true,

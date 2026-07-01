@@ -37,6 +37,7 @@ export type DeviceSelector = {
 
 type DeviceSelectionContext = {
   simulatorSetPath?: string;
+  allowStoppedAndroidAvdPlaceholders?: boolean;
 };
 
 export function isApplePlatform(
@@ -162,6 +163,10 @@ export async function resolveDevice(
     return match;
   }
 
+  if (context.allowStoppedAndroidAvdPlaceholders !== true) {
+    candidates = candidates.filter((device) => !isStoppedAndroidAvdPlaceholder(device));
+  }
+
   if (selector.deviceName) {
     const normalizedName = normalizeDeviceName(selector.deviceName);
     const match = candidates.find((device) => normalizeDeviceName(device.name) === normalizedName);
@@ -192,6 +197,15 @@ export async function resolveDevice(
     : (booted[0] ?? selectable[0]);
   if (!selected) throwNoDevicesFound(selector, context);
   return selected;
+}
+
+function isStoppedAndroidAvdPlaceholder(device: DeviceInfo): boolean {
+  return (
+    device.platform === 'android' &&
+    device.kind === 'emulator' &&
+    device.booted === false &&
+    !/^emulator-\d+$/.test(device.id)
+  );
 }
 
 export function matchesDeviceSelector(

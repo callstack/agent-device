@@ -41,11 +41,14 @@ export async function resolveCommandDevice(params: {
   session: SessionState | undefined;
   flags: DaemonRequest['flags'] | undefined;
   ensureReady?: boolean;
+  allowStoppedAndroidAvdPlaceholders?: boolean;
 }): Promise<DeviceInfo> {
   const shouldUseExplicitSelector = hasExplicitDeviceSelector(params.flags);
   const device =
     shouldUseExplicitSelector || !params.session
-      ? await resolveTargetDevice(params.flags ?? {})
+      ? await resolveTargetDevice(params.flags ?? {}, {
+          allowStoppedAndroidAvdPlaceholders: params.allowStoppedAndroidAvdPlaceholders,
+        })
       : await refreshSessionDeviceIfNeeded(params.session.device);
   if (params.ensureReady !== false) {
     await ensureDeviceReady(device);

@@ -33,8 +33,14 @@ export function readDoctorOptions(
 ): DoctorOptions {
   const kind = detectProjectRuntimeKind(req.meta?.cwd);
   const targetApp = readNonEmptyString(req.flags?.targetApp) ?? session?.appBundleId;
-  const metroHost = readNonEmptyString(req.runtime?.metroHost) ?? DEFAULT_METRO_HOST;
-  const metroPort = readPositivePort(req.runtime?.metroPort) ?? DEFAULT_METRO_PORT;
+  const metroHost =
+    readNonEmptyString(req.flags?.metroHost) ??
+    readNonEmptyString(req.runtime?.metroHost) ??
+    DEFAULT_METRO_HOST;
+  const metroPort =
+    readPositivePort(req.flags?.metroPort) ??
+    readPositivePort(req.runtime?.metroPort) ??
+    DEFAULT_METRO_PORT;
   return {
     targetApp,
     metroHost,
@@ -130,6 +136,8 @@ export function sessionChecks(
 function shouldProbeMetro(req: DaemonRequest, kind: DoctorKind): boolean {
   return (
     kind !== 'auto' ||
+    typeof req.flags?.metroPort === 'number' ||
+    typeof req.flags?.metroHost === 'string' ||
     typeof req.runtime?.metroPort === 'number' ||
     typeof req.runtime?.metroHost === 'string'
   );

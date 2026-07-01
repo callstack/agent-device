@@ -247,6 +247,13 @@ test('Provider-backed integration doctor probes Metro when runtime metadata exis
         assertRpcOk(withoutRuntime);
         assertNoDoctorCheck(withoutRuntime.json.result.data, 'metro');
 
+        const withFlagRuntime = await daemon.callCommand('doctor', [], {
+          platform: 'ios',
+          metroPort: server.port,
+        });
+        assertRpcOk(withFlagRuntime);
+        assertDoctorCheck(withFlagRuntime.json.result.data, 'metro', 'pass');
+
         const withRuntime = await daemon.callCommand(
           'doctor',
           [],
@@ -265,7 +272,7 @@ test('Provider-backed integration doctor probes Metro when runtime metadata exis
   } finally {
     await server.close();
   }
-});
+}, 10_000);
 
 test('Provider-backed integration doctor surfaces a platform inventory failure even when another platform has devices', async () => {
   await withProviderScenarioResource(
