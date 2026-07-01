@@ -1,27 +1,21 @@
 import { access } from 'node:fs/promises';
 import path from 'node:path';
 import type { PlatformSelector } from '../../kernel/device.ts';
-import { normalizeError } from '../../kernel/errors.ts';
-import { runCmd, whichCmd, type ExecResult } from '../../utils/exec.ts';
+import { runCmd, whichCmd } from '../../utils/exec.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';
 import type { DoctorCheck } from './session-doctor-types.ts';
 
 const TOOLCHAIN_TIMEOUT_MS = 3_000;
-
-type SafeExecResult = ExecResult | { error: string };
+type AndroidLicenseState = 'accepted' | 'missing' | 'unknown';
 type AndroidToolchainProbe = {
-  adbVersion: SafeExecResult;
-  license: 'accepted' | 'missing' | 'unknown';
+  license: AndroidLicenseState;
   sdkRoot: string | undefined;
   versionLine: string | undefined;
 };
 type AppleToolchainProbe = {
-  firstLaunch: SafeExecResult | undefined;
   firstLaunchOk: boolean;
   selectedPath: string | undefined;
-  selectedXcode: SafeExecResult | undefined;
   versionLine: string | undefined;
-  xcodeVersion: SafeExecResult | undefined;
 };
 
 export async function appendToolchainChecks(
@@ -43,31 +37,19 @@ async function androidToolchainCheck(): Promise<DoctorCheck> {
   const license = await androidLicenseState(sdkRoot);
   if (!adbAvailable) return missingAndroidAdbCheck(sdkRoot, license);
 
-  const adbVersion = await safeRun('adb', ['version']);
-  const versionLine = firstStdoutLine(adbVersion);
-  return androidAdbCheck({ adbVersion, license, sdkRoot, versionLine });
-}
-
-function missingAndroidAdbCheck(
-  sdkRoot: string | undefined,
-  license: 'accepted' | 'missing' | 'unknown',
-): DoctorCheck {
-  return {
-    id: 'toolchain',
-    status: 'info',
-    summary: 'Android toolchain: adb not found on PATH.',
-    hint: 'Install Android platform-tools or add adb to PATH.',
-    evidence: { androidHome: sdkRoot ?? null, license },
-  };
+  return androidAdbCheck({
+    license,
+    sdkRoot,
+    versionLine: await commandFirstLine('adb', ['version']),
+  });
 }
 
 function androidAdbCheck(probe: AndroidToolchainProbe): DoctorCheck {
-  const sdkSummary = probe.sdkRoot ? 'ANDROID_HOME/ANDROID_SDK_ROOT set' : 'ANDROID_HOME unset';
   return {
     id: 'toolchain',
     status: androidToolchainStatus(probe),
     summary: probe.versionLine
-      ? `Android toolchain: ${probe.versionLine}; ${sdkSummary}.`
+      ? `Android toolchain: ${probe.versionLine}; ${androidSdkSummary(probe.sdkRoot)}.`
       : 'Android toolchain: adb is present but version check failed.',
     hint:
       probe.license === 'missing'
@@ -75,7 +57,7 @@ function androidAdbCheck(probe: AndroidToolchainProbe): DoctorCheck {
         : undefined,
     command: probe.license === 'missing' ? 'sdkmanager --licenses' : undefined,
     evidence: {
-      adbVersion: probe.adbVersion,
+      adbVersion: probe.versionLine ?? null,
       androidHome: probe.sdkRoot ?? null,
       license: probe.license,
     },
@@ -86,37 +68,37 @@ function androidToolchainStatus(probe: AndroidToolchainProbe): DoctorCheck['stat
   return probe.versionLine && probe.sdkRoot && probe.license !== 'missing' ? 'pass' : 'info';
 }
 
+function androidSdkSummary(sdkRoot: string | undefined): string {
+  return sdkRoot ? 'ANDROID_HOME/ANDROID_SDK_ROOT set' : 'ANDROID_HOME unset';
+}
+
+function missingAndroidAdbCheck(
+  sdkRoot: string | undefined,
+  license: AndroidLicenseState,
+): DoctorCheck {
+  return {
+    id: 'toolchain',
+    status: 'info',
+    summary: 'Android toolchain: adb not found on PATH.',
+    hint: 'Install Android platform-tools or add adb to PATH.',
+    evidence: { androidHome: sdkRoot ?? null, license },
+  };
+}
+
 async function appleToolchainCheck(): Promise<DoctorCheck> {
   const xcodeSelectAvailable = await whichCmd('xcode-select');
   const xcodebuildAvailable = await whichCmd('xcodebuild');
   if (!xcodeSelectAvailable && !xcodebuildAvailable) return missingAppleToolchainCheck();
 
-  const selectedXcode = xcodeSelectAvailable ? await safeRun('xcode-select', ['-p']) : undefined;
-  const xcodeVersion = xcodebuildAvailable ? await safeRun('xcodebuild', ['-version']) : undefined;
-  const firstLaunch = xcodebuildAvailable
-    ? await safeRun('xcodebuild', ['-checkFirstLaunchStatus'])
-    : undefined;
-  const versionLine = firstStdoutLine(xcodeVersion);
-  const selectedPath = firstStdoutLine(selectedXcode);
-  const firstLaunchOk = isSuccessful(firstLaunch);
   return appleProbeCheck({
-    firstLaunch,
-    firstLaunchOk,
-    selectedPath,
-    selectedXcode,
-    versionLine,
-    xcodeVersion,
+    firstLaunchOk: xcodebuildAvailable
+      ? await commandOk('xcodebuild', ['-checkFirstLaunchStatus'])
+      : false,
+    selectedPath: xcodeSelectAvailable ? await commandFirstLine('xcode-select', ['-p']) : undefined,
+    versionLine: xcodebuildAvailable
+      ? await commandFirstLine('xcodebuild', ['-version'])
+      : undefined,
   });
-}
-
-function missingAppleToolchainCheck(): DoctorCheck {
-  return {
-    id: 'toolchain',
-    status: 'info',
-    summary: 'Apple toolchain: xcode-select and xcodebuild not found on PATH.',
-    hint: 'Install Xcode and select it with xcode-select.',
-    evidence: { xcodeSelect: false, xcodebuild: false },
-  };
 }
 
 function appleProbeCheck(probe: AppleToolchainProbe): DoctorCheck {
@@ -129,9 +111,9 @@ function appleProbeCheck(probe: AppleToolchainProbe): DoctorCheck {
       : 'Complete Xcode first launch/license setup before building apps.',
     command: probe.firstLaunchOk ? undefined : 'sudo xcodebuild -runFirstLaunch',
     evidence: {
-      firstLaunch: probe.firstLaunch,
-      selectedXcode: probe.selectedXcode,
-      xcodeVersion: probe.xcodeVersion,
+      selectedPath: probe.selectedPath ?? null,
+      xcodeVersion: probe.versionLine ?? null,
+      firstLaunchOk: probe.firstLaunchOk,
     },
   };
 }
@@ -141,15 +123,23 @@ function appleToolchainStatus(probe: AppleToolchainProbe): DoctorCheck['status']
 }
 
 function appleToolchainSummary(probe: AppleToolchainProbe): string {
-  if (!probe.selectedPath || !probe.versionLine) {
-    return 'Apple toolchain: Xcode selection or version check failed.';
+  if (probe.selectedPath && probe.versionLine) {
+    return `Apple toolchain: ${probe.versionLine}; xcode-select ${probe.selectedPath}.`;
   }
-  return `Apple toolchain: ${probe.versionLine}; xcode-select ${probe.selectedPath}.`;
+  return 'Apple toolchain: Xcode selection or version check failed.';
 }
 
-async function androidLicenseState(
-  sdkRoot: string | undefined,
-): Promise<'accepted' | 'missing' | 'unknown'> {
+function missingAppleToolchainCheck(): DoctorCheck {
+  return {
+    id: 'toolchain',
+    status: 'info',
+    summary: 'Apple toolchain: xcode-select and xcodebuild not found on PATH.',
+    hint: 'Install Xcode and select it with xcode-select.',
+    evidence: { xcodeSelect: false, xcodebuild: false },
+  };
+}
+
+async function androidLicenseState(sdkRoot: string | undefined): Promise<AndroidLicenseState> {
   if (!sdkRoot) return 'unknown';
   try {
     await access(path.join(sdkRoot, 'licenses', 'android-sdk-license'));
@@ -159,22 +149,26 @@ async function androidLicenseState(
   }
 }
 
-async function safeRun(cmd: string, args: string[]): Promise<SafeExecResult> {
+async function commandFirstLine(cmd: string, args: string[]): Promise<string | undefined> {
   try {
-    return await runCmd(cmd, args, { allowFailure: true, timeoutMs: TOOLCHAIN_TIMEOUT_MS });
-  } catch (error) {
-    return { error: normalizeError(error).message };
+    const result = await runCmd(cmd, args, { allowFailure: true, timeoutMs: TOOLCHAIN_TIMEOUT_MS });
+    if (result.exitCode !== 0) return undefined;
+    return result.stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .find(Boolean);
+  } catch {
+    return undefined;
   }
 }
 
-function firstStdoutLine(result: SafeExecResult | undefined): string | undefined {
-  if (!result || 'error' in result || result.exitCode !== 0) return undefined;
-  return result.stdout
-    .split('\n')
-    .map((line) => line.trim())
-    .find(Boolean);
-}
-
-function isSuccessful(result: SafeExecResult | undefined): boolean {
-  return Boolean(result && !('error' in result) && result.exitCode === 0);
+async function commandOk(cmd: string, args: string[]): Promise<boolean> {
+  try {
+    return (
+      (await runCmd(cmd, args, { allowFailure: true, timeoutMs: TOOLCHAIN_TIMEOUT_MS }))
+        .exitCode === 0
+    );
+  } catch {
+    return false;
+  }
 }

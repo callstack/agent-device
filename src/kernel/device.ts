@@ -142,9 +142,36 @@ export async function resolveDevice(
   selector: DeviceSelector,
   context: DeviceSelectionContext = {},
 ): Promise<DeviceInfo> {
-  const candidates = sortDeviceCandidatesForSelection(filterDeviceCandidates(devices, selector));
-  const explicitSelection = resolveExplicitDeviceSelection(candidates, selector);
-  if (explicitSelection) return explicitSelection;
+  let candidates = devices.filter((device) => matchesDeviceSelector(device, selector));
+
+  if (selector.udid) {
+    const match = candidates.find(
+      (device) => device.id === selector.udid && isApplePlatform(device.platform),
+    );
+    if (!match)
+      throw new AppError('DEVICE_NOT_FOUND', `No Apple device with UDID ${selector.udid}`);
+    return match;
+  }
+
+  if (selector.serial) {
+    const match = candidates.find(
+      (device) => device.id === selector.serial && device.platform === 'android',
+    );
+    if (!match)
+      throw new AppError('DEVICE_NOT_FOUND', `No Android device with serial ${selector.serial}`);
+    return match;
+  }
+
+  if (selector.deviceName) {
+    const normalizedName = normalizeDeviceName(selector.deviceName);
+    const match = candidates.find((device) => normalizeDeviceName(device.name) === normalizedName);
+    if (!match) throw new AppError('DEVICE_NOT_FOUND', `No device named ${selector.deviceName}`);
+    return match;
+  }
+
+  if (isAppleDeviceCandidateSet(candidates)) {
+    candidates = sortAppleDevicesForSelection(candidates);
+  }
 
   const onlyCandidate = candidates[0];
   if (onlyCandidate !== undefined && candidates.length === 1) return onlyCandidate;
@@ -153,13 +180,18 @@ export async function resolveDevice(
     throwNoDevicesFound(selector, context);
   }
 
-  const selected = selectDefaultDevice(candidates);
-  if (selected === undefined) throwNoDevicesFound(selector, context);
+  const virtual = candidates.filter((device) => device.kind !== 'device');
+  const selectable = virtual.length > 0 ? virtual : candidates;
+  const booted = selectable.filter((device) => device.booted);
+  const onlyBooted = booted[0];
+  if (onlyBooted && booted.length === 1 && !isAppleDeviceCandidateSet(selectable)) {
+    return onlyBooted;
+  }
+  const selected = isAppleDeviceCandidateSet(selectable)
+    ? selectable[0]
+    : (booted[0] ?? selectable[0]);
+  if (!selected) throwNoDevicesFound(selector, context);
   return selected;
-}
-
-function filterDeviceCandidates(devices: DeviceInfo[], selector: DeviceSelector): DeviceInfo[] {
-  return devices.filter((device) => matchesDeviceSelector(device, selector));
 }
 
 export function matchesDeviceSelector(
@@ -188,61 +220,6 @@ function matchesExplicitDeviceSelector(device: DeviceInfo, selector: DeviceSelec
     return false;
   }
   return true;
-}
-
-function sortDeviceCandidatesForSelection(candidates: DeviceInfo[]): DeviceInfo[] {
-  return isAppleDeviceCandidateSet(candidates)
-    ? sortAppleDevicesForSelection(candidates)
-    : candidates;
-}
-
-function resolveExplicitDeviceSelection(
-  candidates: DeviceInfo[],
-  selector: DeviceSelector,
-): DeviceInfo | undefined {
-  if (selector.udid) return findAppleDeviceById(candidates, selector.udid);
-  if (selector.serial) return findAndroidDeviceById(candidates, selector.serial);
-  if (selector.deviceName) return findDeviceByName(candidates, selector.deviceName);
-  return undefined;
-}
-
-function findAppleDeviceById(candidates: DeviceInfo[], udid: string): DeviceInfo {
-  const match = candidates.find((device) => device.id === udid && isApplePlatform(device.platform));
-  if (!match) throw new AppError('DEVICE_NOT_FOUND', `No Apple device with UDID ${udid}`);
-  return match;
-}
-
-function findAndroidDeviceById(candidates: DeviceInfo[], serial: string): DeviceInfo {
-  const match = candidates.find((device) => device.id === serial && device.platform === 'android');
-  if (!match) throw new AppError('DEVICE_NOT_FOUND', `No Android device with serial ${serial}`);
-  return match;
-}
-
-function findDeviceByName(candidates: DeviceInfo[], deviceName: string): DeviceInfo {
-  const normalizedName = normalizeDeviceName(deviceName);
-  const match = candidates.find((device) => normalizeDeviceName(device.name) === normalizedName);
-  if (!match) throw new AppError('DEVICE_NOT_FOUND', `No device named ${deviceName}`);
-  return match;
-}
-
-function selectDefaultDevice(candidates: DeviceInfo[]): DeviceInfo | undefined {
-  const selectable = preferVirtualDevices(candidates);
-  const singleBootedDevice = findSingleBootedDevice(selectable);
-  if (singleBootedDevice && !isAppleDeviceCandidateSet(selectable)) return singleBootedDevice;
-  return isAppleDeviceCandidateSet(selectable)
-    ? selectable[0]
-    : (selectable.find((device) => device.booted) ?? selectable[0]);
-}
-
-function preferVirtualDevices(candidates: DeviceInfo[]): DeviceInfo[] {
-  // Prefer virtual devices unless a physical device was explicitly selected.
-  const virtual = candidates.filter((device) => device.kind !== 'device');
-  return virtual.length > 0 ? virtual : candidates;
-}
-
-function findSingleBootedDevice(candidates: DeviceInfo[]): DeviceInfo | undefined {
-  const booted = candidates.filter((device) => device.booted);
-  return booted.length === 1 ? booted[0] : undefined;
 }
 
 function throwNoDevicesFound(selector: DeviceSelector, context: DeviceSelectionContext): never {

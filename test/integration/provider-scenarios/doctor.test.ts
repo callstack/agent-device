@@ -134,6 +134,8 @@ test('Provider-backed integration doctor --app asks for a selector when multiple
     async () =>
       await createProviderScenarioHarness({
         deviceInventoryProvider: async (request) => {
+          if (!request.platform)
+            return [PROVIDER_SCENARIO_ANDROID, PROVIDER_SCENARIO_IOS_SIMULATOR];
           if (request.platform === 'android') return [PROVIDER_SCENARIO_ANDROID];
           if (request.platform === 'apple') return [PROVIDER_SCENARIO_IOS_SIMULATOR];
           return [];
@@ -232,7 +234,7 @@ test('Provider-backed integration doctor probes Metro when runtime metadata exis
   }
 });
 
-test('Provider-backed integration doctor surfaces a platform inventory failure even when another platform has devices', async () => {
+test('Provider-backed integration doctor surfaces a selected platform inventory failure', async () => {
   await withProviderScenarioResource(
     async () =>
       await createProviderScenarioHarness({
@@ -244,12 +246,11 @@ test('Provider-backed integration doctor surfaces a platform inventory failure e
         },
       }),
     async (daemon) => {
-      const response = await daemon.callCommand('doctor', []);
+      const response = await daemon.callCommand('doctor', [], { platform: 'apple' });
       assertRpcOk(response);
       const data = response.json.result.data;
-      assert.equal(data.status, 'warn', JSON.stringify(data.checks));
-      assertDoctorCheck(data, 'device', 'pass');
-      const failure = assertDoctorCheck(data, 'device-apple', 'warn');
+      assert.equal(data.status, 'fail', JSON.stringify(data.checks));
+      const failure = assertDoctorCheck(data, 'device', 'fail');
       assert.match(failure.summary, /simctl/);
     },
   );

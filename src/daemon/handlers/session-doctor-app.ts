@@ -1,5 +1,3 @@
-import { listAndroidApps } from '../../platforms/android/app-lifecycle.ts';
-import { listIosApps } from '../../platforms/apple/core/apps.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import type { SessionState } from '../types.ts';
@@ -50,6 +48,7 @@ async function resolveInstalledAppForDoctor(
   targetApp: string,
 ): Promise<string | undefined> {
   if (device.platform === 'android') {
+    const { listAndroidApps } = await import('../../platforms/android/app-lifecycle.ts');
     const apps = await listAndroidApps(device, 'all');
     const match = resolveUniqueInstalledAppMatch(
       targetApp,
@@ -58,6 +57,7 @@ async function resolveInstalledAppForDoctor(
     return match?.id;
   }
   if (device.platform === 'ios' || device.platform === 'macos') {
+    const { listIosApps } = await import('../../platforms/apple/core/apps.ts');
     const apps = await listIosApps(device, 'all');
     const match = resolveUniqueInstalledAppMatch(
       targetApp,

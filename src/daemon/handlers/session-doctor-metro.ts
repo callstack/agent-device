@@ -1,42 +1,22 @@
 import type { DoctorCheck, DoctorKind } from './session-doctor-types.ts';
-import { runCmd } from '../../utils/exec.ts';
 
 const METRO_PROBE_TIMEOUT_MS = 1500;
-const METRO_PROCESS_LOOKUP_TIMEOUT_MS = 1500;
-
-export type MetroProcessInfo = {
-  pid: number;
-  cwd?: string;
-};
-
-type MetroProbeOptions = {
-  resolveProcessInfo?: (host: string, port: number) => Promise<MetroProcessInfo | undefined>;
-};
 
 export async function probeMetro(
   host: string,
   port: number,
   kind: DoctorKind,
-  options: MetroProbeOptions = {},
 ): Promise<DoctorCheck> {
   const url = `http://${host}:${port}/status`;
   try {
     const response = await fetch(url, { signal: AbortSignal.timeout(METRO_PROBE_TIMEOUT_MS) });
     const text = await response.text();
     const running = response.ok && text.toLowerCase().includes('packager-status:running');
-    let processInfo: MetroProcessInfo | undefined;
-    if (running) {
-      try {
-        processInfo = await (options.resolveProcessInfo ?? resolveMetroProcessInfo)(host, port);
-      } catch {
-        processInfo = undefined;
-      }
-    }
     return {
       id: 'metro',
       status: running ? 'pass' : 'warn',
       summary: running
-        ? metroRunningSummary(url, processInfo)
+        ? `Metro is reachable at ${url}.`
         : `Metro responded at ${url}, but did not report packager-status:running.`,
       hint: running
         ? undefined
@@ -46,7 +26,6 @@ export async function probeMetro(
         statusCode: response.status,
         body: text.slice(0, 120),
         kind,
-        ...(processInfo ? { process: processInfo } : {}),
       },
     };
   } catch (error) {
@@ -59,49 +38,4 @@ export async function probeMetro(
       evidence: { url, error: error instanceof Error ? error.message : String(error), kind },
     };
   }
-}
-
-function metroRunningSummary(url: string, processInfo: MetroProcessInfo | undefined): string {
-  if (processInfo?.cwd) {
-    return `Metro is reachable at ${url} (cwd: ${processInfo.cwd}).`;
-  }
-  return `Metro is reachable at ${url}.`;
-}
-
-async function resolveMetroProcessInfo(
-  host: string,
-  port: number,
-): Promise<MetroProcessInfo | undefined> {
-  if (!isLocalHost(host)) return undefined;
-  const pid = await findListeningProcessId(port);
-  if (pid === undefined) return undefined;
-  return { pid, cwd: await readProcessCwd(pid) };
-}
-
-function isLocalHost(host: string): boolean {
-  return host === '127.0.0.1' || host === 'localhost' || host === '::1' || host === '0.0.0.0';
-}
-
-async function findListeningProcessId(port: number): Promise<number | undefined> {
-  const result = await runCmd('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN', '-Fp'], {
-    allowFailure: true,
-    timeoutMs: METRO_PROCESS_LOOKUP_TIMEOUT_MS,
-  });
-  if (result.exitCode !== 0) return undefined;
-  return result.stdout
-    .split('\n')
-    .map((line) => (line.startsWith('p') ? Number.parseInt(line.slice(1), 10) : NaN))
-    .find((pid) => Number.isInteger(pid) && pid > 0);
-}
-
-async function readProcessCwd(pid: number): Promise<string | undefined> {
-  const result = await runCmd('lsof', ['-nP', '-a', '-p', String(pid), '-d', 'cwd', '-Fn'], {
-    allowFailure: true,
-    timeoutMs: METRO_PROCESS_LOOKUP_TIMEOUT_MS,
-  });
-  if (result.exitCode !== 0) return undefined;
-  return result.stdout
-    .split('\n')
-    .find((line) => line.startsWith('n') && line.length > 1)
-    ?.slice(1);
 }

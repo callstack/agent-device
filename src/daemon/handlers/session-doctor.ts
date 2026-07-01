@@ -10,7 +10,6 @@ import { appendAppChecks } from './session-doctor-app.ts';
 import {
   appendDeviceInventoryCheck,
   type DoctorDeviceInventory,
-  platformScopeChecks,
   resolveDoctorDeviceForAppCheck,
 } from './session-doctor-device.ts';
 import { probeMetro } from './session-doctor-metro.ts';
@@ -111,7 +110,6 @@ async function appendDeviceScopedDoctorChecks(
   },
 ): Promise<void> {
   const { androidAdbExecutor, device, options, session } = params;
-  appendDoctorChecks(checks, ...platformScopeChecks(device, options));
   await appendAppChecks(checks, { device, session, targetApp: options.targetApp });
   await appendAndroidChecks(checks, {
     androidAdbExecutor,
