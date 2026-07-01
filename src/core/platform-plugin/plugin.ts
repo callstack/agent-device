@@ -24,9 +24,13 @@ import type { CapabilityBucket } from '../platform-descriptor/types.ts';
  * parity test before a real call-site routes through it. A facet's type stays
  * PLATFORM-NEUTRAL and daemon-owned (never the iOS-simulator-shaped provider seam):
  * {@link PlatformPlugin.appLog} carries the neutral {@link LogBackend} resolver
- * (wraps `resolveLogBackend`, pinned by the daemon app-log routing parity test).
- * The remaining columns (`providers` / `recording` / `perf`) stay on their daemon
- * branch as the source of truth until they clear the same gate. See
+ * (wraps `resolveLogBackend`, pinned by the daemon app-log routing parity test);
+ * {@link PlatformPlugin.perf} carries the neutral perf-metrics support predicate
+ * (wraps `supportsPlatformPerfMetrics`, pinned by the daemon perf routing parity
+ * test). The remaining columns (`providers` / `recording`) — and the rest of the
+ * `perf` facet (the sampling body `buildPerfResponseData` and the Android-only
+ * native-collector gate) — stay on their daemon branch as the source of truth
+ * until each clears the same gate. See
  * docs/adr/0009-apple-platform-consolidation.md (tracked in issue #974).
  */
 export type PlatformPlugin = {
@@ -73,6 +77,21 @@ export type PlatformPlugin = {
    */
   readonly appLog?: {
     resolveBackend(device: DeviceInfo): LogBackend;
+  };
+  /**
+   * The daemon perf facet (issue #974). `supportsMetrics` wraps the platform
+   * predicate `supportsPlatformPerfMetrics` in
+   * `src/daemon/handlers/session-perf.ts`, reporting whether `device`'s platform
+   * can produce session perf metrics (startup/fps/memory/cpu). Present only on
+   * families that expose perf metrics (Apple + Android); left `undefined` for
+   * linux/web, where the hand predicate returned `false` — the daemon lookup
+   * preserves that fallthrough, and the daemon perf routing parity test pins the
+   * equivalence. Only the support gate is routed today; the perf sampling body
+   * (`buildPerfResponseData`) and the Android-only native-collector gate stay on
+   * their daemon branch until each clears the same gate.
+   */
+  readonly perf?: {
+    supportsMetrics(device: DeviceInfo): boolean;
   };
 };
 

@@ -2,6 +2,8 @@ import path from 'node:path';
 import type { SessionAction, SessionState } from '../types.ts';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { isApplePlatform } from '../../kernel/device.ts';
+import { tryGetPlugin } from '../../core/platform-plugin/plugin.ts';
+import { registerBuiltinPlatformPlugins } from '../../core/platform-plugin/register-builtins.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import {
   ANDROID_HPROF_SNAPSHOT_DESCRIPTION,
@@ -36,6 +38,12 @@ import {
   STARTUP_SAMPLE_METHOD,
   type StartupPerfSample,
 } from './session-startup-metrics.ts';
+
+// Populate the PlatformPlugin registry once at module load (idempotent; registers
+// only lazy closures, so no leaf code is imported and CLI cold-start is unaffected
+// — mirrors the same call in `daemon/app-log.ts`). `supportsPlatformPerfMetrics`
+// reads the per-platform perf facet from this registry, so it must be populated first.
+registerBuiltinPlatformPlugins();
 
 type SettledMetricResult = PromiseSettledResult<Record<string, unknown>>;
 type MetricResult =
@@ -322,11 +330,11 @@ async function applyFramePerfMetric(
 }
 
 function supportsPlatformPerfMetrics(session: SessionState): boolean {
-  return (
-    session.device.platform === 'android' ||
-    session.device.platform === 'ios' ||
-    session.device.platform === 'macos'
-  );
+  // Routes the platform gate through the PlatformPlugin perf facet (issue #974).
+  // Apple/Android carry `perf.supportsMetrics`; linux/web (and any unregistered
+  // platform) fall through to `false`, matching the former hand predicate. The
+  // daemon perf routing parity test pins this equivalence.
+  return tryGetPlugin(session.device.platform)?.perf?.supportsMetrics(session.device) ?? false;
 }
 
 function buildMissingAppPerfReason(session: SessionState): string {
