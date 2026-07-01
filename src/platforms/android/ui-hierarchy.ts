@@ -1,4 +1,5 @@
 import type { RawSnapshotNode, Rect, SnapshotOptions } from '../../kernel/snapshot.ts';
+import { parseBounds } from '../../utils/bounds.ts';
 import { isScrollableType } from '../../utils/scrollable.ts';
 import { intersectArea } from '../../utils/screenshot-geometry.ts';
 
@@ -409,17 +410,6 @@ function isValidNumericEntityDigits(digits: string, radix: 10 | 16): boolean {
 
 function readXmlAttr(attrs: Map<string, string>, name: string): string | null {
   return attrs.get(name) ?? null;
-}
-
-export function parseBounds(bounds: string | null): Rect | undefined {
-  if (!bounds) return undefined;
-  const match = /\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]/.exec(bounds);
-  if (!match) return undefined;
-  const x1 = Number(match[1]);
-  const y1 = Number(match[2]);
-  const x2 = Number(match[3]);
-  const y2 = Number(match[4]);
-  return { x: x1, y: y1, width: Math.max(0, x2 - x1), height: Math.max(0, y2 - y1) };
 }
 
 export type AndroidUiHierarchy = {

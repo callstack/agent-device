@@ -22,6 +22,8 @@ import { runProviderScenario, type ProviderScenarioStep } from './scenario.ts';
 import {
   CloudWebDriverTestServer,
   type CloudWebDriverHttpCall,
+  startCloudWebDriverTestServer,
+  type StartedCloudWebDriverTestServer,
   writeCloudWebDriverTestJson,
 } from './cloud-webdriver-test-server.ts';
 
@@ -471,62 +473,75 @@ class FakeWebDriverServer extends CloudWebDriverTestServer {
   createSessionFailuresRemaining = 0;
   sessionDeleteFailuresRemaining = 0;
 
-  static async start(): Promise<FakeWebDriverServer> {
-    return await new FakeWebDriverServer().listen();
+  static async start(): Promise<StartedCloudWebDriverTestServer<FakeWebDriverServer>> {
+    return await startCloudWebDriverTestServer(new FakeWebDriverServer());
   }
 
   protected respond(call: CloudWebDriverHttpCall, res: ServerResponse): void {
-    if (call.method === 'POST' && call.path === '/wd/hub/session') {
-      if (this.createSessionFailuresRemaining > 0) {
-        this.createSessionFailuresRemaining -= 1;
-        writeCloudWebDriverTestJson(res, { value: { message: 'create session failed' } }, 500);
-        return;
-      }
-      writeCloudWebDriverTestJson(res, {
-        value: {
-          sessionId: 'wd-1',
-          capabilities: { platformName: 'Android' },
-        },
-      });
+    respondToFakeWebDriverCall(this, call, res);
+  }
+}
+
+function respondToFakeWebDriverCall(
+  server: FakeWebDriverServer,
+  call: CloudWebDriverHttpCall,
+  res: ServerResponse,
+): void {
+  switch (`${call.method} ${call.path}`) {
+    case 'POST /wd/hub/session':
+      writeFakeCreateSessionResponse(server, res);
       return;
-    }
-    if (call.method === 'GET' && call.path === '/wd/hub/session/wd-1/source') {
-      writeCloudWebDriverTestJson(res, {
-        value:
-          '<hierarchy><node text="Root" bounds="[0,0][100,40]" displayed="true">' +
-          '<node text="Login" resource-id="com.example:id/login" bounds="[10,20][110,70]" displayed="true" />' +
-          '<android.widget.ListView resource-id="com.example:id/results" bounds="[0,279][1080,1496]" displayed="true" />' +
-          '</node></hierarchy>',
-      });
+    case 'GET /wd/hub/session/wd-1/source':
+      writeCloudWebDriverTestJson(res, { value: fakeWebDriverSource() });
       return;
-    }
-    if (call.method === 'GET' && call.path === '/wd/hub/session/wd-1/window/rect') {
+    case 'GET /wd/hub/session/wd-1/window/rect':
       writeCloudWebDriverTestJson(res, { value: { x: 0, y: 0, width: 1080, height: 1920 } });
       return;
-    }
-    if (call.method === 'DELETE' && call.path === '/wd/hub/session/wd-1/actions') {
+    case 'DELETE /wd/hub/session/wd-1/actions':
       writeCloudWebDriverTestJson(
         res,
-        {
-          value: {
-            message: 'The requested resource could not be found.',
-          },
-        },
+        { value: { message: 'The requested resource could not be found.' } },
         500,
       );
       return;
-    }
-    if (call.method === 'DELETE' && call.path === '/wd/hub/session/wd-1') {
-      if (this.sessionDeleteFailuresRemaining > 0) {
-        this.sessionDeleteFailuresRemaining -= 1;
-        writeCloudWebDriverTestJson(res, { value: { message: 'stale webdriver session' } }, 500);
-        return;
-      }
-      writeCloudWebDriverTestJson(res, { value: null });
+    case 'DELETE /wd/hub/session/wd-1':
+      writeFakeDeleteSessionResponse(server, res);
       return;
-    }
-    writeCloudWebDriverTestJson(res, { value: null });
+    default:
+      writeCloudWebDriverTestJson(res, { value: null });
   }
+}
+
+function writeFakeCreateSessionResponse(server: FakeWebDriverServer, res: ServerResponse): void {
+  if (server.createSessionFailuresRemaining > 0) {
+    server.createSessionFailuresRemaining -= 1;
+    writeCloudWebDriverTestJson(res, { value: { message: 'create session failed' } }, 500);
+    return;
+  }
+  writeCloudWebDriverTestJson(res, {
+    value: {
+      sessionId: 'wd-1',
+      capabilities: { platformName: 'Android' },
+    },
+  });
+}
+
+function writeFakeDeleteSessionResponse(server: FakeWebDriverServer, res: ServerResponse): void {
+  if (server.sessionDeleteFailuresRemaining > 0) {
+    server.sessionDeleteFailuresRemaining -= 1;
+    writeCloudWebDriverTestJson(res, { value: { message: 'stale webdriver session' } }, 500);
+    return;
+  }
+  writeCloudWebDriverTestJson(res, { value: null });
+}
+
+function fakeWebDriverSource(): string {
+  return (
+    '<hierarchy><node text="Root" bounds="[0,0][100,40]" displayed="true">' +
+    '<node text="Login" resource-id="com.example:id/login" bounds="[10,20][110,70]" displayed="true" />' +
+    '<android.widget.ListView resource-id="com.example:id/results" bounds="[0,279][1080,1496]" displayed="true" />' +
+    '</node></hierarchy>'
+  );
 }
 
 function leaseFlags(leaseId?: string): DaemonRequest['flags'] {

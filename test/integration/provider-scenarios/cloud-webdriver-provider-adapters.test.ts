@@ -24,6 +24,8 @@ import { withProviderScenarioResource, withProviderScenarioTempDir } from './har
 import {
   CloudWebDriverTestServer,
   type CloudWebDriverHttpCall,
+  startCloudWebDriverTestServer,
+  type StartedCloudWebDriverTestServer,
   writeCloudWebDriverTestJson,
 } from './cloud-webdriver-test-server.ts';
 
@@ -445,8 +447,8 @@ class FakeAwsDeviceFarmClient implements AwsDeviceFarmClient {
 class FakeCloudProviderServer extends CloudWebDriverTestServer {
   sessionFailuresRemaining = 0;
 
-  static async start(): Promise<FakeCloudProviderServer> {
-    return await new FakeCloudProviderServer().listen();
+  static async start(): Promise<StartedCloudWebDriverTestServer<FakeCloudProviderServer>> {
+    return await startCloudWebDriverTestServer(new FakeCloudProviderServer());
   }
 
   protected respond(call: CloudWebDriverHttpCall, res: ServerResponse): void {

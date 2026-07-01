@@ -1,5 +1,5 @@
 import type { RawSnapshotNode } from '../kernel/snapshot.ts';
-import { parseBounds } from '../platforms/android/ui-hierarchy.ts';
+import { parseBounds } from '../utils/bounds.ts';
 import { parseXmlDocumentSync, type XmlNode } from '../utils/xml.ts';
 
 export function parseWebDriverSource(source: string): RawSnapshotNode[] {

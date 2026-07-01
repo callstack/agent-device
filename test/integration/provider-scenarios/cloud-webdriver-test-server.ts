@@ -16,27 +16,10 @@ export abstract class CloudWebDriverTestServer {
   readonly calls: CloudWebDriverHttpCall[] = [];
   url = '';
 
-  private readonly server = http.createServer();
-
   constructor() {
-    this.server.on('request', async (req, res) => await this.handle(req, res));
-  }
-
-  async listen(): Promise<this> {
-    await new Promise<void>((resolve, reject) => {
-      this.server.once('error', reject);
-      this.server.listen(0, '127.0.0.1', resolve);
-    });
-    const address = this.server.address();
-    assert.ok(address && typeof address === 'object');
-    this.url = `http://127.0.0.1:${address.port}`;
-    return this;
-  }
-
-  async close(): Promise<void> {
-    await new Promise<void>((resolve, reject) => {
-      this.server.close((error) => (error ? reject(error) : resolve()));
-    });
+    const server = http.createServer();
+    server.on('request', async (req, res) => await this.handle(req, res));
+    cloudWebDriverHttpServers.set(this, server);
   }
 
   protected abstract respond(call: CloudWebDriverHttpCall, res: ServerResponse): void;
@@ -52,6 +35,28 @@ export abstract class CloudWebDriverTestServer {
     this.calls.push(call);
     this.respond(call, res);
   }
+}
+
+const cloudWebDriverHttpServers = new WeakMap<CloudWebDriverTestServer, http.Server>();
+
+export type StartedCloudWebDriverTestServer<T extends CloudWebDriverTestServer> = T & {
+  close(): Promise<void>;
+};
+
+export async function startCloudWebDriverTestServer<T extends CloudWebDriverTestServer>(
+  testServer: T,
+): Promise<StartedCloudWebDriverTestServer<T>> {
+  const server = getCloudWebDriverHttpServer(testServer);
+  await new Promise<void>((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const address = server.address();
+  assert.ok(address && typeof address === 'object');
+  testServer.url = `http://127.0.0.1:${address.port}`;
+  return Object.assign(testServer, {
+    close: async () => await closeCloudWebDriverTestServer(testServer),
+  });
 }
 
 export function writeCloudWebDriverTestJson(
@@ -74,4 +79,17 @@ async function readRequestBody(req: IncomingMessage): Promise<unknown> {
   }
   const text = buffer.toString('utf8');
   return text ? (JSON.parse(text) as unknown) : undefined;
+}
+
+function getCloudWebDriverHttpServer(testServer: CloudWebDriverTestServer): http.Server {
+  const server = cloudWebDriverHttpServers.get(testServer);
+  assert.ok(server);
+  return server;
+}
+
+async function closeCloudWebDriverTestServer(testServer: CloudWebDriverTestServer): Promise<void> {
+  const server = getCloudWebDriverHttpServer(testServer);
+  await new Promise<void>((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
+  });
 }
