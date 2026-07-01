@@ -6,14 +6,14 @@ import {
 } from '../../kernel/device.ts';
 
 // ---------------------------------------------------------------------------
-// Per-`AppleOS` capability data table (ADR-0009 "per-AppleOS capability table";
-// perfect-shape §7 step d.5). This is the capability-axis sibling of the runner
+// Per-`AppleOS` capability data table (ADR-0009 "per-AppleOS capability table").
+// This is the capability-axis sibling of the runner
 // table `RUNNER_PLATFORM_PROFILES` (src/platforms/apple/core/apple-runner-platform.ts)
 // and it encodes the SAME per-OS facts the Swift `#if os()` guards do: which Apple
 // OS has touch input, multi-touch synthesis, a keyboard, device orientation, an
 // app/device lifecycle, and a desktop host surface.
 //
-// DISCIPLINE (perfect-shape §7): the table holds ONLY the AppleOS-axis facts — it
+// DISCIPLINE (ADR-0009): the table holds ONLY the AppleOS-axis facts — it
 // collapses the scattered `target !== 'tv'` / `platform !== 'macos'` / `isTvOsDevice`
 // predicates into one lookup. The DEVICE-shaped nuance the closures still encode
 // (simulator vs physical device — e.g. two-finger synthesis is iOS-*simulator* only)

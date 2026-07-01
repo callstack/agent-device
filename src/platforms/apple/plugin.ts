@@ -9,7 +9,7 @@ import type { RunnerContext } from '../../core/interactor-types.ts';
 
 // ---------------------------------------------------------------------------
 // Apple family per-command capability closures. Originally RELOCATED VERBATIM from
-// src/core/command-descriptor/registry.ts (perfect-shape §7 step b.2), the
+// src/core/command-descriptor/registry.ts (ADR-0009), the
 // AppleOS-axis predicates (`target !== 'tv'` / `platform !== 'macos'` /
 // `isTvOsDevice`) are now READ from the per-`AppleOS` capability table
 // (`apple-os-capabilities.ts`, step d.5) instead of being open-coded. The rewrite is

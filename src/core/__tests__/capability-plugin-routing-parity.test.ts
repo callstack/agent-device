@@ -43,7 +43,7 @@ import { registerBuiltinPlatformPlugins } from '../interactors/register-builtins
 //   (b.2) the per-command `supports()` / `unsupportedHint()` device closures were
 //         RELOCATED VERBATIM off the command-descriptor facet onto the owning
 //         PlatformPlugin's `capability.supportsByDefault` / `unsupportedHintByDefault`
-//         (perfect-shape §7: relocate, never flatten). Most such closures are Apple
+//         (ADR-0009: relocate, never flatten). Most such closures are Apple
 //         family gates; audio is also an Android gate because Android emulator capture
 //         depends on the macOS host backend. The independent VERBATIM copies below
 //         are the oracle: they pin (a) that production admission (`isCommand

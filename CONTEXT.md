@@ -40,6 +40,45 @@
 - Snapshot quality verdict: structured outcome (state, backend, reason code, effective depth, collapsed leaves) computed once by the plan runner and shipped with every planned snapshot payload; the daemon and CLI render it instead of re-deriving degradation from node shapes.
 - AX-unavailable target invalidation: iOS/macOS runner behavior where a root accessibility snapshot failure such as `kAXErrorIllegalArgument` marks the cached `XCUIApplication` target handle suspect. The runner fails closed for degraded interactive snapshots, clears the cached target, and lets the next command reacquire the app through normal activation.
 
+## Architecture (perfect-shape refactor, completed 2026-07)
+
+The perfect-shape refactor is complete and merged. Its end-state:
+
+- Two derivation registries. One `CommandDescriptor` per command
+  (`src/core/command-descriptor/registry.ts`) is the single declaration site from which the public
+  catalog, capability matrix, daemon command registry, batch allowlist, MCP tools, CLI schema, and
+  the Node client surface are *derived* by parity-tested projection; the dispatch `switch` became a
+  total map keyed on the command-name union (a missing handler is a compile error). One
+  `PlatformPlugin` per platform family (`src/core/platform-plugin/`) stops core/daemon from branching
+  on platform, with the Apple plugin the first instance. See
+  [ADR 0008](docs/adr/0008-command-descriptor-registry.md).
+- Typed result spine. Per-command typed results and a `TypedError` replaced the ad-hoc
+  `Record`-typed returns across the daemon/dispatch path.
+- Apple platform model. Internally `Platform` is `apple` (plus `android`/`linux`/`web`) with an
+  `appleOs` discriminant (`ios | ipados | tvos | watchos | visionos | macos`); the shared Apple
+  engine lives under `src/platforms/apple/core/` with per-OS leaves under
+  `src/platforms/apple/os/<os>/`. The public wire stays non-breaking: `PUBLIC_PLATFORMS`
+  (`src/kernel/device.ts`) still emits `ios`/`macos` leaf output. See
+  [ADR 0009](docs/adr/0009-apple-platform-consolidation.md).
+- Folder DAG + layering lint. `kernel`/`remote`/`metro`/`client`/`snapshot`/`screenshot-diff`/
+  `replay`/`cli-parser`/`daemon-client`+`server`/`sdk` are arranged as an import-direction DAG
+  (imports point down toward the kernel sink), enforced in CI by `scripts/layering/check.ts`.
+- Agent-cost. Responses carry a cost block and MCP `outputSchema`, rendered through a leveled
+  `ResponseView`.
+
+### Deferred / next-minor
+
+The refactor is substantively done; these follow-ups are intentionally deferred, not lost:
+
+- Phase 2c — narrow the ~15 remaining `Record`-typed client methods in
+  `src/client/client-types.ts` to their existing typed contracts (a semver-relevant public-API
+  narrowing; not yet done).
+- b.3 recording/providers facets — the two risky `PlatformPlugin` daemon facets (`providers`,
+  `recording`) remain on their daemon branch as source of truth (#974 closed).
+- Strict DAG back-edge inversion — the layering lint enforces the achievable subset; the full
+  zero-back-edge DAG (e.g. `commands` → `cli`/`client`) is not done.
+- Legacy alias drops — ~175 LOC of legacy aliases/barrels remain, gated to the next major.
+
 ## Selector Capture Reliability Contract
 
 Selector capture is allowed to optimize transport, helper reuse, and polling, but it must preserve

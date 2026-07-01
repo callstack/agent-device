@@ -71,4 +71,5 @@ has ~95 importers and the family facet currently imports `AgentDeviceClient`, so
 own the `Input`/`Result` types and the client must be derived as a view type, enforced by a lint boundary.
 Until this lands and the registry tests pin it, the hand-authored tables remain the source of truth.
 
-`plans/perfect-shape.md` (§5.2) holds the prototype; this ADR owns the decision and its constraints.
+This ADR owns the decision and its constraints; the roadmap that prototyped it has been retired, with
+the delivered end-state recorded in [CONTEXT.md](../../CONTEXT.md) (Architecture).

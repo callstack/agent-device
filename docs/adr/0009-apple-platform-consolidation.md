@@ -23,7 +23,8 @@ Model Apple OSes with an **`AppleOS` discriminant** (`ios | ipados | tvos | watc
 under a single `apple` Platform — **not** six `Platform` literals. The OS-agnostic Apple engine consolidates
 under `src/platforms/apple/core/`, with genuinely per-OS code in `src/platforms/apple/os/<os>/` leaves;
 the Apple plugin is the first instance of the platform-plugin registry (the platform axis of the
-`perfect-shape` plan). Per-OS capability differences become data keyed by `AppleOS`. The additive,
+completed perfect-shape refactor; see [CONTEXT.md](../../CONTEXT.md) Architecture). Per-OS capability
+differences become data keyed by `AppleOS`. The additive,
 non-breaking `appleOs` discriminant — the groundwork for this — shipped in #896.
 
 ## Alternatives Considered

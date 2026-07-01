@@ -1,5 +1,5 @@
 // Import-direction lint — enforces the folder DAG established by the Phase-5
-// folder moves (see plans/perfect-shape.md §5.5).
+// folder moves (see CONTEXT.md, "Architecture: folder DAG + layering lint").
 //
 // This generalizes the former inline "Layering Guard" CI grep (which only
 // checked that src/daemon and src/platforms do not import src/commands) into a

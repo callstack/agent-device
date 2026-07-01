@@ -56,7 +56,7 @@ owns the rationale so future changes do not need to infer it from agent instruct
 
 ## Update (2026-06): single-declaration / derivation model
 
-A later proposal (the `CommandDescriptor` direction in `plans/perfect-shape.md`) unifies a command's
+A later proposal (the `CommandDescriptor` direction, now [ADR 0008](0008-command-descriptor-registry.md)) unifies a command's
 declarations so the public catalog, capability matrix, CLI/MCP projections, batch allowlist, and this
 daemon registry are *derived* from one registration site, to remove the cross-table drift that several
 of these surfaces are kept aligned against by convention.

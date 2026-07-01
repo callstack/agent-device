@@ -6,7 +6,7 @@ import type { DeviceInventoryRequest } from '../platform-inventory.ts';
 import type { CapabilityBucket } from '../platform-descriptor/types.ts';
 
 /**
- * The platform-plugin contract (plans/perfect-shape.md §5.1, ADR-0009).
+ * The platform-plugin contract (ADR-0009).
  *
  * One plugin owns one platform FAMILY: a plugin may cover several leaf
  * {@link Platform} literals (the Apple plugin owns both `ios` and `macos`,
@@ -51,7 +51,7 @@ export type PlatformPlugin = {
    *
    * `supportsByDefault` / `unsupportedHintByDefault` carry the per-command
    * `supports()` / `unsupportedHint()` device closures RELOCATED VERBATIM off the
-   * command-descriptor facet (ADR-0009 / perfect-shape §7 step b.2: relocate, never
+   * command-descriptor facet (ADR-0009: relocate, never
    * flatten). They are keyed by command name and owned by the family that owns the
    * device's platform; `isCommandSupportedOnDevice` / `unsupportedHintForDevice`
    * consult the map for `getPlugin(device.platform)`, so a family with no entry for a

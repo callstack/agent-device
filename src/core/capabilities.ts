@@ -91,7 +91,7 @@ export function isCommandSupportedOnDevice(command: string, device: DeviceInfo):
   // `isCommandSupportedOnDevice` unchanged across the full command x device matrix.
   // `tryGetPlugin` returns undefined only for an unregistered platform — the same
   // "no bucket -> unsupported" fall-through the fold produced for a platform with
-  // no capability family (perfect-shape §5.1's `if (!plugin) return false`).
+  // no capability family (ADR-0009's plugin registry: `if (!plugin) return false`).
   const plugin = tryGetPlugin(device.platform);
   if (!plugin) return false;
   const byPlatform = capability[plugin.capability.bucket];
