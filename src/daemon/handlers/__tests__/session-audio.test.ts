@@ -66,35 +66,12 @@ test('audio probe rejects non-web sessions in daemon handler', async () => {
 test('audio probe starts macOS ScreenCaptureKit helper and reads status', async () => {
   const sessionStore = makeSessionStore('agent-device-session-audio-');
   sessionStore.set('macos', makeMacOsSession('macos'));
-  const kill = vi.fn();
-  macosAudioMocks.startMacOsAudioProbeProcess.mockImplementation(
-    async (options: { durationMs: number; bucketMs: number; statusPath: string }) => {
-      await fs.mkdir(path.dirname(options.statusPath), { recursive: true });
-      await fs.writeFile(
-        options.statusPath,
-        JSON.stringify({
-          audio: 'probe',
-          state: 'running',
-          active: true,
-          heard: true,
-          source: 'system-audio',
-          backend: 'macos-screencapturekit',
-          durationMs: options.durationMs,
-          elapsedMs: 1000,
-          bucketMs: options.bucketMs,
-          sampleCount: 1,
-          sourceCount: 1,
-          rmsDbfs: [-12],
-          peakDbfs: [-8],
-          notes: ['helper status'],
-        }),
-      );
-      return {
-        child: { kill, pid: 1234 },
-        wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-      };
-    },
-  );
+  const kill = mockHostAudioProbeStart({
+    elapsedMs: 1000,
+    rmsDbfs: [-12],
+    peakDbfs: [-8],
+    notes: ['helper status'],
+  });
 
   const response = await handleSessionObservabilityCommands({
     req: {
@@ -134,24 +111,17 @@ test('audio probe stop kills active macOS helper and returns stopped status', as
   const sessionStore = makeSessionStore('agent-device-session-audio-');
   const session = makeMacOsSession('macos');
   const statusPath = path.join(sessionStore.ensureSessionDir('macos'), 'audio-probe.json');
-  await fs.writeFile(
-    statusPath,
-    JSON.stringify({
-      audio: 'probe',
-      state: 'running',
-      active: true,
-      heard: true,
-      source: 'system-audio',
-      backend: 'macos-screencapturekit',
-      durationMs: 10000,
-      elapsedMs: 2000,
-      bucketMs: 1000,
-      sampleCount: 2,
-      sourceCount: 1,
-      rmsDbfs: [-15, -14],
-      peakDbfs: [-9, -8],
-    }),
-  );
+  await writeHostAudioProbeStatus(statusPath, {
+    state: 'running',
+    active: true,
+    heard: true,
+    durationMs: 10000,
+    elapsedMs: 2000,
+    bucketMs: 1000,
+    sampleCount: 2,
+    rmsDbfs: [-15, -14],
+    peakDbfs: [-9, -8],
+  });
   const kill = vi.fn();
   session.audioProbe = {
     platform: 'host-system-audio',
@@ -201,33 +171,11 @@ test('audio probe stop kills active macOS helper and returns stopped status', as
 test('audio probe starts host helper for iOS simulator audio', async () => {
   const sessionStore = makeSessionStore('agent-device-session-audio-');
   sessionStore.set('ios', makeIosSession('ios'));
-  macosAudioMocks.startMacOsAudioProbeProcess.mockImplementation(
-    async (options: { durationMs: number; bucketMs: number; statusPath: string }) => {
-      await fs.mkdir(path.dirname(options.statusPath), { recursive: true });
-      await fs.writeFile(
-        options.statusPath,
-        JSON.stringify({
-          audio: 'probe',
-          state: 'running',
-          active: true,
-          heard: true,
-          source: 'system-audio',
-          backend: 'macos-screencapturekit',
-          durationMs: options.durationMs,
-          elapsedMs: 500,
-          bucketMs: options.bucketMs,
-          sampleCount: 1,
-          sourceCount: 1,
-          rmsDbfs: [-18],
-          peakDbfs: [-12],
-        }),
-      );
-      return {
-        child: { kill: vi.fn(), pid: 1234 },
-        wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-      };
-    },
-  );
+  mockHostAudioProbeStart({
+    elapsedMs: 500,
+    rmsDbfs: [-18],
+    peakDbfs: [-12],
+  });
 
   const response = await handleSessionObservabilityCommands({
     req: {
@@ -258,33 +206,11 @@ test('audio probe starts host helper for iOS simulator audio', async () => {
 test('audio probe starts host helper for Android emulator audio', async () => {
   const sessionStore = makeSessionStore('agent-device-session-audio-');
   sessionStore.set('android', makeAndroidSession('android'));
-  macosAudioMocks.startMacOsAudioProbeProcess.mockImplementation(
-    async (options: { durationMs: number; bucketMs: number; statusPath: string }) => {
-      await fs.mkdir(path.dirname(options.statusPath), { recursive: true });
-      await fs.writeFile(
-        options.statusPath,
-        JSON.stringify({
-          audio: 'probe',
-          state: 'running',
-          active: true,
-          heard: true,
-          source: 'system-audio',
-          backend: 'macos-screencapturekit',
-          durationMs: options.durationMs,
-          elapsedMs: 500,
-          bucketMs: options.bucketMs,
-          sampleCount: 1,
-          sourceCount: 1,
-          rmsDbfs: [-20],
-          peakDbfs: [-13],
-        }),
-      );
-      return {
-        child: { kill: vi.fn(), pid: 1234 },
-        wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
-      };
-    },
-  );
+  mockHostAudioProbeStart({
+    elapsedMs: 500,
+    rmsDbfs: [-20],
+    peakDbfs: [-13],
+  });
 
   const response = await handleSessionObservabilityCommands({
     req: {
@@ -380,6 +306,61 @@ function assertHostAudioUnsupportedResponse(response: DaemonResponse | null): vo
       /web browser sessions, macOS sessions, iOS simulators, and Android emulators on macOS hosts/,
     );
   }
+}
+
+type HostAudioProbeStartOptions = {
+  durationMs: number;
+  bucketMs: number;
+  statusPath: string;
+};
+
+type HostAudioProbeStatus = {
+  elapsedMs: number;
+  rmsDbfs: number[];
+  peakDbfs: number[];
+  notes?: string[];
+};
+
+function mockHostAudioProbeStart(status: HostAudioProbeStatus): ReturnType<typeof vi.fn> {
+  const kill = vi.fn();
+  macosAudioMocks.startMacOsAudioProbeProcess.mockImplementation(
+    async (options: HostAudioProbeStartOptions) => {
+      await writeHostAudioProbeStatus(options.statusPath, {
+        state: 'running',
+        active: true,
+        heard: true,
+        durationMs: options.durationMs,
+        elapsedMs: status.elapsedMs,
+        bucketMs: options.bucketMs,
+        sampleCount: status.rmsDbfs.length,
+        rmsDbfs: status.rmsDbfs,
+        peakDbfs: status.peakDbfs,
+        notes: status.notes,
+      });
+      return {
+        child: { kill, pid: 1234 },
+        wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
+      };
+    },
+  );
+  return kill;
+}
+
+async function writeHostAudioProbeStatus(
+  statusPath: string,
+  data: Record<string, unknown>,
+): Promise<void> {
+  await fs.mkdir(path.dirname(statusPath), { recursive: true });
+  await fs.writeFile(
+    statusPath,
+    JSON.stringify({
+      audio: 'probe',
+      source: 'system-audio',
+      backend: 'macos-screencapturekit',
+      sourceCount: 1,
+      ...data,
+    }),
+  );
 }
 
 function makeAudioWebProvider(): WebProvider & {
