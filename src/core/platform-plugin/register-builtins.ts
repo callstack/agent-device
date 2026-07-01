@@ -26,8 +26,11 @@ const supportsSynthesisGesture = (device: DeviceInfo): boolean =>
 const supportsAndroidOrIosNonTv = (device: DeviceInfo): boolean =>
   device.platform === 'android' || (device.platform === 'ios' && device.target !== 'tv');
 const supportsHostAudioProbe = (device: DeviceInfo): boolean =>
-  process.platform === 'darwin' &&
-  (device.platform === 'macos' || (device.platform === 'ios' && device.kind === 'simulator'));
+  device.platform === 'web' ||
+  (process.platform === 'darwin' &&
+    (device.platform === 'macos' ||
+      (device.platform === 'ios' && device.kind === 'simulator') ||
+      (device.platform === 'android' && device.kind === 'emulator')));
 
 const synthesisGestureUnsupportedHint = (device: DeviceInfo): string | undefined => {
   if (device.platform === 'macos')
@@ -125,7 +128,10 @@ const applePlugin = {
 const androidPlugin = {
   id: 'android',
   platforms: ['android'],
-  capability: { bucket: 'android' },
+  capability: {
+    bucket: 'android',
+    supportsByDefault: { [PUBLIC_COMMANDS.audio]: supportsHostAudioProbe },
+  },
   // Wraps the Android arm of `resolveLogBackend`: every Android device -> 'android'.
   appLog: { resolveBackend: () => 'android' },
   createInteractor: async (device: DeviceInfo) => {

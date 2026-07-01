@@ -105,8 +105,11 @@ const supportsSynthesisGesture = (device: DeviceInfo): boolean =>
 const supportsAndroidOrIosNonTv = (device: DeviceInfo): boolean =>
   device.platform === 'android' || (device.platform === 'ios' && device.target !== 'tv');
 const supportsHostAudioProbe = (device: DeviceInfo): boolean =>
-  process.platform === 'darwin' &&
-  (device.platform === 'macos' || (device.platform === 'ios' && device.kind === 'simulator'));
+  device.platform === 'web' ||
+  (process.platform === 'darwin' &&
+    (device.platform === 'macos' ||
+      (device.platform === 'ios' && device.kind === 'simulator') ||
+      (device.platform === 'android' && device.kind === 'emulator')));
 const synthesisGestureUnsupportedHint = (device: DeviceInfo): string | undefined => {
   if (device.platform === 'macos')
     return 'macOS automation has no multi-touch input — this gesture is supported on Android and the iOS simulator only.';
@@ -262,11 +265,15 @@ test('(b.2) the relocated Apple closures are byte-for-byte the verbatim original
   }
 });
 
-test('(b.2) no non-Apple family carries a relocated supports/hint closure', () => {
-  // The relocation is faithful only because the closures are no-ops off the Apple
-  // family; guard that no other plugin accidentally grew a per-command gate (which
-  // would change admission for android/linux/web).
-  for (const platform of ['android', 'linux', 'web'] as const) {
+test('(b.2) non-Apple families only carry their own non-portable support gates', () => {
+  // Most relocated closures are Apple-only. Audio is the one host-dependent command
+  // that also gates Android emulator support on macOS hosts, so Android carries only
+  // that command-specific predicate.
+  assert.deepEqual(Object.keys(getPlugin('android').capability.supportsByDefault ?? {}), [
+    'audio',
+  ]);
+  assert.equal(getPlugin('android').capability.unsupportedHintByDefault, undefined);
+  for (const platform of ['linux', 'web'] as const) {
     const capability = getPlugin(platform).capability;
     assert.equal(capability.supportsByDefault, undefined, `${platform} has no supportsByDefault`);
     assert.equal(
