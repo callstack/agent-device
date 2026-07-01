@@ -5,7 +5,6 @@ import {
 } from '../../command-catalog.ts';
 import type { CommandCapability } from '../capabilities.ts';
 import type { DaemonRequest } from '../../daemon/types.ts';
-import { isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
 import type { CommandDescriptor } from './types.ts';
 
 // ---------------------------------------------------------------------------
@@ -34,29 +33,15 @@ const isShardedTestRequest = (req: DaemonRequest): boolean =>
   (typeof req.flags?.shardAll === 'number' || typeof req.flags?.shardSplit === 'number');
 
 // ---------------------------------------------------------------------------
-// Capability predicates / matrices — copied VERBATIM from
+// Capability matrices — platform/kind buckets, copied VERBATIM from
 // src/core/capabilities.ts (BASE_COMMAND_CAPABILITY_MATRIX).
+//
+// The per-command `supports()` / `unsupportedHint()` device closures that used to
+// live here were RELOCATED VERBATIM onto the owning PlatformPlugin's
+// `capability.supportsByDefault` / `unsupportedHintByDefault` in Phase 3 step b.2
+// (src/core/platform-plugin/register-builtins.ts). The capability facet now carries
+// platform/kind buckets only; admission reads the closure off the plugin.
 // ---------------------------------------------------------------------------
-
-const isNotMacOs = (device: DeviceInfo): boolean => device.platform !== 'macos';
-const isMacOsOrAppleSimulator = (device: DeviceInfo): boolean =>
-  device.platform === 'macos' || device.kind === 'simulator';
-const isIosMobileSimulator = (device: DeviceInfo): boolean =>
-  device.platform === 'ios' && device.kind === 'simulator' && !isTvOsDevice(device);
-const supportsSynthesisGesture = (device: DeviceInfo): boolean =>
-  device.platform === 'android' || isIosMobileSimulator(device);
-const supportsAndroidOrIosNonTv = (device: DeviceInfo): boolean =>
-  device.platform === 'android' || (device.platform === 'ios' && !isTvOsDevice(device));
-
-const synthesisGestureUnsupportedHint = (device: DeviceInfo): string | undefined => {
-  if (device.platform === 'macos')
-    return 'macOS automation has no multi-touch input — this gesture is supported on Android and the iOS simulator only.';
-  if (isTvOsDevice(device))
-    return 'tvOS has no touch input — this gesture is supported on Android and the iOS simulator only.';
-  if (device.platform === 'ios' && device.kind === 'device')
-    return 'Two-finger gesture synthesis is iOS-simulator only — not available on physical iOS devices.';
-  return undefined;
-};
 
 const APPLE_SIM_AND_DEVICE = { simulator: true, device: true };
 const ANDROID_ALL = { emulator: true, device: true, unknown: true };
@@ -78,7 +63,6 @@ const APP_INSTALL_CAPABILITY = {
   apple: APPLE_SIM_AND_DEVICE,
   android: ANDROID_ALL,
   linux: LINUX_NONE,
-  supports: isNotMacOs,
 } satisfies CommandCapability;
 
 // ---------------------------------------------------------------------------
@@ -142,7 +126,6 @@ const RAW_COMMAND_DESCRIPTORS = [
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
       linux: LINUX_NONE,
-      supports: isNotMacOs,
     },
     batchable: true,
   },
@@ -209,11 +192,6 @@ const RAW_COMMAND_DESCRIPTORS = [
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
       linux: LINUX_DEVICE,
-      supports: (device) =>
-        device.platform === 'android' ||
-        device.platform === 'linux' ||
-        device.platform === 'macos' ||
-        device.kind === 'simulator',
     },
     batchable: true,
   },
@@ -224,7 +202,6 @@ const RAW_COMMAND_DESCRIPTORS = [
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
       linux: LINUX_NONE,
-      supports: supportsAndroidOrIosNonTv,
     },
     batchable: true,
   },
@@ -257,7 +234,6 @@ const RAW_COMMAND_DESCRIPTORS = [
       apple: { simulator: true },
       android: ANDROID_ALL,
       linux: LINUX_NONE,
-      supports: isNotMacOs,
     },
     batchable: true,
   },
@@ -316,7 +292,6 @@ const RAW_COMMAND_DESCRIPTORS = [
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
       linux: LINUX_NONE,
-      supports: (device) => device.platform === 'android' || isMacOsOrAppleSimulator(device),
     },
     batchable: true,
   },
@@ -327,8 +302,6 @@ const RAW_COMMAND_DESCRIPTORS = [
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
       linux: LINUX_NONE,
-      supports: (device) =>
-        device.platform === 'android' || device.platform === 'macos' || device.kind === 'simulator',
     },
     batchable: true,
   },
@@ -426,7 +399,6 @@ const RAW_COMMAND_DESCRIPTORS = [
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
       linux: LINUX_DEVICE,
-      supports: isNotMacOs,
     },
     batchable: true,
   },
@@ -437,7 +409,6 @@ const RAW_COMMAND_DESCRIPTORS = [
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
       linux: LINUX_NONE,
-      supports: supportsAndroidOrIosNonTv,
     },
     batchable: true,
   },
@@ -460,8 +431,6 @@ const RAW_COMMAND_DESCRIPTORS = [
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
       linux: LINUX_NONE,
-      supports: supportsSynthesisGesture,
-      unsupportedHint: synthesisGestureUnsupportedHint,
     },
     batchable: false,
   },
@@ -502,8 +471,6 @@ const RAW_COMMAND_DESCRIPTORS = [
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
       linux: LINUX_NONE,
-      supports: supportsSynthesisGesture,
-      unsupportedHint: synthesisGestureUnsupportedHint,
     },
     batchable: false,
   },
@@ -514,8 +481,6 @@ const RAW_COMMAND_DESCRIPTORS = [
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
       linux: LINUX_NONE,
-      supports: supportsSynthesisGesture,
-      unsupportedHint: synthesisGestureUnsupportedHint,
     },
     batchable: false,
   },
@@ -527,7 +492,6 @@ const RAW_COMMAND_DESCRIPTORS = [
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
       linux: LINUX_NONE,
-      supports: isNotMacOs,
     },
     batchable: true,
   },

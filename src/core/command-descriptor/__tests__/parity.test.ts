@@ -116,10 +116,10 @@ test('capability matrix holds its admission invariants', () => {
     const hasPlatformBucket = Boolean(
       capability.apple || capability.android || capability.linux || capability.web,
     );
-    assert.ok(
-      hasPlatformBucket || typeof capability.supports === 'function',
-      `${command} has a platform bucket or a supports predicate`,
-    );
+    // Every capability entry is now selectable purely by its platform buckets: the
+    // per-command `supports()` gate was relocated onto the owning PlatformPlugin
+    // (`capability.supportsByDefault`) in Phase 3 step b.2, so it no longer lives here.
+    assert.ok(hasPlatformBucket, `${command} has a platform bucket`);
   }
 
   const covered = new Set(Object.keys(BASE_COMMAND_CAPABILITY_MATRIX));

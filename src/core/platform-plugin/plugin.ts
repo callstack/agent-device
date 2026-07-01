@@ -43,13 +43,25 @@ export type PlatformPlugin = {
   /**
    * The capability facet. `bucket` is the {@link CapabilityBucket} this family
    * reads from a `CommandCapability` (parity-checked against the existing
-   * `platformDescriptors` registry). `supportsByDefault` is reserved for the
-   * step-(b) relocation of the `supports()` device closures — left undefined
-   * here so those closures stay verbatim in `capabilities.ts` for now.
+   * `platformDescriptors` registry).
+   *
+   * `supportsByDefault` / `unsupportedHintByDefault` carry the per-command
+   * `supports()` / `unsupportedHint()` device closures RELOCATED VERBATIM off the
+   * command-descriptor facet (ADR-0009 / perfect-shape §7 step b.2: relocate, never
+   * flatten). They are keyed by command name and owned by the family that owns the
+   * device's platform; `isCommandSupportedOnDevice` / `unsupportedHintForDevice`
+   * consult the map for `getPlugin(device.platform)`, so a family with no entry for a
+   * command (the key is absent) admits it unchanged. Only the Apple family carries
+   * entries today — every relocated closure is a no-op (returns `true` / `undefined`)
+   * on non-Apple devices, proven byte-for-byte by the parity gate before the
+   * command-facet closures were deleted.
    */
   readonly capability: {
     readonly bucket: CapabilityBucket;
-    supportsByDefault?(device: DeviceInfo): boolean;
+    readonly supportsByDefault?: Readonly<Record<string, (device: DeviceInfo) => boolean>>;
+    readonly unsupportedHintByDefault?: Readonly<
+      Record<string, (device: DeviceInfo) => string | undefined>
+    >;
   };
   /**
    * The daemon app-log facet (issue #974). `resolveBackend` wraps the platform

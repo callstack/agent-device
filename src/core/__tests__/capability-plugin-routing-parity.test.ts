@@ -29,19 +29,25 @@ import { platformDescriptors } from '../platform-descriptor/registry.ts';
 import { getPlugin } from '../platform-plugin/plugin.ts';
 import { registerBuiltinPlatformPlugins } from '../platform-plugin/register-builtins.ts';
 
-// Phase 3 step (b) parity gate. Two independent oracles pin that the migration is
+// Phase 3 step (b) parity gate. Independent oracles pin that the migration is
 // byte-for-byte behaviorless:
 //   (b.1) the platform -> capability-bucket selection in `isCommandSupportedOnDevice`
 //         now flows through the PlatformPlugin registry instead of the
 //         `platformDescriptors` fold. `deriveCapabilityForPlatform(platformDescriptors,
 //         ...)` is kept here as the BEFORE-derivation oracle (the production fold was
 //         deleted), so a plugin-vs-descriptor disagreement fails this test.
-//   (b.2) the per-command `supports()` / `unsupportedHint()` closures stay VERBATIM on
-//         the command-descriptor facet (they cannot move to the plugin's per-FAMILY
-//         `capability.supportsByDefault` without flattening their per-command shape —
-//         perfect-shape §7). Independent verbatim copies below pin that the closures,
-//         as they flow through `deriveCapabilityMatrix` into admission, are unchanged
-//         across the full {platform x command x device-kind x target} matrix.
+//   (b.2) the per-command `supports()` / `unsupportedHint()` device closures were
+//         RELOCATED VERBATIM off the command-descriptor facet onto the owning
+//         PlatformPlugin's `capability.supportsByDefault` / `unsupportedHintByDefault`
+//         (perfect-shape §7: relocate, never flatten). This is faithful because every
+//         such closure is a no-op (returns `true` / `undefined`) on non-Apple devices,
+//         so consulting it only for the Apple family — the family that owns the
+//         relocated map — leaves admission unchanged. The independent VERBATIM copies
+//         below are the oracle: they pin (a) that production admission (`isCommand
+//         SupportedOnDevice`) and hint output (`unsupportedHintForDevice`) are unchanged
+//         across the full {platform x command x device-kind x target} matrix, and (b)
+//         that the closures now living on the Apple plugin are byte-for-byte behaviorally
+//         identical to the originals across the sample-device matrix.
 
 registerBuiltinPlatformPlugins();
 
@@ -211,17 +217,58 @@ test('(b.2) unsupportedHint closures are verbatim across the full device matrix'
   }
 });
 
-test('(b.2) every command carrying a supports closure is covered by the reference map', () => {
-  // Guards the SUPPORTS_REF/HINT_REF oracle against silently missing a closure: a
-  // command whose admission depends on a supports gate must appear in SUPPORTS_REF,
-  // and every hint-bearing command must appear in HINT_REF.
-  for (const command of listCapabilityCommands()) {
-    const capability = BASE_COMMAND_CAPABILITY_MATRIX[command];
-    if (capability?.supports) {
-      assert.ok(SUPPORTS_REF[command], `${command} supports closure present in reference map`);
+test('(b.2) the Apple plugin carries exactly the relocated supports/hint closures', () => {
+  // The relocation target: `supports()` / `unsupportedHint()` now live on the Apple
+  // plugin (the family that owns every discriminating device). Pin the RELOCATED maps'
+  // key sets against the independent verbatim reference so no closure was silently
+  // dropped or added while moving off the command facet.
+  const appleCapability = getPlugin('ios').capability;
+  assert.deepEqual(
+    Object.keys(appleCapability.supportsByDefault ?? {}).sort(),
+    Object.keys(SUPPORTS_REF).sort(),
+    'supportsByDefault key set equals the verbatim reference',
+  );
+  assert.deepEqual(
+    Object.keys(appleCapability.unsupportedHintByDefault ?? {}).sort(),
+    Object.keys(HINT_REF).sort(),
+    'unsupportedHintByDefault key set equals the verbatim reference',
+  );
+  // ios and macos are the SAME Apple plugin instance, so both leaves read one map.
+  assert.equal(getPlugin('ios').capability, getPlugin('macos').capability);
+});
+
+test('(b.2) the relocated Apple closures are byte-for-byte the verbatim originals', () => {
+  // Closure-equivalence: for every command x sample-device, the closure now living on
+  // the Apple plugin returns an identical boolean / identical hint STRING to the
+  // independent verbatim copy of the original command-facet closure.
+  const appleCapability = getPlugin('ios').capability;
+  for (const [command, reference] of Object.entries(SUPPORTS_REF)) {
+    const relocated = appleCapability.supportsByDefault?.[command];
+    assert.ok(relocated, `${command} supports closure present on the Apple plugin`);
+    for (const device of SAMPLE_DEVICES) {
+      assert.equal(relocated(device), reference(device), `${command} supports on ${device.id}`);
     }
-    if (capability?.unsupportedHint) {
-      assert.ok(HINT_REF[command], `${command} unsupportedHint closure present in reference map`);
+  }
+  for (const [command, reference] of Object.entries(HINT_REF)) {
+    const relocated = appleCapability.unsupportedHintByDefault?.[command];
+    assert.ok(relocated, `${command} hint closure present on the Apple plugin`);
+    for (const device of SAMPLE_DEVICES) {
+      assert.equal(relocated(device), reference(device), `${command} hint on ${device.id}`);
     }
+  }
+});
+
+test('(b.2) no non-Apple family carries a relocated supports/hint closure', () => {
+  // The relocation is faithful only because the closures are no-ops off the Apple
+  // family; guard that no other plugin accidentally grew a per-command gate (which
+  // would change admission for android/linux/web).
+  for (const platform of ['android', 'linux', 'web'] as const) {
+    const capability = getPlugin(platform).capability;
+    assert.equal(capability.supportsByDefault, undefined, `${platform} has no supportsByDefault`);
+    assert.equal(
+      capability.unsupportedHintByDefault,
+      undefined,
+      `${platform} has no unsupportedHintByDefault`,
+    );
   }
 });

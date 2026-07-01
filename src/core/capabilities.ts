@@ -24,9 +24,6 @@ export type CommandCapability = {
   android?: KindMatrix;
   linux?: KindMatrix;
   web?: KindMatrix;
-  supports?: (device: DeviceInfo) => boolean;
-  /** Optional actionable hint surfaced when this command is rejected at admission for `device`. */
-  unsupportedHint?: (device: DeviceInfo) => string | undefined;
 };
 
 const WEB_DEVICE: KindMatrix = { device: true };
@@ -52,9 +49,12 @@ const WEB_SUPPORTED_COMMANDS = new Set<string>([
 ]);
 // Built from the additive command-descriptor registry (ADR-0008, Phase 1 step 3).
 // The hand-authored literal was deleted after #906 proved deriveCapabilityMatrix is
-// byte-equal to it (platform/kind buckets plus the supports/unsupportedHint closures,
-// across the sample-device matrix). The registry only type-imports CommandCapability
-// from here, so this value-level dependency does not form a runtime cycle.
+// byte-equal to it (platform/kind buckets). The per-command `supports()` /
+// `unsupportedHint()` device closures no longer live here — they were relocated onto
+// the owning PlatformPlugin's `capability.supportsByDefault` / `unsupportedHintByDefault`
+// in Phase 3 step b.2 (see `isCommandSupportedOnDevice` below). The registry only
+// type-imports CommandCapability from here, so this value-level dependency does not
+// form a runtime cycle.
 export const BASE_COMMAND_CAPABILITY_MATRIX: Record<string, CommandCapability> =
   deriveCapabilityMatrix(commandDescriptors);
 
@@ -95,13 +95,22 @@ export function isCommandSupportedOnDevice(command: string, device: DeviceInfo):
   if (!plugin) return false;
   const byPlatform = capability[plugin.capability.bucket];
   if (!byPlatform) return false;
-  if (capability.supports && !capability.supports(device)) return false;
+  // The per-command `supports()` gate now flows through the owning PlatformPlugin
+  // (ADR-0009, Phase 3 step b.2): the family that owns `device.platform` carries the
+  // `supports()` closure RELOCATED VERBATIM in `capability.supportsByDefault`, keyed by
+  // command. A family with no entry for `command` admits it unchanged — proven equal to
+  // the former command-facet closure across the device matrix by
+  // `__tests__/capability-plugin-routing-parity.test.ts`.
+  const supportsByDefault = plugin.capability.supportsByDefault?.[command];
+  if (supportsByDefault && !supportsByDefault(device)) return false;
   const kind = (device.kind ?? 'unknown') as keyof KindMatrix;
   return byPlatform[kind] === true;
 }
 
 export function unsupportedHintForDevice(command: string, device: DeviceInfo): string | undefined {
-  return COMMAND_CAPABILITY_MATRIX[command]?.unsupportedHint?.(device);
+  // Counterpart of the `supports()` relocation (Phase 3 step b.2): the hint closure is
+  // owned by the family that owns `device.platform`, keyed by command.
+  return tryGetPlugin(device.platform)?.capability.unsupportedHintByDefault?.[command]?.(device);
 }
 
 export function listCapabilityCommands(): string[] {
