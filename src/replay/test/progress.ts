@@ -6,6 +6,7 @@ import type {
   ReplayTestResult,
   ReplayTestStep,
 } from './reporters/types.ts';
+import { formatCliStatusMarker } from '../../cli-status-markers.ts';
 import { formatDurationSeconds } from '../../utils/duration-format.ts';
 import { colorize, supportsColor } from '../../utils/output.ts';
 
@@ -70,12 +71,6 @@ function formatReplayTestProgressEvent(
     lines.push(...replayTestProgressStepLines(event));
   }
   return lines.join('\n');
-}
-
-function replayTestStatusIcon(status: ReplayTestResult['status']): string {
-  if (status === 'pass') return '✓';
-  if (status === 'fail') return '⨯';
-  return '-';
 }
 
 function formatReplayTestLiveProgressLine(
@@ -174,13 +169,12 @@ function formatReplayTestProgressName(event: ReplayTestResult | ReplayTestStep):
 }
 
 function formatReplayTestProgressStatusLabel(event: ReplayTestResult): string {
-  const useColor = supportsColor(process.stderr);
-  const icon = replayTestStatusIcon(event.status);
   if (event.status === 'pass') {
-    const format = event.attempt && event.attempt > 1 ? 'yellow' : 'green';
-    return useColor ? colorizeProgressMarker(icon, format) : icon;
+    return formatCliStatusMarker('pass', {
+      passFormat: event.attempt && event.attempt > 1 ? 'yellow' : 'green',
+    });
   }
-  return useColor ? colorizeProgressMarker(icon, event.status === 'fail' ? 'red' : 'dim') : icon;
+  return formatCliStatusMarker(event.status === 'fail' ? 'fail' : 'skip');
 }
 
 function colorizeProgressMarker(text: string, format: Parameters<typeof colorize>[1]): string {

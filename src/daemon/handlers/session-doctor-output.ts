@@ -1,4 +1,5 @@
 import { emitRequestProgress } from '../request-progress.ts';
+import { formatDoctorCheckDetailLines, formatDoctorCheckSummaryLine } from '../../doctor-output.ts';
 import type { DoctorCheck, DoctorStatus } from './session-doctor-types.ts';
 
 export function summarizeDoctorStatus(checks: DoctorCheck[]): 'pass' | 'warn' | 'fail' {
@@ -29,28 +30,10 @@ export function appendDoctorCheck(checks: DoctorCheck[], check: DoctorCheck): vo
   emitRequestProgress({
     type: 'command',
     status: 'progress',
-    message: formatDoctorProgressMessage(check),
+    message: formatDoctorCheckProgressMessage(check),
   });
 }
 
-function formatDoctorProgressMessage(check: DoctorCheck): string {
-  return [formatDoctorProgressSummary(check), ...formatDoctorProgressDetails(check)].join('\n');
-}
-
-function formatDoctorProgressSummary(check: DoctorCheck): string {
-  return `${doctorProgressMarker(check.status)} ${check.id}: ${check.summary}`;
-}
-
-function formatDoctorProgressDetails(check: DoctorCheck): string[] {
-  if (check.status !== 'fail' && check.status !== 'warn') return [];
-  if (check.command) return [`  run: ${check.command}`];
-  if (check.hint) return [`  hint: ${check.hint}`];
-  return [];
-}
-
-function doctorProgressMarker(status: DoctorStatus): string {
-  if (status === 'pass') return '✓';
-  if (status === 'fail') return '⨯';
-  if (status === 'warn') return '!';
-  return '-';
+function formatDoctorCheckProgressMessage(check: DoctorCheck): string {
+  return [formatDoctorCheckSummaryLine(check), ...formatDoctorCheckDetailLines(check)].join('\n');
 }

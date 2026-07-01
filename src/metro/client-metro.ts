@@ -13,6 +13,11 @@ import { AppError } from '../kernel/errors.ts';
 import { runCmdSync, runCmdDetached } from '../utils/exec.ts';
 import { resolveUserPath } from '../utils/path-resolution.ts';
 import { waitForProcessExit } from '../utils/process-identity.ts';
+import {
+  detectProjectRuntimeKindFromPackageJson,
+  readProjectPackageJson,
+  type PackageJsonShape,
+} from '../utils/project-runtime.ts';
 import { buildBundleUrl, normalizeBaseUrl } from '../utils/url.ts';
 import {
   resolveRuntimeTransportHints,
@@ -32,11 +37,6 @@ export type {
   CompanionTunnelScope,
   MetroBridgeScope,
 } from '../client/client-companion-tunnel-contract.ts';
-
-type PackageJsonShape = {
-  dependencies?: Record<string, string>;
-  devDependencies?: Record<string, string>;
-};
 
 type PackageManagerConfig = {
   command: string;
@@ -169,11 +169,11 @@ function directoryExists(dirPath: string): boolean {
 
 function readPackageJson(projectRoot: string): PackageJsonShape {
   const packageJsonPath = path.join(projectRoot, 'package.json');
-  if (!fileExists(packageJsonPath)) {
+  const packageJson = readProjectPackageJson(projectRoot);
+  if (!packageJson) {
     throw new AppError('INVALID_ARGS', `package.json not found at ${packageJsonPath}`);
   }
-
-  return JSON.parse(fs.readFileSync(packageJsonPath, 'utf8')) as PackageJsonShape;
+  return packageJson;
 }
 
 function detectPackageManager(projectRoot: string): PackageManagerConfig {
@@ -191,13 +191,8 @@ function detectMetroKind(projectRoot: string, requestedKind: MetroPrepareKind): 
     return requestedKind;
   }
 
-  const packageJson = readPackageJson(projectRoot);
-  const dependencies = {
-    ...(packageJson.dependencies ?? {}),
-    ...(packageJson.devDependencies ?? {}),
-  };
-
-  return typeof dependencies.expo === 'string' ? 'expo' : 'react-native';
+  const detected = detectProjectRuntimeKindFromPackageJson(readPackageJson(projectRoot));
+  return detected === 'expo' ? 'expo' : 'react-native';
 }
 
 function parseTimeout(

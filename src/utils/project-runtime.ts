@@ -3,15 +3,20 @@ import path from 'node:path';
 
 export type ProjectRuntimeKind = 'auto' | 'react-native' | 'expo';
 
-type PackageJsonShape = {
+export type PackageJsonShape = {
   dependencies?: Record<string, unknown>;
   devDependencies?: Record<string, unknown>;
 };
 
 export function detectProjectRuntimeKind(cwd: string | undefined): ProjectRuntimeKind {
-  const packageJson = readPackageJson(cwd);
+  const packageJson = readProjectPackageJson(cwd);
   if (!packageJson) return 'auto';
+  return detectProjectRuntimeKindFromPackageJson(packageJson);
+}
 
+export function detectProjectRuntimeKindFromPackageJson(
+  packageJson: PackageJsonShape,
+): ProjectRuntimeKind {
   const dependencies = {
     ...(packageJson.dependencies ?? {}),
     ...(packageJson.devDependencies ?? {}),
@@ -21,7 +26,7 @@ export function detectProjectRuntimeKind(cwd: string | undefined): ProjectRuntim
   return 'auto';
 }
 
-function readPackageJson(cwd: string | undefined): PackageJsonShape | undefined {
+export function readProjectPackageJson(cwd: string | undefined): PackageJsonShape | undefined {
   if (!cwd) return undefined;
   const packageJsonPath = path.join(cwd, 'package.json');
   try {
