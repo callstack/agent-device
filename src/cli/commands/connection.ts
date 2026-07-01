@@ -14,7 +14,7 @@ import {
   type RemoteConnectionRequestMetadata,
 } from '../../remote/remote-connection-state.ts';
 import { AppError } from '../../kernel/errors.ts';
-import { resolveCloudConnectProfile } from '../cloud-connection-profile.ts';
+import { resolveCloudConnectProfile } from '../connection/cloud-profile.ts';
 import {
   connectProviderNamesForError,
   connectionProviderLeaseKind,
@@ -22,9 +22,9 @@ import {
   isConnectProviderName,
   isDirectDeviceConnectProvider,
   type ConnectProvider,
-} from '../connection-provider-traits.ts';
-import { resolveCloudWebDriverConnectProfile } from '../provider-connection-profile.ts';
-import { resolveProxyConnectProfile } from '../proxy-connection-profile.ts';
+} from '../connection/provider-policy.ts';
+import { resolveCloudWebDriverConnectProfile } from '../connection/cloud-webdriver-profile.ts';
+import { resolveProxyConnectProfile } from '../connection/proxy-profile.ts';
 import {
   hasDeferredMetroConfig,
   releaseRemoteConnectionLease,

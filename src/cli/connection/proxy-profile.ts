@@ -1,11 +1,11 @@
 import crypto from 'node:crypto';
-import type { RemoteConfigProfile } from '../remote/remote-config-schema.ts';
-import { AppError } from '../kernel/errors.ts';
-import type { CliFlags } from './parser/cli-flags.ts';
-import type { EnvMap } from '../utils/env-map.ts';
-import { readMetroProfileFields } from './connection-profile-fields.ts';
-import { persistAndResolveGeneratedProfile } from './generated-remote-config.ts';
-import { resolveRequestedLeaseBackend } from './commands/connection-runtime.ts';
+import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
+import { AppError } from '../../kernel/errors.ts';
+import type { CliFlags } from '../parser/cli-flags.ts';
+import type { EnvMap } from '../../utils/env-map.ts';
+import { readMetroProfileFields } from './profile-fields.ts';
+import { persistAndResolveGeneratedProfile } from './generated-config.ts';
+import { resolveRequestedLeaseBackend } from '../commands/connection-runtime.ts';
 
 export function resolveProxyConnectProfile(options: {
   flags: CliFlags;

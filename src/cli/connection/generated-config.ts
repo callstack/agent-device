@@ -1,15 +1,15 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-import { resolveRemoteConfigProfile } from '../remote/remote-config.ts';
+import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
 import type {
   RemoteConfigProfile,
   ResolvedRemoteConfigProfile,
-} from '../remote/remote-config-schema.ts';
-import { AppError, asAppError } from '../kernel/errors.ts';
-import type { EnvMap } from '../utils/env-map.ts';
-import type { CliFlags } from './parser/cli-flags.ts';
-import { profileToCliFlags } from '../utils/remote-config.ts';
+} from '../../remote/remote-config-schema.ts';
+import { AppError, asAppError } from '../../kernel/errors.ts';
+import type { EnvMap } from '../../utils/env-map.ts';
+import type { CliFlags } from '../parser/cli-flags.ts';
+import { profileToCliFlags } from '../../utils/remote-config.ts';
 
 const GENERATED_REMOTE_CONFIG_SECRET_KEYS = new Set(['daemonAuthToken', 'metroBearerToken']);
 

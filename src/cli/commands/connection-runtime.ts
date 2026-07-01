@@ -23,7 +23,7 @@ import type { AgentDeviceClient, Lease } from '../../client/client.ts';
 import type { CloudProviderSessionResult } from '../../cloud-artifacts.ts';
 import type { MetroPrepareKind } from '../../metro/client-metro.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { connectionProviderRequiresRemoteDaemon } from '../connection-provider-traits.ts';
+import { connectionProviderRequiresRemoteDaemon } from '../connection/provider-policy.ts';
 
 const leaseDeferredCommands = new Set([
   'connect',

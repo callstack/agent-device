@@ -2,7 +2,7 @@ import {
   CLOUD_WEBDRIVER_PROVIDERS,
   isCloudWebDriverProviderName,
   type CloudWebDriverKnownProviderName,
-} from '../cloud-webdriver/providers.ts';
+} from '../../cloud-webdriver/providers.ts';
 
 export type ConnectProvider = 'cloud' | 'proxy' | CloudWebDriverKnownProviderName;
 

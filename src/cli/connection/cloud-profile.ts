@@ -1,11 +1,11 @@
 import crypto from 'node:crypto';
-import type { RemoteConfigProfile } from '../remote/remote-config-schema.ts';
-import { AppError } from '../kernel/errors.ts';
-import type { CliFlags } from './parser/cli-flags.ts';
-import type { EnvMap } from '../utils/env-map.ts';
-import { resolveCloudAccessForConnect } from './auth-session.ts';
-import { readCloudJsonResponse } from './cloud-response.ts';
-import { persistAndResolveGeneratedProfile } from './generated-remote-config.ts';
+import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
+import { AppError } from '../../kernel/errors.ts';
+import type { CliFlags } from '../parser/cli-flags.ts';
+import type { EnvMap } from '../../utils/env-map.ts';
+import { resolveCloudAccessForConnect } from '../auth-session.ts';
+import { readCloudJsonResponse } from '../cloud-response.ts';
+import { persistAndResolveGeneratedProfile } from './generated-config.ts';
 
 const CONNECTION_PROFILE_PATH = '/api/control-plane/connection-profile';
 const HTTP_TIMEOUT_MS = 15_000;

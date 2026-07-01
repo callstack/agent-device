@@ -17,7 +17,7 @@ import {
   connectionCommand,
   disconnectCommand,
 } from '../cli/commands/connection.ts';
-import { writeGeneratedRemoteConfig } from '../cli/generated-remote-config.ts';
+import { writeGeneratedRemoteConfig } from '../cli/connection/generated-config.ts';
 import {
   hasDeferredMetroConfig,
   materializeRemoteConnectionForCommand,
