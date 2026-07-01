@@ -268,9 +268,7 @@ test('(b.2) non-Apple families only carry their own non-portable support gates',
   // Most relocated closures are Apple-only. Audio is the one host-dependent command
   // that also gates Android emulator support on macOS hosts, so Android carries only
   // that command-specific predicate.
-  assert.deepEqual(Object.keys(getPlugin('android').capability.supportsByDefault ?? {}), [
-    'audio',
-  ]);
+  assert.deepEqual(Object.keys(getPlugin('android').capability.supportsByDefault ?? {}), ['audio']);
   assert.equal(getPlugin('android').capability.unsupportedHintByDefault, undefined);
   for (const platform of ['linux', 'web'] as const) {
     const capability = getPlugin(platform).capability;
