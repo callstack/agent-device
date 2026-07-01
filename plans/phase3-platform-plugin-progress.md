@@ -122,9 +122,14 @@ This step retired the stale standalone Apple plan by landing the low-risk reloca
 3. **visionOS groundwork** — the runner profile, SDK/platform metadata, Xcode supported-platform list, build
    script case, discovery tagging, and Swift interaction guard now recognize visionOS. Live spatial-input QA is
    still future work.
-4. **request-count gate removal** — the runner request-count CI gate and `cost.runnerRoundTrips` runtime surface
-   were removed because successful `main` runs captured zero runner events, so the signal did not prove runner
-   behavior. Apple runner regressions are now guarded by the normal unit/build gates plus live smoke replay.
+4. **request-count CI gate removal (dev-only)** — the runner request-count **CI gate** (the daemon `--debug`
+   ndjson counter + `smoke-ios` assertion added in #966) was removed because successful `main` runs captured
+   zero runner events, so the signal did not prove runner behavior. Apple runner regressions are now guarded by
+   the normal unit/build gates plus live smoke replay. **Distinct from that gate:** the public runtime
+   `cost.runnerRoundTrips` agent-cost field (`ResponseCost` in `src/kernel/contracts.ts`; computed by
+   `buildResponseCost` over `RUNNER_ROUND_TRIP_PHASES` in `src/daemon/request-router.ts`) is a separate,
+   pre-existing surface — briefly dropped alongside the gate but **restored in #970** — and remains part of the
+   agent-cost contract. Only the dev-only CI gate stays removed.
 
 ## Step (d) — remaining Apple leaf/plugin work ⛔ DO NOT AUTO-MERGE
 
