@@ -1,3 +1,4 @@
+import { isMacOs } from '../../kernel/device.ts';
 import {
   ALERT_ACTION_RETRY_MS,
   ALERT_POLL_INTERVAL_MS as POLL_INTERVAL_MS,
@@ -56,7 +57,7 @@ export async function handleAlertCommand(
       }),
     );
   }
-  if (device.platform === 'macos') {
+  if (isMacOs(device)) {
     const runAlert: NativeAlertRunner = async (alertAction) =>
       await runMacOsAlertAction(alertAction, macOsAlertTarget);
     return await handleNativeAlertCommand(params, action, runAlert);

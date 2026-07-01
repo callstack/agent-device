@@ -1,11 +1,11 @@
-import type { Platform } from '../kernel/device.ts';
+import type { Platform, PublicPlatform } from '../kernel/device.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { isNodeVisible } from './selector-node.ts';
 import { extractNodeText, normalizeType } from '../snapshot/snapshot-processing.ts';
 
 export function buildSelectorChainForNode(
   node: SnapshotNode,
-  _platform: Platform,
+  _platform: Platform | PublicPlatform,
   options: { action?: 'click' | 'fill' | 'get' } = {},
 ): string[] {
   const chain: string[] = [];

@@ -188,7 +188,7 @@ export function areInteractionSurfaceSignaturesStable(
 }
 
 function supportsInteractionOutcomePolicy(session: SessionState): boolean {
-  return isMobilePlatform(session.device.platform);
+  return isMobilePlatform(session.device);
 }
 
 function retryCommandForTap(command: string): string | undefined {

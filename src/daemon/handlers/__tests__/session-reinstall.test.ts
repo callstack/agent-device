@@ -88,7 +88,7 @@ test('reinstall requires active session or explicit device selector', async () =
 test('reinstall validates required args before device operations', async () => {
   const sessionStore = makeStore();
   const session = makeSession('default', {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone',
     kind: 'simulator',
@@ -233,7 +233,7 @@ test('install accepts path without app id hint', async () => {
 test('reinstall resolves uploaded artifacts by id and cleans temp files after completion', async () => {
   const sessionStore = makeStore();
   const session = makeSession('default', {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone',
     kind: 'simulator',

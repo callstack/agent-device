@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { publicPlatformString } from '../kernel/device.ts';
 import { inferFillText } from './action-utils.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { formatPortableActionLine } from '../replay/script-formatting.ts';
@@ -157,7 +158,8 @@ function formatScript(session: SessionState, actions: SessionAction[]): string {
   const kind = session.device.kind ? ` kind=${session.device.kind}` : '';
   const theme = 'unknown';
   lines.push(
-    `context platform=${session.device.platform} device=${formatScriptStringLiteral(session.device.name)}${kind} theme=${theme}`,
+    // approach (b): emit the PUBLIC leaf platform (ios/macos), never the internal `apple`.
+    `context platform=${publicPlatformString(session.device)} device=${formatScriptStringLiteral(session.device.name)}${kind} theme=${theme}`,
   );
   for (const action of actions) {
     if (action.flags?.noRecord) continue;

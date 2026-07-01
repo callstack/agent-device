@@ -8,7 +8,7 @@ const IOS_SESSION: SessionState = {
   createdAt: Date.now(),
   actions: [],
   device: {
-    platform: 'ios',
+    platform: 'apple',
     target: 'mobile',
     id: 'SIM-001',
     name: 'iPhone 16',

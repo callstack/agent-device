@@ -1,3 +1,4 @@
+import { isIosFamily } from '../kernel/device.ts';
 import type { RecordingGestureEvent, SessionState } from './types.ts';
 import type { SnapshotState } from '../kernel/snapshot.ts';
 import {
@@ -58,7 +59,7 @@ export function recordTouchVisualizationEvent(
     fallbackFinishedAtMs: finishedAtMs,
   });
   const tMs =
-    session.device.platform === 'ios' &&
+    isIosFamily(session.device) &&
     readNumber(merged.gestureStartUptimeMs) === undefined &&
     shouldAnchorTapVisualizationNearCompletion(command, merged)
       ? resolveTapVisualizationOffsetMs({ ...timingSource, gestureDurationMs })

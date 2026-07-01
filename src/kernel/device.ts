@@ -1,13 +1,25 @@
 import { AppError } from './errors.ts';
 
+// Legacy Apple leaf platforms. Retained ONLY as accepted `--platform` / read-path
+// input aliases (approach b back-compat) and as the PUBLIC leaf strings the daemon
+// still emits; the internal `Platform` no longer carries them — every Apple OS
+// collapses to the single `apple` platform (ADR-0009 / issue #979).
 export type ApplePlatform = 'ios' | 'macos';
 // Explicit, stored Apple operating system. All six literals are reserved so the
 // type is stable as platform support grows, but discovery only ever populates
 // the four currently supported ones ('ios' | 'ipados' | 'tvos' | 'macos').
 export type AppleOS = 'ios' | 'ipados' | 'tvos' | 'watchos' | 'visionos' | 'macos';
-export const PLATFORMS = ['ios', 'macos', 'android', 'linux', 'web'] as const;
+// Internal device platforms. Apple OSes collapse to a single `apple` platform; the
+// `appleOs` field on DeviceInfo is the sole OS discriminant.
+export const PLATFORMS = ['apple', 'android', 'linux', 'web'] as const;
 export type Platform = (typeof PLATFORMS)[number];
-export const PLATFORM_SELECTORS = [...PLATFORMS, 'apple'] as const;
+// The PUBLIC leaf platform strings the daemon emits and clients parse (approach b:
+// output never changes). Equals the pre-collapse `Platform` set.
+export const PUBLIC_PLATFORMS = ['ios', 'macos', 'android', 'linux', 'web'] as const;
+export type PublicPlatform = (typeof PUBLIC_PLATFORMS)[number];
+// Accepted `--platform` selectors: the internal platforms plus the legacy Apple leaf
+// aliases `ios`/`macos`, which still resolve to `apple` devices (read-path back-compat).
+export const PLATFORM_SELECTORS = [...PLATFORMS, 'ios', 'macos'] as const;
 export type PlatformSelector = (typeof PLATFORM_SELECTORS)[number];
 const DEVICE_KINDS = ['simulator', 'emulator', 'device'] as const;
 export type DeviceKind = (typeof DEVICE_KINDS)[number];
@@ -46,9 +58,62 @@ export function isApplePlatform(
   return platform === 'apple' || platform === 'ios' || platform === 'macos';
 }
 
-export function isMobilePlatform(platform: Platform): boolean {
-  // Leaf-platform family predicate: the two phone/tablet device platforms.
-  return platform === 'ios' || platform === 'android';
+/**
+ * The macOS Apple-OS leaf: the AppKit desktop host. The post-collapse replacement for
+ * the former `platform === 'macos'` leaf compare — discovery always stamps
+ * `appleOs: 'macos'` on the host device (buildHostMacDevice), so the OS discriminant
+ * is authoritative.
+ */
+export function isMacOs(device: Pick<DeviceInfo, 'platform' | 'appleOs'>): boolean {
+  // The `appleOs` discriminant is authoritative for discovered devices; the legacy
+  // leaf `platform: 'macos'` (persisted pre-collapse records, or synthetic
+  // leaf-string devices) is still honored via the cast for back-compat.
+  return device.appleOs === 'macos' || (device.platform as string) === 'macos';
+}
+
+/**
+ * The touch iOS family: every Apple OS except the macOS desktop host
+ * (iOS / iPadOS / tvOS / visionOS). This is the EXACT post-collapse equivalent of the
+ * pre-collapse `platform === 'ios'` leaf compare — that leaf covered all four of these
+ * OSes — so `isIosFamily(device)` swaps in for `device.platform === 'ios'`
+ * behavior-for-behavior (false for macOS and every non-Apple platform).
+ */
+export function isIosFamily(device: Pick<DeviceInfo, 'platform' | 'appleOs'>): boolean {
+  return isApplePlatform(device.platform) && !isMacOs(device);
+}
+
+export function isMobilePlatform(device: Pick<DeviceInfo, 'platform' | 'appleOs'>): boolean {
+  // Phone/tablet device family: Android plus every Apple OS except the macOS desktop
+  // host. Preserves the pre-collapse `platform === 'ios' || platform === 'android'`
+  // set exactly (the old `ios` platform covered iOS/iPadOS/tvOS/visionOS).
+  return device.platform === 'android' || (isApplePlatform(device.platform) && !isMacOs(device));
+}
+
+/**
+ * The PUBLIC leaf platform string emitted to machine consumers (approach b: output
+ * keeps emitting `ios`/`macos`, never the internal `apple`). Apple devices project to
+ * their leaf via `appleOs`; non-Apple platforms pass through unchanged.
+ */
+export function publicPlatformString(
+  device: Pick<DeviceInfo, 'platform' | 'appleOs'>,
+): PublicPlatform {
+  if (!isApplePlatform(device.platform)) return device.platform;
+  return isMacOs(device) ? 'macos' : 'ios';
+}
+
+/**
+ * The inverse of {@link publicPlatformString}: reconstruct the internal `platform` (+
+ * `appleOs` where the leaf is unambiguous) from a PUBLIC leaf string. Used where the
+ * client rebuilds an internal DeviceInfo from a parsed daemon response. The `ios` leaf
+ * leaves `appleOs` unset so the target-based inference still distinguishes tvOS.
+ */
+export function deviceFieldsFromPublicPlatform(platform: PublicPlatform): {
+  platform: Platform;
+  appleOs?: AppleOS;
+} {
+  if (platform === 'macos') return { platform: 'apple', appleOs: 'macos' };
+  if (platform === 'ios') return { platform: 'apple' };
+  return { platform };
 }
 
 /**
@@ -60,25 +125,34 @@ export function isMobilePlatform(platform: Platform): boolean {
  * across the Apple interaction paths.
  *
  * Apple-only by design: Android TV also uses `target: 'tv'` but is a DISTINCT leaf,
- * so the `platform === 'ios'` gate is load-bearing (do not widen it to any TV target).
+ * so the `isApplePlatform` gate is load-bearing (do not widen it to any TV target).
  */
 export function isTvOsDevice(device: Pick<DeviceInfo, 'platform' | 'target'>): boolean {
-  return device.platform === 'ios' && device.target === 'tv';
+  return isApplePlatform(device.platform) && device.target === 'tv';
 }
 
 export function isPlatform(value: unknown): value is Platform {
-  // Leaf-platform membership derived from the canonical PLATFORMS tuple (excludes the
-  // `apple` selector, which is not a concrete device platform).
+  // Internal device-platform membership derived from the canonical PLATFORMS tuple.
   return (PLATFORMS as readonly unknown[]).includes(value);
 }
 
+export function isPublicPlatform(value: unknown): value is PublicPlatform {
+  // The PUBLIC leaf strings a daemon response carries (approach b). Used by the client
+  // normalizers, which parse leaf platforms (`ios`/`macos`), not the internal `apple`.
+  return (PUBLIC_PLATFORMS as readonly unknown[]).includes(value);
+}
+
 export function matchesPlatformSelector(
-  platform: Platform,
+  device: Pick<DeviceInfo, 'platform' | 'appleOs'>,
   selector: PlatformSelector | undefined,
 ): boolean {
   if (!selector) return true;
-  if (selector === 'apple') return isApplePlatform(platform);
-  return platform === selector;
+  if (selector === 'apple') return isApplePlatform(device.platform);
+  // Legacy leaf selectors resolve within the collapsed `apple` platform via `appleOs`,
+  // preserving the pre-collapse `--platform ios|macos` device sets exactly.
+  if (selector === 'ios') return isApplePlatform(device.platform) && !isMacOs(device);
+  if (selector === 'macos') return isApplePlatform(device.platform) && isMacOs(device);
+  return device.platform === selector;
 }
 
 export function resolveApplePlatformName(
@@ -214,7 +288,7 @@ export function matchesDeviceSelector(
   options: { includeExplicitSelectors?: boolean } = {},
 ): boolean {
   return (
-    matchesPlatformSelector(device.platform, selector.platform) &&
+    matchesPlatformSelector(device, selector.platform) &&
     (!selector.target || (device.target ?? 'mobile') === selector.target) &&
     (!options.includeExplicitSelectors || matchesExplicitDeviceSelector(device, selector))
   );
@@ -266,7 +340,7 @@ function compareAppleDevicesForSelection<TDevice extends DeviceInfo>(
 
 function appleDeviceSelectionRank(device: DeviceInfo): number {
   if (device.kind === 'simulator') return appleTargetSelectionRank(device, 0, 1, 2, 3);
-  if (device.kind === 'device' && device.platform === 'ios')
+  if (device.kind === 'device' && isApplePlatform(device.platform) && !isMacOs(device))
     return appleTargetSelectionRank(device, 10, 11, 12, 13);
   return 14;
 }

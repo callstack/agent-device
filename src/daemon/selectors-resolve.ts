@@ -1,4 +1,4 @@
-import type { Platform } from '../kernel/device.ts';
+import type { Platform, PublicPlatform } from '../kernel/device.ts';
 import type { SnapshotNode, SnapshotState } from '../kernel/snapshot.ts';
 import { matchesSelector } from './selectors-match.ts';
 import type { Selector, SelectorChain } from './selectors-parse.ts';
@@ -20,7 +20,7 @@ export function resolveSelectorChain(
   nodes: SnapshotState['nodes'],
   chain: SelectorChain,
   options: {
-    platform: Platform;
+    platform: Platform | PublicPlatform;
     requireRect?: boolean;
     requireUnique?: boolean;
     disambiguateAmbiguous?: boolean;
@@ -58,7 +58,7 @@ export function findSelectorChainMatch(
   nodes: SnapshotState['nodes'],
   chain: SelectorChain,
   options: {
-    platform: Platform;
+    platform: Platform | PublicPlatform;
     requireRect?: boolean;
   },
 ): {
@@ -96,7 +96,7 @@ export function formatSelectorFailure(
 function analyzeSelectorMatches(
   nodes: SnapshotState['nodes'],
   selector: Selector,
-  platform: Platform,
+  platform: Platform | PublicPlatform,
   requireRect: boolean,
 ): { count: number; firstNode: SnapshotNode | null; disambiguated: SnapshotNode | null } {
   let count = 0;
@@ -130,7 +130,7 @@ function analyzeSelectorMatches(
 function countSelectorMatchesOnly(
   nodes: SnapshotState['nodes'],
   selector: Selector,
-  platform: Platform,
+  platform: Platform | PublicPlatform,
   requireRect: boolean,
 ): number {
   let count = 0;

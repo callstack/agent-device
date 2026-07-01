@@ -12,7 +12,7 @@ import { appleRemotePressCommand } from './os/tvos/remote.ts';
 import { runMacOsScreenshotAction } from './os/macos/helper.ts';
 import { runAppleRunnerCommand } from './core/runner/runner-client.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
-import { isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
+import { isMacOs, isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
 import type { Interactor, RunnerContext } from '../../core/interactor-types.ts';
@@ -47,7 +47,7 @@ export function createAppleInteractor(
     openDevice: () => openIosDevice(device),
     close: (app) => closeIosApp(device, app),
     screenshot: async (outPath, options) => {
-      if (device.platform === 'macos' && options?.surface && options.surface !== 'app') {
+      if (isMacOs(device) && options?.surface && options.surface !== 'app') {
         await runMacOsScreenshotAction(outPath, {
           surface: options.surface,
           fullscreen: options.fullscreen,

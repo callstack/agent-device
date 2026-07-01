@@ -17,8 +17,7 @@ function selectCapabilityByHandSwitch(
   platform: Platform,
 ): CommandCapability[CapabilityBucket] {
   switch (platform) {
-    case 'ios':
-    case 'macos':
+    case 'apple':
       return capability.apple;
     case 'android':
       return capability.android;

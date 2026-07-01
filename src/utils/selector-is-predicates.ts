@@ -1,4 +1,4 @@
-import type { Platform } from '../kernel/device.ts';
+import type { Platform, PublicPlatform } from '../kernel/device.ts';
 import type { SnapshotState } from '../kernel/snapshot.ts';
 import { isNodeVisibleInEffectiveViewport } from '../snapshot/mobile-snapshot-semantics.ts';
 import { isNodeEditable, isNodeVisible } from './selector-node.ts';
@@ -20,7 +20,7 @@ export function evaluateIsPredicate(params: {
   node: SnapshotState['nodes'][number];
   nodes: SnapshotState['nodes'];
   expectedText?: string;
-  platform: Platform;
+  platform: Platform | PublicPlatform;
 }): { pass: boolean; actualText: string; details: string } {
   const { predicate, node, nodes, expectedText, platform } = params;
   const actualText = extractNodeText(node);
@@ -60,7 +60,7 @@ export function evaluateIsPredicate(params: {
 function isAssertionVisible(
   node: SnapshotState['nodes'][number],
   nodes: SnapshotState['nodes'],
-  platform: Platform,
+  platform: Platform | PublicPlatform,
 ): boolean {
   if (platform === 'android' && node.visibleToUser === false) return false;
   if (hasPositiveRect(node.rect)) return isRectVisibleInViewport(node, nodes);
@@ -82,7 +82,7 @@ function isRectVisibleInViewport(
 function resolveVisibilityAnchor(
   node: SnapshotState['nodes'][number],
   nodes: SnapshotState['nodes'],
-  platform: Platform,
+  platform: Platform | PublicPlatform,
 ): SnapshotState['nodes'][number] | null {
   const nodesByIndex = buildSnapshotNodeByIndex(nodes);
   return findSnapshotAncestor(nodes, node, nodesByIndex, (parent) =>
@@ -93,7 +93,7 @@ function resolveVisibilityAnchor(
 // fallow-ignore-next-line complexity
 function isUsefulVisibilityAnchor(
   node: SnapshotState['nodes'][number],
-  platform: Platform,
+  platform: Platform | PublicPlatform,
 ): boolean {
   if (platform === 'android' && node.visibleToUser === false) return false;
   const type = normalizeType(node.type ?? '');

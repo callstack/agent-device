@@ -2,7 +2,13 @@ import { resolveDaemonPaths } from '../../daemon/config.ts';
 import { stopReactDevtoolsCompanion } from '../../client/client-react-devtools-companion.ts';
 import { stopMetroTunnel } from '../../metro/metro.ts';
 import { resolveRemoteConfigProfile } from '../../remote/remote-config.ts';
-import { resolveDevice, type DeviceInfo } from '../../kernel/device.ts';
+import {
+  deviceFieldsFromPublicPlatform,
+  isIosFamily,
+  publicPlatformString,
+  resolveDevice,
+  type DeviceInfo,
+} from '../../kernel/device.ts';
 import { shouldAgentCdpUseRemoteBridgeUrl } from './agent-cdp.ts';
 import type { MetroBridgeScope } from '../../client/client-companion-tunnel-contract.ts';
 import {
@@ -718,7 +724,7 @@ async function resolveProxyLeaseState(options: {
 function applyResolvedDeviceSelector(flags: CliFlags, device: DeviceInfo): void {
   flags.platform = device.platform;
   flags.target = device.target ?? flags.target;
-  if (device.platform === 'ios') {
+  if (isIosFamily(device)) {
     flags.udid = device.id;
     return;
   }
@@ -742,7 +748,7 @@ async function resolveSelectedDevice(
   });
   return await resolveDevice(
     devices.map((device) => ({
-      platform: device.platform,
+      ...deviceFieldsFromPublicPlatform(device.platform),
       id: device.id,
       name: device.name,
       kind: device.kind,
@@ -760,11 +766,11 @@ async function resolveSelectedDevice(
 }
 
 function buildProxyDeviceKey(device: DeviceInfo): string {
-  return `${device.platform}:${device.target ?? 'mobile'}:${device.id}`;
+  return `${publicPlatformString(device)}:${device.target ?? 'mobile'}:${device.id}`;
 }
 
 function leaseBackendForDevice(device: DeviceInfo): LeaseBackend | undefined {
-  if (device.platform === 'ios') return 'ios-instance';
+  if (isIosFamily(device)) return 'ios-instance';
   if (device.platform === 'android') return 'android-instance';
   return undefined;
 }

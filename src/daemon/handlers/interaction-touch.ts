@@ -1,4 +1,5 @@
 import type { GestureReferenceFrame } from '../../core/scroll-gesture.ts';
+import { publicPlatformString } from '../../kernel/device.ts';
 import {
   buttonTag,
   getClickButtonValidationError,
@@ -98,7 +99,7 @@ async function dispatchTargetedTouchViaRuntime(
   if (command !== 'longpress' && clickButton !== 'primary') {
     const validationError = getClickButtonValidationError({
       commandLabel,
-      platform: session.device.platform,
+      platform: publicPlatformString(session.device),
       button: clickButton,
       count: req.flags?.count,
       intervalMs: req.flags?.intervalMs,

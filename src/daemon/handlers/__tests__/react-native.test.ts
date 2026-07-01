@@ -78,7 +78,7 @@ test('react-native dismiss-overlay taps collapsed warning close affordance inste
 
   expect(response?.ok).toBe(true);
   expect(mockDispatchCommand).toHaveBeenCalledWith(
-    expect.objectContaining({ platform: 'ios' }),
+    expect.objectContaining({ platform: 'apple' }),
     'press',
     ['379', '820'],
     undefined,
@@ -137,7 +137,7 @@ test('react-native dismiss-overlay prefers non-trailing collapsed warning close 
 
   expect(response?.ok).toBe(true);
   expect(mockDispatchCommand).toHaveBeenCalledWith(
-    expect.objectContaining({ platform: 'ios' }),
+    expect.objectContaining({ platform: 'apple' }),
     'press',
     ['27', '820'],
     undefined,
@@ -209,7 +209,7 @@ test('react-native dismiss-overlay does not confuse app dismiss buttons with ove
 
   expect(response?.ok).toBe(true);
   expect(mockDispatchCommand).toHaveBeenCalledWith(
-    expect.objectContaining({ platform: 'ios' }),
+    expect.objectContaining({ platform: 'apple' }),
     'press',
     ['369', '813'],
     undefined,
@@ -324,7 +324,7 @@ test('react-native dismiss-overlay dismisses RedBox error overlays instead of mi
 
   expect(response?.ok).toBe(true);
   expect(mockDispatchCommand).toHaveBeenCalledWith(
-    expect.objectContaining({ platform: 'ios' }),
+    expect.objectContaining({ platform: 'apple' }),
     'press',
     ['95', '752'],
     undefined,
@@ -446,7 +446,7 @@ test('react-native dismiss-overlay uses Dismiss when RedBox Minimize is absent',
 
   expect(response?.ok).toBe(true);
   expect(mockDispatchCommand).toHaveBeenCalledWith(
-    expect.objectContaining({ platform: 'ios' }),
+    expect.objectContaining({ platform: 'apple' }),
     'press',
     ['95', '752'],
     undefined,
@@ -501,7 +501,7 @@ test('react-native dismiss-overlay accepts RedBox control labels with keyboard s
 
   expect(response?.ok).toBe(true);
   expect(mockDispatchCommand).toHaveBeenCalledWith(
-    expect.objectContaining({ platform: 'ios' }),
+    expect.objectContaining({ platform: 'apple' }),
     'press',
     ['70', '722'],
     undefined,
@@ -872,7 +872,7 @@ function makeSession(name: string, platform: 'ios' | 'android' = 'ios'): Session
     createdAt: Date.now(),
     actions: [],
     device: {
-      platform,
+      platform: platform === 'ios' ? 'apple' : 'android',
       id: 'sim-1',
       name: platform === 'ios' ? 'iPhone' : 'Pixel',
       kind: platform === 'ios' ? 'simulator' : 'emulator',

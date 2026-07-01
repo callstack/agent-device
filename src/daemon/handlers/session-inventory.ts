@@ -3,6 +3,9 @@ import { assertResolvedAppsFilter } from '../../contracts/app-inventory.ts';
 import { asAppError } from '../../kernel/errors.ts';
 import {
   isApplePlatform,
+  isMacOs,
+  matchesPlatformSelector,
+  publicPlatformString,
   resolveAppleSimulatorSetPathForSelector,
   type DeviceInfo,
   type PlatformSelector,
@@ -40,17 +43,19 @@ export async function handleSessionInventoryCommands(params: {
               name: session.name,
               sessionStateDir,
               runnerLogPath: resolveSessionRunnerLogPath(sessionStateDir),
-              platform: session.device.platform,
+              // approach (b): emit the PUBLIC leaf platform (ios/macos), not `apple`.
+              platform: publicPlatformString(session.device),
               target: session.device.target ?? 'mobile',
               surface: session.surface ?? 'app',
               device: session.device.name,
               id: session.device.id,
               device_id: session.device.id,
               createdAt: session.createdAt,
-              ...(session.device.platform === 'ios' && {
-                device_udid: session.device.id,
-                ios_simulator_device_set: session.device.simulatorSetPath ?? null,
-              }),
+              ...(isApplePlatform(session.device.platform) &&
+                !isMacOs(session.device) && {
+                  device_udid: session.device.id,
+                  ios_simulator_device_set: session.device.simulatorSetPath ?? null,
+                }),
             };
           }),
       },
@@ -90,8 +95,12 @@ export async function handleSessionInventoryCommands(params: {
       // Keep appleOs internal-only for now: it is discovery groundwork and the
       // public `devices` shape is not yet meant to expose it. Surfacing it (so
       // agents can tell iPad from iPhone) should be a deliberate later change.
+      // approach (b): project `platform` back to the PUBLIC leaf (ios/macos).
       const publicDevices = filtered.map(
-        ({ simulatorSetPath: _simulatorSetPath, appleOs: _appleOs, ...device }) => device,
+        ({ simulatorSetPath: _simulatorSetPath, appleOs, ...device }) => ({
+          ...device,
+          platform: publicPlatformString({ platform: device.platform, appleOs }),
+        }),
       );
       return { ok: true, data: { devices: publicDevices } };
     } catch (err) {
@@ -145,7 +154,5 @@ function matchesRequestedPlatform(
   device: DeviceInfo,
   requestedPlatform: PlatformSelector | undefined,
 ): boolean {
-  if (!requestedPlatform) return true;
-  if (requestedPlatform === 'apple') return isApplePlatform(device.platform);
-  return device.platform === requestedPlatform;
+  return matchesPlatformSelector(device, requestedPlatform);
 }

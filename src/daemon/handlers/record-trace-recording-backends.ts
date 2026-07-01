@@ -1,3 +1,4 @@
+import { isIosFamily, isMacOs } from '../../kernel/device.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
@@ -75,9 +76,9 @@ export function resolveRecordingBackendForDevice(
 ): RecordingStartBackend {
   if (device.platform === 'web') return webRecordingBackend;
   if (device.platform === 'android') return androidRecordingBackend;
-  if (device.platform === 'macos') return macOsRecordingBackend;
-  if (device.platform === 'ios' && device.kind === 'device') return iosDeviceRecordingBackend;
-  if (device.platform === 'ios') return iosSimulatorRecordingBackend;
+  if (isMacOs(device)) return macOsRecordingBackend;
+  if (isIosFamily(device) && device.kind === 'device') return iosDeviceRecordingBackend;
+  if (isIosFamily(device)) return iosSimulatorRecordingBackend;
   return unsupportedRecordingBackend;
 }
 

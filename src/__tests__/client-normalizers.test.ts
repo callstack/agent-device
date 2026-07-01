@@ -1,10 +1,10 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { normalizeOpenDevice } from '../client/client-normalizers.ts';
-import { PLATFORMS } from '../kernel/device.ts';
+import { PUBLIC_PLATFORMS } from '../kernel/device.ts';
 
 test('normalizeOpenDevice accepts exactly the canonical leaf platforms', () => {
-  for (const platform of PLATFORMS) {
+  for (const platform of PUBLIC_PLATFORMS) {
     const result = normalizeOpenDevice({
       platform,
       id: 'device-1',
@@ -14,7 +14,7 @@ test('normalizeOpenDevice accepts exactly the canonical leaf platforms', () => {
     assert.equal(result.platform, platform);
   }
   // Lock the membership so the derived check cannot silently widen/narrow.
-  assert.deepEqual([...PLATFORMS], ['ios', 'macos', 'android', 'linux', 'web']);
+  assert.deepEqual([...PUBLIC_PLATFORMS], ['ios', 'macos', 'android', 'linux', 'web']);
 });
 
 test('normalizeOpenDevice rejects the apple selector and unknown platforms', () => {

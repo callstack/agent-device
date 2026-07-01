@@ -1,3 +1,4 @@
+import { isMacOs } from '../../kernel/device.ts';
 import {
   getUnsupportedMacOsSettingMessage,
   isMacOsSettingSupported,
@@ -79,7 +80,7 @@ export async function handleSettingsCommand(
   } = parsed;
   const unsupported = requireCommandSupported('settings', device);
   if (unsupported) return unsupported;
-  if (device.platform === 'macos' && !isMacOsSettingSupported(setting)) {
+  if (isMacOs(device) && !isMacOsSettingSupported(setting)) {
     return errorResponse('INVALID_ARGS', getUnsupportedMacOsSettingMessage(setting));
   }
 

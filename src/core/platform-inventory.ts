@@ -1,4 +1,10 @@
-import type { DeviceInfo, DeviceTarget, PlatformSelector } from '../kernel/device.ts';
+import {
+  isIosFamily,
+  isMacOs,
+  type DeviceInfo,
+  type DeviceTarget,
+  type PlatformSelector,
+} from '../kernel/device.ts';
 
 export const LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS = ['android', 'apple', 'linux'] as const;
 
@@ -98,7 +104,7 @@ function emptyDeviceInventoryGroupCounts(): DeviceInventoryGroupCounts {
 }
 
 function deviceInventoryGroupForDevice(device: DeviceInfo): DeviceInventoryGroup {
-  if (device.platform === 'ios' || device.platform === 'macos') return 'apple';
+  if (isIosFamily(device) || isMacOs(device)) return 'apple';
   return device.platform;
 }
 

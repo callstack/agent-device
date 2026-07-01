@@ -1,5 +1,5 @@
 import { withRetry } from '../../../../utils/retry.ts';
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import { isIosFamily, type DeviceInfo } from '../../../../kernel/device.ts';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
 import { type RunnerSessionOptions, validateRunnerDevice } from './runner-session.ts';
 import {
@@ -68,7 +68,7 @@ export function prewarmAppleRunnerCache(
   device: DeviceInfo,
   options: PrewarmIosRunnerOptions = {},
 ): Promise<void> | undefined {
-  if (device.platform !== 'ios') {
+  if (!isIosFamily(device)) {
     return undefined;
   }
   return runBestEffortIosRunnerPrewarm({
@@ -85,7 +85,7 @@ export function prewarmIosRunnerSession(
   device: DeviceInfo,
   options: PrewarmIosRunnerOptions = {},
 ): Promise<void> | undefined {
-  if (device.platform !== 'ios') {
+  if (!isIosFamily(device)) {
     return undefined;
   }
   const provider = resolveAppleRunnerRuntime(device, options);

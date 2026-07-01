@@ -98,7 +98,7 @@ test('close --shutdown calls shutdownSimulator for iOS simulator and includes re
   sessionStore.set(
     sessionName,
     makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-udid-1',
       name: 'iPhone 15',
       kind: 'simulator',
@@ -230,7 +230,7 @@ test('close --shutdown is ignored for non-simulator iOS devices', async () => {
   sessionStore.set(
     sessionName,
     makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'physical-device-1',
       name: 'My iPhone',
       kind: 'device',
@@ -281,7 +281,7 @@ test('close stops active Apple xctrace perf capture before deleting session', as
   };
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-udid-4',
       name: 'iPhone 15',
       kind: 'simulator',
@@ -330,7 +330,7 @@ test('daemon session teardown stops active Apple xctrace perf capture', async ()
   };
   const session = {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-udid-5',
       name: 'iPhone 15',
       kind: 'simulator',
@@ -402,7 +402,8 @@ test('close stops active host audio probe before deleting session', async () => 
   const kill = vi.fn();
   const session = {
     ...makeSession(sessionName, {
-      platform: 'macos',
+      platform: 'apple',
+      appleOs: 'macos',
       id: 'macos',
       name: 'Mac',
       kind: 'device',
@@ -680,7 +681,7 @@ test('close --shutdown returns success and failure payload when shutdownSimulato
   sessionStore.set(
     sessionName,
     makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-udid-3',
       name: 'iPhone 15',
       kind: 'simulator',

@@ -15,7 +15,7 @@ import { resolveAppleBackRunnerCommand } from '../../platforms/apple/interaction
 import { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 
 const iosSimulator: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'sim-1',
   name: 'iPhone Simulator',
   kind: 'simulator',
@@ -23,7 +23,7 @@ const iosSimulator: DeviceInfo = {
 };
 
 const tvOsSimulator: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'tv-sim-1',
   name: 'Apple TV',
   kind: 'simulator',

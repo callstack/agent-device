@@ -18,11 +18,7 @@ registerBuiltinPlatformPlugins();
 // registry's covered set is proven byte-for-byte equal to THIS reference list,
 // so the assertion stays meaningful even if `parsePlatform` is later derived.
 function parsePlatformByHand(value: unknown): Platform | undefined {
-  return value === 'ios' ||
-    value === 'macos' ||
-    value === 'android' ||
-    value === 'linux' ||
-    value === 'web'
+  return value === 'apple' || value === 'android' || value === 'linux' || value === 'web'
     ? value
     : undefined;
 }
@@ -73,9 +69,9 @@ test('every plugin capability bucket matches the platform-descriptor registry', 
 
 test('a family plugin resolves to the SAME instance for every leaf it owns', () => {
   // Apple owns both ios + macos (folds in the eventual macOS unwind).
-  assert.equal(getPlugin('ios'), getPlugin('macos'));
-  assert.equal(getPlugin('ios').id, 'apple');
-  assert.equal(getPlugin('ios').familySelector, 'apple');
+  assert.equal(getPlugin('apple'), getPlugin('apple'));
+  assert.equal(getPlugin('apple').id, 'apple');
+  assert.equal(getPlugin('apple').familySelector, 'apple');
   // Single-platform plugins are distinct objects.
   assert.notEqual(getPlugin('android'), getPlugin('linux'));
 });

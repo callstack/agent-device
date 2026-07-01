@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
+  isIosFamily,
+  isMacOs,
   DEVICE_TARGETS,
   PLATFORMS,
   type DeviceInfo,
@@ -35,7 +37,7 @@ registerBuiltinPlatformPlugins();
 
 // --- INDEPENDENT verbatim copy of the former `supportsPlatformPerfMetrics` branch ---
 function supportsPlatformPerfMetricsByHand(device: DeviceInfo): boolean {
-  return device.platform === 'android' || device.platform === 'ios' || device.platform === 'macos';
+  return device.platform === 'android' || isIosFamily(device) || isMacOs(device);
 }
 
 // --- the exhaustive synthetic device matrix (every platform x kind x target) ---
@@ -87,8 +89,8 @@ test('perf.supportsMetrics facet is byte-identical to the former hand predicate'
 
 test('only families with perf metrics carry the perf facet', () => {
   // Apple owns ios + macos (SAME plugin instance); Android carries its own.
-  assert.equal(getPlugin('ios'), getPlugin('macos'));
-  assert.ok(getPlugin('ios').perf, 'apple plugin exposes perf');
+  assert.equal(getPlugin('apple'), getPlugin('apple'));
+  assert.ok(getPlugin('apple').perf, 'apple plugin exposes perf');
   assert.ok(getPlugin('android').perf, 'android plugin exposes perf');
   // linux/web historically returned `false`; they get NO facet, and the daemon
   // lookup preserves that fallthrough (asserted below).

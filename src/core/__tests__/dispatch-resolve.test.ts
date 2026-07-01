@@ -24,7 +24,7 @@ import type { DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
 
 const physical: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'phys-1',
   name: 'My iPhone',
   kind: 'device',
@@ -33,7 +33,7 @@ const physical: DeviceInfo = {
 };
 
 const simulator: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'sim-1',
   name: 'iPhone 16',
   kind: 'simulator',
@@ -42,7 +42,7 @@ const simulator: DeviceInfo = {
 };
 
 const bootedSimulator: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'sim-2',
   name: 'iPhone 15',
   kind: 'simulator',
@@ -175,7 +175,8 @@ test('resolveTargetDevice resolves web through generic inventory without Apple f
 test('resolveTargetDevice fast-paths explicit macOS without Apple mobile discovery', async () => {
   const result = await resolveTargetDevice({ platform: 'macos' });
 
-  assert.equal(result.platform, 'macos');
+  assert.equal(result.platform, 'apple');
+  assert.equal(result.appleOs, 'macos');
   assert.equal(result.id, 'host-macos-local');
   assert.equal(mockListAppleDevices.mock.calls.length, 0);
 });
@@ -187,7 +188,8 @@ test('resolveTargetDevice fast-paths Apple desktop target without simulator-set 
     iosSimulatorDeviceSet: '/tmp/simulators',
   });
 
-  assert.equal(result.platform, 'macos');
+  assert.equal(result.platform, 'apple');
+  assert.equal(result.appleOs, 'macos');
   assert.equal(result.target, 'desktop');
   assert.equal(mockListAppleDevices.mock.calls.length, 0);
 });

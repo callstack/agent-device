@@ -19,7 +19,7 @@ export function markPostGestureStabilization(
   positionals: string[] = [],
   flags?: CommandFlags,
 ): void {
-  if (!supportsPostGestureStabilization(session.device.platform)) return;
+  if (!supportsPostGestureStabilization(session.device)) return;
   if (!isPostGestureStabilizingAction(action, positionals, flags)) return;
   session.postGestureStabilization = {
     action,
@@ -40,7 +40,7 @@ export async function capturePostGestureStabilizedResult<T>(params: {
 }): Promise<T> {
   const { session, capture } = params;
   const pending = session?.postGestureStabilization;
-  if (!session || !supportsPostGestureStabilization(session.device.platform) || !pending) {
+  if (!session || !supportsPostGestureStabilization(session.device) || !pending) {
     return params.initial ?? (await capture());
   }
 
@@ -97,6 +97,6 @@ function isPostGestureStabilizingAction(
   return action === 'gesture' && positionals[0] === 'swipe';
 }
 
-function supportsPostGestureStabilization(platform: SessionState['device']['platform']): boolean {
-  return isMobilePlatform(platform);
+function supportsPostGestureStabilization(device: SessionState['device']): boolean {
+  return isMobilePlatform(device);
 }

@@ -41,7 +41,8 @@ function makeMacOsMenubarSession(name: string): SessionState {
   return {
     name,
     device: {
-      platform: 'macos',
+      platform: 'apple',
+      appleOs: 'macos',
       id: 'host-macos-local',
       name: 'Mac',
       kind: 'device',

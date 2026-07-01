@@ -8,7 +8,7 @@ test('--platform enumValues are derived from the canonical PLATFORM_SELECTORS tu
   assert.ok(platformFlag, 'expected a --platform flag definition');
   assert.deepEqual(platformFlag.enumValues, [...PLATFORM_SELECTORS]);
   // Guard the exact membership that today's CLI accepts so the derivation cannot drift.
-  assert.deepEqual(platformFlag.enumValues, ['ios', 'macos', 'android', 'linux', 'web', 'apple']);
+  assert.deepEqual(platformFlag.enumValues, ['apple', 'android', 'linux', 'web', 'ios', 'macos']);
 });
 
 test('--platform usageLabel lists the same selectors as enumValues', () => {

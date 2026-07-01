@@ -5,14 +5,14 @@ import { matchesPlatformSelector, type DeviceInfo } from '../../kernel/device.ts
 import { WEB_DESKTOP_DEVICE } from '../../__tests__/test-utils/index.ts';
 
 const iosSimulator: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'sim-1',
   name: 'iPhone',
   kind: 'simulator',
 };
 
 const iosDevice: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'dev-1',
   name: 'iPhone',
   kind: 'device',
@@ -33,7 +33,8 @@ const androidEmulator: DeviceInfo = {
 };
 
 const macOsDevice: DeviceInfo = {
-  platform: 'macos',
+  platform: 'apple',
+  appleOs: 'macos',
   id: 'mac-1',
   name: 'Mac',
   kind: 'device',
@@ -51,7 +52,7 @@ const linuxDevice: DeviceInfo = {
 const webDevice = WEB_DESKTOP_DEVICE;
 
 const tvOsSimulator: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'tv-sim-1',
   name: 'Apple TV',
   kind: 'simulator',
@@ -458,8 +459,8 @@ test('audio probe support is limited to browser and host-rendered audio targets'
 });
 
 test('apple selector does not match web platform', () => {
-  assert.equal(matchesPlatformSelector(webDevice.platform, 'apple'), false);
-  assert.equal(matchesPlatformSelector(webDevice.platform, 'web'), true);
+  assert.equal(matchesPlatformSelector(webDevice, 'apple'), false);
+  assert.equal(matchesPlatformSelector(webDevice, 'web'), true);
 });
 
 test('unknown commands default to supported', () => {

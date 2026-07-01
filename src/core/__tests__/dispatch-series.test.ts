@@ -9,7 +9,7 @@ import {
 import { AppError } from '../../kernel/errors.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 
-const iosDevice: DeviceInfo = { platform: 'ios', id: 'test', name: 'iPhone', kind: 'simulator' };
+const iosDevice: DeviceInfo = { platform: 'apple', id: 'test', name: 'iPhone', kind: 'simulator' };
 const androidDevice: DeviceInfo = {
   platform: 'android',
   id: 'emu',

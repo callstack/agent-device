@@ -47,7 +47,7 @@ beforeEach(() => {
 
 test('dispatch open rejects URL as first argument when second URL is provided', async () => {
   const device: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 15',
     kind: 'simulator',

@@ -1932,7 +1932,8 @@ test('click --button secondary on @ref dispatches a secondary press on macOS and
   const sessionName = 'default';
   const session = makeSession(sessionName);
   session.device = {
-    platform: 'macos',
+    platform: 'apple',
+    appleOs: 'macos',
     id: 'macos-desktop',
     name: 'My Mac',
     kind: 'device',
@@ -1992,7 +1993,8 @@ test('click --button middle on macOS fails with an explicit unsupported-operatio
   const sessionName = 'default';
   const session = makeSession(sessionName);
   session.device = {
-    platform: 'macos',
+    platform: 'apple',
+    appleOs: 'macos',
     id: 'macos-desktop',
     name: 'My Mac',
     kind: 'device',

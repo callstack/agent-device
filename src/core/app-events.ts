@@ -1,5 +1,7 @@
-import type { DeviceInfo } from '../kernel/device.ts';
+import { isIosFamily, isMacOs, publicPlatformString, type DeviceInfo } from '../kernel/device.ts';
 import { AppError } from '../kernel/errors.ts';
+
+type AppEventDevice = Pick<DeviceInfo, 'platform' | 'appleOs'>;
 
 const APP_EVENT_NAME_PATTERN = /^[A-Za-z0-9_.:-]{1,64}$/;
 const MAX_APP_EVENT_PAYLOAD_BYTES = 8 * 1024;
@@ -32,11 +34,12 @@ export function parseTriggerAppEventArgs(positionals: string[]): {
 }
 
 export function resolveAppEventUrl(
-  platform: DeviceInfo['platform'],
+  device: AppEventDevice,
   eventName: string,
   payload?: AppEventPayload,
 ): string {
-  const template = readAppEventUrlTemplate(platform);
+  const platform = publicPlatformString(device);
+  const template = readAppEventUrlTemplate(device);
   if (!template) {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
@@ -89,13 +92,12 @@ function parseTriggerEventPayload(
   }
 }
 
-function readAppEventUrlTemplate(platform: DeviceInfo['platform']): string | undefined {
-  const platformSpecific =
-    platform === 'ios'
-      ? process.env.AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE
-      : platform === 'macos'
-        ? process.env.AGENT_DEVICE_MACOS_APP_EVENT_URL_TEMPLATE
-        : process.env.AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE;
+function readAppEventUrlTemplate(device: AppEventDevice): string | undefined {
+  const platformSpecific = isIosFamily(device)
+    ? process.env.AGENT_DEVICE_IOS_APP_EVENT_URL_TEMPLATE
+    : isMacOs(device)
+      ? process.env.AGENT_DEVICE_MACOS_APP_EVENT_URL_TEMPLATE
+      : process.env.AGENT_DEVICE_ANDROID_APP_EVENT_URL_TEMPLATE;
   const candidate = platformSpecific ?? process.env.AGENT_DEVICE_APP_EVENT_URL_TEMPLATE;
   const trimmed = candidate?.trim();
   return trimmed ? trimmed : undefined;

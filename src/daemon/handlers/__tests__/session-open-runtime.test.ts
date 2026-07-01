@@ -162,7 +162,7 @@ test('open applies launch-only flags only to the direct app launch before runtim
     launchUrl: 'myapp://dev-client',
   });
   mockResolveTargetDevice.mockResolvedValue({
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 15',
     kind: 'simulator',

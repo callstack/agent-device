@@ -20,7 +20,7 @@ function makeIosSimulatorSession(showTouches: boolean): SessionState {
     createdAt: Date.now(),
     actions: [],
     device: {
-      platform: 'ios',
+      platform: 'apple',
       target: 'mobile',
       id: 'sim-1',
       name: 'iPhone 17 Pro',

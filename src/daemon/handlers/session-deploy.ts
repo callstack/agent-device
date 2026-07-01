@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import { installProviderDeviceApp } from '../../provider-device-runtime.ts';
 import { cleanupUploadedArtifact, prepareUploadedArtifact } from '../artifact-tracking.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import { isIosFamily, type DeviceInfo } from '../../kernel/device.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { recordSessionAction } from './handler-utils.ts';
@@ -154,10 +154,9 @@ export async function handleAppDeployCommand(params: {
     const unsupported = requireCommandSupported(command, device);
     if (unsupported) return unsupported;
 
-    const result =
-      device.platform === 'ios'
-        ? buildIosDeployResult(app, appPath, await deployOps.ios(device, app, appPath))
-        : buildAndroidDeployResult(app, appPath, await deployOps.android(device, app, appPath));
+    const result = isIosFamily(device)
+      ? buildIosDeployResult(app, appPath, await deployOps.ios(device, app, appPath))
+      : buildAndroidDeployResult(app, appPath, await deployOps.android(device, app, appPath));
 
     const data = withSuccessText(result, buildDeployMessage(result));
     recordSessionAction(sessionStore, session, req, command, data);

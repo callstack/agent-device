@@ -32,7 +32,7 @@ beforeEach(() => {
 
 test('shutdownDeviceTarget treats already-stopped targets as success', async () => {
   const device: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone',
     kind: 'simulator',
@@ -51,7 +51,7 @@ test('shutdownDeviceTarget treats already-stopped targets as success', async () 
 
 test('shutdownDeviceTarget treats iOS Shutdown final state as success', async () => {
   const device: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone',
     kind: 'simulator',
@@ -76,7 +76,7 @@ test('shutdownDeviceTarget treats iOS Shutdown final state as success', async ()
 
 test('shutdownDeviceTarget preserves iOS shutdown failure when final state probe fails', async () => {
   const device: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone',
     kind: 'simulator',

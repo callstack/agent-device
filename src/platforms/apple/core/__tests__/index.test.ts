@@ -86,7 +86,7 @@ import { retryWithPolicy } from '../../../../utils/retry.ts';
 import { parseIosDeviceAppsPayload, parseIosDeviceProcessesPayload } from '../devicectl.ts';
 
 const IOS_TEST_DEVICE: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'ios-device-1',
   name: 'iPhone Device',
   kind: 'device',
@@ -94,7 +94,7 @@ const IOS_TEST_DEVICE: DeviceInfo = {
 };
 
 const IOS_TEST_SIMULATOR: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'sim-1',
   name: 'iPhone 17 Pro',
   kind: 'simulator',
@@ -102,7 +102,8 @@ const IOS_TEST_SIMULATOR: DeviceInfo = {
 };
 
 const MACOS_TEST_DEVICE: DeviceInfo = {
-  platform: 'macos',
+  platform: 'apple',
+  appleOs: 'macos',
   id: 'host-macos-local',
   name: 'Mac',
   kind: 'device',
@@ -111,7 +112,7 @@ const MACOS_TEST_DEVICE: DeviceInfo = {
 };
 
 const TVOS_TEST_SIMULATOR: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'tvos-sim-1',
   name: 'Apple TV',
   kind: 'simulator',
@@ -528,7 +529,7 @@ fi
 
 test('openIosApp custom scheme deep links on iOS devices require app bundle context', async () => {
   const device: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'ios-device-1',
     name: 'iPhone Device',
     kind: 'device',
@@ -1313,7 +1314,7 @@ test('openIosApp web URL on iOS device without app falls back to Safari', async 
   process.env.AGENT_DEVICE_TEST_ARGS_FILE = argsLogPath;
 
   const device: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'ios-device-1',
     name: 'iPhone Device',
     kind: 'device',
@@ -1362,7 +1363,7 @@ test('openIosApp custom scheme on iOS device uses active app context', async () 
   process.env.AGENT_DEVICE_TEST_ARGS_FILE = argsLogPath;
 
   const device: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'ios-device-1',
     name: 'iPhone Device',
     kind: 'device',
@@ -2154,7 +2155,7 @@ test('openIosApp with app and URL on iOS device launches app bundle with payload
   process.env.AGENT_DEVICE_TEST_ARGS_FILE = argsLogPath;
 
   const device: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'ios-device-1',
     name: 'iPhone Device',
     kind: 'device',
@@ -2218,7 +2219,7 @@ test('pushIosNotification uses simctl push with temporary payload file', async (
   process.env.AGENT_DEVICE_TEST_PAYLOAD_FILE = payloadCapturePath;
 
   const device: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone',
     kind: 'simulator',
@@ -2345,7 +2346,7 @@ test('resolveIosApp resolves app display name on iOS physical devices', async ()
   process.env.PATH = `${tmpDir}${path.delimiter}${previousPath ?? ''}`;
 
   const device: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'ios-device-1',
     name: 'iPhone Device',
     kind: 'device',
@@ -2389,7 +2390,7 @@ test('resolveIosApp caches display-name bundle matches but bypasses exact bundle
   process.env.AGENT_DEVICE_TEST_ARGS_FILE = argsLogPath;
 
   const device: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-cache-1',
     name: 'iPhone Cache',
     kind: 'simulator',
@@ -2527,7 +2528,7 @@ test('installIosInstallablePath invalidates cached display-name bundle matches',
   process.env.AGENT_DEVICE_TEST_INSTALL_MARKER = markerPath;
 
   const device: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-cache-install-1',
     name: 'iPhone Cache',
     kind: 'simulator',
@@ -2573,7 +2574,7 @@ exit 1
 `,
     async ({ argsLogPath }) => {
       const device: DeviceInfo = {
-        platform: 'ios',
+        platform: 'apple',
         id: 'sim-1',
         name: 'iPhone Sim',
         kind: 'simulator',
@@ -2610,7 +2611,7 @@ exit 1
 `,
     async ({ argsLogPath }) => {
       const device: DeviceInfo = {
-        platform: 'ios',
+        platform: 'apple',
         id: 'sim-1',
         name: 'iPhone Sim',
         kind: 'simulator',
@@ -2645,7 +2646,7 @@ exit 1
 `,
     async ({ argsLogPath }) => {
       const device: DeviceInfo = {
-        platform: 'ios',
+        platform: 'apple',
         id: 'sim-1',
         name: 'iPhone Sim',
         kind: 'simulator',
@@ -2685,7 +2686,7 @@ exit 1
 `,
     async ({ argsLogPath }) => {
       const device: DeviceInfo = {
-        platform: 'ios',
+        platform: 'apple',
         id: 'sim-1',
         name: 'iPhone Sim',
         kind: 'simulator',
@@ -2716,7 +2717,7 @@ exit 1
 `,
     async () => {
       const device: DeviceInfo = {
-        platform: 'ios',
+        platform: 'apple',
         id: 'sim-1',
         name: 'iPhone Sim',
         kind: 'simulator',
@@ -2750,7 +2751,7 @@ exit 1
 `,
     async () => {
       const device: DeviceInfo = {
-        platform: 'ios',
+        platform: 'apple',
         id: 'sim-1',
         name: 'iPhone Sim',
         kind: 'simulator',
@@ -2922,7 +2923,7 @@ exit 1
 `,
     async ({ argsLogPath }) => {
       const device: DeviceInfo = {
-        platform: 'ios',
+        platform: 'apple',
         id: 'sim-1',
         name: 'iPhone Sim',
         kind: 'simulator',
@@ -2955,7 +2956,7 @@ exit 0
 `,
     async () => {
       const device: DeviceInfo = {
-        platform: 'ios',
+        platform: 'apple',
         id: 'sim-1',
         name: 'iPhone Sim',
         kind: 'simulator',
@@ -2994,7 +2995,7 @@ exit 1
 `,
     async ({ argsLogPath }) => {
       const device: DeviceInfo = {
-        platform: 'ios',
+        platform: 'apple',
         id: 'sim-1',
         name: 'iPhone Sim',
         kind: 'simulator',
@@ -3079,7 +3080,7 @@ exit 1
 `,
     async ({ argsLogPath }) => {
       const device: DeviceInfo = {
-        platform: 'ios',
+        platform: 'apple',
         id: 'sim-1',
         name: 'iPhone Sim',
         kind: 'simulator',
@@ -3110,7 +3111,7 @@ exit 1
 `,
     async () => {
       const device: DeviceInfo = {
-        platform: 'ios',
+        platform: 'apple',
         id: 'sim-1',
         name: 'iPhone Sim',
         kind: 'simulator',
@@ -3158,7 +3159,7 @@ exit 1
 `,
     async ({ argsLogPath }) => {
       const device: DeviceInfo = {
-        platform: 'ios',
+        platform: 'apple',
         id: 'sim-1',
         name: 'iPhone Sim',
         kind: 'simulator',
@@ -3208,7 +3209,7 @@ exit 1
 `,
     async ({ argsLogPath }) => {
       const device: DeviceInfo = {
-        platform: 'ios',
+        platform: 'apple',
         id: 'sim-1',
         name: 'iPhone Sim',
         kind: 'simulator',
@@ -3264,7 +3265,7 @@ exit 1
 `,
     async ({ argsLogPath }) => {
       const device: DeviceInfo = {
-        platform: 'ios',
+        platform: 'apple',
         id: 'sim-1',
         name: 'iPhone Sim',
         kind: 'simulator',

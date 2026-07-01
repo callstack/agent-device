@@ -10,7 +10,7 @@ import type { DeviceInfo } from '../../../../kernel/device.ts';
 
 function iosSim(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
   return {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 16',
     kind: 'simulator',
@@ -45,7 +45,7 @@ test('resolveRunnerPlatformName maps visionOS appleOs to the visionOS profile', 
 
 test('resolveRunnerPlatformName maps macOS appleOs to the macOS profile', () => {
   const mac: DeviceInfo = {
-    platform: 'macos',
+    platform: 'apple',
     id: 'host-macos-local',
     name: 'Studio Mac',
     kind: 'device',
@@ -88,7 +88,7 @@ test('existing platform xctestrun disallowed hints stay unchanged when visionOS 
   );
   assert.deepEqual(
     resolveRunnerXctestrunHints({
-      platform: 'macos',
+      platform: 'apple',
       id: 'host-macos-local',
       name: 'Studio Mac',
       kind: 'device',

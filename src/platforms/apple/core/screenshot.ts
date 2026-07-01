@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs';
 import path from 'node:path';
-import type { DeviceInfo } from '../../../kernel/device.ts';
+import { isMacOs, type DeviceInfo } from '../../../kernel/device.ts';
 import { emitDiagnostic } from '../../../utils/diagnostics.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import type { ExecOptions } from '../../../utils/exec.ts';
@@ -61,7 +61,7 @@ export async function screenshotIos(
   outPath: string,
   options: Omit<SimulatorScreenshotFlowOptions, 'deps'> = {},
 ): Promise<void> {
-  if (device.platform === 'macos') {
+  if (isMacOs(device)) {
     await captureScreenshotViaRunner(
       device,
       outPath,
@@ -211,7 +211,7 @@ export async function captureScreenshotViaRunner(
     );
   }
 
-  if (device.platform === 'macos') {
+  if (isMacOs(device)) {
     await fs.copyFile(remoteFileName, outPath);
     return;
   }

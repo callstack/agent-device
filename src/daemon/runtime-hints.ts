@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '../kernel/device.ts';
+import { isIosFamily, type DeviceInfo } from '../kernel/device.ts';
 import { AppError, asAppError } from '../kernel/errors.ts';
 import type { SessionRuntimeHints } from './types.ts';
 import {
@@ -54,7 +54,7 @@ export async function applyRuntimeHintsToApp(params: {
     return;
   }
 
-  if (device.platform === 'ios' && device.kind === 'simulator') {
+  if (isIosFamily(device) && device.kind === 'simulator') {
     await applyIosSimulatorRuntimeHints(device, appId, transport);
   }
 }
@@ -71,7 +71,7 @@ export async function clearRuntimeHintsFromApp(params: {
     return;
   }
 
-  if (device.platform === 'ios' && device.kind === 'simulator') {
+  if (isIosFamily(device) && device.kind === 'simulator') {
     await clearIosSimulatorRuntimeHints(device, appId);
   }
 }

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
+  isIosFamily,
+  isMacOs,
   DEVICE_TARGETS,
   PLATFORMS,
   type DeviceInfo,
@@ -33,8 +35,8 @@ registerBuiltinPlatformPlugins();
 
 // --- INDEPENDENT verbatim copy of the former `resolveLogBackend` hand branch ---
 function resolveLogBackendByHand(device: DeviceInfo): LogBackend {
-  if (device.platform === 'macos') return 'macos';
-  if (device.platform === 'ios') {
+  if (isMacOs(device)) return 'macos';
+  if (isIosFamily(device)) {
     return device.kind === 'device' ? 'ios-device' : 'ios-simulator';
   }
   return 'android';
@@ -89,8 +91,8 @@ test('resolveLogBackend routed through the plugin is byte-identical to the forme
 
 test('only families with an app-log backend carry the appLog facet', () => {
   // Apple owns ios + macos (SAME plugin instance); Android carries its own.
-  assert.equal(getPlugin('ios'), getPlugin('macos'));
-  assert.ok(getPlugin('ios').appLog, 'apple plugin exposes appLog');
+  assert.equal(getPlugin('apple'), getPlugin('apple'));
+  assert.ok(getPlugin('apple').appLog, 'apple plugin exposes appLog');
   assert.ok(getPlugin('android').appLog, 'android plugin exposes appLog');
   // linux/web historically fell through to the `'android'` default; they get NO
   // facet, and the daemon lookup preserves that fallthrough (asserted below).
@@ -100,7 +102,7 @@ test('only families with an app-log backend carry the appLog facet', () => {
 
 test('each populated appLog facet resolves the backend its family owns', () => {
   for (const device of SAMPLE_DEVICES.filter(
-    (d) => d.platform === 'ios' || d.platform === 'macos' || d.platform === 'android',
+    (d) => isIosFamily(d) || isMacOs(d) || d.platform === 'android',
   )) {
     assert.equal(
       getPlugin(device.platform).appLog?.resolveBackend(device),

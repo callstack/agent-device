@@ -1,4 +1,4 @@
-import { isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
+import { isIosFamily, isMacOs, isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
 import { assertScrollGestureInput, type ScrollDirection } from '../../core/scroll-gesture.ts';
 import { normalizeScrollDurationMs, SCROLL_DURATION_MAX_MS } from '../../core/scroll-command.ts';
 import { runAppleRunnerCommand } from './core/runner/runner-client.ts';
@@ -268,7 +268,7 @@ function iosTapCommand(
 
 function shouldUseSynthesizedIosGesture(device: DeviceInfo): boolean {
   // Two-finger HID synthesis is for touch-input iOS only; the tvOS leaf has no touch.
-  return device.platform === 'ios' && !isTvOsDevice(device);
+  return isIosFamily(device) && !isTvOsDevice(device);
 }
 
 function iosDragCommand(
@@ -282,7 +282,7 @@ function iosDragCommand(
   options: IosDragCommandOptions,
 ): RunnerCommand {
   const normalizedDurationMs =
-    device.platform === 'ios' && !isTvOsDevice(device)
+    isIosFamily(device) && !isTvOsDevice(device)
       ? iosGestureDurationMs(durationMs, options.defaultDurationMs)
       : (durationMs ?? options.legacyDefaultDurationMs);
   return {
@@ -335,7 +335,7 @@ async function runAppleScroll(
   // could cost one runner request first).
   assertScrollGestureInput(options ?? {});
 
-  if (device.platform === 'macos') {
+  if (isMacOs(device)) {
     return await runMacosDesktopScroll(
       runRunnerCommand,
       device,

@@ -7,7 +7,7 @@ import {
   type SessionSelectorConflict,
   type SessionSelectorConflictKey,
 } from './session-selector.ts';
-import { isApplePlatform, type PlatformSelector } from '../kernel/device.ts';
+import { isApplePlatform, publicPlatformString, type PlatformSelector } from '../kernel/device.ts';
 import { buildSessionRecoveryHint, describeSessionDevice } from './session-recovery-hints.ts';
 import { shellQuoteIfNeeded } from '../utils/shell-quote.ts';
 import { hasLockableDeviceSelector, hasSelectorValue } from './device-selector-intent.ts';
@@ -124,7 +124,9 @@ function applyStripLockPolicy(
 ): void {
   if (existingSession) {
     stripSessionConflicts(flags, conflicts);
-    flags.platform = existingSession.device.platform;
+    // approach (b): backfill the request selector with the PUBLIC leaf platform, not
+    // the internal `apple` — the leaf selector still matches the session's Apple device.
+    flags.platform = publicPlatformString(existingSession.device);
     return;
   }
   stripSessionConflicts(flags, conflicts);

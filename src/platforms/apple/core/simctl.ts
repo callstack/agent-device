@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '../../../kernel/device.ts';
+import { isIosFamily, type DeviceInfo } from '../../../kernel/device.ts';
 import type { ExecOptions, ExecResult } from '../../../utils/exec.ts';
 import { resolveIosSimulatorDeviceSetPath } from '../../../utils/device-isolation.ts';
 import { runXcrun } from './tool-provider.ts';
@@ -14,7 +14,7 @@ export function buildSimctlArgs(args: string[], options: SimctlArgsOptions = {})
 }
 
 export function buildSimctlArgsForDevice(device: DeviceInfo, args: string[]): string[] {
-  if (device.platform !== 'ios' || device.kind !== 'simulator') {
+  if (!isIosFamily(device) || device.kind !== 'simulator') {
     return ['simctl', ...args];
   }
   return buildSimctlArgs(args, { simulatorSetPath: device.simulatorSetPath });

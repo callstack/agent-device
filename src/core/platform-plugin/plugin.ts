@@ -96,8 +96,8 @@ export type PlatformPlugin = {
 };
 
 // The single registry instance: leaf platform -> owning plugin. A family plugin
-// is registered once per leaf platform it owns, so `getPlugin('ios')` and
-// `getPlugin('macos')` resolve to the SAME Apple plugin object.
+// is registered once per leaf platform it owns, so `getPlugin('apple')` and
+// `getPlugin('apple')` resolve to the SAME Apple plugin object.
 const registry = new Map<Platform, PlatformPlugin>();
 
 /**

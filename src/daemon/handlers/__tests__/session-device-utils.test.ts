@@ -10,7 +10,7 @@ const iosSimulatorSession: SessionState = {
   name: 'ios-sim',
   createdAt: Date.now(),
   device: {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 17 Pro',
     kind: 'simulator',

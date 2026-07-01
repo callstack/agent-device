@@ -146,7 +146,7 @@ async function withMockedXcrun(
   process.env.AGENT_DEVICE_TEST_ARGS_FILE = argsLogPath;
 
   const device: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 17 Pro',
     kind: 'simulator',

@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '../kernel/device.ts';
+import { isIosFamily, type DeviceInfo } from '../kernel/device.ts';
 import os from 'node:os';
 import path from 'node:path';
 import { promises as fs } from 'node:fs';
@@ -39,7 +39,7 @@ export async function ensureDeviceReady(
     readyCache.delete(cacheKey);
   }
 
-  if (device.platform === 'ios') {
+  if (isIosFamily(device)) {
     if (device.kind === 'simulator') {
       const { ensureBootedSimulator } = await import('../platforms/apple/core/simulator.ts');
       await ensureBootedSimulator(device, {

@@ -1,5 +1,5 @@
 import fs from 'node:fs';
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import { isMacOs, type DeviceInfo } from '../../../../kernel/device.ts';
 import { AppError } from '../../../../kernel/errors.ts';
 import { runAppleToolCommand } from '../tool-provider.ts';
 
@@ -13,7 +13,7 @@ export async function repairMacOsRunnerProductsIfNeeded(
   productPaths: string[],
   xctestrunPath: string,
 ): Promise<void> {
-  if (device.platform !== 'macos') {
+  if (!isMacOs(device)) {
     return;
   }
   if (productPaths.length === 0) {

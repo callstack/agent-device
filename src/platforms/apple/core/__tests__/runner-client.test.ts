@@ -71,7 +71,7 @@ import {
 import { parseRunnerResponse } from '../runner/runner-session.ts';
 
 const iosSimulator: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'sim-1',
   name: 'iPhone Simulator',
   kind: 'simulator',
@@ -79,7 +79,7 @@ const iosSimulator: DeviceInfo = {
 };
 
 const iosDevice: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: '00008110-000E12341234002E',
   name: 'iPhone',
   kind: 'device',
@@ -87,7 +87,7 @@ const iosDevice: DeviceInfo = {
 };
 
 const tvOsSimulator: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'tv-sim-1',
   name: 'Apple TV',
   kind: 'simulator',
@@ -96,7 +96,7 @@ const tvOsSimulator: DeviceInfo = {
 };
 
 const tvOsDevice: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: '00008120-000E12341234003F',
   name: 'Apple TV',
   kind: 'device',
@@ -105,7 +105,8 @@ const tvOsDevice: DeviceInfo = {
 };
 
 const macOsDevice: DeviceInfo = {
-  platform: 'macos',
+  platform: 'apple',
+  appleOs: 'macos',
   id: 'host-macos-local',
   name: 'Host Mac',
   kind: 'device',
@@ -453,12 +454,15 @@ test('resolveRunnerSigningBuildSettings returns empty args without env overrides
 });
 
 test('resolveRunnerSigningBuildSettings disables signing for macOS desktop builds', () => {
-  assert.deepEqual(resolveRunnerSigningBuildSettings({}, true, 'macos'), [
-    'CODE_SIGNING_ALLOWED=NO',
-    'CODE_SIGNING_REQUIRED=NO',
-    'CODE_SIGN_IDENTITY=',
-    'DEVELOPMENT_TEAM=',
-  ]);
+  assert.deepEqual(
+    resolveRunnerSigningBuildSettings({}, true, { platform: 'apple', appleOs: 'macos' }),
+    [
+      'CODE_SIGNING_ALLOWED=NO',
+      'CODE_SIGNING_REQUIRED=NO',
+      'CODE_SIGN_IDENTITY=',
+      'DEVELOPMENT_TEAM=',
+    ],
+  );
 });
 
 test('resolveRunnerSigningBuildSettings enables automatic signing for device builds without forcing identity', () => {

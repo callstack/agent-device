@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
+  isIosFamily,
+  isMacOs,
   DEVICE_TARGETS,
   PLATFORMS,
   type DeviceInfo,
@@ -101,27 +103,27 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
 // hand so this oracle stays INDEPENDENT of the descriptor it pins (mirrors the
 // `selectCapabilityByHandSwitch` copy in platform-descriptor/__tests__/parity.test.ts).
 // ---------------------------------------------------------------------------
-const isNotMacOs = (device: DeviceInfo): boolean => device.platform !== 'macos';
+const isNotMacOs = (device: DeviceInfo): boolean => !isMacOs(device);
 const isMacOsOrAppleSimulator = (device: DeviceInfo): boolean =>
-  device.platform === 'macos' || device.kind === 'simulator';
+  isMacOs(device) || device.kind === 'simulator';
 const isIosMobileSimulator = (device: DeviceInfo): boolean =>
-  device.platform === 'ios' && device.kind === 'simulator' && device.target !== 'tv';
+  isIosFamily(device) && device.kind === 'simulator' && device.target !== 'tv';
 const supportsSynthesisGesture = (device: DeviceInfo): boolean =>
   device.platform === 'android' || isIosMobileSimulator(device);
 const supportsAndroidOrIosNonTv = (device: DeviceInfo): boolean =>
-  device.platform === 'android' || (device.platform === 'ios' && device.target !== 'tv');
+  device.platform === 'android' || (isIosFamily(device) && device.target !== 'tv');
 const supportsHostAudioProbe = (device: DeviceInfo): boolean =>
   device.platform === 'web' ||
   (process.platform === 'darwin' &&
-    (device.platform === 'macos' ||
-      (device.platform === 'ios' && device.kind === 'simulator') ||
+    (isMacOs(device) ||
+      (isIosFamily(device) && device.kind === 'simulator') ||
       (device.platform === 'android' && device.kind === 'emulator')));
 const synthesisGestureUnsupportedHint = (device: DeviceInfo): string | undefined => {
-  if (device.platform === 'macos')
+  if (isMacOs(device))
     return 'macOS automation has no multi-touch input — this gesture is supported on Android and the iOS simulator only.';
-  if (device.platform === 'ios' && device.target === 'tv')
+  if (isIosFamily(device) && device.target === 'tv')
     return 'tvOS has no touch input — this gesture is supported on Android and the iOS simulator only.';
-  if (device.platform === 'ios' && device.kind === 'device')
+  if (isIosFamily(device) && device.kind === 'device')
     return 'Two-finger gesture synthesis is iOS-simulator only — not available on physical iOS devices.';
   return undefined;
 };
@@ -140,13 +142,13 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   clipboard: (device) =>
     device.platform === 'android' ||
     device.platform === 'linux' ||
-    device.platform === 'macos' ||
+    isMacOs(device) ||
     device.kind === 'simulator',
   keyboard: supportsAndroidOrIosNonTv,
   rotate: supportsAndroidOrIosNonTv,
   alert: (device) => device.platform === 'android' || isMacOsOrAppleSimulator(device),
   settings: (device) =>
-    device.platform === 'android' || device.platform === 'macos' || device.kind === 'simulator',
+    device.platform === 'android' || isMacOs(device) || device.kind === 'simulator',
   audio: supportsHostAudioProbe,
   pinch: supportsSynthesisGesture,
   'rotate-gesture': supportsSynthesisGesture,
@@ -235,7 +237,7 @@ test('(b.2) the Apple plugin carries exactly the relocated supports/hint closure
   // plugin (the family that owns every discriminating device). Pin the RELOCATED maps'
   // key sets against the independent verbatim reference so no closure was silently
   // dropped or added while moving off the command facet.
-  const appleCapability = getPlugin('ios').capability;
+  const appleCapability = getPlugin('apple').capability;
   assert.deepEqual(
     Object.keys(appleCapability.supportsByDefault ?? {}).sort(),
     Object.keys(SUPPORTS_REF).sort(),
@@ -247,14 +249,14 @@ test('(b.2) the Apple plugin carries exactly the relocated supports/hint closure
     'unsupportedHintByDefault key set equals the verbatim reference',
   );
   // ios and macos are the SAME Apple plugin instance, so both leaves read one map.
-  assert.equal(getPlugin('ios').capability, getPlugin('macos').capability);
+  assert.equal(getPlugin('apple').capability, getPlugin('apple').capability);
 });
 
 test('(b.2) the relocated Apple closures are byte-for-byte the verbatim originals', () => {
   // Closure-equivalence: for every command x sample-device, the closure now living on
   // the Apple plugin returns an identical boolean / identical hint STRING to the
   // independent verbatim copy of the original command-facet closure.
-  const appleCapability = getPlugin('ios').capability;
+  const appleCapability = getPlugin('apple').capability;
   for (const [command, reference] of Object.entries(SUPPORTS_REF)) {
     const relocated = appleCapability.supportsByDefault?.[command];
     assert.ok(relocated, `${command} supports closure present on the Apple plugin`);

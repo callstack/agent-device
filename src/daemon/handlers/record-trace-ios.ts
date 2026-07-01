@@ -1,3 +1,4 @@
+import { isIosFamily } from '../../kernel/device.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
@@ -27,7 +28,7 @@ function findOtherActiveIosRunnerRecording(
     .find(
       (session) =>
         session.name !== currentSessionName &&
-        session.device.platform === 'ios' &&
+        isIosFamily(session.device) &&
         session.device.kind === 'device' &&
         session.device.id === deviceId &&
         session.recording?.platform === 'ios-device-runner',

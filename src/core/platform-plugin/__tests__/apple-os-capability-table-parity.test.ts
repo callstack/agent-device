@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { isAudioProbeSupportedDevice } from '../../../kernel/audio-probe-support.ts';
 import {
+  isIosFamily,
+  isMacOs,
   DEVICE_TARGETS,
   PLATFORMS,
   type AppleOS,
@@ -41,21 +43,21 @@ registerBuiltinPlatformPlugins();
 // table read), kept BYTE-FOR-BYTE by hand so this oracle stays INDEPENDENT of the
 // table it pins (mirrors the copy in capability-plugin-routing-parity.test.ts).
 // ---------------------------------------------------------------------------
-const isNotMacOs = (device: DeviceInfo): boolean => device.platform !== 'macos';
+const isNotMacOs = (device: DeviceInfo): boolean => !isMacOs(device);
 const isMacOsOrAppleSimulator = (device: DeviceInfo): boolean =>
-  device.platform === 'macos' || device.kind === 'simulator';
+  isMacOs(device) || device.kind === 'simulator';
 const isIosMobileSimulator = (device: DeviceInfo): boolean =>
-  device.platform === 'ios' && device.kind === 'simulator' && device.target !== 'tv';
+  isIosFamily(device) && device.kind === 'simulator' && device.target !== 'tv';
 const supportsSynthesisGesture = (device: DeviceInfo): boolean =>
   device.platform === 'android' || isIosMobileSimulator(device);
 const supportsAndroidOrIosNonTv = (device: DeviceInfo): boolean =>
-  device.platform === 'android' || (device.platform === 'ios' && device.target !== 'tv');
+  device.platform === 'android' || (isIosFamily(device) && device.target !== 'tv');
 const synthesisGestureUnsupportedHint = (device: DeviceInfo): string | undefined => {
-  if (device.platform === 'macos')
+  if (isMacOs(device))
     return 'macOS automation has no multi-touch input — this gesture is supported on Android and the iOS simulator only.';
-  if (device.platform === 'ios' && device.target === 'tv')
+  if (isIosFamily(device) && device.target === 'tv')
     return 'tvOS has no touch input — this gesture is supported on Android and the iOS simulator only.';
-  if (device.platform === 'ios' && device.kind === 'device')
+  if (isIosFamily(device) && device.kind === 'device')
     return 'Two-finger gesture synthesis is iOS-simulator only — not available on physical iOS devices.';
   return undefined;
 };
@@ -71,13 +73,13 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   clipboard: (device) =>
     device.platform === 'android' ||
     device.platform === 'linux' ||
-    device.platform === 'macos' ||
+    isMacOs(device) ||
     device.kind === 'simulator',
   keyboard: supportsAndroidOrIosNonTv,
   rotate: supportsAndroidOrIosNonTv,
   alert: (device) => device.platform === 'android' || isMacOsOrAppleSimulator(device),
   settings: (device) =>
-    device.platform === 'android' || device.platform === 'macos' || device.kind === 'simulator',
+    device.platform === 'android' || isMacOs(device) || device.kind === 'simulator',
   // `audio` is NOT part of the AppleOS-table relocation — it stays the standalone
   // `isAudioProbeSupportedDevice` predicate. Included here only so the key-set
   // assertion stays strict (catches a dropped command) and confirms the rebase
@@ -169,7 +171,7 @@ test('resolveDeviceAppleOs prefers the stored discriminant, else infers from tar
 });
 
 test('table-driven Apple supports() closures are byte-for-byte the verbatim originals', () => {
-  const appleSupports = getPlugin('ios').capability.supportsByDefault;
+  const appleSupports = getPlugin('apple').capability.supportsByDefault;
   assert.ok(appleSupports, 'the Apple plugin carries supportsByDefault');
   // Every command that had an original predicate must still carry one, keyed the same.
   assert.deepEqual(Object.keys(appleSupports).sort(), Object.keys(SUPPORTS_REF).sort());
@@ -187,7 +189,7 @@ test('table-driven Apple supports() closures are byte-for-byte the verbatim orig
 });
 
 test('table-driven Apple unsupportedHint() closures are byte-for-byte the verbatim originals', () => {
-  const appleHints = getPlugin('ios').capability.unsupportedHintByDefault;
+  const appleHints = getPlugin('apple').capability.unsupportedHintByDefault;
   assert.ok(appleHints, 'the Apple plugin carries unsupportedHintByDefault');
   assert.deepEqual(Object.keys(appleHints).sort(), Object.keys(HINT_REF).sort());
   for (const [command, reference] of Object.entries(HINT_REF)) {

@@ -1,3 +1,4 @@
+import { isMacOs } from '../../../kernel/device.ts';
 import { test, expect, vi, beforeEach } from 'vitest';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
@@ -195,7 +196,7 @@ beforeEach(() => {
   mockResolveIosApp.mockImplementation(async (device, app) => {
     const normalizedApp = app.toLowerCase();
     if (normalizedApp === 'settings') {
-      return device.platform === 'macos' ? 'com.apple.systempreferences' : 'com.apple.Preferences';
+      return isMacOs(device) ? 'com.apple.systempreferences' : 'com.apple.Preferences';
     }
     if (normalizedApp === 'menubarapp') {
       return 'com.example.menubarapp';
@@ -263,7 +264,7 @@ test('devices filters Apple-family platform selectors', async () => {
   ]);
   mockListAppleDevices.mockResolvedValue([
     {
-      platform: 'ios' as const,
+      platform: 'apple' as const,
       id: 'sim-1',
       name: 'iPhone 17 Pro',
       kind: 'simulator' as const,
@@ -271,7 +272,8 @@ test('devices filters Apple-family platform selectors', async () => {
       booted: true,
     },
     {
-      platform: 'macos' as const,
+      platform: 'apple',
+      appleOs: 'macos' as const,
       id: 'host-macos-local',
       name: 'Host Mac',
       kind: 'device' as const,
@@ -321,7 +323,7 @@ test('devices omits internal appleOs from the public inventory projection', asyn
   mockListAndroidDevices.mockResolvedValue([]);
   mockListAppleDevices.mockResolvedValue([
     {
-      platform: 'ios' as const,
+      platform: 'apple' as const,
       id: 'sim-1',
       name: 'iPad Pro 11-inch (M4)',
       kind: 'simulator' as const,
@@ -729,7 +731,7 @@ test('close clears applied runtime transport hints before deleting the session',
   });
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone 17 Pro',
       kind: 'simulator',
@@ -763,7 +765,7 @@ test('close clears retained materialized install paths bound to the session', as
   const sessionName = 'materialized-close-active';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone 17 Pro',
       kind: 'simulator',
@@ -875,7 +877,7 @@ test('boot prefers explicit device selector over active session device', async (
     }),
   );
   const selectedDevice: SessionState['device'] = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-2',
     name: 'iPhone 17 Pro',
     kind: 'simulator',
@@ -1143,7 +1145,7 @@ test('boot keeps --target validation when emulator is fallback-launched', async 
 test('shutdown turns off selected iOS simulator', async () => {
   const sessionStore = makeSessionStore();
   const selectedDevice: SessionState['device'] = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-2',
     name: 'iPhone 17 Pro',
     kind: 'simulator',
@@ -1186,7 +1188,7 @@ test('shutdown rejects active session device and points to close --shutdown', as
   const sessionStore = makeSessionStore();
   const sessionName = 'default';
   const selectedDevice: SessionState['device'] = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-2',
     name: 'iPhone 17 Pro',
     kind: 'simulator',
@@ -1270,7 +1272,7 @@ test('shutdown turns off selected Android emulator', async () => {
 test('shutdown rejects unsupported physical devices', async () => {
   const sessionStore = makeSessionStore();
   mockResolveTargetDevice.mockResolvedValue({
-    platform: 'ios',
+    platform: 'apple',
     id: 'device-1',
     name: 'iPhone',
     kind: 'device',
@@ -1305,7 +1307,7 @@ test('shutdown rejects unsupported physical devices', async () => {
 test('shutdown returns an error response when selected target shutdown fails', async () => {
   const sessionStore = makeSessionStore();
   const selectedDevice: SessionState['device'] = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-2',
     name: 'iPhone 17 Pro',
     kind: 'simulator',
@@ -1353,7 +1355,7 @@ test('appstate on iOS requires active session on selected device', async () => {
   const sessionName = 'default';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone 15',
       kind: 'simulator',
@@ -1363,7 +1365,7 @@ test('appstate on iOS requires active session on selected device', async () => {
     appName: 'Settings',
   });
   const selectedDevice: SessionState['device'] = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-2',
     name: 'iPhone 17 Pro',
     kind: 'simulator',
@@ -1399,7 +1401,7 @@ test('appstate returns session appName when bundle id is unavailable', async () 
   const sessionName = 'sim';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone 17 Pro',
       kind: 'simulator',
@@ -1409,7 +1411,7 @@ test('appstate returns session appName when bundle id is unavailable', async () 
   });
 
   const selectedDevice: SessionState['device'] = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 17 Pro',
     kind: 'simulator',
@@ -1450,7 +1452,7 @@ test('appstate fails when iOS session has no tracked app', async () => {
   sessionStore.set(
     sessionName,
     makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone 17 Pro',
       kind: 'simulator',
@@ -1459,7 +1461,7 @@ test('appstate fails when iOS session has no tracked app', async () => {
   );
 
   const selectedDevice: SessionState['device'] = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 17 Pro',
     kind: 'simulator',
@@ -1492,7 +1494,7 @@ test('appstate fails when iOS session has no tracked app', async () => {
 test('appstate without session on iOS selector returns SESSION_NOT_FOUND', async () => {
   const sessionStore = makeSessionStore();
   const selectedDevice: SessionState['device'] = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-2',
     name: 'iPhone 17 Pro',
     kind: 'simulator',
@@ -1629,7 +1631,7 @@ test('clipboard rejects unsupported iOS physical devices', async () => {
   sessionStore.set(
     sessionName,
     makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'ios-device-1',
       name: 'iPhone Device',
       kind: 'device',
@@ -1790,7 +1792,8 @@ test('perf samples Apple cpu and memory metrics on macOS app sessions', async ()
   const sessionName = 'perf-session-macos';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'macos',
+      platform: 'apple',
+      appleOs: 'macos',
       id: 'host-mac',
       name: 'Host Mac',
       kind: 'device',
@@ -1850,7 +1853,7 @@ test('perf samples Apple cpu and memory metrics on iOS simulator app sessions', 
   const sessionName = 'perf-session-ios-sim';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone 17 Pro',
       kind: 'simulator',
@@ -1907,7 +1910,7 @@ test('perf samples Apple cpu and memory metrics on physical iOS devices', async 
   const sessionName = 'perf-session-ios-device';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'ios-device-1',
       name: 'iPhone Device',
       kind: 'device',
@@ -2031,7 +2034,7 @@ test('perf reports physical iOS cpu and memory as unavailable without an app bun
   const sessionName = 'perf-session-ios-device-no-bundle';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'ios-device-2',
       name: 'iPhone Device',
       kind: 'device',
@@ -2070,7 +2073,7 @@ test('open URL on existing iOS session clears stale app bundle id', async () => 
   const sessionName = 'ios-session';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone 15',
       kind: 'simulator',
@@ -2081,7 +2084,7 @@ test('open URL on existing iOS session clears stale app bundle id', async () => 
   });
 
   mockResolveTargetDevice.mockResolvedValue({
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 15',
     kind: 'simulator',
@@ -2120,7 +2123,8 @@ test('open URL on existing macOS session clears stale app bundle id', async () =
   const sessionName = 'macos-session';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'macos',
+      platform: 'apple',
+      appleOs: 'macos',
       id: 'host-mac',
       name: 'Mac',
       kind: 'device',
@@ -2164,7 +2168,7 @@ test('open URL on existing iOS device session preserves app bundle id context', 
   const sessionName = 'ios-device-session';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'ios-device-1',
       name: 'iPhone Device',
       kind: 'device',
@@ -2207,7 +2211,7 @@ test('open custom URL on existing iOS simulator session preserves app bundle id 
   const sessionName = 'ios-simulator-session';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone 17 Pro',
       kind: 'simulator',
@@ -2217,7 +2221,7 @@ test('open custom URL on existing iOS simulator session preserves app bundle id 
     appName: 'Example App',
   });
   mockResolveTargetDevice.mockResolvedValue({
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 17 Pro',
     kind: 'simulator',
@@ -2260,7 +2264,7 @@ test('open custom URL on fresh iOS simulator session infers app bundle id from U
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-simulator-url-session';
   mockResolveTargetDevice.mockResolvedValue({
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 17 Pro',
     kind: 'simulator',
@@ -2305,7 +2309,7 @@ test('open iOS simulator app prewarms runner cache during cold boot', async () =
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-simulator-cold-boot-cache-prewarm';
   const device: SessionState['device'] = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 17 Pro',
     kind: 'simulator',
@@ -2349,7 +2353,7 @@ test('open iOS app session prewarms runner session when app bundle id is known',
   const sessionName = 'ios-device-session';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'ios-device-1',
       name: 'iPhone Device',
       kind: 'device',
@@ -2377,7 +2381,7 @@ test('open iOS app session prewarms runner session when app bundle id is known',
   expect(response?.ok).toBe(true);
   expect(mockPrewarmIosRunnerSession).toHaveBeenCalledTimes(1);
   expect(mockPrewarmIosRunnerSession).toHaveBeenCalledWith(
-    expect.objectContaining({ platform: 'ios', id: 'ios-device-1' }),
+    expect.objectContaining({ platform: 'apple', id: 'ios-device-1' }),
     expect.objectContaining({ logPath: expect.stringMatching(/daemon\.log$/) }),
   );
 });
@@ -2389,7 +2393,7 @@ test('open iOS Maestro app link waits for runner prewarm before launching app', 
   let finishPrewarm: (() => void) | undefined;
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'ios-device-1',
       name: 'iPhone Device',
       kind: 'device',
@@ -2450,7 +2454,7 @@ test('open iOS Maestro app link reports blocking runner prewarm failures before 
   const sessionName = 'ios-maestro-open-link-prewarm-failed';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'ios-device-1',
       name: 'iPhone Device',
       kind: 'device',
@@ -2490,7 +2494,7 @@ test('open iOS Maestro app link reports blocking runner prewarm failures before 
   });
   expect(mockDispatch).not.toHaveBeenCalled();
   expect(mockPrewarmIosRunnerSession).toHaveBeenCalledWith(
-    expect.objectContaining({ platform: 'ios', id: 'ios-device-1' }),
+    expect.objectContaining({ platform: 'apple', id: 'ios-device-1' }),
     expect.objectContaining({ propagateError: true }),
   );
 });
@@ -2501,7 +2505,7 @@ test('open iOS URL without app bundle id skips runner prewarm', async () => {
   sessionStore.set(
     sessionName,
     makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'ios-device-1',
       name: 'iPhone Device',
       kind: 'device',
@@ -2532,7 +2536,7 @@ test('prepare ios-runner starts the XCTest runner on an explicit iOS selector', 
   const sessionStore = makeSessionStore();
   const sessionName = 'prepare-ios-runner';
   mockResolveTargetDevice.mockResolvedValue({
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 17 Pro',
     kind: 'simulator',
@@ -2557,11 +2561,11 @@ test('prepare ios-runner starts the XCTest runner on an explicit iOS selector', 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
   expect(mockEnsureDeviceReady).toHaveBeenCalledWith(
-    expect.objectContaining({ platform: 'ios', id: 'sim-1' }),
+    expect.objectContaining({ platform: 'apple', id: 'sim-1' }),
   );
   expect(mockPrepareIosRunner).toHaveBeenCalledTimes(1);
   expect(mockPrepareIosRunner).toHaveBeenCalledWith(
-    expect.objectContaining({ platform: 'ios', id: 'sim-1' }),
+    expect.objectContaining({ platform: 'apple', id: 'sim-1' }),
     expect.objectContaining({
       cleanStaleBundles: true,
       buildTimeoutMs: 240000,
@@ -2594,7 +2598,8 @@ test('prepare ios-runner starts the XCTest runner on an explicit macOS selector'
   const sessionStore = makeSessionStore();
   const sessionName = 'prepare-macos-runner';
   mockResolveTargetDevice.mockResolvedValue({
-    platform: 'macos',
+    platform: 'apple',
+    appleOs: 'macos',
     id: 'host-macos-local',
     name: 'Host Mac',
     kind: 'device',
@@ -2620,7 +2625,7 @@ test('prepare ios-runner starts the XCTest runner on an explicit macOS selector'
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
   expect(mockPrepareIosRunner).toHaveBeenCalledWith(
-    expect.objectContaining({ platform: 'macos', id: 'host-macos-local' }),
+    expect.objectContaining({ platform: 'apple', id: 'host-macos-local' }),
     expect.objectContaining({
       buildTimeoutMs: 240000,
       healthTimeoutMs: 240000,
@@ -2710,7 +2715,7 @@ test('open web URL on iOS device session without active app falls back to Safari
   sessionStore.set(
     sessionName,
     makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'ios-device-1',
       name: 'iPhone Device',
       kind: 'device',
@@ -2751,7 +2756,7 @@ test('open app and URL on existing iOS device session keeps app context', async 
   const sessionName = 'ios-device-session';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'ios-device-1',
       name: 'iPhone Device',
       kind: 'device',
@@ -2797,7 +2802,8 @@ test('open app on existing macOS session resolves and stores bundle id', async (
   const sessionName = 'macos-session';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'macos',
+      platform: 'apple',
+      appleOs: 'macos',
       id: 'host-mac',
       name: 'Mac',
       kind: 'device',
@@ -2839,7 +2845,7 @@ test('open app on existing macOS session resolves and stores bundle id', async (
 test('open rejects --surface on non-macOS devices', async () => {
   const sessionStore = makeSessionStore();
   mockResolveTargetDevice.mockResolvedValue({
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 17 Pro',
     kind: 'simulator',
@@ -2871,7 +2877,8 @@ test('open on existing macOS frontmost-app session preserves surface without --s
   const sessionName = 'macos-frontmost-existing';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'macos',
+      platform: 'apple',
+      appleOs: 'macos',
       id: 'host-macos-local',
       name: 'Host Mac',
       kind: 'device',
@@ -2931,7 +2938,7 @@ test('open on existing iOS session refreshes unavailable simulator by name', asy
   const sessionName = 'ios-session';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'stale-sim',
       name: 'iPhone 17 Pro',
       kind: 'simulator',
@@ -2942,7 +2949,7 @@ test('open on existing iOS session refreshes unavailable simulator by name', asy
   });
 
   const resolvedDevice: SessionState['device'] = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'fresh-sim',
     name: 'iPhone 17 Pro',
     kind: 'simulator',
@@ -3182,7 +3189,7 @@ test('open --relaunch on iOS stops runner before close/open', async () => {
   const sessionName = 'ios-session';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'ios-device-1',
       name: 'My iPhone',
       kind: 'device',
@@ -3193,7 +3200,7 @@ test('open --relaunch on iOS stops runner before close/open', async () => {
 
   const calls: string[] = [];
   mockResolveTargetDevice.mockResolvedValue({
-    platform: 'ios',
+    platform: 'apple',
     id: 'ios-device-1',
     name: 'My iPhone',
     kind: 'device',
@@ -3231,7 +3238,7 @@ test('open --relaunch on iOS simulator stops runner before close/open', async ()
   const sessionName = 'ios-simulator-session';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone 17 Pro',
       kind: 'simulator',
@@ -3242,7 +3249,7 @@ test('open --relaunch on iOS simulator stops runner before close/open', async ()
 
   const calls: string[] = [];
   mockResolveTargetDevice.mockResolvedValue({
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 17 Pro',
     kind: 'simulator',
@@ -3282,7 +3289,7 @@ test('open --relaunch includes timing and waits for iOS runner prewarm after ope
   const events: string[] = [];
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'ios-device-1',
       name: 'My iPhone',
       kind: 'device',
@@ -3348,7 +3355,7 @@ test('open --relaunch on iOS without existing session closes then opens target a
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-new-session';
   mockResolveTargetDevice.mockResolvedValue({
-    platform: 'ios',
+    platform: 'apple',
     id: 'ios-device-1',
     name: 'My iPhone',
     kind: 'device',
@@ -3388,7 +3395,7 @@ test('open --relaunch on iOS simulator reaches settle path for close and open', 
   const sessionName = 'ios-sim-session';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone 16',
       kind: 'simulator',
@@ -3398,7 +3405,7 @@ test('open --relaunch on iOS simulator reaches settle path for close and open', 
   });
 
   mockResolveTargetDevice.mockResolvedValue({
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 16',
     kind: 'simulator',
@@ -3435,7 +3442,8 @@ test('close on macOS session stops runner and dismisses automation alert before 
   const sessionName = 'macos-session';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'macos',
+      platform: 'apple',
+      appleOs: 'macos',
       id: 'host-macos-local',
       name: 'Host Mac',
       kind: 'device',
@@ -3485,7 +3493,7 @@ test('close <app> on iOS stops runner before app close dispatch and performs fin
   const sessionName = 'ios-close-session';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'ios-device-1',
       name: 'My iPhone',
       kind: 'device',
@@ -3527,7 +3535,7 @@ test('close <app> on iOS simulator retains runner while terminating app', async 
   const sessionName = 'ios-simulator-close-session';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone 17 Pro',
       kind: 'simulator',
@@ -3569,7 +3577,8 @@ test('close <app> on macOS stops runner before app close dispatch and dismisses 
   const sessionName = 'macos-close-session';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'macos',
+      platform: 'apple',
+      appleOs: 'macos',
       id: 'host-macos-local',
       name: 'Host Mac',
       kind: 'device',
@@ -3805,7 +3814,7 @@ test('open on in-use device returns DEVICE_IN_USE before readiness checks', asyn
   sessionStore.set(
     'busy-session',
     makeSession('busy-session', {
-      platform: 'ios',
+      platform: 'apple',
       id: 'ios-device-1',
       name: 'iPhone Device',
       kind: 'device',
@@ -3814,7 +3823,7 @@ test('open on in-use device returns DEVICE_IN_USE before readiness checks', asyn
   );
 
   mockResolveTargetDevice.mockResolvedValue({
-    platform: 'ios',
+    platform: 'apple',
     id: 'ios-device-1',
     name: 'iPhone Device',
     kind: 'device',
@@ -3849,7 +3858,7 @@ test('open on in-use device returns DEVICE_IN_USE before readiness checks', asyn
 test('open on device owned by recording session returns recording recovery hint', async () => {
   const sessionStore = makeSessionStore();
   const recordingSession = makeSession('default', {
-    platform: 'ios',
+    platform: 'apple',
     id: 'ios-device-1',
     name: 'iPhone Device',
     kind: 'device',
@@ -3868,7 +3877,7 @@ test('open on device owned by recording session returns recording recovery hint'
   sessionStore.set('default', recordingSession);
 
   mockResolveTargetDevice.mockResolvedValue({
-    platform: 'ios',
+    platform: 'apple',
     id: 'ios-device-1',
     name: 'iPhone Device',
     kind: 'device',
@@ -4113,7 +4122,7 @@ test('logs rejects invalid action', async () => {
   sessionStore.set(
     'default',
     makeSession('default', {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone',
       kind: 'simulator',
@@ -4146,7 +4155,7 @@ test('logs start requires app session (appBundleId)', async () => {
   sessionStore.set(
     'default',
     makeSession('default', {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone',
       kind: 'simulator',
@@ -4179,7 +4188,7 @@ test('logs stop requires active app log stream', async () => {
   sessionStore.set(
     'default',
     makeSession('default', {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone',
       kind: 'simulator',
@@ -4257,7 +4266,7 @@ test('logs --restart is only supported with logs clear', async () => {
   const sessionName = 'default';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone Simulator',
       kind: 'simulator',
@@ -4292,7 +4301,7 @@ test('logs clear --restart requires app session bundle id', async () => {
   sessionStore.set(
     sessionName,
     makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone Simulator',
       kind: 'simulator',
@@ -4688,7 +4697,7 @@ test('network dump recovers iOS simulator entries from simctl log show when the 
   );
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone 17 Pro',
       kind: 'simulator',
@@ -4696,7 +4705,7 @@ test('network dump recovers iOS simulator entries from simctl log show when the 
     }),
     appBundleId: 'com.agentdevice.tester',
     appLog: {
-      platform: 'ios',
+      platform: 'apple',
       backend: 'ios-simulator',
       outPath: appLogPath,
       startedAt: 1_712_040_000_000,
@@ -4765,7 +4774,7 @@ test('network dump explains when iOS simulator recovery found app logs but no HT
   );
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone 17 Pro',
       kind: 'simulator',
@@ -4773,7 +4782,7 @@ test('network dump explains when iOS simulator recovery found app logs but no HT
     }),
     appBundleId: 'com.agentdevice.tester',
     appLog: {
-      platform: 'ios',
+      platform: 'apple',
       backend: 'ios-simulator',
       outPath: appLogPath,
       startedAt: 1_712_040_000_000,
@@ -4833,7 +4842,8 @@ test('network dump supports macOS desktop sessions', async () => {
   const sessionName = 'macos-network';
   sessionStore.set(sessionName, {
     ...makeSession(sessionName, {
-      platform: 'macos',
+      platform: 'apple',
+      appleOs: 'macos',
       id: 'host-macos-local',
       name: 'Host Mac',
       kind: 'device',
@@ -4877,7 +4887,7 @@ test('network dump validates include mode and limit', async () => {
   sessionStore.set(
     sessionName,
     makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone Simulator',
       kind: 'simulator',
@@ -4931,7 +4941,7 @@ test('session_list includes device_udid and ios_simulator_device_set for iOS ses
   sessionStore.set(
     'ios-scoped',
     makeSession('ios-scoped', {
-      platform: 'ios',
+      platform: 'apple',
       id: 'DEF-456',
       name: 'iPhone 16',
       kind: 'simulator',
@@ -4952,7 +4962,8 @@ test('session_list includes device_udid and ios_simulator_device_set for iOS ses
   sessionStore.set(
     'macos-1',
     makeSession('macos-1', {
-      platform: 'macos',
+      platform: 'apple',
+      appleOs: 'macos',
       id: 'host-macos-local',
       name: 'Host Mac',
       kind: 'device',

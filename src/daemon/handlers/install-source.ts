@@ -1,3 +1,4 @@
+import { isIosFamily } from '../../kernel/device.ts';
 import {
   installProviderDeviceInstallablePath,
   type ProviderDeviceInstallResult,
@@ -159,7 +160,7 @@ export async function handleInstallFromSourceCommand(params: {
     if (unsupported) return unsupported;
 
     const requestSignal = getRequestSignal(req.meta?.requestId);
-    if (device.platform === 'ios') {
+    if (isIosFamily(device)) {
       const { prepareIosInstallArtifact } =
         await import('../../platforms/apple/core/install-artifact.ts');
       const prepared = await prepareIosInstallArtifact(resolvedSource.source, {

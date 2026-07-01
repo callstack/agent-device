@@ -4,7 +4,7 @@ import type { DaemonRequest, SessionRuntimeHints } from '../daemon/types.ts';
 import { AppError, type NormalizedError } from '../kernel/errors.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { buildAppIdentifiers, buildDeviceIdentifiers } from './client-shared.ts';
-import { isPlatform } from '../kernel/device.ts';
+import { isPublicPlatform } from '../kernel/device.ts';
 import {
   leaseScopeFromOptions,
   leaseScopeToCommandFlags,
@@ -184,7 +184,7 @@ export function normalizeOpenDevice(
   const platform = value.platform;
   const id = readOptionalString(value, 'id');
   const name = readOptionalString(value, 'device');
-  if (!isPlatform(platform) || !id || !name) {
+  if (!isPublicPlatform(platform) || !id || !name) {
     return undefined;
   }
   const target = readDeviceTarget(value, 'target');

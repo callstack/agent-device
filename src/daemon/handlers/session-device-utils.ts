@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '../../kernel/device.ts';
+import { isIosFamily, type DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 import { resolveTargetDevice } from '../../core/dispatch.ts';
@@ -57,7 +57,7 @@ export async function resolveCommandDevice(params: {
 }
 
 export async function refreshSessionDeviceIfNeeded(device: DeviceInfo): Promise<DeviceInfo> {
-  if (device.platform !== 'ios' || device.kind !== 'simulator') {
+  if (!isIosFamily(device) || device.kind !== 'simulator') {
     return device;
   }
   if (process.platform !== 'darwin') {

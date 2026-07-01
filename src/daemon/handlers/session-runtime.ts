@@ -1,5 +1,5 @@
 import { AppError, asAppError } from '../../kernel/errors.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import { publicPlatformString, type DeviceInfo } from '../../kernel/device.ts';
 import type { CommandFlags } from '../../core/dispatch.ts';
 import type { DaemonRequest, SessionRuntimeHints, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
@@ -163,7 +163,7 @@ function resolveSessionRuntimeHints(
 ): SessionRuntimeHints | undefined {
   const runtime = sessionStore.getRuntimeHints(sessionName);
   if (!runtime) return undefined;
-  const boundPlatform = device?.platform;
+  const boundPlatform = device ? publicPlatformString(device) : undefined;
   const deviceRuntimePlatform = toRuntimePlatform(boundPlatform);
   if (runtime.platform && device && !deviceRuntimePlatform) {
     throw new AppError(
@@ -198,7 +198,7 @@ function resolveOpenRuntimeHints(params: {
   const explicitRuntime = normalizeExplicitRuntimeHints({
     runtime: req.runtime,
     sessionName,
-    platform: toRuntimePlatform(device.platform),
+    platform: toRuntimePlatform(publicPlatformString(device)),
   });
   if (req.runtime === undefined) {
     return {

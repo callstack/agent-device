@@ -8,7 +8,7 @@ import { resolveIosSimulatorDeviceSetPath } from '../../../../utils/device-isola
 import { readProcessStartTime } from '../../../../utils/process-identity.ts';
 import { acquireProcessLock, type ProcessLockOwner } from '../../../../utils/process-lock.ts';
 import { isEnvTruthy } from '../../../../utils/retry.ts';
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import { isIosFamily, isMacOs, type DeviceInfo } from '../../../../kernel/device.ts';
 import type { DefinedEnvMap as EnvMap } from '../../../../utils/env-map.ts';
 import { withKeyedLock } from '../../../../utils/keyed-lock.ts';
 import { emitRequestProgress } from '../../../../daemon/request-progress.ts';
@@ -207,7 +207,7 @@ export async function acquireXcodebuildSimulatorSetRedirect(
   device: DeviceInfo,
   options: XcodebuildSimulatorSetRedirectOptions = {},
 ): Promise<XcodebuildSimulatorSetRedirectHandle | null> {
-  if (device.platform !== 'ios' || device.kind !== 'simulator') {
+  if (!isIosFamily(device) || device.kind !== 'simulator') {
     return null;
   }
   const simulatorSetPath = resolveIosSimulatorDeviceSetPath(device.simulatorSetPath);
@@ -770,7 +770,7 @@ export function resolveExpectedRunnerCacheMetadata(
     runnerSigningBuildSettings: resolveRunnerSigningBuildSettings(
       process.env,
       device.kind === 'device',
-      device.platform,
+      device,
     ),
     runnerPerformanceBuildSettings: resolveRunnerPerformanceBuildSettings(),
     runnerSandboxBuildArgs: resolveRunnerSandboxBuildArgs(),
@@ -1375,7 +1375,7 @@ async function buildRunnerXctestrun(
   const signingBuildSettings = resolveRunnerSigningBuildSettings(
     process.env,
     device.kind === 'device',
-    device.platform,
+    device,
   );
   const provisioningArgs = device.kind === 'device' ? ['-allowProvisioningUpdates'] : [];
   const performanceBuildSettings = resolveRunnerPerformanceBuildSettings();
@@ -1453,7 +1453,7 @@ function resolveRunnerDerivedBasePath(device: DeviceInfo): string {
 }
 
 export function resolveRunnerMaxConcurrentDestinationsFlag(device: DeviceInfo): string {
-  if (device.platform === 'macos') {
+  if (isMacOs(device)) {
     return '-maximum-concurrent-test-device-destinations';
   }
   return device.kind === 'device'
@@ -1464,9 +1464,9 @@ export function resolveRunnerMaxConcurrentDestinationsFlag(device: DeviceInfo): 
 export function resolveRunnerSigningBuildSettings(
   env: NodeJS.ProcessEnv = process.env,
   forDevice = false,
-  platform: DeviceInfo['platform'] = 'ios',
+  device: Pick<DeviceInfo, 'platform' | 'appleOs'> = { platform: 'apple' },
 ): string[] {
-  if (platform === 'macos') {
+  if (isMacOs(device)) {
     return [
       'CODE_SIGNING_ALLOWED=NO',
       'CODE_SIGNING_REQUIRED=NO',

@@ -537,7 +537,7 @@ test('perf memory snapshot reports physical iOS memgraph as unavailable', async 
     actions: [],
     appBundleId: 'com.example.app',
     device: {
-      platform: 'ios',
+      platform: 'apple',
       id: 'ios-device-1',
       name: 'iPhone',
       kind: 'device',

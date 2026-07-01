@@ -1,3 +1,4 @@
+import { isIosFamily } from '../kernel/device.ts';
 import { getRunnerSessionSnapshot } from '../platforms/apple/core/runner/runner-client.ts';
 import type { SessionState } from './types.ts';
 
@@ -27,7 +28,7 @@ export function refreshRecordingHealth(session: SessionState): void {
 
 function recordingRequiresRunnerHealth(session: SessionState): boolean {
   const recording = session.recording;
-  if (!recording || session.device.platform !== 'ios') return false;
+  if (!recording || !isIosFamily(session.device)) return false;
   if (recording.platform === 'ios') return false;
   return recording.showTouches !== false;
 }

@@ -12,7 +12,7 @@ import {
   createAppleRunnerCacheColdBootPrewarmForOpen,
 } from '../apple-runner-options.ts';
 import { applyRuntimeHintsToApp } from '../runtime-hints.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import { isIosFamily, type DeviceInfo } from '../../kernel/device.ts';
 import type { DaemonRequest, DaemonResponse, SessionRuntimeHints, SessionState } from '../types.ts';
 import {
   resolveSessionRequestLogPath,
@@ -187,7 +187,7 @@ async function completeOpenCommand(params: {
   });
   timing.runtimeHintsDurationMs = Math.max(0, Date.now() - runtimeHintsStartedAtMs);
   const shouldPrewarmIosRunner =
-    device.platform === 'ios' && surface === 'app' && openPositionals.length > 0;
+    isIosFamily(device) && surface === 'app' && openPositionals.length > 0;
   const runnerPrewarmOptions = buildAppleRunnerSessionOptions({
     req,
     logPath,

@@ -8,17 +8,16 @@ import type { PlatformDescriptor } from './types.ts';
  * Each row is copied VERBATIM from the facts the hand-authored control flow
  * implies today:
  *  - `capabilityBucket` — the bucket `selectCapabilityForPlatform` returned for
- *                         the platform (`ios`/`macos`→`apple`, `android`→`android`,
+ *                         the platform (`apple`→`apple`, `android`→`android`,
  *                         `linux`→`linux`, `web`→`web`).
- *  - `isApple`          — whether `isApplePlatform` is true for the leaf platform
- *                         (`ios`/`macos` only).
+ *  - `isApple`          — whether `isApplePlatform` is true for the platform
+ *                         (`apple` only).
  *
  * `as const satisfies` pins each literal while checking the shape, and the row
  * order matches the `PLATFORMS` tuple so the parity test can prove totality.
  */
 export const platformDescriptors = [
-  { platform: 'ios', capabilityBucket: 'apple', isApple: true },
-  { platform: 'macos', capabilityBucket: 'apple', isApple: true },
+  { platform: 'apple', capabilityBucket: 'apple', isApple: true },
   { platform: 'android', capabilityBucket: 'android', isApple: false },
   { platform: 'linux', capabilityBucket: 'linux', isApple: false },
   { platform: 'web', capabilityBucket: 'web', isApple: false },

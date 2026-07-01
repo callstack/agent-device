@@ -59,14 +59,14 @@ test('Provider-backed integration macOS desktop flow uses semantic host and help
     {
       command: 'macos.runner.uptime',
       deviceId: PROVIDER_SCENARIO_MACOS.id,
-      platform: 'macos',
+      platform: 'apple',
       request: { command: 'uptime' },
       result: { uptimeMs: 84 },
     },
     {
       command: 'macos.runner.desktopScroll',
       deviceId: PROVIDER_SCENARIO_MACOS.id,
-      platform: 'macos',
+      platform: 'apple',
       request: {
         command: 'desktopScroll',
         direction: 'down',

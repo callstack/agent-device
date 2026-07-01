@@ -1,3 +1,4 @@
+import { isMacOs } from '../../kernel/device.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import { errorResponse } from './response.ts';
 
@@ -5,7 +6,7 @@ export function unsupportedMacOsDesktopSurfaceInteraction(
   session: SessionState,
   command: 'click' | 'press' | 'fill' | 'longpress',
 ): DaemonResponse | null {
-  if (session.device.platform !== 'macos') {
+  if (!isMacOs(session.device)) {
     return null;
   }
   if (session.surface !== 'desktop' && session.surface !== 'menubar') {

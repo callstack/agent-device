@@ -3,7 +3,7 @@ import { AppError } from '../kernel/errors.ts';
 import { recordingQualityInputToExportQuality } from '../core/recording-export-quality.ts';
 import { readScreenshotScriptFlag } from '../contracts/screenshot.ts';
 import type { DeviceTarget, PlatformSelector } from '../kernel/device.ts';
-import { PLATFORM_SELECTORS } from '../kernel/device.ts';
+import { PLATFORM_SELECTORS, publicPlatformString } from '../kernel/device.ts';
 import { parseReplayOpenFlags } from './open-script.ts';
 import { formatPortableActionLine } from './script-formatting.ts';
 import type { SessionAction, SessionState } from '../daemon/types.ts';
@@ -15,14 +15,15 @@ import {
 } from './script-utils.ts';
 import { REPLAY_VAR_KEY_RE } from './vars.ts';
 
-// Replay metadata `context platform=` lines only support concrete leaf
-// platforms. 'apple' is an alias (resolved to a leaf), and 'web' is not yet a
-// supported replay target, so both are excluded — keep the type and the runtime
-// allow-list derived from the same canonical PLATFORM_SELECTORS source.
-type ReplayScriptPlatform = Exclude<PlatformSelector, 'apple' | 'web'>;
+// Replay metadata `context platform=` lines support every accepted `--platform`
+// selector except 'web' (not yet a supported replay target). Legacy `ios`/`macos`
+// and the collapsed `apple` selector all resolve through the same device-selection
+// path — keep the type and the runtime allow-list derived from the canonical
+// PLATFORM_SELECTORS source.
+type ReplayScriptPlatform = Exclude<PlatformSelector, 'web'>;
 
 export const REPLAY_METADATA_PLATFORMS = new Set<ReplayScriptPlatform>(
-  PLATFORM_SELECTORS.filter((p): p is ReplayScriptPlatform => p !== 'apple' && p !== 'web'),
+  PLATFORM_SELECTORS.filter((p): p is ReplayScriptPlatform => p !== 'web'),
 );
 const REPLAY_METADATA_TARGETS = new Set<DeviceTarget>(['mobile', 'tv', 'desktop']);
 
@@ -457,8 +458,11 @@ export function writeReplayScript(
   if (session) {
     const kind = session.device.kind ? ` kind=${session.device.kind}` : '';
     const target = session.device.target ? ` target=${session.device.target}` : '';
+    // approach (b): heal-write the PUBLIC leaf platform (ios/macos), never the
+    // internal `apple` — keeps healed `.ad` scripts byte-compatible with checked-in
+    // fixtures and machine consumers.
     lines.push(
-      `context platform=${session.device.platform}${target} device=${formatScriptStringLiteral(session.device.name)}${kind} theme=unknown`,
+      `context platform=${publicPlatformString(session.device)}${target} device=${formatScriptStringLiteral(session.device.name)}${kind} theme=unknown`,
     );
   }
   for (const action of actions) {

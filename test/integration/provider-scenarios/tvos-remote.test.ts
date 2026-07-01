@@ -15,7 +15,7 @@ test('Provider-backed integration tvOS remote flow maps navigation commands to r
     {
       command: 'tvos.runner.remotePress',
       deviceId: PROVIDER_SCENARIO_TVOS.id,
-      platform: 'ios',
+      platform: 'apple',
       request: {
         command: 'remotePress',
         remoteButton: 'down',
@@ -26,7 +26,7 @@ test('Provider-backed integration tvOS remote flow maps navigation commands to r
     {
       command: 'tvos.runner.remotePress',
       deviceId: PROVIDER_SCENARIO_TVOS.id,
-      platform: 'ios',
+      platform: 'apple',
       request: {
         command: 'remotePress',
         remoteButton: 'menu',
@@ -37,7 +37,7 @@ test('Provider-backed integration tvOS remote flow maps navigation commands to r
     {
       command: 'tvos.runner.remotePress',
       deviceId: PROVIDER_SCENARIO_TVOS.id,
-      platform: 'ios',
+      platform: 'apple',
       request: {
         command: 'remotePress',
         remoteButton: 'home',

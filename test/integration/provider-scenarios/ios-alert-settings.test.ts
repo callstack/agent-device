@@ -18,14 +18,14 @@ test('Provider-backed integration iOS Settings permission and alert flow uses pr
     {
       command: 'ios.runner.alert',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-      platform: 'ios',
+      platform: 'apple',
       request: { command: 'alert', action: 'get', appBundleId: 'com.apple.Preferences' },
       result: { title: 'Camera Access', message: 'Allow Settings to access Camera?' },
     },
     {
       command: 'ios.runner.alert',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-      platform: 'ios',
+      platform: 'apple',
       request: { command: 'alert', action: 'accept', appBundleId: 'com.apple.Preferences' },
       result: { action: 'accept', accepted: true },
     },

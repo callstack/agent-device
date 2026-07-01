@@ -1,5 +1,11 @@
 import { AppError } from '../kernel/errors.ts';
-import { isTvOsDevice, type DeviceInfo } from '../kernel/device.ts';
+import {
+  isIosFamily,
+  isMacOs,
+  isTvOsDevice,
+  publicPlatformString,
+  type DeviceInfo,
+} from '../kernel/device.ts';
 import { successText, withSuccessText } from '../utils/success-text.ts';
 import { findMistargetedTypeRefToken } from '../utils/type-target-warning.ts';
 import {
@@ -146,13 +152,13 @@ export async function handlePressCommand(
   positionals: string[],
   context: DispatchContext | undefined,
 ): Promise<Record<string, unknown>> {
-  if (context?.directElementSelector && device.platform === 'ios') {
+  if (context?.directElementSelector && isIosFamily(device)) {
     return await handleDirectElementSelectorPress(interactor, context.directElementSelector);
   }
 
   const { x, y } = readPoint(positionals, 'press requires x y');
 
-  if (device.platform === 'macos' && context?.surface && context.surface !== 'app') {
+  if (isMacOs(device) && context?.surface && context.surface !== 'app') {
     return await handleMacOsSurfacePress(x, y, context);
   }
 
@@ -267,7 +273,7 @@ function assertAlternateClickSupported(
 ): void {
   const validationError = getClickButtonValidationError({
     commandLabel: 'click',
-    platform: device.platform,
+    platform: publicPlatformString(device),
     button,
     count: context?.count,
     intervalMs: context?.intervalMs,
@@ -419,7 +425,7 @@ function buildPressSequenceSteps(
   // Mirror the individual `tap` command: on touch-input iOS (not the tvOS leaf), tap steps
   // use synthesized HID taps (synthesizedTapAt) rather than the drag-based XCUICoordinate
   // tapAt, matching iosTapCommand.
-  const synthesized = kind === 'tap' && device.platform === 'ios' && !isTvOsDevice(device);
+  const synthesized = kind === 'tap' && isIosFamily(device) && !isTvOsDevice(device);
   return Array.from({ length: series.count }, (_, index) => {
     const [dx, dy] = computeDeterministicJitter(index, series.jitterPx);
     const isLast = index === series.count - 1;
@@ -450,7 +456,7 @@ function buildSwipeSequenceSteps(params: {
   effectiveDurationMs: number;
 }): RunnerSequenceStep[] {
   const { device, x1, y1, x2, y2, count, pauseMs, pattern, effectiveDurationMs } = params;
-  const synthesized = device.platform === 'ios' && !isTvOsDevice(device);
+  const synthesized = isIosFamily(device) && !isTvOsDevice(device);
   return Array.from({ length: count }, (_, index) => {
     const reverse = pattern === 'ping-pong' && index % 2 === 1;
     const isLast = index === count - 1;
@@ -869,7 +875,7 @@ export async function handlePinchCommand(
   if (device.target === 'tv') {
     throw new AppError('UNSUPPORTED_OPERATION', 'gesture pinch is not supported on tvOS');
   }
-  if (device.platform === 'macos' && context?.surface && context.surface !== 'app') {
+  if (isMacOs(device) && context?.surface && context.surface !== 'app') {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       'gesture pinch is only supported in macOS app sessions. Re-open the target app without --surface desktop|menubar|frontmost-app first.',
@@ -894,7 +900,7 @@ export async function handleRotateGestureCommand(
   if (device.target === 'tv') {
     throw new AppError('UNSUPPORTED_OPERATION', 'gesture rotate is not supported on tvOS');
   }
-  if (device.platform === 'macos') {
+  if (isMacOs(device)) {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       'gesture rotate is not supported on macOS; XCTest rotation gestures are available only for iOS app sessions.',
@@ -922,7 +928,7 @@ export async function handleTransformGestureCommand(
   if (device.target === 'tv') {
     throw new AppError('UNSUPPORTED_OPERATION', 'gesture transform is not supported on tvOS');
   }
-  const supportedIosSimulator = device.platform === 'ios' && device.kind === 'simulator';
+  const supportedIosSimulator = isIosFamily(device) && device.kind === 'simulator';
   if (device.platform !== 'android' && !supportedIosSimulator) {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
@@ -1050,7 +1056,7 @@ export async function handleReadCommand(
     const text = await readLinuxTextAtPoint(x, y, context?.surface);
     return { action: 'read', text };
   }
-  if (device.platform === 'macos' && context?.surface && context.surface !== 'app') {
+  if (isMacOs(device) && context?.surface && context.surface !== 'app') {
     const { runMacOsReadTextAction } = await import('../platforms/apple/os/macos/helper.ts');
     const result = await runMacOsReadTextAction(x, y, {
       bundleId: context.appBundleId,

@@ -68,7 +68,7 @@ function makeSession(name: string, device: SessionState['device']): SessionState
 }
 
 const iosSimulatorDevice: SessionState['device'] = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'sim-1',
   name: 'My iPhone Simulator',
   kind: 'simulator',
@@ -76,7 +76,8 @@ const iosSimulatorDevice: SessionState['device'] = {
 };
 
 const macOsDevice: SessionState['device'] = {
-  platform: 'macos',
+  platform: 'apple',
+  appleOs: 'macos',
   id: 'host-macos-local',
   name: 'Host Mac',
   kind: 'device',
@@ -310,7 +311,7 @@ test('snapshot rejects @ref scope without existing session snapshot', async () =
   sessionStore.set(
     sessionName,
     makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'My iPhone Simulator',
       kind: 'simulator',
@@ -1479,7 +1480,7 @@ test('settings rejects unsupported iOS physical devices', async () => {
   sessionStore.set(
     sessionName,
     makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'ios-device-1',
       name: 'My iPhone',
       kind: 'device',

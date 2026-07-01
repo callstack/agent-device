@@ -18,7 +18,7 @@ function makeSession(name: string): SessionState {
   return {
     name,
     device: {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone',
       kind: 'simulator',

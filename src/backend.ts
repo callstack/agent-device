@@ -2,7 +2,7 @@ import type { AlertAction, AlertInfo } from './alert-contract.ts';
 import type { AppsFilter } from './contracts/app-inventory.ts';
 import type { Point, SnapshotNode, SnapshotOptions, SnapshotState } from './kernel/snapshot.ts';
 import type { NetworkIncludeMode } from './kernel/contracts.ts';
-import type { DeviceTarget, Platform, PlatformSelector } from './kernel/device.ts';
+import type { DeviceTarget, Platform, PlatformSelector, PublicPlatform } from './kernel/device.ts';
 import type { BackMode } from './core/back-mode.ts';
 import type { RepeatedInput } from './commands/command-input.ts';
 import type { ClickButton } from './core/click-button.ts';
@@ -18,7 +18,10 @@ import type {
 } from './snapshot-capture-annotations.ts';
 import type { ScreenshotResultData } from './utils/screenshot-result.ts';
 
-export type AgentDeviceBackendPlatform = Platform;
+// The backend's public leaf platform (approach b): backends distinguish iOS from
+// macOS (e.g. snapshot backend routing, the macOS surface guard), so this carries the
+// leaf string, not the internal collapsed `apple`.
+export type AgentDeviceBackendPlatform = PublicPlatform;
 
 export const BACKEND_CAPABILITY_NAMES = [
   'android.shell',

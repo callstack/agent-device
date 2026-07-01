@@ -20,7 +20,7 @@ const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 
 function makeIosDevice(id: string): DeviceInfo {
   return {
-    platform: 'ios',
+    platform: 'apple',
     id,
     name: `iPhone ${id}`,
     kind: 'simulator',

@@ -51,7 +51,7 @@ function makeProviderRuntimeWorld() {
     expiresAt: 60_001,
   };
   const device: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     kind: 'simulator',
     id: 'provider:ios:lease-a',
     name: 'Provider iOS',

@@ -1,4 +1,4 @@
-import type { Platform } from '../kernel/device.ts';
+import type { Platform, PublicPlatform } from '../kernel/device.ts';
 import type { RawSnapshotNode, SnapshotNode, SnapshotState } from '../kernel/snapshot.ts';
 import { extractReadableText, normalizeType } from '../utils/text-surface.ts';
 
@@ -81,7 +81,7 @@ export function pruneGroupNodes(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
   return result;
 }
 
-export function isFillableType(type: string, platform: Platform): boolean {
+export function isFillableType(type: string, platform: Platform | PublicPlatform): boolean {
   const normalized = normalizeType(type);
   if (!normalized) return true;
   if (platform === 'android') {

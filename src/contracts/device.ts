@@ -1,4 +1,4 @@
-import type { DeviceKind, DeviceTarget, Platform } from '../kernel/device.ts';
+import type { DeviceKind, DeviceTarget, PublicPlatform } from '../kernel/device.ts';
 import type { TargetShutdownResult } from '../target-shutdown-contract.ts';
 
 /**
@@ -8,7 +8,7 @@ import type { TargetShutdownResult } from '../target-shutdown-contract.ts';
  * spreads nothing, so this shape is intentionally closed.
  */
 export type BootCommandResult = {
-  platform: Platform;
+  platform: PublicPlatform;
   target: DeviceTarget;
   /** Human-readable device name (`device.name`). */
   device: string;
@@ -26,7 +26,7 @@ export type BootCommandResult = {
  * field is the raw {@link TargetShutdownResult} from `shutdownDeviceTarget`.
  */
 export type ShutdownCommandResult = {
-  platform: Platform;
+  platform: PublicPlatform;
   target: DeviceTarget;
   /** Human-readable device name (`device.name`). */
   device: string;

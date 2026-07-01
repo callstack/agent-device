@@ -1,5 +1,5 @@
 import { AppError } from '../kernel/errors.ts';
-import type { DeviceKind, DeviceTarget, Platform } from '../kernel/device.ts';
+import type { DeviceKind, DeviceTarget, PublicPlatform } from '../kernel/device.ts';
 import type { Point, Rect } from '../kernel/snapshot.ts';
 
 function readRequired<T>(
@@ -59,7 +59,7 @@ export function readRequiredNumber(record: Record<string, unknown>, key: string)
   );
 }
 
-export function readRequiredPlatform(record: Record<string, unknown>, key: string): Platform {
+export function readRequiredPlatform(record: Record<string, unknown>, key: string): PublicPlatform {
   return readRequired(record, key, parsePlatform, `Daemon response has invalid "${key}".`);
 }
 
@@ -106,7 +106,13 @@ function parseFiniteNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
-function parsePlatform(value: unknown): Platform | undefined {
+// Client-side parser for the PUBLIC leaf platform a daemon response carries. Under
+// approach (b) the daemon always emits leaf strings (`ios`/`macos`), never the
+// internal `apple`; the extra `apple` acceptance is forward-compat only, and — being
+// unable to disambiguate the Apple OS from the bare token — maps to the dominant
+// `ios` leaf (unreachable today, since output is never `apple`).
+function parsePlatform(value: unknown): PublicPlatform | undefined {
+  if (value === 'apple') return 'ios';
   return value === 'ios' ||
     value === 'macos' ||
     value === 'android' ||

@@ -1,3 +1,4 @@
+import { isIosFamily } from '../../kernel/device.ts';
 import { resolveTargetDevice } from '../../core/dispatch.ts';
 import {
   resolveRunnerAppBundleId,
@@ -25,7 +26,7 @@ export async function withSessionlessRunnerCleanup<T>(
   device: SessionState['device'],
   task: () => Promise<T>,
 ): Promise<T> {
-  const shouldCleanupSessionlessIosRunner = !session && device.platform === 'ios';
+  const shouldCleanupSessionlessIosRunner = !session && isIosFamily(device);
   try {
     return await task();
   } finally {

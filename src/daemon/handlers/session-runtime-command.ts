@@ -1,4 +1,5 @@
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import { publicPlatformString } from '../../kernel/device.ts';
 import { SessionStore } from '../session-store.ts';
 import { clearRuntimeHintsFromApp, hasRuntimeTransportHints } from '../runtime-hints.ts';
 import { errorResponse } from './response.ts';
@@ -92,6 +93,12 @@ function showRuntimeCommand(
   };
 }
 
+function sessionLeafPlatform(
+  session: ReturnType<SessionStore['get']>,
+): ReturnType<typeof publicPlatformString> | undefined {
+  return session ? publicPlatformString(session.device) : undefined;
+}
+
 function setRuntimeCommand(params: {
   req: DaemonRequest;
   sessionName: string;
@@ -100,19 +107,20 @@ function setRuntimeCommand(params: {
   current: ReturnType<SessionStore['getRuntimeHints']>;
 }): DaemonResponse {
   const { req, sessionName, sessionStore, session, current } = params;
-  const platform = toRuntimePlatform(
-    req.flags?.platform ?? current?.platform ?? session?.device.platform,
-  );
+  // approach (b): resolve the session's PUBLIC leaf platform (ios/macos), never the
+  // internal `apple`, so the legacy `--platform ios` selector still matches.
+  const sessionLeaf = sessionLeafPlatform(session);
+  const platform = toRuntimePlatform(req.flags?.platform ?? current?.platform ?? sessionLeaf);
   if (!platform) {
     return errorResponse(
       'INVALID_ARGS',
       'runtime set only supports iOS and Android sessions. Pass --platform ios|android or open an iOS/Android session first.',
     );
   }
-  if (session && session.device.platform !== platform) {
+  if (sessionLeaf !== undefined && sessionLeaf !== platform) {
     return errorResponse(
       'INVALID_ARGS',
-      `runtime set targets ${platform}, but session "${sessionName}" is already bound to ${session.device.platform}.`,
+      `runtime set targets ${platform}, but session "${sessionName}" is already bound to ${sessionLeaf}.`,
     );
   }
   const nextRuntime = mergeRuntimeHints(current, buildRuntimeHints(req.flags, platform));

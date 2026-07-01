@@ -3,7 +3,7 @@ import type { PlatformPlugin } from '../../core/platform-plugin/plugin.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { isAudioProbeSupportedDevice } from '../../kernel/audio-probe-support.ts';
 import { shouldUseHostMacFastPath } from '../../core/platform-inventory.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import { isMacOs, type DeviceInfo } from '../../kernel/device.ts';
 import type { DeviceInventoryRequest } from '../../core/platform-inventory.ts';
 import type { RunnerContext } from '../../core/interactor-types.ts';
 
@@ -23,10 +23,11 @@ import type { RunnerContext } from '../../core/interactor-types.ts';
 // ---------------------------------------------------------------------------
 
 // `install`/`boot`/`reinstall`/`install-from-source`/`push`/`home`/`app-switcher`
-// (was `device.platform !== 'macos'`). Off Apple the original was always true.
+// (was `!isMacOs(device)`). Off Apple (caps undefined) the original was
+// always true — no non-Apple platform is macOS.
 const supportsAppAndDeviceLifecycle = (device: DeviceInfo): boolean => {
   const caps = appleOsCapabilities(device);
-  return caps ? caps.appAndDeviceLifecycle : device.platform !== 'macos';
+  return caps ? caps.appAndDeviceLifecycle : true;
 };
 
 // `keyboard` (was `android || (ios && target !== 'tv')`). Off Apple: `android`.
@@ -118,8 +119,9 @@ const APPLE_UNSUPPORTED_HINT_BY_DEFAULT: Record<
 
 export const applePlugin = {
   id: 'apple',
-  // Apple owns BOTH leaf platforms today — mirrors `case 'ios': case 'macos':`.
-  platforms: ['ios', 'macos'],
+  // Apple owns the single collapsed `apple` platform; the `appleOs` field
+  // discriminates the OS (ADR-0009 / issue #979).
+  platforms: ['apple'],
   familySelector: 'apple',
   capability: {
     bucket: 'apple',
@@ -130,11 +132,7 @@ export const applePlugin = {
   // an iOS `device` -> 'ios-device'; every other iOS kind -> 'ios-simulator'.
   appLog: {
     resolveBackend: (device: DeviceInfo) =>
-      device.platform === 'macos'
-        ? 'macos'
-        : device.kind === 'device'
-          ? 'ios-device'
-          : 'ios-simulator',
+      isMacOs(device) ? 'macos' : device.kind === 'device' ? 'ios-device' : 'ios-simulator',
   },
   // Wraps the Apple arm of `supportsPlatformPerfMetrics`: every Apple device
   // (ios/macos, any kind/target) reports perf-metrics support.

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { DeviceInfo } from '../kernel/device.ts';
+import { isIosFamily, isMacOs, type DeviceInfo } from '../kernel/device.ts';
 import { AppError } from '../kernel/errors.ts';
 import { tryGetPlugin } from '../core/platform-plugin/plugin.ts';
 import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
@@ -248,7 +248,7 @@ export async function readSessionNetworkCapture(params: {
     }
   }
   const canRecoverIosSimulatorLogShow =
-    device.platform === 'ios' && device.kind === 'simulator' && Boolean(appBundleId);
+    isIosFamily(device) && device.kind === 'simulator' && Boolean(appBundleId);
   if (canRecoverIosSimulatorLogShow && dump.entries.length === 0) {
     const recovered = await readRecentIosSimulatorNetworkCapture({
       deviceId: device.id,
@@ -282,7 +282,7 @@ export async function readSessionNetworkCapture(params: {
       'Capture uses the session app log file. For fresh traffic, run logs clear --restart before reproducing requests.',
     );
   } else if (appLogState !== 'active' && notes.length === 0) {
-    if (device.platform === 'ios' && device.kind === 'simulator') {
+    if (isIosFamily(device) && device.kind === 'simulator') {
       notes.push(
         'Session app log stream is inactive. The iOS simulator recovery path scanned recent simctl log history, but a fresh logs clear --restart window is still the most reliable repro loop.',
       );
@@ -358,7 +358,7 @@ async function startLocalAppLog({
   ensureLogPath(outPath);
   const stream = fs.createWriteStream(outPath, { flags: 'a' });
   const redactionPatterns = getAppLogRedactionPatterns();
-  if (device.platform === 'ios') {
+  if (isIosFamily(device)) {
     if (device.kind === 'device') {
       return await startIosDeviceAppLog(device.id, stream, redactionPatterns, pidPath);
     }
@@ -375,7 +375,7 @@ async function startLocalAppLog({
     assertAndroidPackageArgSafe(appBundleId);
     return await startAndroidAppLog(device.id, appBundleId, stream, redactionPatterns, pidPath);
   }
-  if (device.platform === 'macos') {
+  if (isMacOs(device)) {
     return await startMacOsAppLog(appBundleId, stream, redactionPatterns, pidPath);
   }
   stream.end();
@@ -416,10 +416,10 @@ async function readRecentIosSimulatorNetworkCapture(params: {
 }
 
 function buildNoHttpEntriesNote(device: DeviceInfo): string {
-  if (device.platform === 'ios' && device.kind === 'simulator') {
+  if (isIosFamily(device) && device.kind === 'simulator') {
     return 'No HTTP(s) entries were found in recent iOS simulator app logs. If the app only emits non-HTTP diagnostics, inspect logs path or add app-side URLSession/network logging for per-request timing and payload details.';
   }
-  if (device.platform === 'ios') {
+  if (isIosFamily(device)) {
     return 'No HTTP(s) entries were found in recent iOS device app logs. iOS network dump only sees what the app emits into Unified Logging for this process.';
   }
   return 'No HTTP(s) entries were found in recent session app logs.';
@@ -463,7 +463,7 @@ export async function runAppLogDoctor(
       }
     }
   }
-  if (device.platform === 'ios' && device.kind === 'simulator') {
+  if (isIosFamily(device) && device.kind === 'simulator') {
     try {
       const simctl = await runXcrun(['simctl', 'help'], { allowFailure: true });
       checks.simctlAvailable = simctl.exitCode === 0;
@@ -471,7 +471,7 @@ export async function runAppLogDoctor(
       checks.simctlAvailable = false;
     }
   }
-  if (device.platform === 'ios' && device.kind === 'device') {
+  if (isIosFamily(device) && device.kind === 'device') {
     try {
       const devicectl = await runXcrun(['devicectl', '--version'], { allowFailure: true });
       checks.devicectlAvailable = devicectl.exitCode === 0;
@@ -479,7 +479,7 @@ export async function runAppLogDoctor(
       checks.devicectlAvailable = false;
     }
   }
-  if (device.platform === 'macos') {
+  if (isMacOs(device)) {
     try {
       const log = await runCmd('log', ['help'], { allowFailure: true });
       checks.logAvailable = log.exitCode === 0;

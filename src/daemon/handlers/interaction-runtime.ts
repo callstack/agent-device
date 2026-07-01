@@ -1,4 +1,5 @@
 import { dispatchCommand } from '../../core/dispatch.ts';
+import { publicPlatformString } from '../../kernel/device.ts';
 import type {
   AgentDeviceBackend,
   BackendActionResult,
@@ -47,7 +48,7 @@ function createInteractionBackend(
   const { req, session } = params;
   const webProvider = resolveNativeWebInteractionProvider(session);
   return {
-    platform: session.device.platform,
+    platform: publicPlatformString(session.device),
     captureSnapshot: async (_context, options): Promise<BackendSnapshotResult> => ({
       snapshot: await params.captureSnapshotForSession(
         session,

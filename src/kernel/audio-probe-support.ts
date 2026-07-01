@@ -1,10 +1,11 @@
+import { isIosFamily, isMacOs } from './device.ts';
 import type { DeviceInfo } from './device.ts';
 
 export function isHostSystemAudioProbeDevice(device: DeviceInfo): boolean {
   return (
     process.platform === 'darwin' &&
-    (device.platform === 'macos' ||
-      (device.platform === 'ios' && device.kind === 'simulator') ||
+    (isMacOs(device) ||
+      (isIosFamily(device) && device.kind === 'simulator') ||
       (device.platform === 'android' && device.kind === 'emulator'))
   );
 }

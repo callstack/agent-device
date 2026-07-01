@@ -36,7 +36,7 @@ type MockRunCmdResult = Awaited<ReturnType<typeof runCmd>>;
 type XcrunMockHandler = (args: string[]) => Promise<MockRunCmdResult | null>;
 
 const IOS_SIMULATOR: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'sim-1',
   name: 'iPhone 17 Pro',
   kind: 'simulator',
@@ -44,7 +44,8 @@ const IOS_SIMULATOR: DeviceInfo = {
 };
 
 const MACOS_DEVICE: DeviceInfo = {
-  platform: 'macos',
+  platform: 'apple',
+  appleOs: 'macos',
   id: 'host-mac',
   name: 'Host Mac',
   kind: 'device',
@@ -53,7 +54,7 @@ const MACOS_DEVICE: DeviceInfo = {
 };
 
 const IOS_DEVICE: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'ios-device-1',
   name: 'iPhone Device',
   kind: 'device',
@@ -727,7 +728,7 @@ test('stopAppleXctracePerfCapture returns compact artifact metadata', async () =
     outPath: tracePath,
     appBundleId: 'com.example.app',
     deviceId: 'sim-1',
-    platform: 'ios',
+    platform: 'apple',
     targetPids: [111],
     targetProcesses: ['Example'],
     startedAt: '2026-04-01T10:00:00.000Z',
@@ -758,7 +759,7 @@ test('stopAppleXctracePerfCapture force-kills xctrace when graceful stop times o
     outPath: tracePath,
     appBundleId: 'com.example.app',
     deviceId: 'sim-1',
-    platform: 'ios',
+    platform: 'apple',
     targetPids: [111],
     targetProcesses: ['Example'],
     startedAt: '2026-04-01T10:00:00.000Z',
@@ -809,7 +810,7 @@ test('stopAppleXctracePerfCapture reports confirmed cleanup after forced kill ex
     outPath: tracePath,
     appBundleId: 'com.example.app',
     deviceId: 'sim-1',
-    platform: 'ios',
+    platform: 'apple',
     targetPids: [111],
     targetProcesses: ['Example'],
     startedAt: '2026-04-01T10:00:00.000Z',

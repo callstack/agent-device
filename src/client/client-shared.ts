@@ -14,7 +14,7 @@ import {
   publicSnapshotCaptureAnnotations,
   type SnapshotCaptureAnnotations,
 } from '../snapshot-capture-annotations.ts';
-import type { Platform } from '../kernel/device.ts';
+import type { PublicPlatform } from '../kernel/device.ts';
 import { successText, withSuccessText } from '../utils/success-text.ts';
 
 export function buildAppIdentifiers(params: {
@@ -33,7 +33,7 @@ export function buildAppIdentifiers(params: {
 }
 
 export function buildDeviceIdentifiers(
-  platform: Platform,
+  platform: PublicPlatform,
   id: string,
   name: string,
 ): AgentDeviceIdentifiers {

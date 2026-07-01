@@ -19,7 +19,7 @@ import { withRequestPlatformProviderScope } from '../request-platform-providers.
 import type { DaemonRequest } from '../types.ts';
 
 const OTHER_IOS_SIMULATOR: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'sim-2',
   name: 'iPhone 17',
   kind: 'simulator',

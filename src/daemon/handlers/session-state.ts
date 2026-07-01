@@ -1,5 +1,11 @@
 import { asAppError } from '../../kernel/errors.ts';
-import { isApplePlatform, type DeviceInfo } from '../../kernel/device.ts';
+import {
+  isApplePlatform,
+  isIosFamily,
+  isMacOs,
+  publicPlatformString,
+  type DeviceInfo,
+} from '../../kernel/device.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
@@ -65,7 +71,7 @@ async function handleAppStateCommand(params: {
     const appName = session.appName ?? session.appBundleId;
     if (!session.appName && !session.appBundleId) {
       if (
-        session.device.platform === 'macos' &&
+        isMacOs(session.device) &&
         session.surface &&
         session.surface !== 'app' &&
         session.surface !== 'frontmost-app'
@@ -73,7 +79,7 @@ async function handleAppStateCommand(params: {
         return {
           ok: true,
           data: {
-            platform: session.device.platform,
+            platform: publicPlatformString(session.device),
             appName: session.surface,
             appBundleId: session.appBundleId,
             source: 'session',
@@ -82,7 +88,7 @@ async function handleAppStateCommand(params: {
         };
       }
 
-      const sessionPlatform = session.device.platform === 'macos' ? 'macOS' : 'iOS';
+      const sessionPlatform = isMacOs(session.device) ? 'macOS' : 'iOS';
       return errorResponse(
         'COMMAND_FAILED',
         `No foreground app is tracked for this ${sessionPlatform} session. Open an app in the session, then retry appstate.`,
@@ -92,12 +98,12 @@ async function handleAppStateCommand(params: {
     return {
       ok: true,
       data: {
-        platform: session.device.platform,
+        platform: publicPlatformString(session.device),
         appName: appName ?? 'unknown',
         appBundleId: session.appBundleId,
         source: 'session',
         surface: session.surface ?? 'app',
-        ...(session.device.platform === 'ios'
+        ...(isIosFamily(session.device)
           ? {
               device_udid: session.device.id,
               ios_simulator_device_set: session.device.simulatorSetPath ?? null,
@@ -112,10 +118,10 @@ async function handleAppStateCommand(params: {
     flags,
     ensureReady: true,
   });
-  if (device.platform === 'ios') {
+  if (isIosFamily(device)) {
     return errorResponse('SESSION_NOT_FOUND', IOS_APPSTATE_SESSION_REQUIRED_MESSAGE);
   }
-  if (device.platform === 'macos') {
+  if (isMacOs(device)) {
     return errorResponse('SESSION_NOT_FOUND', MACOS_APPSTATE_SESSION_REQUIRED_MESSAGE);
   }
   if (device.platform === 'web') {
@@ -265,7 +271,7 @@ export async function handleSessionStateCommands(params: {
     return {
       ok: true,
       data: {
-        platform: device.platform,
+        platform: publicPlatformString(device),
         target: device.target ?? 'mobile',
         device: device.name,
         id: device.id,
@@ -302,7 +308,7 @@ export async function handleSessionStateCommands(params: {
         {
           hint: `Run agent-device close --shutdown --session ${sessionName}`,
           session: sessionName,
-          platform: device.platform,
+          platform: publicPlatformString(device),
           target: device.target ?? 'mobile',
           device: device.name,
           id: device.id,
@@ -317,7 +323,7 @@ export async function handleSessionStateCommands(params: {
         shutdown.error?.code ?? 'COMMAND_FAILED',
         shutdownFailureMessage(shutdown),
         {
-          platform: device.platform,
+          platform: publicPlatformString(device),
           target: device.target ?? 'mobile',
           device: device.name,
           id: device.id,
@@ -330,7 +336,7 @@ export async function handleSessionStateCommands(params: {
     return {
       ok: true,
       data: {
-        platform: device.platform,
+        platform: publicPlatformString(device),
         target: device.target ?? 'mobile',
         device: device.name,
         id: device.id,

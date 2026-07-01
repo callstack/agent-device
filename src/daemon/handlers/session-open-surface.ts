@@ -1,6 +1,6 @@
 import { parseSessionSurface, type SessionSurface } from '../../core/session-surface.ts';
 import { resolveFrontmostMacOsApp } from '../../platforms/apple/os/macos/helper.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import { isIosFamily, isMacOs, type DeviceInfo } from '../../kernel/device.ts';
 import type { SessionRuntimeHints, SessionState } from '../types.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { successText } from '../../utils/success-text.ts';
@@ -58,7 +58,7 @@ export function buildOpenResult(params: {
       result.serial = device.id;
     }
   }
-  if (device?.platform === 'ios') {
+  if (device && isIosFamily(device)) {
     result.device_udid = device.id;
     result.ios_simulator_device_set = device.simulatorSetPath ?? null;
   }
@@ -133,7 +133,7 @@ function resolveOpenSurface(
     }
     return surface;
   }
-  if (device.platform !== 'macos') {
+  if (!isMacOs(device)) {
     if (surfaceFlag) {
       throw new AppError('INVALID_ARGS', 'surface is only supported on macOS and Linux');
     }
@@ -153,7 +153,7 @@ export function resolveRequestedOpenSurface(params: {
   existingSurface?: SessionSurface;
 }): SessionSurface {
   const { device, surfaceFlag, openTarget, existingSurface } = params;
-  if ((device.platform === 'macos' || device.platform === 'linux') && !surfaceFlag) {
+  if ((isMacOs(device) || device.platform === 'linux') && !surfaceFlag) {
     return existingSurface ?? 'app';
   }
   return resolveOpenSurface(device, surfaceFlag, openTarget);

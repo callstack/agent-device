@@ -1,3 +1,4 @@
+import { isIosFamily } from '../../../../kernel/device.ts';
 import { beforeEach, test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
@@ -177,7 +178,7 @@ test('parseXctracePhysicalAppleDevices parses only physical devices from the Dev
 
   assert.deepEqual(parsed, [
     {
-      platform: 'ios',
+      platform: 'apple',
       id: '00008020-001C2D2234567890',
       name: 'My iPhone',
       kind: 'device',
@@ -186,7 +187,7 @@ test('parseXctracePhysicalAppleDevices parses only physical devices from the Dev
       booted: true,
     },
     {
-      platform: 'ios',
+      platform: 'apple',
       id: 'tv-udid-1',
       name: 'Living Room Apple TV',
       kind: 'device',
@@ -203,7 +204,7 @@ test('parseXctracePhysicalAppleDevices tags physical iPads as iPadOS', () => {
   );
   assert.deepEqual(parsed, [
     {
-      platform: 'ios',
+      platform: 'apple',
       id: 'ipad-udid-1',
       name: 'Studio iPad Pro',
       kind: 'device',
@@ -220,7 +221,7 @@ test('parseXctracePhysicalAppleDevices tags Apple Vision devices as visionOS', (
   );
   assert.deepEqual(parsed, [
     {
-      platform: 'ios',
+      platform: 'apple',
       id: 'vision-udid-1',
       name: 'Apple Vision Pro',
       kind: 'device',
@@ -492,7 +493,7 @@ test('listAppleDevices prefers devicectl metadata when xctrace reports the same 
     async () => await withMockedAppleTools(async () => await listAppleDevices()),
   );
   const physicalDevices = devices.filter(
-    (device) => device.kind === 'device' && device.platform === 'ios',
+    (device) => device.kind === 'device' && isIosFamily(device),
   );
 
   assert.equal(physicalDevices.length, 1);
@@ -521,7 +522,7 @@ test('listAppleDevices keeps physical discovery disabled for simulator-set scope
     true,
   );
   assert.equal(
-    devices.some((device) => device.kind === 'device' && device.platform === 'ios'),
+    devices.some((device) => device.kind === 'device' && isIosFamily(device)),
     false,
   );
   assert.equal(

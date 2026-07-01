@@ -27,7 +27,7 @@ import {
 } from '../runner/runner-transport.ts';
 
 const iosSimulator: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'sim-1',
   name: 'iPhone Simulator',
   kind: 'simulator',
@@ -35,7 +35,7 @@ const iosSimulator: DeviceInfo = {
 };
 
 const iosDevice: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'device-1',
   name: 'iPhone',
   kind: 'device',

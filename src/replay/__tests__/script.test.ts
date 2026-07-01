@@ -275,16 +275,22 @@ test('readReplayScriptMetadata extracts platform from context header', () => {
   assert.equal(metadata.platform, 'android');
 });
 
-test('readReplayScriptMetadata ignores non-concrete platform aliases', () => {
+test('readReplayScriptMetadata accepts the apple selector alias', () => {
   const metadata = readReplayScriptMetadata(
     'context platform=apple device="Host Mac"\nopen "Demo"\n',
   );
 
-  assert.equal(metadata.platform, undefined);
+  assert.equal(metadata.platform, 'apple');
 });
 
 test('REPLAY_METADATA_PLATFORMS is exactly the non-web leaf platforms', () => {
-  assert.deepEqual([...REPLAY_METADATA_PLATFORMS].sort(), ['android', 'ios', 'linux', 'macos']);
+  assert.deepEqual([...REPLAY_METADATA_PLATFORMS].sort(), [
+    'android',
+    'apple',
+    'ios',
+    'linux',
+    'macos',
+  ]);
 });
 
 test('readReplayScriptMetadata accepts every concrete leaf platform', () => {

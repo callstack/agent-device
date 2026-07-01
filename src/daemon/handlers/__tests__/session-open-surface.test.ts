@@ -8,7 +8,7 @@ test('resolveRequestedOpenSurface rejects surface flag on iOS', () => {
     () =>
       resolveRequestedOpenSurface({
         device: {
-          platform: 'ios',
+          platform: 'apple',
           id: 'sim-1',
           name: 'iPhone 17',
           kind: 'simulator',

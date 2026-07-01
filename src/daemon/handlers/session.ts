@@ -7,7 +7,7 @@ import {
   type PrepareIosRunnerResult,
 } from '../../platforms/apple/core/runner/runner-client.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
-import { isApplePlatform } from '../../kernel/device.ts';
+import { isApplePlatform, publicPlatformString } from '../../kernel/device.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { contextFromFlags } from '../context.ts';
@@ -120,7 +120,7 @@ function prepareIosRunnerResponseData(
 ): Record<string, unknown> {
   return {
     action,
-    platform: device.platform,
+    platform: publicPlatformString(device),
     deviceId: device.id,
     deviceName: device.name,
     kind: device.kind,
@@ -221,7 +221,7 @@ async function handleClipboardCommand(params: {
     },
   );
   recordSessionAction(sessionStore, session, req, req.command, result ?? {});
-  return { ok: true, data: { platform: device.platform, ...(result ?? {}) } };
+  return { ok: true, data: { platform: publicPlatformString(device), ...(result ?? {}) } };
 }
 
 // fallow-ignore-next-line complexity

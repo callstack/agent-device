@@ -107,7 +107,7 @@ function makeSession(name: string, device: SessionState['device']): SessionState
 
 function makeIosDeviceSession(name: string, appBundleId?: string): SessionState {
   const session = makeSession(name, {
-    platform: 'ios',
+    platform: 'apple',
     id: 'ios-device-1',
     name: 'My iPhone',
     kind: 'device',
@@ -121,7 +121,7 @@ function makeIosDeviceSession(name: string, appBundleId?: string): SessionState 
 
 function makeIosSimulatorSession(name: string): SessionState {
   return makeSession(name, {
-    platform: 'ios',
+    platform: 'apple',
     id: 'ios-sim-1',
     name: 'iPhone 16',
     kind: 'simulator',
@@ -876,7 +876,7 @@ test('record stop resizes iOS simulator recording when max-size is explicit', as
   sessionStore.set(
     sessionName,
     makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'Simulator',
       kind: 'simulator',
@@ -917,7 +917,7 @@ test('record stop forwards the requested quality to the resize step', async () =
   sessionStore.set(
     sessionName,
     makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'Simulator',
       kind: 'simulator',
@@ -958,7 +958,7 @@ test('record stop leaves a short visual tail after iOS simulator gestures', asyn
   const sessionName = 'ios-sim-visual-tail';
   const kill = vi.fn();
   const session = makeSession(sessionName, {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'Simulator',
     kind: 'simulator',
@@ -996,7 +996,7 @@ test('record stop reports too-short iOS simulator recordings without leaving inv
   const outPath = path.join(os.tmpdir(), `agent-device-too-short-${Date.now()}.mp4`);
   fs.writeFileSync(outPath, 'not-a-video');
   const session = makeSession(sessionName, {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'Simulator',
     kind: 'simulator',
@@ -1033,7 +1033,7 @@ test('record stop measures too-short iOS simulator recordings from stop request 
   const outPath = path.join(os.tmpdir(), `agent-device-too-short-delayed-${Date.now()}.mp4`);
   fs.writeFileSync(outPath, 'not-a-video');
   const session = makeSession(sessionName, {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'Simulator',
     kind: 'simulator',
@@ -1128,7 +1128,7 @@ test('record start stores iOS simulator recorder pid for scoped cleanup', async 
   sessionStore.set(
     sessionName,
     makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'Simulator',
       kind: 'simulator',
@@ -1162,7 +1162,7 @@ test('record stop prefers session-owned iOS recorder processes before path fallb
   const sessionName = 'ios-sim-owned-recorder';
   const kill = vi.fn();
   const session = makeSession(sessionName, {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'Simulator',
     kind: 'simulator',
@@ -1231,7 +1231,7 @@ test('record stop falls back to path matching for stale iOS simulator recordVide
   const sessionName = 'ios-sim-stale-recorder';
   const kill = vi.fn();
   const session = makeSession(sessionName, {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'Simulator',
     kind: 'simulator',
@@ -1280,7 +1280,7 @@ test('record stop keeps iOS simulator video when overlay export fails', async ()
   sessionStore.set(
     sessionName,
     makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'Simulator',
       kind: 'simulator',
@@ -1326,7 +1326,7 @@ test('record stop skips touch overlay export when no gestures were recorded', as
   sessionStore.set(
     sessionName,
     makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'Simulator',
       kind: 'simulator',
@@ -1362,7 +1362,7 @@ test('record stop keeps iOS simulator video when resize export fails', async () 
   sessionStore.set(
     sessionName,
     makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'Simulator',
       kind: 'simulator',
@@ -1400,7 +1400,7 @@ test('record start does not fail when iOS simulator runner warm-up fails', async
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-warm-failure';
   const session = makeSession(sessionName, {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'Simulator',
     kind: 'simulator',
@@ -1447,7 +1447,7 @@ test('record start anchors gesture clock from simulator warm-up and skips standa
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-warm-anchor';
   const session = makeSession(sessionName, {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'Simulator',
     kind: 'simulator',
@@ -1492,7 +1492,7 @@ test('record start falls back to standalone uptime when warm response lacks curr
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-warm-missing';
   const session = makeSession(sessionName, {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'Simulator',
     kind: 'simulator',
@@ -1534,7 +1534,7 @@ test('record start rejects non-finite or non-positive warm anchors', async () =>
     const sessionStore = makeSessionStore();
     const sessionName = `ios-sim-warm-bad-${badValue}`;
     const session = makeSession(sessionName, {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'Simulator',
       kind: 'simulator',
@@ -1576,7 +1576,7 @@ test('record start degrades to wall-clock when warm anchor missing and uptime fa
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-anchor-degraded';
   const session = makeSession(sessionName, {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'Simulator',
     kind: 'simulator',
@@ -1615,7 +1615,7 @@ test('record start skips iOS simulator runner warm-up when touch overlays are hi
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-hide-touches';
   const session = makeSession(sessionName, {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'Simulator',
     kind: 'simulator',
@@ -2068,7 +2068,7 @@ test('record stop keeps iOS simulator video when touch overlay recording was inv
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-invalidated-recording';
   const session = makeSession(sessionName, {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 17 Pro',
     kind: 'simulator',

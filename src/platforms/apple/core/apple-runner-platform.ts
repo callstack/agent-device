@@ -1,5 +1,6 @@
 import { AppError } from '../../../kernel/errors.ts';
 import {
+  isMacOs,
   isApplePlatform,
   resolveApplePlatformName,
   type DeviceInfo,
@@ -119,7 +120,7 @@ export function resolveRunnerPlatformName(device: DeviceInfo): RunnerApplePlatfo
       `Unsupported platform for Apple runner: ${device.platform}`,
     );
   }
-  if (device.platform === 'macos') {
+  if (isMacOs(device)) {
     return 'macOS';
   }
   // Prefer the stored Apple OS discriminant; fall back to target-based inference

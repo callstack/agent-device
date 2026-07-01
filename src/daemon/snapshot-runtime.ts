@@ -1,3 +1,4 @@
+import { isIosFamily, publicPlatformString } from '../kernel/device.ts';
 import type { AgentDeviceBackend, BackendSnapshotResult } from '../backend.ts';
 import type { CommandSessionRecord } from '../runtime.ts';
 import { createAgentDevice } from '../runtime.ts';
@@ -165,7 +166,7 @@ function requireIosAppSessionForSnapshot(
   session: SessionState | undefined,
   device: SessionState['device'],
 ): DaemonResponse | null {
-  if (device.platform !== 'ios' || session?.appBundleId) {
+  if (!isIosFamily(device) || session?.appBundleId) {
     return null;
   }
   return errorResponse(
@@ -275,7 +276,7 @@ function createDaemonSnapshotBackend(params: {
 }): AgentDeviceBackend {
   const { req, logPath, session, device, snapshotScope } = params;
   return {
-    platform: device.platform,
+    platform: publicPlatformString(device),
     captureSnapshot: async (_context, options): Promise<BackendSnapshotResult> => {
       const capture = await captureSnapshot({
         device,

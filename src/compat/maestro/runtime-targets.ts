@@ -1,4 +1,3 @@
-import type { Platform } from '../../kernel/device.ts';
 import type { ElementSelectorKey } from '../../core/interactor-types.ts';
 import type { Rect, SnapshotNode, SnapshotState } from '../../kernel/snapshot.ts';
 import { parseSelectorChain } from '../../daemon/selectors.ts';
@@ -82,7 +81,7 @@ export function resolveMaestroNodeFromSnapshot(
   snapshot: SnapshotState,
   selector: string,
   options: MaestroTapOnOptions,
-  platform: Platform,
+  platform: 'ios' | 'android',
   frame: TouchReferenceFrame | undefined,
   resolutionOptions: MaestroMatchResolutionOptions = {},
 ): { ok: true; node: SnapshotNode; rect: Rect } | { ok: false; message: string } {
@@ -132,7 +131,7 @@ export function resolveMaestroNodeFromSnapshot(
 export function resolveMaestroFuzzyTextNodeFromSnapshot(
   snapshot: SnapshotState,
   query: string,
-  platform: Platform,
+  platform: 'ios' | 'android',
   frame: TouchReferenceFrame | undefined,
   resolutionOptions: MaestroMatchResolutionOptions = {},
 ): { ok: true; node: SnapshotNode; rect: Rect } | { ok: false; message: string } {
@@ -161,7 +160,7 @@ export function resolveMaestroFuzzyTextNodeFromSnapshot(
 export function resolveVisibleMaestroNodeFromSnapshot(
   snapshot: SnapshotState,
   selector: string,
-  platform: Platform,
+  platform: 'ios' | 'android',
   frame: TouchReferenceFrame | undefined,
 ): { ok: true; node: SnapshotNode; rect: Rect; matches: number } | { ok: false; message: string } {
   const matches = findMaestroSelectorMatches(snapshot, selector, platform, {
@@ -201,7 +200,7 @@ export function resolveVisibleMaestroNodeFromSnapshot(
 function filterVisibleMaestroMatches(params: {
   nodes: SnapshotState['nodes'];
   matches: SnapshotNode[];
-  platform: Platform;
+  platform: 'ios' | 'android';
 }): { matches: SnapshotNode[]; blockedByReactNativeOverlay: boolean } {
   const visibleMatches = params.matches.filter(
     (node) =>
@@ -226,7 +225,7 @@ function filterVisibleMaestroMatches(params: {
 function filterReactNativeOverlayBlockedMatches(
   nodes: SnapshotState['nodes'],
   matches: SnapshotNode[],
-  platform: Platform,
+  platform: 'ios' | 'android',
 ): ReactNativeOverlayFilterResult {
   const overlay = detectReactNativeOverlay(nodes);
   if (!overlay.detected) {
@@ -259,7 +258,7 @@ function filterReactNativeOverlayBlockedMatches(
   };
 }
 
-export function readMaestroSelectorPlatform(flags: DaemonRequest['flags']): Platform {
+export function readMaestroSelectorPlatform(flags: DaemonRequest['flags']): 'ios' | 'android' {
   return flags?.platform === 'android' ? 'android' : 'ios';
 }
 
@@ -280,7 +279,7 @@ export function extractMaestroVisibleTextQuery(selectorExpression: string): stri
 function findMaestroSelectorMatches(
   snapshot: SnapshotState,
   selectorExpression: string,
-  platform: Platform,
+  platform: 'ios' | 'android',
   options: MaestroSelectorMatchOptions = {},
 ): SnapshotNode[] {
   const chain = parseSelectorChain(selectorExpression);
@@ -315,7 +314,7 @@ function findMaestroFuzzyTextMatches(snapshot: SnapshotState, query: string): Sn
 function matchesMaestroSelector(
   node: SnapshotNode,
   selector: Selector,
-  platform: Platform,
+  platform: 'ios' | 'android',
   options: MaestroSelectorMatchOptions,
 ): boolean {
   if (matchesSelector(node, selector, platform)) return true;
@@ -325,7 +324,7 @@ function matchesMaestroSelector(
 function matchesMaestroTerm(
   node: SnapshotNode,
   term: SelectorTerm,
-  platform: Platform,
+  platform: 'ios' | 'android',
   options: MaestroSelectorMatchOptions,
 ): boolean {
   if (typeof term.value !== 'string' || !isMaestroRegexTextKey(term.key)) {

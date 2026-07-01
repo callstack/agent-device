@@ -1,3 +1,4 @@
+import { isIosFamily } from '../kernel/device.ts';
 import type { SessionState } from './types.ts';
 import { tryParseSelectorChain } from './selectors.ts';
 import { asAppError } from '../kernel/errors.ts';
@@ -11,7 +12,7 @@ export function readSimpleIosSelectorTarget(params: {
 }): DirectIosSelectorTarget | null {
   const { session, selectorExpression } = params;
   if (!session) return null;
-  if (session.device.platform !== 'ios') return null;
+  if (!isIosFamily(session.device)) return null;
   if (session.postGestureStabilization) return null;
   const chain = tryParseSelectorChain(selectorExpression);
   if (!chain) return null;

@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import { isIosFamily, type DeviceInfo } from '../../../../kernel/device.ts';
 import type { HostAudioProbeBackend } from '../../../audio-probe-backend.ts';
 import { startMacOsAudioProbeProcess } from './helper.ts';
 
@@ -12,12 +12,11 @@ export const macOsScreenCaptureKitAudioProbeBackend = {
 } as const satisfies HostAudioProbeBackend;
 
 function hostSystemAudioProbeNotes(device: DeviceInfo): string[] {
-  const target =
-    device.platform === 'ios'
-      ? 'iOS simulator'
-      : device.platform === 'android'
-        ? 'Android emulator'
-        : 'macOS session';
+  const target = isIosFamily(device)
+    ? 'iOS simulator'
+    : device.platform === 'android'
+      ? 'Android emulator'
+      : 'macOS session';
   return [
     `Audio probe samples host system audio through ScreenCaptureKit for this ${target}; it is not app-instrumented audio.`,
     'Screen Recording permission is required for host system audio capture.',

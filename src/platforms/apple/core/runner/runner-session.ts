@@ -6,7 +6,7 @@ import {
 } from '../../../../utils/exec.ts';
 import { withKeyedLock } from '../../../../utils/keyed-lock.ts';
 import { Deadline } from '../../../../utils/retry.ts';
-import { isApplePlatform, type DeviceInfo } from '../../../../kernel/device.ts';
+import { isIosFamily, isApplePlatform, type DeviceInfo } from '../../../../kernel/device.ts';
 import type { RunnerLogicalLeaseContext } from '../../../../core/runner-lease-context.ts';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
 import { emitRequestProgress } from '../../../../daemon/request-progress.ts';
@@ -476,7 +476,7 @@ async function ensureBooted(device: DeviceInfo): Promise<void> {
 }
 
 async function verifyDeveloperModeForIosRunner(device: DeviceInfo): Promise<void> {
-  if (device.platform !== 'ios' || device.kind !== 'device') return;
+  if (!isIosFamily(device) || device.kind !== 'device') return;
   const result = await runAppleToolCommand('DevToolsSecurity', ['-status'], {
     allowFailure: true,
     timeoutMs: 2_000,

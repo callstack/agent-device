@@ -1,3 +1,4 @@
+import { isIosFamily, publicPlatformString } from '../kernel/device.ts';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -51,7 +52,7 @@ function createDispatchScreenshotBackend(params: {
 }): AgentDeviceBackend {
   const { session, outputPlacement, dispatchContext } = params;
   return {
-    platform: session.device.platform,
+    platform: publicPlatformString(session.device),
     captureScreenshot: async (_context, outPath, options) => {
       const context = {
         ...dispatchContext,
@@ -59,7 +60,7 @@ function createDispatchScreenshotBackend(params: {
         surface: options?.surface,
         skipIosSimulatorBootCheck:
           dispatchContext.skipIosSimulatorBootCheck ??
-          (session.device.platform === 'ios' && session.device.kind === 'simulator'),
+          (isIosFamily(session.device) && session.device.kind === 'simulator'),
       };
       if (outputPlacement === 'out') {
         return readScreenshotResultData(

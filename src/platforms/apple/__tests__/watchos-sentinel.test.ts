@@ -8,7 +8,7 @@ import { AppError } from '../../../kernel/errors.ts';
 // so a `appleOs: 'watchos'` device must be rejected at interactor creation (the
 // admission seam) rather than silently falling through to the iOS runner.
 const watchOsDevice: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'watch-1',
   name: 'Apple Watch Series 10',
   kind: 'device',
@@ -34,7 +34,7 @@ test('a non-watchOS appleOs does not trigger the watchOS sentinel', () => {
   // fail later on the empty runner context, so we only assert it is not the
   // watchOS sentinel error.)
   const tvOsDevice: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'tv-1',
     name: 'Apple TV 4K',
     kind: 'simulator',

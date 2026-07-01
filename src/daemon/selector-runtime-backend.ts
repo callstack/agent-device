@@ -5,7 +5,7 @@ import type {
 } from '../backend.ts';
 import { resolveTargetDevice, type CommandFlags } from '../core/dispatch.ts';
 import { createAgentDevice } from '../runtime.ts';
-import { isApplePlatform } from '../kernel/device.ts';
+import { isMacOs, isApplePlatform, publicPlatformString } from '../kernel/device.ts';
 import { noActiveSessionError, requireCommandSupported } from './handlers/response.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { findNodeByLabel } from '../snapshot/snapshot-processing.ts';
@@ -101,7 +101,7 @@ function createSelectorBackend(params: SelectorRuntimeDeviceParams): AgentDevice
     logPath,
   });
   return {
-    platform: device.platform,
+    platform: publicPlatformString(device),
     captureSnapshot: async (_context, options): Promise<BackendSnapshotResult> => {
       const flags = {
         ...req.flags,
@@ -166,7 +166,7 @@ async function findTextInMacosNonAppSurface(
   params: SelectorRuntimeDeviceParams,
   text: string,
 ): Promise<boolean | null> {
-  if (params.device.platform !== 'macos') return null;
+  if (!isMacOs(params.device)) return null;
   if (!params.session?.surface || params.session.surface === 'app') return null;
   return await findTextInWaitSnapshot(params, text);
 }

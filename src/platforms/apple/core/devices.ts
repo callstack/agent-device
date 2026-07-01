@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '../../../kernel/errors.ts';
 import {
+  isIosFamily,
   sortAppleDevicesForSelection,
   type AppleOS,
   type DeviceInfo,
@@ -212,7 +213,7 @@ function parseSimctlAppleDevices(
       if (!device.isAvailable) continue;
       const target = resolveAppleTargetFromRuntime(runtime);
       devices.push({
-        platform: 'ios',
+        platform: 'apple',
         id: device.udid,
         name: device.name,
         kind: 'simulator',
@@ -237,7 +238,7 @@ function mapDevicectlAppleDevices(payload: DevicectlListDevicesPayload): DeviceI
     if (!id) continue;
     const target = resolveAppleTargetFromDevicectlDevice(device);
     devices.push({
-      platform: 'ios',
+      platform: 'apple',
       id,
       name,
       kind: 'device',
@@ -276,7 +277,7 @@ export function parseXctracePhysicalAppleDevices(output: string): DeviceInfo[] {
     if (!target) continue;
 
     devices.push({
-      platform: 'ios',
+      platform: 'apple',
       id,
       name,
       kind: 'device',
@@ -372,10 +373,7 @@ export async function listAppleDevices(
   }
 
   devices.push(buildHostMacDevice());
-  if (
-    options.udid &&
-    devices.some((device) => device.platform === 'ios' && device.id === options.udid)
-  ) {
+  if (options.udid && devices.some((device) => isIosFamily(device) && device.id === options.udid)) {
     return devices;
   }
 

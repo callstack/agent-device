@@ -33,13 +33,13 @@ test('Provider-backed integration iOS physical recording flow uses runner and de
         {
           command: 'ios.runner.recordStart',
           deviceId: PROVIDER_SCENARIO_IOS_DEVICE.id,
-          platform: 'ios',
+          platform: 'apple',
           result: {},
         },
         {
           command: 'ios.runner.recordStop',
           deviceId: PROVIDER_SCENARIO_IOS_DEVICE.id,
-          platform: 'ios',
+          platform: 'apple',
           request: { command: 'recordStop', appBundleId: 'com.apple.Preferences' },
           result: {},
         },

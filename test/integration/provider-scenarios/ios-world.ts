@@ -33,7 +33,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
     {
       command: 'ios.runner.uptime',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-      platform: 'ios',
+      platform: 'apple',
       request: { command: 'uptime' },
       result: { uptimeMs: 42 },
     },
@@ -42,7 +42,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
     {
       command: 'ios.runner.tap',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-      platform: 'ios',
+      platform: 'apple',
       request: {
         command: 'tap',
         x: 196,
@@ -55,7 +55,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
     {
       command: 'ios.runner.pinch',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-      platform: 'ios',
+      platform: 'apple',
       request: {
         command: 'pinch',
         scale: 0.8,
@@ -68,7 +68,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
     {
       command: 'ios.runner.drag',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-      platform: 'ios',
+      platform: 'apple',
       request: {
         command: 'drag',
         x: 196,
@@ -84,7 +84,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
     {
       command: 'ios.runner.drag',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-      platform: 'ios',
+      platform: 'apple',
       request: {
         command: 'drag',
         x: 196,
@@ -100,7 +100,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
     {
       command: 'ios.runner.rotateGesture',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-      platform: 'ios',
+      platform: 'apple',
       request: {
         command: 'rotateGesture',
         degrees: 35,
@@ -114,7 +114,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
     {
       command: 'ios.runner.transformGesture',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-      platform: 'ios',
+      platform: 'apple',
       request: {
         command: 'transformGesture',
         x: 196,
@@ -132,7 +132,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
     {
       command: 'ios.runner.querySelector',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-      platform: 'ios',
+      platform: 'apple',
       request: {
         command: 'querySelector',
         selectorKey: 'label',
@@ -157,7 +157,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
     {
       command: 'ios.runner.findText',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-      platform: 'ios',
+      platform: 'apple',
       request: {
         command: 'findText',
         text: 'General',
@@ -168,14 +168,14 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
     {
       command: 'ios.runner.backSystem',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-      platform: 'ios',
+      platform: 'apple',
       request: { command: 'backSystem', appBundleId: 'com.apple.Preferences' },
       result: { backed: true },
     },
     {
       command: 'ios.runner.keyboardDismiss',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-      platform: 'ios',
+      platform: 'apple',
       request: { command: 'keyboardDismiss', appBundleId: 'com.apple.Preferences' },
       result: { dismissed: true },
     },
@@ -268,7 +268,7 @@ export async function createIosBottomTabsSnapshotWorld(): Promise<IosBottomTabsS
     {
       command: 'ios.runner.snapshot',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-      platform: 'ios',
+      platform: 'apple',
       result: {
         nodes: bottomTabsContactSnapshotNodes(),
         truncated: false,
@@ -355,7 +355,7 @@ function runnerSnapshot() {
   return {
     command: 'ios.runner.snapshot',
     deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
-    platform: 'ios' as const,
+    platform: 'apple' as const,
     result: {
       nodes: [
         {

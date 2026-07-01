@@ -13,7 +13,7 @@ export const PROVIDER_SCENARIO_ANDROID: DeviceInfo = {
 };
 
 export const PROVIDER_SCENARIO_IOS_SIMULATOR: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'sim-1',
   name: 'iPhone 15',
   kind: 'simulator',
@@ -22,7 +22,7 @@ export const PROVIDER_SCENARIO_IOS_SIMULATOR: DeviceInfo = {
 };
 
 export const PROVIDER_SCENARIO_IOS_DEVICE: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'ios-device-1',
   name: 'QA iPhone',
   kind: 'device',
@@ -31,7 +31,7 @@ export const PROVIDER_SCENARIO_IOS_DEVICE: DeviceInfo = {
 };
 
 export const PROVIDER_SCENARIO_IOS_REINSTALL_DEVICE: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'device-1',
   name: 'iPhone Device',
   kind: 'device',
@@ -40,7 +40,7 @@ export const PROVIDER_SCENARIO_IOS_REINSTALL_DEVICE: DeviceInfo = {
 };
 
 export const PROVIDER_SCENARIO_TVOS: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'tv-sim-1',
   name: 'Apple TV',
   kind: 'simulator',
@@ -49,7 +49,8 @@ export const PROVIDER_SCENARIO_TVOS: DeviceInfo = {
 };
 
 export const PROVIDER_SCENARIO_MACOS: DeviceInfo = {
-  platform: 'macos',
+  platform: 'apple',
+  appleOs: 'macos',
   id: 'host-macos',
   name: 'Mac desktop',
   kind: 'device',

@@ -5,7 +5,7 @@ const HOST_MAC_DEVICE_ID = 'host-macos-local';
 
 export function buildHostMacDevice(): DeviceInfo {
   return {
-    platform: 'macos',
+    platform: 'apple',
     id: HOST_MAC_DEVICE_ID,
     name: os.hostname(),
     kind: 'device',

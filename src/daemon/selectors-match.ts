@@ -1,4 +1,4 @@
-import type { Platform } from '../kernel/device.ts';
+import type { Platform, PublicPlatform } from '../kernel/device.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { isNodeEditable, isNodeVisible } from '../utils/selector-node.ts';
 import { extractNodeText, normalizeType } from '../snapshot/snapshot-processing.ts';
@@ -10,12 +10,16 @@ export { isNodeEditable, isNodeVisible } from '../utils/selector-node.ts';
 export function matchesSelector(
   node: SnapshotNode,
   selector: Selector,
-  platform: Platform,
+  platform: Platform | PublicPlatform,
 ): boolean {
   return selector.terms.every((term) => matchesTerm(node, term, platform));
 }
 
-function matchesTerm(node: SnapshotNode, term: SelectorTerm, platform: Platform): boolean {
+function matchesTerm(
+  node: SnapshotNode,
+  term: SelectorTerm,
+  platform: Platform | PublicPlatform,
+): boolean {
   switch (term.key) {
     case 'id':
       return textEquals(node.identifier, String(term.value));

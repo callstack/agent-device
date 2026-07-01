@@ -9,27 +9,30 @@ export const ANDROID_EMULATOR: DeviceInfo = {
 };
 
 export const IOS_SIMULATOR: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'sim-1',
   name: 'iPhone 17 Pro',
   kind: 'simulator',
+  appleOs: 'ios',
   booted: true,
 };
 
 export const IOS_DEVICE: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'ios-device-1',
   name: 'iPhone',
   kind: 'device',
+  appleOs: 'ios',
   booted: true,
 };
 
 export const MACOS_DEVICE: DeviceInfo = {
-  platform: 'macos',
+  platform: 'apple',
   id: 'host-macos-local',
   name: 'Mac',
   kind: 'device',
   target: 'desktop',
+  appleOs: 'macos',
   booted: true,
 };
 
@@ -59,11 +62,12 @@ export const ANDROID_TV_DEVICE: DeviceInfo = {
 };
 
 export const TVOS_SIMULATOR: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'tv-sim-1',
   name: 'Apple TV',
   kind: 'simulator',
   target: 'tv',
+  appleOs: 'tvos',
 };
 
 // iPadOS / visionOS carry the explicit `appleOs` discriminant discovery stores, so
@@ -72,7 +76,7 @@ export const TVOS_SIMULATOR: DeviceInfo = {
 // the touch iOS engine (`platform: 'ios'`, mobile target) and are capability-identical
 // to iOS today.
 export const IPADOS_SIMULATOR: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'ipad-sim-1',
   name: 'iPad Pro 11-inch',
   kind: 'simulator',
@@ -81,7 +85,7 @@ export const IPADOS_SIMULATOR: DeviceInfo = {
 };
 
 export const VISIONOS_SIMULATOR: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'vision-sim-1',
   name: 'Apple Vision Pro',
   kind: 'simulator',

@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isApplePlatform, type DeviceInfo } from '../../../kernel/device.ts';
+import { isIosFamily, isApplePlatform, type DeviceInfo } from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import {
   runCmdBackground,
@@ -219,7 +219,7 @@ async function resolveAppleXctracePerfTarget(
       hint: 'Android native profiling belongs to the Android perf rollout and is not implemented under Apple xctrace.',
     });
   }
-  if (device.platform === 'ios' && device.kind === 'device') {
+  if (isIosFamily(device) && device.kind === 'device') {
     const processes = await resolveIosDevicePerfTarget(device, appBundleId);
     return {
       pids: processes.map((process) => process.pid),
@@ -255,7 +255,7 @@ function buildAppleXctraceRecordArgs(params: {
     'record',
     '--template',
     params.template,
-    ...(params.device.platform === 'ios' ? ['--device', params.device.id] : []),
+    ...(isIosFamily(params.device) ? ['--device', params.device.id] : []),
     ...params.targetPids.flatMap((pid) => ['--attach', String(pid)]),
     '--output',
     params.outPath,

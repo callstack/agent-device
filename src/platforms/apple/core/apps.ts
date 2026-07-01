@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import type { DeviceInfo } from '../../../kernel/device.ts';
+import { isIosFamily, isMacOs, type DeviceInfo } from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { emitDiagnostic } from '../../../utils/diagnostics.ts';
 import type { AppsFilter } from '../../../contracts/app-inventory.ts';
@@ -116,7 +116,7 @@ type InstallIosAppOptions = {
 };
 
 export async function resolveIosApp(device: DeviceInfo, app: string): Promise<string> {
-  if (device.platform === 'macos') {
+  if (isMacOs(device)) {
     return await resolveMacOsApp(app);
   }
   const trimmed = app.trim();
@@ -156,7 +156,7 @@ export async function resolveIosSimulatorDeepLinkBundleId(
   device: DeviceInfo,
   url: string,
 ): Promise<string | undefined> {
-  if (device.platform !== 'ios' || device.kind !== 'simulator') return undefined;
+  if (!isIosFamily(device) || device.kind !== 'simulator') return undefined;
   const scheme = parseUrlScheme(url);
   if (!scheme) return undefined;
 
@@ -190,10 +190,10 @@ export async function openIosApp(
 ): Promise<void> {
   const launchConsole = options?.launchConsole?.trim();
   const launchArgs = options?.launchArgs;
-  if (launchConsole && (device.platform !== 'ios' || device.kind !== 'simulator')) {
+  if (launchConsole && (!isIosFamily(device) || device.kind !== 'simulator')) {
     throw new AppError('UNSUPPORTED_OPERATION', LAUNCH_CONSOLE_IOS_SIMULATOR_ONLY_MESSAGE);
   }
-  if (device.platform === 'macos') {
+  if (isMacOs(device)) {
     if (launchArgs && launchArgs.length > 0) {
       throw new AppError(
         'UNSUPPORTED_OPERATION',
@@ -278,7 +278,7 @@ async function openIosSimulatorUrl(
 }
 
 export async function openIosDevice(device: DeviceInfo): Promise<void> {
-  if (device.platform === 'macos') {
+  if (isMacOs(device)) {
     return;
   }
   if (device.kind !== 'simulator') return;
@@ -289,7 +289,7 @@ export async function openIosDevice(device: DeviceInfo): Promise<void> {
 }
 
 export async function closeIosApp(device: DeviceInfo, app: string): Promise<void> {
-  if (device.platform === 'macos') {
+  if (isMacOs(device)) {
     await closeMacOsApp(device, app);
     return;
   }
@@ -325,7 +325,7 @@ async function clearIosSimulatorAppState(
   device: DeviceInfo,
   app: string,
 ): Promise<{ bundleId: string; containerPath: string }> {
-  if (device.platform !== 'ios' || device.kind !== 'simulator') {
+  if (!isIosFamily(device) || device.kind !== 'simulator') {
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       'Clearing app state is currently supported only on iOS simulators.',
@@ -482,7 +482,7 @@ export async function installIosInstallablePath(
 }
 
 export async function readIosClipboardText(device: DeviceInfo): Promise<string> {
-  if (device.platform === 'macos') {
+  if (isMacOs(device)) {
     return await readMacOsClipboardText();
   }
   requireSimulatorDevice(device, 'clipboard');
@@ -499,7 +499,7 @@ export async function readIosClipboardText(device: DeviceInfo): Promise<string> 
 }
 
 export async function writeIosClipboardText(device: DeviceInfo, text: string): Promise<void> {
-  if (device.platform === 'macos') {
+  if (isMacOs(device)) {
     await writeMacOsClipboardText(text);
     return;
   }
@@ -542,7 +542,7 @@ export async function setIosSetting(
   appBundleId?: string,
   options?: SettingOptions,
 ): Promise<Record<string, unknown> | void> {
-  if (device.platform === 'macos') {
+  if (isMacOs(device)) {
     const normalizedSetting = setting.toLowerCase();
     if (normalizedSetting === 'appearance') {
       await setMacOsAppearance(state);
@@ -656,7 +656,7 @@ export async function setIosSetting(
 }
 
 export async function listIosApps(device: DeviceInfo, filter: AppsFilter): Promise<IosAppInfo[]> {
-  if (device.platform === 'macos') {
+  if (isMacOs(device)) {
     return await listMacApps(filter);
   }
   if (device.kind === 'simulator') {

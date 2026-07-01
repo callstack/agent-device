@@ -3,7 +3,7 @@ import {
   isWebUrl,
   resolveIosDeviceDeepLinkBundleId,
 } from '../../core/open-target.ts';
-import { isApplePlatform, type DeviceInfo } from '../../kernel/device.ts';
+import { isMacOs, isApplePlatform, type DeviceInfo } from '../../kernel/device.ts';
 
 async function resolveIosBundleIdForOpen(
   device: DeviceInfo,
@@ -12,7 +12,7 @@ async function resolveIosBundleIdForOpen(
 ): Promise<string | undefined> {
   if (!isApplePlatform(device.platform) || !openTarget) return undefined;
   if (isDeepLinkTarget(openTarget)) {
-    if (device.platform === 'macos') return undefined;
+    if (isMacOs(device)) return undefined;
     if (device.kind === 'device') {
       return resolveIosDeviceDeepLinkBundleId(currentAppBundleId, openTarget);
     }

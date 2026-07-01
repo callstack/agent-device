@@ -35,7 +35,7 @@ test('router blocks non-record commands when recording was invalidated', async (
     actions: [],
     appBundleId: 'com.apple.Preferences',
     device: {
-      platform: 'ios',
+      platform: 'apple',
       target: 'mobile',
       id: 'sim-1',
       name: 'iPhone 17 Pro',
@@ -88,7 +88,7 @@ test('router allows iOS simulator gestures during overlay recording after runner
     actions: [],
     appBundleId: 'com.apple.Preferences',
     device: {
-      platform: 'ios',
+      platform: 'apple',
       target: 'mobile',
       id: 'sim-1',
       name: 'iPhone 17 Pro',

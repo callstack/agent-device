@@ -1,5 +1,5 @@
 import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { isApplePlatform } from '../kernel/device.ts';
+import { isMacOs, isApplePlatform } from '../kernel/device.ts';
 import { runMacOsAlertAction } from '../platforms/apple/os/macos/helper.ts';
 import { stopAppLog } from './app-log.ts';
 import { stopIosRunnerSession } from '../platforms/apple/core/runner/runner-client.ts';
@@ -14,7 +14,7 @@ export { stopSessionAudioProbe } from './audio-probe.ts';
 
 export async function stopAppleRunnerForClose(session: SessionState): Promise<void> {
   await stopIosRunnerSession(session.device.id);
-  if (session.device.platform !== 'macos') {
+  if (!isMacOs(session.device)) {
     return;
   }
 

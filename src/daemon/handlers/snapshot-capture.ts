@@ -1,5 +1,5 @@
 import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
-import { isMobilePlatform } from '../../kernel/device.ts';
+import { isMacOs, isMobilePlatform } from '../../kernel/device.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import { runMacOsSnapshotAction } from '../../platforms/apple/os/macos/helper.ts';
 import { snapshotLinux } from '../../platforms/linux/snapshot.ts';
@@ -106,7 +106,7 @@ async function capturePostActionAwareSnapshot(
       pendingInteractionOutcome,
     );
   }
-  if (isMobilePlatform(params.device.platform) && params.session?.postGestureStabilization) {
+  if (isMobilePlatform(params.device) && params.session?.postGestureStabilization) {
     return await capturePostGestureAwareSnapshot({ ...params, session: params.session });
   }
   const freshness = getActiveAndroidSnapshotFreshness(params.session);
@@ -209,7 +209,7 @@ export async function captureSnapshotData(params: CaptureSnapshotParams): Promis
       },
     );
   }
-  if (device.platform === 'macos' && session?.surface && session.surface !== 'app') {
+  if (isMacOs(device) && session?.surface && session.surface !== 'app') {
     const helperSnapshot = await runMacOsSnapshotAction(session.surface, {
       bundleId: session.surface === 'menubar' ? session.appBundleId : undefined,
     });

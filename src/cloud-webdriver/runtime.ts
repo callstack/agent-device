@@ -13,7 +13,7 @@ import type {
   ProviderDeviceInstallResult,
   ProviderDeviceRuntime,
 } from '../provider-device-runtime.ts';
-import type { DeviceInfo, Platform } from '../kernel/device.ts';
+import { deviceFieldsFromPublicPlatform, type DeviceInfo } from '../kernel/device.ts';
 import { AppError } from '../kernel/errors.ts';
 import { unavailableCloudArtifactsResult } from './artifact-results.ts';
 import {
@@ -31,7 +31,7 @@ import {
 } from './webdriver-client.ts';
 import { createWebDriverInteractor } from './webdriver-interactor.ts';
 
-export type CloudWebDriverPlatform = Extract<Platform, 'android' | 'ios'>;
+export type CloudWebDriverPlatform = 'android' | 'ios';
 
 export type CloudWebDriverUploadResult = ProviderDeviceInstallResult & {
   appReference: string;
@@ -337,7 +337,7 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
 
   private deviceForLease(lease: DeviceLease, prepared: CloudWebDriverPreparedSession): DeviceInfo {
     return {
-      platform: prepared.platform,
+      ...deviceFieldsFromPublicPlatform(prepared.platform),
       id:
         prepared.deviceId ??
         this.options.deviceId?.(lease) ??

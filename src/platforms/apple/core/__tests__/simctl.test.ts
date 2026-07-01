@@ -4,7 +4,7 @@ import { buildSimctlArgs, buildSimctlArgsForDevice } from '../simctl.ts';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 
 const IOS_SIMULATOR: DeviceInfo = {
-  platform: 'ios',
+  platform: 'apple',
   id: 'sim-1',
   name: 'iPhone 17',
   kind: 'simulator',

@@ -180,12 +180,12 @@ function resolveExplicitShardDevices(
 
 function isImplicitShardDevice(device: DeviceInfo, flags: CommandFlags | undefined): boolean {
   if (!isShardDeviceCandidate(device, flags)) return false;
-  if (!isMobilePlatform(device.platform)) return false;
+  if (!isMobilePlatform(device)) return false;
   return device.booted !== false;
 }
 
 function isShardDeviceCandidate(device: DeviceInfo, flags: CommandFlags | undefined): boolean {
-  if (!matchesPlatformSelector(device.platform, flags?.platform)) return false;
+  if (!matchesPlatformSelector(device, flags?.platform)) return false;
   if (flags?.target && (device.target ?? 'mobile') !== flags.target) return false;
   return true;
 }

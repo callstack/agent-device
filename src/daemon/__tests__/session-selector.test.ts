@@ -63,7 +63,7 @@ test('selector mismatch explains session recovery commands', () => {
 test('accepts --platform apple alias for ios sessions', () => {
   const session = makeSession({
     device: {
-      platform: 'ios',
+      platform: 'apple',
       id: 'tv-sim-1',
       name: 'Apple TV',
       kind: 'simulator',
@@ -132,7 +132,7 @@ test('rejects mismatched device selector', () => {
 test('accepts matching ios simulator set selector for iOS simulator sessions', () => {
   const session = makeSession({
     device: {
-      platform: 'ios',
+      platform: 'apple',
       id: 'sim-1',
       name: 'iPhone 17',
       kind: 'simulator',

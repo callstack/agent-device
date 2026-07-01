@@ -124,7 +124,9 @@ export function resolveDeviceAppleOs(
   // Real discovery sets `appleOs`; legacy/synthetic records without it fall back to
   // the target-based inference the capability predicates used before this table.
   if (device.appleOs) return device.appleOs;
-  if (device.platform === 'macos') return 'macos';
+  // Back-compat: a legacy persisted record may still carry the pre-collapse `macos`
+  // leaf platform string (the type no longer allows it, hence the cast).
+  if ((device.platform as string) === 'macos') return 'macos';
   if (isTvOsDevice(device)) return 'tvos';
   // iOS / iPadOS / visionOS are indistinguishable without discovery descriptors and
   // are capability-identical, so an unlabeled mobile Apple record collapses to `ios`.

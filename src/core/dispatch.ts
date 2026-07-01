@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import pathModule from 'node:path';
 import { AppError } from '../kernel/errors.ts';
-import type { DeviceInfo } from '../kernel/device.ts';
+import { isIosFamily, type DeviceInfo } from '../kernel/device.ts';
 import { getInteractor } from './interactors.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import { isDeepLinkTarget } from './open-target.ts';
@@ -260,7 +260,7 @@ async function handleOpenCommand(
     await interactor.openDevice();
     return { app: null, ...successText('Opened device') };
   }
-  if (launchConsole && (device.platform !== 'ios' || device.kind !== 'simulator')) {
+  if (launchConsole && (!isIosFamily(device) || device.kind !== 'simulator')) {
     throw new AppError('UNSUPPORTED_OPERATION', LAUNCH_CONSOLE_IOS_SIMULATOR_ONLY_MESSAGE);
   }
   if (device.platform === 'linux' && launchArgs && launchArgs.length > 0) {
@@ -315,7 +315,7 @@ async function handleTriggerAppEventCommand(
   context: DispatchContext | undefined,
 ): Promise<Record<string, unknown>> {
   const { eventName, payload } = parseTriggerAppEventArgs(positionals);
-  const eventUrl = resolveAppEventUrl(device.platform, eventName, payload);
+  const eventUrl = resolveAppEventUrl(device, eventName, payload);
   await interactor.open(eventUrl, { appBundleId: context?.appBundleId });
   return {
     event: eventName,
@@ -408,7 +408,7 @@ async function handleKeyboardCommand(
   if (device.platform === 'android') {
     return await handleAndroidKeyboardCommand(device, action);
   }
-  if (device.platform === 'ios') {
+  if (isIosFamily(device)) {
     return await handleIosKeyboardCommand(device, action, context, runnerCtx);
   }
   throw new AppError('UNSUPPORTED_OPERATION', 'keyboard is supported only on Android and iOS');
@@ -590,7 +590,7 @@ async function handlePushCommand(
     throw new AppError('INVALID_ARGS', 'push requires <bundle|package> <payload.json|inline-json>');
   }
   const payload = await readNotificationPayload(payloadArg);
-  if (device.platform === 'ios') {
+  if (isIosFamily(device)) {
     const { pushIosNotification } = await import('../platforms/apple/core/apps.ts');
     await pushIosNotification(device, target, payload);
     return {

@@ -16,7 +16,7 @@ test('Provider-backed integration macOS recording flow uses runner provider thro
     {
       command: 'macos.runner.recordStart',
       deviceId: PROVIDER_SCENARIO_MACOS.id,
-      platform: 'macos',
+      platform: 'apple',
       request: {
         command: 'recordStart',
         outPath: recordingPath,
@@ -29,7 +29,7 @@ test('Provider-backed integration macOS recording flow uses runner provider thro
     {
       command: 'macos.runner.recordStop',
       deviceId: PROVIDER_SCENARIO_MACOS.id,
-      platform: 'macos',
+      platform: 'apple',
       request: { command: 'recordStop', appBundleId: 'com.apple.systempreferences' },
       result: {},
     },

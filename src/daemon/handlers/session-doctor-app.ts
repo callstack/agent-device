@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '../../kernel/device.ts';
+import { isIosFamily, isMacOs, type DeviceInfo } from '../../kernel/device.ts';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import type { SessionState } from '../types.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';
@@ -56,7 +56,7 @@ async function resolveInstalledAppForDoctor(
     );
     return match?.id;
   }
-  if (device.platform === 'ios' || device.platform === 'macos') {
+  if (isIosFamily(device) || isMacOs(device)) {
     const { listIosApps } = await import('../../platforms/apple/core/apps.ts');
     const apps = await listIosApps(device, 'all');
     const match = resolveUniqueInstalledAppMatch(

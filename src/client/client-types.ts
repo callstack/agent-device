@@ -12,7 +12,12 @@ import type {
   SessionIsolationMode,
   SessionRuntimeHints,
 } from '../kernel/contracts.ts';
-import type { DeviceKind, DeviceTarget, Platform, PlatformSelector } from '../kernel/device.ts';
+import type {
+  DeviceKind,
+  DeviceTarget,
+  PublicPlatform,
+  PlatformSelector,
+} from '../kernel/device.ts';
 import type { BackMode } from '../core/back-mode.ts';
 import type { ClickButton } from '../core/click-button.ts';
 import type { RecordingExportQuality } from '../core/recording-export-quality.ts';
@@ -151,7 +156,7 @@ export type AgentDeviceSelectionOptions = {
 };
 
 export type AgentDeviceDevice = {
-  platform: Platform;
+  platform: PublicPlatform;
   target: DeviceTarget;
   kind: DeviceKind;
   id: string;
@@ -167,7 +172,7 @@ export type AgentDeviceDevice = {
 };
 
 export type AgentDeviceSessionDevice = {
-  platform: Platform;
+  platform: PublicPlatform;
   target: DeviceTarget;
   id: string;
   name: string;
@@ -225,7 +230,7 @@ export type AppDeployOptions = AgentDeviceRequestOverrides &
 export type AppDeployResult = {
   app: string;
   appPath: string;
-  platform: Platform;
+  platform: PublicPlatform;
   appId?: string;
   bundleId?: string;
   package?: string;

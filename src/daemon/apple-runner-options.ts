@@ -2,7 +2,7 @@ import { isDeepLinkTarget } from '../core/open-target.ts';
 import type { SessionSurface } from '../core/session-surface.ts';
 import type { AppleRunnerLifecycleOptions } from '../platforms/apple/core/runner/runner-provider.ts';
 import { prewarmAppleRunnerCache } from '../platforms/apple/core/runner/runner-client.ts';
-import type { DeviceInfo } from '../kernel/device.ts';
+import { isIosFamily, type DeviceInfo } from '../kernel/device.ts';
 import { contextFromFlags } from './context.ts';
 import type { DaemonRequest } from './types.ts';
 
@@ -63,7 +63,7 @@ export function createAppleRunnerCachePrewarmOnColdBoot(params: {
   enabled: boolean;
 }): ((device: DeviceInfo) => void) | undefined {
   const { req, logPath, device, traceLogPath, enabled } = params;
-  if (!enabled || device.platform !== 'ios' || device.kind !== 'simulator') {
+  if (!enabled || !isIosFamily(device) || device.kind !== 'simulator') {
     return undefined;
   }
   return (bootingDevice) =>

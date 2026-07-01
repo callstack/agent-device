@@ -29,17 +29,19 @@ test('isTvOsDevice selects only the Apple tvOS leaf, not any TV target', () => {
 });
 
 test('matchesPlatformSelector resolves apple selector across Apple platforms', () => {
-  assert.equal(matchesPlatformSelector('ios', 'apple'), true);
-  assert.equal(matchesPlatformSelector('macos', 'apple'), true);
-  assert.equal(matchesPlatformSelector('android', 'apple'), false);
+  assert.equal(matchesPlatformSelector({ platform: 'apple', appleOs: 'ios' }, 'apple'), true);
+  assert.equal(matchesPlatformSelector({ platform: 'apple', appleOs: 'macos' }, 'apple'), true);
+  assert.equal(matchesPlatformSelector({ platform: 'android' }, 'apple'), false);
 });
 
 test('isPlatform accepts exactly the canonical PLATFORMS tuple', () => {
   for (const platform of PLATFORMS) {
     assert.equal(isPlatform(platform), true);
   }
-  // The `apple` selector is not a concrete leaf platform.
-  assert.equal(isPlatform('apple'), false);
+  // 'apple' is now the concrete Apple platform; the legacy leaf strings are not.
+  assert.equal(isPlatform('apple'), true);
+  assert.equal(isPlatform('ios'), false);
+  assert.equal(isPlatform('macos'), false);
   assert.equal(isPlatform('windows'), false);
   assert.equal(isPlatform(undefined), false);
 });
@@ -183,14 +185,14 @@ test('resolveDevice applies scoped set guidance when no platform selector specif
 
 test('resolveDevice prefers simulator over physical device when no explicit device selector', async () => {
   const physical: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'phys-1',
     name: 'My iPhone',
     kind: 'device',
     booted: true,
   };
   const simulator: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 16',
     kind: 'simulator',
@@ -203,21 +205,21 @@ test('resolveDevice prefers simulator over physical device when no explicit devi
 
 test('resolveDevice prefers booted simulator over physical device', async () => {
   const physical: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'phys-1',
     name: 'My iPhone',
     kind: 'device',
     booted: true,
   };
   const sim1: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 16',
     kind: 'simulator',
     booted: true,
   };
   const sim2: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-2',
     name: 'iPhone 15',
     kind: 'simulator',
@@ -229,7 +231,7 @@ test('resolveDevice prefers booted simulator over physical device', async () => 
 
 test('resolveDevice keeps Apple simulator family priority ahead of boot state', async () => {
   const tvSimulator: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'tv-sim',
     name: 'Apple TV 4K',
     kind: 'simulator',
@@ -237,7 +239,7 @@ test('resolveDevice keeps Apple simulator family priority ahead of boot state', 
     booted: true,
   };
   const iphoneSimulator: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'iphone-sim',
     name: 'iPhone 16',
     kind: 'simulator',
@@ -252,7 +254,7 @@ test('resolveDevice keeps Apple simulator family priority ahead of boot state', 
 
 test('resolveDevice prefers booted Apple simulator within the same family', async () => {
   const shutdownIphone: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'iphone-shutdown',
     name: 'iPhone 16',
     kind: 'simulator',
@@ -260,7 +262,7 @@ test('resolveDevice prefers booted Apple simulator within the same family', asyn
     booted: false,
   };
   const bootedIphone: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'iphone-booted',
     name: 'iPhone 17',
     kind: 'simulator',
@@ -275,14 +277,14 @@ test('resolveDevice prefers booted Apple simulator within the same family', asyn
 
 test('resolveDevice returns physical device when explicitly selected by deviceName', async () => {
   const physical: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'phys-1',
     name: 'My iPhone',
     kind: 'device',
     booted: true,
   };
   const simulator: DeviceInfo = {
-    platform: 'ios',
+    platform: 'apple',
     id: 'sim-1',
     name: 'iPhone 16',
     kind: 'simulator',

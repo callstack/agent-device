@@ -39,7 +39,7 @@ function makeIosSession(name: string): SessionState {
     createdAt: 1_700_000_000_000,
     actions: [],
     device: {
-      platform: 'ios',
+      platform: 'apple',
       target: 'mobile',
       id: 'SIM-001',
       name: 'iPhone 16',

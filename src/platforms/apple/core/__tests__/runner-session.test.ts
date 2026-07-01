@@ -1207,11 +1207,12 @@ test('runner session invalidation skips graceful shutdown and removes stale sess
 });
 
 test('runner session validates supported Apple runner devices', () => {
-  validateRunnerDevice({ ...IOS_SIMULATOR, platform: 'ios', kind: 'simulator' });
+  validateRunnerDevice({ ...IOS_SIMULATOR, platform: 'apple', kind: 'simulator' });
   validateRunnerDevice({
     ...IOS_SIMULATOR,
     id: 'runner-session-macos',
-    platform: 'macos',
+    platform: 'apple',
+    appleOs: 'macos',
     kind: 'device',
     target: 'desktop',
   });

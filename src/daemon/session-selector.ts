@@ -1,7 +1,7 @@
 import { AppError } from '../kernel/errors.ts';
 import type { CommandFlags } from '../core/dispatch.ts';
 import type { SessionState } from './types.ts';
-import { matchesPlatformSelector } from '../kernel/device.ts';
+import { isIosFamily, matchesPlatformSelector } from '../kernel/device.ts';
 import { parseSerialAllowlist } from '../utils/device-isolation.ts';
 import { buildSessionRecoveryHint, describeSessionDevice } from './session-recovery-hints.ts';
 
@@ -44,14 +44,14 @@ export function listSessionSelectorConflicts(
   const device = session.device;
 
   const normalizedPlatform = flags.platform;
-  if (normalizedPlatform && !matchesPlatformSelector(device.platform, normalizedPlatform)) {
+  if (normalizedPlatform && !matchesPlatformSelector(device, normalizedPlatform)) {
     mismatches.push({ key: 'platform', value: flags.platform! });
   }
   if (flags.target && flags.target !== (device.target ?? 'mobile')) {
     mismatches.push({ key: 'target', value: flags.target });
   }
 
-  if (flags.udid && (device.platform !== 'ios' || flags.udid !== device.id)) {
+  if (flags.udid && (!isIosFamily(device) || flags.udid !== device.id)) {
     mismatches.push({ key: 'udid', value: flags.udid });
   }
 
@@ -67,7 +67,7 @@ export function listSessionSelectorConflicts(
     const requestedSetPath = flags.iosSimulatorDeviceSet.trim();
     const sessionSetPath = device.simulatorSetPath?.trim();
     if (
-      device.platform !== 'ios' ||
+      !isIosFamily(device) ||
       device.kind !== 'simulator' ||
       requestedSetPath !== sessionSetPath
     ) {
