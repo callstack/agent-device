@@ -51,7 +51,9 @@ test('Provider-backed integration prepare uses the Apple runner lifecycle provid
     },
   );
 
-  assert.deepEqual(lifecycleCalls, ['prepare:macos:desktop']);
+  // The provider receives the internal collapsed DeviceInfo (platform:'apple',
+  // appleOs:'macos'); the macOS distinction is carried by appleOs/target.
+  assert.deepEqual(lifecycleCalls, ['prepare:apple:desktop']);
 });
 
 test('Provider-backed integration macOS desktop flow uses semantic host and helper providers', async () => {

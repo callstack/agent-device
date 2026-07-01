@@ -1,7 +1,7 @@
 import path from 'node:path';
 import type { SessionAction, SessionState } from '../types.ts';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
-import { isApplePlatform } from '../../kernel/device.ts';
+import { isApplePlatform, publicPlatformString } from '../../kernel/device.ts';
 import { tryGetPlugin } from '../../core/platform-plugin/plugin.ts';
 import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
@@ -207,7 +207,7 @@ function buildBasePerfResponse(session: SessionState): PerfResponseData {
       };
   return {
     session: session.name,
-    platform: session.device.platform,
+    platform: publicPlatformString(session.device),
     device: session.device.name,
     deviceId: session.device.id,
     metrics: {
@@ -244,7 +244,7 @@ function buildDefaultUnavailableFrameMetric(): Record<string, unknown> {
 function buildBasePerfFramesResponse(session: SessionState): PerfFramesResponseData {
   return {
     session: session.name,
-    platform: session.device.platform,
+    platform: publicPlatformString(session.device),
     device: session.device.name,
     deviceId: session.device.id,
     metrics: {
@@ -259,7 +259,7 @@ function buildBasePerfFramesResponse(session: SessionState): PerfFramesResponseD
 function buildBasePerfMemoryResponse(session: SessionState): PerfMemoryResponseData {
   return {
     session: session.name,
-    platform: session.device.platform,
+    platform: publicPlatformString(session.device),
     device: session.device.name,
     deviceId: session.device.id,
     sampling: {

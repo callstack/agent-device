@@ -1,6 +1,11 @@
 import { parseSessionSurface, type SessionSurface } from '../../core/session-surface.ts';
 import { resolveFrontmostMacOsApp } from '../../platforms/apple/os/macos/helper.ts';
-import { isIosFamily, isMacOs, type DeviceInfo } from '../../kernel/device.ts';
+import {
+  isIosFamily,
+  isMacOs,
+  publicPlatformString,
+  type DeviceInfo,
+} from '../../kernel/device.ts';
 import type { SessionRuntimeHints, SessionState } from '../types.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { successText } from '../../utils/success-text.ts';
@@ -49,7 +54,7 @@ export function buildOpenResult(params: {
     result.runtime = runtime;
   }
   if (device) {
-    result.platform = device.platform;
+    result.platform = publicPlatformString(device);
     result.target = device.target ?? 'mobile';
     result.device = device.name;
     result.id = device.id;
