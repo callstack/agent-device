@@ -25,7 +25,7 @@ export type {
   ReplayTestReporterContext,
   ReplayTestReporterFactory,
   ReplayTestReporterLoadContext,
-} from '../cli-test-reporters/types.ts';
+} from '../replay/test/reporters/types.ts';
 
 export type { CommandResult } from '../core/command-descriptor/command-result.ts';
 export type { ResponseLevel } from '../kernel/contracts.ts';
