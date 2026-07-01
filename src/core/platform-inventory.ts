@@ -1,5 +1,7 @@
 import type { DeviceInfo, DeviceTarget, PlatformSelector } from '../kernel/device.ts';
 
+export const LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS = ['android', 'apple', 'linux'] as const;
+
 export type DeviceInventoryRequest = {
   platform?: PlatformSelector;
   target?: DeviceTarget;
@@ -13,6 +15,12 @@ export type DeviceInventoryRequest = {
   iosSimulatorSetPath?: string;
   androidSerialAllowlist?: string[];
 };
+
+export type DeviceInventoryGroup = 'android' | 'apple' | 'linux' | 'web';
+export type DeviceInventoryGroupCounts = Record<
+  DeviceInventoryGroup,
+  { available: number; booted: number }
+>;
 
 // Exported so the web platform-plugin's `discoverDevices` reuses the SAME static
 // device instance instead of carrying a divergent copy.
@@ -60,32 +68,38 @@ export async function listLocalDeviceInventory(
   }
 
   const devices: DeviceInfo[] = [];
-  try {
-    const { listAndroidDevices } = await import('../platforms/android/devices.ts');
-    devices.push(
-      ...(await listAndroidDevices({
-        serialAllowlist: request.androidSerialAllowlist
-          ? new Set(request.androidSerialAllowlist)
-          : undefined,
-      })),
-    );
-  } catch {}
-  try {
-    const { listAppleDevices } = await import('../platforms/apple/core/devices.ts');
-    devices.push(
-      ...(await listAppleDevices({
-        simulatorSetPath: request.iosSimulatorSetPath,
-        udid: request.udid,
-      })),
-    );
-  } catch {}
   // Linux local device is appended last so it does not displace
   // connected Android/Apple devices in implicit auto-selection.
-  try {
-    const { listLinuxDevices } = await import('../platforms/linux/devices.ts');
-    devices.push(...(await listLinuxDevices()));
-  } catch {}
+  for (const platform of LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS) {
+    try {
+      devices.push(...(await listLocalDeviceInventory({ ...request, platform })));
+    } catch {}
+  }
   return devices;
+}
+
+export function countDeviceInventoryByGroup(devices: DeviceInfo[]): DeviceInventoryGroupCounts {
+  const counts = emptyDeviceInventoryGroupCounts();
+  for (const device of devices) {
+    const group = deviceInventoryGroupForDevice(device);
+    counts[group].available += 1;
+    if (device.booted === true) counts[group].booted += 1;
+  }
+  return counts;
+}
+
+function emptyDeviceInventoryGroupCounts(): DeviceInventoryGroupCounts {
+  return {
+    android: { available: 0, booted: 0 },
+    apple: { available: 0, booted: 0 },
+    linux: { available: 0, booted: 0 },
+    web: { available: 0, booted: 0 },
+  };
+}
+
+function deviceInventoryGroupForDevice(device: DeviceInfo): DeviceInventoryGroup {
+  if (device.platform === 'ios' || device.platform === 'macos') return 'apple';
+  return device.platform;
 }
 
 // Exported so the Apple platform-plugin's `discoverDevices` reuses the SAME

@@ -2,7 +2,12 @@ import {
   buildDeviceInventoryRequestFromFlags,
   listDeviceInventory,
 } from '../../core/dispatch-resolve.ts';
-import type { DeviceInventoryRequest } from '../../core/platform-inventory.ts';
+import {
+  countDeviceInventoryByGroup,
+  LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
+  type DeviceInventoryRequest,
+  type DeviceInventoryGroup,
+} from '../../core/platform-inventory.ts';
 import {
   matchesDeviceSelector,
   type DeviceInfo,
@@ -21,7 +26,6 @@ export type DoctorDeviceInventory = {
   target?: DeviceTarget;
 };
 
-type DoctorInventoryGroup = 'android' | 'apple' | 'linux' | 'web';
 type DoctorInventoryFailure = {
   platform: PlatformSelector;
   message: string;
@@ -130,7 +134,7 @@ async function readDoctorDeviceInventory(
 
   const devices: DeviceInfo[] = [];
   const failures: DoctorInventoryFailure[] = [];
-  for (const platform of ['android', 'apple', 'linux'] as const) {
+  for (const platform of LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS) {
     try {
       devices.push(...(await listDeviceInventory({ ...selector, platform })));
     } catch (error) {
@@ -217,35 +221,25 @@ function deviceInventorySummaryBreakdown(
   selector: Pick<DeviceInventoryRequest, 'platform' | 'target'>,
 ): string | undefined {
   if (selector.platform || selector.target) return undefined;
-  const groups = deviceInventoryGroups(devices);
+  const groups = countDeviceInventoryByGroup(devices);
+  const labels = deviceInventoryGroupLabels();
   return (['android', 'apple', 'linux', 'web'] as const)
     .flatMap((group) => {
       const entry = groups[group];
       return entry.available > 0
-        ? [`${entry.label} ${entry.available} available, ${entry.booted} booted`]
+        ? [`${labels[group]} ${entry.available} available, ${entry.booted} booted`]
         : [];
     })
     .join('; ');
 }
 
-function deviceInventoryGroups(
-  devices: DeviceInfo[],
-): Record<DoctorInventoryGroup, { label: string; available: number; booted: number }> {
-  const groups = {
-    android: { label: 'Android', available: 0, booted: 0 },
-    apple: { label: 'Apple', available: 0, booted: 0 },
-    linux: { label: 'Linux', available: 0, booted: 0 },
-    web: { label: 'web', available: 0, booted: 0 },
+function deviceInventoryGroupLabels(): Record<DeviceInventoryGroup, string> {
+  return {
+    android: 'Android',
+    apple: 'Apple',
+    linux: 'Linux',
+    web: 'web',
   };
-  for (const device of devices) {
-    const group =
-      device.platform === 'ios' || device.platform === 'macos'
-        ? groups.apple
-        : groups[device.platform];
-    group.available += 1;
-    if (device.booted === true) group.booted += 1;
-  }
-  return groups;
 }
 
 function platformLabel(platform: PlatformSelector): string {
