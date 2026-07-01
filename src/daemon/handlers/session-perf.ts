@@ -3,7 +3,7 @@ import type { SessionAction, SessionState } from '../types.ts';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { isApplePlatform } from '../../kernel/device.ts';
 import { tryGetPlugin } from '../../core/platform-plugin/plugin.ts';
-import { registerBuiltinPlatformPlugins } from '../../core/platform-plugin/register-builtins.ts';
+import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import {
   ANDROID_HPROF_SNAPSHOT_DESCRIPTION,

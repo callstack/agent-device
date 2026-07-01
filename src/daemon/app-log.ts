@@ -3,7 +3,7 @@ import path from 'node:path';
 import type { DeviceInfo } from '../kernel/device.ts';
 import { AppError } from '../kernel/errors.ts';
 import { tryGetPlugin } from '../core/platform-plugin/plugin.ts';
-import { registerBuiltinPlatformPlugins } from '../core/platform-plugin/register-builtins.ts';
+import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
 import { runCmd } from '../utils/exec.ts';
 import { runXcrun } from '../platforms/apple/core/tool-provider.ts';
 import { runAndroidAdb } from '../platforms/android/adb.ts';

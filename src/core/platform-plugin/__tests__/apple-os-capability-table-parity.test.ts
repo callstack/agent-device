@@ -23,7 +23,7 @@ import {
 } from '../../../__tests__/test-utils/index.ts';
 import { APPLE_OS_CAPABILITIES, resolveDeviceAppleOs } from '../apple-os-capabilities.ts';
 import { getPlugin } from '../plugin.ts';
-import { registerBuiltinPlatformPlugins } from '../register-builtins.ts';
+import { registerBuiltinPlatformPlugins } from '../../interactors/register-builtins.ts';
 
 // Phase 3 step d.5 table-equivalence gate. The AppleOS-axis predicates
 // (`target !== 'tv'` / `platform !== 'macos'` / `isTvOsDevice`) that used to be

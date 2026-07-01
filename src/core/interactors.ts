@@ -3,7 +3,7 @@ import { AppError } from '../kernel/errors.ts';
 import { getProviderDeviceInteractor, isActiveProviderDevice } from '../provider-device-runtime.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
 import { getPlugin } from './platform-plugin/plugin.ts';
-import { registerBuiltinPlatformPlugins } from './platform-plugin/register-builtins.ts';
+import { registerBuiltinPlatformPlugins } from './interactors/register-builtins.ts';
 
 // Populate the platform-plugin registry once, at module load (only registers
 // lazy closures — no leaf code is imported here, so CLI cold-start is unaffected).

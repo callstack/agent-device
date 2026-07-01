@@ -1,20 +1,20 @@
 import { isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
 import { assertScrollGestureInput, type ScrollDirection } from '../../core/scroll-gesture.ts';
 import { normalizeScrollDurationMs, SCROLL_DURATION_MAX_MS } from '../../core/scroll-command.ts';
-import { runAppleRunnerCommand } from '../apple/core/runner/runner-client.ts';
+import { runAppleRunnerCommand } from './core/runner/runner-client.ts';
 import {
   buildRunnerSequenceCommand,
   parseRunnerSequenceResult,
-} from '../apple/core/runner/runner-sequence.ts';
-import type { RunnerCommand } from '../apple/core/runner/runner-contract.ts';
-import { appleRemotePressCommand } from '../apple/os/tvos/remote.ts';
-import { runMacosDesktopScroll } from '../apple/os/macos/desktop-scroll.ts';
+} from './core/runner/runner-sequence.ts';
+import type { RunnerCommand } from './core/runner/runner-contract.ts';
+import { appleRemotePressCommand } from './os/tvos/remote.ts';
+import { runMacosDesktopScroll } from './os/macos/desktop-scroll.ts';
 import {
   normalizeAppleScrollResult,
   normalizeAppleScrollResultWithResolvedFrame,
   scrollRunnerFields,
   type AppleScrollOptions,
-} from '../apple/core/scroll.ts';
+} from './core/scroll.ts';
 import type {
   BackMode,
   Interactor,

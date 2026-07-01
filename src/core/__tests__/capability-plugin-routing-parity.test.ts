@@ -29,7 +29,7 @@ import {
 import { deriveCapabilityForPlatform } from '../platform-descriptor/derive.ts';
 import { platformDescriptors } from '../platform-descriptor/registry.ts';
 import { getPlugin } from '../platform-plugin/plugin.ts';
-import { registerBuiltinPlatformPlugins } from '../platform-plugin/register-builtins.ts';
+import { registerBuiltinPlatformPlugins } from '../interactors/register-builtins.ts';
 
 // Phase 3 step (b) parity gate. Independent oracles pin that the migration is
 // byte-for-byte behaviorless:

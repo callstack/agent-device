@@ -39,8 +39,10 @@ const isShardedTestRequest = (req: DaemonRequest): boolean =>
 // The per-command `supports()` / `unsupportedHint()` device closures that used to
 // live here were RELOCATED VERBATIM onto the owning PlatformPlugin's
 // `capability.supportsByDefault` / `unsupportedHintByDefault` in Phase 3 step b.2
-// (src/core/platform-plugin/register-builtins.ts). The capability facet now carries
-// platform/kind buckets only; admission reads the closure off the plugin.
+// (the Apple family's closures live on the Apple plugin, src/platforms/apple/plugin.ts;
+// android/linux/web plugins are wired in src/core/interactors/register-builtins.ts). The
+// capability facet now carries platform/kind buckets only; admission reads the closure
+// off the plugin.
 // ---------------------------------------------------------------------------
 
 const APPLE_SIM_AND_DEVICE = { simulator: true, device: true };

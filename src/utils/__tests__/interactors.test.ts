@@ -11,7 +11,7 @@ vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOrigi
 });
 
 import { getInteractor } from '../../core/interactors.ts';
-import { resolveAppleBackRunnerCommand } from '../../platforms/ios/interactions.ts';
+import { resolveAppleBackRunnerCommand } from '../../platforms/apple/interactions.ts';
 import { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 
 const iosSimulator: DeviceInfo = {

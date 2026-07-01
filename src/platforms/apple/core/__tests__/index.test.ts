@@ -76,7 +76,7 @@ import {
   prepareSimulatorStatusBarForScreenshot as prepareStatusBarForScreenshot,
 } from '../screenshot-status-bar.ts';
 import { runAppleRunnerCommand } from '../runner/runner-client.ts';
-import { iosRunnerOverrides } from '../../../ios/interactions.ts';
+import { iosRunnerOverrides } from '../../interactions.ts';
 import { IOS_DEVICE_INSTALL_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from '../config.ts';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import { withDiagnosticsScope } from '../../../../utils/diagnostics.ts';

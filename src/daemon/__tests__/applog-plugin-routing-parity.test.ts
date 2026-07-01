@@ -18,7 +18,7 @@ import {
   WEB_DESKTOP_DEVICE,
 } from '../../__tests__/test-utils/index.ts';
 import { getPlugin } from '../../core/platform-plugin/plugin.ts';
-import { registerBuiltinPlatformPlugins } from '../../core/platform-plugin/register-builtins.ts';
+import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
 import { resolveLogBackend } from '../app-log.ts';
 import type { LogBackend } from '../network-log.ts';
 

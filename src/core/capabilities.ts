@@ -1,7 +1,7 @@
 import { deriveCapabilityMatrix } from './command-descriptor/derive.ts';
 import { commandDescriptors } from './command-descriptor/registry.ts';
 import { tryGetPlugin } from './platform-plugin/plugin.ts';
-import { registerBuiltinPlatformPlugins } from './platform-plugin/register-builtins.ts';
+import { registerBuiltinPlatformPlugins } from './interactors/register-builtins.ts';
 import type { DeviceInfo } from '../kernel/device.ts';
 
 // Populate the PlatformPlugin registry once at module load (idempotent; registers

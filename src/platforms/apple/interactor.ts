@@ -6,19 +6,16 @@ import {
   screenshotIos,
   setIosSetting,
   writeIosClipboardText,
-} from '../../platforms/apple/core/apps.ts';
-import {
-  iosRunnerOverrides,
-  resolveAppleBackRunnerCommand,
-} from '../../platforms/ios/interactions.ts';
-import { appleRemotePressCommand } from '../../platforms/apple/os/tvos/remote.ts';
-import { runMacOsScreenshotAction } from '../../platforms/apple/os/macos/helper.ts';
-import { runAppleRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
+} from './core/apps.ts';
+import { iosRunnerOverrides, resolveAppleBackRunnerCommand } from './interactions.ts';
+import { appleRemotePressCommand } from './os/tvos/remote.ts';
+import { runMacOsScreenshotAction } from './os/macos/helper.ts';
+import { runAppleRunnerCommand } from './core/runner/runner-client.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
-import type { Interactor, RunnerContext } from '../interactor-types.ts';
+import type { Interactor, RunnerContext } from '../../core/interactor-types.ts';
 import {
   readSnapshotQualityVerdict,
   type SnapshotQualityVerdict,

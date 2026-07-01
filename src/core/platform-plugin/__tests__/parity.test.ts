@@ -4,7 +4,10 @@ import { PLATFORMS, type Platform } from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { platformDescriptors } from '../../platform-descriptor/registry.ts';
 import { getPlugin, registeredPlatforms, registerPlatformPlugin, tryGetPlugin } from '../plugin.ts';
-import { BUILTIN_PLATFORM_PLUGINS, registerBuiltinPlatformPlugins } from '../register-builtins.ts';
+import {
+  BUILTIN_PLATFORM_PLUGINS,
+  registerBuiltinPlatformPlugins,
+} from '../../interactors/register-builtins.ts';
 
 // Idempotently populate the registry for this test module.
 registerBuiltinPlatformPlugins();

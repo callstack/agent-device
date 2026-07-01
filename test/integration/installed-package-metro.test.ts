@@ -270,11 +270,11 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       consumerRoot,
       ['--input-type=module', '-e'],
       `
-        import { createAgentDeviceClient, createLocalArtifactAdapter } from 'agent-device';
+        import * as agentDeviceRoot from 'agent-device';
         import 'agent-device/contracts';
         import { createLocalArtifactAdapter as createIoArtifactAdapter } from 'agent-device/io';
         import { buildBundleUrl, normalizeBaseUrl } from 'agent-device/metro';
-        const client = createAgentDeviceClient();
+        const client = agentDeviceRoot.createAgentDeviceClient();
         const removedSubpaths = await Promise.all([
           'agent-device/backend',
           'agent-device/commands',
@@ -290,8 +290,11 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
         }));
         console.log(JSON.stringify({
           bundleUrl: buildBundleUrl('https://public.example.test', 'ios'),
+          rootExports: Object.keys(agentDeviceRoot).sort(),
           rootClientSnapshot: typeof client.capture.snapshot,
-          rootArtifactAdapter: typeof createLocalArtifactAdapter({ cwd: process.cwd() }).reserveOutput,
+          rootArtifactAdapter: typeof agentDeviceRoot.createLocalArtifactAdapter({
+            cwd: process.cwd(),
+          }).reserveOutput,
           ioArtifactAdapter: typeof createIoArtifactAdapter({ cwd: process.cwd() }).reserveOutput,
           removedSubpathsBlocked: removedSubpaths.every(Boolean),
           normalizedBaseUrl: normalizeBaseUrl('https://public.example.test///'),
@@ -303,6 +306,14 @@ test('installed package exposes Node APIs and packaged companion tunnel entrypoi
       imports.bundleUrl,
       'https://public.example.test/index.bundle?platform=ios&dev=true&minify=false',
     );
+    assert.deepEqual(imports.rootExports, [
+      'AppError',
+      'centerOfRect',
+      'createAgentDeviceClient',
+      'createLocalArtifactAdapter',
+      'isAgentDeviceError',
+      'normalizeAgentDeviceError',
+    ]);
     assert.equal(imports.rootClientSnapshot, 'function');
     assert.equal(imports.rootArtifactAdapter, 'function');
     assert.equal(imports.ioArtifactAdapter, 'function');
