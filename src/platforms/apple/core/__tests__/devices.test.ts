@@ -10,8 +10,8 @@ import {
   parseXctracePhysicalAppleDevices,
   resolveAppleTargetFromDevicectlDevice,
   withAppleToolProvider,
-} from '../../apple/core/devices.ts';
-import type { ExecResult } from '../../../utils/exec.ts';
+} from '../devices.ts';
+import type { ExecResult } from '../../../../utils/exec.ts';
 
 const toolCalls: Array<[string, string[]]> = [];
 let mockRunCommand: (cmd: string, args: string[]) => Promise<ExecResult>;

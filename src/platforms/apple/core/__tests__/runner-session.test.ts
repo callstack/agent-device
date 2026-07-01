@@ -4,14 +4,17 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
-import { IOS_DEVICE, IOS_SIMULATOR } from '../../../__tests__/test-utils/index.ts';
+import { IOS_DEVICE, IOS_SIMULATOR } from '../../../../__tests__/test-utils/index.ts';
 import {
   type RequestProgressEvent,
   withRequestProgressSink,
-} from '../../../daemon/request-progress.ts';
-import { AppError } from '../../../kernel/errors.ts';
-import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
-import type { RunnerSession } from '../../apple/core/runner/runner-session-types.ts';
+} from '../../../../daemon/request-progress.ts';
+import { AppError } from '../../../../kernel/errors.ts';
+import {
+  flushDiagnosticsToSessionFile,
+  withDiagnosticsScope,
+} from '../../../../utils/diagnostics.ts';
+import type { RunnerSession } from '../runner/runner-session-types.ts';
 
 const {
   mockAcquireXcodebuildSimulatorSetRedirect,
@@ -47,18 +50,19 @@ const {
   mockRedirectRelease: vi.fn(),
 }));
 
-vi.mock('../../../utils/exec.ts', async () => {
-  const actual =
-    await vi.importActual<typeof import('../../../utils/exec.ts')>('../../../utils/exec.ts');
+vi.mock('../../../../utils/exec.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../../../utils/exec.ts')>(
+    '../../../../utils/exec.ts',
+  );
   return {
     ...actual,
     runCmdBackground: mockRunCmdBackground,
   };
 });
 
-vi.mock('../../../utils/process-identity.ts', async () => {
-  const actual = await vi.importActual<typeof import('../../../utils/process-identity.ts')>(
-    '../../../utils/process-identity.ts',
+vi.mock('../../../../utils/process-identity.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../../../utils/process-identity.ts')>(
+    '../../../../utils/process-identity.ts',
   );
   return {
     ...actual,
@@ -67,10 +71,8 @@ vi.mock('../../../utils/process-identity.ts', async () => {
   };
 });
 
-vi.mock('../../apple/core/tool-provider.ts', async () => {
-  const actual = await vi.importActual<typeof import('../../apple/core/tool-provider.ts')>(
-    '../../apple/core/tool-provider.ts',
-  );
+vi.mock('../tool-provider.ts', async () => {
+  const actual = await vi.importActual<typeof import('../tool-provider.ts')>('../tool-provider.ts');
   return {
     ...actual,
     runAppleToolCommand: mockRunAppleToolCommand,
@@ -78,10 +80,10 @@ vi.mock('../../apple/core/tool-provider.ts', async () => {
   };
 });
 
-vi.mock('../../apple/core/runner/runner-transport.ts', async () => {
-  const actual = await vi.importActual<
-    typeof import('../../apple/core/runner/runner-transport.ts')
-  >('../../apple/core/runner/runner-transport.ts');
+vi.mock('../runner/runner-transport.ts', async () => {
+  const actual = await vi.importActual<typeof import('../runner/runner-transport.ts')>(
+    '../runner/runner-transport.ts',
+  );
   return {
     ...actual,
     cleanupTempFile: mockCleanupTempFile,
@@ -91,10 +93,10 @@ vi.mock('../../apple/core/runner/runner-transport.ts', async () => {
   };
 });
 
-vi.mock('../../apple/core/runner/runner-xctestrun.ts', async () => {
-  const actual = await vi.importActual<
-    typeof import('../../apple/core/runner/runner-xctestrun.ts')
-  >('../../apple/core/runner/runner-xctestrun.ts');
+vi.mock('../runner/runner-xctestrun.ts', async () => {
+  const actual = await vi.importActual<typeof import('../runner/runner-xctestrun.ts')>(
+    '../runner/runner-xctestrun.ts',
+  );
   return {
     ...actual,
     acquireXcodebuildSimulatorSetRedirect: mockAcquireXcodebuildSimulatorSetRedirect,
@@ -113,7 +115,7 @@ import {
   invalidateRunnerSession,
   stopIosRunnerSession,
   validateRunnerDevice,
-} from '../../apple/core/runner/runner-session.ts';
+} from '../runner/runner-session.ts';
 import {
   cleanupRunnerLeasesForOwner,
   RUNNER_OWNER_START_TIME,
@@ -121,7 +123,7 @@ import {
   setRunnerLeaseOwnerStateDir,
   writeRunnerLease,
   type RunnerLease,
-} from '../../apple/core/runner/runner-lease.ts';
+} from '../runner/runner-lease.ts';
 
 beforeEach(async () => {
   await abortAllIosRunnerSessions();

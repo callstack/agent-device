@@ -5,8 +5,8 @@ import {
   resolveRunnerPlatformName,
   resolveRunnerSdkName,
   resolveRunnerXctestrunHints,
-} from '../../apple/core/apple-runner-platform.ts';
-import type { DeviceInfo } from '../../../kernel/device.ts';
+} from '../apple-runner-platform.ts';
+import type { DeviceInfo } from '../../../../kernel/device.ts';
 
 function iosSim(overrides: Partial<DeviceInfo> = {}): DeviceInfo {
   return {

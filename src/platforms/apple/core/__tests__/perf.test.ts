@@ -4,8 +4,8 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-vi.mock('../../../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
+vi.mock('../../../../utils/exec.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../utils/exec.ts')>();
   return {
     ...actual,
     runCmd: vi.fn(actual.runCmd),
@@ -18,17 +18,17 @@ import {
   parseApplePsOutput,
   sampleAppleFramePerf,
   sampleApplePerfMetrics,
-} from '../../apple/core/perf.ts';
+} from '../perf.ts';
 import {
   startAppleXctracePerfCapture,
   stopAppleXctracePerfCapture,
   writeAppleXctracePerfReport,
   type AppleXctracePerfCapture,
-} from '../../apple/core/perf-xctrace.ts';
-import { parseAppleFramePerfSample } from '../../apple/core/perf-frame.ts';
-import { runCmd, runCmdBackground } from '../../../utils/exec.ts';
-import type { DeviceInfo } from '../../../kernel/device.ts';
-import { AppError } from '../../../kernel/errors.ts';
+} from '../perf-xctrace.ts';
+import { parseAppleFramePerfSample } from '../perf-frame.ts';
+import { runCmd, runCmdBackground } from '../../../../utils/exec.ts';
+import type { DeviceInfo } from '../../../../kernel/device.ts';
+import { AppError } from '../../../../kernel/errors.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockRunCmdBackground = vi.mocked(runCmdBackground);

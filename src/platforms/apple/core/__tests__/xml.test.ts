@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
-import { parseXmlDocumentSync } from '../../apple/core/xml.ts';
+import { parseXmlDocumentSync } from '../xml.ts';
 
 test('parseXmlDocumentSync preserves ordered nodes with attributes and decoded text', () => {
   const nodes = parseXmlDocumentSync(

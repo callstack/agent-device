@@ -1,14 +1,14 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError } from '../../../../kernel/errors.ts';
 import {
   MAX_RUNNER_SEQUENCE_STEPS,
   SEQUENCEABLE_RUNNER_STEP_KINDS,
   buildRunnerSequenceCommand,
   parseRunnerSequenceResult,
   validateRunnerSequenceSteps,
-} from '../../apple/core/runner/runner-sequence.ts';
-import type { RunnerSequenceStep } from '../../apple/core/runner/runner-contract.ts';
+} from '../runner/runner-sequence.ts';
+import type { RunnerSequenceStep } from '../runner/runner-contract.ts';
 
 function tap(x: number, y: number): RunnerSequenceStep {
   return { kind: 'tap', x, y };

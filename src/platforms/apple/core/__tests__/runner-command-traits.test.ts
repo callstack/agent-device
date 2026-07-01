@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { RunnerCommand } from '../../apple/core/runner/runner-contract.ts';
+import type { RunnerCommand } from '../runner/runner-contract.ts';
 import {
   canSkipRunnerReadinessPreflightAfterHealthyMutation,
   isReadOnlyRunnerCommand,
   isRunnerReadinessProbeCommand,
   readRunnerCommandTraits,
   type RunnerCommandTraits,
-} from '../../apple/core/runner/runner-command-traits.ts';
-import { RUNNER_COMMAND_TRAIT_MANIFEST } from '../../apple/core/runner/runner-command-manifest.ts';
+} from '../runner/runner-command-traits.ts';
+import { RUNNER_COMMAND_TRAIT_MANIFEST } from '../runner/runner-command-manifest.ts';
 
 const EXPECTED_RUNNER_COMMAND_TRAITS = Object.fromEntries(
   Object.entries(RUNNER_COMMAND_TRAIT_MANIFEST).map(([command, traitClass]) => [

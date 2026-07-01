@@ -4,14 +4,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 
-import {
-  createLocalAppleToolProvider,
-  withAppleToolProvider,
-} from '../../apple/core/tool-provider.ts';
+import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 import {
   applyXctestRunnerAppIcon,
   applyXctestRunnerAppIconFromDerivedPath,
-} from '../../apple/core/runner/runner-icon.ts';
+} from '../runner/runner-icon.ts';
 
 type AppleToolCall = [string, string[]];
 

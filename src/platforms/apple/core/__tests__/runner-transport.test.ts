@@ -1,18 +1,19 @@
 import fs from 'node:fs';
 import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import type { DeviceInfo } from '../../../kernel/device.ts';
-import type { ExecBackgroundResult } from '../../../utils/exec.ts';
-import { AppError } from '../../../kernel/errors.ts';
-import type { RunnerSession } from '../../apple/core/runner/runner-session-types.ts';
+import type { DeviceInfo } from '../../../../kernel/device.ts';
+import type { ExecBackgroundResult } from '../../../../utils/exec.ts';
+import { AppError } from '../../../../kernel/errors.ts';
+import type { RunnerSession } from '../runner/runner-session-types.ts';
 
 const { mockRunCmd } = vi.hoisted(() => ({
   mockRunCmd: vi.fn(),
 }));
 
-vi.mock('../../../utils/exec.ts', async () => {
-  const actual =
-    await vi.importActual<typeof import('../../../utils/exec.ts')>('../../../utils/exec.ts');
+vi.mock('../../../../utils/exec.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../../../utils/exec.ts')>(
+    '../../../../utils/exec.ts',
+  );
   return {
     ...actual,
     runCmd: mockRunCmd,
@@ -23,7 +24,7 @@ import {
   clearDeviceTunnelIpCache,
   sendRunnerCommandOnce,
   waitForRunner,
-} from '../../apple/core/runner/runner-transport.ts';
+} from '../runner/runner-transport.ts';
 
 const iosSimulator: DeviceInfo = {
   platform: 'ios',

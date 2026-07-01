@@ -5,8 +5,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import type { DeviceInfo } from '../../../kernel/device.ts';
-import { withCommandExecutorOverride } from '../../../utils/exec.ts';
+import type { DeviceInfo } from '../../../../kernel/device.ts';
+import { withCommandExecutorOverride } from '../../../../utils/exec.ts';
 import {
   __resetRunnerToolchainFingerprintCacheForTests,
   acquireXcodebuildSimulatorSetRedirect,
@@ -18,7 +18,7 @@ import {
   resolveRunnerDerivedPath,
   resolveXcodebuildSimulatorDeviceSetPath,
   scoreXctestrunCandidate,
-} from '../../apple/core/runner/runner-xctestrun.ts';
+} from '../runner/runner-xctestrun.ts';
 
 const iosSimulator: DeviceInfo = {
   platform: 'ios',

@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { buildSimctlArgs, buildSimctlArgsForDevice } from '../../apple/core/simctl.ts';
-import type { DeviceInfo } from '../../../kernel/device.ts';
+import { buildSimctlArgs, buildSimctlArgsForDevice } from '../simctl.ts';
+import type { DeviceInfo } from '../../../../kernel/device.ts';
 
 const IOS_SIMULATOR: DeviceInfo = {
   platform: 'ios',

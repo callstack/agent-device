@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { IOS_SIMULATOR } from '../../../__tests__/test-utils/index.ts';
+import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/index.ts';
 import {
   resolveAppleRunnerProvider,
   withAppleRunnerProvider,
   type AppleRunnerProvider,
-} from '../../apple/core/runner/runner-provider.ts';
+} from '../runner/runner-provider.ts';
 
 test('scoped Apple runner provider requires matching request id when scoped by request', async () => {
   const calls: string[] = [];

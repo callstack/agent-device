@@ -4,13 +4,13 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-vi.mock('../../../utils/exec.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../utils/exec.ts')>();
+vi.mock('../../../../utils/exec.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../utils/exec.ts')>();
   return { ...actual, runCmd: vi.fn(actual.runCmd) };
 });
 
-import { runCmd } from '../../../utils/exec.ts';
-import { readInfoPlistString } from '../../apple/core/plist.ts';
+import { runCmd } from '../../../../utils/exec.ts';
+import { readInfoPlistString } from '../plist.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 

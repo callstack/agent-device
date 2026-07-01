@@ -3,9 +3,9 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
-import { symbolicateCrashArtifact } from '../../apple/core/debug-symbols.ts';
-import { AppError } from '../../../kernel/errors.ts';
-import { withCommandExecutorOverride } from '../../../utils/exec.ts';
+import { symbolicateCrashArtifact } from '../debug-symbols.ts';
+import { AppError } from '../../../../kernel/errors.ts';
+import { withCommandExecutorOverride } from '../../../../utils/exec.ts';
 
 const UUID = 'ABCDEFAB-CDEF-ABCD-EFAB-CDEFABCDEFAB';
 const NORMALIZED_UUID = 'ABCDEFABCDEFABCDEFABCDEFABCDEFAB';

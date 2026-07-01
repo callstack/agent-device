@@ -6,7 +6,7 @@ import {
   runAppleToolCommand,
   runXcrun,
   withAppleToolProvider,
-} from '../../apple/core/tool-provider.ts';
+} from '../tool-provider.ts';
 
 test('scoped Apple tool provider handles xcrun execution', async () => {
   const calls: Array<[string, string[]]> = [];
