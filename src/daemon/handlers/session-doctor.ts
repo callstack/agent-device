@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import { publicPlatformString, type DeviceInfo } from '../../kernel/device.ts';
 import { readVersion } from '../../utils/version.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
@@ -129,7 +129,11 @@ function doctorResponse(
       status,
       summary: doctorSummary(status),
       kind: options.kind,
-      platform: scope.device?.platform ?? scope.inventory?.platform,
+      // approach (b): a resolved/bound device projects to the PUBLIC leaf platform
+      // (ios/macos), never the internal `apple`. Falls back to the raw inventory
+      // SELECTOR (a user-supplied `--platform` value, which is already a leaf or an
+      // explicit `apple` selector the caller typed) when no device was resolved.
+      platform: scope.device ? publicPlatformString(scope.device) : scope.inventory?.platform,
       target: scope.device?.target ?? scope.inventory?.target,
       targetApp: options.targetApp,
       metro:
