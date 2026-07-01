@@ -13,8 +13,8 @@ import {
   publicPlatformString,
   type DeviceInfo,
   type DeviceTarget,
-  type Platform,
   type PlatformSelector,
+  type PublicPlatform,
 } from '../../kernel/device.ts';
 import { normalizeError } from '../../kernel/errors.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
@@ -267,12 +267,16 @@ function deviceInventoryEvidence(
   devices: DeviceInfo[],
   failures: DoctorInventoryFailure[],
 ): Record<string, unknown> {
-  const byPlatform = new Map<Platform, { available: number; booted: number }>();
+  // Key by the PUBLIC leaf platform (ios/macos/android/...), never the internal
+  // collapsed `apple`, so the doctor breakdown stays a machine-stable output and
+  // Apple devices split into ios vs macos.
+  const byPlatform = new Map<PublicPlatform, { available: number; booted: number }>();
   for (const device of devices) {
-    const entry = byPlatform.get(device.platform) ?? { available: 0, booted: 0 };
+    const key = publicPlatformString(device);
+    const entry = byPlatform.get(key) ?? { available: 0, booted: 0 };
     entry.available += 1;
     if (device.booted === true) entry.booted += 1;
-    byPlatform.set(device.platform, entry);
+    byPlatform.set(key, entry);
   }
   return {
     available: devices.length,

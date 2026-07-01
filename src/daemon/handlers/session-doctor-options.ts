@@ -1,4 +1,5 @@
 import { detectProjectRuntimeKind } from '../../utils/project-runtime.ts';
+import { publicPlatformString } from '../../kernel/device.ts';
 import type { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import type { DoctorCheck, DoctorKind, DoctorOptions } from './session-doctor-types.ts';
@@ -116,7 +117,7 @@ export function sessionChecks(
           : undefined,
       command:
         sameDeviceSessions.length > 0
-          ? `agent-device close --session ${sameDeviceSessions[0]} --platform ${session.device.platform}`
+          ? `agent-device close --session ${sameDeviceSessions[0]} --platform ${publicPlatformString(session.device)}`
           : undefined,
       evidence: {
         session: session.name,
