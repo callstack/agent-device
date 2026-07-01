@@ -17,7 +17,7 @@ import {
   type CloudWebDriverProviderCapabilities,
 } from './capabilities.ts';
 import { touchPointer } from './webdriver-gestures.ts';
-import type { WebDriverClient, WebDriverWindowRect } from './webdriver-client.ts';
+import type { W3CPointerAction, WebDriverClient, WebDriverWindowRect } from './webdriver-client.ts';
 import { scrollFrameFromWebDriverSource } from './webdriver-scroll-frame.ts';
 import { parseWebDriverSource } from './webdriver-source.ts';
 
@@ -273,7 +273,7 @@ class WebDriverInteractor implements Interactor {
     this.unsupported('settings');
   }
 
-  private async pointerGesture(name: string, actions: Record<string, unknown>[]): Promise<void> {
+  private async pointerGesture(name: string, actions: W3CPointerAction[]): Promise<void> {
     await this.client.performActions([touchPointer(name, actions)]);
     // Some Appium grids accept W3C actions but reject DELETE /actions. A failed
     // best-effort input-state reset should not make the completed gesture fail.

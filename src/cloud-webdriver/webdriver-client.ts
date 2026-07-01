@@ -34,11 +34,27 @@ export type WebDriverWindowRect = {
   height: number;
 };
 
+export type W3CPointerAction =
+  | {
+      type: 'pointerMove';
+      duration: number;
+      x: number;
+      y: number;
+    }
+  | {
+      type: 'pointerDown' | 'pointerUp';
+      button: number;
+    }
+  | {
+      type: 'pause';
+      duration: number;
+    };
+
 export type W3CActionSequence = {
-  type: 'pointer' | 'key' | 'wheel';
+  type: 'pointer';
   id: string;
-  parameters?: Record<string, unknown>;
-  actions: Record<string, unknown>[];
+  parameters: { pointerType: 'touch' };
+  actions: W3CPointerAction[];
 };
 
 type WebDriverResponse = {

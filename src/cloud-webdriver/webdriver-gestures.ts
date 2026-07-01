@@ -1,6 +1,6 @@
-import type { W3CActionSequence } from './webdriver-client.ts';
+import type { W3CActionSequence, W3CPointerAction } from './webdriver-client.ts';
 
-export function touchPointer(name: string, actions: Record<string, unknown>[]): W3CActionSequence {
+export function touchPointer(name: string, actions: W3CPointerAction[]): W3CActionSequence {
   return {
     type: 'pointer',
     id: name,

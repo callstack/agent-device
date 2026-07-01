@@ -8,6 +8,7 @@ import { createDefaultCloudWebDriverProviderRuntimes } from '../../../src/cloud-
 import { scrollFrameFromWebDriverSource } from '../../../src/cloud-webdriver/webdriver-scroll-frame.ts';
 import { parseWebDriverSource } from '../../../src/cloud-webdriver/webdriver-source.ts';
 import { CLOUD_WEBDRIVER_PROVIDERS } from '../../../src/cloud-webdriver/providers.ts';
+import type { CloudArtifact } from '../../../src/cloud-artifacts.ts';
 import { createProviderDeviceRuntimeRequestProviders } from '../../../src/provider-device-runtime.ts';
 import type { DeviceLease } from '../../../src/daemon/lease-registry.ts';
 import type { DaemonRequest } from '../../../src/daemon/types.ts';
@@ -56,7 +57,7 @@ test('Cloud WebDriver runtime drives provider devices through daemon commands', 
         provider?: string;
         status?: string;
         providerSessionId?: string;
-        cloudArtifacts?: unknown[];
+        cloudArtifacts?: CloudArtifact[];
       }>(unavailableArtifacts);
       assert.equal(unavailableData.provider, WEBDRIVER_PROVIDER);
       assert.equal(unavailableData.status, 'unavailable');
