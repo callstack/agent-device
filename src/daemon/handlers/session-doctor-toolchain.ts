@@ -111,10 +111,11 @@ function appleToolchainStatus(probe: AppleToolchainProbe): DoctorCheck['status']
 }
 
 function appleToolchainSummary(probe: AppleToolchainProbe): string {
-  if (probe.selectedPath && probe.versionLine) {
-    return `Apple toolchain: ${probe.versionLine}; xcode-select ${probe.selectedPath}.`;
+  if (!probe.versionLine) return 'Apple toolchain: xcodebuild version check failed.';
+  if (!probe.selectedPath) {
+    return `Apple toolchain: ${probe.versionLine}; xcode-select path unavailable.`;
   }
-  return 'Apple toolchain: Xcode selection or version check failed.';
+  return `Apple toolchain: ${probe.versionLine}; xcode-select ${probe.selectedPath}.`;
 }
 
 function missingAppleToolchainCheck(): DoctorCheck {
