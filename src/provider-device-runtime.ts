@@ -8,7 +8,7 @@ import type { Interactor } from './core/interactor-types.ts';
 import type { DeviceInventoryProvider } from './core/dispatch-resolve.ts';
 import type { LeaseLifecycleContext, LeaseLifecycleProvider } from './daemon/handlers/lease.ts';
 import type { DeviceLease } from './daemon/lease-registry.ts';
-import type { DeviceInfo } from './kernel/device.ts';
+import { publicPlatformString, type DeviceInfo } from './kernel/device.ts';
 import { AppError } from './kernel/errors.ts';
 
 export type ProviderDeviceInstallResult = {
@@ -263,6 +263,6 @@ function unsupportedProviderOperation(
   throw new AppError(
     'UNSUPPORTED_OPERATION',
     `Provider device runtime ${runtime.provider} does not support ${operation} for this device.`,
-    { provider: runtime.provider, deviceId: device.id, platform: device.platform },
+    { provider: runtime.provider, deviceId: device.id, platform: publicPlatformString(device) },
   );
 }

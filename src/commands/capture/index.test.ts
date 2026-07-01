@@ -64,7 +64,7 @@ describe('capture command interface', () => {
             p95Ms: 1_900,
             maxMs: 1_900,
             slowThresholdMs: 1_500,
-            platform: 'apple',
+            platform: 'ios',
           },
           warning: 'Warning: ios snapshots are slow in this run: p95 1900ms over 2 captures.',
         },

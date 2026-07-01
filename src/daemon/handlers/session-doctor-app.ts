@@ -1,4 +1,9 @@
-import { isIosFamily, isMacOs, type DeviceInfo } from '../../kernel/device.ts';
+import {
+  isIosFamily,
+  isMacOs,
+  publicPlatformString,
+  type DeviceInfo,
+} from '../../kernel/device.ts';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import type { SessionState } from '../types.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';
@@ -19,8 +24,9 @@ export async function appendAppChecks(
       appendDoctorCheck(checks, {
         id: 'target-app',
         status: 'info',
-        summary: `Target app installation checks are not supported for ${device.platform}.`,
-        evidence: { requested: targetApp, platform: device.platform },
+        // approach (b): emit the PUBLIC leaf platform (ios/macos), never the internal `apple`.
+        summary: `Target app installation checks are not supported for ${publicPlatformString(device)}.`,
+        evidence: { requested: targetApp, platform: publicPlatformString(device) },
       });
       return;
     }

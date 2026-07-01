@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '../kernel/device.ts';
+import { publicPlatformString, type DeviceInfo } from '../kernel/device.ts';
 import { AppError } from '../kernel/errors.ts';
 import { getProviderDeviceInteractor, isActiveProviderDevice } from '../provider-device-runtime.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
@@ -19,7 +19,7 @@ export async function getInteractor(
     throw new AppError(
       'UNSUPPORTED_OPERATION',
       'Provider device runtime does not have an active interactor for this device.',
-      { deviceId: device.id, platform: device.platform },
+      { deviceId: device.id, platform: publicPlatformString(device) },
     );
   }
 

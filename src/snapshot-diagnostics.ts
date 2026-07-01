@@ -1,5 +1,5 @@
 import type { SnapshotBackend } from './kernel/snapshot.ts';
-import type { Platform } from './kernel/device.ts';
+import type { PublicPlatform } from './kernel/device.ts';
 import { isRecord } from './utils/parsing.ts';
 
 const SLOW_SNAPSHOT_P95_WARNING_MS = 1_500;
@@ -7,7 +7,8 @@ const SLOW_SNAPSHOT_P95_WARNING_MS = 1_500;
 export type SnapshotTimingSample = {
   durationMs: number;
   backend?: SnapshotBackend;
-  platform?: Platform;
+  // approach (b): the PUBLIC leaf platform (ios/macos) surfaced in snapshotDiagnostics, never `apple`.
+  platform?: PublicPlatform;
 };
 
 export type SnapshotTimingStats = {
@@ -16,7 +17,7 @@ export type SnapshotTimingStats = {
   p95Ms: number;
   maxMs: number;
   slowThresholdMs: number;
-  platform?: Platform;
+  platform?: PublicPlatform;
   backends?: Record<string, number>;
 };
 
@@ -108,7 +109,7 @@ function percentileNearestRank(values: number[], percentile: number): number {
 function singlePlatform(samples: SnapshotTimingSample[]): Pick<SnapshotTimingStats, 'platform'> {
   const platforms = samples
     .map((sample) => sample.platform)
-    .filter((platform): platform is Platform => Boolean(platform));
+    .filter((platform): platform is PublicPlatform => Boolean(platform));
   const uniquePlatforms = new Set(platforms);
   return uniquePlatforms.size === 1 ? { platform: platforms[0] } : {};
 }

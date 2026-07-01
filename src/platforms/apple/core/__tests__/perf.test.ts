@@ -14,6 +14,7 @@ vi.mock('../../../../utils/exec.ts', async (importOriginal) => {
 });
 
 import {
+  buildAppleMemorySnapshotSupport,
   captureAppleMemorySnapshot,
   parseApplePsOutput,
   sampleAppleFramePerf,
@@ -65,6 +66,42 @@ beforeEach(() => {
   vi.resetAllMocks();
   mockRunCmdBackground.mockImplementation(() => mockBackgroundXctrace());
   vi.useRealTimers();
+});
+
+function collectPlatformValues(value: unknown): string[] {
+  if (Array.isArray(value)) return value.flatMap((entry) => collectPlatformValues(entry));
+  if (value && typeof value === 'object') {
+    return Object.entries(value).flatMap(([key, entry]) =>
+      key === 'platform' && typeof entry === 'string'
+        ? [entry, ...collectPlatformValues(entry)]
+        : collectPlatformValues(entry),
+    );
+  }
+  return [];
+}
+
+test('buildAppleMemorySnapshotSupport projects support.platform to the macOS leaf', () => {
+  // approach (b): response.support.platform must be the PUBLIC leaf, never the internal `apple`.
+  const support = buildAppleMemorySnapshotSupport(MACOS_DEVICE);
+  assert.equal(support.platform, 'macos');
+  assert.equal(support.memgraph, true);
+});
+
+test('buildAppleMemorySnapshotSupport projects support.platform to the iOS leaf', () => {
+  assert.equal(buildAppleMemorySnapshotSupport(IOS_SIMULATOR).platform, 'ios');
+  assert.equal(buildAppleMemorySnapshotSupport(IOS_DEVICE).platform, 'ios');
+});
+
+test('buildAppleMemorySnapshotSupport never emits the internal apple platform', () => {
+  // Guard: no emitted `platform` field on a representative Apple perf response may equal `apple`.
+  for (const device of [MACOS_DEVICE, IOS_SIMULATOR, IOS_DEVICE]) {
+    const platforms = collectPlatformValues(buildAppleMemorySnapshotSupport(device));
+    assert.ok(platforms.length > 0, 'expected at least one platform field');
+    assert.ok(
+      !platforms.includes('apple'),
+      `apple leaked in support for ${device.name}: ${platforms.join(', ')}`,
+    );
+  }
 });
 
 test('parseApplePsOutput reads pid cpu rss and command columns', () => {
@@ -728,7 +765,7 @@ test('stopAppleXctracePerfCapture returns compact artifact metadata', async () =
     outPath: tracePath,
     appBundleId: 'com.example.app',
     deviceId: 'sim-1',
-    platform: 'apple',
+    platform: 'ios',
     targetPids: [111],
     targetProcesses: ['Example'],
     startedAt: '2026-04-01T10:00:00.000Z',
@@ -759,7 +796,7 @@ test('stopAppleXctracePerfCapture force-kills xctrace when graceful stop times o
     outPath: tracePath,
     appBundleId: 'com.example.app',
     deviceId: 'sim-1',
-    platform: 'apple',
+    platform: 'ios',
     targetPids: [111],
     targetProcesses: ['Example'],
     startedAt: '2026-04-01T10:00:00.000Z',
@@ -810,7 +847,7 @@ test('stopAppleXctracePerfCapture reports confirmed cleanup after forced kill ex
     outPath: tracePath,
     appBundleId: 'com.example.app',
     deviceId: 'sim-1',
-    platform: 'apple',
+    platform: 'ios',
     targetPids: [111],
     targetProcesses: ['Example'],
     startedAt: '2026-04-01T10:00:00.000Z',

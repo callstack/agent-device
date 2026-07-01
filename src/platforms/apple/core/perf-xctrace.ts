@@ -2,7 +2,13 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isIosFamily, isApplePlatform, type DeviceInfo } from '../../../kernel/device.ts';
+import {
+  isIosFamily,
+  isApplePlatform,
+  publicPlatformString,
+  type DeviceInfo,
+  type PublicPlatform,
+} from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import {
   runCmdBackground,
@@ -38,7 +44,8 @@ export type AppleXctracePerfCapture = {
   outPath: string;
   appBundleId: string;
   deviceId: string;
-  platform: DeviceInfo['platform'];
+  // approach (b): the PUBLIC leaf platform (ios/macos) surfaced in perf responses, never `apple`.
+  platform: PublicPlatform;
   targetPids: number[];
   targetProcesses: string[];
   startedAt: string;
@@ -53,7 +60,8 @@ export type AppleXctracePerfResult = {
   outPath: string;
   appBundleId: string;
   deviceId: string;
-  platform: DeviceInfo['platform'];
+  // approach (b): the PUBLIC leaf platform (ios/macos) surfaced in perf responses, never `apple`.
+  platform: PublicPlatform;
   targetPids: number[];
   targetProcesses: string[];
   startedAt: string;
@@ -102,7 +110,7 @@ export async function startAppleXctracePerfCapture(params: {
     outPath: params.outPath,
     appBundleId: params.appBundleId,
     deviceId: params.device.id,
-    platform: params.device.platform,
+    platform: publicPlatformString(params.device),
     targetPids: target.pids,
     targetProcesses: target.processNames,
     startedAt,

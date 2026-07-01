@@ -2,7 +2,13 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isIosFamily, isMacOs, type DeviceInfo } from '../../../kernel/device.ts';
+import {
+  isIosFamily,
+  isMacOs,
+  publicPlatformString,
+  type DeviceInfo,
+  type PublicPlatform,
+} from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import type { ExecResult } from '../../../utils/exec.ts';
 import { splitNonEmptyTrimmedLines } from '../../../utils/parsing.ts';
@@ -312,7 +318,7 @@ export async function sampleAppleFramePerf(
       'Apple frame-health sampling is currently available only on connected iOS devices.',
       {
         metric: 'fps',
-        platform: device.platform,
+        platform: publicPlatformString(device),
         deviceKind: device.kind,
       },
     );
@@ -392,7 +398,8 @@ export function buildAppleSamplingMetadata(device: DeviceInfo): Record<string, u
 }
 
 export function buildAppleMemorySnapshotSupport(device: DeviceInfo): {
-  platform: DeviceInfo['platform'];
+  // approach (b): emit the PUBLIC leaf platform (ios/macos), never the internal `apple`.
+  platform: PublicPlatform;
   deviceKind: DeviceInfo['kind'];
   memgraph: boolean;
   method: typeof APPLE_MEMGRAPH_SNAPSHOT_METHOD;
@@ -401,7 +408,7 @@ export function buildAppleMemorySnapshotSupport(device: DeviceInfo): {
 } {
   if (isIosFamily(device) && device.kind === 'device') {
     return {
-      platform: device.platform,
+      platform: publicPlatformString(device),
       deviceKind: device.kind,
       memgraph: false,
       method: APPLE_MEMGRAPH_SNAPSHOT_METHOD,
@@ -412,7 +419,7 @@ export function buildAppleMemorySnapshotSupport(device: DeviceInfo): {
   }
   if (isIosFamily(device) && device.kind === 'simulator') {
     return {
-      platform: device.platform,
+      platform: publicPlatformString(device),
       deviceKind: device.kind,
       memgraph: true,
       method: APPLE_MEMGRAPH_SNAPSHOT_METHOD,
@@ -422,7 +429,7 @@ export function buildAppleMemorySnapshotSupport(device: DeviceInfo): {
   }
   if (isMacOs(device)) {
     return {
-      platform: device.platform,
+      platform: publicPlatformString(device),
       deviceKind: device.kind,
       memgraph: true,
       method: APPLE_MEMGRAPH_SNAPSHOT_METHOD,
@@ -431,7 +438,7 @@ export function buildAppleMemorySnapshotSupport(device: DeviceInfo): {
     };
   }
   return {
-    platform: device.platform,
+    platform: publicPlatformString(device),
     deviceKind: device.kind,
     memgraph: false,
     method: APPLE_MEMGRAPH_SNAPSHOT_METHOD,

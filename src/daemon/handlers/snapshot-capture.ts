@@ -1,5 +1,5 @@
 import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
-import { isMacOs, isMobilePlatform } from '../../kernel/device.ts';
+import { isMacOs, isMobilePlatform, publicPlatformString } from '../../kernel/device.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import { runMacOsSnapshotAction } from '../../platforms/apple/os/macos/helper.ts';
 import { snapshotLinux } from '../../platforms/linux/snapshot.ts';
@@ -312,7 +312,8 @@ async function captureSnapshotAttempt(params: CaptureSnapshotParams): Promise<Sn
   recordSnapshotTiming(params.session, {
     durationMs: Date.now() - startedAt,
     backend: data.backend,
-    platform: params.device.platform,
+    // approach (b): emit the PUBLIC leaf platform (ios/macos), never the internal `apple`.
+    platform: publicPlatformString(params.device),
   });
   return {
     data,

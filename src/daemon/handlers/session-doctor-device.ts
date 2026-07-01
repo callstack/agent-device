@@ -10,6 +10,7 @@ import {
 } from '../../core/platform-inventory.ts';
 import {
   matchesDeviceSelector,
+  publicPlatformString,
   type DeviceInfo,
   type DeviceTarget,
   type Platform,
@@ -94,7 +95,8 @@ export function resolveDoctorDeviceForAppCheck(
     evidence: {
       targetApp,
       booted: booted.map((device) => ({
-        platform: device.platform,
+        // approach (b): emit the PUBLIC leaf platform (ios/macos), never the internal `apple`.
+        platform: publicPlatformString(device),
         id: device.id,
         name: device.name,
       })),

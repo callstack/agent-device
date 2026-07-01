@@ -13,7 +13,11 @@ import type {
   ProviderDeviceInstallResult,
   ProviderDeviceRuntime,
 } from '../provider-device-runtime.ts';
-import { deviceFieldsFromPublicPlatform, type DeviceInfo } from '../kernel/device.ts';
+import {
+  deviceFieldsFromPublicPlatform,
+  publicPlatformString,
+  type DeviceInfo,
+} from '../kernel/device.ts';
 import { AppError } from '../kernel/errors.ts';
 import { unavailableCloudArtifactsResult } from './artifact-results.ts';
 import {
@@ -364,7 +368,7 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
       throw new AppError(
         'UNSUPPORTED_OPERATION',
         unsupportedCapabilityMessage(session.capabilities, 'install'),
-        { provider: this.provider, deviceId: device.id, platform: device.platform },
+        { provider: this.provider, deviceId: device.id, platform: publicPlatformString(device) },
       );
     }
     const uploadApp = session.prepared.uploadApp ?? this.options.uploadApp;

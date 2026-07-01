@@ -492,7 +492,7 @@ test('runReplayScriptFile reports snapshot diagnostics from per-action session s
       session?.snapshotDiagnostics?.samples.push({
         durationMs: captures === 1 ? 400 : 1_900,
         backend: 'xctest',
-        platform: 'apple',
+        platform: 'ios',
       });
       return {
         ok: true,
@@ -550,7 +550,7 @@ test('runReplayScriptFile reports snapshot diagnostics on replay failure', async
       session?.snapshotDiagnostics?.samples.push({
         durationMs: captures === 1 ? 450 : 2_100,
         backend: 'xctest',
-        platform: 'apple',
+        platform: 'ios',
       });
       if (captures === 1) return { ok: true, data: {} };
       return { ok: false, error: { code: 'COMMAND_FAILED', message: 'button missing' } };
