@@ -2,15 +2,15 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runCmd } from '../../../utils/exec.ts';
-import { getRecordingOverlaySupportWarning } from '../../../recording/overlay.ts';
+import { runCmd } from '../../utils/exec.ts';
+import { getRecordingOverlaySupportWarning } from '../overlay.ts';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const recordingScriptsDir = path.resolve(
   __dirname,
-  '../../../../ios-runner/AgentDeviceRunner/RecordingScripts',
+  '../../../ios-runner/AgentDeviceRunner/RecordingScripts',
 );
-const recordingTestSupportDir = path.resolve(__dirname, '../../../../test/integration/support');
+const recordingTestSupportDir = path.resolve(__dirname, '../../../test/integration/support');
 const SWIFT_TYPECHECK_TIMEOUT_MS = 60_000;
 
 async function assertSwiftScriptTypechecks(scriptPath: string): Promise<void> {

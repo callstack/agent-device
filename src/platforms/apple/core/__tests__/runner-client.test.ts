@@ -10,37 +10,38 @@ const { mockRunCmdStreaming, mockRepairMacOsRunnerProductsIfNeeded } = vi.hoiste
   mockRepairMacOsRunnerProductsIfNeeded: vi.fn(),
 }));
 
-vi.mock('../../../utils/exec.ts', async () => {
-  const actual =
-    await vi.importActual<typeof import('../../../utils/exec.ts')>('../../../utils/exec.ts');
+vi.mock('../../../../utils/exec.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../../../utils/exec.ts')>(
+    '../../../../utils/exec.ts',
+  );
   return {
     ...actual,
     runCmdStreaming: mockRunCmdStreaming,
   };
 });
 
-vi.mock('../../apple/core/runner/runner-macos-products.ts', async () => {
-  const actual = await vi.importActual<
-    typeof import('../../apple/core/runner/runner-macos-products.ts')
-  >('../../apple/core/runner/runner-macos-products.ts');
+vi.mock('../runner/runner-macos-products.ts', async () => {
+  const actual = await vi.importActual<typeof import('../runner/runner-macos-products.ts')>(
+    '../runner/runner-macos-products.ts',
+  );
   return {
     ...actual,
     repairMacOsRunnerProductsIfNeeded: mockRepairMacOsRunnerProductsIfNeeded,
   };
 });
 
-import type { DeviceInfo } from '../../../kernel/device.ts';
+import type { DeviceInfo } from '../../../../kernel/device.ts';
 import {
   type RequestProgressEvent,
   withRequestProgressSink,
-} from '../../../daemon/request-progress.ts';
-import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../utils/diagnostics.ts';
-import { AppError } from '../../../kernel/errors.ts';
-import { isReadOnlyRunnerCommand } from '../../apple/core/runner/runner-command-traits.ts';
+} from '../../../../daemon/request-progress.ts';
 import {
-  withRunnerCommandId,
-  type RunnerCommand,
-} from '../../apple/core/runner/runner-contract.ts';
+  flushDiagnosticsToSessionFile,
+  withDiagnosticsScope,
+} from '../../../../utils/diagnostics.ts';
+import { AppError } from '../../../../kernel/errors.ts';
+import { isReadOnlyRunnerCommand } from '../runner/runner-command-traits.ts';
+import { withRunnerCommandId, type RunnerCommand } from '../runner/runner-contract.ts';
 import {
   assertSafeDerivedCleanup,
   isRetryableRunnerError,
@@ -52,7 +53,7 @@ import {
   resolveRunnerMaxConcurrentDestinationsFlag,
   resolveRunnerSigningBuildSettings,
   shouldRetryRunnerConnectError,
-} from '../../apple/core/runner/runner-client.ts';
+} from '../runner/runner-client.ts';
 import {
   acquireRunnerXctestrunCacheLock,
   ensureXctestrunArtifact,
@@ -66,8 +67,8 @@ import {
   shouldDeleteRunnerDerivedRootEntry,
   writeRunnerCacheMetadata,
   xctestrunReferencesProjectRoot,
-} from '../../apple/core/runner/runner-xctestrun.ts';
-import { parseRunnerResponse } from '../../apple/core/runner/runner-session.ts';
+} from '../runner/runner-xctestrun.ts';
+import { parseRunnerResponse } from '../runner/runner-session.ts';
 
 const iosSimulator: DeviceInfo = {
   platform: 'ios',
@@ -180,7 +181,7 @@ const runnerProtocolCommandFixtures: Record<RunnerCommand['command'], RunnerComm
   shutdown: { command: 'shutdown' },
 };
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../');
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../../');
 
 async function makeTmpDir(): Promise<string> {
   const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'agent-device-xctestrun-'));
