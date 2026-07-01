@@ -60,5 +60,5 @@ Implementation status as of 2026-06:
   capability tables, and any watchOS unsupported sentinel. watchOS remains out of scope for the current
   consolidation.
 
-This ADR owns the architectural decision; implementation progress for the remaining platform-plugin work lives
-in `plans/phase3-platform-plugin-progress.md`.
+This ADR owns the architectural decision; implementation progress for the remaining platform-plugin work is
+tracked in GitHub issues under the Phase 3 umbrella (#972).

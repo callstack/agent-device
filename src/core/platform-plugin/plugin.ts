@@ -23,7 +23,7 @@ import type { CapabilityBucket } from '../platform-descriptor/types.ts';
  * (`providers` / `recording` / `appLog` / `perf`) are NOT declared here — they
  * arrive in step (b), typed against PLATFORM-NEUTRAL, daemon-owned wrappers
  * (not the iOS-simulator-shaped provider seam). See
- * plans/phase3-platform-plugin-progress.md.
+ * docs/adr/0009-apple-platform-consolidation.md (tracked in issue #974).
  */
 export type PlatformPlugin = {
   /** Plugin/family id; also the capability-matrix bucket key for its platforms. */
