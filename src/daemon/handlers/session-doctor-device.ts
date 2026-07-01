@@ -51,6 +51,13 @@ export async function appendDeviceInventoryCheck(
       command: devices.length === 0 ? deviceInventoryCommand(selector) : undefined,
       evidence: deviceInventoryEvidence(devices, inventory.failures),
     });
+    // When some platforms had devices, the main check passes — but a platform whose
+    // inventory threw (e.g. a broken Xcode or Android SDK) must not be silently hidden.
+    if (devices.length > 0) {
+      for (const failure of inventory.failures) {
+        appendDoctorCheck(checks, inventoryFailureCheck(failure));
+      }
+    }
     return { devices, platform: selector.platform, target: selector.target };
   } catch (error) {
     const normalized = normalizeError(error);
@@ -132,7 +139,19 @@ async function readDoctorDeviceInventory(
       failures.push(inventoryFailure(platform, error));
     }
   }
-  return { devices, failures: devices.length === 0 ? failures : [] };
+  return { devices, failures };
+}
+
+function inventoryFailureCheck(failure: DoctorInventoryFailure): DoctorCheck {
+  return {
+    id: `device-${failure.platform}`,
+    status: 'warn',
+    summary: `${platformLabel(failure.platform)} device inventory could not be read: ${failure.message}`,
+    hint:
+      failure.hint ??
+      `Check the ${platformLabel(failure.platform)} toolchain, or scope with --platform to skip it.`,
+    evidence: { platform: failure.platform, code: failure.code },
+  };
 }
 
 function inventoryFailure(platform: PlatformSelector, error: unknown): DoctorInventoryFailure {

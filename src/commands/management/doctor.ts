@@ -15,6 +15,11 @@ const doctorCommandMetadata = defineFieldCommandMetadata(
     remote: commandInput.booleanField(
       'Check remote connection setup instead of local device inventory.',
     ),
+    metroHost: commandInput.stringField('Metro host to probe (forces a Metro reachability check).'),
+    metroPort: commandInput.integerField(
+      'Metro port to probe (forces a Metro reachability check).',
+      { min: 1, max: 65535 },
+    ),
   },
 );
 
@@ -23,17 +28,23 @@ const doctorCommandDefinition = defineExecutableCommand(doctorCommandMetadata, (
 );
 
 const doctorCliSchema = {
-  usageOverride: 'doctor [--platform ios|android|macos|linux|web|apple] [--remote]',
+  usageOverride:
+    'doctor [--platform ios|android|macos|linux|web|apple] [--metro-host <host>] [--metro-port <port>] [--remote]',
   helpDescription:
-    'Read-only preflight for QA and dogfood runs. Reports local device inventory, active sessions, app discovery from the active session, Metro reachability inferred from cwd/runtime, and obvious React Native overlay blockers from the current session snapshot. Use --remote to check remote connection setup without probing local devices. Default output is compact; use --json for full checks and evidence.',
+    'Read-only preflight for QA and dogfood runs. Reports local device inventory, active sessions, app discovery from the active session, Metro reachability inferred from cwd/runtime, and obvious React Native overlay blockers from the current session snapshot. Pass --metro-host/--metro-port to force a Metro probe against a specific endpoint (e.g. outside an RN/Expo project directory). Use --remote to check remote connection setup without probing local devices. Default output is compact; use --json for full checks and evidence.',
   summary: 'Preflight device, app, Metro, and RN/Expo readiness',
-  allowedFlags: ['remote'],
+  allowedFlags: ['remote', 'metroHost', 'metroPort'],
 } as const satisfies CommandSchemaOverride;
 
 const doctorCliReader: CliReader = (_positionals, flags) => ({
   ...commonInputFromFlags(flags),
   remote: flags.remote,
+  metroHost: flags.metroHost,
+  metroPort: flags.metroPort,
 });
+// Both the field-command definition (client.command.doctor) and this facet
+// cli reader forward metroHost/metroPort so the Metro probe is controllable
+// regardless of which dispatch path executes.
 
 const doctorDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.doctor);
 

@@ -140,6 +140,62 @@ test('Provider-backed integration doctor --remote fails without remote scope', a
   );
 });
 
+test('Provider-backed integration doctor probes Metro when --metro-port is passed outside an RN project', async () => {
+  const server = await startMetroStatusServer();
+  try {
+    await withProviderScenarioResource(
+      async () =>
+        await createProviderScenarioHarness({
+          deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
+        }),
+      async (daemon) => {
+        // No RN/Expo cwd -> kind stays 'auto', so Metro is only probed because
+        // the explicit --metro-port flag forces it.
+        const withoutFlag = await daemon.callCommand('doctor', [], { platform: 'ios' });
+        assertRpcOk(withoutFlag);
+        assertNoDoctorCheck(withoutFlag.json.result.data, 'metro');
+
+        const withFlag = await daemon.callCommand('doctor', [], {
+          platform: 'ios',
+          metroPort: server.port,
+        });
+        assertRpcOk(withFlag);
+        const data = withFlag.json.result.data;
+        const metro = assertDoctorCheck(data, 'metro', 'pass');
+        assert.equal(
+          (metro.evidence as { url?: string }).url,
+          `http://127.0.0.1:${server.port}/status`,
+        );
+      },
+    );
+  } finally {
+    await server.close();
+  }
+});
+
+test('Provider-backed integration doctor surfaces a platform inventory failure even when another platform has devices', async () => {
+  await withProviderScenarioResource(
+    async () =>
+      await createProviderScenarioHarness({
+        deviceInventoryProvider: async (request) => {
+          if (request.platform === 'apple') {
+            throw new Error('xcrun: error: unable to find utility "simctl"');
+          }
+          return request.platform === 'android' ? [PROVIDER_SCENARIO_ANDROID] : [];
+        },
+      }),
+    async (daemon) => {
+      const response = await daemon.callCommand('doctor', []);
+      assertRpcOk(response);
+      const data = response.json.result.data;
+      assert.equal(data.status, 'warn', JSON.stringify(data.checks));
+      assertDoctorCheck(data, 'device', 'pass');
+      const failure = assertDoctorCheck(data, 'device-apple', 'warn');
+      assert.match(failure.summary, /simctl/);
+    },
+  );
+});
+
 function writePackageJson(dir: string, value: Record<string, unknown>): void {
   fs.writeFileSync(`${dir}/package.json`, `${JSON.stringify(value)}\n`);
 }
