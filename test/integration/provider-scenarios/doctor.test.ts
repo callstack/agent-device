@@ -96,6 +96,63 @@ test('Provider-backed integration doctor runs predictably for supported platform
   );
 });
 
+test('Provider-backed integration doctor --app verifies an installed app without opening a session', async () => {
+  const adbCalls: string[][] = [];
+  const adbProvider: AndroidAdbProvider = {
+    exec: async (args) => {
+      adbCalls.push([...args]);
+      return androidDoctorAdbResult(args, 8081);
+    },
+  };
+
+  await withProviderScenarioResource(
+    async () =>
+      await createProviderScenarioHarness({
+        androidAdbProvider: () => adbProvider,
+        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+      }),
+    async (daemon) => {
+      const response = await daemon.callCommand('doctor', [], {
+        platform: 'android',
+        targetApp: 'com.example.demo',
+      });
+      assertRpcOk(response);
+      const data = response.json.result.data;
+      assert.equal(data.status, 'pass', JSON.stringify(data.checks));
+      const app = assertDoctorCheck(data, 'target-app', 'pass');
+      assert.match(app.summary, /com\.example\.demo/);
+      assert.ok(
+        adbCalls.some((args) => args.includes('query-activities')),
+        JSON.stringify(adbCalls),
+      );
+    },
+  );
+});
+
+test('Provider-backed integration doctor --app asks for a selector when multiple devices are booted', async () => {
+  await withProviderScenarioResource(
+    async () =>
+      await createProviderScenarioHarness({
+        deviceInventoryProvider: async (request) => {
+          if (request.platform === 'android') return [PROVIDER_SCENARIO_ANDROID];
+          if (request.platform === 'apple') return [PROVIDER_SCENARIO_IOS_SIMULATOR];
+          return [];
+        },
+      }),
+    async (daemon) => {
+      const response = await daemon.callCommand('doctor', [], {
+        targetApp: 'com.example.demo',
+      });
+      assertRpcOk(response);
+      const data = response.json.result.data;
+      assert.equal(data.status, 'fail', JSON.stringify(data.checks));
+      const appDevice = assertDoctorCheck(data, 'target-app-device', 'fail');
+      assert.match(appDevice.summary, /2 matched/);
+      assertNoDoctorCheck(data, 'target-app');
+    },
+  );
+});
+
 test('Provider-backed integration doctor --remote skips local device inventory', async () => {
   let inventoryCalls = 0;
 
@@ -235,6 +292,13 @@ function androidDoctorAdbResult(
   exitCode: number;
 } {
   const command = args.join(' ');
+  if (args.includes('query-activities')) {
+    return {
+      stdout: 'com.example.demo/.MainActivity\ncom.example.settings/.MainActivity\n',
+      stderr: '',
+      exitCode: 0,
+    };
+  }
   if (command === 'reverse --list') {
     return {
       stdout: `emulator-5554 tcp:${metroPort} tcp:${metroPort}\n`,

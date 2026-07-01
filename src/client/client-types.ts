@@ -504,7 +504,12 @@ export type PrepareCommandOptions = DeviceCommandBaseOptions & {
   timeoutMs?: number;
 };
 
-export type DoctorCommandOptions = DeviceCommandBaseOptions;
+export type DoctorCommandOptions = DeviceCommandBaseOptions & {
+  targetApp?: string;
+  remote?: boolean;
+  metroHost?: string;
+  metroPort?: number;
+};
 
 export type ViewportCommandOptions = DeviceCommandBaseOptions & {
   width: number;

@@ -94,11 +94,12 @@ test('parseArgs recognizes command-specific flag combinations', async () => {
     },
     {
       label: 'doctor android',
-      argv: ['doctor', '--platform', 'android'],
+      argv: ['doctor', '--platform', 'android', '--app', 'com.example.demo'],
       strictFlags: true,
       assertParsed: (parsed) => {
         assert.equal(parsed.command, 'doctor');
         assert.equal(parsed.flags.platform, 'android');
+        assert.equal(parsed.flags.targetApp, 'com.example.demo');
       },
     },
     {
@@ -1841,6 +1842,7 @@ test('usageForCommand resolves react-native help topic', () => {
   assert.match(help, /Help workflow owns the full Expo URL command shapes/);
   assert.match(help, /For app\/package launches, run metro prepare/);
   assert.match(help, /agent-device doctor --platform android/);
+  assert.match(help, /agent-device doctor --platform android --app com\.example\.app/);
   assert.match(help, /agent-device doctor --platform ios/);
   assert.match(help, /agent-device doctor --remote --remote-config \.\/remote\.json/);
   assert.match(help, /same host context that owns Metro/);

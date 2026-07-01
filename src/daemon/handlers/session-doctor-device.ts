@@ -35,8 +35,8 @@ export async function appendDeviceInventoryCheck(
   req: DaemonRequest,
   session: SessionState | undefined,
 ): Promise<DoctorDeviceInventory | undefined> {
+  const selector = deviceInventorySelector(req, session);
   try {
-    const selector = deviceInventorySelector(req, session);
     const inventory = await readDoctorDeviceInventory(selector);
     const devices = filterInventoryForSelector(inventory.devices, selector);
     appendDoctorCheck(checks, {
@@ -69,8 +69,43 @@ export async function appendDeviceInventoryCheck(
       command: 'agent-device devices',
       evidence: { code: normalized.code, details: normalized.details },
     });
-    return undefined;
+    return { devices: [], platform: selector.platform, target: selector.target };
   }
+}
+
+export function resolveDoctorDeviceForAppCheck(
+  checks: DoctorCheck[],
+  inventory: DoctorDeviceInventory | undefined,
+  targetApp: string | undefined,
+): DeviceInfo | undefined {
+  if (!targetApp || !inventory) return undefined;
+  const booted = inventory.devices.filter((device) => device.booted === true);
+  if (booted.length === 1) return booted[0];
+
+  appendDoctorCheck(checks, {
+    id: 'target-app-device',
+    status: 'fail',
+    summary:
+      booted.length === 0
+        ? 'Target app check needs one booted device; none matched.'
+        : `Target app check needs one booted device; ${booted.length} matched.`,
+    hint:
+      booted.length === 0
+        ? 'Boot a device, or adjust --platform/--target/--device/--udid/--serial.'
+        : 'Pass --platform/--target/--device/--udid/--serial so doctor checks the intended device.',
+    command: inventory.platform
+      ? `agent-device devices --platform ${inventory.platform}`
+      : 'agent-device devices',
+    evidence: {
+      targetApp,
+      booted: booted.map((device) => ({
+        platform: device.platform,
+        id: device.id,
+        name: device.name,
+      })),
+    },
+  });
+  return undefined;
 }
 
 export function platformScopeChecks(device: DeviceInfo, options: DoctorOptions): DoctorCheck[] {

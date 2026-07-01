@@ -6,7 +6,11 @@ import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { appendAndroidChecks } from './session-doctor-android.ts';
 import { appendAppChecks } from './session-doctor-app.ts';
-import { appendDeviceInventoryCheck, platformScopeChecks } from './session-doctor-device.ts';
+import {
+  appendDeviceInventoryCheck,
+  platformScopeChecks,
+  resolveDoctorDeviceForAppCheck,
+} from './session-doctor-device.ts';
 import { probeMetro } from './session-doctor-metro.ts';
 import {
   readDoctorOptions,
@@ -21,6 +25,7 @@ import {
   summarizeDoctorStatus,
 } from './session-doctor-output.ts';
 import { appendReactNativeOverlayCheck } from './session-doctor-react-native.ts';
+import { appendToolchainChecks } from './session-doctor-toolchain.ts';
 import type { DoctorCheck } from './session-doctor-types.ts';
 
 export async function handleDoctorCommand(params: {
@@ -63,16 +68,25 @@ export async function handleDoctorCommand(params: {
   }
 
   const inventory = await appendDeviceInventoryCheck(checks, req, session);
+  await appendToolchainChecks(checks, session?.device.platform ?? inventory?.platform);
+  const appCheckDevice =
+    session?.device ?? resolveDoctorDeviceForAppCheck(checks, inventory, options.targetApp);
   const device = session?.device;
-  if (device) {
-    appendDoctorChecks(checks, ...platformScopeChecks(device, options));
-    await appendAppChecks(checks, { device, session, targetApp: options.targetApp });
+  if (appCheckDevice) {
+    appendDoctorChecks(checks, ...platformScopeChecks(appCheckDevice, options));
+    await appendAppChecks(checks, {
+      device: appCheckDevice,
+      session,
+      targetApp: options.targetApp,
+    });
     await appendAndroidChecks(checks, {
-      device,
+      device: appCheckDevice,
       metroPort: options.metroPort,
       shouldProbeMetro: options.shouldProbeMetro,
       androidAdbExecutor,
     });
+  }
+  if (session) {
     appendReactNativeOverlayCheck(checks, session, options);
   }
   if (options.shouldProbeMetro) {
@@ -86,8 +100,8 @@ export async function handleDoctorCommand(params: {
       status,
       summary: doctorSummary(status),
       kind: options.kind,
-      platform: device?.platform ?? inventory?.platform,
-      target: device?.target ?? inventory?.target,
+      platform: appCheckDevice?.platform ?? device?.platform ?? inventory?.platform,
+      target: appCheckDevice?.target ?? device?.target ?? inventory?.target,
       targetApp: options.targetApp,
       metro: options.shouldProbeMetro
         ? { host: options.metroHost, port: options.metroPort }

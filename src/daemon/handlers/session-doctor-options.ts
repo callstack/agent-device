@@ -12,7 +12,7 @@ export function readDoctorOptions(
   session: SessionState | undefined,
 ): DoctorOptions {
   const kind = detectProjectRuntimeKind(req.meta?.cwd);
-  const targetApp = session?.appBundleId;
+  const targetApp = readNonEmptyString(req.flags?.targetApp) ?? session?.appBundleId;
   const metroHost =
     readNonEmptyString(req.flags?.metroHost) ??
     readNonEmptyString(req.runtime?.metroHost) ??

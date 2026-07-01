@@ -73,6 +73,7 @@ export type CliFlags = CloudProviderProfileFields &
     androidDeviceAllowlist?: string;
     remote?: boolean;
     session?: string;
+    targetApp?: string;
     metroHost?: string;
     metroPort?: number;
     bundleUrl?: string;
@@ -493,6 +494,13 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--headless',
     usageDescription: 'Boot: launch Android emulator without a GUI window',
+  },
+  {
+    key: 'targetApp',
+    names: ['--app', '--target-app'],
+    type: 'string',
+    usageLabel: '--app <id-or-name>',
+    usageDescription: 'Doctor: verify an installed target app without opening a session',
   },
   {
     key: 'metroHost',
