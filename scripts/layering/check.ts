@@ -89,8 +89,8 @@ function isDaemonServer(rel: string): boolean {
   return rel.startsWith('src/daemon/') && !rel.startsWith('src/daemon/client/');
 }
 
-// sdk/ are the package's PUBLIC re-export barrels (§5.5 "sdk = re-export barrels
-// only"). They legitimately re-export platform symbols as part of the public API,
+// sdk/ are the package's PUBLIC re-export barrels ("sdk = re-export barrels only").
+// They legitimately re-export platform symbols as part of the public API,
 // and are OFF the CLI cold path (not imported by bin.ts/cli), so exempting them
 // from R3 does not regress cold-start — they sit above the internal DAG R3 governs.
 function isSdkBarrel(rel: string): boolean {

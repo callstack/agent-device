@@ -92,7 +92,7 @@ type CoveredPlatform = (typeof BUILTIN_PLATFORM_PLUGINS)[number]['platforms'][nu
  * without a plugin makes `Platform` no longer extend `CoveredPlatform`, so this
  * alias resolves to `false`, violating the `extends true` constraint and failing
  * the build. This is the registry counterpart of the deleted `getInteractor`
- * switch's exhaustive `never` default. (Equivalent in spirit to the §5.1
+ * switch's exhaustive `never` default. (Equivalent in spirit to an
  * `Object.fromEntries(registeredPlatforms()...) satisfies Record<Platform, true>`
  * sketch, but type-level so it cannot be satisfied vacuously by a runtime map.)
  */

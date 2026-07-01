@@ -68,7 +68,8 @@ const synthesisGestureUnsupportedHint = (device: DeviceInfo): string | undefined
   // OS-level block (macOS: no multi-touch; tvOS: no touch) comes from the table.
   if (caps.multiTouchUnsupportedHint) return caps.multiTouchUnsupportedHint;
   // iOS family: multi-touch exists but synthesis is simulator-only — the remaining
-  // block is the kind-shaped physical-device case, kept device-shaped here (§7).
+  // block is the kind-shaped physical-device case, kept device-shaped in the leaf
+  // rather than flattened into the table (do-not-flatten; see docs/adr/0009).
   if (device.kind === 'device')
     return 'Two-finger gesture synthesis is iOS-simulator only — not available on physical iOS devices.';
   return undefined;
