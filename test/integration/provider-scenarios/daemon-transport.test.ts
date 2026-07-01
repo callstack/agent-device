@@ -7,7 +7,7 @@ import {
   createSocketServer,
   listenHttpServer,
   listenNetServer,
-} from '../../../src/daemon/transport.ts';
+} from '../../../src/daemon/server/transport.ts';
 import {
   closeLoopbackServer,
   skipWhenLoopbackUnavailable,

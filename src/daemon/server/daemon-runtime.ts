@@ -1,20 +1,20 @@
 import crypto from 'node:crypto';
-import { asAppError, AppError } from './kernel/errors.ts';
-import { SessionStore } from './daemon/session-store.ts';
-import { cleanupStaleAppLogProcesses } from './daemon/app-log-process.ts';
-import { resolveDaemonPaths, resolveDaemonServerMode } from './daemon/config.ts';
-import { createDaemonHttpServer } from './daemon/http-server.ts';
-import { trackDownloadableArtifact } from './daemon/artifact-tracking.ts';
-import { LeaseRegistry } from './daemon/lease-registry.ts';
-import { createRequestHandler } from './daemon/request-router.ts';
-import { teardownSessionResources } from './daemon/session-teardown.ts';
-import { closeDaemonServers } from './daemon/server-shutdown.ts';
-import type { SessionState } from './daemon/types.ts';
+import { asAppError, AppError } from '../../kernel/errors.ts';
+import { SessionStore } from '../session-store.ts';
+import { cleanupStaleAppLogProcesses } from '../app-log-process.ts';
+import { resolveDaemonPaths, resolveDaemonServerMode } from '../config.ts';
+import { createDaemonHttpServer } from './http-server.ts';
+import { trackDownloadableArtifact } from '../artifact-tracking.ts';
+import { LeaseRegistry } from '../lease-registry.ts';
+import { createRequestHandler } from '../request-router.ts';
+import { teardownSessionResources } from '../session-teardown.ts';
+import { closeDaemonServers } from './server-shutdown.ts';
+import type { SessionState } from '../types.ts';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,
-} from './utils/diagnostics.ts';
+} from '../../utils/diagnostics.ts';
 import {
   acquireDaemonLock,
   parseIntegerEnv,
@@ -24,16 +24,16 @@ import {
   removeInfo,
   resolveDaemonCodeSignature,
   writeInfo,
-} from './daemon/server-lifecycle.ts';
+} from './server-lifecycle.ts';
 import {
   createSocketServer,
   listenHttpServer,
   listenNetServer,
   type DaemonServer,
-} from './daemon/transport.ts';
-import { prewarmPngWorker, terminatePngWorker } from './utils/png-worker-client.ts';
-import { sleep } from './utils/timeouts.ts';
-import { setRunnerLeaseOwnerStateDir } from './platforms/apple/core/runner/runner-lease.ts';
+} from './transport.ts';
+import { prewarmPngWorker, terminatePngWorker } from '../../utils/png-worker-client.ts';
+import { sleep } from '../../utils/timeouts.ts';
+import { setRunnerLeaseOwnerStateDir } from '../../platforms/apple/core/runner/runner-lease.ts';
 
 const DAEMON_SESSION_TEARDOWN_TIMEOUT_MS = 5_000;
 const DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS = 1_000;
@@ -224,7 +224,7 @@ export async function startDaemonRuntime(
     await closeDaemonServers(servers);
     await teardownDaemonSessions();
     const { stopAllIosRunnerSessions } =
-      await import('./platforms/apple/core/runner/runner-client.ts');
+      await import('../../platforms/apple/core/runner/runner-client.ts');
     await stopAllIosRunnerSessions();
     // Best effort: stop the PNG worker so an in-flight job cannot delay exit.
     await Promise.race([

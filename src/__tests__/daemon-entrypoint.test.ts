@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import { resolveDaemonPaths } from '../daemon/config.ts';
-import { startDaemonRuntime } from '../daemon-runtime.ts';
+import { startDaemonRuntime } from '../daemon/server/daemon-runtime.ts';
 import { runCmdBackground } from '../utils/exec.ts';
 import { isProcessAlive, waitForProcessExit } from '../utils/process-identity.ts';
 import { waitForHttpOk } from './test-utils/index.ts';

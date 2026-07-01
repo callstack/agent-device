@@ -9,7 +9,7 @@ import {
   releaseDaemonLock,
   removeInfo,
   writeInfo,
-} from '../../../src/daemon/server-lifecycle.ts';
+} from '../../../src/daemon/server/server-lifecycle.ts';
 
 test('Provider-backed integration daemon lifecycle writes metadata and protects process-owned locks', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-daemon-lifecycle-'));

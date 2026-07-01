@@ -1,4 +1,4 @@
-import { startDaemonRuntime } from './daemon-runtime.ts';
+import { startDaemonRuntime } from './daemon/server/daemon-runtime.ts';
 import { asAppError } from './kernel/errors.ts';
 
 void startDaemonRuntime().catch((error) => {

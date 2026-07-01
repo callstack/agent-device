@@ -1,7 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import type { DaemonServer } from '../transport.ts';
-import { closeDaemonServers } from '../server-shutdown.ts';
+import type { DaemonServer } from '../server/transport.ts';
+import { closeDaemonServers } from '../server/server-shutdown.ts';
 
 test('closeDaemonServers forces stuck servers after timeout', async () => {
   let destroyed = false;

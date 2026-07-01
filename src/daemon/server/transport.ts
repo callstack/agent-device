@@ -1,7 +1,7 @@
 import net from 'node:net';
 import type { Server as HttpServer } from 'node:http';
-import { AppError, normalizeError } from '../kernel/errors.ts';
-import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './types.ts';
+import { AppError, normalizeError } from '../../kernel/errors.ts';
+import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
 import {
   clearRequestCanceled,
   createRequestCanceledError,
@@ -9,16 +9,16 @@ import {
   markRequestCanceled,
   registerRequestAbort,
   resolveRequestTrackingId,
-} from './request-cancel.ts';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { consumeTextLines } from '../utils/line-stream.ts';
-import { sleep } from '../utils/timeouts.ts';
-import { withRequestProgressSink } from './request-progress.ts';
+} from '../request-cancel.ts';
+import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { consumeTextLines } from '../../utils/line-stream.ts';
+import { sleep } from '../../utils/timeouts.ts';
+import { withRequestProgressSink } from '../request-progress.ts';
 import {
   serializeDaemonProgressEnvelope,
   serializeDaemonResponseEnvelope,
   shouldStreamRequestProgress,
-} from './request-progress-protocol.ts';
+} from '../request-progress-protocol.ts';
 
 const disconnectAbortPollIntervalMs = 200;
 const disconnectAbortMaxWindowMs = 15_000;
@@ -54,7 +54,7 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
           const deadline = Date.now() + disconnectAbortMaxWindowMs;
           while (inFlightRequests > 0 && Date.now() < deadline) {
             const { abortAllIosRunnerSessions } =
-              await import('../platforms/apple/core/runner/runner-client.ts');
+              await import('../../platforms/apple/core/runner/runner-client.ts');
             await abortAllIosRunnerSessions();
             if (inFlightRequests <= 0) break;
             await sleep(disconnectAbortPollIntervalMs);

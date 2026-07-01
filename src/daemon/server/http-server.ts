@@ -1,37 +1,37 @@
 import http, { type IncomingHttpHeaders } from 'node:http';
 import fs from 'node:fs';
-import { AppError, normalizeError, toAppErrorCode } from '../kernel/errors.ts';
-import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
+import { AppError, normalizeError, toAppErrorCode } from '../../kernel/errors.ts';
+import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { timingSafeStringEqual } from '../../utils/timing-safe-equal.ts';
 import type {
   CommandRpcParams,
   JsonRpcId,
   JsonRpcRequestEnvelope,
   LeaseBackend,
-} from '../kernel/contracts.ts';
-import { commandRpcParamsSchema } from '../kernel/contracts.ts';
-import type { DaemonInstallSource, DaemonInvokeFn, DaemonRequest } from './types.ts';
-import { normalizeTenantId } from './config.ts';
+} from '../../kernel/contracts.ts';
+import { commandRpcParamsSchema } from '../../kernel/contracts.ts';
+import type { DaemonInstallSource, DaemonInvokeFn, DaemonRequest } from '../types.ts';
+import { normalizeTenantId } from '../config.ts';
 import {
   clearRequestCanceled,
   isRequestCanceled,
   markRequestCanceled,
   registerRequestAbort,
   resolveRequestTrackingId,
-} from './request-cancel.ts';
+} from '../request-cancel.ts';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { sleep } from '../utils/timeouts.ts';
-import { cleanupDownloadableArtifact, prepareDownloadableArtifact } from './artifact-tracking.ts';
-import { type RequestProgressEvent, withRequestProgressSink } from './request-progress.ts';
+import { sleep } from '../../utils/timeouts.ts';
+import { cleanupDownloadableArtifact, prepareDownloadableArtifact } from '../artifact-tracking.ts';
+import { type RequestProgressEvent, withRequestProgressSink } from '../request-progress.ts';
 import {
   serializeDaemonProgressEnvelope,
   serializeDaemonRpcResponseEnvelope,
   shouldStreamRequestProgress,
-} from './request-progress-protocol.ts';
-import { buildDaemonHealthPayload } from './http-health.ts';
-import { sendRestJsonError, statusCodeForNormalizedError } from './http-errors.ts';
-import { tryHandleUploadHttpRoute } from './upload-http.ts';
+} from '../request-progress-protocol.ts';
+import { buildDaemonHealthPayload } from '../http-health.ts';
+import { sendRestJsonError, statusCodeForNormalizedError } from '../http-errors.ts';
+import { tryHandleUploadHttpRoute } from '../upload-http.ts';
 
 type JsonRpcRequest = JsonRpcRequestEnvelope;
 
@@ -795,7 +795,7 @@ async function abortInFlightIosRunnerSessionsWhileDisconnected(
     const deadline = Date.now() + CLIENT_DISCONNECT_ABORT_MAX_WINDOW_MS;
     while (isRequestCanceled(requestId) && Date.now() < deadline) {
       const { abortAllIosRunnerSessions } =
-        await import('../platforms/apple/core/runner/runner-client.ts');
+        await import('../../platforms/apple/core/runner/runner-client.ts');
       await abortAllIosRunnerSessions();
       if (!isRequestCanceled(requestId)) break;
       await sleep(CLIENT_DISCONNECT_ABORT_POLL_INTERVAL_MS);

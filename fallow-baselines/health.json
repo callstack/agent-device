@@ -330,7 +330,7 @@
         "count": 1
       }
     },
-    "src/daemon/http-server.ts": {
+    "src/daemon/server/http-server.ts": {
       "complexity_critical": {
         "count": 1
       },

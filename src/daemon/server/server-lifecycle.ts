@@ -1,9 +1,9 @@
 import fs from 'node:fs';
-import { isAgentDeviceDaemonProcess } from '../utils/process-identity.ts';
+import { isAgentDeviceDaemonProcess } from '../../utils/process-identity.ts';
 
-export { readVersion } from '../utils/version.ts';
-export { readProcessStartTime } from '../utils/process-identity.ts';
-export { resolveDaemonCodeSignature } from './code-signature.ts';
+export { readVersion } from '../../utils/version.ts';
+export { readProcessStartTime } from '../../utils/process-identity.ts';
+export { resolveDaemonCodeSignature } from '../code-signature.ts';
 
 export type DaemonLockInfo = {
   pid: number;
