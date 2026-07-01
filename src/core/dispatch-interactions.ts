@@ -1,5 +1,5 @@
 import { AppError } from '../kernel/errors.ts';
-import type { DeviceInfo } from '../kernel/device.ts';
+import { isTvOsDevice, type DeviceInfo } from '../kernel/device.ts';
 import { successText, withSuccessText } from '../utils/success-text.ts';
 import { findMistargetedTypeRefToken } from '../utils/type-target-warning.ts';
 import {
@@ -416,9 +416,10 @@ function buildPressSequenceSteps(
   series: PressSeriesOptions,
 ): RunnerSequenceStep[] {
   const kind = series.doubleTap ? 'doubleTap' : series.holdMs > 0 ? 'longPress' : 'tap';
-  // Mirror the individual `tap` command: on iOS non-tv, tap steps use synthesized HID taps
-  // (synthesizedTapAt) rather than the drag-based XCUICoordinate tapAt, matching iosTapCommand.
-  const synthesized = kind === 'tap' && device.platform === 'ios' && device.target !== 'tv';
+  // Mirror the individual `tap` command: on touch-input iOS (not the tvOS leaf), tap steps
+  // use synthesized HID taps (synthesizedTapAt) rather than the drag-based XCUICoordinate
+  // tapAt, matching iosTapCommand.
+  const synthesized = kind === 'tap' && device.platform === 'ios' && !isTvOsDevice(device);
   return Array.from({ length: series.count }, (_, index) => {
     const [dx, dy] = computeDeterministicJitter(index, series.jitterPx);
     const isLast = index === series.count - 1;
@@ -449,7 +450,7 @@ function buildSwipeSequenceSteps(params: {
   effectiveDurationMs: number;
 }): RunnerSequenceStep[] {
   const { device, x1, y1, x2, y2, count, pauseMs, pattern, effectiveDurationMs } = params;
-  const synthesized = device.platform === 'ios' && device.target !== 'tv';
+  const synthesized = device.platform === 'ios' && !isTvOsDevice(device);
   return Array.from({ length: count }, (_, index) => {
     const reverse = pattern === 'ping-pong' && index % 2 === 1;
     const isLast = index === count - 1;
@@ -863,6 +864,8 @@ export async function handlePinchCommand(
   positionals: string[],
   context: DispatchContext | undefined,
 ): Promise<Record<string, unknown>> {
+  // Cross-platform TV-target gate (also rejects Android TV, which shares target: 'tv');
+  // NOT narrowed to the tvOS Apple-OS leaf (isTvOsDevice) so Android-TV behavior is unchanged.
   if (device.target === 'tv') {
     throw new AppError('UNSUPPORTED_OPERATION', 'gesture pinch is not supported on tvOS');
   }
@@ -887,6 +890,7 @@ export async function handleRotateGestureCommand(
   interactor: Interactor,
   positionals: string[],
 ): Promise<Record<string, unknown>> {
+  // Cross-platform TV-target gate (also rejects Android TV) — see handlePinchCommand.
   if (device.target === 'tv') {
     throw new AppError('UNSUPPORTED_OPERATION', 'gesture rotate is not supported on tvOS');
   }
@@ -914,6 +918,7 @@ export async function handleTransformGestureCommand(
   interactor: Interactor,
   positionals: string[],
 ): Promise<Record<string, unknown>> {
+  // Cross-platform TV-target gate (also rejects Android TV) — see handlePinchCommand.
   if (device.target === 'tv') {
     throw new AppError('UNSUPPORTED_OPERATION', 'gesture transform is not supported on tvOS');
   }

@@ -23,3 +23,26 @@ test('dispatch pinch rejects tvOS before runner call', async () => {
       /pinch is not supported on tvOS/i.test(error.message),
   );
 });
+
+// tvOS is focus-only: coordinate multi-touch gestures have no meaning off the focused
+// element, so rotate/transform reject up front (mirroring pinch above). This pins the
+// UNSUPPORTED coordinate-gesture half of the tvOS interaction contract.
+test('dispatch rotate-gesture rejects tvOS before runner call', async () => {
+  await assert.rejects(
+    () => dispatchCommand(TVOS_SIMULATOR, 'rotate-gesture', ['90']),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'UNSUPPORTED_OPERATION' &&
+      /rotate is not supported on tvOS/i.test(error.message),
+  );
+});
+
+test('dispatch transform-gesture rejects tvOS before runner call', async () => {
+  await assert.rejects(
+    () => dispatchCommand(TVOS_SIMULATOR, 'transform-gesture', ['1', '2', '3', '4', '1.5', '90']),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'UNSUPPORTED_OPERATION' &&
+      /transform is not supported on tvOS/i.test(error.message),
+  );
+});

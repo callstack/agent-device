@@ -2,6 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   isPlatform,
+  isTvOsDevice,
   matchesPlatformSelector,
   PLATFORMS,
   resolveApplePlatformName,
@@ -9,7 +10,23 @@ import {
   resolveDevice,
 } from '../../kernel/device.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
+import {
+  ANDROID_TV_DEVICE,
+  IOS_SIMULATOR,
+  MACOS_DEVICE,
+  TVOS_SIMULATOR,
+} from '../../__tests__/test-utils/device-fixtures.ts';
 import { AppError } from '../../kernel/errors.ts';
+
+test('isTvOsDevice selects only the Apple tvOS leaf, not any TV target', () => {
+  assert.equal(isTvOsDevice(TVOS_SIMULATOR), true);
+  // Touch-input iOS and macOS are Apple, but are NOT the focus-only tvOS leaf.
+  assert.equal(isTvOsDevice(IOS_SIMULATOR), false);
+  assert.equal(isTvOsDevice(MACOS_DEVICE), false);
+  // Android TV shares target: 'tv' but is a DISTINCT leaf — the platform gate excludes it,
+  // so the tvOS focus-only contract is never applied to Android TV.
+  assert.equal(isTvOsDevice(ANDROID_TV_DEVICE), false);
+});
 
 test('matchesPlatformSelector resolves apple selector across Apple platforms', () => {
   assert.equal(matchesPlatformSelector('ios', 'apple'), true);

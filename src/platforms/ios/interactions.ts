@@ -1,4 +1,4 @@
-import type { DeviceInfo } from '../../kernel/device.ts';
+import { isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
 import { assertScrollGestureInput, type ScrollDirection } from '../../core/scroll-gesture.ts';
 import { normalizeScrollDurationMs, SCROLL_DURATION_MAX_MS } from '../../core/scroll-command.ts';
 import { runIosRunnerCommand } from '../apple/core/runner/runner-client.ts';
@@ -7,6 +7,7 @@ import {
   parseRunnerSequenceResult,
 } from '../apple/core/runner/runner-sequence.ts';
 import type { RunnerCommand } from '../apple/core/runner/runner-contract.ts';
+import { appleRemotePressCommand } from '../apple/os/tvos/remote.ts';
 import { runMacosDesktopScroll } from '../apple/os/macos/desktop-scroll.ts';
 import {
   normalizeAppleScrollResult,
@@ -22,7 +23,6 @@ import type {
 } from '../../core/interactor-types.ts';
 
 export type AppleBackRunnerCommand = 'backInApp' | 'backSystem';
-type AppleRemoteButton = NonNullable<RunnerCommand['remoteButton']>;
 type RunIosRunnerCommand = typeof runIosRunnerCommand;
 type RunnerOpts = RunnerCallOptions;
 
@@ -267,7 +267,8 @@ function iosTapCommand(
 }
 
 function shouldUseSynthesizedIosGesture(device: DeviceInfo): boolean {
-  return device.platform === 'ios' && device.target !== 'tv';
+  // Two-finger HID synthesis is for touch-input iOS only; the tvOS leaf has no touch.
+  return device.platform === 'ios' && !isTvOsDevice(device);
 }
 
 function iosDragCommand(
@@ -281,7 +282,7 @@ function iosDragCommand(
   options: IosDragCommandOptions,
 ): RunnerCommand {
   const normalizedDurationMs =
-    device.platform === 'ios' && device.target !== 'tv'
+    device.platform === 'ios' && !isTvOsDevice(device)
       ? iosGestureDurationMs(durationMs, options.defaultDurationMs)
       : (durationMs ?? options.legacyDefaultDurationMs);
   return {
@@ -305,19 +306,6 @@ function iosGestureDurationMs(durationMs: number | undefined, defaultDurationMs:
   );
 }
 
-export function appleRemotePressCommand(
-  remoteButton: AppleRemoteButton,
-  appBundleId?: string,
-  durationMs?: number,
-): Parameters<RunIosRunnerCommand>[1] {
-  return {
-    command: 'remotePress',
-    remoteButton,
-    ...(durationMs !== undefined ? { durationMs } : {}),
-    ...(appBundleId !== undefined ? { appBundleId } : {}),
-  };
-}
-
 async function runAppleScroll(
   runRunnerCommand: RunIosRunnerCommand,
   device: DeviceInfo,
@@ -330,7 +318,7 @@ async function runAppleScroll(
     invalidMessage: `scroll durationMs must be a non-negative integer at most ${SCROLL_DURATION_MAX_MS}`,
   });
 
-  if (device.target === 'tv') {
+  if (isTvOsDevice(device)) {
     const runnerResult = await runRunnerCommand(
       device,
       appleRemotePressCommand(direction, ctx.appBundleId, options?.durationMs),

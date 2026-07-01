@@ -50,6 +50,21 @@ export function isMobilePlatform(platform: Platform): boolean {
   return platform === 'ios' || platform === 'android';
 }
 
+/**
+ * The tvOS Apple-OS leaf predicate. tvOS is modeled as the `ios` platform with a
+ * `tv` form-factor target (ADR-0009 defers the `Platform` collapse; discovery also
+ * stores `appleOs: 'tvos'`). Naming the leaf keeps its focus-only interaction
+ * contract — XCUIRemote focus navigation, and NO coordinate tap/gesture — gated by
+ * one explicit predicate instead of a `target === 'tv'` string compare smeared
+ * across the Apple interaction paths.
+ *
+ * Apple-only by design: Android TV also uses `target: 'tv'` but is a DISTINCT leaf,
+ * so the `platform === 'ios'` gate is load-bearing (do not widen it to any TV target).
+ */
+export function isTvOsDevice(device: Pick<DeviceInfo, 'platform' | 'target'>): boolean {
+  return device.platform === 'ios' && device.target === 'tv';
+}
+
 export function isPlatform(value: unknown): value is Platform {
   // Leaf-platform membership derived from the canonical PLATFORMS tuple (excludes the
   // `apple` selector, which is not a concrete device platform).

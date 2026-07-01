@@ -130,6 +130,51 @@ test('tvOS scroll sends only a remotePress command (behavior unchanged)', async 
   ]);
 });
 
+test('tvOS back navigates focus via the remote Menu button, not a coordinate tap', async () => {
+  const commands: RunnerCommand[] = [];
+  mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+    commands.push(command);
+    return {};
+  });
+  const interactor = await getInteractor(tvOsSimulator, { appBundleId: 'com.example.app' });
+
+  await interactor.back();
+
+  // tvOS is focus-only: back pops focus via the Siri Remote Menu button (XCUIRemote).
+  assert.deepEqual(commands, [
+    { command: 'remotePress', remoteButton: 'menu', appBundleId: 'com.example.app' },
+  ]);
+});
+
+test('tvOS home navigates focus via the remote Home button', async () => {
+  const commands: RunnerCommand[] = [];
+  mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+    commands.push(command);
+    return {};
+  });
+  const interactor = await getInteractor(tvOsSimulator, { appBundleId: 'com.example.app' });
+
+  await interactor.home();
+
+  assert.deepEqual(commands, [
+    { command: 'remotePress', remoteButton: 'home', appBundleId: 'com.example.app' },
+  ]);
+});
+
+test('iOS back keeps the in-app navigation path, not the tvOS remote', async () => {
+  const commands: RunnerCommand[] = [];
+  mockRunIosRunnerCommand.mockImplementation(async (_device, command) => {
+    commands.push(command);
+    return {};
+  });
+  const interactor = await getInteractor(iosSimulator, { appBundleId: 'com.example.app' });
+
+  await interactor.back();
+
+  // The per-OS gate must not flatten: touch-input iOS never uses the XCUIRemote path.
+  assert.deepEqual(commands, [{ command: 'backInApp', appBundleId: 'com.example.app' }]);
+});
+
 test('ios scroll rejects non-positive amount before sending any runner command', async () => {
   mockRunIosRunnerCommand.mockImplementation(async () => ({}));
   const interactor = await getInteractor(iosSimulator, { appBundleId: 'com.example.app' });

@@ -5,7 +5,7 @@ import {
 } from '../../command-catalog.ts';
 import type { CommandCapability } from '../capabilities.ts';
 import type { DaemonRequest } from '../../daemon/types.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import { isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
 import type { CommandDescriptor } from './types.ts';
 
 // ---------------------------------------------------------------------------
@@ -42,16 +42,16 @@ const isNotMacOs = (device: DeviceInfo): boolean => device.platform !== 'macos';
 const isMacOsOrAppleSimulator = (device: DeviceInfo): boolean =>
   device.platform === 'macos' || device.kind === 'simulator';
 const isIosMobileSimulator = (device: DeviceInfo): boolean =>
-  device.platform === 'ios' && device.kind === 'simulator' && device.target !== 'tv';
+  device.platform === 'ios' && device.kind === 'simulator' && !isTvOsDevice(device);
 const supportsSynthesisGesture = (device: DeviceInfo): boolean =>
   device.platform === 'android' || isIosMobileSimulator(device);
 const supportsAndroidOrIosNonTv = (device: DeviceInfo): boolean =>
-  device.platform === 'android' || (device.platform === 'ios' && device.target !== 'tv');
+  device.platform === 'android' || (device.platform === 'ios' && !isTvOsDevice(device));
 
 const synthesisGestureUnsupportedHint = (device: DeviceInfo): string | undefined => {
   if (device.platform === 'macos')
     return 'macOS automation has no multi-touch input — this gesture is supported on Android and the iOS simulator only.';
-  if (device.platform === 'ios' && device.target === 'tv')
+  if (isTvOsDevice(device))
     return 'tvOS has no touch input — this gesture is supported on Android and the iOS simulator only.';
   if (device.platform === 'ios' && device.kind === 'device')
     return 'Two-finger gesture synthesis is iOS-simulator only — not available on physical iOS devices.';

@@ -8,14 +8,14 @@ import {
   writeIosClipboardText,
 } from '../../platforms/apple/core/apps.ts';
 import {
-  appleRemotePressCommand,
   iosRunnerOverrides,
   resolveAppleBackRunnerCommand,
 } from '../../platforms/ios/interactions.ts';
+import { appleRemotePressCommand } from '../../platforms/apple/os/tvos/remote.ts';
 import { runMacOsScreenshotAction } from '../../platforms/apple/os/macos/helper.ts';
 import { runIosRunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
-import type { DeviceInfo } from '../../kernel/device.ts';
+import { isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
 import type { Interactor, RunnerContext } from '../interactor-types.ts';
@@ -89,7 +89,8 @@ export function createAppleInteractor(
       };
     },
     back: async (mode) => {
-      if (device.target === 'tv') {
+      if (isTvOsDevice(device)) {
+        // tvOS focus-only navigation: the Menu button pops focus, not a coordinate tap.
         await runIosRunnerCommand(
           device,
           appleRemotePressCommand('menu', runnerContext.appBundleId),
@@ -107,7 +108,8 @@ export function createAppleInteractor(
       );
     },
     home: async () => {
-      if (device.target === 'tv') {
+      if (isTvOsDevice(device)) {
+        // tvOS focus-only navigation: the Home button drives the remote, not a tap.
         await runIosRunnerCommand(
           device,
           appleRemotePressCommand('home', runnerContext.appBundleId),
