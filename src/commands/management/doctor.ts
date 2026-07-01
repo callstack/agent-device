@@ -29,7 +29,7 @@ const doctorCliSchema = {
   usageOverride:
     'doctor [--platform ios|android|macos|linux|web|apple] [--app <id-or-name>] [--remote]',
   helpDescription:
-    'Read-only preflight for QA and dogfood runs. Reports local device inventory, active sessions, optional app discovery, scoped toolchain info, Metro reachability inferred from cwd/runtime, and obvious React Native overlay blockers from the current session snapshot. Pass --app to verify a target app on the one matching booted device without opening a session. Use --remote to check remote connection setup without probing local devices. Default output is compact; use --json for full checks and evidence.',
+    'Read-only preflight for QA and dogfood runs. Reports local device inventory, active sessions, optional app discovery, scoped toolchain info, and Metro reachability inferred from cwd/runtime. Pass --app to verify a target app on the one matching booted device without opening a session. Use --remote to check remote connection setup without probing local devices. Default output is compact; use --json for full checks and evidence.',
   summary: 'Preflight device, app, Metro, and RN/Expo readiness',
   allowedFlags: ['targetApp', 'remote'],
 } as const satisfies CommandSchemaOverride;

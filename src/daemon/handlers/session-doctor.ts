@@ -25,7 +25,6 @@ import {
   sortChecks,
   summarizeDoctorStatus,
 } from './session-doctor-output.ts';
-import { appendReactNativeOverlayCheck } from './session-doctor-react-native.ts';
 import { appendToolchainChecks } from './session-doctor-toolchain.ts';
 import type { DoctorCheck, DoctorOptions } from './session-doctor-types.ts';
 
@@ -93,7 +92,6 @@ async function appendLocalDoctorChecks(params: {
       session,
     });
   }
-  if (session) appendReactNativeOverlayCheck(checks, session, options);
   if (options.shouldProbeMetro) {
     appendDoctorCheck(checks, await probeMetro(options.metroHost, options.metroPort, options.kind));
   }
