@@ -12,9 +12,11 @@ import {
   ANDROID_TV_DEVICE,
   IOS_DEVICE,
   IOS_SIMULATOR,
+  IPADOS_SIMULATOR,
   LINUX_DEVICE,
   MACOS_DEVICE,
   TVOS_SIMULATOR,
+  VISIONOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
 } from '../../__tests__/test-utils/index.ts';
 import {
@@ -81,6 +83,11 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
   ANDROID_TV_DEVICE,
   IOS_DEVICE,
   IOS_SIMULATOR,
+  // The appleOs-bearing iPadOS/visionOS shapes exercise the per-AppleOS table's
+  // stored-`appleOs` read path (step d.5); the target-based oracle below still agrees
+  // because both are modeled as the mobile iOS engine and are capability-identical.
+  IPADOS_SIMULATOR,
+  VISIONOS_SIMULATOR,
   LINUX_DEVICE,
   MACOS_DEVICE,
   TVOS_SIMULATOR,

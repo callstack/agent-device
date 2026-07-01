@@ -65,3 +65,26 @@ export const TVOS_SIMULATOR: DeviceInfo = {
   kind: 'simulator',
   target: 'tv',
 };
+
+// iPadOS / visionOS carry the explicit `appleOs` discriminant discovery stores, so
+// the per-AppleOS capability table's stored-`appleOs` read path is exercised (not just
+// the target-based inference the iPhone/tvOS/macOS fixtures cover). Both are modeled as
+// the touch iOS engine (`platform: 'ios'`, mobile target) and are capability-identical
+// to iOS today.
+export const IPADOS_SIMULATOR: DeviceInfo = {
+  platform: 'ios',
+  id: 'ipad-sim-1',
+  name: 'iPad Pro 11-inch',
+  kind: 'simulator',
+  appleOs: 'ipados',
+  booted: true,
+};
+
+export const VISIONOS_SIMULATOR: DeviceInfo = {
+  platform: 'ios',
+  id: 'vision-sim-1',
+  name: 'Apple Vision Pro',
+  kind: 'simulator',
+  appleOs: 'visionos',
+  booted: true,
+};

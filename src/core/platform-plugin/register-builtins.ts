@@ -1,3 +1,4 @@
+import { appleOsCapabilities } from './apple-os-capabilities.ts';
 import { registerPlatformPlugin, type PlatformPlugin } from './plugin.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { isAudioProbeSupportedDevice } from '../../kernel/audio-probe-support.ts';
@@ -7,31 +8,67 @@ import type { DeviceInventoryRequest } from '../platform-inventory.ts';
 import type { RunnerContext } from '../interactor-types.ts';
 
 // ---------------------------------------------------------------------------
-// Apple family per-command capability closures — RELOCATED VERBATIM from
-// src/core/command-descriptor/registry.ts (ADR-0009 / perfect-shape §7 step b.2:
-// relocate, never flatten). Every body below is byte-for-byte the former
-// command-facet `supports()` / `unsupportedHint()` closure; the parity gate
-// (src/core/__tests__/capability-plugin-routing-parity.test.ts) pins them
-// behaviorally against an INDEPENDENT verbatim oracle across the full device
-// matrix. Most closures are Apple-only; host audio is shared with Android because
-// Android emulator capture is also gated by the macOS host backend.
+// Apple family per-command capability closures. Originally RELOCATED VERBATIM from
+// src/core/command-descriptor/registry.ts (perfect-shape §7 step b.2), the
+// AppleOS-axis predicates (`target !== 'tv'` / `platform !== 'macos'` /
+// `isTvOsDevice`) are now READ from the per-`AppleOS` capability table
+// (`apple-os-capabilities.ts`, step d.5) instead of being open-coded. The rewrite is
+// behaviorless: the DEVICE-shaped nuance (simulator vs physical device) stays in the
+// closure — only the OS-axis facts moved to data — and the non-Apple branches are the
+// verbatim verdicts (`appleOsCapabilities` returns `undefined` off the Apple family, so
+// each closure is a no-op on android/linux/web). The table-equivalence gate
+// (apple-os-capabilities table parity + capability-plugin-routing-parity tests) pins
+// every closure byte-for-byte against a verbatim copy of the original predicate across
+// the full {command x sample-device} matrix (iOS/iPadOS/tvOS/macOS/visionOS).
 // ---------------------------------------------------------------------------
 
-const isNotMacOs = (device: DeviceInfo): boolean => device.platform !== 'macos';
-const isMacOsOrAppleSimulator = (device: DeviceInfo): boolean =>
-  device.platform === 'macos' || device.kind === 'simulator';
-const isIosMobileSimulator = (device: DeviceInfo): boolean =>
-  device.platform === 'ios' && device.kind === 'simulator' && device.target !== 'tv';
-const supportsSynthesisGesture = (device: DeviceInfo): boolean =>
-  device.platform === 'android' || isIosMobileSimulator(device);
-const supportsAndroidOrIosNonTv = (device: DeviceInfo): boolean =>
-  device.platform === 'android' || (device.platform === 'ios' && device.target !== 'tv');
+// `install`/`boot`/`reinstall`/`install-from-source`/`push`/`home`/`app-switcher`
+// (was `device.platform !== 'macos'`). Off Apple the original was always true.
+const supportsAppAndDeviceLifecycle = (device: DeviceInfo): boolean => {
+  const caps = appleOsCapabilities(device);
+  return caps ? caps.appAndDeviceLifecycle : device.platform !== 'macos';
+};
+
+// `keyboard` (was `android || (ios && target !== 'tv')`). Off Apple: `android`.
+const supportsKeyboard = (device: DeviceInfo): boolean => {
+  const caps = appleOsCapabilities(device);
+  return caps ? caps.keyboard : device.platform === 'android';
+};
+
+// `rotate` (was `android || (ios && target !== 'tv')`). Off Apple: `android`.
+const supportsOrientation = (device: DeviceInfo): boolean => {
+  const caps = appleOsCapabilities(device);
+  return caps ? caps.orientation : device.platform === 'android';
+};
+
+// The Apple arm shared by `clipboard`/`alert`/`settings` (was `macos || simulator`):
+// reachable on the macOS host directly, on every other Apple OS only on the simulator.
+// Off Apple this preserves the trailing `device.kind === 'simulator'` term verbatim.
+const supportsHostOrSimulatorSurface = (device: DeviceInfo): boolean => {
+  const caps = appleOsCapabilities(device);
+  return caps
+    ? caps.physicalDeviceSurfaces || device.kind === 'simulator'
+    : device.kind === 'simulator';
+};
+
+// `pinch`/`rotate-gesture`/`transform-gesture` (was `android || (ios && simulator &&
+// target !== 'tv')`). Apple: the OS multi-touch model AND a simulator (physical iOS
+// cannot synthesize). Off Apple: only `android`.
+const supportsSynthesisGesture = (device: DeviceInfo): boolean => {
+  const caps = appleOsCapabilities(device);
+  return caps
+    ? caps.multiTouchSynthesis && device.kind === 'simulator'
+    : device.platform === 'android';
+};
+
 const synthesisGestureUnsupportedHint = (device: DeviceInfo): string | undefined => {
-  if (device.platform === 'macos')
-    return 'macOS automation has no multi-touch input — this gesture is supported on Android and the iOS simulator only.';
-  if (device.platform === 'ios' && device.target === 'tv')
-    return 'tvOS has no touch input — this gesture is supported on Android and the iOS simulator only.';
-  if (device.platform === 'ios' && device.kind === 'device')
+  const caps = appleOsCapabilities(device);
+  if (!caps) return undefined; // non-Apple: no multi-touch gate, no hint
+  // OS-level block (macOS: no multi-touch; tvOS: no touch) comes from the table.
+  if (caps.multiTouchUnsupportedHint) return caps.multiTouchUnsupportedHint;
+  // iOS family: multi-touch exists but synthesis is simulator-only — the remaining
+  // block is the kind-shaped physical-device case, kept device-shaped here (§7).
+  if (device.kind === 'device')
     return 'Two-finger gesture synthesis is iOS-simulator only — not available on physical iOS devices.';
   return undefined;
 };
@@ -39,24 +76,23 @@ const synthesisGestureUnsupportedHint = (device: DeviceInfo): string | undefined
 // Per-command support gates the Apple family applies by default, keyed exactly as in
 // the command-descriptor registry (a command absent here has no Apple gate).
 const APPLE_SUPPORTS_BY_DEFAULT: Record<string, (device: DeviceInfo) => boolean> = {
-  [PUBLIC_COMMANDS.boot]: isNotMacOs,
-  [PUBLIC_COMMANDS.install]: isNotMacOs,
-  [PUBLIC_COMMANDS.reinstall]: isNotMacOs,
-  [PUBLIC_COMMANDS.installFromSource]: isNotMacOs,
-  [PUBLIC_COMMANDS.push]: isNotMacOs,
-  [PUBLIC_COMMANDS.home]: isNotMacOs,
-  [PUBLIC_COMMANDS.appSwitcher]: isNotMacOs,
+  [PUBLIC_COMMANDS.boot]: supportsAppAndDeviceLifecycle,
+  [PUBLIC_COMMANDS.install]: supportsAppAndDeviceLifecycle,
+  [PUBLIC_COMMANDS.reinstall]: supportsAppAndDeviceLifecycle,
+  [PUBLIC_COMMANDS.installFromSource]: supportsAppAndDeviceLifecycle,
+  [PUBLIC_COMMANDS.push]: supportsAppAndDeviceLifecycle,
+  [PUBLIC_COMMANDS.home]: supportsAppAndDeviceLifecycle,
+  [PUBLIC_COMMANDS.appSwitcher]: supportsAppAndDeviceLifecycle,
   [PUBLIC_COMMANDS.clipboard]: (device) =>
     device.platform === 'android' ||
     device.platform === 'linux' ||
-    device.platform === 'macos' ||
-    device.kind === 'simulator',
-  [PUBLIC_COMMANDS.keyboard]: supportsAndroidOrIosNonTv,
-  [PUBLIC_COMMANDS.rotate]: supportsAndroidOrIosNonTv,
+    supportsHostOrSimulatorSurface(device),
+  [PUBLIC_COMMANDS.keyboard]: supportsKeyboard,
+  [PUBLIC_COMMANDS.rotate]: supportsOrientation,
   [PUBLIC_COMMANDS.alert]: (device) =>
-    device.platform === 'android' || isMacOsOrAppleSimulator(device),
+    device.platform === 'android' || supportsHostOrSimulatorSurface(device),
   [PUBLIC_COMMANDS.settings]: (device) =>
-    device.platform === 'android' || device.platform === 'macos' || device.kind === 'simulator',
+    device.platform === 'android' || supportsHostOrSimulatorSurface(device),
   [PUBLIC_COMMANDS.audio]: isAudioProbeSupportedDevice,
   pinch: supportsSynthesisGesture,
   'rotate-gesture': supportsSynthesisGesture,
