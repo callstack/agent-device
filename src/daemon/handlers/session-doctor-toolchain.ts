@@ -1,7 +1,7 @@
 import { access } from 'node:fs/promises';
 import path from 'node:path';
 import type { PlatformSelector } from '../../kernel/device.ts';
-import { runCmd, whichCmd } from '../../utils/exec.ts';
+import { runCmd } from '../../utils/exec.ts';
 import { appendDoctorCheck } from './session-doctor-output.ts';
 import type { DoctorCheck } from './session-doctor-types.ts';
 
@@ -13,7 +13,6 @@ type AndroidToolchainProbe = {
   versionLine: string | undefined;
 };
 type AppleToolchainProbe = {
-  firstLaunchOk: boolean;
   selectedPath: string | undefined;
   versionLine: string | undefined;
 };
@@ -32,15 +31,15 @@ export async function appendToolchainChecks(
 }
 
 async function androidToolchainCheck(): Promise<DoctorCheck> {
-  const adbAvailable = await whichCmd('adb');
   const sdkRoot = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT;
   const license = await androidLicenseState(sdkRoot);
-  if (!adbAvailable) return missingAndroidAdbCheck(sdkRoot, license);
+  const versionLine = await commandFirstLine('adb', ['version']);
+  if (!versionLine) return missingAndroidAdbCheck(sdkRoot, license);
 
   return androidAdbCheck({
     license,
     sdkRoot,
-    versionLine: await commandFirstLine('adb', ['version']),
+    versionLine,
   });
 }
 
@@ -86,18 +85,12 @@ function missingAndroidAdbCheck(
 }
 
 async function appleToolchainCheck(): Promise<DoctorCheck> {
-  const xcodeSelectAvailable = await whichCmd('xcode-select');
-  const xcodebuildAvailable = await whichCmd('xcodebuild');
-  if (!xcodeSelectAvailable && !xcodebuildAvailable) return missingAppleToolchainCheck();
+  const versionLine = await commandFirstLine('xcodebuild', ['-version']);
+  if (!versionLine) return missingAppleToolchainCheck();
 
   return appleProbeCheck({
-    firstLaunchOk: xcodebuildAvailable
-      ? await commandOk('xcodebuild', ['-checkFirstLaunchStatus'])
-      : false,
-    selectedPath: xcodeSelectAvailable ? await commandFirstLine('xcode-select', ['-p']) : undefined,
-    versionLine: xcodebuildAvailable
-      ? await commandFirstLine('xcodebuild', ['-version'])
-      : undefined,
+    selectedPath: await commandFirstLine('xcode-select', ['-p']),
+    versionLine,
   });
 }
 
@@ -106,20 +99,15 @@ function appleProbeCheck(probe: AppleToolchainProbe): DoctorCheck {
     id: 'toolchain',
     status: appleToolchainStatus(probe),
     summary: appleToolchainSummary(probe),
-    hint: probe.firstLaunchOk
-      ? undefined
-      : 'Complete Xcode first launch/license setup before building apps.',
-    command: probe.firstLaunchOk ? undefined : 'sudo xcodebuild -runFirstLaunch',
     evidence: {
       selectedPath: probe.selectedPath ?? null,
       xcodeVersion: probe.versionLine ?? null,
-      firstLaunchOk: probe.firstLaunchOk,
     },
   };
 }
 
 function appleToolchainStatus(probe: AppleToolchainProbe): DoctorCheck['status'] {
-  return probe.selectedPath && probe.versionLine && probe.firstLaunchOk ? 'pass' : 'info';
+  return probe.versionLine ? 'pass' : 'info';
 }
 
 function appleToolchainSummary(probe: AppleToolchainProbe): string {
@@ -133,9 +121,9 @@ function missingAppleToolchainCheck(): DoctorCheck {
   return {
     id: 'toolchain',
     status: 'info',
-    summary: 'Apple toolchain: xcode-select and xcodebuild not found on PATH.',
-    hint: 'Install Xcode and select it with xcode-select.',
-    evidence: { xcodeSelect: false, xcodebuild: false },
+    summary: 'Apple toolchain: xcodebuild version check failed.',
+    hint: 'Install/select Xcode and complete first launch/license setup if xcodebuild reports it.',
+    command: 'xcodebuild -version',
   };
 }
 
@@ -159,16 +147,5 @@ async function commandFirstLine(cmd: string, args: string[]): Promise<string | u
       .find(Boolean);
   } catch {
     return undefined;
-  }
-}
-
-async function commandOk(cmd: string, args: string[]): Promise<boolean> {
-  try {
-    return (
-      (await runCmd(cmd, args, { allowFailure: true, timeoutMs: TOOLCHAIN_TIMEOUT_MS }))
-        .exitCode === 0
-    );
-  } catch {
-    return false;
   }
 }
