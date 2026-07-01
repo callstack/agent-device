@@ -197,7 +197,7 @@ test('Provider-backed integration doctor --remote fails without remote scope', a
   );
 });
 
-test('Provider-backed integration doctor probes Metro when --metro-port is passed outside an RN project', async () => {
+test('Provider-backed integration doctor probes Metro when runtime metadata exists outside an RN project', async () => {
   const server = await startMetroStatusServer();
   try {
     await withProviderScenarioResource(
@@ -206,18 +206,20 @@ test('Provider-backed integration doctor probes Metro when --metro-port is passe
           deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
         }),
       async (daemon) => {
-        // No RN/Expo cwd -> kind stays 'auto', so Metro is only probed because
-        // the explicit --metro-port flag forces it.
-        const withoutFlag = await daemon.callCommand('doctor', [], { platform: 'ios' });
-        assertRpcOk(withoutFlag);
-        assertNoDoctorCheck(withoutFlag.json.result.data, 'metro');
+        // No RN/Expo cwd -> kind stays 'auto', so Metro is only probed after
+        // an app/session flow has supplied runtime metadata.
+        const withoutRuntime = await daemon.callCommand('doctor', [], { platform: 'ios' });
+        assertRpcOk(withoutRuntime);
+        assertNoDoctorCheck(withoutRuntime.json.result.data, 'metro');
 
-        const withFlag = await daemon.callCommand('doctor', [], {
-          platform: 'ios',
-          metroPort: server.port,
-        });
-        assertRpcOk(withFlag);
-        const data = withFlag.json.result.data;
+        const withRuntime = await daemon.callCommand(
+          'doctor',
+          [],
+          { platform: 'ios' },
+          { runtime: { metroPort: server.port } },
+        );
+        assertRpcOk(withRuntime);
+        const data = withRuntime.json.result.data;
         const metro = assertDoctorCheck(data, 'metro', 'pass');
         assert.equal(
           (metro.evidence as { url?: string }).url,

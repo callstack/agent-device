@@ -54,7 +54,7 @@ export async function probeMetro(
       id: 'metro',
       status: kind === 'auto' ? 'warn' : 'fail',
       summary: `Metro is not reachable at ${url}.`,
-      hint: 'Start Metro, pass the correct --metro-host/--metro-port, or use a remote Metro profile.',
+      hint: 'Start Metro for this project. For non-default endpoints, launch with open --metro-host/--metro-port, or run metro prepare with --public-base-url/--proxy-base-url before retrying doctor.',
       command: `curl -fsS ${url}`,
       evidence: { url, error: error instanceof Error ? error.message : String(error), kind },
     };
