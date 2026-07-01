@@ -5,6 +5,7 @@ import {
   REPLAY_TEST_PROGRESS_SPINNER_INTERVAL_MS,
 } from '../progress.ts';
 import { formatDurationSeconds } from '../../../utils/duration-format.ts';
+import { isInteractive } from '../../../utils/env-map.ts';
 import { colorize, supportsColor } from '../../../utils/output.ts';
 import type {
   ReplayTestReporter,
@@ -41,15 +42,16 @@ export function createDefaultReplayTestReporter(): ReplayTestReporter {
   ) => {
     stopLiveProgressInterval();
     latestLiveProgressEvent = event.type === 'test-step' ? event : undefined;
+    const liveProgress = isInteractive(context.stderr);
     progressRenderer ??= createReplayTestProgressRenderer({
       verbose: context.verbose,
-      liveProgress: shouldUseLiveProgress(context),
+      liveProgress,
       columns: context.stderr.columns,
     });
     const output = progressRenderer.render(event);
     if (!output) return;
     context.stderr.write(output.newline ? `${output.text}\n` : output.text);
-    if (event.type === 'test-step' && shouldUseLiveProgress(context)) {
+    if (event.type === 'test-step' && liveProgress) {
       startLiveProgressInterval(context);
     }
   };
@@ -68,7 +70,8 @@ export function createDefaultReplayTestReporter(): ReplayTestReporter {
     progressInterval = undefined;
   };
   const hideCursor = (context: ReplayTestReporterContext) => {
-    if (cursorHidden || !shouldUseLiveProgress(context)) return;
+    if (cursorHidden) return;
+    if (!isInteractive(context.stderr)) return;
     context.stderr.write(HIDE_CURSOR);
     cursorHidden = true;
   };
@@ -97,10 +100,6 @@ export function createDefaultReplayTestReporter(): ReplayTestReporter {
     },
     getExitCode: getReplayTestExitCode,
   };
-}
-
-function shouldUseLiveProgress(context: ReplayTestReporterContext): boolean {
-  return context.stderr.isTTY && !process.env.CI;
 }
 
 function renderReplayTestSummary(

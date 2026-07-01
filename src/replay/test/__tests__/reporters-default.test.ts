@@ -54,7 +54,7 @@ function withCiEnv<T>(value: string | undefined, run: () => T): T {
 }
 
 test('default replay test reporter hides and restores cursor for tty progress', () => {
-  withCiEnv(undefined, () => {
+  withCiEnv('0', () => {
     const reporter = createDefaultReplayTestReporter();
     const { context, stderr, stdout } = createReporterContext({ stderrIsTty: true });
 

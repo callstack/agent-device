@@ -107,7 +107,7 @@ async function captureInteractiveStderr(callback: () => Promise<void>): Promise<
   const originalCi = process.env.CI;
   let output = '';
   Object.defineProperty(stderr, 'isTTY', { configurable: true, value: true });
-  delete process.env.CI;
+  process.env.CI = '0';
   (process.stderr as any).write = ((chunk: unknown) => {
     output += String(chunk);
     return true;

@@ -1,4 +1,5 @@
 import { Transform } from 'node:stream';
+import { isInteractive } from './utils/env-map.ts';
 
 const DEFAULT_UPLOAD_PROGRESS_STEP_BYTES = 8 * 1024 * 1024;
 const DEFAULT_UPLOAD_PROGRESS_STEP_RATIO = 0.05;
@@ -59,7 +60,7 @@ export function createUploadProgressTransform(options: {
 }
 
 export function createStderrUploadProgressReporter(): UploadProgressSink | undefined {
-  if (process.stderr.isTTY !== true || process.env.CI) return undefined;
+  if (!isInteractive(process.stderr)) return undefined;
   return (event) => {
     process.stderr.write(`${formatUploadProgressEvent(event)}\n`);
   };

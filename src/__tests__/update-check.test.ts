@@ -36,7 +36,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-03-31T10:00:00.000Z'));
   vi.stubEnv('NODE_ENV', '');
-  vi.stubEnv('CI', '');
+  vi.stubEnv('CI', '0');
   vi.stubEnv('AGENT_DEVICE_NO_UPDATE_NOTIFIER', '');
   Object.defineProperty(process.stderr, 'isTTY', {
     configurable: true,

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runCmdDetached } from './exec.ts';
+import { isInteractive } from './env-map.ts';
 
 const PACKAGE_NAME = 'agent-device';
 const UPDATE_CHECK_INTERVAL_MS = 14 * 24 * 60 * 60 * 1000;
@@ -82,10 +83,9 @@ function shouldEnableUpgradeNotifier(options: UpgradeNotifierOptions): boolean {
   if (!options.command) return false;
   if (options.command === 'help' || options.command === 'test') return false;
   if (options.flags.help || options.flags.version || options.flags.json) return false;
-  if (process.env.CI?.trim()) return false;
   if (process.env.NODE_ENV === 'test') return false;
   if (process.env.AGENT_DEVICE_NO_UPDATE_NOTIFIER?.trim()) return false;
-  return Boolean(process.stderr.isTTY);
+  return isInteractive(process.stderr);
 }
 
 function shouldShowUpgradeNotice(cache: UpdateCheckCache, currentVersion: string): boolean {

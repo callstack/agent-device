@@ -4,6 +4,7 @@ import type {
 } from '../types.ts';
 import type { RequestProgressSink } from '../request-progress.ts';
 import { createRequestId, emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
+import { isInteractive } from '../../utils/env-map.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { prepareRemoteRequestArtifacts } from '../../remote/daemon-artifacts.ts';
 import {
@@ -107,7 +108,8 @@ export async function sendToDaemon(
 }
 
 function writeInstallInProgressNotice(command: string | undefined): void {
-  if (!isInstallLikeCommand(command) || process.stderr.isTTY !== true || process.env.CI) return;
+  if (!isInstallLikeCommand(command)) return;
+  if (!isInteractive(process.stderr)) return;
   process.stderr.write(
     command === PUBLIC_COMMANDS.reinstall ? 'Reinstalling...\n' : 'Installing...\n',
   );

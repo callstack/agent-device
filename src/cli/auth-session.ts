@@ -3,7 +3,7 @@ import path from 'node:path';
 import { runCmd } from '../utils/exec.ts';
 import { AppError } from '../kernel/errors.ts';
 import type { CliFlags } from './parser/cli-flags.ts';
-import type { EnvMap } from '../utils/env-map.ts';
+import { isInteractive, type EnvMap } from '../utils/env-map.ts';
 import { readCloudJsonResponse } from './cloud-response.ts';
 
 const DEFAULT_CLOUD_BASE_URL = 'https://cloud.agent-device.dev';
@@ -477,13 +477,11 @@ function detectAuthMode(
 ): 'local-browser' | 'device-code' | 'non-interactive' {
   const stdinIsTTY = io?.stdinIsTTY ?? process.stdin.isTTY;
   const stdoutIsTTY = io?.stdoutIsTTY ?? process.stdout.isTTY;
-  if (isCi(env) || !stdinIsTTY || !stdoutIsTTY) return 'non-interactive';
+  if (!isInteractive({ isTTY: stdinIsTTY }, env) || !isInteractive({ isTTY: stdoutIsTTY }, env)) {
+    return 'non-interactive';
+  }
   if (isRemoteShell(env)) return 'device-code';
   return 'local-browser';
-}
-
-function isCi(env: EnvMap): boolean {
-  return env.CI === 'true' || env.GITHUB_ACTIONS === 'true' || env.BUILDKITE === 'true';
 }
 
 function isRemoteShell(env: EnvMap): boolean {
