@@ -108,6 +108,16 @@ type WebDriverProviderSession = {
   providerSessionId: string;
 };
 
+type CloudWebDriverReleaseWarning = {
+  code: 'WEBDRIVER_SESSION_DELETE_FAILED' | 'PROVIDER_CLEANUP_FAILED';
+  message: string;
+};
+
+type CloudWebDriverCloseResult = {
+  cleanup?: Record<string, unknown>;
+  warnings: CloudWebDriverReleaseWarning[];
+};
+
 export function createCloudWebDriverRuntime(
   options: CloudWebDriverRuntimeOptions,
 ): ProviderDeviceRuntime {
@@ -261,12 +271,13 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
     const session = this.sessionsByLeaseId.get(lease.leaseId);
     if (!session) return undefined;
     this.sessionsByLeaseId.delete(lease.leaseId);
-    const cleanup = await this.closeSession(session);
+    const close = await this.closeSession(session);
     const artifacts = await this.safeListArtifacts(session);
     return {
       provider: this.provider,
       providerSessionId: session.providerSessionId,
-      ...cleanup,
+      ...close.cleanup,
+      ...(close.warnings.length > 0 ? { warnings: close.warnings } : {}),
       ...(artifacts ? { cloudArtifacts: artifacts } : {}),
     };
   }
@@ -370,14 +381,26 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
 
   private async closeSession(
     session: WebDriverProviderSession,
-  ): Promise<Record<string, unknown> | undefined> {
-    let cleanupResult: Record<string, unknown> | undefined;
+  ): Promise<CloudWebDriverCloseResult> {
+    const warnings: CloudWebDriverReleaseWarning[] = [];
+    let cleanup: Record<string, unknown> | undefined;
     try {
       await session.client.deleteSession();
-    } finally {
-      cleanupResult = await session.prepared.cleanup?.();
+    } catch (error) {
+      warnings.push({
+        code: 'WEBDRIVER_SESSION_DELETE_FAILED',
+        message: errorMessage(error),
+      });
     }
-    return cleanupResult;
+    try {
+      cleanup = await session.prepared.cleanup?.();
+    } catch (error) {
+      warnings.push({
+        code: 'PROVIDER_CLEANUP_FAILED',
+        message: errorMessage(error),
+      });
+    }
+    return { cleanup, warnings };
   }
 
   private async safeListArtifacts(
@@ -401,4 +424,8 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
       });
     }
   }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }

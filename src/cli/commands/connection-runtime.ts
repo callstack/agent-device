@@ -23,7 +23,7 @@ import type { AgentDeviceClient, Lease } from '../../client/client.ts';
 import type { CloudProviderSessionResult } from '../../cloud-artifacts.ts';
 import type { MetroPrepareKind } from '../../metro/client-metro.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { isCloudWebDriverProviderName } from '../../cloud-webdriver/providers.ts';
+import { connectionProviderRequiresRemoteDaemon } from '../connection-provider-traits.ts';
 
 const leaseDeferredCommands = new Set([
   'connect',
@@ -612,7 +612,7 @@ function createRemoteConnectionStateFromFlags(
       'remote command requires runId in remote config or via --run-id <id>.',
     );
   }
-  if (!flags.daemonBaseUrl && !isCloudWebDriverProviderName(profile.leaseProvider)) {
+  if (!flags.daemonBaseUrl && connectionProviderRequiresRemoteDaemon(profile.leaseProvider)) {
     throw new AppError(
       'INVALID_ARGS',
       'remote command requires daemonBaseUrl in remote config, config, env, or --daemon-base-url.',

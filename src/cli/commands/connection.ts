@@ -15,10 +15,13 @@ import {
 import { AppError } from '../../kernel/errors.ts';
 import { resolveCloudConnectProfile } from '../cloud-connection-profile.ts';
 import {
-  CLOUD_WEBDRIVER_PROVIDERS,
-  isCloudWebDriverProviderName,
-  type CloudWebDriverKnownProviderName,
-} from '../../cloud-webdriver/providers.ts';
+  connectProviderNamesForError,
+  connectionProviderLeaseKind,
+  connectionProviderRequiresRemoteDaemon,
+  isConnectProviderName,
+  isDirectDeviceConnectProvider,
+  type ConnectProvider,
+} from '../connection-provider-traits.ts';
 import { resolveCloudWebDriverConnectProfile } from '../provider-connection-profile.ts';
 import { resolveProxyConnectProfile } from '../proxy-connection-profile.ts';
 import {
@@ -89,7 +92,7 @@ async function resolveConnectProfile(options: {
 }): Promise<{ flags: CliFlags; remoteConfigPath: string }> {
   const { provider, flags, stateDir } = options;
   if (flags.remoteConfig) return resolveRemoteConnectFlags(flags);
-  if (isCloudWebDriverProviderName(provider)) {
+  if (isDirectDeviceConnectProvider(provider)) {
     return resolveCloudWebDriverConnectProfile({
       provider,
       flags,
@@ -113,8 +116,6 @@ async function resolveConnectProfile(options: {
     env: process.env,
   });
 }
-
-type ConnectProvider = 'cloud' | 'proxy' | CloudWebDriverKnownProviderName;
 
 function assertConnectProviderUsage(provider: ConnectProvider | undefined, flags: CliFlags): void {
   if (!provider || !flags.remoteConfig) return;
@@ -140,7 +141,10 @@ function readRequiredConnectScope(
       'connect requires runId in remote config or via --run-id <id>.',
     );
   }
-  if (!flags.daemonBaseUrl && !isLocalProviderConnection(connectionMetadata?.leaseProvider)) {
+  if (
+    !flags.daemonBaseUrl &&
+    connectionProviderRequiresRemoteDaemon(connectionMetadata?.leaseProvider)
+  ) {
     throw new AppError(
       'INVALID_ARGS',
       'connect requires daemonBaseUrl in remote config, config, env, or --daemon-base-url.',
@@ -301,10 +305,6 @@ function readRemoteConfigConnectionMetadata(
   return Object.values(metadata).some((value) => value !== undefined) ? metadata : undefined;
 }
 
-function isLocalProviderConnection(provider: string | undefined): boolean {
-  return isCloudWebDriverProviderName(provider);
-}
-
 export const disconnectCommand: ClientCommandHandler = async ({ flags, client }) => {
   const { session, stateDir, state } = readRequestedConnectionState(flags);
   if (!state) {
@@ -389,12 +389,12 @@ function readConnectProvider(positionals: string[]): ConnectProvider | undefined
   if (positionals.length > 1) {
     throw new AppError('INVALID_ARGS', 'connect accepts at most one provider positional.');
   }
-  if (provider === 'cloud' || provider === 'proxy' || isCloudWebDriverProviderName(provider)) {
+  if (isConnectProviderName(provider)) {
     return provider;
   }
   throw new AppError(
     'INVALID_ARGS',
-    `Unknown connect provider: ${provider}. Supported providers: cloud, proxy, ${CLOUD_WEBDRIVER_PROVIDERS.browserStack}, ${CLOUD_WEBDRIVER_PROVIDERS.awsDeviceFarm}.`,
+    `Unknown connect provider: ${provider}. Supported providers: ${connectProviderNamesForError()}.`,
   );
 }
 
@@ -530,7 +530,8 @@ function buildLeasePreparationNotice(
   state: RemoteConnectionState,
 ): LeasePreparationNotice | undefined {
   if (state.leaseId) return undefined;
-  if (state.leaseProvider === 'proxy') {
+  const leaseKind = connectionProviderLeaseKind(state.leaseProvider);
+  if (leaseKind === 'proxy') {
     return {
       status: 'deferred',
       nextSteps: ['agent-device open <app-id> --relaunch', 'agent-device devices'],
@@ -538,7 +539,7 @@ function buildLeasePreparationNotice(
         'Proxy lease allocation is pending; run open when ready to allocate or refresh the device lease. Devices can inspect inventory but do not allocate a proxy lease.',
     };
   }
-  if (isLocalProviderConnection(state.leaseProvider)) {
+  if (leaseKind === 'direct-device-provider') {
     const nextSteps = [
       'agent-device open <app-id> --relaunch',
       'agent-device snapshot -i',

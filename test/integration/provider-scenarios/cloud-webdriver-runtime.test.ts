@@ -73,6 +73,38 @@ test('Cloud WebDriver runtime drives provider devices through daemon commands', 
   });
 }, 15_000);
 
+test('Cloud WebDriver release still returns artifacts when WebDriver session delete fails', async () => {
+  await withProviderScenarioResource(createCloudWebDriverWorld, async (world) => {
+    const { daemon, server } = world;
+    const lease = await allocateWebDriverLease(daemon);
+    server.sessionDeleteFailuresRemaining = 2;
+
+    const release = await daemon.callCommand('lease_release', [], leaseFlags(lease.leaseId), {
+      meta: leaseMeta(lease.leaseId),
+    });
+
+    const data = assertRpcOk<{
+      released?: boolean;
+      provider?: {
+        provider?: string;
+        providerSessionId?: string;
+        warnings?: Array<{ code?: string; message?: string }>;
+        cloudArtifacts?: {
+          status?: string;
+          cloudArtifacts?: Array<{ kind?: string }>;
+        };
+      };
+    }>(release);
+    assert.equal(data.released, true);
+    assert.equal(data.provider?.provider, WEBDRIVER_PROVIDER);
+    assert.equal(data.provider?.providerSessionId, 'wd-1');
+    assert.equal(data.provider?.warnings?.[0]?.code, 'WEBDRIVER_SESSION_DELETE_FAILED');
+    assert.match(data.provider?.warnings?.[0]?.message ?? '', /stale webdriver session/);
+    assert.equal(data.provider?.cloudArtifacts?.status, 'ready');
+    assert.equal(data.provider?.cloudArtifacts?.cloudArtifacts?.[0]?.kind, 'video');
+  });
+}, 15_000);
+
 test('default BrowserStack provider runtime builds sessions from daemon request profile flags', async () => {
   const server = await FakeWebDriverServer.start();
   const runtimes = createDefaultCloudWebDriverProviderRuntimes({
@@ -404,6 +436,8 @@ function assertWebDriverCalls(
 }
 
 class FakeWebDriverServer extends CloudWebDriverTestServer {
+  sessionDeleteFailuresRemaining = 0;
+
   static async start(): Promise<FakeWebDriverServer> {
     return await new FakeWebDriverServer().listen();
   }
@@ -442,6 +476,15 @@ class FakeWebDriverServer extends CloudWebDriverTestServer {
         },
         500,
       );
+      return;
+    }
+    if (call.method === 'DELETE' && call.path === '/wd/hub/session/wd-1') {
+      if (this.sessionDeleteFailuresRemaining > 0) {
+        this.sessionDeleteFailuresRemaining -= 1;
+        writeCloudWebDriverTestJson(res, { value: { message: 'stale webdriver session' } }, 500);
+        return;
+      }
+      writeCloudWebDriverTestJson(res, { value: null });
       return;
     }
     writeCloudWebDriverTestJson(res, { value: null });
