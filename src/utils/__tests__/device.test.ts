@@ -113,6 +113,7 @@ test('resolveDevice throws DEVICE_NOT_FOUND with scoped set guidance when simula
   assert.ok(typeof err.details?.hint === 'string');
   assert.match(err.details.hint as string, /simctl --set/);
   assert.match(err.details.hint as string, /create/);
+  assert.doesNotMatch(err.details.hint as string, /iPhone 16|SimRuntime\.iOS-18-0/);
 });
 
 test('resolveDevice throws generic DEVICE_NOT_FOUND when no simulatorSetPath and no devices found', async () => {

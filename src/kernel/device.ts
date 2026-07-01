@@ -227,7 +227,7 @@ function throwNoDevicesFound(selector: DeviceSelector, context: DeviceSelectionC
   if (simulatorSetPath && supportsAppleSimulatorSelection(selector.platform)) {
     throw new AppError('DEVICE_NOT_FOUND', 'No devices found in the scoped simulator set', {
       simulatorSetPath,
-      hint: `The simulator set at "${simulatorSetPath}" appears to be empty. Create a simulator first:\n  xcrun simctl --set "${simulatorSetPath}" create "iPhone 16" com.apple.CoreSimulator.SimDeviceType.iPhone-16 com.apple.CoreSimulator.SimRuntime.iOS-18-0`,
+      hint: `The simulator set at "${simulatorSetPath}" appears to be empty. Create a compatible simulator first with xcrun simctl --set "${simulatorSetPath}" create, or remove the scoped simulator set.`,
       selector,
     });
   }
