@@ -1,7 +1,6 @@
 import { sendToDaemon } from '../daemon/client/daemon-client.ts';
 import { prepareMetroRuntime, reloadMetro } from '../metro/client-metro.ts';
 import { resolveDaemonPaths } from '../daemon/config.ts';
-import { symbolicateCrashArtifact } from '../platforms/apple/core/debug-symbols.ts';
 import { INTERNAL_COMMANDS } from '../command-catalog.ts';
 import {
   prepareDaemonCommandRequest,
@@ -332,8 +331,11 @@ export function createAgentDeviceClient(
       network: async (options = {}) => await executeCommand('network', options),
     },
     debug: {
-      symbols: async (options) =>
-        await symbolicateCrashArtifact({ cwd: options.cwd ?? config.cwd, ...options }),
+      symbols: async (options) => {
+        const { symbolicateCrashArtifact } =
+          await import('../platforms/apple/core/debug-symbols.ts');
+        return symbolicateCrashArtifact({ cwd: options.cwd ?? config.cwd, ...options });
+      },
     },
     recording: {
       record: async (options) => await executeCommand('record', options),

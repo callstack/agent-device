@@ -41,11 +41,6 @@ import {
   computeDeterministicJitter,
   runRepeatedSeries,
 } from './dispatch-series.ts';
-import {
-  MAX_RUNNER_SEQUENCE_STEPS,
-  buildRunnerSequenceCommand,
-  parseRunnerSequenceResult,
-} from '../platforms/apple/core/runner/runner-sequence.ts';
 import type { RunnerSequenceStep } from '../platforms/apple/core/runner/runner-contract.ts';
 import type { DispatchContext } from './dispatch-context.ts';
 import type { Interactor, RunnerCallOptions } from './interactor-types.ts';
@@ -347,6 +342,8 @@ async function runIosSequenceChunks(
   context: DispatchContext | undefined,
 ): Promise<Record<string, unknown>> {
   const { runIosRunnerCommand } = await import('../platforms/apple/core/runner/runner-client.ts');
+  const { MAX_RUNNER_SEQUENCE_STEPS, buildRunnerSequenceCommand, parseRunnerSequenceResult } =
+    await import('../platforms/apple/core/runner/runner-sequence.ts');
   const chunks = chunkRunnerSequenceStepsByBudget(steps, MAX_RUNNER_SEQUENCE_STEPS);
 
   let firstChunkRunnerResult: Record<string, unknown> | undefined;

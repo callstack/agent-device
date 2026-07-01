@@ -96,24 +96,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Reject commands/ imports below the CLI surface layer
-        run: |
-          # daemon/ and platforms/ should not directly depend on the CLI commands layer.
-          # This grep is a direct-import guard; deeper type-only transitive imports are handled
-          # by keeping shared daemon/client contracts outside src/commands.
-          set +e
-          matches=$(git grep -n -E "from '.*commands/" -- src/daemon src/platforms ':!src/**/__tests__/**' ':!*.test.ts')
-          grep_status=$?
-          set -e
-          if [ "$grep_status" -gt 1 ]; then
-            exit "$grep_status"
-          fi
-          if [ -n "$matches" ]; then
-            echo "$matches"
-            count=$(printf '%s\n' "$matches" | wc -l)
-            echo "::error title=Layering drift::$count import(s) of src/commands/* from src/daemon or src/platforms. Depend on shared contracts instead."
-            exit 1
-          fi
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+        with:
+          install-deps: false
+
+      - name: Check import-direction DAG (kernel-sink, commands-floor, platforms-seam)
+        # Generalizes the former inline commands/-import grep into a structured
+        # import-direction lint over the resolved graph. See scripts/layering/check.ts
+        # and plans/perfect-shape.md §5.5. Invoked directly (no deps needed) so the
+        # job stays fast and does not require a pnpm install.
+        run: node --experimental-strip-types scripts/layering/check.ts
 
   fallow:
     name: Fallow Code Quality

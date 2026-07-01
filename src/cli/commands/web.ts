@@ -1,8 +1,4 @@
-import {
-  doctorManagedAgentBrowser,
-  setupManagedAgentBrowser,
-  type AgentBrowserToolStatus,
-} from '../../platforms/web/agent-browser-tool.ts';
+import type { AgentBrowserToolStatus } from '../../platforms/web/agent-browser-tool.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { CliFlags } from '../parser/cli-flags.ts';
 import { printJson } from '../../utils/output.ts';
@@ -17,6 +13,8 @@ export async function runWebCommand(
   switch (action) {
     case 'setup': {
       printWebSetupStart(options.flags.json);
+      const { setupManagedAgentBrowser } =
+        await import('../../platforms/web/agent-browser-tool.ts');
       const status = await setupManagedAgentBrowser({
         stateDir: options.stateDir,
       });
@@ -24,6 +22,8 @@ export async function runWebCommand(
       return 0;
     }
     case 'doctor': {
+      const { doctorManagedAgentBrowser } =
+        await import('../../platforms/web/agent-browser-tool.ts');
       const result = await doctorManagedAgentBrowser({
         stateDir: options.stateDir,
       });
@@ -44,10 +44,7 @@ function printWebSetupStart(json: boolean | undefined): void {
   process.stdout.write('Setting up managed agent-browser backend (downloads if needed)...\n');
 }
 
-function printWebSetupResult(
-  json: boolean | undefined,
-  status: Awaited<ReturnType<typeof setupManagedAgentBrowser>>,
-): void {
+function printWebSetupResult(json: boolean | undefined, status: AgentBrowserToolStatus): void {
   if (json) {
     printJson({ success: true, data: { status: toPublicAgentBrowserToolStatus(status) } });
     return;

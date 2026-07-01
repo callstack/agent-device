@@ -27,6 +27,7 @@
   "ignorePatterns": [
     "examples/test-app/**",
     "scripts/perf/**",
+    "scripts/layering/**",
     "ios-runner/AgentDeviceRunner/AgentDeviceRunnerUITests.xctestplan",
     "scripts/write-xcuitest-cache-metadata.mjs"
   ],
