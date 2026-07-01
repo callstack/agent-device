@@ -168,7 +168,7 @@ test('doctor command opts into progress rows for human output', async () => {
   assert.equal(result.code, null);
   assert.equal(result.calls.length, 1);
   assert.equal(result.calls[0]?.command, 'doctor');
-  assert.equal(result.calls[0]?.meta?.requestProgress, 'doctor');
+  assert.equal(result.calls[0]?.meta?.requestProgress, 'command');
   assert.match(result.stdout, /✓ agent-device: agent-device 0\.17\.9 using \/tmp\/agent-device/);
 });
 
