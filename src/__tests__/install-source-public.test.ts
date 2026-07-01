@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 
-import { isTrustedInstallSourceUrl, validateDownloadSourceUrl } from '../install-source.ts';
+import { isTrustedInstallSourceUrl, validateDownloadSourceUrl } from '../sdk/install-source.ts';
 
 test('public install-source entrypoint re-exports pure helpers', () => {
   assert.equal(

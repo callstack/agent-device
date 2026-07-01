@@ -6,7 +6,7 @@ import {
   type MetroBridgeDescriptor,
   type MetroTunnelRequestMessage,
   type MetroTunnelResponseMessage,
-} from '../metro.ts';
+} from '../sdk/metro.ts';
 
 // Type-only contract fixtures — these verify that the public subpath types
 // remain structurally stable. A rename or breaking shape change will fail

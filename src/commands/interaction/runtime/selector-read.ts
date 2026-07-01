@@ -12,13 +12,12 @@ import {
 } from '../../../snapshot/snapshot-quality.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { AppError } from '../../../kernel/errors.ts';
+import { parseSelectorChain, type SelectorChain } from '../../../utils/selectors-parse.ts';
 import {
   findSelectorChainMatch,
   formatSelectorFailure,
-  parseSelectorChain,
   resolveSelectorChain,
-  type SelectorChain,
-} from '../../../selectors.ts';
+} from '../../../daemon/selectors.ts';
 import { buildSelectorChainForNode } from '../../../utils/selector-build.ts';
 import {
   evaluateIsPredicate,

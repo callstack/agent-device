@@ -27,7 +27,8 @@ import {
   isSparseSnapshotQualityVerdict,
   type SnapshotQualityVerdict,
 } from '../../snapshot/snapshot-quality.ts';
-import { resolveSelectorChain, type SelectorChain } from '../../selectors.ts';
+import { resolveSelectorChain } from '../selectors.ts';
+import type { SelectorChain } from '../../utils/selectors-parse.ts';
 
 export { parseFindArgs } from '../../utils/finders.ts';
 

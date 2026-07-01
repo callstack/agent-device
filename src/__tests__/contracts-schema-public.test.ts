@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError } from '../index.ts';
+import { AppError } from '../sdk/index.ts';
 import type { CommandResult } from '../core/command-descriptor/command-result.ts';
 import type { AppStateCommandResult } from '../contracts/app-state.ts';
 import type { ClipboardCommandResult } from '../contracts/clipboard.ts';
@@ -14,7 +14,7 @@ import type {
   RotateCommandResult,
 } from '../contracts/navigation.ts';
 import type { ViewportCommandResult } from '../contracts/viewport.ts';
-import { centerOfRect, defaultHintForCode, normalizeError } from '../contracts.ts';
+import { centerOfRect, defaultHintForCode, normalizeError } from '../sdk/contracts.ts';
 import {
   daemonCommandRequestSchema,
   daemonRuntimeSchema,
@@ -48,7 +48,7 @@ test('public contracts error helpers do not load diagnostics module', () => {
 });
 
 test('public contract facade does not expose parser schemas', async () => {
-  const publicContracts = (await import('../contracts.ts')) as Record<string, unknown>;
+  const publicContracts = (await import('../sdk/contracts.ts')) as Record<string, unknown>;
 
   assert.equal(publicContracts.daemonCommandRequestSchema, undefined);
   assert.equal(publicContracts.daemonRuntimeSchema, undefined);

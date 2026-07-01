@@ -11,7 +11,7 @@ import {
   tryParseSelectorChain,
   type SelectorChain,
   type SelectorDiagnostics,
-} from '../selectors.ts';
+} from '../sdk/selectors.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 
 const nodes: SnapshotNode[] = [

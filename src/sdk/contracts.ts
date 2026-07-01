@@ -11,6 +11,6 @@ export type {
   LeaseHeartbeatPayload,
   LeaseReleasePayload,
   SessionRuntimeHints,
-} from './kernel/contracts.ts';
+} from '../kernel/contracts.ts';
 
-export { centerOfRect, defaultHintForCode, normalizeError } from './kernel/contracts.ts';
+export { centerOfRect, defaultHintForCode, normalizeError } from '../kernel/contracts.ts';
