@@ -30,6 +30,7 @@ import type { CloudProviderSessionResult } from '../../cloud-artifacts.ts';
 import type { MetroPrepareKind } from '../../metro/client-metro.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { connectionProviderRequiresRemoteDaemon } from '../connection/provider-policy.ts';
+import { isCloudWebDriverProviderName } from '../../cloud-webdriver/providers.ts';
 
 const leaseDeferredCommands = new Set([
   'connect',
@@ -47,6 +48,7 @@ const proxyLeaseAllocatingCommands: ReadonlySet<string> = new Set([
   INTERNAL_COMMANDS.installSource,
 ]);
 export const PROXY_REMOTE_LEASE_TTL_MS = 5 * 60 * 1000;
+export const CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS = 10 * 60 * 1000;
 
 export async function materializeRemoteConnectionForCommand(options: {
   command: string;
@@ -368,9 +370,11 @@ type ConnectionLeasePolicy = {
 };
 
 function connectionLeasePolicyForState(state: RemoteConnectionState): ConnectionLeasePolicy {
-  return state.leaseProvider === 'proxy'
-    ? PROXY_CONNECTION_LEASE_POLICY
-    : DEFAULT_CONNECTION_LEASE_POLICY;
+  if (state.leaseProvider === 'proxy') return PROXY_CONNECTION_LEASE_POLICY;
+  if (isCloudWebDriverProviderName(state.leaseProvider)) {
+    return CLOUD_WEBDRIVER_CONNECTION_LEASE_POLICY;
+  }
+  return DEFAULT_CONNECTION_LEASE_POLICY;
 }
 
 const DEFAULT_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
@@ -383,6 +387,12 @@ const PROXY_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
   shouldAllocate: (command) => command !== 'devices' && !leaseDeferredCommands.has(command),
   ttlMs: () => PROXY_REMOTE_LEASE_TTL_MS,
   resolveLeaseState: resolveProxyLeaseState,
+};
+
+const CLOUD_WEBDRIVER_CONNECTION_LEASE_POLICY: ConnectionLeasePolicy = {
+  shouldAllocate: (command) => !leaseDeferredCommands.has(command),
+  ttlMs: () => CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS,
+  resolveLeaseState: async (options) => ({ state: options.state }),
 };
 
 async function prepareConnectedMetro(

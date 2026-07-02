@@ -21,6 +21,7 @@ import { writeGeneratedRemoteConfig } from '../cli/connection/generated-config.t
 import {
   hasDeferredMetroConfig,
   materializeRemoteConnectionForCommand,
+  CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS,
   PROXY_REMOTE_LEASE_TTL_MS,
 } from '../cli/commands/connection-runtime.ts';
 import { stopMetroCompanion } from '../metro/client-metro-companion.ts';
@@ -765,6 +766,83 @@ test('proxy install allocates a device lease before dispatch', async () => {
   assert.equal(state?.leaseId, 'android-lease-1');
   assert.equal(state?.deviceKey, 'android:mobile:emulator-5554');
   assert.equal(state?.leaseProvider, 'proxy');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('cloud webdriver connection allocates and heartbeats with extended lease TTL', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-cloud-ttl-'));
+  const stateDir = path.join(tempRoot, '.state');
+  const remoteConfigPath = path.join(tempRoot, 'remote.json');
+  fs.writeFileSync(remoteConfigPath, JSON.stringify({}));
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      version: 1,
+      session: 'adc-cloud',
+      remoteConfigPath,
+      remoteConfigHash: hashRemoteConfigFile(remoteConfigPath),
+      tenant: 'acme',
+      runId: 'run-123',
+      leaseProvider: 'aws-device-farm',
+      platform: 'ios',
+      connectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  });
+  const baseFlags = {
+    json: true,
+    help: false,
+    version: false,
+    stateDir,
+    remoteConfig: remoteConfigPath,
+    tenant: 'acme',
+    runId: 'run-123',
+    session: 'adc-cloud',
+    platform: 'ios',
+  } as const;
+  let allocateRequest: Parameters<AgentDeviceClient['leases']['allocate']>[0] | undefined;
+
+  const materialized = await materializeRemoteConnectionForCommand({
+    command: 'screenshot',
+    flags: { ...baseFlags },
+    client: createTestClient({
+      allocate: async (request) => {
+        allocateRequest = request;
+        return {
+          leaseId: 'cloud-lease-1',
+          tenantId: request.tenant,
+          runId: request.runId,
+          backend: request.leaseBackend ?? 'ios-instance',
+          leaseProvider: request.leaseProvider,
+        };
+      },
+    }),
+  });
+
+  assert.equal(allocateRequest?.leaseProvider, 'aws-device-farm');
+  assert.equal(allocateRequest?.ttlMs, CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS);
+  assert.equal(materialized.flags.leaseId, 'cloud-lease-1');
+
+  let heartbeatRequest: Parameters<AgentDeviceClient['leases']['heartbeat']>[0] | undefined;
+  await materializeRemoteConnectionForCommand({
+    command: 'screenshot',
+    flags: { ...baseFlags },
+    client: createTestClient({
+      heartbeat: async (request) => {
+        heartbeatRequest = request;
+        return {
+          leaseId: request.leaseId,
+          tenantId: request.tenant ?? 'acme',
+          runId: request.runId ?? 'run-123',
+          backend: request.leaseBackend ?? 'ios-instance',
+          leaseProvider: request.leaseProvider,
+        };
+      },
+    }),
+  });
+
+  assert.equal(heartbeatRequest?.leaseId, 'cloud-lease-1');
+  assert.equal(heartbeatRequest?.ttlMs, CLOUD_WEBDRIVER_REMOTE_LEASE_TTL_MS);
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
