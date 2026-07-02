@@ -84,11 +84,11 @@ test('Provider-backed integration tvOS remote flow maps navigation commands to r
       assertRpcOk(close);
 
       runnerTranscript.assertComplete();
+      // One state listing per flow: the launch and terminate boot checks hit
+      // the recently-observed-Booted memo instead of re-listing devices.
       assert.deepEqual(appleTool.calls, [
         ['simctl', 'list', 'devices', '-j'],
-        ['simctl', 'list', 'devices', '-j'],
         ['simctl', 'launch', 'tv-sim-1', 'com.example.tv'],
-        ['simctl', 'list', 'devices', '-j'],
         ['simctl', 'terminate', 'tv-sim-1', 'com.example.tv'],
       ]);
     },
