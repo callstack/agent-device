@@ -748,6 +748,19 @@ export function shouldDeleteRunnerDerivedRootEntry(entryName: string): boolean {
   return RUNNER_ROOT_TRANSIENT_ENTRY_NAMES.has(entryName);
 }
 
+// Cheap cache probe for preflight surfaces (doctor): does the expected
+// derived location already hold a usable xctestrun artifact? Resolving the
+// expected metadata stats the runner sources and reads tool versions
+// (~100ms, cached per process) but never builds.
+export function hasCachedAppleRunnerArtifact(device: DeviceInfo): boolean {
+  try {
+    const derived = resolveRunnerDerivedPath(device, resolveExpectedRunnerCacheMetadata(device));
+    return findXctestrun(derived, device) !== null;
+  } catch {
+    return false;
+  }
+}
+
 export function resolveRunnerCacheMetadataPath(derived: string): string {
   return path.join(derived, RUNNER_CACHE_METADATA_FILE);
 }

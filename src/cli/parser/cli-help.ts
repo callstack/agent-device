@@ -133,6 +133,9 @@ Version-matched operating guide for normal agent-device work.
 Core loop:
   devices/apps -> open -> snapshot or snapshot -i -> get/is/find/wait or press/fill/scroll/back -> verify -> close
 
+Fresh machine or first iOS run:
+  Run agent-device doctor --platform ios first. Besides preflight checks it warms the iOS XCTest runner build cache in the background, so the first open skips the runner build (~10s). To block until fully warm instead, run agent-device prepare ios-runner.
+
 Command shape:
   Plans should use agent-device commands, not raw platform tools, pseudo commands, package-manager aliases, or helper prose.
   If the user asks for a command plan, final output should be command lines only: no intro sentence, numbered list, Markdown fence, shell pipe, grep/head/tail helper, or explanatory bullets.
@@ -569,7 +572,7 @@ Choose the next help topic:
   Remote/cloud config, leases, and local service tunnels: help remote.
 
 React Native dev loop:
-  Before QA/dogfood runs, use doctor to separate environment setup from app failures:
+  Before QA/dogfood runs, use doctor to separate environment setup from app failures (on iOS simulators doctor also warms the runner build cache in the background):
     agent-device doctor --platform android
     agent-device doctor --platform ios
     agent-device doctor --platform android --app com.example.app

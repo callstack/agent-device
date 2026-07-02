@@ -181,6 +181,7 @@ export {
   resolveRunnerSigningBuildSettings,
   resolveRunnerBundleBuildSettings,
   assertSafeDerivedCleanup,
+  hasCachedAppleRunnerArtifact,
   IOS_RUNNER_CONTAINER_BUNDLE_IDS,
 } from './runner-xctestrun.ts';
 

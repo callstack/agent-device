@@ -11,6 +11,7 @@ import { SessionStore } from '../session-store.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 import { shutdownDeviceTarget } from '../target-shutdown.ts';
 import { createAppleRunnerCachePrewarmOnColdBoot } from '../apple-runner-options.ts';
+import { prewarmAppleRunnerCache } from '../../platforms/apple/core/runner/runner-client.ts';
 import {
   hasExplicitSessionFlag,
   requireSessionOrExplicitSelector,
@@ -267,6 +268,15 @@ export async function handleSessionStateCommands(params: {
 
     const unsupported = requireCommandSupported('boot', device);
     if (unsupported) return unsupported;
+
+    // Cold boots warm the runner artifact cache via the
+    // onIosSimulatorColdBootStart hook above; an already-booted simulator
+    // never fires it, so kick the best-effort warmup here — boot is a
+    // natural fresh-machine entry point and a cached artifact makes this a
+    // fast no-op.
+    if (isIosFamily(device) && device.kind === 'simulator') {
+      void prewarmAppleRunnerCache(device, {});
+    }
 
     return {
       ok: true,
