@@ -107,6 +107,7 @@ import { LeaseRegistry } from '../../lease-registry.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
 import { AppError } from '../../../kernel/errors.ts';
+import { IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_NOTE } from '../../app-log-ios.ts';
 import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
 import { ensureDeviceReady } from '../../device-ready.ts';
 import { applyRuntimeHintsToApp, clearRuntimeHintsFromApp } from '../../runtime-hints.ts';
@@ -4543,9 +4544,7 @@ function mockUnsupportedIosDeviceLogBackend(): void {
   );
   mockRunAppLogDoctor.mockResolvedValue({
     checks: { devicectlAvailable: true, devicectlConsoleCapture: false },
-    notes: [
-      'Installed devicectl does not expose scriptable iOS physical-device app console capture. Markers can still be written, but app output is not being captured by agent-device on this toolchain.',
-    ],
+    notes: [IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_NOTE],
   });
 }
 
@@ -4618,9 +4617,7 @@ function expectUnsupportedIosDeviceLogsDoctor(
   expect(response.data?.state).toBe('failed');
   expect(response.data?.backend).toBe('ios-device');
   expect(response.data?.failureCode).toBe('UNSUPPORTED_OPERATION');
-  expect(response.data?.notes).toEqual([
-    'Installed devicectl does not expose scriptable iOS physical-device app console capture. Markers can still be written, but app output is not being captured by agent-device on this toolchain.',
-  ]);
+  expect(response.data?.notes).toEqual([IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_NOTE]);
 }
 
 test('logs clear --restart starts active iOS physical-device console capture', async () => {

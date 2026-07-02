@@ -2,7 +2,11 @@ import { isIosFamily, isMacOs, type DeviceInfo } from '../kernel/device.ts';
 import { runXcrun } from '../platforms/apple/core/tool-provider.ts';
 import { runAndroidAdb } from '../platforms/android/adb.ts';
 import { runCmd } from '../utils/exec.ts';
-import { checkIosDeviceConsoleCaptureSupport } from './app-log-ios.ts';
+import {
+  checkIosDeviceConsoleCaptureSupport,
+  IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED_NOTE,
+  IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_NOTE,
+} from './app-log-ios.ts';
 
 export type AppLogDoctorResult = {
   checks: Record<string, boolean>;
@@ -90,13 +94,9 @@ async function runIosDeviceAppLogDoctor(): Promise<AppLogDoctorResult> {
   checks.devicectlConsoleCapture = consoleCapture.supported;
   if (!consoleCapture.supported) {
     if (consoleCapture.reason === 'probe-failed') {
-      notes.push(
-        'Could not verify iOS physical-device app console capture support. Retry after devicectl is responsive, then rerun logs doctor.',
-      );
+      notes.push(IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED_NOTE);
     } else {
-      notes.push(
-        'Installed devicectl does not expose scriptable iOS physical-device app console capture. Markers can still be written, but app output is not being captured by agent-device on this toolchain.',
-      );
+      notes.push(IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_NOTE);
     }
   }
   return { checks, notes };

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { buildSimctlArgs } from '../platforms/apple/core/simctl.ts';
 import { AppError } from '../kernel/errors.ts';
-import { runCmd, runCmdBackground } from '../utils/exec.ts';
+import { runCmd, runCmdBackground, type ExecResult } from '../utils/exec.ts';
 import { runXcrun } from '../platforms/apple/core/tool-provider.ts';
 import {
   clearPidFile,
@@ -20,12 +20,14 @@ const IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED_MESSAGE =
   'Could not verify iOS physical-device app console capture support.';
 const IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED_HINT =
   'Retry logs clear --restart. If the probe keeps failing, run logs doctor and inspect the request diagnostics for the devicectl help command.';
+export const IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_NOTE =
+  'Installed devicectl does not expose scriptable iOS physical-device app console capture. Markers can still be written, but app output is not being captured by agent-device on this toolchain.';
+export const IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED_NOTE =
+  'Could not verify iOS physical-device app console capture support. Retry after devicectl is responsive, then rerun logs doctor.';
 
-type IosDeviceConsoleCaptureSupport = {
-  supported: boolean;
-  reason?: 'unsupported' | 'probe-failed';
-  stderr?: string;
-};
+export type IosDeviceConsoleCaptureSupport =
+  | { supported: true; stderr?: string }
+  | { supported: false; reason: 'unsupported' | 'probe-failed'; stderr?: string };
 
 let cachedSupportedIosDeviceConsoleCapture: IosDeviceConsoleCaptureSupport | undefined;
 
@@ -99,17 +101,7 @@ export async function checkIosDeviceConsoleCaptureSupport(): Promise<IosDeviceCo
       allowFailure: true,
       timeoutMs: 5_000,
     });
-    if (result.exitCode !== 0) {
-      return {
-        supported: false,
-        reason: 'probe-failed',
-        stderr: result.stderr.trim() || undefined,
-      };
-    }
-    const supported = isIosDeviceConsoleCaptureHelp(result.stdout, result.stderr);
-    const support: IosDeviceConsoleCaptureSupport = supported
-      ? { supported: true, stderr: result.stderr.trim() || undefined }
-      : { supported: false, reason: 'unsupported', stderr: result.stderr.trim() || undefined };
+    const support = readIosDeviceConsoleCaptureSupport(result);
     if (support.supported) cachedSupportedIosDeviceConsoleCapture = support;
     return support;
   } catch (error) {
@@ -119,6 +111,17 @@ export async function checkIosDeviceConsoleCaptureSupport(): Promise<IosDeviceCo
       stderr: error instanceof Error ? error.message : undefined,
     };
   }
+}
+
+function readIosDeviceConsoleCaptureSupport(result: ExecResult): IosDeviceConsoleCaptureSupport {
+  const stderr = result.stderr.trim() || undefined;
+  if (result.exitCode !== 0) {
+    return { supported: false, reason: 'probe-failed', stderr };
+  }
+  if (!isIosDeviceConsoleCaptureHelp(result.stdout, result.stderr)) {
+    return { supported: false, reason: 'unsupported', stderr };
+  }
+  return { supported: true, stderr };
 }
 
 function isIosDeviceConsoleCaptureHelp(stdout: string, stderr: string): boolean {
@@ -260,18 +263,7 @@ export async function startIosDeviceAppLog(
   const support = await checkIosDeviceConsoleCaptureSupport();
   if (!support.supported) {
     stream.end();
-    if (support.reason === 'probe-failed') {
-      throw new AppError('COMMAND_FAILED', IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED_MESSAGE, {
-        backend: 'ios-device',
-        hint: IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED_HINT,
-        stderr: support.stderr,
-      });
-    }
-    throw new AppError('UNSUPPORTED_OPERATION', IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_MESSAGE, {
-      backend: 'ios-device',
-      hint: IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_HINT,
-      stderr: support.stderr,
-    });
+    throw buildIosDeviceConsoleCaptureError(support);
   }
   return startAppleAppLogStream({
     backend: 'ios-device',
@@ -281,6 +273,23 @@ export async function startIosDeviceAppLog(
     redactionPatterns,
     pidPath,
     stopSignals: ['SIGKILL'],
+  });
+}
+
+function buildIosDeviceConsoleCaptureError(
+  support: Extract<IosDeviceConsoleCaptureSupport, { supported: false }>,
+): AppError {
+  if (support.reason === 'probe-failed') {
+    return new AppError('COMMAND_FAILED', IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED_MESSAGE, {
+      backend: 'ios-device',
+      hint: IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED_HINT,
+      stderr: support.stderr,
+    });
+  }
+  return new AppError('UNSUPPORTED_OPERATION', IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_MESSAGE, {
+    backend: 'ios-device',
+    hint: IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_HINT,
+    stderr: support.stderr,
   });
 }
 
