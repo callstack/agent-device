@@ -1,6 +1,5 @@
 import { PUBLIC_COMMANDS } from '../command-catalog.ts';
 import type { SessionAction } from './types.ts';
-import { definedEventDetails } from './session-event-details.ts';
 
 export function buildActionSummary(action: SessionAction): string {
   const message = readString(action.result?.message);
@@ -28,7 +27,7 @@ export function buildActionSummary(action: SessionAction): string {
 
 export function buildActionDetails(action: SessionAction): Record<string, unknown> {
   const result = action.result ?? {};
-  return definedEventDetails({
+  return {
     command: action.command,
     positionals: buildDisplayPositionals(action),
     flags: action.flags,
@@ -61,7 +60,7 @@ export function buildActionDetails(action: SessionAction): Record<string, unknow
     launchTarget: result.launchTarget,
     textLength: typeof result.text === 'string' ? Array.from(result.text).length : undefined,
     nodeCount: Array.isArray(result.nodes) ? result.nodes.length : undefined,
-  });
+  };
 }
 
 function readActionTargetLabel(action: SessionAction): string | undefined {

@@ -6,7 +6,6 @@ import { redactDiagnosticData } from '../kernel/redaction.ts';
 import { getDiagnosticsMeta } from '../utils/diagnostics.ts';
 import type { DaemonRequest, DaemonResponse, SessionAction } from './types.ts';
 import { buildActionDetails, buildActionSummary } from './session-event-action.ts';
-import { definedEventDetails } from './session-event-details.ts';
 
 export const SESSION_EVENT_LOG_FILENAME = 'events.ndjson';
 
@@ -93,14 +92,14 @@ export function buildRequestStartedEvent(params: {
     requestId: req.meta?.requestId ?? getDiagnosticsMeta().requestId,
     command: req.command,
     summary: `Started ${req.command}`,
-    details: definedEventDetails({
+    details: {
       publicSession: req.session,
       effectiveSession: sessionName,
       tenant: req.meta?.tenantId,
       isolation: req.meta?.sessionIsolation,
       requestLogPath,
       runnerLogPath,
-    }),
+    },
   };
 }
 
@@ -117,7 +116,7 @@ export function buildRequestFinishedEvent(params: {
       command: req.command,
       status: 'ok',
       summary: `Finished ${req.command}`,
-      details: definedEventDetails({ durationMs }),
+      details: { durationMs },
     };
   }
   return {
@@ -126,14 +125,14 @@ export function buildRequestFinishedEvent(params: {
     command: req.command,
     status: 'error',
     summary: `Failed ${req.command}: ${response.error.message}`,
-    details: definedEventDetails({
+    details: {
       durationMs,
       code: response.error.code,
       message: response.error.message,
       hint: response.error.hint,
       diagnosticId: response.error.diagnosticId,
       logPath: response.error.logPath,
-    }),
+    },
   };
 }
 
@@ -149,7 +148,7 @@ export function readSessionEventLog(
 
   const rawLines = fs
     .readFileSync(eventLogPath, 'utf8')
-    .split('\n')
+    .split(/\r?\n/)
     .filter((line) => line.trim().length > 0);
   const end = Math.min(rawLines.length, cursor + limit);
   const events = rawLines.slice(cursor, end).flatMap((line) => {
