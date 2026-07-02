@@ -3,6 +3,7 @@ import type { DeviceInfo } from '../../../../kernel/device.ts';
 import {
   __resetSimulatorBootedMemoForTests,
   ensureBootedSimulator,
+  markSimulatorBooted,
   shutdownSimulator,
   SIMULATOR_BOOTED_MEMO_TTL_MS,
 } from '../simulator.ts';
@@ -69,6 +70,13 @@ test('shutdownSimulator invalidates the booted memo', async () => {
 
   await ensureBootedSimulator(simulator);
   expect(countSimctlListCalls()).toBe(2);
+});
+
+test('markSimulatorBooted seeds the memo so the first boot check skips the listing', async () => {
+  markSimulatorBooted(simulator);
+
+  await ensureBootedSimulator(simulator);
+  expect(countSimctlListCalls()).toBe(0);
 });
 
 test('booted memo is scoped per simulator set path', async () => {

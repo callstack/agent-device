@@ -49,7 +49,11 @@ function readSimulatorBootedMemo(device: DeviceInfo): boolean {
   return true;
 }
 
-function markSimulatorBooted(device: DeviceInfo): void {
+// Also called by the device-inventory parser: a `simctl list` that reports a
+// simulator Booted is the same observation ensureBootedSimulator would make,
+// so resolving a device seeds the memo and the boot checks that follow in the
+// same request cost nothing.
+export function markSimulatorBooted(device: DeviceInfo): void {
   simulatorBootedMemo.set(simulatorBootedMemoKey(device), Date.now());
 }
 

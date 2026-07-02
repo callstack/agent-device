@@ -12,6 +12,7 @@ import {
 import { resolveIosSimulatorDeviceSetPath } from '../../../utils/device-isolation.ts';
 import { buildHostMacDevice } from '../os/macos/devices.ts';
 import { buildSimctlArgs } from './simctl.ts';
+import { markSimulatorBooted } from './simulator.ts';
 import { resolveAppleToolProvider, runXcrun } from './tool-provider.ts';
 
 export { createLocalAppleToolProvider, withAppleToolProvider } from './tool-provider.ts';
@@ -212,7 +213,7 @@ function parseSimctlAppleDevices(
     for (const device of runtimes) {
       if (!device.isAvailable) continue;
       const target = resolveAppleTargetFromRuntime(runtime);
-      devices.push({
+      const parsed: DeviceInfo = {
         platform: 'apple',
         id: device.udid,
         name: device.name,
@@ -223,7 +224,9 @@ function parseSimctlAppleDevices(
         appleOs: resolveAppleOs(target, [device.deviceTypeIdentifier ?? '', device.name]),
         booted: device.state === 'Booted',
         ...(simulatorSetPath ? { simulatorSetPath } : {}),
-      });
+      };
+      if (parsed.booted) markSimulatorBooted(parsed);
+      devices.push(parsed);
     }
   }
   return devices;
