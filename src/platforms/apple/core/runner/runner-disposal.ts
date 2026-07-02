@@ -1,6 +1,7 @@
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import { isProcessAlive, isProcessGroupAlive } from '../../../../utils/process-identity.ts';
+import type { ExecBackgroundResult } from '../../../../utils/exec.ts';
 import { cleanupTempFile, waitForRunner } from './runner-transport.ts';
 import { withRunnerCommandId, type RunnerCommand } from './runner-contract.ts';
 import {
@@ -165,7 +166,7 @@ async function signalRunnerSessions(
 }
 
 async function signalRunnerPrepProcesses(
-  prepProcesses: readonly RunnerSession['child'][],
+  prepProcesses: readonly ExecBackgroundResult['child'][],
   signal: 'SIGINT' | 'SIGTERM' | 'SIGKILL',
 ): Promise<void> {
   await Promise.allSettled(

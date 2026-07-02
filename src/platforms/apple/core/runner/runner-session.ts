@@ -56,7 +56,11 @@ import {
   stopRunnerPrepProcesses,
 } from './runner-disposal.ts';
 import { enrichRunnerFailureFromLog } from './runner-failure-diagnostics.ts';
-import type { RunnerSession } from './runner-session-types.ts';
+import {
+  buildRunnerSessionId,
+  normalizeRunnerStartupTimeoutMs,
+  type RunnerSession,
+} from './runner-session-types.ts';
 
 export type { RunnerSession } from './runner-session-types.ts';
 
@@ -241,7 +245,7 @@ async function startRunnerSessionWithLease(
     logChunk(chunk, options.logPath, options.traceLogPath, options.verbose);
   });
 
-  const sessionId = `${device.id}:${port}:${Date.now()}`;
+  const sessionId = buildRunnerSessionId(device.id, port);
   const lease = buildRunnerLease({
     deviceId: device.id,
     sessionId,
@@ -469,7 +473,7 @@ export async function abortAllIosRunnerSessions(): Promise<void> {
 export async function detachIosSimulatorRunnerSessionsForShutdown(): Promise<number> {
   if (!isIosRunnerDetachEnabled()) return 0;
   let detached = 0;
-  for (const [deviceId, session] of Array.from(runnerSessions.entries())) {
+  for (const [deviceId, session] of runnerSessions) {
     if (session.device.kind !== 'simulator') continue;
     // A held device-set redirect means this runner depends on the global
     // XCTestDevices symlink pointing at a custom simulator set for its whole
@@ -934,12 +938,6 @@ export function readRunnerStartupTimeoutMs(
   session: Pick<RunnerSession, 'startupTimeoutMs'>,
 ): number {
   return session.startupTimeoutMs ?? RUNNER_STARTUP_TIMEOUT_MS;
-}
-
-function normalizeRunnerStartupTimeoutMs(value: number | undefined): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) && value > 0
-    ? Math.floor(value)
-    : undefined;
 }
 
 async function measureRunnerStartupStep<T>(

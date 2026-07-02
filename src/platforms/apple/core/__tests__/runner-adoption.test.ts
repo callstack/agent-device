@@ -110,11 +110,9 @@ test('readStaleRunnerLease returns dead-owner leases and skips owned ones', () =
   expect(readStaleRunnerLease(simulator.id)).toBeNull();
 });
 
-test('buildDetachedRunnerLease rewrites the token once', () => {
+test('buildDetachedRunnerLease rewrites the token', () => {
   const lease = writeStaleLease();
-  const detached = buildDetachedRunnerLease(lease);
-  expect(detached.ownerToken).toBe(`detached-${lease.ownerToken}`);
-  expect(buildDetachedRunnerLease(detached).ownerToken).toBe(detached.ownerToken);
+  expect(buildDetachedRunnerLease(lease).ownerToken).toBe(`detached-${lease.ownerToken}`);
 });
 
 test('adoption succeeds for a live, matching, probe-healthy runner', async () => {

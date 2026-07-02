@@ -239,7 +239,6 @@ export function readStaleRunnerLease(deviceId: string): RunnerLease | null {
 // matches this daemon, so the shutdown's own lease-cleanup paths skip it, and
 // once this process exits the lease classifies as stale for the next adopter.
 export function buildDetachedRunnerLease(lease: RunnerLease): RunnerLease {
-  if (lease.ownerToken.startsWith('detached-')) return lease;
   return { ...lease, ownerToken: `detached-${lease.ownerToken}` };
 }
 

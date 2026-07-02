@@ -168,7 +168,10 @@ async function completeOpenCommand(params: {
   const timing: OpenTiming = {};
 
   const shouldPrewarmIosRunner =
-    isIosFamily(device) && surface === 'app' && openPositionals.length > 0;
+    isIosFamily(device) &&
+    surface === 'app' &&
+    openPositionals.length > 0 &&
+    Boolean(sessionAppBundleId);
   const runnerPrewarmOptions = buildAppleRunnerSessionOptions({
     req,
     logPath,
@@ -177,19 +180,32 @@ async function completeOpenCommand(params: {
   });
   const shouldPrewarmRunnerBeforeOpen = req.flags?.maestro?.prewarmRunnerBeforeOpen === true;
   let runnerPrewarm: Promise<void> | undefined;
+  // Tracked separately from `runnerPrewarm`: prewarmIosRunnerSession may
+  // return undefined (prewarm unavailable), and one attempt is one attempt.
+  let runnerPrewarmScheduled = false;
+  let runnerPrewarmAwaited = false;
+  const schedulePrewarm = (
+    options: Parameters<typeof prewarmIosRunnerSession>[1] = runnerPrewarmOptions,
+  ): void => {
+    runnerPrewarmScheduled = true;
+    timing.runnerPrewarmKind = 'session';
+    timing.runnerPrewarmScheduled = true;
+    runnerPrewarm = prewarmIosRunnerSession(device, options);
+  };
+  const awaitPrewarm = async (): Promise<void> => {
+    if (!runnerPrewarm || runnerPrewarmAwaited) return;
+    runnerPrewarmAwaited = true;
+    const startedAtMs = Date.now();
+    await runnerPrewarm;
+    timing.runnerPrewarmWaited = true;
+    timing.runnerPrewarmDurationMs = Math.max(0, Date.now() - startedAtMs);
+  };
   // Start the runner spin-up before close/open dispatch on simulators: neither
   // touches the runner there (both ride simctl), so the xcodebuild ramp
   // overlaps the app relaunch instead of following it. Real devices tear the
   // runner down in relaunchCloseApp, so their prewarm stays post-open.
-  if (
-    shouldPrewarmIosRunner &&
-    sessionAppBundleId &&
-    isIosSimulator(device) &&
-    !shouldPrewarmRunnerBeforeOpen
-  ) {
-    timing.runnerPrewarmKind = 'session';
-    timing.runnerPrewarmScheduled = true;
-    runnerPrewarm = prewarmIosRunnerSession(device, runnerPrewarmOptions);
+  if (shouldPrewarmIosRunner && isIosSimulator(device) && !shouldPrewarmRunnerBeforeOpen) {
+    schedulePrewarm();
   }
 
   if (shouldRelaunch && openTarget) {
@@ -218,17 +234,9 @@ async function completeOpenCommand(params: {
     runtime,
   });
   timing.runtimeHintsDurationMs = Math.max(0, Date.now() - runtimeHintsStartedAtMs);
-  if (shouldPrewarmIosRunner && sessionAppBundleId && shouldPrewarmRunnerBeforeOpen) {
-    timing.runnerPrewarmKind = 'session';
-    timing.runnerPrewarmScheduled = true;
-    runnerPrewarm = prewarmIosRunnerSession(device, {
-      ...runnerPrewarmOptions,
-      propagateError: true,
-    });
-    const runnerPrewarmStartedAtMs = Date.now();
-    await runnerPrewarm;
-    timing.runnerPrewarmWaited = true;
-    timing.runnerPrewarmDurationMs = Math.max(0, Date.now() - runnerPrewarmStartedAtMs);
+  if (shouldPrewarmIosRunner && shouldPrewarmRunnerBeforeOpen) {
+    schedulePrewarm({ ...runnerPrewarmOptions, propagateError: true });
+    await awaitPrewarm();
   }
   const openStartedAtMs = Date.now();
   const provisionalSession = await prepareOpenDispatchSession({
@@ -260,17 +268,12 @@ async function completeOpenCommand(params: {
     openPositionals,
   });
   timing.launchUrlDurationMs = Math.max(0, Date.now() - launchUrlStartedAtMs);
-  if (shouldPrewarmIosRunner && sessionAppBundleId && timing.runnerPrewarmScheduled !== true) {
-    timing.runnerPrewarmKind = 'session';
-    timing.runnerPrewarmScheduled = true;
-    runnerPrewarm = prewarmIosRunnerSession(device, runnerPrewarmOptions);
+  if (shouldPrewarmIosRunner && !runnerPrewarmScheduled) {
+    schedulePrewarm();
   }
-  if (shouldRelaunch && runnerPrewarm && timing.runnerPrewarmWaited !== true) {
-    const runnerPrewarmStartedAtMs = Date.now();
-    await runnerPrewarm;
-    timing.runnerPrewarmWaited = true;
-    timing.runnerPrewarmDurationMs = Math.max(0, Date.now() - runnerPrewarmStartedAtMs);
-  } else if (runnerPrewarm && timing.runnerPrewarmWaited !== true) {
+  if (shouldRelaunch) {
+    await awaitPrewarm();
+  } else if (runnerPrewarm && !runnerPrewarmAwaited) {
     timing.runnerPrewarmWaited = false;
   }
   sessionAppBundleId = await inferAndroidPackageAfterOpen(device, openTarget, sessionAppBundleId);
