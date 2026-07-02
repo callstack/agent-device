@@ -8,6 +8,14 @@ export const APP_LOG_PID_FILENAME = 'app-log.pid';
 
 export type AppLogState = 'active' | 'recovering' | 'failed';
 
+export type AppLogFailure = {
+  backend: LogBackend;
+  code: string;
+  message: string;
+  hint?: string;
+  occurredAt: number;
+};
+
 export type AppLogResult = {
   backend: LogBackend;
   getState: () => AppLogState;

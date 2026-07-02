@@ -78,7 +78,12 @@ vi.mock('../../../platforms/apple/core/apps.ts', async (importOriginal) => {
 });
 vi.mock('../../app-log.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../app-log.ts')>();
-  return { ...actual, startAppLog: vi.fn(), stopAppLog: vi.fn(async () => {}) };
+  return {
+    ...actual,
+    runAppLogDoctor: vi.fn(async () => ({ checks: {}, notes: [] })),
+    startAppLog: vi.fn(),
+    stopAppLog: vi.fn(async () => {}),
+  };
 });
 vi.mock('../session-deploy.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../session-deploy.ts')>();
@@ -125,7 +130,7 @@ import {
   resolveIosApp,
   resolveIosSimulatorDeepLinkBundleId,
 } from '../../../platforms/apple/core/apps.ts';
-import { startAppLog, stopAppLog } from '../../app-log.ts';
+import { runAppLogDoctor, startAppLog, stopAppLog } from '../../app-log.ts';
 import { defaultInstallOps, defaultReinstallOps } from '../session-deploy.ts';
 import { clearRequestCanceled, markRequestCanceled } from '../../request-cancel.ts';
 
@@ -151,6 +156,7 @@ const mockResolveIosSimulatorDeepLinkBundleId = vi.mocked(resolveIosSimulatorDee
 const mockEnsureAndroidEmulatorBooted = vi.mocked(ensureAndroidEmulatorBooted);
 const mockStartAppLog = vi.mocked(startAppLog);
 const mockStopAppLog = vi.mocked(stopAppLog);
+const mockRunAppLogDoctor = vi.mocked(runAppLogDoctor);
 const mockDefaultInstallOpsIos = vi.mocked(defaultInstallOps.ios);
 const mockDefaultInstallOpsAndroid = vi.mocked(defaultInstallOps.android);
 const mockDefaultReinstallOpsIos = vi.mocked(defaultReinstallOps.ios);
@@ -210,6 +216,8 @@ beforeEach(() => {
   mockStartAppLog.mockReset();
   mockStopAppLog.mockReset();
   mockStopAppLog.mockResolvedValue(undefined);
+  mockRunAppLogDoctor.mockReset();
+  mockRunAppLogDoctor.mockResolvedValue({ checks: {}, notes: [] });
   mockDefaultInstallOpsIos.mockReset();
   mockDefaultInstallOpsAndroid.mockReset();
   mockDefaultReinstallOpsIos.mockReset();
@@ -4486,6 +4494,110 @@ test('logs clear --restart requires app session bundle id', async () => {
   if (response && !response.ok) {
     expect(response.error.code).toBe('INVALID_ARGS');
     expect(response.error.message).toMatch(/app session|open <app>/i);
+  }
+});
+
+test('logs path and doctor report unsupported iOS physical-device backend as inactive failure', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-device-logs-unsupported';
+  sessionStore.set(sessionName, {
+    ...makeSession(sessionName, {
+      platform: 'apple',
+      appleOs: 'ios',
+      id: '00008150-0000AAAA',
+      name: 'iPhone',
+      kind: 'device',
+    }),
+    appBundleId: 'com.example.app',
+  });
+  mockStartAppLog.mockRejectedValue(
+    new AppError(
+      'UNSUPPORTED_OPERATION',
+      'iOS physical-device app log streaming is not supported by the installed devicectl.',
+      {
+        backend: 'ios-device',
+        hint: 'Use an iOS simulator for agent-device app logs or inspect physical-device logs in Console.app/Xcode.',
+      },
+    ),
+  );
+  mockRunAppLogDoctor.mockResolvedValue({
+    checks: { devicectlAvailable: true, devicectlDeviceLogStream: false },
+    notes: ['Installed devicectl does not expose a scriptable iOS physical-device app log stream.'],
+  });
+
+  const restartResponse = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'logs',
+      positionals: ['clear'],
+      flags: { restart: true },
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+  expect(restartResponse?.ok).toBe(false);
+  if (restartResponse && !restartResponse.ok) {
+    expect(restartResponse.error.code).toBe('UNSUPPORTED_OPERATION');
+    expect(restartResponse.error.hint).toMatch(/Console\.app\/Xcode/);
+  }
+
+  const pathResponse = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'logs',
+      positionals: ['path'],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+  expect(pathResponse?.ok).toBe(true);
+  if (pathResponse && pathResponse.ok) {
+    expect(pathResponse.data?.active).toBe(false);
+    expect(pathResponse.data?.state).toBe('failed');
+    expect(pathResponse.data?.backend).toBe('ios-device');
+    expect(pathResponse.data?.failureCode).toBe('UNSUPPORTED_OPERATION');
+    expect(pathResponse.data?.failureMessage).toMatch(/physical-device app log streaming/);
+    expect(pathResponse.data?.hint).toMatch(/Console\.app\/Xcode/);
+    expect(pathResponse.data?.notes).toContain(
+      'iOS physical-device app log streaming is not supported by the installed devicectl.',
+    );
+  }
+
+  const doctorResponse = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'logs',
+      positionals: ['doctor'],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+  expect(doctorResponse?.ok).toBe(true);
+  if (doctorResponse && doctorResponse.ok) {
+    expect(doctorResponse.data?.active).toBe(false);
+    expect(doctorResponse.data?.state).toBe('failed');
+    expect(doctorResponse.data?.backend).toBe('ios-device');
+    expect(doctorResponse.data?.checks).toEqual({
+      devicectlAvailable: true,
+      devicectlDeviceLogStream: false,
+    });
+    expect(doctorResponse.data?.notes).toContain(
+      'Installed devicectl does not expose a scriptable iOS physical-device app log stream.',
+    );
+    expect(doctorResponse.data?.notes).toContain(
+      'iOS physical-device app log streaming is not supported by the installed devicectl.',
+    );
   }
 });
 

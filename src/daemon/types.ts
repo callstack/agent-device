@@ -18,7 +18,7 @@ import type { RecordingExportQuality } from '../core/recording-export-quality.ts
 import type { DeviceInfo, Platform, PlatformSelector } from '../kernel/device.ts';
 import type { ExecBackgroundResult, ExecResult } from '../utils/exec.ts';
 import type { SnapshotState } from '../kernel/snapshot.ts';
-import type { AppLogState } from './app-log-process.ts';
+import type { AppLogFailure, AppLogState } from './app-log-process.ts';
 import type { DeviceLease } from './lease-registry.ts';
 import type { AndroidNativePerfSession } from '../platforms/android/perf.ts';
 import type {
@@ -329,6 +329,7 @@ export type SessionState = {
     stop: () => Promise<void>;
     wait: Promise<ExecResult>;
   };
+  appLogFailure?: AppLogFailure;
 };
 
 export type SessionReplayControl =

@@ -16,6 +16,7 @@ import {
   startAndroidAppLog,
 } from './app-log-android.ts';
 import {
+  checkIosDeviceLogStreamSupport,
   readRecentIosSimulatorLogShowForBundle,
   startIosDeviceAppLog,
   startIosSimulatorAppLog,
@@ -40,6 +41,7 @@ registerBuiltinPlatformPlugins();
 
 export type { AppLogResult } from './app-log-process.ts';
 export type { AppLogState } from './app-log-process.ts';
+export type { AppLogFailure } from './app-log-process.ts';
 export { APP_LOG_PID_FILENAME, cleanupStaleAppLogProcesses } from './app-log-process.ts';
 export {
   assertAndroidPackageArgSafe,
@@ -475,6 +477,15 @@ export async function runAppLogDoctor(
     try {
       const devicectl = await runXcrun(['devicectl', '--version'], { allowFailure: true });
       checks.devicectlAvailable = devicectl.exitCode === 0;
+      if (checks.devicectlAvailable) {
+        const logStream = await checkIosDeviceLogStreamSupport();
+        checks.devicectlDeviceLogStream = logStream.supported;
+        if (!logStream.supported) {
+          notes.push(
+            'Installed devicectl does not expose a scriptable iOS physical-device app log stream. Markers can still be written, but app output is not being captured by agent-device on this toolchain.',
+          );
+        }
+      }
     } catch {
       checks.devicectlAvailable = false;
     }

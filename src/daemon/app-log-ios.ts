@@ -1,10 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { buildSimctlArgs } from '../platforms/apple/core/simctl.ts';
+import { AppError } from '../kernel/errors.ts';
 import { runCmd, runCmdBackground } from '../utils/exec.ts';
 import { runXcrun } from '../platforms/apple/core/tool-provider.ts';
 import { clearPidFile, writePidFile, type AppLogResult } from './app-log-process.ts';
 import { attachChildToStream, createLineWriter, waitForChildExit } from './app-log-stream.ts';
+
+const IOS_DEVICE_LOG_STREAM_UNSUPPORTED_MESSAGE =
+  'iOS physical-device app log streaming is not supported by the installed devicectl.';
+const IOS_DEVICE_LOG_STREAM_UNSUPPORTED_HINT =
+  'This devicectl does not expose a device log stream subcommand. Markers can still be written to app.log, but app output is not being captured. Use an iOS simulator for agent-device app logs or inspect physical-device logs in Console.app/Xcode until this Xcode toolchain exposes a scriptable stream.';
 
 export function buildAppleLogPredicate(
   appBundleId: string,
@@ -57,6 +63,31 @@ export function buildIosSimulatorLogStreamArgs(params: {
 
 export function buildIosDeviceLogStreamArgs(deviceId: string): string[] {
   return ['devicectl', 'device', 'log', 'stream', '--device', deviceId];
+}
+
+export async function checkIosDeviceLogStreamSupport(): Promise<{
+  supported: boolean;
+  stderr?: string;
+}> {
+  try {
+    const result = await runXcrun(['devicectl', 'device', 'log', 'stream', '--help'], {
+      allowFailure: true,
+      timeoutMs: 5_000,
+    });
+    return {
+      supported: result.exitCode === 0 && isIosDeviceLogStreamHelp(result.stdout, result.stderr),
+      stderr: result.stderr.trim() || undefined,
+    };
+  } catch (error) {
+    return {
+      supported: false,
+      stderr: error instanceof Error ? error.message : undefined,
+    };
+  }
+}
+
+function isIosDeviceLogStreamHelp(stdout: string, stderr: string): boolean {
+  return /\bUSAGE:\s+devicectl device log stream\b/i.test(`${stdout}\n${stderr}`);
 }
 
 export async function readRecentIosSimulatorLogShowForBundle(params: {
@@ -185,6 +216,15 @@ export async function startIosDeviceAppLog(
   redactionPatterns: RegExp[],
   pidPath?: string,
 ): Promise<AppLogResult> {
+  const support = await checkIosDeviceLogStreamSupport();
+  if (!support.supported) {
+    stream.end();
+    throw new AppError('UNSUPPORTED_OPERATION', IOS_DEVICE_LOG_STREAM_UNSUPPORTED_MESSAGE, {
+      backend: 'ios-device',
+      hint: IOS_DEVICE_LOG_STREAM_UNSUPPORTED_HINT,
+      stderr: support.stderr,
+    });
+  }
   return startAppleAppLogStream({
     backend: 'ios-device',
     cmd: 'xcrun',

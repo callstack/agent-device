@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { finished } from 'node:stream/promises';
+import { AppError } from '../../kernel/errors.ts';
+import { withAppleToolProvider } from '../../platforms/apple/core/tool-provider.ts';
 import {
   APP_LOG_PID_FILENAME,
   assertAndroidPackageArgSafe,
@@ -13,6 +16,7 @@ import {
   runAppLogDoctor,
   rotateAppLogIfNeeded,
 } from '../app-log.ts';
+import { startIosDeviceAppLog } from '../app-log-ios.ts';
 
 test('buildAppleLogPredicate includes bundle-aware filters', () => {
   const predicate = buildAppleLogPredicate('com.example.app');
@@ -73,6 +77,116 @@ test('buildIosDeviceLogStreamArgs builds expected devicectl command args', () =>
     '--device',
     '00008150-0000AAAA',
   ]);
+});
+
+test('startIosDeviceAppLog reports unsupported devicectl log stream before spawning', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-ios-device-log-'));
+  const stream = fs.createWriteStream(path.join(root, 'app.log'), { flags: 'a' });
+  const devicectlCalls: string[][] = [];
+
+  await withAppleToolProvider(
+    {
+      runCommand: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+      devicectl: {
+        run: async (args) => {
+          devicectlCalls.push(args);
+          return {
+            stdout:
+              'USAGE: devicectl device [--verbose] [--quiet] <subcommand>\n\nSUBCOMMANDS:\n  info\n  process\n',
+            stderr: '',
+            exitCode: 0,
+          };
+        },
+      },
+      whichCommand: async () => false,
+    },
+    async () => {
+      await assert.rejects(
+        async () => await startIosDeviceAppLog('00008150-0000AAAA', stream, []),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+          assert.match(error.message, /iOS physical-device app log streaming is not supported/);
+          assert.equal(error.details?.backend, 'ios-device');
+          return true;
+        },
+      );
+    },
+  );
+
+  await finished(stream).catch(() => {});
+  assert.deepEqual(devicectlCalls, [['device', 'log', 'stream', '--help']]);
+});
+
+test('startIosDeviceAppLog reports unsupported when devicectl support probe fails', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-ios-device-log-timeout-'));
+  const stream = fs.createWriteStream(path.join(root, 'app.log'), { flags: 'a' });
+
+  await withAppleToolProvider(
+    {
+      runCommand: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+      devicectl: {
+        run: async () => {
+          throw new Error('xcrun timed out after 5000ms');
+        },
+      },
+      whichCommand: async () => false,
+    },
+    async () => {
+      await assert.rejects(
+        async () => await startIosDeviceAppLog('00008150-0000AAAA', stream, []),
+        (error: unknown) => {
+          assert.ok(error instanceof AppError);
+          assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+          assert.match(error.message, /iOS physical-device app log streaming is not supported/);
+          assert.equal(error.details?.stderr, 'xcrun timed out after 5000ms');
+          return true;
+        },
+      );
+    },
+  );
+
+  await finished(stream).catch(() => {});
+});
+
+test('runAppLogDoctor reports unsupported iOS physical-device log stream', async () => {
+  const devicectlCalls: string[][] = [];
+  const result = await withAppleToolProvider(
+    {
+      runCommand: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+      devicectl: {
+        run: async (args) => {
+          devicectlCalls.push(args);
+          if (args.join(' ') === '--version') {
+            return { stdout: '506.6\n', stderr: '', exitCode: 0 };
+          }
+          return {
+            stdout:
+              'USAGE: devicectl device [--verbose] [--quiet] <subcommand>\n\nSUBCOMMANDS:\n  info\n  process\n',
+            stderr: '',
+            exitCode: 0,
+          };
+        },
+      },
+      whichCommand: async () => false,
+    },
+    async () =>
+      await runAppLogDoctor(
+        {
+          platform: 'apple',
+          appleOs: 'ios',
+          id: '00008150-0000AAAA',
+          name: 'iPhone',
+          kind: 'device',
+        },
+        'com.example.app',
+      ),
+  );
+
+  assert.deepEqual(devicectlCalls, [['--version'], ['device', 'log', 'stream', '--help']]);
+  assert.equal(result.checks.devicectlAvailable, true);
+  assert.equal(result.checks.devicectlDeviceLogStream, false);
+  assert.ok(result.notes.some((note) => note.includes('does not expose')));
 });
 
 test('buildIosSimulatorLogStreamArgs streams logs inside the simulator at info level', () => {
