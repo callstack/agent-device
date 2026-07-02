@@ -3237,7 +3237,7 @@ test('open --relaunch on iOS stops runner before close/open', async () => {
   expect(calls).toEqual(['stop-runner', 'close:com.example.app', 'open:com.example.app']);
 });
 
-test('open --relaunch on iOS simulator stops runner before close/open', async () => {
+test('open --relaunch on iOS simulator keeps runner hot across close/open', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-simulator-session';
   sessionStore.set(sessionName, {
@@ -3283,7 +3283,7 @@ test('open --relaunch on iOS simulator stops runner before close/open', async ()
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
-  expect(calls).toEqual(['stop-runner', 'close:com.example.app', 'open:com.example.app']);
+  expect(calls).toEqual(['close:com.example.app', 'open:com.example.app']);
 });
 
 test('open --relaunch includes timing and waits for iOS runner prewarm after opening app', async () => {

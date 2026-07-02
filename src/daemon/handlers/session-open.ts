@@ -22,6 +22,7 @@ import {
 import {
   IOS_SIMULATOR_POST_CLOSE_SETTLE_MS,
   IOS_SIMULATOR_POST_OPEN_SETTLE_MS,
+  isIosSimulator,
   refreshSessionDeviceIfNeeded,
   settleIosSimulator,
 } from './session-device-utils.ts';
@@ -71,7 +72,13 @@ async function relaunchCloseApp(params: {
   context: Parameters<typeof dispatchCommand>[4];
 }): Promise<void> {
   const { device, closeTarget, outFlag, context } = params;
-  if (device.platform !== 'android') {
+  // Simulator close/open go through simctl and never touch the XCUITest
+  // runner, so a healthy runner session survives the relaunch (~6s saved per
+  // open --relaunch). A runner that does go stale is caught by the readiness
+  // preflight and restarted via invalidateRunnerSession/restart-and-replay.
+  // Real devices keep the conservative teardown: their runner transport rides
+  // the device tunnel, which app relaunches can disturb.
+  if (device.platform !== 'android' && !isIosSimulator(device)) {
     await stopIosRunnerSession(device.id);
   }
   await dispatchCommand(device, 'close', [closeTarget], outFlag, context);
