@@ -84,13 +84,41 @@ test('clean-xcuitest macos removes the entire platform directory when present', 
   }
 });
 
-function runCleanXcuitest(homeDir: string, ...platforms: string[]) {
+test('clean-xcuitest reports cleanup failures directly', () => {
+  const homeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-clean-xcuitest-failure-'));
+  const derivedRoot = path.join(homeDir, '.agent-device', 'apple-runner', 'derived');
+  try {
+    fs.mkdirSync(path.join(derivedRoot, 'Build'), { recursive: true });
+    fs.chmodSync(derivedRoot, 0o500);
+
+    const result = runCleanXcuitest(homeDir, 'ios', { allowFailure: true });
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.stdout, '');
+    assert.match(
+      result.stderr.trim(),
+      new RegExp(`^Failed to clean iOS XCTest derived data under ${escapeRegExp(derivedRoot)}: `),
+    );
+  } finally {
+    fs.chmodSync(derivedRoot, 0o700);
+    fs.rmSync(homeDir, { recursive: true, force: true });
+  }
+});
+
+function runCleanXcuitest(homeDir: string, ...args: Array<string | { allowFailure?: boolean }>) {
+  const lastArg = args.at(-1);
+  const options = typeof lastArg === 'object' ? lastArg : {};
+  const platforms = (options === lastArg ? args.slice(0, -1) : args) as string[];
   return runCmdSync(process.execPath, [scriptPath, ...platforms], {
     cwd: repoRoot,
     env: {
       ...process.env,
       HOME: homeDir,
     },
+    allowFailure: options?.allowFailure,
     timeoutMs: 30_000,
   });
+}
+
+function escapeRegExp(value: string) {
+  return value.replaceAll(/[\\^$.*+?()[\]{}|]/g, '\\$&');
 }

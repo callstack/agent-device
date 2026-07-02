@@ -112,7 +112,7 @@ function formatKeptEntriesSuffix(preservedEntries) {
 
 function formatCleanupError(platform, targetPath, error) {
   const detail = error instanceof Error ? error.message : String(error);
-  return `Could not verify ${resolvePlatformLabel(platform)} XCTest cleanup under ${targetPath}: ${detail}`;
+  return `Failed to clean ${resolvePlatformLabel(platform)} XCTest derived data under ${targetPath}: ${detail}`;
 }
 
 function resolvePlatformLabel(platform) {
