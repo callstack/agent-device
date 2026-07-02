@@ -1,5 +1,6 @@
 import { PUBLIC_COMMANDS } from '../command-catalog.ts';
 import type { SessionAction } from './types.ts';
+import { definedEventDetails } from './session-event-details.ts';
 
 export function buildActionSummary(action: SessionAction): string {
   const message = readString(action.result?.message);
@@ -27,7 +28,7 @@ export function buildActionSummary(action: SessionAction): string {
 
 export function buildActionDetails(action: SessionAction): Record<string, unknown> {
   const result = action.result ?? {};
-  return compactDetails({
+  return definedEventDetails({
     command: action.command,
     positionals: buildDisplayPositionals(action),
     flags: action.flags,
@@ -143,12 +144,4 @@ function readStringArray(value: unknown): string[] | undefined {
   return Array.isArray(value) && value.every((entry) => typeof entry === 'string')
     ? value
     : undefined;
-}
-
-function compactDetails(record: Record<string, unknown>): Record<string, unknown> {
-  const compact: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(record)) {
-    if (value !== undefined) compact[key] = value;
-  }
-  return compact;
 }

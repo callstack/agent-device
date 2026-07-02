@@ -6,6 +6,7 @@ import { redactDiagnosticData } from '../kernel/redaction.ts';
 import { getDiagnosticsMeta } from '../utils/diagnostics.ts';
 import type { DaemonRequest, DaemonResponse, SessionAction } from './types.ts';
 import { buildActionDetails, buildActionSummary } from './session-event-action.ts';
+import { definedEventDetails } from './session-event-details.ts';
 
 export const SESSION_EVENT_LOG_FILENAME = 'events.ndjson';
 
@@ -92,7 +93,7 @@ export function buildRequestStartedEvent(params: {
     requestId: req.meta?.requestId ?? getDiagnosticsMeta().requestId,
     command: req.command,
     summary: `Started ${req.command}`,
-    details: compactDetails({
+    details: definedEventDetails({
       publicSession: req.session,
       effectiveSession: sessionName,
       tenant: req.meta?.tenantId,
@@ -116,7 +117,7 @@ export function buildRequestFinishedEvent(params: {
       command: req.command,
       status: 'ok',
       summary: `Finished ${req.command}`,
-      details: compactDetails({ durationMs }),
+      details: definedEventDetails({ durationMs }),
     };
   }
   return {
@@ -125,7 +126,7 @@ export function buildRequestFinishedEvent(params: {
     command: req.command,
     status: 'error',
     summary: `Failed ${req.command}: ${response.error.message}`,
-    details: compactDetails({
+    details: definedEventDetails({
       durationMs,
       code: response.error.code,
       message: response.error.message,
@@ -193,12 +194,4 @@ function parseSessionEventLogLine(line: string): SessionEventLogEntry | undefine
 
 function isSessionEventKind(value: unknown): value is SessionEventLogEntry['kind'] {
   return value === 'request.started' || value === 'request.finished' || value === 'action.recorded';
-}
-
-function compactDetails(record: Record<string, unknown>): Record<string, unknown> {
-  const compact: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(record)) {
-    if (value !== undefined) compact[key] = value;
-  }
-  return compact;
 }
