@@ -214,12 +214,14 @@ Command-only flags (like `find --first`) that do not flow to the platform layer 
 - Test-only DI seam CI failures: the workflow enforces this; do not add optional `typeof` DI params in production code.
 - Tooling/config change (`package.json`, `tsconfig*.json`, `.oxlintrc.json`, `.oxfmtrc.json`): `pnpm check:tooling`.
 - Daemon handler/shared module change: `pnpm check:unit`.
+- Platform/device-response change (anything emitting `platform`/`appleOs` on the wire, or shaping a daemon response): also run `pnpm test:integration:provider` and `pnpm test:coverage` — both exercise the `provider-integration` project (incl. the apple-platform-output leak guard); `pnpm check:unit` alone does NOT. Internal `apple` must never reach a command response — project through `publicPlatformString`.
 - iOS runner/Swift change: `pnpm build:xcuitest`.
 - Cross-platform behavior change: run `pnpm test:integration`.
 - Any change in: `src/`, `test/`, `skills/`: `pnpm format`.
 
 ## PR Readiness Checklist
 - Static gates first: required checks from **Testing Matrix** pass, `pnpm check:fallow --base origin/main` is clean when code quality/dead-code risk is relevant, CI guards are green, and no conflict markers or unmerged paths remain.
+- Do not report a PR as CI-green from a local `--project unit` run alone: the **Integration Tests** and **Coverage** jobs run the `provider-integration` project, so verify green on the actual PR head across those jobs, not just unit.
 - Command-surface changes preserve CLI, Node.js, daemon, MCP, help, docs, and SkillGym coverage where that surface is affected. Do not duplicate command contracts across layers.
 - Device-facing behavior is not merge-ready until it has real simulator/emulator/device evidence for the changed path. Fixture-backed tests can prove contracts, but they do not replace a live run that creates or observes the artifact/state the feature claims to handle.
 - If live verification is blocked, state the blocker, exact command or device needed, and downgrade the PR to residual risk instead of calling it ready.
