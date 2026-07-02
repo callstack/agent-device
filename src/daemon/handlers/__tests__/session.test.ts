@@ -179,6 +179,7 @@ beforeEach(() => {
     healthCheckMs: 3,
   });
   mockStopIosRunner.mockReset();
+  mockScheduleIosRunnerIdleStop.mockReset();
   mockStopIosRunner.mockResolvedValue(undefined);
   mockDismissMacOsAlert.mockReset();
   mockDismissMacOsAlert.mockResolvedValue({} as any);
