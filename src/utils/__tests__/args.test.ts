@@ -1655,6 +1655,10 @@ test('usageForCommand resolves debugging help topic', () => {
   assert.match(help, /resolved app executable/);
   assert.match(help, /--launch-console is only for direct iOS simulator app launches/);
   assert.match(help, /runnerLogPath and requestLogPath/);
+  assert.match(
+    help,
+    /AGENT_DEVICE_EXEC_TRACE=1 when you need host-tool spawn timing without full debug streaming/,
+  );
   assert.match(help, /requests\/<request-id>\.ndjson holds daemon request diagnostics/);
   assert.match(help, /daemon\.log is global daemon lifecycle evidence/);
   assert.match(help, /agent-device perf memory sample --json/);

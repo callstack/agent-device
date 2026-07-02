@@ -126,10 +126,14 @@ test.sequential('runCmdBackground emits bounded exec_command diagnostics when AG
       },
     );
 
-    const execEvent = readExecDiagnosticEvent(diagnosticsPath);
-    assert.equal(execEvent?.phase, 'exec_command');
-    assert.equal(execEvent?.data?.command, process.execPath);
-    assert.deepEqual(execEvent?.data?.argsPrefix, [
+    const execEvents = readExecDiagnosticEvents(diagnosticsPath);
+    assert.equal(execEvents.length, 2);
+    const [spawnEvent, exitEvent] = execEvents;
+    assert.equal(spawnEvent?.phase, 'exec_command');
+    assert.equal(spawnEvent?.data?.command, process.execPath);
+    assert.equal(spawnEvent?.data?.event, 'spawn');
+    assert.equal(spawnEvent?.durationMs, undefined);
+    assert.deepEqual(spawnEvent?.data?.argsPrefix, [
       '-e',
       'process.stdout.write("ok")',
       'a',
@@ -137,7 +141,10 @@ test.sequential('runCmdBackground emits bounded exec_command diagnostics when AG
       'c',
       'd',
     ]);
-    assert.equal(execEvent?.data?.omittedArgCount, 2);
+    assert.equal(spawnEvent?.data?.omittedArgCount, 2);
+    assert.equal(exitEvent?.phase, 'exec_command');
+    assert.equal(exitEvent?.data?.event, 'exit');
+    assert.equal(typeof exitEvent?.durationMs, 'number');
   } finally {
     if (previousTraceEnv === undefined) {
       delete process.env.AGENT_DEVICE_EXEC_TRACE;
@@ -312,28 +319,34 @@ test.sequential('whichCmd ignores directories that match a command name in PATH'
   }
 });
 
+function readExecDiagnosticEvents(diagnosticsPath: string | null): Array<{
+  level?: string;
+  phase?: string;
+  durationMs?: number;
+  data?: Record<string, unknown>;
+}> {
+  if (!diagnosticsPath) return [];
+  const rows = fs
+    .readFileSync(diagnosticsPath, 'utf8')
+    .trim()
+    .split('\n')
+    .map(
+      (line) =>
+        JSON.parse(line) as {
+          level?: string;
+          phase?: string;
+          durationMs?: number;
+          data?: Record<string, unknown>;
+        },
+    );
+  return rows.filter((row) => row.phase === 'exec_command');
+}
+
 function readExecDiagnosticEvent(diagnosticsPath: string | null): {
   level?: string;
   phase?: string;
   durationMs?: number;
   data?: Record<string, unknown>;
 } | null {
-  if (!diagnosticsPath) return null;
-  const rows = fs
-    .readFileSync(diagnosticsPath, 'utf8')
-    .trim()
-    .split('\n')
-    .map((line) => JSON.parse(line) as { phase?: string });
-  return (
-    rows.find(
-      (
-        row,
-      ): row is {
-        level?: string;
-        phase?: string;
-        durationMs?: number;
-        data?: Record<string, unknown>;
-      } => row.phase === 'exec_command',
-    ) ?? null
-  );
+  return readExecDiagnosticEvents(diagnosticsPath)[0] ?? null;
 }

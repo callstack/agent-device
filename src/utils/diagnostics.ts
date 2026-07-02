@@ -75,6 +75,7 @@ export function getDiagnosticsMeta(): {
   session?: string;
   command?: string;
   debug?: boolean;
+  flushOnSuccess?: boolean;
 } {
   const scope = diagnosticsStorage.getStore();
   if (!scope) return {};
@@ -84,6 +85,7 @@ export function getDiagnosticsMeta(): {
     session: scope.session,
     command: scope.command,
     debug: scope.debug,
+    flushOnSuccess: scope.flushOnSuccess,
   };
 }
 

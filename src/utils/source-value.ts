@@ -108,7 +108,7 @@ function parseBooleanValue(value: unknown, sourceLabel: string, rawKey: string):
   );
 }
 
-function parseBooleanLiteral(value: string): boolean | undefined {
+export function parseBooleanLiteral(value: string): boolean | undefined {
   const normalized = value.trim().toLowerCase();
   if (BOOLEAN_TRUE_VALUES.has(normalized)) return true;
   if (BOOLEAN_FALSE_VALUES.has(normalized)) return false;

@@ -7,6 +7,7 @@ import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '../kernel/errors.ts';
 import { emitDiagnostic, getDiagnosticsMeta, updateDiagnosticsScope } from './diagnostics.ts';
+import { parseBooleanLiteral } from './source-value.ts';
 
 export type ExecResult = {
   stdout: string;
@@ -130,7 +131,6 @@ function runSpawnedCommand(
     const stdoutChunks: Buffer[] | undefined = options.binaryStdout ? [] : undefined;
     let stderr = '';
     let didTimeout = false;
-    let didEmitExecDiagnostic = false;
     const timeoutMs = normalizeTimeoutMs(options.timeoutMs);
     const timeoutHandle = timeoutMs
       ? setTimeout(() => {
@@ -169,22 +169,14 @@ function runSpawnedCommand(
     child.on('error', (err) => {
       if (timeoutHandle) clearTimeout(timeoutHandle);
       abort.dispose();
-      emitExecCommandDiagnostic(execTrace, cmd, args, () => {
-        if (didEmitExecDiagnostic) return false;
-        didEmitExecDiagnostic = true;
-        return true;
-      });
+      execTrace.emitForegroundCompletion(cmd, args);
       reject(spawnRejectionError(abort, executable, cmd, args, err));
     });
 
     child.on('close', (code) => {
       if (timeoutHandle) clearTimeout(timeoutHandle);
       abort.dispose();
-      emitExecCommandDiagnostic(execTrace, cmd, args, () => {
-        if (didEmitExecDiagnostic) return false;
-        didEmitExecDiagnostic = true;
-        return true;
-      });
+      execTrace.emitForegroundCompletion(cmd, args);
       const exitCode = code ?? 1;
       if (!abort.didAbort && didTimeout && timeoutMs) {
         reject(createTimeoutError(executable, cmd, args, timeoutMs, exitCode, stdout, stderr));
@@ -379,12 +371,12 @@ export function runCmdBackground(
     windowsHide: true,
     shell: false,
   });
+  execTrace.emitBackgroundSpawn(cmd, args);
 
   let stdout = '';
   let stderr = '';
   const captureOutput = options.captureOutput ?? true;
   const abort = watchCommandAbort(child, options);
-  let didEmitExecDiagnostic = false;
 
   if (captureOutput) {
     child.stdout?.setEncoding('utf8');
@@ -401,20 +393,12 @@ export function runCmdBackground(
   const wait = new Promise<ExecResult>((resolve, reject) => {
     child.on('error', (err) => {
       abort.dispose();
-      emitExecCommandDiagnostic(execTrace, cmd, args, () => {
-        if (didEmitExecDiagnostic) return false;
-        didEmitExecDiagnostic = true;
-        return true;
-      });
+      execTrace.emitBackgroundCompletion(cmd, args, 'error');
       reject(spawnRejectionError(abort, executable, cmd, args, err));
     });
     child.on('close', (code) => {
       abort.dispose();
-      emitExecCommandDiagnostic(execTrace, cmd, args, () => {
-        if (didEmitExecDiagnostic) return false;
-        didEmitExecDiagnostic = true;
-        return true;
-      });
+      execTrace.emitBackgroundCompletion(cmd, args, 'exit');
       const exitCode = code ?? 1;
       const failure = commandCloseFailure(
         abort,
@@ -437,36 +421,81 @@ export function runCmdBackground(
   return { child, wait };
 }
 
-function createExecTraceContext(): { enabled: boolean; startedAtMs?: number } {
-  const diagnosticsDebugEnabled = getDiagnosticsMeta().debug === true;
-  const envTraceEnabled = isTruthyEnvValue(process.env.AGENT_DEVICE_EXEC_TRACE);
+type ExecTraceContext = {
+  emitBackgroundCompletion: (cmd: string, args: string[], event: 'error' | 'exit') => void;
+  emitBackgroundSpawn: (cmd: string, args: string[]) => void;
+  emitForegroundCompletion: (cmd: string, args: string[]) => void;
+};
+
+function createExecTraceContext(): ExecTraceContext {
+  const diagnosticsMeta = getDiagnosticsMeta();
+  const diagnosticsDebugEnabled = diagnosticsMeta.debug === true;
+  const envTraceEnabled = parseBooleanLiteral(process.env.AGENT_DEVICE_EXEC_TRACE ?? '') === true;
   if (!diagnosticsDebugEnabled && !envTraceEnabled) {
-    return { enabled: false };
+    return createDisabledExecTraceContext();
   }
-  if (envTraceEnabled) {
+  if (envTraceEnabled && diagnosticsMeta.flushOnSuccess !== true) {
     updateDiagnosticsScope({ flushOnSuccess: true });
   }
-  return { enabled: true, startedAtMs: Date.now() };
+  const startedAtMs = Date.now();
+  let completionEmitted = false;
+  return {
+    emitForegroundCompletion: (cmd, args) => {
+      if (completionEmitted) return;
+      completionEmitted = true;
+      emitExecCommandDiagnostic({
+        cmd,
+        args,
+        startedAtMs,
+      });
+    },
+    emitBackgroundSpawn: (cmd, args) => {
+      emitExecCommandDiagnostic({
+        cmd,
+        args,
+        data: { event: 'spawn' },
+      });
+    },
+    emitBackgroundCompletion: (cmd, args, event) => {
+      if (completionEmitted) return;
+      completionEmitted = true;
+      emitExecCommandDiagnostic({
+        cmd,
+        args,
+        startedAtMs,
+        data: { event },
+      });
+    },
+  };
 }
 
-function emitExecCommandDiagnostic(
-  context: { enabled: boolean; startedAtMs?: number },
-  cmd: string,
-  args: string[],
-  markEmitted: () => boolean,
-): void {
-  if (!context.enabled || context.startedAtMs === undefined || !markEmitted()) return;
-  const argsPrefix = args.slice(0, EXEC_DIAGNOSTIC_ARG_LIMIT);
+function createDisabledExecTraceContext(): ExecTraceContext {
+  return {
+    emitForegroundCompletion: () => {},
+    emitBackgroundSpawn: () => {},
+    emitBackgroundCompletion: () => {},
+  };
+}
+
+function emitExecCommandDiagnostic(params: {
+  cmd: string;
+  args: string[];
+  startedAtMs?: number;
+  data?: Record<string, unknown>;
+}): void {
+  const argsPrefix = params.args.slice(0, EXEC_DIAGNOSTIC_ARG_LIMIT);
   emitDiagnostic({
     level: 'debug',
     phase: 'exec_command',
-    durationMs: Math.max(0, Date.now() - context.startedAtMs),
+    durationMs:
+      params.startedAtMs === undefined ? undefined : Math.max(0, Date.now() - params.startedAtMs),
     data: {
-      command: cmd,
+      command: params.cmd,
       argsPrefix,
-      ...(args.length > argsPrefix.length
-        ? { omittedArgCount: args.length - argsPrefix.length }
+      ...(params.args.length > argsPrefix.length
+        ? { omittedArgCount: params.args.length - argsPrefix.length }
         : {}),
+      ...(params.data ?? {}),
     },
   });
 }
@@ -720,8 +749,4 @@ function isEpipeError(error: unknown): boolean {
   return (
     error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'EPIPE'
   );
-}
-
-function isTruthyEnvValue(value: string | undefined): boolean {
-  return ['1', 'true', 'yes', 'on'].includes((value ?? '').trim().toLowerCase());
 }
