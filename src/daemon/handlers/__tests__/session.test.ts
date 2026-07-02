@@ -3290,6 +3290,57 @@ test('open --relaunch on iOS simulator collapses into one terminate-running open
   expect(openContext?.terminateRunningApp).toBe(true);
 });
 
+test('open <app> <url> --relaunch on iOS simulator keeps close-first ordering', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-simulator-url-relaunch-session';
+  sessionStore.set(sessionName, {
+    ...makeSession(sessionName, {
+      platform: 'apple',
+      id: 'sim-1',
+      name: 'iPhone 17 Pro',
+      kind: 'simulator',
+      booted: true,
+    }),
+    appName: 'com.example.app',
+  });
+
+  const calls: string[] = [];
+  mockResolveTargetDevice.mockResolvedValue({
+    platform: 'apple',
+    id: 'sim-1',
+    name: 'iPhone 17 Pro',
+    kind: 'simulator',
+    booted: true,
+  });
+  let openContext: Record<string, unknown> | undefined;
+  mockDispatch.mockImplementation(async (_device, command, positionals, _out, context) => {
+    calls.push(`${command}:${positionals.join(' ')}`);
+    if (command === 'open') openContext = context as Record<string, unknown>;
+    return {};
+  });
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'open',
+      positionals: ['com.example.app', 'https://example.com/deal'],
+      flags: { relaunch: true },
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response).toBeTruthy();
+  expect(response?.ok).toBe(true);
+  // The URL dispatch path cannot carry the terminate, so the relaunch keeps
+  // the explicit close-then-open sequence.
+  expect(calls).toEqual(['close:com.example.app', 'open:com.example.app https://example.com/deal']);
+  expect(openContext?.terminateRunningApp).toBeUndefined();
+});
+
 test('open --relaunch --clear-app-state on iOS simulator keeps close-first ordering', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-simulator-clear-state-session';

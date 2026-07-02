@@ -211,11 +211,14 @@ async function completeOpenCommand(params: {
   // iOS simulators relaunch with one `simctl launch --terminate-running-process`
   // instead of terminate + settle + launch (~1s per relaunch). Runtime hints
   // written below are user-defaults reads at that launch, so ordering holds.
-  // --clear-app-state keeps the close-first ordering: it must never mutate a
-  // running app's container.
+  // Only the single app-launch form collapses: `open <app> <url>` dispatches
+  // through the URL path, where a deep-link open never launches the app and
+  // so cannot carry the terminate; those keep the close-first ordering, as
+  // does --clear-app-state, which must never mutate a running app's container.
   const collapseSimulatorRelaunch =
     shouldRelaunch &&
     Boolean(openTarget) &&
+    openPositionals.length === 1 &&
     isIosSimulator(device) &&
     req.flags?.clearAppState !== true;
   if (shouldRelaunch && openTarget && !collapseSimulatorRelaunch) {
