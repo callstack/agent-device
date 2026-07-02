@@ -1,4 +1,4 @@
-import { PUBLIC_COMMANDS } from '../command-catalog.ts';
+import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../command-catalog.ts';
 import type { SessionAction } from './types.ts';
 
 export function buildActionSummary(action: SessionAction): string {
@@ -18,7 +18,7 @@ export function buildActionSummary(action: SessionAction): string {
       return `Filled ${readActionTargetLabel(action) ?? 'target'}`;
     case PUBLIC_COMMANDS.install:
     case PUBLIC_COMMANDS.reinstall:
-    case 'install_source':
+    case INTERNAL_COMMANDS.installSource:
       return `Installed ${readActionTargetLabel(action) ?? 'app'}`;
     default:
       return `Ran ${action.command}`;
@@ -65,21 +65,35 @@ export function buildActionDetails(action: SessionAction): Record<string, unknow
 
 function readActionTargetLabel(action: SessionAction): string | undefined {
   const result = action.result ?? {};
+  return (
+    readElementTargetLabel(result) ??
+    readPointTargetLabel(result) ??
+    readAppTargetLabel(result) ??
+    action.positionals[0]
+  );
+}
+
+function readElementTargetLabel(result: Record<string, unknown>): string | undefined {
   const ref = readString(result.ref);
   if (ref) return ref.startsWith('@') ? ref : `@${ref}`;
   const selector = readString(result.selector);
   if (selector) return selector;
-  const refLabel = readString(result.refLabel);
-  if (refLabel) return refLabel;
+  return readString(result.refLabel);
+}
+
+function readPointTargetLabel(result: Record<string, unknown>): string | undefined {
   const x = readNumber(result.x);
   const y = readNumber(result.y);
   if (x !== undefined && y !== undefined) return `(${x}, ${y})`;
+  return undefined;
+}
+
+function readAppTargetLabel(result: Record<string, unknown>): string | undefined {
   return (
     readString(result.appName) ??
     readString(result.appBundleId) ??
     readString(result.bundleId) ??
-    readString(result.packageName) ??
-    action.positionals[0]
+    readString(result.packageName)
   );
 }
 
@@ -132,7 +146,8 @@ function readActionTextLength(action: SessionAction): number {
 }
 
 function readString(value: unknown): string | undefined {
-  return typeof value === 'string' && value.trim().length > 0 ? value : undefined;
+  if (typeof value !== 'string') return undefined;
+  return value.trim().length > 0 ? value : undefined;
 }
 
 function readNumber(value: unknown): number | undefined {

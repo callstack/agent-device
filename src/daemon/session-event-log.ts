@@ -3,12 +3,12 @@ import path from 'node:path';
 import { PUBLIC_COMMANDS } from '../command-catalog.ts';
 import { AppError } from '../kernel/errors.ts';
 import { redactDiagnosticData } from '../kernel/redaction.ts';
-import { getDiagnosticsMeta } from '../utils/diagnostics.ts';
+import { emitDiagnostic, getDiagnosticsMeta } from '../utils/diagnostics.ts';
+import { isRecord } from '../utils/parsing.ts';
 import type { DaemonRequest, DaemonResponse, SessionAction } from './types.ts';
 import { buildActionDetails, buildActionSummary } from './session-event-action.ts';
 
-export const SESSION_EVENT_LOG_FILENAME = 'events.ndjson';
-
+const SESSION_EVENT_LOG_FILENAME = 'events.ndjson';
 const EVENT_LOG_VERSION = 1;
 const DEFAULT_EVENT_LIMIT = 100;
 const MAX_EVENT_LIMIT = 500;
@@ -38,6 +38,8 @@ export type SessionEventLogInput = Omit<SessionEventLogEntry, 'version' | 'ts' |
 };
 
 type ReadSessionEventLogOptions = { cursor?: string; limit?: number };
+type RawSessionEventLogEntry = Record<string, unknown> &
+  Pick<SessionEventLogEntry, 'version' | 'ts' | 'session' | 'kind'>;
 
 export function resolveSessionEventLogPath(sessionDir: string): string {
   return path.join(sessionDir, SESSION_EVENT_LOG_FILENAME);
@@ -61,8 +63,15 @@ export function appendSessionEvent(
       ...event,
     } satisfies SessionEventLogEntry);
     fs.appendFileSync(eventLogPath, `${JSON.stringify(entry)}\n`, 'utf8');
-  } catch {
-    // Event logging is best-effort and must never break device automation.
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'session_event_log_write_failed',
+      data: {
+        path: eventLogPath,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
   }
 }
 
@@ -179,18 +188,42 @@ function normalizeLimit(value: number | undefined): number {
 
 function parseSessionEventLogLine(line: string): SessionEventLogEntry | undefined {
   try {
-    const parsed = JSON.parse(line) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
-    const record = parsed as Partial<SessionEventLogEntry>;
-    if (record.version !== EVENT_LOG_VERSION) return undefined;
-    if (typeof record.ts !== 'string' || typeof record.session !== 'string') return undefined;
-    if (!isSessionEventKind(record.kind)) return undefined;
-    return record as SessionEventLogEntry;
+    const parsed = readRawSessionEventLogEntry(JSON.parse(line));
+    return parsed ? buildSessionEventLogEntry(parsed) : undefined;
   } catch {
     return undefined;
   }
 }
 
+function readRawSessionEventLogEntry(value: unknown): RawSessionEventLogEntry | undefined {
+  if (!isRecord(value)) return undefined;
+  if (value.version !== EVENT_LOG_VERSION) return undefined;
+  if (typeof value.ts !== 'string' || typeof value.session !== 'string') return undefined;
+  if (!isSessionEventKind(value.kind)) return undefined;
+  return value as RawSessionEventLogEntry;
+}
+
+function buildSessionEventLogEntry(parsed: RawSessionEventLogEntry): SessionEventLogEntry {
+  const details = isRecord(parsed.details) ? parsed.details : undefined;
+  return {
+    version: EVENT_LOG_VERSION,
+    ts: parsed.ts,
+    session: parsed.session,
+    kind: parsed.kind,
+    ...(typeof parsed.requestId === 'string' ? { requestId: parsed.requestId } : {}),
+    ...(typeof parsed.command === 'string' ? { command: parsed.command } : {}),
+    ...(isSessionEventStatus(parsed.status) ? { status: parsed.status } : {}),
+    ...(typeof parsed.summary === 'string' ? { summary: parsed.summary } : {}),
+    ...(details ? { details } : {}),
+  };
+}
+
 function isSessionEventKind(value: unknown): value is SessionEventLogEntry['kind'] {
   return value === 'request.started' || value === 'request.finished' || value === 'action.recorded';
+}
+
+function isSessionEventStatus(
+  value: unknown,
+): value is NonNullable<SessionEventLogEntry['status']> {
+  return value === 'ok' || value === 'error';
 }
