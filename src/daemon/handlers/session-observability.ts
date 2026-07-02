@@ -25,6 +25,9 @@ import {
   runAppLogDoctor,
   startAppLog,
   stopAppLog,
+  type AppLogFailure,
+  type AppLogResult,
+  type AppLogState,
 } from '../app-log.ts';
 import {
   buildPerfFramesResponseData,
@@ -37,7 +40,6 @@ import { handleAudioCommand } from './session-audio.ts';
 import { handleNativePerfCommand as handleAppleNativePerfCommand } from './session-perf-xctrace.ts';
 import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '../../kernel/contracts.ts';
 import type { LogBackend } from '../network-log.ts';
-import type { AppLogFailure, AppLogState } from '../app-log.ts';
 import {
   LOG_ACTION_VALUES as LOG_ACTIONS,
   type LogAction as LogsAction,
@@ -118,8 +120,10 @@ function resolveSessionLogStatus(session: SessionState): SessionLogStatus {
   };
 }
 
-function buildAppLogFailure(error: unknown, backend: LogBackend): AppLogFailure {
-  const normalized = normalizeError(error);
+function buildAppLogFailure(
+  normalized: ReturnType<typeof normalizeError>,
+  backend: LogBackend,
+): AppLogFailure {
   return {
     backend,
     code: normalized.code,
@@ -127,6 +131,37 @@ function buildAppLogFailure(error: unknown, backend: LogBackend): AppLogFailure 
     hint: normalized.hint,
     occurredAt: Date.now(),
   };
+}
+
+function buildSessionAppLog(
+  session: SessionState,
+  outPath: string,
+  appLog: AppLogResult,
+): NonNullable<SessionState['appLog']> {
+  return {
+    platform: session.device.platform,
+    backend: appLog.backend,
+    outPath,
+    startedAt: appLog.startedAt,
+    getState: appLog.getState,
+    stop: appLog.stop,
+    wait: appLog.wait,
+  };
+}
+
+function storeAppLogStartFailure(
+  sessionStore: SessionStore,
+  sessionName: string,
+  session: SessionState,
+  error: unknown,
+): DaemonFailureResponse {
+  const normalized = normalizeError(error);
+  sessionStore.set(sessionName, {
+    ...session,
+    appLog: undefined,
+    appLogFailure: buildAppLogFailure(normalized, resolveLogBackend(session.device)),
+  });
+  return { ok: false, error: normalized };
 }
 
 export async function handleSessionObservabilityCommands(
@@ -476,25 +511,12 @@ async function handleLogsClear(
     const appLogStream = await startAppLog(session.device, appBundleId, logPath, appLogPidPath);
     sessionStore.set(sessionName, {
       ...session,
-      appLog: {
-        platform: session.device.platform,
-        backend: appLogStream.backend,
-        outPath: logPath,
-        startedAt: appLogStream.startedAt,
-        getState: appLogStream.getState,
-        stop: appLogStream.stop,
-        wait: appLogStream.wait,
-      },
+      appLog: buildSessionAppLog(session, logPath, appLogStream),
       appLogFailure: undefined,
     });
     return { ok: true, data: { ...cleared, restarted: true } };
   } catch (err) {
-    sessionStore.set(sessionName, {
-      ...session,
-      appLog: undefined,
-      appLogFailure: buildAppLogFailure(err, resolveLogBackend(session.device)),
-    });
-    return { ok: false, error: normalizeError(err) };
+    return storeAppLogStartFailure(sessionStore, sessionName, session, err);
   }
 }
 
@@ -524,25 +546,12 @@ async function handleLogsStart(
     );
     sessionStore.set(sessionName, {
       ...session,
-      appLog: {
-        platform: session.device.platform,
-        backend: appLogStream.backend,
-        outPath: appLogPath,
-        startedAt: appLogStream.startedAt,
-        getState: appLogStream.getState,
-        stop: appLogStream.stop,
-        wait: appLogStream.wait,
-      },
+      appLog: buildSessionAppLog(session, appLogPath, appLogStream),
       appLogFailure: undefined,
     });
     return { ok: true, data: { path: appLogPath, started: true } };
   } catch (err) {
-    sessionStore.set(sessionName, {
-      ...session,
-      appLog: undefined,
-      appLogFailure: buildAppLogFailure(err, resolveLogBackend(session.device)),
-    });
-    return { ok: false, error: normalizeError(err) };
+    return storeAppLogStartFailure(sessionStore, sessionName, session, err);
   }
 }
 

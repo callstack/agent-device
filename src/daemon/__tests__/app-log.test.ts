@@ -4,8 +4,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { finished } from 'node:stream/promises';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { withAppleToolProvider } from '../../platforms/apple/core/tool-provider.ts';
+import type { ExecResult } from '../../utils/exec.ts';
 import {
   APP_LOG_PID_FILENAME,
   assertAndroidPackageArgSafe,
@@ -17,6 +19,45 @@ import {
   rotateAppLogIfNeeded,
 } from '../app-log.ts';
 import { startIosDeviceAppLog } from '../app-log-ios.ts';
+
+const IOS_DEVICE_ID = '00008150-0000AAAA';
+const IOS_DEVICE: DeviceInfo = {
+  platform: 'apple',
+  appleOs: 'ios',
+  id: IOS_DEVICE_ID,
+  name: 'iPhone',
+  kind: 'device',
+};
+const IOS_DEVICE_LOG_STREAM_UNAVAILABLE_HELP =
+  'USAGE: devicectl device [--verbose] [--quiet] <subcommand>\n\nSUBCOMMANDS:\n  info\n  process\n';
+
+type FakeDevicectlRun = (args: string[]) => Promise<ExecResult>;
+
+async function withFakeDevicectl<T>(
+  run: FakeDevicectlRun,
+  fn: () => Promise<T>,
+): Promise<{ result: T; calls: string[][] }> {
+  const calls: string[][] = [];
+  const result = await withAppleToolProvider(
+    {
+      runCommand: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+      devicectl: {
+        run: async (args) => {
+          calls.push(args);
+          return await run(args);
+        },
+      },
+      whichCommand: async () => false,
+    },
+    fn,
+  );
+  return { result, calls };
+}
+
+function makeAppLogWriteStream(prefix: string): fs.WriteStream {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  return fs.createWriteStream(path.join(root, 'app.log'), { flags: 'a' });
+}
 
 test('buildAppleLogPredicate includes bundle-aware filters', () => {
   const predicate = buildAppleLogPredicate('com.example.app');
@@ -69,40 +110,27 @@ test('cleanupStaleAppLogProcesses removes pid files even when pid is stale', () 
 });
 
 test('buildIosDeviceLogStreamArgs builds expected devicectl command args', () => {
-  assert.deepEqual(buildIosDeviceLogStreamArgs('00008150-0000AAAA'), [
+  assert.deepEqual(buildIosDeviceLogStreamArgs(IOS_DEVICE_ID), [
     'devicectl',
     'device',
     'log',
     'stream',
     '--device',
-    '00008150-0000AAAA',
+    IOS_DEVICE_ID,
   ]);
 });
 
 test('startIosDeviceAppLog reports unsupported devicectl log stream before spawning', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-ios-device-log-'));
-  const stream = fs.createWriteStream(path.join(root, 'app.log'), { flags: 'a' });
-  const devicectlCalls: string[][] = [];
-
-  await withAppleToolProvider(
-    {
-      runCommand: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
-      devicectl: {
-        run: async (args) => {
-          devicectlCalls.push(args);
-          return {
-            stdout:
-              'USAGE: devicectl device [--verbose] [--quiet] <subcommand>\n\nSUBCOMMANDS:\n  info\n  process\n',
-            stderr: '',
-            exitCode: 0,
-          };
-        },
-      },
-      whichCommand: async () => false,
-    },
+  const stream = makeAppLogWriteStream('agent-device-ios-device-log-');
+  const { calls } = await withFakeDevicectl(
+    async () => ({
+      stdout: IOS_DEVICE_LOG_STREAM_UNAVAILABLE_HELP,
+      stderr: '',
+      exitCode: 0,
+    }),
     async () => {
       await assert.rejects(
-        async () => await startIosDeviceAppLog('00008150-0000AAAA', stream, []),
+        async () => await startIosDeviceAppLog(IOS_DEVICE_ID, stream, []),
         (error: unknown) => {
           assert.ok(error instanceof AppError);
           assert.equal(error.code, 'UNSUPPORTED_OPERATION');
@@ -115,26 +143,19 @@ test('startIosDeviceAppLog reports unsupported devicectl log stream before spawn
   );
 
   await finished(stream).catch(() => {});
-  assert.deepEqual(devicectlCalls, [['device', 'log', 'stream', '--help']]);
+  assert.deepEqual(calls, [['device', 'log', 'stream', '--help']]);
 });
 
 test('startIosDeviceAppLog reports unsupported when devicectl support probe fails', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-ios-device-log-timeout-'));
-  const stream = fs.createWriteStream(path.join(root, 'app.log'), { flags: 'a' });
+  const stream = makeAppLogWriteStream('agent-device-ios-device-log-timeout-');
 
-  await withAppleToolProvider(
-    {
-      runCommand: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
-      devicectl: {
-        run: async () => {
-          throw new Error('xcrun timed out after 5000ms');
-        },
-      },
-      whichCommand: async () => false,
+  await withFakeDevicectl(
+    async () => {
+      throw new Error('xcrun timed out after 5000ms');
     },
     async () => {
       await assert.rejects(
-        async () => await startIosDeviceAppLog('00008150-0000AAAA', stream, []),
+        async () => await startIosDeviceAppLog(IOS_DEVICE_ID, stream, []),
         (error: unknown) => {
           assert.ok(error instanceof AppError);
           assert.equal(error.code, 'UNSUPPORTED_OPERATION');
@@ -150,40 +171,21 @@ test('startIosDeviceAppLog reports unsupported when devicectl support probe fail
 });
 
 test('runAppLogDoctor reports unsupported iOS physical-device log stream', async () => {
-  const devicectlCalls: string[][] = [];
-  const result = await withAppleToolProvider(
-    {
-      runCommand: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
-      devicectl: {
-        run: async (args) => {
-          devicectlCalls.push(args);
-          if (args.join(' ') === '--version') {
-            return { stdout: '506.6\n', stderr: '', exitCode: 0 };
-          }
-          return {
-            stdout:
-              'USAGE: devicectl device [--verbose] [--quiet] <subcommand>\n\nSUBCOMMANDS:\n  info\n  process\n',
-            stderr: '',
-            exitCode: 0,
-          };
-        },
-      },
-      whichCommand: async () => false,
+  const { result, calls } = await withFakeDevicectl(
+    async (args) => {
+      if (args.join(' ') === '--version') {
+        return { stdout: '506.6\n', stderr: '', exitCode: 0 };
+      }
+      return {
+        stdout: IOS_DEVICE_LOG_STREAM_UNAVAILABLE_HELP,
+        stderr: '',
+        exitCode: 0,
+      };
     },
-    async () =>
-      await runAppLogDoctor(
-        {
-          platform: 'apple',
-          appleOs: 'ios',
-          id: '00008150-0000AAAA',
-          name: 'iPhone',
-          kind: 'device',
-        },
-        'com.example.app',
-      ),
+    async () => await runAppLogDoctor(IOS_DEVICE, 'com.example.app'),
   );
 
-  assert.deepEqual(devicectlCalls, [['--version'], ['device', 'log', 'stream', '--help']]);
+  assert.deepEqual(calls, [['--version'], ['device', 'log', 'stream', '--help']]);
   assert.equal(result.checks.devicectlAvailable, true);
   assert.equal(result.checks.devicectlDeviceLogStream, false);
   assert.ok(result.notes.some((note) => note.includes('does not expose')));

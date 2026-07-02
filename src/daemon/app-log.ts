@@ -4,9 +4,6 @@ import { isIosFamily, isMacOs, type DeviceInfo } from '../kernel/device.ts';
 import { AppError } from '../kernel/errors.ts';
 import { tryGetPlugin } from '../core/platform-plugin/plugin.ts';
 import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
-import { runCmd } from '../utils/exec.ts';
-import { runXcrun } from '../platforms/apple/core/tool-provider.ts';
-import { runAndroidAdb } from '../platforms/android/adb.ts';
 import { createScopedProvider } from '../utils/scoped-provider.ts';
 import {
   assertAndroidPackageArgSafe,
@@ -16,7 +13,6 @@ import {
   startAndroidAppLog,
 } from './app-log-android.ts';
 import {
-  checkIosDeviceLogStreamSupport,
   readRecentIosSimulatorLogShowForBundle,
   startIosDeviceAppLog,
   startIosSimulatorAppLog,
@@ -52,11 +48,7 @@ export {
   buildIosDeviceLogStreamArgs,
   buildIosSimulatorLogStreamArgs,
 } from './app-log-ios.ts';
-
-export type AppLogDoctorResult = {
-  checks: Record<string, boolean>;
-  notes: string[];
-};
+export { runAppLogDoctor, type AppLogDoctorResult } from './app-log-doctor.ts';
 
 export type SessionNetworkCapture = {
   backend: LogBackend;
@@ -479,101 +471,6 @@ function buildNoHttpEntriesNote(device: DeviceInfo): string {
 export async function stopAppLog(appLog: AppLogResult): Promise<void> {
   await appLog.stop();
   await waitForChildExit(appLog.wait);
-}
-
-export async function runAppLogDoctor(
-  device: DeviceInfo,
-  appBundleId?: string,
-): Promise<AppLogDoctorResult> {
-  const checks: Record<string, boolean> = {};
-  const notes: string[] = [];
-  if (!appBundleId) {
-    notes.push(
-      'No app bundle is tracked in this session. Run open <app> first for app-scoped logs.',
-    );
-  }
-  if (device.platform === 'android') {
-    Object.assign(checks, await runAndroidAppLogDoctor(device, appBundleId));
-  }
-  if (isIosFamily(device) && device.kind === 'simulator') {
-    Object.assign(checks, await runIosSimulatorAppLogDoctor());
-  }
-  if (isIosFamily(device) && device.kind === 'device') {
-    const result = await runIosDeviceAppLogDoctor();
-    Object.assign(checks, result.checks);
-    notes.push(...result.notes);
-  }
-  if (isMacOs(device)) {
-    Object.assign(checks, await runMacOsAppLogDoctor());
-  }
-  return { checks, notes };
-}
-
-async function runAndroidAppLogDoctor(
-  device: DeviceInfo,
-  appBundleId?: string,
-): Promise<Record<string, boolean>> {
-  const checks: Record<string, boolean> = {};
-  try {
-    const adb = await runAndroidAdb(device, ['shell', 'echo', 'ok'], {
-      allowFailure: true,
-      timeoutMs: 1_000,
-    });
-    checks.adbAvailable = adb.exitCode === 0;
-  } catch {
-    checks.adbAvailable = false;
-  }
-  if (!appBundleId) return checks;
-
-  try {
-    const pidof = await runAndroidAdb(device, ['shell', 'pidof', appBundleId], {
-      allowFailure: true,
-      timeoutMs: 1_000,
-    });
-    checks.androidPidVisible = pidof.stdout.trim().length > 0;
-  } catch {
-    checks.androidPidVisible = false;
-  }
-  return checks;
-}
-
-async function runIosSimulatorAppLogDoctor(): Promise<Record<string, boolean>> {
-  try {
-    const simctl = await runXcrun(['simctl', 'help'], { allowFailure: true });
-    return { simctlAvailable: simctl.exitCode === 0 };
-  } catch {
-    return { simctlAvailable: false };
-  }
-}
-
-async function runIosDeviceAppLogDoctor(): Promise<AppLogDoctorResult> {
-  const checks: Record<string, boolean> = {};
-  const notes: string[] = [];
-  try {
-    const devicectl = await runXcrun(['devicectl', '--version'], { allowFailure: true });
-    checks.devicectlAvailable = devicectl.exitCode === 0;
-  } catch {
-    checks.devicectlAvailable = false;
-  }
-  if (!checks.devicectlAvailable) return { checks, notes };
-
-  const logStream = await checkIosDeviceLogStreamSupport();
-  checks.devicectlDeviceLogStream = logStream.supported;
-  if (!logStream.supported) {
-    notes.push(
-      'Installed devicectl does not expose a scriptable iOS physical-device app log stream. Markers can still be written, but app output is not being captured by agent-device on this toolchain.',
-    );
-  }
-  return { checks, notes };
-}
-
-async function runMacOsAppLogDoctor(): Promise<Record<string, boolean>> {
-  try {
-    const log = await runCmd('log', ['help'], { allowFailure: true });
-    return { logAvailable: log.exitCode === 0 };
-  } catch {
-    return { logAvailable: false };
-  }
 }
 
 export function appendAppLogMarker(outPath: string, marker: string): void {
