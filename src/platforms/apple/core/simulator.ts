@@ -25,6 +25,42 @@ type EnsureBootedSimulatorOptions = {
   onColdBootStart?: (device: DeviceInfo) => void;
 };
 
+// Recently-observed-Booted memo. `simctl list devices -j` costs ~0.7s per
+// spawn, and a single open --relaunch used to pay it three times (resolve,
+// close, launch). Mirrors the DEVICE_READY_CACHE_TTL_MS tradeoff at the daemon
+// layer: a simulator shut down externally inside the window surfaces the raw
+// simctl error instead of an auto-boot. Transitions we own update the memo.
+// Exported so unit tests can assert TTL behavior without duplicating the value.
+export const SIMULATOR_BOOTED_MEMO_TTL_MS = 5_000;
+const simulatorBootedMemo = new Map<string, number>();
+
+function simulatorBootedMemoKey(device: DeviceInfo): string {
+  return `${device.id}|${device.simulatorSetPath ?? ''}`;
+}
+
+function readSimulatorBootedMemo(device: DeviceInfo): boolean {
+  const key = simulatorBootedMemoKey(device);
+  const observedAt = simulatorBootedMemo.get(key);
+  if (observedAt === undefined) return false;
+  if (Date.now() - observedAt > SIMULATOR_BOOTED_MEMO_TTL_MS) {
+    simulatorBootedMemo.delete(key);
+    return false;
+  }
+  return true;
+}
+
+function markSimulatorBooted(device: DeviceInfo): void {
+  simulatorBootedMemo.set(simulatorBootedMemoKey(device), Date.now());
+}
+
+function clearSimulatorBootedMemo(device: DeviceInfo): void {
+  simulatorBootedMemo.delete(simulatorBootedMemoKey(device));
+}
+
+export function __resetSimulatorBootedMemoForTests(): void {
+  simulatorBootedMemo.clear();
+}
+
 export function requireSimulatorDevice(device: DeviceInfo, command: string): void {
   if (device.kind !== 'simulator') {
     throw new AppError('UNSUPPORTED_OPERATION', `${command} is only supported on iOS simulators`);
@@ -49,8 +85,9 @@ export async function ensureBootedSimulator(
 ): Promise<void> {
   if (device.kind !== 'simulator') return;
 
-  const state = await getSimulatorState(device);
+  const state = readSimulatorBootedMemo(device) ? 'Booted' : await getSimulatorState(device);
   if (state === 'Booted') {
+    markSimulatorBooted(device);
     if (options.focusExisting) {
       await openIosSimulatorApp({
         background: options.deviceHub,
@@ -182,6 +219,7 @@ export async function ensureBootedSimulator(
     });
   }
 
+  markSimulatorBooted(device);
   await openIosSimulatorApp({ deviceHub: options.deviceHub });
 }
 
@@ -191,6 +229,7 @@ export async function shutdownSimulator(device: DeviceInfo): Promise<{
   stdout: string;
   stderr: string;
 }> {
+  clearSimulatorBootedMemo(device);
   const args = buildSimctlArgsForDevice(device, ['shutdown', device.id]);
   const result = await runXcrun(args, { allowFailure: true, timeoutMs: 15_000 });
   return {

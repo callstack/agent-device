@@ -1,10 +1,28 @@
-import { test, expect } from 'vitest';
+import { test, expect, vi, beforeEach } from 'vitest';
 import type { SessionState } from '../../types.ts';
 
 import {
   refreshSessionDeviceIfNeeded,
   selectorTargetsSessionDevice,
 } from '../session-device-utils.ts';
+import { getRunnerSessionSnapshot } from '../../../platforms/apple/core/runner/runner-client.ts';
+import { resolveTargetDevice } from '../../../core/dispatch.ts';
+
+vi.mock('../../../platforms/apple/core/runner/runner-client.ts', () => ({
+  getRunnerSessionSnapshot: vi.fn(() => null),
+}));
+vi.mock('../../../core/dispatch.ts', () => ({
+  resolveTargetDevice: vi.fn(),
+}));
+
+const mockGetRunnerSessionSnapshot = vi.mocked(getRunnerSessionSnapshot);
+const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
+
+beforeEach(() => {
+  mockGetRunnerSessionSnapshot.mockReset();
+  mockGetRunnerSessionSnapshot.mockReturnValue(null);
+  mockResolveTargetDevice.mockReset();
+});
 
 const iosSimulatorSession: SessionState = {
   name: 'ios-sim',
@@ -35,6 +53,30 @@ test('refreshSessionDeviceIfNeeded keeps iOS simulator session device on non-mac
   );
 
   expect(device).toBe(iosSimulatorSession.device);
+});
+
+test('refreshSessionDeviceIfNeeded skips re-resolve while the iOS runner session is alive', async () => {
+  mockGetRunnerSessionSnapshot.mockReturnValue({ sessionId: 'sim-1:1234:1', alive: true });
+
+  const device = await withMockedPlatform('darwin', async () =>
+    refreshSessionDeviceIfNeeded(iosSimulatorSession.device),
+  );
+
+  expect(device).toEqual({ ...iosSimulatorSession.device, booted: true });
+  expect(mockResolveTargetDevice).not.toHaveBeenCalled();
+});
+
+test('refreshSessionDeviceIfNeeded re-resolves when the iOS runner session is gone', async () => {
+  mockGetRunnerSessionSnapshot.mockReturnValue({ sessionId: 'sim-1:1234:1', alive: false });
+  const resolved = { ...iosSimulatorSession.device, booted: true, name: 'renamed' };
+  mockResolveTargetDevice.mockResolvedValue(resolved);
+
+  const device = await withMockedPlatform('darwin', async () =>
+    refreshSessionDeviceIfNeeded(iosSimulatorSession.device),
+  );
+
+  expect(device).toBe(resolved);
+  expect(mockResolveTargetDevice).toHaveBeenCalledTimes(1);
 });
 
 test('selectorTargetsSessionDevice uses session selector conflicts for simulator set selectors', () => {
