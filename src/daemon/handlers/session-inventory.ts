@@ -45,6 +45,8 @@ export async function handleSessionInventoryCommands(params: {
               runnerLogPath: resolveSessionRunnerLogPath(sessionStateDir),
               // approach (b): emit the PUBLIC leaf platform (ios/macos), not `apple`.
               platform: publicPlatformString(session.device),
+              // Additive Apple-OS discriminant; Apple devices only (non-Apple omit it).
+              ...(session.device.appleOs ? { appleOs: session.device.appleOs } : {}),
               target: session.device.target ?? 'mobile',
               surface: session.surface ?? 'app',
               device: session.device.name,
@@ -92,14 +94,17 @@ export async function handleSessionInventoryCommands(params: {
       const filtered = req.flags?.target
         ? platformFiltered.filter((device) => (device.target ?? 'mobile') === req.flags?.target)
         : platformFiltered;
-      // Keep appleOs internal-only for now: it is discovery groundwork and the
-      // public `devices` shape is not yet meant to expose it. Surfacing it (so
-      // agents can tell iPad from iPhone) should be a deliberate later change.
-      // approach (b): project `platform` back to the PUBLIC leaf (ios/macos).
+      // Surface the `appleOs` discriminant additively so consumers can distinguish
+      // iPhone/iPad/tvOS/visionOS/macOS instead of only the leaf `ios`/`macos`. It is
+      // emitted ONLY for Apple devices (non-Apple platforms carry no `appleOs`), and
+      // `platform` stays the PUBLIC leaf via `publicPlatformString` (approach b). The
+      // internal-only `simulatorSetPath` is still stripped. `appleOs` values never equal
+      // the internal `apple` token, so this does not affect the apple-leak guard.
       const publicDevices = filtered.map(
         ({ simulatorSetPath: _simulatorSetPath, appleOs, ...device }) => ({
           ...device,
           platform: publicPlatformString({ platform: device.platform, appleOs }),
+          ...(appleOs ? { appleOs } : {}),
         }),
       );
       return { ok: true, data: { devices: publicDevices } };

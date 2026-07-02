@@ -4,7 +4,7 @@ import type { DaemonRequest, SessionRuntimeHints } from '../daemon/types.ts';
 import { AppError, type NormalizedError } from '../kernel/errors.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { buildAppIdentifiers, buildDeviceIdentifiers } from './client-shared.ts';
-import { isPublicPlatform } from '../kernel/device.ts';
+import { isAppleOs, isPublicPlatform, type AppleOS } from '../kernel/device.ts';
 import {
   leaseScopeFromOptions,
   leaseScopeToCommandFlags,
@@ -94,6 +94,7 @@ export function normalizeMaterializationReleaseResult(
 
 export function normalizeDevice(value: unknown): AgentDeviceDevice {
   const { record, platform, id, name, target } = readClientDeviceIdentity(value, 'name');
+  const appleOs = readAppleOs(record);
   return {
     platform,
     target,
@@ -101,6 +102,8 @@ export function normalizeDevice(value: unknown): AgentDeviceDevice {
     id,
     name,
     booted: typeof record.booted === 'boolean' ? record.booted : undefined,
+    // Additive Apple-OS discriminant; present only when the daemon emits it (Apple devices).
+    ...(appleOs ? { appleOs } : {}),
     identifiers: buildDeviceIdentifiers(platform, id, name),
     ...buildClientDevicePlatformFields(platform, id),
   };
@@ -109,6 +112,7 @@ export function normalizeDevice(value: unknown): AgentDeviceDevice {
 export function normalizeSession(value: unknown): AgentDeviceSession {
   const { record, platform, id, name, target } = readClientDeviceIdentity(value, 'name');
   const deviceName = readRequiredString(record, 'device');
+  const appleOs = readAppleOs(record);
   const identifiers = {
     session: name,
     ...buildDeviceIdentifiers(platform, id, deviceName),
@@ -123,6 +127,8 @@ export function normalizeSession(value: unknown): AgentDeviceSession {
       target,
       id,
       name: deviceName,
+      // Additive Apple-OS discriminant; present only when the daemon emits it (Apple devices).
+      ...(appleOs ? { appleOs } : {}),
       identifiers,
       ...buildClientDevicePlatformFields(
         platform,
@@ -132,6 +138,11 @@ export function normalizeSession(value: unknown): AgentDeviceSession {
     },
     identifiers,
   };
+}
+
+function readAppleOs(record: Record<string, unknown>): AppleOS | undefined {
+  const value = record.appleOs;
+  return isAppleOs(value) ? value : undefined;
 }
 
 function readClientDeviceIdentity(value: unknown, nameField: string) {

@@ -13,6 +13,7 @@ import type {
   SessionRuntimeHints,
 } from '../kernel/contracts.ts';
 import type {
+  AppleOS,
   DeviceKind,
   DeviceTarget,
   PublicPlatform,
@@ -61,6 +62,7 @@ export type { CompanionTunnelScope, MetroBridgeScope } from './client-companion-
 export type { AppsFilter } from '../contracts/app-inventory.ts';
 export type { AlertAction, AlertInfo, AlertPlatform, AlertSource } from '../alert-contract.ts';
 export type { DebugSymbolsOptions, DebugSymbolsResult } from '../contracts/debug-symbols.ts';
+export type { AppleOS } from '../kernel/device.ts';
 export type { BootCommandResult, ShutdownCommandResult } from '../contracts/device.ts';
 export type { ViewportCommandResult } from '../contracts/viewport.ts';
 export type {
@@ -162,6 +164,11 @@ export type AgentDeviceDevice = {
   id: string;
   name: string;
   booted?: boolean;
+  /**
+   * Additive Apple-OS discriminant (iPhone/iPad/tvOS/visionOS/macOS). Present only for
+   * Apple devices; `platform` still carries the leaf (`ios`/`macos`).
+   */
+  appleOs?: AppleOS;
   identifiers: AgentDeviceIdentifiers;
   ios?: {
     udid: string;
@@ -176,6 +183,11 @@ export type AgentDeviceSessionDevice = {
   target: DeviceTarget;
   id: string;
   name: string;
+  /**
+   * Additive Apple-OS discriminant (iPhone/iPad/tvOS/visionOS/macOS). Present only for
+   * Apple devices; `platform` still carries the leaf (`ios`/`macos`).
+   */
+  appleOs?: AppleOS;
   identifiers: AgentDeviceIdentifiers;
   ios?: {
     udid: string;

@@ -1,6 +1,10 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { normalizeOpenDevice } from '../client/client-normalizers.ts';
+import {
+  normalizeDevice,
+  normalizeOpenDevice,
+  normalizeSession,
+} from '../client/client-normalizers.ts';
 import { PUBLIC_PLATFORMS } from '../kernel/device.ts';
 
 test('normalizeOpenDevice accepts exactly the canonical leaf platforms', () => {
@@ -31,6 +35,53 @@ test('normalizeOpenDevice rejects the apple selector and unknown platforms', () 
     normalizeOpenDevice({ platform: undefined, id: 'device-1', device: 'Device One' }),
     undefined,
   );
+});
+
+test('normalizeDevice carries the additive appleOs discriminant when present', () => {
+  const ipad = normalizeDevice({
+    platform: 'ios',
+    appleOs: 'ipados',
+    id: 'ipad-sim-1',
+    name: 'iPad Pro 11-inch',
+    kind: 'simulator',
+    booted: true,
+  });
+  assert.equal(ipad.appleOs, 'ipados');
+  // `platform` stays the PUBLIC leaf; appleOs is additive, not a replacement.
+  assert.equal(ipad.platform, 'ios');
+});
+
+test('normalizeDevice omits appleOs for non-Apple and invalid values', () => {
+  const android = normalizeDevice({
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator',
+  });
+  assert.equal('appleOs' in android, false);
+
+  const bogus = normalizeDevice({
+    platform: 'ios',
+    appleOs: 'windowsphone',
+    id: 'sim-1',
+    name: 'iPhone',
+    kind: 'simulator',
+  });
+  assert.equal('appleOs' in bogus, false);
+});
+
+test('normalizeSession carries the additive appleOs discriminant on the session device', () => {
+  const session = normalizeSession({
+    name: 'default',
+    createdAt: 1,
+    platform: 'ios',
+    appleOs: 'tvos',
+    id: 'tv-sim-1',
+    device: 'Apple TV',
+    target: 'tv',
+  });
+  assert.equal(session.device.appleOs, 'tvos');
+  assert.equal(session.device.platform, 'ios');
 });
 
 test('normalizeOpenDevice preserves per-platform identifier shaping', () => {

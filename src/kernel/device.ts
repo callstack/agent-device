@@ -8,7 +8,8 @@ export type ApplePlatform = 'ios' | 'macos';
 // Explicit, stored Apple operating system. All six literals are reserved so the
 // type is stable as platform support grows, but discovery only ever populates
 // the four currently supported ones ('ios' | 'ipados' | 'tvos' | 'macos').
-export type AppleOS = 'ios' | 'ipados' | 'tvos' | 'watchos' | 'visionos' | 'macos';
+const APPLE_OS_VALUES = ['ios', 'ipados', 'tvos', 'watchos', 'visionos', 'macos'] as const;
+export type AppleOS = (typeof APPLE_OS_VALUES)[number];
 // Internal device platforms. Apple OSes collapse to a single `apple` platform; the
 // `appleOs` field on DeviceInfo is the sole OS discriminant.
 export const PLATFORMS = ['apple', 'android', 'linux', 'web'] as const;
@@ -140,6 +141,14 @@ export function isPublicPlatform(value: unknown): value is PublicPlatform {
   // The PUBLIC leaf strings a daemon response carries (approach b). Used by the client
   // normalizers, which parse leaf platforms (`ios`/`macos`), not the internal `apple`.
   return (PUBLIC_PLATFORMS as readonly unknown[]).includes(value);
+}
+
+export function isAppleOs(value: unknown): value is AppleOS {
+  // The stored Apple-OS discriminant carried additively on the PUBLIC device output
+  // (iPhone/iPad/tvOS/visionOS/macOS). Used by the client normalizers to validate the
+  // optional `appleOs` field parsed from a daemon response. Its values never include the
+  // internal `apple` platform token, so surfacing it does not affect the apple-leak guard.
+  return (APPLE_OS_VALUES as readonly unknown[]).includes(value);
 }
 
 export function matchesPlatformSelector(

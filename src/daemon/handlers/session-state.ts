@@ -277,6 +277,8 @@ export async function handleSessionStateCommands(params: {
         id: device.id,
         kind: device.kind,
         booted: true,
+        // Additive Apple-OS discriminant; Apple devices only (non-Apple omit it).
+        ...(device.appleOs ? { appleOs: device.appleOs } : {}),
       },
     };
   }
@@ -342,6 +344,8 @@ export async function handleSessionStateCommands(params: {
         id: device.id,
         kind: device.kind,
         shutdown,
+        // Additive Apple-OS discriminant; Apple devices only (non-Apple omit it).
+        ...(device.appleOs ? { appleOs: device.appleOs } : {}),
       },
     };
   }

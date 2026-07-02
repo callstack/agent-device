@@ -318,7 +318,7 @@ test('devices filters Apple-family platform selectors', async () => {
   }
 });
 
-test('devices omits internal appleOs from the public inventory projection', async () => {
+test('devices surfaces appleOs additively while keeping platform the public leaf', async () => {
   const sessionStore = makeSessionStore();
   mockListAndroidDevices.mockResolvedValue([]);
   mockListAppleDevices.mockResolvedValue([
@@ -352,7 +352,11 @@ test('devices omits internal appleOs from the public inventory projection', asyn
   if (response?.ok) {
     const devices = response.data?.devices as Array<Record<string, unknown>> | undefined;
     expect(devices).toHaveLength(1);
-    expect(devices?.[0]).not.toHaveProperty('appleOs');
+    // appleOs is now surfaced additively (iPad -> ipados) ...
+    expect(devices?.[0]?.appleOs).toBe('ipados');
+    // ... while `platform` stays the PUBLIC leaf (never the internal `apple`).
+    expect(devices?.[0]?.platform).toBe('ios');
+    // The internal-only simulator set path is still stripped from the public shape.
     expect(devices?.[0]).not.toHaveProperty('simulatorSetPath');
     expect(devices?.[0]?.id).toBe('sim-1');
   }
