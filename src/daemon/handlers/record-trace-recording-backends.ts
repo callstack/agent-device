@@ -1,6 +1,7 @@
-import { isIosFamily, isMacOs } from '../../kernel/device.ts';
 import fs from 'node:fs';
 import path from 'node:path';
+import { tryGetPlugin } from '../../core/platform-plugin/plugin.ts';
+import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import type { SessionStore } from '../session-store.ts';
 import {
@@ -23,6 +24,28 @@ import {
   stopIosSimulatorRecording,
 } from './record-trace-ios-simulator-recording.ts';
 import type { RecordTraceDeps, RecordingBase } from './record-trace-types.ts';
+
+// The plugin registry is consulted by `resolveRecordingBackendForDevice` below;
+// register the builtin plugins on load so the lookup is populated (idempotent,
+// mirrors src/daemon/app-log.ts and src/daemon/handlers/session-perf.ts).
+registerBuiltinPlatformPlugins();
+
+/**
+ * The daemon-owned recording-backend discriminant (issue #974). A PLATFORM-NEUTRAL
+ * string tag naming which recording backend a device resolves to; the daemon maps it
+ * back to the concrete {@link RecordingBackend} instance via `RECORDING_BACKENDS_BY_TAG`.
+ * The {@link PlatformPlugin.recording} facet returns this tag (type-only in the plugin,
+ * exactly like {@link LogBackend} for app-log), so core/platforms never construct the
+ * daemon-owned backend objects. `'unsupported'` is the fallthrough for families that
+ * carry no recording facet (linux) and any unregistered platform.
+ */
+export type RecordingBackendTag =
+  | 'web'
+  | 'android'
+  | 'macos'
+  | 'ios-device'
+  | 'ios-simulator'
+  | 'unsupported';
 
 type ActiveRecording = NonNullable<SessionState['recording']>;
 type RecordingPlatform = ActiveRecording['platform'];
@@ -74,12 +97,13 @@ type RecordingStartBackend = Omit<RecordingBackend, 'stop'>;
 export function resolveRecordingBackendForDevice(
   device: SessionState['device'],
 ): RecordingStartBackend {
-  if (device.platform === 'web') return webRecordingBackend;
-  if (device.platform === 'android') return androidRecordingBackend;
-  if (isMacOs(device)) return macOsRecordingBackend;
-  if (isIosFamily(device) && device.kind === 'device') return iosDeviceRecordingBackend;
-  if (isIosFamily(device)) return iosSimulatorRecordingBackend;
-  return unsupportedRecordingBackend;
+  // Routes the per-platform branch through the PlatformPlugin recording facet (issue
+  // #974): web/android/apple carry a `recording.resolveBackendTag`; linux (and any
+  // unregistered platform) fall through to `'unsupported'`, matching the former hand
+  // branch's default. The daemon owns the backend instances and maps the neutral tag
+  // back to them here. The recording-plugin routing parity test pins the equivalence.
+  const tag = tryGetPlugin(device.platform)?.recording?.resolveBackendTag(device) ?? 'unsupported';
+  return RECORDING_BACKENDS_BY_TAG[tag];
 }
 
 export function stopActiveRecording(context: RecordingStopContext): Promise<DaemonResponse | null> {
@@ -263,6 +287,19 @@ const unsupportedRecordingBackend: RecordingBackend = {
     errorResponse('UNSUPPORTED_OPERATION', 'record is not supported on this device'),
   stop: async () =>
     errorResponse('UNSUPPORTED_OPERATION', 'record is not supported on this device'),
+};
+
+// Maps the neutral {@link RecordingBackendTag} the plugin facet returns back to the
+// daemon-owned backend instance. Exhaustive over the tag union (a compile error if a
+// tag is added without a backend), so `resolveRecordingBackendForDevice` is a pure
+// data lookup with no platform branch of its own.
+const RECORDING_BACKENDS_BY_TAG: Record<RecordingBackendTag, RecordingStartBackend> = {
+  web: webRecordingBackend,
+  android: androidRecordingBackend,
+  macos: macOsRecordingBackend,
+  'ios-device': iosDeviceRecordingBackend,
+  'ios-simulator': iosSimulatorRecordingBackend,
+  unsupported: unsupportedRecordingBackend,
 };
 
 function webRecordingUnsupportedFlags(req: DaemonRequest): string[] {

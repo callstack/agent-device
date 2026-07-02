@@ -1,4 +1,6 @@
 import { resolveTargetDevice } from '../core/dispatch-resolve.ts';
+import { registerBuiltinPlatformPlugins } from '../core/interactors/register-builtins.ts';
+import { tryGetPlugin } from '../core/platform-plugin/plugin.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from '../platforms/android/adb-executor.ts';
 import type {
   AppleRunnerCommandExecutor,
@@ -10,7 +12,7 @@ import type {
 } from '../platforms/apple/core/tool-provider.ts';
 import type { LinuxToolProvider } from '../platforms/linux/tool-provider.ts';
 import type { WebProvider } from '../platforms/web/provider.ts';
-import { isApplePlatform, type DeviceInfo } from '../kernel/device.ts';
+import type { DeviceInfo } from '../kernel/device.ts';
 import type { AppLogProvider } from './app-log.ts';
 import { hasExplicitDeviceSelector } from './device-selector-intent.ts';
 import type { RecordingProvider } from './recording-provider.ts';
@@ -55,6 +57,51 @@ export type PlatformProviderResolvers = {
   appLogProvider?: AppLogProviderResolver;
   recordingProvider?: RecordingProviderResolver;
 };
+
+/**
+ * The request provider resolvers whose application is PLATFORM-GATED — each ran behind
+ * a hand `device.platform === …` predicate inside its descriptor's `resolve`. The
+ * PlatformPlugin `providers` facet (issue #974) declares, per family, which of these
+ * apply to that family's devices (data-only: a plain string list, type-only in the
+ * plugin), and `platformGatedResolverApplies` routes the gate through it. The daemon
+ * still OWNS the resolver invocation, wrapper composition, and request-scope
+ * concurrency isolation — only the platform GATE moved to data.
+ *
+ * `appLogProvider` / `recordingProvider` are deliberately ABSENT: they carry no
+ * platform gate (they apply on every platform), so they stay ungated in the daemon and
+ * are not part of the facet.
+ */
+export type PlatformGatedProviderResolverKey =
+  | 'androidAdbProvider'
+  | 'appleRunnerProvider'
+  | 'appleToolProvider'
+  | 'linuxToolProvider'
+  | 'webProvider';
+
+// Compile-time: every gated key is a real resolver key (so the facet can never name a
+// resolver the daemon does not compose).
+type AssertTrue<T extends true> = T;
+export type GatedKeysAreResolverKeys = AssertTrue<
+  [PlatformGatedProviderResolverKey] extends [keyof PlatformProviderResolvers] ? true : false
+>;
+
+// The plugin registry backs `platformGatedResolverApplies`; register the builtin
+// plugins on load so the lookup is populated (idempotent, mirrors app-log.ts).
+registerBuiltinPlatformPlugins();
+
+/**
+ * Whether the platform-gated resolver `key` applies to `device`, per the owning
+ * family's PlatformPlugin `providers` facet. A device on a platform with no plugin, or
+ * a family that does not list `key`, resolves to `false` — byte-identical to the former
+ * hand `device.platform === …` gate (which also excluded every other platform). Pinned
+ * by the providers-plugin routing parity test.
+ */
+function platformGatedResolverApplies(
+  key: PlatformGatedProviderResolverKey,
+  device: DeviceInfo,
+): boolean {
+  return tryGetPlugin(device.platform)?.providers?.platformGatedResolvers.includes(key) ?? false;
+}
 
 export type RequestPlatformProviderScope = {
   androidAdbExecutor?: AndroidAdbExecutor;
@@ -119,7 +166,11 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     resolverKey: 'androidAdbProvider',
     resolve(providers, context) {
       const androidAdbProvider = providers.androidAdbProvider;
-      if (!androidAdbProvider || context.device.platform !== 'android') return {};
+      if (
+        !androidAdbProvider ||
+        !platformGatedResolverApplies('androidAdbProvider', context.device)
+      )
+        return {};
       const provider = androidAdbProvider(context);
       const executor = typeof provider === 'function' ? provider : provider?.exec;
       return { androidAdb: { provider, executor, serial: context.device.id } };
@@ -140,7 +191,11 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     resolverKey: 'appleRunnerProvider',
     resolve(providers, context) {
       const appleRunnerProvider = providers.appleRunnerProvider;
-      if (!appleRunnerProvider || !isApplePlatform(context.device.platform)) return {};
+      if (
+        !appleRunnerProvider ||
+        !platformGatedResolverApplies('appleRunnerProvider', context.device)
+      )
+        return {};
       const provider = appleRunnerProvider(context);
       return {
         appleRunner: {
@@ -170,7 +225,8 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     resolverKey: 'appleToolProvider',
     resolve(providers, context) {
       const appleToolProvider = providers.appleToolProvider;
-      if (!appleToolProvider || !isApplePlatform(context.device.platform)) return {};
+      if (!appleToolProvider || !platformGatedResolverApplies('appleToolProvider', context.device))
+        return {};
       return { appleTool: { provider: appleToolProvider(context) } };
     },
     async appendWrapper(scopedProviders, wrappers) {
@@ -183,7 +239,8 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     resolverKey: 'linuxToolProvider',
     resolve(providers, context) {
       const linuxToolProvider = providers.linuxToolProvider;
-      if (!linuxToolProvider || context.device.platform !== 'linux') return {};
+      if (!linuxToolProvider || !platformGatedResolverApplies('linuxToolProvider', context.device))
+        return {};
       return { linuxTool: { provider: linuxToolProvider(context) } };
     },
     async appendWrapper(scopedProviders, wrappers) {
@@ -196,7 +253,7 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     resolverKey: 'webProvider',
     resolve(providers, context) {
       const webProvider = providers.webProvider;
-      if (!webProvider || context.device.platform !== 'web') return {};
+      if (!webProvider || !platformGatedResolverApplies('webProvider', context.device)) return {};
       return { web: { provider: webProvider(context) } };
     },
     async appendWrapper(scopedProviders, wrappers) {

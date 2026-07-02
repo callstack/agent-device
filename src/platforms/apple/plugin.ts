@@ -138,6 +138,16 @@ export const applePlugin = {
   // Wraps the Apple arm of `supportsPlatformPerfMetrics`: every Apple device
   // (ios/macos, any kind/target) reports perf-metrics support.
   perf: { supportsMetrics: () => true },
+  // Wraps the Apple arm of `resolveRecordingBackendForDevice` verbatim: macOS ->
+  // 'macos'; an iOS `device` -> 'ios-device'; every other iOS kind (simulator, incl.
+  // tvOS/iPadOS/visionOS) -> 'ios-simulator'. Mirrors the appLog resolveBackend shape.
+  recording: {
+    resolveBackendTag: (device: DeviceInfo) =>
+      isMacOs(device) ? 'macos' : device.kind === 'device' ? 'ios-device' : 'ios-simulator',
+  },
+  // Declares the platform-gated request provider resolvers the Apple family owns: the
+  // runner + tool providers (formerly gated by `isApplePlatform(device.platform)`).
+  providers: { platformGatedResolvers: ['appleRunnerProvider', 'appleToolProvider'] },
   createInteractor: async (device: DeviceInfo, runner: RunnerContext) => {
     const { createAppleInteractor } = await import('./interactor.ts');
     return createAppleInteractor(device, runner);

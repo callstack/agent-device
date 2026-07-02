@@ -1,6 +1,8 @@
 import { AppError } from '../../kernel/errors.ts';
 import type { DeviceInfo, Platform, PlatformSelector } from '../../kernel/device.ts';
 import type { LogBackend } from '../../daemon/network-log.ts';
+import type { RecordingBackendTag } from '../../daemon/handlers/record-trace-recording-backends.ts';
+import type { PlatformGatedProviderResolverKey } from '../../daemon/request-platform-providers.ts';
 import type { Interactor, RunnerContext } from '../interactor-types.ts';
 import type { DeviceInventoryRequest } from '../platform-inventory.ts';
 import type { CapabilityBucket } from '../platform-descriptor/types.ts';
@@ -27,10 +29,15 @@ import type { CapabilityBucket } from '../platform-descriptor/types.ts';
  * (wraps `resolveLogBackend`, pinned by the daemon app-log routing parity test);
  * {@link PlatformPlugin.perf} carries the neutral perf-metrics support predicate
  * (wraps `supportsPlatformPerfMetrics`, pinned by the daemon perf routing parity
- * test). The remaining columns (`providers` / `recording`) — and the rest of the
- * `perf` facet (the sampling body `buildPerfResponseData` and the Android-only
- * native-collector gate) — stay on their daemon branch as the source of truth
- * until each clears the same gate. See
+ * test); {@link PlatformPlugin.recording} carries the neutral
+ * {@link RecordingBackendTag} resolver (wraps the per-platform branch of
+ * `resolveRecordingBackendForDevice`, pinned by the recording routing parity test);
+ * {@link PlatformPlugin.providers} carries the per-family platform-gated request
+ * provider resolver list (replaces the hand `device.platform === …` gate in
+ * `request-platform-providers.ts`, pinned by the providers routing parity test). The
+ * rest of the `perf` facet (the sampling body `buildPerfResponseData` and the
+ * Android-only native-collector gate) stays on its daemon branch as the source of
+ * truth until it clears the same gate. See
  * docs/adr/0009-apple-platform-consolidation.md (tracked in issue #974).
  */
 export type PlatformPlugin = {
@@ -92,6 +99,39 @@ export type PlatformPlugin = {
    */
   readonly perf?: {
     supportsMetrics(device: DeviceInfo): boolean;
+  };
+  /**
+   * The daemon recording facet (issue #974). `resolveBackendTag` wraps the
+   * per-platform branch of `resolveRecordingBackendForDevice`
+   * (src/daemon/handlers/record-trace-recording-backends.ts), returning the neutral
+   * {@link RecordingBackendTag} for `device` (a DATA-ONLY string, type-only in the
+   * plugin — exactly like {@link appLog}'s {@link LogBackend}). The daemon maps the tag
+   * back to its own {@link RecordingBackend} instance, so core/platforms never construct
+   * the daemon-owned backend objects. Present on families with a recording backend
+   * (Apple + Android + web); left `undefined` for linux, where the hand branch fell
+   * through to the unsupported backend — the daemon lookup preserves that fallthrough
+   * (`?? 'unsupported'`), and the recording routing parity test pins the equivalence.
+   */
+  readonly recording?: {
+    resolveBackendTag(device: DeviceInfo): RecordingBackendTag;
+  };
+  /**
+   * The daemon request-scope provider facet (issue #974). `platformGatedResolvers`
+   * declares which PLATFORM-GATED request provider resolvers apply to this family's
+   * devices — the DATA that replaces the hand `device.platform === …` gate formerly
+   * open-coded inside each descriptor's `resolve` in
+   * src/daemon/request-platform-providers.ts. The daemon still OWNS the resolver
+   * functions, their wrapper composition, and the request-scope concurrency isolation;
+   * this facet supplies only the per-family gate (a plain string list, the keys
+   * type-only in the plugin). The ungated resolvers (`appLogProvider` /
+   * `recordingProvider`, which apply on every platform) are intentionally NOT part of
+   * the facet and stay ungated in the daemon. Every family carries this facet (each
+   * owns at least one platform-specific resolver); a device on an unregistered platform
+   * resolves to no gated resolvers, matching the former hand gate. Pinned by the
+   * providers routing parity test.
+   */
+  readonly providers?: {
+    readonly platformGatedResolvers: readonly PlatformGatedProviderResolverKey[];
   };
 };
 
