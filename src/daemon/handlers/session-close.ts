@@ -43,7 +43,13 @@ async function maybeShutdownSessionTarget(params: {
 }
 
 function shouldRetainAppleRunnerAfterClose(req: DaemonRequest, session: SessionState): boolean {
-  return isIosSimulator(session.device) && !req.flags?.shutdown && !session.recording;
+  return (
+    isIosSimulator(session.device) &&
+    !req.flags?.shutdown &&
+    !session.recording &&
+    !session.lease &&
+    !session.device.simulatorSetPath
+  );
 }
 
 function shouldStopAppleRunnerBeforeTargetedClose(session: SessionState): boolean {

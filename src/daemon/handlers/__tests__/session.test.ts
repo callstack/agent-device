@@ -98,6 +98,7 @@ import {
   retainMaterializedPaths,
   cleanupRetainedMaterializedPathsForSession,
 } from '../../materialized-path-registry.ts';
+import { LeaseRegistry } from '../../lease-registry.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
 import { AppError } from '../../../kernel/errors.ts';
@@ -3490,6 +3491,161 @@ test('close on macOS session stops runner and dismisses automation alert before 
     'dismiss-alert:dismiss:com.apple.systempreferences',
   ]);
   expect(sessionStore.get(sessionName)).toBe(undefined);
+});
+
+test('close on iOS simulator session retains runner and deletes the session', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-simulator-session';
+  sessionStore.set(sessionName, {
+    ...makeSession(sessionName, {
+      platform: 'apple',
+      id: 'sim-1',
+      name: 'iPhone 17 Pro',
+      kind: 'simulator',
+      booted: true,
+    }),
+    appName: 'com.example.app',
+  });
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response).toBeTruthy();
+  expect(response?.ok).toBe(true);
+  expect(mockStopIosRunner).not.toHaveBeenCalled();
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+});
+
+test('close on iOS simulator with scoped simulator set stops runner before deleting session', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-scoped-simulator-session';
+  sessionStore.set(sessionName, {
+    ...makeSession(sessionName, {
+      platform: 'apple',
+      id: 'sim-1',
+      name: 'iPhone 17 Pro',
+      kind: 'simulator',
+      booted: true,
+      simulatorSetPath: '/tmp/tenant-a/simulator-set',
+    }),
+    appName: 'com.example.app',
+  });
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response).toBeTruthy();
+  expect(response?.ok).toBe(true);
+  expect(mockStopIosRunner).toHaveBeenCalledWith('sim-1');
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+});
+
+test('close on leased iOS simulator session stops runner before deleting session', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-leased-simulator-session';
+  const leaseRegistry = new LeaseRegistry();
+  const lease = leaseRegistry.allocateLease({
+    tenantId: 'tenant-a',
+    runId: 'run-1',
+    leaseBackend: 'ios-simulator',
+    deviceKey: 'ios:sim-1',
+    clientId: 'client-a',
+  });
+  sessionStore.set(sessionName, {
+    ...makeSession(sessionName, {
+      platform: 'apple',
+      id: 'sim-1',
+      name: 'iPhone 17 Pro',
+      kind: 'simulator',
+      booted: true,
+    }),
+    appName: 'com.example.app',
+    lease: {
+      leaseId: lease.leaseId,
+      tenantId: lease.tenantId,
+      runId: lease.runId,
+      leaseBackend: lease.backend,
+      deviceKey: lease.deviceKey,
+      clientId: lease.clientId,
+      expiresAt: lease.expiresAt,
+    },
+  });
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: {},
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    leaseRegistry,
+    invoke: noopInvoke,
+  });
+
+  expect(response).toBeTruthy();
+  expect(response?.ok).toBe(true);
+  expect(mockStopIosRunner).toHaveBeenCalledWith('sim-1');
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+});
+
+test('close --shutdown on iOS simulator stops runner before deleting session', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-simulator-shutdown-session';
+  sessionStore.set(sessionName, {
+    ...makeSession(sessionName, {
+      platform: 'apple',
+      id: 'sim-1',
+      name: 'iPhone 17 Pro',
+      kind: 'simulator',
+      booted: true,
+    }),
+    appName: 'com.example.app',
+  });
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: { shutdown: true },
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response).toBeTruthy();
+  expect(response?.ok).toBe(true);
+  expect(mockStopIosRunner).toHaveBeenCalledWith('sim-1');
+  expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 
 test('close <app> on iOS stops runner before app close dispatch and performs final idempotent stop', async () => {
