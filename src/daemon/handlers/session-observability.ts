@@ -40,6 +40,7 @@ import { handleAudioCommand } from './session-audio.ts';
 import { handleNativePerfCommand as handleAppleNativePerfCommand } from './session-perf-xctrace.ts';
 import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '../../kernel/contracts.ts';
 import type { LogBackend } from '../network-log.ts';
+import { uniqueStrings } from '../action-utils.ts';
 import {
   LOG_ACTION_VALUES as LOG_ACTIONS,
   type LogAction as LogsAction,
@@ -91,15 +92,13 @@ const LOG_ACTION_HANDLERS: Record<
 function resolveSessionLogStatus(session: SessionState): SessionLogStatus {
   if (session.appLog) {
     const state = session.appLog.getState();
+    const active = state === 'active' || state === 'recovering';
     return {
-      active: state !== 'failed',
+      active,
       state,
       backend: session.appLog.backend,
       startedAt: session.appLog.startedAt,
-      notes:
-        state === 'failed'
-          ? ['The app log stream process exited. Run logs doctor for backend diagnostics.']
-          : undefined,
+      notes: buildAppLogStateNotes(state),
     };
   }
   if (session.appLogFailure) {
@@ -129,8 +128,31 @@ function buildAppLogFailure(
     code: normalized.code,
     message: normalized.message,
     hint: normalized.hint,
-    occurredAt: Date.now(),
   };
+}
+
+function buildAppLogStateNotes(state: AppLogState): string[] | undefined {
+  if (state === 'failed') {
+    return [
+      'The app log stream process exited with an error. Run logs doctor for backend diagnostics.',
+    ];
+  }
+  if (state === 'ended') {
+    return [
+      'The app log stream process ended. Run logs clear --restart before the next capture window.',
+    ];
+  }
+  return undefined;
+}
+
+function mergeLogDoctorNotes(
+  doctorNotes: string[],
+  status: Pick<SessionLogStatus, 'failureCode' | 'notes'>,
+): string[] {
+  if (status.failureCode === 'UNSUPPORTED_OPERATION' && doctorNotes.length > 0) {
+    return uniqueStrings(doctorNotes);
+  }
+  return uniqueStrings([...doctorNotes, ...(status.notes ?? [])]);
 }
 
 function buildSessionAppLog(
@@ -460,7 +482,7 @@ async function handleLogsDoctor(
       failureCode: status.failureCode,
       failureMessage: status.failureMessage,
       hint: status.hint,
-      notes: [...doctor.notes, ...(status.notes ?? [])],
+      notes: mergeLogDoctorNotes(doctor.notes, status),
     },
   };
 }

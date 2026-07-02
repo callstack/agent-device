@@ -89,9 +89,15 @@ async function runIosDeviceAppLogDoctor(): Promise<AppLogDoctorResult> {
   const consoleCapture = await checkIosDeviceConsoleCaptureSupport();
   checks.devicectlConsoleCapture = consoleCapture.supported;
   if (!consoleCapture.supported) {
-    notes.push(
-      'Installed devicectl does not expose scriptable iOS physical-device app console capture. Markers can still be written, but app output is not being captured by agent-device on this toolchain.',
-    );
+    if (consoleCapture.reason === 'probe-failed') {
+      notes.push(
+        'Could not verify iOS physical-device app console capture support. Retry after devicectl is responsive, then rerun logs doctor.',
+      );
+    } else {
+      notes.push(
+        'Installed devicectl does not expose scriptable iOS physical-device app console capture. Markers can still be written, but app output is not being captured by agent-device on this toolchain.',
+      );
+    }
   }
   return { checks, notes };
 }

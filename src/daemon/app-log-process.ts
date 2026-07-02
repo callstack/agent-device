@@ -6,14 +6,13 @@ import type { ExecResult } from '../utils/exec.ts';
 
 export const APP_LOG_PID_FILENAME = 'app-log.pid';
 
-export type AppLogState = 'active' | 'recovering' | 'failed';
+export type AppLogState = 'active' | 'recovering' | 'ended' | 'failed';
 
 export type AppLogFailure = {
   backend: LogBackend;
   code: string;
   message: string;
   hint?: string;
-  occurredAt: number;
 };
 
 export type AppLogResult = {

@@ -4530,6 +4530,25 @@ function mockIosDeviceLogBackend(): void {
   });
 }
 
+function mockUnsupportedIosDeviceLogBackend(): void {
+  mockStartAppLog.mockRejectedValue(
+    new AppError(
+      'UNSUPPORTED_OPERATION',
+      'iOS physical-device app console capture is not supported by the installed devicectl.',
+      {
+        backend: 'ios-device',
+        hint: 'Use an iOS simulator for agent-device app logs or inspect physical-device logs in Console.app/Xcode.',
+      },
+    ),
+  );
+  mockRunAppLogDoctor.mockResolvedValue({
+    checks: { devicectlAvailable: true, devicectlConsoleCapture: false },
+    notes: [
+      'Installed devicectl does not expose scriptable iOS physical-device app console capture. Markers can still be written, but app output is not being captured by agent-device on this toolchain.',
+    ],
+  });
+}
+
 async function runLogsCommandForSession(
   sessionStore: ReturnType<typeof makeSessionStore>,
   sessionName: string,
@@ -4564,6 +4583,17 @@ function expectActiveIosDeviceLogsPath(
   expect(response.data?.startedAt).toBe('2024-04-02T06:40:00.000Z');
 }
 
+function expectEndedIosDeviceLogsPath(response: Awaited<ReturnType<typeof handleSessionCommands>>) {
+  expect(response?.ok).toBe(true);
+  if (!response || !response.ok) return;
+  expect(response.data?.active).toBe(false);
+  expect(response.data?.state).toBe('ended');
+  expect(response.data?.backend).toBe('ios-device');
+  expect(response.data?.notes).toContain(
+    'The app log stream process ended. Run logs clear --restart before the next capture window.',
+  );
+}
+
 function expectActiveIosDeviceLogsDoctor(
   response: Awaited<ReturnType<typeof handleSessionCommands>>,
 ) {
@@ -4577,6 +4607,20 @@ function expectActiveIosDeviceLogsDoctor(
     devicectlConsoleCapture: true,
   });
   expect(response.data?.notes).toEqual([]);
+}
+
+function expectUnsupportedIosDeviceLogsDoctor(
+  response: Awaited<ReturnType<typeof handleSessionCommands>>,
+) {
+  expect(response?.ok).toBe(true);
+  if (!response || !response.ok) return;
+  expect(response.data?.active).toBe(false);
+  expect(response.data?.state).toBe('failed');
+  expect(response.data?.backend).toBe('ios-device');
+  expect(response.data?.failureCode).toBe('UNSUPPORTED_OPERATION');
+  expect(response.data?.notes).toEqual([
+    'Installed devicectl does not expose scriptable iOS physical-device app console capture. Markers can still be written, but app output is not being captured by agent-device on this toolchain.',
+  ]);
 }
 
 test('logs clear --restart starts active iOS physical-device console capture', async () => {
@@ -4599,6 +4643,39 @@ test('logs clear --restart starts active iOS physical-device console capture', a
 
   expectActiveIosDeviceLogsPath(await runLogsCommandForSession(sessionStore, sessionName, 'path'));
   expectActiveIosDeviceLogsDoctor(
+    await runLogsCommandForSession(sessionStore, sessionName, 'doctor'),
+  );
+});
+
+test('logs path reports cleanly ended iOS physical-device console capture as inactive', async () => {
+  const { sessionStore, sessionName } = makeIosDeviceLogSession();
+  const session = sessionStore.get(sessionName);
+  if (!session) throw new Error('Expected test session');
+  sessionStore.set(sessionName, {
+    ...session,
+    appLog: {
+      platform: 'apple',
+      backend: 'ios-device',
+      outPath: '/tmp/app.log',
+      startedAt: 1_712_040_000_000,
+      getState: () => 'ended',
+      stop: async () => {},
+      wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
+    },
+  });
+
+  expectEndedIosDeviceLogsPath(await runLogsCommandForSession(sessionStore, sessionName, 'path'));
+});
+
+test('logs doctor deduplicates unsupported iOS physical-device console capture notes', async () => {
+  const { sessionStore, sessionName } = makeIosDeviceLogSession();
+  mockUnsupportedIosDeviceLogBackend();
+
+  const restartResponse = await runLogsCommandForSession(sessionStore, sessionName, 'clear', {
+    restart: true,
+  });
+  expect(restartResponse?.ok).toBe(false);
+  expectUnsupportedIosDeviceLogsDoctor(
     await runLogsCommandForSession(sessionStore, sessionName, 'doctor'),
   );
 });

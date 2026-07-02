@@ -154,7 +154,7 @@ test('startIosDeviceAppLog reports unsupported devicectl console capture before 
   assert.deepEqual(calls, [['device', 'process', 'launch', '--help']]);
 });
 
-test('startIosDeviceAppLog reports unsupported when devicectl support probe fails', async () => {
+test('startIosDeviceAppLog reports retryable failure when devicectl support probe fails', async () => {
   const stream = makeAppLogWriteStream('agent-device-ios-device-log-timeout-');
 
   await withFakeDevicectl(
@@ -166,8 +166,8 @@ test('startIosDeviceAppLog reports unsupported when devicectl support probe fail
         async () => await startIosDeviceAppLog(IOS_DEVICE_ID, 'com.example.app', stream, []),
         (error: unknown) => {
           assert.ok(error instanceof AppError);
-          assert.equal(error.code, 'UNSUPPORTED_OPERATION');
-          assert.match(error.message, /iOS physical-device app console capture is not supported/);
+          assert.equal(error.code, 'COMMAND_FAILED');
+          assert.match(error.message, /Could not verify iOS physical-device app console capture/);
           assert.equal(error.details?.stderr, 'xcrun timed out after 5000ms');
           return true;
         },
@@ -197,6 +197,34 @@ test('runAppLogDoctor reports supported iOS physical-device console capture', as
   assert.equal(result.checks.devicectlAvailable, true);
   assert.equal(result.checks.devicectlConsoleCapture, true);
   assert.equal(result.notes.length, 0);
+});
+
+test('startIosDeviceAppLog marks clean devicectl console exit as ended', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-ios-device-console-'));
+  const fakeBinDir = path.join(root, 'bin');
+  fs.mkdirSync(fakeBinDir);
+  const fakeXcrun = path.join(fakeBinDir, 'xcrun');
+  fs.writeFileSync(fakeXcrun, '#!/bin/sh\nprintf "app output\\n"\nexit 0\n');
+  fs.chmodSync(fakeXcrun, 0o755);
+  const previousPath = process.env.PATH;
+  process.env.PATH = `${fakeBinDir}${path.delimiter}${previousPath ?? ''}`;
+  const stream = fs.createWriteStream(path.join(root, 'app.log'), { flags: 'a' });
+
+  try {
+    await withFakeDevicectl(
+      async () => ({ stdout: IOS_DEVICE_CONSOLE_CAPTURE_HELP, stderr: '', exitCode: 0 }),
+      async () => {
+        const appLog = await startIosDeviceAppLog(IOS_DEVICE_ID, 'com.example.app', stream, []);
+        assert.equal(appLog.getState(), 'active');
+        assert.equal((await appLog.wait).exitCode, 0);
+        assert.equal(appLog.getState(), 'ended');
+      },
+    );
+  } finally {
+    if (previousPath === undefined) delete process.env.PATH;
+    else process.env.PATH = previousPath;
+    await finished(stream).catch(() => {});
+  }
 });
 
 test('buildIosSimulatorLogStreamArgs streams logs inside the simulator at info level', () => {
