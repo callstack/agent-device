@@ -2,7 +2,7 @@ import { isIosFamily, isMacOs, type DeviceInfo } from '../kernel/device.ts';
 import { runXcrun } from '../platforms/apple/core/tool-provider.ts';
 import { runAndroidAdb } from '../platforms/android/adb.ts';
 import { runCmd } from '../utils/exec.ts';
-import { checkIosDeviceLogStreamSupport } from './app-log-ios.ts';
+import { checkIosDeviceConsoleCaptureSupport } from './app-log-ios.ts';
 
 export type AppLogDoctorResult = {
   checks: Record<string, boolean>;
@@ -86,11 +86,11 @@ async function runIosDeviceAppLogDoctor(): Promise<AppLogDoctorResult> {
   }
   if (!checks.devicectlAvailable) return { checks, notes };
 
-  const logStream = await checkIosDeviceLogStreamSupport();
-  checks.devicectlDeviceLogStream = logStream.supported;
-  if (!logStream.supported) {
+  const consoleCapture = await checkIosDeviceConsoleCaptureSupport();
+  checks.devicectlConsoleCapture = consoleCapture.supported;
+  if (!consoleCapture.supported) {
     notes.push(
-      'Installed devicectl does not expose a scriptable iOS physical-device app log stream. Markers can still be written, but app output is not being captured by agent-device on this toolchain.',
+      'Installed devicectl does not expose scriptable iOS physical-device app console capture. Markers can still be written, but app output is not being captured by agent-device on this toolchain.',
     );
   }
   return { checks, notes };

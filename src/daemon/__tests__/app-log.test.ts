@@ -12,7 +12,7 @@ import {
   APP_LOG_PID_FILENAME,
   assertAndroidPackageArgSafe,
   buildAppleLogPredicate,
-  buildIosDeviceLogStreamArgs,
+  buildIosDeviceConsoleLaunchArgs,
   buildIosSimulatorLogStreamArgs,
   cleanupStaleAppLogProcesses,
   runAppLogDoctor,
@@ -28,8 +28,13 @@ const IOS_DEVICE: DeviceInfo = {
   name: 'iPhone',
   kind: 'device',
 };
-const IOS_DEVICE_LOG_STREAM_UNAVAILABLE_HELP =
+const IOS_DEVICE_HELP_WITHOUT_CONSOLE_CAPTURE =
   'USAGE: devicectl device [--verbose] [--quiet] <subcommand>\n\nSUBCOMMANDS:\n  info\n  process\n';
+const IOS_DEVICE_CONSOLE_CAPTURE_HELP = `USAGE: devicectl device process launch [<options>] --device <uuid|ecid|serial_number|udid|name|dns_name> <bundle-identifier-or-path>
+
+COMMAND OPTIONS:
+  --console               Attaches the application to the console and waits for it to exit.
+  --terminate-existing    Terminates any already-running instances of the app prior to launch.`;
 
 type FakeDevicectlRun = (args: string[]) => Promise<ExecResult>;
 
@@ -109,32 +114,35 @@ test('cleanupStaleAppLogProcesses removes pid files even when pid is stale', () 
   assert.equal(fs.existsSync(pidPath), false);
 });
 
-test('buildIosDeviceLogStreamArgs builds expected devicectl command args', () => {
-  assert.deepEqual(buildIosDeviceLogStreamArgs(IOS_DEVICE_ID), [
+test('buildIosDeviceConsoleLaunchArgs builds expected devicectl command args', () => {
+  assert.deepEqual(buildIosDeviceConsoleLaunchArgs(IOS_DEVICE_ID, 'com.example.app'), [
     'devicectl',
     'device',
-    'log',
-    'stream',
+    'process',
+    'launch',
     '--device',
     IOS_DEVICE_ID,
+    '--console',
+    '--terminate-existing',
+    'com.example.app',
   ]);
 });
 
-test('startIosDeviceAppLog reports unsupported devicectl log stream before spawning', async () => {
+test('startIosDeviceAppLog reports unsupported devicectl console capture before spawning', async () => {
   const stream = makeAppLogWriteStream('agent-device-ios-device-log-');
   const { calls } = await withFakeDevicectl(
     async () => ({
-      stdout: IOS_DEVICE_LOG_STREAM_UNAVAILABLE_HELP,
+      stdout: IOS_DEVICE_HELP_WITHOUT_CONSOLE_CAPTURE,
       stderr: '',
       exitCode: 0,
     }),
     async () => {
       await assert.rejects(
-        async () => await startIosDeviceAppLog(IOS_DEVICE_ID, stream, []),
+        async () => await startIosDeviceAppLog(IOS_DEVICE_ID, 'com.example.app', stream, []),
         (error: unknown) => {
           assert.ok(error instanceof AppError);
           assert.equal(error.code, 'UNSUPPORTED_OPERATION');
-          assert.match(error.message, /iOS physical-device app log streaming is not supported/);
+          assert.match(error.message, /iOS physical-device app console capture is not supported/);
           assert.equal(error.details?.backend, 'ios-device');
           return true;
         },
@@ -143,7 +151,7 @@ test('startIosDeviceAppLog reports unsupported devicectl log stream before spawn
   );
 
   await finished(stream).catch(() => {});
-  assert.deepEqual(calls, [['device', 'log', 'stream', '--help']]);
+  assert.deepEqual(calls, [['device', 'process', 'launch', '--help']]);
 });
 
 test('startIosDeviceAppLog reports unsupported when devicectl support probe fails', async () => {
@@ -155,11 +163,11 @@ test('startIosDeviceAppLog reports unsupported when devicectl support probe fail
     },
     async () => {
       await assert.rejects(
-        async () => await startIosDeviceAppLog(IOS_DEVICE_ID, stream, []),
+        async () => await startIosDeviceAppLog(IOS_DEVICE_ID, 'com.example.app', stream, []),
         (error: unknown) => {
           assert.ok(error instanceof AppError);
           assert.equal(error.code, 'UNSUPPORTED_OPERATION');
-          assert.match(error.message, /iOS physical-device app log streaming is not supported/);
+          assert.match(error.message, /iOS physical-device app console capture is not supported/);
           assert.equal(error.details?.stderr, 'xcrun timed out after 5000ms');
           return true;
         },
@@ -170,14 +178,14 @@ test('startIosDeviceAppLog reports unsupported when devicectl support probe fail
   await finished(stream).catch(() => {});
 });
 
-test('runAppLogDoctor reports unsupported iOS physical-device log stream', async () => {
+test('runAppLogDoctor reports supported iOS physical-device console capture', async () => {
   const { result, calls } = await withFakeDevicectl(
     async (args) => {
       if (args.join(' ') === '--version') {
         return { stdout: '506.6\n', stderr: '', exitCode: 0 };
       }
       return {
-        stdout: IOS_DEVICE_LOG_STREAM_UNAVAILABLE_HELP,
+        stdout: IOS_DEVICE_CONSOLE_CAPTURE_HELP,
         stderr: '',
         exitCode: 0,
       };
@@ -185,10 +193,10 @@ test('runAppLogDoctor reports unsupported iOS physical-device log stream', async
     async () => await runAppLogDoctor(IOS_DEVICE, 'com.example.app'),
   );
 
-  assert.deepEqual(calls, [['--version'], ['device', 'log', 'stream', '--help']]);
+  assert.deepEqual(calls, [['--version'], ['device', 'process', 'launch', '--help']]);
   assert.equal(result.checks.devicectlAvailable, true);
-  assert.equal(result.checks.devicectlDeviceLogStream, false);
-  assert.ok(result.notes.some((note) => note.includes('does not expose')));
+  assert.equal(result.checks.devicectlConsoleCapture, true);
+  assert.equal(result.notes.length, 0);
 });
 
 test('buildIosSimulatorLogStreamArgs streams logs inside the simulator at info level', () => {

@@ -45,7 +45,7 @@ export {
 } from './app-log-android.ts';
 export {
   buildAppleLogPredicate,
-  buildIosDeviceLogStreamArgs,
+  buildIosDeviceConsoleLaunchArgs,
   buildIosSimulatorLogStreamArgs,
 } from './app-log-ios.ts';
 export { runAppLogDoctor, type AppLogDoctorResult } from './app-log-doctor.ts';
@@ -403,7 +403,7 @@ async function startLocalAppLog({
   const redactionPatterns = getAppLogRedactionPatterns();
   if (isIosFamily(device)) {
     if (device.kind === 'device') {
-      return await startIosDeviceAppLog(device.id, stream, redactionPatterns, pidPath);
+      return await startIosDeviceAppLog(device.id, appBundleId, stream, redactionPatterns, pidPath);
     }
     return await startIosSimulatorAppLog(
       device.id,

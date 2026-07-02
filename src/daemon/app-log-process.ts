@@ -50,7 +50,8 @@ function isManagedAppLogCommand(command: string): boolean {
   return (
     normalized.includes('log stream') ||
     normalized.includes('logcat') ||
-    normalized.includes('devicectl device log stream')
+    normalized.includes('devicectl device log stream') ||
+    normalized.includes('devicectl device process launch')
   );
 }
 

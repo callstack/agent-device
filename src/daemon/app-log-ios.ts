@@ -7,10 +7,10 @@ import { runXcrun } from '../platforms/apple/core/tool-provider.ts';
 import { clearPidFile, writePidFile, type AppLogResult } from './app-log-process.ts';
 import { attachChildToStream, createLineWriter, waitForChildExit } from './app-log-stream.ts';
 
-const IOS_DEVICE_LOG_STREAM_UNSUPPORTED_MESSAGE =
-  'iOS physical-device app log streaming is not supported by the installed devicectl.';
-const IOS_DEVICE_LOG_STREAM_UNSUPPORTED_HINT =
-  'This devicectl does not expose a device log stream subcommand. Markers can still be written to app.log, but app output is not being captured. Use an iOS simulator for agent-device app logs or inspect physical-device logs in Console.app/Xcode until this Xcode toolchain exposes a scriptable stream.';
+const IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_MESSAGE =
+  'iOS physical-device app console capture is not supported by the installed devicectl.';
+const IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_HINT =
+  'This devicectl does not expose process launch --console. Markers can still be written to app.log, but app output is not being captured. Use an iOS simulator for agent-device app logs or inspect physical-device logs in Console.app/Xcode until this Xcode toolchain exposes scriptable console capture.';
 
 export function buildAppleLogPredicate(
   appBundleId: string,
@@ -61,21 +61,32 @@ export function buildIosSimulatorLogStreamArgs(params: {
   );
 }
 
-export function buildIosDeviceLogStreamArgs(deviceId: string): string[] {
-  return ['devicectl', 'device', 'log', 'stream', '--device', deviceId];
+export function buildIosDeviceConsoleLaunchArgs(deviceId: string, appBundleId: string): string[] {
+  return [
+    'devicectl',
+    'device',
+    'process',
+    'launch',
+    '--device',
+    deviceId,
+    '--console',
+    '--terminate-existing',
+    appBundleId,
+  ];
 }
 
-export async function checkIosDeviceLogStreamSupport(): Promise<{
+export async function checkIosDeviceConsoleCaptureSupport(): Promise<{
   supported: boolean;
   stderr?: string;
 }> {
   try {
-    const result = await runXcrun(['devicectl', 'device', 'log', 'stream', '--help'], {
+    const result = await runXcrun(['devicectl', 'device', 'process', 'launch', '--help'], {
       allowFailure: true,
       timeoutMs: 5_000,
     });
     return {
-      supported: result.exitCode === 0 && isIosDeviceLogStreamHelp(result.stdout, result.stderr),
+      supported:
+        result.exitCode === 0 && isIosDeviceConsoleCaptureHelp(result.stdout, result.stderr),
       stderr: result.stderr.trim() || undefined,
     };
   } catch (error) {
@@ -86,8 +97,13 @@ export async function checkIosDeviceLogStreamSupport(): Promise<{
   }
 }
 
-function isIosDeviceLogStreamHelp(stdout: string, stderr: string): boolean {
-  return /\bUSAGE:\s+devicectl device log stream\b/i.test(`${stdout}\n${stderr}`);
+function isIosDeviceConsoleCaptureHelp(stdout: string, stderr: string): boolean {
+  const help = `${stdout}\n${stderr}`;
+  return (
+    /\bUSAGE:\s+devicectl device process launch\b/i.test(help) &&
+    /--console\b/.test(help) &&
+    /--terminate-existing\b/.test(help)
+  );
 }
 
 export async function readRecentIosSimulatorLogShowForBundle(params: {
@@ -212,26 +228,28 @@ export async function startMacOsAppLog(
 
 export async function startIosDeviceAppLog(
   deviceId: string,
+  appBundleId: string,
   stream: fs.WriteStream,
   redactionPatterns: RegExp[],
   pidPath?: string,
 ): Promise<AppLogResult> {
-  const support = await checkIosDeviceLogStreamSupport();
+  const support = await checkIosDeviceConsoleCaptureSupport();
   if (!support.supported) {
     stream.end();
-    throw new AppError('UNSUPPORTED_OPERATION', IOS_DEVICE_LOG_STREAM_UNSUPPORTED_MESSAGE, {
+    throw new AppError('UNSUPPORTED_OPERATION', IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_MESSAGE, {
       backend: 'ios-device',
-      hint: IOS_DEVICE_LOG_STREAM_UNSUPPORTED_HINT,
+      hint: IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_HINT,
       stderr: support.stderr,
     });
   }
   return startAppleAppLogStream({
     backend: 'ios-device',
     cmd: 'xcrun',
-    args: buildIosDeviceLogStreamArgs(deviceId),
+    args: buildIosDeviceConsoleLaunchArgs(deviceId, appBundleId),
     stream,
     redactionPatterns,
     pidPath,
+    stopSignals: ['SIGKILL'],
   });
 }
 
@@ -242,6 +260,7 @@ function startAppleAppLogStream(params: {
   stream: fs.WriteStream;
   redactionPatterns: RegExp[];
   pidPath?: string;
+  stopSignals?: NodeJS.Signals[];
 }): AppLogResult {
   let state: 'active' | 'failed' = 'active';
   const background = runCmdBackground(params.cmd, params.args, {
@@ -275,10 +294,10 @@ function startAppleAppLogStream(params: {
     startedAt: Date.now(),
     wait,
     stop: async () => {
-      if (!child.killed) child.kill('SIGINT');
-      await waitForChildExit(wait);
-      if (!child.killed) child.kill('SIGKILL');
-      await waitForChildExit(wait);
+      for (const signal of params.stopSignals ?? ['SIGINT', 'SIGKILL']) {
+        child.kill(signal);
+        await waitForChildExit(wait);
+      }
       clearPidFile(params.pidPath);
     },
   };
