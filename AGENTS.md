@@ -171,6 +171,7 @@ Command-only flags (like `find --first`) that do not flow to the platform layer 
 
 ## React Native Verification
 - After changing runtime code exercised through `bin/agent-device.mjs` or the daemon, run `pnpm build` and `pnpm clean:daemon` before manual device verification so snapshots use current `dist` output.
+- For repo-owned `Agent Device Tester` verification, use `examples/test-app/README.md` as the source of truth for simulator, physical-device, Metro/dev-client, and app-surface verification steps. Do not treat an already installed `com.callstack.agentdevicelab` as sufficient unless the README's Metro/dev-build and `snapshot -i` checks prove the expected app surface is running.
 - For Android RN/Expo/dev-client apps connected to any local Metro port, `adb reverse tcp:<port> tcp:<port>` is harmless and should be run before opening the app or URL on the emulator/device.
 - In sandboxed agent environments, run manual `agent-device` CLI verification that starts the daemon outside the sandbox with escalation. The daemon binds localhost, and sandboxed runs can fail before any product code executes with `listen EPERM: operation not permitted 127.0.0.1` or repeated `Failed to start daemon`/metadata cleanup messages. Do not spend time debugging those as agent-device regressions; rerun the same command with escalation. Unit tests, typecheck, lint, and build can stay sandboxed unless they need platform devices or network/listener access.
 

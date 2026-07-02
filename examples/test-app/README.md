@@ -52,7 +52,10 @@ The app declares `@expo/dom-webview` directly to keep Expo's development runtime
 on the SDK 56 native module; Android verification failed when the dev client
 resolved an older transitive copy.
 
-From the repo root:
+### iOS simulator
+
+From the repo root, install dependencies and run the development build on the
+target simulator:
 
 ```bash
 pnpm test-app:install
@@ -63,12 +66,50 @@ pnpm test-app:ios -- --device "iPhone 17 Pro"
 terminal running, then use a separate terminal for `agent-device` or Maestro
 commands.
 
-Or on Android:
+### iOS physical device
+
+Use the physical device name from `agent-device devices --platform ios` or
+`xcrun devicectl list devices`. Keep the `expo run:ios` terminal running so
+Metro stays visible to the development build:
+
+```bash
+pnpm test-app:install
+pnpm test-app:ios -- --device "<physical device name>"
+```
+
+Then verify the installed development build from another terminal with the same
+physical device identifier:
+
+```bash
+agent-device open com.callstack.agentdevicelab --platform ios --udid "<physical udid>" --session test-app-physical
+agent-device snapshot -i --platform ios --udid "<physical udid>" --session test-app-physical
+```
+
+The snapshot should show the `Agent Device Tester` home screen, for example the
+`Agent Device Tester` heading and tab bar. An already installed
+`com.callstack.agentdevicelab` is not enough evidence by itself: confirm Metro
+is running for the development build and verify the visible app surface before
+using the session for manual logs, network, replay, or interaction checks. Close
+the same session when verification is complete:
+
+```bash
+agent-device close --platform ios --udid "<physical udid>" --session test-app-physical
+```
+
+### Android emulator or device
+
+Install dependencies and run the development build on the target Android
+emulator or device:
 
 ```bash
 pnpm test-app:install
 pnpm test-app:android -- --device "$ANDROID_DEVICE"
 ```
+
+For Android app/package launches connected to local Metro, run `adb reverse`
+for the Metro port when needed before opening the app with `agent-device`.
+
+### Running from the app folder
 
 If you prefer to work from inside the app folder:
 
@@ -87,9 +128,11 @@ pnpm android
 ```
 
 After the first native build is installed, use `pnpm test-app:start` when you only
-need to restart Metro for JavaScript or TypeScript changes. Once the app is
-running, use `agent-device` against `Agent Device Tester` like any other target
-app.
+need to restart Metro for JavaScript or TypeScript changes. `test-app:start`
+starts Metro only; it does not build, install, or prove a physical device is
+running the development build. Once the app is running and verified with
+`snapshot -i`, use `agent-device` against `Agent Device Tester` like any other
+target app.
 
 ## Local Agent Device suites
 
