@@ -23,6 +23,7 @@ type DiagnosticsScopeOptions = {
   requestId?: string;
   command?: string;
   debug?: boolean;
+  flushOnSuccess?: boolean;
   logPath?: string;
   traceLogPath?: string;
 };
@@ -172,7 +173,7 @@ export async function withDiagnosticTimer<T>(
 export function flushDiagnosticsToSessionFile(options: { force?: boolean } = {}): string | null {
   const scope = diagnosticsStorage.getStore();
   if (!scope) return null;
-  if (!options.force && !scope.debug) return null;
+  if (!options.force && !scope.debug && !scope.flushOnSuccess) return null;
   if (scope.events.length === 0) return null;
 
   try {

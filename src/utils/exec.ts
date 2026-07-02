@@ -6,7 +6,7 @@ import { spawn, spawnSync, type ChildProcess, type StdioOptions } from 'node:chi
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '../kernel/errors.ts';
-import { emitDiagnostic, getDiagnosticsMeta } from './diagnostics.ts';
+import { emitDiagnostic, getDiagnosticsMeta, updateDiagnosticsScope } from './diagnostics.ts';
 
 export type ExecResult = {
   stdout: string;
@@ -442,6 +442,9 @@ function createExecTraceContext(): { enabled: boolean; startedAtMs?: number } {
   const envTraceEnabled = isTruthyEnvValue(process.env.AGENT_DEVICE_EXEC_TRACE);
   if (!diagnosticsDebugEnabled && !envTraceEnabled) {
     return { enabled: false };
+  }
+  if (envTraceEnabled) {
+    updateDiagnosticsScope({ flushOnSuccess: true });
   }
   return { enabled: true, startedAtMs: Date.now() };
 }
