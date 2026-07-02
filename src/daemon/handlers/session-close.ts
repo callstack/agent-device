@@ -1,4 +1,5 @@
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { scheduleIosRunnerIdleStop } from '../../platforms/apple/core/runner/runner-client.ts';
 import { isApplePlatform, type DeviceInfo } from '../../kernel/device.ts';
 import { dispatchCommand } from '../../core/dispatch.ts';
 import { contextFromFlags } from '../context.ts';
@@ -101,6 +102,9 @@ export async function handleCloseCommand(params: {
           deviceId: session.device.id,
         },
       });
+      // A retained runner holds the device's runner lease against every other
+      // daemon; bound that with an idle stop unless something reuses it first.
+      scheduleIosRunnerIdleStop(session.device.id);
     }
     const runtime = sessionStore.getRuntimeHints(sessionName);
     if (hasRuntimeTransportHints(runtime) && session.appBundleId) {

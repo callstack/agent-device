@@ -187,6 +187,7 @@ export {
 export {
   detachIosSimulatorRunnerSessionsForShutdown,
   getRunnerSessionSnapshot,
+  scheduleIosRunnerIdleStop,
   stopIosRunnerSession,
   abortAllIosRunnerSessions,
   stopAllIosRunnerSessions,

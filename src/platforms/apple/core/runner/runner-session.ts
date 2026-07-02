@@ -68,6 +68,8 @@ export type RunnerSessionOptions = AppleRunnerLifecycleOptions;
 
 const runnerSessions = new Map<string, RunnerSession>();
 const runnerSessionLocks = new Map<string, Promise<unknown>>();
+const runnerIdleStopTimers = new Map<string, NodeJS.Timeout>();
+const RUNNER_RETAINED_IDLE_STOP_DEFAULT_MS = 5 * 60_000;
 const RUNNER_READY_PREFLIGHT_TIMEOUT_MS = 1_000;
 const RUNNER_STALE_BUNDLE_UNINSTALL_TIMEOUT_MS = 10_000;
 const RUNNER_PREFLIGHT_SKIP_FRESHNESS_MS = 5_000;
@@ -101,6 +103,9 @@ export async function ensureRunnerSession(
   device: DeviceInfo,
   options: RunnerSessionOptions,
 ): Promise<RunnerSession> {
+  // Any runner use means the device is active again: a pending idle stop
+  // from a retained-after-close runner no longer applies.
+  cancelIosRunnerIdleStop(device.id);
   return await withRunnerSessionLock(device.id, async () => {
     const existing = runnerSessions.get(device.id);
     if (existing) {
@@ -444,7 +449,63 @@ async function stopRunnerSessionInternal(
   }
 }
 
+// Bounds the lifetime of a runner retained after session close: the retained
+// runner holds the device's runner lease, which blocks every other daemon on
+// the machine from using the device. If nothing touches the runner within the
+// idle window, stop it and release the lease. Any ensureRunnerSession call
+// cancels the pending stop. AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS overrides
+// the window; 0 disables idle stops (retain until daemon exit, the pre-idle
+// behavior).
+export function scheduleIosRunnerIdleStop(deviceId: string): void {
+  cancelIosRunnerIdleStop(deviceId);
+  const idleMs = resolveRunnerIdleStopMs();
+  if (idleMs <= 0) return;
+  if (!runnerSessions.has(deviceId)) return;
+  const timer = setTimeout(() => {
+    runnerIdleStopTimers.delete(deviceId);
+    emitDiagnostic({
+      level: 'info',
+      phase: 'ios_runner_idle_stop',
+      data: { deviceId, idleMs },
+    });
+    stopIosRunnerSession(deviceId).catch((error: unknown) => {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'ios_runner_idle_stop_failed',
+        data: {
+          deviceId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    });
+  }, idleMs);
+  timer.unref?.();
+  runnerIdleStopTimers.set(deviceId, timer);
+  emitDiagnostic({
+    level: 'debug',
+    phase: 'ios_runner_idle_stop_scheduled',
+    data: { deviceId, idleMs },
+  });
+}
+
+export function cancelIosRunnerIdleStop(deviceId: string): void {
+  const timer = runnerIdleStopTimers.get(deviceId);
+  if (!timer) return;
+  clearTimeout(timer);
+  runnerIdleStopTimers.delete(deviceId);
+}
+
+function resolveRunnerIdleStopMs(env: NodeJS.ProcessEnv = process.env): number {
+  const raw = env.AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS?.trim();
+  if (raw) {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed >= 0) return Math.floor(parsed);
+  }
+  return RUNNER_RETAINED_IDLE_STOP_DEFAULT_MS;
+}
+
 export async function stopIosRunnerSession(deviceId: string): Promise<void> {
+  cancelIosRunnerIdleStop(deviceId);
   await withRunnerSessionLock(deviceId, async () => {
     await withRunnerLeaseLock(deviceId, async () => {
       await stopRunnerSessionInternal(deviceId);
@@ -488,6 +549,7 @@ export async function detachIosSimulatorRunnerSessionsForShutdown(): Promise<num
       continue; // Could not mark the handoff; leave it for the kill path.
     }
     runnerSessions.delete(deviceId);
+    cancelIosRunnerIdleStop(deviceId);
     detached += 1;
     emitDiagnostic({
       level: 'info',

@@ -26,6 +26,7 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
     })),
     prewarmAppleRunnerCache: vi.fn(),
     prewarmIosRunnerSession: vi.fn(),
+    scheduleIosRunnerIdleStop: vi.fn(),
     stopIosRunnerSession: vi.fn(async () => {}),
   };
 });
@@ -109,6 +110,7 @@ import {
   prepareIosRunner,
   prewarmAppleRunnerCache,
   prewarmIosRunnerSession,
+  scheduleIosRunnerIdleStop,
   stopIosRunnerSession,
 } from '../../../platforms/apple/core/runner/runner-client.ts';
 import { runMacOsAlertAction } from '../../../platforms/apple/os/macos/helper.ts';
@@ -138,6 +140,7 @@ const mockPrewarmIosRunnerSession = vi.mocked(prewarmIosRunnerSession);
 const mockPrewarmAppleRunnerCache = vi.mocked(prewarmAppleRunnerCache);
 const mockPrepareIosRunner = vi.mocked(prepareIosRunner);
 const mockStopIosRunner = vi.mocked(stopIosRunnerSession);
+const mockScheduleIosRunnerIdleStop = vi.mocked(scheduleIosRunnerIdleStop);
 const mockDismissMacOsAlert = vi.mocked(runMacOsAlertAction);
 const mockSettleSimulator = vi.mocked(settleIosSimulator);
 const mockResolveAndroidPackage = vi.mocked(resolveAndroidPackageForOpen);
@@ -3524,6 +3527,7 @@ test('close on iOS simulator session retains runner and deletes the session', as
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
   expect(mockStopIosRunner).not.toHaveBeenCalled();
+  expect(mockScheduleIosRunnerIdleStop).toHaveBeenCalledWith('sim-1');
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 
