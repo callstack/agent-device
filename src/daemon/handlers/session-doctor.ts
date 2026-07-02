@@ -2,6 +2,8 @@ import path from 'node:path';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import { isIosFamily, publicPlatformString, type DeviceInfo } from '../../kernel/device.ts';
+import { emitRequestProgress } from '../request-progress.ts';
+import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { readVersion } from '../../utils/version.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
@@ -91,6 +93,15 @@ function resolveWarmupSimulator(
 
 function appendIosRunnerWarmupCheck(checks: DoctorCheck[], device: DeviceInfo | undefined): void {
   if (!device || !isIosFamily(device) || device.kind !== 'simulator') return;
+  // The warmup drives local xcodebuild: skip on non-macOS hosts and for
+  // provider-backed devices, whose runner lives with the remote daemon.
+  // (--remote returns before device checks and never reaches here.)
+  if (process.platform !== 'darwin' || isActiveProviderDevice(device)) return;
+  emitRequestProgress({
+    type: 'command',
+    status: 'progress',
+    message: `Checking iOS runner build cache (${device.name})...`,
+  });
   if (hasCachedAppleRunnerArtifact(device)) {
     appendDoctorCheck(checks, {
       id: 'ios-runner-cache',
@@ -100,6 +111,11 @@ function appendIosRunnerWarmupCheck(checks: DoctorCheck[], device: DeviceInfo | 
     return;
   }
   void prewarmAppleRunnerCache(device, {});
+  emitRequestProgress({
+    type: 'command',
+    status: 'progress',
+    message: `Warming iOS runner build cache in the background (${device.name})...`,
+  });
   appendDoctorCheck(checks, {
     id: 'ios-runner-cache',
     status: 'pass',

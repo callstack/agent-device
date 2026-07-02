@@ -4,6 +4,7 @@ import {
   hasCachedAppleRunnerArtifact,
   prewarmAppleRunnerCache,
 } from '../../../platforms/apple/core/runner/runner-client.ts';
+import { isActiveProviderDevice } from '../../../provider-device-runtime.ts';
 import { handleDoctorCommand } from '../session-doctor.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import type { DaemonResponse } from '../../types.ts';
@@ -32,9 +33,23 @@ vi.mock('../session-doctor-android.ts', () => ({
 vi.mock('../session-doctor-metro.ts', () => ({
   probeMetro: vi.fn(async () => ({ id: 'metro', status: 'pass', summary: 'mocked' })),
 }));
+vi.mock('../../../provider-device-runtime.ts', () => ({
+  isActiveProviderDevice: vi.fn(() => false),
+}));
 
 const mockHasCachedArtifact = vi.mocked(hasCachedAppleRunnerArtifact);
 const mockPrewarmCache = vi.mocked(prewarmAppleRunnerCache);
+const mockIsActiveProviderDevice = vi.mocked(isActiveProviderDevice);
+
+async function withMockedPlatform<T>(platform: NodeJS.Platform, fn: () => Promise<T>): Promise<T> {
+  const original = process.platform;
+  Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+  try {
+    return await fn();
+  } finally {
+    Object.defineProperty(process, 'platform', { value: original, configurable: true });
+  }
+}
 
 const IOS_SIMULATOR: DeviceInfo = {
   platform: 'apple',
@@ -49,6 +64,8 @@ beforeEach(() => {
   mockHasCachedArtifact.mockReset();
   mockHasCachedArtifact.mockReturnValue(false);
   mockPrewarmCache.mockReset();
+  mockIsActiveProviderDevice.mockReset();
+  mockIsActiveProviderDevice.mockReturnValue(false);
 });
 
 async function runDoctorWithSessionDevice(device: DeviceInfo): Promise<DaemonResponse | null> {
@@ -79,7 +96,9 @@ function readCheck(response: DaemonResponse | null, id: string): Record<string, 
 }
 
 test('doctor warms the iOS runner cache in the background when the artifact is missing', async () => {
-  const response = await runDoctorWithSessionDevice(IOS_SIMULATOR);
+  const response = await withMockedPlatform('darwin', () =>
+    runDoctorWithSessionDevice(IOS_SIMULATOR),
+  );
 
   expect(response?.ok).toBe(true);
   expect(mockPrewarmCache).toHaveBeenCalledTimes(1);
@@ -91,7 +110,9 @@ test('doctor warms the iOS runner cache in the background when the artifact is m
 test('doctor reports a cached iOS runner artifact without rebuilding', async () => {
   mockHasCachedArtifact.mockReturnValue(true);
 
-  const response = await runDoctorWithSessionDevice(IOS_SIMULATOR);
+  const response = await withMockedPlatform('darwin', () =>
+    runDoctorWithSessionDevice(IOS_SIMULATOR),
+  );
 
   expect(response?.ok).toBe(true);
   expect(mockPrewarmCache).not.toHaveBeenCalled();
@@ -100,11 +121,35 @@ test('doctor reports a cached iOS runner artifact without rebuilding', async () 
 });
 
 test('doctor skips the runner warmup for non-simulator devices', async () => {
-  const response = await runDoctorWithSessionDevice({
-    ...IOS_SIMULATOR,
-    id: 'doctor-device-1',
-    kind: 'device',
-  });
+  const response = await withMockedPlatform('darwin', () =>
+    runDoctorWithSessionDevice({
+      ...IOS_SIMULATOR,
+      id: 'doctor-device-1',
+      kind: 'device',
+    }),
+  );
+
+  expect(response?.ok).toBe(true);
+  expect(mockPrewarmCache).not.toHaveBeenCalled();
+  expect(readCheck(response, 'ios-runner-cache')).toBeNull();
+});
+
+test('doctor skips the runner warmup on non-macOS hosts', async () => {
+  const response = await withMockedPlatform('linux', () =>
+    runDoctorWithSessionDevice(IOS_SIMULATOR),
+  );
+
+  expect(response?.ok).toBe(true);
+  expect(mockPrewarmCache).not.toHaveBeenCalled();
+  expect(readCheck(response, 'ios-runner-cache')).toBeNull();
+});
+
+test('doctor skips the runner warmup for provider-backed devices', async () => {
+  mockIsActiveProviderDevice.mockReturnValue(true);
+
+  const response = await withMockedPlatform('darwin', () =>
+    runDoctorWithSessionDevice(IOS_SIMULATOR),
+  );
 
   expect(response?.ok).toBe(true);
   expect(mockPrewarmCache).not.toHaveBeenCalled();
