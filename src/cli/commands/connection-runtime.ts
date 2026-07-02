@@ -32,6 +32,7 @@ import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { connectionProviderRequiresRemoteDaemon } from '../connection/provider-policy.ts';
 
 const leaseDeferredCommands = new Set([
+  'artifacts',
   'connect',
   'connection',
   'close',

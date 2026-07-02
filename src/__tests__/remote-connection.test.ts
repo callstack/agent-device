@@ -768,6 +768,52 @@ test('proxy install allocates a device lease before dispatch', async () => {
   fs.rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('artifacts command reuses the stored cloud lease without allocating', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-cloud-artifacts-'));
+  const stateDir = path.join(tempRoot, '.state');
+  const remoteConfigPath = path.join(tempRoot, 'remote.json');
+  fs.writeFileSync(remoteConfigPath, JSON.stringify({}));
+  writeRemoteConnectionState({
+    stateDir,
+    state: {
+      version: 1,
+      session: 'adc-cloud',
+      remoteConfigPath,
+      remoteConfigHash: hashRemoteConfigFile(remoteConfigPath),
+      tenant: 'acme',
+      runId: 'run-123',
+      leaseId: 'cloud-lease-1',
+      leaseBackend: 'ios-instance',
+      leaseProvider: 'aws-device-farm',
+      platform: 'ios',
+      connectedAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    },
+  });
+
+  const materialized = await materializeRemoteConnectionForCommand({
+    command: 'artifacts',
+    flags: {
+      json: true,
+      help: false,
+      version: false,
+      stateDir,
+      remoteConfig: remoteConfigPath,
+      tenant: 'acme',
+      runId: 'run-123',
+      session: 'adc-cloud',
+    },
+    client: createTestClient({
+      allocate: unexpectedCommandCall,
+      heartbeat: unexpectedCommandCall,
+    }),
+  });
+
+  assert.equal(materialized.flags.leaseId, 'cloud-lease-1');
+  assert.equal(materialized.connection?.leaseProvider, 'aws-device-farm');
+  fs.rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('proxy commands without active device lease fail before allocation', async () => {
   const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-connect-proxy-closed-'));
   const stateDir = path.join(tempRoot, '.state');

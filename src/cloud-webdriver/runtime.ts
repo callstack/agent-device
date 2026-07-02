@@ -148,6 +148,7 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
   readonly capabilities: CloudWebDriverProviderCapabilities;
 
   private readonly sessionsByLeaseId = new Map<string, WebDriverProviderSession>();
+  private readonly releasedProviderSessionIdsByLeaseId = new Map<string, string>();
   private readonly options: CloudWebDriverRuntimeOptions;
 
   constructor(options: CloudWebDriverRuntimeOptions) {
@@ -275,6 +276,7 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
     const session = this.sessionsByLeaseId.get(lease.leaseId);
     if (!session) return undefined;
     this.sessionsByLeaseId.delete(lease.leaseId);
+    this.releasedProviderSessionIdsByLeaseId.set(lease.leaseId, session.providerSessionId);
     const close = await this.closeSession(session);
     const artifacts = await this.safeListArtifacts(session);
     return {
@@ -292,10 +294,13 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
     if (query.provider !== this.provider) return undefined;
     const session = query.leaseId ? this.sessionsByLeaseId.get(query.leaseId) : undefined;
     if (session) return await this.safeListArtifacts(session);
-    if (!query.providerSessionId || !this.options.listArtifacts) return undefined;
+    const providerSessionId =
+      query.providerSessionId ??
+      (query.leaseId ? this.releasedProviderSessionIdsByLeaseId.get(query.leaseId) : undefined);
+    if (!providerSessionId || !this.options.listArtifacts) return undefined;
     return await this.options.listArtifacts({
       provider: this.provider,
-      providerSessionId: query.providerSessionId,
+      providerSessionId,
     });
   }
 

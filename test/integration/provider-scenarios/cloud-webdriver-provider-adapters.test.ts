@@ -127,6 +127,36 @@ test('AWS Device Farm adapter selects WebDriver endpoint and stops remote access
   });
 }, 15_000);
 
+test('AWS Device Farm adapter lists artifacts for a released lease without a new provider session', async () => {
+  await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
+    const lease = makeLease('aws-device-farm');
+    const client = new FakeAwsDeviceFarmClient(`${server.url}/wd/hub/`);
+    const runtime = createAwsDeviceFarmWebDriverRuntime({
+      client,
+      projectArn: 'arn:aws:devicefarm:us-west-2:123:project/project-id',
+      deviceArn: 'arn:aws:devicefarm:us-west-2::device/device-id',
+      platform: 'android',
+      deviceName: 'Google Pixel 8',
+      pollIntervalMs: 1,
+    });
+    try {
+      await runtime.leaseLifecycle.allocate?.(lease);
+      await runtime.leaseLifecycle.release?.(lease);
+      const artifacts = await runtime.cloudArtifacts?.listCloudArtifacts?.({
+        provider: 'aws-device-farm',
+        leaseId: lease.leaseId,
+      });
+      assert.equal(artifacts?.status, 'ready');
+      assert.equal(artifacts?.cloudArtifacts.length, 3);
+      assert.equal(artifacts?.providerSessionId, client.sessionArn);
+    } finally {
+      await runtime.shutdown();
+    }
+    const createCalls = client.calls.filter((call) => call.startsWith('create:'));
+    assert.equal(createCalls.length, 1);
+  });
+}, 15_000);
+
 test('AWS Device Farm adapter rejects local artifact install until upload support exists', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     await withProviderScenarioTempDir('agent-device-aws-install-unsupported-', async (tempDir) => {

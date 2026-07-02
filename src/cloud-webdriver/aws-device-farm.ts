@@ -130,6 +130,8 @@ export function createAwsDeviceFarmWebDriverRuntime(
         deviceName,
         client,
       }),
+    listArtifacts: async ({ provider, providerSessionId }) =>
+      await listAwsDeviceFarmCloudArtifacts(provider, providerSessionId, client),
     deviceId: options.deviceId,
     requestPolicy: options.requestPolicy,
     capabilityOverrides: AWS_DEVICE_FARM_CAPABILITY_OVERRIDES,
@@ -210,8 +212,6 @@ export function createAwsDeviceFarmPrepareSession(
         await options.client.stopRemoteAccessSession(running.arn);
         return { awsDeviceFarmSessionArn: running.arn };
       },
-      listArtifacts: async ({ provider, providerSessionId }) =>
-        await listAwsDeviceFarmCloudArtifacts(provider, providerSessionId, options.client),
       providerSessionId: running.arn,
       providerData: {
         awsDeviceFarmSessionArn: running.arn,
