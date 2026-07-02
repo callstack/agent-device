@@ -109,7 +109,7 @@ function resolveSessionLogStatus(session: SessionState): SessionLogStatus {
       failureCode: session.appLogFailure.code,
       failureMessage: session.appLogFailure.message,
       hint: session.appLogFailure.hint,
-      notes: [session.appLogFailure.message],
+      notes: [buildAppLogFailureNote(session.appLogFailure)],
     };
   }
   return {
@@ -131,6 +131,10 @@ function buildAppLogFailure(
   };
 }
 
+function buildAppLogFailureNote(failure: AppLogFailure): string {
+  return failure.hint ? `${failure.message} ${failure.hint}` : failure.message;
+}
+
 function buildAppLogStateNotes(state: AppLogState): string[] | undefined {
   if (state === 'failed') {
     return [
@@ -147,11 +151,8 @@ function buildAppLogStateNotes(state: AppLogState): string[] | undefined {
 
 function mergeLogDoctorNotes(
   doctorNotes: string[],
-  status: Pick<SessionLogStatus, 'failureCode' | 'notes'>,
+  status: Pick<SessionLogStatus, 'notes'>,
 ): string[] {
-  if (status.failureCode === 'UNSUPPORTED_OPERATION' && doctorNotes.length > 0) {
-    return uniqueStrings(doctorNotes);
-  }
   return uniqueStrings([...doctorNotes, ...(status.notes ?? [])]);
 }
 
@@ -161,13 +162,9 @@ function buildSessionAppLog(
   appLog: AppLogResult,
 ): NonNullable<SessionState['appLog']> {
   return {
+    ...appLog,
     platform: session.device.platform,
-    backend: appLog.backend,
     outPath,
-    startedAt: appLog.startedAt,
-    getState: appLog.getState,
-    stop: appLog.stop,
-    wait: appLog.wait,
   };
 }
 

@@ -107,7 +107,10 @@ import { LeaseRegistry } from '../../lease-registry.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../types.ts';
 import { AppError } from '../../../kernel/errors.ts';
-import { IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_NOTE } from '../../app-log-ios.ts';
+import {
+  IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED,
+  IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_NOTE,
+} from '../../app-log-ios.ts';
 import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';
 import { ensureDeviceReady } from '../../device-ready.ts';
 import { applyRuntimeHintsToApp, clearRuntimeHintsFromApp } from '../../runtime-hints.ts';
@@ -4533,14 +4536,10 @@ function mockIosDeviceLogBackend(): void {
 
 function mockUnsupportedIosDeviceLogBackend(): void {
   mockStartAppLog.mockRejectedValue(
-    new AppError(
-      'UNSUPPORTED_OPERATION',
-      'iOS physical-device app console capture is not supported by the installed devicectl.',
-      {
-        backend: 'ios-device',
-        hint: 'Use an iOS simulator for agent-device app logs or inspect physical-device logs in Console.app/Xcode.',
-      },
-    ),
+    new AppError('UNSUPPORTED_OPERATION', IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED.message, {
+      backend: 'ios-device',
+      hint: IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED.hint,
+    }),
   );
   mockRunAppLogDoctor.mockResolvedValue({
     checks: { devicectlAvailable: true, devicectlConsoleCapture: false },

@@ -12,18 +12,20 @@ import {
 } from './app-log-process.ts';
 import { attachChildToStream, createLineWriter, waitForChildExit } from './app-log-stream.ts';
 
-const IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_MESSAGE =
-  'iOS physical-device app console capture is not supported by the installed devicectl.';
-const IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_HINT =
-  'This devicectl does not expose process launch --console. Markers can still be written to app.log, but app output is not being captured. Use an iOS simulator for agent-device app logs or inspect physical-device logs in Console.app/Xcode until this Xcode toolchain exposes scriptable console capture.';
-const IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED_MESSAGE =
-  'Could not verify iOS physical-device app console capture support.';
-const IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED_HINT =
-  'Retry logs clear --restart. If the probe keeps failing, run logs doctor and inspect the request diagnostics for the devicectl help command.';
-export const IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_NOTE =
-  'Installed devicectl does not expose scriptable iOS physical-device app console capture. Markers can still be written, but app output is not being captured by agent-device on this toolchain.';
-export const IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED_NOTE =
-  'Could not verify iOS physical-device app console capture support. Retry after devicectl is responsive, then rerun logs doctor.';
+export const IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED = {
+  message: 'iOS physical-device app console capture is not supported by the installed devicectl.',
+  hint: 'This devicectl does not expose process launch --console. Markers can still be written to app.log, but app output is not being captured. Use an iOS simulator for agent-device app logs or inspect physical-device logs in Console.app/Xcode until this Xcode toolchain exposes scriptable console capture.',
+} as const;
+const IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED = {
+  message: 'Could not verify iOS physical-device app console capture support.',
+  hint: 'Retry logs clear --restart. If the probe keeps failing, run logs doctor and inspect the request diagnostics for the devicectl help command.',
+} as const;
+export const IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_NOTE = formatIosDeviceConsoleCaptureNote(
+  IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED,
+);
+export const IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED_NOTE = formatIosDeviceConsoleCaptureNote(
+  IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED,
+);
 
 export type IosDeviceConsoleCaptureSupport =
   | { supported: true; stderr?: string }
@@ -122,6 +124,10 @@ function readIosDeviceConsoleCaptureSupport(result: ExecResult): IosDeviceConsol
     return { supported: false, reason: 'unsupported', stderr };
   }
   return { supported: true, stderr };
+}
+
+function formatIosDeviceConsoleCaptureNote(message: { message: string; hint: string }): string {
+  return `${message.message} ${message.hint}`;
 }
 
 function isIosDeviceConsoleCaptureHelp(stdout: string, stderr: string): boolean {
@@ -280,15 +286,15 @@ function buildIosDeviceConsoleCaptureError(
   support: Extract<IosDeviceConsoleCaptureSupport, { supported: false }>,
 ): AppError {
   if (support.reason === 'probe-failed') {
-    return new AppError('COMMAND_FAILED', IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED_MESSAGE, {
+    return new AppError('COMMAND_FAILED', IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED.message, {
       backend: 'ios-device',
-      hint: IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED_HINT,
+      hint: IOS_DEVICE_CONSOLE_CAPTURE_PROBE_FAILED.hint,
       stderr: support.stderr,
     });
   }
-  return new AppError('UNSUPPORTED_OPERATION', IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_MESSAGE, {
+  return new AppError('UNSUPPORTED_OPERATION', IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED.message, {
     backend: 'ios-device',
-    hint: IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED_HINT,
+    hint: IOS_DEVICE_CONSOLE_CAPTURE_UNSUPPORTED.hint,
     stderr: support.stderr,
   });
 }

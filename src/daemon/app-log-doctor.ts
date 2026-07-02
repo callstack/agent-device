@@ -47,47 +47,40 @@ async function runAndroidAppLogDoctor(
   appBundleId?: string,
 ): Promise<Record<string, boolean>> {
   const checks: Record<string, boolean> = {};
-  try {
+  checks.adbAvailable = await safeCheck(async () => {
     const adb = await runAndroidAdb(device, ['shell', 'echo', 'ok'], {
       allowFailure: true,
       timeoutMs: 1_000,
     });
-    checks.adbAvailable = adb.exitCode === 0;
-  } catch {
-    checks.adbAvailable = false;
-  }
+    return adb.exitCode === 0;
+  });
   if (!appBundleId) return checks;
 
-  try {
+  checks.androidPidVisible = await safeCheck(async () => {
     const pidof = await runAndroidAdb(device, ['shell', 'pidof', appBundleId], {
       allowFailure: true,
       timeoutMs: 1_000,
     });
-    checks.androidPidVisible = pidof.stdout.trim().length > 0;
-  } catch {
-    checks.androidPidVisible = false;
-  }
+    return pidof.stdout.trim().length > 0;
+  });
   return checks;
 }
 
 async function runIosSimulatorAppLogDoctor(): Promise<Record<string, boolean>> {
-  try {
+  const simctlAvailable = await safeCheck(async () => {
     const simctl = await runXcrun(['simctl', 'help'], { allowFailure: true });
-    return { simctlAvailable: simctl.exitCode === 0 };
-  } catch {
-    return { simctlAvailable: false };
-  }
+    return simctl.exitCode === 0;
+  });
+  return { simctlAvailable };
 }
 
 async function runIosDeviceAppLogDoctor(): Promise<AppLogDoctorResult> {
   const checks: Record<string, boolean> = {};
   const notes: string[] = [];
-  try {
+  checks.devicectlAvailable = await safeCheck(async () => {
     const devicectl = await runXcrun(['devicectl', '--version'], { allowFailure: true });
-    checks.devicectlAvailable = devicectl.exitCode === 0;
-  } catch {
-    checks.devicectlAvailable = false;
-  }
+    return devicectl.exitCode === 0;
+  });
   if (!checks.devicectlAvailable) return { checks, notes };
 
   const consoleCapture = await checkIosDeviceConsoleCaptureSupport();
@@ -103,10 +96,17 @@ async function runIosDeviceAppLogDoctor(): Promise<AppLogDoctorResult> {
 }
 
 async function runMacOsAppLogDoctor(): Promise<Record<string, boolean>> {
-  try {
+  const logAvailable = await safeCheck(async () => {
     const log = await runCmd('log', ['help'], { allowFailure: true });
-    return { logAvailable: log.exitCode === 0 };
+    return log.exitCode === 0;
+  });
+  return { logAvailable };
+}
+
+async function safeCheck(check: () => Promise<boolean>): Promise<boolean> {
+  try {
+    return await check();
   } catch {
-    return { logAvailable: false };
+    return false;
   }
 }

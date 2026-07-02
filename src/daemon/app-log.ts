@@ -201,146 +201,102 @@ export function resolveLogBackend(device: DeviceInfo): LogBackend {
 export async function readSessionNetworkCapture(
   params: SessionNetworkCaptureParams,
 ): Promise<SessionNetworkCapture> {
-  const { device, appLogState } = params;
+  const {
+    device,
+    appBundleId,
+    appLogState,
+    appLogStartedAt,
+    appLogPath,
+    maxEntries,
+    include,
+    maxPayloadChars,
+    maxScanLines,
+  } = params;
   const backend = resolveLogBackend(device);
-  let dump = readSessionAppNetworkDump(params, backend);
+  let dump = readRecentNetworkTraffic(appLogPath, {
+    backend,
+    maxEntries,
+    include,
+    maxPayloadChars,
+    maxScanLines,
+  });
   const notes: string[] = [];
 
-  const androidRecovery = await recoverAndroidNetworkDump(params, dump);
+  const androidRecovery = await resolveAndroidNetworkRecoveryContext({
+    device,
+    appBundleId,
+    appLogPath,
+    appLogState,
+  });
   if (androidRecovery) {
-    dump = androidRecovery.dump;
-    notes.push(androidRecovery.note);
+    const recovered = await readRecentAndroidLogcatForPackage(device.id, appBundleId as string);
+    if (recovered) {
+      const recoveredDump = readRecentNetworkTrafficFromText(recovered.text, {
+        path: `${appLogPath} (adb logcat recovery)`,
+        backend: 'android',
+        maxEntries,
+        include,
+        maxPayloadChars,
+        maxScanLines,
+      });
+      if (recoveredDump.entries.length > 0) {
+        dump = mergeNetworkDumps(recoveredDump, dump, maxEntries);
+        notes.push(buildAndroidRecoveryNote(androidRecovery, recovered.recoveredPids));
+      }
+    }
   }
 
-  const iosRecovery = await recoverIosSimulatorNetworkDump(params, dump);
-  if (iosRecovery) {
-    dump = iosRecovery.dump;
-    notes.push(...iosRecovery.notes);
+  const canRecoverIosSimulatorLogShow =
+    isIosFamily(device) && device.kind === 'simulator' && Boolean(appBundleId);
+  if (canRecoverIosSimulatorLogShow && dump.entries.length === 0) {
+    const recovered = await readRecentIosSimulatorNetworkCapture({
+      deviceId: device.id,
+      appBundleId: appBundleId as string,
+      startedAt: appLogStartedAt,
+      simulatorSetPath: device.simulatorSetPath,
+      appLogPath,
+      maxEntries,
+      include,
+      maxPayloadChars,
+      maxScanLines,
+    });
+    if (recovered) {
+      if (recovered.dump.entries.length > 0) {
+        dump = mergeNetworkDumps(recovered.dump, dump, maxEntries);
+        notes.push(
+          `Recovered ${recovered.dump.entries.length} iOS simulator HTTP entr${
+            recovered.dump.entries.length === 1 ? 'y' : 'ies'
+          } from simctl log show (${recovered.recoveredLineCount} app log lines scanned).`,
+        );
+      } else if (recovered.recoveredLineCount > 0) {
+        notes.push(
+          `Recovered ${recovered.recoveredLineCount} recent iOS simulator app log lines from simctl log show, but none looked like HTTP traffic. This app may not emit request URLs, status, or timing into Unified Logging for this repro window.`,
+        );
+      }
+    }
   }
 
-  notes.push(...buildAppLogStateNotes(device, appLogState, notes.length > 0));
+  if (appLogState === undefined) {
+    notes.push(
+      'Capture uses the session app log file. For fresh traffic, run logs clear --restart before reproducing requests.',
+    );
+  } else if (appLogState !== 'active' && notes.length === 0) {
+    if (isIosFamily(device) && device.kind === 'simulator') {
+      notes.push(
+        'Session app log stream is inactive. The iOS simulator recovery path scanned recent simctl log history, but a fresh logs clear --restart window is still the most reliable repro loop.',
+      );
+    } else {
+      notes.push(
+        'Session app log stream is inactive. Run logs clear --restart, reproduce the request window again, then rerun network dump.',
+      );
+    }
+  }
 
   if (dump.entries.length === 0) {
     notes.push(buildNoHttpEntriesNote(device));
   }
 
   return { backend, dump, notes };
-}
-
-function readSessionAppNetworkDump(
-  params: SessionNetworkCaptureParams,
-  backend: LogBackend,
-): NetworkDump {
-  return readRecentNetworkTraffic(params.appLogPath, {
-    backend,
-    maxEntries: params.maxEntries,
-    include: params.include,
-    maxPayloadChars: params.maxPayloadChars,
-    maxScanLines: params.maxScanLines,
-  });
-}
-
-async function recoverAndroidNetworkDump(
-  params: SessionNetworkCaptureParams,
-  currentDump: NetworkDump,
-): Promise<{ dump: NetworkDump; note: string } | null> {
-  const recovery = await resolveAndroidNetworkRecoveryContext(params);
-  if (!recovery || !params.appBundleId) return null;
-
-  const recovered = await readRecentAndroidLogcatForPackage(params.device.id, params.appBundleId);
-  if (!recovered) return null;
-
-  const recoveredDump = readRecentNetworkTrafficFromText(recovered.text, {
-    path: `${params.appLogPath} (adb logcat recovery)`,
-    backend: 'android',
-    maxEntries: params.maxEntries,
-    include: params.include,
-    maxPayloadChars: params.maxPayloadChars,
-    maxScanLines: params.maxScanLines,
-  });
-  if (recoveredDump.entries.length === 0) return null;
-
-  return {
-    dump: mergeNetworkDumps(recoveredDump, currentDump, params.maxEntries),
-    note: buildAndroidRecoveryNote(recovery, recovered.recoveredPids),
-  };
-}
-
-async function recoverIosSimulatorNetworkDump(
-  params: SessionNetworkCaptureParams,
-  currentDump: NetworkDump,
-): Promise<{ dump: NetworkDump; notes: string[] } | null> {
-  if (!canRecoverIosSimulatorLogShow(params, currentDump)) return null;
-
-  const recovered = await readRecentIosSimulatorNetworkCapture({
-    deviceId: params.device.id,
-    appBundleId: params.appBundleId as string,
-    startedAt: params.appLogStartedAt,
-    simulatorSetPath: params.device.simulatorSetPath,
-    appLogPath: params.appLogPath,
-    maxEntries: params.maxEntries,
-    include: params.include,
-    maxPayloadChars: params.maxPayloadChars,
-    maxScanLines: params.maxScanLines,
-  });
-  if (!recovered) return null;
-
-  return {
-    dump:
-      recovered.dump.entries.length > 0
-        ? mergeNetworkDumps(recovered.dump, currentDump, params.maxEntries)
-        : currentDump,
-    notes: buildIosSimulatorRecoveryNotes(recovered),
-  };
-}
-
-function canRecoverIosSimulatorLogShow(
-  params: SessionNetworkCaptureParams,
-  dump: NetworkDump,
-): boolean {
-  return (
-    isIosFamily(params.device) &&
-    params.device.kind === 'simulator' &&
-    Boolean(params.appBundleId) &&
-    dump.entries.length === 0
-  );
-}
-
-function buildIosSimulatorRecoveryNotes(recovered: IosSimulatorNetworkRecovery): string[] {
-  if (recovered.dump.entries.length > 0) {
-    return [
-      `Recovered ${recovered.dump.entries.length} iOS simulator HTTP entr${
-        recovered.dump.entries.length === 1 ? 'y' : 'ies'
-      } from simctl log show (${recovered.recoveredLineCount} app log lines scanned).`,
-    ];
-  }
-  if (recovered.recoveredLineCount > 0) {
-    return [
-      `Recovered ${recovered.recoveredLineCount} recent iOS simulator app log lines from simctl log show, but none looked like HTTP traffic. This app may not emit request URLs, status, or timing into Unified Logging for this repro window.`,
-    ];
-  }
-  return [];
-}
-
-function buildAppLogStateNotes(
-  device: DeviceInfo,
-  appLogState: AppLogState | undefined,
-  alreadyRecovered: boolean,
-): string[] {
-  if (appLogState === undefined) {
-    return [
-      'Capture uses the session app log file. For fresh traffic, run logs clear --restart before reproducing requests.',
-    ];
-  }
-  if (appLogState === 'active' || alreadyRecovered) return [];
-  if (isIosFamily(device) && device.kind === 'simulator') {
-    return [
-      'Session app log stream is inactive. The iOS simulator recovery path scanned recent simctl log history, but a fresh logs clear --restart window is still the most reliable repro loop.',
-    ];
-  }
-  return [
-    'Session app log stream is inactive. Run logs clear --restart, reproduce the request window again, then rerun network dump.',
-  ];
 }
 
 async function resolveAndroidNetworkRecoveryContext(params: {
