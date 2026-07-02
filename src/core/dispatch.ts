@@ -304,6 +304,7 @@ async function handleOpenCommand(
     appBundleId: context?.appBundleId,
     launchConsole,
     launchArgs,
+    terminateRunningApp: context?.terminateRunningApp,
   });
   return { app, ...(launchConsole ? { launchConsole } : {}), ...successText(`Opened: ${app}`) };
 }

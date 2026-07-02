@@ -3238,7 +3238,7 @@ test('open --relaunch on iOS stops runner before close/open', async () => {
   expect(calls).toEqual(['stop-runner', 'close:com.example.app', 'open:com.example.app']);
 });
 
-test('open --relaunch on iOS simulator keeps runner hot across close/open', async () => {
+test('open --relaunch on iOS simulator collapses into one terminate-running open dispatch', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-simulator-session';
   sessionStore.set(sessionName, {
@@ -3263,8 +3263,10 @@ test('open --relaunch on iOS simulator keeps runner hot across close/open', asyn
   mockStopIosRunner.mockImplementation(async () => {
     calls.push('stop-runner');
   });
-  mockDispatch.mockImplementation(async (_device, command, positionals) => {
+  let openContext: Record<string, unknown> | undefined;
+  mockDispatch.mockImplementation(async (_device, command, positionals, _out, context) => {
     calls.push(`${command}:${positionals.join(' ')}`);
+    if (command === 'open') openContext = context as Record<string, unknown>;
     return {};
   });
 
@@ -3284,7 +3286,57 @@ test('open --relaunch on iOS simulator keeps runner hot across close/open', asyn
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
+  expect(calls).toEqual(['open:com.example.app']);
+  expect(openContext?.terminateRunningApp).toBe(true);
+});
+
+test('open --relaunch --clear-app-state on iOS simulator keeps close-first ordering', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-simulator-clear-state-session';
+  sessionStore.set(sessionName, {
+    ...makeSession(sessionName, {
+      platform: 'apple',
+      id: 'sim-1',
+      name: 'iPhone 17 Pro',
+      kind: 'simulator',
+      booted: true,
+    }),
+    appName: 'com.example.app',
+  });
+
+  const calls: string[] = [];
+  mockResolveTargetDevice.mockResolvedValue({
+    platform: 'apple',
+    id: 'sim-1',
+    name: 'iPhone 17 Pro',
+    kind: 'simulator',
+    booted: true,
+  });
+  let openContext: Record<string, unknown> | undefined;
+  mockDispatch.mockImplementation(async (_device, command, positionals, _out, context) => {
+    calls.push(`${command}:${positionals.join(' ')}`);
+    if (command === 'open') openContext = context as Record<string, unknown>;
+    return {};
+  });
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'open',
+      positionals: [],
+      flags: { relaunch: true, clearAppState: true },
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response).toBeTruthy();
+  expect(response?.ok).toBe(true);
   expect(calls).toEqual(['close:com.example.app', 'open:com.example.app']);
+  expect(openContext?.terminateRunningApp).toBeUndefined();
 });
 
 test('open --relaunch includes timing and waits for iOS runner prewarm after opening app', async () => {
@@ -3395,7 +3447,7 @@ test('open --relaunch on iOS without existing session closes then opens target a
   expect(calls).toEqual(['stop-runner', 'close:com.example.app', 'open:com.example.app']);
 });
 
-test('open --relaunch on iOS simulator reaches settle path for close and open', async () => {
+test('open --relaunch on iOS simulator settles once after the collapsed open', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-session';
   sessionStore.set(sessionName, {
@@ -3437,9 +3489,8 @@ test('open --relaunch on iOS simulator reaches settle path for close and open', 
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
-  expect(settleCalls.length).toBe(2);
-  expect(settleCalls[0]).toEqual({ deviceId: 'sim-1', delayMs: 300 });
-  expect(settleCalls[1]).toEqual({ deviceId: 'sim-1', delayMs: 300 });
+  // Collapsed simulator relaunch skips the post-close settle: one settle after open.
+  expect(settleCalls).toEqual([{ deviceId: 'sim-1', delayMs: 300 }]);
 });
 
 test('close on macOS session stops runner and dismisses automation alert before delete', async () => {

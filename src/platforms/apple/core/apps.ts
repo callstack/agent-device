@@ -186,7 +186,13 @@ function parseUrlScheme(url: string): string | undefined {
 export async function openIosApp(
   device: DeviceInfo,
   app: string,
-  options?: { appBundleId?: string; launchConsole?: string; launchArgs?: string[]; url?: string },
+  options?: {
+    appBundleId?: string;
+    launchConsole?: string;
+    launchArgs?: string[];
+    terminateRunningApp?: boolean;
+    url?: string;
+  },
 ): Promise<void> {
   const launchConsole = options?.launchConsole?.trim();
   const launchArgs = options?.launchArgs;
@@ -258,6 +264,7 @@ export async function openIosApp(
     await launchIosSimulatorApp(device, bundleId, {
       ...(launchConsole ? { launchConsole } : {}),
       ...(launchArgs ? { launchArgs } : {}),
+      ...(options?.terminateRunningApp ? { terminateRunningApp: true } : {}),
     });
     return;
   }
@@ -1112,7 +1119,7 @@ function isIosBiometricCapabilityMissing(stdout: string, stderr: string): boolea
 async function launchIosSimulatorApp(
   device: DeviceInfo,
   bundleId: string,
-  options?: { launchConsole?: string; launchArgs?: string[] },
+  options?: { launchConsole?: string; launchArgs?: string[]; terminateRunningApp?: boolean },
 ): Promise<void> {
   await ensureBootedSimulator(device);
 
@@ -1175,10 +1182,11 @@ async function launchIosSimulatorApp(
 function buildIosSimulatorLaunchArgs(
   deviceId: string,
   bundleId: string,
-  options?: { launchConsole?: string; launchArgs?: string[] },
+  options?: { launchConsole?: string; launchArgs?: string[]; terminateRunningApp?: boolean },
 ): string[] {
   const args = ['launch'];
   if (options?.launchConsole) args.push('--console-pty');
+  if (options?.terminateRunningApp) args.push('--terminate-running-process');
   args.push(deviceId, bundleId);
   if (options?.launchArgs && options.launchArgs.length > 0) {
     args.push(...options.launchArgs);

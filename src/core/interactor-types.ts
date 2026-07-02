@@ -74,6 +74,7 @@ export type Interactor = {
       appBundleId?: string;
       launchConsole?: string;
       launchArgs?: string[];
+      terminateRunningApp?: boolean;
       url?: string;
     },
   ): Promise<void>;
