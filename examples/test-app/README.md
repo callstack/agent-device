@@ -134,6 +134,39 @@ running the development build. Once the app is running and verified with
 `snapshot -i`, use `agent-device` against `Agent Device Tester` like any other
 target app.
 
+### Non-default Metro ports
+
+If the default Metro port is already in use, start Metro on another port. Do not
+reinstall the native development build just to change the JavaScript server port:
+
+```bash
+pnpm test-app:start -- --port 8082
+```
+
+If you are building and installing for the first time in that terminal, Expo's
+`run:ios` and `run:android` commands also accept `--port`:
+
+```bash
+pnpm test-app:ios -- --device "<device name>" --port 8082
+pnpm test-app:android -- --device "$ANDROID_DEVICE" --port 8082
+```
+
+After the development build is installed, keep using the same native app. The
+current `agent-device open` CLI does not accept `--metro-host` or `--metro-port`;
+open the app normally, then use the Metro command surface for Metro-specific
+actions:
+
+```bash
+agent-device metro prepare --project-root examples/test-app --kind expo --port 8082 --public-base-url http://127.0.0.1:8082
+agent-device metro reload --metro-host 127.0.0.1 --metro-port 8082
+```
+
+Use `metro prepare` when you want `agent-device` to start or reuse Metro and
+print the runtime URLs. Use `metro reload` when Metro is already running and the
+installed development build is connected to that server. For Android local
+device/emulator runs, also run `adb reverse tcp:8082 tcp:8082` when the device
+needs host port forwarding.
+
 ## Local Agent Device suites
 
 The repo includes two local suites for iterating on the fixture app:
