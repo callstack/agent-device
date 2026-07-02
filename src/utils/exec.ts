@@ -6,6 +6,7 @@ import { spawn, spawnSync, type ChildProcess, type StdioOptions } from 'node:chi
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '../kernel/errors.ts';
+import { emitDiagnostic, getDiagnosticsMeta } from './diagnostics.ts';
 
 export type ExecResult = {
   stdout: string;
@@ -65,6 +66,7 @@ export type ExecBackgroundOptions = ExecOptions & {
 
 const BARE_COMMAND_RE = /^[A-Za-z0-9][A-Za-z0-9._+-]*$/;
 const WINDOWS_PATH_EXTENSIONS = ['.com', '.exe', '.bat', '.cmd'];
+const EXEC_DIAGNOSTIC_ARG_LIMIT = 6;
 export type CommandExecutorOverride = (
   cmd: string,
   args: string[],
@@ -112,6 +114,7 @@ function runSpawnedCommand(
   options: ExecStreamOptions = {},
 ): Promise<ExecResult> {
   const executable = normalizeExecutableCommand(cmd);
+  const execTrace = createExecTraceContext();
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, {
       cwd: options.cwd,
@@ -127,6 +130,7 @@ function runSpawnedCommand(
     const stdoutChunks: Buffer[] | undefined = options.binaryStdout ? [] : undefined;
     let stderr = '';
     let didTimeout = false;
+    let didEmitExecDiagnostic = false;
     const timeoutMs = normalizeTimeoutMs(options.timeoutMs);
     const timeoutHandle = timeoutMs
       ? setTimeout(() => {
@@ -165,12 +169,22 @@ function runSpawnedCommand(
     child.on('error', (err) => {
       if (timeoutHandle) clearTimeout(timeoutHandle);
       abort.dispose();
+      emitExecCommandDiagnostic(execTrace, cmd, args, () => {
+        if (didEmitExecDiagnostic) return false;
+        didEmitExecDiagnostic = true;
+        return true;
+      });
       reject(spawnRejectionError(abort, executable, cmd, args, err));
     });
 
     child.on('close', (code) => {
       if (timeoutHandle) clearTimeout(timeoutHandle);
       abort.dispose();
+      emitExecCommandDiagnostic(execTrace, cmd, args, () => {
+        if (didEmitExecDiagnostic) return false;
+        didEmitExecDiagnostic = true;
+        return true;
+      });
       const exitCode = code ?? 1;
       if (!abort.didAbort && didTimeout && timeoutMs) {
         reject(createTimeoutError(executable, cmd, args, timeoutMs, exitCode, stdout, stderr));
@@ -356,6 +370,7 @@ export function runCmdBackground(
   options: ExecBackgroundOptions = {},
 ): ExecBackgroundResult {
   const executable = normalizeExecutableCommand(cmd);
+  const execTrace = createExecTraceContext();
   const child = spawn(executable, args, {
     cwd: options.cwd,
     env: options.env,
@@ -369,6 +384,7 @@ export function runCmdBackground(
   let stderr = '';
   const captureOutput = options.captureOutput ?? true;
   const abort = watchCommandAbort(child, options);
+  let didEmitExecDiagnostic = false;
 
   if (captureOutput) {
     child.stdout?.setEncoding('utf8');
@@ -385,10 +401,20 @@ export function runCmdBackground(
   const wait = new Promise<ExecResult>((resolve, reject) => {
     child.on('error', (err) => {
       abort.dispose();
+      emitExecCommandDiagnostic(execTrace, cmd, args, () => {
+        if (didEmitExecDiagnostic) return false;
+        didEmitExecDiagnostic = true;
+        return true;
+      });
       reject(spawnRejectionError(abort, executable, cmd, args, err));
     });
     child.on('close', (code) => {
       abort.dispose();
+      emitExecCommandDiagnostic(execTrace, cmd, args, () => {
+        if (didEmitExecDiagnostic) return false;
+        didEmitExecDiagnostic = true;
+        return true;
+      });
       const exitCode = code ?? 1;
       const failure = commandCloseFailure(
         abort,
@@ -409,6 +435,37 @@ export function runCmdBackground(
   });
 
   return { child, wait };
+}
+
+function createExecTraceContext(): { enabled: boolean; startedAtMs?: number } {
+  const diagnosticsDebugEnabled = getDiagnosticsMeta().debug === true;
+  const envTraceEnabled = isTruthyEnvValue(process.env.AGENT_DEVICE_EXEC_TRACE);
+  if (!diagnosticsDebugEnabled && !envTraceEnabled) {
+    return { enabled: false };
+  }
+  return { enabled: true, startedAtMs: Date.now() };
+}
+
+function emitExecCommandDiagnostic(
+  context: { enabled: boolean; startedAtMs?: number },
+  cmd: string,
+  args: string[],
+  markEmitted: () => boolean,
+): void {
+  if (!context.enabled || context.startedAtMs === undefined || !markEmitted()) return;
+  const argsPrefix = args.slice(0, EXEC_DIAGNOSTIC_ARG_LIMIT);
+  emitDiagnostic({
+    level: 'debug',
+    phase: 'exec_command',
+    durationMs: Math.max(0, Date.now() - context.startedAtMs),
+    data: {
+      command: cmd,
+      argsPrefix,
+      ...(args.length > argsPrefix.length
+        ? { omittedArgCount: args.length - argsPrefix.length }
+        : {}),
+    },
+  });
 }
 
 function normalizeExecutableCommand(cmd: string): string {
@@ -660,4 +717,8 @@ function isEpipeError(error: unknown): boolean {
   return (
     error instanceof Error && 'code' in error && (error as NodeJS.ErrnoException).code === 'EPIPE'
   );
+}
+
+function isTruthyEnvValue(value: string | undefined): boolean {
+  return ['1', 'true', 'yes', 'on'].includes((value ?? '').trim().toLowerCase());
 }

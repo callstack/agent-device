@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../diagnostics.ts';
 import {
   runCmd,
   runCmdBackground,
@@ -52,6 +53,34 @@ test('runCmd abort keeps cancellation details while writing stdin', async () => 
   await assertRejectsRequestCanceled(promise);
 });
 
+test('runCmd emits exec_command diagnostics when the scope is debug-enabled', async () => {
+  const logPath = path.join(
+    fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-exec-debug-')),
+    'diag.ndjson',
+  );
+  const diagnosticsPath = await withDiagnosticsScope(
+    {
+      session: 'exec-debug',
+      requestId: 'exec-debug-1',
+      command: 'debug',
+      debug: true,
+      logPath,
+    },
+    async () => {
+      await runCmd(process.execPath, ['-e', 'process.stdout.write("ok")']);
+      return flushDiagnosticsToSessionFile({ force: true });
+    },
+  );
+
+  const execEvent = readExecDiagnosticEvent(diagnosticsPath);
+  assert.equal(execEvent?.level, 'debug');
+  assert.equal(execEvent?.phase, 'exec_command');
+  assert.equal(execEvent?.data?.command, process.execPath);
+  assert.deepEqual(execEvent?.data?.argsPrefix, ['-e', 'process.stdout.write("ok")']);
+  assert.equal(execEvent?.data?.omittedArgCount, undefined);
+  assert.equal(typeof execEvent?.durationMs, 'number');
+});
+
 test('runCmd writes stdin through pipeline', async () => {
   const stdin = Buffer.alloc(256_000, 'a');
   const result = await runCmd(
@@ -68,6 +97,54 @@ test('runCmd writes stdin through pipeline', async () => {
   );
 
   assert.equal(result.stdout, String(stdin.length));
+});
+
+test.sequential('runCmdBackground emits bounded exec_command diagnostics when AGENT_DEVICE_EXEC_TRACE is enabled', async () => {
+  const previousTraceEnv = process.env.AGENT_DEVICE_EXEC_TRACE;
+  process.env.AGENT_DEVICE_EXEC_TRACE = '1';
+
+  try {
+    const diagnosticsPath = await withDiagnosticsScope(
+      {
+        session: 'exec-trace',
+        requestId: 'exec-trace-1',
+        command: 'background',
+      },
+      async () => {
+        const { wait } = runCmdBackground(process.execPath, [
+          '-e',
+          'process.stdout.write("ok")',
+          'a',
+          'b',
+          'c',
+          'd',
+          'e',
+          'f',
+        ]);
+        await wait;
+        return flushDiagnosticsToSessionFile({ force: true });
+      },
+    );
+
+    const execEvent = readExecDiagnosticEvent(diagnosticsPath);
+    assert.equal(execEvent?.phase, 'exec_command');
+    assert.equal(execEvent?.data?.command, process.execPath);
+    assert.deepEqual(execEvent?.data?.argsPrefix, [
+      '-e',
+      'process.stdout.write("ok")',
+      'a',
+      'b',
+      'c',
+      'd',
+    ]);
+    assert.equal(execEvent?.data?.omittedArgCount, 2);
+  } finally {
+    if (previousTraceEnv === undefined) {
+      delete process.env.AGENT_DEVICE_EXEC_TRACE;
+    } else {
+      process.env.AGENT_DEVICE_EXEC_TRACE = previousTraceEnv;
+    }
+  }
 });
 
 test('runCmdBackground can leave output streams to the caller', async () => {
@@ -93,6 +170,31 @@ test('runCmdBackground can leave output streams to the caller', async () => {
   assert.equal(result.stderr, '');
   assert.equal(stdout, 'out');
   assert.equal(stderr, 'err');
+});
+
+test.sequential('runCmd stays silent when exec tracing is not enabled', async () => {
+  const previousTraceEnv = process.env.AGENT_DEVICE_EXEC_TRACE;
+  delete process.env.AGENT_DEVICE_EXEC_TRACE;
+
+  try {
+    const diagnosticsPath = await withDiagnosticsScope(
+      {
+        session: 'exec-silent',
+        requestId: 'exec-silent-1',
+        command: 'home',
+      },
+      async () => {
+        await runCmd(process.execPath, ['-e', 'process.stdout.write("ok")']);
+        return flushDiagnosticsToSessionFile({ force: true });
+      },
+    );
+
+    assert.equal(diagnosticsPath, null);
+  } finally {
+    if (previousTraceEnv !== undefined) {
+      process.env.AGENT_DEVICE_EXEC_TRACE = previousTraceEnv;
+    }
+  }
 });
 
 test('runCmdBackground aborts with request cancellation details', async () => {
@@ -209,3 +311,29 @@ test.sequential('whichCmd ignores directories that match a command name in PATH'
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
+
+function readExecDiagnosticEvent(diagnosticsPath: string | null): {
+  level?: string;
+  phase?: string;
+  durationMs?: number;
+  data?: Record<string, unknown>;
+} | null {
+  if (!diagnosticsPath) return null;
+  const rows = fs
+    .readFileSync(diagnosticsPath, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line) as { phase?: string });
+  return (
+    rows.find(
+      (
+        row,
+      ): row is {
+        level?: string;
+        phase?: string;
+        durationMs?: number;
+        data?: Record<string, unknown>;
+      } => row.phase === 'exec_command',
+    ) ?? null
+  );
+}
