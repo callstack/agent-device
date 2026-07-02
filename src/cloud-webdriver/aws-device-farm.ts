@@ -3,7 +3,7 @@ import {
   type CloudWebDriverCapabilityOverrides,
   type CloudWebDriverProviderCapabilities,
 } from './capabilities.ts';
-import { createCloudWebDriverRuntime } from './runtime.ts';
+import { buildCloudWebDriverBaseCapabilities, createCloudWebDriverRuntime } from './runtime.ts';
 import {
   listAwsDeviceFarmCloudArtifacts,
   readAwsArtifacts,
@@ -201,11 +201,21 @@ export function createAwsDeviceFarmPrepareSession(
         status: running.status,
       });
     }
+    const deviceName = running.device?.name ?? options.deviceName;
+    const configured =
+      typeof options.webdriverCapabilities === 'function'
+        ? options.webdriverCapabilities(lease)
+        : (options.webdriverCapabilities ?? {});
     return {
       ...base,
       endpoint,
       platform: options.platform,
-      deviceName: running.device?.name ?? options.deviceName,
+      deviceName,
+      webdriverCapabilities: buildCloudWebDriverBaseCapabilities(
+        options.platform,
+        deviceName,
+        configured,
+      ),
       cleanup: async () => {
         await options.client.stopRemoteAccessSession(running.arn);
         return { awsDeviceFarmSessionArn: running.arn };

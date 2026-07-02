@@ -127,6 +127,40 @@ test('AWS Device Farm adapter selects WebDriver endpoint and stops remote access
   });
 }, 15_000);
 
+test('AWS Device Farm adapter sends the requested platform in WebDriver capabilities', async () => {
+  await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
+    const lease = makeLease('aws-device-farm');
+    const client = new FakeAwsDeviceFarmClient(`${server.url}/wd/hub/`, {
+      name: 'Apple iPhone 13',
+      platform: 'IOS',
+      os: '16.0.2',
+    });
+    const runtime = createAwsDeviceFarmWebDriverRuntime({
+      client,
+      projectArn: 'arn:aws:devicefarm:us-west-2:123:project/project-id',
+      deviceArn: 'arn:aws:devicefarm:us-west-2::device/device-id',
+      platform: 'ios',
+      deviceName: 'AWS Device Farm device',
+      pollIntervalMs: 1,
+    });
+    try {
+      await runtime.leaseLifecycle.allocate?.(lease);
+    } finally {
+      await runtime.leaseLifecycle.release?.(lease);
+      await runtime.shutdown();
+    }
+    assert.equal(server.calls[0]?.path, '/wd/hub/session');
+    assert.deepEqual(server.calls[0]?.body, {
+      capabilities: {
+        alwaysMatch: {
+          platformName: 'iOS',
+          'appium:deviceName': 'Apple iPhone 13',
+        },
+      },
+    });
+  });
+}, 15_000);
+
 test('AWS Device Farm adapter rejects local artifact install until upload support exists', async () => {
   await withProviderScenarioResource(FakeCloudProviderServer.start, async (server) => {
     await withProviderScenarioTempDir('agent-device-aws-install-unsupported-', async (tempDir) => {
@@ -377,9 +411,18 @@ class FakeAwsDeviceFarmClient implements AwsDeviceFarmClient {
   readonly sessionArn = 'arn:aws:devicefarm:session/fake';
   readonly calls: string[] = [];
   private readonly webDriverEndpoint: string;
+  private readonly device: { name: string; platform: string; os: string };
 
-  constructor(webDriverEndpoint: string) {
+  constructor(
+    webDriverEndpoint: string,
+    device: { name: string; platform: string; os: string } = {
+      name: 'Google Pixel 8',
+      platform: 'ANDROID',
+      os: '14',
+    },
+  ) {
     this.webDriverEndpoint = webDriverEndpoint;
+    this.device = device;
   }
 
   async createRemoteAccessSession(input: { name: string }) {
@@ -396,11 +439,7 @@ class FakeAwsDeviceFarmClient implements AwsDeviceFarmClient {
       endpoints: {
         appium: this.webDriverEndpoint,
       },
-      device: {
-        name: 'Google Pixel 8',
-        platform: 'ANDROID',
-        os: '14',
-      },
+      device: this.device,
     };
   }
 
