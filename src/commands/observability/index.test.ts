@@ -80,9 +80,17 @@ describe('observability command interface', () => {
       limit: 25,
       cursor: '100',
     });
+    expect(eventsCliReader(['', '100'], NO_FLAGS)).toEqual({
+      limit: undefined,
+      cursor: '100',
+    });
     expect(eventsDaemonWriter({ limit: 25, cursor: '100' })).toMatchObject({
       command: 'events',
       positionals: ['25', '100'],
+    });
+    expect(eventsDaemonWriter({ cursor: '100' })).toMatchObject({
+      command: 'events',
+      positionals: ['', '100'],
     });
   });
 

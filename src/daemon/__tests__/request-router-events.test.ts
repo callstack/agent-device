@@ -47,6 +47,49 @@ test('events reads the daemon-owned session timeline without appending poll nois
   expect(fs.readFileSync(eventLogPath, 'utf8').trim().split('\n')).toHaveLength(1);
 });
 
+test('events accepts a blank limit placeholder for cursor-only reads', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-events-cursor-');
+  sessionStore.recordEvent('events-session', {
+    kind: 'action.recorded',
+    command: 'open',
+    summary: 'Opened session',
+  });
+  sessionStore.recordEvent('events-session', {
+    kind: 'action.recorded',
+    command: 'click',
+    summary: 'Tapped @14',
+  });
+
+  const handler = createRequestHandler({
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'events-session',
+    command: 'events',
+    positionals: ['', '1'],
+    flags: {},
+    meta: { requestId: 'req-events-cursor' },
+  });
+
+  expect(response.ok).toBe(true);
+  if (!response.ok) return;
+  expect(response.data?.cursor).toBe('1');
+  expect(response.data?.limit).toBe(100);
+  expect(response.data?.events).toEqual([
+    expect.objectContaining({
+      kind: 'action.recorded',
+      command: 'click',
+      summary: 'Tapped @14',
+    }),
+  ]);
+});
+
 test('request timeline records thrown request failures after scope creation', async () => {
   const sessionStore = makeSessionStore('agent-device-router-events-throws-');
   sessionStore.set('events-session', makeIosSession('events-session'));

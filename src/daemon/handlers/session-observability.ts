@@ -221,7 +221,7 @@ function handleEventsCommand(params: ObservabilityParams): DaemonResponse {
 }
 
 function readOptionalEventLimit(value: string | undefined): number | undefined | AppError {
-  if (value === undefined) return undefined;
+  if (value === undefined || value.trim() === '') return undefined;
   const parsed = Number(value);
   if (Number.isInteger(parsed)) return parsed;
   return new AppError('INVALID_ARGS', 'events limit must be an integer.');

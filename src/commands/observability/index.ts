@@ -144,7 +144,7 @@ export const logsCliReader: CliReader = (positionals, flags) => ({
 
 export const eventsCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
-  limit: optionalCliNumber(positionals[0]),
+  limit: optionalEventsLimit(positionals[0]),
   cursor: positionals[1],
 });
 
@@ -229,11 +229,16 @@ function logsPositionals(input: { action?: string; message?: string }): string[]
 }
 
 function eventsPositionals(input: EventsOptions): string[] {
-  return [...optionalNumber(input.limit), ...optionalString(input.cursor)];
+  if (input.cursor === undefined) return optionalNumber(input.limit);
+  return [input.limit === undefined ? '' : String(input.limit), input.cursor];
 }
 
 function networkPositionals(input: NetworkOptions): string[] {
   return [...(input.action ? [input.action] : []), ...optionalNumber(input.limit)];
+}
+
+function optionalEventsLimit(value: string | undefined): number | undefined {
+  return value === undefined || value.trim() === '' ? undefined : optionalCliNumber(value);
 }
 
 function audioPositionals(input: AudioOptions): string[] {

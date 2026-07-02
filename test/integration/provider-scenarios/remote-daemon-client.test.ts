@@ -325,6 +325,10 @@ function writeRemoteSuccess(
 }
 
 function writeEventsSuccess(res: http.ServerResponse, payload: RemoteRpcRequest): void {
+  const positionals = payload.params?.positionals ?? [];
+  const limitArg = typeof positionals[0] === 'string' ? positionals[0] : undefined;
+  const cursorArg = typeof positionals[1] === 'string' ? positionals[1] : undefined;
+  const limit = limitArg === undefined || limitArg.trim() === '' ? 100 : Number(limitArg);
   writeJson(res, 200, {
     jsonrpc: '2.0',
     id: payload.id,
@@ -332,8 +336,8 @@ function writeEventsSuccess(res: http.ServerResponse, payload: RemoteRpcRequest)
       ok: true,
       data: {
         path: '/remote/sessions/default/events.ndjson',
-        cursor: payload.params?.positionals?.[1] ?? '0',
-        limit: Number(payload.params?.positionals?.[0] ?? 100),
+        cursor: cursorArg ?? '0',
+        limit,
         nextCursor: '6',
         events: [
           {
@@ -576,6 +580,16 @@ async function assertEventsRpc(
   assert.equal(eventsRpc?.params?.command, 'events');
   assert.deepEqual(eventsRpc?.params?.positionals, ['2', '4']);
   assert.equal(eventsRpc?.params?.token, 'remote-token');
+
+  const cursorOnlyPage = await client.observability.events({ cursor: '6' });
+  assert.equal(cursorOnlyPage.cursor, '6');
+  assert.equal(cursorOnlyPage.limit, 100);
+
+  const cursorOnlyRpc = rpcRequests.at(-1);
+  assert.equal(cursorOnlyRpc?.method, 'agent_device.command');
+  assert.equal(cursorOnlyRpc?.params?.command, 'events');
+  assert.deepEqual(cursorOnlyRpc?.params?.positionals, ['', '6']);
+  assert.equal(cursorOnlyRpc?.params?.token, 'remote-token');
 }
 
 async function assertRemoteRpcErrorNormalization(client: RemoteClient): Promise<void> {
