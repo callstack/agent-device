@@ -4497,7 +4497,10 @@ test('logs clear --restart requires app session bundle id', async () => {
   }
 });
 
-test('logs path and doctor report unsupported iOS physical-device backend as inactive failure', async () => {
+function makeUnsupportedIosDeviceLogSession(): {
+  sessionStore: ReturnType<typeof makeSessionStore>;
+  sessionName: string;
+} {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-device-logs-unsupported';
   sessionStore.set(sessionName, {
@@ -4510,6 +4513,10 @@ test('logs path and doctor report unsupported iOS physical-device backend as ina
     }),
     appBundleId: 'com.example.app',
   });
+  return { sessionStore, sessionName };
+}
+
+function mockUnsupportedIosDeviceLogBackend(): void {
   mockStartAppLog.mockRejectedValue(
     new AppError(
       'UNSUPPORTED_OPERATION',
@@ -4524,19 +4531,71 @@ test('logs path and doctor report unsupported iOS physical-device backend as ina
     checks: { devicectlAvailable: true, devicectlDeviceLogStream: false },
     notes: ['Installed devicectl does not expose a scriptable iOS physical-device app log stream.'],
   });
+}
 
-  const restartResponse = await handleSessionCommands({
+async function runLogsCommandForSession(
+  sessionStore: ReturnType<typeof makeSessionStore>,
+  sessionName: string,
+  action: 'clear' | 'path' | 'doctor',
+  flags: Record<string, unknown> = {},
+) {
+  return await handleSessionCommands({
     req: {
       token: 't',
       session: sessionName,
       command: 'logs',
-      positionals: ['clear'],
-      flags: { restart: true },
+      positionals: [action],
+      flags,
     },
     sessionName,
     logPath: path.join(os.tmpdir(), 'daemon.log'),
     sessionStore,
     invoke: noopInvoke,
+  });
+}
+
+function expectUnsupportedIosDeviceLogsPath(
+  response: Awaited<ReturnType<typeof handleSessionCommands>>,
+) {
+  expect(response?.ok).toBe(true);
+  if (!response || !response.ok) return;
+  expect(response.data?.active).toBe(false);
+  expect(response.data?.state).toBe('failed');
+  expect(response.data?.backend).toBe('ios-device');
+  expect(response.data?.failureCode).toBe('UNSUPPORTED_OPERATION');
+  expect(response.data?.failureMessage).toMatch(/physical-device app log streaming/);
+  expect(response.data?.hint).toMatch(/Console\.app\/Xcode/);
+  expect(response.data?.notes).toContain(
+    'iOS physical-device app log streaming is not supported by the installed devicectl.',
+  );
+}
+
+function expectUnsupportedIosDeviceLogsDoctor(
+  response: Awaited<ReturnType<typeof handleSessionCommands>>,
+) {
+  expect(response?.ok).toBe(true);
+  if (!response || !response.ok) return;
+  expect(response.data?.active).toBe(false);
+  expect(response.data?.state).toBe('failed');
+  expect(response.data?.backend).toBe('ios-device');
+  expect(response.data?.checks).toEqual({
+    devicectlAvailable: true,
+    devicectlDeviceLogStream: false,
+  });
+  expect(response.data?.notes).toContain(
+    'Installed devicectl does not expose a scriptable iOS physical-device app log stream.',
+  );
+  expect(response.data?.notes).toContain(
+    'iOS physical-device app log streaming is not supported by the installed devicectl.',
+  );
+}
+
+test('logs path and doctor report unsupported iOS physical-device backend as inactive failure', async () => {
+  const { sessionStore, sessionName } = makeUnsupportedIosDeviceLogSession();
+  mockUnsupportedIosDeviceLogBackend();
+
+  const restartResponse = await runLogsCommandForSession(sessionStore, sessionName, 'clear', {
+    restart: true,
   });
   expect(restartResponse?.ok).toBe(false);
   if (restartResponse && !restartResponse.ok) {
@@ -4544,61 +4603,12 @@ test('logs path and doctor report unsupported iOS physical-device backend as ina
     expect(restartResponse.error.hint).toMatch(/Console\.app\/Xcode/);
   }
 
-  const pathResponse = await handleSessionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'logs',
-      positionals: ['path'],
-      flags: {},
-    },
-    sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
-  });
-  expect(pathResponse?.ok).toBe(true);
-  if (pathResponse && pathResponse.ok) {
-    expect(pathResponse.data?.active).toBe(false);
-    expect(pathResponse.data?.state).toBe('failed');
-    expect(pathResponse.data?.backend).toBe('ios-device');
-    expect(pathResponse.data?.failureCode).toBe('UNSUPPORTED_OPERATION');
-    expect(pathResponse.data?.failureMessage).toMatch(/physical-device app log streaming/);
-    expect(pathResponse.data?.hint).toMatch(/Console\.app\/Xcode/);
-    expect(pathResponse.data?.notes).toContain(
-      'iOS physical-device app log streaming is not supported by the installed devicectl.',
-    );
-  }
-
-  const doctorResponse = await handleSessionCommands({
-    req: {
-      token: 't',
-      session: sessionName,
-      command: 'logs',
-      positionals: ['doctor'],
-      flags: {},
-    },
-    sessionName,
-    logPath: path.join(os.tmpdir(), 'daemon.log'),
-    sessionStore,
-    invoke: noopInvoke,
-  });
-  expect(doctorResponse?.ok).toBe(true);
-  if (doctorResponse && doctorResponse.ok) {
-    expect(doctorResponse.data?.active).toBe(false);
-    expect(doctorResponse.data?.state).toBe('failed');
-    expect(doctorResponse.data?.backend).toBe('ios-device');
-    expect(doctorResponse.data?.checks).toEqual({
-      devicectlAvailable: true,
-      devicectlDeviceLogStream: false,
-    });
-    expect(doctorResponse.data?.notes).toContain(
-      'Installed devicectl does not expose a scriptable iOS physical-device app log stream.',
-    );
-    expect(doctorResponse.data?.notes).toContain(
-      'iOS physical-device app log streaming is not supported by the installed devicectl.',
-    );
-  }
+  expectUnsupportedIosDeviceLogsPath(
+    await runLogsCommandForSession(sessionStore, sessionName, 'path'),
+  );
+  expectUnsupportedIosDeviceLogsDoctor(
+    await runLogsCommandForSession(sessionStore, sessionName, 'doctor'),
+  );
 });
 
 test('network requires an active session', async () => {
