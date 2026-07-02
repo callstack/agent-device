@@ -16,7 +16,11 @@ import type {
   CommandRequestResult,
   SessionCloseResult,
 } from '../../client/client-types.ts';
-import type { CloudArtifactsResult } from '../../cloud-artifacts.ts';
+import type {
+  AgentArtifactsResult,
+  CloudArtifactsResult,
+  DaemonArtifactsResult,
+} from '../../cloud-artifacts.ts';
 import { readCommandMessage } from '../../utils/success-text.ts';
 import type { CliOutput } from '../command-contract.ts';
 import {
@@ -79,7 +83,17 @@ function closeCliOutput(result: AppCloseResult | SessionCloseResult): CliOutput 
   return messageCliOutput(serializeCloseResult(result));
 }
 
-function artifactsCliOutput(result: CloudArtifactsResult): CliOutput {
+function artifactsCliOutput(result: AgentArtifactsResult): CliOutput {
+  if (isDaemonArtifactsResult(result)) {
+    return {
+      data: result,
+      text:
+        result.artifacts.length > 0
+          ? result.artifacts.map(formatDaemonArtifactLine).join('\n')
+          : (result.message ?? 'No daemon artifacts available.'),
+    };
+  }
+
   const emptyText = [result.message ?? `No cloud artifacts available for ${result.provider}.`];
   const retryCommand = formatCloudArtifactsRetryCommand(result);
   if (retryCommand) emptyText.push(`Retry: ${retryCommand}`);
@@ -90,6 +104,10 @@ function artifactsCliOutput(result: CloudArtifactsResult): CliOutput {
         ? result.cloudArtifacts.map(formatCloudArtifactLine).join('\n')
         : emptyText.join('\n'),
   };
+}
+
+function isDaemonArtifactsResult(result: AgentArtifactsResult): result is DaemonArtifactsResult {
+  return 'source' in result && result.source === 'daemon';
 }
 
 function deployCliOutput(result: AppDeployResult): CliOutput {
@@ -173,6 +191,10 @@ function formatCloudArtifactLine(artifact: CloudArtifactsResult['cloudArtifacts'
   const url = artifact.url ? ` ${artifact.url}` : '';
   const availability = artifact.availability ? ` ${artifact.availability}` : '';
   return `${artifact.kind}: ${artifact.name}${availability}${url}`;
+}
+
+function formatDaemonArtifactLine(artifact: DaemonArtifactsResult['artifacts'][number]): string {
+  return `${artifact.filename}: ${artifact.mimeType} ${artifact.sizeBytes} bytes id=${artifact.id}`;
 }
 
 function formatCloudArtifactsRetryCommand(result: CloudArtifactsResult): string | undefined {

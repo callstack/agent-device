@@ -50,7 +50,7 @@ import { isNonDefaultResponseLevel, type ResponseLevel } from '../kernel/contrac
 import { readSerializedSnapshotCaptureAnnotations } from '../snapshot-capture-annotations.ts';
 import { readSnapshotDiagnosticsSummary } from '../snapshot-diagnostics.ts';
 import type { CommandFlags } from '../core/dispatch-context.ts';
-import type { CloudArtifactsResult } from '../cloud-artifacts.ts';
+import type { AgentArtifactsResult } from '../cloud-artifacts.ts';
 
 export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},
@@ -156,7 +156,7 @@ export function createAgentDeviceClient(
         };
       },
       artifacts: async (options = {}) =>
-        await executeCommand<CloudArtifactsResult>('artifacts', options),
+        await executeCommand<AgentArtifactsResult>('artifacts', options),
     },
     apps: {
       install: async (options: AppInstallOptions) =>

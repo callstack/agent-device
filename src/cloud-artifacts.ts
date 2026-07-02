@@ -34,6 +34,24 @@ export type CloudArtifactsResult = {
   message?: string;
 };
 
+export type DaemonArtifactInventoryEntry = {
+  id: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+  expiresAt: string;
+};
+
+export type DaemonArtifactsResult = {
+  source: 'daemon';
+  status: 'ready';
+  artifacts: DaemonArtifactInventoryEntry[];
+  message?: string;
+};
+
+export type AgentArtifactsResult = CloudArtifactsResult | DaemonArtifactsResult;
+
 export type CloudArtifactsQuery = {
   provider?: string;
   leaseId?: string;

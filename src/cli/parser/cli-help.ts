@@ -698,6 +698,7 @@ Direct proxy flow for a remote Mac/simulator:
     agent-device devices --platform ios
     agent-device open Maps --platform ios --device "iPhone 17 Pro"
     agent-device snapshot -i --platform ios --device "iPhone 17 Pro"
+    agent-device artifacts --json
     agent-device close
     agent-device disconnect
 

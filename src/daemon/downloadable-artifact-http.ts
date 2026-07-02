@@ -113,6 +113,7 @@ async function handleArtifactDownload(
       didCleanupArtifact = true;
       cleanupDownloadableArtifact(artifactId);
     };
+    stream.on('end', cleanupCompletedDownload);
     res.on('finish', cleanupCompletedDownload);
     res.on('close', () => {
       if (res.writableFinished) {

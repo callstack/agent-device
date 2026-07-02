@@ -80,6 +80,32 @@ describe('artifactsCliOutput', () => {
       ].join('\n'),
     );
   });
+
+  test('prints daemon artifact inventory and preserves JSON data', () => {
+    const output = managementCliOutputFormatters.artifacts({
+      input: {},
+      result: {
+        source: 'daemon',
+        status: 'ready',
+        artifacts: [
+          {
+            id: 'artifact-1',
+            filename: 'screenshot.png',
+            mimeType: 'application/octet-stream',
+            sizeBytes: 123,
+            createdAt: '2026-07-02T12:00:00.000Z',
+            expiresAt: '2026-07-02T12:15:00.000Z',
+          },
+        ],
+      },
+    });
+
+    expect(output.text).toBe('screenshot.png: application/octet-stream 123 bytes id=artifact-1');
+    expect(output.data).toMatchObject({
+      source: 'daemon',
+      artifacts: [{ id: 'artifact-1', filename: 'screenshot.png' }],
+    });
+  });
 });
 
 describe('doctorCliOutput', () => {

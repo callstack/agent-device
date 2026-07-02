@@ -10,7 +10,7 @@ import { managementCliOutputFormatters } from './output.ts';
 
 const artifactsCommandMetadata = defineFieldCommandMetadata(
   'artifacts',
-  'List cloud provider artifacts for an active or completed provider session.',
+  'List daemon or cloud provider artifacts for an active or completed session.',
   {
     provider: stringField('Cloud provider name, for example browserstack or aws-device-farm.'),
     providerSessionId: stringField('Cloud provider session id or ARN.'),
@@ -23,8 +23,8 @@ const artifactsCommandDefinition = defineExecutableCommand(
 );
 
 const artifactsCliSchema = {
-  summary: 'List cloud provider session artifacts',
-  usageOverride: 'artifacts [provider-session-id] --provider <name>',
+  summary: 'List daemon or cloud provider session artifacts',
+  usageOverride: 'artifacts [provider-session-id] [--provider <name>]',
   positionalArgs: ['provider-session-id?'],
   allowedFlags: ['provider', 'providerSessionId'],
 } as const satisfies CommandSchemaOverride;

@@ -1,9 +1,13 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { test } from 'vitest';
 import { withTargetDeviceResolutionScope } from '../../core/dispatch-resolve.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { getDaemonCommandRoute, type DaemonCommandRoute } from '../daemon-command-registry.ts';
+import { cleanupDownloadableArtifact, trackDownloadableArtifact } from '../artifact-tracking.ts';
 import { contextFromFlags } from '../context.ts';
 import { handleLeaseCommands } from '../handlers/lease.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
@@ -150,6 +154,26 @@ test('lease handler preserves device-aware lease fields', async () => {
   assert.equal(heartbeatLease.leaseProvider, 'proxy');
 });
 
+test('lease artifacts lists daemon inventory for proxy lease scopes', async () => {
+  const leaseRegistry = new LeaseRegistry();
+  const sessionStore = makeSessionStore('agent-device-lease-artifacts-');
+  const tracked = trackProxyLeaseArtifact();
+
+  try {
+    const response = await handleLeaseCommands({
+      req: proxyArtifactsRequest(),
+      sessionName: 'catalog-test',
+      sessionStore,
+      leaseRegistry,
+    });
+
+    assertProxyLeaseArtifactInventory(response, tracked.artifactId);
+  } finally {
+    cleanupDownloadableArtifact(tracked.artifactId);
+    fs.rmSync(tracked.tempDir, { recursive: true, force: true });
+  }
+});
+
 test('lease release calls provider hook using the released lease without heartbeat mutation', async () => {
   const leaseRegistry = new LeaseRegistry();
   const sessionStore = makeSessionStore('agent-device-lease-release-');
@@ -267,6 +291,70 @@ function catalogRouteRequest(command: string): DaemonRequest {
     },
     positionals: [],
   };
+}
+
+function trackProxyLeaseArtifact(): { artifactId: string; tempDir: string } {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-lease-artifacts-'));
+  const artifactPath = path.join(tempDir, 'proxy-shot.png');
+  fs.writeFileSync(artifactPath, 'png-body');
+  return {
+    tempDir,
+    artifactId: trackDownloadableArtifact({
+      artifactPath,
+      fileName: 'proxy-shot.png',
+      tenantId: 'tenant-a',
+    }),
+  };
+}
+
+function proxyArtifactsRequest(): DaemonRequest {
+  return {
+    command: PUBLIC_COMMANDS.artifacts,
+    token: 'test-token',
+    session: 'catalog-test',
+    meta: {
+      tenantId: 'tenant-a',
+      runId: 'run-a',
+      leaseId: 'lease-a',
+      leaseProvider: 'proxy',
+      deviceKey: 'device-1',
+      clientId: 'client-a',
+    },
+    positionals: [],
+  };
+}
+
+function assertProxyLeaseArtifactInventory(
+  response: DaemonResponse | null,
+  artifactId: string,
+): void {
+  assert.equal(response?.ok, true);
+  const data = response.data as Record<string, unknown> | undefined;
+  assert.equal(data?.source, 'daemon');
+  const artifact = readSingleArtifactRecord(data?.artifacts);
+  assert.deepEqual(
+    {
+      id: artifact.id,
+      filename: artifact.filename,
+      mimeType: artifact.mimeType,
+      sizeBytes: artifact.sizeBytes,
+    },
+    {
+      id: artifactId,
+      filename: 'proxy-shot.png',
+      mimeType: 'application/octet-stream',
+      sizeBytes: 'png-body'.length,
+    },
+  );
+  assert.equal(typeof artifact.createdAt, 'string');
+  assert.equal(typeof artifact.expiresAt, 'string');
+}
+
+function readSingleArtifactRecord(value: unknown): Record<string, unknown> {
+  assert.ok(Array.isArray(value));
+  assert.equal(value.length, 1);
+  assert.ok(value[0] && typeof value[0] === 'object' && !Array.isArray(value[0]));
+  return value[0] as Record<string, unknown>;
 }
 
 function assertNoRoutingMismatch(error: unknown, command: string): void {

@@ -55,7 +55,7 @@ import type {
   RemoteConnectionProfileFields,
 } from '../remote/remote-config-schema.ts';
 import type { CommandResult } from '../core/command-descriptor/command-result.ts';
-import type { CloudArtifactsResult, CloudProviderSessionResult } from '../cloud-artifacts.ts';
+import type { AgentArtifactsResult, CloudProviderSessionResult } from '../cloud-artifacts.ts';
 
 export type { FindLocator } from '../utils/finders.ts';
 export type { CompanionTunnelScope, MetroBridgeScope } from './client-companion-tunnel-contract.ts';
@@ -969,7 +969,7 @@ export type AgentDeviceClient = {
     close: (
       options?: AgentDeviceRequestOverrides & { shutdown?: boolean },
     ) => Promise<SessionCloseResult>;
-    artifacts: (options?: CloudArtifactsOptions) => Promise<CloudArtifactsResult>;
+    artifacts: (options?: CloudArtifactsOptions) => Promise<AgentArtifactsResult>;
   };
   apps: {
     install: (options: AppInstallOptions) => Promise<AppDeployResult>;
