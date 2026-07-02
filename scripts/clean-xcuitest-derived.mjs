@@ -85,22 +85,29 @@ function cleanDerivedPath(platform, targetPath) {
 
 function formatCleanupResult(platform, targetPath, result) {
   const platformLabel = resolvePlatformLabel(platform);
-  if (platform !== 'ios') {
-    return result.status === 'removed'
-      ? `Removed ${platformLabel} XCTest derived data: ${targetPath}`
-      : `Skipped ${platformLabel} XCTest cleanup: ${targetPath} not found`;
-  }
+  if (platform !== 'ios') return formatWholeDerivedCleanupResult(platformLabel, targetPath, result);
+  return formatIosCleanupResult(platformLabel, targetPath, result);
+}
+
+function formatWholeDerivedCleanupResult(platformLabel, targetPath, result) {
+  return result.status === 'removed'
+    ? `Removed ${platformLabel} XCTest derived data: ${targetPath}`
+    : `Skipped ${platformLabel} XCTest cleanup: ${targetPath} not found`;
+}
+
+function formatIosCleanupResult(platformLabel, targetPath, result) {
   if (result.status === 'skipped' && result.reason === 'not-found') {
     return `Skipped ${platformLabel} XCTest cleanup: ${targetPath} not found`;
   }
-  const keptSuffix =
-    result.preservedEntries.length > 0
-      ? `; kept ${summarizeEntryNames(result.preservedEntries)}`
-      : '';
+  const keptSuffix = formatKeptEntriesSuffix(result.preservedEntries);
   if (result.status === 'skipped') {
     return `Skipped ${platformLabel} XCTest cleanup under ${targetPath}: no transient entries found${keptSuffix}`;
   }
   return `Removed ${platformLabel} XCTest transient entries under ${targetPath}: ${summarizeEntryNames(result.removedEntries)}${keptSuffix}`;
+}
+
+function formatKeptEntriesSuffix(preservedEntries) {
+  return preservedEntries.length > 0 ? `; kept ${summarizeEntryNames(preservedEntries)}` : '';
 }
 
 function formatCleanupError(platform, targetPath, error) {
