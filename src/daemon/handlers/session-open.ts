@@ -12,7 +12,7 @@ import {
   createAppleRunnerCacheColdBootPrewarmForOpen,
 } from '../apple-runner-options.ts';
 import { applyRuntimeHintsToApp } from '../runtime-hints.ts';
-import { isIosFamily, type DeviceInfo } from '../../kernel/device.ts';
+import { isApplePlatform, isIosFamily, type DeviceInfo } from '../../kernel/device.ts';
 import type { DaemonRequest, DaemonResponse, SessionRuntimeHints, SessionState } from '../types.ts';
 import {
   resolveSessionRequestLogPath,
@@ -72,13 +72,13 @@ async function relaunchCloseApp(params: {
   context: Parameters<typeof dispatchCommand>[4];
 }): Promise<void> {
   const { device, closeTarget, outFlag, context } = params;
-  // Simulator close/open go through simctl and never touch the XCUITest
-  // runner, so a healthy runner session survives the relaunch (~6s saved per
-  // open --relaunch). A runner that does go stale is caught by the readiness
-  // preflight and restarted via invalidateRunnerSession/restart-and-replay.
-  // Real devices keep the conservative teardown: their runner transport rides
-  // the device tunnel, which app relaunches can disturb.
-  if (device.platform !== 'android' && !isIosSimulator(device)) {
+  // Only Apple targets have an XCUITest runner to tear down, and simulators
+  // keep theirs hot: their close/open go through simctl and never touch the
+  // runner (~6s saved per open --relaunch); one that goes stale is caught by
+  // the readiness preflight and restarted via invalidateRunnerSession.
+  // macOS and real iOS devices keep the conservative teardown — the device
+  // transport rides the tunnel, which app relaunches can disturb.
+  if (isApplePlatform(device.platform) && !isIosSimulator(device)) {
     await stopIosRunnerSession(device.id);
   }
   await dispatchCommand(device, 'close', [closeTarget], outFlag, context);
