@@ -100,58 +100,32 @@ test('runCmd writes stdin through pipeline', async () => {
 });
 
 test.sequential('runCmdBackground emits bounded exec_command diagnostics when AGENT_DEVICE_EXEC_TRACE is enabled', async () => {
-  const previousTraceEnv = process.env.AGENT_DEVICE_EXEC_TRACE;
-  process.env.AGENT_DEVICE_EXEC_TRACE = '1';
+  const diagnosticsPath = await withExecTraceEnv(
+    async () =>
+      await withDiagnosticsScope(
+        {
+          session: 'exec-trace',
+          requestId: 'exec-trace-1',
+          command: 'background',
+        },
+        async () => {
+          const { wait } = runCmdBackground(process.execPath, [
+            '-e',
+            'process.stdout.write("ok")',
+            'a',
+            'b',
+            'c',
+            'd',
+            'e',
+            'f',
+          ]);
+          await wait;
+          return flushDiagnosticsToSessionFile();
+        },
+      ),
+  );
 
-  try {
-    const diagnosticsPath = await withDiagnosticsScope(
-      {
-        session: 'exec-trace',
-        requestId: 'exec-trace-1',
-        command: 'background',
-      },
-      async () => {
-        const { wait } = runCmdBackground(process.execPath, [
-          '-e',
-          'process.stdout.write("ok")',
-          'a',
-          'b',
-          'c',
-          'd',
-          'e',
-          'f',
-        ]);
-        await wait;
-        return flushDiagnosticsToSessionFile();
-      },
-    );
-
-    const execEvents = readExecDiagnosticEvents(diagnosticsPath);
-    assert.equal(execEvents.length, 2);
-    const [spawnEvent, exitEvent] = execEvents;
-    assert.equal(spawnEvent?.phase, 'exec_command');
-    assert.equal(spawnEvent?.data?.command, process.execPath);
-    assert.equal(spawnEvent?.data?.event, 'spawn');
-    assert.equal(spawnEvent?.durationMs, undefined);
-    assert.deepEqual(spawnEvent?.data?.argsPrefix, [
-      '-e',
-      'process.stdout.write("ok")',
-      'a',
-      'b',
-      'c',
-      'd',
-    ]);
-    assert.equal(spawnEvent?.data?.omittedArgCount, 2);
-    assert.equal(exitEvent?.phase, 'exec_command');
-    assert.equal(exitEvent?.data?.event, 'exit');
-    assert.equal(typeof exitEvent?.durationMs, 'number');
-  } finally {
-    if (previousTraceEnv === undefined) {
-      delete process.env.AGENT_DEVICE_EXEC_TRACE;
-    } else {
-      process.env.AGENT_DEVICE_EXEC_TRACE = previousTraceEnv;
-    }
-  }
+  assertBackgroundExecTraceEvents(readExecDiagnosticEvents(diagnosticsPath));
 });
 
 test('runCmdBackground can leave output streams to the caller', async () => {
@@ -349,4 +323,65 @@ function readExecDiagnosticEvent(diagnosticsPath: string | null): {
   data?: Record<string, unknown>;
 } | null {
   return readExecDiagnosticEvents(diagnosticsPath)[0] ?? null;
+}
+
+async function withExecTraceEnv<T>(fn: () => Promise<T>): Promise<T> {
+  const previousTraceEnv = process.env.AGENT_DEVICE_EXEC_TRACE;
+  process.env.AGENT_DEVICE_EXEC_TRACE = '1';
+  try {
+    return await fn();
+  } finally {
+    restoreOptionalEnv('AGENT_DEVICE_EXEC_TRACE', previousTraceEnv);
+  }
+}
+
+function restoreOptionalEnv(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key];
+    return;
+  }
+  process.env[key] = value;
+}
+
+function assertBackgroundExecTraceEvents(
+  execEvents: Array<{
+    level?: string;
+    phase?: string;
+    durationMs?: number;
+    data?: Record<string, unknown>;
+  }>,
+): void {
+  assert.deepEqual(execEvents.map(summarizeExecEvent), [
+    {
+      phase: 'exec_command',
+      command: process.execPath,
+      event: 'spawn',
+      durationType: 'undefined',
+      argsPrefix: ['-e', 'process.stdout.write("ok")', 'a', 'b', 'c', 'd'],
+      omittedArgCount: 2,
+    },
+    {
+      phase: 'exec_command',
+      command: process.execPath,
+      event: 'exit',
+      durationType: 'number',
+      argsPrefix: ['-e', 'process.stdout.write("ok")', 'a', 'b', 'c', 'd'],
+      omittedArgCount: 2,
+    },
+  ]);
+}
+
+function summarizeExecEvent(event: {
+  phase?: string;
+  durationMs?: number;
+  data?: Record<string, unknown>;
+}): Record<string, unknown> {
+  return {
+    phase: event.phase,
+    command: event.data?.command,
+    event: event.data?.event,
+    durationType: typeof event.durationMs,
+    argsPrefix: event.data?.argsPrefix,
+    omittedArgCount: event.data?.omittedArgCount,
+  };
 }
