@@ -25,6 +25,13 @@ const DERIVED_PATHS = new Map([
   ['tvos', path.join(DERIVED_ROOT, 'tvos')],
   ['visionos', path.join(DERIVED_ROOT, 'visionos')],
 ]);
+const PLATFORM_LABELS = new Map([
+  ['ios', 'iOS'],
+  ['macos', 'macOS'],
+  ['tvos', 'tvOS'],
+  ['visionos', 'visionOS'],
+]);
+const MAX_SUMMARY_ENTRY_NAMES = 3;
 
 for (const platform of requested) {
   if (!supported.has(platform)) {
@@ -34,23 +41,85 @@ for (const platform of requested) {
     continue;
   }
   const targetPath = resolveDerivedPath(platform);
-  cleanDerivedPath(platform, targetPath);
-  console.log(`Removed ${targetPath}`);
+  try {
+    const result = cleanDerivedPath(platform, targetPath);
+    console.log(formatCleanupResult(platform, targetPath, result));
+  } catch (error) {
+    console.error(formatCleanupError(platform, targetPath, error));
+    process.exitCode = 1;
+  }
 }
 
 // fallow-ignore-next-line complexity
 function cleanDerivedPath(platform, targetPath) {
+  if (!fs.existsSync(targetPath)) {
+    return { status: 'skipped', reason: 'not-found' };
+  }
   if (platform !== 'ios') {
     fs.rmSync(targetPath, { recursive: true, force: true });
-    return;
+    return { status: 'removed' };
   }
-  if (!fs.existsSync(targetPath)) {
-    return;
-  }
+  const removedEntries = [];
+  const preservedEntries = [];
   for (const entry of fs.readdirSync(targetPath, { withFileTypes: true })) {
-    if (!ROOT_TRANSIENT_ENTRY_NAMES.has(entry.name)) continue;
+    if (!ROOT_TRANSIENT_ENTRY_NAMES.has(entry.name)) {
+      preservedEntries.push(entry.name);
+      continue;
+    }
     fs.rmSync(path.join(targetPath, entry.name), { recursive: true, force: true });
+    removedEntries.push(entry.name);
   }
+  if (removedEntries.length === 0) {
+    return {
+      status: 'skipped',
+      reason: 'no-transient-entries',
+      preservedEntries,
+    };
+  }
+  return {
+    status: 'removed',
+    removedEntries,
+    preservedEntries,
+  };
+}
+
+function formatCleanupResult(platform, targetPath, result) {
+  const platformLabel = resolvePlatformLabel(platform);
+  if (platform !== 'ios') {
+    return result.status === 'removed'
+      ? `Removed ${platformLabel} XCTest derived data: ${targetPath}`
+      : `Skipped ${platformLabel} XCTest cleanup: ${targetPath} not found`;
+  }
+  if (result.status === 'skipped' && result.reason === 'not-found') {
+    return `Skipped ${platformLabel} XCTest cleanup: ${targetPath} not found`;
+  }
+  const keptSuffix =
+    result.preservedEntries.length > 0
+      ? `; kept ${summarizeEntryNames(result.preservedEntries)}`
+      : '';
+  if (result.status === 'skipped') {
+    return `Skipped ${platformLabel} XCTest cleanup under ${targetPath}: no transient entries found${keptSuffix}`;
+  }
+  return `Removed ${platformLabel} XCTest transient entries under ${targetPath}: ${summarizeEntryNames(result.removedEntries)}${keptSuffix}`;
+}
+
+function formatCleanupError(platform, targetPath, error) {
+  const detail = error instanceof Error ? error.message : String(error);
+  return `Could not verify ${resolvePlatformLabel(platform)} XCTest cleanup under ${targetPath}: ${detail}`;
+}
+
+function resolvePlatformLabel(platform) {
+  const platformLabel = PLATFORM_LABELS.get(platform);
+  if (platformLabel) return platformLabel;
+  throw new Error(`Unsupported platform: ${platform}`);
+}
+
+function summarizeEntryNames(entryNames) {
+  const names = [...entryNames].sort();
+  if (names.length <= MAX_SUMMARY_ENTRY_NAMES) {
+    return names.join(', ');
+  }
+  return `${names.slice(0, MAX_SUMMARY_ENTRY_NAMES).join(', ')} (+${names.length - MAX_SUMMARY_ENTRY_NAMES} more)`;
 }
 
 function resolveDerivedPath(platform) {
