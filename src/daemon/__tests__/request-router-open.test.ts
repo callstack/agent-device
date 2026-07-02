@@ -90,7 +90,11 @@ test('open returns and creates the session state directory', async () => {
     expect(response.data?.requestLogPath).toEqual(
       path.join(String(response.data?.sessionStateDir), 'requests', 'req-open-state.ndjson'),
     );
+    expect(response.data?.eventLogPath).toEqual(
+      path.join(String(response.data?.sessionStateDir), 'events.ndjson'),
+    );
     expect(fs.existsSync(String(response.data?.sessionStateDir))).toBe(true);
+    expect(fs.existsSync(String(response.data?.eventLogPath))).toBe(true);
   }
 });
 

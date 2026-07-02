@@ -5,6 +5,14 @@ import type { SessionRuntimeHints, SessionState } from './types.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
 import { expandSessionPath, safeSessionName } from './session-paths.ts';
 import { SessionScriptWriter } from './session-script-writer.ts';
+import {
+  appendActionEvent,
+  appendSessionEvent,
+  readSessionEventLog,
+  resolveSessionEventLogPath,
+  type SessionEventLogInput,
+  type SessionEventLogPage,
+} from './session-event-log.ts';
 
 export class SessionStore {
   private readonly sessions = new Map<string, SessionState>();
@@ -51,7 +59,22 @@ export class SessionStore {
   }
 
   recordAction(session: SessionState, entry: RecordActionEntry): void {
-    recordActionEntry(session, entry);
+    const action = recordActionEntry(session, entry);
+    if (action) {
+      const sessionName = this.resolveStoredSessionName(session);
+      appendActionEvent(this.resolveEventLogPath(sessionName), sessionName, action);
+    }
+  }
+
+  recordEvent(sessionName: string, event: SessionEventLogInput): void {
+    appendSessionEvent(this.resolveEventLogPath(sessionName), sessionName, event);
+  }
+
+  readEvents(
+    sessionName: string,
+    options: { cursor?: string; limit?: number } = {},
+  ): SessionEventLogPage {
+    return readSessionEventLog(this.resolveEventLogPath(sessionName), options);
   }
 
   writeSessionLog(session: SessionState): void {
@@ -90,8 +113,19 @@ export class SessionStore {
     return path.join(this.resolveSessionDir(sessionName), 'app-log.pid');
   }
 
+  resolveEventLogPath(sessionName: string): string {
+    return resolveSessionEventLogPath(this.resolveSessionDir(sessionName));
+  }
+
   static expandHome(filePath: string, cwd?: string): string {
     return expandSessionPath(filePath, cwd);
+  }
+
+  private resolveStoredSessionName(session: SessionState): string {
+    for (const [name, value] of this.sessions) {
+      if (value === session) return name;
+    }
+    return session.name;
   }
 }
 

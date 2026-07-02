@@ -337,6 +337,18 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
+    name: 'events',
+    catalog: { group: 'public' },
+    daemon: {
+      route: 'session',
+      sessionKind: 'observability',
+      allowInvalidRecording: true,
+      ...REQUEST_EXECUTION_EXEMPT,
+    },
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+  },
+  {
     name: 'network',
     catalog: { group: 'public' },
     daemon: { route: 'session', sessionKind: 'observability' },

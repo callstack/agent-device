@@ -7,6 +7,7 @@ import {
   updateDiagnosticsScope,
 } from '../utils/diagnostics.ts';
 import { applyCommandDefaults } from '../utils/command-schema.ts';
+import { normalizeError } from '../kernel/errors.ts';
 import type { DaemonCommandContext } from './context.ts';
 import { contextFromFlags as contextFromFlagsWithLog } from './context.ts';
 import { assertSessionSelectorMatches } from './session-selector.ts';
@@ -30,6 +31,11 @@ import {
   shouldLockSessionExecution,
   shouldValidateSessionSelector,
 } from './daemon-command-registry.ts';
+import {
+  buildRequestFinishedEvent,
+  buildRequestStartedEvent,
+  shouldRecordEventForRequest,
+} from './session-event-log.ts';
 import type { LeaseRegistry } from './lease-registry.ts';
 import {
   resolveSessionRequestLogPath,
@@ -49,6 +55,7 @@ export type RequestExecutionScope = {
   sessionName: string;
   requestLogPath: string;
   runnerLogPath: string;
+  startedAtMs: number;
   runAdmitted<T>(task: () => Promise<T>): Promise<T>;
   runLocked<T>(task: () => Promise<T>): Promise<T>;
   throwIfCanceled(): void;
@@ -85,6 +92,7 @@ export async function createRequestExecutionScope(params: {
   let scopedReq = applyRequestCommandDefaults(scopeRequestSession(params.req));
 
   const command = scopedReq.command;
+  const startedAtMs = Date.now();
   const sessionName = resolveEffectiveSessionName(scopedReq, sessionStore);
   const diagnosticsMeta = getDiagnosticsMeta();
   const sessionDir = sessionStore.resolveSessionDir(sessionName);
@@ -110,47 +118,80 @@ export async function createRequestExecutionScope(params: {
       runnerLogPath,
     },
   });
-  assertLockedLeaseAdmissionPreflight(scopedReq);
-  const executionLockKeys = shouldLockSessionExecution(command)
-    ? await resolveRequestExecutionLockKeys({ req: scopedReq, sessionName, sessionStore })
-    : [];
-  const executionLocks = getLeaseRegistryExecutionLocks(leaseRegistry);
-
-  const scope: RequestExecutionScope = {
-    req: scopedReq,
-    command,
-    sessionName,
-    requestLogPath,
-    runnerLogPath,
-    throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
-    runAdmitted: async (task) => {
-      throwIfRequestCanceled(scopedReq.meta?.requestId);
-      await cleanupExpiredLeasedSession({
-        sessionName,
-        sessionStore,
-        leaseRegistry,
-        teardownSession: teardownSessionResources,
-      });
-      scopedReq = admitRequestLeaseForLockedScope({
+  const shouldRecordRequestEvents = shouldRecordEventForRequest(scopedReq);
+  if (shouldRecordRequestEvents) {
+    sessionStore.recordEvent(
+      sessionName,
+      buildRequestStartedEvent({
         req: scopedReq,
         sessionName,
-        sessionStore,
-        leaseRegistry,
-      });
-      scope.req = scopedReq;
-      return await task();
-    },
-    runLocked: async (task) => {
-      throwIfRequestCanceled(scopedReq.meta?.requestId);
-      if (executionLockKeys.length === 0) return await scope.runAdmitted(task);
-      return await withRequestExecutionLocks(
-        executionLocks,
-        executionLockKeys,
-        async () => await scope.runAdmitted(task),
+        requestLogPath,
+        runnerLogPath,
+      }),
+    );
+  }
+  try {
+    assertLockedLeaseAdmissionPreflight(scopedReq);
+    const executionLockKeys = shouldLockSessionExecution(command)
+      ? await resolveRequestExecutionLockKeys({ req: scopedReq, sessionName, sessionStore })
+      : [];
+    const executionLocks = getLeaseRegistryExecutionLocks(leaseRegistry);
+
+    const scope: RequestExecutionScope = {
+      req: scopedReq,
+      command,
+      sessionName,
+      requestLogPath,
+      runnerLogPath,
+      startedAtMs,
+      throwIfCanceled: () => throwIfRequestCanceled(scopedReq.meta?.requestId),
+      runAdmitted: async (task) => {
+        throwIfRequestCanceled(scopedReq.meta?.requestId);
+        await cleanupExpiredLeasedSession({
+          sessionName,
+          sessionStore,
+          leaseRegistry,
+          teardownSession: teardownSessionResources,
+        });
+        scopedReq = admitRequestLeaseForLockedScope({
+          req: scopedReq,
+          sessionName,
+          sessionStore,
+          leaseRegistry,
+        });
+        scope.req = scopedReq;
+        return await task();
+      },
+      runLocked: async (task) => {
+        throwIfRequestCanceled(scopedReq.meta?.requestId);
+        if (executionLockKeys.length === 0) return await scope.runAdmitted(task);
+        return await withRequestExecutionLocks(
+          executionLocks,
+          executionLockKeys,
+          async () => await scope.runAdmitted(task),
+        );
+      },
+    };
+    return scope;
+  } catch (error) {
+    if (shouldRecordRequestEvents) {
+      sessionStore.recordEvent(
+        sessionName,
+        buildRequestFinishedEvent({
+          req: scopedReq,
+          response: {
+            ok: false,
+            error: normalizeError(error, {
+              diagnosticId: getDiagnosticsMeta().diagnosticId,
+              logPath: requestLogPath,
+            }),
+          },
+          durationMs: Math.max(0, Date.now() - startedAtMs),
+        }),
       );
-    },
-  };
-  return scope;
+    }
+    throw error;
+  }
 }
 
 async function withRequestExecutionLocks<T>(
@@ -203,8 +244,20 @@ export function prepareLockedRequestScope(params: {
   });
   const lockedReq = binding.req;
   existingSession = binding.existingSession;
-  const finalize = (response: DaemonResponse): DaemonResponse =>
-    finalizeDaemonResponse(lockedReq, response, trackDownloadableArtifact);
+  const finalize = (response: DaemonResponse): DaemonResponse => {
+    const finalized = finalizeDaemonResponse(lockedReq, response, trackDownloadableArtifact);
+    if (shouldRecordEventForRequest(lockedReq)) {
+      sessionStore.recordEvent(
+        scope.sessionName,
+        buildRequestFinishedEvent({
+          req: lockedReq,
+          response: finalized,
+          durationMs: Math.max(0, Date.now() - scope.startedAtMs),
+        }),
+      );
+    }
+    return finalized;
+  };
 
   if (
     existingSession?.recording?.invalidatedReason &&

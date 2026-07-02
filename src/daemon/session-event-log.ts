@@ -1,0 +1,204 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { PUBLIC_COMMANDS } from '../command-catalog.ts';
+import { AppError } from '../kernel/errors.ts';
+import { redactDiagnosticData } from '../kernel/redaction.ts';
+import { getDiagnosticsMeta } from '../utils/diagnostics.ts';
+import type { DaemonRequest, DaemonResponse, SessionAction } from './types.ts';
+import { buildActionDetails, buildActionSummary } from './session-event-action.ts';
+
+export const SESSION_EVENT_LOG_FILENAME = 'events.ndjson';
+
+const EVENT_LOG_VERSION = 1;
+const DEFAULT_EVENT_LIMIT = 100;
+const MAX_EVENT_LIMIT = 500;
+
+export type SessionEventLogEntry = {
+  version: 1;
+  ts: string;
+  session: string;
+  kind: 'request.started' | 'request.finished' | 'action.recorded';
+  requestId?: string;
+  command?: string;
+  status?: 'ok' | 'error';
+  summary?: string;
+  details?: Record<string, unknown>;
+};
+
+export type SessionEventLogPage = {
+  path: string;
+  cursor: string;
+  limit: number;
+  events: SessionEventLogEntry[];
+  nextCursor?: string;
+};
+
+export type SessionEventLogInput = Omit<SessionEventLogEntry, 'version' | 'ts' | 'session'> & {
+  ts?: string;
+};
+
+type ReadSessionEventLogOptions = { cursor?: string; limit?: number };
+
+export function resolveSessionEventLogPath(sessionDir: string): string {
+  return path.join(sessionDir, SESSION_EVENT_LOG_FILENAME);
+}
+
+export function shouldRecordEventForRequest(req: Pick<DaemonRequest, 'command'>): boolean {
+  return req.command !== PUBLIC_COMMANDS.events;
+}
+
+export function appendSessionEvent(
+  eventLogPath: string,
+  sessionName: string,
+  event: SessionEventLogInput,
+): void {
+  try {
+    fs.mkdirSync(path.dirname(eventLogPath), { recursive: true });
+    const entry = redactDiagnosticData({
+      version: EVENT_LOG_VERSION,
+      ts: event.ts ?? new Date().toISOString(),
+      session: sessionName,
+      ...event,
+    } satisfies SessionEventLogEntry);
+    fs.appendFileSync(eventLogPath, `${JSON.stringify(entry)}\n`, 'utf8');
+  } catch {
+    // Event logging is best-effort and must never break device automation.
+  }
+}
+
+export function appendActionEvent(
+  eventLogPath: string,
+  sessionName: string,
+  action: SessionAction,
+): void {
+  appendSessionEvent(eventLogPath, sessionName, {
+    kind: 'action.recorded',
+    requestId: getDiagnosticsMeta().requestId,
+    command: action.command,
+    summary: buildActionSummary(action),
+    details: buildActionDetails(action),
+  });
+}
+
+export function buildRequestStartedEvent(params: {
+  req: DaemonRequest;
+  sessionName: string;
+  requestLogPath: string;
+  runnerLogPath: string;
+}): SessionEventLogInput {
+  const { req, sessionName, requestLogPath, runnerLogPath } = params;
+  return {
+    kind: 'request.started',
+    requestId: req.meta?.requestId ?? getDiagnosticsMeta().requestId,
+    command: req.command,
+    summary: `Started ${req.command}`,
+    details: compactDetails({
+      publicSession: req.session,
+      effectiveSession: sessionName,
+      tenant: req.meta?.tenantId,
+      isolation: req.meta?.sessionIsolation,
+      requestLogPath,
+      runnerLogPath,
+    }),
+  };
+}
+
+export function buildRequestFinishedEvent(params: {
+  req: DaemonRequest;
+  response: DaemonResponse;
+  durationMs: number;
+}): SessionEventLogInput {
+  const { req, response, durationMs } = params;
+  if (response.ok) {
+    return {
+      kind: 'request.finished',
+      requestId: req.meta?.requestId ?? getDiagnosticsMeta().requestId,
+      command: req.command,
+      status: 'ok',
+      summary: `Finished ${req.command}`,
+      details: compactDetails({ durationMs }),
+    };
+  }
+  return {
+    kind: 'request.finished',
+    requestId: req.meta?.requestId ?? getDiagnosticsMeta().requestId,
+    command: req.command,
+    status: 'error',
+    summary: `Failed ${req.command}: ${response.error.message}`,
+    details: compactDetails({
+      durationMs,
+      code: response.error.code,
+      message: response.error.message,
+      hint: response.error.hint,
+      diagnosticId: response.error.diagnosticId,
+      logPath: response.error.logPath,
+    }),
+  };
+}
+
+export function readSessionEventLog(
+  eventLogPath: string,
+  options: ReadSessionEventLogOptions = {},
+): SessionEventLogPage {
+  const cursor = normalizeCursor(options.cursor);
+  const limit = normalizeLimit(options.limit);
+  if (!fs.existsSync(eventLogPath)) {
+    return { path: eventLogPath, cursor: String(cursor), limit, events: [] };
+  }
+
+  const rawLines = fs
+    .readFileSync(eventLogPath, 'utf8')
+    .split('\n')
+    .filter((line) => line.trim().length > 0);
+  const end = Math.min(rawLines.length, cursor + limit);
+  const events = rawLines.slice(cursor, end).flatMap((line) => {
+    const parsed = parseSessionEventLogLine(line);
+    return parsed ? [parsed] : [];
+  });
+  return {
+    path: eventLogPath,
+    cursor: String(cursor),
+    limit,
+    events,
+    ...(end < rawLines.length ? { nextCursor: String(end) } : {}),
+  };
+}
+
+function normalizeCursor(value: string | undefined): number {
+  if (value === undefined || value.trim() === '') return 0;
+  const cursor = Number(value);
+  if (Number.isInteger(cursor) && cursor >= 0) return cursor;
+  throw new AppError('INVALID_ARGS', 'events cursor must be a non-negative integer string.');
+}
+
+function normalizeLimit(value: number | undefined): number {
+  if (value === undefined) return DEFAULT_EVENT_LIMIT;
+  if (Number.isInteger(value) && value >= 1 && value <= MAX_EVENT_LIMIT) return value;
+  throw new AppError('INVALID_ARGS', `events limit must be between 1 and ${MAX_EVENT_LIMIT}.`);
+}
+
+function parseSessionEventLogLine(line: string): SessionEventLogEntry | undefined {
+  try {
+    const parsed = JSON.parse(line) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined;
+    const record = parsed as Partial<SessionEventLogEntry>;
+    if (record.version !== EVENT_LOG_VERSION) return undefined;
+    if (typeof record.ts !== 'string' || typeof record.session !== 'string') return undefined;
+    if (!isSessionEventKind(record.kind)) return undefined;
+    return record as SessionEventLogEntry;
+  } catch {
+    return undefined;
+  }
+}
+
+function isSessionEventKind(value: unknown): value is SessionEventLogEntry['kind'] {
+  return value === 'request.started' || value === 'request.finished' || value === 'action.recorded';
+}
+
+function compactDetails(record: Record<string, unknown>): Record<string, unknown> {
+  const compact: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (value !== undefined) compact[key] = value;
+  }
+  return compact;
+}

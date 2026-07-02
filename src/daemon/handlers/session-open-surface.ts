@@ -16,6 +16,7 @@ export function buildOpenResult(params: {
   sessionStateDir: string;
   runnerLogPath: string;
   requestLogPath: string;
+  eventLogPath: string;
   appName?: string;
   appBundleId?: string;
   surface: SessionSurface;
@@ -30,6 +31,7 @@ export function buildOpenResult(params: {
     sessionStateDir,
     runnerLogPath,
     requestLogPath,
+    eventLogPath,
     appName,
     appBundleId,
     surface,
@@ -45,6 +47,7 @@ export function buildOpenResult(params: {
     sessionStateDir,
     runnerLogPath,
     requestLogPath,
+    eventLogPath,
   };
   if (appName) result.appName = appName;
   if (appBundleId) result.appBundleId = appBundleId;

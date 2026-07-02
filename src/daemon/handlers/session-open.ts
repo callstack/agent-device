@@ -344,6 +344,7 @@ async function completeOpenCommand(params: {
     sessionStateDir,
     runnerLogPath: resolveSessionRunnerLogPath(sessionStateDir),
     requestLogPath,
+    eventLogPath: sessionStore.resolveEventLogPath(sessionName),
     appName,
     appBundleId: sessionAppBundleId,
     surface,
@@ -353,6 +354,7 @@ async function completeOpenCommand(params: {
     runtime,
     runtimeHintCount: countConfiguredRuntimeHints,
   });
+  sessionStore.set(sessionName, nextSession);
   sessionStore.recordAction(nextSession, {
     command: 'open',
     positionals: openPositionals,
@@ -360,7 +362,6 @@ async function completeOpenCommand(params: {
     runtime: req.runtime !== undefined ? runtime : undefined,
     result: openResult,
   });
-  sessionStore.set(sessionName, nextSession);
   return { ok: true, data: openResult };
 }
 

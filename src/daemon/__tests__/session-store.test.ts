@@ -143,6 +143,44 @@ test('saveScript flag enables .ad session log writing', () => {
   assert.equal(listSessionScriptFiles(root).length, 1);
 });
 
+test('recordAction writes a paged session event log', () => {
+  const { store, session } = makeFixture('agent-device-session-events-');
+  recordOpen(store, session, { platform: 'ios' });
+  store.recordAction(session, {
+    command: 'click',
+    positionals: ['@14', 'Checkout'],
+    flags: { platform: 'ios' },
+    result: { ref: '14', refLabel: 'Checkout', x: 120, y: 240, message: 'Tapped @14 (120, 240)' },
+  });
+
+  const eventLogPath = store.resolveEventLogPath(session.name);
+  assert.equal(fs.existsSync(eventLogPath), true);
+  const firstPage = store.readEvents(session.name, { limit: 1 });
+  assert.equal(firstPage.events.length, 1);
+  assert.equal(firstPage.events[0]?.kind, 'action.recorded');
+  assert.equal(firstPage.nextCursor, '1');
+
+  const secondPage = store.readEvents(session.name, { cursor: firstPage.nextCursor, limit: 1 });
+  assert.equal(secondPage.events[0]?.summary, 'Tapped @14 (120, 240)');
+  assert.equal(secondPage.nextCursor, undefined);
+});
+
+test('recordAction event log redacts typed text from display positionals', () => {
+  const { store, session } = makeFixture('agent-device-session-events-redaction-');
+  store.recordAction(session, {
+    command: 'fill',
+    positionals: ['@14', 'super-secret-token'],
+    flags: {},
+    result: { ref: '14', text: 'super-secret-token', message: 'Filled 18 chars' },
+  });
+
+  const page = store.readEvents(session.name);
+  const serialized = JSON.stringify(page.events);
+  assert.equal(serialized.includes('super-secret-token'), false);
+  assert.deepEqual(page.events[0]?.details?.positionals, ['@14', '<text:18 chars>']);
+  assert.equal(page.events[0]?.details?.textLength, 18);
+});
+
 test('saveScript path writes session log to custom location', () => {
   const { root, store, session } = makeFixture('agent-device-session-log-custom-path-', 'sessions');
   const customPath = path.join(root, 'workflows', 'my-flow.ad');
@@ -151,7 +189,7 @@ test('saveScript path writes session log to custom location', () => {
 
   store.writeSessionLog(session);
   assert.equal(fs.existsSync(customPath), true);
-  assert.equal(fs.existsSync(path.join(root, 'sessions')), false);
+  assert.equal(fs.existsSync(store.resolveEventLogPath(session.name)), true);
 });
 
 test('writeSessionLog persists open --relaunch in script output', () => {

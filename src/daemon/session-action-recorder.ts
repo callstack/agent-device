@@ -12,22 +12,26 @@ export type RecordActionEntry = {
   result?: Record<string, unknown>;
 };
 
-export function recordActionEntry(session: SessionState, entry: RecordActionEntry): void {
-  if (entry.flags?.noRecord) return;
+export function recordActionEntry(
+  session: SessionState,
+  entry: RecordActionEntry,
+): SessionAction | undefined {
+  if (entry.flags?.noRecord) return undefined;
   if (entry.flags?.saveScript) {
     session.recordSession = true;
     if (typeof entry.flags.saveScript === 'string') {
       session.saveScriptPath = expandSessionPath(entry.flags.saveScript);
     }
   }
-  session.actions.push({
+  const action: SessionAction = {
     ts: Date.now(),
     command: entry.command,
     positionals: entry.positionals,
     runtime: entry.runtime,
     flags: sanitizeFlags(entry.flags),
     result: entry.result,
-  });
+  };
+  session.actions.push(action);
   emitDiagnostic({
     level: 'debug',
     phase: 'record_action',
@@ -36,6 +40,7 @@ export function recordActionEntry(session: SessionState, entry: RecordActionEntr
       session: session.name,
     },
   });
+  return action;
 }
 
 const SANITIZED_FLAG_KEYS = [

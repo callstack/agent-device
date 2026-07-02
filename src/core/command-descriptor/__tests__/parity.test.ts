@@ -46,6 +46,7 @@ const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.capabilities,
   PUBLIC_COMMANDS.devices,
   PUBLIC_COMMANDS.doctor,
+  PUBLIC_COMMANDS.events,
   PUBLIC_COMMANDS.gesture,
   PUBLIC_COMMANDS.prepare,
   PUBLIC_COMMANDS.replay,

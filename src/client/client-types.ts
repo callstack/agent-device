@@ -282,6 +282,7 @@ export type AppOpenResult = {
   sessionStateDir?: string;
   runnerLogPath?: string;
   requestLogPath?: string;
+  eventLogPath?: string;
   appName?: string;
   appBundleId?: string;
   appId?: string;
@@ -857,6 +858,11 @@ export type LogsOptions = AgentDeviceRequestOverrides & {
   restart?: boolean;
 };
 
+export type EventsOptions = AgentDeviceRequestOverrides & {
+  cursor?: string;
+  limit?: number;
+};
+
 export type NetworkOptions = AgentDeviceRequestOverrides & {
   action?: 'dump' | 'log';
   limit?: number;
@@ -1105,6 +1111,7 @@ export type AgentDeviceClient = {
   observability: {
     perf: (options?: PerfOptions) => Promise<CommandRequestResult>;
     logs: (options?: LogsOptions) => Promise<CommandRequestResult>;
+    events: (options?: EventsOptions) => Promise<CommandRequestResult>;
     network: (options?: NetworkOptions) => Promise<CommandRequestResult>;
     audio: (options?: AudioOptions) => Promise<CommandRequestResult>;
   };

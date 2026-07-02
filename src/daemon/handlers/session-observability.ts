@@ -194,6 +194,9 @@ export async function handleSessionObservabilityCommands(
   if (req.command === 'logs') {
     return handleLogsCommand(params);
   }
+  if (req.command === 'events') {
+    return handleEventsCommand(params);
+  }
   if (req.command === 'network') {
     return handleNetworkCommand(params);
   }
@@ -202,6 +205,26 @@ export async function handleSessionObservabilityCommands(
   }
 
   return null;
+}
+
+function handleEventsCommand(params: ObservabilityParams): DaemonResponse {
+  const { req, sessionName, sessionStore } = params;
+  const limit = readOptionalEventLimit(req.positionals?.[0]);
+  if (limit instanceof AppError) return { ok: false, error: normalizeError(limit) };
+  return {
+    ok: true,
+    data: sessionStore.readEvents(sessionName, {
+      limit,
+      cursor: req.positionals?.[1],
+    }),
+  };
+}
+
+function readOptionalEventLimit(value: string | undefined): number | undefined | AppError {
+  if (value === undefined) return undefined;
+  const parsed = Number(value);
+  if (Number.isInteger(parsed)) return parsed;
+  return new AppError('INVALID_ARGS', 'events limit must be an integer.');
 }
 
 // ---------------------------------------------------------------------------

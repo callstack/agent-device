@@ -1,4 +1,9 @@
-import type { AudioOptions, LogsOptions, NetworkOptions } from '../../client/client-types.ts';
+import type {
+  AudioOptions,
+  EventsOptions,
+  LogsOptions,
+  NetworkOptions,
+} from '../../client/client-types.ts';
 import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '../../kernel/contracts.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { parseStringMember } from '../../utils/string-enum.ts';
@@ -20,6 +25,7 @@ import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import { observabilityCliOutputFormatters } from './output.ts';
 
 const LOGS_COMMAND_NAME = 'logs';
+const EVENTS_COMMAND_NAME = 'events';
 const NETWORK_COMMAND_NAME = 'network';
 const AUDIO_COMMAND_NAME = 'audio';
 const NETWORK_ACTION_VALUES = ['dump', 'log'] as const;
@@ -27,6 +33,7 @@ const AUDIO_ACTION_VALUES = ['probe'] as const;
 const AUDIO_PROBE_ACTION_VALUES = ['start', 'status', 'stop'] as const;
 
 const logsCommandDescription = 'Manage session app logs.';
+const eventsCommandDescription = 'Read the session event timeline.';
 const networkCommandDescription = 'Show recent HTTP traffic.';
 const audioCommandDescription = 'Probe audio levels.';
 
@@ -37,6 +44,15 @@ export const logsCommandMetadata = defineFieldCommandMetadata(
     action: enumField(LOG_ACTION_VALUES),
     message: stringField(),
     restart: booleanField(),
+  },
+);
+
+export const eventsCommandMetadata = defineFieldCommandMetadata(
+  EVENTS_COMMAND_NAME,
+  eventsCommandDescription,
+  {
+    limit: integerField(),
+    cursor: stringField(),
   },
 );
 
@@ -65,6 +81,11 @@ export const logsCommandDefinition = defineExecutableCommand(logsCommandMetadata
   client.observability.logs(input),
 );
 
+export const eventsCommandDefinition = defineExecutableCommand(
+  eventsCommandMetadata,
+  (client, input) => client.observability.events(input),
+);
+
 export const networkCommandDefinition = defineExecutableCommand(
   networkCommandMetadata,
   (client, input) => client.observability.network(input),
@@ -83,6 +104,14 @@ const logsCliSchema = {
   positionalArgs: ['path|start|stop|clear|doctor|mark', 'message?'],
   allowsExtraPositionals: true,
   allowedFlags: ['restart'],
+} as const satisfies CommandSchemaOverride;
+
+const eventsCliSchema = {
+  usageOverride: 'events [limit] [cursor]',
+  listUsageOverride: 'events',
+  helpDescription: 'Read the daemon-owned session event timeline as paged JSON-friendly entries',
+  summary: 'Read session event timeline',
+  positionalArgs: ['limit?', 'cursor?'],
 } as const satisfies CommandSchemaOverride;
 
 const networkCliSchema = {
@@ -113,6 +142,12 @@ export const logsCliReader: CliReader = (positionals, flags) => ({
   restart: flags.restart,
 });
 
+export const eventsCliReader: CliReader = (positionals, flags) => ({
+  ...commonInputFromFlags(flags),
+  limit: optionalCliNumber(positionals[0]),
+  cursor: positionals[1],
+});
+
 export const networkCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
   action: readNetworkAction(positionals[0]),
@@ -132,6 +167,9 @@ export const logsDaemonWriter: DaemonWriter = direct(LOGS_COMMAND_NAME, (input) 
   logsPositionals(input as LogsOptions),
 );
 
+export const eventsDaemonWriter: DaemonWriter = (input) =>
+  request(EVENTS_COMMAND_NAME, eventsPositionals(input as EventsOptions), input);
+
 export const networkDaemonWriter: DaemonWriter = (input) =>
   request(NETWORK_COMMAND_NAME, networkPositionals(input as NetworkOptions), {
     ...input,
@@ -149,6 +187,16 @@ const logsCommandFacet = defineCommandFacet({
   cliReader: logsCliReader,
   daemonWriter: logsDaemonWriter,
   cliOutputFormatter: observabilityCliOutputFormatters.logs,
+});
+
+const eventsCommandFacet = defineCommandFacet({
+  name: EVENTS_COMMAND_NAME,
+  metadata: eventsCommandMetadata,
+  definition: eventsCommandDefinition,
+  cliSchema: eventsCliSchema,
+  cliReader: eventsCliReader,
+  daemonWriter: eventsDaemonWriter,
+  cliOutputFormatter: observabilityCliOutputFormatters.events,
 });
 
 const networkCommandFacet = defineCommandFacet({
@@ -173,11 +221,15 @@ const audioCommandFacet = defineCommandFacet({
 
 export const observabilityCommandFamily = defineCommandFamilyFromFacets({
   name: 'observability',
-  commands: [logsCommandFacet, networkCommandFacet, audioCommandFacet],
+  commands: [logsCommandFacet, eventsCommandFacet, networkCommandFacet, audioCommandFacet],
 });
 
 function logsPositionals(input: { action?: string; message?: string }): string[] {
   return [input.action ?? 'path', ...optionalString(input.message)];
+}
+
+function eventsPositionals(input: EventsOptions): string[] {
+  return [...optionalNumber(input.limit), ...optionalString(input.cursor)];
 }
 
 function networkPositionals(input: NetworkOptions): string[] {

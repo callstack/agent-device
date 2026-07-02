@@ -150,6 +150,7 @@ export function serializeOpenResult(result: AppOpenResult): Record<string, unkno
       ...(result.sessionStateDir ? { sessionStateDir: result.sessionStateDir } : {}),
       ...(result.runnerLogPath ? { runnerLogPath: result.runnerLogPath } : {}),
       ...(result.requestLogPath ? { requestLogPath: result.requestLogPath } : {}),
+      ...(result.eventLogPath ? { eventLogPath: result.eventLogPath } : {}),
       ...(result.appName ? { appName: result.appName } : {}),
       ...(result.appBundleId ? { appBundleId: result.appBundleId } : {}),
       ...(result.startup ? { startup: result.startup } : {}),

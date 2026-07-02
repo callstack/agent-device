@@ -200,6 +200,7 @@ export function createAgentDeviceClient(
         return {
           session,
           sessionStateDir: readOptionalString(data, 'sessionStateDir'),
+          eventLogPath: readOptionalString(data, 'eventLogPath'),
           appName: readOptionalString(data, 'appName'),
           appBundleId,
           appId,
@@ -350,6 +351,7 @@ export function createAgentDeviceClient(
     observability: {
       perf: async (options = {}) => await executeCommand('perf', options),
       logs: async (options = {}) => await executeCommand('logs', options),
+      events: async (options = {}) => await executeCommand('events', options),
       network: async (options = {}) => await executeCommand('network', options),
       audio: async (options = {}) => await executeCommand('audio', options),
     },

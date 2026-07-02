@@ -1,0 +1,123 @@
+import { test, expect } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { createRequestHandler } from '../request-router.ts';
+import { LeaseRegistry } from '../lease-registry.ts';
+import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
+import { makeIosSession } from '../../__tests__/test-utils/index.ts';
+
+test('events reads the daemon-owned session timeline without appending poll noise', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-events-');
+  sessionStore.recordEvent('events-session', {
+    kind: 'action.recorded',
+    command: 'click',
+    summary: 'Tapped @14 (10, 20)',
+    details: { ref: '14', x: 10, y: 20 },
+  });
+  const eventLogPath = sessionStore.resolveEventLogPath('events-session');
+
+  const handler = createRequestHandler({
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'events-session',
+    command: 'events',
+    positionals: ['10'],
+    flags: {},
+    meta: { requestId: 'req-events' },
+  });
+
+  expect(response.ok).toBe(true);
+  if (!response.ok) return;
+  expect(response.data?.path).toBe(eventLogPath);
+  expect(response.data?.events).toEqual([
+    expect.objectContaining({
+      kind: 'action.recorded',
+      command: 'click',
+      summary: 'Tapped @14 (10, 20)',
+    }),
+  ]);
+  expect(fs.readFileSync(eventLogPath, 'utf8').trim().split('\n')).toHaveLength(1);
+});
+
+test('request timeline records thrown request failures after scope creation', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-events-throws-');
+  sessionStore.set('events-session', makeIosSession('events-session'));
+
+  const handler = createRequestHandler({
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'events-session',
+    command: 'click',
+    positionals: ['10', '20'],
+    flags: { platform: 'android' },
+    meta: { requestId: 'req-selector-conflict' },
+  });
+
+  expect(response.ok).toBe(false);
+  const page = sessionStore.readEvents('events-session');
+  expect(page.events).toEqual([
+    expect.objectContaining({
+      kind: 'request.started',
+      command: 'click',
+      requestId: 'req-selector-conflict',
+    }),
+    expect.objectContaining({
+      kind: 'request.finished',
+      command: 'click',
+      requestId: 'req-selector-conflict',
+      status: 'error',
+    }),
+  ]);
+});
+
+test('request timeline records setup failures after start is appended', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-events-setup-failure-');
+
+  const handler = createRequestHandler({
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'open',
+    positionals: ['Expo Go'],
+    flags: {},
+    meta: { requestId: 'req-proxy-open', leaseProvider: 'proxy' },
+  });
+
+  expect(response.ok).toBe(false);
+  const page = sessionStore.readEvents('default');
+  expect(page.events).toEqual([
+    expect.objectContaining({
+      kind: 'request.started',
+      command: 'open',
+      requestId: 'req-proxy-open',
+    }),
+    expect.objectContaining({
+      kind: 'request.finished',
+      command: 'open',
+      requestId: 'req-proxy-open',
+      status: 'error',
+    }),
+  ]);
+});
