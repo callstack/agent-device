@@ -19,14 +19,14 @@ afterEach(() => {
 });
 
 test('cdp wrapper pins agent-cdp package version', () => {
-  assert.equal(AGENT_CDP_PACKAGE, 'agent-cdp@1.6.0');
+  assert.equal(AGENT_CDP_PACKAGE, 'agent-cdp@1.6.1');
   assert.deepEqual(
     buildAgentCdpNpmExecArgs(['memory', 'usage', 'sample', '--label', 'baseline', '--gc']),
     [
       'exec',
       '--yes',
       '--package',
-      'agent-cdp@1.6.0',
+      'agent-cdp@1.6.1',
       '--',
       'agent-cdp',
       'memory',
@@ -81,7 +81,7 @@ test('cdp wrapper streams through npm exec and returns downstream exit code', as
     'exec',
     '--yes',
     '--package',
-    'agent-cdp@1.6.0',
+    'agent-cdp@1.6.1',
     '--',
     'agent-cdp',
     'target',
@@ -175,7 +175,7 @@ test('cdp passes injected remote target url to npm exec', async () => {
     'exec',
     '--yes',
     '--package',
-    'agent-cdp@1.6.0',
+    'agent-cdp@1.6.1',
     '--',
     'agent-cdp',
     'target',

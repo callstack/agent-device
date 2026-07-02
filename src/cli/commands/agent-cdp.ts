@@ -4,7 +4,7 @@ import { isRemoteBridgeBackend } from './remote-bridge.ts';
 import type { SessionRuntimeHints } from '../../kernel/contracts.ts';
 import type { CliFlags } from '../parser/cli-flags.ts';
 
-const AGENT_CDP_VERSION = '1.6.0';
+const AGENT_CDP_VERSION = '1.6.1';
 export const AGENT_CDP_PACKAGE = `agent-cdp@${AGENT_CDP_VERSION}`;
 const AGENT_CDP_BIN = 'agent-cdp';
 
