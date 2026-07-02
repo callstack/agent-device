@@ -226,6 +226,23 @@ function shellQuote(value: string): string {
   return `'${value.replaceAll("'", "'\\''")}'`;
 }
 
+// A lease whose owner process is gone but whose runner may still be running:
+// the adoption path probes it instead of killing it. Detached leases (graceful
+// daemon shutdown rewrote the token) classify as stale too once the owner pid
+// dies, so crash-orphans and deliberate handoffs share one recovery path.
+export function readStaleRunnerLease(deviceId: string): RunnerLease | null {
+  const state = classifyRunnerLease(readRunnerLease(deviceId));
+  return state.type === 'stale' ? state.lease : null;
+}
+
+// Marks a lease as handed off during graceful shutdown: the token no longer
+// matches this daemon, so the shutdown's own lease-cleanup paths skip it, and
+// once this process exits the lease classifies as stale for the next adopter.
+export function buildDetachedRunnerLease(lease: RunnerLease): RunnerLease {
+  if (lease.ownerToken.startsWith('detached-')) return lease;
+  return { ...lease, ownerToken: `detached-${lease.ownerToken}` };
+}
+
 export async function cleanupOwnedRunnerLease(
   deviceId: string,
   cleanup: RunnerLeaseCleanupAdapter,

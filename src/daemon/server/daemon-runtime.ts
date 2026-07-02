@@ -239,12 +239,18 @@ export async function startDaemonRuntime(
       await emitFatalDiagnostic(shutdownOptions.cause);
     }
     await closeDaemonServers(servers);
+    // Hand healthy simulator runners off to the next daemon before session
+    // teardown gets a chance to kill them; everything left after this
+    // (real devices, unhealthy runners) goes through the normal stop path.
+    const { detachIosSimulatorRunnerSessionsForShutdown, stopAllIosRunnerSessions } =
+      await import('../../platforms/apple/core/runner/runner-client.ts');
+    try {
+      await detachIosSimulatorRunnerSessionsForShutdown();
+    } catch {}
     await teardownDaemonSessions();
     await Promise.allSettled(
       providerDeviceRuntimes.map(async (runtime) => await runtime.shutdown()),
     );
-    const { stopAllIosRunnerSessions } =
-      await import('../../platforms/apple/core/runner/runner-client.ts');
     await stopAllIosRunnerSessions();
     // Best effort: stop the PNG worker so an in-flight job cannot delay exit.
     await Promise.race([

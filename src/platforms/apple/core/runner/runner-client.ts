@@ -185,6 +185,7 @@ export {
 } from './runner-xctestrun.ts';
 
 export {
+  detachIosSimulatorRunnerSessionsForShutdown,
   getRunnerSessionSnapshot,
   stopIosRunnerSession,
   abortAllIosRunnerSessions,

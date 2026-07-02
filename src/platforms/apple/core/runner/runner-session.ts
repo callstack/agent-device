@@ -38,12 +38,14 @@ import {
   isRunnerReadinessProbeCommand,
 } from './runner-command-traits.ts';
 import {
+  buildDetachedRunnerLease,
   buildRunnerLease,
   prepareRunnerLeaseForStartup,
   RUNNER_OWNER_TOKEN,
   withRunnerLeaseLock,
   writeRunnerLease,
 } from './runner-lease.ts';
+import { isIosRunnerDetachEnabled, tryAdoptRunnerSessionFromLease } from './runner-adoption.ts';
 import {
   abortRunnerSessionsAndPrepProcesses,
   cleanupOwnedIosRunnerLease,
@@ -126,6 +128,20 @@ async function startRunnerSessionWithLease(
       logicalLeaseContext,
     },
   });
+  const adopted = await measureRunnerStartupStep(
+    startupTimings,
+    'adopt_detached_runner',
+    async () =>
+      await tryAdoptRunnerSessionFromLease(device, {
+        startupTimeoutMs: options.startupTimeoutMs,
+      }),
+  );
+  if (adopted) {
+    adopted.startupTimings = startupTimings;
+    adopted.logicalLeaseContext = logicalLeaseContext;
+    runnerSessions.set(device.id, adopted);
+    return adopted;
+  }
   await measureRunnerStartupStep(startupTimings, 'cleanup_stale_xcodebuild', async () => {
     await prepareRunnerLeaseForStartup(device.id, runnerLeaseCleanupAdapter, logicalLeaseContext);
   });
@@ -441,6 +457,43 @@ export async function abortAllIosRunnerSessions(): Promise<void> {
       runnerSessions.delete(session.deviceId);
     }
   }
+}
+
+// Graceful daemon shutdown hands healthy simulator runners off to the next
+// daemon instead of paying the ~5s xcodebuild ramp again: the lease token is
+// rewritten to a detached form (so this daemon's own teardown paths no longer
+// classify it as owned) and the session simply leaves the in-memory map. Once
+// this process exits the lease is stale and the adoption path picks it up.
+// Explicit cleanup still works: clean:daemon kills by the lease's runnerPid,
+// and the runner's XCTWaiter self-expires after 24h.
+export async function detachIosSimulatorRunnerSessionsForShutdown(): Promise<number> {
+  if (!isIosRunnerDetachEnabled()) return 0;
+  let detached = 0;
+  for (const [deviceId, session] of Array.from(runnerSessions.entries())) {
+    if (session.device.kind !== 'simulator') continue;
+    if (!session.lease || !isRunnerProcessAlive(session.child.pid)) continue;
+    try {
+      writeRunnerLease(buildDetachedRunnerLease(session.lease));
+    } catch {
+      continue; // Could not mark the handoff; leave it for the kill path.
+    }
+    runnerSessions.delete(deviceId);
+    try {
+      await session.simulatorSetRedirect?.release();
+    } catch {}
+    detached += 1;
+    emitDiagnostic({
+      level: 'info',
+      phase: 'ios_runner_session_detached',
+      data: {
+        deviceId,
+        sessionId: session.sessionId,
+        runnerPid: session.child.pid,
+        port: session.port,
+      },
+    });
+  }
+  return detached;
 }
 
 export async function stopAllIosRunnerSessions(): Promise<void> {
