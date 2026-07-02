@@ -823,6 +823,8 @@ agent-device logs clear                 # Truncate app.log + remove rotated app.
 agent-device logs clear --restart       # Stop stream, clear log files, and start streaming again
 agent-device logs doctor                # Show logs backend/tool checks and readiness hints
 agent-device logs mark "before submit"  # Insert timeline marker into app.log
+agent-device events                     # Print recent session request/action events
+agent-device events 50 100              # Page 50 events starting at cursor 100
 agent-device network dump 25            # Parse recent HTTP(s) requests (method/url/status)
 agent-device network dump 25 --include all # Include parsed headers/body when available (truncated)
 agent-device network dump 25 --include headers --platform web # Browser requests via managed agent-browser
@@ -831,8 +833,8 @@ agent-device network dump 25 --include headers --platform web # Browser requests
 - Supported on iOS simulator, iOS physical device, and Android.
 - Preferred debug entrypoint: `logs clear --restart` for clean-window repro loops.
 - `logs start` appends to `app.log` and rotates to `app.log.1` when the file exceeds 5 MB.
-- `open` prints `Session state: <path>` and JSON includes `sessionStateDir`, `runnerLogPath`, and `requestLogPath`. Use the session directory to inspect concurrent runs without parsing global daemon logs.
-- `requests/<request-id>.ndjson` contains daemon request diagnostics for the session; `runner.log` contains Apple runner and `xcodebuild` output.
+- `open` prints `Session state: <path>` and JSON includes `sessionStateDir`, `runnerLogPath`, `requestLogPath`, and `eventLogPath`. Use the session directory to inspect concurrent runs without parsing global daemon logs.
+- `events.ndjson` contains the session event timeline; `requests/<request-id>.ndjson` contains daemon request diagnostics; `runner.log` contains Apple runner and `xcodebuild` output.
 - `network dump [limit] [summary|headers|body|all]` parses recent HTTP(s) entries from `app.log` for app/device sessions and from managed `agent-browser` request history for web sessions; `network log ...` is an alias.
 - Prefer `--include headers|body|all` when you want explicit detail level without relying on positional ordering.
 - On macOS, `logs` and `network dump` are app-scoped and parse Unified Logging output associated with the active session app.
