@@ -133,6 +133,15 @@ test('adoption succeeds for a live, matching, probe-healthy runner', async () =>
   expect(readStaleRunnerLease(simulator.id)).toBeNull();
 });
 
+test('adoption is skipped for devices in a custom simulator set', async () => {
+  writeStaleLease();
+  mockIsProcessAlive.mockReturnValue(true);
+
+  const scopedDevice = { ...simulator, simulatorSetPath: '/custom/device-set' };
+  expect(await tryAdoptRunnerSessionFromLease(scopedDevice, {})).toBeNull();
+  expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
+});
+
 test('adoption is skipped when the runner process is dead', async () => {
   writeStaleLease();
   mockIsProcessAlive.mockReturnValue(false);

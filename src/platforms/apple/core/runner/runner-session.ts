@@ -471,6 +471,12 @@ export async function detachIosSimulatorRunnerSessionsForShutdown(): Promise<num
   let detached = 0;
   for (const [deviceId, session] of Array.from(runnerSessions.entries())) {
     if (session.device.kind !== 'simulator') continue;
+    // A held device-set redirect means this runner depends on the global
+    // XCTestDevices symlink pointing at a custom simulator set for its whole
+    // lifetime. Handing it off would either restore the symlink under a live
+    // runner or leak the redirect lock, so scoped-set runners keep the normal
+    // dispose-and-restore path.
+    if (session.simulatorSetRedirect) continue;
     if (!session.lease || !isRunnerProcessAlive(session.child.pid)) continue;
     try {
       writeRunnerLease(buildDetachedRunnerLease(session.lease));
@@ -478,9 +484,6 @@ export async function detachIosSimulatorRunnerSessionsForShutdown(): Promise<num
       continue; // Could not mark the handoff; leave it for the kill path.
     }
     runnerSessions.delete(deviceId);
-    try {
-      await session.simulatorSetRedirect?.release();
-    } catch {}
     detached += 1;
     emitDiagnostic({
       level: 'info',

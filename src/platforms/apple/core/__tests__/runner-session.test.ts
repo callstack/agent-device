@@ -109,6 +109,7 @@ vi.mock('../runner/runner-xctestrun.ts', async () => {
 
 import {
   abortAllIosRunnerSessions,
+  detachIosSimulatorRunnerSessionsForShutdown,
   ensureRunnerSession,
   executeRunnerCommandWithSession,
   getRunnerSessionSnapshot,
@@ -723,6 +724,42 @@ test('runner session does not require Apple developer mode for iOS simulators', 
   assert.equal(mockEnsureXctestrunArtifact.mock.calls.length, 1);
   assert.equal(mockRunCmdBackground.mock.calls.length, 1);
   assert.equal(mockRunAppleToolCommand.mock.calls.some(isDevToolsSecurityStatusCall), false);
+});
+
+test('shutdown detach hands off default-set simulator runner sessions', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-detach-default-sim' };
+  // Default simulator set: no XCTestDevices redirect is held.
+  mockAcquireXcodebuildSimulatorSetRedirect.mockResolvedValue(null);
+  await ensureRunnerSession(device, {});
+
+  const detached = await detachIosSimulatorRunnerSessionsForShutdown();
+
+  assert.equal(detached, 1);
+  assert.equal(getRunnerSessionSnapshot(device.id), null);
+  const leaseRaw = fs.readFileSync(
+    path.join(process.env.AGENT_DEVICE_IOS_RUNNER_LEASE_DIR ?? '', `${device.id}.json`),
+    'utf8',
+  );
+  const lease = JSON.parse(leaseRaw) as { ownerToken: string };
+  assert.match(lease.ownerToken, /^detached-owner-/);
+});
+
+test('shutdown detach keeps scoped simulator-set runner sessions for the kill path', async () => {
+  const device = {
+    ...IOS_SIMULATOR,
+    id: 'runner-session-detach-scoped-sim',
+    simulatorSetPath: '/tmp/custom-device-set',
+  };
+  await ensureRunnerSession(device, {});
+  assert.equal(mockAcquireXcodebuildSimulatorSetRedirect.mock.calls.length, 1);
+
+  const detached = await detachIosSimulatorRunnerSessionsForShutdown();
+
+  // The redirect-holding session must stay for disposal, which restores the
+  // XCTestDevices symlink; detach never releases the redirect itself.
+  assert.equal(detached, 0);
+  assert.ok(getRunnerSessionSnapshot(device.id));
+  assert.equal(mockRedirectRelease.mock.calls.length, 0);
 });
 
 test('runner session startup kills legacy ownerless xcodebuild before launching a new runner', async () => {

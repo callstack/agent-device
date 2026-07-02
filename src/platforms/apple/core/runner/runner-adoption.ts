@@ -1,4 +1,5 @@
 import path from 'node:path';
+import { resolveIosSimulatorDeviceSetPath } from '../../../../utils/device-isolation.ts';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
 import { isProcessAlive } from '../../../../utils/process-identity.ts';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
@@ -40,6 +41,10 @@ export async function tryAdoptRunnerSessionFromLease(
   options: { startupTimeoutMs?: number },
 ): Promise<RunnerSession | null> {
   if (device.kind !== 'simulator' || !isIosRunnerDetachEnabled()) return null;
+  // Custom simulator sets run behind the XCTestDevices redirect, whose
+  // symlink+lock lifetime is bound to the owning session and cannot be
+  // carried across daemons; scoped-set runners always restart fresh.
+  if (resolveIosSimulatorDeviceSetPath(device.simulatorSetPath)) return null;
   const lease = readStaleRunnerLease(device.id);
   if (!lease) return null;
   const runnerPid = lease.runnerPid;
