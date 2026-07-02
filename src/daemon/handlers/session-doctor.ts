@@ -72,7 +72,7 @@ export async function handleDoctorCommand(params: {
     options,
     session,
   });
-  appendIosRunnerWarmupCheck(checks, appCheckDevice ?? resolveWarmupSimulator(inventory));
+  await appendIosRunnerWarmupCheck(checks, appCheckDevice ?? resolveWarmupSimulator(inventory));
   return doctorResponse(checks, options, { device: appCheckDevice, includeMetro: true, inventory });
 }
 
@@ -91,7 +91,10 @@ function resolveWarmupSimulator(
   return simulators.find((device) => device.booted === true) ?? simulators[0];
 }
 
-function appendIosRunnerWarmupCheck(checks: DoctorCheck[], device: DeviceInfo | undefined): void {
+async function appendIosRunnerWarmupCheck(
+  checks: DoctorCheck[],
+  device: DeviceInfo | undefined,
+): Promise<void> {
   if (!device || !isIosFamily(device) || device.kind !== 'simulator') return;
   // The warmup drives local xcodebuild: skip on non-macOS hosts and for
   // provider-backed devices, whose runner lives with the remote daemon.
@@ -102,7 +105,7 @@ function appendIosRunnerWarmupCheck(checks: DoctorCheck[], device: DeviceInfo | 
     status: 'progress',
     message: `Checking iOS runner build cache (${device.name})...`,
   });
-  if (hasCachedAppleRunnerArtifact(device)) {
+  if (await hasCachedAppleRunnerArtifact(device)) {
     appendDoctorCheck(checks, {
       id: 'ios-runner-cache',
       status: 'pass',

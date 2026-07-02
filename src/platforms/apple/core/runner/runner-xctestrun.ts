@@ -533,13 +533,11 @@ async function ensureXctestrunUnderCacheLock(params: {
 }): Promise<RunnerXctestrunArtifact> {
   const { device, options, projectRoot, expectedCacheMetadata, derived } = params;
   cleanRunnerDerivedBeforeEvaluation(derived, params.forceRebuild);
-  const existing = await evaluateExistingXctestrun({
+  const existing = await evaluateExistingXctestrunForDevice({
+    device,
     derived,
     projectRoot,
     expectedCacheMetadata,
-    findXctestrun: (root) => findXctestrun(root, device),
-    xctestrunReferencesProjectRoot,
-    resolveExistingXctestrunProductPaths,
   });
   const cache =
     existing.reason === 'reuse_ready' ? 'exact' : existing.xctestrunPath ? 'restore-key' : 'miss';
@@ -748,17 +746,43 @@ export function shouldDeleteRunnerDerivedRootEntry(entryName: string): boolean {
   return RUNNER_ROOT_TRANSIENT_ENTRY_NAMES.has(entryName);
 }
 
-// Cheap cache probe for preflight surfaces (doctor): does the expected
-// derived location already hold a usable xctestrun artifact? Resolving the
-// expected metadata stats the runner sources and reads tool versions
-// (~100ms, cached per process) but never builds.
-export function hasCachedAppleRunnerArtifact(device: DeviceInfo): boolean {
+// Cache probe for preflight surfaces (doctor): runs the same no-build reuse
+// evaluation as the ensure path (cache metadata + product-path validation),
+// so a partial or stale cache never reports as ready. Resolving the expected
+// metadata stats the runner sources and reads tool versions (~100ms, cached
+// per process) but never builds.
+export async function hasCachedAppleRunnerArtifact(device: DeviceInfo): Promise<boolean> {
   try {
-    const derived = resolveRunnerDerivedPath(device, resolveExpectedRunnerCacheMetadata(device));
-    return findXctestrun(derived, device) !== null;
+    const projectRoot = findProjectRoot();
+    const expectedCacheMetadata = resolveExpectedRunnerCacheMetadata(device, projectRoot);
+    const derived = resolveRunnerDerivedPath(device, expectedCacheMetadata);
+    const existing = await evaluateExistingXctestrunForDevice({
+      device,
+      derived,
+      projectRoot,
+      expectedCacheMetadata,
+    });
+    return existing.reason === 'reuse_ready';
   } catch {
     return false;
   }
+}
+
+function evaluateExistingXctestrunForDevice(params: {
+  device: DeviceInfo;
+  derived: string;
+  projectRoot: string;
+  expectedCacheMetadata: RunnerXctestrunCacheMetadata;
+}): Promise<ExistingXctestrunState> {
+  const { device, derived, projectRoot, expectedCacheMetadata } = params;
+  return evaluateExistingXctestrun({
+    derived,
+    projectRoot,
+    expectedCacheMetadata,
+    findXctestrun: (root) => findXctestrun(root, device),
+    xctestrunReferencesProjectRoot,
+    resolveExistingXctestrunProductPaths,
+  });
 }
 
 export function resolveRunnerCacheMetadataPath(derived: string): string {

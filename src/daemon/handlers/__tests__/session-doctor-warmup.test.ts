@@ -10,7 +10,7 @@ import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts
 import type { DaemonResponse } from '../../types.ts';
 
 vi.mock('../../../platforms/apple/core/runner/runner-client.ts', () => ({
-  hasCachedAppleRunnerArtifact: vi.fn(() => false),
+  hasCachedAppleRunnerArtifact: vi.fn(async () => false),
   prewarmAppleRunnerCache: vi.fn(),
 }));
 vi.mock('../session-doctor-device.ts', async (importOriginal) => {
@@ -62,7 +62,7 @@ const IOS_SIMULATOR: DeviceInfo = {
 
 beforeEach(() => {
   mockHasCachedArtifact.mockReset();
-  mockHasCachedArtifact.mockReturnValue(false);
+  mockHasCachedArtifact.mockResolvedValue(false);
   mockPrewarmCache.mockReset();
   mockIsActiveProviderDevice.mockReset();
   mockIsActiveProviderDevice.mockReturnValue(false);
@@ -108,7 +108,7 @@ test('doctor warms the iOS runner cache in the background when the artifact is m
 });
 
 test('doctor reports a cached iOS runner artifact without rebuilding', async () => {
-  mockHasCachedArtifact.mockReturnValue(true);
+  mockHasCachedArtifact.mockResolvedValue(true);
 
   const response = await withMockedPlatform('darwin', () =>
     runDoctorWithSessionDevice(IOS_SIMULATOR),
