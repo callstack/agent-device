@@ -94,6 +94,40 @@ test('open returns and creates the session state directory', async () => {
   }
 });
 
+test('open --debug writes bounded open timing diagnostics to requestLogPath', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-open-');
+  const device = makeIosDevice('SIM-DEBUG');
+  mockResolveTargetDevice.mockResolvedValue(device);
+
+  const handler = createOpenHandler(sessionStore);
+
+  const response = await handler(
+    openRequest('session-debug', { platform: 'ios', verbose: true }, 'req-open-debug', {
+      debug: true,
+    }),
+  );
+
+  expect(response.ok).toBe(true);
+  if (response.ok) {
+    const requestLogPath = String(response.data?.requestLogPath);
+    expect(fs.existsSync(requestLogPath)).toBe(true);
+    const rows = fs
+      .readFileSync(requestLogPath, 'utf8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const timingEvent = rows.find((row) => row.phase === 'open_timing');
+    expect(timingEvent).toMatchObject({
+      level: 'info',
+      phase: 'open_timing',
+      durationMs: expect.any(Number),
+      data: {
+        totalDurationMs: expect.any(Number),
+      },
+    });
+  }
+});
+
 test('open stores admitted lease metadata on the session', async () => {
   const sessionStore = makeSessionStore('agent-device-router-open-');
   const leaseRegistry = new LeaseRegistry({ now: () => 1_000 });

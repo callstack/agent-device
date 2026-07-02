@@ -32,7 +32,7 @@ import { buildNextOpenSession, buildOpenResult } from './session-open-surface.ts
 import { markAndroidSnapshotFreshness } from '../android-snapshot-freshness.ts';
 import { resetAndroidFramePerfStats } from '../../platforms/android/perf.ts';
 import { withKeyedLock } from '../../utils/keyed-lock.ts';
-import { getDiagnosticsMeta } from '../../utils/diagnostics.ts';
+import { emitDiagnostic, getDiagnosticsMeta } from '../../utils/diagnostics.ts';
 import { inferAndroidPackageAfterOpen } from './session-open-target.ts';
 import {
   invalidOpenArgs,
@@ -319,6 +319,12 @@ async function completeOpenCommand(params: {
     req.meta?.requestId ?? getDiagnosticsMeta().requestId,
   );
   timing.totalDurationMs = Math.max(0, Date.now() - openCommandStartedAtMs);
+  emitDiagnostic({
+    level: 'info',
+    phase: 'open_timing',
+    durationMs: timing.totalDurationMs,
+    data: timing,
+  });
   const openResult = buildOpenResult({
     sessionName: nextSession.name,
     sessionStateDir,

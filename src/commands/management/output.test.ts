@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { doctorCliOutput, managementCliOutputFormatters, openCliOutput } from './output.ts';
 import { markDoctorProgressRendered } from '../../cli-doctor-output.ts';
 import { withNoColor } from '../../__tests__/test-utils/index.ts';
+import type { AppOpenResult } from '../../client/client-types.ts';
 
 describe('openCliOutput', () => {
   test('prints session state directory on a second line', () => {
@@ -18,6 +19,18 @@ describe('openCliOutput', () => {
       session: 'default',
       sessionStateDir: '/tmp/agent-device/sessions/cwd_123_default',
     });
+  });
+
+  test('keeps internal open timing out of public output data', () => {
+    const result: AppOpenResult & { timing: { totalDurationMs: number } } = {
+      session: 'default',
+      sessionStateDir: '/tmp/agent-device/sessions/cwd_123_default',
+      identifiers: { session: 'default' },
+      timing: { totalDurationMs: 42 },
+    };
+    const output = openCliOutput(result);
+
+    expect(output.data).not.toHaveProperty('timing');
   });
 });
 

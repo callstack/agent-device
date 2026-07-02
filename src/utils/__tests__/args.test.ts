@@ -1659,6 +1659,8 @@ test('usageForCommand resolves debugging help topic', () => {
     help,
     /AGENT_DEVICE_EXEC_TRACE=1 when you need host-tool spawn timing without full debug streaming/,
   );
+  assert.match(help, /open --debug --json/);
+  assert.match(help, /open_timing event/);
   assert.match(help, /requests\/<request-id>\.ndjson holds daemon request diagnostics/);
   assert.match(help, /daemon\.log is global daemon lifecycle evidence/);
   assert.match(help, /agent-device perf memory sample --json/);
