@@ -68,6 +68,18 @@ test('normalizeDevice omits appleOs for non-Apple and invalid values', () => {
     kind: 'simulator',
   });
   assert.equal('appleOs' in bogus, false);
+
+  // Regression: a non-Apple platform carrying a VALID Apple OS value must still be
+  // dropped — appleOs is Apple-only, gated on the platform, not merely on being a
+  // valid AppleOS value.
+  const androidWithStrayAppleOs = normalizeDevice({
+    platform: 'android',
+    appleOs: 'macos',
+    id: 'emulator-5555',
+    name: 'Pixel',
+    kind: 'emulator',
+  });
+  assert.equal('appleOs' in androidWithStrayAppleOs, false);
 });
 
 test('normalizeSession carries the additive appleOs discriminant on the session device', () => {

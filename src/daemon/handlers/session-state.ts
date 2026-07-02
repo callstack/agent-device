@@ -277,8 +277,10 @@ export async function handleSessionStateCommands(params: {
         id: device.id,
         kind: device.kind,
         booted: true,
-        // Additive Apple-OS discriminant; Apple devices only (non-Apple omit it).
-        ...(device.appleOs ? { appleOs: device.appleOs } : {}),
+        // Additive Apple-OS discriminant; Apple devices only. Gate on the platform
+        // (not just field presence) so a non-Apple record with a stray appleOs never
+        // surfaces it.
+        ...(isApplePlatform(device.platform) && device.appleOs ? { appleOs: device.appleOs } : {}),
       },
     };
   }
@@ -344,8 +346,10 @@ export async function handleSessionStateCommands(params: {
         id: device.id,
         kind: device.kind,
         shutdown,
-        // Additive Apple-OS discriminant; Apple devices only (non-Apple omit it).
-        ...(device.appleOs ? { appleOs: device.appleOs } : {}),
+        // Additive Apple-OS discriminant; Apple devices only. Gate on the platform
+        // (not just field presence) so a non-Apple record with a stray appleOs never
+        // surfaces it.
+        ...(isApplePlatform(device.platform) && device.appleOs ? { appleOs: device.appleOs } : {}),
       },
     };
   }

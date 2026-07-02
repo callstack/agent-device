@@ -92,3 +92,14 @@ test('devices omits appleOs for non-Apple devices', async () => {
   const ios = devices.find((device) => device.id === IOS_SIMULATOR.id);
   expect(ios?.appleOs).toBe('ios');
 });
+
+test('devices drops a stray appleOs on a non-Apple device (gated to Apple platforms)', async () => {
+  // Regression: appleOs is Apple-only. A malformed/legacy NON-Apple record carrying a
+  // valid Apple OS value must NOT surface it — the projection gates on the platform,
+  // not merely on field presence.
+  const androidWithStrayAppleOs: DeviceInfo = { ...ANDROID_EMULATOR, appleOs: 'macos' };
+  const devices = await listPublicDevices([androidWithStrayAppleOs]);
+  const android = devices.find((device) => device.id === ANDROID_EMULATOR.id);
+  expect(android?.platform).toBe('android');
+  expect(android && 'appleOs' in android).toBe(false);
+});

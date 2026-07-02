@@ -45,8 +45,12 @@ export async function handleSessionInventoryCommands(params: {
               runnerLogPath: resolveSessionRunnerLogPath(sessionStateDir),
               // approach (b): emit the PUBLIC leaf platform (ios/macos), not `apple`.
               platform: publicPlatformString(session.device),
-              // Additive Apple-OS discriminant; Apple devices only (non-Apple omit it).
-              ...(session.device.appleOs ? { appleOs: session.device.appleOs } : {}),
+              // Additive Apple-OS discriminant; Apple devices only. Gate on the
+              // platform (not just field presence) so a non-Apple record carrying a
+              // stray appleOs value never surfaces it.
+              ...(isApplePlatform(session.device.platform) && session.device.appleOs
+                ? { appleOs: session.device.appleOs }
+                : {}),
               target: session.device.target ?? 'mobile',
               surface: session.surface ?? 'app',
               device: session.device.name,
@@ -104,7 +108,7 @@ export async function handleSessionInventoryCommands(params: {
         ({ simulatorSetPath: _simulatorSetPath, appleOs, ...device }) => ({
           ...device,
           platform: publicPlatformString({ platform: device.platform, appleOs }),
-          ...(appleOs ? { appleOs } : {}),
+          ...(isApplePlatform(device.platform) && appleOs ? { appleOs } : {}),
         }),
       );
       return { ok: true, data: { devices: publicDevices } };

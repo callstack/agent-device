@@ -4,7 +4,7 @@ import type { DaemonRequest, SessionRuntimeHints } from '../daemon/types.ts';
 import { AppError, type NormalizedError } from '../kernel/errors.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { buildAppIdentifiers, buildDeviceIdentifiers } from './client-shared.ts';
-import { isAppleOs, isPublicPlatform, type AppleOS } from '../kernel/device.ts';
+import { isAppleOs, isApplePlatform, isPublicPlatform, type AppleOS } from '../kernel/device.ts';
 import {
   leaseScopeFromOptions,
   leaseScopeToCommandFlags,
@@ -102,8 +102,9 @@ export function normalizeDevice(value: unknown): AgentDeviceDevice {
     id,
     name,
     booted: typeof record.booted === 'boolean' ? record.booted : undefined,
-    // Additive Apple-OS discriminant; present only when the daemon emits it (Apple devices).
-    ...(appleOs ? { appleOs } : {}),
+    // Additive Apple-OS discriminant; Apple platforms only — gate on the platform so
+    // a non-Apple record with a stray appleOs value is not preserved.
+    ...(isApplePlatform(platform) && appleOs ? { appleOs } : {}),
     identifiers: buildDeviceIdentifiers(platform, id, name),
     ...buildClientDevicePlatformFields(platform, id),
   };
