@@ -460,6 +460,13 @@ function isDebugRequested(argv: string[]): boolean {
 
 function formatUnhandledCommandMessage(command: string): string {
   if (isKnownCliCommandName(command)) {
+    // Registered-but-unhandled means catalog/dispatch drift — make it visible
+    // in telemetry too, not just the thrown message (from #1055).
+    emitDiagnostic({
+      level: 'error',
+      phase: 'cli_known_command_unhandled',
+      data: { command },
+    });
     return `Command is registered but no CLI handler accepted it: ${command}`;
   }
   return `Unknown command: ${command}`;
