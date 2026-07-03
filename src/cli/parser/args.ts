@@ -347,11 +347,14 @@ function normalizeParsedCommandAliases(parsed: ParsedArgs): ParsedArgs {
 }
 
 function isCommandKnown(command: string): boolean {
+  // Must stay in sync with the authoritative dispatch fall-through in
+  // cli.ts ("Unknown command"): any command runnable there must be listed in
+  // the catalog (or below), or this early check rejects it at parse time.
   // 'help' is handled specially in cli.ts and is not in the command catalog
   if (command === 'help') return true;
   // Internal commands are handled specially in cli.ts
-  if (Object.values(INTERNAL_COMMANDS).includes(command as any)) return true;
-  return listCliCommandNames().includes(command as any);
+  if ((Object.values(INTERNAL_COMMANDS) as readonly string[]).includes(command)) return true;
+  return (listCliCommandNames() as readonly string[]).includes(command);
 }
 
 const COMMAND_ALIAS_SUGGESTIONS: Record<string, string> = {
