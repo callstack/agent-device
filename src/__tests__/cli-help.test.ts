@@ -137,3 +137,19 @@ test('help rejects multiple positional commands and skips daemon dispatch', asyn
   assert.equal(result.calls.length, 0);
   assert.match(result.stderr, /Error \(INVALID_ARGS\): help accepts at most one command/);
 });
+
+test('unknown command with flags reports unknown command before flag validation', async () => {
+  const result = await runCliCapture(['tap', 'e3', '--session', 'foo']);
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stderr, /Error \(INVALID_ARGS\): Unknown command: tap/);
+  assert.match(result.stderr, /Did you mean press or click/);
+});
+
+test('unknown command without flags reports unknown command with alias suggestion', async () => {
+  const result = await runCliCapture(['tap', 'e3']);
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stderr, /Error \(INVALID_ARGS\): Unknown command: tap/);
+  assert.match(result.stderr, /Did you mean press or click/);
+});

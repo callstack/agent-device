@@ -11,6 +11,7 @@ import {
 } from '../../utils/command-schema.ts';
 import { buildCommandUsageText, buildUsageText } from './cli-help.ts';
 import { isFlagSupportedForCommand } from '../../utils/cli-option-schema.ts';
+import { listCliCommandNames, INTERNAL_COMMANDS } from '../../command-catalog.ts';
 
 type ParsedArgs = {
   command: string | null;
@@ -148,6 +149,18 @@ export function finalizeParsedArgs(
     options?.defaultFlags ?? {},
   );
   mergeDefinedFlags(flags, parsed.flags);
+
+  // Check if the command is known before validating flags
+  // This ensures "Unknown command" errors take precedence over flag validation errors
+  // However, skip this check if --help is provided, since cli.ts will handle it gracefully
+  if (parsed.command && !isCommandKnown(parsed.command) && !flags.help) {
+    const hint = getCommandAliasSuggestion(parsed.command);
+    const message = hint
+      ? `Unknown command: ${parsed.command}. Did you mean ${hint}?`
+      : `Unknown command: ${parsed.command}`;
+    throw new AppError('INVALID_ARGS', message);
+  }
+
   const disallowed = parsed.providedFlags.filter(
     (entry) => !isFlagSupportedForCommand(entry.key, parsed.command),
   );
@@ -331,6 +344,22 @@ function normalizeParsedCommandAliases(parsed: ParsedArgs): ParsedArgs {
     };
   }
   return parsed;
+}
+
+function isCommandKnown(command: string): boolean {
+  // 'help' is handled specially in cli.ts and is not in the command catalog
+  if (command === 'help') return true;
+  // Internal commands are handled specially in cli.ts
+  if (Object.values(INTERNAL_COMMANDS).includes(command as any)) return true;
+  return listCliCommandNames().includes(command as any);
+}
+
+const COMMAND_ALIAS_SUGGESTIONS: Record<string, string> = {
+  tap: 'press or click',
+};
+
+function getCommandAliasSuggestion(command: string): string | undefined {
+  return COMMAND_ALIAS_SUGGESTIONS[command];
 }
 
 function formatUnsupportedFlagMessage(command: string | null, unsupported: string[]): string {
