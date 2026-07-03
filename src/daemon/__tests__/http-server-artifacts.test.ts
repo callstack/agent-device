@@ -338,4 +338,5 @@ async function waitFor(condition: () => boolean | Promise<boolean>): Promise<voi
     if (await condition()) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
+  throw new Error('Timed out waiting for condition');
 }
