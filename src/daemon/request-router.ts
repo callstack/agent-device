@@ -5,7 +5,7 @@ import {
 import { AppError, normalizeError, retriableForErrorCode } from '../kernel/errors.ts';
 import { supportedPlatformsForCommand } from '../core/capabilities.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
-import type { DaemonError, ResponseCost } from '../kernel/contracts.ts';
+import type { DaemonArtifactType, DaemonError, ResponseCost } from '../kernel/contracts.ts';
 import type { CloudArtifactProvider } from '../cloud-artifacts.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, DaemonResponseData } from './types.ts';
 import { RESPONSE_VIEWS } from './response-views.ts';
@@ -66,6 +66,7 @@ export type RequestRouterDeps = {
   trackDownloadableArtifact: (opts: {
     artifactPath: string;
     tenantId?: string;
+    artifactType?: DaemonArtifactType;
     fileName?: string;
   }) => string;
 };

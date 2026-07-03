@@ -301,6 +301,7 @@ function trackProxyLeaseArtifact(): { artifactId: string; tempDir: string } {
     tempDir,
     artifactId: trackDownloadableArtifact({
       artifactPath,
+      artifactType: 'screenshot',
       fileName: 'proxy-shot.png',
       tenantId: 'tenant-a',
     }),

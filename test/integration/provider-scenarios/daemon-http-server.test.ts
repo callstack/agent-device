@@ -476,6 +476,7 @@ test('Provider-backed integration daemon HTTP server accepts uploads and streams
   fs.writeFileSync(downloadablePath, 'png-binary');
   const artifactId = trackDownloadableArtifact({
     artifactPath: downloadablePath,
+    artifactType: 'screenshot',
     fileName: 'screen.png',
   });
   const server = await createDaemonHttpServer({

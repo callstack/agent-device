@@ -110,8 +110,19 @@ export type DaemonRequest = {
   meta?: DaemonRequestMeta;
 };
 
+export type DaemonArtifactKnownType =
+  | 'screenshot'
+  | 'screenshot-diff'
+  | 'screen-recording'
+  | 'screen-recording-chunk'
+  | 'screen-recording-telemetry'
+  | 'trace-log';
+
+export type DaemonArtifactType = DaemonArtifactKnownType | (string & {});
+
 export type DaemonArtifact = {
   field: string;
+  artifactType?: DaemonArtifactType;
   artifactId?: string;
   fileName?: string;
   localPath?: string;

@@ -1,4 +1,5 @@
 import type { CommandFlags } from '../core/dispatch.ts';
+import type { DaemonArtifactType } from '../kernel/contracts.ts';
 import { withKeyedLock } from '../utils/keyed-lock.ts';
 import {
   emitDiagnostic,
@@ -182,6 +183,7 @@ export function prepareLockedRequestScope(params: {
   trackDownloadableArtifact: (opts: {
     artifactPath: string;
     tenantId?: string;
+    artifactType?: DaemonArtifactType;
     fileName?: string;
   }) => string;
 }): LockedRequestScopeResult {

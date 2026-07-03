@@ -213,6 +213,7 @@ function buildRecordStopResponse(
   const artifacts: DaemonArtifact[] = [
     {
       field: 'outPath',
+      artifactType: 'screen-recording',
       path: recording.outPath,
       localPath: recording.clientOutPath,
       fileName: path.basename(recording.clientOutPath ?? recording.outPath),
@@ -222,6 +223,7 @@ function buildRecordStopResponse(
     artifacts.push(
       ...chunks.slice(1).map((chunk) => ({
         field: 'chunkPath',
+        artifactType: 'screen-recording-chunk' as const,
         path: chunk.path,
         localPath: deriveAndroidChunkClientPath(recording, chunk.index),
         fileName: path.basename(deriveAndroidChunkClientPath(recording, chunk.index) ?? chunk.path),
@@ -231,6 +233,7 @@ function buildRecordStopResponse(
   if (recording.telemetryPath) {
     artifacts.push({
       field: 'telemetryPath',
+      artifactType: 'screen-recording-telemetry',
       path: recording.telemetryPath,
       localPath: deriveClientTelemetryPath(recording),
       fileName: path.basename(recording.telemetryPath),

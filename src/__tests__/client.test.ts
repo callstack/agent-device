@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { createAgentDeviceClient, type AgentDeviceClientConfig } from '../client/client.ts';
 import { runCommand } from '../commands/command-surface.ts';
-import type { DaemonRequest, DaemonResponse } from '../kernel/contracts.ts';
+import type { DaemonRequest, DaemonResponse, DaemonResponseData } from '../kernel/contracts.ts';
 import { AppError } from '../kernel/errors.ts';
 
 function createTransport(
@@ -809,11 +809,11 @@ test('sessions.stateDir resolves locally without contacting the daemon', async (
 });
 
 test('capture.screenshot passes a digest (non-default level) payload through unnormalized', async () => {
-  const digest = {
+  const digest: DaemonResponseData = {
     path: '/tmp/shot.png',
     overlayCount: 2,
     overlayRefs: [{ ref: 'e1', label: 'Login' }],
-    artifacts: [{ field: 'path', artifactId: 'a1' }],
+    artifacts: [{ field: 'path', artifactType: 'screenshot', artifactId: 'a1' }],
   };
   const setup = createTransport(async (req) => {
     assert.equal(req.command, 'screenshot');

@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError } from './kernel/errors.ts';
+import type { DaemonArtifactType } from './kernel/contracts.ts';
 
 export type FileInputRef =
   | {
@@ -28,6 +29,7 @@ export type ArtifactDescriptor =
   | {
       kind: 'localPath';
       field: string;
+      artifactType?: DaemonArtifactType;
       path: string;
       fileName?: string;
       metadata?: Record<string, unknown>;
@@ -35,6 +37,7 @@ export type ArtifactDescriptor =
   | {
       kind: 'artifact';
       field: string;
+      artifactType?: DaemonArtifactType;
       artifactId: string;
       fileName?: string;
       url?: string;
@@ -70,6 +73,7 @@ export type ResolveInputOptions = {
 export type ReserveOutputOptions = {
   field: string;
   ext: string;
+  artifactType?: DaemonArtifactType;
   requestedClientPath?: string;
   visibility?: OutputVisibility;
 };
@@ -139,6 +143,7 @@ export function createLocalArtifactAdapter(
             ? {
                 kind: 'localPath',
                 field: outputOptions.field,
+                artifactType: outputOptions.artifactType,
                 path: outputPath,
                 fileName: ref.fileName ?? path.basename(ref.clientPath ?? outputPath),
               }

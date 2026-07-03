@@ -40,7 +40,7 @@ test('screenshot --level digest --json preserves the digest payload through the 
     path: '/tmp/shot.png',
     overlayCount: 2,
     overlayRefs: [{ ref: 'e1', label: 'Login' }],
-    artifacts: [{ field: 'path', artifactId: 'a1' }],
+    artifacts: [{ field: 'path', artifactType: 'screenshot', artifactId: 'a1' }],
   };
   const client = clientReturning(digest, 'digest');
   const flags = { json: true, responseLevel: 'digest' } as CliFlags;

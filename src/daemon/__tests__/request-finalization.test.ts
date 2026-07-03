@@ -1,6 +1,7 @@
 import { test, expect } from 'vitest';
 import { finalizeDaemonResponse } from '../request-finalization.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
+import type { DaemonArtifactType } from '../../kernel/contracts.ts';
 
 test('finalizeDaemonResponse preserves handler error hints from details', () => {
   const req: DaemonRequest = {
@@ -28,4 +29,137 @@ test('finalizeDaemonResponse preserves handler error hints from details', () => 
   if (!finalized.ok) {
     expect(finalized.error.hint).toBe('Run agent-device session list and reuse --session default.');
   }
+});
+
+test('finalizeDaemonResponse registers downloadable artifact type', () => {
+  const req: DaemonRequest = {
+    token: 'token',
+    session: 'default',
+    command: 'record',
+    positionals: ['stop'],
+    meta: { tenantId: 'tenant-a' },
+  };
+  const response: DaemonResponse = {
+    ok: true,
+    data: {
+      artifacts: [
+        {
+          field: 'telemetryPath',
+          artifactType: 'screen-recording-telemetry',
+          path: '/tmp/telemetry.json',
+          localPath: '/client/telemetry.json',
+          fileName: 'telemetry.json',
+        },
+        {
+          field: 'rawPath',
+          path: '/tmp/raw.bin',
+          localPath: '/client/raw.bin',
+          fileName: 'raw.bin',
+        },
+      ],
+    },
+  };
+  const tracked: Array<{
+    artifactPath: string;
+    tenantId?: string;
+    artifactType?: DaemonArtifactType;
+    fileName?: string;
+  }> = [];
+
+  const finalized = finalizeDaemonResponse(req, response, (opts) => {
+    tracked.push(opts);
+    return `artifact-id-${tracked.length}`;
+  });
+
+  expect(finalized).toEqual({
+    ok: true,
+    data: {
+      artifacts: [
+        {
+          field: 'telemetryPath',
+          artifactType: 'screen-recording-telemetry',
+          artifactId: 'artifact-id-1',
+          fileName: 'telemetry.json',
+          localPath: '/client/telemetry.json',
+        },
+        {
+          field: 'rawPath',
+          artifactType: undefined,
+          artifactId: 'artifact-id-2',
+          fileName: 'raw.bin',
+          localPath: '/client/raw.bin',
+        },
+      ],
+    },
+  });
+  expect(tracked).toEqual([
+    {
+      artifactPath: '/tmp/telemetry.json',
+      tenantId: 'tenant-a',
+      artifactType: 'screen-recording-telemetry',
+      fileName: 'telemetry.json',
+    },
+    {
+      artifactPath: '/tmp/raw.bin',
+      tenantId: 'tenant-a',
+      artifactType: undefined,
+      fileName: 'raw.bin',
+    },
+  ]);
+});
+
+test('finalizeDaemonResponse keeps screenshot path fallback as screenshot artifact type', () => {
+  const req: DaemonRequest = {
+    token: 'token',
+    session: 'default',
+    command: 'screenshot',
+    positionals: [],
+    meta: {
+      clientArtifactPaths: {
+        path: '/client/screenshot.png',
+      },
+      tenantId: 'tenant-a',
+    },
+  };
+  const response: DaemonResponse = {
+    ok: true,
+    data: {
+      path: '/tmp/screenshot.png',
+    },
+  };
+  const tracked: Array<{
+    artifactPath: string;
+    tenantId?: string;
+    artifactType?: DaemonArtifactType;
+    fileName?: string;
+  }> = [];
+
+  const finalized = finalizeDaemonResponse(req, response, (opts) => {
+    tracked.push(opts);
+    return 'artifact-id';
+  });
+
+  expect(finalized).toEqual({
+    ok: true,
+    data: {
+      path: '/tmp/screenshot.png',
+      artifacts: [
+        {
+          field: 'path',
+          artifactType: 'screenshot',
+          artifactId: 'artifact-id',
+          fileName: 'screenshot.png',
+          localPath: '/client/screenshot.png',
+        },
+      ],
+    },
+  });
+  expect(tracked).toEqual([
+    {
+      artifactPath: '/tmp/screenshot.png',
+      tenantId: 'tenant-a',
+      artifactType: 'screenshot',
+      fileName: 'screenshot.png',
+    },
+  ]);
 });

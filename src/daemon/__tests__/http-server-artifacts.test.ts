@@ -20,6 +20,7 @@ import {
 type ArtifactInventoryResponse = {
   artifacts: Array<{
     id: string;
+    artifactType?: string;
     filename: string;
     mimeType: string;
     sizeBytes: number;
@@ -80,7 +81,11 @@ test('downloadable artifact inventory skips directory artifacts that fail to arc
   fs.writeFileSync(path.join(tracePath, 'metadata.json'), '{}\n');
   const artifactIds = [
     trackDownloadableArtifact({ artifactPath: filePath, fileName: 'report.json' }),
-    trackDownloadableArtifact({ artifactPath: tracePath, fileName: 'profile.trace' }),
+    trackDownloadableArtifact({
+      artifactPath: tracePath,
+      artifactType: 'trace-log',
+      fileName: 'profile.trace',
+    }),
   ];
 
   try {
@@ -112,6 +117,7 @@ test('daemon artifact inventory exposes directory artifacts as tar.gz downloads'
   fs.writeFileSync(path.join(tracePath, 'metadata.json'), '{"ok":true}\n');
   const artifactId = trackDownloadableArtifact({
     artifactPath: tracePath,
+    artifactType: 'trace-log',
     fileName: 'profile.trace',
   });
   const server = await createDaemonHttpServer({
@@ -174,6 +180,7 @@ test('daemon artifact inventory lists artifacts and downloads consume them', asy
   fs.writeFileSync(artifactPath, 'png-body');
   const artifactId = trackDownloadableArtifact({
     artifactPath,
+    artifactType: 'screenshot',
     fileName: 'shot.png',
   });
   const server = await createDaemonHttpServer({
@@ -191,6 +198,7 @@ test('daemon artifact inventory lists artifacts and downloads consume them', asy
     const body = (await inventory.json()) as ArtifactInventoryResponse;
     const artifact = body.artifacts.find((entry) => entry.id === artifactId);
     assert.ok(artifact, `expected ${artifactId} in artifact inventory`);
+    assert.equal(artifact.artifactType, 'screenshot');
     assert.equal(artifact.filename, 'shot.png');
     assert.equal(artifact.mimeType, 'application/octet-stream');
     assert.equal(artifact.sizeBytes, 'png-body'.length);
@@ -256,12 +264,11 @@ test('daemon artifact downloads can keep the source file while consuming the inv
     assert.equal(await consumingDownload.text(), 'runner-output');
     assert.equal(fs.existsSync(artifactPath), true);
 
-    const inventoryAfterConsume = await fetch(`${baseUrl}/artifacts`, { headers: auth });
-    const consumedBody = (await inventoryAfterConsume.json()) as ArtifactInventoryResponse;
-    assert.equal(
-      consumedBody.artifacts.some((entry) => entry.id === artifactId),
-      false,
-    );
+    await waitFor(async () => {
+      const inventoryAfterConsume = await fetch(`${baseUrl}/artifacts`, { headers: auth });
+      const consumedBody = (await inventoryAfterConsume.json()) as ArtifactInventoryResponse;
+      return !consumedBody.artifacts.some((entry) => entry.id === artifactId);
+    });
   } finally {
     cleanupDownloadableArtifact(artifactId);
     await closeLoopbackServer(server);
@@ -314,9 +321,9 @@ test('daemon artifact downloads can be forced retained by server option', async 
   }
 });
 
-async function waitFor(condition: () => boolean): Promise<void> {
+async function waitFor(condition: () => boolean | Promise<boolean>): Promise<void> {
   for (let attempt = 0; attempt < 20; attempt++) {
-    if (condition()) return;
+    if (await condition()) return;
     await new Promise((resolve) => setTimeout(resolve, 10));
   }
 }

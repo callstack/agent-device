@@ -194,7 +194,8 @@ function formatCloudArtifactLine(artifact: CloudArtifactsResult['cloudArtifacts'
 }
 
 function formatDaemonArtifactLine(artifact: DaemonArtifactsResult['artifacts'][number]): string {
-  return `${artifact.filename}: ${artifact.mimeType} ${artifact.sizeBytes} bytes id=${artifact.id}`;
+  const type = artifact.artifactType ? ` (${artifact.artifactType})` : '';
+  return `${artifact.filename}${type}: ${artifact.mimeType} ${artifact.sizeBytes} bytes id=${artifact.id}`;
 }
 
 function formatCloudArtifactsRetryCommand(result: CloudArtifactsResult): string | undefined {

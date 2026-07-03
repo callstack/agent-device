@@ -1,3 +1,5 @@
+import type { DaemonArtifactType } from './kernel/contracts.ts';
+
 const CLOUD_ARTIFACT_KINDS = [
   'video',
   'appium-log',
@@ -36,6 +38,7 @@ export type CloudArtifactsResult = {
 
 export type DaemonArtifactInventoryEntry = {
   id: string;
+  artifactType?: DaemonArtifactType;
   filename: string;
   mimeType: string;
   sizeBytes: number;

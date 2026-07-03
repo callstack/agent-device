@@ -69,6 +69,7 @@ export const recordCommand: RuntimeCommand<
     ? await reserveCommandOutput(runtime, options.out, {
         field: 'path',
         ext: '.mp4',
+        artifactType: 'screen-recording',
       })
     : undefined;
   try {
@@ -100,6 +101,7 @@ export const traceCommand: RuntimeCommand<
     ? await reserveCommandOutput(runtime, options.out, {
         field: 'outPath',
         ext: '.trace',
+        artifactType: 'trace-log',
       })
     : undefined;
   try {

@@ -5,12 +5,18 @@ import {
   flushDiagnosticsToSessionFile,
   getDiagnosticsMeta,
 } from '../utils/diagnostics.ts';
-import type { DaemonArtifact, DaemonRequest, DaemonResponse, DaemonResponseData } from './types.ts';
+import type { DaemonRequest, DaemonResponse, DaemonResponseData } from './types.ts';
+import type { DaemonArtifact, DaemonArtifactType } from '../kernel/contracts.ts';
 
 export function finalizeDaemonResponse(
   req: DaemonRequest,
   response: DaemonResponse,
-  trackArtifact: (opts: { artifactPath: string; tenantId?: string; fileName?: string }) => string,
+  trackArtifact: (opts: {
+    artifactPath: string;
+    tenantId?: string;
+    artifactType?: DaemonArtifactType;
+    fileName?: string;
+  }) => string,
 ): DaemonResponse {
   const details = getDiagnosticsMeta();
   if (!response.ok) {
@@ -52,7 +58,12 @@ export function finalizeDaemonResponse(
 function registerDownloadableArtifacts(
   req: DaemonRequest,
   data: DaemonResponseData | undefined,
-  trackArtifact: (opts: { artifactPath: string; tenantId?: string; fileName?: string }) => string,
+  trackArtifact: (opts: {
+    artifactPath: string;
+    tenantId?: string;
+    artifactType?: DaemonArtifactType;
+    fileName?: string;
+  }) => string,
 ): DaemonResponseData | undefined {
   if (!data) return data;
   const pendingArtifacts = collectPendingArtifacts(req, data);
@@ -63,9 +74,11 @@ function registerDownloadableArtifacts(
       const artifactPath = artifact.path as string;
       return {
         field: artifact.field,
+        artifactType: artifact.artifactType,
         artifactId: trackArtifact({
           artifactPath,
           tenantId: req.meta?.tenantId,
+          artifactType: artifact.artifactType,
           fileName: artifact.fileName,
         }),
         fileName: artifact.fileName,
@@ -82,6 +95,7 @@ function collectPendingArtifacts(req: DaemonRequest, data: DaemonResponseData): 
   if (req.command === 'screenshot' && !hasField('path') && typeof data.path === 'string') {
     artifacts.push({
       field: 'path',
+      artifactType: 'screenshot',
       path: data.path,
       localPath: req.meta?.clientArtifactPaths?.path,
       fileName: path.basename(req.meta?.clientArtifactPaths?.path ?? data.path),

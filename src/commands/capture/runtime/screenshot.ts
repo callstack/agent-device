@@ -22,6 +22,7 @@ export const screenshotCommand: RuntimeCommand<
   const reserved = await reserveCommandOutput(runtime, options.out, {
     field: 'path',
     ext: '.png',
+    artifactType: 'screenshot',
   });
 
   let artifact: ArtifactDescriptor | undefined;

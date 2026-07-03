@@ -65,7 +65,14 @@ const SCREENSHOT_DATA: DaemonResponseData = {
     overlayRef('e1', 'Continue'),
     overlayRef('e2', undefined), // label omitted → stays undefined in the digest
   ],
-  artifacts: [{ field: 'path', artifactId: 'art-1', fileName: 'screenshot.png' }], // cheap retrieval handle — preserved
+  artifacts: [
+    {
+      field: 'path',
+      artifactType: 'screenshot',
+      artifactId: 'art-1',
+      fileName: 'screenshot.png',
+    },
+  ], // cheap retrieval handle — preserved
 };
 
 test('screenshot view is registered', () => {
@@ -81,7 +88,14 @@ test('digest collapses overlay geometry to count + leveled refs, keeps cheap fie
       { ref: 'e1', label: 'Continue' },
       { ref: 'e2', label: undefined },
     ],
-    artifacts: [{ field: 'path', artifactId: 'art-1', fileName: 'screenshot.png' }],
+    artifacts: [
+      {
+        field: 'path',
+        artifactType: 'screenshot',
+        artifactId: 'art-1',
+        fileName: 'screenshot.png',
+      },
+    ],
   });
   // The per-overlay geometry (the token sink) is dropped from every ref.
   expect(digest.overlayRefs).not.toContainEqual(

@@ -12,6 +12,12 @@
 - CloudArtifact: provider-hosted session output such as video, Appium logs, device logs, automation
   logs, or provider dashboard links. Cloud artifacts stay under the `cloudArtifacts` response field
   so they do not collide with daemon-managed local/downloadable `artifacts`.
+- DaemonArtifactType: optional semantic category supplied by the command or adapter that owns a
+  daemon-managed downloadable artifact, such as `screenshot`, `screen-recording`, or `trace-log`.
+  Finalization and inventory code must preserve this value when present, not infer it from
+  filenames, fields, or MIME types. Missing artifact types must not prevent artifact registration.
+  The type documents known values while allowing provider or command owners to introduce more
+  specific strings.
 - Provider transcript: exact record of provider calls used when a test must verify platform command translation.
 - Scenario transcript: command-level integration flow that describes user-visible behavior through daemon commands.
 - In-process provider scenario harness: integration runner that invokes the daemon request handler directly without opening an HTTP listener.

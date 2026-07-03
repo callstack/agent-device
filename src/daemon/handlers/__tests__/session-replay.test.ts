@@ -119,6 +119,7 @@ function stopMockRecording(params: {
       artifacts: [
         {
           field: 'outPath',
+          artifactType: 'screen-recording',
           path: state.recordingPath,
           fileName: path.basename(state.recordingPath),
         },

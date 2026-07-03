@@ -86,6 +86,7 @@ export const diffScreenshotCommand: RuntimeCommand<
       ? await reserveCommandOutput(runtime, options.out, {
           field: 'diffPath',
           ext: '.png',
+          artifactType: 'screenshot-diff',
         })
       : undefined;
 
@@ -161,6 +162,7 @@ async function maybeAttachCurrentOverlay(
   const overlayOutput = await reserveCommandOutput(runtime, overlayOutputRef, {
     field: 'currentOverlayPath',
     ext: '.png',
+    artifactType: 'screenshot',
   });
 
   try {

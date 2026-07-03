@@ -90,6 +90,7 @@ describe('artifactsCliOutput', () => {
         artifacts: [
           {
             id: 'artifact-1',
+            artifactType: 'screenshot',
             filename: 'screenshot.png',
             mimeType: 'application/octet-stream',
             sizeBytes: 123,
@@ -100,10 +101,12 @@ describe('artifactsCliOutput', () => {
       },
     });
 
-    expect(output.text).toBe('screenshot.png: application/octet-stream 123 bytes id=artifact-1');
+    expect(output.text).toBe(
+      'screenshot.png (screenshot): application/octet-stream 123 bytes id=artifact-1',
+    );
     expect(output.data).toMatchObject({
       source: 'daemon',
-      artifacts: [{ id: 'artifact-1', filename: 'screenshot.png' }],
+      artifacts: [{ id: 'artifact-1', artifactType: 'screenshot', filename: 'screenshot.png' }],
     });
   });
 });
