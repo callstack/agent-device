@@ -1739,6 +1739,9 @@ test('press @ref promotes a non-hittable node to its hittable ancestor before ta
     expect(response.data?.ref).toBe('e2');
     expect(response.data?.x).toBe(180);
     expect(response.data?.y).toBe(136);
+    // Promotion landed on a hittable ancestor, so there is nothing to flag.
+    expect(response.data?.targetHittable).toBeUndefined();
+    expect(response.data?.hint).toBeUndefined();
   }
   expect(mockDispatch).toHaveBeenCalledTimes(1);
   expect(mockDispatch.mock.calls[0]?.[1]).toBe('press');
@@ -1798,6 +1801,12 @@ test('press @ref does not promote to a full-screen hittable ancestor', async () 
   if (response?.ok) {
     expect(response.data?.x).toBe(201);
     expect(response.data?.y).toBe(319);
+    // #1037: the press still proceeds against the non-hittable node (no stricter
+    // resolution), but the daemon response flags it so agents can react instead
+    // of assuming the tap had a visible effect.
+    expect(response.data?.targetHittable).toBe(false);
+    expect(typeof response.data?.hint).toBe('string');
+    expect(response.data?.hint as string).toMatch(/hittable: false/);
   }
   expect(mockDispatch).toHaveBeenCalledTimes(1);
   expect(mockDispatch.mock.calls[0]?.[2]).toEqual(['201', '319']);

@@ -93,6 +93,7 @@ async function resolveRefInteractionTarget(
       action: params.action === 'fill' ? 'fill' : 'click',
     }),
     refLabel: resolveRefLabel(node, capture.snapshot.nodes),
+    ...describeNonHittableTarget(node, params.action),
   };
 }
 
@@ -159,6 +160,26 @@ async function resolveSelectorInteractionTarget(
       action: params.action === 'fill' ? 'fill' : 'click',
     }),
     refLabel: resolveRefLabel(node, capture.snapshot.nodes),
+    ...describeNonHittableTarget(node, params.action),
+  };
+}
+
+/**
+ * iOS AX `hittable` flags are unreliable on deep React Native trees (see #1037:
+ * a map-pin annotation exact-matched a longer recents row label and reported tap
+ * success while doing nothing visible). We deliberately do NOT fail or filter on
+ * this signal — that would break selectors that only ever resolve to nodes the
+ * platform marks non-hittable. Instead, surface it so the caller can notice a
+ * likely no-op tap and re-target with a ref or a more specific selector/longer text.
+ */
+function describeNonHittableTarget(
+  node: SnapshotNode,
+  action: InteractionAction,
+): { targetHittable?: boolean; hint?: string } {
+  if (node.hittable !== false) return {};
+  return {
+    targetHittable: false,
+    hint: `The resolved element reports hittable: false, so this ${action} may have had no visible effect. Verify with a snapshot, or prefer a @ref or a longer/more specific selector to target the intended element.`,
   };
 }
 

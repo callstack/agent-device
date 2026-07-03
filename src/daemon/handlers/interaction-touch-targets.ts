@@ -132,6 +132,8 @@ export function interactionResultExtra(
       ref: stripAtPrefix(result.target?.kind === 'ref' ? result.target.ref : undefined),
       refLabel: result.refLabel,
       selectorChain: result.selectorChain,
+      targetHittable: result.targetHittable,
+      hint: result.hint,
     };
   }
   if (result.kind === 'selector') {
@@ -139,6 +141,8 @@ export function interactionResultExtra(
       selector: result.target?.kind === 'selector' ? result.target.selector : undefined,
       selectorChain: result.selectorChain,
       refLabel: result.refLabel,
+      targetHittable: result.targetHittable,
+      hint: result.hint,
     };
   }
   return {};

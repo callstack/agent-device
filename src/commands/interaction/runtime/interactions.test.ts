@@ -234,6 +234,60 @@ test('runtime click keeps non-button semantic targets at their own center', asyn
   assert.equal(result.node?.label, 'Account');
 });
 
+test('runtime press surfaces targetHittable and a hint when the final tap node is non-hittable (#1037)', async () => {
+  const calls: Point[] = [];
+  const device = createInteractionDevice(nonHittableCellSnapshot(), {
+    tap: async (_context, point) => {
+      calls.push(point);
+    },
+  });
+
+  const result = await device.interactions.press(ref('@e2'), { session: 'default' });
+
+  // Press still proceeds and reports success — non-hittable is informational only.
+  assert.deepEqual(calls, [{ x: 70, y: 30 }]);
+  assert.equal(result.kind, 'ref');
+  assert.equal(result.node?.label, 'Account');
+  assert.equal(result.targetHittable, false);
+  assert.match(result.hint ?? '', /hittable: false/);
+  assert.match(result.hint ?? '', /@ref/);
+});
+
+test('runtime press omits targetHittable and hint when the resolved node is hittable', async () => {
+  const device = createInteractionDevice(selectorSnapshot(), {
+    tap: async () => {},
+  });
+
+  const result = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+  });
+
+  assert.equal(result.kind, 'selector');
+  assert.equal(result.targetHittable, undefined);
+  assert.equal(result.hint, undefined);
+});
+
+test('runtime fill surfaces targetHittable and a hint for a non-hittable selector match (Maps pin case, #1037)', async () => {
+  const calls: Array<{ point: Point; text: string }> = [];
+  const device = createInteractionDevice(mapPinAnnotationSnapshot(), {
+    fill: async (_context, point, text) => {
+      calls.push({ point, text });
+    },
+  });
+
+  const result = await device.interactions.fill(
+    selector('text="Anthropic - Headquarters"'),
+    'ignored',
+    { session: 'default' },
+  );
+
+  assert.equal(result.kind, 'selector');
+  assert.equal(result.node?.label, 'Anthropic - Headquarters');
+  assert.equal(result.targetHittable, false);
+  assert.match(result.hint ?? '', /hittable: false/);
+  assert.deepEqual(calls, [{ point: { x: 192, y: 461 }, text: 'ignored' }]);
+});
+
 test('runtime click still promotes non-touchable nodes to hittable ancestors', async () => {
   const calls: Point[] = [];
   const device = createInteractionDevice(nonTouchableGroupSnapshot(), {
@@ -1087,6 +1141,31 @@ function nonHittableCellSnapshot(): SnapshotState {
       type: 'XCUIElementTypeCell',
       label: 'Account',
       rect: { x: 20, y: 10, width: 100, height: 40 },
+      hittable: false,
+    },
+  ]);
+}
+
+// Mirrors the #1037 Maps repro: a non-hittable map-pin annotation exact-matches
+// `text="Anthropic - Headquarters"` while the real, longer-labeled row is a
+// separate node. Fill/press must still proceed against the unique match (no
+// stricter resolution) but should flag it as likely non-actionable.
+function mapPinAnnotationSnapshot(): SnapshotState {
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Other',
+      label: 'Anthropic - Headquarters',
+      rect: { x: 177, y: 446, width: 30, height: 30 },
+      hittable: false,
+    },
+    {
+      index: 1,
+      depth: 1,
+      type: 'Button',
+      label: 'Anthropic - Headquarters, 548 Market St',
+      rect: { x: 0, y: 786, width: 390, height: 60 },
       hittable: false,
     },
   ]);

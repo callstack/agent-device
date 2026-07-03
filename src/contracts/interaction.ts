@@ -43,6 +43,8 @@ export type ResolvedInteractionTarget =
       node?: SnapshotNode;
       selectorChain?: string[];
       refLabel?: string;
+      targetHittable?: boolean;
+      hint?: string;
     }
   | {
       kind: 'selector';
@@ -51,6 +53,8 @@ export type ResolvedInteractionTarget =
       node: SnapshotNode;
       selectorChain: string[];
       refLabel?: string;
+      targetHittable?: boolean;
+      hint?: string;
     };
 
 export type PressCommandResult = ResolvedInteractionTarget & {

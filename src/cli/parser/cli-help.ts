@@ -189,6 +189,8 @@ Selectors:
     agent-device press 'id="submit-order"'
     agent-device is visible 'label="Online"'
     agent-device get text 'id="quantity-value"'
+  Ambiguous selector disambiguation: a selector on an interactive command (press/click/fill/focus/longpress/scroll/swipe/pinch) that matches multiple elements does not fail by default. It auto-resolves deepest node first (largest depth in the tree), then smallest on-screen area; only an exact tie on both depth and area fails with "Selector did not resolve uniquely". replay and replay-heal apply the same depth-then-area policy for touch/fill/get-text, so recorded flows and live commands pick the same candidate. This exists because short/reused labels (tab + header + button with the same text, or a duplicated list-row label) are common in real apps; add id="..." or a longer/more specific text to force a different match instead of assuming ambiguous selectors always fail.
+  Selector match can still land on a non-interactive node (for example an off-screen map annotation that exact-matches text= while the real control has a longer label). Success responses for press/fill/click/ref targets carry targetHittable: false and a hint when the resolved element reports hittable: false, since the tap may have had no visible effect; treat that as a signal to verify with a snapshot or re-target by @ref/longer text, not as a command failure.
 
 Text entry:
   fill replaces; type appends to focused field.

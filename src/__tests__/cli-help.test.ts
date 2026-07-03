@@ -106,6 +106,18 @@ test('help workflow preserves known device workaround guidance', async () => {
   assert.match(result.stdout, /Avoid broad restore-key fallbacks/);
 });
 
+test('help workflow documents the selector disambiguation policy (#1037)', async () => {
+  const result = await runCliCapture(['help', 'workflow']);
+  assert.equal(result.code, 0);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stdout, /does not fail by default/);
+  assert.match(result.stdout, /deepest node first/);
+  assert.match(result.stdout, /then smallest on-screen area/);
+  assert.match(result.stdout, /Selector did not resolve uniquely/);
+  assert.match(result.stdout, /replay and replay-heal apply the same depth-then-area policy/);
+  assert.match(result.stdout, /targetHittable: false/);
+});
+
 test('help unknown command prints error plus global usage and skips daemon dispatch', async () => {
   const result = await runCliCapture(['help', 'not-a-command']);
   assert.equal(result.code, 1);
