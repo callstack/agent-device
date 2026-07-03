@@ -70,6 +70,9 @@ export function toDaemonWaitData(result: Record<string, unknown>): Record<string
     waitedMs: result.waitedMs,
     ...(typeof result.text === 'string' ? { text: result.text } : {}),
     ...(typeof result.selector === 'string' ? { selector: result.selector } : {}),
+    ...(typeof result.settledAfterMs === 'number' ? { settledAfterMs: result.settledAfterMs } : {}),
+    ...(typeof result.captures === 'number' ? { captures: result.captures } : {}),
+    ...(typeof result.nodeCount === 'number' ? { nodeCount: result.nodeCount } : {}),
   };
 }
 

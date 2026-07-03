@@ -126,3 +126,18 @@ test('parseWaitArgs text keyword with non-numeric trailing leaves timeoutMs null
   const result = parseWaitArgs(['text', 'Loading', 'abc']);
   assert.deepEqual(result, { kind: 'text', text: 'Loading abc', timeoutMs: null });
 });
+
+test('parseWaitArgs parses bare stable keyword', () => {
+  const result = parseWaitArgs(['stable']);
+  assert.deepEqual(result, { kind: 'stable', quietMs: null, timeoutMs: null });
+});
+
+test('parseWaitArgs parses stable with quietMs', () => {
+  const result = parseWaitArgs(['stable', '500']);
+  assert.deepEqual(result, { kind: 'stable', quietMs: 500, timeoutMs: null });
+});
+
+test('parseWaitArgs parses stable with quietMs and timeoutMs', () => {
+  const result = parseWaitArgs(['stable', '500', '10000']);
+  assert.deepEqual(result, { kind: 'stable', quietMs: 500, timeoutMs: 10000 });
+});

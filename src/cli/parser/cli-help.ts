@@ -218,8 +218,11 @@ Read-only and waits:
   agent-device is visible 'label="Online"'
   agent-device wait text "Refreshing metrics..." 3000
   agent-device wait 'label="Ready"' 3000
+  agent-device wait stable
+  agent-device wait stable 500 10000
   agent-device find "Increment" press --json
   For async/list text presence, prefer wait text over is visible when no interaction is needed.
+  wait stable [quietMs] [timeoutMs] (defaults 500/10000) replaces guessed sleeps between actions and snapshots in the core loop: it polls the interactive-only tree and resolves once two or more consecutive captures are unchanged for quietMs, or fails with the standard wait-timeout shape plus the last capture stats (captures, nodeCount) on timeout; use it after relaunch/navigation instead of a fixed wait <ms> before the next snapshot or action.
   Use snapshot -i only when refs are needed for an action or targeted query.
   Ambiguous find: add --first or --last. If info is not visible/exposed, report that gap instead of typing/searching/navigating to reveal it.
 

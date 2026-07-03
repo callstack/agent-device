@@ -440,6 +440,8 @@ type WaitCommandTarget =
       text?: never;
       ref?: never;
       selector?: never;
+      stable?: never;
+      quietMs?: never;
       timeoutMs?: never;
     }
   | (SelectorSnapshotCommandOptions & {
@@ -447,6 +449,8 @@ type WaitCommandTarget =
       durationMs?: never;
       ref?: never;
       selector?: never;
+      stable?: never;
+      quietMs?: never;
       timeoutMs?: number;
     })
   | (SelectorSnapshotCommandOptions & {
@@ -454,6 +458,8 @@ type WaitCommandTarget =
       durationMs?: never;
       text?: never;
       selector?: never;
+      stable?: never;
+      quietMs?: never;
       timeoutMs?: number;
     })
   | (SelectorSnapshotCommandOptions & {
@@ -461,6 +467,17 @@ type WaitCommandTarget =
       durationMs?: never;
       text?: never;
       ref?: never;
+      stable?: never;
+      quietMs?: never;
+      timeoutMs?: number;
+    })
+  | (SelectorSnapshotCommandOptions & {
+      stable: true;
+      durationMs?: never;
+      text?: never;
+      ref?: never;
+      selector?: never;
+      quietMs?: number;
       timeoutMs?: number;
     });
 

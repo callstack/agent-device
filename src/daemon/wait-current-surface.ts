@@ -37,7 +37,7 @@ export async function maybeWaitTimeoutSurfaceResponse(
 }
 
 function isWaitTimeoutMessage(message: string): boolean {
-  return /^wait timed out for (?:selector|text): /i.test(message);
+  return /^wait timed out (?:for (?:selector|text): |waiting for a stable UI)/i.test(message);
 }
 
 async function inspectCurrentSurface(

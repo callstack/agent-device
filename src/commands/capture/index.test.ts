@@ -134,6 +134,37 @@ describe('capture command interface', () => {
     expectInvalidArgs(() => waitDaemonWriter({ text: 'Ready', ref: '@e1' }), 'exactly one');
   });
 
+  test('reads and writes wait stable with defaults', () => {
+    expect(waitCliReader(['stable'], flags())).toMatchObject({ stable: true });
+    expect(waitDaemonWriter({ stable: true })).toMatchObject({
+      command: 'wait',
+      positionals: ['stable'],
+    });
+  });
+
+  test('reads and writes wait stable with quietMs and timeoutMs', () => {
+    expect(waitCliReader(['stable', '500', '10000'], flags())).toMatchObject({
+      stable: true,
+      quietMs: 500,
+      timeoutMs: 10_000,
+    });
+    expect(waitDaemonWriter({ stable: true, quietMs: 500, timeoutMs: 10_000 })).toMatchObject({
+      command: 'wait',
+      positionals: ['stable', '500', '10000'],
+    });
+  });
+
+  test('rejects wait stable combined with another target', () => {
+    expectInvalidArgs(() => waitDaemonWriter({ stable: true, text: 'Ready' }), 'exactly one');
+  });
+
+  test('rejects wait stable timeoutMs without quietMs', () => {
+    expectInvalidArgs(
+      () => waitDaemonWriter({ stable: true, timeoutMs: 10_000 }),
+      'quietMs before timeoutMs',
+    );
+  });
+
   test('reads and writes alert action and timeout', () => {
     expect(alertCliReader(['wait', '3000'], flags())).toMatchObject({
       action: 'wait',

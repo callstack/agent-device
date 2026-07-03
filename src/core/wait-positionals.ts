@@ -5,7 +5,8 @@ export type WaitParsed =
   | { kind: 'sleep'; durationMs: number }
   | { kind: 'ref'; rawRef: string; timeoutMs: number | null }
   | { kind: 'selector'; selectorExpression: string; timeoutMs: number | null }
-  | { kind: 'text'; text: string; timeoutMs: number | null };
+  | { kind: 'text'; text: string; timeoutMs: number | null }
+  | { kind: 'stable'; quietMs: number | null; timeoutMs: number | null };
 
 export function parseWaitPositionals(args: string[]): WaitParsed | null {
   const firstArg = args[0];
@@ -16,6 +17,12 @@ export function parseWaitPositionals(args: string[]): WaitParsed | null {
   if (firstArg === 'text') {
     const text = timeoutMs !== null ? args.slice(1, -1).join(' ') : args.slice(1).join(' ');
     return { kind: 'text', text: text.trim(), timeoutMs };
+  }
+  if (firstArg === 'stable') {
+    const rest = args.slice(1);
+    const stableTimeoutMs = rest.length > 1 ? parseTimeout(rest[1]) : null;
+    const quietMs = rest.length > 0 ? parseTimeout(rest[0]) : null;
+    return { kind: 'stable', quietMs, timeoutMs: stableTimeoutMs };
   }
   if (firstArg.startsWith('@')) return { kind: 'ref', rawRef: firstArg, timeoutMs };
   const argsWithoutTimeout = timeoutMs !== null ? args.slice(0, -1) : args.slice();

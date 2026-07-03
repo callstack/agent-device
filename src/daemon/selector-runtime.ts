@@ -482,6 +482,13 @@ function toWaitTarget(parsed: WaitParsed, session: SessionState | undefined) {
     }
     return { kind: 'ref' as const, ref: parsed.rawRef, timeoutMs: parsed.timeoutMs };
   }
+  if (parsed.kind === 'stable') {
+    return {
+      kind: 'stable' as const,
+      quietMs: parsed.quietMs,
+      timeoutMs: parsed.timeoutMs,
+    };
+  }
   if (!parsed.text) throw new AppError('INVALID_ARGS', 'wait requires text');
   return { kind: 'text' as const, text: parsed.text, timeoutMs: parsed.timeoutMs };
 }

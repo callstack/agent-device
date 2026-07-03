@@ -338,6 +338,163 @@ test('runtime selector convenience methods use explicit target helpers', async (
   assert.deepEqual(waited, { kind: 'text', text: 'Ready', waitedMs: 0 });
 });
 
+test('runtime wait stable settles after two unchanged captures', async () => {
+  const snapshot = selectorSnapshot();
+  const clock = createFakeClock();
+  let captures = 0;
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      captureSnapshot: async () => {
+        captures += 1;
+        return { snapshot };
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
+    policy: localCommandPolicy(),
+    clock,
+  });
+
+  const result = await device.selectors.wait({
+    session: 'default',
+    target: { kind: 'stable', quietMs: 500, timeoutMs: 10_000 },
+  });
+
+  // Poll cadence is 300ms; a 500ms quiet window needs a 3rd identical capture to
+  // accumulate enough elapsed time since the first (baseline) capture.
+  assert.equal(result.kind, 'stable');
+  if (result.kind === 'stable') {
+    assert.equal(result.captures, 3);
+    assert.equal(result.nodeCount, snapshot.nodes.length);
+    assert.equal(result.settledAfterMs, result.waitedMs);
+  }
+  assert.equal(captures, 3);
+});
+
+test('runtime wait stable requires quiet captures after instability before settling', async () => {
+  const snapshot = selectorSnapshot();
+  const changedSnapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Button',
+      label: 'Loading',
+      rect: { x: 0, y: 0, width: 1, height: 1 },
+    },
+  ]);
+  const clock = createFakeClock();
+  let captures = 0;
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      captureSnapshot: async () => {
+        captures += 1;
+        // First capture unstable/changed relative to the initial nothing-seen-yet state,
+        // second capture changes again (still unstable), then two identical captures settle.
+        if (captures <= 2) return { snapshot: captures === 1 ? snapshot : changedSnapshot };
+        return { snapshot: changedSnapshot };
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
+    policy: localCommandPolicy(),
+    clock,
+  });
+
+  const result = await device.selectors.wait({
+    session: 'default',
+    target: { kind: 'stable', quietMs: 500, timeoutMs: 10_000 },
+  });
+
+  assert.equal(result.kind, 'stable');
+  // capture 1: baseline; capture 2: changed (reset quiet window); capture 3+4: unchanged -> settle.
+  assert.equal(captures, 4);
+});
+
+test('runtime wait stable times out with capture stats when never settling', async () => {
+  const clock = createFakeClock();
+  let captures = 0;
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      captureSnapshot: async () => {
+        captures += 1;
+        return {
+          snapshot: makeSnapshotState([
+            {
+              index: 0,
+              depth: 0,
+              type: 'Button',
+              label: `Item ${captures}`,
+              rect: { x: 0, y: 0, width: 1, height: 1 },
+            },
+          ]),
+        };
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default' }]),
+    policy: localCommandPolicy(),
+    clock,
+  });
+
+  await assert.rejects(
+    () =>
+      device.selectors.wait({
+        session: 'default',
+        target: { kind: 'stable', quietMs: 500, timeoutMs: 1_000 },
+      }),
+    (error: unknown) =>
+      error instanceof Error &&
+      error.message === 'wait timed out waiting for a stable UI' &&
+      (error as { details?: { reason?: string; captures?: number } }).details?.reason ===
+        'wait_stable_timeout' &&
+      typeof (error as { details?: { captures?: number } }).details?.captures === 'number',
+  );
+  assert.ok(captures > 1);
+});
+
+test('runtime wait stable uses provided defaults when quietMs/timeoutMs are omitted', async () => {
+  const snapshot = selectorSnapshot();
+  const clock = createFakeClock();
+  let captures = 0;
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      captureSnapshot: async () => {
+        captures += 1;
+        return { snapshot };
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
+    policy: localCommandPolicy(),
+    clock,
+  });
+
+  const result = await device.selectors.wait({
+    session: 'default',
+    target: { kind: 'stable' },
+  });
+
+  assert.equal(result.kind, 'stable');
+  assert.equal(captures, 3);
+});
+
+function createFakeClock(stepMs = 300): {
+  now: () => number;
+  sleep: (ms: number) => Promise<void>;
+} {
+  let elapsed = 0;
+  return {
+    now: () => elapsed,
+    sleep: async (ms: number) => {
+      elapsed += ms > 0 ? ms : stepMs;
+    },
+  };
+}
+
 function selectorSnapshot(): SnapshotState {
   return makeSnapshotState([
     {

@@ -36,7 +36,12 @@ export async function requireSnapshotSession(
 export async function captureSelectorSnapshot(
   runtime: AgentDeviceRuntime,
   options: CommandContext & SelectorSnapshotOptions,
-  captureOptions: { updateSession: boolean; scope?: string; includeRects?: boolean } = {
+  captureOptions: {
+    updateSession: boolean;
+    scope?: string;
+    includeRects?: boolean;
+    interactiveOnly?: boolean;
+  } = {
     updateSession: true,
   },
 ): Promise<CapturedSnapshot> {
@@ -47,7 +52,7 @@ export async function captureSelectorSnapshot(
   const sessionName = options.session ?? 'default';
   const session = await runtime.sessions.get(sessionName);
   const result = await captureSnapshot(toBackendContext(runtime, options), {
-    interactiveOnly: false,
+    interactiveOnly: captureOptions.interactiveOnly ?? false,
     depth: options.depth,
     scope: captureOptions.scope ?? options.scope,
     raw: options.raw,
