@@ -76,13 +76,21 @@ const LOCAL_CLI_COMMANDS = {
   web: 'web',
 } as const;
 
+export const SPECIAL_CLI_COMMANDS = {
+  help: 'help',
+} as const;
+
 export const GESTURE_KINDS = ['pan', 'fling', 'swipe', 'pinch', 'rotate', 'transform'] as const;
 export type GestureKind = (typeof GESTURE_KINDS)[number];
 export const GESTURE_SUBCOMMAND_ERROR = `gesture requires one of: ${GESTURE_KINDS.join(', ')}`;
 
 export type PublicCommandName = (typeof PUBLIC_COMMANDS)[keyof typeof PUBLIC_COMMANDS];
+export type InternalCommandName = (typeof INTERNAL_COMMANDS)[keyof typeof INTERNAL_COMMANDS];
 export type LocalCliCommandName = (typeof LOCAL_CLI_COMMANDS)[keyof typeof LOCAL_CLI_COMMANDS];
+export type SpecialCliCommandName =
+  (typeof SPECIAL_CLI_COMMANDS)[keyof typeof SPECIAL_CLI_COMMANDS];
 export type CliCommandName = PublicCommandName | LocalCliCommandName;
+export type KnownCliCommandName = CliCommandName | InternalCommandName | SpecialCliCommandName;
 export type ClientBackedCliCommandName =
   | PublicCommandName
   | typeof LOCAL_CLI_COMMANDS.debug
@@ -133,6 +141,12 @@ function commandSet(...commands: readonly string[]): ReadonlySet<string> {
 
 export function listCliCommandNames(): CliCommandName[] {
   return [...Object.values(PUBLIC_COMMANDS), ...Object.values(LOCAL_CLI_COMMANDS)].sort();
+}
+
+export function isKnownCliCommandName(command: string): command is KnownCliCommandName {
+  if ((Object.values(SPECIAL_CLI_COMMANDS) as readonly string[]).includes(command)) return true;
+  if ((Object.values(INTERNAL_COMMANDS) as readonly string[]).includes(command)) return true;
+  return (listCliCommandNames() as readonly string[]).includes(command);
 }
 
 export function isClientBackedCliCommandName(

@@ -11,7 +11,7 @@ import {
 } from '../../utils/command-schema.ts';
 import { buildCommandUsageText, buildUsageText } from './cli-help.ts';
 import { isFlagSupportedForCommand } from '../../utils/cli-option-schema.ts';
-import { listCliCommandNames, INTERNAL_COMMANDS } from '../../command-catalog.ts';
+import { isKnownCliCommandName } from '../../command-catalog.ts';
 
 type ParsedArgs = {
   command: string | null;
@@ -153,7 +153,7 @@ export function finalizeParsedArgs(
   // Check if the command is known before validating flags
   // This ensures "Unknown command" errors take precedence over flag validation errors
   // However, skip this check if --help is provided, since cli.ts will handle it gracefully
-  if (parsed.command && !isCommandKnown(parsed.command) && !flags.help) {
+  if (parsed.command && !isKnownCliCommandName(parsed.command) && !flags.help) {
     const hint = getCommandAliasSuggestion(parsed.command);
     const message = hint
       ? `Unknown command: ${parsed.command}. Did you mean ${hint}?`
@@ -346,18 +346,9 @@ function normalizeParsedCommandAliases(parsed: ParsedArgs): ParsedArgs {
   return parsed;
 }
 
-function isCommandKnown(command: string): boolean {
-  // Must stay in sync with the authoritative dispatch fall-through in
-  // cli.ts ("Unknown command"): any command runnable there must be listed in
-  // the catalog (or below), or this early check rejects it at parse time.
-  // 'help' is handled specially in cli.ts and is not in the command catalog
-  if (command === 'help') return true;
-  // Internal commands are handled specially in cli.ts
-  if ((Object.values(INTERNAL_COMMANDS) as readonly string[]).includes(command)) return true;
-  return (listCliCommandNames() as readonly string[]).includes(command);
-}
-
-const COMMAND_ALIAS_SUGGESTIONS: Record<string, string> = {};
+const COMMAND_ALIAS_SUGGESTIONS: Record<string, string> = {
+  tap: 'press or click',
+};
 
 function getCommandAliasSuggestion(command: string): string | undefined {
   return COMMAND_ALIAS_SUGGESTIONS[command];

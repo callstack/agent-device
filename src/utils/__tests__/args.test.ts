@@ -1,9 +1,18 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import * as ts from 'typescript';
 import { parseArgs, usage, usageForCommand } from '../../cli/parser/args.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { listCapabilityCommands } from '../../core/capabilities.ts';
-import { listCapabilityCheckedCommandNames, listCliCommandNames } from '../../command-catalog.ts';
+import {
+  INTERNAL_COMMANDS,
+  isKnownCliCommandName,
+  listCapabilityCheckedCommandNames,
+  listCliCommandNames,
+  SPECIAL_CLI_COMMANDS,
+} from '../../command-catalog.ts';
 import { getCliCommandSchema } from '../command-schema.ts';
 
 test('parseArgs recognizes command-specific flag combinations', async () => {
@@ -1955,6 +1964,32 @@ test('every CLI command has a derived or local parser schema entry', () => {
   }
 });
 
+test('known CLI command predicate covers catalog, help, and internal commands', () => {
+  for (const command of listCliCommandNames()) {
+    assert.equal(isKnownCliCommandName(command), true, `Missing CLI command: ${command}`);
+  }
+  for (const command of Object.values(SPECIAL_CLI_COMMANDS)) {
+    assert.equal(isKnownCliCommandName(command), true, `Missing special command: ${command}`);
+  }
+  for (const command of Object.values(INTERNAL_COMMANDS)) {
+    assert.equal(isKnownCliCommandName(command), true, `Missing internal command: ${command}`);
+  }
+  assert.equal(isKnownCliCommandName('tap'), false);
+  assert.equal(isKnownCliCommandName('not-a-command'), false);
+});
+
+test('cli.ts command dispatch checks are recognized by parser-level unknown-command handling', () => {
+  const commands = collectCliDispatchCommandLiterals();
+  assert.notEqual(commands.size, 0);
+  for (const command of commands) {
+    assert.equal(
+      isKnownCliCommandName(command),
+      true,
+      `cli.ts checks command "${command}" but the parser does not recognize it`,
+    );
+  }
+});
+
 test('schema capability mappings match capability source-of-truth', () => {
   assert.deepEqual(
     listCapabilityCheckedCommandNames(),
@@ -2375,3 +2410,54 @@ test('removed trigger aliases are no longer documented as commands', () => {
   const help = usageForCommand('trigger-screenshot-notification');
   assert.equal(help, null);
 });
+
+function collectCliDispatchCommandLiterals(): Set<string> {
+  const cliPath = fileURLToPath(new URL('../../cli.ts', import.meta.url));
+  const sourceText = fs.readFileSync(cliPath, 'utf8');
+  const sourceFile = ts.createSourceFile(
+    cliPath,
+    sourceText,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+  const commands = new Set<string>();
+
+  function visit(node: ts.Node): void {
+    if (ts.isBinaryExpression(node) && isEqualityOperator(node.operatorToken.kind)) {
+      const command = readCommandComparisonLiteral(node.left, node.right);
+      if (command) commands.add(command);
+    }
+    ts.forEachChild(node, visit);
+  }
+
+  visit(sourceFile);
+  return commands;
+}
+
+function isEqualityOperator(kind: ts.SyntaxKind): boolean {
+  return (
+    kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+    kind === ts.SyntaxKind.ExclamationEqualsEqualsToken
+  );
+}
+
+function readCommandComparisonLiteral(left: ts.Expression, right: ts.Expression): string | null {
+  if (isCommandExpression(left) && ts.isStringLiteralLike(right)) return right.text;
+  if (isCommandExpression(right) && ts.isStringLiteralLike(left)) return left.text;
+  return null;
+}
+
+function isCommandExpression(expression: ts.Expression): boolean {
+  const unwrapped = unwrapParenthesizedExpression(expression);
+  if (ts.isIdentifier(unwrapped)) return unwrapped.text === 'command';
+  return ts.isPropertyAccessExpression(unwrapped) && unwrapped.name.text === 'command';
+}
+
+function unwrapParenthesizedExpression(expression: ts.Expression): ts.Expression {
+  let current = expression;
+  while (ts.isParenthesizedExpression(current)) {
+    current = current.expression;
+  }
+  return current;
+}
