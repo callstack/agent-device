@@ -54,6 +54,33 @@ test('interaction and fill grammar share ref, selector, and point parsing', () =
   });
 });
 
+test('bare snapshot refs without @ prefix throw helpful error', () => {
+  assert.throws(
+    () => readInputFromCli('click', ['e3'], BASE_FLAGS),
+    (err: any) => {
+      assert.equal(err.code, 'INVALID_ARGS');
+      assert.match(err.message, /Did you mean "@e3"\?/);
+      return true;
+    },
+  );
+  assert.throws(
+    () => readInputFromCli('press', ['e123'], BASE_FLAGS),
+    (err: any) => {
+      assert.equal(err.code, 'INVALID_ARGS');
+      assert.match(err.message, /Did you mean "@e123"\?/);
+      return true;
+    },
+  );
+  assert.throws(
+    () => readInputFromCli('fill', ['e5', 'text'], BASE_FLAGS),
+    (err: any) => {
+      assert.equal(err.code, 'INVALID_ARGS');
+      assert.match(err.message, /Did you mean "@e5"\?/);
+      return true;
+    },
+  );
+});
+
 test('find and is grammar decodes command action positionals', () => {
   const findOptions = readInputFromCli('find', ['label', 'Continue', 'wait', '3000'], {
     ...BASE_FLAGS,
