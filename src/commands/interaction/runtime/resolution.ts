@@ -40,6 +40,15 @@ type ResolveInteractionTargetParams = {
   action: InteractionAction;
   requireInteractive: boolean;
   promoteToHittableAncestor: boolean;
+  /**
+   * `--verify` (#1047): also capture the pre-action node set for a `point` target
+   * so `changedFromBefore` evidence has a baseline. Ref/selector targets already
+   * capture a snapshot to resolve the target, so this is a no-op cost for them —
+   * their nodes are attached below regardless of this flag. For point targets,
+   * which normally skip capture entirely, this opts into one extra capture, only
+   * when the caller explicitly asked for verify evidence. Defaults to false.
+   */
+  captureEvidenceBaseline?: boolean;
 };
 
 export async function resolveInteractionTarget(
@@ -50,7 +59,7 @@ export async function resolveInteractionTarget(
   await assertSupportedInteractionSurface(runtime, options, params.action);
 
   if (options.target.kind === 'point') {
-    return resolvePointInteractionTarget(options.target);
+    return await resolvePointInteractionTarget(runtime, options, options.target, params);
   }
 
   if (options.target.kind === 'ref') {
@@ -60,11 +69,36 @@ export async function resolveInteractionTarget(
   return await resolveSelectorInteractionTarget(runtime, options, options.target, params);
 }
 
-function resolvePointInteractionTarget(target: PointTarget): ResolvedInteractionTarget {
+async function resolvePointInteractionTarget(
+  runtime: AgentDeviceRuntime,
+  options: CommandContext,
+  target: PointTarget,
+  params: ResolveInteractionTargetParams,
+): Promise<ResolvedInteractionTarget> {
+  if (!params.captureEvidenceBaseline) {
+    return { kind: 'point', point: { x: target.x, y: target.y } };
+  }
+  const preActionNodes = await tryCaptureEvidenceBaseline(runtime, options);
   return {
     kind: 'point',
     point: { x: target.x, y: target.y },
+    ...(preActionNodes ? { preActionNodes } : {}),
   };
+}
+
+async function tryCaptureEvidenceBaseline(
+  runtime: AgentDeviceRuntime,
+  options: CommandContext,
+): Promise<SnapshotNode[] | undefined> {
+  try {
+    const capture = await captureInteractionSnapshot(runtime, options, true);
+    return capture.snapshot.nodes;
+  } catch {
+    // Evidence is best-effort: a failed baseline capture must not fail the
+    // action itself. Post-action evidence (if any) will simply omit
+    // changedFromBefore.
+    return undefined;
+  }
 }
 
 async function resolveRefInteractionTarget(
@@ -94,6 +128,7 @@ async function resolveRefInteractionTarget(
     }),
     refLabel: resolveRefLabel(node, capture.snapshot.nodes),
     ...describeNonHittableTarget(node, params.action),
+    preActionNodes: capture.snapshot.nodes,
   };
 }
 
@@ -161,6 +196,7 @@ async function resolveSelectorInteractionTarget(
     }),
     refLabel: resolveRefLabel(node, capture.snapshot.nodes),
     ...describeNonHittableTarget(node, params.action),
+    preActionNodes: capture.snapshot.nodes,
   };
 }
 

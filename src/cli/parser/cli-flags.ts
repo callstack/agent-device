@@ -105,6 +105,7 @@ export type CliFlags = CloudProviderProfileFields &
     jitterPx?: number;
     pixels?: number;
     doubleTap?: boolean;
+    verify?: boolean;
     clickButton?: ClickButton;
     backMode?: BackMode;
     pauseMs?: number;
@@ -838,6 +839,14 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--double-tap',
     usageDescription: 'Use double-tap gesture per press iteration',
+  },
+  {
+    key: 'verify',
+    names: ['--verify'],
+    type: 'boolean',
+    usageLabel: '--verify',
+    usageDescription:
+      'Capture cheap post-action evidence (AX digest, node counts, changedFromBefore) instead of a follow-up snapshot',
   },
   {
     key: 'clickButton',

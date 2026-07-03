@@ -165,6 +165,21 @@ function interactionResultSchema(extra: InteractionExtra = {}): JsonSchema {
 
 const backendResultSchema = looseObjectSchema('Raw backend result passthrough.');
 
+// InteractionEvidence (src/contracts/interaction.ts) — opt-in `--verify` cheap
+// post-condition evidence (#1047).
+const interactionEvidenceSchema: JsonSchema = objectSchema(
+  {
+    foregroundApp: stringSchema('Foreground app bundle id or name, when the capture carries it.'),
+    nodeCount: numberSchema('Node count in the post-action interactive-only capture.'),
+    interactiveNodeCount: numberSchema('Subset of nodeCount the platform reports as hittable.'),
+    digest: stringSchema('Order-independent digest of the post-action node multiset.'),
+    changedFromBefore: booleanSchema(
+      'Whether the post-action digest differs from the pre-action capture digest. false is evidence, not failure.',
+    ),
+  },
+  ['nodeCount', 'interactiveNodeCount', 'digest', 'changedFromBefore'],
+);
+
 // boot / shutdown share the resolved-device header (src/contracts/device.ts).
 const deviceHeaderProperties: Record<string, JsonSchema> = {
   platform: enumSchema(PLATFORMS),
@@ -190,7 +205,11 @@ const targetShutdownResultSchema: JsonSchema = objectSchema(
 export const COMMAND_OUTPUT_SCHEMAS = {
   // src/contracts/interaction.ts
   press: interactionResultSchema({
-    properties: { backendResult: backendResultSchema, message: stringSchema() },
+    properties: {
+      backendResult: backendResultSchema,
+      message: stringSchema(),
+      evidence: interactionEvidenceSchema,
+    },
   }),
   fill: interactionResultSchema({
     properties: {
@@ -198,6 +217,7 @@ export const COMMAND_OUTPUT_SCHEMAS = {
       warning: stringSchema(),
       backendResult: backendResultSchema,
       message: stringSchema(),
+      evidence: interactionEvidenceSchema,
     },
     required: ['text'],
   }),

@@ -208,6 +208,7 @@ async function runTargetedTouchInteraction(params: {
     holdMs: flags?.holdMs,
     jitterPx: flags?.jitterPx,
     doubleTap: flags?.doubleTap,
+    verify: flags?.verify,
   };
   return command === 'click'
     ? await runtime.interactions.click(target, options)
@@ -259,6 +260,7 @@ function readDirectIosSelectorTapTarget(params: {
   if (commandLabel !== 'click') return null;
   if (target.kind !== 'selector') return null;
   if (hasNonDefaultClickOptions(flags)) return null;
+  if (flags?.verify === true) return null;
   const selector = readSimpleIosSelectorTarget({ session, selectorExpression: target.selector });
   if (!selector) return null;
   return {
@@ -443,6 +445,7 @@ async function dispatchFillViaRuntime(
         session: sessionName,
         requestId: req.meta?.requestId,
         delayMs: req.flags?.delayMs,
+        verify: req.flags?.verify,
       }),
     buildPayloads: (result) => {
       const referenceFrame =
@@ -483,6 +486,7 @@ function readDirectIosSelectorFillTarget(params: {
 }): DirectIosSelectorTarget | null {
   const { session, target, flags } = params;
   if (target.kind !== 'selector') return null;
+  if (flags?.verify === true) return null;
   const selector = readSimpleIosSelectorTarget({ session, selectorExpression: target.selector });
   if (!selector) return null;
   return {

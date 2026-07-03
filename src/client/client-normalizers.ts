@@ -342,6 +342,7 @@ export function buildFlags(options: InternalRequestOptions): CommandFlags {
     jitterPx: options.jitterPx,
     pixels: options.pixels,
     doubleTap: options.doubleTap,
+    verify: options.verify,
     clickButton: options.clickButton,
     pauseMs: options.pauseMs,
     pattern: options.pattern,

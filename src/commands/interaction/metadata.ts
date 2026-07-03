@@ -66,17 +66,24 @@ const interactionCommandDescriptions = {
 
 type InteractionCommandName = keyof typeof interactionCommandDescriptions;
 
+const verifyField = () =>
+  booleanField(
+    'Capture cheap post-action evidence (AX digest, node counts, changedFromBefore) instead of a follow-up snapshot.',
+  );
+
 const clickFields = {
   target: requiredField(interactionTargetField()),
   button: enumField(CLICK_BUTTONS, 'Pointer button for platforms that support mouse buttons.'),
   ...selectorSnapshotFields(),
   ...repeatedFields(),
+  verify: verifyField(),
 };
 
 const pressFields = {
   target: requiredField(interactionTargetField()),
   ...selectorSnapshotFields(),
   ...repeatedFields(),
+  verify: verifyField(),
 };
 
 const fillFields = {
@@ -84,6 +91,7 @@ const fillFields = {
   text: requiredField(stringField('Text to enter into the target.')),
   delayMs: integerField('Delay between typed characters.', { min: 0 }),
   ...selectorSnapshotFields(),
+  verify: verifyField(),
 };
 
 const longPressFields = {

@@ -70,7 +70,7 @@ const interactionCliSchemas = {
     usageOverride: 'click <x y|@ref|selector>',
     positionalArgs: ['target'],
     allowsExtraPositionals: true,
-    allowedFlags: [...REPEATED_TOUCH_FLAGS, 'clickButton', ...SELECTOR_SNAPSHOT_FLAGS],
+    allowedFlags: [...REPEATED_TOUCH_FLAGS, 'clickButton', 'verify', ...SELECTOR_SNAPSHOT_FLAGS],
   },
   press: {
     usageOverride: 'press <x y|@ref|selector>',
@@ -78,7 +78,7 @@ const interactionCliSchemas = {
       'Short press a semantic UI target by ref, selector, or point. For native context menus or hold gestures, use longpress <target> <durationMs> instead of press --hold-ms.',
     positionalArgs: ['targetOrX', 'y?'],
     allowsExtraPositionals: true,
-    allowedFlags: [...REPEATED_TOUCH_FLAGS, ...SELECTOR_SNAPSHOT_FLAGS],
+    allowedFlags: [...REPEATED_TOUCH_FLAGS, 'verify', ...SELECTOR_SNAPSHOT_FLAGS],
   },
   longpress: {
     usageOverride: 'longpress <x y|@ref|selector> [durationMs]',
@@ -114,7 +114,7 @@ const interactionCliSchemas = {
     usageOverride: 'fill <x> <y> <text> | fill <@ref|selector> <text>',
     positionalArgs: ['targetOrX', 'yOrText', 'text?'],
     allowsExtraPositionals: true,
-    allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS, 'delayMs'],
+    allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS, 'delayMs', 'verify'],
   },
   scroll: {
     usageOverride: 'scroll <direction|top|bottom> [amount] [--pixels <n>] [--duration-ms <ms>]',
@@ -342,6 +342,7 @@ function toClickOptions(input: ClickInput): ClickOptions {
     ...toSelectorSnapshotOptions(input),
     ...toRepeatedOptions(input),
     button: input.button,
+    verify: input.verify,
   };
 }
 
@@ -351,6 +352,7 @@ function toPressOptions(input: PressInput): PressOptions {
     ...toClientInteractionTarget(input.target),
     ...toSelectorSnapshotOptions(input),
     ...toRepeatedOptions(input),
+    verify: input.verify,
   };
 }
 
@@ -361,6 +363,7 @@ function toFillOptions(input: FillInput): FillOptions {
     ...toSelectorSnapshotOptions(input),
     text: input.text,
     delayMs: input.delayMs,
+    verify: input.verify,
   };
 }
 

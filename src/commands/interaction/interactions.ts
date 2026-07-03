@@ -37,12 +37,14 @@ export const interactionCliReaders = {
     ...repeatedInputFromFlags(flags),
     target: targetInputFromClientTarget(readInteractionTargetFromPositionals(positionals)),
     button: flags.clickButton,
+    verify: flags.verify,
   }),
   press: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
     ...selectorSnapshotInputFromFlags(flags),
     ...repeatedInputFromFlags(flags),
     target: targetInputFromClientTarget(readInteractionTargetFromPositionals(positionals)),
+    verify: flags.verify,
   }),
   longpress: (positionals, flags) => {
     const decoded = readLongPressTargetFromPositionals(positionals);
@@ -80,6 +82,7 @@ export const interactionCliReaders = {
       target: targetInputFromClientTarget(decoded.target),
       text: decoded.text,
       delayMs: flags.delayMs,
+      verify: flags.verify,
     };
   },
   scroll: (positionals, flags) => ({

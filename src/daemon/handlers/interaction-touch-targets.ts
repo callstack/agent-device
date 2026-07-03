@@ -127,6 +127,10 @@ export function parseFillTarget(positionals: string[]): ParsedFillTarget {
 export function interactionResultExtra(
   result: PressCommandResult | FillCommandResult | LongPressCommandResult,
 ): Record<string, unknown> {
+  // `evidence` (#1047, opt-in via --verify) is additive on press/fill only —
+  // LongPressCommandResult has no evidence field, so it reads as undefined
+  // (and gets dropped by the response layer) for longpress.
+  const evidence = 'evidence' in result ? result.evidence : undefined;
   if (result.kind === 'ref') {
     return {
       ref: stripAtPrefix(result.target?.kind === 'ref' ? result.target.ref : undefined),
@@ -134,6 +138,7 @@ export function interactionResultExtra(
       selectorChain: result.selectorChain,
       targetHittable: result.targetHittable,
       hint: result.hint,
+      evidence,
     };
   }
   if (result.kind === 'selector') {
@@ -143,9 +148,10 @@ export function interactionResultExtra(
       refLabel: result.refLabel,
       targetHittable: result.targetHittable,
       hint: result.hint,
+      evidence,
     };
   }
-  return {};
+  return { evidence };
 }
 
 export function formatTouchTargetLabel(

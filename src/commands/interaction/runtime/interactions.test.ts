@@ -27,6 +27,56 @@ test('runtime click taps an explicit point without requiring a snapshot', async 
   assert.deepEqual(result, { kind: 'point', point: { x: 10, y: 20 } });
 });
 
+test('runtime click with verify captures a baseline for point targets and reports evidence', async () => {
+  let captureCount = 0;
+  const device = createInteractionDevice(selectorSnapshot(), {
+    captureSnapshot: async () => {
+      captureCount += 1;
+      if (captureCount === 1) return { snapshot: selectorSnapshot() };
+      return { snapshot: makeSnapshotState([]) };
+    },
+    tap: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.click(
+    { kind: 'point', x: 10, y: 20 },
+    { session: 'default', verify: true },
+  );
+
+  assert.equal(result.kind, 'point');
+  assert.ok(result.evidence);
+  assert.equal(result.evidence?.changedFromBefore, true);
+  assert.equal(result.evidence?.nodeCount, 0);
+  assert.equal(captureCount, 2);
+});
+
+test('runtime click with verify skips the native ref fast path so evidence can be captured', async () => {
+  const calls: string[] = [];
+  let captureCount = 0;
+  const device = createInteractionDevice(selectorSnapshot(), {
+    platform: 'web',
+    captureSnapshot: async () => {
+      captureCount += 1;
+      return { snapshot: selectorSnapshot() };
+    },
+    tapTarget: async (_context, target) => {
+      calls.push(target.ref);
+      return { ref: target.ref.replace(/^@/, '') };
+    },
+    tap: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.click(ref('@e1'), {
+    session: 'default',
+    verify: true,
+  });
+
+  assert.deepEqual(calls, []);
+  assert.equal(result.kind, 'ref');
+  assert.ok(result.evidence);
+  assert.ok(captureCount >= 1);
+});
+
 test('runtime click uses backend ref primitive without resolving snapshot geometry', async () => {
   const calls: string[] = [];
   const device = createInteractionDevice(selectorSnapshot(), {
@@ -160,6 +210,127 @@ test('runtime selector interactions fall back to a full snapshot when interactiv
     { interactiveOnly: true, includeRects: true },
     { interactiveOnly: false, includeRects: true },
   ]);
+});
+
+test('runtime press without verify omits evidence entirely', async () => {
+  const device = createInteractionDevice(selectorSnapshot(), {
+    tap: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+  });
+
+  assert.equal('evidence' in result, false);
+});
+
+test('runtime press with verify reports unchanged evidence when the post-action capture matches', async () => {
+  const device = createInteractionDevice(selectorSnapshot(), {
+    tap: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+    verify: true,
+  });
+
+  assert.equal(result.kind, 'selector');
+  assert.ok(result.evidence);
+  assert.equal(result.evidence?.changedFromBefore, false);
+  assert.equal(result.evidence?.nodeCount, 1);
+  assert.equal(result.evidence?.interactiveNodeCount, 1);
+  assert.equal(typeof result.evidence?.digest, 'string');
+  assert.ok(result.evidence?.digest.startsWith('ax1:'));
+});
+
+test('runtime press with verify reports changedFromBefore true when the post-action capture differs', async () => {
+  let captureCount = 0;
+  const device = createInteractionDevice(selectorSnapshot(), {
+    captureSnapshot: async () => {
+      captureCount += 1;
+      if (captureCount === 1) return { snapshot: selectorSnapshot() };
+      return {
+        snapshot: makeSnapshotState([
+          {
+            index: 0,
+            depth: 0,
+            type: 'Button',
+            label: 'Continue',
+            value: 'Continue',
+            rect: { x: 10, y: 20, width: 100, height: 40 },
+            hittable: true,
+          },
+          {
+            index: 1,
+            depth: 0,
+            type: 'Text',
+            label: 'Loading…',
+            rect: { x: 10, y: 80, width: 100, height: 20 },
+            hittable: true,
+          },
+        ]),
+      };
+    },
+    tap: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+    verify: true,
+  });
+
+  assert.equal(result.kind, 'selector');
+  assert.ok(result.evidence);
+  assert.equal(result.evidence?.changedFromBefore, true);
+  assert.equal(result.evidence?.nodeCount, 2);
+});
+
+test('runtime fill without verify omits evidence entirely', async () => {
+  const device = createInteractionDevice(fillableSnapshot(), {
+    fill: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.fill(selector('label=Email'), 'hi', {
+    session: 'default',
+  });
+
+  assert.equal('evidence' in result, false);
+});
+
+test('runtime fill with verify reports evidence and detects a changed post-action capture', async () => {
+  let captureCount = 0;
+  const device = createInteractionDevice(fillableSnapshot(), {
+    captureSnapshot: async () => {
+      captureCount += 1;
+      if (captureCount === 1) return { snapshot: fillableSnapshot() };
+      return {
+        snapshot: makeSnapshotState([
+          {
+            index: 0,
+            depth: 0,
+            type: 'XCUIElementTypeTextField',
+            label: 'Email',
+            value: 'hi',
+            rect: { x: 20, y: 10, width: 60, height: 40 },
+            hittable: true,
+          },
+        ]),
+      };
+    },
+    fill: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.fill(selector('label=Email'), 'hi', {
+    session: 'default',
+    verify: true,
+  });
+
+  assert.equal(result.kind, 'selector');
+  assert.ok(result.evidence);
+  // Digest is over (type, label, identifier) only, so a value-only change does
+  // not flip the digest — this is intentional (see ax-digest.ts docs).
+  assert.equal(result.evidence?.changedFromBefore, false);
+  assert.equal(result.evidence?.nodeCount, 1);
 });
 
 test('runtime click keeps distinct tab button centers when iOS reports the tab bar as hittable', async () => {
