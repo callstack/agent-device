@@ -65,7 +65,8 @@ export function buildSnapshotDisplayLines(
     const depth = node.depth ?? 0;
     const label = node.label?.trim() || node.value?.trim() || node.identifier?.trim() || '';
     const type = formatRole(node.type ?? 'Element');
-    if (type === 'group' && !label) {
+    const hasInheritedLabel = node.inheritsLabel === true || node.inheritsIdentifier === true;
+    if (type === 'group' && !label && !hasInheritedLabel) {
       continue;
     }
     while (visibleDepths.length > 0 && depth <= visibleDepths[visibleDepths.length - 1]!) {
@@ -96,6 +97,9 @@ export function formatSnapshotLine(
   const indent = '  '.repeat(depth);
   const ref = node.ref ? `@${node.ref}` : '';
   const metadata = buildLineMetadata(node, type, options, textSurface);
+  if (!label && (node.inheritsLabel === true || node.inheritsIdentifier === true)) {
+    metadata.push('same label as parent');
+  }
   const metadataText = metadata.map((entry) => ` [${entry}]`).join('');
   const textPart = label ? ` "${label}"` : '';
   if (hiddenGroup) {

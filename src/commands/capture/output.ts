@@ -1,5 +1,6 @@
 import { serializeSnapshotResult } from '../../client/client-shared.ts';
 import type { CaptureSnapshotResult } from '../../client/client-types.ts';
+import { dedupeInheritedSnapshotLabels } from '../../snapshot/snapshot-label-dedup.ts';
 import { formatSnapshotText } from '../../utils/output.ts';
 import type { CliOutput } from '../command-contract.ts';
 import { messageOutput, type CliOutputFormatter } from '../output-common.ts';
@@ -11,7 +12,16 @@ export function snapshotCliOutput(params: {
   scope?: string;
   depth?: number;
 }): CliOutput {
-  const data = serializeSnapshotResult(params.result);
+  // --raw is the full-fidelity escape hatch (e.g. rect fallback lookups): keep
+  // it byte-for-byte, undeduped. Every other presentation (default text and
+  // --json) collapses labels/identifiers that repeat an ancestor's value.
+  // A non-default responseLevel (e.g. digest) can hand back a payload with no
+  // `nodes` array at all; leave it untouched rather than assume the shape.
+  const presentedResult =
+    params.raw || !Array.isArray(params.result.nodes)
+      ? params.result
+      : { ...params.result, nodes: dedupeInheritedSnapshotLabels(params.result.nodes) };
+  const data = serializeSnapshotResult(presentedResult);
   return {
     data,
     // Programmatic SDK callers can see `unchanged`; CLI --json hides it for schema compatibility.

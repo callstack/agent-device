@@ -75,6 +75,14 @@ export type HiddenContentHint = {
 
 export type SnapshotNode = RawSnapshotNode & {
   ref: string;
+  /**
+   * Output-only marker set by client-serialization dedup (see
+   * ../snapshot/snapshot-label-dedup.ts) when `label`/`identifier` was omitted
+   * because it string-equals the nearest ancestor's value in the parent chain.
+   * Never set on the in-daemon session tree used by selectors/wait/replay.
+   */
+  inheritsLabel?: true;
+  inheritsIdentifier?: true;
 };
 
 export type SnapshotBackend = 'xctest' | 'android' | 'macos-helper' | 'linux-atspi' | 'web';

@@ -59,7 +59,8 @@ const AGENT_START_LINES = [
 
 const AGENT_QUICKSTART_LINES = [
   'Planning output contract: when asked to plan commands, output command lines only: no prose, numbering, Markdown fences, pipes, or shell helpers.',
-  'Default loop: devices/apps -> open -> snapshot -i -> press/fill/get/is/wait/find -> verify -> close.',
+  'Default loop: devices/apps -> open -> snapshot -i -> press/fill/get/is/wait/find -> verify with diff snapshot -> close.',
+  'Verify a mutation with diff snapshot (or diff snapshot -i), not a full snapshot: it prints only the added/removed/changed lines since the last snapshot in this session, so confirming an action costs a few lines instead of the whole tree.',
   'Use selectors or refs as positional targets: id="submit", label="Allow", or @e12 from snapshot -i.',
   'Plain snapshot reads state; snapshot -i refreshes current interactive refs only.',
   'Default snapshot text is an agent-facing, token-efficient view for planning and targeting actions.',
@@ -131,7 +132,8 @@ const HELP_TOPICS = {
 Version-matched operating guide for normal agent-device work.
 
 Core loop:
-  devices/apps -> open -> snapshot or snapshot -i -> get/is/find/wait or press/fill/scroll/back -> verify -> close
+  devices/apps -> open -> snapshot or snapshot -i -> get/is/find/wait or press/fill/scroll/back -> verify with diff snapshot -> close
+  After a mutating command, prefer diff snapshot (or diff snapshot -i) over a full snapshot to verify the effect: it diffs the rendered snapshot lines against the previous one in this session and prints only what changed, so verification does not re-pay the cost of the whole tree.
 
 Fresh machine or first iOS run:
   Run agent-device doctor --platform ios first. Besides preflight checks it warms the iOS XCTest runner build cache in the background, so the first open skips the runner build (~10s). To block until fully warm instead, run agent-device prepare ios-runner.
