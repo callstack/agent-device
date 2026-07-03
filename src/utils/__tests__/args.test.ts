@@ -1161,6 +1161,13 @@ test('parseArgs supports legacy long-press alias', () => {
   assert.deepEqual(parsed.positionals, ['300', '500', '800']);
 });
 
+test('parseArgs supports tap alias for press', () => {
+  const parsed = parseArgs(['tap', '@e3', '--json'], { strictFlags: true });
+  assert.equal(parsed.command, 'press');
+  assert.deepEqual(parsed.positionals, ['@e3']);
+  assert.equal(parsed.flags.json, true);
+});
+
 test('parseArgs supports metrics alias for perf', () => {
   const parsed = parseArgs(['metrics'], { strictFlags: true });
   assert.equal(parsed.command, 'perf');
@@ -1492,6 +1499,7 @@ test('usageForCommand resolves workflow help topic', () => {
   const help = usageForCommand('workflow');
   if (help === null) throw new Error('Expected workflow help text');
   assert.match(help, /agent-device help workflow/);
+  assert.match(help, /tap is accepted as a CLI alias for press/);
   assert.match(help, /Use selectors as positional targets/);
   assert.match(help, /Do not use CSS selectors/);
   assert.match(help, /Snapshot legend:/);

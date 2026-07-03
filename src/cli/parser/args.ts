@@ -154,11 +154,7 @@ export function finalizeParsedArgs(
   // This ensures "Unknown command" errors take precedence over flag validation errors
   // However, skip this check if --help is provided, since cli.ts will handle it gracefully
   if (parsed.command && !isCommandKnown(parsed.command) && !flags.help) {
-    const hint = getCommandAliasSuggestion(parsed.command);
-    const message = hint
-      ? `Unknown command: ${parsed.command}. Did you mean ${hint}?`
-      : `Unknown command: ${parsed.command}`;
-    throw new AppError('INVALID_ARGS', message);
+    throw new AppError('INVALID_ARGS', `Unknown command: ${parsed.command}`);
   }
 
   const disallowed = parsed.providedFlags.filter(
@@ -357,14 +353,6 @@ function isCommandKnown(command: string): boolean {
   return (listCliCommandNames() as readonly string[]).includes(command);
 }
 
-const COMMAND_ALIAS_SUGGESTIONS: Record<string, string> = {
-  tap: 'press or click',
-};
-
-function getCommandAliasSuggestion(command: string): string | undefined {
-  return COMMAND_ALIAS_SUGGESTIONS[command];
-}
-
 function formatUnsupportedFlagMessage(command: string | null, unsupported: string[]): string {
   if (!command) {
     return unsupported.length === 1
@@ -387,5 +375,6 @@ export function usageForCommand(command: string): string | null {
 function normalizeCommandAlias(command: string): string {
   if (command === 'long-press') return 'longpress';
   if (command === 'metrics') return 'perf';
+  if (command === 'tap') return 'press';
   return command;
 }

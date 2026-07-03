@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
+import { parseArgs } from '../../cli/parser/args.ts';
 
 type RecordActionEntry = Parameters<SessionStore['recordAction']>[1];
 
@@ -152,6 +153,23 @@ test('saveScript path writes session log to custom location', () => {
   store.writeSessionLog(session);
   assert.equal(fs.existsSync(customPath), true);
   assert.equal(fs.existsSync(path.join(root, 'sessions')), false);
+});
+
+test('writeSessionLog records tap alias as canonical press', () => {
+  const fixture = makeFixture('agent-device-session-log-tap-alias-');
+  const parsed = parseArgs(['tap', '@e3', '--json'], { strictFlags: true });
+  assert.equal(parsed.command, 'press');
+
+  fixture.store.recordAction(fixture.session, {
+    command: parsed.command ?? '',
+    positionals: parsed.positionals,
+    flags: { ...parsed.flags, platform: 'ios', saveScript: true },
+    result: {},
+  });
+
+  const script = writeScript(fixture);
+  assert.match(script, /\npress @e3\n/);
+  assert.doesNotMatch(script, /\ntap @e3\n/);
 });
 
 test('writeSessionLog persists open --relaunch in script output', () => {
