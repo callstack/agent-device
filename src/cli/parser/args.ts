@@ -357,9 +357,7 @@ function isCommandKnown(command: string): boolean {
   return (listCliCommandNames() as readonly string[]).includes(command);
 }
 
-const COMMAND_ALIAS_SUGGESTIONS: Record<string, string> = {
-  tap: 'press or click',
-};
+const COMMAND_ALIAS_SUGGESTIONS: Record<string, string> = {};
 
 function getCommandAliasSuggestion(command: string): string | undefined {
   return COMMAND_ALIAS_SUGGESTIONS[command];
@@ -387,5 +385,6 @@ export function usageForCommand(command: string): string | null {
 function normalizeCommandAlias(command: string): string {
   if (command === 'long-press') return 'longpress';
   if (command === 'metrics') return 'perf';
+  if (command === 'tap') return 'press';
   return command;
 }

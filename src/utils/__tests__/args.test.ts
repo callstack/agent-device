@@ -1167,6 +1167,19 @@ test('parseArgs supports metrics alias for perf', () => {
   assert.deepEqual(parsed.positionals, []);
 });
 
+test('parseArgs supports tap alias for press', () => {
+  const parsed = parseArgs(['tap', '@e3'], { strictFlags: true });
+  assert.equal(parsed.command, 'press');
+  assert.deepEqual(parsed.positionals, ['@e3']);
+});
+
+test('parseArgs preserves flags when tap is aliased to press', () => {
+  const parsed = parseArgs(['tap', '@e3', '--json'], { strictFlags: true });
+  assert.equal(parsed.command, 'press');
+  assert.deepEqual(parsed.positionals, ['@e3']);
+  assert.equal(parsed.flags.json, true);
+});
+
 test('parseArgs supports trigger-app-event payload argument', () => {
   const parsed = parseArgs(['trigger-app-event', 'screenshot_taken', '{"source":"qa"}'], {
     strictFlags: true,
@@ -1192,6 +1205,13 @@ test('usageForCommand supports legacy long-press alias', () => {
   assert.equal(help === null, false);
   assert.match(help ?? '', /agent-device longpress <x y\|@ref\|selector> \[durationMs\]/);
   assert.doesNotMatch(help ?? '', /agent-device long-press/);
+});
+
+test('usageForCommand supports tap alias for press', () => {
+  const help = usageForCommand('tap');
+  assert.equal(help === null, false);
+  assert.match(help ?? '', /agent-device press/);
+  assert.doesNotMatch(help ?? '', /agent-device tap/);
 });
 
 test('usageForCommand documents keyboard dismissal flow', () => {
