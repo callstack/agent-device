@@ -184,6 +184,7 @@ function summarizeProviderScenarioFlagCoverage(files) {
     ['batchMaxSteps', 'batch max-step guard', ['maxSteps']],
     ['findFirst', 'find first disambiguation'],
     ['findLast', 'find last disambiguation'],
+    ['verify', 'post-action evidence capture on press/click/fill'],
   ];
   const sources = files.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
   return flagTargets.map(([key, reason, aliases = []]) => {
