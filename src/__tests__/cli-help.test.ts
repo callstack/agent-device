@@ -118,6 +118,58 @@ test('help workflow documents the selector disambiguation policy (#1037)', async
   assert.match(result.stdout, /targetHittable: false/);
 });
 
+test('help workflow documents selector and hittability guarantees (#1051)', async () => {
+  const result = await runCliCapture(['help', 'workflow']);
+  assert.equal(result.code, 0);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stdout, /Guarantees:/);
+  assert.match(
+    result.stdout,
+    /auto-disambiguates deepest node first, then smallest on-screen area/,
+  );
+  assert.match(result.stdout, /Selector did not resolve uniquely/);
+  assert.match(result.stdout, /non-hittable resolution is allowed by design/);
+  assert.match(result.stdout, /targetHittable: false plus a hint/);
+});
+
+test('help workflow documents open/close/relaunch runner guarantees (#1051)', async () => {
+  const result = await runCliCapture(['help', 'workflow']);
+  assert.equal(result.code, 0);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stdout, /idempotent-foreground for an already-running app/);
+  assert.match(
+    result.stdout,
+    /one simctl launch --terminate-running-process call instead of a separate terminate-then-launch/,
+  );
+  assert.match(
+    result.stdout,
+    /keeps a healthy iOS simulator XCTest runner warm by default so the next open on that device skips the runner build/,
+  );
+  assert.match(result.stdout, /the session held a device lease/);
+  assert.match(result.stdout, /AGENT_DEVICE_IOS_RUNNER_IDLE_STOP_MS/);
+  assert.match(result.stdout, /default 5 minutes/);
+});
+
+test('help workflow documents ref lifetime, snapshot diff, and wait guarantees (#1051)', async () => {
+  const result = await runCliCapture(['help', 'workflow']);
+  assert.equal(result.code, 0);
+  assert.equal(result.calls.length, 0);
+  assert.match(
+    result.stdout,
+    /open and open --relaunch clear the session's stored snapshot outright/,
+  );
+  assert.match(
+    result.stdout,
+    /diff snapshot compares the current capture against the session's last stored snapshot/,
+  );
+  assert.match(
+    result.stdout,
+    /initializes the baseline and reports zero additions\/removals instead of failing/,
+  );
+  assert.match(result.stdout, /polls on a fixed interval \(300ms\)/);
+  assert.match(result.stdout, /Timing out raises a command failure/);
+});
+
 test('help unknown command prints error plus global usage and skips daemon dispatch', async () => {
   const result = await runCliCapture(['help', 'not-a-command']);
   assert.equal(result.code, 1);
