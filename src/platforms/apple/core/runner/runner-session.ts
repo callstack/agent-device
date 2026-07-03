@@ -536,11 +536,10 @@ export async function detachIosSimulatorRunnerSessionsForShutdown(): Promise<num
   let detached = 0;
   for (const [deviceId, session] of runnerSessions) {
     if (session.device.kind !== 'simulator') continue;
-    // A held device-set redirect means this runner depends on the global
-    // XCTestDevices symlink pointing at a custom simulator set for its whole
-    // lifetime. Handing it off would either restore the symlink under a live
-    // runner or leak the redirect lock, so scoped-set runners keep the normal
-    // dispose-and-restore path.
+    // CONSERVATIVE: Scoped simulator sets depend on the global XCTestDevices symlink for their
+    // whole runner lifetime; handoff could restore the symlink under a live runner or leak the
+    // redirect lock. Revisit only if simulator-set redirects become runner-owned instead of
+    // daemon-session-owned.
     if (session.simulatorSetRedirect) continue;
     if (!session.lease || !isRunnerProcessAlive(session.child.pid)) continue;
     try {
@@ -936,6 +935,9 @@ function resolveRunnerReadinessPreflightDecision(
     };
   }
   if (!canSkipRunnerReadinessPreflightAfterHealthyMutation(command.command)) {
+    // CONSERVATIVE: Commands outside the healthy-mutation allowlist still preflight because their
+    // terminal runner state is not proven by recency. Revisit when lifecycle status coverage can
+    // distinguish every mutating command's safe terminal state.
     return {
       action: 'run',
       reason: 'conservative_command',

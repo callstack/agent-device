@@ -880,6 +880,9 @@ export async function markRunnerXctestrunArtifactBadForRun(
   reason: string,
 ): Promise<void> {
   if (artifact.cache === 'external') {
+    // CONSERVATIVE: External xctestrun artifacts are outside this checkout's cache ownership, so
+    // deleting them could remove user-managed build output. Revisit only if external artifacts get
+    // an ownership marker that proves agent-device may clean them.
     emitRunnerXctestrunDecision('preserve', 'external_bad_artifact', {
       derived: artifact.derived,
       xctestrunPath: artifact.xctestrunPath,

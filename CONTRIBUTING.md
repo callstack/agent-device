@@ -108,6 +108,31 @@ pnpm test-app:maestro:android -- --session test-app-maestro -- --device "$ANDROI
 - Add/adjust integration tests when introducing new commands.
 - Prefer built-in Node APIs over new packages.
 
+### Conservative Code Comments
+
+When code deliberately chooses a slower or more conservative path, leave a short inline comment at
+the decision site. The comment should name:
+
+1. the failure or regression the conservative path prevents; and
+2. the condition that should trigger a revisit.
+
+Use a grep-able `CONSERVATIVE:` prefix when the choice is expected to outlive the current change.
+This applies to defensive fallbacks, temporary guards, disabled fast paths, serialization, retries,
+over-preservation, and teardown-to-be-safe behavior.
+
+Examples:
+
+```ts
+// CONSERVATIVE: Keep the preflight for non-allowlisted runner commands because only the
+// allowlist has proven healthy-mutation recovery. Revisit when lifecycle status coverage can
+// distinguish every mutating command's terminal state.
+```
+
+```ts
+// CONSERVATIVE: Preserve external runner artifacts because the checkout does not own their cache
+// root. Revisit only if external artifacts get an ownership marker that makes cleanup safe.
+```
+
 ## Issue Labels
 
 Issue labels describe workflow state, not who will do the work. See
