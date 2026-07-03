@@ -22,7 +22,7 @@ type DirectoryArchive = {
 type ArtifactEntry = {
   artifactPath: string;
   tenantId?: string;
-  artifactType?: DaemonArtifactType;
+  artifactType: DaemonArtifactType | undefined;
   fileName?: string;
   deleteAfterDownload: boolean;
   createdAt: number;
@@ -35,7 +35,7 @@ const pendingArtifacts = new Map<string, ArtifactEntry>();
 
 export type DownloadableArtifactInventoryEntry = {
   id: string;
-  artifactType?: DaemonArtifactType;
+  artifactType: DaemonArtifactType | undefined;
   filename: string;
   mimeType: string;
   sizeBytes: number;
@@ -53,7 +53,7 @@ export type PreparedDownloadableArtifact = {
 export function trackDownloadableArtifact(params: {
   artifactPath: string;
   tenantId?: string;
-  artifactType?: DaemonArtifactType;
+  artifactType: DaemonArtifactType | undefined;
   fileName?: string;
   deleteAfterDownload?: boolean;
 }): string {

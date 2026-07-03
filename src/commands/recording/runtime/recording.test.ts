@@ -108,6 +108,7 @@ test('record keeps successful reserved outputs available after publish', async (
         publish: async () => ({
           kind: 'artifact',
           field: options.field,
+          artifactType: options.artifactType,
           artifactId: 'recording-1',
           fileName: 'recording.mp4',
         }),

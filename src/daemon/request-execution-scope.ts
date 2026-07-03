@@ -183,7 +183,7 @@ export function prepareLockedRequestScope(params: {
   trackDownloadableArtifact: (opts: {
     artifactPath: string;
     tenantId?: string;
-    artifactType?: DaemonArtifactType;
+    artifactType: DaemonArtifactType | undefined;
     fileName?: string;
   }) => string;
 }): LockedRequestScopeResult {

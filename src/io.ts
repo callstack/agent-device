@@ -29,7 +29,7 @@ export type ArtifactDescriptor =
   | {
       kind: 'localPath';
       field: string;
-      artifactType?: DaemonArtifactType;
+      artifactType: DaemonArtifactType | undefined;
       path: string;
       fileName?: string;
       metadata?: Record<string, unknown>;
@@ -37,7 +37,7 @@ export type ArtifactDescriptor =
   | {
       kind: 'artifact';
       field: string;
-      artifactType?: DaemonArtifactType;
+      artifactType: DaemonArtifactType | undefined;
       artifactId: string;
       fileName?: string;
       url?: string;
@@ -73,7 +73,7 @@ export type ResolveInputOptions = {
 export type ReserveOutputOptions = {
   field: string;
   ext: string;
-  artifactType?: DaemonArtifactType;
+  artifactType: DaemonArtifactType | undefined;
   requestedClientPath?: string;
   visibility?: OutputVisibility;
 };

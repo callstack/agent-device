@@ -120,6 +120,7 @@ test('local artifact adapter marks command outputs and temp files by visibility'
   const output = await adapter.reserveOutput(undefined, {
     field: 'path',
     ext: '.png',
+    artifactType: 'screenshot',
     visibility: 'client-visible',
   });
   const temp = await adapter.createTempFile({
@@ -153,7 +154,7 @@ test('local artifact adapter can constrain explicit local paths to a root', asyn
       () =>
         adapter.reserveOutput(
           { kind: 'path', path: path.join(path.dirname(root), 'outside.png') },
-          { field: 'path', ext: '.png' },
+          { field: 'path', ext: '.png', artifactType: 'screenshot' },
         ),
       /outside the artifact adapter root/,
     );

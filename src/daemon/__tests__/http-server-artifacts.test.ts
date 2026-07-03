@@ -38,15 +38,21 @@ test('downloadable artifact inventory is filtered by tenant', async () => {
   fs.writeFileSync(tenantAPath, 'tenant-a');
   fs.writeFileSync(tenantBPath, 'tenant-b');
   const artifactIds = [
-    trackDownloadableArtifact({ artifactPath: publicPath, fileName: 'public.txt' }),
+    trackDownloadableArtifact({
+      artifactPath: publicPath,
+      artifactType: 'test-public-file',
+      fileName: 'public.txt',
+    }),
     trackDownloadableArtifact({
       artifactPath: tenantAPath,
       tenantId: 'tenant-a',
+      artifactType: 'test-tenant-file',
       fileName: 'tenant-a.txt',
     }),
     trackDownloadableArtifact({
       artifactPath: tenantBPath,
       tenantId: 'tenant-b',
+      artifactType: 'test-tenant-file',
       fileName: 'tenant-b.txt',
     }),
   ];
@@ -80,7 +86,11 @@ test('downloadable artifact inventory skips directory artifacts that fail to arc
   fs.mkdirSync(tracePath, { recursive: true });
   fs.writeFileSync(path.join(tracePath, 'metadata.json'), '{}\n');
   const artifactIds = [
-    trackDownloadableArtifact({ artifactPath: filePath, fileName: 'report.json' }),
+    trackDownloadableArtifact({
+      artifactPath: filePath,
+      artifactType: 'test-report',
+      fileName: 'report.json',
+    }),
     trackDownloadableArtifact({
       artifactPath: tracePath,
       artifactType: 'trace-log',
@@ -236,6 +246,7 @@ test('daemon artifact downloads can keep the source file while consuming the inv
   fs.writeFileSync(artifactPath, 'runner-output');
   const artifactId = trackDownloadableArtifact({
     artifactPath,
+    artifactType: 'runner-output',
     fileName: 'runner-output.txt',
     deleteAfterDownload: false,
   });
@@ -284,6 +295,7 @@ test('daemon artifact downloads can be forced retained by server option', async 
   fs.writeFileSync(artifactPath, 'log-body');
   const artifactId = trackDownloadableArtifact({
     artifactPath,
+    artifactType: 'session-log',
     fileName: 'session-log.txt',
   });
   const server = await createDaemonHttpServer({

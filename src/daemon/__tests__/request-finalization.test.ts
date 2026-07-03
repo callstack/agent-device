@@ -52,6 +52,7 @@ test('finalizeDaemonResponse registers downloadable artifact type', () => {
         },
         {
           field: 'rawPath',
+          artifactType: undefined,
           path: '/tmp/raw.bin',
           localPath: '/client/raw.bin',
           fileName: 'raw.bin',

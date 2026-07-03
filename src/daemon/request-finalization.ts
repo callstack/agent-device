@@ -14,7 +14,7 @@ export function finalizeDaemonResponse(
   trackArtifact: (opts: {
     artifactPath: string;
     tenantId?: string;
-    artifactType?: DaemonArtifactType;
+    artifactType: DaemonArtifactType | undefined;
     fileName?: string;
   }) => string,
 ): DaemonResponse {
@@ -61,7 +61,7 @@ function registerDownloadableArtifacts(
   trackArtifact: (opts: {
     artifactPath: string;
     tenantId?: string;
-    artifactType?: DaemonArtifactType;
+    artifactType: DaemonArtifactType | undefined;
     fileName?: string;
   }) => string,
 ): DaemonResponseData | undefined {

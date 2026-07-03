@@ -122,7 +122,7 @@ export type DaemonArtifactType = DaemonArtifactKnownType | (string & {});
 
 export type DaemonArtifact = {
   field: string;
-  artifactType?: DaemonArtifactType;
+  artifactType: DaemonArtifactType | undefined;
   artifactId?: string;
   fileName?: string;
   localPath?: string;

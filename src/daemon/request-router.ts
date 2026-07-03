@@ -66,7 +66,7 @@ export type RequestRouterDeps = {
   trackDownloadableArtifact: (opts: {
     artifactPath: string;
     tenantId?: string;
-    artifactType?: DaemonArtifactType;
+    artifactType: DaemonArtifactType | undefined;
     fileName?: string;
   }) => string;
 };
