@@ -25,7 +25,7 @@ const AGENT_DEVICE_RUNNER_BUNDLE_PREFIX = 'com.callstack.agentdevice.runner';
 
 const iosAppResolutionCache = createAppResolutionCache<string>();
 
-export function iosAppResolutionScope(device: DeviceInfo): AppResolutionCacheScope {
+function iosAppResolutionScope(device: DeviceInfo): AppResolutionCacheScope {
   return { platform: 'ios', deviceId: device.id, variant: device.kind };
 }
 
@@ -114,7 +114,7 @@ export async function listIosApps(device: DeviceInfo, filter: AppsFilter): Promi
   return await listIosDeviceApps(device, filter);
 }
 
-export async function listSimulatorApps(device: DeviceInfo): Promise<IosAppInfo[]> {
+async function listSimulatorApps(device: DeviceInfo): Promise<IosAppInfo[]> {
   const apps = await listSimulatorAppMetadata(device);
   return apps.map((app) => ({
     bundleId: app.bundleId,

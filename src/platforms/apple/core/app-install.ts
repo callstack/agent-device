@@ -16,10 +16,7 @@ type InstallIosAppOptions = {
   appIdentifierHint?: string;
 };
 
-export async function uninstallIosApp(
-  device: DeviceInfo,
-  app: string,
-): Promise<{ bundleId: string }> {
+async function uninstallIosApp(device: DeviceInfo, app: string): Promise<{ bundleId: string }> {
   return await invalidateIosAppResolutionCache(device, async () => {
     const bundleId = await resolveIosApp(device, app);
     if (device.kind !== 'simulator') {

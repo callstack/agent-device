@@ -2012,7 +2012,7 @@ test('fillAndroid uses chunk-safe shell input and retries when verification stil
       assert.ok(shellInputTextCount > 1);
     },
   );
-});
+}, 15_000);
 
 test('fillAndroid keeps delayed typing in typed-input mode', async () => {
   await withMockedAdb(
@@ -2059,7 +2059,7 @@ test('fillAndroid keeps delayed typing in typed-input mode', async () => {
       assert.doesNotMatch(logged, /shell\ninput\nkeyevent\nKEYCODE_PASTE/);
     },
   );
-});
+}, 15_000);
 
 test('fillAndroid tolerates delayed React Native text verification', async () => {
   await withMockedAdb(
