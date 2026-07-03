@@ -1105,6 +1105,10 @@ function assertRecoveredPrepareDiagnostics(): void {
   assert.equal(prepareDiagnostic.data?.xctestrunPath, '/tmp/rebuilt.xctestrun');
   assert.equal(prepareDiagnostic.data?.recoveryReason, 'Runner did not accept connection');
   assert.equal(prepareDiagnostic.data?.failureReason, undefined);
+  assert.deepEqual(prepareDiagnostic.data?.timingContainment, {
+    connectMs: ['buildMs'],
+    healthCheckMs: [],
+  });
 }
 
 function assertDiagnosticDecision(expected: {

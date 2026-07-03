@@ -43,6 +43,9 @@ import { PREPARE_REQUEST_TIMEOUT_MS } from '../request-timeouts.ts';
 import { Deadline } from '../../utils/retry.ts';
 import type { LeaseLifecycleProvider } from './lease.ts';
 
+const PREPARE_IOS_RUNNER_TIMING_NOTE =
+  'Top-level prepare timing fields are diagnostic and may overlap; use timing.additiveParts for additive wall-clock phases.';
+
 async function handlePrepareCommand(params: {
   req: DaemonRequest;
   sessionName: string;
@@ -126,8 +129,39 @@ function prepareIosRunnerResponseData(
     kind: device.kind,
     durationMs,
     ...result,
+    timing: prepareIosRunnerTiming(durationMs, result),
     message: `Prepared Apple runner: ${device.name}`,
   };
+}
+
+function prepareIosRunnerTiming(
+  durationMs: number,
+  result: PrepareIosRunnerResult,
+): Record<string, unknown> {
+  const buildMs = normalizeOptionalTimingMs(result.buildMs);
+  const connectMs = normalizeTimingMs(result.connectMs);
+  const healthCheckMs = normalizeTimingMs(result.healthCheckMs);
+  const additiveParts = {
+    ...(buildMs === undefined ? {} : { buildMs }),
+    connectAfterBuildMs: Math.max(0, connectMs - (buildMs ?? 0)),
+    healthCheckMs,
+  };
+
+  return {
+    totalMs: durationMs,
+    additiveParts,
+    containment:
+      buildMs === undefined ? { healthCheckMs: [] } : { connectMs: ['buildMs'], healthCheckMs: [] },
+    note: PREPARE_IOS_RUNNER_TIMING_NOTE,
+  };
+}
+
+function normalizeOptionalTimingMs(value: number | undefined): number | undefined {
+  return value === undefined ? undefined : normalizeTimingMs(value);
+}
+
+function normalizeTimingMs(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.round(value)) : 0;
 }
 
 // fallow-ignore-next-line complexity

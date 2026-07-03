@@ -2615,6 +2615,70 @@ test('prepare ios-runner starts the XCTest runner on an explicit iOS selector', 
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 
+test('prepare ios-runner explains overlapping timing fields with additive parts', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'prepare-ios-runner-timing';
+  const dateNow = vi.spyOn(Date, 'now');
+  try {
+    dateNow.mockReturnValueOnce(1_000).mockReturnValueOnce(28_337);
+    mockResolveTargetDevice.mockResolvedValue({
+      platform: 'apple',
+      id: 'sim-1',
+      name: 'iPhone 17 Pro',
+      kind: 'simulator',
+      booted: true,
+    });
+    mockPrepareIosRunner.mockResolvedValueOnce({
+      runner: { currentUptimeMs: 42 },
+      buildMs: 10_642,
+      connectMs: 12_635,
+      healthCheckMs: 14_702,
+    });
+
+    const response = await handleSessionCommands({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'prepare',
+        positionals: ['ios-runner'],
+        flags: { platform: 'ios', udid: 'sim-1' },
+      },
+      sessionName,
+      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      sessionStore,
+      invoke: noopInvoke,
+    });
+
+    expect(response?.ok).toBe(true);
+    const data = (response as any).data;
+    expect(data).toMatchObject({
+      durationMs: 27_337,
+      buildMs: 10_642,
+      connectMs: 12_635,
+      healthCheckMs: 14_702,
+      timing: {
+        totalMs: 27_337,
+        additiveParts: {
+          buildMs: 10_642,
+          connectAfterBuildMs: 1_993,
+          healthCheckMs: 14_702,
+        },
+        containment: {
+          connectMs: ['buildMs'],
+          healthCheckMs: [],
+        },
+      },
+    });
+    expect(String(data.timing.note)).toMatch(/top-level prepare timing fields.*may overlap/i);
+    const additiveParts = data.timing.additiveParts as Record<string, number>;
+    const additiveTotalMs = Object.values(additiveParts).reduce((sum, value) => sum + value, 0);
+    expect(additiveTotalMs).toBeLessThanOrEqual(data.timing.totalMs);
+    expect(data.buildMs + data.connectMs + data.healthCheckMs).toBeGreaterThan(data.durationMs);
+  } finally {
+    dateNow.mockRestore();
+  }
+});
+
 test('prepare ios-runner starts the XCTest runner on an explicit macOS selector', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'prepare-macos-runner';

@@ -543,6 +543,10 @@ export type AgentDeviceCommandClient = {
   clipboard: (options: ClipboardCommandOptions) => Promise<CommandResult<'clipboard'>>;
   reactNative: (options: ReactNativeCommandOptions) => Promise<CommandRequestResult>;
   doctor: (options?: DoctorCommandOptions) => Promise<CommandRequestResult>;
+  /**
+   * JSON prepare results include timing.additiveParts for additive wall-clock phases.
+   * Top-level buildMs/connectMs/healthCheckMs are diagnostics and may overlap.
+   */
   prepare: (options: PrepareCommandOptions) => Promise<CommandRequestResult>;
   viewport: (options: ViewportCommandOptions) => Promise<CommandResult<'viewport'>>;
 };

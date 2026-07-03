@@ -516,6 +516,10 @@ function emitPrepareDiagnostic(
       buildMs: result.buildMs,
       connectMs: result.connectMs,
       healthCheckMs: result.healthCheckMs,
+      timingContainment:
+        result.buildMs === undefined
+          ? { healthCheckMs: [] }
+          : { connectMs: ['buildMs'], healthCheckMs: [] },
       xctestrunPath: result.xctestrunPath,
       recoveryReason: result.recoveryReason,
       failureReason: result.failureReason,

@@ -182,6 +182,7 @@ agent-device prepare ios-runner --platform ios --timeout 240000
 - `prepare ios-runner` is intended for Apple-platform CI setup before `snapshot`, `replay`, or `test`.
 - Run it after the simulator/device is booted and the app is installed, but before the first snapshot, replay, or test command.
 - It builds or reuses the local XCTest runner, starts a runner session, and verifies that the runner can answer a lightweight health command.
+- In JSON output, top-level `buildMs`, `connectMs`, and `healthCheckMs` are diagnostic fields and may overlap; use `timing.additiveParts` for additive wall-clock phase totals. `connectMs` contains `buildMs` when a runner artifact is built or rebuilt.
 - If health checking exposes a bad restored runner artifact, Agent Device marks that artifact bad and rebuilds once.
 - If a fresh runner launch gets stuck before accepting connections, Agent Device invalidates that runner session and launches it once more without forcing a rebuild.
 - CI may cache `~/.agent-device/apple-runner/derived` when the cache key includes the exact Agent Device package contents and selected Xcode version.

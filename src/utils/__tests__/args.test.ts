@@ -1498,6 +1498,8 @@ test('usageForCommand documents prepare ios-runner', () => {
   assert.match(help, /Prepare platform helper infrastructure/);
   assert.match(help, /--timeout <ms>/);
   assert.match(help, /XCTest runner/);
+  assert.match(help, /top-level buildMs\/connectMs\/healthCheckMs are diagnostic fields/);
+  assert.match(help, /timing\.additiveParts/);
   assert.match(help, /separate daemon/);
   assert.match(help, /stop the prepare daemon before replay\/test/);
   assert.doesNotMatch(help, /clean:daemon|pnpm/);
