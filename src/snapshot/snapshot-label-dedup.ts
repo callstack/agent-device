@@ -18,6 +18,12 @@ import { buildSnapshotNodeMap } from './snapshot-tree.ts';
  * copy right before rendering text or JSON for the end user, never write it
  * back into session/runtime state.
  */
+// Dedup only pays for itself when the omitted string is longer than the
+// marker that replaces it (JSON: `"inheritsLabel":true` ~21 chars; text:
+// `[same label as parent]` ~23). Short duplicated labels (tab bars: "Home",
+// "Settings") stay verbatim — cheaper on both surfaces and easier to read.
+const MIN_DEDUPED_VALUE_LENGTH = 24;
+
 export function dedupeInheritedSnapshotLabels(nodes: SnapshotNode[]): SnapshotNode[] {
   if (!Array.isArray(nodes) || nodes.length === 0) return nodes;
   const byIndex = buildSnapshotNodeMap(nodes);
@@ -31,10 +37,12 @@ export function dedupeInheritedSnapshotLabels(nodes: SnapshotNode[]): SnapshotNo
     );
 
     const dedupesLabel =
-      typeof node.label === 'string' && node.label.length > 0 && node.label === ancestorLabel;
+      typeof node.label === 'string' &&
+      node.label.length >= MIN_DEDUPED_VALUE_LENGTH &&
+      node.label === ancestorLabel;
     const dedupesIdentifier =
       typeof node.identifier === 'string' &&
-      node.identifier.length > 0 &&
+      node.identifier.length >= MIN_DEDUPED_VALUE_LENGTH &&
       node.identifier === ancestorIdentifier;
 
     if (!dedupesLabel && !dedupesIdentifier) return node;

@@ -9,15 +9,33 @@ function nodes(raw: RawSnapshotNode[]) {
 
 test('omits a label that string-equals the nearest ancestor label', () => {
   const input = nodes([
-    { index: 0, type: 'ScrollView', label: 'Anthropic HQ', depth: 0 },
-    { index: 1, type: 'Other', label: 'Anthropic HQ', depth: 1, parentIndex: 0 },
-    { index: 2, type: 'Button', label: 'Anthropic HQ', depth: 2, parentIndex: 1 },
-    { index: 3, type: 'Button', label: 'Anthropic HQ', depth: 3, parentIndex: 2 },
+    { index: 0, type: 'ScrollView', label: 'Anthropic - Headquarters, 548 Market St', depth: 0 },
+    {
+      index: 1,
+      type: 'Other',
+      label: 'Anthropic - Headquarters, 548 Market St',
+      depth: 1,
+      parentIndex: 0,
+    },
+    {
+      index: 2,
+      type: 'Button',
+      label: 'Anthropic - Headquarters, 548 Market St',
+      depth: 2,
+      parentIndex: 1,
+    },
+    {
+      index: 3,
+      type: 'Button',
+      label: 'Anthropic - Headquarters, 548 Market St',
+      depth: 3,
+      parentIndex: 2,
+    },
   ]);
 
   const result = dedupeInheritedSnapshotLabels(input);
 
-  assert.equal(result[0]!.label, 'Anthropic HQ');
+  assert.equal(result[0]!.label, 'Anthropic - Headquarters, 548 Market St');
   assert.equal(result[0]!.inheritsLabel, undefined);
   for (const node of result.slice(1)) {
     assert.equal(node.label, undefined);
@@ -28,20 +46,39 @@ test('omits a label that string-equals the nearest ancestor label', () => {
 test('keeps a label that differs from every ancestor', () => {
   const input = nodes([
     { index: 0, type: 'ScrollView', label: 'Map', depth: 0 },
-    { index: 1, type: 'Button', label: 'Anthropic HQ', depth: 1, parentIndex: 0 },
+    {
+      index: 1,
+      type: 'Button',
+      label: 'Anthropic - Headquarters, 548 Market St',
+      depth: 1,
+      parentIndex: 0,
+    },
   ]);
 
   const result = dedupeInheritedSnapshotLabels(input);
 
   assert.equal(result[0]!.label, 'Map');
-  assert.equal(result[1]!.label, 'Anthropic HQ');
+  assert.equal(result[1]!.label, 'Anthropic - Headquarters, 548 Market St');
   assert.equal(result[1]!.inheritsLabel, undefined);
 });
 
 test('dedups label and identifier independently', () => {
   const input = nodes([
-    { index: 0, type: 'Group', label: 'Same', identifier: 'row-1', depth: 0 },
-    { index: 1, type: 'Button', label: 'Same', identifier: 'other-id', depth: 1, parentIndex: 0 },
+    {
+      index: 0,
+      type: 'Group',
+      label: 'A very long shared accessibility label',
+      identifier: 'row-1',
+      depth: 0,
+    },
+    {
+      index: 1,
+      type: 'Button',
+      label: 'A very long shared accessibility label',
+      identifier: 'other-id',
+      depth: 1,
+      parentIndex: 0,
+    },
   ]);
 
   const result = dedupeInheritedSnapshotLabels(input);
@@ -54,9 +91,15 @@ test('dedups label and identifier independently', () => {
 
 test('walks past an intermediate node with no label to find the nearest labeled ancestor', () => {
   const input = nodes([
-    { index: 0, type: 'ScrollView', label: 'Anthropic HQ', depth: 0 },
+    { index: 0, type: 'ScrollView', label: 'Anthropic - Headquarters, 548 Market St', depth: 0 },
     { index: 1, type: 'Other', depth: 1, parentIndex: 0 },
-    { index: 2, type: 'Button', label: 'Anthropic HQ', depth: 2, parentIndex: 1 },
+    {
+      index: 2,
+      type: 'Button',
+      label: 'Anthropic - Headquarters, 548 Market St',
+      depth: 2,
+      parentIndex: 1,
+    },
   ]);
 
   const result = dedupeInheritedSnapshotLabels(input);
@@ -72,9 +115,21 @@ test('each comparison uses the original ancestor value, not an already-deduped o
   // stripped. It must still match because node 1's *original* label equals
   // node 0's.
   const input = nodes([
-    { index: 0, type: 'ScrollView', label: 'X', depth: 0 },
-    { index: 1, type: 'Other', label: 'X', depth: 1, parentIndex: 0 },
-    { index: 2, type: 'Button', label: 'X', depth: 2, parentIndex: 1 },
+    { index: 0, type: 'ScrollView', label: 'A very long shared accessibility label X', depth: 0 },
+    {
+      index: 1,
+      type: 'Other',
+      label: 'A very long shared accessibility label X',
+      depth: 1,
+      parentIndex: 0,
+    },
+    {
+      index: 2,
+      type: 'Button',
+      label: 'A very long shared accessibility label X',
+      depth: 2,
+      parentIndex: 1,
+    },
   ]);
 
   const result = dedupeInheritedSnapshotLabels(input);
@@ -85,7 +140,7 @@ test('each comparison uses the original ancestor value, not an already-deduped o
 
 test('does not touch nodes with no label/identifier at all', () => {
   const input = nodes([
-    { index: 0, type: 'ScrollView', label: 'X', depth: 0 },
+    { index: 0, type: 'ScrollView', label: 'A very long shared accessibility label X', depth: 0 },
     { index: 1, type: 'Other', depth: 1, parentIndex: 0 },
   ]);
 
@@ -101,12 +156,29 @@ test('empty input returns empty output', () => {
 
 test('does not mutate the input nodes', () => {
   const input = nodes([
-    { index: 0, type: 'ScrollView', label: 'X', depth: 0 },
-    { index: 1, type: 'Button', label: 'X', depth: 1, parentIndex: 0 },
+    { index: 0, type: 'ScrollView', label: 'A very long shared accessibility label X', depth: 0 },
+    {
+      index: 1,
+      type: 'Button',
+      label: 'A very long shared accessibility label X',
+      depth: 1,
+      parentIndex: 0,
+    },
   ]);
   const snapshotBefore = JSON.parse(JSON.stringify(input));
 
   dedupeInheritedSnapshotLabels(input);
 
   assert.deepEqual(input, snapshotBefore);
+});
+
+test('short duplicated labels stay verbatim (marker would cost more than it saves)', () => {
+  const result = dedupeInheritedSnapshotLabels(
+    nodes([
+      { index: 0, type: 'Other', label: 'Home', depth: 0 },
+      { index: 1, parentIndex: 0, type: 'Button', label: 'Home', depth: 1 },
+    ]),
+  );
+  assert.equal(result[1]!.label, 'Home');
+  assert.equal(result[1]!.inheritsLabel, undefined);
 });
