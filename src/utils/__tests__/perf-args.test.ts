@@ -28,8 +28,8 @@ test('parseArgs accepts perf area subcommands', () => {
   assert.equal(profile.flags.out, 'app.trace');
 });
 
-test('usageForCommand advertises perf area subcommands for metrics alias', () => {
-  const help = usageForCommand('metrics');
+test('usageForCommand advertises perf area subcommands for metrics alias', async () => {
+  const help = await usageForCommand('metrics');
   assert.equal(help === null, false);
   assert.match(help ?? '', /agent-device perf metrics --json/);
   assert.match(help ?? '', /agent-device perf frames --json/);

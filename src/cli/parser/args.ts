@@ -9,7 +9,6 @@ import {
   type FlagDefinition,
   type FlagKey,
 } from '../../utils/command-schema.ts';
-import { buildCommandUsageText, buildUsageText } from './cli-help.ts';
 import { isFlagSupportedForCommand } from '../../utils/cli-option-schema.ts';
 import { isKnownCliCommandName } from '../../command-catalog.ts';
 
@@ -365,11 +364,15 @@ function formatUnsupportedFlagMessage(command: string | null, unsupported: strin
     : `Flags ${unsupported.join(', ')} are not supported for command ${command}.`;
 }
 
-export function usage(): string {
+// Usage text lives in cli-help.ts, which pulls the full command schema surface.
+// Callers load it lazily so plain command invocations never parse the help text.
+export async function usage(): Promise<string> {
+  const { buildUsageText } = await import('./cli-help.ts');
   return buildUsageText();
 }
 
-export function usageForCommand(command: string): string | null {
+export async function usageForCommand(command: string): Promise<string | null> {
+  const { buildCommandUsageText } = await import('./cli-help.ts');
   return buildCommandUsageText(normalizeCommandAlias(command));
 }
 

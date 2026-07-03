@@ -4,8 +4,6 @@ import { isNonDefaultResponseLevel } from '../../kernel/contracts.ts';
 import { resolveUserPath } from '../../utils/path-resolution.ts';
 import type { AgentDeviceBackend } from '../../backend.ts';
 import type { AgentDeviceClient, CaptureScreenshotResult } from '../../client/client.ts';
-import { createLocalArtifactAdapter } from '../../io.ts';
-import { createAgentDevice, localCommandPolicy } from '../../runtime.ts';
 import { runCliCommand } from '../../commands/cli-runner.ts';
 import type { CliFlags } from '../parser/cli-flags.ts';
 import { writeCommandOutput } from './shared.ts';
@@ -61,6 +59,10 @@ export const diffCommand: ClientCommandHandler = async ({ positionals, flags, cl
     );
   }
 
+  // Lazy: createAgentDevice pulls the whole client-side command runtime
+  // (including screenshot pixel diffing), which only `diff screenshot` needs.
+  const [{ createAgentDevice, localCommandPolicy }, { createLocalArtifactAdapter }] =
+    await Promise.all([import('../../runtime.ts'), import('../../io.ts')]);
   const runtime = createAgentDevice({
     backend: createClientScreenshotBackend(client, flags),
     artifacts: createLocalArtifactAdapter(),

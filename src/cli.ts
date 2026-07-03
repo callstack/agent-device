@@ -6,7 +6,6 @@ import { pathToFileURL } from 'node:url';
 import { sendToDaemon } from './daemon/client/daemon-client.ts';
 import fs from 'node:fs';
 import type { BatchStep } from './client/client-types.ts';
-import { createReplayTestReporterRuntime } from './replay/test/reporting.ts';
 import type { ReplayTestReporterRuntime } from './replay/test/reporting.ts';
 import {
   createAgentDeviceClient,
@@ -139,21 +138,21 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
         }
         const helpTarget = isHelpAlias ? parsed.positionals[0] : parsed.command;
         if (!helpTarget) {
-          process.stdout.write(`${usage()}\n`);
+          process.stdout.write(`${await usage()}\n`);
           process.exit(0);
         }
-        const commandHelp = usageForCommand(helpTarget);
+        const commandHelp = await usageForCommand(helpTarget);
         if (commandHelp) {
           process.stdout.write(commandHelp);
           process.exit(0);
         }
         printHumanError(new AppError('INVALID_ARGS', `Unknown command: ${helpTarget}`));
-        process.stdout.write(`${usage()}\n`);
+        process.stdout.write(`${await usage()}\n`);
         process.exit(1);
       }
 
       if (!parsed.command) {
-        process.stdout.write(`${usage()}\n`);
+        process.stdout.write(`${await usage()}\n`);
         process.exit(1);
       }
 
@@ -341,13 +340,18 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
             : null;
         const replayTestReporterRuntime =
           command === 'test'
-            ? await createReplayTestReporterRuntime({
-                debug: debugOutputEnabled,
-                verbose: effectiveFlags.verbose,
-                json: effectiveFlags.json,
-                reporter: effectiveFlags.reporter,
-                reportJunit: effectiveFlags.reportJunit,
-              })
+            ? // Lazy: the replay test reporter is only needed by `test`, and its
+              // static import would put the reporting runtime on every command's path.
+              await import('./replay/test/reporting.ts').then(
+                ({ createReplayTestReporterRuntime }) =>
+                  createReplayTestReporterRuntime({
+                    debug: debugOutputEnabled,
+                    verbose: effectiveFlags.verbose,
+                    json: effectiveFlags.json,
+                    reporter: effectiveFlags.reporter,
+                    reportJunit: effectiveFlags.reportJunit,
+                  }),
+              )
             : undefined;
         const client = createAgentDeviceClient(
           buildClientConfig(effectiveFlags, resolvedRuntime, connectionMetadata),

@@ -1,5 +1,4 @@
 import type { CommandRequestResult } from '../../client/client.ts';
-import { renderReplayTestResponse } from '../../replay/test/reporting.ts';
 import { runCliCommandWithOutput } from '../../commands/cli-runner.ts';
 import type { CommandName } from '../../commands/command-metadata.ts';
 import type { CliOutput } from '../../commands/command-contract.ts';
@@ -54,15 +53,18 @@ function writeGenericCliOutput(
   options: Pick<ClientCommandParams, 'debug' | 'replayTestReporterRuntime'> = {},
 ): Promise<number> | number {
   if (command === 'test') {
-    return renderReplayTestResponse({
-      suite: data as ReplaySuiteResult,
-      debug: options.debug,
-      verbose: flags.verbose,
-      json: flags.json,
-      reporter: flags.reporter,
-      reportJunit: flags.reportJunit,
-      reporterRuntime: options.replayTestReporterRuntime,
-    });
+    // Lazy: keeps the replay test reporting runtime off every other command's path.
+    return import('../../replay/test/reporting.ts').then(({ renderReplayTestResponse }) =>
+      renderReplayTestResponse({
+        suite: data as ReplaySuiteResult,
+        debug: options.debug,
+        verbose: flags.verbose,
+        json: flags.json,
+        reporter: flags.reporter,
+        reportJunit: flags.reportJunit,
+        reporterRuntime: options.replayTestReporterRuntime,
+      }),
+    );
   }
   writeCommandOutput(flags, data, () =>
     readCommandMessage(data as Record<string, unknown> | undefined),

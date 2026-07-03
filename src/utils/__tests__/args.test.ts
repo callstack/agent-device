@@ -505,8 +505,8 @@ test('parseArgs rejects --launch-args on commands that do not allow it', () => {
   );
 });
 
-test('usageForCommand documents open --launch-args', () => {
-  const help = usageForCommand('open');
+test('usageForCommand documents open --launch-args', async () => {
+  const help = await usageForCommand('open');
   if (help === null) throw new Error('Expected open help text');
   assert.match(help, /--launch-args <arg>/);
   assert.match(help, /forwarded verbatim/);
@@ -1121,8 +1121,8 @@ test('parseArgs recognizes screenshot flags', () => {
   assert.equal(parsed.flags.screenshotNormalizeStatusBar, true);
 });
 
-test('usageForCommand documents screenshot web aliases and stabilization flags', () => {
-  const help = usageForCommand('screenshot');
+test('usageForCommand documents screenshot web aliases and stabilization flags', async () => {
+  const help = await usageForCommand('screenshot');
   if (help === null) throw new Error('Expected screenshot help text');
   assert.match(help, /--fullscreen, --full, -f/);
   assert.match(help, /entire page/i);
@@ -1132,8 +1132,8 @@ test('usageForCommand documents screenshot web aliases and stabilization flags',
   assert.match(help, /deterministic iOS simulator chrome/);
 });
 
-test('usageForCommand documents screenshot diff normalization', () => {
-  const help = usageForCommand('diff');
+test('usageForCommand documents screenshot diff normalization', async () => {
+  const help = await usageForCommand('diff');
   if (help === null) throw new Error('Expected diff help text');
   assert.match(help, /Live iOS simulator screenshot diffs normalize status-bar chrome by default/);
   assert.match(help, /screenshot --normalize-status-bar/);
@@ -1203,36 +1203,36 @@ test('parseArgs accepts rotate orientation aliases', () => {
   assert.deepEqual(parsed.positionals, ['left']);
 });
 
-test('usageForCommand resolves longpress help', () => {
-  const help = usageForCommand('longpress');
+test('usageForCommand resolves longpress help', async () => {
+  const help = await usageForCommand('longpress');
   assert.equal(help === null, false);
   assert.match(help ?? '', /agent-device longpress <x y\|@ref\|selector> \[durationMs\]/);
 });
 
-test('usageForCommand supports legacy long-press alias', () => {
-  const help = usageForCommand('long-press');
+test('usageForCommand supports legacy long-press alias', async () => {
+  const help = await usageForCommand('long-press');
   assert.equal(help === null, false);
   assert.match(help ?? '', /agent-device longpress <x y\|@ref\|selector> \[durationMs\]/);
   assert.doesNotMatch(help ?? '', /agent-device long-press/);
 });
 
-test('usageForCommand supports tap alias for press', () => {
-  const help = usageForCommand('tap');
+test('usageForCommand supports tap alias for press', async () => {
+  const help = await usageForCommand('tap');
   assert.equal(help === null, false);
   assert.match(help ?? '', /agent-device press/);
   assert.doesNotMatch(help ?? '', /agent-device tap/);
 });
 
-test('usageForCommand documents keyboard dismissal flow', () => {
-  const help = usageForCommand('keyboard');
+test('usageForCommand documents keyboard dismissal flow', async () => {
+  const help = await usageForCommand('keyboard');
   assert.equal(help === null, false);
   assert.match(help ?? '', /To hide the keyboard, use keyboard dismiss/);
   assert.match(help ?? '', /taps safe controls like Done/);
   assert.match(help ?? '', /UNSUPPORTED_OPERATION/);
 });
 
-test('usageForCommand supports metrics alias', () => {
-  const help = usageForCommand('metrics');
+test('usageForCommand supports metrics alias', async () => {
+  const help = await usageForCommand('metrics');
   assert.equal(help === null, false);
   assert.match(help ?? '', /agent-device perf/);
   assert.match(help ?? '', /report --kind xctrace --out <report\.json>/);
@@ -1260,8 +1260,8 @@ test('parseArgs rejects conflicting back mode flags', () => {
   );
 });
 
-test('usage includes concise top-level commands', () => {
-  const usageText = usage();
+test('usage includes concise top-level commands', async () => {
+  const usageText = await usage();
   assert.match(
     usageText,
     /install-from-source\s{2,}Install app builds from URLs, remote source specs, or CI artifacts/,
@@ -1294,8 +1294,8 @@ test('usage includes concise top-level commands', () => {
   assert.match(usageText, /trace start <path> \| trace stop <path>/);
 });
 
-test('usage includes only global flags in the top-level global flags section', () => {
-  const usageText = usage();
+test('usage includes only global flags in the top-level global flags section', async () => {
+  const usageText = await usage();
   const flagsSection = usageText.slice(
     usageText.indexOf('Global Flags:'),
     usageText.indexOf('Agent Quickstart:'),
@@ -1329,8 +1329,8 @@ test('usage includes only global flags in the top-level global flags section', (
   assert.doesNotMatch(flagsSection, /--metadata/);
 });
 
-test('usage includes agent workflows, config, environment, and examples footers', () => {
-  const usageText = usage();
+test('usage includes agent workflows, config, environment, and examples footers', async () => {
+  const usageText = await usage();
   assert.match(
     usageText,
     /CLI to automate supported app, device, desktop, and web targets for AI agents/,
@@ -1452,8 +1452,8 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /agent-device test \.\/suite --platform android/);
 });
 
-test('usageForCommand includes Maestro replay flag', () => {
-  const help = usageForCommand('replay');
+test('usageForCommand includes Maestro replay flag', async () => {
+  const help = await usageForCommand('replay');
   if (help === null) throw new Error('Expected replay help text');
   assert.match(help, /replay <path> \| replay export <file\.ad>/);
   assert.match(help, /--format maestro/);
@@ -1469,8 +1469,8 @@ test('usageForCommand includes Maestro replay flag', () => {
   assert.match(help, /issues\/558/);
 });
 
-test('usageForCommand includes Maestro test suite flag', () => {
-  const help = usageForCommand('test');
+test('usageForCommand includes Maestro test suite flag', async () => {
+  const help = await usageForCommand('test');
   if (help === null) throw new Error('Expected test help text');
   assert.match(help, /Run one or more replay scripts as a serial test suite/);
   assert.match(help, /--maestro/);
@@ -1482,13 +1482,13 @@ test('usageForCommand includes Maestro test suite flag', () => {
   assert.match(help, /Replay\/Test: inject or override/);
 });
 
-test('command help keeps scroll and gesture planning guidance', () => {
-  const scrollHelp = usageForCommand('scroll');
+test('command help keeps scroll and gesture planning guidance', async () => {
+  const scrollHelp = await usageForCommand('scroll');
   if (scrollHelp === null) throw new Error('Expected scroll help text');
   assert.match(scrollHelp, /Scroll in a direction/);
   assert.match(scrollHelp, /top\/bottom edge/);
 
-  const gestureHelp = usageForCommand('gesture');
+  const gestureHelp = await usageForCommand('gesture');
   if (gestureHelp === null) throw new Error('Expected gesture help text');
   assert.match(gestureHelp, /Android transform verification should use all app-observable effects/);
   assert.match(gestureHelp, /wait text "pan changed yes"/);
@@ -1500,8 +1500,8 @@ test('parseArgs recognizes test --record-video flag', () => {
   assert.equal(parsed.flags.recordVideo, true);
 });
 
-test('usageForCommand documents prepare ios-runner', () => {
-  const help = usageForCommand('prepare');
+test('usageForCommand documents prepare ios-runner', async () => {
+  const help = await usageForCommand('prepare');
   if (help === null) throw new Error('Expected prepare help text');
   assert.match(help, /Usage:\s+agent-device prepare ios-runner --platform ios\|macos/);
   assert.match(help, /Prepare platform helper infrastructure/);
@@ -1519,8 +1519,8 @@ test('usageForCommand documents prepare ios-runner', () => {
   assert.match(help, /Runner build\/start output is written to the session runner\.log/);
 });
 
-test('usageForCommand resolves workflow help topic', () => {
-  const help = usageForCommand('workflow');
+test('usageForCommand resolves workflow help topic', async () => {
+  const help = await usageForCommand('workflow');
   if (help === null) throw new Error('Expected workflow help text');
   assert.match(help, /agent-device help workflow/);
   assert.match(help, /Use selectors as positional targets/);
@@ -1621,8 +1621,8 @@ test('usageForCommand resolves workflow help topic', () => {
   assert.doesNotMatch(help, /agent-device react-devtools profile/);
 });
 
-test('usageForCommand resolves web help topic', () => {
-  const help = usageForCommand('web');
+test('usageForCommand resolves web help topic', async () => {
+  const help = await usageForCommand('web');
   if (help === null) throw new Error('Expected web help text');
   assert.match(help, /agent-device help web/);
   assert.match(help, /agent-device uses a managed, pinned agent-browser backend/);
@@ -1659,8 +1659,8 @@ test('usageForCommand resolves web help topic', () => {
   assert.match(help, /Do not use native mobile or desktop setup commands/);
 });
 
-test('workflow help keeps common copyable command forms', () => {
-  const help = usageForCommand('workflow');
+test('workflow help keeps common copyable command forms', async () => {
+  const help = await usageForCommand('workflow');
   if (help === null) throw new Error('Expected workflow help text');
   assert.match(help, /network dump --include headers/);
   assert.match(help, /settings animations off/);
@@ -1671,8 +1671,8 @@ test('workflow help keeps common copyable command forms', () => {
   assert.match(help, /clipboard write "some text"/);
 });
 
-test('usageForCommand resolves debugging help topic', () => {
-  const help = usageForCommand('debugging');
+test('usageForCommand resolves debugging help topic', async () => {
+  const help = await usageForCommand('debugging');
   if (help === null) throw new Error('Expected debugging help text');
   assert.match(help, /agent-device help debugging/);
   assert.match(help, /Use logs when you need the lead-up timeline/);
@@ -1731,8 +1731,8 @@ test('parseArgs recognizes debug symbols command shape', () => {
   assert.equal(parsed.flags.out, 'crash-symbolicated.ips');
 });
 
-test('debug command help stays scoped to symbolication', () => {
-  const help = usageForCommand('debug');
+test('debug command help stays scoped to symbolication', async () => {
+  const help = await usageForCommand('debug');
   if (help === null) throw new Error('Expected debug help text');
   assert.match(help, /debug symbols --artifact/);
   assert.match(help, /intentionally narrow/);
@@ -1751,8 +1751,8 @@ test('debug rejects unrelated diagnostics flags', () => {
   );
 });
 
-test('usageForCommand resolves remote help topic', () => {
-  const help = usageForCommand('remote');
+test('usageForCommand resolves remote help topic', async () => {
+  const help = await usageForCommand('remote');
   if (help === null) throw new Error('Expected remote help text');
   assert.match(help, /agent-device connect/);
   assert.match(help, /Remote connection providers use the same lifecycle/);
@@ -1794,8 +1794,8 @@ test('usageForCommand resolves remote help topic', () => {
   assert.match(help, /install-from-source --github-actions-artifact org\/repo:artifact/);
 });
 
-test('usageForCommand resolves physical-device help topic', () => {
-  const help = usageForCommand('physical-device');
+test('usageForCommand resolves physical-device help topic', async () => {
+  const help = await usageForCommand('physical-device');
   if (help === null) throw new Error('Expected physical-device help text');
   assert.match(help, /agent-device help physical-device/);
   assert.match(help, /Start with Automatic Signing and only these env vars/);
@@ -1804,16 +1804,16 @@ test('usageForCommand resolves physical-device help topic', () => {
   assert.match(help, /profile name\/specifier, not a file path/);
 });
 
-test('usageForCommand resolves macos help topic', () => {
-  const help = usageForCommand('macos');
+test('usageForCommand resolves macos help topic', async () => {
+  const help = await usageForCommand('macos');
   if (help === null) throw new Error('Expected macos help text');
   assert.match(help, /agent-device click @e66 --button secondary --platform macos/);
   assert.match(help, /Context menus are not ambient UI/);
   assert.match(help, /menu-item refs/);
 });
 
-test('usageForCommand resolves dogfood help topic', () => {
-  const help = usageForCommand('dogfood');
+test('usageForCommand resolves dogfood help topic', async () => {
+  const help = await usageForCommand('dogfood');
   if (help === null) throw new Error('Expected dogfood help text');
   assert.match(help, /agent-device help dogfood/);
   assert.match(help, /Find user-visible issues from runtime behavior/);
@@ -1831,8 +1831,8 @@ test('usageForCommand resolves dogfood help topic', () => {
   assert.match(help, /screenshot \.\/dogfood-output\/screenshots\/issue-001\.png --overlay-refs/);
 });
 
-test('usageForCommand resolves react-devtools help topic', () => {
-  const help = usageForCommand('react-devtools');
+test('usageForCommand resolves react-devtools help topic', async () => {
+  const help = await usageForCommand('react-devtools');
   if (help === null) throw new Error('Expected react-devtools help text');
   assert.match(help, /agent-device react-devtools start/);
   assert.match(help, /agent-device react-devtools wait --component <ComponentName>/);
@@ -1867,8 +1867,8 @@ test('usageForCommand resolves react-devtools help topic', () => {
   assert.match(help, /Remote iOS apps attempt the legacy React DevTools websocket/);
 });
 
-test('usageForCommand resolves cdp help topic', () => {
-  const help = usageForCommand('cdp');
+test('usageForCommand resolves cdp help topic', async () => {
+  const help = await usageForCommand('cdp');
   if (help === null) throw new Error('Expected cdp help text');
   assert.match(help, /agent-device cdp target list --url http:\/\/127\.0\.0\.1:8081/);
   assert.match(help, /memory usage sample --label baseline --gc/);
@@ -1879,8 +1879,8 @@ test('usageForCommand resolves cdp help topic', () => {
   assert.match(help, /React Native\/Hermes implements a subset of browser CDP/);
 });
 
-test('usageForCommand resolves react-native help topic', () => {
-  const help = usageForCommand('react-native');
+test('usageForCommand resolves react-native help topic', async () => {
+  const help = await usageForCommand('react-native');
   if (help === null) throw new Error('Expected react-native help text');
   assert.match(help, /agent-device help react-native/);
   assert.match(help, /React Native-specific automation hazards/);
@@ -2165,8 +2165,8 @@ test('invalid range errors are deterministic', () => {
   );
 });
 
-test('usage includes swipe and press series options', () => {
-  const help = usage();
+test('usage includes swipe and press series options', async () => {
+  const help = await usage();
   assert.match(help, /diff <kind>/);
   assert.match(help, /swipe <x1> <y1> <x2> <y2>/);
   assert.match(help, /settings \[area\] \[options\]/);
@@ -2174,8 +2174,8 @@ test('usage includes swipe and press series options', () => {
   assert.doesNotMatch(help, /--interval-ms/);
 });
 
-test('usage renders concise commands inline with descriptions', () => {
-  const help = usage();
+test('usage renders concise commands inline with descriptions', async () => {
+  const help = await usage();
   assert.match(help, /Commands:[\s\S]*\n  boot\s{2,}Boot target device\/simulator/);
   assert.match(help, /Commands:[\s\S]*\n  shutdown\s{2,}Shutdown target simulator\/emulator/);
   assert.match(help, /  prepare\s{2,}Pre-warm platform helpers/);
@@ -2199,8 +2199,8 @@ test('usage renders concise commands inline with descriptions', () => {
   assert.doesNotMatch(help, /agent-device-proxy/);
 });
 
-test('proxy command help describes tunnel usage', () => {
-  const help = usageForCommand('proxy');
+test('proxy command help describes tunnel usage', async () => {
+  const help = await usageForCommand('proxy');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /Usage:\s+agent-device proxy/);
   assert.match(help, /cloudflared tunnel --url http:\/\/127\.0\.0\.1:4310/);
@@ -2214,8 +2214,8 @@ test('proxy command help describes tunnel usage', () => {
   assert.doesNotMatch(help, /agent-device-proxy/);
 });
 
-test('connect command help lists lease id in usage and flags', () => {
-  const help = usageForCommand('connect');
+test('connect command help lists lease id in usage and flags', async () => {
+  const help = await usageForCommand('connect');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /Usage:\s+agent-device connect .*--daemon-base-url <url>/);
   assert.match(help, /--daemon-base-url <url>\s+Explicit remote HTTP daemon base URL/);
@@ -2226,21 +2226,21 @@ test('connect command help lists lease id in usage and flags', () => {
   assert.doesNotMatch(help, /--launch-url <url>/);
 });
 
-test('install-from-source command help describes all source types', () => {
-  const help = usageForCommand('install-from-source');
+test('install-from-source command help describes all source types', async () => {
+  const help = await usageForCommand('install-from-source');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /Install app builds from URLs, remote source specs, or CI artifacts/);
 });
 
-test('session command help includes daemon state directory discovery', () => {
-  const help = usageForCommand('session');
+test('session command help includes daemon state directory discovery', async () => {
+  const help = await usageForCommand('session');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /Usage:\s+agent-device session list \| session state-dir/);
   assert.match(help, /effective daemon state directory/);
 });
 
-test('web command help includes managed backend setup', () => {
-  const help = usageForCommand('web');
+test('web command help includes managed backend setup', async () => {
+  const help = await usageForCommand('web');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /agent-device help web/);
   assert.match(help, /managed, pinned agent-browser backend/);
@@ -2253,8 +2253,8 @@ test('web command help includes managed backend setup', () => {
   assert.doesNotMatch(help, /web status/);
 });
 
-test('command usage describes test suite flags', () => {
-  const help = usageForCommand('test');
+test('command usage describes test suite flags', async () => {
+  const help = await usageForCommand('test');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /Usage:\s+agent-device test <path-or-glob>\.\.\./);
   assert.match(help, /Run one or more replay scripts as a serial test suite/);
@@ -2272,9 +2272,9 @@ test('command usage describes test suite flags', () => {
   assert.doesNotMatch(help, /test --verbose prints per-test step timings without debug logs/);
 });
 
-test('command usage describes delayed typing flags', () => {
-  const typeHelp = usageForCommand('type');
-  const fillHelp = usageForCommand('fill');
+test('command usage describes delayed typing flags', async () => {
+  const typeHelp = await usageForCommand('type');
+  const fillHelp = await usageForCommand('fill');
   if (typeHelp === null || fillHelp === null) {
     throw new Error('Expected command help text');
   }
@@ -2282,8 +2282,8 @@ test('command usage describes delayed typing flags', () => {
   assert.match(fillHelp, /--delay-ms <ms>/);
 });
 
-test('snapshot command usage documents diff alias', () => {
-  const help = usageForCommand('snapshot');
+test('snapshot command usage documents diff alias', async () => {
+  const help = await usageForCommand('snapshot');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /agent-device snapshot \[--diff\]/);
   assert.match(help, /--timeout <ms>/);
@@ -2292,14 +2292,14 @@ test('snapshot command usage documents diff alias', () => {
   assert.match(help, /verify with diff snapshot -i or snapshot --diff/);
 });
 
-test('network command usage documents include flag', () => {
-  const help = usageForCommand('network');
+test('network command usage documents include flag', async () => {
+  const help = await usageForCommand('network');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /--include summary\|headers\|body\|all/);
 });
 
-test('command usage shows command flags without global flags', () => {
-  const help = usageForCommand('swipe');
+test('command usage shows command flags without global flags', async () => {
+  const help = await usageForCommand('swipe');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /Swipe coordinates with optional repeat pattern/);
   assert.match(help, /Command flags:/);
@@ -2309,16 +2309,16 @@ test('command usage shows command flags without global flags', () => {
   assert.doesNotMatch(help, /--platform ios\|macos\|android\|linux\|web\|apple/);
 });
 
-test('back command usage documents explicit mode flags', () => {
-  const help = usageForCommand('back');
+test('back command usage documents explicit mode flags', async () => {
+  const help = await usageForCommand('back');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /agent-device back \[--in-app\|--system\]/);
   assert.match(help, /--in-app/);
   assert.match(help, /--system/);
 });
 
-test('open command usage documents surface and console log flags', () => {
-  const help = usageForCommand('open');
+test('open command usage documents surface and console log flags', async () => {
+  const help = await usageForCommand('open');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /--surface app\|frontmost-app\|desktop\|menubar/);
   assert.match(help, /macOS also supports --surface/);
@@ -2330,16 +2330,16 @@ test('open command usage documents surface and console log flags', () => {
   assert.match(help, /agent-device open "Expo Go" exp:\/\/127\.0\.0\.1:8081 --platform ios/);
 });
 
-test('replay command usage keeps Maestro target binding guidance', () => {
-  const help = usageForCommand('replay');
+test('replay command usage keeps Maestro target binding guidance', async () => {
+  const help = await usageForCommand('replay');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /For Maestro YAML compatibility flows/);
   assert.match(help, /replay <flow\.yaml> --maestro/);
   assert.match(help, /--platform ios/);
 });
 
-test('command usage shows record touch-overlay opt-out flag', () => {
-  const help = usageForCommand('record');
+test('command usage shows record touch-overlay opt-out flag', async () => {
+  const help = await usageForCommand('record');
   if (help === null) throw new Error('Expected command help text');
   assert.match(
     help,
@@ -2352,8 +2352,8 @@ test('command usage shows record touch-overlay opt-out flag', () => {
   assert.match(help, /multiple MP4 chunks/);
 });
 
-test('command usage keeps detailed descriptions', () => {
-  const help = usageForCommand('metro');
+test('command usage keeps detailed descriptions', async () => {
+  const help = await usageForCommand('metro');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /Prepare a local Metro runtime or ask Metro to reload/);
   assert.match(help, /metro reload/);
@@ -2361,8 +2361,8 @@ test('command usage keeps detailed descriptions', () => {
   assert.match(help, /AGENT_DEVICE_METRO_BEARER_TOKEN/);
 });
 
-test('command usage shows no command flags when unsupported', () => {
-  const help = usageForCommand('appstate');
+test('command usage shows no command flags when unsupported', async () => {
+  const help = await usageForCommand('appstate');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /Show foreground app\/activity/);
   assert.doesNotMatch(help, /Command flags:/);
@@ -2370,15 +2370,15 @@ test('command usage shows no command flags when unsupported', () => {
   assert.doesNotMatch(help, /Global Flags:/);
 });
 
-test('clipboard command usage is documented', () => {
-  const help = usageForCommand('clipboard');
+test('clipboard command usage is documented', async () => {
+  const help = await usageForCommand('clipboard');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /clipboard read \| clipboard write <text>/);
   assert.match(help, /Read or write device clipboard text/);
 });
 
-test('keyboard command usage is documented', () => {
-  const help = usageForCommand('keyboard');
+test('keyboard command usage is documented', async () => {
+  const help = await usageForCommand('keyboard');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /keyboard \[status\|get\|dismiss\|enter\|return\]/);
   assert.match(
@@ -2387,15 +2387,15 @@ test('keyboard command usage is documented', () => {
   );
 });
 
-test('rotate command usage is documented', () => {
-  const help = usageForCommand('rotate');
+test('rotate command usage is documented', async () => {
+  const help = await usageForCommand('rotate');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /rotate <portrait\|portrait-upside-down\|landscape-left\|landscape-right>/);
   assert.match(help, /Rotate device orientation on iOS and Android/);
 });
 
-test('settings usage documents canonical faceid states', () => {
-  const help = usageForCommand('settings');
+test('settings usage documents canonical faceid states', async () => {
+  const help = await usageForCommand('settings');
   if (help === null) throw new Error('Expected command help text');
   assert.match(help, /location set <lat> <lon>/);
   assert.match(help, /clear-app-state \[app-id\]/);
@@ -2408,8 +2408,8 @@ test('settings usage documents canonical faceid states', () => {
   assert.doesNotMatch(help, /validate\|unvalidate/);
 });
 
-test('removed trigger aliases are no longer documented as commands', () => {
-  const help = usageForCommand('trigger-screenshot-notification');
+test('removed trigger aliases are no longer documented as commands', async () => {
+  const help = await usageForCommand('trigger-screenshot-notification');
   assert.equal(help, null);
 });
 
