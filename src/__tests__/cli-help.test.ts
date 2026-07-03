@@ -150,16 +150,28 @@ test('help rejects multiple positional commands and skips daemon dispatch', asyn
   assert.match(result.stderr, /Error \(INVALID_ARGS\): help accepts at most one command/);
 });
 
-test('tap is an alias for press', async () => {
+test('tap dispatches as press with positionals and flags preserved', async () => {
   const result = await runCliCapture(['tap', '@e3', '--json']);
-  // The command should normalize to press and execute accordingly
-  // We check that it doesn't report an unknown command error
-  assert.doesNotMatch(result.stderr, /Error \(INVALID_ARGS\): Unknown command: tap/);
+  assert.doesNotMatch(result.stderr, /Unknown command/);
+  // Canonicalization: the daemon call must record press, never tap.
+  assert.equal(result.calls.length, 1);
+  assert.equal(result.calls[0]?.command, 'press');
+  assert.deepEqual(result.calls[0]?.positionals, ['@e3']);
 });
 
-test('tap with selector resolves to press command', async () => {
-  const result = await runCliCapture(['tap', 'label="Submit"', '--json']);
-  // The command should normalize to press and execute accordingly
-  // We check that it doesn't report an unknown command error
-  assert.doesNotMatch(result.stderr, /Error \(INVALID_ARGS\): Unknown command: tap/);
+// Regression coverage for #1036 (moved off `tap` when it became an alias):
+// unknown commands must be reported before per-command flag validation.
+test('unknown command with flags reports unknown command before flag validation', async () => {
+  const result = await runCliCapture(['bogus-cmd', 'e3', '--session', 'foo']);
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stderr, /Error \(INVALID_ARGS\): Unknown command: bogus-cmd/);
+  assert.doesNotMatch(result.stderr, /not supported for command/);
+});
+
+test('unknown command without flags reports unknown command', async () => {
+  const result = await runCliCapture(['bogus-cmd', 'e3']);
+  assert.equal(result.code, 1);
+  assert.equal(result.calls.length, 0);
+  assert.match(result.stderr, /Error \(INVALID_ARGS\): Unknown command: bogus-cmd/);
 });
