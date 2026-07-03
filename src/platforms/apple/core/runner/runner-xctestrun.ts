@@ -8,6 +8,7 @@ import { resolveIosSimulatorDeviceSetPath } from '../../../../utils/device-isola
 import { readProcessStartTime } from '../../../../utils/process-identity.ts';
 import { acquireProcessLock, type ProcessLockOwner } from '../../../../utils/process-lock.ts';
 import { isEnvTruthy } from '../../../../utils/retry.ts';
+import { createTtlMemo } from '../../../../utils/ttl-memo.ts';
 import { isIosFamily, isMacOs, type DeviceInfo } from '../../../../kernel/device.ts';
 import type { DefinedEnvMap as EnvMap } from '../../../../utils/env-map.ts';
 import { withKeyedLock } from '../../../../utils/keyed-lock.ts';
@@ -64,7 +65,7 @@ const RUNNER_UNIT_TEST_SWIFT_FLAGS =
 
 const runnerXctestrunBuildLocks = new Map<string, Promise<unknown>>();
 const badRunnerArtifactsForRun = new Set<string>();
-const appleToolFingerprintCache = new Map<string, string>();
+const appleToolFingerprintCache = createTtlMemo<string, string>();
 export const runnerPrepProcesses = new Set<ExecBackgroundResult['child']>();
 
 type XctestrunTarget = {
@@ -737,10 +738,6 @@ const RUNNER_ROOT_TRANSIENT_ENTRY_NAMES = new Set([
   'TextBasedInstallAPI',
   'info.plist',
 ]);
-
-export function __resetRunnerToolchainFingerprintCacheForTests(): void {
-  appleToolFingerprintCache.clear();
-}
 
 export function shouldDeleteRunnerDerivedRootEntry(entryName: string): boolean {
   return RUNNER_ROOT_TRANSIENT_ENTRY_NAMES.has(entryName);

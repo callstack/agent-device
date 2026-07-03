@@ -9,6 +9,7 @@ import {
 } from '../platforms/apple/core/devicectl.ts';
 import { runXcrun } from '../platforms/apple/core/tool-provider.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
+import { createTtlMemo } from '../utils/ttl-memo.ts';
 
 const IOS_DEVICE_READY_TIMEOUT_MS = 15_000;
 const IOS_DEVICE_READY_COMMAND_TIMEOUT_BUFFER_MS = 3_000;
@@ -16,7 +17,7 @@ const IOS_DEVICE_READY_COMMAND_TIMEOUT_BUFFER_MS = 3_000;
 // Exported so unit tests can assert TTL behavior without duplicating the value.
 export const DEVICE_READY_CACHE_TTL_MS = 5_000;
 
-const readyCache = new Map<string, number>();
+const readyCache = createTtlMemo<string, true>({ ttlMs: DEVICE_READY_CACHE_TTL_MS });
 
 export type DeviceReadyOptions = {
   deviceHub?: boolean;
@@ -31,11 +32,9 @@ export async function ensureDeviceReady(
   if (isActiveProviderDevice(device)) return;
 
   const cacheKey = deviceReadyCacheKey(device);
-  const cachedUntil = readyCache.get(cacheKey);
-  if (cachedUntil !== undefined) {
-    if (cachedUntil > Date.now() && !options.focusExisting) {
-      return;
-    }
+  const isCached = readyCache.get(cacheKey) === true;
+  if (isCached) {
+    if (!options.focusExisting) return;
     readyCache.delete(cacheKey);
   }
 
@@ -63,13 +62,8 @@ export async function ensureDeviceReady(
   }
 }
 
-// Test-only reset hook for this daemon-local cache.
-export function clearDeviceReadyCacheForTests(): void {
-  readyCache.clear();
-}
-
 function markDeviceReady(cacheKey: string): void {
-  readyCache.set(cacheKey, Date.now() + DEVICE_READY_CACHE_TTL_MS);
+  readyCache.set(cacheKey, true);
 }
 
 function deviceReadyCacheKey(device: DeviceInfo): string {

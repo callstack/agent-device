@@ -164,7 +164,6 @@ const mockPrepareStatusBarForScreenshot = vi.mocked(prepareStatusBarForScreensho
 
 beforeEach(() => {
   vi.resetAllMocks();
-  simulatorActual.__resetSimulatorBootedMemoForTests();
   invalidateSimulatorStatusBarOverrideCache(IOS_TEST_SIMULATOR);
   mockRunCmd.mockImplementation(execActual.runCmd);
   mockRetryWithPolicy.mockImplementation(retryActual.retryWithPolicy);

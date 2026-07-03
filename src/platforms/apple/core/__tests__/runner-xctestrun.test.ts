@@ -8,7 +8,6 @@ import path from 'node:path';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import { withCommandExecutorOverride } from '../../../../utils/exec.ts';
 import {
-  __resetRunnerToolchainFingerprintCacheForTests,
   acquireXcodebuildSimulatorSetRedirect,
   ensureXctestrunArtifact,
   findXctestrun,
@@ -251,7 +250,6 @@ test('setup metadata script matches expected iOS simulator cache metadata', asyn
     });
     const previousPath = process.env.PATH;
     process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ''}`;
-    __resetRunnerToolchainFingerprintCacheForTests();
 
     try {
       execFileSync(
@@ -278,7 +276,6 @@ test('setup metadata script matches expected iOS simulator cache metadata', asyn
 
       assert.deepEqual(actualComparable, expectedComparable);
     } finally {
-      __resetRunnerToolchainFingerprintCacheForTests();
       restoreEnvVar('PATH', previousPath);
     }
   });

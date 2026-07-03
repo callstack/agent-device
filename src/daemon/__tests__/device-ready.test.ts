@@ -20,7 +20,6 @@ import { waitForAndroidBoot } from '../../platforms/android/devices.ts';
 import { ensureBootedSimulator } from '../../platforms/apple/core/simulator.ts';
 import { ANDROID_EMULATOR, IOS_DEVICE, IOS_SIMULATOR } from '../../__tests__/test-utils/index.ts';
 import {
-  clearDeviceReadyCacheForTests,
   DEVICE_READY_CACHE_TTL_MS,
   ensureDeviceReady,
   parseIosReadyPayload,
@@ -34,7 +33,6 @@ const mockWaitForAndroidBoot = vi.mocked(waitForAndroidBoot);
 beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-04-01T10:00:00.000Z'));
-  clearDeviceReadyCacheForTests();
   mockRunCmd.mockReset();
   mockEnsureBootedSimulator.mockReset();
   mockEnsureBootedSimulator.mockResolvedValue(undefined);
@@ -43,7 +41,6 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  clearDeviceReadyCacheForTests();
   vi.useRealTimers();
 });
 

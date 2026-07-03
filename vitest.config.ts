@@ -7,12 +7,14 @@ export default defineConfig({
         test: {
           name: 'unit',
           include: ['src/**/*.test.ts'],
+          setupFiles: ['src/__tests__/process-memo-setup.ts'],
         },
       },
       {
         test: {
           name: 'provider-integration',
           include: ['test/integration/provider-scenarios/**/*.test.ts'],
+          setupFiles: ['src/__tests__/process-memo-setup.ts'],
         },
       },
     ],

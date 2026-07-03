@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import {
-  __resetSimulatorBootedMemoForTests,
   ensureBootedSimulator,
   markSimulatorBooted,
   shutdownSimulator,
@@ -41,7 +40,6 @@ function countSimctlListCalls(): number {
 
 beforeEach(() => {
   vi.useFakeTimers({ now: 1_000 });
-  __resetSimulatorBootedMemoForTests();
   mockRunXcrun.mockReset();
   mockRunXcrun.mockImplementation(async () => bootedListResult());
 });
@@ -85,4 +83,18 @@ test('booted memo is scoped per simulator set path', async () => {
 
   await ensureBootedSimulator({ ...simulator, simulatorSetPath: '/custom/set' });
   expect(countSimctlListCalls()).toBe(2);
+});
+
+test.sequential('process memo test setup clears simulator boot memo: seed', async () => {
+  markSimulatorBooted(simulator);
+
+  await ensureBootedSimulator(simulator);
+
+  expect(countSimctlListCalls()).toBe(0);
+});
+
+test.sequential('process memo test setup clears simulator boot memo: verify', async () => {
+  await ensureBootedSimulator(simulator);
+
+  expect(countSimctlListCalls()).toBe(1);
 });
