@@ -8,7 +8,7 @@ import {
   createRecordingAppleToolProvider,
   simctlListDevicesHandler,
 } from './providers.ts';
-import { createProviderTranscript } from './transcript.ts';
+import { createProviderTranscript, type ProviderScenarioProviderEntry } from './transcript.ts';
 
 const APP = 'com.example.app';
 const DEVICE_ID = PROVIDER_SCENARIO_IOS_SIMULATOR.id;
@@ -46,7 +46,7 @@ const AFTER_NODES = [
   },
 ];
 
-function snapshotEntry(nodes: unknown[]) {
+function snapshotEntry(nodes: unknown[]): ProviderScenarioProviderEntry {
   return {
     command: 'ios.runner.snapshot',
     deviceId: DEVICE_ID,
