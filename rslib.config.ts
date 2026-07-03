@@ -48,7 +48,16 @@ export default defineConfig({
         distPath: {
           root: path.join('dist', 'src'),
         },
-        minify: true,
+        minify: {
+          js: true,
+          jsOptions: {
+            minimizerOptions: {
+              compress: {
+                passes: 3,
+              },
+            },
+          },
+        },
       },
     },
   ],
