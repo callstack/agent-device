@@ -17,6 +17,13 @@ export default defineConfig({
           setupFiles: ['src/__tests__/process-memo-setup.ts'],
         },
       },
+      {
+        test: {
+          name: 'interaction-contract',
+          include: ['test/integration/interaction-contract/**/*.test.ts'],
+          setupFiles: ['src/__tests__/process-memo-setup.ts'],
+        },
+      },
     ],
     coverage: {
       provider: 'v8',
