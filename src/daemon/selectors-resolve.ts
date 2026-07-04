@@ -110,6 +110,12 @@ export function formatSelectorFailure(
     : `Selector did not match (${summary})`;
 }
 
+type DisambiguationState = {
+  best: SnapshotNode | null;
+  bestVisible: boolean;
+  tie: boolean;
+};
+
 function analyzeSelectorMatches(
   nodes: SnapshotState['nodes'],
   selector: Selector,
@@ -118,9 +124,7 @@ function analyzeSelectorMatches(
 ): { count: number; firstNode: SnapshotNode | null; disambiguated: SnapshotNode | null } {
   let count = 0;
   let firstNode: SnapshotNode | null = null;
-  let best: SnapshotNode | null = null;
-  let bestVisible = false;
-  let tie = false;
+  const state: DisambiguationState = { best: null, bestVisible: false, tie: false };
   // Lazily built: only ambiguous matches pay for viewport inference.
   let byIndex: Map<number, SnapshotNode> | undefined;
   const isVisible = (node: SnapshotNode): boolean => {
@@ -132,38 +136,46 @@ function analyzeSelectorMatches(
     if (!matchesSelector(node, selector, platform)) continue;
     count += 1;
     firstNode ??= node;
-    if (!best) {
-      best = node;
-      continue;
-    }
-    // A closed drawer or off-viewport carousel keeps its items in the tree at
-    // out-of-bounds rects; picking one silently taps coordinates that cannot
-    // land. Prefer candidates visible in the effective viewport before the
-    // deepest-then-smallest tiebreak (evaluated only once matches are
-    // ambiguous, so unique resolutions never pay for viewport inference).
-    bestVisible ||= isVisible(best);
-    const nodeVisible = isVisible(node);
-    if (nodeVisible !== bestVisible) {
-      if (nodeVisible) {
-        best = node;
-        bestVisible = true;
-        tie = false;
-      }
-      continue;
-    }
-    const comparison = compareDisambiguationCandidates(node, best);
-    if (comparison > 0) {
-      best = node;
-      tie = false;
-    } else if (comparison === 0) {
-      tie = true;
-    }
+    accumulateDisambiguationCandidate(state, node, isVisible);
   }
   return {
     count,
     firstNode,
-    disambiguated: tie ? null : best,
+    disambiguated: state.tie ? null : state.best,
   };
+}
+
+// A closed drawer or off-viewport carousel keeps its items in the tree at
+// out-of-bounds rects; picking one silently taps coordinates that cannot land.
+// Prefer candidates visible on screen before the deepest-then-smallest
+// tiebreak (visibility is evaluated only once matches are ambiguous, so
+// unique resolutions never pay for viewport inference).
+function accumulateDisambiguationCandidate(
+  state: DisambiguationState,
+  node: SnapshotNode,
+  isVisible: (node: SnapshotNode) => boolean,
+): void {
+  if (!state.best) {
+    state.best = node;
+    return;
+  }
+  state.bestVisible ||= isVisible(state.best);
+  const nodeVisible = isVisible(node);
+  if (nodeVisible !== state.bestVisible) {
+    if (nodeVisible) {
+      state.best = node;
+      state.bestVisible = true;
+      state.tie = false;
+    }
+    return;
+  }
+  const comparison = compareDisambiguationCandidates(node, state.best);
+  if (comparison > 0) {
+    state.best = node;
+    state.tie = false;
+  } else if (comparison === 0) {
+    state.tie = true;
+  }
 }
 
 function countSelectorMatchesOnly(

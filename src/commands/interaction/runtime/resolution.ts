@@ -127,7 +127,7 @@ async function resolveRefInteractionTarget(
     kind: 'ref',
     point,
     target: { kind: 'ref', ref: `@${resolved.ref}` },
-    ...describeResolvedNode(runtime, capture.snapshot.nodes, node, params.action),
+    ...describeResolvedInteractionNode(runtime, node, capture.snapshot.nodes, params.action),
   };
 }
 
@@ -191,22 +191,24 @@ async function resolveSelectorInteractionTarget(
     kind: 'selector',
     point,
     target: { kind: 'selector', selector: resolved.selector.raw },
-    ...describeResolvedNode(runtime, capture.snapshot.nodes, node, params.action),
+    ...describeResolvedInteractionNode(runtime, node, capture.snapshot.nodes, params.action),
   };
 }
 
-function describeResolvedNode(
+// Shared tail of a resolved ref/selector interaction target: the node itself
+// plus everything derived from it for the response.
+function describeResolvedInteractionNode(
   runtime: AgentDeviceRuntime,
-  nodes: SnapshotState['nodes'],
   node: SnapshotNode,
+  nodes: SnapshotState['nodes'],
   action: InteractionAction,
 ): {
   node: SnapshotNode;
   selectorChain: string[];
-  refLabel?: string;
+  refLabel: string | undefined;
   targetHittable?: boolean;
   hint?: string;
-  preActionNodes: SnapshotNode[];
+  preActionNodes: SnapshotState['nodes'];
 } {
   return {
     node,
@@ -411,7 +413,7 @@ function isUsableResolvedNode(node: SnapshotNode | null | undefined): node is Sn
   return resolveRectCenter(node.rect) !== null;
 }
 
-// Selector parity for the @ref off-screen guard below: without it, a selector
+// Selector parity for the @ref off-screen guard: without it, a selector
 // resolving to a closed drawer/carousel item "succeeds" by tapping coordinates
 // outside the viewport (observed as `Tapped (-161, 265)` against Bluesky's
 // closed drawer) while the same node via @ref is refused.
@@ -421,20 +423,11 @@ function assertVisibleSelectorTarget(
   selector: string,
   action: InteractionAction,
 ): void {
-  const viewport = node.rect ? resolveEffectiveViewportRect(node, nodes) : null;
-  if (!node.rect || !viewport || isNodeVisibleOnScreen(node, nodes)) return;
-  throw new AppError(
-    'COMMAND_FAILED',
-    `Selector ${selector} resolved to an off-screen element and is not safe to ${action}`,
-    {
-      reason: 'offscreen_selector',
-      selector,
-      ...(node.ref !== undefined ? { ref: `@${node.ref}` } : {}),
-      rect: node.rect,
-      viewport,
-      hint: `The element is outside the visible viewport — likely inside a closed drawer, another tab, or scrolled content. Scroll toward it or open its container, take a fresh snapshot, then retry ${action}.`,
-    },
-  );
+  throwIfOffscreenInteractionTarget(node, nodes, {
+    message: `Selector ${selector} resolved to an off-screen element and is not safe to ${action}`,
+    details: { reason: 'offscreen_selector', selector },
+    hint: `The element is outside the visible viewport — likely inside a closed drawer, another tab, or scrolled content. Scroll toward it or open its container, take a fresh snapshot, then retry ${action}.`,
+  });
 }
 
 function assertVisibleRefTarget(
@@ -443,16 +436,27 @@ function assertVisibleRefTarget(
   refInput: string,
   action: InteractionAction,
 ): void {
-  // isNodeVisibleOnScreen (not the effective-viewport form): items inside an
-  // off-screen scrollable container (closed drawer) must also count as
-  // off-screen here, not just items scrolled out of an on-screen container.
+  throwIfOffscreenInteractionTarget(node, nodes, {
+    message: `Ref ${refInput} is off-screen and not safe to ${action}`,
+    details: { reason: 'offscreen_ref', ref: normalizeRef(refInput) },
+    hint: `Use scroll with the direction from the off-screen summary, take a fresh snapshot, then retry ${action} with the new ref or a selector.`,
+  });
+}
+
+// isNodeVisibleOnScreen (not the effective-viewport form): items inside an
+// off-screen scrollable container (closed drawer) must also count as
+// off-screen, not just items scrolled out of an on-screen container.
+function throwIfOffscreenInteractionTarget(
+  node: SnapshotNode,
+  nodes: SnapshotState['nodes'],
+  failure: { message: string; details: Record<string, unknown>; hint: string },
+): void {
   const viewport = node.rect ? resolveEffectiveViewportRect(node, nodes) : null;
   if (!node.rect || !viewport || isNodeVisibleOnScreen(node, nodes)) return;
-  throw new AppError('COMMAND_FAILED', `Ref ${refInput} is off-screen and not safe to ${action}`, {
-    reason: 'offscreen_ref',
-    ref: normalizeRef(refInput),
+  throw new AppError('COMMAND_FAILED', failure.message, {
+    ...failure.details,
     rect: node.rect,
     viewport,
-    hint: `Use scroll with the direction from the off-screen summary, take a fresh snapshot, then retry ${action} with the new ref or a selector.`,
+    hint: failure.hint,
   });
 }
