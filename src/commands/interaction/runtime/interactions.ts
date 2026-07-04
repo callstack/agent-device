@@ -24,6 +24,7 @@ import type { RepeatedInput } from '../../command-input.ts';
 import {
   captureInteractionSnapshot,
   type InteractionTarget,
+  preflightNativeRefInteraction,
   resolveInteractionTarget,
 } from './resolution.ts';
 
@@ -272,6 +273,11 @@ async function maybeTapRefTarget(
     return null;
   }
   if (hasNonDefaultTapOptions(options)) return null;
+  // ADR 0011 native-ref preflight: the shared occlusion/offscreen guards run
+  // against the stored session snapshot node before the backend call (a
+  // backend fast path can silently "succeed", so errors must be raised here).
+  // No snapshot / no usable rect → no-op; never adds a capture round trip.
+  const preflight = await preflightNativeRefInteraction(runtime, options, options.target, action);
   const backendResult = await runtime.backend.tapTarget(toBackendContext(runtime, options), {
     kind: 'ref',
     ref: options.target.ref,
@@ -281,6 +287,7 @@ async function maybeTapRefTarget(
   return {
     kind: 'ref',
     target: { kind: 'ref', ref: options.target.ref },
+    ...preflight,
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
   };
 }
@@ -290,6 +297,8 @@ async function maybeFillRefTarget(
   options: FillCommandOptions,
 ): Promise<FillCommandResult | null> {
   if (options.target.kind !== 'ref' || !runtime.backend.fillTarget) return null;
+  // ADR 0011 native-ref preflight — see maybeTapRefTarget.
+  const preflight = await preflightNativeRefInteraction(runtime, options, options.target, 'fill');
   const backendResult = await runtime.backend.fillTarget(
     toBackendContext(runtime, options),
     {
@@ -305,6 +314,7 @@ async function maybeFillRefTarget(
     kind: 'ref',
     target: { kind: 'ref', ref: options.target.ref },
     text: options.text,
+    ...preflight,
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
   };
 }

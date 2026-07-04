@@ -23,7 +23,8 @@
  * where the fast path can succeed on a candidate the runtime rules would
  * refuse stay gaps until proven); and a shared runtime preflight against the
  * already-captured snapshot node for the native-ref path, because a backend
- * fast path can silently succeed and delegation-on-error never triggers.
+ * fast path can silently succeed and delegation-on-error never triggers
+ * (implemented: preflightNativeRefInteraction, #1081).
  */
 
 export const INTERACTION_GUARANTEES = [
@@ -256,7 +257,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
   },
   'native-ref': {
     description:
-      'click @ref / fill @ref dispatch to backend.tapTarget/fillTarget without runtime resolution when no non-default options are set.',
+      'click @ref / fill @ref dispatch to backend.tapTarget/fillTarget without runtime resolution when no non-default options are set. A zero-round-trip preflight (preflightNativeRefInteraction) runs the shared guards against the stored session snapshot node first; no snapshot / no usable rect makes the preflight a no-op.',
     commands: ['click', 'fill'],
     guarantees: {
       disambiguation: {
@@ -264,22 +265,19 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         reason: 'Refs identify exactly one node by construction.',
       },
       occlusion: {
-        kind: 'waived',
-        reason:
-          'gap: no covered-element check before the native ref tap; closure strategy is a shared runtime preflight against the snapshot node before the backend call — a backend fast path can silently succeed, so delegation-on-error never triggers.',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
+        kind: 'runtime',
+        via: 'src/snapshot/snapshot-occlusion.ts#isSnapshotNodeInteractionBlocked',
       },
       offscreen: {
-        kind: 'waived',
-        reason:
-          'gap: no viewport check before the native ref tap; closure strategy is the same shared runtime preflight (the ref came from a daemon snapshot, so the node is already available).',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
+        kind: 'runtime',
+        via: 'src/snapshot/mobile-snapshot-semantics.ts#isNodeVisibleOnScreen',
       },
+      // Annotation only (targetHittable/hint on the result): promotion to a
+      // hittable ancestor stays a runtime-path behavior — the preflight never
+      // changes which element the backend acts on.
       nonHittable: {
-        kind: 'waived',
-        reason:
-          'gap: no promotion/annotation on the native ref path; closure strategy is the same shared runtime preflight.',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
+        kind: 'runtime',
+        via: 'src/commands/interaction/runtime/resolution.ts#preflightNativeRefInteraction',
       },
       responseConstruction: {
         kind: 'waived',

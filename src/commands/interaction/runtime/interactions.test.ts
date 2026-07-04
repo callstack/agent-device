@@ -127,6 +127,145 @@ test('runtime fill uses backend ref primitive without resolving snapshot geometr
   assert.deepEqual(result.backendResult, { ref: 'e1', text: 'hello' });
 });
 
+test('native ref click preflight refuses an off-screen ref without calling the backend', async () => {
+  // Closed-drawer shape (ADR 0011): the stored session snapshot already holds
+  // the node, so the fast path must refuse it with the runtime path's exact
+  // offscreen_ref shape instead of letting the backend silently "succeed".
+  const calls: string[] = [];
+  const device = createInteractionDevice(offscreenDrawerSnapshot(), {
+    platform: 'web',
+    captureSnapshot: async () => {
+      throw new Error('native ref preflight must not capture a snapshot');
+    },
+    tapTarget: async (_context, target) => {
+      calls.push(target.ref);
+      return {};
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e2'), { session: 'default' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /Ref @e2 is off-screen and not safe to click/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'offscreen_ref');
+      assert.equal(details?.ref, 'e2');
+      assert.ok(typeof details?.hint === 'string');
+      return true;
+    },
+  );
+  assert.deepEqual(calls, []);
+});
+
+test('native ref fill preflight refuses an off-screen ref without calling the backend', async () => {
+  const calls: string[] = [];
+  const device = createInteractionDevice(offscreenDrawerSnapshot(), {
+    platform: 'web',
+    captureSnapshot: async () => {
+      throw new Error('native ref preflight must not capture a snapshot');
+    },
+    fillTarget: async (_context, target) => {
+      calls.push(target.ref);
+      return {};
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.fill(ref('@e2'), 'hello', { session: 'default' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /Ref @e2 is off-screen and not safe to fill/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'offscreen_ref');
+      return true;
+    },
+  );
+  assert.deepEqual(calls, []);
+});
+
+test('native ref click preflight refuses a covered ref without calling the backend', async () => {
+  const calls: string[] = [];
+  const device = createInteractionDevice(coveredByTabBarSnapshot(), {
+    platform: 'web',
+    captureSnapshot: async () => {
+      throw new Error('native ref preflight must not capture a snapshot');
+    },
+    tapTarget: async (_context, target) => {
+      calls.push(target.ref);
+      return {};
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.click(ref('@e2'), { session: 'default' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      // Same shape as the runtime path's buildCoveredInteractionError.
+      assert.match(error.message, /Ref @e2 is covered by another visible element/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.ref, '@e2');
+      assert.equal(details?.interactionBlocked, 'covered');
+      return true;
+    },
+  );
+  assert.deepEqual(calls, []);
+});
+
+test('native ref click preflight annotates non-hittable targets but still calls the backend', async () => {
+  const calls: string[] = [];
+  const device = createInteractionDevice(nonHittableCellSnapshot(), {
+    platform: 'web',
+    captureSnapshot: async () => {
+      throw new Error('native ref preflight must not capture a snapshot');
+    },
+    tapTarget: async (_context, target) => {
+      calls.push(target.ref);
+      return { ref: target.ref.replace(/^@/, '') };
+    },
+  });
+
+  const result = await device.interactions.click(ref('@e2'), { session: 'default' });
+
+  // Annotation only: the backend still acts on the ref (no promotion on the
+  // fast path), and the result carries the same targetHittable/hint fields
+  // the runtime path attaches.
+  assert.deepEqual(calls, ['@e2']);
+  assert.equal(result.kind, 'ref');
+  assert.equal(result.targetHittable, false);
+  assert.match(result.hint ?? '', /hittable: false/);
+  assert.deepEqual(result.backendResult, { ref: 'e2' });
+});
+
+test('native ref fast path proceeds untouched when the session has no snapshot', async () => {
+  const calls: string[] = [];
+  const device = createAgentDevice({
+    backend: {
+      platform: 'web',
+      captureSnapshot: async () => {
+        throw new Error('native ref preflight must not capture a snapshot');
+      },
+      tap: async () => {},
+      typeText: async () => {},
+      tapTarget: async (_context, target) => {
+        calls.push(target.ref);
+        return { ref: target.ref.replace(/^@/, '') };
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default' }]),
+    policy: localCommandPolicy(),
+  });
+
+  const result = await device.interactions.click(ref('@e2'), { session: 'default' });
+
+  assert.deepEqual(calls, ['@e2']);
+  assert.equal(result.kind, 'ref');
+  assert.equal(result.targetHittable, undefined);
+  assert.equal(result.hint, undefined);
+  assert.deepEqual(result.backendResult, { ref: 'e2' });
+});
+
 test('runtime interactions pass runtime signal to backend primitives', async () => {
   const controller = new AbortController();
   let signal: AbortSignal | undefined;
@@ -1249,6 +1388,29 @@ function selectorSnapshot(): SnapshotState {
       label: 'Continue',
       value: 'Continue',
       rect: { x: 10, y: 20, width: 100, height: 40 },
+      hittable: true,
+    },
+  ]);
+}
+
+// Closed-drawer shape shared by the native-ref preflight tests: the only
+// interactive node (@e2) sits fully left of the Application viewport.
+function offscreenDrawerSnapshot(): SnapshotState {
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 2,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Explore',
+      rect: { x: -320, y: 240, width: 300, height: 50 },
       hittable: true,
     },
   ]);

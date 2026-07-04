@@ -443,6 +443,41 @@ function assertVisibleRefTarget(
   });
 }
 
+/**
+ * ADR 0011 native-ref preflight: `click @ref` / `fill @ref` fast paths
+ * dispatch straight to `backend.tapTarget`/`fillTarget`, and a backend fast
+ * path can silently "succeed" — delegation-on-error never triggers there. The
+ * ref came from the stored session snapshot, so the node is already in hand:
+ * run the SAME shared guards the runtime path uses against it before the
+ * backend call — occlusion (`isSnapshotNodeInteractionBlocked` via
+ * `assertInteractionNotBlocked`) and offscreen (`isNodeVisibleOnScreen` via
+ * `assertVisibleRefTarget`) ERROR with the runtime path's exact shapes, and
+ * the non-hittable annotation is returned for the fast-path result.
+ *
+ * Zero extra round trips by construction: no session, no stored snapshot, an
+ * unresolvable/invalid ref, or a node without a usable rect all make the
+ * preflight a no-op and the fast path proceeds exactly as before. Promotion
+ * to a hittable ancestor stays a runtime-path behavior — the preflight never
+ * changes which element the backend acts on.
+ */
+export async function preflightNativeRefInteraction(
+  runtime: AgentDeviceRuntime,
+  options: CommandContext,
+  target: Extract<InteractionTarget, { kind: 'ref' }>,
+  action: InteractionAction,
+): Promise<{ targetHittable?: boolean; hint?: string }> {
+  const session = await runtime.sessions.get(options.session ?? 'default');
+  const nodes = session?.snapshot?.nodes;
+  if (!nodes || normalizeRef(target.ref) === null) return {};
+  const resolved = tryResolveRefNode(nodes, target.ref, {
+    fallbackLabel: target.fallbackLabel ?? '',
+  });
+  if (!resolved) return {};
+  assertInteractionNotBlocked(resolved.node, `Ref ${target.ref}`, action);
+  assertVisibleRefTarget(resolved.node, nodes, target.ref, action);
+  return describeNonHittableTarget(resolved.node, action);
+}
+
 // isNodeVisibleOnScreen (not the effective-viewport form): items inside an
 // off-screen scrollable container (closed drawer) must also count as
 // off-screen, not just items scrolled out of an on-screen container.
