@@ -213,7 +213,7 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
 
 ## Testing Matrix
 - Docs/skills only: no tests required unless a more specific rule below applies.
-- CLI help/guidance changes in `src/utils/cli-help.ts`, `src/utils/cli-command-overrides.ts`, or `src/utils/command-schema.ts`: run `pnpm exec vitest run src/utils/__tests__/args.test.ts`.
+- CLI help/guidance changes in `src/cli/parser/cli-help.ts`, `src/utils/cli-command-overrides.ts`, or `src/utils/command-schema.ts`: run `pnpm exec vitest run src/cli/parser/__tests__ src/utils/__tests__/command-schema-guards.test.ts`.
 - SkillGym prompt/assertion changes: run `pnpm test:skillgym:case <case-id>`; the script builds local CLI help first. For broad validation, use `pnpm test:skillgym`; append `-- --tag fixture-smoke` or `-- --tag skill-guidance` when validating one suite group.
 - Non-TS, no behavior impact: no tests unless requested.
 - Keep tests behavioral; do not assert shapes or cases TypeScript already proves.
@@ -258,7 +258,7 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
 - Changing `tsconfig.lib.json`/build tooling without running `pnpm check:tooling`; declaration generation is stricter than a plain typecheck.
 
 ## Docs & Skills
-- Versioned CLI help is the agent-facing source of truth. Put workflow guidance/help topics in `src/utils/cli-help.ts`, flags in `src/utils/cli-flags.ts`, CLI command overrides in `src/utils/cli-command-overrides.ts`, and assertions for important copy in `src/utils/__tests__/args.test.ts`.
+- Versioned CLI help is the agent-facing source of truth. Put workflow guidance/help topics in `src/cli/parser/cli-help.ts`, flags in `src/cli/parser/cli-flags.ts`, CLI command overrides in `src/utils/cli-command-overrides.ts`, and assertions for important copy in `src/cli/parser/__tests__/cli-help-topics.test.ts` / `cli-help-command-usage.test.ts`.
 - Keep parser schema and help rendering separate: `src/utils/command-schema.ts` composes contract-derived command schemas with CLI overrides; `src/utils/cli-help.ts` owns help topics and usage rendering.
 - Before planning device automation commands, read `agent-device help workflow`; then read topic help such as `debugging`, `react-native`, `react-devtools`, `physical-device`, `macos`, or `dogfood` when relevant. This is required even when local agent skills are unavailable.
 - Skills are thin routers. Keep `skills/**/SKILL.md` focused on when to use the skill, version gating, which `agent-device help <topic>` page to read, and a short default loop. Do not duplicate full CLI manuals in skills.
