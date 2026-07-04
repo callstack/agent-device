@@ -5,6 +5,7 @@ import type { IncomingMessage } from 'node:http';
 import { pipeline } from 'node:stream/promises';
 import { AppError } from '../kernel/errors.ts';
 import { extractTarInstallableArtifact } from './artifact-archive.ts';
+import { requireTenantOwnedEntry, type TenantOwnedResourceKind } from './tenant-owned-entry.ts';
 import {
   createArtifactTempDir,
   sanitizeArtifactFilename,
@@ -12,6 +13,11 @@ import {
 } from './artifact-download.ts';
 
 const RESUMABLE_UPLOAD_CLEANUP_TIMEOUT_MS = 5 * 60 * 1000;
+
+const RESUMABLE_UPLOAD_RESOURCE: TenantOwnedResourceKind = {
+  label: 'Upload',
+  expiredHint: `Resumable uploads expire ${RESUMABLE_UPLOAD_CLEANUP_TIMEOUT_MS / 60_000} minutes after the last received chunk. Start the upload again from the beginning.`,
+};
 const RESUMABLE_UPLOAD_HASH_ALGORITHM = 'sha256';
 const RESUMABLE_UPLOADS_BY_ID = new Map<string, ResumableUploadEntry>();
 const RESUMABLE_UPLOADS_BY_KEY = new Map<string, string>();
@@ -200,14 +206,12 @@ function requireResumableUpload(
   uploadId: string,
   tenantId: string | undefined,
 ): ResumableUploadEntry {
-  const entry = RESUMABLE_UPLOADS_BY_ID.get(uploadId);
-  if (!entry) {
-    throw new AppError('INVALID_ARGS', `Upload not found: ${uploadId}`);
-  }
-  if (entry.tenantId && entry.tenantId !== tenantId) {
-    throw new AppError('UNAUTHORIZED', 'Upload belongs to a different tenant');
-  }
-  return entry;
+  return requireTenantOwnedEntry(
+    RESUMABLE_UPLOADS_BY_ID,
+    uploadId,
+    tenantId,
+    RESUMABLE_UPLOAD_RESOURCE,
+  );
 }
 
 function currentResumableUploadOffset(entry: ResumableUploadEntry): number {

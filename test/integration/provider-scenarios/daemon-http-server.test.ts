@@ -699,6 +699,55 @@ test('Provider-backed integration daemon HTTP server isolates same-artifact uplo
   }
 });
 
+test('Provider-backed integration daemon HTTP server reports unknown upload tickets as expired', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'daemon HTTP integration coverage')) {
+    return;
+  }
+
+  const server = await createDaemonHttpServer({
+    token: 'provider-scenario-token',
+    handleRequest: async (): Promise<DaemonResponse> => ({ ok: true, data: {} }),
+  });
+
+  try {
+    const port = await listenOnLoopback(server);
+    const unknownUploadId = crypto.randomUUID();
+    const auth = { authorization: 'Bearer provider-scenario-token' };
+
+    const directChunk = await fetch(`http://127.0.0.1:${port}/upload/direct/${unknownUploadId}`, {
+      method: 'PUT',
+      headers: { ...auth, 'content-type': 'application/octet-stream' },
+      body: Buffer.from('late-chunk'),
+    });
+    assert.equal(directChunk.status, 500);
+    const directBody = (await directChunk.json()) as {
+      ok?: boolean;
+      code?: string;
+      error?: string;
+    };
+    assert.equal(directBody.ok, false);
+    assert.equal(directBody.code, 'COMMAND_FAILED');
+    assert.match(directBody.error ?? '', /not found or expired/);
+
+    const finalize = await fetch(`http://127.0.0.1:${port}/upload/finalize`, {
+      method: 'POST',
+      headers: { ...auth, 'content-type': 'application/json' },
+      body: JSON.stringify({ uploadId: unknownUploadId }),
+    });
+    assert.equal(finalize.status, 500);
+    const finalizeBody = (await finalize.json()) as {
+      ok?: boolean;
+      code?: string;
+      error?: string;
+    };
+    assert.equal(finalizeBody.ok, false);
+    assert.equal(finalizeBody.code, 'COMMAND_FAILED');
+    assert.match(finalizeBody.error ?? '', /not found or expired/);
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
 test('Provider-backed integration daemon HTTP auth hook can scope tenants and reject requests', async (t) => {
   if (await skipWhenLoopbackUnavailable(t, 'daemon HTTP integration coverage')) {
     return;
