@@ -352,7 +352,13 @@ async function dispatchDirectIosSelectorInteraction(params: {
       actionFinishedAt,
     });
   } catch (error) {
-    if (!isDirectIosSelectorFallbackError(error)) {
+    // ADR 0011 delegation-on-error: semantic runner failures fall back to the
+    // tree-based runtime path — except for Maestro replay dispatches, whose
+    // runner-native error shapes must be preserved.
+    const fallback = isDirectIosSelectorFallbackError(error, {
+      delegateSemanticFailures: selector.allowNonHittableCoordinateFallback !== true,
+    });
+    if (!fallback) {
       return { ok: false, error: normalizeError(error) };
     }
     emitDiagnostic({

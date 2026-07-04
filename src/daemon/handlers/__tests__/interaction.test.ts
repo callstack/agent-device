@@ -657,17 +657,38 @@ test('click simple iOS id selector falls back to snapshot coordinates on transpo
   }
 });
 
-test('click simple iOS id selector does not snapshot-fallback on runner element miss', async () => {
+test('click simple iOS id selector falls back to snapshot resolution on runner element miss', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-direct-selector-element-miss';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
 
-  mockDispatch.mockImplementation(async (_device, command, _positionals, _out, context) => {
+  mockDispatch.mockImplementation(async (_device, command, positionals, _out, context) => {
     if (command === 'press' && (context as Record<string, unknown>)?.directElementSelector) {
       throw new AppError('ELEMENT_NOT_FOUND', 'element not found');
     }
     if (command === 'snapshot') {
-      throw new Error('snapshot fallback should not run');
+      return {
+        nodes: attachRefs([
+          {
+            index: 0,
+            type: 'Window',
+            rect: { x: 0, y: 0, width: 390, height: 844 },
+          },
+          {
+            index: 1,
+            parentIndex: 0,
+            type: 'XCUIElementTypeButton',
+            identifier: 'submit',
+            rect: { x: 20, y: 80, width: 120, height: 40 },
+            enabled: true,
+            hittable: true,
+          },
+        ]),
+        backend: 'xctest',
+      };
+    }
+    if (command === 'press') {
+      return { x: Number(positionals[0]), y: Number(positionals[1]), pressed: true };
     }
     return {};
   });
@@ -685,24 +706,58 @@ test('click simple iOS id selector does not snapshot-fallback on runner element 
     contextFromFlags,
   });
 
-  expect(response?.ok).toBe(false);
-  if (response?.ok === false) {
-    expect(response.error.code).toBe('ELEMENT_NOT_FOUND');
+  expect(response?.ok).toBe(true);
+  const pressCalls = mockDispatch.mock.calls.filter((call) => call[1] === 'press');
+  expect(pressCalls.length).toBe(2);
+  expect(pressCalls[1]?.[2]).toEqual(['80', '100']);
+  if (response?.ok) {
+    expect(response.data?.selectorChain).toContain('id="submit"');
   }
-  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(0);
 });
 
-test('click simple iOS id selector does not snapshot-fallback on ambiguous runner match', async () => {
+test('click simple iOS id selector falls back to runtime disambiguation on ambiguous runner match', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-direct-selector-ambiguous';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
 
-  mockDispatch.mockImplementation(async (_device, command, _positionals, _out, context) => {
+  mockDispatch.mockImplementation(async (_device, command, positionals, _out, context) => {
     if (command === 'press' && (context as Record<string, unknown>)?.directElementSelector) {
       throw new AppError('AMBIGUOUS_MATCH', 'Selector matched multiple elements');
     }
     if (command === 'snapshot') {
-      throw new Error('snapshot fallback should not run');
+      return {
+        nodes: attachRefs([
+          {
+            index: 0,
+            type: 'Window',
+            rect: { x: 0, y: 0, width: 390, height: 844 },
+          },
+          // Off-screen drawer twin: runtime disambiguation prefers the
+          // visible candidate instead of failing like the runner did.
+          {
+            index: 1,
+            parentIndex: 0,
+            type: 'XCUIElementTypeButton',
+            identifier: 'submit',
+            rect: { x: -300, y: 80, width: 120, height: 40 },
+            enabled: true,
+            hittable: true,
+          },
+          {
+            index: 2,
+            parentIndex: 0,
+            type: 'XCUIElementTypeButton',
+            identifier: 'submit',
+            rect: { x: 20, y: 80, width: 120, height: 40 },
+            enabled: true,
+            hittable: true,
+          },
+        ]),
+        backend: 'xctest',
+      };
+    }
+    if (command === 'press') {
+      return { x: Number(positionals[0]), y: Number(positionals[1]), pressed: true };
     }
     return {};
   });
@@ -720,12 +775,52 @@ test('click simple iOS id selector does not snapshot-fallback on ambiguous runne
     contextFromFlags,
   });
 
-  expect(response?.ok).toBe(false);
-  if (response?.ok === false) {
-    expect(response.error.code).toBe('AMBIGUOUS_MATCH');
-  }
-  expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(0);
+  expect(response?.ok).toBe(true);
+  const pressCalls = mockDispatch.mock.calls.filter((call) => call[1] === 'press');
+  expect(pressCalls.length).toBe(2);
+  expect(pressCalls[1]?.[2]).toEqual(['80', '100']);
 });
+
+test.each([
+  ['ELEMENT_NOT_FOUND', 'element not found'],
+  ['AMBIGUOUS_MATCH', 'Selector matched multiple elements'],
+] as const)(
+  'maestro-flagged click keeps runner %s error without snapshot fallback',
+  async (code, message) => {
+    const sessionStore = makeSessionStore();
+    const sessionName = `ios-maestro-direct-selector-${code}`;
+    sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+
+    mockDispatch.mockImplementation(async (_device, command, _positionals, _out, context) => {
+      if (command === 'press' && (context as Record<string, unknown>)?.directElementSelector) {
+        throw new AppError(code, message);
+      }
+      if (command === 'snapshot') {
+        throw new Error('snapshot fallback should not run for maestro replay dispatches');
+      }
+      return {};
+    });
+
+    const response = await handleInteractionCommands({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'click',
+        positionals: ['id="submit"'],
+        flags: { maestro: { allowNonHittableCoordinateFallback: true } },
+      },
+      sessionName,
+      sessionStore,
+      contextFromFlags,
+    });
+
+    expect(response?.ok).toBe(false);
+    if (response?.ok === false) {
+      expect(response.error.code).toBe(code);
+    }
+    expect(mockDispatch.mock.calls.filter((call) => call[1] === 'snapshot')).toHaveLength(0);
+  },
+);
 
 test('click simple iOS id selector waits for snapshot path after pending gesture stabilization', async () => {
   const sessionStore = makeSessionStore();

@@ -215,10 +215,9 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
       occlusion: {
-        kind: 'waived',
-        reason:
-          'gap: no explicit covered-element check on the direct path; closure strategy is delegation-on-error plus contract scenarios, since XCTest isHittable only approximates occlusion.',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
+        kind: 'delegated',
+        to: 'runtime-selector',
+        via: 'runner ELEMENT_NOT_FOUND/AMBIGUOUS_MATCH fall back to tree-based resolution (isDirectIosSelectorFallbackError delegateSemanticFailures; non-maestro dispatches only) — XCTest skips covered/non-hittable matches, so the runtime path raises the covered-element refusal with its hint',
       },
       offscreen: {
         // Decision: TapPointPolicy (pure geometry, parity-tested against the
@@ -229,10 +228,9 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         parityTable: 'contracts/fixtures/tap-point-policy.json',
       },
       nonHittable: {
-        kind: 'waived',
-        reason:
-          'gap: non-hittable matches are skipped runner-side (ELEMENT_NOT_FOUND) instead of promoted/annotated; closure strategy is delegation-on-error into the runtime path.',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
+        kind: 'delegated',
+        to: 'runtime-selector',
+        via: 'runner ELEMENT_NOT_FOUND (non-hittable matches are skipped runner-side) falls back to tree-based resolution (isDirectIosSelectorFallbackError delegateSemanticFailures; non-maestro dispatches only), which promotes to a hittable ancestor or annotates targetHittable/hint',
       },
       responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
       responseIdentity: {
@@ -246,10 +244,9 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         via: '--verify disables the direct path (readDirectIosSelectorTapTarget / fill flags.verify check)',
       },
       errorTaxonomy: {
-        kind: 'waived',
-        reason:
-          'gap: ELEMENT_NOT_FOUND/AMBIGUOUS_MATCH lack the selector diagnostics and hints the runtime path attaches; closure strategy is delegation-on-error for the failure shapes.',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
+        kind: 'delegated',
+        to: 'runtime-selector',
+        via: 'runner ELEMENT_NOT_FOUND/AMBIGUOUS_MATCH fall back to tree-based resolution (isDirectIosSelectorFallbackError delegateSemanticFailures; non-maestro dispatches only), which attaches the shared no-match diagnostics, ambiguous shape, and hints',
       },
     },
   },
