@@ -181,7 +181,8 @@ function expectHandlerResponse(
 ): DaemonResponse {
   if (response) return response;
   throw new AppError(
-    'INTERNAL_ERROR',
+    'UNKNOWN',
     `Daemon handler routing mismatch: ${handlerFamily} handler matched command "${command}" but returned no response.`,
+    { hint: 'This is a daemon-internal routing bug in agent-device — please report it.' },
   );
 }

@@ -4,6 +4,8 @@ const canceledRequestIds = new Set<string>();
 const requestAbortControllers = new Map<string, AbortController>();
 const REQUEST_CANCELED_REASON = 'request_canceled';
 const REQUEST_CANCELED_MESSAGE = 'request canceled';
+const REQUEST_CANCELED_HINT =
+  'The request was canceled intentionally (explicit cancel or client disconnect) — no retry is needed unless the cancellation was unintended.';
 
 export function resolveRequestTrackingId(
   requestId: string | undefined,
@@ -84,6 +86,7 @@ export function getRequestSignal(requestId: string | undefined): AbortSignal | u
 export function createRequestCanceledError(): AppError {
   return new AppError('COMMAND_FAILED', REQUEST_CANCELED_MESSAGE, {
     reason: REQUEST_CANCELED_REASON,
+    hint: REQUEST_CANCELED_HINT,
   });
 }
 

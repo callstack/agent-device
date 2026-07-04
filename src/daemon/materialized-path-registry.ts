@@ -2,9 +2,16 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { AppError } from '../kernel/errors.ts';
+import { requireTenantOwnedEntry, type TenantOwnedResourceKind } from './tenant-owned-entry.ts';
 
 const DEFAULT_MATERIALIZED_PATH_TTL_MS = 15 * 60 * 1000;
+
+const MATERIALIZED_PATHS_RESOURCE: TenantOwnedResourceKind = {
+  label: 'Materialized paths',
+  plural: true,
+  expiredHint:
+    'Materialized paths are released automatically when their TTL expires; re-run the command that materialized them if the paths are still needed.',
+};
 
 type RetainedEntry = {
   rootPath: string;
@@ -45,7 +52,7 @@ export async function retainMaterializedPaths(params: {
     const ttlMs = params.ttlMs ?? DEFAULT_MATERIALIZED_PATH_TTL_MS;
     const expiresAt = Date.now() + ttlMs;
     const timer = setTimeout(() => {
-      void cleanupRetainedMaterializedPaths(materializationId);
+      void expireRetainedMaterializedPaths(materializationId);
     }, ttlMs);
     retainedPaths.set(materializationId, {
       rootPath,
@@ -72,29 +79,44 @@ export async function cleanupRetainedMaterializedPaths(
   materializationId: string,
   tenantId?: string,
 ): Promise<void> {
-  const entry = retainedPaths.get(materializationId);
-  if (!entry) {
-    throw new AppError('INVALID_ARGS', `Materialized paths not found: ${materializationId}`);
-  }
-  if (entry.tenantId && entry.tenantId !== tenantId) {
-    throw new AppError('UNAUTHORIZED', 'Materialized paths belong to a different tenant');
-  }
-  clearTimeout(entry.timer);
-  retainedPaths.delete(materializationId);
-  await fs.rm(entry.rootPath, { recursive: true, force: true });
+  const entry = requireTenantOwnedEntry(
+    retainedPaths,
+    materializationId,
+    tenantId,
+    MATERIALIZED_PATHS_RESOURCE,
+  );
+  await removeRetainedEntry(materializationId, entry);
 }
 
 export async function cleanupRetainedMaterializedPathsForSession(
   sessionName: string,
 ): Promise<void> {
-  const matchingIds = Array.from(retainedPaths.entries())
-    .filter(([, entry]) => entry.sessionName === sessionName)
-    .map(([materializationId]) => materializationId);
+  const matchingEntries = Array.from(retainedPaths.entries()).filter(
+    ([, entry]) => entry.sessionName === sessionName,
+  );
   await Promise.all(
-    matchingIds.map(async (materializationId) => {
-      await cleanupRetainedMaterializedPaths(materializationId);
+    matchingEntries.map(async ([materializationId, entry]) => {
+      await removeRetainedEntry(materializationId, entry);
     }),
   );
+}
+
+// Daemon-internal expiry: skips the tenant check (the timer has no tenant
+// context) and must never reject — the caller is a bare setTimeout.
+async function expireRetainedMaterializedPaths(materializationId: string): Promise<void> {
+  const entry = retainedPaths.get(materializationId);
+  if (!entry) return;
+  try {
+    await removeRetainedEntry(materializationId, entry);
+  } catch {
+    // best-effort cleanup only
+  }
+}
+
+async function removeRetainedEntry(materializationId: string, entry: RetainedEntry): Promise<void> {
+  clearTimeout(entry.timer);
+  retainedPaths.delete(materializationId);
+  await fs.rm(entry.rootPath, { recursive: true, force: true });
 }
 
 async function copyPathInto(sourcePath: string, parentDir: string): Promise<string> {

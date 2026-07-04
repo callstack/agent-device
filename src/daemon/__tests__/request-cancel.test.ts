@@ -20,6 +20,7 @@ test('createRequestCanceledError includes stable cancellation reason marker', ()
   assert.equal(err.code, 'COMMAND_FAILED');
   assert.equal(err.message, 'request canceled');
   assert.equal(err.details?.reason, 'request_canceled');
+  assert.match(String(err.details?.hint), /canceled intentionally/);
 });
 
 test('isRequestCanceledError accepts structured and legacy cancellation errors', () => {
