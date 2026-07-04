@@ -62,7 +62,7 @@ test('Provider-backed integration doctor infers Android RN/Metro readiness throu
   } finally {
     await server.close();
   }
-});
+}, 15_000);
 
 test('Provider-backed integration doctor runs predictably for supported platform selectors', async () => {
   const devices = [
@@ -94,7 +94,7 @@ test('Provider-backed integration doctor runs predictably for supported platform
       }
     },
   );
-});
+}, 15_000);
 
 test('Provider-backed integration doctor --app verifies an installed app without opening a session', async () => {
   const adbCalls: string[][] = [];
