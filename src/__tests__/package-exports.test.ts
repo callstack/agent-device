@@ -10,13 +10,15 @@ const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf
   exports: Record<string, { import: string; types: string }>;
 };
 
-// The rslib build is what actually emits the files package.json points at, so a
+// The tsdown build is what actually emits the files package.json points at, so a
 // subpath only reaches the npm tarball when both agree on the same source entry.
 // Loaded via a runtime path so its build-tooling types stay out of the program.
-const rslibConfig = (await import(pathToFileURL(path.join(repoRoot, 'rslib.config.ts')).href)) as {
-  default: { lib: Array<{ source?: { entry?: Record<string, string> } }> };
+const tsdownConfig = (await import(
+  pathToFileURL(path.join(repoRoot, 'tsdown.config.ts')).href
+)) as {
+  default: { entry?: Record<string, string> };
 };
-const rslibEntries = rslibConfig.default.lib[0]?.source?.entry ?? {};
+const buildEntries = tsdownConfig.default.entry ?? {};
 
 const supportedSubpaths = [
   '.',
@@ -39,20 +41,20 @@ function exportTarget(subpath: string): { import: string; types: string } {
   return target;
 }
 
-// Resolve `./dist/src/<name>.js` back to the rslib entry key (`<name>`).
+// Resolve `./dist/src/<name>.js` back to the tsdown entry key (`<name>`).
 function entryKeyForDist(distImportPath: string): string {
   const key = distImportPath.match(/^\.\/dist\/src\/(.+)\.js$/)?.[1];
   assert.ok(key, `Unexpected export target shape: ${distImportPath}`);
   return key;
 }
 
-// The repo-relative source file the rslib build compiles for this subpath.
+// The repo-relative source file the tsdown build compiles for this subpath.
 function sourcePathFor(subpath: string): string {
   const entryKey = entryKeyForDist(exportTarget(subpath).import);
-  const entry = rslibEntries[entryKey];
+  const entry = buildEntries[entryKey];
   assert.ok(
     entry,
-    `exports["${subpath}"] needs an rslib build entry "${entryKey}" to reach the npm tarball`,
+    `exports["${subpath}"] needs a tsdown build entry "${entryKey}" to reach the npm tarball`,
   );
   return path.join(repoRoot, entry);
 }
@@ -66,7 +68,7 @@ test('package exports only supported public subpaths', () => {
   assert.equal(pkg.exports['./daemon'], undefined);
 });
 
-test('every public subpath is backed by a configured rslib build entry', () => {
+test('every public subpath is backed by a configured tsdown build entry', () => {
   for (const subpath of supportedSubpaths) {
     const sourcePath = sourcePathFor(subpath);
     assert.ok(

@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
   "entry": [
-    "rslib.config.ts",
+    "tsdown.config.ts",
     "src/sdk/index.ts",
     "src/sdk/io.ts",
     "src/sdk/artifacts.ts",
@@ -31,7 +31,7 @@
     "apple-runner/AgentDeviceRunner/AgentDeviceRunnerUITests.xctestplan",
     "scripts/write-xcuitest-cache-metadata.mjs"
   ],
-  "ignoreDependencies": ["@microsoft/api-extractor", "@theme"],
+  "ignoreDependencies": ["@theme"],
   "ignoreExports": [
     {
       "file": "src/__tests__/test-utils/index.ts",

@@ -84,7 +84,7 @@ Single-context repo. Read `CONTEXT.md` for domain language and testing/architect
 - Lint/format stack is OXC:
   - config: `.oxlintrc.json`, `.oxfmtrc.json`
 - TypeScript is strict enough to surface dead code early: `strict`, `isolatedModules`, `noUnusedLocals`, and `noUnusedParameters` are enabled.
-- The repo emits with `rslib`, not `tsc`. If declaration generation fails, inspect `tsconfig.lib.json` first.
+- The repo emits with `tsdown` (Rolldown), not `tsc`. If declaration generation fails, inspect `tsconfig.lib.json` first.
 - `tsconfig.lib.json` needs an explicit `rootDir: "./src"` for declaration layout.
 - Use the aggregate scripts in `package.json` when possible; they encode the expected validation bundles better than ad hoc command lists.
 

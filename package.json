@@ -70,7 +70,7 @@
     "agent-device": "bin/agent-device.mjs"
   },
   "scripts": {
-    "build": "rslib build",
+    "build": "tsdown",
     "clean:daemon": "node --experimental-strip-types scripts/clean-daemon.ts",
     "daemon:state-dir": "node --experimental-strip-types scripts/print-daemon-state-dir.ts",
     "clean:xcuitest": "node scripts/clean-xcuitest-derived.mjs",
@@ -102,8 +102,8 @@
     "perf:ios": "node --experimental-strip-types scripts/perf/run.ts --platform ios",
     "perf:android": "node --experimental-strip-types scripts/perf/run.ts --platform android",
     "lint": "oxlint . --deny-warnings",
-    "format": "node ./node_modules/oxfmt/bin/oxfmt --write src test skills package.json tsconfig.json tsconfig.lib.json rslib.config.ts vitest.config.ts .github/actions/setup-node-pnpm/action.yml .oxlintrc.json .oxfmtrc.json '!test/skillgym/.skillgym-results/**'",
-    "format:check": "node ./node_modules/oxfmt/bin/oxfmt --check src test skills package.json tsconfig.json tsconfig.lib.json rslib.config.ts vitest.config.ts .github/actions/setup-node-pnpm/action.yml .oxlintrc.json .oxfmtrc.json '!test/skillgym/.skillgym-results/**'",
+    "format": "node ./node_modules/oxfmt/bin/oxfmt --write src test skills package.json tsconfig.json tsconfig.lib.json tsdown.config.ts vitest.config.ts .github/actions/setup-node-pnpm/action.yml .oxlintrc.json .oxfmtrc.json '!test/skillgym/.skillgym-results/**'",
+    "format:check": "node ./node_modules/oxfmt/bin/oxfmt --check src test skills package.json tsconfig.json tsconfig.lib.json tsdown.config.ts vitest.config.ts .github/actions/setup-node-pnpm/action.yml .oxlintrc.json .oxfmtrc.json '!test/skillgym/.skillgym-results/**'",
     "fallow": "fallow audit --base origin/main",
     "fallow:all": "fallow --summary",
     "fallow:baseline": "(fallow dead-code --save-baseline fallow-baselines/dead-code.json --summary || true) && (fallow health --save-baseline fallow-baselines/health.json --summary || true)",
@@ -218,8 +218,6 @@
     "yaml": "^2.9.0"
   },
   "devDependencies": {
-    "@microsoft/api-extractor": "^7.58.8",
-    "@rslib/core": "0.22.1",
     "@types/node": "^22.19.21",
     "@typescript/native-preview": "7.0.0-dev.20260613.1",
     "@vitest/coverage-v8": "4.1.8",
@@ -227,6 +225,7 @@
     "oxfmt": "^0.42.0",
     "oxlint": "^1.69.0",
     "skillgym": "^0.9.1",
+    "tsdown": "^0.22.3",
     "typescript": "^6.0.3",
     "vite": "^8.0.16",
     "vitest": "^4.1.8"
