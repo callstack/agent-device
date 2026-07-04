@@ -45,8 +45,7 @@ export async function repairMacOsRunnerProductsIfNeeded(
     try {
       await runAppleToolCommand('codesign', ['--force', '--sign', '-', productPath]);
     } catch (error) {
-      const appError =
-        asAppError(error, 'COMMAND_FAILED');
+      const appError = asAppError(error, 'COMMAND_FAILED');
       throw new AppError('COMMAND_FAILED', 'Failed to repair macOS runner product signature', {
         reason: 'RUNNER_PRODUCT_REPAIR_FAILED',
         productPath,

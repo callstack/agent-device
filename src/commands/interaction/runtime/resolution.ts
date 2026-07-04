@@ -127,13 +127,7 @@ async function resolveRefInteractionTarget(
     kind: 'ref',
     point,
     target: { kind: 'ref', ref: `@${resolved.ref}` },
-    node,
-    selectorChain: buildSelectorChainForNode(node, runtime.backend.platform, {
-      action: params.action === 'fill' ? 'fill' : 'click',
-    }),
-    refLabel: resolveRefLabel(node, capture.snapshot.nodes),
-    ...describeNonHittableTarget(node, params.action),
-    preActionNodes: capture.snapshot.nodes,
+    ...describeResolvedNode(runtime, capture.snapshot.nodes, node, params.action),
   };
 }
 
@@ -196,13 +190,31 @@ async function resolveSelectorInteractionTarget(
     kind: 'selector',
     point,
     target: { kind: 'selector', selector: resolved.selector.raw },
+    ...describeResolvedNode(runtime, capture.snapshot.nodes, node, params.action),
+  };
+}
+
+function describeResolvedNode(
+  runtime: AgentDeviceRuntime,
+  nodes: SnapshotState['nodes'],
+  node: SnapshotNode,
+  action: InteractionAction,
+): {
+  node: SnapshotNode;
+  selectorChain: string[];
+  refLabel?: string;
+  targetHittable?: boolean;
+  hint?: string;
+  preActionNodes: SnapshotNode[];
+} {
+  return {
     node,
     selectorChain: buildSelectorChainForNode(node, runtime.backend.platform, {
-      action: params.action === 'fill' ? 'fill' : 'click',
+      action: action === 'fill' ? 'fill' : 'click',
     }),
-    refLabel: resolveRefLabel(node, capture.snapshot.nodes),
-    ...describeNonHittableTarget(node, params.action),
-    preActionNodes: capture.snapshot.nodes,
+    refLabel: resolveRefLabel(node, nodes),
+    ...describeNonHittableTarget(node, action),
+    preActionNodes: nodes,
   };
 }
 

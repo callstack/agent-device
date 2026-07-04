@@ -79,10 +79,10 @@ export function findSelectorChainMatch(
   return null;
 }
 
-export const SELECTOR_NO_MATCH_HINT =
+const SELECTOR_NO_MATCH_HINT =
   'Selector text/label values match exactly (quote multi-word values: text="Sign in"). Run snapshot -i to see current elements and refs, or use find <text> for contains matching.';
 
-export const SELECTOR_NOT_UNIQUE_HINT =
+const SELECTOR_NOT_UNIQUE_HINT =
   'Add more terms to disambiguate (e.g. role=button text="Sign in"), use an @ref from snapshot -i, or use find <text> --first/--last.';
 
 export const STALE_REF_HINT =

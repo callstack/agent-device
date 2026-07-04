@@ -92,20 +92,11 @@ export function normalizeError(
 ): NormalizedError {
   const appErr = asAppError(err);
   const details = appErr.details ? redactDiagnosticData(appErr.details) : undefined;
-  const detailHint = details && typeof details.hint === 'string' ? details.hint : undefined;
-  const diagnosticId =
-    (details && typeof details.diagnosticId === 'string' ? details.diagnosticId : undefined) ??
-    context.diagnosticId;
-  const logPath =
-    (details && typeof details.logPath === 'string' ? details.logPath : undefined) ??
-    context.logPath;
-  const hint = detailHint ?? defaultHintForCode(appErr.code);
-  const retriable =
-    details && typeof details.retriable === 'boolean'
-      ? details.retriable
-      : retriableForErrorCode(appErr.code);
-  const supportedOn =
-    details && typeof details.supportedOn === 'string' ? details.supportedOn : undefined;
+  const diagnosticId = stringDetail(details, 'diagnosticId') ?? context.diagnosticId;
+  const logPath = stringDetail(details, 'logPath') ?? context.logPath;
+  const hint = stringDetail(details, 'hint') ?? defaultHintForCode(appErr.code);
+  const retriable = booleanDetail(details, 'retriable') ?? retriableForErrorCode(appErr.code);
+  const supportedOn = stringDetail(details, 'supportedOn');
   const cleanDetails = stripDiagnosticMeta(details);
   const message = maybeEnrichCommandFailedMessage(appErr.code, appErr.message, details);
 
@@ -156,6 +147,22 @@ function firstStderrLine(stderr: string): string | null {
     return line.length > 200 ? `${line.slice(0, 200)}...` : line;
   }
   return null;
+}
+
+function stringDetail(
+  details: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const value = details?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function booleanDetail(
+  details: Record<string, unknown> | undefined,
+  key: string,
+): boolean | undefined {
+  const value = details?.[key];
+  return typeof value === 'boolean' ? value : undefined;
 }
 
 function stripDiagnosticMeta(

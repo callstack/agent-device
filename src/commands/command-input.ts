@@ -97,7 +97,7 @@ function numberSchema(description?: string): JsonSchema {
   return { type: 'number', ...(description ? { description } : {}) };
 }
 
-export function integerSchema(description?: string): JsonSchema {
+function integerSchema(description?: string): JsonSchema {
   return { type: 'integer', ...(description ? { description } : {}) };
 }
 
@@ -252,7 +252,7 @@ export function readFieldInput<TFields extends CommandFieldMap>(
     Object.entries(fields).flatMap(([key, field]) => {
       const value = field.read(record, key);
       if (field.required && value === undefined) {
-        throw new AppError('INVALID_ARGS',`Expected ${key} to be set.`);
+        throw new AppError('INVALID_ARGS', `Expected ${key} to be set.`);
       }
       return value === undefined ? [] : [[key, value]];
     }),
@@ -270,7 +270,7 @@ export function readFieldInput<TFields extends CommandFieldMap>(
 export function readInputRecord(input: unknown): Record<string, unknown> {
   if (input === undefined || input === null) return {};
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
-    throw new AppError('INVALID_ARGS','Expected object arguments.');
+    throw new AppError('INVALID_ARGS', 'Expected object arguments.');
   }
   return input as Record<string, unknown>;
 }
@@ -309,7 +309,10 @@ function readDeviceTarget(
   if (options.readTargetAlias === false || record.target === undefined) return deviceTarget;
   const targetAlias = optionalEnum(record, 'target', DEVICE_TARGETS);
   if (deviceTarget !== undefined && targetAlias !== deviceTarget) {
-    throw new AppError('INVALID_ARGS','Expected target alias to match deviceTarget when both are set.');
+    throw new AppError(
+      'INVALID_ARGS',
+      'Expected target alias to match deviceTarget when both are set.',
+    );
   }
   return deviceTarget ?? targetAlias;
 }
@@ -359,7 +362,7 @@ export function readPoint(record: Record<string, unknown>, key: string): PointIn
 function requiredString(record: Record<string, unknown>, key: string): string {
   const value = record[key];
   if (typeof value !== 'string' || value.length === 0) {
-    throw new AppError('INVALID_ARGS',`Expected ${key} to be a non-empty string.`);
+    throw new AppError('INVALID_ARGS', `Expected ${key} to be a non-empty string.`);
   }
   return value;
 }
@@ -368,7 +371,7 @@ function optionalString(record: Record<string, unknown>, key: string): string | 
   const value = record[key];
   if (value === undefined) return undefined;
   if (typeof value !== 'string' || value.length === 0) {
-    throw new AppError('INVALID_ARGS',`Expected ${key} to be a non-empty string.`);
+    throw new AppError('INVALID_ARGS', `Expected ${key} to be a non-empty string.`);
   }
   return value;
 }
@@ -376,7 +379,7 @@ function optionalString(record: Record<string, unknown>, key: string): string | 
 export function requiredNumber(record: Record<string, unknown>, key: string): number {
   const value = record[key];
   if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw new AppError('INVALID_ARGS',`Expected ${key} to be a finite number.`);
+    throw new AppError('INVALID_ARGS', `Expected ${key} to be a finite number.`);
   }
   return value;
 }
@@ -385,7 +388,7 @@ function optionalNumberValue(record: Record<string, unknown>, key: string): numb
   const value = record[key];
   if (value === undefined) return undefined;
   if (typeof value !== 'number' || !Number.isFinite(value)) {
-    throw new AppError('INVALID_ARGS',`Expected ${key} to be a finite number.`);
+    throw new AppError('INVALID_ARGS', `Expected ${key} to be a finite number.`);
   }
   return value;
 }
@@ -398,14 +401,14 @@ export function optionalInteger(
   const value = record[key];
   if (value === undefined) return undefined;
   if (!Number.isInteger(value)) {
-    throw new AppError('INVALID_ARGS',`Expected ${key} to be an integer.`);
+    throw new AppError('INVALID_ARGS', `Expected ${key} to be an integer.`);
   }
   const numberValue = value as number;
   if (options.min !== undefined && numberValue < options.min) {
-    throw new AppError('INVALID_ARGS',`Expected ${key} to be at least ${options.min}.`);
+    throw new AppError('INVALID_ARGS', `Expected ${key} to be at least ${options.min}.`);
   }
   if (options.max !== undefined && numberValue > options.max) {
-    throw new AppError('INVALID_ARGS',`Expected ${key} to be at most ${options.max}.`);
+    throw new AppError('INVALID_ARGS', `Expected ${key} to be at most ${options.max}.`);
   }
   return numberValue;
 }
@@ -414,7 +417,7 @@ function optionalBoolean(record: Record<string, unknown>, key: string): boolean 
   const value = record[key];
   if (value === undefined) return undefined;
   if (typeof value !== 'boolean') {
-    throw new AppError('INVALID_ARGS',`Expected ${key} to be a boolean.`);
+    throw new AppError('INVALID_ARGS', `Expected ${key} to be a boolean.`);
   }
   return value;
 }
@@ -426,7 +429,7 @@ export function requiredEnum<const T extends readonly string[]>(
 ): T[number] {
   const value = record[key];
   if (typeof value !== 'string' || !values.includes(value)) {
-    throw new AppError('INVALID_ARGS',`Expected ${key} to be one of: ${values.join(', ')}.`);
+    throw new AppError('INVALID_ARGS', `Expected ${key} to be one of: ${values.join(', ')}.`);
   }
   return value;
 }
@@ -439,7 +442,7 @@ export function optionalEnum<const T extends readonly string[]>(
   const value = record[key];
   if (value === undefined) return undefined;
   if (typeof value !== 'string' || !values.includes(value)) {
-    throw new AppError('INVALID_ARGS',`Expected ${key} to be one of: ${values.join(', ')}.`);
+    throw new AppError('INVALID_ARGS', `Expected ${key} to be one of: ${values.join(', ')}.`);
   }
   return value;
 }
@@ -515,7 +518,7 @@ export function assertAllowedKeys(
   const allowed = new Set(allowedKeys);
   const unknownKeys = Object.keys(record).filter((key) => !allowed.has(key));
   if (unknownKeys.length > 0) {
-    throw new AppError('INVALID_ARGS',`${label} has unknown field(s): ${unknownKeys.join(', ')}.`);
+    throw new AppError('INVALID_ARGS', `${label} has unknown field(s): ${unknownKeys.join(', ')}.`);
   }
 }
 
@@ -553,7 +556,7 @@ function optionalRecord(
   const value = record[key];
   if (value === undefined) return undefined;
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new AppError('INVALID_ARGS',`Expected ${key} to be an object.`);
+    throw new AppError('INVALID_ARGS', `Expected ${key} to be an object.`);
   }
   return value as Record<string, unknown>;
 }
@@ -562,7 +565,7 @@ function optionalStringArray(record: Record<string, unknown>, key: string): stri
   const value = record[key];
   if (value === undefined) return undefined;
   if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string')) {
-    throw new AppError('INVALID_ARGS',`Expected ${key} to be an array of strings.`);
+    throw new AppError('INVALID_ARGS', `Expected ${key} to be an array of strings.`);
   }
   return value as string[];
 }
@@ -672,7 +675,7 @@ function elementTargetSchemaVariants(): JsonSchema[] {
 function readRecordField(record: Record<string, unknown>, key: string): Record<string, unknown> {
   const value = record[key];
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new AppError('INVALID_ARGS',`Expected ${key} to be an object.`);
+    throw new AppError('INVALID_ARGS', `Expected ${key} to be an object.`);
   }
   return value as Record<string, unknown>;
 }

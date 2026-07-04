@@ -342,8 +342,7 @@ async function restartSessionAndRunCommand(params: {
     }
     return recovered;
   } catch (retryErr) {
-    const retryAppErr =
-      asAppError(retryErr, 'COMMAND_FAILED');
+    const retryAppErr = asAppError(retryErr, 'COMMAND_FAILED');
     if (isRetryableRunnerError(retryAppErr)) {
       return await handleRunnerTransportErrorAfterCommandSend({
         device,
