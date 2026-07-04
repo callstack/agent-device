@@ -72,6 +72,8 @@ function toDaemonHttpRpcError(
       hint: typeof data.hint === 'string' ? data.hint : undefined,
       diagnosticId: typeof data.diagnosticId === 'string' ? data.diagnosticId : undefined,
       logPath: typeof data.logPath === 'string' ? data.logPath : undefined,
+      retriable: typeof data.retriable === 'boolean' ? data.retriable : undefined,
+      supportedOn: typeof data.supportedOn === 'string' ? data.supportedOn : undefined,
       requestId,
     },
   );

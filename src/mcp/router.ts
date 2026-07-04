@@ -1,7 +1,7 @@
 import { listCommandTools, commandToolExecutor, type ToolResult } from './command-tools.ts';
 import { readVersion } from '../utils/version.ts';
 import type { JsonRpcId, JsonRpcRequestEnvelope } from '../kernel/contracts.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError, normalizeError } from '../kernel/errors.ts';
 
 const MCP_SERVER_NAME = 'agent-device';
 const SUPPORTED_PROTOCOL_VERSION = '2025-11-25';
@@ -63,8 +63,18 @@ async function callTool(params: unknown): Promise<ToolResult> {
   try {
     return await commandToolExecutor.execute(name, record.arguments);
   } catch (error) {
-    return textToolResult(error instanceof Error ? error.message : String(error), true);
+    return textToolResult(formatToolError(error), true);
   }
+}
+
+// Keep the full error contract (code + hint) visible to MCP agents; a bare
+// message string strips exactly the guidance the hint system exists to give.
+function formatToolError(error: unknown): string {
+  const normalized = normalizeError(error);
+  const lines = [`Error (${normalized.code}): ${normalized.message}`];
+  if (normalized.hint) lines.push(`Hint: ${normalized.hint}`);
+  if (normalized.supportedOn) lines.push(`Supported on: ${normalized.supportedOn}`);
+  return lines.join('\n');
 }
 
 function supportedProtocolVersion(_params: unknown): string {

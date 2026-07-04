@@ -7,5 +7,7 @@ export function throwDaemonError(error: DaemonError): never {
     hint: error.hint,
     diagnosticId: error.diagnosticId,
     logPath: error.logPath,
+    retriable: error.retriable,
+    supportedOn: error.supportedOn,
   });
 }

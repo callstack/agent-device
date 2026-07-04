@@ -17,6 +17,7 @@ import {
   findSelectorChainMatch,
   formatSelectorFailure,
   resolveSelectorChain,
+  selectorFailureHint,
 } from '../../../daemon/selectors.ts';
 import { buildSelectorChainForNode } from '../../../utils/selector-build.ts';
 import {
@@ -280,7 +281,9 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
       platform: runtime.backend.platform,
     });
     if (!matched) {
-      throw new AppError('COMMAND_FAILED', formatSelectorFailure(chain, [], { unique: false }));
+      throw new AppError('COMMAND_FAILED', formatSelectorFailure(chain, [], { unique: false }), {
+        hint: selectorFailureHint([]),
+      });
     }
     return {
       predicate: options.predicate,
@@ -303,6 +306,7 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
       reason: 'selector_not_found',
       predicate: options.predicate,
       selector: chain.raw,
+      hint: selectorFailureHint([]),
     });
   }
   const result = evaluateIsPredicate({
@@ -642,7 +646,9 @@ async function resolveSelectorNode(
     disambiguateAmbiguous: params.disambiguateAmbiguous,
   });
   if (!resolved) {
-    throw new AppError('COMMAND_FAILED', formatSelectorFailure(chain, [], { unique: true }));
+    throw new AppError('COMMAND_FAILED', formatSelectorFailure(chain, [], { unique: true }), {
+      hint: selectorFailureHint([]),
+    });
   }
   return {
     capture,

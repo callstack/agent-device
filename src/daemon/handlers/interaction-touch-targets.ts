@@ -4,7 +4,10 @@ import type {
   LongPressCommandResult,
   PressCommandResult,
 } from '../../contracts/interaction.ts';
-import { readFillTargetFromPositionals } from '../../core/interaction-positionals.ts';
+import {
+  readFillTargetFromPositionals,
+  type DecodedFillTarget,
+} from '../../core/interaction-positionals.ts';
 import type { DaemonResponse } from '../types.ts';
 import { parseCoordinateTarget } from './interaction-targeting.ts';
 import { errorResponse } from './response.ts';
@@ -99,8 +102,8 @@ export function parseFillTarget(positionals: string[]): ParsedFillTarget {
     return { ok: true, target: { kind: 'point', x: coordinates.x, y: coordinates.y }, text };
   }
 
-  const parsed = readFillTargetFromPositionals(positionals);
-  if (parsed.kind !== 'selector') {
+  const parsed = tryReadFillSelectorTarget(positionals);
+  if (!parsed || parsed.kind !== 'selector') {
     return {
       ok: false,
       response: errorResponse(
@@ -122,6 +125,16 @@ export function parseFillTarget(positionals: string[]): ParsedFillTarget {
     target: { kind: 'selector', selector: parsed.target.selector },
     text: parsed.text,
   };
+}
+
+// Valid points and @refs are handled above, so a parse failure here only means
+// "not a selector either" — fold it into this handler's uniform INVALID_ARGS response.
+function tryReadFillSelectorTarget(positionals: string[]): DecodedFillTarget | null {
+  try {
+    return readFillTargetFromPositionals(positionals);
+  } catch {
+    return null;
+  }
 }
 
 export function interactionResultExtra(

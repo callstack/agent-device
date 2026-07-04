@@ -58,8 +58,10 @@ The perfect-shape refactor is complete and merged. Its end-state:
   `PlatformPlugin` per platform family (`src/core/platform-plugin/`) stops core/daemon from branching
   on platform, with the Apple plugin the first instance. See
   [ADR 0008](docs/adr/0008-command-descriptor-registry.md).
-- Typed result spine. Per-command typed results and a `TypedError` replaced the ad-hoc
-  `Record`-typed returns across the daemon/dispatch path.
+- Typed result spine. Per-command typed results replaced the ad-hoc `Record`-typed returns across
+  the daemon/dispatch path; errors gained machine-readable `retriable`/`supportedOn` signals on
+  `DaemonError` (#939). Error-system conventions live in
+  [ADR 0010](docs/adr/0010-error-system.md).
 - Apple platform model. Internally `Platform` is `apple` (plus `android`/`linux`/`web`) with an
   `appleOs` discriminant (`ios | ipados | tvos | watchos | visionos | macos`); the shared Apple
   engine lives under `src/platforms/apple/core/` with per-OS leaves under

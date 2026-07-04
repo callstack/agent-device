@@ -1,5 +1,5 @@
 import { AppError } from '../kernel/errors.ts';
-import { splitSelectorFromArgs } from '../utils/selectors-parse.ts';
+import { isSelectorToken, splitSelectorFromArgs } from '../utils/selectors-parse.ts';
 
 type PositionalInteractionTarget =
   | { x: number; y: number }
@@ -28,7 +28,7 @@ export function readInteractionTargetFromPositionals(
   }
   const selectorArgs = splitSelectorFromArgs(positionals);
   if (selectorArgs) return { selector: selectorArgs.selectorExpression };
-  return { x: Number(positionals[0]), y: Number(positionals[1]) };
+  return readPointTarget(positionals);
 }
 
 export function readFillTargetFromPositionals(positionals: string[]): DecodedFillTarget {
@@ -61,9 +61,32 @@ export function readFillTargetFromPositionals(positionals: string[]): DecodedFil
   }
   return {
     kind: 'point',
-    target: { x: Number(positionals[0]), y: Number(positionals[1]) },
+    target: readPointTarget(positionals.slice(0, 2)),
     text: positionals.slice(2).join(' '),
   };
+}
+
+function readPointTarget(positionals: string[]): { x: number; y: number } {
+  const x = Number(positionals[0]);
+  const y = Number(positionals[1]);
+  if (Number.isFinite(x) && Number.isFinite(y)) return { x, y };
+  throw new AppError('INVALID_ARGS', formatTargetParseFailure(positionals));
+}
+
+function formatTargetParseFailure(positionals: string[]): string {
+  const raw = positionals.filter((part) => part !== undefined).join(' ');
+  if (!raw.trim()) {
+    return 'Missing target. Pass an @ref from snapshot, a selector like text="Sign in", or "x y" coordinates.';
+  }
+  const base = `Target "${raw}" is not a @ref, selector, or "x y" point.`;
+  if (positionals.some((part) => isSelectorToken(part ?? ''))) {
+    return `${base} Selector values with spaces need quotes, e.g. text="Sign in".`;
+  }
+  return `${base} To match by visible text, use text=${quoteSelectorValue(raw)} (or label=/id=/role=), or pass an @ref from snapshot.`;
+}
+
+function quoteSelectorValue(value: string): string {
+  return `"${value.replaceAll('\\', '\\\\').replaceAll('"', '\\"')}"`;
 }
 
 function optionalTrimmedText(parts: string[]): string | undefined {

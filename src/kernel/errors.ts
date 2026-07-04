@@ -35,6 +35,7 @@ type AppErrorDetails = Record<string, unknown> & {
   diagnosticId?: string;
   logPath?: string;
   retriable?: boolean;
+  supportedOn?: string;
 };
 
 export type NormalizedError = {
@@ -49,6 +50,7 @@ export type NormalizedError = {
    * error wire shape is unchanged.
    */
   retriable?: boolean;
+  supportedOn?: string;
   details?: Record<string, unknown>;
 };
 
@@ -65,12 +67,12 @@ export class AppError extends Error {
   }
 }
 
-export function asAppError(err: unknown): AppError {
+export function asAppError(err: unknown, fallbackCode: AppErrorCode = 'UNKNOWN'): AppError {
   if (err instanceof AppError) return err;
   if (err instanceof Error) {
-    return new AppError('UNKNOWN', err.message, undefined, err);
+    return new AppError(fallbackCode, err.message, undefined, err);
   }
-  return new AppError('UNKNOWN', 'Unknown error', { err });
+  return new AppError(fallbackCode, 'Unknown error', { err });
 }
 
 export function isAgentDeviceError(err: unknown): err is AppError {
@@ -99,7 +101,11 @@ export function normalizeError(
     context.logPath;
   const hint = detailHint ?? defaultHintForCode(appErr.code);
   const retriable =
-    details && typeof details.retriable === 'boolean' ? details.retriable : undefined;
+    details && typeof details.retriable === 'boolean'
+      ? details.retriable
+      : retriableForErrorCode(appErr.code);
+  const supportedOn =
+    details && typeof details.supportedOn === 'string' ? details.supportedOn : undefined;
   const cleanDetails = stripDiagnosticMeta(details);
   const message = maybeEnrichCommandFailedMessage(appErr.code, appErr.message, details);
 
@@ -109,7 +115,9 @@ export function normalizeError(
     hint,
     diagnosticId,
     logPath,
+    // Typed-error signals stay absent unless confidently known (#939 wire shape).
     ...(retriable !== undefined ? { retriable } : {}),
+    ...(supportedOn !== undefined ? { supportedOn } : {}),
     details: cleanDetails,
   };
 }
@@ -159,6 +167,7 @@ function stripDiagnosticMeta(
   delete output.diagnosticId;
   delete output.logPath;
   delete output.retriable;
+  delete output.supportedOn;
   return Object.keys(output).length > 0 ? output : undefined;
 }
 
@@ -194,12 +203,20 @@ export function defaultHintForCode(code: string): string | undefined {
       return 'Run apps to discover the exact installed package or bundle id, or install the app before open.';
     case 'UNSUPPORTED_OPERATION':
       return 'This command is not available for the selected platform/device.';
+    case 'UNSUPPORTED_PLATFORM':
+      return 'This platform is not supported for the requested operation; run devices to inspect available targets.';
+    case 'AMBIGUOUS_MATCH':
+      return 'Multiple candidates matched. Narrow the query or pass an exact identifier.';
+    case 'DEVICE_IN_USE':
+      return 'The device is busy with another agent-device request; retry once it frees up.';
     case 'NOT_IMPLEMENTED':
       return 'This command is part of the planned API but is not implemented yet.';
     case 'COMMAND_FAILED':
       return 'Retry with --debug and inspect diagnostics log for details.';
     case 'UNAUTHORIZED':
       return 'Refresh daemon metadata and retry the command.';
+    case 'UNKNOWN':
+      return 'Unexpected internal error. Retry with --debug and report the diagnostics log if it persists.';
     default:
       return 'Retry with --debug and inspect diagnostics log for details.';
   }

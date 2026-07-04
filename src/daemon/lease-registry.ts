@@ -371,7 +371,7 @@ export class LeaseRegistry {
       (lease) => lease.backend === 'ios-simulator',
     ).length;
     if (activeSimulatorLeases < this.maxActiveSimulatorLeases) return;
-    throw new AppError('COMMAND_FAILED', 'No simulator lease capacity available', {
+    throw new AppError('DEVICE_IN_USE', 'No simulator lease capacity available', {
       reason: 'LEASE_CAPACITY_EXCEEDED',
       activeLeases: activeSimulatorLeases,
       maxActiveLeases: this.maxActiveSimulatorLeases,
@@ -511,7 +511,7 @@ export class LeaseRegistry {
   }
 
   private throwDeviceBusy(activeLease: DeviceLease): never {
-    throw new AppError('COMMAND_FAILED', 'Device is already leased', {
+    throw new AppError('DEVICE_IN_USE', 'Device is already leased', {
       reason: 'DEVICE_LEASE_BUSY',
       deviceKey: activeLease.deviceKey,
       backend: activeLease.backend,

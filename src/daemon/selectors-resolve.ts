@@ -79,6 +79,21 @@ export function findSelectorChainMatch(
   return null;
 }
 
+export const SELECTOR_NO_MATCH_HINT =
+  'Selector text/label values match exactly (quote multi-word values: text="Sign in"). Run snapshot -i to see current elements and refs, or use find <text> for contains matching.';
+
+export const SELECTOR_NOT_UNIQUE_HINT =
+  'Add more terms to disambiguate (e.g. role=button text="Sign in"), use an @ref from snapshot -i, or use find <text> --first/--last.';
+
+export const STALE_REF_HINT =
+  'Snapshot refs expire when the UI changes. Run snapshot -i and retry with a fresh @ref.';
+
+export function selectorFailureHint(diagnostics: SelectorDiagnostics[]): string {
+  return diagnostics.some((entry) => entry.matches > 1)
+    ? SELECTOR_NOT_UNIQUE_HINT
+    : SELECTOR_NO_MATCH_HINT;
+}
+
 export function formatSelectorFailure(
   chain: SelectorChain,
   diagnostics: SelectorDiagnostics[],

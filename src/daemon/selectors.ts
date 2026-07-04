@@ -14,6 +14,8 @@ export {
   resolveSelectorChain,
   findSelectorChainMatch,
   formatSelectorFailure,
+  selectorFailureHint,
+  STALE_REF_HINT,
 } from './selectors-resolve.ts';
 
 export { buildSelectorChainForNode } from '../utils/selector-build.ts';

@@ -1,4 +1,4 @@
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError, asAppError } from '../../../../kernel/errors.ts';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
 import { getRequestSignal, isRequestCanceledError } from '../../../../daemon/request-cancel.ts';
@@ -115,7 +115,7 @@ async function handlePrepareHealthFailure(params: {
   error: unknown;
 }): Promise<PrepareAttemptResult> {
   const { device, session, command, options, signal, attempt, error } = params;
-  const appErr = error instanceof AppError ? error : new AppError('COMMAND_FAILED', String(error));
+  const appErr = asAppError(error, 'COMMAND_FAILED');
   if (attempt === 1 && shouldRecoverBadCachedRunnerArtifact(appErr, session)) {
     return {
       kind: 'prepared',
@@ -256,7 +256,7 @@ export async function executeRunnerCommand(
       signal,
     );
   } catch (err) {
-    const appErr = err instanceof AppError ? err : new AppError('COMMAND_FAILED', String(err));
+    const appErr = asAppError(err, 'COMMAND_FAILED');
     if (
       appErr.code === 'COMMAND_FAILED' &&
       typeof appErr.message === 'string' &&
@@ -343,7 +343,7 @@ async function restartSessionAndRunCommand(params: {
     return recovered;
   } catch (retryErr) {
     const retryAppErr =
-      retryErr instanceof AppError ? retryErr : new AppError('COMMAND_FAILED', String(retryErr));
+      asAppError(retryErr, 'COMMAND_FAILED');
     if (isRetryableRunnerError(retryAppErr)) {
       return await handleRunnerTransportErrorAfterCommandSend({
         device,
@@ -444,7 +444,7 @@ function wrapPrepareHealthFailure(
   session: RunnerSession,
   restoredFailureReason: string,
 ): AppError {
-  const appErr = error instanceof AppError ? error : new AppError('COMMAND_FAILED', String(error));
+  const appErr = asAppError(error, 'COMMAND_FAILED');
   return new AppError(
     appErr.code,
     'artifact restored but runner did not connect',

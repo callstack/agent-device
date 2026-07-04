@@ -4,7 +4,12 @@ import { findNodeByRef, normalizeRef } from '../../../kernel/snapshot.ts';
 import { resolveRectCenter } from '../../../utils/rect-center.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { parseSelectorChain } from '../../../utils/selectors-parse.ts';
-import { formatSelectorFailure, resolveSelectorChain } from '../../../daemon/selectors.ts';
+import {
+  formatSelectorFailure,
+  resolveSelectorChain,
+  selectorFailureHint,
+  STALE_REF_HINT,
+} from '../../../daemon/selectors.ts';
 import { buildSelectorChainForNode } from '../../../utils/selector-build.ts';
 import { findNodeByLabel, resolveRefLabel } from '../../../snapshot/snapshot-processing.ts';
 import {
@@ -173,6 +178,7 @@ async function resolveSelectorInteractionTarget(
     throw new AppError(
       'COMMAND_FAILED',
       formatSelectorFailure(chain, resolved?.diagnostics ?? [], { unique: true }),
+      { hint: selectorFailureHint(resolved?.diagnostics ?? []) },
     );
   }
   const node = params.promoteToHittableAncestor
@@ -355,7 +361,9 @@ async function resolveSnapshotForRef(
     fallbackLabel,
   });
   if (!refreshed) {
-    throw new AppError('COMMAND_FAILED', `Ref ${target.ref} not found or has no bounds`);
+    throw new AppError('COMMAND_FAILED', `Ref ${target.ref} not found or has no bounds`, {
+      hint: STALE_REF_HINT,
+    });
   }
   return { ...capture, resolved: refreshed };
 }

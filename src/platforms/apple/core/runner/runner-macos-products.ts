@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { isMacOs, type DeviceInfo } from '../../../../kernel/device.ts';
-import { AppError } from '../../../../kernel/errors.ts';
+import { AppError, asAppError } from '../../../../kernel/errors.ts';
 import { runAppleToolCommand } from '../tool-provider.ts';
 
 const RUNNER_PRODUCT_REPAIR_FAILURE_REASONS = new Set([
@@ -46,7 +46,7 @@ export async function repairMacOsRunnerProductsIfNeeded(
       await runAppleToolCommand('codesign', ['--force', '--sign', '-', productPath]);
     } catch (error) {
       const appError =
-        error instanceof AppError ? error : new AppError('COMMAND_FAILED', String(error));
+        asAppError(error, 'COMMAND_FAILED');
       throw new AppError('COMMAND_FAILED', 'Failed to repair macOS runner product signature', {
         reason: 'RUNNER_PRODUCT_REPAIR_FAILED',
         productPath,

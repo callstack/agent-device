@@ -297,7 +297,7 @@ test('public contract exports normalize and hint app errors', () => {
   assert.equal(normalized.hint, defaultHintForCode(invalidArgsCode));
   assert.equal(
     defaultHintForCode('UNKNOWN'),
-    'Retry with --debug and inspect diagnostics log for details.',
+    'Unexpected internal error. Retry with --debug and report the diagnostics log if it persists.',
   );
 });
 
