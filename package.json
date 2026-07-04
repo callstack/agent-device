@@ -118,7 +118,6 @@
     "check": "pnpm check:tooling && pnpm check:fallow && pnpm check:unit",
     "prepack": "pnpm check:mcp-metadata && pnpm build:all && pnpm package:android-snapshot-helper:npm && pnpm package:android-multitouch-helper:npm",
     "typecheck": "tsgo -p tsconfig.json",
-    "typecheck:tsc": "tsc -p tsconfig.json",
     "test-app:install": "pnpm install --dir examples/test-app --ignore-workspace",
     "test-app:start": "pnpm --dir examples/test-app start",
     "test-app:ios": "pnpm --dir examples/test-app ios",
@@ -223,11 +222,11 @@
     "@typescript/native-preview": "7.0.0-dev.20260613.1",
     "@vitest/coverage-v8": "4.1.8",
     "fallow": "^2.95.0",
+    "oxc-parser": "^0.138.0",
     "oxfmt": "^0.42.0",
     "oxlint": "^1.69.0",
     "skillgym": "^0.9.1",
     "tsdown": "^0.22.3",
-    "typescript": "^6.0.3",
     "vite": "^8.0.16",
     "vitest": "^4.1.8"
   }

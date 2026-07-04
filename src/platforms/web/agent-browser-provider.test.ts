@@ -336,35 +336,40 @@ test('agent-browser provider surfaces stale ref failures during requested snapsh
 });
 
 test('agent-browser provider adds doctor guidance for missing binary and invalid JSON', async () => {
-  const missingStateDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-web-provider-missing-'),
-  );
-  try {
-    const provider = createAgentBrowserWebProvider({ stateDir: missingStateDir });
-    await assert.rejects(
-      async () => await provider.open('https://example.test'),
-      (error: unknown) =>
-        error instanceof AppError &&
-        error.code === 'TOOL_MISSING' &&
-        error.details?.hint === 'Run `agent-device web setup` to install the managed web backend.',
+  // Pin a web-supported Node version so the missing-binary path yields the
+  // setup hint instead of the Node upgrade hint on Node <24 hosts.
+  await withNodeRuntimeVersion('24.0.0', async () => {
+    const missingStateDir = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'agent-device-web-provider-missing-'),
     );
-  } finally {
-    fs.rmSync(missingStateDir, { recursive: true, force: true });
-  }
+    try {
+      const provider = createAgentBrowserWebProvider({ stateDir: missingStateDir });
+      await assert.rejects(
+        async () => await provider.open('https://example.test'),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.code === 'TOOL_MISSING' &&
+          error.details?.hint ===
+            'Run `agent-device web setup` to install the managed web backend.',
+      );
+    } finally {
+      fs.rmSync(missingStateDir, { recursive: true, force: true });
+    }
 
-  await withManagedAgentBrowserProvider({}, async (installedProvider) => {
-    await assert.rejects(
-      () =>
-        withCommandExecutorOverride(
-          async () => ({ stdout: 'not-json', stderr: '', exitCode: 0 }),
-          async () => await installedProvider.open('https://example.test'),
-        ),
-      (error: unknown) =>
-        error instanceof AppError &&
-        error.code === 'COMMAND_FAILED' &&
-        error.message === 'agent-browser returned invalid JSON' &&
-        typeof error.details?.hint === 'string',
-    );
+    await withManagedAgentBrowserProvider({}, async (installedProvider) => {
+      await assert.rejects(
+        () =>
+          withCommandExecutorOverride(
+            async () => ({ stdout: 'not-json', stderr: '', exitCode: 0 }),
+            async () => await installedProvider.open('https://example.test'),
+          ),
+        (error: unknown) =>
+          error instanceof AppError &&
+          error.code === 'COMMAND_FAILED' &&
+          error.message === 'agent-browser returned invalid JSON' &&
+          typeof error.details?.hint === 'string',
+      );
+    });
   });
 });
 

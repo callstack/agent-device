@@ -2,7 +2,8 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import * as ts from 'typescript';
+import { parseSync } from 'oxc-parser';
+import type { BinaryExpression, Expression, PrivateIdentifier } from 'oxc-parser';
 import { parseArgs, usage, usageForCommand } from '../../cli/parser/args.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { listCapabilityCommands } from '../../core/capabilities.ts';
@@ -2416,49 +2417,86 @@ test('removed trigger aliases are no longer documented as commands', async () =>
 function collectCliDispatchCommandLiterals(): Set<string> {
   const cliPath = fileURLToPath(new URL('../../cli.ts', import.meta.url));
   const sourceText = fs.readFileSync(cliPath, 'utf8');
-  const sourceFile = ts.createSourceFile(
-    cliPath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-    ts.ScriptKind.TS,
-  );
+  const parsed = parseSync(cliPath, sourceText);
   const commands = new Set<string>();
 
-  function visit(node: ts.Node): void {
-    if (ts.isBinaryExpression(node) && isEqualityOperator(node.operatorToken.kind)) {
-      const command = readCommandComparisonLiteral(node.left, node.right);
-      if (command) commands.add(command);
-    }
-    ts.forEachChild(node, visit);
-  }
+  visitAstNodes(parsed.program, (node) => {
+    const command = readBinaryComparisonCommandLiteral(node);
+    if (command) commands.add(command);
+  });
 
-  visit(sourceFile);
   return commands;
 }
 
-function isEqualityOperator(kind: ts.SyntaxKind): boolean {
+type AstNode = { type: string };
+
+function isAstNode(value: unknown): value is AstNode {
   return (
-    kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
-    kind === ts.SyntaxKind.ExclamationEqualsEqualsToken
+    typeof value === 'object' &&
+    value !== null &&
+    typeof (value as { type?: unknown }).type === 'string'
   );
 }
 
-function readCommandComparisonLiteral(left: ts.Expression, right: ts.Expression): string | null {
-  if (isCommandExpression(left) && ts.isStringLiteralLike(right)) return right.text;
-  if (isCommandExpression(right) && ts.isStringLiteralLike(left)) return left.text;
+function visitAstNodes(root: AstNode, visit: (node: AstNode) => void): void {
+  const stack: AstNode[] = [root];
+  while (stack.length > 0) {
+    const node = stack.pop();
+    if (!node) continue;
+    visit(node);
+    for (const value of Object.values(node)) {
+      for (const child of Array.isArray(value) ? value : [value]) {
+        if (isAstNode(child)) stack.push(child);
+      }
+    }
+  }
+}
+
+function readBinaryComparisonCommandLiteral(node: AstNode): string | null {
+  if (node.type !== 'BinaryExpression') return null;
+  const binary = node as unknown as BinaryExpression;
+  if (binary.operator !== '===' && binary.operator !== '!==') return null;
+  return (
+    readCommandComparisonLiteral(binary.left, binary.right) ??
+    readCommandComparisonLiteral(binary.right, binary.left)
+  );
+}
+
+function readCommandComparisonLiteral(
+  commandSide: Expression | PrivateIdentifier,
+  literalSide: Expression | PrivateIdentifier,
+): string | null {
+  if (!isCommandExpression(commandSide)) return null;
+  return readStringLiteralText(unwrapParenthesizedExpression(literalSide));
+}
+
+function isCommandExpression(expression: Expression | PrivateIdentifier): boolean {
+  const unwrapped = unwrapParenthesizedExpression(expression);
+  if (unwrapped.type === 'Identifier') return unwrapped.name === 'command';
+  return (
+    unwrapped.type === 'MemberExpression' &&
+    !unwrapped.computed &&
+    unwrapped.property.type === 'Identifier' &&
+    unwrapped.property.name === 'command'
+  );
+}
+
+// Mirrors ts.isStringLiteralLike: string literals plus substitution-free templates.
+function readStringLiteralText(expression: Expression | PrivateIdentifier): string | null {
+  if (expression.type === 'Literal' && typeof expression.value === 'string') {
+    return expression.value;
+  }
+  if (expression.type === 'TemplateLiteral' && expression.expressions.length === 0) {
+    return expression.quasis[0]?.value.cooked ?? null;
+  }
   return null;
 }
 
-function isCommandExpression(expression: ts.Expression): boolean {
-  const unwrapped = unwrapParenthesizedExpression(expression);
-  if (ts.isIdentifier(unwrapped)) return unwrapped.text === 'command';
-  return ts.isPropertyAccessExpression(unwrapped) && unwrapped.name.text === 'command';
-}
-
-function unwrapParenthesizedExpression(expression: ts.Expression): ts.Expression {
+function unwrapParenthesizedExpression(
+  expression: Expression | PrivateIdentifier,
+): Expression | PrivateIdentifier {
   let current = expression;
-  while (ts.isParenthesizedExpression(current)) {
+  while (current.type === 'ParenthesizedExpression') {
     current = current.expression;
   }
   return current;

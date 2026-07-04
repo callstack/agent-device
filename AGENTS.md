@@ -30,7 +30,7 @@ Single-context repo. Read `CONTEXT.md` for domain language and testing/architect
 - Decide docs/skills impact up front.
 
 ## Principles (expensive lessons — each cost an incident)
-- Guarantees erode at path boundaries. Any new dispatch path or fast path classifies its cells in `src/contracts/interaction-guarantees.ts` first; tsc forces completeness, you supply honesty. ADR 0011.
+- Guarantees erode at path boundaries. Any new dispatch path or fast path classifies its cells in `src/contracts/interaction-guarantees.ts` first; the typechecker forces completeness, you supply honesty. ADR 0011.
 - A registry claim is not a semantic check: never mark a cell `runner` without reading whether the Swift code implements the guarantee's *definition*, not just a similar-sounding behavior.
 - Delegation-on-error is not success-path parity. A fast path that falls back on failure can still succeed on a candidate the shared rules would refuse.
 - Do not measure before confirming the code path can fire. An A/B whose B-arm cannot execute returns two green runs masquerading as evidence.
@@ -79,7 +79,7 @@ Keep `src/daemon.ts` a thin router and `src/daemon/request-router.ts` orchestrat
 - Lint/format stack is OXC:
   - config: `.oxlintrc.json`, `.oxfmtrc.json`
 - TypeScript is strict enough to surface dead code early: `strict`, `isolatedModules`, `noUnusedLocals`, and `noUnusedParameters` are enabled.
-- The repo emits with `tsdown` (Rolldown), not `tsc`; `pnpm typecheck` runs `tsgo` (native preview), with `typecheck:tsc` as the fallback. If declaration generation fails, inspect `tsconfig.lib.json` first.
+- The repo emits with `tsdown` (Rolldown) and typechecks with `tsgo` (native preview); the `typescript` package is not a dependency, so there is no `tsc` to fall back to. If declaration generation fails, inspect `tsconfig.lib.json` first.
 - Dev-loop staleness has three layers; after editing runtime or runner code: `pnpm build` (dist), restart the daemon (it does not self-reload), and remember `shutdown` deliberately HANDS OFF a healthy simulator runner — the adopted runner keeps serving the old Swift binary until you kill its process or the source fingerprint changes. Verifying "my change did nothing" against an adopted runner is a classic false negative.
 - `tsconfig.lib.json` needs an explicit `rootDir: "./src"` for declaration layout.
 - Use the aggregate scripts in `package.json` when possible; they encode the expected validation bundles better than ad hoc command lists.
@@ -255,7 +255,7 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
 - Duplicating logs backend logic in handlers instead of `src/daemon/app-log.ts`.
 - Growing `src/daemon/handlers/session.ts` or `src/platforms/apple/core/apps.ts` further without extracting Apple-family/macOS-specific helpers first.
 - Reintroducing an npm lockfile or assuming ESLint/Prettier still exist in this repo.
-- Changing `tsconfig.lib.json`/build tooling without running `pnpm check:tooling`; declaration generation is stricter than `tsc --noEmit`.
+- Changing `tsconfig.lib.json`/build tooling without running `pnpm check:tooling`; declaration generation is stricter than a plain typecheck.
 
 ## Docs & Skills
 - Versioned CLI help is the agent-facing source of truth. Put workflow guidance/help topics in `src/utils/cli-help.ts`, flags in `src/utils/cli-flags.ts`, CLI command overrides in `src/utils/cli-command-overrides.ts`, and assertions for important copy in `src/utils/__tests__/args.test.ts`.
