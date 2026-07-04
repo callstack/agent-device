@@ -1,4 +1,10 @@
-import { runCmd, whichCmd, type ExecOptions, type ExecResult } from '../../../utils/exec.ts';
+import {
+  coerceExecResult,
+  runCmd,
+  whichCmd,
+  type ExecOptions,
+  type ExecResult,
+} from '../../../utils/exec.ts';
 import { createScopedProvider } from '../../../utils/scoped-provider.ts';
 import { createLocalAppleMacOsHostProvider } from '../os/macos/host-provider.ts';
 import type {
@@ -7,6 +13,7 @@ import type {
   ApplePlistProvider,
   AppleToolAvailabilityChecker,
   AppleToolCommandExecutor,
+  AppleToolSubcommandExecutor,
   AppleXcrunToolProvider,
 } from './tool-provider-types.ts';
 
@@ -130,9 +137,25 @@ export async function readApplePlistJson(
 
 function normalizeAppleToolProvider(provider: AppleToolProviderInput): AppleToolProvider {
   if (typeof provider === 'function') {
-    return createLocalAppleToolProvider({ runCommand: provider });
+    return createLocalAppleToolProvider({ runCommand: coerceRunCommand(provider) });
   }
-  return createLocalAppleToolProvider(provider);
+  return createLocalAppleToolProvider({
+    ...provider,
+    runCommand: coerceRunCommand(provider.runCommand),
+    ...(provider.simctl ? { simctl: { run: coerceRun(provider.simctl.run) } } : {}),
+    ...(provider.devicectl ? { devicectl: { run: coerceRun(provider.devicectl.run) } } : {}),
+    ...(provider.macosHelper ? { macosHelper: { run: coerceRun(provider.macosHelper.run) } } : {}),
+  });
+}
+
+// Scoped providers are SDK-supplied callbacks; coerce their results once at
+// the boundary (see coerceExecResult) so platform code can trust the types.
+function coerceRunCommand(run: AppleToolCommandExecutor): AppleToolCommandExecutor {
+  return async (cmd, args, options) => coerceExecResult(await run(cmd, args, options));
+}
+
+function coerceRun(run: AppleToolSubcommandExecutor): AppleToolSubcommandExecutor {
+  return async (args, options) => coerceExecResult(await run(args, options));
 }
 
 async function readPlistJsonWithCommand(

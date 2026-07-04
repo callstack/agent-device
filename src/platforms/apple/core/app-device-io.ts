@@ -2,8 +2,7 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { isMacOs, type DeviceInfo } from '../../../kernel/device.ts';
-import { AppError } from '../../../kernel/errors.ts';
-import { execFailureDetails } from '../../../utils/exec.ts';
+import { requireExecSuccess } from '../../../utils/exec.ts';
 import { ensureBootedSimulator, requireSimulatorDevice } from './simulator.ts';
 import { readMacOsClipboardText, writeMacOsClipboardText } from '../os/macos/apps.ts';
 import { runSimctl } from './apps-simctl.ts';
@@ -14,14 +13,10 @@ export async function readIosClipboardText(device: DeviceInfo): Promise<string> 
   }
   requireSimulatorDevice(device, 'clipboard');
   await ensureBootedSimulator(device);
-  const result = await runSimctl(device, ['pbpaste', device.id], { allowFailure: true });
-  if (result.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Failed to read iOS simulator clipboard',
-      execFailureDetails(result),
-    );
-  }
+  const result = requireExecSuccess(
+    await runSimctl(device, ['pbpaste', device.id], { allowFailure: true }),
+    'Failed to read iOS simulator clipboard',
+  );
   return result.stdout.replace(/\r\n/g, '\n').replace(/\n$/, '');
 }
 
@@ -32,17 +27,13 @@ export async function writeIosClipboardText(device: DeviceInfo, text: string): P
   }
   requireSimulatorDevice(device, 'clipboard');
   await ensureBootedSimulator(device);
-  const result = await runSimctl(device, ['pbcopy', device.id], {
-    allowFailure: true,
-    stdin: text,
-  });
-  if (result.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Failed to write iOS simulator clipboard',
-      execFailureDetails(result),
-    );
-  }
+  requireExecSuccess(
+    await runSimctl(device, ['pbcopy', device.id], {
+      allowFailure: true,
+      stdin: text,
+    }),
+    'Failed to write iOS simulator clipboard',
+  );
 }
 
 export async function pushIosNotification(

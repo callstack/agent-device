@@ -1,16 +1,11 @@
 import type { DeviceInfo } from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { execFailureDetails } from '../../../utils/exec.ts';
-import { IOS_DEVICE_INSTALL_TIMEOUT_MS, IOS_DEVICECTL_TIMEOUT_MS } from './config.ts';
+import { IOS_DEVICE_INSTALL_TIMEOUT_MS } from './config.ts';
 import { runIosDevicectl } from './devicectl.ts';
 import { prepareIosInstallArtifact } from './install-artifact.ts';
 import { ensureBootedSimulator } from './simulator.ts';
-import { runXcrun } from './tool-provider.ts';
-import {
-  invalidateIosAppResolutionCache,
-  maybeResolveIosDevicectlHint,
-  resolveIosApp,
-} from './app-resolution.ts';
+import { invalidateIosAppResolutionCache, resolveIosApp } from './app-resolution.ts';
 import { isMissingAppErrorOutput, runSimctl } from './apps-simctl.ts';
 
 type InstallIosAppOptions = {
@@ -21,30 +16,14 @@ async function uninstallIosApp(device: DeviceInfo, app: string): Promise<{ bundl
   return await invalidateIosAppResolutionCache(device, async () => {
     const bundleId = await resolveIosApp(device, app);
     if (device.kind !== 'simulator') {
-      const args = ['devicectl', 'device', 'uninstall', 'app', '--device', device.id, bundleId];
-      const result = await runXcrun(args, {
-        allowFailure: true,
-        timeoutMs: IOS_DEVICECTL_TIMEOUT_MS,
-      });
-      if (result.exitCode !== 0) {
-        const stdout = String(result.stdout ?? '');
-        const stderr = String(result.stderr ?? '');
-        const output = `${stdout}\n${stderr}`.toLowerCase();
-        if (!isMissingAppErrorOutput(output)) {
-          throw new AppError(
-            'COMMAND_FAILED',
-            `Failed to uninstall iOS app ${bundleId}`,
-            execFailureDetails(result, {
-              cmd: 'xcrun',
-              args,
-              stdout,
-              stderr,
-              deviceId: device.id,
-              hint: maybeResolveIosDevicectlHint(stdout, stderr),
-            }),
-          );
-        }
-      }
+      await runIosDevicectl(
+        ['device', 'uninstall', 'app', '--device', device.id, bundleId],
+        { action: `uninstall iOS app ${bundleId}`, deviceId: device.id },
+        {
+          tolerateOutput: (stdout, stderr) =>
+            isMissingAppErrorOutput(`${stdout}\n${stderr}`.toLowerCase()),
+        },
+      );
       return { bundleId };
     }
 

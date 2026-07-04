@@ -1,5 +1,6 @@
 import { isIosFamily, type DeviceInfo } from '../kernel/device.ts';
 import { AppError, asAppError } from '../kernel/errors.ts';
+import { execFailureDetails } from '../utils/exec.ts';
 import type { SessionRuntimeHints } from './types.ts';
 import {
   resolveRuntimeTransportHints,
@@ -125,15 +126,12 @@ async function writeAndroidDevPrefs(
       runAsDenied
         ? `Failed to access Android app sandbox for ${packageName}`
         : `Failed to probe Android app sandbox for ${packageName}`,
-      {
+      execFailureDetails(probeResult, {
         package: packageName,
         cmd: 'adb',
         args: probeArgs,
-        stdout: probeResult.stdout,
-        stderr: probeResult.stderr,
-        exitCode: probeResult.exitCode,
         hint: runAsDenied ? ANDROID_RUN_AS_HINT : ANDROID_PROBE_HINT,
-      },
+      }),
     );
   }
 

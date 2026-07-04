@@ -1,4 +1,4 @@
-import { execFailureDetails, runCmd, runCmdDetached, whichCmd } from '../../utils/exec.ts';
+import { requireExecSuccess, runCmd, runCmdDetached, whichCmd } from '../../utils/exec.ts';
 import type { ExecResult } from '../../utils/exec.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import { AppError, asAppError } from '../../kernel/errors.ts';
@@ -311,19 +311,16 @@ export function resolveAndroidAvdName(
 }
 
 async function listAndroidAvdNames(): Promise<string[]> {
-  const result = await runCmd('emulator', ['-list-avds'], {
-    allowFailure: true,
-    timeoutMs: ANDROID_BOOT_PROP_TIMEOUT_MS,
-  });
-  if (result.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Failed to list Android emulator AVDs',
-      execFailureDetails(result, {
-        hint: 'Verify Android emulator tooling is installed and available in PATH.',
-      }),
-    );
-  }
+  const result = requireExecSuccess(
+    await runCmd('emulator', ['-list-avds'], {
+      allowFailure: true,
+      timeoutMs: ANDROID_BOOT_PROP_TIMEOUT_MS,
+    }),
+    'Failed to list Android emulator AVDs',
+    {
+      hint: 'Verify Android emulator tooling is installed and available in PATH.',
+    },
+  );
   return parseAndroidAvdList(result.stdout);
 }
 
@@ -523,6 +520,8 @@ export async function waitForAndroidBoot(serial: string, timeoutMs = 60000): Pro
         );
         lastBootResult = result;
         if (result.stdout.trim() === '1') return;
+        // exec-guard-allow: getprop exits 0 while the device is still booting;
+        // the throw is a retry-loop poll miss, not a process-exit wrap.
         throw new AppError('COMMAND_FAILED', 'Android device is still booting', {
           serial,
           stdout: result.stdout,

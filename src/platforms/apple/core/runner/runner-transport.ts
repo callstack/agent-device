@@ -7,7 +7,7 @@ import {
   isRequestCanceledError,
 } from '../../../../daemon/request-cancel.ts';
 import { AppError } from '../../../../kernel/errors.ts';
-import { execFailureDetails } from '../../../../utils/exec.ts';
+import { requireExecSuccess } from '../../../../utils/exec.ts';
 import { Deadline, retryWithPolicy } from '../../../../utils/retry.ts';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import { classifyBootFailure, bootFailureHint } from '../../../boot-diagnostics.ts';
@@ -534,25 +534,24 @@ async function postCommandViaSimulator(
     payload,
     `http://127.0.0.1:${port}/command`,
   ]);
-  const result = await runXcrun(args, { allowFailure: true, timeoutMs, signal });
-  const body = result.stdout as string;
-  if (result.exitCode !== 0) {
-    const reason = classifyBootFailure({
-      message: 'Runner did not accept connection (simctl spawn)',
-      stdout: result.stdout,
-      stderr: result.stderr,
-      context: { platform: 'ios', phase: 'connect' },
-    });
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Runner did not accept connection (simctl spawn)',
-      execFailureDetails(result, {
+  const result = requireExecSuccess(
+    await runXcrun(args, { allowFailure: true, timeoutMs, signal }),
+    'Runner did not accept connection (simctl spawn)',
+    (result) => {
+      const reason = classifyBootFailure({
+        message: 'Runner did not accept connection (simctl spawn)',
+        stdout: result.stdout,
+        stderr: result.stderr,
+        context: { platform: 'ios', phase: 'connect' },
+      });
+      return {
         port,
         reason,
         hint: bootFailureHint(reason),
-      }),
-    );
-  }
+      };
+    },
+  );
+  const body = result.stdout as string;
   return { status: 200, body };
 }
 

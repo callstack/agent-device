@@ -279,6 +279,8 @@ function parseAgentBrowserJson(
     return JSON.parse(stdout);
   } catch (error) {
     const commandFailed = exitCode !== 0;
+    // exec-guard-allow: reachable at exit 0 (invalid JSON on stdout); the
+    // message already branches on the exit code and output is truncated.
     throw new AppError(
       'COMMAND_FAILED',
       commandFailed ? 'agent-browser command failed' : 'agent-browser returned invalid JSON',

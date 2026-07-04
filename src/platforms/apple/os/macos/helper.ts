@@ -282,6 +282,9 @@ async function runMacOsHelper<T extends Record<string, unknown>>(args: string[])
     parsed && !parsed.ok
       ? (parsed.error?.message ?? `macOS helper exited with code ${result.exitCode}`)
       : stdout || result.stderr.trim() || `macOS helper exited with code ${result.exitCode}`;
+  // exec-guard-allow: the message is already built from the helper's JSON error
+  // envelope (or its output); a stderr excerpt would only degrade it, and the
+  // throw is reachable at exit 0 when the envelope reports ok=false.
   throw new AppError('COMMAND_FAILED', message, {
     helperPath,
     args,

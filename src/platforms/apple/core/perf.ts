@@ -10,7 +10,7 @@ import {
   type PublicPlatform,
 } from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
-import { execFailureDetails, type ExecResult } from '../../../utils/exec.ts';
+import { execFailureDetails, requireExecSuccess, type ExecResult } from '../../../utils/exec.ts';
 import { splitNonEmptyTrimmedLines } from '../../../utils/parsing.ts';
 import { roundPercent } from '../../perf-utils.ts';
 import { uniqueStrings } from '../../../daemon/action-utils.ts';
@@ -640,15 +640,13 @@ async function exportIosDevicePerfTable(
     '--output',
     outputPath,
   ];
-  const exportResult = await runXcrun(exportArgs, {
-    allowFailure: true,
-    timeoutMs: IOS_DEVICE_PERF_EXPORT_TIMEOUT_MS,
-  });
-  if (exportResult.exitCode === 0) return;
-  throw new AppError(
-    'COMMAND_FAILED',
+  requireExecSuccess(
+    await runXcrun(exportArgs, {
+      allowFailure: true,
+      timeoutMs: IOS_DEVICE_PERF_EXPORT_TIMEOUT_MS,
+    }),
     `Failed to export iOS device ${schema} data`,
-    execFailureDetails(exportResult, {
+    (exportResult) => ({
       cmd: 'xcrun',
       args: exportArgs,
       appBundleId,
@@ -976,17 +974,14 @@ function summarizeIosDevicePerfSnapshot(
 
 async function resolveMacOsBundlePath(appBundleId: string): Promise<string> {
   const query = `kMDItemCFBundleIdentifier == "${appBundleId.replaceAll('"', '\\"')}"`;
-  const result = await runAppleToolCommand('mdfind', [query], {
-    allowFailure: true,
-    timeoutMs: APPLE_PERF_TIMEOUT_MS,
-  });
-  if (result.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `Failed to resolve macOS app bundle for ${appBundleId}`,
-      execFailureDetails(result, { appBundleId }),
-    );
-  }
+  const result = requireExecSuccess(
+    await runAppleToolCommand('mdfind', [query], {
+      allowFailure: true,
+      timeoutMs: APPLE_PERF_TIMEOUT_MS,
+    }),
+    `Failed to resolve macOS app bundle for ${appBundleId}`,
+    { appBundleId },
+  );
 
   const bundlePath = result.stdout
     .split('\n')
@@ -1010,20 +1005,17 @@ async function resolveIosSimulatorAppContainer(
     appBundleId,
     'app',
   ]);
-  const result = await runXcrun(args, {
-    allowFailure: true,
-    timeoutMs: APPLE_PERF_TIMEOUT_MS,
-  });
-  if (result.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `Failed to resolve iOS simulator app container for ${appBundleId}`,
-      execFailureDetails(result, {
-        appBundleId,
-        hint: 'Ensure the iOS simulator app is installed and booted, then retry perf.',
-      }),
-    );
-  }
+  const result = requireExecSuccess(
+    await runXcrun(args, {
+      allowFailure: true,
+      timeoutMs: APPLE_PERF_TIMEOUT_MS,
+    }),
+    `Failed to resolve iOS simulator app container for ${appBundleId}`,
+    {
+      appBundleId,
+      hint: 'Ensure the iOS simulator app is installed and booted, then retry perf.',
+    },
+  );
   const appPath = result.stdout.trim();
   if (appPath.length === 0) {
     throw new AppError(

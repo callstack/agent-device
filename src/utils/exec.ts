@@ -95,7 +95,7 @@ export async function runCmd(
   options: ExecOptions = {},
 ): Promise<ExecResult> {
   const overrideResult = commandExecutorOverrideScope.getStore()?.(cmd, args, options);
-  if (overrideResult) return await overrideResult;
+  if (overrideResult) return coerceExecResult(await overrideResult);
   return await runSpawnedCommand(cmd, args, options);
 }
 
@@ -105,8 +105,28 @@ export async function runCmdStreaming(
   options: ExecStreamOptions = {},
 ): Promise<ExecResult> {
   const overrideResult = commandExecutorOverrideScope.getStore()?.(cmd, args, options);
-  if (overrideResult) return await overrideResult;
+  if (overrideResult) return coerceExecResult(await overrideResult);
   return await runSpawnedCommand(cmd, args, options);
+}
+
+/**
+ * Normalize an exec result produced outside this module. Tool providers,
+ * executor overrides, and SDK-supplied adb executors are plain callbacks whose
+ * results cross an unchecked boundary; coercing once here lets downstream code
+ * trust the ExecResult types instead of re-wrapping fields defensively at every
+ * use. A non-number exitCode coerces to 1 — the same failure branch such a
+ * result already landed in at every `exitCode !== 0` guard.
+ */
+export function coerceExecResult<T extends Pick<ExecResult, 'stdout' | 'stderr' | 'exitCode'>>(
+  result: T,
+): T {
+  const stdout = typeof result.stdout === 'string' ? result.stdout : String(result.stdout ?? '');
+  const stderr = typeof result.stderr === 'string' ? result.stderr : String(result.stderr ?? '');
+  const exitCode = typeof result.exitCode === 'number' ? result.exitCode : 1;
+  if (stdout === result.stdout && stderr === result.stderr && exitCode === result.exitCode) {
+    return result;
+  }
+  return { ...result, stdout, stderr, exitCode };
 }
 
 function runSpawnedCommand(
@@ -564,6 +584,8 @@ function createTimeoutError(
   stdout: string,
   stderr: string,
 ): AppError {
+  // exec-guard-allow: deliberately no processExitError — "timed out after Nms"
+  // beats whatever partial stderr the killed process left behind.
   return new AppError('COMMAND_FAILED', `${executable} timed out after ${timeoutMs}ms`, {
     cmd,
     args,
@@ -586,6 +608,29 @@ function createExitError(
     'COMMAND_FAILED',
     `${executable} exited with code ${exitCode}`,
     execFailureDetails({ stdout, stderr, exitCode }, { cmd, args }),
+  );
+}
+
+/**
+ * Guard an exec result that was obtained with `allowFailure: true`: throw a
+ * curated COMMAND_FAILED (with `processExitError` set, so normalizeError
+ * appends the stderr excerpt) on non-zero exit, and pass the result through
+ * otherwise. This is the standard shape for "run tool, fail with a specific
+ * message" call sites — it works under every executor (local spawn, tool
+ * providers, command overrides) because it checks the returned result rather
+ * than relying on the spawn layer to throw. `extra` accepts a function so
+ * failure-only work (hint classification) is not paid on the success path.
+ */
+export function requireExecSuccess(
+  result: ExecResult,
+  message: string,
+  extra?: Record<string, unknown> | ((result: ExecResult) => Record<string, unknown>),
+): ExecResult {
+  if (result.exitCode === 0) return result;
+  throw new AppError(
+    'COMMAND_FAILED',
+    message,
+    execFailureDetails(result, typeof extra === 'function' ? extra(result) : extra),
   );
 }
 

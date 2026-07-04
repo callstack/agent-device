@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Readable, Writable } from 'node:stream';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import {
+  coerceExecResult,
   execFailureDetails,
   runCmd,
   runCmdBackground,
@@ -382,15 +383,27 @@ function withAdbFailureHintProvider(provider: AndroidAdbProvider): AndroidAdbPro
   if (adbFailureHintProviders.has(provider)) return provider;
   const enriched: AndroidAdbProvider = {
     ...provider,
-    exec: withAdbFailureHints(provider.exec),
-    ...(provider.pull ? { pull: withAdbFailureHints(provider.pull) } : {}),
-    ...(provider.install ? { install: withAdbFailureHints(provider.install) } : {}),
+    exec: withAdbFailureHints(coerceAdbResults(provider.exec)),
+    ...(provider.pull ? { pull: withAdbFailureHints(coerceAdbResults(provider.pull)) } : {}),
+    ...(provider.install
+      ? { install: withAdbFailureHints(coerceAdbResults(provider.install)) }
+      : {}),
     ...(provider.installBundle
       ? { installBundle: withAdbFailureHints(provider.installBundle) }
       : {}),
   };
   adbFailureHintProviders.add(enriched);
   return enriched;
+}
+
+// Providers are SDK-supplied callbacks whose results cross an unchecked
+// boundary; coerce them once here (see coerceExecResult) so downstream code
+// can trust the ExecResult types. Wrapped inside the same enrichment pass so
+// the WeakSet memo above also prevents coercer stacking.
+function coerceAdbResults<Args extends unknown[]>(
+  call: (...args: Args) => Promise<AndroidAdbExecutorResult>,
+): (...args: Args) => Promise<AndroidAdbExecutorResult> {
+  return async (...args) => coerceExecResult(await call(...args));
 }
 
 export function createDeviceAdbExecutor(device: DeviceInfo): AndroidAdbExecutor {

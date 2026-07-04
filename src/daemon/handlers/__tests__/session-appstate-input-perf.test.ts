@@ -441,7 +441,8 @@ test('perf preserves successful metrics and normalizes per-metric Android sampli
     const cpu = (response.data?.metrics as any)?.cpu;
     expect(startup?.available).toBe(false);
     expect(memory?.available).toBe(false);
-    expect(memory?.reason).toBe('error: device offline');
+    // The bare `error:` severity prefix is stripped by the stderr-excerpt noise filter.
+    expect(memory?.reason).toBe('device offline');
     expect(memory?.error?.code).toBe('COMMAND_FAILED');
     expect(memory?.error?.hint).toMatch(/adb reconnect/i);
     expect(memory?.error?.details?.metric).toBe('memory');

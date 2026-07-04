@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
-import { execFailureDetails } from '../../utils/exec.ts';
+import { execFailureDetails, requireExecSuccess } from '../../utils/exec.ts';
 import { splitNonEmptyTrimmedLines } from '../../utils/parsing.ts';
 import {
   androidAdbResultError,
@@ -130,23 +130,20 @@ export async function captureAndroidHeapSnapshot(
   await fs.mkdir(path.dirname(outPath), { recursive: true });
   const hadLocalArtifact = await fileExists(outPath);
   try {
-    const dumpResult = await adb(['shell', 'am', 'dumpheap', packageName, remotePath], {
-      allowFailure: true,
-      timeoutMs: ANDROID_HEAP_DUMP_TIMEOUT_MS,
-    });
-    if (dumpResult.exitCode !== 0) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        `Failed to capture Android heap dump for ${packageName}`,
-        execFailureDetails(dumpResult, {
-          kind: 'android-hprof',
-          package: packageName,
-          pid,
-          remotePath,
-          hint: resolveAndroidHeapDumpHint(dumpResult.stdout, dumpResult.stderr),
-        }),
-      );
-    }
+    requireExecSuccess(
+      await adb(['shell', 'am', 'dumpheap', packageName, remotePath], {
+        allowFailure: true,
+        timeoutMs: ANDROID_HEAP_DUMP_TIMEOUT_MS,
+      }),
+      `Failed to capture Android heap dump for ${packageName}`,
+      (dumpResult) => ({
+        kind: 'android-hprof',
+        package: packageName,
+        pid,
+        remotePath,
+        hint: resolveAndroidHeapDumpHint(dumpResult.stdout, dumpResult.stderr),
+      }),
+    );
 
     const pullResult = await adb(['pull', remotePath, outPath], {
       allowFailure: true,

@@ -25,7 +25,7 @@ export async function readInfoPlistString(
       },
     );
     if (result.exitCode === 0) {
-      const value = String(result.stdout ?? '').trim();
+      const value = result.stdout.trim();
       if (value.length > 0) {
         return value;
       }

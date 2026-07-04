@@ -184,6 +184,9 @@ export async function buildRunnerEarlyExitError(params: {
     stderr: result.stderr,
     context: { platform: 'ios', phase: 'connect' },
   });
+  // exec-guard-allow: xcodebuild can exit 0 and still count as an early exit;
+  // the trio is nested tool context under `xcodebuild`, classified into
+  // `reason`/`hint` above — not a process-exit wrap.
   return new AppError('COMMAND_FAILED', message, {
     port,
     logPath,

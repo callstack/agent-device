@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
-import { execFailureDetails } from '../../../utils/exec.ts';
+import { execFailureDetails, requireExecSuccess } from '../../../utils/exec.ts';
 import { Deadline, retryWithPolicy } from '../../../utils/retry.ts';
 import { createTtlMemo } from '../../../utils/ttl-memo.ts';
 import { bootFailureHint, classifyBootFailure } from '../../boot-diagnostics.ts';
@@ -124,11 +124,7 @@ export async function ensureBootedSimulator(
           allowFailure: true,
           timeoutMs: remainingMs,
         });
-        bootResult = {
-          stdout: String(boot.stdout ?? ''),
-          stderr: String(boot.stderr ?? ''),
-          exitCode: boot.exitCode,
-        };
+        bootResult = boot;
 
         const bootOutput = `${bootResult.stdout}\n${bootResult.stderr}`.toLowerCase();
         const bootAlreadyDone =
@@ -149,19 +145,9 @@ export async function ensureBootedSimulator(
             timeoutMs: remainingMs,
           },
         );
-        bootStatusResult = {
-          stdout: String(bootStatus.stdout ?? ''),
-          stderr: String(bootStatus.stderr ?? ''),
-          exitCode: bootStatus.exitCode,
-        };
+        bootStatusResult = bootStatus;
 
-        if (bootStatusResult.exitCode !== 0) {
-          throw new AppError(
-            'COMMAND_FAILED',
-            'simctl bootstatus failed',
-            execFailureDetails(bootStatusResult),
-          );
-        }
+        requireExecSuccess(bootStatusResult, 'simctl bootstatus failed');
 
         const nextState = await getSimulatorState(device);
         if (nextState !== 'Booted') {
@@ -231,8 +217,8 @@ export async function shutdownSimulator(device: DeviceInfo): Promise<{
   return {
     success: result.exitCode === 0,
     exitCode: result.exitCode,
-    stdout: String(result.stdout ?? ''),
-    stderr: String(result.stderr ?? ''),
+    stdout: result.stdout,
+    stderr: result.stderr,
   };
 }
 
@@ -249,7 +235,7 @@ export async function getSimulatorState(deviceOrUdid: DeviceInfo | string): Prom
   if (result.exitCode !== 0) return null;
 
   try {
-    const payload = JSON.parse(String(result.stdout ?? '')) as {
+    const payload = JSON.parse(result.stdout) as {
       devices: Record<string, { udid: string; state: string }[]>;
     };
 

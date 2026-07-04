@@ -3,7 +3,7 @@ import path from 'node:path';
 import { isIosFamily, isMacOs, type DeviceInfo } from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { requireLocationCoordinates } from '../../../utils/location-coordinates.ts';
-import { execFailureDetails } from '../../../utils/exec.ts';
+import { requireExecSuccess } from '../../../utils/exec.ts';
 import { resolveIosSimulatorDeviceSetPath } from '../../../utils/device-isolation.ts';
 import { getUnsupportedMacOsSettingMessage } from '../../../core/settings-contract.ts';
 import {
@@ -168,16 +168,12 @@ async function clearIosSimulatorAppState(
   await ensureBootedSimulator(device);
   await closeIosApp(device, bundleId);
 
-  const result = await runSimctl(device, ['get_app_container', device.id, bundleId, 'data'], {
-    allowFailure: true,
-  });
-  if (result.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `simctl get_app_container failed for ${bundleId}`,
-      execFailureDetails(result),
-    );
-  }
+  const result = requireExecSuccess(
+    await runSimctl(device, ['get_app_container', device.id, bundleId, 'data'], {
+      allowFailure: true,
+    }),
+    `simctl get_app_container failed for ${bundleId}`,
+  );
 
   const containerPath = result.stdout.trim();
   if (!containerPath) {
@@ -222,16 +218,12 @@ async function resolveIosAppearanceTarget(
   const action = parseAppearanceAction(state);
   if (action !== 'toggle') return action;
 
-  const currentResult = await runSimctl(device, ['ui', device.id, 'appearance'], {
-    allowFailure: true,
-  });
-  if (currentResult.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Failed to read current iOS appearance',
-      execFailureDetails(currentResult),
-    );
-  }
+  const currentResult = requireExecSuccess(
+    await runSimctl(device, ['ui', device.id, 'appearance'], {
+      allowFailure: true,
+    }),
+    'Failed to read current iOS appearance',
+  );
   const current = parseIosAppearance(currentResult.stdout, currentResult.stderr);
   if (!current) {
     throw new AppError('COMMAND_FAILED', 'Unable to determine current iOS appearance for toggle', {
@@ -353,6 +345,9 @@ async function getSimctlPrivacyServices(device: DeviceInfo): Promise<Set<string>
   const result = await runSimctl(device, ['privacy', 'help'], { allowFailure: true });
   const services = parseSimctlPrivacyServices(`${result.stdout}\n${result.stderr}`);
   if (services.size === 0) {
+    // exec-guard-allow: `simctl privacy help` prints usage to stderr and can
+    // exit non-zero while still listing services — the guard is on parse
+    // output, not the exit code.
     throw new AppError('COMMAND_FAILED', 'Unable to determine supported simctl privacy services', {
       stdout: result.stdout,
       stderr: result.stderr,

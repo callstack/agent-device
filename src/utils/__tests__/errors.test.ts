@@ -68,6 +68,36 @@ test('normalizeError skips simctl boilerplate wrappers in stderr', () => {
   assert.equal(normalized.message, 'Operation not permitted');
 });
 
+test('normalizeError strips adb and severity prefixes from the stderr excerpt', () => {
+  const err = new AppError('COMMAND_FAILED', 'adb exited with code 1', {
+    exitCode: 1,
+    processExitError: true,
+    stderr: 'adb: error: failed to get feature set: device offline\n',
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, 'failed to get feature set: device offline');
+});
+
+test('normalizeError strips a bare error prefix when appending to a curated message', () => {
+  const err = new AppError('COMMAND_FAILED', 'simctl boot failed', {
+    exitCode: 1,
+    processExitError: true,
+    stderr: 'error: device is locked\n',
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, 'simctl boot failed: device is locked');
+});
+
+test('normalizeError skips a stderr line that is only a noise prefix', () => {
+  const err = new AppError('COMMAND_FAILED', 'xcrun exited with code 1', {
+    exitCode: 1,
+    processExitError: true,
+    stderr: 'xcrun: error:\nunable to find utility simctl\n',
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, 'unable to find utility simctl');
+});
+
 test('normalizeError provides app discovery guidance for app-not-installed errors', () => {
   const normalized = normalizeError(
     new AppError('APP_NOT_INSTALLED', 'No package found matching "chat"'),

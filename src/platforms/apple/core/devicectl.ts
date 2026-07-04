@@ -38,7 +38,14 @@ type IosDeviceProcessesPayload = {
 export async function runIosDevicectl(
   args: string[],
   context: { action: string; deviceId: string },
-  options: { timeoutMs?: number } = {},
+  options: {
+    timeoutMs?: number;
+    /**
+     * Treat a non-zero exit as success when its output matches — e.g. an
+     * uninstall of an app that is already gone.
+     */
+    tolerateOutput?: (stdout: string, stderr: string) => boolean;
+  } = {},
 ): Promise<void> {
   const fullArgs = ['devicectl', ...args];
   const result = await runXcrun(fullArgs, {
@@ -46,8 +53,8 @@ export async function runIosDevicectl(
     timeoutMs: options.timeoutMs ?? IOS_DEVICECTL_TIMEOUT_MS,
   });
   if (result.exitCode === 0) return;
-  const stdout = String(result.stdout ?? '');
-  const stderr = String(result.stderr ?? '');
+  const { stdout, stderr } = result;
+  if (options.tolerateOutput?.(stdout, stderr)) return;
   throw new AppError(
     'COMMAND_FAILED',
     `Failed to ${context.action}`,
@@ -107,8 +114,7 @@ async function runIosDevicectlJsonCommand(
 
   try {
     if (result.exitCode !== 0) {
-      const stdout = String(result.stdout ?? '');
-      const stderr = String(result.stderr ?? '');
+      const { stdout, stderr } = result;
       throw new AppError(
         'COMMAND_FAILED',
         options.failureMessage,

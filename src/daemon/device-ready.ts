@@ -9,6 +9,7 @@ import {
 } from '../platforms/apple/core/devicectl.ts';
 import { runXcrun } from '../platforms/apple/core/tool-provider.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
+import { execFailureDetails } from '../utils/exec.ts';
 import { createTtlMemo } from '../utils/ttl-memo.ts';
 
 const IOS_DEVICE_READY_TIMEOUT_MS = 15_000;
@@ -102,11 +103,12 @@ async function ensureIosDeviceReady(deviceId: string): Promise<void> {
         timeoutMs: IOS_DEVICE_READY_TIMEOUT_MS + IOS_DEVICE_READY_COMMAND_TIMEOUT_BUFFER_MS,
       },
     );
-    const stdout = String(result.stdout ?? '');
-    const stderr = String(result.stderr ?? '');
+    const { stdout, stderr } = result;
     const parsed = await readIosReadyPayload(jsonPath);
     if (result.exitCode === 0) {
       if (!parsed.parsed) {
+        // exec-guard-allow: thrown at exit 0 (probe succeeded but the readiness
+        // JSON was missing/invalid) — not a process-exit wrap.
         throw new AppError('COMMAND_FAILED', 'iOS device readiness probe failed', {
           kind: 'probe_inconclusive',
           deviceId,
@@ -126,15 +128,16 @@ async function ensureIosDeviceReady(deviceId: string): Promise<void> {
       }
       return;
     }
-    throw new AppError('COMMAND_FAILED', 'iOS device is not ready for automation', {
-      kind: 'not_ready',
-      deviceId,
-      stdout,
-      stderr,
-      exitCode: result.exitCode,
-      tunnelState: parsed?.tunnelState,
-      hint: resolveIosReadyHint(stdout, stderr),
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      'iOS device is not ready for automation',
+      execFailureDetails(result, {
+        kind: 'not_ready',
+        deviceId,
+        tunnelState: parsed?.tunnelState,
+        hint: resolveIosReadyHint(stdout, stderr),
+      }),
+    );
   } catch (error) {
     if (error instanceof AppError && error.code === 'COMMAND_FAILED') {
       const kind = typeof error.details?.kind === 'string' ? error.details.kind : '';

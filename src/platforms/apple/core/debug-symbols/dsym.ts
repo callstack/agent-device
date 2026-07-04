@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { AppleImage, DsymMatch, DsymSlice } from './types.ts';
 import { normalizeUuid, unique } from './utils.ts';
-import { execFailureDetails, runCmd } from '../../../../utils/exec.ts';
+import { requireExecSuccess, runCmd } from '../../../../utils/exec.ts';
 import { AppError } from '../../../../kernel/errors.ts';
 
 const MAX_SEARCH_ENTRIES = 10_000;
@@ -92,17 +92,14 @@ export async function readDsymSlices(dsymPaths: string[], dwarfdump: string): Pr
 
 async function readDsymBundleSlices(dsymPath: string, dwarfdump: string): Promise<DsymSlice[]> {
   await assertDsymBundlePath(dsymPath);
-  const result = await runCmd(dwarfdump, ['--uuid', dsymPath], {
-    timeoutMs: 15_000,
-    allowFailure: true,
-  });
-  if (result.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `Failed to inspect dSYM UUIDs: ${dsymPath}`,
-      execFailureDetails(result, { hint: 'Verify the dSYM bundle is valid and readable.' }),
-    );
-  }
+  const result = requireExecSuccess(
+    await runCmd(dwarfdump, ['--uuid', dsymPath], {
+      timeoutMs: 15_000,
+      allowFailure: true,
+    }),
+    `Failed to inspect dSYM UUIDs: ${dsymPath}`,
+    { hint: 'Verify the dSYM bundle is valid and readable.' },
+  );
   return parseDwarfdumpUuidOutput(dsymPath, result.stdout);
 }
 

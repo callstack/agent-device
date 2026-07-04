@@ -1,7 +1,7 @@
 import type { DeviceInfo } from '../../../kernel/device.ts';
 import { emitDiagnostic } from '../../../utils/diagnostics.ts';
 import { AppError } from '../../../kernel/errors.ts';
-import { execFailureDetails, type ExecOptions } from '../../../utils/exec.ts';
+import { requireExecSuccess, type ExecOptions } from '../../../utils/exec.ts';
 import { runSimctlForDevice } from './simctl.ts';
 import { extractAppleToolErrorMeta } from './tool-diagnostics.ts';
 
@@ -128,16 +128,12 @@ function statusBarOverrideCacheKey(device: DeviceInfo): string {
 async function readSimulatorStatusBarOverrides(
   device: DeviceInfo,
 ): Promise<RestorableStatusBarOverrides | null> {
-  const result = await runSimctl(device, ['status_bar', device.id, 'list'], {
-    allowFailure: true,
-  });
-  if (result.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Failed to read simulator status bar overrides',
-      execFailureDetails(result),
-    );
-  }
+  const result = requireExecSuccess(
+    await runSimctl(device, ['status_bar', device.id, 'list'], {
+      allowFailure: true,
+    }),
+    'Failed to read simulator status bar overrides',
+  );
   return parseSimulatorStatusBarOverrides(result.stdout);
 }
 

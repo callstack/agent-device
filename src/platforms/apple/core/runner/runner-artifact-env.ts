@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '../../../../kernel/errors.ts';
 import type { DefinedEnvMap as EnvMap } from '../../../../utils/env-map.ts';
-import { execFailureDetails } from '../../../../utils/exec.ts';
+import { requireExecSuccess } from '../../../../utils/exec.ts';
 import { runAppleToolCommand } from '../tool-provider.ts';
 
 const RUNNER_XCTESTRUN_CAPTURE_OPTIONS = {
@@ -92,20 +92,13 @@ async function writeXctestrunPlist(
   tmpXctestrunPath: string,
 ): Promise<void> {
   fs.writeFileSync(tmpJsonPath, JSON.stringify(parsed, null, 2));
-  const plistResult = await runAppleToolCommand(
-    'plutil',
-    ['-convert', 'xml1', '-o', tmpXctestrunPath, tmpJsonPath],
-    {
+  requireExecSuccess(
+    await runAppleToolCommand('plutil', ['-convert', 'xml1', '-o', tmpXctestrunPath, tmpJsonPath], {
       allowFailure: true,
-    },
+    }),
+    'Failed to write xctestrun plist',
+    { tmpXctestrunPath },
   );
-  if (plistResult.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Failed to write xctestrun plist',
-      execFailureDetails(plistResult, { tmpXctestrunPath }),
-    );
-  }
 }
 
 function mergeEnvIntoXctestrunTarget(

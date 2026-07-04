@@ -5,13 +5,17 @@ import os from 'node:os';
 import path from 'node:path';
 import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../diagnostics.ts';
 import {
+  coerceExecResult,
+  requireExecSuccess,
   runCmd,
   runCmdBackground,
   runCmdDetached,
   runCmdStreaming,
   runCmdSync,
   whichCmd,
+  type ExecResult,
 } from '../exec.ts';
+import { AppError } from '../../kernel/errors.ts';
 
 test('runCmd enforces timeoutMs and rejects with COMMAND_FAILED', async () => {
   await assert.rejects(
@@ -385,3 +389,41 @@ function summarizeExecEvent(event: {
     omittedArgCount: event.data?.omittedArgCount,
   };
 }
+
+test('requireExecSuccess passes a zero-exit result through untouched', () => {
+  const result: ExecResult = { stdout: 'ok', stderr: '', exitCode: 0 };
+  assert.equal(
+    requireExecSuccess(result, 'should not throw', () => {
+      throw new Error('extra must not be evaluated on success');
+    }),
+    result,
+  );
+});
+
+test('requireExecSuccess throws a flagged COMMAND_FAILED with lazy extras on failure', () => {
+  const result: ExecResult = { stdout: 'out', stderr: 'boom\n', exitCode: 3 };
+  try {
+    requireExecSuccess(result, 'tool failed', (failed) => ({ hint: `saw ${failed.exitCode}` }));
+    assert.fail('expected requireExecSuccess to throw');
+  } catch (error) {
+    assert.ok(error instanceof AppError);
+    assert.equal(error.code, 'COMMAND_FAILED');
+    assert.equal(error.message, 'tool failed');
+    assert.equal(error.details?.processExitError, true);
+    assert.equal(error.details?.stderr, 'boom\n');
+    assert.equal(error.details?.exitCode, 3);
+    assert.equal(error.details?.hint, 'saw 3');
+  }
+});
+
+test('coerceExecResult repairs loosely-typed provider results and keeps typed ones identical', () => {
+  const typed: ExecResult = { stdout: 'a', stderr: 'b', exitCode: 0 };
+  assert.equal(coerceExecResult(typed), typed);
+
+  const loose = coerceExecResult({
+    stdout: undefined,
+    stderr: 42,
+    exitCode: undefined,
+  } as unknown as ExecResult);
+  assert.deepEqual(loose, { stdout: '', stderr: '42', exitCode: 1 });
+});

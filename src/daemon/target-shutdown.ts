@@ -71,7 +71,7 @@ async function shutdownAndroidEmulator(device: DeviceInfo): Promise<DeviceTarget
   return {
     success: result.exitCode === 0,
     exitCode: result.exitCode,
-    stdout: String(result.stdout ?? ''),
-    stderr: String(result.stderr ?? ''),
+    stdout: result.stdout,
+    stderr: result.stderr,
   };
 }

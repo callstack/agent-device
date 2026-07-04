@@ -30,12 +30,30 @@ export function toAppErrorCode(
   return fallback;
 }
 
-type AppErrorDetails = Record<string, unknown> & {
+/**
+ * Details bag for AppError. Free-form context is allowed, but these keys carry
+ * meaning at normalize/render time and must keep their types:
+ * - `hint` — overrides `defaultHintForCode`; re-wraps preserve an existing hint.
+ * - `diagnosticId` / `logPath` — lifted onto the normalized error, stripped from details.
+ * - `processExitError` + `stdout`/`stderr`/`exitCode` — marks a wrap of a real
+ *   process exit so normalizeError can surface the first meaningful stderr line;
+ *   build these via `execFailureDetails`/`requireExecSuccess` in src/utils/exec.ts
+ *   rather than by hand.
+ * - `retriable` — typed retry signal hoisted to the wire error shape.
+ * - `reason` — machine-dispatchable sub-classification within a code.
+ */
+export type AppErrorDetails = Record<string, unknown> & {
   hint?: string;
   diagnosticId?: string;
   logPath?: string;
   retriable?: boolean;
   supportedOn?: string;
+  processExitError?: boolean;
+  stdout?: string;
+  stderr?: string;
+  // null mirrors the raw child_process exit event: killed by signal, no code.
+  exitCode?: number | null;
+  reason?: string;
 };
 
 export type NormalizedError = {
@@ -133,18 +151,26 @@ function maybeEnrichCommandFailedMessage(
   return `${message}: ${excerpt}`;
 }
 
-function firstStderrLine(stderr: string): string | null {
-  const skipPatterns = [
-    /^an error was encountered processing the command/i,
-    /^underlying error\b/i,
-    /^simulator device failed to complete the requested operation/i,
-  ];
+// Boilerplate preamble lines and tool-name/severity prefixes carry nothing the
+// code/message don't already convey. These lists live in the kernel deliberately:
+// normalizeError renders wire-level errors after platform code has run, so
+// platforms cannot contribute patterns — revisit as a registry only if the
+// lists outgrow a handful of entries.
+const STDERR_SKIP_PATTERNS = [
+  /^an error was encountered processing the command/i,
+  /^underlying error\b/i,
+  /^simulator device failed to complete the requested operation/i,
+];
+const STDERR_NOISE_PREFIX = /^(?:(?:adb|xcrun|simctl):\s*)?(?:error:\s*)?/i;
 
+function firstStderrLine(stderr: string): string | null {
   for (const rawLine of stderr.split('\n')) {
     const line = rawLine.trim();
     if (!line) continue;
-    if (skipPatterns.some((pattern) => pattern.test(line))) continue;
-    return line.length > 200 ? `${line.slice(0, 200)}...` : line;
+    if (STDERR_SKIP_PATTERNS.some((pattern) => pattern.test(line))) continue;
+    const excerpt = line.replace(STDERR_NOISE_PREFIX, '').trim();
+    if (!excerpt) continue;
+    return excerpt.length > 200 ? `${excerpt.slice(0, 200)}...` : excerpt;
   }
   return null;
 }

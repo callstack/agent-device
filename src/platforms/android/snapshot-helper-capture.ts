@@ -156,6 +156,8 @@ async function readFallbackHelperOutputOrThrow(
   if (error instanceof AppError && result.exitCode !== 0 && error.details?.helper) throw error;
   const fileOutput = await readFallbackHelperOutputFile(options, resolved, result);
   if (fileOutput) return { output: fileOutput, cleanupDone: true };
+  // exec-guard-allow: reachable at exit 0 (helper output unparseable); the
+  // message already branches on the exit code.
   throw new AppError(
     'COMMAND_FAILED',
     result.exitCode === 0

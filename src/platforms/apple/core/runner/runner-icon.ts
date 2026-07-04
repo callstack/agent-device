@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { AppError } from '../../../../kernel/errors.ts';
-import { execFailureDetails } from '../../../../utils/exec.ts';
+import { requireExecSuccess } from '../../../../utils/exec.ts';
 import { readApplePlistJson, runAppleToolCommand } from '../tool-provider.ts';
 
 const ICON_PLIST_KEYS = ['CFBundleIcons', 'CFBundleIcons~ipad'] as const;
@@ -101,33 +100,27 @@ async function writeIconPlistValue(
   value: unknown,
   shouldInsert: boolean,
 ): Promise<void> {
-  const result = await runAppleToolCommand(
-    'plutil',
-    [shouldInsert ? '-insert' : '-replace', key, '-json', JSON.stringify(value), plistPath],
-    { allowFailure: true },
+  requireExecSuccess(
+    await runAppleToolCommand(
+      'plutil',
+      [shouldInsert ? '-insert' : '-replace', key, '-json', JSON.stringify(value), plistPath],
+      { allowFailure: true },
+    ),
+    'Failed to update XCTest runner icon plist',
+    { key, plistPath },
   );
-  if (result.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Failed to update XCTest runner icon plist',
-      execFailureDetails(result, { key, plistPath }),
-    );
-  }
 }
 
 async function codesignRunnerApp(runnerAppPath: string): Promise<void> {
-  const result = await runAppleToolCommand(
-    'codesign',
-    ['--force', '--sign', '-', '--timestamp=none', '--generate-entitlement-der', runnerAppPath],
-    { allowFailure: true },
+  requireExecSuccess(
+    await runAppleToolCommand(
+      'codesign',
+      ['--force', '--sign', '-', '--timestamp=none', '--generate-entitlement-der', runnerAppPath],
+      { allowFailure: true },
+    ),
+    'Failed to sign XCTest runner app after icon update',
+    { runnerAppPath },
   );
-  if (result.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Failed to sign XCTest runner app after icon update',
-      execFailureDetails(result, { runnerAppPath }),
-    );
-  }
 }
 
 function copyFileIfChanged(sourcePath: string, destinationPath: string): boolean {
