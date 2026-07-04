@@ -126,21 +126,9 @@ jobs:
           FALLOW_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: pnpm check:fallow --base "$FALLOW_BASE"
 
-  unit:
-    name: Unit Tests
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-
-      - name: Setup toolchain
-        uses: ./.github/actions/setup-node-pnpm
-
-      - name: Run unit tests
-        run: pnpm test:unit
-
   coverage:
+    # Runs the full unit + provider-integration suites under coverage with
+    # thresholds, so a separate unit-tests job would rerun the same tests.
     name: Coverage
     runs-on: ubuntu-latest
     timeout-minutes: 30

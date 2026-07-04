@@ -2,6 +2,14 @@ name: Size
 
 on:
   pull_request:
+    paths-ignore:
+      - "docs/**"
+      - "website/**"
+      - "README.md"
+      - ".github/actions/build-docs/action.yml"
+      - ".github/workflows/deploy.yml"
+      - ".github/workflows/pr-preview.yml"
+      - ".github/workflows/pr-preview-cleanup.yml"
 
 permissions:
   contents: read
@@ -29,14 +37,34 @@ jobs:
       - name: Preserve report script
         run: cp scripts/size-report.mjs /tmp/agent-device-size-report.mjs
 
+      # dist is fully determined by the base commit, so reuse it across PR runs
+      # against the same base. Startup medians are still measured fresh on this
+      # runner so the base/PR comparison stays same-machine.
+      - name: Restore base dist cache
+        id: base-dist-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
+        with:
+          path: dist
+          key: size-base-dist-${{ github.event.pull_request.base.sha }}
+
       - name: Measure base size
         run: |
           git checkout --detach "${{ github.event.pull_request.base.sha }}"
           pnpm install --frozen-lockfile
-          pnpm build
+          if [ "${{ steps.base-dist-cache.outputs.cache-hit }}" != "true" ]; then
+            pnpm build
+          fi
           node /tmp/agent-device-size-report.mjs \
             --startup-runs 7 \
             --json /tmp/agent-device-size-base.json
+
+      # Save immediately: the job-end dist belongs to the PR head, not the base.
+      - name: Save base dist cache
+        if: steps.base-dist-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.2.3
+        with:
+          path: dist
+          key: size-base-dist-${{ github.event.pull_request.base.sha }}
 
       - name: Measure PR size
         run: |
