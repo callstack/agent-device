@@ -124,7 +124,10 @@ test('is grammar explains the predicate/selector-key collision on invalid predic
     () => readInputFromCli('is', ['text=Zzznope', 'nope'], BASE_FLAGS),
     (err: any) => {
       assert.equal(err.code, 'INVALID_ARGS');
-      assert.match(err.message, /is requires predicate: visible\|hidden\|exists\|editable\|selected\|text/);
+      assert.match(
+        err.message,
+        /is requires predicate: visible\|hidden\|exists\|editable\|selected\|text/,
+      );
       assert.match(err.details?.hint ?? '', /is <selector> <predicate>/);
       assert.match(err.details?.hint ?? '', /visible=true/);
       return true;
