@@ -455,6 +455,39 @@ test('runtime wait stable times out with capture stats when never settling', asy
   assert.ok(captures > 1);
 });
 
+test('runtime wait stable times out when a backend capture stalls past the wait budget', async () => {
+  const clock = createFakeClock();
+  const device = createAgentDevice({
+    backend: {
+      platform: 'macos',
+      // Simulates the stalled macOS AX capture: the promise never settles, so
+      // only the real-timer deadline can end the wait.
+      captureSnapshot: () => new Promise<BackendSnapshotResult>(() => {}),
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default' }]),
+    policy: localCommandPolicy(),
+    clock,
+  });
+
+  await assert.rejects(
+    () =>
+      device.selectors.wait({
+        session: 'default',
+        target: { kind: 'stable', quietMs: 100, timeoutMs: 250 },
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.message, 'wait timed out waiting for a stable UI');
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'wait_stable_timeout');
+      assert.equal(details?.captureStalled, true);
+      assert.equal(details?.captures, 0);
+      return true;
+    },
+  );
+});
+
 test('runtime wait stable uses provided defaults when quietMs/timeoutMs are omitted', async () => {
   const snapshot = selectorSnapshot();
   const clock = createFakeClock();

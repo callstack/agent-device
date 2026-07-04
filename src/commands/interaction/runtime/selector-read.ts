@@ -530,14 +530,22 @@ async function waitForStable(
   let lastNodeCount = 0;
   let quietSinceMs = start;
   while (now(runtime) - start < timeout) {
-    // Intentionally do not update the session snapshot: this loop captures an
-    // interactive-only tree purely as a settle signal, and overwriting the session's
-    // richer cached snapshot with the filtered tree would degrade subsequent
-    // ref/get/find lookups against the same session.
-    const capture = await captureSelectorSnapshot(runtime, options, {
-      updateSession: false,
-      interactiveOnly: true,
-    });
+    const capture = await captureStableSignalWithinDeadline(
+      runtime,
+      options,
+      timeout - (now(runtime) - start),
+    );
+    if (!capture) {
+      throw new AppError('COMMAND_FAILED', 'wait timed out waiting for a stable UI', {
+        reason: 'wait_stable_timeout',
+        captureStalled: true,
+        quietMs: quiet,
+        timeoutMs: timeout,
+        captures,
+        nodeCount: lastNodeCount,
+        hint: 'A snapshot capture stalled past the wait timeout, so no settle verdict is available. The UI may still be readable: retry, or use screenshot to inspect the surface.',
+      });
+    }
     captures += 1;
     const digest = digestSnapshotNodes(capture.snapshot.nodes);
     const nowMs = now(runtime);
@@ -563,6 +571,45 @@ async function waitForStable(
     captures,
     nodeCount: lastNodeCount,
   });
+}
+
+// Intentionally does not update the session snapshot: the stable loop captures
+// an interactive-only tree purely as a settle signal, and overwriting the
+// session's richer cached snapshot with the filtered tree would degrade
+// subsequent ref/get/find lookups against the same session.
+//
+// Resolves undefined when the capture does not return within remainingMs. A
+// stalled backend capture (observed with macOS AX captures) must not push the
+// stable wait past the user-supplied timeout into the daemon request timeout.
+// The deadline uses a real timer even when runtime.clock is injected: test
+// clocks advance synthetic time synchronously and cannot represent a hung
+// backend call.
+async function captureStableSignalWithinDeadline(
+  runtime: AgentDeviceRuntime,
+  options: WaitCommandOptions,
+  remainingMs: number,
+): Promise<CapturedSnapshot | undefined> {
+  const capture = captureSelectorSnapshot(runtime, options, {
+    updateSession: false,
+    interactiveOnly: true,
+  });
+  let timer: NodeJS.Timeout | undefined;
+  try {
+    const result = await Promise.race([
+      capture,
+      new Promise<undefined>((resolve) => {
+        timer = setTimeout(() => resolve(undefined), remainingMs);
+      }),
+    ]);
+    if (result === undefined) {
+      // The abandoned capture settles (or fails) on its own; swallow it so it
+      // cannot surface as an unhandled rejection after the wait already threw.
+      capture.catch(() => {});
+    }
+    return result;
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 function digestSnapshotNodes(nodes: SnapshotNode[]): string {
