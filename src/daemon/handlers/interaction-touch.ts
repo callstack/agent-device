@@ -13,11 +13,11 @@ import type {
 } from '../../contracts/interaction.ts';
 import { asAppError, normalizeError } from '../../kernel/errors.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
+import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';
 import {
-  buildTouchVisualizationResult,
-  finalizeTouchInteraction,
-  type InteractionHandlerParams,
-} from './interaction-common.ts';
+  buildInteractionResponseData,
+  type InteractionResponsePayloads,
+} from './interaction-touch-response.ts';
 import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
 import type { RefSnapshotFlagGuardResponse } from './interaction-flags.ts';
 import {
@@ -33,11 +33,9 @@ import {
 import { createInteractionRuntime } from './interaction-runtime.ts';
 import {
   formatTouchTargetLabel,
-  interactionResultExtra,
   parseFillTarget,
   parseLongPressTarget,
   parseTouchTarget,
-  stripAtPrefix,
 } from './interaction-touch-targets.ts';
 import { getActiveAndroidSnapshotFreshness } from '../android-snapshot-freshness.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
@@ -160,7 +158,7 @@ async function dispatchTargetedTouchViaRuntime(
     },
     buildPayloads: async (result) => {
       const durationMs = readLongPressResultDuration(result);
-      const responseData = await buildTargetedTouchResponseData({
+      return await buildTargetedTouchResponsePayloads({
         params,
         session,
         result,
@@ -172,7 +170,6 @@ async function dispatchTargetedTouchViaRuntime(
               }
             : resultButtonTag,
       });
-      return { result: responseData, responseData };
     },
   });
 }
@@ -215,14 +212,14 @@ async function runTargetedTouchInteraction(params: {
     : await runtime.interactions.press(target, options);
 }
 
-async function buildTargetedTouchResponseData(params: {
+async function buildTargetedTouchResponsePayloads(params: {
   params: InteractionHandlerParams & {
     captureSnapshotForSession: CaptureSnapshotForSession;
   };
   session: SessionState;
   result: TargetedTouchResult;
   extra: Record<string, unknown>;
-}): Promise<Record<string, unknown>> {
+}): Promise<InteractionResponsePayloads> {
   const { params: handlerParams, session, result, extra } = params;
   const referenceFrame =
     result.kind === 'point'
@@ -234,15 +231,10 @@ async function buildTargetedTouchResponseData(params: {
           captureSnapshotForSession: handlerParams.captureSnapshotForSession,
         })
       : readSnapshotNodesReferenceFrame(session.snapshot?.nodes ?? []);
-  return buildTouchVisualizationResult({
-    data: result.backendResult,
-    fallbackX: result.point?.x,
-    fallbackY: result.point?.y,
+  return buildInteractionResponseData({
+    source: { kind: 'runtime', result },
     referenceFrame,
-    extra: {
-      ...interactionResultExtra(result),
-      ...extra,
-    },
+    extra,
   });
 }
 
@@ -330,10 +322,8 @@ async function dispatchDirectIosSelectorInteraction(params: {
       })) ?? {};
     const actionFinishedAt = Date.now();
     const point = readPointFromDirectSelectorTapResult(data);
-    const responseData = buildTouchVisualizationResult({
-      data,
-      fallbackX: point.x,
-      fallbackY: point.y,
+    const { result, responseData } = buildInteractionResponseData({
+      source: { kind: 'runner-payload', data, point },
       referenceFrame: readReferenceFrameFromDirectSelectorTapResult(data),
       extra: {
         ...extra,
@@ -347,7 +337,7 @@ async function dispatchDirectIosSelectorInteraction(params: {
       positionals: handlerParams.req.positionals ?? [],
       retryPositionals: pointPositionals(point),
       flags: handlerParams.req.flags,
-      result: responseData,
+      result,
       responseData,
       actionStartedAt,
       actionFinishedAt,
@@ -452,33 +442,15 @@ async function dispatchFillViaRuntime(
         result.kind === 'point'
           ? undefined
           : readSnapshotNodesReferenceFrame(session.snapshot?.nodes ?? []);
-      const recordedResult = buildTouchVisualizationResult({
-        data: result.backendResult,
-        fallbackX: result.point?.x,
-        fallbackY: result.point?.y,
+      return buildInteractionResponseData({
+        // refBackendWireShape keeps the historical fill @ref wire response
+        // (backendResult + identity extras) while the shared builder owns the
+        // extras — the hand-rolled version of this branch dropped evidence
+        // (PR #1064 review).
+        source: { kind: 'runtime', result, refBackendWireShape: true },
         referenceFrame,
-        extra: {
-          ...interactionResultExtra(result),
-          text: parsedTarget.text,
-        },
+        extra: { text: parsedTarget.text },
       });
-      if (result.warning) recordedResult.warning = result.warning;
-
-      const responseData =
-        result.kind === 'ref'
-          ? {
-              ...(result.backendResult ?? {
-                ref: stripAtPrefix(result.target?.kind === 'ref' ? result.target.ref : undefined),
-                ...(result.point ? { x: result.point.x, y: result.point.y } : {}),
-              }),
-              // Same extras press @ref already returns — without this the ref
-              // branch rebuilt the response from backendResult and dropped
-              // evidence, so fill @ref --verify returned none (PR #1064 review).
-              ...interactionResultExtra(result),
-            }
-          : recordedResult;
-      if (result.warning) responseData.warning = result.warning;
-      return { result: recordedResult, responseData };
     },
   });
 }

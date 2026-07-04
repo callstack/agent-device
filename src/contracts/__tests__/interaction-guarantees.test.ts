@@ -180,17 +180,11 @@ test('acknowledged gaps are visible and bounded', () => {
   // (umbrella: https://github.com/callstack/agent-device/issues/1081).
   assert.deepEqual(gaps.sort(), [
     'coordinate/offscreen',
-    'coordinate/responseConstruction',
     'direct-ios-selector/disambiguation',
     'direct-ios-selector/errorTaxonomy',
     'direct-ios-selector/nonHittable',
     'direct-ios-selector/occlusion',
-    'direct-ios-selector/responseConstruction',
     'direct-ios-selector/responseIdentity',
     'maestro-non-hittable-fallback/errorTaxonomy',
-    'maestro-non-hittable-fallback/responseConstruction',
-    'native-ref/responseConstruction',
-    'runtime-ref/responseConstruction',
-    'runtime-selector/responseConstruction',
   ]);
 });

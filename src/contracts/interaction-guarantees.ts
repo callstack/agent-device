@@ -41,7 +41,8 @@ export const INTERACTION_GUARANTEES = [
   'nonHittable',
   // Response payloads are assembled by a single shared construction site,
   // never hand-rolled per branch (the class of bug that dropped fill @ref
-  // evidence). Closure is ADR 0011 Layer 2 (buildInteractionResponseData).
+  // evidence). Closed by ADR 0011 Layer 2: buildInteractionResponseData plus
+  // the hand-rolled-literal guard test.
   'responseConstruction',
   // The identity fields a path can echo back: refLabel, selectorChain, the
   // resolved target. Distinct from construction — a path may build responses
@@ -121,6 +122,14 @@ export type InteractionPathContract = {
 
 const GAPS_UMBRELLA_ISSUE = 'https://github.com/callstack/agent-device/issues/1081';
 
+// Every path shares the SAME cell by construction: response payloads have one
+// construction site (ADR 0011 Layer 2), and the hand-rolled-literal guard test
+// (interaction-response-construction-guard.test.ts) keeps new branches on it.
+const SHARED_RESPONSE_CONSTRUCTION: GuaranteeEnforcement = {
+  kind: 'runtime',
+  via: 'src/daemon/handlers/interaction-touch-response.ts#buildInteractionResponseData',
+};
+
 export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPathContract> = {
   'runtime-selector': {
     description: 'Daemon tree capture, selector chain resolution, guarded coordinate tap.',
@@ -142,12 +151,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/core/interaction-targeting.ts#resolveActionableTouchResolution',
       },
-      responseConstruction: {
-        kind: 'waived',
-        reason:
-          'gap: response payloads are assembled per handler branch; Layer-2 buildInteractionResponseData consolidation pending.',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
-      },
+      responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
       responseIdentity: {
         kind: 'runtime',
         via: 'src/daemon/handlers/interaction-touch-targets.ts#interactionResultExtra',
@@ -183,12 +187,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/core/interaction-targeting.ts#resolveActionableTouchResolution',
       },
-      responseConstruction: {
-        kind: 'waived',
-        reason:
-          'gap: the ref response branch is hand-assembled (this exact shape dropped fill @ref evidence, #1064); Layer-2 consolidation pending.',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
-      },
+      responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
       responseIdentity: {
         kind: 'runtime',
         via: 'src/daemon/handlers/interaction-touch-targets.ts#interactionResultExtra',
@@ -231,12 +230,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
           'gap: non-hittable matches are skipped runner-side (ELEMENT_NOT_FOUND) instead of promoted/annotated; closure strategy is delegation-on-error into the runtime path.',
         trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
-      responseConstruction: {
-        kind: 'waived',
-        reason:
-          'gap: the response is assembled from the raw runner payload; Layer-2 consolidation pending.',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
-      },
+      responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
       responseIdentity: {
         kind: 'waived',
         reason: 'gap: refLabel/selectorChain are absent on the direct path.',
@@ -279,11 +273,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/resolution.ts#preflightNativeRefInteraction',
       },
-      responseConstruction: {
-        kind: 'waived',
-        reason: 'gap: native ref responses are hand-assembled; Layer-2 consolidation pending.',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
-      },
+      responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
       responseIdentity: {
         kind: 'runtime',
         via: 'src/daemon/handlers/interaction-touch-targets.ts#interactionResultExtra',
@@ -321,12 +311,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'inapplicable',
         reason: 'No element to promote or annotate.',
       },
-      responseConstruction: {
-        kind: 'waived',
-        reason:
-          'gap: coordinate responses flow through the same per-branch assembly; Layer-2 consolidation pending.',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
-      },
+      responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
       responseIdentity: {
         kind: 'inapplicable',
         reason: 'No resolved node, so no refLabel/selectorChain.',
@@ -364,12 +349,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'waived',
         reason: 'Intentional: the entire point of this path is tapping non-hittable elements.',
       },
-      responseConstruction: {
-        kind: 'waived',
-        reason:
-          'gap: shares the direct path payload-based assembly; Layer-2 consolidation pending.',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
-      },
+      responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
       responseIdentity: {
         kind: 'waived',
         reason: 'Intentional: replay-only path; Maestro semantics do not consume identity fields.',
