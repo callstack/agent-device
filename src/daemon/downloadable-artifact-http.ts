@@ -113,6 +113,14 @@ async function handleArtifactDownload(
       didCleanupArtifact = true;
       cleanupDownloadableArtifact(artifactId);
     };
+    // Consume before the final chunk is written to the client: fetch treats a
+    // download as complete once content-length bytes arrive, which can happen
+    // before this stream emits 'end' (that needs one more threadpool read).
+    let bytesSent = 0;
+    stream.on('data', (chunk: string | Buffer) => {
+      bytesSent += chunk.length;
+      if (bytesSent >= artifact.sizeBytes) cleanupCompletedDownload();
+    });
     stream.on('end', cleanupCompletedDownload);
     res.on('finish', cleanupCompletedDownload);
     res.on('close', () => {
