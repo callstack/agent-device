@@ -1,5 +1,6 @@
 import type { DeviceInfo } from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
+import { execFailureDetails } from '../../../utils/exec.ts';
 import { IOS_DEVICE_INSTALL_TIMEOUT_MS, IOS_DEVICECTL_TIMEOUT_MS } from './config.ts';
 import { runIosDevicectl } from './devicectl.ts';
 import { prepareIosInstallArtifact } from './install-artifact.ts';
@@ -30,15 +31,18 @@ async function uninstallIosApp(device: DeviceInfo, app: string): Promise<{ bundl
         const stderr = String(result.stderr ?? '');
         const output = `${stdout}\n${stderr}`.toLowerCase();
         if (!isMissingAppErrorOutput(output)) {
-          throw new AppError('COMMAND_FAILED', `Failed to uninstall iOS app ${bundleId}`, {
-            cmd: 'xcrun',
-            args,
-            exitCode: result.exitCode,
-            stdout,
-            stderr,
-            deviceId: device.id,
-            hint: maybeResolveIosDevicectlHint(stdout, stderr),
-          });
+          throw new AppError(
+            'COMMAND_FAILED',
+            `Failed to uninstall iOS app ${bundleId}`,
+            execFailureDetails(result, {
+              cmd: 'xcrun',
+              args,
+              stdout,
+              stderr,
+              deviceId: device.id,
+              hint: maybeResolveIosDevicectlHint(stdout, stderr),
+            }),
+          );
         }
       }
       return { bundleId };
@@ -52,11 +56,11 @@ async function uninstallIosApp(device: DeviceInfo, app: string): Promise<{ bundl
     if (result.exitCode !== 0) {
       const output = `${result.stdout}\n${result.stderr}`.toLowerCase();
       if (!isMissingAppErrorOutput(output)) {
-        throw new AppError('COMMAND_FAILED', `simctl uninstall failed for ${bundleId}`, {
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode,
-        });
+        throw new AppError(
+          'COMMAND_FAILED',
+          `simctl uninstall failed for ${bundleId}`,
+          execFailureDetails(result),
+        );
       }
     }
 

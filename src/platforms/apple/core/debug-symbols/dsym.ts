@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { AppleImage, DsymMatch, DsymSlice } from './types.ts';
 import { normalizeUuid, unique } from './utils.ts';
-import { runCmd } from '../../../../utils/exec.ts';
+import { execFailureDetails, runCmd } from '../../../../utils/exec.ts';
 import { AppError } from '../../../../kernel/errors.ts';
 
 const MAX_SEARCH_ENTRIES = 10_000;
@@ -97,10 +97,11 @@ async function readDsymBundleSlices(dsymPath: string, dwarfdump: string): Promis
     allowFailure: true,
   });
   if (result.exitCode !== 0) {
-    throw new AppError('COMMAND_FAILED', `Failed to inspect dSYM UUIDs: ${dsymPath}`, {
-      stderr: result.stderr,
-      hint: 'Verify the dSYM bundle is valid and readable.',
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Failed to inspect dSYM UUIDs: ${dsymPath}`,
+      execFailureDetails(result, { hint: 'Verify the dSYM bundle is valid and readable.' }),
+    );
   }
   return parseDwarfdumpUuidOutput(dsymPath, result.stdout);
 }

@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { resolveFileOverridePath, runCmd, whichCmd } from '../../utils/exec.ts';
+import { execFailureDetails, resolveFileOverridePath, runCmd, whichCmd } from '../../utils/exec.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import type { AppsFilter } from '../../contracts/app-inventory.ts';
@@ -726,11 +726,11 @@ async function uninstallAndroidApp(device: DeviceInfo, app: string): Promise<{ p
   if (result.exitCode !== 0) {
     const output = `${result.stdout}\n${result.stderr}`.toLowerCase();
     if (!output.includes('unknown package') && !output.includes('not installed')) {
-      throw new AppError('COMMAND_FAILED', `adb uninstall failed for ${resolved.value}`, {
-        stdout: result.stdout,
-        stderr: result.stderr,
-        exitCode: result.exitCode,
-      });
+      throw new AppError(
+        'COMMAND_FAILED',
+        `adb uninstall failed for ${resolved.value}`,
+        execFailureDetails(result),
+      );
     }
   }
   return { package: resolved.value };

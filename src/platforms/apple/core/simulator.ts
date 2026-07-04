@@ -1,5 +1,6 @@
 import type { DeviceInfo } from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
+import { execFailureDetails } from '../../../utils/exec.ts';
 import { Deadline, retryWithPolicy } from '../../../utils/retry.ts';
 import { createTtlMemo } from '../../../utils/ttl-memo.ts';
 import { bootFailureHint, classifyBootFailure } from '../../boot-diagnostics.ts';
@@ -134,11 +135,11 @@ export async function ensureBootedSimulator(
           bootOutput.includes('already booted') || bootOutput.includes('current state: booted');
 
         if (bootResult.exitCode !== 0 && !bootAlreadyDone) {
-          throw new AppError('COMMAND_FAILED', 'simctl boot failed', {
-            stdout: bootResult.stdout,
-            stderr: bootResult.stderr,
-            exitCode: bootResult.exitCode,
-          });
+          throw new AppError(
+            'COMMAND_FAILED',
+            'simctl boot failed',
+            execFailureDetails(bootResult),
+          );
         }
 
         const bootStatus = await runXcrun(
@@ -155,11 +156,11 @@ export async function ensureBootedSimulator(
         };
 
         if (bootStatusResult.exitCode !== 0) {
-          throw new AppError('COMMAND_FAILED', 'simctl bootstatus failed', {
-            stdout: bootStatusResult.stdout,
-            stderr: bootStatusResult.stderr,
-            exitCode: bootStatusResult.exitCode,
-          });
+          throw new AppError(
+            'COMMAND_FAILED',
+            'simctl bootstatus failed',
+            execFailureDetails(bootStatusResult),
+          );
         }
 
         const nextState = await getSimulatorState(device);

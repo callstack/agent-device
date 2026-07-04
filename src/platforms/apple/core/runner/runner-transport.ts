@@ -7,6 +7,7 @@ import {
   isRequestCanceledError,
 } from '../../../../daemon/request-cancel.ts';
 import { AppError } from '../../../../kernel/errors.ts';
+import { execFailureDetails } from '../../../../utils/exec.ts';
 import { Deadline, retryWithPolicy } from '../../../../utils/retry.ts';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import { classifyBootFailure, bootFailureHint } from '../../../boot-diagnostics.ts';
@@ -542,14 +543,15 @@ async function postCommandViaSimulator(
       stderr: result.stderr,
       context: { platform: 'ios', phase: 'connect' },
     });
-    throw new AppError('COMMAND_FAILED', 'Runner did not accept connection (simctl spawn)', {
-      port,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      exitCode: result.exitCode,
-      reason,
-      hint: bootFailureHint(reason),
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Runner did not accept connection (simctl spawn)',
+      execFailureDetails(result, {
+        port,
+        reason,
+        hint: bootFailureHint(reason),
+      }),
+    );
   }
   return { status: 200, body };
 }

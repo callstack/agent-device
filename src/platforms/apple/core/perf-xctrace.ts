@@ -11,6 +11,7 @@ import {
 } from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import {
+  execFailureDetails,
   runCmdBackground,
   type ExecBackgroundResult,
   type ExecResult,
@@ -128,14 +129,15 @@ export async function stopAppleXctracePerfCapture(
   }
   const result = await stopAppleXctraceProcess(capture, { failOnForcedKill: true });
   if (result.exitCode !== 0) {
-    throw new AppError('COMMAND_FAILED', `Failed to stop Apple xctrace ${capture.mode} capture`, {
-      exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      tracePath: capture.outPath,
-      captureCleanedUp: true,
-      hint: resolveIosDevicePerfHint(result.stdout, result.stderr),
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Failed to stop Apple xctrace ${capture.mode} capture`,
+      execFailureDetails(result, {
+        tracePath: capture.outPath,
+        captureCleanedUp: true,
+        hint: resolveIosDevicePerfHint(result.stdout, result.stderr),
+      }),
+    );
   }
   if (outPath !== capture.outPath) {
     await fs.rename(capture.outPath, outPath).catch(async () => {
@@ -195,15 +197,16 @@ export async function writeAppleXctracePerfReport(params: {
       timeoutMs: IOS_DEVICE_PERF_EXPORT_TIMEOUT_MS,
     });
     if (exportResult.exitCode !== 0) {
-      throw new AppError('COMMAND_FAILED', 'Failed to export Apple xctrace report metadata', {
-        cmd: 'xcrun',
-        args: exportArgs,
-        exitCode: exportResult.exitCode,
-        stdout: exportResult.stdout,
-        stderr: exportResult.stderr,
-        tracePath: params.tracePath,
-        hint: resolveIosDevicePerfHint(exportResult.stdout, exportResult.stderr),
-      });
+      throw new AppError(
+        'COMMAND_FAILED',
+        'Failed to export Apple xctrace report metadata',
+        execFailureDetails(exportResult, {
+          cmd: 'xcrun',
+          args: exportArgs,
+          tracePath: params.tracePath,
+          hint: resolveIosDevicePerfHint(exportResult.stdout, exportResult.stderr),
+        }),
+      );
     }
     const report = buildAppleXctracePerfReport({
       ...params,
@@ -292,16 +295,17 @@ async function startAppleXctraceRecordWithRetry(
   }
 
   const failure = lastImmediateFailure ?? { stdout: '', stderr: '', exitCode: 1 };
-  throw new AppError('COMMAND_FAILED', context.failureMessage, {
-    cmd: 'xcrun',
-    args,
-    exitCode: failure.exitCode,
-    stdout: failure.stdout,
-    stderr: failure.stderr,
-    appBundleId: context.appBundleId,
-    deviceId: context.device.id,
-    hint: resolveIosDevicePerfHint(failure.stdout, failure.stderr),
-  });
+  throw new AppError(
+    'COMMAND_FAILED',
+    context.failureMessage,
+    execFailureDetails(failure, {
+      cmd: 'xcrun',
+      args,
+      appBundleId: context.appBundleId,
+      deviceId: context.device.id,
+      hint: resolveIosDevicePerfHint(failure.stdout, failure.stderr),
+    }),
+  );
 }
 
 async function waitForImmediateAppleXctraceExit(

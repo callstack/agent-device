@@ -1,4 +1,4 @@
-import { runCmd, runCmdDetached, whichCmd } from '../../utils/exec.ts';
+import { execFailureDetails, runCmd, runCmdDetached, whichCmd } from '../../utils/exec.ts';
 import type { ExecResult } from '../../utils/exec.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import { AppError, asAppError } from '../../kernel/errors.ts';
@@ -311,12 +311,13 @@ async function listAndroidAvdNames(): Promise<string[]> {
     timeoutMs: ANDROID_BOOT_PROP_TIMEOUT_MS,
   });
   if (result.exitCode !== 0) {
-    throw new AppError('COMMAND_FAILED', 'Failed to list Android emulator AVDs', {
-      stdout: result.stdout,
-      stderr: result.stderr,
-      exitCode: result.exitCode,
-      hint: 'Verify Android emulator tooling is installed and available in PATH.',
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Failed to list Android emulator AVDs',
+      execFailureDetails(result, {
+        hint: 'Verify Android emulator tooling is installed and available in PATH.',
+      }),
+    );
   }
   return parseAndroidAvdList(result.stdout);
 }

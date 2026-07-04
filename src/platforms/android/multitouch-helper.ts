@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
+import { execFailureDetails } from '../../utils/exec.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { findProjectRoot, readVersion } from '../../utils/version.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
@@ -396,12 +397,11 @@ export async function runAndroidMultiTouchHelperGesture(options: {
     );
   }
   if (result.exitCode !== 0) {
-    throw new AppError('COMMAND_FAILED', 'Android multi-touch helper failed', {
-      stdout: result.stdout,
-      stderr: result.stderr,
-      exitCode: result.exitCode,
-      helper: output,
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Android multi-touch helper failed',
+      execFailureDetails(result, { helper: output }),
+    );
   }
   return output;
 }
@@ -528,13 +528,11 @@ export async function ensureAndroidMultiTouchHelper(options: {
     timeoutMs: ANDROID_MULTITOUCH_HELPER_INSTALL_TIMEOUT_MS,
   });
   if (result.exitCode !== 0) {
-    throw new AppError('COMMAND_FAILED', 'Failed to install Android multi-touch helper', {
-      packageName,
-      versionCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      exitCode: result.exitCode,
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Failed to install Android multi-touch helper',
+      execFailureDetails(result, { packageName, versionCode }),
+    );
   }
   installedMultiTouchHelpers.add(cacheKey);
   return {

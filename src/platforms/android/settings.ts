@@ -1,4 +1,5 @@
 import { AppError } from '../../kernel/errors.ts';
+import { execFailureDetails } from '../../utils/exec.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { requireLocationCoordinates } from '../../utils/location-coordinates.ts';
 import {
@@ -252,11 +253,11 @@ async function resolveAndroidAppearanceTarget(
     allowFailure: true,
   });
   if (currentResult.exitCode !== 0) {
-    throw new AppError('COMMAND_FAILED', 'Failed to read current Android appearance', {
-      stdout: currentResult.stdout,
-      stderr: currentResult.stderr,
-      exitCode: currentResult.exitCode,
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Failed to read current Android appearance',
+      execFailureDetails(currentResult),
+    );
   }
   const current = parseAndroidAppearance(currentResult.stdout, currentResult.stderr);
   if (!current) {

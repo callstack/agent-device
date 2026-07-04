@@ -1,7 +1,7 @@
 import type { DeviceInfo } from '../../../kernel/device.ts';
 import { emitDiagnostic } from '../../../utils/diagnostics.ts';
 import { AppError } from '../../../kernel/errors.ts';
-import type { ExecOptions } from '../../../utils/exec.ts';
+import { execFailureDetails, type ExecOptions } from '../../../utils/exec.ts';
 import { runSimctlForDevice } from './simctl.ts';
 import { extractAppleToolErrorMeta } from './tool-diagnostics.ts';
 
@@ -132,11 +132,11 @@ async function readSimulatorStatusBarOverrides(
     allowFailure: true,
   });
   if (result.exitCode !== 0) {
-    throw new AppError('COMMAND_FAILED', 'Failed to read simulator status bar overrides', {
-      exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Failed to read simulator status bar overrides',
+      execFailureDetails(result),
+    );
   }
   return parseSimulatorStatusBarOverrides(result.stdout);
 }

@@ -10,7 +10,7 @@ import {
   type PublicPlatform,
 } from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
-import type { ExecResult } from '../../../utils/exec.ts';
+import { execFailureDetails, type ExecResult } from '../../../utils/exec.ts';
 import { splitNonEmptyTrimmedLines } from '../../../utils/parsing.ts';
 import { roundPercent } from '../../perf-utils.ts';
 import { uniqueStrings } from '../../../daemon/action-utils.ts';
@@ -188,17 +188,18 @@ export async function captureAppleMemorySnapshot(
   if (result.exitCode !== 0) {
     await cleanupLocalArtifact(outPath, hadLocalArtifact);
     // fallow-ignore-next-line code-duplication
-    throw new AppError('COMMAND_FAILED', `Failed to capture Apple memgraph for ${appBundleId}`, {
-      kind: 'memgraph',
-      appBundleId,
-      pid: process.pid,
-      processName: path.basename(readProcessCommandToken(process.command)),
-      path: outPath,
-      exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      hint: resolveAppleMemorySnapshotHint(device, result.stdout, result.stderr),
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Failed to capture Apple memgraph for ${appBundleId}`,
+      execFailureDetails(result, {
+        kind: 'memgraph',
+        appBundleId,
+        pid: process.pid,
+        processName: path.basename(readProcessCommandToken(process.command)),
+        path: outPath,
+        hint: resolveAppleMemorySnapshotHint(device, result.stdout, result.stderr),
+      }),
+    );
   }
 
   const stat = await fs.stat(outPath).catch(() => null);
@@ -536,16 +537,17 @@ async function recordIosDeviceTrace(params: {
       capturedAtMs: record.capturedAtMs,
     };
   }
-  throw new AppError('COMMAND_FAILED', params.failureMessage, {
-    cmd: 'xcrun',
-    args: recordArgs,
-    exitCode: record.result.exitCode,
-    stdout: record.result.stdout,
-    stderr: record.result.stderr,
-    appBundleId,
-    deviceId: device.id,
-    hint: resolveIosDevicePerfHint(record.result.stdout, record.result.stderr),
-  });
+  throw new AppError(
+    'COMMAND_FAILED',
+    params.failureMessage,
+    execFailureDetails(record.result, {
+      cmd: 'xcrun',
+      args: recordArgs,
+      appBundleId,
+      deviceId: device.id,
+      hint: resolveIosDevicePerfHint(record.result.stdout, record.result.stderr),
+    }),
+  );
 }
 
 async function runIosDeviceTraceRecord(
@@ -643,16 +645,17 @@ async function exportIosDevicePerfTable(
     timeoutMs: IOS_DEVICE_PERF_EXPORT_TIMEOUT_MS,
   });
   if (exportResult.exitCode === 0) return;
-  throw new AppError('COMMAND_FAILED', `Failed to export iOS device ${schema} data`, {
-    cmd: 'xcrun',
-    args: exportArgs,
-    exitCode: exportResult.exitCode,
-    stdout: exportResult.stdout,
-    stderr: exportResult.stderr,
-    appBundleId,
-    deviceId: device.id,
-    hint: resolveIosDevicePerfHint(exportResult.stdout, exportResult.stderr),
-  });
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Failed to export iOS device ${schema} data`,
+    execFailureDetails(exportResult, {
+      cmd: 'xcrun',
+      args: exportArgs,
+      appBundleId,
+      deviceId: device.id,
+      hint: resolveIosDevicePerfHint(exportResult.stdout, exportResult.stderr),
+    }),
+  );
 }
 
 async function exportOptionalIosDevicePerfTable(
@@ -978,12 +981,11 @@ async function resolveMacOsBundlePath(appBundleId: string): Promise<string> {
     timeoutMs: APPLE_PERF_TIMEOUT_MS,
   });
   if (result.exitCode !== 0) {
-    throw new AppError('COMMAND_FAILED', `Failed to resolve macOS app bundle for ${appBundleId}`, {
-      appBundleId,
-      stdout: result.stdout,
-      stderr: result.stderr,
-      exitCode: result.exitCode,
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Failed to resolve macOS app bundle for ${appBundleId}`,
+      execFailureDetails(result, { appBundleId }),
+    );
   }
 
   const bundlePath = result.stdout
@@ -1016,13 +1018,10 @@ async function resolveIosSimulatorAppContainer(
     throw new AppError(
       'COMMAND_FAILED',
       `Failed to resolve iOS simulator app container for ${appBundleId}`,
-      {
+      execFailureDetails(result, {
         appBundleId,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        exitCode: result.exitCode,
         hint: 'Ensure the iOS simulator app is installed and booted, then retry perf.',
-      },
+      }),
     );
   }
   const appPath = result.stdout.trim();

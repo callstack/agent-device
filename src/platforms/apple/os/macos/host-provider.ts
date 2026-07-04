@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import type { AppsFilter } from '../../../../contracts/app-inventory.ts';
 import { AppError } from '../../../../kernel/errors.ts';
+import { execFailureDetails } from '../../../../utils/exec.ts';
 import { filterAppleAppsByBundlePrefix } from '../../core/app-filter.ts';
 import type { IosAppInfo } from '../../core/app-info.ts';
 import type {
@@ -26,11 +27,11 @@ export function createLocalAppleMacOsHostProvider(
     readClipboard: async () => {
       const result = await runCommand('pbpaste', [], { allowFailure: true });
       if (result.exitCode !== 0) {
-        throw new AppError('COMMAND_FAILED', 'Failed to read macOS clipboard', {
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode,
-        });
+        throw new AppError(
+          'COMMAND_FAILED',
+          'Failed to read macOS clipboard',
+          execFailureDetails(result),
+        );
       }
       return result.stdout.replace(/\r\n/g, '\n').replace(/\n$/, '');
     },
@@ -40,11 +41,11 @@ export function createLocalAppleMacOsHostProvider(
         stdin: text,
       });
       if (result.exitCode !== 0) {
-        throw new AppError('COMMAND_FAILED', 'Failed to write macOS clipboard', {
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode,
-        });
+        throw new AppError(
+          'COMMAND_FAILED',
+          'Failed to write macOS clipboard',
+          execFailureDetails(result),
+        );
       }
     },
     readDarkMode: async () => {
@@ -52,11 +53,11 @@ export function createLocalAppleMacOsHostProvider(
         'tell application "System Events" to tell appearance preferences to get dark mode';
       const result = await runCommand('osascript', ['-e', script], { allowFailure: true });
       if (result.exitCode !== 0) {
-        throw new AppError('COMMAND_FAILED', 'Failed to read macOS appearance', {
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode,
-        });
+        throw new AppError(
+          'COMMAND_FAILED',
+          'Failed to read macOS appearance',
+          execFailureDetails(result),
+        );
       }
       const normalized = result.stdout.trim().toLowerCase();
       if (normalized === 'true') return true;
@@ -70,11 +71,11 @@ export function createLocalAppleMacOsHostProvider(
       const script = `tell application "System Events" to tell appearance preferences to set dark mode to ${enabled ? 'true' : 'false'}`;
       const result = await runCommand('osascript', ['-e', script], { allowFailure: true });
       if (result.exitCode !== 0) {
-        throw new AppError('COMMAND_FAILED', 'Failed to set macOS appearance', {
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode,
-        });
+        throw new AppError(
+          'COMMAND_FAILED',
+          'Failed to set macOS appearance',
+          execFailureDetails(result),
+        );
       }
     },
     listApps: async (filter) => await listLocalMacApps(runCommand, readPlistJson, filter),

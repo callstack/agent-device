@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
+import { execFailureDetails } from '../../utils/exec.ts';
 import { splitNonEmptyTrimmedLines } from '../../utils/parsing.ts';
 import { resolveAndroidAdbExecutor, type AndroidAdbExecutor } from './adb-executor.ts';
 import { parseNumericToken } from './perf-parsing.ts';
@@ -133,16 +134,13 @@ export async function captureAndroidHeapSnapshot(
       throw new AppError(
         'COMMAND_FAILED',
         `Failed to capture Android heap dump for ${packageName}`,
-        {
+        execFailureDetails(dumpResult, {
           kind: 'android-hprof',
           package: packageName,
           pid,
           remotePath,
-          exitCode: dumpResult.exitCode,
-          stdout: dumpResult.stdout,
-          stderr: dumpResult.stderr,
           hint: resolveAndroidHeapDumpHint(dumpResult.stdout, dumpResult.stderr),
-        },
+        }),
       );
     }
 
@@ -152,17 +150,18 @@ export async function captureAndroidHeapSnapshot(
     });
     if (pullResult.exitCode !== 0) {
       await cleanupLocalArtifact(outPath, hadLocalArtifact);
-      throw new AppError('COMMAND_FAILED', `Failed to pull Android heap dump for ${packageName}`, {
-        kind: 'android-hprof',
-        package: packageName,
-        pid,
-        remotePath,
-        path: outPath,
-        exitCode: pullResult.exitCode,
-        stdout: pullResult.stdout,
-        stderr: pullResult.stderr,
-        hint: 'Verify the daemon can write the requested --out path and retry. The heap dump stays on-device only until cleanup runs.',
-      });
+      throw new AppError(
+        'COMMAND_FAILED',
+        `Failed to pull Android heap dump for ${packageName}`,
+        execFailureDetails(pullResult, {
+          kind: 'android-hprof',
+          package: packageName,
+          pid,
+          remotePath,
+          path: outPath,
+          hint: 'Verify the daemon can write the requested --out path and retry. The heap dump stays on-device only until cleanup runs.',
+        }),
+      );
     }
 
     const stat = await fs.stat(outPath).catch(() => null);

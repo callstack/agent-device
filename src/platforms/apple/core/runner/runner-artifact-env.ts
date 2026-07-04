@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '../../../../kernel/errors.ts';
 import type { DefinedEnvMap as EnvMap } from '../../../../utils/env-map.ts';
+import { execFailureDetails } from '../../../../utils/exec.ts';
 import { runAppleToolCommand } from '../tool-provider.ts';
 
 const RUNNER_XCTESTRUN_CAPTURE_OPTIONS = {
@@ -99,10 +100,11 @@ async function writeXctestrunPlist(
     },
   );
   if (plistResult.exitCode !== 0) {
-    throw new AppError('COMMAND_FAILED', 'Failed to write xctestrun plist', {
-      tmpXctestrunPath,
-      stderr: plistResult.stderr,
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Failed to write xctestrun plist',
+      execFailureDetails(plistResult, { tmpXctestrunPath }),
+    );
   }
 }
 

@@ -1,4 +1,4 @@
-import { runCmd } from '../../utils/exec.ts';
+import { execFailureDetails, runCmd } from '../../utils/exec.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import type { Rect } from '../../kernel/snapshot.ts';
@@ -253,14 +253,17 @@ function unwrapAgentBrowserJson(
     });
   }
   if (result.exitCode !== 0) {
-    throw new AppError('COMMAND_FAILED', 'agent-browser command failed', {
-      cmd: AGENT_BROWSER,
-      args: cliArgs,
-      exitCode: result.exitCode,
-      stdout: result.stdout.slice(0, 500),
-      stderr: result.stderr.slice(0, 500),
-      hint: readStringProperty(parsed, 'hint') ?? AGENT_BROWSER_DOCTOR_HINT,
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      'agent-browser command failed',
+      execFailureDetails(result, {
+        cmd: AGENT_BROWSER,
+        args: cliArgs,
+        stdout: result.stdout.slice(0, 500),
+        stderr: result.stderr.slice(0, 500),
+        hint: readStringProperty(parsed, 'hint') ?? AGENT_BROWSER_DOCTOR_HINT,
+      }),
+    );
   }
 
   return Object.hasOwn(parsed, 'data') ? parsed.data : parsed;

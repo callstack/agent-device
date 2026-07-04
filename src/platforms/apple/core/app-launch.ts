@@ -3,6 +3,7 @@ import path from 'node:path';
 import { isIosFamily, isMacOs, type DeviceInfo } from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { emitDiagnostic } from '../../../utils/diagnostics.ts';
+import { execFailureDetails } from '../../../utils/exec.ts';
 import {
   LAUNCH_CONSOLE_DIRECT_APP_ONLY_MESSAGE,
   LAUNCH_CONSOLE_IOS_SIMULATOR_ONLY_MESSAGE,
@@ -160,13 +161,11 @@ export async function closeIosApp(device: DeviceInfo, app: string): Promise<void
     if (result.exitCode !== 0) {
       const stderr = result.stderr.toLowerCase();
       if (stderr.includes('found nothing to terminate')) return;
-      throw new AppError('COMMAND_FAILED', `xcrun exited with code ${result.exitCode}`, {
-        cmd: 'xcrun',
-        args: terminateArgs,
-        stdout: result.stdout,
-        stderr: result.stderr,
-        exitCode: result.exitCode,
-      });
+      throw new AppError(
+        'COMMAND_FAILED',
+        `xcrun exited with code ${result.exitCode}`,
+        execFailureDetails(result, { cmd: 'xcrun', args: terminateArgs }),
+      );
     }
     return;
   }
@@ -208,13 +207,11 @@ async function launchIosSimulatorApp(
             });
         if (result.exitCode === 0) return;
 
-        throw new AppError('COMMAND_FAILED', `xcrun exited with code ${result.exitCode}`, {
-          cmd: 'xcrun',
-          args: launchArgs,
-          stdout: result.stdout,
-          stderr: result.stderr,
-          exitCode: result.exitCode,
-        });
+        throw new AppError(
+          'COMMAND_FAILED',
+          `xcrun exited with code ${result.exitCode}`,
+          execFailureDetails(result, { cmd: 'xcrun', args: launchArgs }),
+        );
       },
       {
         maxAttempts: 10,

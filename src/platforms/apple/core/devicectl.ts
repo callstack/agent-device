@@ -4,6 +4,7 @@ import path from 'node:path';
 
 import type { DeviceInfo } from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
+import { execFailureDetails } from '../../../utils/exec.ts';
 
 import { IOS_DEVICECTL_TIMEOUT_MS } from './config.ts';
 import { runXcrun } from './tool-provider.ts';
@@ -47,15 +48,18 @@ export async function runIosDevicectl(
   if (result.exitCode === 0) return;
   const stdout = String(result.stdout ?? '');
   const stderr = String(result.stderr ?? '');
-  throw new AppError('COMMAND_FAILED', `Failed to ${context.action}`, {
-    cmd: 'xcrun',
-    args: fullArgs,
-    exitCode: result.exitCode,
-    stdout,
-    stderr,
-    deviceId: context.deviceId,
-    hint: resolveIosDevicectlHint(stdout, stderr) ?? IOS_DEVICECTL_DEFAULT_HINT,
-  });
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Failed to ${context.action}`,
+    execFailureDetails(result, {
+      cmd: 'xcrun',
+      args: fullArgs,
+      stdout,
+      stderr,
+      deviceId: context.deviceId,
+      hint: resolveIosDevicectlHint(stdout, stderr) ?? IOS_DEVICECTL_DEFAULT_HINT,
+    }),
+  );
 }
 
 export async function listIosDeviceApps(
@@ -105,15 +109,18 @@ async function runIosDevicectlJsonCommand(
     if (result.exitCode !== 0) {
       const stdout = String(result.stdout ?? '');
       const stderr = String(result.stderr ?? '');
-      throw new AppError('COMMAND_FAILED', options.failureMessage, {
-        cmd: 'xcrun',
-        args,
-        exitCode: result.exitCode,
-        stdout,
-        stderr,
-        deviceId: device.id,
-        hint: resolveIosDevicectlHint(stdout, stderr) ?? IOS_DEVICECTL_DEFAULT_HINT,
-      });
+      throw new AppError(
+        'COMMAND_FAILED',
+        options.failureMessage,
+        execFailureDetails(result, {
+          cmd: 'xcrun',
+          args,
+          stdout,
+          stderr,
+          deviceId: device.id,
+          hint: resolveIosDevicectlHint(stdout, stderr) ?? IOS_DEVICECTL_DEFAULT_HINT,
+        }),
+      );
     }
     return JSON.parse(await fs.readFile(jsonPath, 'utf8'));
   } catch (error) {

@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { withRetry } from '../../utils/retry.ts';
+import { execFailureDetails } from '../../utils/exec.ts';
 import { AppError, normalizeError, toAppErrorCode } from '../../kernel/errors.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
@@ -682,12 +683,11 @@ async function dumpUiHierarchyOnce(adb: AndroidAdbExecutor): Promise<string> {
   });
   const reportedPath = readDumpPath(dumpResult.stdout, dumpResult.stderr);
   if (dumpResult.exitCode !== 0 && !reportedPath) {
-    throw new AppError('COMMAND_FAILED', 'uiautomator dump did not return XML', {
-      stdout: dumpResult.stdout,
-      stderr: dumpResult.stderr,
-      exitCode: dumpResult.exitCode,
-      reason: 'missing_fresh_dump',
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      'uiautomator dump did not return XML',
+      execFailureDetails(dumpResult, { reason: 'missing_fresh_dump' }),
+    );
   }
   const actualPath = reportedPath ?? dumpPath;
 

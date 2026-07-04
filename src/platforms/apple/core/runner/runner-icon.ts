@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '../../../../kernel/errors.ts';
+import { execFailureDetails } from '../../../../utils/exec.ts';
 import { readApplePlistJson, runAppleToolCommand } from '../tool-provider.ts';
 
 const ICON_PLIST_KEYS = ['CFBundleIcons', 'CFBundleIcons~ipad'] as const;
@@ -106,11 +107,11 @@ async function writeIconPlistValue(
     { allowFailure: true },
   );
   if (result.exitCode !== 0) {
-    throw new AppError('COMMAND_FAILED', 'Failed to update XCTest runner icon plist', {
-      key,
-      plistPath,
-      stderr: result.stderr,
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Failed to update XCTest runner icon plist',
+      execFailureDetails(result, { key, plistPath }),
+    );
   }
 }
 
@@ -121,10 +122,11 @@ async function codesignRunnerApp(runnerAppPath: string): Promise<void> {
     { allowFailure: true },
   );
   if (result.exitCode !== 0) {
-    throw new AppError('COMMAND_FAILED', 'Failed to sign XCTest runner app after icon update', {
-      runnerAppPath,
-      stderr: result.stderr,
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Failed to sign XCTest runner app after icon update',
+      execFailureDetails(result, { runnerAppPath }),
+    );
   }
 }
 

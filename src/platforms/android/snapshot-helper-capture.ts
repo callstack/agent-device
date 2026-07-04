@@ -1,4 +1,5 @@
 import { AppError } from '../../kernel/errors.ts';
+import { execFailureDetails } from '../../utils/exec.ts';
 import type { SnapshotOptions } from '../../kernel/snapshot.ts';
 import {
   parseInstrumentationRecords,
@@ -58,12 +59,11 @@ export async function captureAndroidSnapshotWithHelper(
     await removeHelperOutputFile(options.adb, resolved.outputPath);
   }
   if (result.exitCode !== 0) {
-    throw new AppError('COMMAND_FAILED', 'Android snapshot helper failed', {
-      stdout: result.stdout,
-      stderr: result.stderr,
-      exitCode: result.exitCode,
-      helper: output.metadata,
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Android snapshot helper failed',
+      execFailureDetails(result, { helper: output.metadata }),
+    );
   }
   return output;
 }

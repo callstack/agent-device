@@ -582,14 +582,29 @@ function createExitError(
   stdout: string,
   stderr: string,
 ): AppError {
-  return new AppError('COMMAND_FAILED', `${executable} exited with code ${exitCode}`, {
-    cmd,
-    args,
-    stdout,
-    stderr,
-    exitCode,
+  return new AppError(
+    'COMMAND_FAILED',
+    `${executable} exited with code ${exitCode}`,
+    execFailureDetails({ stdout, stderr, exitCode }, { cmd, args }),
+  );
+}
+
+/**
+ * COMMAND_FAILED details for a non-zero exec result. `processExitError: true`
+ * lets normalizeError surface the first meaningful stderr line as the user-facing
+ * message instead of the generic wrap message.
+ */
+export function execFailureDetails(
+  result: Pick<ExecResult, 'stdout' | 'stderr' | 'exitCode'>,
+  extra?: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    exitCode: result.exitCode,
     processExitError: true,
-  });
+    ...extra,
+  };
 }
 
 type CommandAbort = { readonly didAbort: boolean };

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { isIosFamily, isMacOs, type DeviceInfo } from '../../../kernel/device.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { requireLocationCoordinates } from '../../../utils/location-coordinates.ts';
+import { execFailureDetails } from '../../../utils/exec.ts';
 import { resolveIosSimulatorDeviceSetPath } from '../../../utils/device-isolation.ts';
 import { getUnsupportedMacOsSettingMessage } from '../../../core/settings-contract.ts';
 import {
@@ -171,11 +172,11 @@ async function clearIosSimulatorAppState(
     allowFailure: true,
   });
   if (result.exitCode !== 0) {
-    throw new AppError('COMMAND_FAILED', `simctl get_app_container failed for ${bundleId}`, {
-      stdout: result.stdout,
-      stderr: result.stderr,
-      exitCode: result.exitCode,
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      `simctl get_app_container failed for ${bundleId}`,
+      execFailureDetails(result),
+    );
   }
 
   const containerPath = result.stdout.trim();
@@ -225,11 +226,11 @@ async function resolveIosAppearanceTarget(
     allowFailure: true,
   });
   if (currentResult.exitCode !== 0) {
-    throw new AppError('COMMAND_FAILED', 'Failed to read current iOS appearance', {
-      stdout: currentResult.stdout,
-      stderr: currentResult.stderr,
-      exitCode: currentResult.exitCode,
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Failed to read current iOS appearance',
+      execFailureDetails(currentResult),
+    );
   }
   const current = parseIosAppearance(currentResult.stdout, currentResult.stderr);
   if (!current) {
