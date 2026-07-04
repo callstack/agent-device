@@ -23,6 +23,7 @@ import { errorResponse, noActiveSessionError } from './response.ts';
 import { recordSessionAction } from './handler-utils.ts';
 import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts';
 import { dispatchFindReadOnlyViaRuntime } from '../selector-runtime.ts';
+import { markSessionSnapshotRefsIssued } from '../session-snapshot.ts';
 import { createSelectorCaptureRuntime } from '../selector-capture-runtime.ts';
 import {
   isSparseSnapshotQualityVerdict,
@@ -156,6 +157,15 @@ export async function handleFindCommands(params: {
   const ref = `@${resolvedNode.ref}`;
   const actionFlags = { ...(req.flags ?? {}), noRecord: true };
   const match: ResolvedMatch = { node, resolvedNode, ref, nodes, actionFlags };
+  if (session) {
+    // #1076 clear choke point: every action below returns `match.ref`, minted
+    // from the snapshot the capture runtime just stored, so the client leaves
+    // with a ref that matches the stored tree. Clearing here also keeps the
+    // internal `click/fill @ref` sub-invocations from attaching a spurious
+    // stale-refs warning to the find response.
+    markSessionSnapshotRefsIssued(session);
+    sessionStore.set(sessionName, session);
+  }
 
   const actionHandlers: Record<string, () => Promise<DaemonResponse | null>> = {
     exists: () => handleFindExists(ctx),

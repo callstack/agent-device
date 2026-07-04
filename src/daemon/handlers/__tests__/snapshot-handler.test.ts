@@ -402,6 +402,54 @@ test('snapshot on iOS runs when the session tracks an app', async () => {
   );
 });
 
+test('snapshot clears the stale-refs marker; diff leaves client refs stale (#1076)', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-stale-refs-marker';
+  const session = makeSession(sessionName, androidDevice);
+  session.snapshot = {
+    nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'android.widget.Button', label: 'Old' }],
+    createdAt: Date.now(),
+    backend: 'android',
+  };
+  // As set by a selector-resolution capture that replaced the stored tree.
+  session.snapshotRefsStale = true;
+  sessionStore.set(sessionName, session);
+  mockDispatch.mockResolvedValue({
+    nodes: [{ index: 0, depth: 0, type: 'android.widget.Button', label: 'Fresh' }],
+    truncated: false,
+    backend: 'android',
+  });
+
+  const snapshotResponse = await handleSnapshotCommands({
+    req: { token: 't', session: sessionName, command: 'snapshot', positionals: [], flags: {} },
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  // The snapshot response hands every stored node's ref to the client.
+  expect(snapshotResponse?.ok).toBe(true);
+  expect(sessionStore.get(sessionName)?.snapshotRefsStale).toBe(false);
+
+  const diffResponse = await handleSnapshotCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'diff',
+      positionals: ['snapshot'],
+      flags: {},
+    },
+    sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore,
+  });
+
+  // diff replaces the stored tree but only returns a summary, so the refs the
+  // client holds go stale again.
+  expect(diffResponse?.ok).toBe(true);
+  expect(sessionStore.get(sessionName)?.snapshotRefsStale).toBe(true);
+});
+
 test('snapshot surfaces filtered-to-zero Android guidance for interactive snapshots', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-empty-interactive';

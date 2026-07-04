@@ -248,6 +248,18 @@ export type SessionState = {
   appBundleId?: string;
   appName?: string;
   snapshot?: SnapshotState;
+  /**
+   * Honest-marker for stale client refs (#1076): true when the stored session
+   * snapshot was replaced by a capture whose response did NOT hand the new refs
+   * to the client (selector-resolution captures, wait/find polling captures,
+   * verify-evidence captures, ...). Commands that consume `@ref` arguments while
+   * this is true attach a warning — refs are positional indexes into the latest
+   * tree, so they may silently resolve to different elements. Cleared only where
+   * the client demonstrably receives the new refs (snapshot responses, find
+   * responses that return a ref). Set/cleared at the choke points documented in
+   * `setSessionSnapshot` (src/daemon/session-snapshot.ts).
+   */
+  snapshotRefsStale?: boolean;
   /** Source snapshot used to resolve repeated `snapshot -s @ref` after scoped output replaces refs. */
   snapshotScopeSource?: SnapshotState;
   /** Last broad snapshot safe for Android route-freshness comparisons after interactive snapshots. */

@@ -6,6 +6,7 @@ import type { CommandFlags } from '../../../core/dispatch.ts';
 import { attachRefs, type SnapshotBackend } from '../../../kernel/snapshot.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { buildSnapshotState } from '../snapshot-capture.ts';
+import { setSessionSnapshot, STALE_SNAPSHOT_REFS_WARNING } from '../../session-snapshot.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import {
   makeIosSession,
@@ -106,7 +107,9 @@ async function emulateCaptureSnapshotForSession(
     contextFromFlags(effectiveFlags, session.appBundleId, session.trace?.outPath),
   )) as { nodes?: never[]; truncated?: boolean; backend?: SnapshotBackend };
   const snapshot = buildSnapshotState(snapshotData ?? {}, effectiveFlags);
-  session.snapshot = snapshot;
+  // Mirror the real captureSnapshotForSession: session snapshot writes go
+  // through setSessionSnapshot so snapshotRefsStale tracking (#1076) applies.
+  setSessionSnapshot(session, snapshot);
   sessionStore.set(session.name, session);
   return snapshot;
 }
@@ -3099,5 +3102,212 @@ test('is reports Android permission dialog blocker when app content assertion fa
       expectedPackage: 'com.example.demo',
       foregroundPackage: 'com.google.android.permissioncontroller',
     });
+  }
+});
+
+// --- Stale @ref warnings (#1076) ---
+
+function makeTwoButtonNodes() {
+  return [
+    {
+      index: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 390, height: 844 },
+    },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'XCUIElementTypeButton',
+      label: 'Continue',
+      rect: { x: 10, y: 20, width: 100, height: 40 },
+      enabled: true,
+      hittable: true,
+    },
+    {
+      index: 2,
+      parentIndex: 0,
+      type: 'XCUIElementTypeButton',
+      label: 'Cancel',
+      rect: { x: 10, y: 80, width: 100, height: 40 },
+      enabled: true,
+      hittable: true,
+    },
+  ];
+}
+
+function makeStaleRefSession(sessionName: string): SessionState {
+  const session = makeSession(sessionName);
+  session.snapshot = {
+    nodes: attachRefs(makeTwoButtonNodes() as never),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+  // As if the snapshot command just returned these refs to the client.
+  session.snapshotRefsStale = false;
+  return session;
+}
+
+async function runInteraction(
+  sessionStore: SessionStore,
+  sessionName: string,
+  command: string,
+  positionals: string[],
+  flags: Record<string, unknown> = {},
+) {
+  return await handleInteractionCommands({
+    req: { token: 't', session: sessionName, command, positionals, flags },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+}
+
+test('press selector then press @ref warns that refs outlived the stored snapshot', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'stale-ref-warns';
+  const session = makeStaleRefSession(sessionName);
+  sessionStore.set(sessionName, session);
+  mockDispatch.mockImplementation(async (_device, command) =>
+    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
+  );
+
+  // Selector press: its resolution capture replaces the stored snapshot
+  // without handing the new refs back to the client.
+  const selectorPress = await runInteraction(sessionStore, sessionName, 'press', [
+    'label=Continue',
+  ]);
+  if (!selectorPress?.ok) {
+    throw new Error(`selector press failed: ${JSON.stringify(selectorPress)}`);
+  }
+  expect(selectorPress.data?.warning).toBeUndefined();
+  expect(sessionStore.get(sessionName)?.snapshotRefsStale).toBe(true);
+
+  const refPress = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
+  expect(refPress?.ok).toBe(true);
+  if (refPress?.ok) {
+    expect(refPress.data?.warning).toBe(STALE_SNAPSHOT_REFS_WARNING);
+  }
+});
+
+test('press @ref directly after refs were issued does not warn', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'fresh-ref-no-warning';
+  const session = makeStaleRefSession(sessionName);
+  sessionStore.set(sessionName, session);
+
+  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    expect(response.data?.warning).toBeUndefined();
+  }
+});
+
+test('re-issuing refs clears the stale marker so press @ref does not warn', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'reissued-refs-no-warning';
+  const session = makeStaleRefSession(sessionName);
+  sessionStore.set(sessionName, session);
+  mockDispatch.mockImplementation(async (_device, command) =>
+    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
+  );
+
+  const selectorPress = await runInteraction(sessionStore, sessionName, 'press', [
+    'label=Continue',
+  ]);
+  expect(selectorPress?.ok).toBe(true);
+  expect(sessionStore.get(sessionName)?.snapshotRefsStale).toBe(true);
+
+  // Simulate the snapshot command re-issuing refs (its handler clears the
+  // marker through buildNextSnapshotSession; covered in snapshot-handler tests).
+  const stored = sessionStore.get(sessionName)!;
+  stored.snapshotRefsStale = false;
+  sessionStore.set(sessionName, stored);
+
+  const refPress = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
+  expect(refPress?.ok).toBe(true);
+  if (refPress?.ok) {
+    expect(refPress.data?.warning).toBeUndefined();
+  }
+});
+
+test('fill @ref warns while refs are stale', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'stale-ref-fill';
+  const session = makeStaleRefSession(sessionName);
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'XCUIElementTypeTextField',
+        label: 'Email',
+        rect: { x: 10, y: 20, width: 200, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+  session.snapshotRefsStale = true;
+  sessionStore.set(sessionName, session);
+
+  const response = await runInteraction(sessionStore, sessionName, 'fill', [
+    '@e1',
+    'hello@example.com',
+  ]);
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    expect(response.data?.warning).toBe(STALE_SNAPSHOT_REFS_WARNING);
+  }
+});
+
+test('get text @ref warns while refs are stale', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'stale-ref-get-text';
+  const session = makeStaleRefSession(sessionName);
+  session.snapshotRefsStale = true;
+  sessionStore.set(sessionName, session);
+  mockDispatch.mockRejectedValue(
+    new Error('dispatch should not be called for snapshot-derived get text'),
+  );
+
+  const response = await runInteraction(sessionStore, sessionName, 'get', ['text', '@e1']);
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    expect(response.data?.warning).toBe(STALE_SNAPSHOT_REFS_WARNING);
+    expect(response.data?.ref).toBe('e1');
+  }
+});
+
+test('stale-ref warning appends to an existing interaction warning', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'stale-ref-appends';
+  const session = makeStaleRefSession(sessionName);
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        // Non-fillable type produces the runtime fill warning the stale-ref
+        // warning must append to, not replace.
+        type: 'XCUIElementTypeStaticText',
+        label: 'Read-only',
+        rect: { x: 10, y: 20, width: 200, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+  session.snapshotRefsStale = true;
+  sessionStore.set(sessionName, session);
+
+  const response = await runInteraction(sessionStore, sessionName, 'fill', ['@e1', 'nope']);
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    const warning = String(response.data?.warning ?? '');
+    expect(warning).toContain('attempting fill anyway');
+    expect(warning).toContain(STALE_SNAPSHOT_REFS_WARNING);
+    expect(warning.endsWith(STALE_SNAPSHOT_REFS_WARNING)).toBe(true);
   }
 });

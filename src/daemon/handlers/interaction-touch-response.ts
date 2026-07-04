@@ -5,6 +5,7 @@ import type {
   PressCommandResult,
 } from '../../contracts/interaction.ts';
 import { successText } from '../../utils/success-text.ts';
+import { STALE_SNAPSHOT_REFS_WARNING } from '../session-snapshot.ts';
 import { interactionResultExtra, stripAtPrefix } from './interaction-touch-targets.ts';
 
 /**
@@ -55,6 +56,13 @@ export function buildInteractionResponseData(params: {
    * button tags for click, selector/maestro details for the direct path.
    */
   extra?: Record<string, unknown>;
+  /**
+   * The command consumed an `@ref` argument while the session's stored
+   * snapshot had been replaced without re-issuing refs to the client
+   * (`session.snapshotRefsStale`, #1076). Appends
+   * STALE_SNAPSHOT_REFS_WARNING to the response warning.
+   */
+  staleRefs?: boolean;
 }): InteractionResponsePayloads {
   const { source, referenceFrame, extra } = params;
   if (source.kind === 'runner-payload') {
@@ -89,11 +97,25 @@ export function buildInteractionResponseData(params: {
           ...interactionResultExtra(result),
         }
       : visualization;
-  if ('warning' in result && result.warning) {
-    visualization.warning = result.warning;
-    responseData.warning = result.warning;
+  const warning = composeResponseWarning(
+    'warning' in result ? result.warning : undefined,
+    params.staleRefs,
+  );
+  if (warning) {
+    visualization.warning = warning;
+    responseData.warning = warning;
   }
   return { result: visualization, responseData };
+}
+
+function composeResponseWarning(
+  resultWarning: string | undefined,
+  staleRefs: boolean | undefined,
+): string | undefined {
+  if (staleRefs !== true) return resultWarning;
+  return resultWarning
+    ? `${resultWarning} ${STALE_SNAPSHOT_REFS_WARNING}`
+    : STALE_SNAPSHOT_REFS_WARNING;
 }
 
 function buildTouchVisualizationResult(params: {

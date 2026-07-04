@@ -6,6 +6,7 @@ import { runAppleRunnerCommand } from '../platforms/apple/core/runner/runner-cli
 import { buildAppleRunnerRequestOptions } from './apple-runner-options.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { errorResponse, requireCommandSupported } from './handlers/response.ts';
+import { markSessionSnapshotRefsIssued, STALE_SNAPSHOT_REFS_WARNING } from './session-snapshot.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from './handlers/snapshot-session.ts';
 import { parseFindArgs, type FindAction } from '../utils/finders.ts';
 import { splitIsSelectorArgs } from './selectors.ts';
@@ -100,7 +101,18 @@ export async function dispatchFindReadOnlyViaRuntime(
       req,
       buildFindRecordResult(result, action),
     );
-    return toDaemonFindData(result);
+    const data = toDaemonFindData(result);
+    // #1076 clear choke point: this response returns a ref minted from the
+    // freshly captured (and stored) session snapshot, so the client now holds
+    // refs that match the stored tree again.
+    if (typeof data.ref === 'string') {
+      const session = params.sessionStore.get(params.sessionName);
+      if (session) {
+        markSessionSnapshotRefsIssued(session);
+        params.sessionStore.set(params.sessionName, session);
+      }
+    }
+    return data;
   });
 }
 
@@ -130,6 +142,11 @@ export async function dispatchGetViaRuntime(
   });
   if (!resolvedRuntime.ok) return resolvedRuntime.response;
 
+  // #1076: get @ref reads from the stored snapshot; warn when that tree was
+  // replaced since the client last received refs.
+  const staleRefs =
+    target.target.kind === 'ref' &&
+    params.sessionStore.get(params.sessionName)?.snapshotRefsStale === true;
   return await toDaemonResponse(async () => {
     const result = await resolvedRuntime.runtime.selectors.get({
       session: params.sessionName,
@@ -143,7 +160,8 @@ export async function dispatchGetViaRuntime(
       req,
       buildGetRecordResult(result, sub),
     );
-    return toDaemonGetData(result);
+    const data = toDaemonGetData(result);
+    return staleRefs ? { ...data, warning: STALE_SNAPSHOT_REFS_WARNING } : data;
   });
 }
 
@@ -216,6 +234,9 @@ export async function dispatchWaitViaRuntime(
     });
     if (directResponse) return directResponse;
   }
+  // #1076: wait @ref re-resolves the ref against fresh polling captures; warn
+  // when the stored tree already drifted from the refs the client holds.
+  const staleRefs = parsed.kind === 'ref' && session?.snapshotRefsStale === true;
   const execute = async () => {
     const runtime = createSelectorRuntimeForDevice({
       ...params,
@@ -229,7 +250,8 @@ export async function dispatchWaitViaRuntime(
         target: toWaitTarget(parsed, session),
       });
       recordIfSession(sessionStore, sessionName, req, result);
-      return toDaemonWaitData(result);
+      const data = toDaemonWaitData(result);
+      return staleRefs ? { ...data, warning: STALE_SNAPSHOT_REFS_WARNING } : data;
     });
     const enrichedResponse = await maybeWaitTimeoutSurfaceResponse(
       { req, logPath: params.logPath, session, device },

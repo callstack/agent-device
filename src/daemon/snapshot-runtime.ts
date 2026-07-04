@@ -209,6 +209,10 @@ function createSnapshotRuntime(params: {
             device,
             record: snapshotRecord,
             refScopedSnapshot: isRefScopedSnapshot(req),
+            // Only the snapshot command's response carries every stored node's
+            // ref back to the client; diff returns a summary, so its refreshed
+            // tree leaves client refs stale (#1076).
+            issuesRefsToClient: req.command === 'snapshot',
           }),
         );
       },
@@ -222,6 +226,7 @@ function buildNextSnapshotSession(params: {
   device: SessionState['device'];
   record: CommandSessionRecord & { snapshot: NonNullable<CommandSessionRecord['snapshot']> };
   refScopedSnapshot: boolean;
+  issuesRefsToClient: boolean;
 }): SessionState {
   const { current, sessionName, device, record, refScopedSnapshot } = params;
   const keepCurrentSnapshot = shouldKeepCurrentSnapshot(current, record, refScopedSnapshot);
@@ -238,6 +243,13 @@ function buildNextSnapshotSession(params: {
     keepCurrentSnapshot,
     refScopedSnapshot,
   });
+  // #1076 honest marker (see setSessionSnapshot in session-snapshot.ts):
+  // - kept current snapshot (empty ref-scoped result): tree unchanged, flag unchanged;
+  // - snapshot command: the response hands every node's ref to the client → cleared;
+  // - diff: tree replaced but the response is a summary → client refs go stale.
+  nextSession.snapshotRefsStale = keepCurrentSnapshot
+    ? current?.snapshotRefsStale
+    : !params.issuesRefsToClient;
   if (record.appName) nextSession.appName = record.appName;
   return nextSession;
 }

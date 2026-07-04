@@ -208,6 +208,7 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     properties: {
       backendResult: backendResultSchema,
       message: stringSchema(),
+      warning: stringSchema(),
       evidence: interactionEvidenceSchema,
     },
   }),
@@ -226,6 +227,7 @@ export const COMMAND_OUTPUT_SCHEMAS = {
       durationMs: numberSchema(),
       backendResult: backendResultSchema,
       message: stringSchema(),
+      warning: stringSchema(),
     },
   }),
 

@@ -116,6 +116,10 @@ async function dispatchTargetedTouchViaRuntime(
       ? parseLongPressTarget(req.positionals ?? [])
       : parseTouchTarget(req.positionals ?? [], commandLabel);
   if (!parsedTarget.ok) return parsedTarget.response;
+  // Staleness relative to what the client knew when it sent this @ref — read
+  // BEFORE any internal recapture (Android freshness refresh, --verify) flips
+  // the flag as a side effect of this same command (#1076).
+  const staleRefs = parsedTarget.target.kind === 'ref' && session.snapshotRefsStale === true;
   let androidFreshnessBaseline: SessionState['snapshot'];
   if (parsedTarget.target.kind === 'ref') {
     const invalidRefFlagsResponse = params.refSnapshotFlagGuardResponse(
@@ -163,6 +167,7 @@ async function dispatchTargetedTouchViaRuntime(
         params,
         session,
         result,
+        staleRefs,
         extra:
           command === 'longpress'
             ? {
@@ -219,6 +224,7 @@ async function buildTargetedTouchResponsePayloads(params: {
   };
   session: SessionState;
   result: TargetedTouchResult;
+  staleRefs: boolean;
   extra: Record<string, unknown>;
 }): Promise<InteractionResponsePayloads> {
   const { params: handlerParams, session, result, extra } = params;
@@ -236,6 +242,7 @@ async function buildTargetedTouchResponsePayloads(params: {
     source: { kind: 'runtime', result },
     referenceFrame,
     extra,
+    staleRefs: params.staleRefs,
   });
 }
 
@@ -418,6 +425,8 @@ async function dispatchFillViaRuntime(
 
   const parsedTarget = parseFillTarget(req.positionals ?? []);
   if (!parsedTarget.ok) return parsedTarget.response;
+  // Read before the Android freshness refresh recaptures — see the press path.
+  const staleRefs = parsedTarget.target.kind === 'ref' && session.snapshotRefsStale === true;
   if (parsedTarget.target.kind === 'ref') {
     const invalidRefFlagsResponse = params.refSnapshotFlagGuardResponse('fill', req.flags);
     if (invalidRefFlagsResponse) return invalidRefFlagsResponse;
@@ -459,6 +468,7 @@ async function dispatchFillViaRuntime(
         source: { kind: 'runtime', result, refBackendWireShape: true },
         referenceFrame,
         extra: { text: parsedTarget.text },
+        staleRefs,
       });
     },
   });
@@ -526,8 +536,14 @@ async function dispatchRuntimeInteraction<
     const actionFinishedAt = Date.now();
     const { result, responseData } = await options.buildPayloads(runtimeResult);
     if (readiness.status === 'recovered') {
-      result.warning = readiness.warning;
-      responseData.warning = readiness.warning;
+      // Append, don't clobber — the builder may already carry a warning
+      // (e.g. stale-refs, #1076).
+      const warning =
+        typeof responseData.warning === 'string'
+          ? `${responseData.warning} ${readiness.warning}`
+          : readiness.warning;
+      result.warning = warning;
+      responseData.warning = warning;
     }
     return finalizeTouchInteraction({
       session,
