@@ -1,9 +1,20 @@
 import type { RawSnapshotNode } from '../kernel/snapshot.ts';
+import { AppError } from '../kernel/errors.ts';
 import { parseBounds } from '../utils/bounds.ts';
 import { parseXmlDocumentSync, type XmlNode } from '../utils/xml.ts';
 
 export function parseWebDriverSource(source: string): RawSnapshotNode[] {
-  const roots = parseXmlDocumentSync(source);
+  let roots: XmlNode[];
+  try {
+    roots = parseXmlDocumentSync(source);
+  } catch (error) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Failed to parse WebDriver page source XML: ${error instanceof Error ? error.message : String(error)}`,
+      undefined,
+      error,
+    );
+  }
   const nodes: RawSnapshotNode[] = [];
   for (const root of roots) {
     appendSourceNodes(nodes, root);

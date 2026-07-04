@@ -5,8 +5,8 @@ import {
   parseBatchStepRuntime,
   readBatchStepInputObject,
   readBatchStepRecord,
-  type BatchStepErrorFactory,
 } from '../../batch-contract.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { type SessionRuntimeHints } from '../../kernel/contracts.ts';
 import {
   STRUCTURED_BATCH_COMMAND_NAMES,
@@ -29,8 +29,6 @@ import {
   type CommandFieldMap,
   type InferCommandInput,
 } from '../command-input.ts';
-
-const batchPlainError: BatchStepErrorFactory = (message) => new Error(message);
 
 export type BatchCommandStep = {
   command: string;
@@ -109,9 +107,9 @@ function readBatchInput(input: unknown, fields: ReturnType<typeof batchFields>):
   const parsed = readFieldInput(input, fields);
   const maxSteps = parsed.maxSteps ?? DEFAULT_BATCH_MAX_STEPS;
   if (!isValidBatchMaxSteps(maxSteps)) {
-    throw new Error(`Invalid batch maxSteps: ${String(parsed.maxSteps)}`);
+    throw new AppError('INVALID_ARGS', `Invalid batch maxSteps: ${String(parsed.maxSteps)}`);
   }
-  assertBatchStepCount(parsed.steps.length, maxSteps, batchPlainError);
+  assertBatchStepCount(parsed.steps.length, maxSteps);
   return {
     ...parsed,
   };
@@ -119,7 +117,7 @@ function readBatchInput(input: unknown, fields: ReturnType<typeof batchFields>):
 
 function readBatchSteps(steps: unknown, nestedCommands: readonly string[]): BatchCommandStep[] {
   if (!Array.isArray(steps)) {
-    throw new Error('Expected steps to be an array.');
+    throw new AppError('INVALID_ARGS', 'Expected steps to be an array.');
   }
   return steps.map((step, index) => readBatchStep(step, index + 1, nestedCommands));
 }
@@ -129,11 +127,11 @@ function readBatchStep(
   stepNumber: number,
   nestedCommands: readonly string[],
 ): BatchCommandStep {
-  const record = readBatchStepRecord(step, stepNumber, batchPlainError);
+  const record = readBatchStepRecord(step, stepNumber);
   assertAllowedKeys(record, ['command', 'input', 'runtime'], `Batch step ${stepNumber}`);
   return {
     command: readBatchStepCommand(record, stepNumber, nestedCommands),
-    input: readBatchStepInputObject(record, stepNumber, batchPlainError),
+    input: readBatchStepInputObject(record, stepNumber),
     ...readBatchStepRuntimeProperty(record, stepNumber),
   };
 }
@@ -148,7 +146,10 @@ function readBatchStepCommand(
   }
   const command = record.command;
   if (typeof command !== 'string' || !nestedCommands.includes(command)) {
-    throw new Error(`Expected command to be one of: ${nestedCommands.join(', ')}.`);
+    throw new AppError(
+      'INVALID_ARGS',
+      `Expected command to be one of: ${nestedCommands.join(', ')}.`,
+    );
   }
   return command;
 }
@@ -157,6 +158,6 @@ function readBatchStepRuntimeProperty(
   record: Record<string, unknown>,
   stepNumber: number,
 ): Pick<BatchCommandStep, 'runtime'> {
-  const runtime = parseBatchStepRuntime(record.runtime, stepNumber, batchPlainError);
+  const runtime = parseBatchStepRuntime(record.runtime, stepNumber);
   return runtime === undefined ? {} : { runtime };
 }

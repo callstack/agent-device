@@ -8,6 +8,7 @@ import {
   type CommandName,
 } from '../commands/command-metadata.ts';
 import { COMMAND_OUTPUT_SCHEMAS } from './command-output-schemas.ts';
+import { AppError } from '../kernel/errors.ts';
 
 export type ToolResult = {
   isError: boolean;
@@ -61,7 +62,7 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
   return {
     execute: async (name, input) => {
       if (!isCommandName(name)) {
-        throw new Error(`Unknown command tool: ${name}`);
+        throw new AppError('INVALID_ARGS', `Unknown command tool: ${name}`);
       }
       const config = readMcpToolConfig(input);
       const commandInput = stripMcpConfigFields(input);
@@ -124,11 +125,11 @@ function readClientConfig(record: Record<string, unknown>): AgentDeviceClientCon
   const responseLevel = record.responseLevel;
   const client: AgentDeviceClientConfig = {};
   if (stateDir !== undefined && (typeof stateDir !== 'string' || stateDir.length === 0)) {
-    throw new Error('Expected stateDir to be a non-empty string.');
+    throw new AppError('INVALID_ARGS', 'Expected stateDir to be a non-empty string.');
   }
   if (typeof stateDir === 'string') client.stateDir = stateDir;
   if (includeCost !== undefined && typeof includeCost !== 'boolean') {
-    throw new Error('Expected includeCost to be a boolean.');
+    throw new AppError('INVALID_ARGS', 'Expected includeCost to be a boolean.');
   }
   // Only set when explicitly true so the default request shape is untouched
   // (cost rides on response.data → structuredContent only when opted in).
@@ -143,7 +144,10 @@ function readClientConfig(record: Record<string, unknown>): AgentDeviceClientCon
 function readResponseLevel(value: unknown): ResponseLevel | undefined {
   if (value === undefined) return undefined;
   if (typeof value !== 'string' || !(RESPONSE_LEVELS as readonly string[]).includes(value)) {
-    throw new Error("Expected responseLevel to be one of 'digest', 'default', or 'full'.");
+    throw new AppError(
+      'INVALID_ARGS',
+      "Expected responseLevel to be one of 'digest', 'default', or 'full'.",
+    );
   }
   return value as ResponseLevel;
 }
@@ -151,7 +155,7 @@ function readResponseLevel(value: unknown): ResponseLevel | undefined {
 function readMcpOutputFormat(outputFormat: unknown): McpOutputFormat {
   if (outputFormat === undefined) return 'optimized';
   if (outputFormat !== 'optimized' && outputFormat !== 'json') {
-    throw new Error('Expected mcpOutputFormat to be "optimized" or "json".');
+    throw new AppError('INVALID_ARGS', 'Expected mcpOutputFormat to be "optimized" or "json".');
   }
   return outputFormat;
 }

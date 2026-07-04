@@ -1,6 +1,7 @@
 import { listCommandTools, commandToolExecutor, type ToolResult } from './command-tools.ts';
 import { readVersion } from '../utils/version.ts';
 import type { JsonRpcId, JsonRpcRequestEnvelope } from '../kernel/contracts.ts';
+import { AppError } from '../kernel/errors.ts';
 
 const MCP_SERVER_NAME = 'agent-device';
 const SUPPORTED_PROTOCOL_VERSION = '2025-11-25';
@@ -87,7 +88,7 @@ function errorResponse(id: JsonRpcId, code: number, message: string): JsonRpcRes
 
 function asRecord(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('Expected object parameters.');
+    throw new AppError('INVALID_ARGS', 'Expected object parameters.');
   }
   return value as Record<string, unknown>;
 }
@@ -95,7 +96,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 function stringField(record: Record<string, unknown>, key: string): string {
   const value = record[key];
   if (typeof value !== 'string' || value.length === 0) {
-    throw new Error(`Expected ${key} to be a non-empty string.`);
+    throw new AppError('INVALID_ARGS', `Expected ${key} to be a non-empty string.`);
   }
   return value;
 }

@@ -278,7 +278,7 @@ async function fetchText(
     };
   } catch (error) {
     if (error instanceof Error && error.name === 'TimeoutError') {
-      throw new Error(`Timed out fetching ${url} after ${timeoutMs}ms`);
+      throw new AppError('COMMAND_FAILED', `Timed out fetching ${url} after ${timeoutMs}ms`);
     }
     throw error;
   }
@@ -393,7 +393,7 @@ function startMetroProcess(
   }
 
   if (!Number.isInteger(pid) || pid <= 0) {
-    throw new Error('Failed to start Metro. Expected a detached child PID.');
+    throw new AppError('COMMAND_FAILED', 'Failed to start Metro. Expected a detached child PID.');
   }
 
   return {
@@ -433,7 +433,7 @@ function createMetroBridgeRequestError(
   message: string,
   retryable: boolean,
 ): MetroBridgeRequestError {
-  const error = new Error(message) as MetroBridgeRequestError;
+  const error = new AppError('COMMAND_FAILED', message) as MetroBridgeRequestError;
   error.retryable = retryable;
   return error;
 }
@@ -598,7 +598,8 @@ function describeBridgeFailure(
 
 function requireBridgeRuntimeDescriptor(baseUrl: string, bridge: MetroBridgeResult | null): void {
   if (!bridge?.iosRuntime.bundleUrl) {
-    throw new Error(
+    throw new AppError(
+      'COMMAND_FAILED',
       describeBridgeFailure(
         baseUrl,
         'bridge descriptor is missing ios_runtime.metro_bundle_url',
@@ -769,7 +770,8 @@ async function configureMetroBridgeUntilReady(options: {
     } catch (error) {
       lastBridgeError = error instanceof Error ? error.message : String(error);
       if (!isRetryableBridgeError(error)) {
-        throw new Error(
+        throw new AppError(
+          'COMMAND_FAILED',
           describeBridgeFailure(
             options.baseUrl,
             lastBridgeError,
@@ -777,6 +779,8 @@ async function configureMetroBridgeUntilReady(options: {
             options.initialBridgeError,
             options.companionLogPath,
           ),
+          undefined,
+          error,
         );
       }
     }
@@ -787,7 +791,8 @@ async function configureMetroBridgeUntilReady(options: {
     }
   }
 
-  throw new Error(
+  throw new AppError(
+    'COMMAND_FAILED',
     describeBridgeFailure(
       options.baseUrl,
       lastBridgeError,
@@ -820,8 +825,10 @@ async function ensureMetroProcessReady(
   }
 
   await stopSpawnedMetroProcess(startedProcess.pid).catch(() => {});
-  throw new Error(
+  throw new AppError(
+    'COMMAND_FAILED',
     `Metro did not become ready at ${statusUrl} within ${settings.startupTimeoutMs}ms. Check ${settings.logPath}.`,
+    { logPath: settings.logPath },
   );
 }
 
@@ -886,13 +893,16 @@ async function configureProxyBridgeViaCompanion(
     });
     companionLogPath = companion.logPath;
   } catch (error) {
-    throw new Error(
+    throw new AppError(
+      'COMMAND_FAILED',
       describeBridgeFailure(
         settings.proxyBaseUrl,
         error instanceof Error ? error.message : String(error),
         bridge,
         initialBridgeError,
       ),
+      undefined,
+      error,
     );
   }
 
