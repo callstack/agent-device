@@ -1418,7 +1418,10 @@ test('dumpUiHierarchy does not attach animation hint to non-dump timeouts', asyn
     (error: unknown) =>
       error instanceof AppError &&
       error.message === 'adb timed out after 8000ms' &&
-      typeof error.details?.hint === 'undefined',
+      // Non-dump timeouts keep the generic classified adb-timeout hint instead
+      // of the looping-animation explanation reserved for uiautomator dump.
+      !String(error.details?.hint).includes('Android accessibility snapshots can be blocked') &&
+      error.details?.adbFailure === 'timeout',
   );
 });
 

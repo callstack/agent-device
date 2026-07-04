@@ -429,6 +429,62 @@ test('the local adb executor flags transient transport failures retriable', asyn
   assert.equal(error.details?.retriable, true);
 });
 
+test('the local adb executor classifies exec-layer timeouts as a wedged adb server', async () => {
+  mockRunCmd.mockClear();
+  // Shape of createTimeoutError in utils/exec.ts: no stderr to classify, the
+  // structured `timeoutMs` detail is the signal.
+  mockRunCmd.mockRejectedValueOnce(
+    new AppError('COMMAND_FAILED', 'adb timed out after 10000ms', {
+      cmd: 'adb',
+      args: ['-s', 'emulator-5554', 'devices', '-l'],
+      stdout: '',
+      stderr: '',
+      exitCode: -1,
+      timeoutMs: 10000,
+    }),
+  );
+  const adb = createDeviceAdbExecutor({
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel Emulator',
+    kind: 'emulator',
+    booted: true,
+  });
+
+  const error = await adb(['devices', '-l']).then(
+    () => assert.fail('expected the adb call to reject'),
+    (err: unknown) => err,
+  );
+
+  assert.ok(error instanceof AppError);
+  assert.equal(error.details?.adbFailure, 'timeout');
+  assert.match(String(error.details?.hint), /adb kill-server && adb start-server/);
+  // A wedged adb server times out identically on an unchanged retry.
+  assert.equal(Object.hasOwn(error.details ?? {}, 'retriable'), false);
+});
+
+test('attachAdbFailureHint classifies timeouts over partial stderr and keeps site hints winning', () => {
+  // Partial output from the killed process must not reclassify the timeout
+  // (transport-error stderr would otherwise flag it retriable).
+  const timedOutWithPartialStderr = new AppError('COMMAND_FAILED', 'adb timed out after 5000ms', {
+    stderr: 'error: transport error',
+    timeoutMs: 5000,
+  });
+  attachAdbFailureHint(timedOutWithPartialStderr);
+  assert.equal(timedOutWithPartialStderr.details?.adbFailure, 'timeout');
+  assert.match(String(timedOutWithPartialStderr.details?.hint), /kill-server/);
+  assert.equal(Object.hasOwn(timedOutWithPartialStderr.details ?? {}, 'retriable'), false);
+
+  const withSiteHint = new AppError('COMMAND_FAILED', 'adb timed out after 5000ms', {
+    stderr: '',
+    timeoutMs: 5000,
+    hint: 'site-specific hint',
+  });
+  attachAdbFailureHint(withSiteHint);
+  assert.equal(withSiteHint.details?.hint, 'site-specific hint');
+  assert.equal(withSiteHint.details?.adbFailure, 'timeout');
+});
+
 test('attachAdbFailureHint preserves existing hints and ignores non-adb errors', () => {
   const withHint = new AppError('COMMAND_FAILED', 'adb exited with code 1', {
     stderr: 'adb: device offline',

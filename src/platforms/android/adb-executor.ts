@@ -190,6 +190,7 @@ const androidAdbProviderScope = new AsyncLocalStorage<AndroidAdbProviderScope>()
 export type AdbFailureClassification = {
   /** Machine-readable failure family, attached to error details as `adbFailure`. */
   reason:
+    | 'timeout'
     | 'device_offline'
     | 'device_unauthorized'
     | 'device_not_found'
@@ -284,6 +285,16 @@ const ADB_FAILURE_MATCHERS: readonly AdbFailureMatcher[] = [
   },
 ];
 
+// A timed-out adb invocation leaves no failure output to key on — the exec
+// layer kills the process and rejects with COMMAND_FAILED carrying `timeoutMs`
+// in details (see createTimeoutError in utils/exec.ts), so timeouts classify on
+// that structured signal instead of a stderr matcher. Not marked retriable: an
+// unchanged retry against a wedged adb server times out identically.
+const ADB_TIMEOUT_CLASSIFICATION: AdbFailureClassification = {
+  reason: 'timeout',
+  hint: 'adb timed out — the adb server may be wedged. Run adb kill-server && adb start-server, check adb devices, then retry.',
+};
+
 /**
  * Maps well-known adb failure output to an actionable hint (and a `retriable`
  * flag for clearly transient families). Matches stderr; install verdicts also
@@ -306,15 +317,14 @@ export function classifyAdbFailure(
 /**
  * Enriches a failed adb command error in place with the classified hint,
  * `retriable` flag, and machine-readable `adbFailure` family, so every adb call
- * site surfaces guidance without per-site classification. No-op for errors that
- * are not adb command failures or that carry no recognized failure output; an
+ * site surfaces guidance without per-site classification. Exec-layer timeouts
+ * classify as `timeout` even though they leave no stderr. No-op for errors that
+ * are not adb command failures or that carry no recognized failure signal; an
  * existing hint or retriable verdict is never overwritten.
  */
 export function attachAdbFailureHint<T>(error: T): T {
   if (!(error instanceof AppError) || error.code !== 'COMMAND_FAILED') return error;
-  const stderr = typeof error.details?.stderr === 'string' ? error.details.stderr : '';
-  const stdout = typeof error.details?.stdout === 'string' ? error.details.stdout : '';
-  const classification = classifyAdbFailure(stderr, stdout);
+  const classification = classifyAdbCommandError(error);
   if (!classification) return error;
   error.details = {
     ...error.details,
@@ -325,6 +335,17 @@ export function attachAdbFailureHint<T>(error: T): T {
       : {}),
   };
   return error;
+}
+
+// Timeout wins over text matchers: the exec layer deliberately builds timeout
+// errors around "timed out after Nms" because partial output from the killed
+// process is untrustworthy — classifying that partial stderr (e.g. flagging a
+// half-written transport line retriable) would point away from the real fix.
+function classifyAdbCommandError(error: AppError): AdbFailureClassification | undefined {
+  if (typeof error.details?.timeoutMs === 'number') return ADB_TIMEOUT_CLASSIFICATION;
+  const stderr = typeof error.details?.stderr === 'string' ? error.details.stderr : '';
+  const stdout = typeof error.details?.stdout === 'string' ? error.details.stdout : '';
+  return classifyAdbFailure(stderr, stdout);
 }
 
 /**
