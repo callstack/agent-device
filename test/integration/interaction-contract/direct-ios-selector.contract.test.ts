@@ -9,6 +9,8 @@ import {
   RUNNER_CHANGED_NODES,
   RUNNER_CLOSED_DRAWER_NODES,
   RUNNER_CONTINUE_NODES,
+  RUNNER_COVERED_NODES,
+  RUNNER_NON_HITTABLE_NODES,
 } from './fixtures.ts';
 import {
   runnerSnapshotEntry,
@@ -96,6 +98,61 @@ test(scenario('verifyEvidence'), async () => {
       assert.equal(typeof evidence.digest, 'string');
       // The verify capture's tree must never be serialized into the response.
       assert.equal(data.nodes, undefined);
+    },
+  );
+});
+
+test(scenario('errorTaxonomy'), async () => {
+  await withIosContractDaemon(
+    [
+      runnerTapErrorEntry(new AppError('ELEMENT_NOT_FOUND', 'element not found')),
+      // Runtime fallback resolution: interactive-only capture, then the
+      // full-tree retry — neither contains the selector.
+      runnerSnapshotEntry(RUNNER_CONTINUE_NODES),
+      runnerSnapshotEntry(RUNNER_CONTINUE_NODES),
+    ],
+    async (daemon) => {
+      const click = await daemon.callCommand('click', ['label=Missing']);
+      const error = assertRpcError(click, 'COMMAND_FAILED', /did not match/);
+      // The delegated taxonomy: runtime diagnostics and the actionable hint,
+      // not the runner's bare "element not found".
+      assert.ok(typeof error.hint === 'string' && error.hint.length > 0);
+    },
+  );
+});
+
+test(scenario('occlusion'), async () => {
+  await withIosContractDaemon(
+    [
+      runnerTapErrorEntry(new AppError('ELEMENT_NOT_FOUND', 'element not found')),
+      runnerSnapshotEntry(RUNNER_COVERED_NODES),
+      runnerSnapshotEntry(RUNNER_COVERED_NODES),
+    ],
+    async (daemon) => {
+      const click = await daemon.callCommand('click', ['label="Save draft"']);
+      const error = assertRpcError(click, 'COMMAND_FAILED', /covered by another visible element/);
+      const details = error.details as Record<string, unknown> | undefined;
+      assert.equal(details?.interactionBlocked, 'covered');
+    },
+  );
+});
+
+test(scenario('nonHittable'), async () => {
+  await withIosContractDaemon(
+    [
+      runnerTapErrorEntry(new AppError('ELEMENT_NOT_FOUND', 'element not found')),
+      runnerSnapshotEntry(RUNNER_NON_HITTABLE_NODES),
+      runnerTapEntry({ x: 200, y: 330 }),
+    ],
+    async (daemon, transcript) => {
+      const click = await daemon.callCommand('click', ['label="Recents row"']);
+      const data = assertRpcOk(click);
+      // Delegation really happened: the second tap is coordinate-keyed.
+      const fallbackTap = transcript.calls.at(-1)?.request as Record<string, unknown> | undefined;
+      assert.equal(transcript.calls.at(-1)?.command, 'ios.runner.tap');
+      assert.equal(fallbackTap?.selectorKey, undefined);
+      assert.equal(data.targetHittable, false);
+      assert.match(String(data.hint ?? ''), /hittable: false/);
     },
   );
 });
