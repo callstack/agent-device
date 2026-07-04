@@ -142,8 +142,42 @@ export function attachRefs(nodes: RawSnapshotNode[]): SnapshotNode[] {
   return nodes.map((node, idx) => ({ ...node, ref: `e${idx + 1}` }));
 }
 
-export function normalizeRef(input: string): string | null {
+/**
+ * Versioned-ref grammar (#1076): a ref argument may carry an optional
+ * `~s<generation>` suffix pinning it to the session snapshot generation that
+ * minted it, e.g. `@e12~s3`. The suffix is accepted INPUT only — snapshot
+ * output stays plain `e12` refs (the tree is the most token-expensive artifact
+ * agents consume), and ref-issuing responses carry the generation ONCE as the
+ * additive `refsGeneration` field.
+ */
+const REF_GENERATION_SUFFIX_RE = /^~s(\d+)$/;
+
+export const REF_GRAMMAR_HINT =
+  'Refs look like @e12, optionally pinned to the snapshot generation that minted them: @e12~s3 (the ref, then "~s" and the refsGeneration reported by the issuing snapshot/find response).';
+
+export type SplitRef = { base: string; generation?: number };
+
+/**
+ * Split an optional `~s<generation>` suffix off a ref token (`@e12~s3` or bare
+ * `e12~s3`). `base` keeps the token's `@` prefix (or lack of one). Returns null
+ * when a `~` is present but the suffix does not match the grammar — callers
+ * surface INVALID_ARGS with REF_GRAMMAR_HINT.
+ */
+export function splitRefGenerationSuffix(input: string): SplitRef | null {
   const trimmed = input.trim();
+  const tildeIndex = trimmed.indexOf('~');
+  if (tildeIndex === -1) return { base: trimmed };
+  const match = REF_GENERATION_SUFFIX_RE.exec(trimmed.slice(tildeIndex));
+  if (!match || tildeIndex === 0) return null;
+  return { base: trimmed.slice(0, tildeIndex), generation: Number(match[1]) };
+}
+
+export function normalizeRef(input: string): string | null {
+  // Node lookup always uses the plain ref; the generation suffix is stripped
+  // here so every existing parse site accepts the pinned form (#1076).
+  const split = splitRefGenerationSuffix(input);
+  if (!split) return null;
+  const trimmed = split.base;
   if (trimmed.startsWith('@')) {
     const ref = trimmed.slice(1);
     return ref ? ref : null;

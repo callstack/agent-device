@@ -38,6 +38,10 @@ export const STALE_SNAPSHOT_REFS_WARNING =
 export function setSessionSnapshot(session: SessionState, snapshot: SnapshotState): void {
   if (session.snapshot !== snapshot) {
     session.snapshotRefsStale = true;
+    // #1076 versioned refs: every tree replacement advances the session's
+    // snapshot generation, so refs pinned to an earlier generation
+    // (`@e12~s3`) can be diagnosed precisely.
+    session.snapshotGeneration = (session.snapshotGeneration ?? 0) + 1;
   }
   session.snapshot = snapshot;
   session.snapshotScopeSource = undefined;
@@ -49,4 +53,45 @@ export function setSessionSnapshot(session: SessionState, snapshot: SnapshotStat
 /** The response being returned hands the stored snapshot's refs to the client. */
 export function markSessionSnapshotRefsIssued(session: SessionState): void {
   session.snapshotRefsStale = false;
+}
+
+/**
+ * Warning for a ref pinned to a generation (`@e12~s3`) that no longer matches
+ * the stored tree's generation. Unlike STALE_SNAPSHOT_REFS_WARNING it is
+ * PRECISE: the pin proves which tree minted the ref, so the mismatch is a
+ * fact, not a conservative marker.
+ */
+function buildPinnedStaleRefWarning(params: {
+  ref: string;
+  mintedGeneration: number;
+  currentGeneration: number;
+}): string {
+  const plainRef = params.ref.startsWith('@') ? params.ref.slice(1) : params.ref;
+  return `Ref @${plainRef} was minted from snapshot s${params.mintedGeneration} but the session tree is now s${params.currentGeneration} — re-run snapshot -i.`;
+}
+
+/**
+ * Staleness warning for a command consuming an `@ref` argument (#1076):
+ * - pinned ref (`@e12~s3`) matching the stored generation → no warning, even
+ *   while the coarse `snapshotRefsStale` marker is set (the pin proves the
+ *   client's ref came from the stored tree);
+ * - pinned ref with any other generation → the precise pinned warning;
+ * - plain ref → the coarse #1093 marker behavior, unchanged.
+ *
+ * Warn-only in this release: a stale pinned ref still executes with a warning
+ * attached. The compat ladder tightens this to an error in a later release,
+ * once auto-pinning clients (the MCP layer) are established.
+ */
+export function resolveRefStalenessWarning(params: {
+  session: SessionState | undefined;
+  ref: string;
+  mintedGeneration: number | undefined;
+}): string | undefined {
+  const { session, ref, mintedGeneration } = params;
+  if (mintedGeneration !== undefined) {
+    const currentGeneration = session?.snapshotGeneration ?? 0;
+    if (mintedGeneration === currentGeneration) return undefined;
+    return buildPinnedStaleRefWarning({ ref, mintedGeneration, currentGeneration });
+  }
+  return session?.snapshotRefsStale === true ? STALE_SNAPSHOT_REFS_WARNING : undefined;
 }

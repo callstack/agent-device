@@ -38,8 +38,14 @@ export async function dispatchSnapshotViaRuntime(params: {
         raw: req.flags?.snapshotRaw,
         forceFull: req.flags?.snapshotForceFull,
       });
+      // #1076 versioned refs: the snapshot response is a ref-issuing response,
+      // so it carries the stored tree's generation ONCE (`refsGeneration`) —
+      // the node tree itself stays plain `e12` refs (token economy). The
+      // capture above already stored the next session via setRecord, so the
+      // store holds the generation these refs were minted from.
+      const refsGeneration = params.sessionStore.get(sessionName)?.snapshotGeneration;
       return {
-        data: result,
+        data: refsGeneration === undefined ? result : { ...result, refsGeneration },
         record: {
           kind: 'snapshot',
           nodes: result.nodes.length,
@@ -250,6 +256,13 @@ function buildNextSnapshotSession(params: {
   nextSession.snapshotRefsStale = keepCurrentSnapshot
     ? current?.snapshotRefsStale
     : !params.issuesRefsToClient;
+  // #1076 versioned refs: this path bypasses setSessionSnapshot, so it advances
+  // the generation itself whenever the stored tree is replaced (snapshot AND
+  // diff — diff's summary response leaves client refs pinned to the previous
+  // generation, which is exactly what the pinned warning diagnoses).
+  nextSession.snapshotGeneration = keepCurrentSnapshot
+    ? current?.snapshotGeneration
+    : (current?.snapshotGeneration ?? 0) + 1;
   if (record.appName) nextSession.appName = record.appName;
   return nextSession;
 }

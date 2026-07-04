@@ -247,3 +247,8 @@ test('find/get default and full return today’s shape unchanged (same reference
   expect(getView!(data, 'default')).toBe(data);
   expect(getView!(data, 'full')).toBe(data);
 });
+
+test('snapshot digest preserves refsGeneration — the pinning signal for the refs it keeps (#1076)', () => {
+  const digest = RESPONSE_VIEWS.snapshot!({ ...SNAPSHOT_DATA, refsGeneration: 7 }, 'digest');
+  expect(digest.refsGeneration).toBe(7);
+});

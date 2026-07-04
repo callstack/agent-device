@@ -59,6 +59,9 @@ export function listCommandTools(): Array<{
 }
 
 export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): CommandToolExecutor {
+  // #1076 versioned refs — MCP auto-pinning state: the last `refsGeneration`
+  // observed on a ref-issuing (snapshot/find) response, per session name.
+  const sessionRefGenerations = new Map<string, number>();
   return {
     execute: async (name, input) => {
       if (!isCommandName(name)) {
@@ -66,14 +69,23 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
       }
       const config = readMcpToolConfig(input);
       const commandInput = stripMcpConfigFields(input);
+      const sessionKey = readSessionKey(commandInput);
+      const pinnedInput = pinPlainRefArguments(
+        name,
+        commandInput,
+        sessionRefGenerations.get(sessionKey),
+      );
       const client = await createClient(deps, config.client);
-      const result = await (deps.runCommand ?? runCommand)(client, name, commandInput);
+      const result = await (deps.runCommand ?? runCommand)(client, name, pinnedInput);
+      trackIssuedRefsGeneration(sessionRefGenerations, sessionKey, name, result);
       return {
         isError: false,
         structuredContent: result,
         content: [
           {
             type: 'text',
+            // Render from the UNPINNED input: the model typed plain refs and
+            // must never see generation suffixes (zero token cost).
             text: renderToolText({
               name,
               input: commandInput,
@@ -86,6 +98,96 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
       };
     },
   };
+}
+
+/**
+ * #1076 versioned refs — MCP auto-pinning. Snapshot trees and find outputs
+ * keep plain `e12` refs (snapshots are the most token-expensive artifact the
+ * model consumes); the issuing response carries the tree's generation ONCE as
+ * `refsGeneration`. This layer sees those responses before the model does:
+ * it remembers the last issued generation per session name and rewrites plain
+ * `@ref` tool arguments to the pinned `@ref~s<generation>` form before
+ * forwarding to the daemon — the daemon can then warn PRECISELY when a ref
+ * outlives the tree that minted it. The model never sees or types suffixes.
+ */
+const REF_ISSUING_TOOLS: ReadonlySet<CommandName> = new Set(['snapshot', 'find'] as CommandName[]);
+
+const TARGET_REF_TOOLS: ReadonlySet<CommandName> = new Set([
+  'press',
+  'click',
+  'fill',
+  'longpress',
+  'get',
+] as CommandName[]);
+
+function readSessionKey(input: unknown): string {
+  const record = asOptionalRecord(input);
+  const session = record?.session;
+  return typeof session === 'string' && session.length > 0 ? session : 'default';
+}
+
+function trackIssuedRefsGeneration(
+  generations: Map<string, number>,
+  sessionKey: string,
+  name: CommandName,
+  result: unknown,
+): void {
+  if (!REF_ISSUING_TOOLS.has(name)) return;
+  const refsGeneration = asOptionalRecord(result)?.refsGeneration;
+  if (typeof refsGeneration === 'number') {
+    generations.set(sessionKey, refsGeneration);
+    return;
+  }
+  // The ref-issuing response carried no generation (older daemon, or a find
+  // that returned no ref). Forget the remembered one rather than pin future
+  // refs to a value the response did not vouch for — never guess.
+  generations.delete(sessionKey);
+}
+
+function pinPlainRefArguments(
+  name: CommandName,
+  input: unknown,
+  generation: number | undefined,
+): unknown {
+  // No remembered generation for this session → pass refs through unpinned.
+  if (generation === undefined) return input;
+  const record = asOptionalRecord(input);
+  if (!record) return input;
+  if (name === 'wait') return pinWaitRef(record, generation) ?? input;
+  if (TARGET_REF_TOOLS.has(name)) return pinTargetRef(record, generation) ?? input;
+  return input;
+}
+
+function pinWaitRef(
+  record: Record<string, unknown>,
+  generation: number,
+): Record<string, unknown> | undefined {
+  if (typeof record.ref !== 'string') return undefined;
+  const pinned = pinRef(record.ref, generation);
+  return pinned === record.ref ? undefined : { ...record, ref: pinned };
+}
+
+function pinTargetRef(
+  record: Record<string, unknown>,
+  generation: number,
+): Record<string, unknown> | undefined {
+  const target = asOptionalRecord(record.target);
+  if (target?.kind !== 'ref' || typeof target.ref !== 'string') return undefined;
+  const pinned = pinRef(target.ref, generation);
+  return pinned === target.ref ? undefined : { ...record, target: { ...target, ref: pinned } };
+}
+
+function pinRef(ref: string, generation: number): string {
+  // Only pin the canonical plain form `@e12`: an existing `~` means the ref is
+  // already pinned (or malformed — the daemon owns rejecting that), and a
+  // missing `@` prefix is not a ref the daemon would accept anyway.
+  if (!ref.startsWith('@') || ref.includes('~')) return ref;
+  return `${ref}~s${generation}`;
+}
+
+function asOptionalRecord(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  return value as Record<string, unknown>;
 }
 
 export const commandToolExecutor = createCommandToolExecutor();

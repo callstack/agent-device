@@ -3406,3 +3406,131 @@ test('stale-ref warning appends to an existing interaction warning', async () =>
     expect(warning.endsWith(STALE_SNAPSHOT_REFS_WARNING)).toBe(true);
   }
 });
+
+// --- Versioned @ref pins (#1076 follow-up) ---
+
+test('press with a pinned ref matching the stored generation is clean even while the coarse marker is set', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'pinned-current-clean';
+  const session = makeStaleRefSession(sessionName);
+  session.snapshotGeneration = 5;
+  // Coarse marker set (e.g. a --verify evidence capture stored the SAME tree
+  // shape again) — the pin proves the client's ref came from this generation.
+  session.snapshotRefsStale = true;
+  sessionStore.set(sessionName, session);
+
+  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1~s5']);
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    expect(response.data?.warning).toBeUndefined();
+  }
+});
+
+test('press with a pinned ref from an older generation gets the precise warning', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'pinned-stale-precise';
+  const session = makeStaleRefSession(sessionName);
+  session.snapshotGeneration = 15;
+  sessionStore.set(sessionName, session);
+
+  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1~s12']);
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    expect(response.data?.warning).toBe(
+      'Ref @e1 was minted from snapshot s12 but the session tree is now s15 — re-run snapshot -i.',
+    );
+  }
+});
+
+test('fill with a pinned stale ref gets the precise warning; pinned current is clean', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'pinned-fill';
+  const session = makeStaleRefSession(sessionName);
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'XCUIElementTypeTextField',
+        label: 'Email',
+        rect: { x: 10, y: 20, width: 200, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+  session.snapshotGeneration = 3;
+  session.snapshotRefsStale = true;
+  sessionStore.set(sessionName, session);
+
+  const stale = await runInteraction(sessionStore, sessionName, 'fill', ['@e1~s2', 'hello']);
+  expect(stale?.ok).toBe(true);
+  if (stale?.ok) {
+    expect(stale.data?.warning).toBe(
+      'Ref @e1 was minted from snapshot s2 but the session tree is now s3 — re-run snapshot -i.',
+    );
+  }
+
+  const current = await runInteraction(sessionStore, sessionName, 'fill', ['@e1~s3', 'hello']);
+  expect(current?.ok).toBe(true);
+  if (current?.ok) {
+    expect(current.data?.warning).toBeUndefined();
+  }
+});
+
+test('get text with a pinned stale ref gets the precise warning', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'pinned-get-text';
+  const session = makeStaleRefSession(sessionName);
+  session.snapshotGeneration = 4;
+  sessionStore.set(sessionName, session);
+  mockDispatch.mockRejectedValue(
+    new Error('dispatch should not be called for snapshot-derived get text'),
+  );
+
+  const response = await runInteraction(sessionStore, sessionName, 'get', ['text', '@e1~s2']);
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    expect(response.data?.warning).toBe(
+      'Ref @e1 was minted from snapshot s2 but the session tree is now s4 — re-run snapshot -i.',
+    );
+    expect(response.data?.ref).toBe('e1');
+  }
+});
+
+test('a plain ref keeps the coarse #1093 warning, never the pinned text', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'plain-ref-coarse';
+  const session = makeStaleRefSession(sessionName);
+  session.snapshotGeneration = 7;
+  session.snapshotRefsStale = true;
+  sessionStore.set(sessionName, session);
+
+  const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    expect(response.data?.warning).toBe(STALE_SNAPSHOT_REFS_WARNING);
+  }
+});
+
+test('a malformed generation suffix is INVALID_ARGS with the ref grammar hint', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'pinned-malformed';
+  const session = makeStaleRefSession(sessionName);
+  sessionStore.set(sessionName, session);
+
+  for (const [command, positionals] of [
+    ['press', ['@e1~x3']],
+    ['fill', ['@e1~s', 'text']],
+    ['get', ['text', '@e1~3']],
+  ] as const) {
+    const response = await runInteraction(sessionStore, sessionName, command, [...positionals]);
+    expect(response?.ok).toBe(false);
+    if (response && !response.ok) {
+      expect(response.error.code).toBe('INVALID_ARGS');
+      expect(response.error.message).toContain('malformed generation suffix');
+      expect(String(response.error.details?.hint)).toContain('@e12~s3');
+    }
+  }
+});

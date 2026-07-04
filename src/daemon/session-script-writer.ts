@@ -11,6 +11,7 @@ import {
   formatScriptStringLiteral,
   isClickLikeCommand,
   isTouchTargetCommand,
+  stripRecordedRefGeneration,
 } from '../replay/script-utils.ts';
 import type { SessionAction, SessionState } from './types.ts';
 
@@ -192,7 +193,9 @@ function formatClickLikeActionLine(parts: string[], action: SessionAction): stri
   const first = action.positionals?.[0];
   if (!first) return undefined;
   if (first.startsWith('@')) {
-    parts.push(formatScriptArg(first));
+    // Recorded refs may carry a `~s<generation>` pin (#1076); scripts store the
+    // plain ref — generations are meaningless outside the minting session.
+    parts.push(formatScriptArg(stripRecordedRefGeneration(first)));
     appendRefLabel(parts, action);
     appendScriptSeriesFlags(parts, action);
     return parts.join(' ');
@@ -208,7 +211,7 @@ function formatClickLikeActionLine(parts: string[], action: SessionAction): stri
 function formatFillActionLine(parts: string[], action: SessionAction): string | undefined {
   const ref = action.positionals?.[0];
   if (!ref?.startsWith('@')) return undefined;
-  parts.push(formatScriptArg(ref));
+  parts.push(formatScriptArg(stripRecordedRefGeneration(ref)));
   appendRefLabel(parts, action);
   const text = action.positionals.slice(1).join(' ');
   // Preserve explicit empty-string fill arguments.
@@ -224,7 +227,7 @@ function formatGetActionLine(parts: string[], action: SessionAction): string | u
   const ref = action.positionals?.[1];
   if (!sub || !ref) return undefined;
   parts.push(formatScriptArg(sub));
-  parts.push(formatScriptArg(ref));
+  parts.push(formatScriptArg(stripRecordedRefGeneration(ref)));
   if (ref.startsWith('@')) appendRefLabel(parts, action);
   return parts.join(' ');
 }

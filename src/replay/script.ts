@@ -12,6 +12,7 @@ import {
   isClickLikeCommand,
   parseReplaySeriesFlags,
   parseReplayRuntimeFlags,
+  stripRecordedRefGeneration,
 } from './script-utils.ts';
 import { REPLAY_VAR_KEY_RE } from './vars.ts';
 
@@ -261,7 +262,9 @@ function parseReplayScriptLine(line: string): SessionAction | null {
     const target = parsed.positionals[0];
     if (target === undefined) return action;
     if (target.startsWith('@')) {
-      action.positionals = [target];
+      // Recorded refs may carry a `~s<generation>` pin — strip and IGNORE it
+      // (see stripRecordedRefGeneration: generations are session-scoped).
+      action.positionals = [stripRecordedRefGeneration(target)];
       if (parsed.positionals[1]) {
         action.result = { refLabel: parsed.positionals[1] };
       }
@@ -286,12 +289,13 @@ function parseReplayScriptLine(line: string): SessionAction | null {
     }
     const [target, text, ...textRest] = parsed.positionals;
     if (target.startsWith('@')) {
+      const ref = stripRecordedRefGeneration(target);
       if (textRest.length > 0) {
-        action.positionals = [target, textRest.join(' ')];
+        action.positionals = [ref, textRest.join(' ')];
         action.result = { refLabel: text };
         return action;
       }
-      action.positionals = [target, text];
+      action.positionals = [ref, text];
       return action;
     }
     action.positionals = [target, [text, ...textRest].join(' ')];
@@ -306,7 +310,7 @@ function parseReplayScriptLine(line: string): SessionAction | null {
       return action;
     }
     if (target.startsWith('@')) {
-      action.positionals = [sub, target];
+      action.positionals = [sub, stripRecordedRefGeneration(target)];
       if (args[2]) {
         action.result = { refLabel: args[2] };
       }
@@ -377,7 +381,12 @@ function parseReplayScriptLine(line: string): SessionAction | null {
     return action;
   }
 
-  action.positionals = args;
+  // wait @ref [timeout] and longpress @ref [durationMs] flow through this
+  // generic branch: strip recorded generation pins like the branches above.
+  action.positionals =
+    command === 'wait' || command === 'longpress'
+      ? args.map((token) => stripRecordedRefGeneration(token))
+      : args;
   return action;
 }
 

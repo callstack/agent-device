@@ -178,7 +178,27 @@ export async function handleFindCommands(params: {
   };
 
   const handler = actionHandlers[action];
-  return handler ? handler() : null;
+  if (!handler) return null;
+  // Re-read the session AFTER the handler: internal click/fill sub-invocations
+  // may have replaced the stored tree again (Android freshness refresh), and
+  // the reported generation must describe the tree the response's ref resolves
+  // against at response time.
+  return attachIssuedRefsGeneration(await handler(), () => sessionStore.get(sessionName));
+}
+
+/**
+ * #1076 versioned refs: a find response that returns a ref is a ref-issuing
+ * response, so it carries the stored tree's generation ONCE as the additive
+ * `refsGeneration` field (the ref itself stays plain `@e12` — token economy).
+ */
+function attachIssuedRefsGeneration(
+  response: DaemonResponse | null,
+  getSession: () => SessionState | undefined,
+): DaemonResponse | null {
+  if (!response?.ok || !response.data || typeof response.data.ref !== 'string') return response;
+  const refsGeneration = getSession()?.snapshotGeneration;
+  if (refsGeneration === undefined) return response;
+  return { ...response, data: { ...response.data, refsGeneration } };
 }
 
 // --- Per-action handlers ---

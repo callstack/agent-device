@@ -33,6 +33,9 @@ function snapshotView(data: DaemonResponseData, level: ResponseLevel): DaemonRes
     truncated: data.truncated,
     ...(data.visibility !== undefined ? { visibility: data.visibility } : {}),
     ...(data.snapshotQuality !== undefined ? { snapshotQuality: data.snapshotQuality } : {}),
+    // #1076 versioned refs: the one-number generation is the pinning signal for
+    // the refs above — cheap, and dropping it would strand auto-pinning clients.
+    ...(data.refsGeneration !== undefined ? { refsGeneration: data.refsGeneration } : {}),
   };
 }
 

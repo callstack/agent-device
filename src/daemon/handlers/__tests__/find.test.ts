@@ -93,7 +93,8 @@ test('handleFindCommands click returns deterministic metadata across locator var
       positionals: ['Increment', 'click'],
       nodes: [hittableParentNoRect, nonHittableChildWithRect],
       invoke: async () => ({ platformSpecificRef: 'XCUIElementTypeView' }),
-      expectedKeys: ['locator', 'message', 'query', 'ref', 'x', 'y'],
+      // refsGeneration rides every ref-issuing find response (#1076 versioned refs).
+      expectedKeys: ['locator', 'message', 'query', 'ref', 'refsGeneration', 'x', 'y'],
       expectedLocator: 'any',
       expectedQuery: 'Increment',
       expectedCoordinates: { x: 100, y: 50 },
@@ -756,4 +757,34 @@ test('handleFindCommands click re-issues a fresh ref and clears the stale-refs m
   // The response returns a ref minted from the freshly stored snapshot, so
   // the marker clears before the internal click @ref sub-invocation runs.
   expect(storedSession.snapshotRefsStale).toBe(false);
+});
+
+test('handleFindCommands click carries refsGeneration for the freshly stored tree (#1076 versioned refs)', async () => {
+  const sessionName = 'default';
+  const session = makeSession(sessionName);
+  // Two earlier tree replacements happened in this session.
+  session.snapshotGeneration = 2;
+
+  const { response, session: storedSession } = await runFindClickScenario({
+    positionals: ['Increment', 'click'],
+    nodes: [
+      {
+        index: 0,
+        type: 'Button',
+        label: 'Increment',
+        hittable: true,
+        rect: { x: 50, y: 0, width: 100, height: 100 },
+        depth: 0,
+      },
+    ],
+    session,
+  });
+
+  expect(response.ok).toBe(true);
+  // The find capture replaced the stored tree (generation 3) and the response
+  // returns a ref minted from it, so it reports that generation ONCE.
+  expect(storedSession.snapshotGeneration).toBe(3);
+  if (response.ok) {
+    expect((response.data as Record<string, unknown>).refsGeneration).toBe(3);
+  }
 });

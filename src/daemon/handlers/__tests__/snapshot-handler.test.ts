@@ -450,6 +450,67 @@ test('snapshot clears the stale-refs marker; diff leaves client refs stale (#107
   expect(sessionStore.get(sessionName)?.snapshotRefsStale).toBe(true);
 });
 
+// #1076 versioned refs — shared harness for the refsGeneration tests below.
+async function runVersionedRefsCommand(params: {
+  sessionStore: ReturnType<typeof makeSessionStore>;
+  sessionName: string;
+  command: 'snapshot' | 'diff';
+}): Promise<Record<string, unknown> | undefined> {
+  const response = await handleSnapshotCommands({
+    req: {
+      token: 't',
+      session: params.sessionName,
+      command: params.command,
+      positionals: params.command === 'diff' ? ['snapshot'] : [],
+      flags: {},
+    },
+    sessionName: params.sessionName,
+    logPath: '/tmp/daemon.log',
+    sessionStore: params.sessionStore,
+  });
+  expect(response?.ok).toBe(true);
+  return response?.ok ? response.data : undefined;
+}
+
+function makeVersionedRefsScenario(sessionName: string) {
+  const sessionStore = makeSessionStore();
+  sessionStore.set(sessionName, makeSession(sessionName, androidDevice));
+  mockDispatch.mockResolvedValue({
+    nodes: [{ index: 0, depth: 0, type: 'android.widget.Button', label: 'Fresh' }],
+    truncated: false,
+    backend: 'android',
+  });
+  return sessionStore;
+}
+
+test('snapshot responses carry refsGeneration and advance it per capture (#1076 versioned refs)', async () => {
+  const sessionName = 'android-refs-generation';
+  const sessionStore = makeVersionedRefsScenario(sessionName);
+
+  const first = await runVersionedRefsCommand({ sessionStore, sessionName, command: 'snapshot' });
+  // Ref-issuing response reports the generation ONCE; the node tree itself
+  // stays plain `e1` refs (token economy).
+  expect(first?.refsGeneration).toBe(1);
+  expect(sessionStore.get(sessionName)?.snapshotGeneration).toBe(1);
+
+  const second = await runVersionedRefsCommand({ sessionStore, sessionName, command: 'snapshot' });
+  expect(second?.refsGeneration).toBe(2);
+});
+
+test('diff advances the generation without issuing refsGeneration (#1076 versioned refs)', async () => {
+  const sessionName = 'android-refs-generation-diff';
+  const sessionStore = makeVersionedRefsScenario(sessionName);
+
+  await runVersionedRefsCommand({ sessionStore, sessionName, command: 'snapshot' });
+
+  // diff replaces the stored tree too — the generation advances even though
+  // the summary response issues no refs, which is exactly what a pinned
+  // `@e1~s1` ref would then warn about.
+  const diffData = await runVersionedRefsCommand({ sessionStore, sessionName, command: 'diff' });
+  expect(diffData?.refsGeneration).toBeUndefined();
+  expect(sessionStore.get(sessionName)?.snapshotGeneration).toBe(2);
+});
+
 test('snapshot surfaces filtered-to-zero Android guidance for interactive snapshots', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-empty-interactive';

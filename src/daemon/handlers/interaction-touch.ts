@@ -14,6 +14,7 @@ import type {
 import { asAppError, normalizeError } from '../../kernel/errors.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';
+import { resolveRefStalenessWarning } from '../session-snapshot.ts';
 import {
   buildInteractionResponseData,
   type InteractionResponsePayloads,
@@ -118,8 +119,17 @@ async function dispatchTargetedTouchViaRuntime(
   if (!parsedTarget.ok) return parsedTarget.response;
   // Staleness relative to what the client knew when it sent this @ref — read
   // BEFORE any internal recapture (Android freshness refresh, --verify) flips
-  // the flag as a side effect of this same command (#1076).
-  const staleRefs = parsedTarget.target.kind === 'ref' && session.snapshotRefsStale === true;
+  // the flag or advances the generation as a side effect of this same command
+  // (#1076). Pinned refs (`@e12~s3`) get a precise generation-mismatch
+  // warning; plain refs keep the coarse marker warning.
+  const staleRefsWarning =
+    parsedTarget.target.kind === 'ref'
+      ? resolveRefStalenessWarning({
+          session,
+          ref: parsedTarget.target.ref,
+          mintedGeneration: parsedTarget.refGeneration,
+        })
+      : undefined;
   let androidFreshnessBaseline: SessionState['snapshot'];
   if (parsedTarget.target.kind === 'ref') {
     const invalidRefFlagsResponse = params.refSnapshotFlagGuardResponse(
@@ -167,7 +177,7 @@ async function dispatchTargetedTouchViaRuntime(
         params,
         session,
         result,
-        staleRefs,
+        staleRefsWarning,
         extra:
           command === 'longpress'
             ? {
@@ -224,7 +234,7 @@ async function buildTargetedTouchResponsePayloads(params: {
   };
   session: SessionState;
   result: TargetedTouchResult;
-  staleRefs: boolean;
+  staleRefsWarning: string | undefined;
   extra: Record<string, unknown>;
 }): Promise<InteractionResponsePayloads> {
   const { params: handlerParams, session, result, extra } = params;
@@ -242,7 +252,7 @@ async function buildTargetedTouchResponsePayloads(params: {
     source: { kind: 'runtime', result },
     referenceFrame,
     extra,
-    staleRefs: params.staleRefs,
+    staleRefsWarning: params.staleRefsWarning,
   });
 }
 
@@ -432,7 +442,14 @@ async function dispatchFillViaRuntime(
   const parsedTarget = parseFillTarget(req.positionals ?? []);
   if (!parsedTarget.ok) return parsedTarget.response;
   // Read before the Android freshness refresh recaptures — see the press path.
-  const staleRefs = parsedTarget.target.kind === 'ref' && session.snapshotRefsStale === true;
+  const staleRefsWarning =
+    parsedTarget.target.kind === 'ref'
+      ? resolveRefStalenessWarning({
+          session,
+          ref: parsedTarget.target.ref,
+          mintedGeneration: parsedTarget.refGeneration,
+        })
+      : undefined;
   if (parsedTarget.target.kind === 'ref') {
     const invalidRefFlagsResponse = params.refSnapshotFlagGuardResponse('fill', req.flags);
     if (invalidRefFlagsResponse) return invalidRefFlagsResponse;
@@ -474,7 +491,7 @@ async function dispatchFillViaRuntime(
         source: { kind: 'runtime', result, refBackendWireShape: true },
         referenceFrame,
         extra: { text: parsedTarget.text },
-        staleRefs,
+        staleRefsWarning,
       });
     },
   });

@@ -1,5 +1,22 @@
 import type { SessionAction } from '../daemon/types.ts';
 import { appendScreenshotScriptFlags } from '../contracts/screenshot.ts';
+import { splitRefGenerationSuffix } from '../kernel/snapshot.ts';
+
+/**
+ * #1076 versioned refs: a recorded ref positional may carry a `~s<generation>`
+ * pin from the client that issued it (`@e12~s3`). Generations are meaningless
+ * outside the session that minted them — a replayed script runs against a NEW
+ * session with its own generation counter — so replay parsing and script
+ * writing strip well-formed suffixes and IGNORE the generation instead of
+ * re-validating it (which would only produce spurious staleness warnings).
+ * Malformed suffixes are left untouched; they were never minted by us and the
+ * daemon owns rejecting them.
+ */
+export function stripRecordedRefGeneration(token: string): string {
+  if (!token.startsWith('@')) return token;
+  const split = splitRefGenerationSuffix(token);
+  return split?.base ?? token;
+}
 
 const NUMERIC_ARG_RE = /^-?\d+(\.\d+)?$/;
 const BARE_SCRIPT_TOKEN_RE = /^[^\s"\\]+$/;
@@ -180,7 +197,13 @@ export function appendRuntimeActionScriptArgs(
 
 export function appendGenericActionScriptArgs(parts: string[], action: SessionAction): void {
   for (const positional of action.positionals ?? []) {
-    parts.push(formatScriptArg(positional));
+    // wait @ref: recorded refs may carry a `~s<generation>` pin (#1076);
+    // scripts store the plain ref (see stripRecordedRefGeneration).
+    parts.push(
+      formatScriptArg(
+        action.command === 'wait' ? stripRecordedRefGeneration(positional) : positional,
+      ),
+    );
   }
   appendScriptSeriesFlags(parts, action);
 }

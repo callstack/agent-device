@@ -5,7 +5,6 @@ import type {
   PressCommandResult,
 } from '../../contracts/interaction.ts';
 import { successText } from '../../utils/success-text.ts';
-import { STALE_SNAPSHOT_REFS_WARNING } from '../session-snapshot.ts';
 import { interactionResultExtra, stripAtPrefix } from './interaction-touch-targets.ts';
 
 /**
@@ -57,12 +56,14 @@ export function buildInteractionResponseData(params: {
    */
   extra?: Record<string, unknown>;
   /**
-   * The command consumed an `@ref` argument while the session's stored
-   * snapshot had been replaced without re-issuing refs to the client
-   * (`session.snapshotRefsStale`, #1076). Appends
-   * STALE_SNAPSHOT_REFS_WARNING to the response warning.
+   * Staleness warning for the consumed `@ref` argument (#1076), resolved by
+   * `resolveRefStalenessWarning` (src/daemon/session-snapshot.ts): the coarse
+   * STALE_SNAPSHOT_REFS_WARNING for plain refs while `snapshotRefsStale` is
+   * set, or the precise pinned-generation warning for `@e12~s3` refs whose
+   * generation no longer matches the stored tree. Appended to the response
+   * warning.
    */
-  staleRefs?: boolean;
+  staleRefsWarning?: string;
 }): InteractionResponsePayloads {
   const { source, referenceFrame, extra } = params;
   if (source.kind === 'runner-payload') {
@@ -99,7 +100,7 @@ export function buildInteractionResponseData(params: {
       : visualization;
   const warning = composeResponseWarning(
     'warning' in result ? result.warning : undefined,
-    params.staleRefs,
+    params.staleRefsWarning,
   );
   if (warning) {
     visualization.warning = warning;
@@ -110,12 +111,10 @@ export function buildInteractionResponseData(params: {
 
 function composeResponseWarning(
   resultWarning: string | undefined,
-  staleRefs: boolean | undefined,
+  staleRefsWarning: string | undefined,
 ): string | undefined {
-  if (staleRefs !== true) return resultWarning;
-  return resultWarning
-    ? `${resultWarning} ${STALE_SNAPSHOT_REFS_WARNING}`
-    : STALE_SNAPSHOT_REFS_WARNING;
+  if (!staleRefsWarning) return resultWarning;
+  return resultWarning ? `${resultWarning} ${staleRefsWarning}` : staleRefsWarning;
 }
 
 function buildTouchVisualizationResult(params: {

@@ -9,12 +9,38 @@ import {
   type DecodedFillTarget,
 } from '../../core/interaction-positionals.ts';
 import type { DaemonResponse } from '../types.ts';
+import { REF_GRAMMAR_HINT, splitRefGenerationSuffix } from '../../kernel/snapshot.ts';
 import { parseCoordinateTarget } from './interaction-targeting.ts';
 import { errorResponse } from './response.ts';
 
 export type ParsedTouchTarget =
-  | { ok: true; target: InteractionTarget; durationMs?: never }
+  | { ok: true; target: InteractionTarget; refGeneration?: number; durationMs?: never }
   | { ok: false; response: DaemonResponse };
+
+/**
+ * Daemon boundary for the versioned-ref suffix (#1076): a pinned `@e12~s3`
+ * target is split here so everything downstream (runtime resolution, backend
+ * fast paths, recording) sees exactly today's plain `@e12` ref, while the
+ * minted generation is surfaced separately for the staleness warning.
+ */
+type ParsedVersionedRef =
+  | { ok: true; ref: string; generation?: number }
+  | { ok: false; response: DaemonResponse };
+
+export function parseVersionedRefPositional(refInput: string): ParsedVersionedRef {
+  const split = splitRefGenerationSuffix(refInput);
+  if (!split) {
+    return {
+      ok: false,
+      response: errorResponse(
+        'INVALID_ARGS',
+        `Invalid ref "${refInput}" — malformed generation suffix.`,
+        { hint: REF_GRAMMAR_HINT },
+      ),
+    };
+  }
+  return { ok: true, ref: split.base, generation: split.generation };
+}
 
 export function parseTouchTarget(positionals: string[], commandLabel: string): ParsedTouchTarget {
   const coordinates = parseCoordinateTarget(positionals);
@@ -23,13 +49,16 @@ export function parseTouchTarget(positionals: string[], commandLabel: string): P
   }
   const first = positionals[0] ?? '';
   if (first.startsWith('@')) {
+    const versioned = parseVersionedRefPositional(first);
+    if (!versioned.ok) return { ok: false, response: versioned.response };
     return {
       ok: true,
       target: {
         kind: 'ref',
-        ref: first,
+        ref: versioned.ref,
         fallbackLabel: positionals.slice(1).join(' ').trim(),
       },
+      refGeneration: versioned.generation,
     };
   }
   const selector = positionals.join(' ').trim();
@@ -46,7 +75,7 @@ export function parseTouchTarget(positionals: string[], commandLabel: string): P
 }
 
 export type ParsedLongPressTarget =
-  | { ok: true; target: InteractionTarget; durationMs?: number }
+  | { ok: true; target: InteractionTarget; refGeneration?: number; durationMs?: number }
   | { ok: false; response: DaemonResponse };
 
 export function parseLongPressTarget(positionals: string[]): ParsedLongPressTarget {
@@ -65,17 +94,20 @@ export function parseLongPressTarget(positionals: string[]): ParsedLongPressTarg
   return {
     ok: true,
     target: parsedTarget.target,
+    refGeneration: parsedTarget.refGeneration,
     ...split.duration,
   };
 }
 
 export type ParsedFillTarget =
-  | { ok: true; target: InteractionTarget; text: string }
+  | { ok: true; target: InteractionTarget; refGeneration?: number; text: string }
   | { ok: false; response: DaemonResponse };
 
 export function parseFillTarget(positionals: string[]): ParsedFillTarget {
   const first = positionals[0] ?? '';
   if (first.startsWith('@')) {
+    const versioned = parseVersionedRefPositional(first);
+    if (!versioned.ok) return { ok: false, response: versioned.response };
     const parsed = readFillTargetFromPositionals(positionals);
     const text = parsed.text;
     if (!text)
@@ -84,9 +116,10 @@ export function parseFillTarget(positionals: string[]): ParsedFillTarget {
       ok: true,
       target: {
         kind: 'ref',
-        ref: first,
+        ref: versioned.ref,
         fallbackLabel: readRefFallbackLabel(positionals),
       },
+      refGeneration: versioned.generation,
       text,
     };
   }
