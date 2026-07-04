@@ -16,6 +16,7 @@ import {
   isNodeVisibleOnScreen,
   resolveEffectiveViewportRect,
 } from '../../../snapshot/mobile-snapshot-semantics.ts';
+import { containsPoint, resolveViewportRect } from '../../../utils/rect-visibility.ts';
 import { isSnapshotNodeInteractionBlocked } from '../../../snapshot/snapshot-occlusion.ts';
 import type {
   InteractionTarget,
@@ -26,6 +27,10 @@ import { now, toBackendContext } from '../../runtime-common.ts';
 import { resolveActionableTouchResolution } from '../../../core/interaction-targeting.ts';
 
 export type { InteractionTarget, PointTarget, ResolvedInteractionTarget };
+
+// Referenced in interaction-guarantees.ts registry via dynamic symbol lookup.
+// fallow-ignore-next-line unused-export
+export { tryResolveOutOfBoundsPointWarning };
 
 export type InteractionAction =
   | 'click'
@@ -74,20 +79,46 @@ export async function resolveInteractionTarget(
   return await resolveSelectorInteractionTarget(runtime, options, options.target, params);
 }
 
+async function tryResolveOutOfBoundsPointWarning(
+  runtime: AgentDeviceRuntime,
+  options: CommandContext,
+  target: PointTarget,
+): Promise<string | undefined> {
+  const sessionName = options.session ?? 'default';
+  const session = await runtime.sessions.get(sessionName);
+  if (!session?.snapshot) return undefined;
+
+  // Create a synthetic rect from the point for viewport lookup
+  const pointRect = { x: target.x, y: target.y, width: 0, height: 0 };
+  const viewport = resolveViewportRect(session.snapshot.nodes, pointRect);
+  if (!viewport) return undefined;
+
+  const point = { x: target.x, y: target.y };
+  if (containsPoint(viewport, point.x, point.y)) return undefined;
+
+  return `Coordinates (${point.x}, ${point.y}) are outside the last-known viewport (${viewport.width}x${viewport.height}). The tap will be forwarded anyway; take a fresh snapshot if the screen changed.`;
+}
+
 async function resolvePointInteractionTarget(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
   target: PointTarget,
   params: ResolveInteractionTargetParams,
 ): Promise<ResolvedInteractionTarget> {
+  const warning = await tryResolveOutOfBoundsPointWarning(runtime, options, target);
   if (!params.captureEvidenceBaseline) {
-    return { kind: 'point', point: { x: target.x, y: target.y } };
+    return {
+      kind: 'point',
+      point: { x: target.x, y: target.y },
+      ...(warning ? { warning } : {}),
+    };
   }
   const preActionNodes = await tryCaptureEvidenceBaseline(runtime, options);
   return {
     kind: 'point',
     point: { x: target.x, y: target.y },
     ...(preActionNodes ? { preActionNodes } : {}),
+    ...(warning ? { warning } : {}),
   };
 }
 

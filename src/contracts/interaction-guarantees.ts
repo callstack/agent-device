@@ -302,10 +302,8 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         reason: 'Coordinates bypass element semantics by design (escape hatch).',
       },
       offscreen: {
-        kind: 'waived',
-        reason:
-          'gap: out-of-viewport coordinates are forwarded as-is; a bounds warning would be cheap.',
-        trackingIssue: GAPS_UMBRELLA_ISSUE,
+        kind: 'runtime',
+        via: 'src/commands/interaction/runtime/resolution.ts#tryResolveOutOfBoundsPointWarning',
       },
       nonHittable: {
         kind: 'inapplicable',

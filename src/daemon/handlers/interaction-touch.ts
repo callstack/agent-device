@@ -236,6 +236,7 @@ async function buildTargetedTouchResponsePayloads(params: {
     referenceFrame,
     extra,
   });
+  return responseData;
 }
 
 function readLongPressResultDuration(result: TargetedTouchResult): number | undefined {

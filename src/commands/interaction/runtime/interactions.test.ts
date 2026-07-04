@@ -1379,6 +1379,85 @@ test('runtime interaction commands are available from the command namespace', as
   assert.equal(result.kind, 'selector');
 });
 
+test('coordinate tap with out-of-bounds point warns when session has viewport', async () => {
+  const device = createInteractionDevice(
+    makeSnapshotState([
+      {
+        index: 0,
+        depth: 0,
+        type: 'Application',
+        rect: { x: 0, y: 0, width: 400, height: 800 },
+        hittable: true,
+      },
+    ]),
+    {
+      tap: async () => ({ ok: true }),
+    },
+  );
+
+  const result = await device.interactions.click(
+    { kind: 'point', x: 500, y: 500 },
+    {
+      session: 'default',
+    },
+  );
+
+  assert.equal(result.kind, 'point');
+  assert.equal(
+    result.warning,
+    'Coordinates (500, 500) are outside the last-known viewport (400x800). The tap will be forwarded anyway; take a fresh snapshot if the screen changed.',
+  );
+});
+
+test('coordinate tap with in-bounds point has no warning', async () => {
+  const device = createInteractionDevice(
+    makeSnapshotState([
+      {
+        index: 0,
+        depth: 0,
+        type: 'Application',
+        rect: { x: 0, y: 0, width: 400, height: 800 },
+        hittable: true,
+      },
+    ]),
+    {
+      tap: async () => ({ ok: true }),
+    },
+  );
+
+  const result = await device.interactions.click(
+    { kind: 'point', x: 200, y: 400 },
+    {
+      session: 'default',
+    },
+  );
+
+  assert.equal(result.kind, 'point');
+  assert.equal('warning' in result, false);
+});
+
+test('coordinate tap with no session snapshot has no warning', async () => {
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      tap: async () => ({ ok: true }),
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default' }]),
+    policy: localCommandPolicy(),
+  });
+
+  const result = await device.interactions.click(
+    { kind: 'point', x: 500, y: 500 },
+    {
+      session: 'default',
+    },
+  );
+
+  assert.equal(result.kind, 'point');
+  assert.equal('warning' in result, false);
+});
+
 function selectorSnapshot(): SnapshotState {
   return makeSnapshotState([
     {

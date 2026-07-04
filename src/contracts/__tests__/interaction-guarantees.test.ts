@@ -179,7 +179,6 @@ test('acknowledged gaps are visible and bounded', () => {
   // updates it here with a linked issue. It is the diffable debt list
   // (umbrella: https://github.com/callstack/agent-device/issues/1081).
   assert.deepEqual(gaps.sort(), [
-    'coordinate/offscreen',
     'direct-ios-selector/disambiguation',
     'direct-ios-selector/errorTaxonomy',
     'direct-ios-selector/nonHittable',

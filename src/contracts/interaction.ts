@@ -80,6 +80,7 @@ export type InteractionEvidence = {
 export type PressCommandResult = ResolvedInteractionTarget & {
   backendResult?: Record<string, unknown>;
   message?: string;
+  warning?: string;
   evidence?: InteractionEvidence;
 };
 
@@ -95,4 +96,5 @@ export type LongPressCommandResult = ResolvedInteractionTarget & {
   durationMs?: number;
   backendResult?: Record<string, unknown>;
   message?: string;
+  warning?: string;
 };
