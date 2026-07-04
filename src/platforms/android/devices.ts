@@ -6,6 +6,7 @@ import type { DeviceInfo } from '../../kernel/device.ts';
 import { Deadline, retryWithPolicy } from '../../utils/retry.ts';
 import { resolveAndroidSerialAllowlist } from '../../utils/device-isolation.ts';
 import { bootFailureHint, classifyBootFailure } from '../boot-diagnostics.ts';
+import { attachAdbFailureHint } from './adb-executor.ts';
 import { ensureAndroidSdkPathConfigured } from './sdk.ts';
 
 const EMULATOR_SERIAL_PREFIX = 'emulator-';
@@ -282,10 +283,14 @@ function parseAndroidDeviceEntries(rawOutput: string): AndroidDeviceEntry[] {
 }
 
 async function listAndroidDeviceEntries(): Promise<AndroidDeviceEntry[]> {
-  const result = await runCmd('adb', ['devices', '-l'], {
-    timeoutMs: ANDROID_BOOT_PROP_TIMEOUT_MS,
-  });
-  return parseAndroidDeviceEntries(result.stdout);
+  try {
+    const result = await runCmd('adb', ['devices', '-l'], {
+      timeoutMs: ANDROID_BOOT_PROP_TIMEOUT_MS,
+    });
+    return parseAndroidDeviceEntries(result.stdout);
+  } catch (error) {
+    throw attachAdbFailureHint(error);
+  }
 }
 
 export function parseAndroidAvdList(rawOutput: string): string[] {

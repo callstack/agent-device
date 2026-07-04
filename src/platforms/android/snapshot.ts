@@ -23,6 +23,7 @@ import {
   type AndroidUiHierarchy,
 } from './ui-hierarchy.ts';
 import {
+  classifyAdbFailure,
   resolveAndroidAdbExecutor,
   resolveAndroidAdbProvider,
   type AndroidAdbProvider,
@@ -56,12 +57,10 @@ const HELPER_CAPTURE_TIMEOUT_MS = 5_000;
 const HELPER_COMMAND_TIMEOUT_MS = 30_000;
 const HELPER_RUNTIME_RESET_DELAY_MS = 150;
 const HELPER_RUNTIME_RESET_TIMEOUT_MS = 2_000;
-const RETRYABLE_ADB_STDERR_PATTERNS = [
-  'device offline',
-  'device not found',
-  'transport error',
-  'connection reset',
-  'broken pipe',
+// Transient adb transport families (device offline/not found, transport error,
+// connection reset, broken pipe) come from the shared classifier; these extras
+// are snapshot-specific races (dump timeouts, dump-file reads) worth retrying.
+const SNAPSHOT_ONLY_RETRYABLE_ADB_STDERR_PATTERNS = [
   'timed out',
   'no such file or directory',
 ] as const;
@@ -724,7 +723,8 @@ function isRetryableAdbError(err: unknown): boolean {
   if (err.code !== 'COMMAND_FAILED') return false;
   const rawStderr = err.details?.stderr;
   const stderr = (typeof rawStderr === 'string' ? rawStderr : '').toLowerCase();
-  return RETRYABLE_ADB_STDERR_PATTERNS.some((pattern) => stderr.includes(pattern));
+  if (classifyAdbFailure(stderr)?.retriable === true) return true;
+  return SNAPSHOT_ONLY_RETRYABLE_ADB_STDERR_PATTERNS.some((pattern) => stderr.includes(pattern));
 }
 
 function isUiHierarchyDumpTimeout(err: unknown): err is AppError {

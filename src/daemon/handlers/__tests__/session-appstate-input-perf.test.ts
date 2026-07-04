@@ -443,7 +443,7 @@ test('perf preserves successful metrics and normalizes per-metric Android sampli
     expect(memory?.available).toBe(false);
     expect(memory?.reason).toBe('error: device offline');
     expect(memory?.error?.code).toBe('COMMAND_FAILED');
-    expect(memory?.error?.hint).toMatch(/retry with --debug/i);
+    expect(memory?.error?.hint).toMatch(/adb reconnect/i);
     expect(memory?.error?.details?.metric).toBe('memory');
     expect(memory?.error?.details?.package).toBe('com.example.app');
     expect(cpu?.available).toBe(true);

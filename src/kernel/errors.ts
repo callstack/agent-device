@@ -34,6 +34,7 @@ type AppErrorDetails = Record<string, unknown> & {
   hint?: string;
   diagnosticId?: string;
   logPath?: string;
+  retriable?: boolean;
 };
 
 export type NormalizedError = {
@@ -42,6 +43,12 @@ export type NormalizedError = {
   hint?: string;
   diagnosticId?: string;
   logPath?: string;
+  /**
+   * Lifted from `details.retriable` when a throw site classified the failure as
+   * clearly transient (or clearly not). Included only when set, so the default
+   * error wire shape is unchanged.
+   */
+  retriable?: boolean;
   details?: Record<string, unknown>;
 };
 
@@ -91,6 +98,8 @@ export function normalizeError(
     (details && typeof details.logPath === 'string' ? details.logPath : undefined) ??
     context.logPath;
   const hint = detailHint ?? defaultHintForCode(appErr.code);
+  const retriable =
+    details && typeof details.retriable === 'boolean' ? details.retriable : undefined;
   const cleanDetails = stripDiagnosticMeta(details);
   const message = maybeEnrichCommandFailedMessage(appErr.code, appErr.message, details);
 
@@ -100,6 +109,7 @@ export function normalizeError(
     hint,
     diagnosticId,
     logPath,
+    ...(retriable !== undefined ? { retriable } : {}),
     details: cleanDetails,
   };
 }
@@ -148,6 +158,7 @@ function stripDiagnosticMeta(
   delete output.hint;
   delete output.diagnosticId;
   delete output.logPath;
+  delete output.retriable;
   return Object.keys(output).length > 0 ? output : undefined;
 }
 

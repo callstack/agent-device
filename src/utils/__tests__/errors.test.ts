@@ -78,6 +78,22 @@ test('normalizeError provides app discovery guidance for app-not-installed error
   );
 });
 
+test('normalizeError lifts details.retriable to the top level and strips it from details', () => {
+  const normalized = normalizeError(
+    new AppError('COMMAND_FAILED', 'adb exited with code 1', {
+      stderr: 'error: device offline',
+      retriable: true,
+    }),
+  );
+  assert.equal(normalized.retriable, true);
+  assert.equal(Object.hasOwn(normalized.details ?? {}, 'retriable'), false);
+});
+
+test('normalizeError omits retriable when the throw site did not classify it', () => {
+  const normalized = normalizeError(new AppError('COMMAND_FAILED', 'adb exited with code 1'));
+  assert.equal(Object.hasOwn(normalized, 'retriable'), false);
+});
+
 test('toAppErrorCode falls back when code is missing or empty', () => {
   assert.equal(toAppErrorCode(undefined), 'COMMAND_FAILED');
   assert.equal(toAppErrorCode(''), 'COMMAND_FAILED');

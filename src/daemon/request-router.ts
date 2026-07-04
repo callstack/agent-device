@@ -313,7 +313,9 @@ function enrichDaemonError(command: string, error: DaemonError): DaemonError {
       ? supportedPlatformsForCommand(command)
       : [];
   const supportedOn = supportedPlatforms.length > 0 ? supportedPlatforms.join(', ') : undefined;
-  const retriable = retriableForErrorCode(error.code);
+  // A throw-site classification (lifted from details by normalizeError) wins
+  // over the conservative code-level policy.
+  const retriable = error.retriable ?? retriableForErrorCode(error.code);
   if (supportedOn === undefined && retriable === undefined) return error;
   return {
     ...error,
