@@ -522,18 +522,6 @@ extension RunnerTests {
         }
         return Response(ok: false, error: ErrorPayload(code: "ELEMENT_NOT_FOUND", message: "element not found"))
       }
-      if let text = command.text {
-        if let element = findElement(app: activeApp, text: text) {
-          let (timing, outcome) = performGesture(activeApp) {
-            activateElement(app: activeApp, element: element, action: "tap by text")
-          }
-          if let response = unsupportedResponse(for: outcome) {
-            return response
-          }
-          return gestureResponse(message: "tapped", timing: timing)
-        }
-        return Response(ok: false, error: ErrorPayload(message: "element not found"))
-      }
       if let x = command.x, let y = command.y {
         var fallback: GestureFallback?
         if command.synthesized == true {
@@ -557,7 +545,7 @@ extension RunnerTests {
           fallback: fallback
         )
       }
-      return Response(ok: false, error: ErrorPayload(message: "tap requires text or x/y"))
+      return Response(ok: false, error: ErrorPayload(message: "tap requires a selector or x/y"))
     case .mouseClick:
       guard let x = command.x, let y = command.y else {
         return Response(ok: false, error: ErrorPayload(message: "mouseClick requires x and y"))

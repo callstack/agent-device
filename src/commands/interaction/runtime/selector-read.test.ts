@@ -367,9 +367,91 @@ test('runtime wait stable settles after two unchanged captures', async () => {
   if (result.kind === 'stable') {
     assert.equal(result.captures, 3);
     assert.equal(result.nodeCount, snapshot.nodes.length);
-    assert.equal(result.settledAfterMs, result.waitedMs);
   }
   assert.equal(captures, 3);
+});
+
+test('runtime wait stable hints when it settles on a nearly-empty tree', async () => {
+  const tinySnapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Button',
+      label: 'One',
+      rect: { x: 0, y: 0, width: 10, height: 10 },
+    },
+    {
+      index: 1,
+      depth: 0,
+      type: 'Button',
+      label: 'Two',
+      rect: { x: 0, y: 20, width: 10, height: 10 },
+    },
+    {
+      index: 2,
+      depth: 0,
+      type: 'Button',
+      label: 'Three',
+      rect: { x: 0, y: 40, width: 10, height: 10 },
+    },
+  ]);
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      captureSnapshot: async () => ({ snapshot: tinySnapshot }),
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default', snapshot: tinySnapshot }]),
+    policy: localCommandPolicy(),
+    clock: createFakeClock(),
+  });
+
+  const result = await device.selectors.wait({
+    session: 'default',
+    target: { kind: 'stable', quietMs: 500, timeoutMs: 10_000 },
+  });
+
+  assert.equal(result.kind, 'stable');
+  if (result.kind === 'stable') {
+    assert.equal(result.nodeCount, 3);
+    assert.equal(
+      result.hint,
+      'Settled on a nearly-empty tree — the app may still be loading. Wait for specific content (wait text ...) before interacting.',
+    );
+  }
+});
+
+test('runtime wait stable omits the loading hint for a normal-sized tree', async () => {
+  const normalSnapshot = makeSnapshotState(
+    Array.from({ length: 6 }, (_, index) => ({
+      index,
+      depth: 0,
+      type: 'Button',
+      label: `Item ${index}`,
+      rect: { x: 0, y: index * 20, width: 10, height: 10 },
+    })),
+  );
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      captureSnapshot: async () => ({ snapshot: normalSnapshot }),
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default', snapshot: normalSnapshot }]),
+    policy: localCommandPolicy(),
+    clock: createFakeClock(),
+  });
+
+  const result = await device.selectors.wait({
+    session: 'default',
+    target: { kind: 'stable', quietMs: 500, timeoutMs: 10_000 },
+  });
+
+  assert.equal(result.kind, 'stable');
+  if (result.kind === 'stable') {
+    assert.equal(result.nodeCount, 6);
+    assert.equal('hint' in result, false);
+  }
 });
 
 test('runtime wait stable requires quiet captures after instability before settling', async () => {

@@ -123,9 +123,9 @@ export type WaitCommandResult =
   | {
       kind: 'stable';
       waitedMs: number;
-      settledAfterMs: number;
       captures: number;
       nodeCount: number;
+      hint?: string;
     };
 
 export type WaitForTextCommandOptions = CommandContext &
@@ -154,6 +154,9 @@ export function ref(refInput: string, options: { fallbackLabel?: string } = {}):
 const DEFAULT_TIMEOUT_MS = 10_000;
 const POLL_INTERVAL_MS = 300;
 const DEFAULT_QUIET_MS = 500;
+// Below this node count a settled tree is suspicious: real app surfaces have
+// more than a handful of accessibility nodes, splash/loading screens do not.
+const TINY_STABLE_TREE_NODE_COUNT = 5;
 
 export const findCommand: RuntimeCommand<FindReadCommandOptions, FindReadCommandResult> = async (
   runtime,
@@ -559,9 +562,15 @@ async function waitForStable(
       return {
         kind: 'stable',
         waitedMs: nowMs - start,
-        settledAfterMs: nowMs - start,
         captures,
         nodeCount: lastNodeCount,
+        // A settled-but-tiny tree usually means a splash/loading surface, not
+        // real content: stability alone is a weak readiness signal there.
+        ...(lastNodeCount < TINY_STABLE_TREE_NODE_COUNT
+          ? {
+              hint: 'Settled on a nearly-empty tree — the app may still be loading. Wait for specific content (wait text ...) before interacting.',
+            }
+          : {}),
       };
     }
     await sleep(runtime, POLL_INTERVAL_MS);
