@@ -200,16 +200,17 @@ extension RunnerTests {
     )
   }
 
+  // Maestro-compat gate for the non-hittable coordinate fallback: an element
+  // with no frame at all cannot be coordinate-tapped, otherwise the decision
+  // is the shared TapPointPolicy center-in-frame rule (golden parity table
+  // with the TS twin). app.frame is the frame source here — replay taps
+  // resolved bounds Maestro-style, so the union frame is intentional.
   private func hasTappableFrame(app: XCUIApplication, element: XCUIElement) -> Bool {
     let frame = element.frame
     if frame.isEmpty {
       return false
     }
-    let appFrame = app.frame
-    if appFrame.isEmpty {
-      return true
-    }
-    return appFrame.contains(CGPoint(x: frame.midX, y: frame.midY))
+    return TapPointPolicy.isAllowed(elementFrame: frame, windowFrame: app.frame)
   }
 
   // The tappable on-screen viewport. app.frame is unsuitable: it unions

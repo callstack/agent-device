@@ -1,0 +1,74 @@
+[
+  {
+    "name": "closed drawer fully left of the viewport is refused (Bluesky #1075: tapped (-161, 265) reported as success)",
+    "elementFrame": { "x": -321.6, "y": 200, "width": 321.33, "height": 130 },
+    "windowFrame": { "x": 0, "y": 0, "width": 402, "height": 874 },
+    "allowed": false
+  },
+  {
+    "name": "edge-grazing container with 0.07pt viewport overlap is still refused: the tap point is the CENTER, not any overlapping edge",
+    "elementFrame": { "x": -321.6, "y": 0, "width": 321.67, "height": 874 },
+    "windowFrame": { "x": 0, "y": 0, "width": 402, "height": 874 },
+    "allowed": false
+  },
+  {
+    "name": "on-screen bottom tab is allowed",
+    "elementFrame": { "x": 252, "y": 820, "width": 75, "height": 50 },
+    "windowFrame": { "x": 0, "y": 0, "width": 402, "height": 874 },
+    "allowed": true
+  },
+  {
+    "name": "element flush against the viewport right edge with its center inside is allowed",
+    "elementFrame": { "x": 302, "y": 100, "width": 100, "height": 44 },
+    "windowFrame": { "x": 0, "y": 0, "width": 402, "height": 874 },
+    "allowed": true
+  },
+  {
+    "name": "element straddling the left edge with its center exactly on the edge is allowed (edges are inclusive)",
+    "elementFrame": { "x": -50, "y": 300, "width": 100, "height": 40 },
+    "windowFrame": { "x": 0, "y": 0, "width": 402, "height": 874 },
+    "allowed": true
+  },
+  {
+    "name": "center exactly on the viewport bottom edge is allowed (closed interval on both max edges)",
+    "elementFrame": { "x": 0, "y": 844, "width": 100, "height": 60 },
+    "windowFrame": { "x": 0, "y": 0, "width": 402, "height": 874 },
+    "allowed": true
+  },
+  {
+    "name": "empty window frame fails open: resolving a usable frame is the caller's job, the policy must not turn a missing frame into a refusal",
+    "elementFrame": { "x": 1000, "y": 1000, "width": 10, "height": 10 },
+    "windowFrame": { "x": 0, "y": 0, "width": 0, "height": 0 },
+    "allowed": true
+  },
+  {
+    "name": "middle-of-screen element is allowed",
+    "elementFrame": { "x": 100, "y": 400, "width": 200, "height": 48 },
+    "windowFrame": { "x": 0, "y": 0, "width": 402, "height": 874 },
+    "allowed": true
+  },
+  {
+    "name": "element fully below the viewport is refused",
+    "elementFrame": { "x": 0, "y": 900, "width": 402, "height": 60 },
+    "windowFrame": { "x": 0, "y": 0, "width": 402, "height": 874 },
+    "allowed": false
+  },
+  {
+    "name": "off-viewport carousel page fully right of the viewport is refused",
+    "elementFrame": { "x": 402, "y": 0, "width": 402, "height": 874 },
+    "windowFrame": { "x": 0, "y": 0, "width": 402, "height": 874 },
+    "allowed": false
+  },
+  {
+    "name": "window frame with a non-zero origin: center inside the offset frame is allowed",
+    "elementFrame": { "x": 60, "y": 80, "width": 100, "height": 40 },
+    "windowFrame": { "x": 10, "y": 20, "width": 1210, "height": 834 },
+    "allowed": true
+  },
+  {
+    "name": "window frame with a non-zero origin: center left of the offset frame is refused",
+    "elementFrame": { "x": -100, "y": 80, "width": 100, "height": 40 },
+    "windowFrame": { "x": 10, "y": 20, "width": 1210, "height": 834 },
+    "allowed": false
+  }
+]

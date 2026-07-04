@@ -1,11 +1,10 @@
-import { isRectVisibleInViewport, resolveViewportRect } from '../utils/rect-visibility.ts';
-import { inferVerticalScrollIndicatorDirections } from '../utils/scroll-indicator.ts';
 import {
-  centerOfRect,
-  type HiddenContentHint,
-  type Rect,
-  type SnapshotNode,
-} from '../kernel/snapshot.ts';
+  containsPoint,
+  isRectVisibleInViewport,
+  resolveViewportRect,
+} from '../utils/rect-visibility.ts';
+import { inferVerticalScrollIndicatorDirections } from '../utils/scroll-indicator.ts';
+import type { HiddenContentHint, Rect, SnapshotNode } from '../kernel/snapshot.ts';
 import { buildSnapshotNodeMap, displayNodeLabel } from './snapshot-tree.ts';
 import { isScrollableNodeLike } from '../utils/scrollable.ts';
 
@@ -118,16 +117,25 @@ export function isNodeVisibleOnScreen(
     return false;
   }
   const rootViewport = resolveViewportRect(nodes, node.rect);
-  if (!rootViewport) {
+  return isTapPointInsideViewport(node.rect, rootViewport);
+}
+
+// The tap-point rule shared with the iOS runner (ADR 0011 Layer 2): the tap
+// point is the rect's exact CENTER; it is inside the viewport iff it lies
+// within the frame, edges inclusive. A missing, empty, or invalid viewport
+// fails open (allowed) — resolving the best available viewport is the
+// caller's job, and the rule must not turn a missing frame into a refusal.
+//
+// Swift twin: apple-runner/AgentDeviceRunner/AgentDeviceRunnerUITests/
+// RunnerTapPointPolicy.swift (TapPointPolicy.isAllowed). Parity is enforced
+// by the golden fixture table contracts/fixtures/tap-point-policy.json,
+// asserted on both sides (tap-point-policy-parity.test.ts / the gated XCTest
+// in RunnerTapPointPolicy.swift). Change the rule only via the table.
+export function isTapPointInsideViewport(rect: Rect, viewport: Rect | null): boolean {
+  if (!viewport || viewport.width <= 0 || viewport.height <= 0) {
     return true;
   }
-  const center = centerOfRect(node.rect);
-  return (
-    center.x >= rootViewport.x &&
-    center.x <= rootViewport.x + rootViewport.width &&
-    center.y >= rootViewport.y &&
-    center.y <= rootViewport.y + rootViewport.height
-  );
+  return containsPoint(viewport, rect.x + rect.width / 2, rect.y + rect.height / 2);
 }
 
 export function resolveEffectiveViewportRect(

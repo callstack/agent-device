@@ -484,8 +484,13 @@ extension RunnerTests {
           // state. The check uses the main window frame, not app.frame: on RN
           // apps app.frame unions transformed subtrees (a closed drawer at
           // negative x), so it happily "contains" unreachable coordinates.
+          // The DECISION lives in TapPointPolicy (golden parity table with the
+          // TS twin); onScreenWindowFrame only supplies the frame.
           if !match.usedNonHittableFallback
-            && !onScreenWindowFrame(app: activeApp).contains(CGPoint(x: frame.midX, y: frame.midY)) {
+            && !TapPointPolicy.isAllowed(
+              elementFrame: frame,
+              windowFrame: onScreenWindowFrame(app: activeApp)
+            ) {
             return Response(ok: false, error: ErrorPayload(
               code: "ELEMENT_OFFSCREEN",
               message: "element resolved off-screen at (\(Int(frame.midX)), \(Int(frame.midY)))"))
