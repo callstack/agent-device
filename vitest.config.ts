@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config';
+import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 
 export default defineConfig({
   test: {
@@ -10,7 +11,7 @@ export default defineConfig({
     // --no-isolate = 205s wall vs 48s (module state thrashes across files),
     // threads = no change.
     slowTestThreshold: 500,
-    reporters: ['default', './scripts/vitest-slow-test-reporter.ts'],
+    reporters: ['default', slowTestGateReporter()],
     projects: [
       {
         test: {

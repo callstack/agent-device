@@ -68,54 +68,90 @@ const PINNED_SLOW_UNIT_TESTS = new Set([
 
 type Offender = { key: string; durationMs: number; budgetMs: number; enforce: boolean };
 
-export default class SlowTestGateReporter implements Reporter {
-  private offenders: Offender[] = [];
-  private root = '';
+function budgetForPath(relativePath: string): number {
+  return relativePath.startsWith('src/') ? UNIT_BUDGET_MS : INTEGRATION_BUDGET_MS;
+}
 
-  onInit(ctx: { config: { root: string } }): void {
-    this.root = ctx.config.root;
-  }
+/**
+ * Classify one finished test against its budget. Exported for the unit test —
+ * the reporter shell below is a thin vitest-callback adapter around this.
+ */
+export function classifySlowTest(params: {
+  root: string;
+  moduleId: string;
+  name: string;
+  fullName: string;
+  durationMs: number;
+}): Offender | null {
+  const relative =
+    params.root && params.moduleId.startsWith(params.root)
+      ? params.moduleId.slice(params.root.length + 1)
+      : params.moduleId;
+  const budgetMs = budgetForPath(relative);
+  if (params.durationMs <= budgetMs) return null;
+  const fullKey = `${relative} :: ${params.fullName.split(' > ').join(' ')}`;
+  if (PINNED_SLOW_UNIT_TESTS.has(`${relative} :: ${params.name}`)) return null;
+  if (PINNED_SLOW_UNIT_TESTS.has(fullKey)) return null;
+  return {
+    key: fullKey,
+    durationMs: params.durationMs,
+    budgetMs,
+    enforce: params.durationMs > budgetMs * ENFORCE_FACTOR,
+  };
+}
 
-  onTestCaseResult(testCase: TestCase): void {
-    const result = testCase.result();
-    if (result.state !== 'passed' && result.state !== 'failed') return;
-    const diagnostic = testCase.diagnostic();
-    const durationMs = diagnostic?.duration ?? 0;
-    const moduleId = (testCase.module as TestModule).moduleId;
-    const relative = this.root && moduleId.startsWith(this.root)
-      ? moduleId.slice(this.root.length + 1)
-      : moduleId;
-    const budgetMs = relative.startsWith('src/') ? UNIT_BUDGET_MS : INTEGRATION_BUDGET_MS;
-    if (durationMs <= budgetMs) return;
-    const key = `${relative} :: ${testCase.fullName.split(' > ').join(' ')}`;
-    const pinKey = `${relative} :: ${testCase.name}`;
-    if (PINNED_SLOW_UNIT_TESTS.has(pinKey) || PINNED_SLOW_UNIT_TESTS.has(key)) return;
-    this.offenders.push({ key, durationMs, budgetMs, enforce: durationMs > budgetMs * ENFORCE_FACTOR });
-  }
-
-  onTestRunEnd(): void {
-    if (this.offenders.length === 0) return;
-    const sorted = this.offenders.sort((a, b) => b.durationMs - a.durationMs);
-    const line = (o: Offender): string =>
-      `  ${(o.durationMs / 1000).toFixed(2)}s (budget ${o.budgetMs / 1000}s)  ${o.key}`;
-    const failing = sorted.filter((o) => o.enforce);
-    const warning = sorted.filter((o) => !o.enforce);
-    if (warning.length > 0) {
-      // eslint-disable-next-line no-console
-      console.error(
-        `\nSlow-test gate: ${warning.length} test(s) over budget (within the 2x load-variance band, not failing):\n` +
-          warning.map(line).join('\n'),
-      );
-    }
-    if (failing.length === 0) return;
-    // eslint-disable-next-line no-console
-    console.error(
-      `\nSlow-test gate: ${failing.length} test(s) exceeded ${ENFORCE_FACTOR}x the wall-clock budget.\n` +
-        `Tests must not wait real time — inject the timeout/poll budget or assert the budget is\n` +
-        `wired instead of waiting it out (docs/agents/testing.md). If the wait is genuinely\n` +
-        `irreducible, pin it in scripts/vitest-slow-test-reporter.ts in this PR with a reason.\n` +
-        failing.map(line).join('\n'),
+/** Render the gate outcome; returns true when the run must fail. */
+export function reportSlowTests(
+  offenders: Offender[],
+  write: (message: string) => void,
+): boolean {
+  if (offenders.length === 0) return false;
+  const sorted = [...offenders].sort((a, b) => b.durationMs - a.durationMs);
+  const line = (o: Offender): string =>
+    `  ${(o.durationMs / 1000).toFixed(2)}s (budget ${o.budgetMs / 1000}s)  ${o.key}`;
+  const failing = sorted.filter((o) => o.enforce);
+  const warning = sorted.filter((o) => !o.enforce);
+  if (warning.length > 0) {
+    write(
+      `\nSlow-test gate: ${warning.length} test(s) over budget (within the ${ENFORCE_FACTOR}x load-variance band, not failing):\n` +
+        warning.map(line).join('\n'),
     );
-    process.exitCode = 1;
   }
+  if (failing.length === 0) return false;
+  write(
+    `\nSlow-test gate: ${failing.length} test(s) exceeded ${ENFORCE_FACTOR}x the wall-clock budget.\n` +
+      `Tests must not wait real time — inject the timeout/poll budget or assert the budget is\n` +
+      `wired instead of waiting it out (docs/agents/testing.md). If the wait is genuinely\n` +
+      `irreducible, pin it in scripts/vitest-slow-test-reporter.ts in this PR with a reason.\n` +
+      failing.map(line).join('\n'),
+  );
+  return true;
+}
+
+export default function slowTestGateReporter(): Reporter {
+  const offenders: Offender[] = [];
+  let root = '';
+  return {
+    onInit(ctx: { config: { root: string } }): void {
+      root = ctx.config.root;
+    },
+    onTestCaseResult(testCase: TestCase): void {
+      const result = testCase.result();
+      if (result.state !== 'passed' && result.state !== 'failed') return;
+      const offender = classifySlowTest({
+        root,
+        moduleId: (testCase.module as TestModule).moduleId,
+        name: testCase.name,
+        fullName: testCase.fullName,
+        durationMs: testCase.diagnostic()?.duration ?? 0,
+      });
+      if (offender) offenders.push(offender);
+    },
+    onTestRunEnd(): void {
+      // eslint-disable-next-line no-console
+      if (reportSlowTests(offenders, (message) => console.error(message))) {
+        process.exitCode = 1;
+      }
+    },
+  };
 }
