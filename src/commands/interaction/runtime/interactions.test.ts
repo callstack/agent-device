@@ -212,6 +212,128 @@ test('runtime selector interactions fall back to a full snapshot when interactiv
   ]);
 });
 
+test('runtime press refuses a selector that resolves to an off-screen element', async () => {
+  // Closed-drawer shape: the only match sits fully left of the viewport. The
+  // @ref path already refuses this; the selector path must not silently tap
+  // out-of-viewport coordinates.
+  const offscreenSnapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 2,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Explore',
+      rect: { x: -320, y: 240, width: 300, height: 50 },
+      hittable: true,
+    },
+  ]);
+  const taps: unknown[] = [];
+  const device = createInteractionDevice(offscreenSnapshot, {
+    tap: async (_context, point) => {
+      taps.push(point);
+    },
+  });
+
+  await assert.rejects(
+    () => device.interactions.press(selector('label=Explore'), { session: 'default' }),
+    (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.match(error.message, /off-screen element and is not safe to press/);
+      const details = (error as { details?: Record<string, unknown> }).details;
+      assert.equal(details?.reason, 'offscreen_selector');
+      assert.ok(typeof details?.hint === 'string');
+      return true;
+    },
+  );
+  assert.equal(taps.length, 0);
+});
+
+test('runtime press with verify drops the non-hittable hint when evidence proves a change', async () => {
+  let captureCount = 0;
+  const nonHittableSnapshot = () =>
+    makeSnapshotState([
+      {
+        index: 0,
+        depth: 0,
+        type: 'Button',
+        label: 'Continue',
+        rect: { x: 10, y: 20, width: 100, height: 40 },
+        hittable: false,
+      },
+    ]);
+  const changedSnapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Button',
+      label: 'Next screen',
+      rect: { x: 10, y: 20, width: 100, height: 40 },
+      hittable: true,
+    },
+  ]);
+  const device = createInteractionDevice(nonHittableSnapshot(), {
+    captureSnapshot: async () => {
+      captureCount += 1;
+      return { snapshot: captureCount === 1 ? nonHittableSnapshot() : changedSnapshot };
+    },
+    tap: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+    verify: true,
+  });
+
+  assert.equal(result.kind, 'selector');
+  if (result.kind !== 'selector') return;
+  assert.equal(result.targetHittable, false);
+  assert.equal(result.evidence?.changedFromBefore, true);
+  // The "may have had no visible effect" warning is contradicted by the
+  // evidence sitting next to it — it must be dropped.
+  assert.equal('hint' in result, false);
+});
+
+test('runtime press keeps the non-hittable hint when evidence shows no change', async () => {
+  const nonHittableSnapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Button',
+      label: 'Continue',
+      rect: { x: 10, y: 20, width: 100, height: 40 },
+      hittable: false,
+    },
+  ]);
+  const device = createInteractionDevice(nonHittableSnapshot, {
+    tap: async () => ({ ok: true }),
+  });
+
+  const verified = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+    verify: true,
+  });
+  assert.equal(verified.evidence?.changedFromBefore, false);
+  assert.match(
+    ('hint' in verified ? verified.hint : undefined) ?? '',
+    /may have had no visible effect/,
+  );
+
+  const unverified = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+  });
+  assert.match(
+    ('hint' in unverified ? unverified.hint : undefined) ?? '',
+    /may have had no visible effect/,
+  );
+});
+
 test('runtime press without verify omits evidence entirely', async () => {
   const device = createInteractionDevice(selectorSnapshot(), {
     tap: async () => ({ ok: true }),

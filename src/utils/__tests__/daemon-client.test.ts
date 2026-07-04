@@ -207,6 +207,61 @@ test('snapshot request timeout preserves daemon metadata for follow-up evidence 
   assert.equal(shouldResetDaemonAfterRequestTimeout(undefined), true);
 });
 
+test('read-only polling command timeouts preserve the daemon like snapshot', () => {
+  // wait/find are repeated snapshot captures: a stalled accessibility bridge
+  // must not turn one timed-out poll into a daemon reset that loses every session.
+  assert.equal(shouldResetDaemonAfterRequestTimeout('wait'), false);
+  assert.equal(shouldResetDaemonAfterRequestTimeout('find'), false);
+  assert.equal(shouldResetDaemonAfterRequestTimeout('press'), true);
+});
+
+test('wait request timeout extends past the user-supplied wait budget', () => {
+  const base = {
+    session: 'default',
+    positionals: [] as string[],
+    flags: {},
+    meta: {},
+  };
+
+  // Explicit budgets beyond the default envelope extend it (budget + margin).
+  assert.equal(
+    resolveDaemonRequestTimeoutMs({
+      ...base,
+      command: 'wait',
+      positionals: ['text', 'Ready', '180000'],
+    }),
+    210_000,
+  );
+  assert.equal(
+    resolveDaemonRequestTimeoutMs({
+      ...base,
+      command: 'wait',
+      positionals: ['stable', '500', '120000'],
+    }),
+    150_000,
+  );
+  // Sleep waits block for their full duration and get the same treatment.
+  assert.equal(
+    resolveDaemonRequestTimeoutMs({ ...base, command: 'wait', positionals: ['120000'] }),
+    150_000,
+  );
+  // Small budgets never shrink the envelope below the default.
+  assert.equal(
+    resolveDaemonRequestTimeoutMs({
+      ...base,
+      command: 'wait',
+      positionals: ['text', 'Ready', '5000'],
+    }),
+    90_000,
+  );
+  // No explicit budget → default envelope.
+  assert.equal(
+    resolveDaemonRequestTimeoutMs({ ...base, command: 'wait', positionals: ['text', 'Ready'] }),
+    90_000,
+  );
+  assert.equal(resolveDaemonRequestTimeoutMs({ ...base, command: 'wait' }), 90_000);
+});
+
 test('snapshot uses the standard daemon request timeout with an explicit override', () => {
   const base = {
     session: 'default',

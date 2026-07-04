@@ -35,6 +35,11 @@ export function isDirectIosSelectorFallbackError(
 ): boolean {
   const appError = asAppError(error);
   if (appError.code === 'ELEMENT_NOT_FOUND') return options.allowElementNotFound === true;
+  // The runner refuses to tap a hittable match whose frame is outside the app
+  // frame (closed drawer, off-viewport carousel). The tree-based path either
+  // prefers an on-screen candidate or raises the actionable offscreen_selector
+  // error, so always fall back.
+  if (appError.code === 'ELEMENT_OFFSCREEN') return true;
   if (appError.code !== 'COMMAND_FAILED') return false;
   const message = appError.message.toLowerCase();
   return (

@@ -1,5 +1,7 @@
 import type { Platform, PublicPlatform } from '../kernel/device.ts';
 import type { SnapshotNode, SnapshotState } from '../kernel/snapshot.ts';
+import { isNodeVisibleOnScreen } from '../snapshot/mobile-snapshot-semantics.ts';
+import { buildSnapshotNodeMap } from '../snapshot/snapshot-tree.ts';
 import { matchesSelector } from './selectors-match.ts';
 import type { Selector, SelectorChain } from './selectors-parse.ts';
 
@@ -117,7 +119,14 @@ function analyzeSelectorMatches(
   let count = 0;
   let firstNode: SnapshotNode | null = null;
   let best: SnapshotNode | null = null;
+  let bestVisible = false;
   let tie = false;
+  // Lazily built: only ambiguous matches pay for viewport inference.
+  let byIndex: Map<number, SnapshotNode> | undefined;
+  const isVisible = (node: SnapshotNode): boolean => {
+    byIndex ??= buildSnapshotNodeMap(nodes);
+    return isNodeVisibleOnScreen(node, nodes, byIndex);
+  };
   for (const node of nodes) {
     if (requireRect && !node.rect) continue;
     if (!matchesSelector(node, selector, platform)) continue;
@@ -125,6 +134,21 @@ function analyzeSelectorMatches(
     firstNode ??= node;
     if (!best) {
       best = node;
+      continue;
+    }
+    // A closed drawer or off-viewport carousel keeps its items in the tree at
+    // out-of-bounds rects; picking one silently taps coordinates that cannot
+    // land. Prefer candidates visible in the effective viewport before the
+    // deepest-then-smallest tiebreak (evaluated only once matches are
+    // ambiguous, so unique resolutions never pay for viewport inference).
+    bestVisible ||= isVisible(best);
+    const nodeVisible = isVisible(node);
+    if (nodeVisible !== bestVisible) {
+      if (nodeVisible) {
+        best = node;
+        bestVisible = true;
+        tie = false;
+      }
       continue;
     }
     const comparison = compareDisambiguationCandidates(node, best);

@@ -477,6 +477,19 @@ extension RunnerTests {
         }
         if let element = match.element {
           let frame = element.frame
+          // XCTest reports closed-drawer/off-viewport items as hittable, then
+          // "taps" coordinates outside the visible window as a silent no-op.
+          // Refuse instead; the daemon falls back to tree-based resolution,
+          // which can prefer an on-screen candidate or explain the off-screen
+          // state. The check uses the main window frame, not app.frame: on RN
+          // apps app.frame unions transformed subtrees (a closed drawer at
+          // negative x), so it happily "contains" unreachable coordinates.
+          if !match.usedNonHittableFallback
+            && !onScreenWindowFrame(app: activeApp).contains(CGPoint(x: frame.midX, y: frame.midY)) {
+            return Response(ok: false, error: ErrorPayload(
+              code: "ELEMENT_OFFSCREEN",
+              message: "element resolved off-screen at (\(Int(frame.midX)), \(Int(frame.midY)))"))
+          }
           let isTextEntry = isTextEntryElement(element)
           let touchFrame = frame.isEmpty
             ? nil

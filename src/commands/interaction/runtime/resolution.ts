@@ -13,7 +13,7 @@ import {
 import { buildSelectorChainForNode } from '../../../utils/selector-build.ts';
 import { findNodeByLabel, resolveRefLabel } from '../../../snapshot/snapshot-processing.ts';
 import {
-  isNodeVisibleInEffectiveViewport,
+  isNodeVisibleOnScreen,
   resolveEffectiveViewportRect,
 } from '../../../snapshot/mobile-snapshot-semantics.ts';
 import { isSnapshotNodeInteractionBlocked } from '../../../snapshot/snapshot-occlusion.ts';
@@ -182,6 +182,7 @@ async function resolveSelectorInteractionTarget(
       })
     : resolved.node;
   assertInteractionNotBlocked(node, `Selector ${resolved.selector.raw}`, params.action);
+  assertVisibleSelectorTarget(node, capture.snapshot.nodes, resolved.selector.raw, params.action);
   const point = resolveNodeCenter(
     node,
     `Selector ${resolved.selector.raw} resolved to invalid bounds`,
@@ -410,14 +411,43 @@ function isUsableResolvedNode(node: SnapshotNode | null | undefined): node is Sn
   return resolveRectCenter(node.rect) !== null;
 }
 
+// Selector parity for the @ref off-screen guard below: without it, a selector
+// resolving to a closed drawer/carousel item "succeeds" by tapping coordinates
+// outside the viewport (observed as `Tapped (-161, 265)` against Bluesky's
+// closed drawer) while the same node via @ref is refused.
+function assertVisibleSelectorTarget(
+  node: SnapshotNode,
+  nodes: SnapshotState['nodes'],
+  selector: string,
+  action: InteractionAction,
+): void {
+  const viewport = node.rect ? resolveEffectiveViewportRect(node, nodes) : null;
+  if (!node.rect || !viewport || isNodeVisibleOnScreen(node, nodes)) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Selector ${selector} resolved to an off-screen element and is not safe to ${action}`,
+    {
+      reason: 'offscreen_selector',
+      selector,
+      ...(node.ref !== undefined ? { ref: `@${node.ref}` } : {}),
+      rect: node.rect,
+      viewport,
+      hint: `The element is outside the visible viewport — likely inside a closed drawer, another tab, or scrolled content. Scroll toward it or open its container, take a fresh snapshot, then retry ${action}.`,
+    },
+  );
+}
+
 function assertVisibleRefTarget(
   node: SnapshotNode,
   nodes: SnapshotState['nodes'],
   refInput: string,
   action: InteractionAction,
 ): void {
+  // isNodeVisibleOnScreen (not the effective-viewport form): items inside an
+  // off-screen scrollable container (closed drawer) must also count as
+  // off-screen here, not just items scrolled out of an on-screen container.
   const viewport = node.rect ? resolveEffectiveViewportRect(node, nodes) : null;
-  if (!node.rect || !viewport || isNodeVisibleInEffectiveViewport(node, nodes)) return;
+  if (!node.rect || !viewport || isNodeVisibleOnScreen(node, nodes)) return;
   throw new AppError('COMMAND_FAILED', `Ref ${refInput} is off-screen and not safe to ${action}`, {
     reason: 'offscreen_ref',
     ref: normalizeRef(refInput),

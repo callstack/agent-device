@@ -127,13 +127,13 @@ export const fillCommand: RuntimeCommand<FillCommandOptions, FillCommandResult> 
       ? `fill target ${formatTargetForWarning(resolved)} resolved to "${nodeType}", attempting fill anyway.`
       : undefined;
   const evidence = verify ? await captureVerifyEvidence(runtime, options, resolved) : undefined;
-  return {
+  return reconcileNonHittableHintWithEvidence({
     ...resolved,
     text: options.text,
     ...(warning ? { warning } : {}),
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
     ...(evidence ? { evidence } : {}),
-  };
+  });
 };
 
 export const typeTextCommand: RuntimeCommand<
@@ -198,11 +198,11 @@ async function tapCommand(
   });
   const formattedBackendResult = toBackendResult(backendResult);
   const evidence = verify ? await captureVerifyEvidence(runtime, options, resolved) : undefined;
-  return {
+  return reconcileNonHittableHintWithEvidence({
     ...resolved,
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
     ...(evidence ? { evidence } : {}),
-  };
+  });
 }
 
 /**
@@ -231,6 +231,29 @@ async function captureVerifyEvidence(
   } catch {
     return undefined;
   }
+}
+
+// The resolution-time non-hittable hint warns the action "may have had no
+// visible effect". When --verify evidence proves the interactive tree changed,
+// that warning is contradicted by data sitting next to it in the same response
+// — drop it and let targetHittable + evidence speak for themselves.
+function reconcileNonHittableHintWithEvidence<T extends object>(result: T): T {
+  // Widened view: point-target results carry none of these fields, which is
+  // exactly the no-op path.
+  const view = result as {
+    targetHittable?: boolean;
+    hint?: string;
+    evidence?: InteractionEvidence;
+  };
+  if (
+    view.targetHittable !== false ||
+    view.evidence?.changedFromBefore !== true ||
+    view.hint === undefined
+  ) {
+    return result;
+  }
+  const { hint: _hint, ...rest } = view;
+  return rest as T;
 }
 
 function requireResolvedPoint(result: { point?: Point }): Point {

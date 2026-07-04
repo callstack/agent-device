@@ -212,6 +212,21 @@ extension RunnerTests {
     return appFrame.contains(CGPoint(x: frame.midX, y: frame.midY))
   }
 
+  // The tappable on-screen viewport. app.frame is unsuitable: it unions
+  // transformed subtrees, so a closed drawer at negative x inflates it and
+  // out-of-window coordinates still pass containment. Falls back to app.frame
+  // when no window frame is readable.
+  func onScreenWindowFrame(app: XCUIApplication) -> CGRect {
+    let window = app.windows.element(boundBy: 0)
+    if window.exists {
+      let frame = window.frame
+      if !frame.isEmpty {
+        return frame
+      }
+    }
+    return app.frame
+  }
+
   func queryElement(app: XCUIApplication, selectorKey: String, selectorValue: String) -> Response {
     let match = findElement(app: app, selectorKey: selectorKey, selectorValue: selectorValue)
     if match.isAmbiguous {

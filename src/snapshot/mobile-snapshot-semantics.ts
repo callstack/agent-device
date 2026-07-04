@@ -1,6 +1,11 @@
 import { isRectVisibleInViewport, resolveViewportRect } from '../utils/rect-visibility.ts';
 import { inferVerticalScrollIndicatorDirections } from '../utils/scroll-indicator.ts';
-import type { HiddenContentHint, Rect, SnapshotNode } from '../kernel/snapshot.ts';
+import {
+  centerOfRect,
+  type HiddenContentHint,
+  type Rect,
+  type SnapshotNode,
+} from '../kernel/snapshot.ts';
 import { buildSnapshotNodeMap, displayNodeLabel } from './snapshot-tree.ts';
 import { isScrollableNodeLike } from '../utils/scrollable.ts';
 
@@ -90,6 +95,39 @@ export function isNodeVisibleInEffectiveViewport(
     return true;
   }
   return isRectVisibleInViewport(node.rect, viewport);
+}
+
+// Effective-viewport visibility measures a node against its nearest scrollable
+// ancestor, so items inside an off-screen container (e.g. a closed drawer's own
+// ScrollView at negative x) still read as "visible" within that container.
+// On-screen visibility additionally requires the node's CENTER — the point an
+// interaction would tap — to sit inside the root Application/Window viewport.
+// Edge overlap is not enough: a mostly-off-screen drawer container can graze
+// the viewport by a fraction of a pixel while its center (the tap point) is
+// far off-screen. Interaction guards and selector disambiguation use this
+// stricter form; scroll-direction summaries keep the effective form.
+export function isNodeVisibleOnScreen(
+  node: Pick<SnapshotNode, 'rect' | 'index' | 'parentIndex' | 'type' | 'role' | 'subrole'>,
+  nodes: SnapshotNode[],
+  byIndex: Map<number, SnapshotNode> = buildSnapshotNodeMap(nodes),
+): boolean {
+  if (!node.rect) {
+    return true;
+  }
+  if (!isNodeVisibleInEffectiveViewport(node, nodes, byIndex)) {
+    return false;
+  }
+  const rootViewport = resolveViewportRect(nodes, node.rect);
+  if (!rootViewport) {
+    return true;
+  }
+  const center = centerOfRect(node.rect);
+  return (
+    center.x >= rootViewport.x &&
+    center.x <= rootViewport.x + rootViewport.width &&
+    center.y >= rootViewport.y &&
+    center.y <= rootViewport.y + rootViewport.height
+  );
 }
 
 export function resolveEffectiveViewportRect(

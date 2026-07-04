@@ -52,11 +52,21 @@ export function handleRequestTimeout(
   });
 }
 
+// Read-only capture/polling commands that can block in platform accessibility
+// bridges while the app is crashed or never idle. `wait` and `find` are repeated
+// snapshot captures, so they share snapshot's failure mode. Keep the
+// daemon/session alive on their timeouts so callers can still collect
+// screenshot/perf/log evidence and close the session after the runner abort
+// path has been triggered — resetting the daemon here turned one timed-out wait
+// into a lost session for every session the daemon owned.
+const DAEMON_PRESERVING_TIMEOUT_COMMANDS: ReadonlySet<string> = new Set([
+  PUBLIC_COMMANDS.snapshot,
+  PUBLIC_COMMANDS.wait,
+  PUBLIC_COMMANDS.find,
+]);
+
 export function shouldResetDaemonAfterRequestTimeout(command: string | undefined): boolean {
-  // Snapshot can block in platform accessibility bridges while the app is crashed or never idle.
-  // Keep the daemon/session alive so callers can still collect screenshot/perf/log evidence
-  // and close the session after the runner abort path has been triggered.
-  return command !== 'snapshot';
+  return command === undefined || !DAEMON_PRESERVING_TIMEOUT_COMMANDS.has(command);
 }
 
 function resolveRequestTimeoutHint(params: {
