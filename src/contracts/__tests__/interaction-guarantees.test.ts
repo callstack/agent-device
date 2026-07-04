@@ -82,40 +82,65 @@ test('runner enforcement entries reference symbols present in runner sources', (
   }
 });
 
-test('delegations point at real paths and waivers carry reasons', () => {
+function eachEnforcement(
+  visit: (
+    pathId: string,
+    guarantee: (typeof INTERACTION_GUARANTEES)[number],
+    enforcement: (typeof INTERACTION_DISPATCH_PATHS)[keyof typeof INTERACTION_DISPATCH_PATHS]['guarantees'][(typeof INTERACTION_GUARANTEES)[number]],
+  ) => void,
+): void {
   for (const [pathId, contract] of Object.entries(INTERACTION_DISPATCH_PATHS)) {
-    for (const [guarantee, enforcement] of Object.entries(contract.guarantees)) {
-      if (enforcement.kind === 'delegated') {
-        assert.ok(
-          (INTERACTION_PATH_IDS as readonly string[]).includes(enforcement.to),
-          `${pathId}/${guarantee}: delegated to unknown path ${enforcement.to}`,
-        );
-        assert.notEqual(
-          enforcement.to,
-          pathId,
-          `${pathId}/${guarantee}: a path cannot delegate to itself`,
-        );
-        assert.ok(
-          enforcement.via.trim().length > 0,
-          `${pathId}/${guarantee}: delegation must say how it triggers`,
-        );
-        const target =
-          INTERACTION_DISPATCH_PATHS[enforcement.to].guarantees[
-            guarantee as (typeof INTERACTION_GUARANTEES)[number]
-          ];
-        assert.ok(
-          target.kind === 'runtime' || target.kind === 'runner',
-          `${pathId}/${guarantee}: delegates to ${enforcement.to}, which does not enforce it (${target.kind})`,
-        );
-      }
-      if (enforcement.kind === 'waived' || enforcement.kind === 'inapplicable') {
-        assert.ok(
-          enforcement.reason.trim().length > 10,
-          `${pathId}/${guarantee}: ${enforcement.kind} requires a substantive reason`,
-        );
-      }
+    for (const guarantee of INTERACTION_GUARANTEES) {
+      visit(pathId, guarantee, contract.guarantees[guarantee]);
     }
   }
+}
+
+test('delegations point at real paths that enforce the guarantee', () => {
+  eachEnforcement((pathId, guarantee, enforcement) => {
+    if (enforcement.kind !== 'delegated') return;
+    assert.ok(
+      (INTERACTION_PATH_IDS as readonly string[]).includes(enforcement.to),
+      `${pathId}/${guarantee}: delegated to unknown path ${enforcement.to}`,
+    );
+    assert.notEqual(
+      enforcement.to,
+      pathId,
+      `${pathId}/${guarantee}: a path cannot delegate to itself`,
+    );
+    assert.ok(
+      enforcement.via.trim().length > 0,
+      `${pathId}/${guarantee}: delegation must say how it triggers`,
+    );
+    const target = INTERACTION_DISPATCH_PATHS[enforcement.to].guarantees[guarantee];
+    assert.ok(
+      target.kind === 'runtime' || target.kind === 'runner',
+      `${pathId}/${guarantee}: delegates to ${enforcement.to}, which does not enforce it (${target.kind})`,
+    );
+  });
+});
+
+test('waivers and inapplicable entries carry substantive reasons', () => {
+  eachEnforcement((pathId, guarantee, enforcement) => {
+    if (enforcement.kind !== 'waived' && enforcement.kind !== 'inapplicable') return;
+    assert.ok(
+      enforcement.reason.trim().length > 10,
+      `${pathId}/${guarantee}: ${enforcement.kind} requires a substantive reason`,
+    );
+  });
+});
+
+test('gap waivers are owned by tracking issues', () => {
+  eachEnforcement((pathId, guarantee, enforcement) => {
+    if (enforcement.kind !== 'waived' || !enforcement.reason.startsWith('gap:')) return;
+    // Waivers must be owned, not just visible: every acknowledged gap links
+    // the umbrella tracking issue or a sub-issue split from it.
+    assert.match(
+      enforcement.trackingIssue ?? '',
+      /^https:\/\/github\.com\/callstack\/agent-device\/issues\/\d+$/,
+      `${pathId}/${guarantee}: gap waiver requires a trackingIssue URL`,
+    );
+  });
 });
 
 test('acknowledged gaps are visible and bounded', () => {
@@ -128,17 +153,24 @@ test('acknowledged gaps are visible and bounded', () => {
     }
   }
   // CONSERVATIVE: this list may only shrink, or grow in the same PR that
-  // updates it here with a linked issue. It is the diffable debt list.
+  // updates it here with a linked issue. It is the diffable debt list
+  // (umbrella: https://github.com/callstack/agent-device/issues/1081).
   assert.deepEqual(gaps.sort(), [
     'coordinate/offscreen',
+    'coordinate/responseConstruction',
     'direct-ios-selector/disambiguation',
     'direct-ios-selector/errorTaxonomy',
     'direct-ios-selector/nonHittable',
     'direct-ios-selector/occlusion',
-    'direct-ios-selector/responseFields',
+    'direct-ios-selector/responseConstruction',
+    'direct-ios-selector/responseIdentity',
     'maestro-non-hittable-fallback/errorTaxonomy',
+    'maestro-non-hittable-fallback/responseConstruction',
     'native-ref/nonHittable',
     'native-ref/occlusion',
     'native-ref/offscreen',
+    'native-ref/responseConstruction',
+    'runtime-ref/responseConstruction',
+    'runtime-selector/responseConstruction',
   ]);
 });

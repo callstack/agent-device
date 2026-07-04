@@ -6,14 +6,24 @@
  * parity table once ADR 0011 phase 3 lands), delegated to another path,
  * inapplicable by construction, or explicitly waived with a reason.
  *
+ * This registry plus its gate test is an HONESTY/COMPLETENESS gate, not a
+ * truth gate: it proves every path has declared a stance and that referenced
+ * symbols exist. Behavioral parity is only proven once the golden fixture
+ * tables (Layer 2) and contract scenarios (Layer 3) land.
+ *
  * The `Record` over the guarantee union makes completeness a compile error:
  * adding a guarantee refuses to build until every path classifies it, and a
  * new path cannot omit a cell. The companion gate test keeps the entries
- * honest (referenced symbols must exist, waivers must carry reasons).
+ * honest (referenced symbols must exist, waivers must carry reasons, and
+ * every `gap:` waiver must carry a tracking issue).
  *
- * Waived cells with a `gap:` prefix are acknowledged debt — each should link
- * an issue. They are the point of the registry: the debt is a diffable list
- * a reviewer sees change, not folklore rediscovered on-device.
+ * Closure strategy for the acknowledged gaps is hybrid (see ADR 0011):
+ * runner-side parity for cheap geometry-local rules; delegation-on-error for
+ * semantic/rich-runtime failures (which is NOT success-path parity — cells
+ * where the fast path can succeed on a candidate the runtime rules would
+ * refuse stay gaps until proven); and a shared runtime preflight against the
+ * already-captured snapshot node for the native-ref path, because a backend
+ * fast path can silently succeed and delegation-on-error never triggers.
  */
 
 export const INTERACTION_GUARANTEES = [
@@ -28,13 +38,21 @@ export const INTERACTION_GUARANTEES = [
   // Non-hittable targets are promoted to a hittable ancestor when possible
   // and annotated (targetHittable/hint) when not.
   'nonHittable',
-  // Responses carry the shared field set (refLabel, selectorChain, evidence
-  // merge) assembled by the shared builders, never hand-rolled per branch.
-  'responseFields',
+  // Response payloads are assembled by a single shared construction site,
+  // never hand-rolled per branch (the class of bug that dropped fill @ref
+  // evidence). Closure is ADR 0011 Layer 2 (buildInteractionResponseData).
+  'responseConstruction',
+  // The identity fields a path can echo back: refLabel, selectorChain, the
+  // resolved target. Distinct from construction — a path may build responses
+  // through the shared site yet be unable to provide identity fields.
+  'responseIdentity',
   // --verify captures a pre-action baseline and post-action digest.
   'verifyEvidence',
   // Failures use the shared codes/messages/hints (no-match diagnostics,
-  // ambiguous shape, offscreen reasons).
+  // ambiguous shape, offscreen reasons). NOTE: expected to split into
+  // errorCodes (stable codes / fallback classification) vs errorDiagnostics
+  // (rich selector diagnostics and hints) once direct runner paths close
+  // codes earlier than full diagnostics.
   'errorTaxonomy',
 ] as const;
 
@@ -61,7 +79,10 @@ export type GuaranteeEnforcement =
       kind: 'runner';
       /** Swift symbol implementing the rule runner-side. */
       via: string;
-      /** Golden fixture table proving TS/Swift parity (ADR 0011 phase 3). */
+      /**
+       * Golden fixture table proving TS/Swift parity. Optional until ADR 0011
+       * Layer 3 lands; required once a runner cell claims parity.
+       */
       parityTable?: string;
     }
   | {
@@ -77,6 +98,8 @@ export type GuaranteeEnforcement =
   | {
       kind: 'waived';
       reason: string;
+      /** Required when the reason starts with `gap:` — waivers must be owned. */
+      trackingIssue?: string;
     };
 
 export type InteractionPathContract = {
@@ -84,6 +107,8 @@ export type InteractionPathContract = {
   commands: readonly string[];
   guarantees: Record<InteractionGuarantee, GuaranteeEnforcement>;
 };
+
+const GAPS_UMBRELLA_ISSUE = 'https://github.com/callstack/agent-device/issues/1081';
 
 export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPathContract> = {
   'runtime-selector': {
@@ -106,7 +131,13 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/core/interaction-targeting.ts#resolveActionableTouchResolution',
       },
-      responseFields: {
+      responseConstruction: {
+        kind: 'waived',
+        reason:
+          'gap: response payloads are assembled per handler branch; Layer-2 buildInteractionResponseData consolidation pending.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
+      },
+      responseIdentity: {
         kind: 'runtime',
         via: 'src/daemon/handlers/interaction-touch-targets.ts#interactionResultExtra',
       },
@@ -140,7 +171,13 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/core/interaction-targeting.ts#resolveActionableTouchResolution',
       },
-      responseFields: {
+      responseConstruction: {
+        kind: 'waived',
+        reason:
+          'gap: the ref response branch is hand-assembled (this exact shape dropped fill @ref evidence, #1064); Layer-2 consolidation pending.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
+      },
+      responseIdentity: {
         kind: 'runtime',
         via: 'src/daemon/handlers/interaction-touch-targets.ts#interactionResultExtra',
       },
@@ -162,12 +199,14 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       disambiguation: {
         kind: 'waived',
         reason:
-          'gap: runner findElement uses unique-hittable-or-AMBIGUOUS_MATCH, which differs from tree rules (no visible-first/deepest-smallest preference). Needs a parity table or delegation on AMBIGUOUS_MATCH.',
+          'gap: success-path parity — XCTest unique-hittable matching can succeed on a candidate the runtime rules (visible-first/deepest-smallest) would refuse or rank differently; delegation-on-error cannot catch this. Stays a gap until parity tables or contract scenarios prove the success path.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
       occlusion: {
         kind: 'waived',
         reason:
-          'gap: XCTest isHittable approximates occlusion but there is no explicit covered-element check on the direct path.',
+          'gap: no explicit covered-element check on the direct path; closure strategy is delegation-on-error plus contract scenarios, since XCTest isHittable only approximates occlusion.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
       offscreen: {
         kind: 'runner',
@@ -176,12 +215,19 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       nonHittable: {
         kind: 'waived',
         reason:
-          'gap: non-hittable matches are skipped runner-side (ELEMENT_NOT_FOUND) instead of promoted/annotated like the runtime path.',
+          'gap: non-hittable matches are skipped runner-side (ELEMENT_NOT_FOUND) instead of promoted/annotated; closure strategy is delegation-on-error into the runtime path.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
-      responseFields: {
+      responseConstruction: {
         kind: 'waived',
         reason:
-          'gap: the response is built from the runner payload; refLabel/selectorChain are absent on the direct path.',
+          'gap: the response is assembled from the raw runner payload; Layer-2 consolidation pending.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
+      },
+      responseIdentity: {
+        kind: 'waived',
+        reason: 'gap: refLabel/selectorChain are absent on the direct path.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
       verifyEvidence: {
         kind: 'delegated',
@@ -191,7 +237,8 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       errorTaxonomy: {
         kind: 'waived',
         reason:
-          'gap: ELEMENT_NOT_FOUND/AMBIGUOUS_MATCH lack the selector diagnostics and hints the runtime path attaches.',
+          'gap: ELEMENT_NOT_FOUND/AMBIGUOUS_MATCH lack the selector diagnostics and hints the runtime path attaches; closure strategy is delegation-on-error for the failure shapes.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
     },
   },
@@ -206,18 +253,28 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       occlusion: {
         kind: 'waived',
-        reason: 'gap: no covered-element check before the native ref tap.',
+        reason:
+          'gap: no covered-element check before the native ref tap; closure strategy is a shared runtime preflight against the snapshot node before the backend call — a backend fast path can silently succeed, so delegation-on-error never triggers.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
       offscreen: {
         kind: 'waived',
         reason:
-          'gap: no viewport check before the native ref tap; relies on runner-side ref resolution behavior.',
+          'gap: no viewport check before the native ref tap; closure strategy is the same shared runtime preflight (the ref came from a daemon snapshot, so the node is already available).',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
       nonHittable: {
         kind: 'waived',
-        reason: 'gap: no promotion/annotation on the native ref path.',
+        reason:
+          'gap: no promotion/annotation on the native ref path; closure strategy is the same shared runtime preflight.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
-      responseFields: {
+      responseConstruction: {
+        kind: 'waived',
+        reason: 'gap: native ref responses are hand-assembled; Layer-2 consolidation pending.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
+      },
+      responseIdentity: {
         kind: 'runtime',
         via: 'src/daemon/handlers/interaction-touch-targets.ts#interactionResultExtra',
       },
@@ -248,12 +305,19 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'waived',
         reason:
           'gap: out-of-viewport coordinates are forwarded as-is; a bounds warning would be cheap.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
       nonHittable: {
         kind: 'inapplicable',
         reason: 'No element to promote or annotate.',
       },
-      responseFields: {
+      responseConstruction: {
+        kind: 'waived',
+        reason:
+          'gap: coordinate responses flow through the same per-branch assembly; Layer-2 consolidation pending.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
+      },
+      responseIdentity: {
         kind: 'inapplicable',
         reason: 'No resolved node, so no refLabel/selectorChain.',
       },
@@ -288,9 +352,15 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'waived',
         reason: 'Intentional: the entire point of this path is tapping non-hittable elements.',
       },
-      responseFields: {
-        kind: 'runtime',
-        via: 'src/daemon/handlers/interaction-touch.ts#handleTouchInteractionCommands',
+      responseConstruction: {
+        kind: 'waived',
+        reason:
+          'gap: shares the direct path payload-based assembly; Layer-2 consolidation pending.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
+      },
+      responseIdentity: {
+        kind: 'waived',
+        reason: 'Intentional: replay-only path; Maestro semantics do not consume identity fields.',
       },
       verifyEvidence: {
         kind: 'inapplicable',
@@ -299,6 +369,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       errorTaxonomy: {
         kind: 'waived',
         reason: 'gap: shares the direct path error shapes, including their missing hints.',
+        trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
     },
   },

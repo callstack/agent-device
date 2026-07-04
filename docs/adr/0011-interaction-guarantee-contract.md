@@ -50,25 +50,45 @@ shared implementations prevent **drift**, and generated test coverage enforces
 
 ### Layer 1 — Declare: the matrix as a typed registry with a gate
 
+Layer 1 is an **honesty/completeness gate, not a truth gate**: it proves that
+every path has declared a stance on every guarantee and that the referenced
+implementations exist. It does not prove the declared behavior — behavioral
+parity only starts once the fixture tables (Layer 2) and contract scenarios
+(Layer 3) land. Landing Layer 1 alone still changes the failure mode: an
+unwatched cell becomes impossible; an unproven cell is at least a visible,
+owned claim.
+
 `src/contracts/interaction-guarantees.ts` declares both axes and requires
 every cell to be classified:
 
 ```ts
 export const INTERACTION_GUARANTEES = [
-  'disambiguation',   // visible > deepest > smallest; ties fail
-  'occlusion',        // covered targets are refused
-  'offscreen',        // tap point (rect center) must lie in the root viewport
-  'nonHittable',      // promotion + targetHittable/hint annotation
-  'responseFields',   // refLabel/selectorChain/evidence assembled by the shared builder
-  'verifyEvidence',   // --verify baseline + post-action digest
-  'errorTaxonomy',    // no-match/ambiguous/offscreen codes, messages, hints
+  'disambiguation',        // visible > deepest > smallest; ties fail
+  'occlusion',             // covered targets are refused
+  'offscreen',             // tap point (rect center) must lie in the root viewport
+  'nonHittable',           // promotion + targetHittable/hint annotation
+  'responseConstruction',  // one shared response construction site (Layer 2)
+  'responseIdentity',      // refLabel/selectorChain availability on this path
+  'verifyEvidence',        // --verify baseline + post-action digest
+  'errorTaxonomy',         // no-match/ambiguous/offscreen codes, messages, hints
 ] as const;
+```
+
+`responseConstruction` and `responseIdentity` are deliberately separate: "use
+one shared construction site" and "which identity fields this path can
+provide" have different closure strategies (the former is a single Layer-2
+refactor; the latter is per-path capability work). `errorTaxonomy` is expected
+to split the same way later — stable codes/fallback classification vs rich
+selector diagnostics and hints — because direct runner paths can close codes
+long before full diagnostics.
+
+```ts
 
 export type GuaranteeEnforcement =
   | { kind: 'runtime'; via: string }                    // shared TS implementation (symbol name)
-  | { kind: 'runner'; via: string; parityTable: string } // Swift twin + golden fixture table proving parity
+  | { kind: 'runner'; via: string; parityTable?: string } // Swift twin; parityTable optional until Layer 3, required once the cell claims parity
   | { kind: 'delegated'; to: InteractionPathId }        // path defers (e.g. direct → runtime on ELEMENT_OFFSCREEN)
-  | { kind: 'waived'; reason: string };                 // explicit, reviewed waiver
+  | { kind: 'waived'; reason: string; trackingIssue?: string }; // explicit, reviewed waiver; gap waivers must carry a tracking issue
 
 export const INTERACTION_DISPATCH_PATHS: Record<
   InteractionPathId,
@@ -88,9 +108,10 @@ a path without classifying every guarantee. A unit gate
 - every `via` string resolves to a real exported symbol (declarations cannot
   rot into fiction);
 - every `parityTable` names an existing fixture file;
-- every `waived` reason is non-empty (waivers are visible, reviewed debt — the
-  initial classification will honestly contain several, and each one links an
-  issue).
+- every `waived` reason is non-empty, and every `gap:` waiver carries a
+  `trackingIssue` — waivers must be owned, not merely visible. One umbrella
+  tracking issue with sub-issues split off as work is scheduled is
+  sufficient; the gate enforces the link, not the granularity.
 
 This is the same "make the gap declare itself" pattern already proven in this
 repo by `scripts/integration-progress-model.ts` (which caught the unclassified
@@ -147,6 +168,28 @@ test-only) so cases stay stable when path-selection heuristics change.
 The gate closes the loop: it walks the Layer-1 registry and fails when any
 non-waived cell has no contract case tagged for it. Coverage of the matrix is
 therefore by construction, not by reviewer memory.
+
+### Closing the gaps: a hybrid strategy, not one answer
+
+The acknowledged gaps close by different mechanisms depending on what the
+guarantee needs:
+
+- **Runner-side parity for cheap geometry-local rules** (offscreen /
+  tappable-frame on the direct iOS path). These are pure frame math, provable
+  with golden tables, and keep the fast path fast.
+- **Delegation-on-error for semantic and rich-runtime cases**
+  (`ELEMENT_OFFSCREEN`, `AMBIGUOUS_MATCH`, `ELEMENT_NOT_FOUND`, non-hittable
+  refusal): the fast path fails cheaply, and the runtime path supplies
+  disambiguation and full diagnostics only when needed. **Delegation-on-error
+  is not success-path parity**: it cannot catch the case where XCTest finds
+  one hittable candidate that runtime rules would refuse or rank differently.
+  Those cells stay `gap:` waivers until parity tables or contract scenarios
+  prove the success path too.
+- **A shared runtime preflight for the native-ref path**: the ref came from a
+  daemon snapshot, so the node is already in hand — check offscreen /
+  occlusion / non-hittable against it *before* calling
+  `tapTarget`/`fillTarget`. A backend fast path can silently "succeed", so
+  delegation-on-error would never trigger there.
 
 ### Timeout policy joins the descriptor registry
 
