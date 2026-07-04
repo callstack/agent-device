@@ -303,7 +303,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       offscreen: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/resolution.ts#tryResolveOutOfBoundsPointWarning',
+        via: 'src/commands/interaction/runtime/resolution.ts#resolveInteractionTarget',
       },
       nonHittable: {
         kind: 'inapplicable',

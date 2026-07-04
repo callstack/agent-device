@@ -28,10 +28,6 @@ import { resolveActionableTouchResolution } from '../../../core/interaction-targ
 
 export type { InteractionTarget, PointTarget, ResolvedInteractionTarget };
 
-// Referenced in interaction-guarantees.ts registry via dynamic symbol lookup.
-// fallow-ignore-next-line unused-export
-export { tryResolveOutOfBoundsPointWarning };
-
 export type InteractionAction =
   | 'click'
   | 'press'
