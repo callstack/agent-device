@@ -27,7 +27,15 @@ export function readInteractionTargetFromPositionals(
     );
   }
   const selectorArgs = splitSelectorFromArgs(positionals);
-  if (selectorArgs) return { selector: selectorArgs.selectorExpression };
+  if (selectorArgs) {
+    if (selectorArgs.rest.length > 0) {
+      throw new AppError(
+        'INVALID_ARGS',
+        formatSelectorTrailingArgsFailure(positionals, selectorArgs),
+      );
+    }
+    return { selector: selectorArgs.selectorExpression };
+  }
   return readPointTarget(positionals);
 }
 
@@ -83,6 +91,29 @@ function formatTargetParseFailure(positionals: string[]): string {
     return `${base} Selector values with spaces need quotes, e.g. text="Sign in".`;
   }
   return `${base} To match by visible text, use text=${quoteSelectorValue(raw)} (or label=/id=/role=), or pass an @ref from snapshot.`;
+}
+
+function formatSelectorTrailingArgsFailure(
+  positionals: string[],
+  selectorArgs: { selectorExpression: string; rest: string[] },
+): string {
+  const base = `Selector ${selectorArgs.selectorExpression} is followed by unexpected extra arguments: "${selectorArgs.rest.join(' ')}".`;
+  const suggestion = mergeRestIntoSelectorValue(positionals, selectorArgs) ?? 'text="Sign in"';
+  return `${base} Selector values with spaces need quotes, e.g. ${suggestion}.`;
+}
+
+function mergeRestIntoSelectorValue(
+  positionals: string[],
+  selectorArgs: { selectorExpression: string; rest: string[] },
+): string | undefined {
+  const boundary = positionals.length - selectorArgs.rest.length;
+  const lastSelectorToken = positionals[boundary - 1];
+  if (lastSelectorToken === undefined) return undefined;
+  const equalsIdx = lastSelectorToken.indexOf('=');
+  if (equalsIdx <= 0) return undefined;
+  const mergedValue = [lastSelectorToken.slice(equalsIdx + 1), ...selectorArgs.rest].join(' ');
+  const mergedToken = `${lastSelectorToken.slice(0, equalsIdx + 1)}${quoteSelectorValue(mergedValue)}`;
+  return [...positionals.slice(0, boundary - 1), mergedToken].join(' ');
 }
 
 function quoteSelectorValue(value: string): string {

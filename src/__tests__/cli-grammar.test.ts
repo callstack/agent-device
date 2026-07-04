@@ -54,6 +54,44 @@ test('interaction and fill grammar share ref, selector, and point parsing', () =
   });
 });
 
+test('interaction selectors reject unquoted trailing text instead of dropping it', () => {
+  assert.throws(
+    () => readInputFromCli('press', ['text=Gesture', 'lab'], BASE_FLAGS),
+    (err: any) => {
+      assert.equal(err.code, 'INVALID_ARGS');
+      assert.match(err.message, /unexpected extra arguments: "lab"/);
+      assert.match(err.message, /text="Gesture lab"/);
+      return true;
+    },
+  );
+  assert.throws(
+    () => readInputFromCli('click', ['role=button', 'text=Sign', 'in'], BASE_FLAGS),
+    (err: any) => {
+      assert.equal(err.code, 'INVALID_ARGS');
+      assert.match(err.message, /unexpected extra arguments: "in"/);
+      assert.match(err.message, /role=button text="Sign in"/);
+      return true;
+    },
+  );
+  assert.throws(
+    () => readInputFromCli('longpress', ['text=Gesture', 'lab'], BASE_FLAGS),
+    (err: any) => {
+      assert.equal(err.code, 'INVALID_ARGS');
+      assert.match(err.message, /unexpected extra arguments: "lab"/);
+      return true;
+    },
+  );
+
+  // Quoted selector values and fill's trailing text payload keep working.
+  assert.deepEqual(readInputFromCli('press', ['text="Gesture lab"'], BASE_FLAGS).target, {
+    kind: 'selector',
+    selector: 'text="Gesture lab"',
+  });
+  const fillAfterSelector = readInputFromCli('fill', ['id=email', 'qa@example.com'], BASE_FLAGS);
+  assert.deepEqual(fillAfterSelector.target, { kind: 'selector', selector: 'id=email' });
+  assert.equal(fillAfterSelector.text, 'qa@example.com');
+});
+
 test('bare snapshot refs without @ prefix throw helpful error', () => {
   assert.throws(
     () => readInputFromCli('click', ['e3'], BASE_FLAGS),
