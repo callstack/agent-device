@@ -55,6 +55,10 @@ const AGENT_START_LINES = [
   'Default to agent-device for installs, opens, snapshots, interactions, screenshots, logs, network/perf evidence, and verification.',
   'Use raw adb, simctl, xcrun, or platform scripts only when this help calls out a tool gap or platform setup step.',
   'Start with agent-device help workflow to understand the core loop and how to use the tool.',
+  // Benchmarked 2026-07-05 (#1101): agents that only read --help skipped the
+  // help-workflow pointer and fell into plain-snapshot loops; stating the loop
+  // here is what makes small models pick snapshot -i and --settle unprompted.
+  'Core loop: open <app> -> snapshot -i (interactive tree with @refs) -> press/click/fill <target> --settle (returns the settled diff with fresh @refs) -> repeat. Verify with diff snapshot -i.',
 ] as const;
 
 const AGENT_QUICKSTART_LINES = [
