@@ -35,7 +35,7 @@ Single-context repo. Read `CONTEXT.md` for domain language and testing/architect
 - Delegation-on-error is not success-path parity. A fast path that falls back on failure can still succeed on a candidate the shared rules would refuse.
 - Do not measure before confirming the code path can fire. An A/B whose B-arm cannot execute returns two green runs masquerading as evidence.
 - Typed signals over message sniffing: key on structured details (`details.timeoutMs`, reason codes), never on error text. Remaining sniffs are owned debt with in-code rationale — do not copy the pattern.
-- Snapshot output is the token budget. Never add per-node bytes to the tree; response-level metadata rides once per response (see versioned refs: pins are accepted input, never emitted output).
+- Snapshot output is the token budget. Never add per-node bytes to the tree; response-level metadata rides once per response.
 - Warnings compose, never clobber. Append through the shared response builder; two clobber bugs shipped before this rule.
 - Unreleased API surface dies free. Before treating a field as wire-compat, check `git tag --contains <commit>`; if it never shipped, delete it now.
 - Push only behind `&&`-chained gates. `format:check && typecheck && lint && vitest && git push` — a push that can run after a failed gate eventually will.
