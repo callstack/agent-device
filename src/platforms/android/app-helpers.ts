@@ -1,7 +1,5 @@
-import { AppError } from '../../kernel/errors.ts';
-import { execFailureDetails } from '../../utils/exec.ts';
 import { resolveAppsFilter, type AppsFilter } from '../../contracts/app-inventory.ts';
-import type { AndroidAdbExecutor } from './adb-executor.ts';
+import { androidAdbResultError, type AndroidAdbExecutor } from './adb-executor.ts';
 import {
   parseAndroidForegroundApp,
   parseAndroidLaunchablePackages,
@@ -102,11 +100,7 @@ function parseAndroidLaunchablePackageOutput(stdout: string): string[] {
 async function listAndroidUserInstalledPackagesWithAdb(adb: AndroidAdbExecutor): Promise<string[]> {
   const result = await adb(['shell', 'pm', 'list', 'packages', '-3'], { allowFailure: true });
   if (result.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Failed to list Android user-installed apps',
-      execFailureDetails(result),
-    );
+    throw androidAdbResultError('Failed to list Android user-installed apps', result);
   }
   return parseAndroidUserInstalledPackages(result.stdout);
 }

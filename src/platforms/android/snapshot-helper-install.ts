@@ -1,10 +1,9 @@
-import { AppError } from '../../kernel/errors.ts';
-import { execFailureDetails } from '../../utils/exec.ts';
 import {
   readAndroidSnapshotHelperInstallOptions,
   verifyAndroidSnapshotHelperArtifact,
 } from './snapshot-helper-artifact.ts';
 import {
+  androidAdbResultError,
   installAndroidAdbPackage,
   type AndroidAdbExecutor,
   type AndroidAdbProvider,
@@ -118,11 +117,10 @@ export async function ensureAndroidSnapshotHelper(options: {
   );
   if (result.exitCode !== 0) {
     forgetInstalledSnapshotHelper(installCacheKey);
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Failed to install Android snapshot helper',
-      execFailureDetails(result, { packageName, versionCode }),
-    );
+    throw androidAdbResultError('Failed to install Android snapshot helper', result, {
+      packageName,
+      versionCode,
+    });
   }
 
   rememberInstalledSnapshotHelper(installCacheKey, versionCode);

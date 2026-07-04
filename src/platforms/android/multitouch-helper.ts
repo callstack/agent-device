@@ -8,6 +8,7 @@ import { findProjectRoot, readVersion } from '../../utils/version.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import type { TransformGestureParams } from '../../core/scroll-gesture.ts';
 import {
+  androidAdbResultError,
   installAndroidAdbPackage,
   resolveAndroidAdbExecutor,
   resolveAndroidAdbProvider,
@@ -528,11 +529,10 @@ export async function ensureAndroidMultiTouchHelper(options: {
     timeoutMs: ANDROID_MULTITOUCH_HELPER_INSTALL_TIMEOUT_MS,
   });
   if (result.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Failed to install Android multi-touch helper',
-      execFailureDetails(result, { packageName, versionCode }),
-    );
+    throw androidAdbResultError('Failed to install Android multi-touch helper', result, {
+      packageName,
+      versionCode,
+    });
   }
   installedMultiTouchHelpers.add(cacheKey);
   return {

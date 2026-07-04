@@ -2,6 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Readable, Writable } from 'node:stream';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import {
+  execFailureDetails,
   runCmd,
   runCmdBackground,
   withCommandExecutorOverride,
@@ -325,14 +326,71 @@ export function attachAdbFailureHint<T>(error: T): T {
   return error;
 }
 
-function withAdbFailureHintExecutor(exec: AndroidAdbExecutor): AndroidAdbExecutor {
-  return async (args, options) => {
+/**
+ * Builds the COMMAND_FAILED AppError for a failed `allowFailure` adb result and
+ * runs it through the failure classifier. This is the shared construction point
+ * for call sites that tolerate a failure to inspect it and then throw — those
+ * errors never cross the executor throw path, so they classify here instead.
+ * Site-provided `details` win on key collisions, and a site `hint` is preserved
+ * over the classified one.
+ *
+ * Nonzero exits build their details via execFailureDetails, whose
+ * processExitError flag makes normalizeError append the first stderr line to
+ * the curated message — the classified hint and the stderr-excerpt enrichment
+ * compose instead of competing. Semantic failures thrown at exit 0 (e.g. an
+ * `am start` error printed on a successful exit) stay unflagged so a stray
+ * stderr line never decorates a message the process exit does not back up.
+ */
+export function androidAdbResultError(
+  message: string,
+  result: Pick<AndroidAdbExecutorResult, 'exitCode' | 'stdout' | 'stderr'>,
+  details?: Record<string, unknown>,
+): AppError {
+  const failureDetails =
+    result.exitCode === 0
+      ? { stdout: result.stdout, stderr: result.stderr, exitCode: result.exitCode, ...details }
+      : execFailureDetails(result, details);
+  return attachAdbFailureHint(new AppError('COMMAND_FAILED', message, failureDetails));
+}
+
+function withAdbFailureHints<Args extends unknown[], Result>(
+  call: (...args: Args) => Promise<Result>,
+): (...args: Args) => Promise<Result> {
+  return async (...args) => {
     try {
-      return await exec(args, options);
+      return await call(...args);
     } catch (error) {
       throw attachAdbFailureHint(error);
     }
   };
+}
+
+// Providers already enriched by withAdbFailureHintProvider, so repeated
+// normalization resolves to the same object instead of stacking wrappers.
+const adbFailureHintProviders = new WeakSet<AndroidAdbProvider>();
+
+/**
+ * Wraps every promise-returning adb funnel a provider exposes — `exec` plus the
+ * semantic `pull`/`install`/`installBundle` methods that bypass it — so a
+ * provider failure (e.g. an INSTALL_FAILED verdict from `provider.install`)
+ * carries the same classified hint as local execution. Applied once inside
+ * {@link normalizeAndroidAdbProvider}, the single funnel every provider passes
+ * through; the local provider needs no wrap because its methods delegate to the
+ * already-enriched serial executor.
+ */
+function withAdbFailureHintProvider(provider: AndroidAdbProvider): AndroidAdbProvider {
+  if (adbFailureHintProviders.has(provider)) return provider;
+  const enriched: AndroidAdbProvider = {
+    ...provider,
+    exec: withAdbFailureHints(provider.exec),
+    ...(provider.pull ? { pull: withAdbFailureHints(provider.pull) } : {}),
+    ...(provider.install ? { install: withAdbFailureHints(provider.install) } : {}),
+    ...(provider.installBundle
+      ? { installBundle: withAdbFailureHints(provider.installBundle) }
+      : {}),
+  };
+  adbFailureHintProviders.add(enriched);
+  return enriched;
 }
 
 export function createDeviceAdbExecutor(device: DeviceInfo): AndroidAdbExecutor {
@@ -340,7 +398,7 @@ export function createDeviceAdbExecutor(device: DeviceInfo): AndroidAdbExecutor 
 }
 
 function createSerialAdbExecutor(serial: string): AndroidAdbExecutor {
-  return withAdbFailureHintExecutor(
+  return withAdbFailureHints(
     async (args, options) =>
       // Local adb execution must escape any active provider scope to avoid routing
       // tunnel-backed providers back into themselves when they shell out to adb.
@@ -467,10 +525,7 @@ export function createAndroidPortReverseManager(
 function normalizeAndroidAdbProvider(
   provider: AndroidAdbProvider | AndroidAdbExecutor,
 ): AndroidAdbProvider {
-  if (typeof provider === 'function') {
-    return { exec: provider };
-  }
-  return provider;
+  return withAdbFailureHintProvider(typeof provider === 'function' ? { exec: provider } : provider);
 }
 
 type AndroidAdbTransferProviderOptions = {
@@ -537,13 +592,10 @@ export async function withAndroidAdbProvider<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
   if (!provider) return await fn();
-  const normalized = typeof provider === 'function' ? { exec: provider } : provider;
-  // Wrap once at scope installation so every consumer — the command-executor
-  // override and direct resolveAndroidAdb* lookups — gets classified failure hints.
-  const enriched: AndroidAdbProvider = {
-    ...normalized,
-    exec: withAdbFailureHintExecutor(normalized.exec),
-  };
+  // Normalization wraps once at scope installation, so every consumer — the
+  // command-executor override and direct resolveAndroidAdb* lookups — gets
+  // classified failure hints on exec and the semantic provider methods alike.
+  const enriched = normalizeAndroidAdbProvider(provider);
   const scope = { provider: enriched, serial: options.serial };
   const override = createAndroidCommandExecutorOverride(scope);
   return await androidAdbProviderScope.run(

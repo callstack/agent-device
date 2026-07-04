@@ -4,7 +4,11 @@ import type { DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { execFailureDetails } from '../../utils/exec.ts';
 import { splitNonEmptyTrimmedLines } from '../../utils/parsing.ts';
-import { resolveAndroidAdbExecutor, type AndroidAdbExecutor } from './adb-executor.ts';
+import {
+  androidAdbResultError,
+  resolveAndroidAdbExecutor,
+  type AndroidAdbExecutor,
+} from './adb-executor.ts';
 import { parseNumericToken } from './perf-parsing.ts';
 import { roundPercent } from '../perf-utils.ts';
 export {
@@ -150,17 +154,19 @@ export async function captureAndroidHeapSnapshot(
     });
     if (pullResult.exitCode !== 0) {
       await cleanupLocalArtifact(outPath, hadLocalArtifact);
-      throw new AppError(
-        'COMMAND_FAILED',
+      // The site hint wins over the classified one (attachAdbFailureHint never
+      // overwrites), but the classifier still tags adbFailure/retriable.
+      throw androidAdbResultError(
         `Failed to pull Android heap dump for ${packageName}`,
-        execFailureDetails(pullResult, {
+        pullResult,
+        {
           kind: 'android-hprof',
           package: packageName,
           pid,
           remotePath,
           path: outPath,
           hint: 'Verify the daemon can write the requested --out path and retry. The heap dump stays on-device only until cleanup runs.',
-        }),
+        },
       );
     }
 

@@ -18,6 +18,7 @@ vi.mock('../../../utils/exec.ts', async (importOriginal) => {
 });
 
 import {
+  androidAdbResultError,
   attachAdbFailureHint,
   classifyAdbFailure,
   createAndroidPortReverseManager,
@@ -30,7 +31,7 @@ import {
   withAndroidAdbProvider,
 } from '../adb-executor.ts';
 import { runCmd, runCmdBackground } from '../../../utils/exec.ts';
-import { AppError } from '../../../kernel/errors.ts';
+import { AppError, normalizeError } from '../../../kernel/errors.ts';
 
 const mockRunCmd = vi.mocked(runCmd);
 const mockRunCmdBackground = vi.mocked(runCmdBackground);
@@ -465,6 +466,111 @@ test('port reverse removal failures surface as classified AppErrors, not bare Er
   assert.equal(error.details?.adbFailure, 'device_offline');
   assert.equal(error.details?.retriable, true);
   assert.match(String(error.details?.hint), /reconnect/i);
+});
+
+test('androidAdbResultError classifies tolerated nonzero results like thrown executor failures', () => {
+  const error = androidAdbResultError(
+    'adb uninstall failed for com.example.app',
+    { exitCode: 1, stdout: '', stderr: 'error: device offline' },
+    { package: 'com.example.app' },
+  );
+
+  assert.equal(error.code, 'COMMAND_FAILED');
+  assert.equal(error.details?.stderr, 'error: device offline');
+  assert.equal(error.details?.exitCode, 1);
+  assert.equal(error.details?.package, 'com.example.app');
+  assert.equal(error.details?.adbFailure, 'device_offline');
+  assert.equal(error.details?.retriable, true);
+  assert.match(String(error.details?.hint), /adb reconnect/i);
+});
+
+test('androidAdbResultError composes the classified hint with the stderr excerpt enrichment', () => {
+  const error = androidAdbResultError('adb uninstall failed for com.example.app', {
+    exitCode: 1,
+    stdout: '',
+    stderr: 'error: device offline',
+  });
+
+  // execFailureDetails flags processExitError, so normalizeError suffixes the
+  // curated message with the stderr excerpt while the classified hint rides along.
+  assert.equal(error.details?.processExitError, true);
+  const normalized = normalizeError(error);
+  assert.equal(
+    normalized.message,
+    'adb uninstall failed for com.example.app: error: device offline',
+  );
+  assert.match(String(normalized.hint), /adb reconnect/i);
+  assert.equal(normalized.retriable, true);
+});
+
+test('androidAdbResultError leaves semantic exit-0 failures without excerpt enrichment', () => {
+  const error = androidAdbResultError('Failed to launch com.example.app', {
+    exitCode: 0,
+    stdout: 'Error: Activity not started',
+    stderr: 'Warning: unrelated deprecation notice',
+  });
+
+  assert.equal(Object.hasOwn(error.details ?? {}, 'processExitError'), false);
+  assert.equal(normalizeError(error).message, 'Failed to launch com.example.app');
+});
+
+test('androidAdbResultError keeps a site hint over the classified one', () => {
+  const error = androidAdbResultError(
+    'Failed to pull Android heap dump',
+    { exitCode: 1, stdout: '', stderr: 'error: device offline' },
+    { hint: 'site-specific hint' },
+  );
+
+  assert.equal(error.details?.hint, 'site-specific hint');
+  assert.equal(error.details?.adbFailure, 'device_offline');
+});
+
+test('semantic provider install failures carry classified hints', async () => {
+  const error = await withAndroidAdbProvider(
+    {
+      exec: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+      install: async () => {
+        throw new AppError('COMMAND_FAILED', 'remote install failed', {
+          exitCode: 1,
+          stdout: 'Failure [INSTALL_FAILED_UPDATE_INCOMPATIBLE: signatures do not match]',
+          stderr: '',
+        });
+      },
+    },
+    { serial: 'emulator-5554' },
+    async () =>
+      await installAndroidAdbPackage('/app.apk', { replace: true }).then(
+        () => assert.fail('expected the provider install to reject'),
+        (err: unknown) => err,
+      ),
+  );
+
+  assert.ok(error instanceof AppError);
+  assert.equal(error.details?.adbFailure, 'install_update_incompatible');
+  assert.match(String(error.details?.hint), /incompatible signature/i);
+});
+
+test('explicitly passed provider pull failures carry classified hints', async () => {
+  const error = await pullAndroidAdbFile('/remote.mp4', '/local.mp4', {
+    provider: {
+      exec: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
+      pull: async () => {
+        throw new AppError('COMMAND_FAILED', 'remote pull failed', {
+          exitCode: 1,
+          stdout: '',
+          stderr: 'error: device offline',
+        });
+      },
+    },
+  }).then(
+    () => assert.fail('expected the provider pull to reject'),
+    (err: unknown) => err,
+  );
+
+  assert.ok(error instanceof AppError);
+  assert.equal(error.details?.adbFailure, 'device_offline');
+  assert.equal(error.details?.retriable, true);
+  assert.match(String(error.details?.hint), /adb reconnect/i);
 });
 
 test('provider-scoped adb failures get the same classified hints as local execution', async () => {

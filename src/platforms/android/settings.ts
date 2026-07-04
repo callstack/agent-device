@@ -1,5 +1,4 @@
 import { AppError } from '../../kernel/errors.ts';
-import { execFailureDetails } from '../../utils/exec.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { requireLocationCoordinates } from '../../utils/location-coordinates.ts';
 import {
@@ -14,6 +13,7 @@ import {
 import { parseAppearanceAction } from '../appearance.ts';
 import { parseSettingState } from '../setting-state.ts';
 import { runAndroidAdb } from './adb.ts';
+import { androidAdbResultError } from './adb-executor.ts';
 import { resolveAndroidApp } from './app-lifecycle.ts';
 
 const ANDROID_ANIMATION_SCALE_SETTINGS = [
@@ -253,11 +253,7 @@ async function resolveAndroidAppearanceTarget(
     allowFailure: true,
   });
   if (currentResult.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Failed to read current Android appearance',
-      execFailureDetails(currentResult),
-    );
+    throw androidAdbResultError('Failed to read current Android appearance', currentResult);
   }
   const current = parseAndroidAppearance(currentResult.stdout, currentResult.stderr);
   if (!current) {

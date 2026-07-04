@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFailureDetails, resolveFileOverridePath, runCmd, whichCmd } from '../../utils/exec.ts';
+import { resolveFileOverridePath, runCmd, whichCmd } from '../../utils/exec.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import type { AppsFilter } from '../../contracts/app-inventory.ts';
@@ -11,6 +11,7 @@ import { createAppResolutionCache, type AppResolutionCacheScope } from '../app-r
 import { waitForAndroidBoot } from './devices.ts';
 import { runAndroidAdb } from './adb.ts';
 import {
+  androidAdbResultError,
   createAndroidPortReverseManager,
   installAndroidAdbPackage,
   resolveAndroidAdbProvider,
@@ -479,10 +480,7 @@ async function openAndroidPackage(
     if (!(await isAndroidPackageInstalled(device, packageName))) {
       throw buildAndroidPackageNotInstalledError(packageName);
     }
-    throw new AppError('COMMAND_FAILED', `Failed to launch ${packageName}`, {
-      stdout: primaryResult.stdout,
-      stderr: primaryResult.stderr,
-    });
+    throw androidAdbResultError(`Failed to launch ${packageName}`, primaryResult);
   }
   await runAndroidAdb(device, buildAndroidActivityLaunchArgs(component, launchCategory, options));
 }
@@ -726,11 +724,7 @@ async function uninstallAndroidApp(device: DeviceInfo, app: string): Promise<{ p
   if (result.exitCode !== 0) {
     const output = `${result.stdout}\n${result.stderr}`.toLowerCase();
     if (!output.includes('unknown package') && !output.includes('not installed')) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        `adb uninstall failed for ${resolved.value}`,
-        execFailureDetails(result),
-      );
+      throw androidAdbResultError(`adb uninstall failed for ${resolved.value}`, result);
     }
   }
   return { package: resolved.value };

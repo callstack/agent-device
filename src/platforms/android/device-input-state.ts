@@ -1,9 +1,12 @@
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { execFailureDetails } from '../../utils/exec.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { isClipboardShellUnsupported, sleep } from './adb.ts';
-import { resolveAndroidAdbExecutor, type AndroidAdbExecutor } from './adb-executor.ts';
+import {
+  androidAdbResultError,
+  resolveAndroidAdbExecutor,
+  type AndroidAdbExecutor,
+} from './adb-executor.ts';
 import {
   classifyAndroidInputOwner,
   isFallbackAndroidInputMethodPackage,
@@ -85,11 +88,7 @@ export async function getAndroidKeyboardStatusWithAdb(
     allowFailure: true,
   });
   if (result.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Failed to query Android keyboard state',
-      execFailureDetails(result),
-    );
+    throw androidAdbResultError('Failed to query Android keyboard state', result);
   }
   return parseAndroidKeyboardState(result.stdout);
 }
@@ -327,11 +326,7 @@ async function runAndroidClipboardShellCommand(
     );
   }
   if (result.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `Failed to ${operation} Android clipboard text`,
-      execFailureDetails(result),
-    );
+    throw androidAdbResultError(`Failed to ${operation} Android clipboard text`, result);
   }
   return result.stdout;
 }

@@ -1,7 +1,11 @@
 import fs from 'node:fs';
 import { AppError } from '../../kernel/errors.ts';
-import { execFailureDetails } from '../../utils/exec.ts';
-import type { AndroidAdbExecutor, AndroidAdbProcess, AndroidAdbProvider } from './adb-executor.ts';
+import {
+  androidAdbResultError,
+  type AndroidAdbExecutor,
+  type AndroidAdbProcess,
+  type AndroidAdbProvider,
+} from './adb-executor.ts';
 
 export type AndroidLogcatCaptureOptions = {
   lines?: number;
@@ -29,11 +33,7 @@ export async function captureAndroidLogcatWithAdb(
     signal: options.signal,
   });
   if (result.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Failed to capture Android logcat',
-      execFailureDetails(result),
-    );
+    throw androidAdbResultError('Failed to capture Android logcat', result);
   }
   return result.stdout;
 }
