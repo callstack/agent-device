@@ -92,7 +92,7 @@ Keep `src/daemon.ts` a thin router and `src/daemon/request-router.ts` orchestrat
   - read `.oxlintrc.json` before treating lint output as source-level bugs
 - For files over 500 LOC, search for the relevant type/function/section first, then read a bounded range.
 - Do not run integration tests by default.
-- Keep long help prose in `src/utils/cli-help.ts`, flag definitions in `src/utils/cli-flags.ts`, and CLI-specific usage/flag metadata in `src/utils/cli-command-overrides.ts`.
+- Keep long help prose in `src/cli/parser/cli-help.ts`, flag definitions in `src/cli/parser/cli-flags.ts`, and CLI-specific usage/flag metadata in `src/utils/cli-command-overrides.ts`.
 - If build/type errors mention declaration generation, inspect `tsconfig.lib.json` before reading platform code.
 - If lint failures appear after toolchain edits, check whether the rule is from `eslint/*`, `typescript/*`, `import/*`, or `node/*` in `.oxlintrc.json` before assuming source bugs.
 
@@ -110,7 +110,7 @@ Keep `src/daemon.ts` a thin router and `src/daemon/request-router.ts` orchestrat
 
 A new snapshot/command flag touches only the layers that need to understand it. Follow this checklist in order:
 
-1. `src/utils/cli-flags.ts`: add to `CliFlags`, `FLAG_DEFINITIONS`, and the relevant exported flag group (e.g. `SNAPSHOT_FLAGS`). Add the flag to `CLI_COMMAND_OVERRIDES` in `src/utils/cli-command-overrides.ts` for each command that supports it; command names/descriptions come from command contracts unless CLI help needs a specific override.
+1. `src/cli/parser/cli-flags.ts`: add to `CliFlags`, `FLAG_DEFINITIONS`, and the relevant exported flag group (e.g. `SNAPSHOT_FLAGS`). Add the flag to `CLI_COMMAND_OVERRIDES` in `src/utils/cli-command-overrides.ts` for each command that supports it; command names/descriptions come from command contracts unless CLI help needs a specific override.
 2. `src/commands/cli-grammar/*`: read the CLI flag into command input when the CLI accepts it.
 3. `src/commands/command-projection.ts` and command-family projection helpers: write the input into the daemon request only if the flag affects daemon execution.
 4. `src/commands/*-command-contracts.ts`: add or update the command input schema only if the option should be available through Node.js or MCP as structured input.
@@ -259,7 +259,7 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
 
 ## Docs & Skills
 - Versioned CLI help is the agent-facing source of truth. Put workflow guidance/help topics in `src/cli/parser/cli-help.ts`, flags in `src/cli/parser/cli-flags.ts`, CLI command overrides in `src/utils/cli-command-overrides.ts`, and assertions for important copy in `src/cli/parser/__tests__/cli-help-topics.test.ts` / `cli-help-command-usage.test.ts`.
-- Keep parser schema and help rendering separate: `src/utils/command-schema.ts` composes contract-derived command schemas with CLI overrides; `src/utils/cli-help.ts` owns help topics and usage rendering.
+- Keep parser schema and help rendering separate: `src/utils/command-schema.ts` composes contract-derived command schemas with CLI overrides; `src/cli/parser/cli-help.ts` owns help topics and usage rendering.
 - Before planning device automation commands, read `agent-device help workflow`; then read topic help such as `debugging`, `react-native`, `react-devtools`, `physical-device`, `macos`, or `dogfood` when relevant. This is required even when local agent skills are unavailable.
 - Skills are thin routers. Keep `skills/**/SKILL.md` focused on when to use the skill, version gating, which `agent-device help <topic>` page to read, and a short default loop. Do not duplicate full CLI manuals in skills.
 - For behavior/CLI surface changes, update help/metadata, README or `website/docs/**` when user-facing, and a SkillGym case in `test/skillgym/suites/agent-device-smoke-suite.ts` when command-planning guidance changes.
@@ -276,8 +276,8 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
   - exact next command/action needed to unblock
 
 ## Key Files
-- CLI parse + formatting: `src/bin.ts`, `src/cli.ts`, `src/utils/args.ts`
-- CLI help + option metadata: `src/utils/cli-help.ts`, `src/utils/cli-flags.ts`, `src/utils/cli-command-overrides.ts`, `src/utils/command-schema.ts`, `src/utils/cli-option-schema.ts`
+- CLI parse + formatting: `src/bin.ts`, `src/cli.ts`, `src/cli/parser/args.ts`
+- CLI help + option metadata: `src/cli/parser/cli-help.ts`, `src/cli/parser/cli-flags.ts`, `src/utils/cli-command-overrides.ts`, `src/utils/command-schema.ts`, `src/utils/cli-option-schema.ts`
 - Daemon client transport: `src/daemon-client.ts`
 - Daemon state/store: `src/daemon/session-store.ts`
 - Selector DSL and matching: `src/daemon/selectors.ts`
