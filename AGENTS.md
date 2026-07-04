@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Minimal operating guide for AI coding agents in this repo.
+AGENTS.md is this repo's README for coding agents: project context, commands, conventions, non-obvious traps, and PR expectations in one predictable place. Keep it high-signal and living; prefer durable source-of-truth pointers over file inventories that drift.
 
 ## Agent skills
 
@@ -97,13 +97,8 @@ Keep `src/daemon.ts` a thin router and `src/daemon/request-router.ts` orchestrat
 - If lint failures appear after toolchain edits, check whether the rule is from `eslint/*`, `typescript/*`, `import/*`, or `node/*` in `.oxlintrc.json` before assuming source bugs.
 
 ## Apple Runner Seams
-- The OS-agnostic Apple XCTest runner lives under `src/platforms/apple/core/runner/`. Keep dependency direction clean:
-  - `runner-client.ts`: command execution + retry behavior
-  - `runner-transport.ts`: connection/probing/HTTP transport
-  - `runner-contract.ts`: shared `RunnerCommand` type and runner connect/error helpers
-  - `runner-session.ts`: session lifecycle and request/response execution
-  - `runner-xctestrun.ts`: xctestrun preparation/build/cache logic
-- `runner-transport.ts` must not import back from `runner-client.ts`.
+- The OS-agnostic Apple XCTest runner lives under `src/platforms/apple/core/runner/`; use `rg --files src/platforms/apple/core/runner` and read the seam you are changing before editing.
+- Keep dependency direction clean: transport stays below client/session behavior, shared command/error contracts stay in the runner contract module, and xctestrun preparation/build/cache logic stays isolated from request execution.
 - If changing runner connect errors, retry policy, or command typing, start in `src/platforms/apple/core/runner/runner-contract.ts` before touching client/transport files.
 
 ## Adding a New CLI Flag
@@ -201,15 +196,9 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
 - Prefer selector or `@ref` interactions over raw x/y commands in tests and docs, especially on macOS where window position can vary across runs.
 
 ## Shared Test Utilities
-- Before writing a new test, check `src/__tests__/test-utils/` for existing helpers:
-  - `device-fixtures.ts`: canonical `DeviceInfo` constants (`ANDROID_EMULATOR`, `IOS_SIMULATOR`, `IOS_DEVICE`, `MACOS_DEVICE`, `LINUX_DEVICE`, etc.)
-  - `session-factories.ts`: `makeSession`, `makeIosSession`, `makeAndroidSession`, `makeMacOsSession`
-  - `store-factory.ts`: `makeSessionStore` (creates temp `SessionStore` instances)
-  - `snapshot-builders.ts`: `buildNodes`, `makeSnapshotState`
-  - `mocked-binaries.ts`: `withMockedAdb`, `withMockedXcrun` (stub CLI binaries for dispatch tests)
-- Use `import { ... } from '<relative-path>/__tests__/test-utils/index.ts'` for convenient barrel imports.
-- Prefer shared fixtures over inlining new `DeviceInfo` or `SessionState` objects in tests.
-- Do not duplicate `makeSessionStore`, `makeSession`, or device constants when a shared helper already exists.
+- Before writing a new test, inspect `src/__tests__/test-utils/index.ts` and search for existing factories, fixtures, and mocked binaries with `rg -n "export .*make|export .*DEVICE|withMocked" src/__tests__/test-utils`.
+- Use the test-utils barrel for imports and prefer named shared fixtures over inlining new `DeviceInfo`, `SessionState`, snapshot, store, or mocked-binary objects.
+- Do not duplicate session/store/device helpers when a shared helper already exists; if a helper is missing, add it near the concept it serves and export it through the barrel.
 
 ## Testing Matrix
 - Docs/skills only: no tests required unless a more specific rule below applies.
@@ -275,22 +264,12 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
   - why it blocks completion
   - exact next command/action needed to unblock
 
-## Key Files
-- CLI parse + formatting: `src/bin.ts`, `src/cli.ts`, `src/cli/parser/args.ts`
-- CLI help + option metadata: `src/cli/parser/cli-help.ts`, `src/cli/parser/cli-flags.ts`, `src/utils/cli-command-overrides.ts`, `src/utils/command-schema.ts`, `src/utils/cli-option-schema.ts`
-- Daemon client transport: `src/daemon-client.ts`
-- Daemon state/store: `src/daemon/session-store.ts`
-- Selector DSL and matching: `src/daemon/selectors.ts`
-- `is` predicate evaluation: `src/daemon/is-predicates.ts`
-- Shared action helpers: `src/daemon/action-utils.ts`
-- Snapshot shaping + labels: `src/daemon/snapshot-processing.ts`
-- Handler context helpers: `src/daemon/context.ts`, `src/daemon/device-ready.ts`
-- Request routing/policy: `src/daemon/daemon-command-registry.ts`, `src/daemon/request-router.ts`, `src/daemon/request-admission.ts`, `src/daemon/request-generic-dispatch.ts`
-- Dispatcher + capability map: `src/core/dispatch.ts`, `src/core/dispatch-context.ts`, `src/core/dispatch-interactions.ts`, `src/core/capabilities.ts`
-- Command identity + command surface: `src/command-catalog.ts`, `src/commands/command-surface.ts`, `src/commands/command-contract.ts`, `src/commands/client-command-contracts.ts`
-- CLI grammar: `src/commands/cli-grammar.ts`, `src/commands/cli-grammar/*`
-- Daemon request projection: `src/commands/command-projection.ts`
-- Platform backends: `src/platforms/apple/*`, `src/platforms/ios/*`, `apple-runner/*`, `src/platforms/android/*`
+## Finding Source Owners
+- Do not turn this file into a source tree map. For implementation work, identify owner modules from the durable registries and then follow imports/tests from there.
+- Command identity and projection: search command descriptors and command contracts first with `rg -n "<command>|CommandDescriptor|defineCommand" src/core/command-descriptor src/command-catalog.ts src/commands`.
+- Daemon routing and policy: start with `src/daemon/daemon-command-registry.ts`, then trace to the named handler/request module with `rg -n "<command>|route|policy" src/daemon`.
+- Platform behavior and capabilities: start with `src/core/capabilities.ts` and the relevant platform under `src/platforms/`; use `rg`, not broad directory reads.
+- CLI help and command-planning guidance: source of truth is `src/cli/parser/cli-help.ts`, `src/cli/parser/cli-flags.ts`, `src/utils/cli-command-overrides.ts`, and `src/utils/command-schema.ts`.
 
 ## Pull Requests
 - Before opening PR: ensure no conflict markers/unmerged paths.
