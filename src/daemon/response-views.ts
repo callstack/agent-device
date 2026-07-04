@@ -123,9 +123,33 @@ function selectorReadView(data: DaemonResponseData, level: ResponseLevel): Daemo
   return { ...data, node: compactSelectorNode(node as SnapshotNode) };
 }
 
+/**
+ * Token-cheap settle digest for interaction commands (#1101). CONSERVATIVE:
+ * only acts on a result that carries a `settle.diff` payload (the `--settle`
+ * opt-in) and otherwise returns the data UNCHANGED, so plain interaction
+ * responses stay byte-identical at every level. The digest keeps the verdict
+ * fields and the changed-line COUNTS (`diff.summary`) plus `refsGeneration`,
+ * and drops the diff line texts — the changed-count summary is the digest
+ * answer; the lines are the default-level payload. `full` returns today's
+ * shape unchanged (nothing richer is computed yet).
+ */
+function interactionSettleView(data: DaemonResponseData, level: ResponseLevel): DaemonResponseData {
+  if (level !== 'digest') return data;
+  const settle = data.settle;
+  if (!settle || typeof settle !== 'object' || Array.isArray(settle)) return data;
+  const { diff, ...rest } = settle as Record<string, unknown>;
+  if (!diff || typeof diff !== 'object' || Array.isArray(diff)) return data;
+  const summary = (diff as Record<string, unknown>).summary;
+  return { ...data, settle: { ...rest, diff: { summary } } };
+}
+
 export const RESPONSE_VIEWS: Record<string, ResponseView> = {
   snapshot: snapshotView,
   screenshot: screenshotView,
   find: selectorReadView,
   get: selectorReadView,
+  press: interactionSettleView,
+  click: interactionSettleView,
+  fill: interactionSettleView,
+  longpress: interactionSettleView,
 };

@@ -71,12 +71,21 @@ const verifyField = () =>
     'Capture cheap post-action evidence (AX digest, node counts, changedFromBefore) instead of a follow-up snapshot.',
   );
 
+const settleFields = () => ({
+  settle: booleanField(
+    'After the action, wait for the UI to go quiet and return the settled diff vs the pre-action tree in the same response. Best-effort; never fails the action.',
+  ),
+  settleQuietMs: integerField('Settle: quiet window in milliseconds (default 500).', { min: 0 }),
+  timeoutMs: integerField('Settle: wait deadline in milliseconds (default 10000).', { min: 1 }),
+});
+
 const clickFields = {
   target: requiredField(interactionTargetField()),
   button: enumField(CLICK_BUTTONS, 'Pointer button for platforms that support mouse buttons.'),
   ...selectorSnapshotFields(),
   ...repeatedFields(),
   verify: verifyField(),
+  ...settleFields(),
 };
 
 const pressFields = {
@@ -84,6 +93,7 @@ const pressFields = {
   ...selectorSnapshotFields(),
   ...repeatedFields(),
   verify: verifyField(),
+  ...settleFields(),
 };
 
 const fillFields = {
@@ -92,12 +102,14 @@ const fillFields = {
   delayMs: integerField('Delay between typed characters.', { min: 0 }),
   ...selectorSnapshotFields(),
   verify: verifyField(),
+  ...settleFields(),
 };
 
 const longPressFields = {
   target: requiredField(interactionTargetField()),
   durationMs: integerField('Long press duration in milliseconds.', { min: 0 }),
   ...selectorSnapshotFields(),
+  ...settleFields(),
 };
 
 const swipeFields = {

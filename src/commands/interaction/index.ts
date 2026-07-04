@@ -18,7 +18,11 @@ import type {
   TypeTextOptions,
 } from '../../client/client-types.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
-import { REPEATED_TOUCH_FLAGS, SELECTOR_SNAPSHOT_FLAGS } from '../../cli/parser/cli-flags.ts';
+import {
+  REPEATED_TOUCH_FLAGS,
+  SELECTOR_SNAPSHOT_FLAGS,
+  SETTLE_FLAGS,
+} from '../../cli/parser/cli-flags.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import {
@@ -70,7 +74,13 @@ const interactionCliSchemas = {
     usageOverride: 'click <x y|@ref|selector>',
     positionalArgs: ['target'],
     allowsExtraPositionals: true,
-    allowedFlags: [...REPEATED_TOUCH_FLAGS, 'clickButton', 'verify', ...SELECTOR_SNAPSHOT_FLAGS],
+    allowedFlags: [
+      ...REPEATED_TOUCH_FLAGS,
+      'clickButton',
+      'verify',
+      ...SETTLE_FLAGS,
+      ...SELECTOR_SNAPSHOT_FLAGS,
+    ],
   },
   press: {
     usageOverride: 'press <x y|@ref|selector>',
@@ -78,7 +88,7 @@ const interactionCliSchemas = {
       'Short press a semantic UI target by ref, selector, or point. For native context menus or hold gestures, use longpress <target> <durationMs> instead of press --hold-ms.',
     positionalArgs: ['targetOrX', 'y?'],
     allowsExtraPositionals: true,
-    allowedFlags: [...REPEATED_TOUCH_FLAGS, 'verify', ...SELECTOR_SNAPSHOT_FLAGS],
+    allowedFlags: [...REPEATED_TOUCH_FLAGS, 'verify', ...SETTLE_FLAGS, ...SELECTOR_SNAPSHOT_FLAGS],
   },
   longpress: {
     usageOverride: 'longpress <x y|@ref|selector> [durationMs]',
@@ -86,7 +96,7 @@ const interactionCliSchemas = {
       'Open native context menus or long-press targets by ref, selector, or point. Duration is positional, for example longpress @e12 800 or longpress 300 500 800.',
     positionalArgs: ['targetOrX', 'yOrDurationMs?', 'durationMs?'],
     allowsExtraPositionals: true,
-    allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS],
+    allowedFlags: [...SETTLE_FLAGS, ...SELECTOR_SNAPSHOT_FLAGS],
   },
   swipe: {
     helpDescription: 'Swipe coordinates with optional repeat pattern',
@@ -114,7 +124,7 @@ const interactionCliSchemas = {
     usageOverride: 'fill <x> <y> <text> | fill <@ref|selector> <text>',
     positionalArgs: ['targetOrX', 'yOrText', 'text?'],
     allowsExtraPositionals: true,
-    allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS, 'delayMs', 'verify'],
+    allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS, 'delayMs', 'verify', ...SETTLE_FLAGS],
   },
   scroll: {
     usageOverride: 'scroll <direction|top|bottom> [amount] [--pixels <n>] [--duration-ms <ms>]',
@@ -343,6 +353,7 @@ function toClickOptions(input: ClickInput): ClickOptions {
     ...toRepeatedOptions(input),
     button: input.button,
     verify: input.verify,
+    ...toSettleOptions(input),
   };
 }
 
@@ -353,6 +364,7 @@ function toPressOptions(input: PressInput): PressOptions {
     ...toSelectorSnapshotOptions(input),
     ...toRepeatedOptions(input),
     verify: input.verify,
+    ...toSettleOptions(input),
   };
 }
 
@@ -364,6 +376,7 @@ function toFillOptions(input: FillInput): FillOptions {
     text: input.text,
     delayMs: input.delayMs,
     verify: input.verify,
+    ...toSettleOptions(input),
   };
 }
 
@@ -373,6 +386,19 @@ function toLongPressOptions(input: LongPressInput): LongPressOptions {
     ...toClientInteractionTarget(input.target),
     ...toSelectorSnapshotOptions(input),
     durationMs: input.durationMs,
+    ...toSettleOptions(input),
+  };
+}
+
+function toSettleOptions(input: {
+  settle?: boolean;
+  settleQuietMs?: number;
+  timeoutMs?: number;
+}): Pick<PressOptions, 'settle' | 'settleQuietMs' | 'timeoutMs'> {
+  return {
+    settle: input.settle,
+    settleQuietMs: input.settleQuietMs,
+    timeoutMs: input.timeoutMs,
   };
 }
 

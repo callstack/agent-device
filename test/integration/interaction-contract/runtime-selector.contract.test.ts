@@ -14,6 +14,7 @@ import {
   edgeGrazingDrawerSnapshot,
   nonHittableButtonSnapshot,
   RUNNER_CONTINUE_NODES,
+  settledWelcomeSnapshot,
 } from './fixtures.ts';
 import { createContractDevice } from './runtime-harness.ts';
 import { runnerSnapshotEntry, runnerTapEntry, withIosContractDaemon } from './daemon-harness.ts';
@@ -131,6 +132,35 @@ test(scenario('verifyEvidence'), async () => {
   assert.ok(result.evidence);
   assert.equal(result.evidence?.changedFromBefore, false);
   assert.ok(result.evidence?.digest.startsWith('ax1:'));
+});
+
+test(scenario('settleObservation'), async () => {
+  const before = continueButtonSnapshot();
+  const after = settledWelcomeSnapshot();
+  let captures = 0;
+  const device = createContractDevice(before, {
+    // Resolution capture sees the pre-action tree; every settle capture sees
+    // the (already stable) post-action tree.
+    captureSnapshot: async () => ({ snapshot: captures++ === 0 ? before : after }),
+    tap: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+    settle: { quietMs: 25, timeoutMs: 2_000 },
+  });
+
+  assert.equal(result.kind, 'selector');
+  const settle = result.settle;
+  assert.ok(settle, 'press --settle must return a settle observation');
+  assert.equal(settle.settled, true);
+  assert.ok(settle.captures >= 2);
+  assert.deepEqual(settle.diff?.summary, { additions: 1, removals: 1, unchanged: 0 });
+  const added = settle.diff?.lines.find((line) => line.kind === 'added');
+  assert.match(added?.text ?? '', /Welcome!/);
+  // Fresh refs ride the diff: the added line's ref resolves on the stored
+  // settled tree.
+  assert.equal(added?.ref, 'e1');
 });
 
 test(scenario('errorTaxonomy'), async () => {

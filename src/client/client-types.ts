@@ -629,10 +629,24 @@ export type CaptureDiffOptions = DeviceCommandBaseOptions &
     out?: string;
   };
 
+/**
+ * Opt-in (#1101): after the action, wait for the UI to go quiet and return the
+ * settled diff vs the pre-action tree (`settle` on the result) in the same
+ * response. Best-effort — never fails the action. `settleQuietMs` tunes the
+ * quiet window (default 500ms); `timeoutMs` bounds the settle wait (default
+ * 10s) and is rejected without `settle`.
+ */
+type SettleCommandOptions = {
+  settle?: boolean;
+  settleQuietMs?: number;
+  timeoutMs?: number;
+};
+
 export type ClickOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions &
   InteractionTarget &
-  RepeatedPressOptions & {
+  RepeatedPressOptions &
+  SettleCommandOptions & {
     button?: ClickButton;
     /**
      * Opt-in (#1047): return cheap post-action evidence (AX digest, node counts,
@@ -645,13 +659,15 @@ export type ClickOptions = DeviceCommandBaseOptions &
 export type PressOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions &
   InteractionTarget &
-  RepeatedPressOptions & {
+  RepeatedPressOptions &
+  SettleCommandOptions & {
     verify?: boolean;
   };
 
 export type LongPressOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions &
-  InteractionTarget & {
+  InteractionTarget &
+  SettleCommandOptions & {
     durationMs?: number;
   };
 
@@ -697,7 +713,8 @@ export type TypeTextOptions = DeviceCommandBaseOptions & {
 
 export type FillOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions &
-  InteractionTarget & {
+  InteractionTarget &
+  SettleCommandOptions & {
     text: string;
     delayMs?: number;
     verify?: boolean;
@@ -928,6 +945,8 @@ type CommandExecutionOptions = Partial<ScreenshotRequestFlags> & {
   pixels?: number;
   doubleTap?: boolean;
   verify?: boolean;
+  settle?: boolean;
+  settleQuietMs?: number;
   clickButton?: ClickButton;
   pauseMs?: number;
   pattern?: SwipePattern;

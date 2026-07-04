@@ -102,6 +102,45 @@ test(scenario('verifyEvidence'), async () => {
   );
 });
 
+test(scenario('settleObservation'), async () => {
+  await withIosContractDaemon(
+    [
+      // --settle disables the direct path: runtime tree capture, coordinate
+      // tap, then the settle loop's two stable captures of the changed tree.
+      runnerSnapshotEntry(RUNNER_CONTINUE_NODES),
+      runnerTapEntry({ x: 200, y: 322 }),
+      runnerSnapshotEntry(RUNNER_CHANGED_NODES),
+      runnerSnapshotEntry(RUNNER_CHANGED_NODES),
+    ],
+    async (daemon, transcript) => {
+      const click = await daemon.callCommand('click', ['label=Continue'], {
+        settle: true,
+        settleQuietMs: 25,
+        timeoutMs: 2_000,
+      });
+      const data = assertRpcOk(click);
+
+      assert.equal(transcript.calls[0]?.command, 'ios.runner.snapshot');
+      const tapRequest = transcript.calls.find((call) => call.command === 'ios.runner.tap')
+        ?.request as Record<string, unknown> | undefined;
+      assert.equal(tapRequest?.selectorKey, undefined);
+      assert.equal(tapRequest?.x, 200);
+
+      const settle = data.settle as Record<string, unknown> | undefined;
+      assert.ok(settle, 'click --settle must return a settle observation');
+      assert.equal(settle.settled, true);
+      assert.equal(typeof settle.refsGeneration, 'number');
+      const diff = settle.diff as
+        | { summary: Record<string, unknown>; lines: Array<Record<string, unknown>> }
+        | undefined;
+      assert.ok(diff, 'settle observation must carry the diff');
+      assert.deepEqual(diff.summary, { additions: 1, removals: 1, unchanged: 1 });
+      // The settled tree itself is never serialized into the response.
+      assert.equal(data.nodes, undefined);
+    },
+  );
+});
+
 test(scenario('errorTaxonomy'), async () => {
   await withIosContractDaemon(
     [

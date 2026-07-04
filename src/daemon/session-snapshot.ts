@@ -32,9 +32,13 @@ export const STALE_SNAPSHOT_REFS_WARNING =
  *   issuing the full ref set and stays conservative-stale)
  *
  * Cleared (set false) only where the client demonstrably receives the new
- * refs: the snapshot command response (buildNextSnapshotSession) and find
+ * refs: the snapshot command response (buildNextSnapshotSession), find
  * responses that return a ref minted from the freshly stored tree
- * (handlers/find.ts, dispatchFindReadOnlyViaRuntime in selector-runtime.ts).
+ * (handlers/find.ts, dispatchFindReadOnlyViaRuntime in selector-runtime.ts),
+ * and interaction --settle responses whose settled diff carries refs minted
+ * from the freshly stored settled tree (settleRefsGenerationIssue in
+ * handlers/interaction-touch.ts — the same accepted coarse blessing as find's
+ * single re-issued ref; per-ref precision is the MCP pin layer's job).
  */
 export function setSessionSnapshot(session: SessionState, snapshot: SnapshotState): void {
   if (session.snapshot !== snapshot) {

@@ -13,4 +13,6 @@ export const DIRECT_IOS_SELECTOR_COVERAGE = definePathCoverage('direct-ios-selec
     'direct-ios-selector responseConstruction: runner payload response carries the canonical selector field set',
   verifyEvidence:
     'direct-ios-selector verifyEvidence: --verify disables the direct path and returns runtime evidence',
+  settleObservation:
+    'direct-ios-selector settleObservation: --settle disables the direct path and returns the runtime settled diff',
 });

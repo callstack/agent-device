@@ -185,6 +185,8 @@ function summarizeProviderScenarioFlagCoverage(files) {
     ['findFirst', 'find first disambiguation'],
     ['findLast', 'find last disambiguation'],
     ['verify', 'post-action evidence capture on press/click/fill'],
+    ['settle', 'post-action settled-diff observation on press/click/fill/longpress'],
+    ['settleQuietMs', 'settle quiet-window tuning'],
   ];
   const sources = files.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
   return flagTargets.map(([key, reason, aliases = []]) => {

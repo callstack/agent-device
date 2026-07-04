@@ -13,6 +13,7 @@ import type {
   PressCommandResult,
   ResolvedInteractionTarget,
   ResolvedTarget,
+  SettleObservation,
 } from '../../../contracts/interaction.ts';
 import { toBackendContext } from '../../runtime-common.ts';
 import {
@@ -27,6 +28,7 @@ import {
   preflightNativeRefInteraction,
   resolveInteractionTarget,
 } from './resolution.ts';
+import { settleAfterInteraction, settleEvidence, type SettleParams } from './settle.ts';
 
 export {
   focusCommand,
@@ -62,6 +64,14 @@ export type PressCommandOptions = CommandContext &
      * follow-up snapshot round trip to confirm the action had an effect.
      */
     verify?: boolean;
+    /**
+     * Opt-in (#1101): after the action, wait for the UI to go quiet and return
+     * the settled diff vs the pre-action tree in the same response. Presence
+     * enables settling; quiet window and deadline default in settle.ts.
+     * Best-effort — never fails the action. Composes with `verify`: the settle
+     * loop's final capture doubles as the evidence source (no extra captures).
+     */
+    settle?: SettleParams;
   };
 
 export type ClickCommandOptions = PressCommandOptions;
@@ -73,6 +83,7 @@ export type FillCommandOptions = CommandContext & {
   text: string;
   delayMs?: number;
   verify?: boolean;
+  settle?: SettleParams;
 };
 
 export type TypeTextCommandOptions = CommandContext & {
@@ -102,14 +113,17 @@ export const fillCommand: RuntimeCommand<FillCommandOptions, FillCommandResult> 
 ): Promise<FillCommandResult> => {
   if (!options.text) throw new AppError('INVALID_ARGS', 'fill requires text');
   const verify = options.verify === true;
-  const nativeRefFill = verify ? null : await maybeFillRefTarget(runtime, options);
+  // --settle needs the resolution-path baseline and post-action captures, so
+  // it disables the native ref fast path exactly like --verify does.
+  const nativeRefFill =
+    verify || options.settle ? null : await maybeFillRefTarget(runtime, options);
   if (nativeRefFill) return nativeRefFill;
 
   const resolved = await resolveInteractionTarget(runtime, options, {
     action: 'fill',
     requireInteractive: true,
     promoteToHittableAncestor: false,
-    captureEvidenceBaseline: verify,
+    captureEvidenceBaseline: verify || options.settle !== undefined,
   });
   if (!runtime.backend.fill) {
     throw new AppError('UNSUPPORTED_OPERATION', 'fill is not supported by this backend');
@@ -127,13 +141,16 @@ export const fillCommand: RuntimeCommand<FillCommandOptions, FillCommandResult> 
     nodeType && !isFillableType(nodeType, runtime.backend.platform)
       ? `fill target ${formatTargetForWarning(resolved)} resolved to "${nodeType}", attempting fill anyway.`
       : undefined;
-  const evidence = verify ? await captureVerifyEvidence(runtime, options, resolved) : undefined;
+  const observed = await observeAfterInteraction(runtime, options, resolved, {
+    verify,
+    settle: options.settle,
+  });
   return reconcileNonHittableHintWithEvidence({
     ...resolved,
     text: options.text,
     ...(warning ? { warning } : {}),
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
-    ...(evidence ? { evidence } : {}),
+    ...observed,
   });
 };
 
@@ -176,14 +193,17 @@ async function tapCommand(
   action: 'click' | 'press',
 ): Promise<PressCommandResult> {
   const verify = options.verify === true;
-  const nativeRefTap = verify ? null : await maybeTapRefTarget(runtime, options, action);
+  // --settle needs the resolution-path baseline and post-action captures, so
+  // it disables the native ref fast path exactly like --verify does.
+  const nativeRefTap =
+    verify || options.settle ? null : await maybeTapRefTarget(runtime, options, action);
   if (nativeRefTap) return nativeRefTap;
 
   const resolved = await resolveInteractionTarget(runtime, options, {
     action,
     requireInteractive: true,
     promoteToHittableAncestor: true,
-    captureEvidenceBaseline: verify,
+    captureEvidenceBaseline: verify || options.settle !== undefined,
   });
   if (!runtime.backend.tap) {
     throw new AppError('UNSUPPORTED_OPERATION', 'tap is not supported by this backend');
@@ -198,12 +218,45 @@ async function tapCommand(
     doubleTap: options.doubleTap,
   });
   const formattedBackendResult = toBackendResult(backendResult);
-  const evidence = verify ? await captureVerifyEvidence(runtime, options, resolved) : undefined;
+  const observed = await observeAfterInteraction(runtime, options, resolved, {
+    verify,
+    settle: options.settle,
+  });
   return reconcileNonHittableHintWithEvidence({
     ...resolved,
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
-    ...(evidence ? { evidence } : {}),
+    ...observed,
   });
+}
+
+/**
+ * Post-action observation composition: `--settle` runs the quiet-window loop
+ * (settle.ts) and, when `--verify` rides along, its final capture doubles as
+ * the evidence source — the pair costs zero captures beyond the settle loop's
+ * own. Without settle, verify keeps its single dedicated capture.
+ */
+async function observeAfterInteraction(
+  runtime: AgentDeviceRuntime,
+  options: CommandContext,
+  resolved: ResolvedInteractionTarget,
+  params: { verify: boolean; settle: SettleParams | undefined },
+): Promise<{ evidence?: InteractionEvidence; settle?: SettleObservation }> {
+  if (params.settle) {
+    const outcome = await settleAfterInteraction(runtime, options, {
+      ...params.settle,
+      resolved,
+    });
+    const evidence = params.verify
+      ? settleEvidence(
+          outcome.settledNodes,
+          'preActionNodes' in resolved ? resolved.preActionNodes : undefined,
+        )
+      : undefined;
+    return { settle: outcome.observation, ...(evidence ? { evidence } : {}) };
+  }
+  if (!params.verify) return {};
+  const evidence = await captureVerifyEvidence(runtime, options, resolved);
+  return evidence ? { evidence } : {};
 }
 
 /**

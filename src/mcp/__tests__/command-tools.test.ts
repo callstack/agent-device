@@ -416,6 +416,87 @@ test('MCP merges digest-level snapshot refs too', async () => {
   assert.deepEqual(runCalls[1]?.input, { target: { kind: 'ref', ref: '@e9~s41' } });
 });
 
+// --- #1101 --settle: interaction responses re-pin from the settled diff ---
+
+test('MCP merges per-ref pins from a settle response diff (merge-only)', async () => {
+  const runCalls: Array<{ name: string; input: unknown }> = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      runCalls.push({ name, input });
+      if (name === 'snapshot') {
+        return { nodes: [{ ref: 'e2' }, { ref: 'e37' }], truncated: false, refsGeneration: 7 };
+      }
+      if (name === 'press') {
+        // press @e2 --settle: the settled diff issues e4 at generation 8.
+        return {
+          ref: 'e2',
+          settle: {
+            settled: true,
+            waitedMs: 60,
+            captures: 2,
+            quietMs: 25,
+            timeoutMs: 2000,
+            refsGeneration: 8,
+            diff: {
+              summary: { additions: 1, removals: 1, unchanged: 1 },
+              lines: [
+                { kind: 'removed', text: '@e2 [button] "Continue"' },
+                { kind: 'added', text: '@e4 [text] "Welcome!"', ref: 'e4' },
+              ],
+            },
+          },
+        };
+      }
+      return {};
+    },
+  });
+
+  await executor.execute('snapshot', { session: 'demo' });
+  await executor.execute('press', { session: 'demo', target: { kind: 'ref', ref: '@e2' } });
+  await executor.execute('press', { session: 'demo', target: { kind: 'ref', ref: '@e4' } });
+  await executor.execute('get', {
+    session: 'demo',
+    format: 'text',
+    target: { kind: 'ref', ref: '@e37' },
+  });
+
+  // The first press consumed the snapshot pin…
+  assert.deepEqual(runCalls[1]?.input, { session: 'demo', target: { kind: 'ref', ref: '@e2~s7' } });
+  // …its settle diff issued e4 at the settle generation…
+  assert.deepEqual(runCalls[2]?.input, { session: 'demo', target: { kind: 'ref', ref: '@e4~s8' } });
+  // …and refs absent from the diff keep their older pins (merge-only), so the
+  // daemon can warn precisely about the replaced tree.
+  assert.deepEqual(runCalls[3]?.input, {
+    session: 'demo',
+    format: 'text',
+    target: { kind: 'ref', ref: '@e37~s7' },
+  });
+});
+
+test('MCP leaves pins untouched for plain (non-settle) interaction responses', async () => {
+  const runCalls: Array<{ name: string; input: unknown }> = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      runCalls.push({ name, input });
+      if (name === 'snapshot') {
+        return { nodes: [{ ref: 'e2' }], truncated: false, refsGeneration: 7 };
+      }
+      // A plain press response has no settle payload and no refsGeneration —
+      // it must NOT clear the scope (only snapshot/find responses without a
+      // generation do that).
+      return { ref: 'e2', x: 10, y: 20 };
+    },
+  });
+
+  await executor.execute('snapshot', { session: 'demo' });
+  await executor.execute('press', { session: 'demo', target: { kind: 'ref', ref: '@e2' } });
+  await executor.execute('press', { session: 'demo', target: { kind: 'ref', ref: '@e2' } });
+
+  assert.deepEqual(runCalls[2]?.input, { session: 'demo', target: { kind: 'ref', ref: '@e2~s7' } });
+});
+
 test('MCP passes never-issued refs through unpinned (coarse floor, never guess)', async () => {
   const runCalls: Array<{ name: string; input: unknown }> = [];
   const executor = createPinningExecutor(runCalls);

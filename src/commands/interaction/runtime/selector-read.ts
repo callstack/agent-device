@@ -42,6 +42,12 @@ import {
   resolveRefNode,
 } from './selector-read-shared.ts';
 import { findNodeByLabel, resolveRefLabel, shouldScopeFind } from './selector-read-utils.ts';
+import {
+  DEFAULT_STABLE_QUIET_MS,
+  runStableCaptureLoop,
+  TINY_STABLE_TREE_HINT,
+  TINY_STABLE_TREE_NODE_COUNT,
+} from './stable-capture.ts';
 import { now, sleep, toBackendContext } from '../../runtime-common.ts';
 
 export type { SelectorSnapshotOptions } from './selector-read-shared.ts';
@@ -153,10 +159,6 @@ export function ref(refInput: string, options: { fallbackLabel?: string } = {}):
 
 const DEFAULT_TIMEOUT_MS = 10_000;
 const POLL_INTERVAL_MS = 300;
-const DEFAULT_QUIET_MS = 500;
-// Below this node count a settled tree is suspicious: real app surfaces have
-// more than a handful of accessibility nodes, splash/loading screens do not.
-const TINY_STABLE_TREE_NODE_COUNT = 5;
 
 export const findCommand: RuntimeCommand<FindReadCommandOptions, FindReadCommandResult> = async (
   runtime,
@@ -521,6 +523,9 @@ async function snapshotContainsText(
   return Boolean(findNodeByLabel(capture.snapshot.nodes, text));
 }
 
+// The quiet-window loop itself lives in stable-capture.ts and is shared with
+// the interaction `--settle` flag (#1101); this wrapper maps the loop outcome
+// to wait's throwing semantics.
 async function waitForStable(
   runtime: AgentDeviceRuntime,
   options: WaitCommandOptions,
@@ -528,110 +533,33 @@ async function waitForStable(
   timeoutMs: number | null | undefined,
 ): Promise<Extract<WaitCommandResult, { kind: 'stable' }>> {
   const timeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const quiet = quietMs ?? DEFAULT_QUIET_MS;
-  const start = now(runtime);
-  let captures = 0;
-  let lastDigest: string | undefined;
-  let lastNodeCount = 0;
-  let quietSinceMs = start;
-  while (now(runtime) - start < timeout) {
-    const capture = await captureStableSignalWithinDeadline(
-      runtime,
-      options,
-      timeout - (now(runtime) - start),
-    );
-    if (!capture) {
-      throw new AppError('COMMAND_FAILED', 'wait timed out waiting for a stable UI', {
-        reason: 'wait_stable_timeout',
-        captureStalled: true,
-        quietMs: quiet,
-        timeoutMs: timeout,
-        captures,
-        nodeCount: lastNodeCount,
-        hint: 'A snapshot capture stalled past the wait timeout, so no settle verdict is available. The UI may still be readable: retry, or use screenshot to inspect the surface.',
-      });
-    }
-    captures += 1;
-    const digest = digestSnapshotNodes(capture.snapshot.nodes);
-    const nowMs = now(runtime);
-    if (digest !== lastDigest) {
-      lastDigest = digest;
-      lastNodeCount = capture.snapshot.nodes.length;
-      quietSinceMs = nowMs;
-    } else if (captures >= 2 && nowMs - quietSinceMs >= quiet) {
-      return {
-        kind: 'stable',
-        waitedMs: nowMs - start,
-        captures,
-        nodeCount: lastNodeCount,
-        // A settled-but-tiny tree usually means a splash/loading surface, not
-        // real content: stability alone is a weak readiness signal there.
-        ...(lastNodeCount < TINY_STABLE_TREE_NODE_COUNT
-          ? {
-              hint: 'Settled on a nearly-empty tree — the app may still be loading. Wait for specific content (wait text ...) before interacting.',
-            }
-          : {}),
-      };
-    }
-    await sleep(runtime, POLL_INTERVAL_MS);
-  }
-  throw new AppError('COMMAND_FAILED', 'wait timed out waiting for a stable UI', {
-    reason: 'wait_stable_timeout',
+  const quiet = quietMs ?? DEFAULT_STABLE_QUIET_MS;
+  const outcome = await runStableCaptureLoop(runtime, options, {
     quietMs: quiet,
     timeoutMs: timeout,
-    captures,
-    nodeCount: lastNodeCount,
   });
-}
-
-// Intentionally does not update the session snapshot: the stable loop captures
-// an interactive-only tree purely as a settle signal, and overwriting the
-// session's richer cached snapshot with the filtered tree would degrade
-// subsequent ref/get/find lookups against the same session.
-//
-// Resolves undefined when the capture does not return within remainingMs. A
-// stalled backend capture (observed with macOS AX captures) must not push the
-// stable wait past the user-supplied timeout into the daemon request timeout.
-// The deadline uses a real timer even when runtime.clock is injected: test
-// clocks advance synthetic time synchronously and cannot represent a hung
-// backend call.
-async function captureStableSignalWithinDeadline(
-  runtime: AgentDeviceRuntime,
-  options: WaitCommandOptions,
-  remainingMs: number,
-): Promise<CapturedSnapshot | undefined> {
-  const capture = captureSelectorSnapshot(runtime, options, {
-    updateSession: false,
-    interactiveOnly: true,
-  });
-  let timer: NodeJS.Timeout | undefined;
-  try {
-    const result = await Promise.race([
-      capture,
-      new Promise<undefined>((resolve) => {
-        timer = setTimeout(() => resolve(undefined), remainingMs);
-      }),
-    ]);
-    if (result === undefined) {
-      // The abandoned capture settles (or fails) on its own; swallow it so it
-      // cannot surface as an unhandled rejection after the wait already threw.
-      capture.catch(() => {});
-    }
-    return result;
-  } finally {
-    if (timer !== undefined) clearTimeout(timer);
+  if (!outcome.settled) {
+    throw new AppError('COMMAND_FAILED', 'wait timed out waiting for a stable UI', {
+      reason: 'wait_stable_timeout',
+      ...(outcome.stalled ? { captureStalled: true } : {}),
+      quietMs: quiet,
+      timeoutMs: timeout,
+      captures: outcome.captures,
+      nodeCount: outcome.nodeCount,
+      ...(outcome.stalled
+        ? {
+            hint: 'A snapshot capture stalled past the wait timeout, so no settle verdict is available. The UI may still be readable: retry, or use screenshot to inspect the surface.',
+          }
+        : {}),
+    });
   }
-}
-
-function digestSnapshotNodes(nodes: SnapshotNode[]): string {
-  return nodes.map(digestSnapshotNode).join('|');
-}
-
-function digestSnapshotNode(node: SnapshotNode): string {
-  const rect = node.rect
-    ? `${Math.round(node.rect.x)},${Math.round(node.rect.y)},${Math.round(node.rect.width)},${Math.round(node.rect.height)}`
-    : '';
-  return `${node.type ?? ''}#${node.label ?? ''}#${node.identifier ?? ''}#${rect}`;
+  return {
+    kind: 'stable',
+    waitedMs: outcome.waitedMs,
+    captures: outcome.captures,
+    nodeCount: outcome.nodeCount,
+    ...(outcome.nodeCount < TINY_STABLE_TREE_NODE_COUNT ? { hint: TINY_STABLE_TREE_HINT } : {}),
+  };
 }
 
 async function resolveSelectorNode(

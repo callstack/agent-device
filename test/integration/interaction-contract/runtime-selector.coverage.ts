@@ -14,6 +14,8 @@ export const RUNTIME_SELECTOR_COVERAGE = definePathCoverage('runtime-selector', 
     'runtime-selector responseIdentity: result echoes selectorChain and the resolved node',
   verifyEvidence:
     'runtime-selector verifyEvidence: press --verify returns a digest with change detection',
+  settleObservation:
+    'runtime-selector settleObservation: press --settle returns the settled diff with fresh refs',
   errorTaxonomy:
     'runtime-selector errorTaxonomy: no-match failure carries the shared code and hint',
 });

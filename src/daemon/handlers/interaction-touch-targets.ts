@@ -175,8 +175,10 @@ export function interactionResultExtra(
 ): Record<string, unknown> {
   // `evidence` (#1047, opt-in via --verify) is additive on press/fill only —
   // LongPressCommandResult has no evidence field, so it reads as undefined
-  // (and gets dropped by the response layer) for longpress.
+  // (and gets dropped by the response layer) for longpress. `settle` (#1101,
+  // opt-in via --settle) is additive on all four touch commands.
   const evidence = 'evidence' in result ? result.evidence : undefined;
+  const settle = result.settle;
   if (result.kind === 'ref') {
     return {
       ref: stripAtPrefix(result.target?.kind === 'ref' ? result.target.ref : undefined),
@@ -185,6 +187,7 @@ export function interactionResultExtra(
       targetHittable: result.targetHittable,
       hint: result.hint,
       evidence,
+      settle,
     };
   }
   if (result.kind === 'selector') {
@@ -195,9 +198,10 @@ export function interactionResultExtra(
       targetHittable: result.targetHittable,
       hint: result.hint,
       evidence,
+      settle,
     };
   }
-  return { evidence };
+  return { evidence, settle };
 }
 
 export function formatTouchTargetLabel(

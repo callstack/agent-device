@@ -99,6 +99,25 @@ const INSTALL_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   envelopeMs: INSTALL_REQUEST_TIMEOUT_MS,
 };
 
+// press/click/fill/longpress --settle (#1101): --timeout bounds the SETTLE
+// wait, not the request — the envelope only ever WIDENS past the budget
+// (mirroring wait's positional budget, #1075), never shrinks below the
+// default; a slow tap must not die at a user-supplied settle deadline.
+const SETTLE_FLAG_TIMEOUT_POLICY: CommandTimeoutPolicy = {
+  ...DEFAULT_TIMEOUT_POLICY,
+  budget: { source: 'flag', envelope: 'widen' },
+};
+
+// press/click/fill/longpress also resolve their target through the same
+// platform accessibility capture as snapshot/find (#1105): a hung capture is
+// their dominant timeout mode, so on top of the --settle flag-sourced
+// widening envelope above, keep the daemon (and sessions) alive on timeout
+// too — composing both fixes rather than picking one.
+const SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY: CommandTimeoutPolicy = {
+  ...SETTLE_FLAG_TIMEOUT_POLICY,
+  onTimeout: 'preserve-daemon',
+};
+
 // ---------------------------------------------------------------------------
 // The additive single source. Each entry carries the daemon route/traits +
 // capability + batchable flag copied VERBATIM from today's hand tables.
@@ -461,28 +480,28 @@ const RAW_COMMAND_DESCRIPTORS = [
     name: PUBLIC_COMMANDS.click,
     daemon: { route: 'interaction', replayScopedAction: true, androidBlockingDialogGuard: true },
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
+    timeoutPolicy: SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
   },
   {
     name: PUBLIC_COMMANDS.fill,
     daemon: { route: 'interaction', replayScopedAction: true, androidBlockingDialogGuard: true },
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
+    timeoutPolicy: SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
   },
   {
     name: PUBLIC_COMMANDS.longPress,
     daemon: { route: 'interaction', replayScopedAction: true, androidBlockingDialogGuard: true },
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
+    timeoutPolicy: SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
   },
   {
     name: PUBLIC_COMMANDS.press,
     daemon: { route: 'interaction', replayScopedAction: true, androidBlockingDialogGuard: true },
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
+    timeoutPolicy: SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
   },
   {

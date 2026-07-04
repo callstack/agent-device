@@ -40,6 +40,7 @@ import {
   type ResolvedInteractionTarget,
   resolveInteractionTarget,
 } from './resolution.ts';
+import { settleAfterInteraction, type SettleParams } from './settle.ts';
 
 export type FocusCommandOptions = CommandContext & {
   target: InteractionTarget;
@@ -50,6 +51,8 @@ export type FocusCommandResult = ResolvedInteractionTarget & BackendResultEnvelo
 export type LongPressCommandOptions = CommandContext & {
   target: InteractionTarget;
   durationMs?: number;
+  /** Opt-in (#1101): settled-diff observation after the press; see settle.ts. */
+  settle?: SettleParams;
 };
 
 export type { LongPressCommandResult };
@@ -159,6 +162,7 @@ export const longPressCommand: RuntimeCommand<
     action: 'longPress',
     requireInteractive: true,
     promoteToHittableAncestor: true,
+    captureEvidenceBaseline: options.settle !== undefined,
   });
   if (!runtime.backend.longPress) {
     throw new AppError('UNSUPPORTED_OPERATION', 'longPress is not supported by this backend');
@@ -172,10 +176,14 @@ export const longPressCommand: RuntimeCommand<
     durationMs,
   });
   const formattedBackendResult = toBackendResult(backendResult);
+  const settle = options.settle
+    ? (await settleAfterInteraction(runtime, options, { ...options.settle, resolved })).observation
+    : undefined;
   return {
     ...resolved,
     ...(durationMs !== undefined ? { durationMs } : {}),
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
+    ...(settle ? { settle } : {}),
     ...successText(`Long pressed (${point.x}, ${point.y})`),
   };
 };

@@ -180,6 +180,22 @@ export function nonHittableButtonSnapshot(): SnapshotState {
   ]);
 }
 
+// Post-action settled tree for --settle scenarios: vs continueButtonSnapshot
+// the Continue button is replaced by a Welcome text — exactly one addition and
+// one removal in the settled diff, with the added line carrying its ref.
+export function settledWelcomeSnapshot(): SnapshotState {
+  return makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'StaticText',
+      label: 'Welcome!',
+      rect: { x: 10, y: 20, width: 100, height: 40 },
+      hittable: true,
+    },
+  ]);
+}
+
 // Viewport-only tree for coordinate scenarios.
 export function viewportOnlySnapshot(): SnapshotState {
   return makeSnapshotState([

@@ -5,7 +5,7 @@ import { makeSnapshotState } from '../../../src/__tests__/test-utils/index.ts';
 import { assertRpcError, assertRpcOk } from '../provider-scenarios/assertions.ts';
 import { scenarioName } from './coverage-manifest.ts';
 import { COORDINATE_COVERAGE } from './coordinate.coverage.ts';
-import { viewportOnlySnapshot } from './fixtures.ts';
+import { settledWelcomeSnapshot, viewportOnlySnapshot } from './fixtures.ts';
 import { createContractDevice } from './runtime-harness.ts';
 import { runnerTapEntry, runnerTapErrorEntry, withIosContractDaemon } from './daemon-harness.ts';
 
@@ -50,6 +50,31 @@ test(scenario('verifyEvidence'), async () => {
   assert.equal(result.kind, 'point');
   assert.ok(result.evidence);
   assert.equal(result.evidence?.changedFromBefore, true);
+});
+
+test(scenario('settleObservation'), async () => {
+  let captureCount = 0;
+  const device = createContractDevice(viewportOnlySnapshot(), {
+    // Point targets normally skip captures entirely; --settle opts into the
+    // evidence-baseline capture (first call) and the settle loop's captures.
+    captureSnapshot: async () => {
+      captureCount += 1;
+      if (captureCount === 1) return { snapshot: viewportOnlySnapshot() };
+      return { snapshot: settledWelcomeSnapshot() };
+    },
+    tap: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.press(
+    { kind: 'point', x: 10, y: 20 },
+    { session: 'default', settle: { quietMs: 25, timeoutMs: 2_000 } },
+  );
+
+  assert.equal(result.kind, 'point');
+  const settle = result.settle;
+  assert.ok(settle, 'point press --settle must return a settle observation');
+  assert.equal(settle.settled, true);
+  assert.deepEqual(settle.diff?.summary, { additions: 1, removals: 1, unchanged: 0 });
 });
 
 test(scenario('errorTaxonomy'), async () => {

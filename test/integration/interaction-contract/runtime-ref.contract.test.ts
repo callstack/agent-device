@@ -12,6 +12,7 @@ import {
   coveredButtonSnapshot,
   nonHittableCellSnapshot,
   RUNNER_CONTINUE_NODES,
+  settledWelcomeSnapshot,
 } from './fixtures.ts';
 import { createContractDevice } from './runtime-harness.ts';
 import { runnerSnapshotEntry, runnerTapEntry, withIosContractDaemon } from './daemon-harness.ts';
@@ -90,6 +91,28 @@ test(scenario('verifyEvidence'), async () => {
   assert.ok(result.evidence);
   assert.equal(result.evidence?.changedFromBefore, false);
   assert.ok(result.evidence?.digest.startsWith('ax1:'));
+});
+
+test(scenario('settleObservation'), async () => {
+  // The @ref resolves against the STORED session tree (no resolution capture);
+  // the settle loop's captures see the post-action tree.
+  const device = createContractDevice(continueButtonSnapshot(), {
+    captureSnapshot: async () => ({ snapshot: settledWelcomeSnapshot() }),
+    tap: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.press(ref('@e1'), {
+    session: 'default',
+    settle: { quietMs: 25, timeoutMs: 2_000 },
+  });
+
+  assert.equal(result.kind, 'ref');
+  const settle = result.settle;
+  assert.ok(settle, 'press @ref --settle must return a settle observation');
+  assert.equal(settle.settled, true);
+  // Baseline is the stored pre-action tree the ref was resolved on.
+  assert.deepEqual(settle.diff?.summary, { additions: 1, removals: 1, unchanged: 0 });
+  assert.equal(settle.diff?.lines.find((line) => line.kind === 'added')?.ref, 'e1');
 });
 
 test(scenario('errorTaxonomy'), async () => {

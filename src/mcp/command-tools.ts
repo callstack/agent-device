@@ -113,6 +113,22 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
  */
 const REF_ISSUING_TOOLS: ReadonlySet<CommandName> = new Set(['snapshot', 'find'] as CommandName[]);
 
+/**
+ * `--settle` (#1101) makes an interaction response CONDITIONALLY ref-issuing:
+ * when it carries `settle.diff` + `settle.refsGeneration`, the diff's added
+ * lines hand out refs minted from the freshly stored settled tree. These tools
+ * are NOT in REF_ISSUING_TOOLS on purpose — a plain (non-settle) press carries
+ * no generation, and treating that as "issuing response without a generation"
+ * would clear the scope's pins on every ordinary tap. Absent or diff-less
+ * settle payloads leave pins untouched.
+ */
+const SETTLE_REF_ISSUING_TOOLS: ReadonlySet<CommandName> = new Set([
+  'press',
+  'click',
+  'fill',
+  'longpress',
+] as CommandName[]);
+
 const TARGET_REF_TOOLS: ReadonlySet<CommandName> = new Set([
   'press',
   'click',
@@ -155,6 +171,10 @@ function mergeIssuedRefPins(
   name: CommandName,
   result: unknown,
 ): void {
+  if (SETTLE_REF_ISSUING_TOOLS.has(name)) {
+    mergeSettleIssuedRefPins(refPinsByScope, scopeKey, result);
+    return;
+  }
   if (!REF_ISSUING_TOOLS.has(name)) return;
   const record = asOptionalRecord(result);
   const refsGeneration = record?.refsGeneration;
@@ -163,6 +183,30 @@ function mergeIssuedRefPins(
     return;
   }
   const issuedRefs = readIssuedRefBodies(record);
+  if (issuedRefs.length === 0) return;
+  const pins = refPinsByScope.get(scopeKey) ?? new Map<string, number>();
+  refPinsByScope.set(scopeKey, pins);
+  recordIssuedPins(pins, issuedRefs, refsGeneration);
+}
+
+/**
+ * MERGE-ONLY, like the snapshot/find rule: refs on the settled diff's added
+ * lines move to the settle generation; every other pin stays put (the settle
+ * capture replaced the tree, so an old pin on an unchanged-looking element is
+ * exactly what makes the daemon warn precisely). No settle payload, no diff,
+ * or no generation → not an issuing response; pins are left untouched.
+ */
+function mergeSettleIssuedRefPins(
+  refPinsByScope: Map<string, Map<string, number>>,
+  scopeKey: string,
+  result: unknown,
+): void {
+  const settle = asOptionalRecord(asOptionalRecord(result)?.settle);
+  const refsGeneration = settle?.refsGeneration;
+  if (typeof refsGeneration !== 'number') return;
+  const lines = asOptionalRecord(settle?.diff)?.lines;
+  const issuedRefs: string[] = [];
+  collectRefBodies(lines, issuedRefs);
   if (issuedRefs.length === 0) return;
   const pins = refPinsByScope.get(scopeKey) ?? new Map<string, number>();
   refPinsByScope.set(scopeKey, pins);

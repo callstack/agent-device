@@ -1,4 +1,5 @@
 import type { CommandFlags } from '../../core/dispatch.ts';
+import type { SettleParams } from '../../commands/interaction/runtime/settle.ts';
 import type { DaemonResponse } from '../types.ts';
 import { errorResponse } from './response.ts';
 
@@ -29,4 +30,37 @@ export function unsupportedRefSnapshotFlags(flags: CommandFlags | undefined): st
     if (flags[key] !== undefined) unsupported.push(label);
   }
   return unsupported;
+}
+
+/**
+ * `--settle` (#1101) flag grammar on press/click/fill/longpress:
+ * `--settle` opts in, `--settle-quiet <ms>` overrides the quiet window, and
+ * `--timeout <ms>` bounds the settle wait (the same budget the descriptor's
+ * flag-sourced timeout policy widens the request envelope past, mirroring
+ * wait's positional budget). The two tuning flags without `--settle` would
+ * silently do nothing — reject them so a typo cannot masquerade as a settled
+ * interaction.
+ */
+export function settleFlagGuardResponse(
+  command: 'press' | 'click' | 'fill' | 'longpress',
+  flags: CommandFlags | undefined,
+): DaemonResponse | null {
+  if (!flags || flags.settle === true) return null;
+  const orphaned: string[] = [];
+  if (flags.settleQuietMs !== undefined) orphaned.push('--settle-quiet');
+  if (flags.timeoutMs !== undefined) orphaned.push('--timeout');
+  if (orphaned.length === 0) return null;
+  return errorResponse(
+    'INVALID_ARGS',
+    `${command}: ${orphaned.join(', ')} require${orphaned.length === 1 ? 's' : ''} --settle.`,
+  );
+}
+
+/** The runtime settle request for a command's flags, or undefined without --settle. */
+export function readSettleRequest(flags: CommandFlags | undefined): SettleParams | undefined {
+  if (flags?.settle !== true) return undefined;
+  return {
+    ...(flags.settleQuietMs !== undefined ? { quietMs: flags.settleQuietMs } : {}),
+    ...(flags.timeoutMs !== undefined ? { timeoutMs: flags.timeoutMs } : {}),
+  };
 }

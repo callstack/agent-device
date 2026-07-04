@@ -3,6 +3,7 @@ import type {
   FillCommandResult,
   LongPressCommandResult,
   PressCommandResult,
+  SettleObservation,
 } from '../../contracts/interaction.ts';
 import { successText } from '../../utils/success-text.ts';
 import { interactionResultExtra, stripAtPrefix } from './interaction-touch-targets.ts';
@@ -64,6 +65,15 @@ export function buildInteractionResponseData(params: {
    * warning.
    */
   staleRefsWarning?: string;
+  /**
+   * `--settle` (#1101): the session's `snapshotGeneration` AFTER the settled
+   * tree became the stored snapshot. Rides INSIDE the settle payload as
+   * `settle.refsGeneration` — a settle response with a diff hands the client
+   * fresh refs (added lines carry them), making it ref-issuing like snapshot/
+   * find; the generation is what MCP auto-pinning merges per-ref (#1076).
+   * Only attached when the settle observation actually carries a diff.
+   */
+  settleRefsGeneration?: number;
 }): InteractionResponsePayloads {
   const { source, referenceFrame, extra } = params;
   if (source.kind === 'runner-payload') {
@@ -85,6 +95,7 @@ export function buildInteractionResponseData(params: {
     referenceFrame,
     extra: {
       ...interactionResultExtra(result),
+      ...settleExtra(result.settle, params.settleRefsGeneration),
       ...(extra ?? {}),
     },
   });
@@ -96,6 +107,7 @@ export function buildInteractionResponseData(params: {
             ...(result.point ? { x: result.point.x, y: result.point.y } : {}),
           }),
           ...interactionResultExtra(result),
+          ...settleExtra(result.settle, params.settleRefsGeneration),
         }
       : visualization;
   const warning = composeResponseWarning(
@@ -107,6 +119,17 @@ export function buildInteractionResponseData(params: {
     responseData.warning = warning;
   }
   return { result: visualization, responseData };
+}
+
+// Attaches refsGeneration inside the settle payload when the response is
+// ref-issuing (diff present). Overrides the raw `settle` from
+// interactionResultExtra by key order in the extras spread.
+function settleExtra(
+  settle: SettleObservation | undefined,
+  refsGeneration: number | undefined,
+): Record<string, unknown> {
+  if (!settle?.diff || refsGeneration === undefined) return {};
+  return { settle: { ...settle, refsGeneration } };
 }
 
 function composeResponseWarning(

@@ -8,6 +8,7 @@ import { NATIVE_REF_COVERAGE } from './native-ref.coverage.ts';
 import {
   closedDrawerSnapshot,
   continueButtonSnapshot,
+  settledWelcomeSnapshot,
   coveredButtonSnapshot,
   nonHittableCellSnapshot,
 } from './fixtures.ts';
@@ -114,6 +115,33 @@ test(scenario('verifyEvidence'), async () => {
   assert.equal(result.kind, 'ref');
   assert.ok(result.evidence);
   assert.ok(result.evidence?.digest.startsWith('ax1:'));
+});
+
+test(scenario('settleObservation'), async () => {
+  const calls: string[] = [];
+  const device = createContractDevice(continueButtonSnapshot(), {
+    platform: 'web',
+    captureSnapshot: async () => ({ snapshot: settledWelcomeSnapshot() }),
+    tap: async () => ({ ok: true }),
+    tapTarget: async (_context, target) => {
+      calls.push(target.ref);
+      return {};
+    },
+  });
+
+  const result = await device.interactions.click(ref('@e1'), {
+    session: 'default',
+    settle: { quietMs: 25, timeoutMs: 2_000 },
+  });
+
+  // --settle delegates to the runtime-ref path: the fast path is skipped so
+  // the baseline and the settle captures exist.
+  assert.deepEqual(calls, []);
+  assert.equal(result.kind, 'ref');
+  const settle = result.settle;
+  assert.ok(settle, 'click @ref --settle must return a settle observation');
+  assert.equal(settle.settled, true);
+  assert.deepEqual(settle.diff?.summary, { additions: 1, removals: 1, unchanged: 0 });
 });
 
 test(scenario('responseIdentity'), async () => {

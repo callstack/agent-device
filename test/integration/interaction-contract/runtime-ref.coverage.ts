@@ -9,5 +9,7 @@ export const RUNTIME_REF_COVERAGE = definePathCoverage('runtime-ref', {
   responseIdentity: 'runtime-ref responseIdentity: result echoes the ref target and resolved node',
   verifyEvidence:
     'runtime-ref verifyEvidence: click @ref --verify returns a digest with change detection',
+  settleObservation:
+    'runtime-ref settleObservation: press @ref --settle diffs the settled tree against the stored baseline',
   errorTaxonomy: 'runtime-ref errorTaxonomy: unknown ref fails with the stale-ref hint',
 });

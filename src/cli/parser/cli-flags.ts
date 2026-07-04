@@ -106,6 +106,8 @@ export type CliFlags = CloudProviderProfileFields &
     pixels?: number;
     doubleTap?: boolean;
     verify?: boolean;
+    settle?: boolean;
+    settleQuietMs?: number;
     clickButton?: ClickButton;
     backMode?: BackMode;
     pauseMs?: number;
@@ -211,6 +213,10 @@ export const REPEATED_TOUCH_FLAGS = flagKeys(
   'jitterPx',
   'doubleTap',
 );
+// press/click/fill/longpress --settle (#1101): opt-in settled-diff observation.
+// --timeout doubles as the settle deadline (flag-sourced budget on the
+// interaction descriptors, mirroring wait's positional budget).
+export const SETTLE_FLAGS = flagKeys('settle', 'settleQuietMs', 'timeoutMs');
 export const REPLAY_FLAGS = flagKeys('replayUpdate', 'replayEnv');
 
 const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
@@ -849,6 +855,22 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
       'Capture cheap post-action evidence (AX digest, node counts, changedFromBefore) instead of a follow-up snapshot',
   },
   {
+    key: 'settle',
+    names: ['--settle'],
+    type: 'boolean',
+    usageLabel: '--settle',
+    usageDescription:
+      'After the action, wait for the UI to go quiet and return the settled diff vs the pre-action tree in the same response (best-effort; never fails the action)',
+  },
+  {
+    key: 'settleQuietMs',
+    names: ['--settle-quiet'],
+    type: 'int',
+    min: 0,
+    usageLabel: '--settle-quiet <ms>',
+    usageDescription: 'Settle: quiet window the UI must hold to count as settled (default 500ms)',
+  },
+  {
     key: 'clickButton',
     names: ['--button'],
     type: 'enum',
@@ -1051,7 +1073,7 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 1,
     usageLabel: '--timeout <ms>',
     usageDescription:
-      'Prepare/Replay/Snapshot/Test: maximum wall-clock time for the command or attempt',
+      'Prepare/Replay/Snapshot/Test: maximum wall-clock time for the command or attempt. With --settle: the settle-wait deadline (default 10s)',
   },
   {
     key: 'retries',

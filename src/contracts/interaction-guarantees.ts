@@ -50,6 +50,11 @@ export const INTERACTION_GUARANTEES = [
   'responseIdentity',
   // --verify captures a pre-action baseline and post-action digest.
   'verifyEvidence',
+  // --settle (#1101) waits for the UI to go quiet after the action and returns
+  // the settled diff vs the pre-action tree (plus refsGeneration when the
+  // settled tree was stored) in the same response. Best-effort: never fails
+  // the action.
+  'settleObservation',
   // Failures use the shared codes/messages/hints (no-match diagnostics,
   // ambiguous shape, offscreen reasons). NOTE: expected to split into
   // errorCodes (stable codes / fallback classification) vs errorDiagnostics
@@ -130,36 +135,47 @@ const SHARED_RESPONSE_CONSTRUCTION: GuaranteeEnforcement = {
   via: 'src/daemon/handlers/interaction-touch-response.ts#buildInteractionResponseData',
 };
 
+// The two runtime tree paths (selector and ref resolution) run the SAME shared
+// guard/observation implementations; only how the target is found
+// (disambiguation) and how failures are described (errorTaxonomy) differ.
+const RUNTIME_TREE_SHARED_GUARANTEES = {
+  occlusion: {
+    kind: 'runtime',
+    via: 'src/snapshot/snapshot-occlusion.ts#isSnapshotNodeInteractionBlocked',
+  },
+  offscreen: {
+    kind: 'runtime',
+    via: 'src/snapshot/mobile-snapshot-semantics.ts#isNodeVisibleOnScreen',
+  },
+  nonHittable: {
+    kind: 'runtime',
+    via: 'src/core/interaction-targeting.ts#resolveActionableTouchResolution',
+  },
+  responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
+  responseIdentity: {
+    kind: 'runtime',
+    via: 'src/daemon/handlers/interaction-touch-targets.ts#interactionResultExtra',
+  },
+  verifyEvidence: {
+    kind: 'runtime',
+    via: 'src/commands/interaction/runtime/interactions.ts#pressCommand',
+    appliesTo: ['press', 'click', 'fill'],
+  },
+  settleObservation: {
+    kind: 'runtime',
+    via: 'src/commands/interaction/runtime/settle.ts#settleAfterInteraction',
+  },
+} satisfies Partial<Record<InteractionGuarantee, GuaranteeEnforcement>>;
+
 export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPathContract> = {
   'runtime-selector': {
     description: 'Daemon tree capture, selector chain resolution, guarded coordinate tap.',
     commands: ['press', 'click', 'fill', 'longpress'],
     guarantees: {
+      ...RUNTIME_TREE_SHARED_GUARANTEES,
       disambiguation: {
         kind: 'runtime',
         via: 'src/daemon/selectors-resolve.ts#resolveSelectorChain',
-      },
-      occlusion: {
-        kind: 'runtime',
-        via: 'src/snapshot/snapshot-occlusion.ts#isSnapshotNodeInteractionBlocked',
-      },
-      offscreen: {
-        kind: 'runtime',
-        via: 'src/snapshot/mobile-snapshot-semantics.ts#isNodeVisibleOnScreen',
-      },
-      nonHittable: {
-        kind: 'runtime',
-        via: 'src/core/interaction-targeting.ts#resolveActionableTouchResolution',
-      },
-      responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
-      responseIdentity: {
-        kind: 'runtime',
-        via: 'src/daemon/handlers/interaction-touch-targets.ts#interactionResultExtra',
-      },
-      verifyEvidence: {
-        kind: 'runtime',
-        via: 'src/commands/interaction/runtime/interactions.ts#pressCommand',
-        appliesTo: ['press', 'click', 'fill'],
       },
       errorTaxonomy: {
         kind: 'runtime',
@@ -171,31 +187,10 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
     description: 'Session snapshot ref lookup, guarded coordinate tap.',
     commands: ['press', 'click', 'fill', 'longpress'],
     guarantees: {
+      ...RUNTIME_TREE_SHARED_GUARANTEES,
       disambiguation: {
         kind: 'inapplicable',
         reason: 'Refs identify exactly one node by construction.',
-      },
-      occlusion: {
-        kind: 'runtime',
-        via: 'src/snapshot/snapshot-occlusion.ts#isSnapshotNodeInteractionBlocked',
-      },
-      offscreen: {
-        kind: 'runtime',
-        via: 'src/snapshot/mobile-snapshot-semantics.ts#isNodeVisibleOnScreen',
-      },
-      nonHittable: {
-        kind: 'runtime',
-        via: 'src/core/interaction-targeting.ts#resolveActionableTouchResolution',
-      },
-      responseConstruction: SHARED_RESPONSE_CONSTRUCTION,
-      responseIdentity: {
-        kind: 'runtime',
-        via: 'src/daemon/handlers/interaction-touch-targets.ts#interactionResultExtra',
-      },
-      verifyEvidence: {
-        kind: 'runtime',
-        via: 'src/commands/interaction/runtime/interactions.ts#pressCommand',
-        appliesTo: ['press', 'click', 'fill'],
       },
       errorTaxonomy: {
         kind: 'runtime',
@@ -243,6 +238,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         to: 'runtime-selector',
         via: '--verify disables the direct path (readDirectIosSelectorTapTarget / fill flags.verify check)',
       },
+      settleObservation: {
+        kind: 'delegated',
+        to: 'runtime-selector',
+        via: '--settle disables the direct path (readDirectIosSelectorTapTarget / readDirectIosSelectorFillTarget flags.settle checks) — settling needs the tree-based baseline and captures',
+      },
       errorTaxonomy: {
         kind: 'delegated',
         to: 'runtime-selector',
@@ -289,6 +289,11 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         to: 'runtime-ref',
         via: '--verify disables the native ref fast path (maybeTapRefTarget / maybeFillRefTarget verify check)',
       },
+      settleObservation: {
+        kind: 'delegated',
+        to: 'runtime-ref',
+        via: '--settle disables the native ref fast path (maybeTapRefTarget / maybeFillRefTarget settle checks) — settling needs the tree-based baseline and captures',
+      },
       errorTaxonomy: {
         kind: 'runtime',
         via: 'src/daemon/selectors-resolve.ts#STALE_REF_HINT',
@@ -324,6 +329,10 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/resolution.ts#resolveInteractionTarget',
         appliesTo: ['press', 'click', 'fill'],
+      },
+      settleObservation: {
+        kind: 'runtime',
+        via: 'src/commands/interaction/runtime/settle.ts#settleAfterInteraction',
       },
       errorTaxonomy: {
         kind: 'runtime',
@@ -365,6 +374,10 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       verifyEvidence: {
         kind: 'inapplicable',
         reason: 'Replay-only path; --verify is not part of replay semantics.',
+      },
+      settleObservation: {
+        kind: 'inapplicable',
+        reason: 'Replay-only path; --settle is not part of replay semantics.',
       },
       errorTaxonomy: {
         kind: 'waived',

@@ -88,6 +88,16 @@ export function selectorSnapshotOptionsFromFlags(flags: CliFlags): SelectorSnaps
   };
 }
 
+// press/click/fill/longpress --settle (#1101). --timeout doubles as the settle
+// deadline on these commands (the daemon rejects it without --settle).
+export function settleInputFromFlags(flags: CliFlags): Record<string, unknown> {
+  return compactRecord({
+    settle: flags.settle,
+    settleQuietMs: flags.settleQuietMs,
+    timeoutMs: flags.timeoutMs,
+  });
+}
+
 export function repeatedInputFromFlags(flags: CliFlags): Record<string, unknown> {
   return compactRecord({
     count: flags.count,

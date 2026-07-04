@@ -77,11 +77,62 @@ export type InteractionEvidence = {
   changedFromBefore: boolean;
 };
 
+export type SettleDiffLine = {
+  kind: 'added' | 'removed';
+  text: string;
+  /**
+   * Plain ref body (`e12`) for ADDED lines: minted from the settled tree that
+   * became the stored session snapshot, so it is immediately actionable and
+   * lets the MCP layer pin it at `refsGeneration`. Removed lines never carry
+   * one — their refs name nodes of the replaced tree.
+   */
+  ref?: string;
+};
+
+/**
+ * Opt-in (`--settle`, #1101) post-action settled observation for mutating
+ * interaction commands. After the action, the daemon re-captures the
+ * interactive tree with `wait stable`'s quiet-window semantics and returns the
+ * DIFF against the pre-action tree in the same response, collapsing the
+ * dominant interact → observe round-trip pair into one.
+ *
+ * Best-effort by contract: settling never fails the action. `settled: false`
+ * means the quiet window was never reached inside the budget (carousel/ticker/
+ * animation) — the diff then reflects the LAST capture, and `hint` says so.
+ *
+ * Token budget: `diff.lines` carries only added/removed display lines (the
+ * unchanged bulk rides as `diff.summary.unchanged`), bounded by the daemon; a
+ * full tree per interaction would invert the snapshot token-budget principle.
+ */
+export type SettleObservation = {
+  settled: boolean;
+  waitedMs: number;
+  captures: number;
+  quietMs: number;
+  timeoutMs: number;
+  /**
+   * The session's snapshot generation after the settled tree became the stored
+   * snapshot (#1076 versioned refs). Attached by the daemon response layer
+   * when `diff` is present: added lines carry refs minted from that tree, so
+   * the response is ref-issuing — the MCP layer merges per-ref pins from it
+   * exactly like snapshot/find responses.
+   */
+  refsGeneration?: number;
+  diff?: {
+    summary: { additions: number; removals: number; unchanged: number };
+    lines: SettleDiffLine[];
+    /** Present (true) when lines were capped to the response bound. */
+    truncated?: boolean;
+  };
+  hint?: string;
+};
+
 export type PressCommandResult = ResolvedInteractionTarget & {
   backendResult?: Record<string, unknown>;
   message?: string;
   warning?: string;
   evidence?: InteractionEvidence;
+  settle?: SettleObservation;
 };
 
 export type FillCommandResult = ResolvedInteractionTarget & {
@@ -90,6 +141,7 @@ export type FillCommandResult = ResolvedInteractionTarget & {
   backendResult?: Record<string, unknown>;
   message?: string;
   evidence?: InteractionEvidence;
+  settle?: SettleObservation;
 };
 
 export type LongPressCommandResult = ResolvedInteractionTarget & {
@@ -97,4 +149,5 @@ export type LongPressCommandResult = ResolvedInteractionTarget & {
   backendResult?: Record<string, unknown>;
   message?: string;
   warning?: string;
+  settle?: SettleObservation;
 };

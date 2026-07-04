@@ -14,13 +14,17 @@ import type {
 import { asAppError, normalizeError } from '../../kernel/errors.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';
-import { resolveRefStalenessWarning } from '../session-snapshot.ts';
+import { markSessionSnapshotRefsIssued, resolveRefStalenessWarning } from '../session-snapshot.ts';
 import {
   buildInteractionResponseData,
   type InteractionResponsePayloads,
 } from './interaction-touch-response.ts';
 import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
-import type { RefSnapshotFlagGuardResponse } from './interaction-flags.ts';
+import {
+  readSettleRequest,
+  settleFlagGuardResponse,
+  type RefSnapshotFlagGuardResponse,
+} from './interaction-flags.ts';
 import {
   readSnapshotNodesReferenceFrame,
   resolveDirectTouchReferenceFrameSafely,
@@ -93,6 +97,8 @@ async function dispatchTargetedTouchViaRuntime(
   if (unsupportedSurfaceResponse) return unsupportedSurfaceResponse;
   const unsupported = requireCommandSupported(capabilityCommand, session.device);
   if (unsupported) return unsupported;
+  const invalidSettleFlags = settleFlagGuardResponse(command, req.flags);
+  if (invalidSettleFlags) return invalidSettleFlags;
 
   const clickButton = resolveClickButton(req.flags);
   const resultButtonTag = buttonTag(clickButton);
@@ -204,11 +210,13 @@ async function runTargetedTouchInteraction(params: {
   durationMs?: number;
 }): Promise<TargetedTouchResult> {
   const { runtime, command, target, sessionName, requestId, flags } = params;
+  const settle = readSettleRequest(flags);
   if (command === 'longpress') {
     return await runtime.interactions.longPress(target, {
       session: sessionName,
       requestId,
       durationMs: params.durationMs,
+      settle,
     });
   }
 
@@ -222,6 +230,7 @@ async function runTargetedTouchInteraction(params: {
     jitterPx: flags?.jitterPx,
     doubleTap: flags?.doubleTap,
     verify: flags?.verify,
+    settle,
   };
   return command === 'click'
     ? await runtime.interactions.click(target, options)
@@ -253,7 +262,27 @@ async function buildTargetedTouchResponsePayloads(params: {
     referenceFrame,
     extra,
     staleRefsWarning: params.staleRefsWarning,
+    settleRefsGeneration: settleRefsGenerationIssue(session, result),
   });
+}
+
+/**
+ * #1101 `--settle`: a settle observation carrying a diff hands the client refs
+ * minted from the freshly stored settled tree (added lines carry them), which
+ * makes the response ref-issuing like snapshot/find (#1076): the coarse
+ * `snapshotRefsStale` marker clears (the same accepted coarse blessing as
+ * find's single re-issued ref) and the stored tree's generation rides inside
+ * the settle payload for MCP per-ref pinning. Without a diff — never captured,
+ * or sparse-quality capture that was not stored — nothing was issued and the
+ * staleness machinery is left untouched.
+ */
+function settleRefsGenerationIssue(
+  session: SessionState,
+  result: PressCommandResult | FillCommandResult | LongPressCommandResult,
+): number | undefined {
+  if (!result.settle?.diff) return undefined;
+  markSessionSnapshotRefsIssued(session);
+  return session.snapshotGeneration;
 }
 
 function readLongPressResultDuration(result: TargetedTouchResult): number | undefined {
@@ -271,6 +300,8 @@ function readDirectIosSelectorTapTarget(params: {
   if (target.kind !== 'selector') return null;
   if (hasNonDefaultClickOptions(flags)) return null;
   if (flags?.verify === true) return null;
+  // --settle needs the tree-based runtime path (baseline + settle captures).
+  if (flags?.settle === true) return null;
   return readDirectSelectorWithMaestroFallback(session, target.selector, flags);
 }
 
@@ -438,37 +469,26 @@ async function dispatchFillViaRuntime(
     if (unsupported) return unsupported;
   }
   if (!session) return noActiveSessionError();
+  const invalidSettleFlags = settleFlagGuardResponse('fill', req.flags);
+  if (invalidSettleFlags) return invalidSettleFlags;
 
   const parsedTarget = parseFillTarget(req.positionals ?? []);
   if (!parsedTarget.ok) return parsedTarget.response;
-  // Read before the Android freshness refresh recaptures — see the press path.
-  const staleRefsWarning =
-    parsedTarget.target.kind === 'ref'
-      ? resolveRefStalenessWarning({
-          session,
-          ref: parsedTarget.target.ref,
-          mintedGeneration: parsedTarget.refGeneration,
-        })
-      : undefined;
-  if (parsedTarget.target.kind === 'ref') {
-    const invalidRefFlagsResponse = params.refSnapshotFlagGuardResponse('fill', req.flags);
-    if (invalidRefFlagsResponse) return invalidRefFlagsResponse;
-    await refreshAndroidRefSnapshotIfFreshnessActive(params, session);
-  }
-  const directSelector = readDirectIosSelectorFillTarget({
+  const refPreamble = await prepareFillRefTarget(
+    params,
     session,
-    target: parsedTarget.target,
-    flags: req.flags,
-  });
-  if (directSelector) {
-    const directResponse = await dispatchDirectIosSelectorFill(
-      params,
-      session,
-      directSelector,
-      parsedTarget.text,
-    );
-    if (directResponse) return directResponse;
-  }
+    parsedTarget.target,
+    parsedTarget.refGeneration,
+  );
+  if (refPreamble.response) return refPreamble.response;
+  const { staleRefsWarning } = refPreamble;
+  const directResponse = await maybeDispatchDirectIosSelectorFill(
+    params,
+    session,
+    parsedTarget.target,
+    parsedTarget.text,
+  );
+  if (directResponse) return directResponse;
 
   return await dispatchRuntimeInteraction(params, {
     run: async (runtime) =>
@@ -477,23 +497,73 @@ async function dispatchFillViaRuntime(
         requestId: req.meta?.requestId,
         delayMs: req.flags?.delayMs,
         verify: req.flags?.verify,
+        settle: readSettleRequest(req.flags),
       }),
-    buildPayloads: (result) => {
-      const referenceFrame =
-        result.kind === 'point'
-          ? undefined
-          : readSnapshotNodesReferenceFrame(session.snapshot?.nodes ?? []);
-      return buildInteractionResponseData({
-        // refBackendWireShape keeps the historical fill @ref wire response
-        // (backendResult + identity extras) while the shared builder owns the
-        // extras — the hand-rolled version of this branch dropped evidence
-        // (PR #1064 review).
-        source: { kind: 'runtime', result, refBackendWireShape: true },
-        referenceFrame,
-        extra: { text: parsedTarget.text },
-        staleRefsWarning,
-      });
-    },
+    buildPayloads: (result) =>
+      buildFillResponsePayloads({ session, result, text: parsedTarget.text, staleRefsWarning }),
+  });
+}
+
+// The fill @ref preamble shared with the press path's shape: read staleness
+// relative to what the client knew BEFORE any internal recapture, validate
+// @ref-incompatible flags, and run the Android freshness refresh.
+async function prepareFillRefTarget(
+  params: InteractionHandlerParams & {
+    captureSnapshotForSession: CaptureSnapshotForSession;
+    refSnapshotFlagGuardResponse: RefSnapshotFlagGuardResponse;
+  },
+  session: SessionState,
+  target: InteractionTarget,
+  refGeneration: number | undefined,
+): Promise<{ response?: DaemonResponse; staleRefsWarning?: string }> {
+  if (target.kind !== 'ref') return {};
+  const staleRefsWarning = resolveRefStalenessWarning({
+    session,
+    ref: target.ref,
+    mintedGeneration: refGeneration,
+  });
+  const invalidRefFlagsResponse = params.refSnapshotFlagGuardResponse('fill', params.req.flags);
+  if (invalidRefFlagsResponse) return { response: invalidRefFlagsResponse, staleRefsWarning };
+  await refreshAndroidRefSnapshotIfFreshnessActive(params, session);
+  return { staleRefsWarning };
+}
+
+async function maybeDispatchDirectIosSelectorFill(
+  params: InteractionHandlerParams & { captureSnapshotForSession: CaptureSnapshotForSession },
+  session: SessionState,
+  target: InteractionTarget,
+  text: string,
+): Promise<DaemonResponse | null> {
+  const directSelector = readDirectIosSelectorFillTarget({
+    session,
+    target,
+    flags: params.req.flags,
+  });
+  if (!directSelector) return null;
+  return await dispatchDirectIosSelectorFill(params, session, directSelector, text);
+}
+
+function buildFillResponsePayloads(params: {
+  session: SessionState;
+  result: FillCommandResult;
+  text: string;
+  staleRefsWarning: string | undefined;
+}): InteractionResponsePayloads {
+  const { session, result } = params;
+  const referenceFrame =
+    result.kind === 'point'
+      ? undefined
+      : readSnapshotNodesReferenceFrame(session.snapshot?.nodes ?? []);
+  return buildInteractionResponseData({
+    // refBackendWireShape keeps the historical fill @ref wire response
+    // (backendResult + identity extras) while the shared builder owns the
+    // extras — the hand-rolled version of this branch dropped evidence
+    // (PR #1064 review).
+    source: { kind: 'runtime', result, refBackendWireShape: true },
+    referenceFrame,
+    extra: { text: params.text },
+    staleRefsWarning: params.staleRefsWarning,
+    settleRefsGeneration: settleRefsGenerationIssue(session, result),
   });
 }
 
@@ -505,6 +575,8 @@ function readDirectIosSelectorFillTarget(params: {
   const { session, target, flags } = params;
   if (target.kind !== 'selector') return null;
   if (flags?.verify === true) return null;
+  // --settle needs the tree-based runtime path (baseline + settle captures).
+  if (flags?.settle === true) return null;
   return readDirectSelectorWithMaestroFallback(session, target.selector, flags);
 }
 

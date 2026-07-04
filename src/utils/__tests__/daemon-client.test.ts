@@ -265,6 +265,35 @@ test('wait request timeout extends past the user-supplied wait budget', () => {
   assert.equal(resolveDaemonRequestTimeoutMs({ ...base, command: 'wait' }), 90_000);
 });
 
+test('interaction --settle budgets widen the envelope like wait budgets, never shrink it', () => {
+  const base = {
+    session: 'default',
+    positionals: ['@e2'],
+    meta: {},
+  };
+
+  // --timeout bounds the SETTLE wait, so the envelope extends past it…
+  assert.equal(
+    resolveDaemonRequestTimeoutMs({
+      ...base,
+      command: 'press',
+      flags: { settle: true, timeoutMs: 120_000 },
+    }),
+    150_000,
+  );
+  // …and a small settle deadline never shrinks the envelope (a slow tap must
+  // not die at the user-supplied settle budget).
+  assert.equal(
+    resolveDaemonRequestTimeoutMs({
+      ...base,
+      command: 'fill',
+      flags: { settle: true, timeoutMs: 5_000 },
+    }),
+    90_000,
+  );
+  assert.equal(resolveDaemonRequestTimeoutMs({ ...base, command: 'press', flags: {} }), 90_000);
+});
+
 test('snapshot uses the standard daemon request timeout with an explicit override', () => {
   const base = {
     session: 'default',

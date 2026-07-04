@@ -61,6 +61,7 @@ const AGENT_QUICKSTART_LINES = [
   'Planning output contract: when asked to plan commands, output command lines only: no prose, numbering, Markdown fences, pipes, or shell helpers.',
   'Default loop: devices/apps -> open -> snapshot -i -> press/fill/get/is/wait/find -> verify with diff snapshot -> close.',
   'Verify a mutation with diff snapshot (or diff snapshot -i), not a full snapshot: it prints only the added/removed/changed lines since the last snapshot in this session, so confirming an action costs a few lines instead of the whole tree.',
+  'Collapse act+observe into one call with --settle on press/click/fill/longpress: the response waits for the UI to go quiet and carries the settled diff with fresh refs (settled: false plus a hint on never-quiet content; the action itself never fails). Tune with --settle-quiet <ms> and --timeout <ms>.',
   'Use selectors or refs as positional targets: id="submit", label="Allow", or @e12 from snapshot -i.',
   'Pin a ref to the snapshot that minted it with ~s<n> (n = refsGeneration in the snapshot response): press @e12~s4. Pinned refs get exact staleness warnings instead of the coarse tree-changed one; plain refs stay valid input.',
   'Plain snapshot reads state; snapshot -i refreshes current interactive refs only.',
