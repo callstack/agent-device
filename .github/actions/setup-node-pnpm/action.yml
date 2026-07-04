@@ -27,7 +27,10 @@ runs:
       uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
       with:
         node-version: ${{ inputs.node-version }}
-        cache: 'pnpm'
+        # Only cache the pnpm store when this action also installs dependencies.
+        # Jobs with install-deps: false never create the store, and on a cache
+        # miss (any lockfile-changing PR) the post-job cache save fails the job.
+        cache: ${{ inputs.install-deps == 'true' && 'pnpm' || '' }}
 
     - name: Install dependencies
       if: ${{ inputs.install-deps == 'true' }}
