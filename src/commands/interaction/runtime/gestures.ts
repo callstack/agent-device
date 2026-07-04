@@ -32,7 +32,7 @@ import {
   type BackendResultVariant,
   type RuntimeCommand,
 } from '../../runtime-types.ts';
-import type { LongPressCommandResult } from '../../../contracts/interaction.ts';
+import type { LongPressCommandResult, SettleParams } from '../../../contracts/interaction.ts';
 import {
   assertSupportedInteractionSurface,
   captureInteractionSnapshot,
@@ -40,7 +40,7 @@ import {
   type ResolvedInteractionTarget,
   resolveInteractionTarget,
 } from './resolution.ts';
-import { settleAfterInteraction, type SettleParams } from './settle.ts';
+import { settleAfterInteraction } from './settle.ts';
 
 export type FocusCommandOptions = CommandContext & {
   target: InteractionTarget;

@@ -7,6 +7,7 @@ import type {
   InteractionEvidence,
   ResolvedInteractionTarget,
   SettleObservation,
+  SettleParams,
 } from '../../../contracts/interaction.ts';
 import type { CapturedSnapshot } from './selector-read-shared.ts';
 import {
@@ -27,11 +28,6 @@ import {
  * succeeded when it runs; observation quality is advisory (same principle as
  * `--verify` evidence).
  */
-
-export type SettleParams = {
-  quietMs?: number;
-  timeoutMs?: number;
-};
 
 export type SettleOutcome = {
   observation: SettleObservation;

@@ -104,6 +104,12 @@ export type SettleDiffLine = {
  * unchanged bulk rides as `diff.summary.unchanged`), bounded by the daemon; a
  * full tree per interaction would invert the snapshot token-budget principle.
  */
+/** Tuning for the settle wait; defaults live with the loop (stable-capture.ts). */
+export type SettleParams = {
+  quietMs?: number;
+  timeoutMs?: number;
+};
+
 export type SettleObservation = {
   settled: boolean;
   waitedMs: number;

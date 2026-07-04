@@ -14,6 +14,7 @@ import type {
   ResolvedInteractionTarget,
   ResolvedTarget,
   SettleObservation,
+  SettleParams,
 } from '../../../contracts/interaction.ts';
 import { toBackendContext } from '../../runtime-common.ts';
 import {
@@ -28,7 +29,7 @@ import {
   preflightNativeRefInteraction,
   resolveInteractionTarget,
 } from './resolution.ts';
-import { settleAfterInteraction, settleEvidence, type SettleParams } from './settle.ts';
+import { settleAfterInteraction, settleEvidence } from './settle.ts';
 
 export {
   focusCommand,

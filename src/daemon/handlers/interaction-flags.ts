@@ -1,5 +1,5 @@
 import type { CommandFlags } from '../../core/dispatch.ts';
-import type { SettleParams } from '../../commands/interaction/runtime/settle.ts';
+import type { SettleParams } from '../../contracts/interaction.ts';
 import type { DaemonResponse } from '../types.ts';
 import { errorResponse } from './response.ts';
 
