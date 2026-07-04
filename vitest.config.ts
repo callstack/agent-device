@@ -2,6 +2,15 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
+    // Wall-clock discipline: unit tests must not wait real time. Measured
+    // 2026-07-04: the suite's duration was bounded by files sleeping through
+    // production timeout budgets. slowTestThreshold surfaces creep in local
+    // output; the slow-test reporter enforces the ratchet (pinned offenders
+    // only shrink). Isolation stays ON and pool stays forks: measured
+    // --no-isolate = 205s wall vs 48s (module state thrashes across files),
+    // threads = no change.
+    slowTestThreshold: 500,
+    reporters: ['default', './scripts/vitest-slow-test-reporter.ts'],
     projects: [
       {
         test: {

@@ -366,6 +366,14 @@ async function waitForAndroidEmulatorByAvdName(params: {
   timeoutMs: number;
 }): Promise<DeviceInfo> {
   const startedAt = Date.now();
+  // Poll cadence scales with the caller's budget: a 1Hz sample rate against a
+  // small budget wastes most of it between checks (a 5s budget deserves 250ms
+  // sampling), while large budgets keep the gentle 1s cadence. Floor of 50ms
+  // keeps tight budgets from busy-spinning.
+  const pollMs = Math.min(
+    ANDROID_EMULATOR_BOOT_POLL_MS,
+    Math.max(50, Math.floor(params.timeoutMs / 20)),
+  );
   while (Date.now() - startedAt < params.timeoutMs) {
     try {
       const serial = await findAndroidEmulatorSerialByAvdName(params.avdName, params.serial);
@@ -382,7 +390,7 @@ async function waitForAndroidEmulatorByAvdName(params: {
     } catch {
       // Best-effort polling while adb/emulator process settles.
     }
-    await sleep(ANDROID_EMULATOR_BOOT_POLL_MS);
+    await sleep(pollMs);
   }
   throw new AppError('COMMAND_FAILED', 'Android emulator did not appear in time', {
     avdName: params.avdName,

@@ -36,6 +36,7 @@ Single-context repo. Read `CONTEXT.md` for domain language and testing/architect
 - Ship the minimum code that solves the problem: no speculative features, no single-use abstractions, and no unrelated cleanup.
 - Match existing style. Remove imports/variables your change made unused.
 - Test through public interfaces when possible. Do not add unrelated exports just to make tests easier.
+- Unit tests never wait real time: inject the budget, derive the cadence from it, or assert the budget is wired — the slow-test ratchet (`scripts/vitest-slow-test-reporter.ts`) fails tests past 2x budget; speed rules and conversion patterns in `docs/agents/testing.md`.
 - Prefer type-level checks when TypeScript can enforce a contract or invalid shape.
 - Use `unknown` only at trust boundaries: parsed JSON, daemon/runtime payloads, catch values, generic I/O, or parser callbacks. Once a value is validated or its producer has a known contract, narrow to a domain type or focused parser/helper instead of carrying `unknown` through internal helper and formatter signatures.
 - Keep modules small for agent context safety:
