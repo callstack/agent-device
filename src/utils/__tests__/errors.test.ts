@@ -31,6 +31,26 @@ test('normalizeError enriches generic command-failed message with stderr excerpt
   assert.equal(normalized.message, 'Operation not permitted');
 });
 
+test('normalizeError appends stderr excerpt to specific command-failed messages', () => {
+  const err = new AppError('COMMAND_FAILED', 'uiautomator dump did not return XML', {
+    exitCode: 1,
+    processExitError: true,
+    stderr: 'uiautomator unavailable\n',
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, 'uiautomator dump did not return XML: uiautomator unavailable');
+});
+
+test('normalizeError does not duplicate an excerpt already present in the message', () => {
+  const err = new AppError('COMMAND_FAILED', 'simctl boot failed: device is locked', {
+    exitCode: 1,
+    processExitError: true,
+    stderr: 'device is locked\n',
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.message, 'simctl boot failed: device is locked');
+});
+
 test('normalizeError skips simctl boilerplate wrappers in stderr', () => {
   const err = new AppError('COMMAND_FAILED', 'xcrun exited with code 1', {
     exitCode: 1,

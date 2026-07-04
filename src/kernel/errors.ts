@@ -104,6 +104,8 @@ export function normalizeError(
   };
 }
 
+const GENERIC_EXIT_MESSAGE = /^\S+ exited with code -?\d+$/;
+
 function maybeEnrichCommandFailedMessage(
   code: string,
   message: string,
@@ -114,7 +116,12 @@ function maybeEnrichCommandFailedMessage(
   const stderr = typeof details?.stderr === 'string' ? details.stderr : '';
   const excerpt = firstStderrLine(stderr);
   if (!excerpt) return message;
-  return excerpt;
+  // Generic "<tool> exited with code N" wraps carry no context of their own,
+  // so the stderr excerpt replaces them outright. Curated wrap messages keep
+  // the specific failure description and gain the excerpt as a suffix.
+  if (GENERIC_EXIT_MESSAGE.test(message)) return excerpt;
+  if (message.includes(excerpt)) return message;
+  return `${message}: ${excerpt}`;
 }
 
 function firstStderrLine(stderr: string): string | null {
