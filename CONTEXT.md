@@ -42,11 +42,24 @@
 - Daemon command registry: daemon-side source of truth for command route ownership and request-policy traits, including admission exemptions, session locking, selector validation, replay-scoped actions, recording invalidation, Android dialog guards, and request provider device resolution.
 - Runner command traits: per-command-type classification for iOS/macOS runner lifecycle behavior, distinct from the public command surface and daemon command registry. The Swift runner traits classify interaction, read-only, and runner-lifecycle axes for XCTest execution; Swift resolves the alert command as read-only only for its `get` action. The TypeScript runner command traits classify daemon-side runner send/recovery policy such as read-only retry routing, readiness probes, and recent-healthy-mutation preflight skips; the TypeScript table is command-type keyed and currently classifies alert as read-only for daemon retry policy. Each side keeps one source of truth keyed by runner command type.
 - Coordinate-first resolved element activation: iOS/macOS runner interaction pattern where a selector or text query resolves the semantic `XCUIElement`, then activation uses the element's resolved center coordinate when a frame is available. This keeps target selection semantic while avoiding `XCUIElement.tap()` post-action element re-resolution after normal navigation. tvOS remains focus/remote-driven.
+- Interaction dispatch path: one concrete route an interaction command takes to the device (runtime selector/ref resolution, direct iOS selector, native ref via web clickRef, coordinate, maestro non-hittable fallback). Every path classifies every guarantee in the ADR 0011 registry.
+- Guarantee cell: one (dispatch path, guarantee) entry in `src/contracts/interaction-guarantees.ts`, classified as runtime/runner/delegated/inapplicable/waived. Completeness is a compile error; honesty is gate-tested.
+- Owned waiver: a `gap:`-prefixed waived cell carrying a `trackingIssue` URL. Waivers are diffable debt with an owner, never folklore.
+- Parity table: golden JSON fixture under `contracts/fixtures/` consumed by both vitest and the runner's gated Swift tests, so a cross-language rule (e.g. tap-point policy) cannot drift silently. Change the rule only via the table.
+- Coverage manifest: `CONTRACT_COVERAGE` export beside each interaction contract test file claiming which matrix cells it proves; the coverage gate requires every enforced/delegated cell to be claimed and rejects overclaims of waived cells.
+- Delegation-on-error: a fast path falling back to the runtime path on semantic failure shapes. It closes failure-side guarantee cells only — never success-path parity.
+- Ref generation pin: optional `~s<n>` suffix on an @ref carrying the snapshot generation it was minted from. Accepted as input everywhere, emitted by no tree output (snapshot token budget), auto-appended by the MCP layer, stripped and ignored by replay.
 - Snapshot capture plan: per-strategy ordered chain of iOS snapshot capture backends (recursive tree, query sweep, private AX) run by one plan runner under a shared wall-clock budget; recovery ordering is declared data, never a per-call-site branch.
 - Snapshot quality verdict: structured outcome (state, backend, reason code, effective depth, collapsed leaves) computed once by the plan runner and shipped with every planned snapshot payload; the daemon and CLI render it instead of re-deriving degradation from node shapes.
 - AX-unavailable target invalidation: iOS/macOS runner behavior where a root accessibility snapshot failure such as `kAXErrorIllegalArgument` marks the cached `XCUIApplication` target handle suspect. The runner fails closed for degraded interactive snapshots, clears the cached target, and lets the next command reacquire the app through normal activation.
 
 ## Architecture (perfect-shape refactor, completed 2026-07)
+
+ADR 0011 (interaction guarantee contract) is the interaction-semantics counterpart of ADR 0008's
+registry thesis: the dispatch-path × guarantee matrix is declared once in
+`src/contracts/interaction-guarantees.ts`, completeness is type-enforced, honesty and coverage are
+gate-enforced, and cross-language rules are pinned by golden parity tables. New dispatch paths and
+guarantees are whole-matrix decisions, not local edits.
 
 The perfect-shape refactor is complete and merged. Its end-state:
 

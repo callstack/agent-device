@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted (implemented through Layer 3, 2026-07-04: #1080, #1082–#1086, #1091, #1092)
 
 ## Context
 

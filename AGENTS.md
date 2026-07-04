@@ -29,6 +29,17 @@ Single-context repo. Read `CONTEXT.md` for domain language and testing/architect
 - Define verifiable success criteria before editing.
 - Decide docs/skills impact up front.
 
+## Principles (expensive lessons — each cost an incident)
+- Guarantees erode at path boundaries. Any new dispatch path or fast path classifies its cells in `src/contracts/interaction-guarantees.ts` first; tsc forces completeness, you supply honesty. ADR 0011.
+- A registry claim is not a semantic check: never mark a cell `runner` without reading whether the Swift code implements the guarantee's *definition*, not just a similar-sounding behavior.
+- Delegation-on-error is not success-path parity. A fast path that falls back on failure can still succeed on a candidate the shared rules would refuse.
+- Do not measure before confirming the code path can fire. An A/B whose B-arm cannot execute returns two green runs masquerading as evidence.
+- Typed signals over message sniffing: key on structured details (`details.timeoutMs`, reason codes), never on error text. Remaining sniffs are owned debt with in-code rationale — do not copy the pattern.
+- Snapshot output is the token budget. Never add per-node bytes to the tree; response-level metadata rides once per response (see versioned refs: pins are accepted input, never emitted output).
+- Warnings compose, never clobber. Append through the shared response builder; two clobber bugs shipped before this rule.
+- Unreleased API surface dies free. Before treating a field as wire-compat, check `git tag --contains <commit>`; if it never shipped, delete it now.
+- Push only behind `&&`-chained gates. `format:check && typecheck && lint && vitest && git push` — a push that can run after a failed gate eventually will.
+
 ## Scope & Changes
 - Keep changes scoped to one command family or module group unless the task explicitly crosses boundaries. If scope expands, stop and confirm.
 - Preserve daemon session semantics and platform behavior.
@@ -38,44 +49,27 @@ Single-context repo. Read `CONTEXT.md` for domain language and testing/architect
 - Test through public interfaces when possible. Do not add unrelated exports just to make tests easier.
 - Prefer type-level checks when TypeScript can enforce a contract or invalid shape.
 - Use `unknown` only at trust boundaries: parsed JSON, daemon/runtime payloads, catch values, generic I/O, or parser callbacks. Once a value is validated or its producer has a known contract, narrow to a domain type or focused parser/helper instead of carrying `unknown` through internal helper and formatter signatures.
-- Keep modules small for agent context safety:
-  - target <= 300 LOC per implementation file when practical.
-  - if a file grows past 500 LOC, plan/extract focused submodules before adding new behavior.
-  - if a file grows past 1,000 LOC, treat it as architecture debt unless it is generated data, a fixture snapshot, or an integration test aggregation.
-  - long guidance/data tables should live behind focused modules instead of sharing a file with parser/runtime logic.
+- Keep modules small for agent context safety. The unit is not lines, it is questions: a file should answer one question, so `rg` -> read-whole-file stays one cheap bounded read.
+  - numeric tripwires: target <= 300 LOC per implementation file; past 500, extract before adding behavior; past 1,000 is architecture debt unless it is generated data or a fixture snapshot. There is no exemption for tests (see below).
+  - name files by the domain concept they answer (`runner-cache.ts`, `interaction-touch-response.ts`), not by layer leftovers (`utils2.ts`, `common.ts` accretion).
+  - colocate machine-readable claims with the code they describe: coverage manifests beside contract tests, registry cells beside enforcement pointers, decision comments at the decision site — agents navigate by claims, not by directory listings.
+  - test files mirror source topology 1:1: when a source module splits, split its test file the same way in the same PR. A 3,000-line family test aggregation makes every fixture lookup a whole-file read; the worst offenders (`interaction.test.ts`, platform `index.test.ts`) predate this rule and shrink opportunistically — do not add to them.
+  - shared fixtures live as named exports in a sibling fixtures module (see `test/integration/interaction-contract/fixtures.ts`), never as inline literals repeated per test.
+  - long guidance/data tables live behind focused modules instead of sharing a file with parser/runtime logic.
+  - barrels only at package boundaries; internal barrels add a navigation hop per read. Legacy internal barrels are gated for removal (CONTEXT.md).
   - prefer deep modules over mechanical splits: extract when it improves locality for a concept callers already need, not just to reduce line count.
 - Before finalizing a code change, do one tightening pass over touched and directly adjacent areas: drop obsolete code, redundant tests, stale helpers/fixtures, and needless duplication made unnecessary by the change.
 - Prefer existing helpers. Add a helper only when it reduces real repetition or clarifies domain behavior.
 - When adding new guidance, examples, schemas, or command metadata, decide whether it belongs in the command surface, CLI grammar, CLI help, MCP projection, or daemon runtime before editing.
 - Prefer updating existing domain vocabulary in `CONTEXT.md` when naming a new durable module concept. Do not coin parallel names in docs, tests, and code.
 
-## Routing
-- Keep `src/daemon.ts` as a thin router.
-- Keep command names centralized in `src/command-catalog.ts`; do not re-create command identity sets in handlers or request policy modules.
-- Keep daemon routing and request-policy traits centralized in `src/daemon/daemon-command-registry.ts`; request modules should consume its predicates instead of recreating command string sets. See `docs/adr/0003-daemon-command-registry.md`.
-- Keep command input/output contracts in the command modules:
-  - command surface and shared schemas: `src/commands/command-surface.ts`, `src/commands/command-contract.ts`, `src/commands/command-input.ts`
-  - typed client command execution: `src/commands/client-command-contracts.ts`
-  - command families: `src/commands/interaction-command-contracts.ts`, `src/commands/batch-command.ts`, with other typed client contracts in `src/commands/client-command-contracts.ts`
-  - CLI positional/flag grammar: `src/commands/cli-grammar.ts` and `src/commands/cli-grammar/*`
-  - typed input to daemon request projection: `src/commands/command-projection.ts`
-  - CLI/client/runtime output projection: `src/commands/cli-output.ts`, `src/commands/client-output.ts`, `src/commands/runtime-output.ts`
-- Do not reintroduce CLI-shaped command adapters or schemas as a second source of truth. CLI, Node.js, and MCP should project from command contracts.
-- Keep `src/daemon/request-router.ts` as request orchestration: auth, diagnostics scope, request admission, locking, handler chain, and fallback dispatch.
-- New daemon handler-family commands must update `src/daemon/daemon-command-registry.ts` with the route and request-policy traits. `src/daemon/__tests__/daemon-command-registry.test.ts` guards route and policy traits; handler catalog tests keep executable handler sanity checks.
-- Put request policies in focused request modules:
-  - tenant/lease/selector/lock admission: `src/daemon/request-admission.ts`
-  - artifact/error finalization: `src/daemon/request-finalization.ts`
-  - request-scoped platform provider scoping: `src/daemon/request-platform-providers.ts`
-  - generic fallback dispatch + action recording: `src/daemon/request-generic-dispatch.ts`
-  - recording invalidation health: `src/daemon/request-recording-health.ts`
-- Put command logic in handler modules:
-  - session/apps/appstate/open/close/replay/logs: `src/daemon/handlers/session.ts`
-  - click/fill/get/is: `src/daemon/handlers/interaction.ts`
-  - snapshot/wait/alert/settings: `src/daemon/handlers/snapshot.ts`
-  - find: `src/daemon/handlers/find.ts`
-  - record/trace: `src/daemon/handlers/record-trace.ts`
-- Commands routed as generic in `src/daemon/daemon-command-registry.ts` fall through to daemon fallback dispatch after specialized handlers return null.
+## Routing & command identity (read the registries, not this file)
+Command identity, routing, capability, and request-policy traits are *derived* artifacts — inspect their declaration sites instead of prose maps:
+- one `CommandDescriptor` per command: `src/core/command-descriptor/registry.ts` (catalog, capabilities, MCP/CLI projection, batch policy, timeout policy — ADR 0008)
+- daemon route ownership + request-policy traits: `src/daemon/daemon-command-registry.ts` (parity-tested)
+- interaction dispatch paths × guarantees: `src/contracts/interaction-guarantees.ts` (ADR 0011)
+- command names: `src/command-catalog.ts`; never re-create command string sets in handlers
+Keep `src/daemon.ts` a thin router and `src/daemon/request-router.ts` orchestration-only. New daemon handler-family commands update the daemon command registry; its tests guard the traits.
 
 ## Toolchain Snapshot
 - Package manager: `pnpm` only. Do not add or restore `package-lock.json`.
@@ -84,7 +78,8 @@ Single-context repo. Read `CONTEXT.md` for domain language and testing/architect
 - Lint/format stack is OXC:
   - config: `.oxlintrc.json`, `.oxfmtrc.json`
 - TypeScript is strict enough to surface dead code early: `strict`, `isolatedModules`, `noUnusedLocals`, and `noUnusedParameters` are enabled.
-- The repo emits with `tsdown` (Rolldown), not `tsc`. If declaration generation fails, inspect `tsconfig.lib.json` first.
+- The repo emits with `tsdown` (Rolldown), not `tsc`; `pnpm typecheck` runs `tsgo` (native preview), with `typecheck:tsc` as the fallback. If declaration generation fails, inspect `tsconfig.lib.json` first.
+- Dev-loop staleness has three layers; after editing runtime or runner code: `pnpm build` (dist), restart the daemon (it does not self-reload), and remember `shutdown` deliberately HANDS OFF a healthy simulator runner — the adopted runner keeps serving the old Swift binary until you kill its process or the source fingerprint changes. Verifying "my change did nothing" against an adopted runner is a classic false negative.
 - `tsconfig.lib.json` needs an explicit `rootDir: "./src"` for declaration layout.
 - Use the aggregate scripts in `package.json` when possible; they encode the expected validation bundles better than ad hoc command lists.
 
@@ -99,13 +94,6 @@ Single-context repo. Read `CONTEXT.md` for domain language and testing/architect
 - Keep long help prose in `src/utils/cli-help.ts`, flag definitions in `src/utils/cli-flags.ts`, and CLI-specific usage/flag metadata in `src/utils/cli-command-overrides.ts`.
 - If build/type errors mention declaration generation, inspect `tsconfig.lib.json` before reading platform code.
 - If lint failures appear after toolchain edits, check whether the rule is from `eslint/*`, `typescript/*`, `import/*`, or `node/*` in `.oxlintrc.json` before assuming source bugs.
-
-## Command Family Lookup
-- `logs`: `src/daemon/handlers/session.ts` -> `src/daemon/app-log.ts` -> `src/daemon/handlers/__tests__/session.test.ts`
-- `open/close/replay/apps/appstate`: `src/daemon/handlers/session.ts` -> `src/daemon/session-store.ts` -> `src/daemon/handlers/__tests__/session.test.ts`
-- `click/fill/get/is`: `src/daemon/handlers/interaction.ts` -> `src/daemon/selectors.ts` -> `src/daemon/handlers/__tests__/interaction.test.ts`
-- `snapshot/wait/settings/alert`: `src/daemon/handlers/snapshot.ts` -> `src/daemon/snapshot-processing.ts` -> `src/daemon/handlers/__tests__/snapshot-handler.test.ts`
-- `record/trace`: `src/daemon/handlers/record-trace.ts` -> `src/platforms/apple/core/runner/runner-client.ts` -> `src/daemon/handlers/__tests__/record-trace.test.ts`
 
 ## Apple Runner Seams
 - The OS-agnostic Apple XCTest runner lives under `src/platforms/apple/core/runner/`. Keep dependency direction clean:
@@ -130,7 +118,20 @@ A new snapshot/command flag touches only the layers that need to understand it. 
 7. `src/daemon/context.ts` and `src/core/dispatch-context.ts`: add the field only when it flows into platform dispatch.
 8. Handler/platform modules: thread the option only after the command surface, grammar, and projection prove it belongs there.
 
-Command-only flags (like `find --first`) that do not flow to the platform layer usually stop at steps 1-3.
+9. `scripts/integration-progress-model.ts`: classify the flag (device-observable vs intentionally-outside) — the architecture-progress gate fails CI on unclassified public flags.
+10. If the flag changes interaction semantics, revisit the affected cells in `src/contracts/interaction-guarantees.ts` (command scoping via `appliesTo` when the flag exists only on some commands).
+
+Command-only flags (like `find --first`) that do not flow to the platform layer usually stop at steps 1-3 (plus step 9).
+
+## Enforcement gates (when one fails, it located your incomplete change)
+This repo encodes invariants as self-declaring gates. The correct response to a gate failure is to classify/cover the new thing, never to suppress or allowlist:
+- public CLI flags must be classified: `scripts/integration-progress-model.ts`
+- interaction guarantee matrix completeness + honesty: `src/contracts/__tests__/interaction-guarantees.test.ts` (gap waivers need `trackingIssue`; the pin list changes only in reviewed diffs)
+- every enforced/delegated matrix cell needs a contract scenario: `src/contracts/__tests__/interaction-contract-coverage.test.ts` + `test/integration/interaction-contract/`
+- interaction responses build only through `buildInteractionResponseData`: the construction-guard test
+- every command declares a timeout policy on its descriptor: the timeout-policy completeness test
+- TS/Swift rule parity: golden tables under `contracts/fixtures/` consumed by vitest and the gated XCTest
+- cross-command apple-leak guard, folder DAG/import lint, fallow (dead code, duplication, complexity)
 
 ## Hard Rules
 - Use process helpers from `src/utils/exec.ts` for TypeScript process execution: `runCmd`, `runCmdStreaming`, `runCmdSync`, `runCmdBackground`, and `runCmdDetached`. Do not import raw `spawn`/`spawnSync` outside `src/utils/exec.ts`; add or extend an exec helper instead. Plain `.mjs` packaging fixtures that cannot import TypeScript helpers should keep child-process usage local and prefer `execFile`/`execFileSync` over spawn.
@@ -174,6 +175,11 @@ Command-only flags (like `find --first`) that do not flow to the platform layer 
 - For repo-owned `Agent Device Tester` verification, use `examples/test-app/README.md` as the source of truth for simulator, physical-device, Metro/dev-client, and app-surface verification steps. Do not treat an already installed `com.callstack.agentdevicelab` as sufficient unless the README's Metro/dev-build and `snapshot -i` checks prove the expected app surface is running.
 - For Android RN/Expo/dev-client apps connected to any local Metro port, `adb reverse tcp:<port> tcp:<port>` is harmless and should be run before opening the app or URL on the emulator/device.
 - In sandboxed agent environments, run manual `agent-device` CLI verification that starts the daemon outside the sandbox with escalation. The daemon binds localhost, and sandboxed runs can fail before any product code executes with `listen EPERM: operation not permitted 127.0.0.1` or repeated `Failed to start daemon`/metadata cleanup messages. Do not spend time debugging those as agent-device regressions; rerun the same command with escalation. Unit tests, typecheck, lint, and build can stay sandboxed unless they need platform devices or network/listener access.
+
+## Known environment traps (do not debug these as regressions)
+- First `node` exec right after the dev-signed Apple runner launches can block ~19s at 0% CPU (Gatekeeper re-verification). It poisons back-to-back CLI wall-clock timing; absorb with a throwaway `node -e 0` or measure in-process/daemon-side.
+- A leftover session holding the device fails every subsequent command instantly with `DEVICE_IN_USE` naming the owner; the hint's `close --session` guidance is the fix, not daemon debugging.
+- Contention flakes: `request-handler-catalog` ("specialized daemon routes...") and the doctor provider scenario time out under host load. Protocol before believing a regression: rerun in isolation AND reproduce on plain `origin/main` under the same load. A changing failure set that passes in isolation is contention, not your change.
 
 ## Manual Device Session Hygiene
 - Treat every manually opened `agent-device` session as a resource that must be closed, including exploratory sessions and failed verification attempts.
