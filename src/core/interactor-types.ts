@@ -55,6 +55,14 @@ export type ElementSelectorTapOptions = {
   allowNonHittableCoordinateFallback?: boolean;
 };
 
+/**
+ * Wire marker the XCTest runner puts in `message` when a selector tap used the
+ * Maestro non-hittable coordinate fallback (RunnerTests+CommandExecution.swift).
+ * The direct-selector press handler must preserve it so the daemon can report
+ * `maestroNonHittableCoordinateFallbackUsed` truthfully.
+ */
+export const MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE = 'tapped via non-hittable coordinate fallback';
+
 export type SnapshotOptions = BaseSnapshotOptions & {
   appBundleId?: string;
   includeRects?: boolean;

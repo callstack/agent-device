@@ -40,6 +40,7 @@ import {
 import { getActiveAndroidSnapshotFreshness } from '../android-snapshot-freshness.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
+import { MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE } from '../../core/interactor-types.ts';
 import {
   isDirectIosSelectorFallbackError,
   readSimpleIosSelectorTarget,
@@ -253,7 +254,15 @@ function readDirectIosSelectorTapTarget(params: {
   if (target.kind !== 'selector') return null;
   if (hasNonDefaultClickOptions(flags)) return null;
   if (flags?.verify === true) return null;
-  const selector = readSimpleIosSelectorTarget({ session, selectorExpression: target.selector });
+  return readDirectSelectorWithMaestroFallback(session, target.selector, flags);
+}
+
+function readDirectSelectorWithMaestroFallback(
+  session: SessionState,
+  selectorExpression: string,
+  flags: CommandFlags | undefined,
+): DirectIosSelectorTarget | null {
+  const selector = readSimpleIosSelectorTarget({ session, selectorExpression });
   if (!selector) return null;
   return {
     ...selector,
@@ -363,7 +372,7 @@ function directIosSelectorFallbackDetails(
   data: Record<string, unknown>,
 ): Record<string, unknown> {
   if (!selector.allowNonHittableCoordinateFallback) return {};
-  const used = data.message === 'tapped via non-hittable coordinate fallback';
+  const used = data.message === MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE;
   return {
     maestroNonHittableCoordinateFallbackAllowed: true,
     maestroNonHittableCoordinateFallbackUsed: used,
@@ -463,14 +472,7 @@ function readDirectIosSelectorFillTarget(params: {
   const { session, target, flags } = params;
   if (target.kind !== 'selector') return null;
   if (flags?.verify === true) return null;
-  const selector = readSimpleIosSelectorTarget({ session, selectorExpression: target.selector });
-  if (!selector) return null;
-  return {
-    ...selector,
-    ...(flags?.maestro?.allowNonHittableCoordinateFallback
-      ? { allowNonHittableCoordinateFallback: true }
-      : {}),
-  };
+  return readDirectSelectorWithMaestroFallback(session, target.selector, flags);
 }
 
 async function dispatchDirectIosSelectorFill(

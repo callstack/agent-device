@@ -49,7 +49,11 @@ import {
 } from './dispatch-series.ts';
 import type { RunnerSequenceStep } from '../platforms/apple/core/runner/runner-contract.ts';
 import type { DispatchContext } from './dispatch-context.ts';
-import type { Interactor, RunnerCallOptions } from './interactor-types.ts';
+import {
+  MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE,
+  type Interactor,
+  type RunnerCallOptions,
+} from './interactor-types.ts';
 
 type ScrollTarget = {
   direction: ScrollDirection;
@@ -185,10 +189,16 @@ async function handleDirectElementSelectorPress(
     throw new AppError('UNSUPPORTED_OPERATION', 'direct element selector tap is not supported');
   }
   const result = await interactor.tapElementSelector(selector);
+  // Keep the runner's non-hittable-fallback marker: the daemon reports
+  // maestroNonHittableCoordinateFallbackUsed from this message, so replacing
+  // it with the generic success text would silently hide fallback usage.
+  const usedNonHittableFallback = result?.message === MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE;
   return {
     selector: selector.raw,
     ...(result ?? {}),
-    ...successText(`Tapped ${selector.raw}`),
+    ...successText(
+      usedNonHittableFallback ? MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE : `Tapped ${selector.raw}`,
+    ),
   };
 }
 
