@@ -1879,6 +1879,120 @@ test('fill selector --verify surfaces evidence through the interactionResultExtr
   }
 });
 
+test('fill @ref --verify surfaces evidence in the ref response branch', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'verify-fill-ref';
+  const session = makeSession(sessionName);
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'XCUIElementTypeTextField',
+        label: 'Email',
+        rect: { x: 10, y: 20, width: 100, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+  sessionStore.set(sessionName, session);
+
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'snapshot') {
+      return {
+        nodes: [
+          {
+            index: 0,
+            type: 'XCUIElementTypeTextField',
+            label: 'Email',
+            rect: { x: 10, y: 20, width: 100, height: 40 },
+            enabled: true,
+            hittable: true,
+          },
+          {
+            index: 1,
+            type: 'XCUIElementTypeButton',
+            label: 'Submit',
+            rect: { x: 10, y: 80, width: 100, height: 40 },
+            enabled: true,
+            hittable: true,
+          },
+        ],
+        backend: 'xctest',
+      };
+    }
+    return {};
+  });
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'fill',
+      positionals: ['@e1', 'hello@example.com'],
+      flags: { verify: true },
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    const evidence = response.data?.evidence as
+      | { nodeCount: number; changedFromBefore: boolean; digest: string }
+      | undefined;
+    expect(evidence).toBeTruthy();
+    expect(evidence?.nodeCount).toBe(2);
+    expect(evidence?.changedFromBefore).toBe(true);
+    expect(typeof evidence?.digest).toBe('string');
+  }
+});
+
+test('fill @ref without --verify never includes an evidence field', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'no-verify-fill-ref';
+  const session = makeSession(sessionName);
+  session.snapshot = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'XCUIElementTypeTextField',
+        label: 'Email',
+        rect: { x: 10, y: 20, width: 100, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'xctest',
+  };
+  sessionStore.set(sessionName, session);
+  mockDispatch.mockResolvedValue({});
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'fill',
+      positionals: ['@e1', 'hello@example.com'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    expect(response.data?.evidence).toBeUndefined();
+  }
+  // No verify flag means no post-action snapshot capture at all.
+  expect(mockDispatch.mock.calls.map((call) => call[1])).not.toContain('snapshot');
+});
+
 test('press @ref promotes a non-hittable node to its hittable ancestor before tapping', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'default';

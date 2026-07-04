@@ -471,6 +471,10 @@ async function dispatchFillViaRuntime(
                 ref: stripAtPrefix(result.target?.kind === 'ref' ? result.target.ref : undefined),
                 ...(result.point ? { x: result.point.x, y: result.point.y } : {}),
               }),
+              // Same extras press @ref already returns — without this the ref
+              // branch rebuilt the response from backendResult and dropped
+              // evidence, so fill @ref --verify returned none (PR #1064 review).
+              ...interactionResultExtra(result),
             }
           : recordedResult;
       if (result.warning) responseData.warning = result.warning;
