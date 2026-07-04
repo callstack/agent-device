@@ -118,6 +118,8 @@ export async function setAndroidSetting(
         allowFailure: true,
       });
       if (result.exitCode !== 0 || !/\bSuccess\b/i.test(result.stdout)) {
+        // exec-guard-allow: pm clear can exit 0 without printing Success; the
+        // guard also covers that non-exit failure mode.
         throw new AppError(
           'COMMAND_FAILED',
           `Failed to clear Android app data for ${resolved.value}`,

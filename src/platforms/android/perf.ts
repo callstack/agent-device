@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
-import { execFailureDetails, requireExecSuccess } from '../../utils/exec.ts';
+import { requireExecSuccess } from '../../utils/exec.ts';
 import { splitNonEmptyTrimmedLines } from '../../utils/parsing.ts';
 import {
   androidAdbResultError,
@@ -153,6 +153,7 @@ export async function captureAndroidHeapSnapshot(
       await cleanupLocalArtifact(outPath, hadLocalArtifact);
       // The site hint wins over the classified one (attachAdbFailureHint never
       // overwrites), but the classifier still tags adbFailure/retriable.
+      // fallow-ignore-next-line code-duplication
       throw androidAdbResultError(
         `Failed to pull Android heap dump for ${packageName}`,
         pullResult,
@@ -167,6 +168,7 @@ export async function captureAndroidHeapSnapshot(
       );
     }
 
+    // fallow-ignore-next-line code-duplication
     const stat = await fs.stat(outPath).catch(() => null);
     if (!stat?.isFile() || stat.size <= 0) {
       await cleanupLocalArtifact(outPath, hadLocalArtifact);

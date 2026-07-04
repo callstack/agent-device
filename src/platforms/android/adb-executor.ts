@@ -662,14 +662,9 @@ function createExecAndroidPortReverseProvider(adb: AndroidAdbExecutor): AndroidP
         timeoutMs: options?.timeoutMs,
       });
       if (result.exitCode !== 0 && !isMissingReverseMapping(result.stdout, result.stderr)) {
-        throw attachAdbFailureHint(
-          new AppError('COMMAND_FAILED', `Failed to remove Android port reverse ${local}`, {
-            local,
-            stdout: result.stdout,
-            stderr: result.stderr,
-            exitCode: result.exitCode,
-          }),
-        );
+        throw androidAdbResultError(`Failed to remove Android port reverse ${local}`, result, {
+          local,
+        });
       }
       for (const locals of owned.values()) {
         locals.delete(local);

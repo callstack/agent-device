@@ -66,30 +66,33 @@ function hasAllowMarker(source: string, callStart: number): boolean {
   return precedingLines.includes(ALLOW_MARKER);
 }
 
-test('AppError details never rebuild the exec stdout/stderr/exitCode trio inline', () => {
+function isInlineTrioViolation(source: string, callStart: number): boolean {
+  const window = appErrorCallWindow(source, callStart);
+  // Stderr enrichment only fires for COMMAND_FAILED; the trio is plain
+  // diagnostic context under other codes (and under dynamic code
+  // expressions, which are runner/daemon pass-throughs, not exec wraps).
+  if (!/^\(\s*'COMMAND_FAILED'/.test(window)) return false;
+  if (!TRIO_KEYS.every((key) => key.test(window))) return false;
+  if (window.includes('execFailureDetails') || window.includes('requireExecSuccess')) return false;
+  return !hasAllowMarker(source, callStart);
+}
+
+function collectFileViolations(filePath: string): string[] {
+  const source = fs.readFileSync(filePath, 'utf8');
   const violations: string[] = [];
-
-  for (const filePath of listSourceFiles(SRC_ROOT)) {
-    const source = fs.readFileSync(filePath, 'utf8');
-    let searchFrom = 0;
-    for (;;) {
-      const callStart = source.indexOf('new AppError(', searchFrom);
-      if (callStart === -1) break;
-      searchFrom = callStart + 1;
-
-      const window = appErrorCallWindow(source, callStart);
-      // Stderr enrichment only fires for COMMAND_FAILED; the trio is plain
-      // diagnostic context under other codes (and under dynamic code
-      // expressions, which are runner/daemon pass-throughs, not exec wraps).
-      if (!/^\(\s*'COMMAND_FAILED'/.test(window)) continue;
-      if (!TRIO_KEYS.every((key) => key.test(window))) continue;
-      if (window.includes('execFailureDetails') || window.includes('requireExecSuccess')) continue;
-      if (hasAllowMarker(source, callStart)) continue;
-
-      const line = source.slice(0, callStart).split('\n').length;
-      violations.push(`${path.relative(SRC_ROOT, filePath)}:${line}`);
-    }
+  let searchFrom = 0;
+  for (;;) {
+    const callStart = source.indexOf('new AppError(', searchFrom);
+    if (callStart === -1) return violations;
+    searchFrom = callStart + 1;
+    if (!isInlineTrioViolation(source, callStart)) continue;
+    const line = source.slice(0, callStart).split('\n').length;
+    violations.push(`${path.relative(SRC_ROOT, filePath)}:${line}`);
   }
+}
+
+test('AppError details never rebuild the exec stdout/stderr/exitCode trio inline', () => {
+  const violations = listSourceFiles(SRC_ROOT).flatMap(collectFileViolations);
 
   assert.deepEqual(
     violations,

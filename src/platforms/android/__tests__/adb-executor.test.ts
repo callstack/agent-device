@@ -492,13 +492,11 @@ test('androidAdbResultError composes the classified hint with the stderr excerpt
   });
 
   // execFailureDetails flags processExitError, so normalizeError suffixes the
-  // curated message with the stderr excerpt while the classified hint rides along.
+  // curated message with the stderr excerpt (severity prefix stripped) while
+  // the classified hint rides along.
   assert.equal(error.details?.processExitError, true);
   const normalized = normalizeError(error);
-  assert.equal(
-    normalized.message,
-    'adb uninstall failed for com.example.app: error: device offline',
-  );
+  assert.equal(normalized.message, 'adb uninstall failed for com.example.app: device offline');
   assert.match(String(normalized.hint), /adb reconnect/i);
   assert.equal(normalized.retriable, true);
 });

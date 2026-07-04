@@ -384,6 +384,8 @@ export async function runAndroidMultiTouchHelperGesture(options: {
         throw error;
       }
     }
+    // exec-guard-allow: reachable at exit 0 (helper output unparseable); the
+    // message already branches on the exit code.
     throw new AppError(
       'COMMAND_FAILED',
       result.exitCode === 0
