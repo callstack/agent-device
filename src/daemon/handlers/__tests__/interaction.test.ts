@@ -3534,3 +3534,30 @@ test('a malformed generation suffix is INVALID_ARGS with the ref grammar hint', 
     }
   }
 });
+
+test('after a session reopen, a pin from the previous lifetime warns (reseeded generations)', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'reopened-pin-warns';
+  // Previous lifetime: a seeded generation minted the client's pin.
+  const previous = makeStaleRefSession(sessionName);
+  setSessionSnapshot(previous, { ...previous.snapshot! });
+  const oldGeneration = previous.snapshotGeneration!;
+
+  // Reopen: fresh session object, same name — the counter reseeds, so the
+  // old pin cannot silently read as current even though both lifetimes are
+  // one replacement deep (a per-lifetime count from 1 would collide here).
+  const reopened = makeStaleRefSession(sessionName);
+  setSessionSnapshot(reopened, { ...reopened.snapshot! });
+  reopened.snapshotRefsStale = false;
+  sessionStore.set(sessionName, reopened);
+  // Probabilistic (~1/900000 collision) — accepted residual risk.
+  expect(reopened.snapshotGeneration).not.toBe(oldGeneration);
+
+  const response = await runInteraction(sessionStore, sessionName, 'press', [
+    `@e1~s${oldGeneration}`,
+  ]);
+  expect(response?.ok).toBe(true);
+  if (response?.ok) {
+    expect(String(response.data?.warning)).toContain(`minted from snapshot s${oldGeneration}`);
+  }
+});

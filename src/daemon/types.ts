@@ -268,7 +268,11 @@ export type SessionState = {
    * ref outputs) report it once as the additive `refsGeneration` field;
    * consumers may pin refs as `@e12~s3` and get a precise staleness warning
    * when the pinned generation no longer matches the stored tree. Plain number
-   * with per-session lifetime — no persistence, no overflow/reset handling.
+   * with per-session lifetime — no persistence. The first bump of a lifetime
+   * seeds at a random 6-digit base (`nextSnapshotGeneration`), so a pin from a
+   * previous lifetime of a reopened same-named session collides only with
+   * ~1e-6 probability instead of commonly: cross-lifetime protection is
+   * probabilistic (seeded), NOT identity-based.
    */
   snapshotGeneration?: number;
   /** Source snapshot used to resolve repeated `snapshot -s @ref` after scoped output replaces refs. */

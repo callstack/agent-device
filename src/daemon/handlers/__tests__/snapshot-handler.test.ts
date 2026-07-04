@@ -489,12 +489,15 @@ test('snapshot responses carry refsGeneration and advance it per capture (#1076 
 
   const first = await runVersionedRefsCommand({ sessionStore, sessionName, command: 'snapshot' });
   // Ref-issuing response reports the generation ONCE; the node tree itself
-  // stays plain `e1` refs (token economy).
-  expect(first?.refsGeneration).toBe(1);
-  expect(sessionStore.get(sessionName)?.snapshotGeneration).toBe(1);
+  // stays plain `e1` refs (token economy). The first generation of a session
+  // lifetime is SEEDED (random 6-digit base), so assert relative bumps and
+  // echo the observed seed instead of literals.
+  const seed = first?.refsGeneration;
+  expect(typeof seed).toBe('number');
+  expect(sessionStore.get(sessionName)?.snapshotGeneration).toBe(seed);
 
   const second = await runVersionedRefsCommand({ sessionStore, sessionName, command: 'snapshot' });
-  expect(second?.refsGeneration).toBe(2);
+  expect(second?.refsGeneration).toBe((seed as number) + 1);
 });
 
 test('diff advances the generation without issuing refsGeneration (#1076 versioned refs)', async () => {
@@ -503,12 +506,14 @@ test('diff advances the generation without issuing refsGeneration (#1076 version
 
   await runVersionedRefsCommand({ sessionStore, sessionName, command: 'snapshot' });
 
+  const seed = sessionStore.get(sessionName)?.snapshotGeneration as number;
+
   // diff replaces the stored tree too — the generation advances even though
-  // the summary response issues no refs, which is exactly what a pinned
-  // `@e1~s1` ref would then warn about.
+  // the summary response issues no refs, which is exactly what a ref pinned
+  // to the snapshot generation would then warn about.
   const diffData = await runVersionedRefsCommand({ sessionStore, sessionName, command: 'diff' });
   expect(diffData?.refsGeneration).toBeUndefined();
-  expect(sessionStore.get(sessionName)?.snapshotGeneration).toBe(2);
+  expect(sessionStore.get(sessionName)?.snapshotGeneration).toBe(seed + 1);
 });
 
 test('snapshot surfaces filtered-to-zero Android guidance for interactive snapshots', async () => {

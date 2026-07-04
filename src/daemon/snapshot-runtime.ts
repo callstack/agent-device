@@ -18,6 +18,7 @@ import { createDaemonRuntimePolicy } from './runtime-policy.ts';
 import { createDaemonRuntimeSessionStore } from './runtime-session.ts';
 import { maybeBuildAndroidSnapshotTimeoutFailure } from './android-snapshot-timeout-evidence.ts';
 import { summarizeSnapshotDiagnostics } from '../snapshot-diagnostics.ts';
+import { nextSnapshotGeneration } from './session-snapshot.ts';
 
 export async function dispatchSnapshotViaRuntime(params: {
   req: DaemonRequest;
@@ -262,7 +263,7 @@ function buildNextSnapshotSession(params: {
   // generation, which is exactly what the pinned warning diagnoses).
   nextSession.snapshotGeneration = keepCurrentSnapshot
     ? current?.snapshotGeneration
-    : (current?.snapshotGeneration ?? 0) + 1;
+    : nextSnapshotGeneration(current?.snapshotGeneration);
   if (record.appName) nextSession.appName = record.appName;
   return nextSession;
 }

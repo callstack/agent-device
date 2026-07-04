@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import type { SnapshotState } from '../kernel/snapshot.ts';
 import type { SessionState } from './types.ts';
 
@@ -41,13 +42,27 @@ export function setSessionSnapshot(session: SessionState, snapshot: SnapshotStat
     // #1076 versioned refs: every tree replacement advances the session's
     // snapshot generation, so refs pinned to an earlier generation
     // (`@e12~s3`) can be diagnosed precisely.
-    session.snapshotGeneration = (session.snapshotGeneration ?? 0) + 1;
+    session.snapshotGeneration = nextSnapshotGeneration(session.snapshotGeneration);
   }
   session.snapshot = snapshot;
   session.snapshotScopeSource = undefined;
   if (snapshot.comparisonSafe === true) {
     session.lastComparisonSafeSnapshot = snapshot;
   }
+}
+
+/**
+ * Advance `snapshotGeneration` (#1076 versioned refs). The FIRST bump of a
+ * session lifetime seeds at a random 6-digit base instead of 1: a reopened
+ * session restarts its counter, so a per-lifetime count starting at 1 would
+ * let a stale `@e1~s1` pin from the previous lifetime silently read as
+ * current. With a seeded base, cross-lifetime collisions are ~1e-6 instead of
+ * common — the protection is probabilistic (seeded), NOT identity-based.
+ * Within a lifetime the counter stays strictly monotonic (+1 per replacement),
+ * so pinned-vs-current comparisons remain exact.
+ */
+export function nextSnapshotGeneration(current: number | undefined): number {
+  return current === undefined ? randomInt(100_000, 1_000_000) : current + 1;
 }
 
 /** The response being returned hands the stored snapshot's refs to the client. */

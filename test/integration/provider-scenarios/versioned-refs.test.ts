@@ -16,8 +16,11 @@ const DEVICE_ID = PROVIDER_SCENARIO_IOS_SIMULATOR.id;
 // #1076 versioned refs: ref-issuing responses carry the session tree's
 // generation once (`refsGeneration`); a consumer may pin refs as `@e2~s<n>`.
 // A pinned ref matching the stored generation is clean; a pinned ref from an
-// older generation gets a PRECISE warning naming both generations. The tree
-// output itself stays plain `e2` refs.
+// older generation gets a PRECISE warning naming both generations — including
+// after a later find issued a NEWER generation (the find-blessing hole this
+// feature closes). The tree output itself stays plain `e2` refs, and the
+// generation values are seeded per session lifetime, so every assertion below
+// is relative to the observed seed.
 const NODES = [
   {
     index: 0,
@@ -61,18 +64,31 @@ function tapEntry(x: number, y: number): ProviderScenarioProviderEntry {
   };
 }
 
+function pinnedStaleWarning(ref: string, minted: number, current: number): string {
+  return `Ref ${ref} was minted from snapshot s${minted} but the session tree is now s${current} — re-run snapshot -i.`;
+}
+
 test('Provider-backed integration pinned @refs get precise generation warnings', async () => {
   const runnerTranscript = createProviderTranscript([
-    // snapshot -i: issues refs at generation 1
+    // snapshot -i: issues refs at the seeded generation g1
     snapshotEntry(),
     // press label=Continue: selector resolution capture replaces the stored
-    // tree (generation 2) without issuing refs
+    // tree (g1+1) without issuing refs
     snapshotEntry(),
     tapEntry(200, 322),
-    // press @e2~s1: pinned to the outlived generation — executes, warns precisely
+    // press @e2~s{g1}: pinned to the outlived generation — executes, warns precisely
     tapEntry(200, 422),
-    // press @e2~s2: pinned to the CURRENT generation — clean
+    // press @e2~s{g1+1}: pinned to the CURRENT generation — clean
     tapEntry(200, 422),
+    // find Cancel click: capture replaces the tree AGAIN (g1+2) and issues
+    // only the found ref at the new generation
+    snapshotEntry(),
+    tapEntry(200, 422),
+    // press @e1~s{g1+1}: a PRE-find pin — the find must not bless it (the
+    // #1076 hole): precise warning naming g1+1 → g1+2
+    tapEntry(200, 322),
+    // press @e1~s{g1+2}: pinned to the post-find generation — clean
+    tapEntry(200, 322),
   ]);
   const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
     runnerTranscript,
@@ -102,25 +118,41 @@ test('Provider-backed integration pinned @refs get precise generation warnings',
         snapshotInteractiveOnly: true,
       });
       const snapshotData = assertRpcOk(snapshot);
-      // Ref-issuing response reports the generation ONCE; nodes stay plain refs.
-      assert.equal(snapshotData.refsGeneration, 1);
+      // Ref-issuing response reports the (seeded) generation ONCE; nodes stay
+      // plain refs — no per-node token growth.
+      assert.equal(typeof snapshotData.refsGeneration, 'number');
+      const g1 = snapshotData.refsGeneration as number;
       const nodes = snapshotData.nodes as Array<{ ref?: string }>;
+      assert.ok(nodes.length > 0);
       assert.ok(nodes.every((node) => node.ref === undefined || !node.ref.includes('~')));
 
       const selectorPress = await daemon.callCommand('press', ['label=Continue'], {});
       const selectorData = assertRpcOk(selectorPress);
       assert.equal(selectorData.warning, undefined);
 
-      const pinnedStale = await daemon.callCommand('press', ['@e2~s1'], {});
+      const pinnedStale = await daemon.callCommand('press', [`@e2~s${g1}`], {});
       const pinnedStaleData = assertRpcOk(pinnedStale);
-      assert.equal(
-        pinnedStaleData.warning,
-        'Ref @e2 was minted from snapshot s1 but the session tree is now s2 — re-run snapshot -i.',
-      );
+      assert.equal(pinnedStaleData.warning, pinnedStaleWarning('@e2', g1, g1 + 1));
 
-      const pinnedCurrent = await daemon.callCommand('press', ['@e2~s2'], {});
+      const pinnedCurrent = await daemon.callCommand('press', [`@e2~s${g1 + 1}`], {});
       const pinnedCurrentData = assertRpcOk(pinnedCurrent);
       assert.equal(pinnedCurrentData.warning, undefined);
+
+      // The blessing flow: find replaces the tree and issues its ref at the
+      // NEW generation…
+      const find = await daemon.callCommand('find', ['Cancel', 'click'], {});
+      const findData = assertRpcOk(find);
+      assert.equal(findData.refsGeneration, g1 + 2);
+
+      // …but a ref pinned BEFORE the find keeps warning precisely — the find
+      // response must not silently re-bless it.
+      const preFindPin = await daemon.callCommand('press', [`@e1~s${g1 + 1}`], {});
+      const preFindPinData = assertRpcOk(preFindPin);
+      assert.equal(preFindPinData.warning, pinnedStaleWarning('@e1', g1 + 1, g1 + 2));
+
+      const postFindPin = await daemon.callCommand('press', [`@e1~s${g1 + 2}`], {});
+      const postFindPinData = assertRpcOk(postFindPin);
+      assert.equal(postFindPinData.warning, undefined);
 
       runnerTranscript.assertComplete();
     },
