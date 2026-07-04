@@ -62,6 +62,7 @@ const AGENT_QUICKSTART_LINES = [
   'Default loop: devices/apps -> open -> snapshot -i -> press/fill/get/is/wait/find -> verify with diff snapshot -> close.',
   'Verify a mutation with diff snapshot (or diff snapshot -i), not a full snapshot: it prints only the added/removed/changed lines since the last snapshot in this session, so confirming an action costs a few lines instead of the whole tree.',
   'Use selectors or refs as positional targets: id="submit", label="Allow", or @e12 from snapshot -i.',
+  'Pin a ref to the snapshot that minted it with ~s<n> (n = refsGeneration in the snapshot response): press @e12~s4. Pinned refs get exact staleness warnings instead of the coarse tree-changed one; plain refs stay valid input.',
   'Plain snapshot reads state; snapshot -i refreshes current interactive refs only.',
   'Default snapshot text is an agent-facing, token-efficient view for planning and targeting actions.',
   'Read-only visible/state question: use snapshot/get/is/find; use snapshot -i only when refs are needed.',
