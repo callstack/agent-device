@@ -69,7 +69,7 @@ export const INTERACTION_PATH_IDS = [
 
 export type InteractionPathId = (typeof INTERACTION_PATH_IDS)[number];
 
-export type GuaranteeEnforcement =
+type GuaranteeEnforcementBase =
   | {
       kind: 'runtime';
       /** `<module path>#<exported symbol>` implementing the rule. */
@@ -101,6 +101,16 @@ export type GuaranteeEnforcement =
       /** Required when the reason starts with `gap:` — waivers must be owned. */
       trackingIssue?: string;
     };
+
+export type GuaranteeEnforcement = GuaranteeEnforcementBase & {
+  /**
+   * Command scoping: when a guarantee only applies to a subset of the path's
+   * commands (e.g. --verify exists on press/click/fill but not longpress),
+   * the cell names that subset instead of implying path-wide coverage. Must
+   * be a non-empty subset of the path's `commands`; omitted = all commands.
+   */
+  appliesTo?: readonly string[];
+};
 
 export type InteractionPathContract = {
   description: string;
@@ -144,6 +154,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       verifyEvidence: {
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/interactions.ts#pressCommand',
+        appliesTo: ['press', 'click', 'fill'],
       },
       errorTaxonomy: {
         kind: 'runtime',
@@ -184,6 +195,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       verifyEvidence: {
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/interactions.ts#pressCommand',
+        appliesTo: ['press', 'click', 'fill'],
       },
       errorTaxonomy: {
         kind: 'runtime',
@@ -324,6 +336,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       verifyEvidence: {
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/resolution.ts#resolveInteractionTarget',
+        appliesTo: ['press', 'click', 'fill'],
       },
       errorTaxonomy: {
         kind: 'runtime',
@@ -337,8 +350,9 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
     commands: ['press', 'fill'],
     guarantees: {
       disambiguation: {
-        kind: 'runner',
-        via: 'RunnerTests+Interaction.swift#findElement',
+        kind: 'waived',
+        reason:
+          'Intentional: Maestro replay matches by unique-or-ambiguous scan (findElement), a deliberate divergence from runtime ranking (visible-first/deepest/smallest) to preserve Maestro semantics.',
       },
       occlusion: {
         kind: 'waived',

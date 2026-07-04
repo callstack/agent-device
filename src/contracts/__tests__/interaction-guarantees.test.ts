@@ -130,6 +130,29 @@ test('waivers and inapplicable entries carry substantive reasons', () => {
   });
 });
 
+test('command-scoped guarantees only name commands the path actually dispatches', () => {
+  for (const [pathId, contract] of Object.entries(INTERACTION_DISPATCH_PATHS)) {
+    for (const guarantee of INTERACTION_GUARANTEES) {
+      const enforcement = contract.guarantees[guarantee];
+      if (enforcement.appliesTo === undefined) continue;
+      assert.ok(
+        enforcement.appliesTo.length > 0,
+        `${pathId}/${guarantee}: appliesTo must be non-empty when present`,
+      );
+      for (const command of enforcement.appliesTo) {
+        assert.ok(
+          contract.commands.includes(command),
+          `${pathId}/${guarantee}: appliesTo names "${command}", which the path does not dispatch`,
+        );
+      }
+      assert.ok(
+        enforcement.appliesTo.length < contract.commands.length,
+        `${pathId}/${guarantee}: appliesTo covers every path command — drop it, omission means all`,
+      );
+    }
+  }
+});
+
 test('gap waivers are owned by tracking issues', () => {
   eachEnforcement((pathId, guarantee, enforcement) => {
     if (enforcement.kind !== 'waived' || !enforcement.reason.startsWith('gap:')) return;

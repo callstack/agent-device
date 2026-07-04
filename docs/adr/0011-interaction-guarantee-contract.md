@@ -74,6 +74,12 @@ export const INTERACTION_GUARANTEES = [
 ] as const;
 ```
 
+Cells may be **command-scoped** via `appliesTo` when a guarantee only exists
+for a subset of the path's commands — e.g. `verifyEvidence` applies to
+`press`/`click`/`fill` but not `longpress`, and claiming it path-wide would
+overstate coverage. The gate rejects `appliesTo` entries naming commands the
+path does not dispatch, and rejects redundant full-coverage lists.
+
 `responseConstruction` and `responseIdentity` are deliberately separate: "use
 one shared construction site" and "which identity fields this path can
 provide" have different closure strategies (the former is a single Layer-2
