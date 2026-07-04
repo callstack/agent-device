@@ -127,9 +127,13 @@ function buildSettleDiff(
   // the baseline came from a richer stored tree (ref targets reuse the session
   // snapshot), extra baseline-only lines surface as removals — advisory noise,
   // the same baseline caveat --verify's changedFromBefore already accepts.
-  const diff = buildSnapshotDiff(baselineNodes, settledNodes, { flatten: true, withRefs: true });
+  const diff = buildSnapshotDiff(
+    withoutKeyboardKeys(baselineNodes),
+    withoutKeyboardKeys(settledNodes),
+    { flatten: true, withRefs: true },
+  );
   const changed = diff.lines.filter((line) => line.kind !== 'unchanged');
-  const lines = changed.slice(0, MAX_SETTLE_DIFF_LINES).map((line) => ({
+  const lines = capSettleDiffLines(changed).map((line) => ({
     kind: line.kind as 'added' | 'removed',
     text: line.text,
     ...(line.ref ? { ref: line.ref } : {}),
@@ -139,6 +143,37 @@ function buildSettleDiff(
     lines,
     ...(changed.length > lines.length ? { truncated: true as const } : {}),
   };
+}
+
+// The iOS QWERTY keyboard is ~50 Key nodes; a fill that summons it would spend
+// most of the capped line budget spelling out the keyboard instead of the
+// content change the agent actually asked to observe. The Keyboard container
+// node stays, so "keyboard appeared/left" remains one visible diff line.
+function withoutKeyboardKeys(nodes: SnapshotNode[]): SnapshotNode[] {
+  return nodes.filter((node) => node.type !== 'Key');
+}
+
+/**
+ * Truncation policy: added lines win. They carry the settled tree's fresh
+ * refs — the actionable half of the diff — while removals only describe what
+ * left the screen (the summary still counts them). Relative order within each
+ * kind is preserved; removals fill whatever budget the additions leave.
+ */
+function capSettleDiffLines<T extends { kind: string }>(changed: T[]): T[] {
+  if (changed.length <= MAX_SETTLE_DIFF_LINES) return changed;
+  const added = changed.filter((line) => line.kind === 'added');
+  const keptAdded = new Set(added.slice(0, MAX_SETTLE_DIFF_LINES));
+  let removedBudget = MAX_SETTLE_DIFF_LINES - keptAdded.size;
+  const kept: T[] = [];
+  for (const line of changed) {
+    if (keptAdded.has(line)) {
+      kept.push(line);
+    } else if (line.kind === 'removed' && removedBudget > 0) {
+      kept.push(line);
+      removedBudget -= 1;
+    }
+  }
+  return kept;
 }
 
 function resolveSettleHint(

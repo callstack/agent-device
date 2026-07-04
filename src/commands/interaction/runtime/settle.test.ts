@@ -268,3 +268,112 @@ test('the settled diff line list is bounded with a truncation marker', async () 
   assert.equal(diff.lines.length, 80);
   assert.equal(diff.truncated, true);
 });
+
+test('keyboard Key nodes never spend the settled diff budget', async () => {
+  const before = buttonSnapshot();
+  // A fill-style settled tree: a summoned keyboard (container + keys) plus the
+  // content change the agent actually cares about.
+  const keyboardTree = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'StaticText',
+      label: 'Results for alpenglow',
+      rect: { x: 0, y: 0, width: 200, height: 20 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 0,
+      type: 'Keyboard',
+      label: 'keyboard',
+      rect: { x: 0, y: 500, width: 400, height: 300 },
+      hittable: true,
+    },
+    ...Array.from({ length: 26 }, (_, key) => ({
+      index: key + 2,
+      depth: 1,
+      parentIndex: 1,
+      type: 'Key',
+      label: String.fromCharCode(97 + key),
+      rect: { x: key * 10, y: 520, width: 10, height: 40 },
+      hittable: true,
+    })),
+    ...['Next', 'Back', 'Home'].map((label, extra) => ({
+      index: extra + 28,
+      depth: 0,
+      type: 'Button',
+      label,
+      rect: { x: 0, y: 40 + extra * 40, width: 100, height: 40 },
+      hittable: true,
+    })),
+  ]);
+  let captures = 0;
+  const device = createSettleDevice({
+    stored: before,
+    captureSnapshot: () => {
+      captures += 1;
+      return { snapshot: captures === 1 ? before : keyboardTree };
+    },
+  });
+
+  const result = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+    settle: {},
+  });
+
+  const diff = result.settle?.diff;
+  assert.ok(diff);
+  const texts = diff.lines.map((line) => line.text).join('\n');
+  assert.match(texts, /Results for alpenglow/);
+  assert.match(texts, /keyboard/);
+  // The container line survives as the keyboard signal; individual keys do not.
+  assert.ok(!diff.lines.some((line) => /\[key\]/.test(line.text)));
+  assert.equal(diff.summary.additions, 5);
+});
+
+test('added lines win diff-budget slots over removals under truncation', async () => {
+  // 120 removals precede the additions positionally; the fresh-ref additions
+  // must still survive the 80-line cap.
+  const bigBefore = makeSnapshotState(
+    Array.from({ length: 120 }, (_, index) => ({
+      index,
+      depth: 0,
+      type: 'StaticText',
+      label: `Old row ${index}`,
+      rect: { x: 0, y: index * 20, width: 100, height: 20 },
+      hittable: true,
+    })),
+  );
+  const afterTree = makeSnapshotState(
+    Array.from({ length: 10 }, (_, index) => ({
+      index,
+      depth: 0,
+      type: 'Button',
+      label: `New action ${index}`,
+      rect: { x: 0, y: index * 40, width: 100, height: 40 },
+      hittable: true,
+    })),
+  );
+  let captures = 0;
+  const device = createSettleDevice({
+    stored: bigBefore,
+    captureSnapshot: () => {
+      captures += 1;
+      return { snapshot: captures === 1 ? bigBefore : afterTree };
+    },
+  });
+
+  const result = await device.interactions.press(selector('label="Old row 0"'), {
+    session: 'default',
+    settle: {},
+  });
+
+  const diff = result.settle?.diff;
+  assert.ok(diff);
+  assert.equal(diff.truncated, true);
+  assert.equal(diff.lines.length, 80);
+  const added = diff.lines.filter((line) => line.kind === 'added');
+  assert.equal(added.length, 10);
+  assert.ok(added.every((line) => line.ref !== undefined));
+});
