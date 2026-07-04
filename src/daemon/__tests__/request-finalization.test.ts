@@ -85,7 +85,6 @@ test('finalizeDaemonResponse registers downloadable artifact type', () => {
         },
         {
           field: 'rawPath',
-          artifactType: undefined,
           artifactId: 'artifact-id-2',
           fileName: 'raw.bin',
           localPath: '/client/raw.bin',
@@ -93,6 +92,13 @@ test('finalizeDaemonResponse registers downloadable artifact type', () => {
       ],
     },
   });
+  // The untyped artifact must omit the key entirely (optional wire contract),
+  // not carry an explicit undefined — toEqual alone cannot tell these apart.
+  const finalizedArtifacts =
+    finalized.ok === true
+      ? (finalized.data?.artifacts as Array<Record<string, unknown>>)
+      : undefined;
+  expect(finalizedArtifacts?.[1]).not.toHaveProperty('artifactType');
   expect(tracked).toEqual([
     {
       artifactPath: '/tmp/telemetry.json',

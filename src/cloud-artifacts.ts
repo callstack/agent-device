@@ -38,7 +38,8 @@ export type CloudArtifactsResult = {
 
 export type DaemonArtifactInventoryEntry = {
   id: string;
-  artifactType: DaemonArtifactType | undefined;
+  // Optional on the wire (see DaemonArtifact.artifactType).
+  artifactType?: DaemonArtifactType;
   filename: string;
   mimeType: string;
   sizeBytes: number;

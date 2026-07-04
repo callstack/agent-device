@@ -74,7 +74,9 @@ function registerDownloadableArtifacts(
       const artifactPath = artifact.path as string;
       return {
         field: artifact.field,
-        artifactType: artifact.artifactType,
+        // Omitted (not null/undefined-valued) when untyped, matching the
+        // optional wire contract on DaemonArtifact.
+        ...(artifact.artifactType !== undefined ? { artifactType: artifact.artifactType } : {}),
         artifactId: trackArtifact({
           artifactPath,
           tenantId: req.meta?.tenantId,

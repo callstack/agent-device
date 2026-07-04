@@ -122,7 +122,11 @@ export type DaemonArtifactType = DaemonArtifactKnownType | (string & {});
 
 export type DaemonArtifact = {
   field: string;
-  artifactType: DaemonArtifactType | undefined;
+  // Optional on the wire: missing metadata is valid, JSON drops undefined, and
+  // remote/older daemons may omit the field entirely. Producer-owned APIs
+  // (reserveOutput, trackDownloadableArtifact) keep the required
+  // `DaemonArtifactType | undefined` form so artifact owners must decide.
+  artifactType?: DaemonArtifactType;
   artifactId?: string;
   fileName?: string;
   localPath?: string;

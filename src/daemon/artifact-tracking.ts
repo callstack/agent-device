@@ -35,7 +35,8 @@ const pendingArtifacts = new Map<string, ArtifactEntry>();
 
 export type DownloadableArtifactInventoryEntry = {
   id: string;
-  artifactType: DaemonArtifactType | undefined;
+  // Optional on the wire (see DaemonArtifact.artifactType).
+  artifactType?: DaemonArtifactType;
   filename: string;
   mimeType: string;
   sizeBytes: number;
@@ -107,7 +108,7 @@ export async function listDownloadableArtifacts(
     if (!payload) continue;
     artifacts.push({
       id,
-      artifactType: entry.artifactType,
+      ...(entry.artifactType !== undefined ? { artifactType: entry.artifactType } : {}),
       filename: payload.fileName ?? id,
       mimeType: payload.mimeType,
       sizeBytes: payload.sizeBytes,
