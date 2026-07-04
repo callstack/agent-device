@@ -3,6 +3,11 @@ import type { FindOptions, IsOptions } from '../../client/client-types.ts';
 import type { CliFlags } from '../../cli/parser/cli-flags.ts';
 import { AppError } from '../../kernel/errors.ts';
 import {
+  IS_PREDICATE_REQUIRED_MESSAGE,
+  IS_PREDICATE_USAGE_HINT,
+  normalizeIsPositionals,
+} from '../../utils/selector-is-predicates.ts';
+import {
   direct,
   optionalCliNumber,
   optionalNumber,
@@ -107,26 +112,27 @@ function readIsOptionsFromPositionals(positionals: string[], flags: CliFlags): I
     ...selectorSnapshotOptionsFromFlags(flags),
     ...selectionOptionsFromFlags(flags),
   };
-  const predicate = positionals[0];
-  const split = splitRequiredSelector(positionals.slice(1), {
+  const normalized = normalizeIsPositionals(positionals);
+  const predicate = normalized[0];
+  if (
+    predicate !== 'text' &&
+    predicate !== 'visible' &&
+    predicate !== 'hidden' &&
+    predicate !== 'exists' &&
+    predicate !== 'editable' &&
+    predicate !== 'selected'
+  ) {
+    throw new AppError('INVALID_ARGS', IS_PREDICATE_REQUIRED_MESSAGE, {
+      hint: IS_PREDICATE_USAGE_HINT,
+    });
+  }
+  const split = splitRequiredSelector(normalized.slice(1), {
     preferTrailingValue: predicate === 'text',
   });
   if (predicate === 'text') {
     return { ...base, predicate, selector: split.selectorExpression, value: split.rest.join(' ') };
   }
-  if (
-    predicate === 'visible' ||
-    predicate === 'hidden' ||
-    predicate === 'exists' ||
-    predicate === 'editable' ||
-    predicate === 'selected'
-  ) {
-    return { ...base, predicate, selector: split.selectorExpression };
-  }
-  throw new AppError(
-    'INVALID_ARGS',
-    'is requires predicate: visible|hidden|exists|editable|selected|text',
-  );
+  return { ...base, predicate, selector: split.selectorExpression };
 }
 
 function readFindLocator(value: string | undefined): FindOptions['locator'] | undefined {

@@ -18,6 +18,7 @@ import {
 } from '../../core/interaction-targeting.ts';
 import { isSnapshotNodeInteractionBlocked } from '../../snapshot/snapshot-occlusion.ts';
 import { readTextForNode } from './interaction-read.ts';
+import { readCommandMessage, successText } from '../../utils/success-text.ts';
 import { errorResponse, noActiveSessionError } from './response.ts';
 import { recordSessionAction } from './handler-utils.ts';
 import { stripInternalInteractionFlags } from '../interaction-outcome-policy.ts';
@@ -509,6 +510,10 @@ async function handleFindClick(ctx: FindContext, match: ResolvedMatch): Promise<
     matchData.x = matchCoords.x;
     matchData.y = matchCoords.y;
   }
+  const clickMessage =
+    readCommandMessage(response.data as Record<string, unknown>) ??
+    `Tapped ${match.ref}${matchCoords ? ` (${matchCoords.x}, ${matchCoords.y})` : ''}`;
+  Object.assign(matchData, successText(clickMessage));
   recordSessionAction(
     sessionStore,
     session,

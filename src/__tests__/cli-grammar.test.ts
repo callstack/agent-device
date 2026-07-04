@@ -100,6 +100,38 @@ test('find and is grammar decodes command action positionals', () => {
   assert.equal(isOptions.value, 'Welcome');
 });
 
+test('is grammar accepts the selector-first form with a trailing predicate', () => {
+  // `visible` is both a selector boolean key and a predicate; the trailing bare token
+  // must be reserved as the predicate instead of being swallowed by the selector.
+  const trailingVisible = readInputFromCli('is', ['text=Zzznope', 'visible'], BASE_FLAGS);
+  assert.equal(trailingVisible.predicate, 'visible');
+  assert.equal(trailingVisible.selector, 'text=Zzznope');
+
+  const trailingText = readInputFromCli('is', ['id=title', 'text', 'Welcome'], BASE_FLAGS);
+  assert.equal(trailingText.predicate, 'text');
+  assert.equal(trailingText.selector, 'id=title');
+  assert.equal(trailingText.value, 'Welcome');
+
+  // Predicate-first stays canonical: a bare trailing predicate name after a
+  // predicate-first expression is a selector boolean term, not a second predicate.
+  const predicateFirst = readInputFromCli('is', ['visible', 'text=Foo', 'hidden'], BASE_FLAGS);
+  assert.equal(predicateFirst.predicate, 'visible');
+  assert.equal(predicateFirst.selector, 'text=Foo hidden');
+});
+
+test('is grammar explains the predicate/selector-key collision on invalid predicates', () => {
+  assert.throws(
+    () => readInputFromCli('is', ['text=Zzznope', 'nope'], BASE_FLAGS),
+    (err: any) => {
+      assert.equal(err.code, 'INVALID_ARGS');
+      assert.match(err.message, /is requires predicate: visible\|hidden\|exists\|editable\|selected\|text/);
+      assert.match(err.details?.hint ?? '', /is <selector> <predicate>/);
+      assert.match(err.details?.hint ?? '', /visible=true/);
+      return true;
+    },
+  );
+});
+
 test('settings grammar owns positional parsing for CLI commands', () => {
   const location = readInputFromCli('settings', ['location', 'set', '37.3349', '-122.009'], {
     ...BASE_FLAGS,

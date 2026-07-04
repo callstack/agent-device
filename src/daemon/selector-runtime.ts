@@ -13,6 +13,8 @@ import { refSnapshotFlagGuardResponse } from './handlers/interaction-flags.ts';
 import {
   evaluateIsPredicate,
   isSupportedPredicate,
+  IS_PREDICATE_REQUIRED_MESSAGE,
+  IS_PREDICATE_USAGE_HINT,
   type IsPredicate,
 } from '../utils/selector-is-predicates.ts';
 import {
@@ -150,14 +152,13 @@ export async function dispatchIsViaRuntime(
 ): Promise<DaemonResponse | null> {
   const { req } = params;
   if (req.command !== 'is') return null;
-  const predicate = (req.positionals?.[0] ?? '').toLowerCase();
+  const { predicate: rawPredicate, split } = splitIsSelectorArgs(req.positionals ?? []);
+  const predicate = rawPredicate.toLowerCase();
   if (!isSupportedPredicate(predicate)) {
-    return errorResponse(
-      'INVALID_ARGS',
-      'is requires predicate: visible|hidden|exists|editable|selected|text',
-    );
+    return errorResponse('INVALID_ARGS', IS_PREDICATE_REQUIRED_MESSAGE, {
+      hint: IS_PREDICATE_USAGE_HINT,
+    });
   }
-  const { split } = splitIsSelectorArgs(req.positionals ?? []);
   if (!split) return errorResponse('INVALID_ARGS', 'is requires a selector expression');
   const expectedText = split.rest.join(' ').trim();
   if (predicate === 'text' && !expectedText) {

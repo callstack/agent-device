@@ -5,6 +5,7 @@ import {
   findSelectorChainMatch,
   parseSelectorChain,
   resolveSelectorChain,
+  splitIsSelectorArgs,
   splitSelectorFromArgs,
 } from '../selectors.ts';
 
@@ -342,4 +343,23 @@ test('appName selector matches nodes with appName field', () => {
   const match3 = findSelectorChainMatch(desktopNodes, chain3, { platform: 'linux' });
   assert.ok(match3);
   assert.equal(match3.matches, 1);
+});
+
+test('splitIsSelectorArgs accepts both predicate-first and selector-first forms', () => {
+  const predicateFirst = splitIsSelectorArgs(['visible', 'text=Zzznope']);
+  assert.equal(predicateFirst.predicate, 'visible');
+  assert.equal(predicateFirst.split?.selectorExpression, 'text=Zzznope');
+  assert.deepEqual(predicateFirst.split?.rest, []);
+
+  // The trailing bare predicate must not be swallowed into the selector as a
+  // boolean term (`visible` is both a selector key and a predicate name).
+  const selectorFirst = splitIsSelectorArgs(['text=Zzznope', 'visible']);
+  assert.equal(selectorFirst.predicate, 'visible');
+  assert.equal(selectorFirst.split?.selectorExpression, 'text=Zzznope');
+  assert.deepEqual(selectorFirst.split?.rest, []);
+
+  const selectorFirstText = splitIsSelectorArgs(['id=title', 'text', 'Welcome']);
+  assert.equal(selectorFirstText.predicate, 'text');
+  assert.equal(selectorFirstText.split?.selectorExpression, 'id=title');
+  assert.deepEqual(selectorFirstText.split?.rest, ['Welcome']);
 });

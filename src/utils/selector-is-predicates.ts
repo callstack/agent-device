@@ -2,6 +2,7 @@ import type { Platform, PublicPlatform } from '../kernel/device.ts';
 import type { SnapshotState } from '../kernel/snapshot.ts';
 import { isNodeVisibleInEffectiveViewport } from '../snapshot/mobile-snapshot-semantics.ts';
 import { isNodeEditable, isNodeVisible } from './selector-node.ts';
+import { tryParseSelectorChain } from './selectors-parse.ts';
 import {
   buildSnapshotNodeByIndex,
   extractNodeText,
@@ -13,6 +14,28 @@ export type IsPredicate = 'visible' | 'hidden' | 'exists' | 'editable' | 'select
 
 export function isSupportedPredicate(input: string): input is IsPredicate {
   return ['visible', 'hidden', 'exists', 'editable', 'selected', 'text'].includes(input);
+}
+
+export const IS_PREDICATE_REQUIRED_MESSAGE =
+  'is requires predicate: visible|hidden|exists|editable|selected|text';
+
+export const IS_PREDICATE_USAGE_HINT =
+  'Use "is <predicate> <selector>" or "is <selector> <predicate>". visible|hidden|editable|selected double as selector keys: a bare predicate token after the selector is read as the predicate, so write key=true (e.g. visible=true) inside the selector to use it as a filter instead.';
+
+// visible|hidden|editable|selected double as selector boolean keys, so the selector-first
+// form (`is <selector> <predicate>`) cannot survive greedy selector parsing: the trailing
+// predicate token would be swallowed as a boolean selector term. Reserve the first bare
+// predicate token that terminates a valid selector prefix and rotate the positionals into
+// the canonical predicate-first shape.
+export function normalizeIsPositionals(positionals: string[]): string[] {
+  if (isSupportedPredicate((positionals[0] ?? '').toLowerCase())) return positionals;
+  for (let i = 1; i < positionals.length; i += 1) {
+    const candidate = (positionals[i] ?? '').toLowerCase();
+    if (!isSupportedPredicate(candidate)) continue;
+    if (!tryParseSelectorChain(positionals.slice(0, i).join(' '))) continue;
+    return [candidate, ...positionals.slice(0, i), ...positionals.slice(i + 1)];
+  }
+  return positionals;
 }
 
 export function evaluateIsPredicate(params: {

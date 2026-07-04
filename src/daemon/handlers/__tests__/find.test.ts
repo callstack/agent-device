@@ -93,7 +93,7 @@ test('handleFindCommands click returns deterministic metadata across locator var
       positionals: ['Increment', 'click'],
       nodes: [hittableParentNoRect, nonHittableChildWithRect],
       invoke: async () => ({ platformSpecificRef: 'XCUIElementTypeView' }),
-      expectedKeys: ['locator', 'query', 'ref', 'x', 'y'],
+      expectedKeys: ['locator', 'message', 'query', 'ref', 'x', 'y'],
       expectedLocator: 'any',
       expectedQuery: 'Increment',
       expectedCoordinates: { x: 100, y: 50 },
@@ -122,6 +122,37 @@ test('handleFindCommands click returns deterministic metadata across locator var
     expect(invokeCalls.length).toBe(1);
     expect(invokeCalls[0]!.positionals?.[0]).toBe(scenario.expectedRef);
   }
+});
+
+test('handleFindCommands click reports the same success message as a direct press', async () => {
+  const nodes = [
+    { index: 0, type: 'View', hittable: true, depth: 0 },
+    {
+      index: 1,
+      type: 'Button',
+      label: 'Catalog',
+      hittable: true,
+      rect: { x: 50, y: 0, width: 100, height: 100 },
+      depth: 1,
+      parentIndex: 0,
+    },
+  ];
+
+  // Default action (no explicit `click` token) must also confirm the tap.
+  const synthesized = await runFindClickScenario({ positionals: ['Catalog'], nodes });
+  expect(synthesized.response.ok).toBe(true);
+  const synthesizedData = (synthesized.response as { data: Record<string, unknown> }).data;
+  expect(synthesizedData.message).toBe('Tapped @e2 (100, 50)');
+
+  // When the delegated click supplies its own success message, it is passed through.
+  const delegated = await runFindClickScenario({
+    positionals: ['Catalog', 'click'],
+    nodes,
+    invoke: async () => ({ message: 'Tapped @e2 (100, 50)', x: 100, y: 50 }),
+  });
+  expect(delegated.response.ok).toBe(true);
+  const delegatedData = (delegated.response as { data: Record<string, unknown> }).data;
+  expect(delegatedData.message).toBe('Tapped @e2 (100, 50)');
 });
 
 test('handleFindCommands click prefers on-screen duplicate text matches', async () => {

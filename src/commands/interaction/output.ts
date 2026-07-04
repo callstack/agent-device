@@ -1,5 +1,6 @@
 import type { CommandRequestResult } from '../../client/client-types.ts';
 import type { CliOutput } from '../command-contract.ts';
+import { readCommandMessage } from '../../utils/success-text.ts';
 import { messageCliOutput, resultOutput, type CliOutputFormatter } from '../output-common.ts';
 
 function getCliOutput(params: { result: CommandRequestResult; format?: string }): CliOutput {
@@ -15,6 +16,10 @@ function getCliOutput(params: { result: CommandRequestResult; format?: string })
 
 function findCliOutput(result: CommandRequestResult): CliOutput {
   const data = result as Record<string, unknown>;
+  // Interactive find actions (click/fill/focus/type) carry the same success message as
+  // their direct counterparts; prefer it over the raw text field fill responses include.
+  const message = readCommandMessage(data);
+  if (message) return { data, text: message };
   if (typeof data.text === 'string') return { data, text: data.text };
   if (typeof data.found === 'boolean') return { data, text: `Found: ${data.found}` };
   if (data.node) return { data, text: JSON.stringify(data.node, null, 2) };

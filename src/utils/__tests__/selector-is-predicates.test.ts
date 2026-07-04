@@ -1,7 +1,48 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { evaluateIsPredicate } from '../selector-is-predicates.ts';
+import { evaluateIsPredicate, normalizeIsPositionals } from '../selector-is-predicates.ts';
 import type { SnapshotNode } from '../../kernel/snapshot.ts';
+
+test('normalizeIsPositionals keeps canonical predicate-first arguments untouched', () => {
+  assert.deepEqual(normalizeIsPositionals(['visible', 'text=Zzznope']), [
+    'visible',
+    'text=Zzznope',
+  ]);
+  assert.deepEqual(normalizeIsPositionals(['text', 'id=title', 'Welcome']), [
+    'text',
+    'id=title',
+    'Welcome',
+  ]);
+  // Predicate-first wins even when the trailing token is also a predicate name: the
+  // bare `hidden` here is the boolean selector term, not a competing predicate.
+  assert.deepEqual(normalizeIsPositionals(['visible', 'hidden']), ['visible', 'hidden']);
+});
+
+test('normalizeIsPositionals rotates the selector-first form to predicate-first', () => {
+  assert.deepEqual(normalizeIsPositionals(['text=Zzznope', 'visible']), [
+    'visible',
+    'text=Zzznope',
+  ]);
+  assert.deepEqual(normalizeIsPositionals(['id=title', 'text', 'Welcome']), [
+    'text',
+    'id=title',
+    'Welcome',
+  ]);
+  // Boolean selector terms before the trailing predicate stay inside the selector.
+  assert.deepEqual(normalizeIsPositionals(['text=Foo', 'visible=true', 'selected']), [
+    'selected',
+    'text=Foo',
+    'visible=true',
+  ]);
+});
+
+test('normalizeIsPositionals leaves unparseable arguments untouched', () => {
+  assert.deepEqual(normalizeIsPositionals(['text=Zzznope', 'nope']), ['text=Zzznope', 'nope']);
+  assert.deepEqual(normalizeIsPositionals(['text=Zzznope']), ['text=Zzznope']);
+  // The token before `visible` is not a valid selector, so no rotation applies.
+  assert.deepEqual(normalizeIsPositionals(['Some Label', 'visible']), ['Some Label', 'visible']);
+  assert.deepEqual(normalizeIsPositionals([]), []);
+});
 
 test('visible predicate treats zero-height hittable Android nodes as hidden', () => {
   const nodes: SnapshotNode[] = [

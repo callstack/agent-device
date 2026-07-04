@@ -22,6 +22,7 @@ import { buildSelectorChainForNode } from '../../../utils/selector-build.ts';
 import {
   evaluateIsPredicate,
   isSupportedPredicate,
+  IS_PREDICATE_REQUIRED_MESSAGE,
   type IsPredicate,
 } from '../../../utils/selector-is-predicates.ts';
 import type {
@@ -253,10 +254,7 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
   options,
 ): Promise<IsCommandResult> => {
   if (!isSupportedPredicate(options.predicate)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'is requires predicate: visible|hidden|exists|editable|selected|text',
-    );
+    throw new AppError('INVALID_ARGS', IS_PREDICATE_REQUIRED_MESSAGE);
   }
   if (options.predicate === 'text' && !options.expectedText) {
     throw new AppError('INVALID_ARGS', 'is text requires expected text value');
