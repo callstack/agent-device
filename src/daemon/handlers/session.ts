@@ -39,7 +39,7 @@ import { handleSessionReplayCommands } from './session-replay.ts';
 import { handleDoctorCommand } from './session-doctor.ts';
 import { getSessionCommandKind } from '../daemon-command-registry.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { PREPARE_REQUEST_TIMEOUT_MS } from '../request-timeouts.ts';
+import { PREPARE_REQUEST_TIMEOUT_MS } from '../../core/command-descriptor/timeout-policy.ts';
 import { Deadline } from '../../utils/retry.ts';
 import type { LeaseLifecycleProvider } from './lease.ts';
 

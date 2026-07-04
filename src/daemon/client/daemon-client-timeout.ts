@@ -3,6 +3,7 @@ import { runCmdSync } from '../../utils/exec.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { isAgentDeviceDaemonProcess } from '../../utils/process-identity.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { resolveCommandTimeoutPolicy } from '../../core/command-descriptor/registry.ts';
 import type { DaemonPaths } from '../config.ts';
 import {
   removeDaemonInfo,
@@ -52,21 +53,13 @@ export function handleRequestTimeout(
   });
 }
 
-// Read-only capture/polling commands that can block in platform accessibility
-// bridges while the app is crashed or never idle. `wait` and `find` are repeated
-// snapshot captures, so they share snapshot's failure mode. Keep the
-// daemon/session alive on their timeouts so callers can still collect
-// screenshot/perf/log evidence and close the session after the runner abort
-// path has been triggered — resetting the daemon here turned one timed-out wait
-// into a lost session for every session the daemon owned.
-const DAEMON_PRESERVING_TIMEOUT_COMMANDS: ReadonlySet<string> = new Set([
-  PUBLIC_COMMANDS.snapshot,
-  PUBLIC_COMMANDS.wait,
-  PUBLIC_COMMANDS.find,
-]);
-
+// Whether a timed-out request tears down the local daemon is declared on the
+// command's descriptor (ADR-0011, `timeoutPolicy.onTimeout`): read-only
+// capture/polling commands preserve the daemon so sessions survive and evidence
+// commands still work; everything else resets it. Unknown/undefined commands
+// fall back to the default reset-daemon policy.
 export function shouldResetDaemonAfterRequestTimeout(command: string | undefined): boolean {
-  return command === undefined || !DAEMON_PRESERVING_TIMEOUT_COMMANDS.has(command);
+  return resolveCommandTimeoutPolicy(command).onTimeout === 'reset-daemon';
 }
 
 function resolveRequestTimeoutHint(params: {

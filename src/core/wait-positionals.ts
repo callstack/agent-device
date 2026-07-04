@@ -33,3 +33,16 @@ export function parseWaitPositionals(args: string[]): WaitParsed | null {
   const text = timeoutMs !== null ? args.slice(0, -1).join(' ') : args.join(' ');
   return { kind: 'text', text: text.trim(), timeoutMs };
 }
+
+/**
+ * The user-supplied budget of a `wait` invocation, or null when none was given.
+ * The budget travels as a positional, not a flag, so it is parsed the same way
+ * the daemon will. Referenced by the `wait` descriptor's timeout policy
+ * (ADR-0011) so the client's request envelope can extend past it.
+ */
+export function resolveWaitBudgetMs(positionals: string[]): number | null {
+  const parsed = parseWaitPositionals(positionals);
+  if (!parsed) return null;
+  if (parsed.kind === 'sleep') return parsed.durationMs;
+  return parsed.timeoutMs;
+}

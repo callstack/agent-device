@@ -5,7 +5,7 @@ import type {
 import type { RequestProgressSink } from '../request-progress.ts';
 import { createRequestId, emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { parseWaitPositionals } from '../../core/wait-positionals.ts';
+import { resolveCommandTimeoutPolicy } from '../../core/command-descriptor/registry.ts';
 import { prepareRemoteRequestArtifacts } from '../../remote/daemon-artifacts.ts';
 import {
   cleanupDaemonAfterRequest,
@@ -13,11 +13,6 @@ import {
   resolveClientSettings,
 } from './daemon-client-lifecycle.ts';
 import { sendRequest } from './daemon-client-transport.ts';
-import {
-  DAEMON_REQUEST_TIMEOUT_MS,
-  INSTALL_REQUEST_TIMEOUT_MS,
-  PREPARE_REQUEST_TIMEOUT_MS,
-} from '../request-timeouts.ts';
 
 export { computeDaemonCodeSignature } from '../code-signature.ts';
 export { downloadRemoteArtifact } from '../../remote/daemon-artifacts.ts';
@@ -122,42 +117,29 @@ function isInstallLikeCommand(command: string | undefined): boolean {
   );
 }
 
+// Derives the request envelope from the command's declared timeout policy
+// (ADR-0011) instead of the former per-command-name special cases.
 export function resolveDaemonRequestTimeoutMs(
   req: Omit<DaemonRequest, 'token'>,
 ): number | undefined {
-  if (req.command === PUBLIC_COMMANDS.test) return undefined;
-  if (req.command === PUBLIC_COMMANDS.wait) {
-    // The wait budget travels as a positional, not a flag, so parse it the same
-    // way the daemon will. Without this, a `wait ... 180000` dies at the default
-    // request timeout with the runner/daemon torn down as collateral.
-    const waitBudgetMs = resolveWaitRequestBudgetMs(req.positionals);
-    if (waitBudgetMs !== null) {
-      return Math.max(DAEMON_REQUEST_TIMEOUT_MS, waitBudgetMs + WAIT_REQUEST_TIMEOUT_MARGIN_MS);
+  const policy = resolveCommandTimeoutPolicy(req.command);
+  if (policy.envelopeMs === 'unbounded') return undefined;
+  if (policy.budget.source === 'positional-parser') {
+    // The user budget travels inside the positionals (e.g. `wait ... 180000`).
+    // Without extending the envelope past it, the request dies at the default
+    // timeout with the runner/daemon torn down as collateral (#1075).
+    const budgetMs = policy.budget.parser(req.positionals ?? []);
+    if (budgetMs !== null) {
+      return Math.max(policy.envelopeMs, budgetMs + REQUEST_TIMEOUT_BUDGET_MARGIN_MS);
     }
   }
-  if (typeof req.flags?.timeoutMs === 'number' && isExplicitTimeoutCommand(req.command)) {
+  if (policy.budget.source === 'flag' && typeof req.flags?.timeoutMs === 'number') {
     return req.flags.timeoutMs;
   }
-  if (req.command === PUBLIC_COMMANDS.prepare) return PREPARE_REQUEST_TIMEOUT_MS;
-  if (isInstallLikeCommand(req.command)) return INSTALL_REQUEST_TIMEOUT_MS;
-  return DAEMON_REQUEST_TIMEOUT_MS;
+  return policy.envelopeMs;
 }
 
-function isExplicitTimeoutCommand(command: string | undefined): boolean {
-  return (
-    command === PUBLIC_COMMANDS.prepare ||
-    command === PUBLIC_COMMANDS.replay ||
-    command === PUBLIC_COMMANDS.snapshot
-  );
-}
-
-// Margin over the user-supplied wait budget so the daemon-side timeout result
-// (with its stable/wait diagnostics) wins the race against the client envelope.
-const WAIT_REQUEST_TIMEOUT_MARGIN_MS = 30_000;
-
-function resolveWaitRequestBudgetMs(positionals: string[] | undefined): number | null {
-  const parsed = parseWaitPositionals(positionals ?? []);
-  if (!parsed) return null;
-  if (parsed.kind === 'sleep') return parsed.durationMs;
-  return parsed.timeoutMs;
-}
+// Margin over a user-supplied positional budget so the daemon-side timeout
+// result (with its stable/wait diagnostics) wins the race against the client
+// envelope. Never shrinks the envelope below the command's declared base.
+const REQUEST_TIMEOUT_BUDGET_MARGIN_MS = 30_000;
