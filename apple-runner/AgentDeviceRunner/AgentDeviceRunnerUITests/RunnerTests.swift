@@ -109,6 +109,21 @@ final class RunnerTests: XCTestCase {
     continueAfterFailure = true
   }
 
+  /// On AX-broken screens (deep RN trees, #758/#1105) every XCUIApplication query can record a
+  /// "Failed to get matching snapshot: kAXErrorIllegalArgument" issue. Those are capture-plan
+  /// noise — the plan already classifies and recovers from AX failures — but XCTest tears the
+  /// whole test case down once such issues accumulate, killing the long-lived runner right
+  /// after the command completes and forcing a ~25s restart per capture. Swallow exactly this
+  /// issue class; everything else still records (and still drives XCTEST_RECORDED_FAILURE).
+  override func record(_ issue: XCTIssue) {
+    let description = issue.compactDescription
+    if description.contains("Failed to get matching snapshot") {
+      NSLog("AGENT_DEVICE_RUNNER_AX_SNAPSHOT_ISSUE_SUPPRESSED=%@", description)
+      return
+    }
+    super.record(issue)
+  }
+
   @MainActor
   func testCommand() throws {
     if RunnerEnv.isTruthy("AGENT_DEVICE_RUNNER_NOOP_STARTUP") {
