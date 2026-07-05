@@ -451,53 +451,59 @@ const RAW_COMMAND_DESCRIPTORS = [
   },
 
   // -- interaction (route: interaction) --
+  // Interaction commands resolve their target through the same platform accessibility
+  // capture as snapshot, so a hung capture is their dominant timeout mode. Resetting the
+  // daemon here destroyed every app session the daemon owned while the app itself was
+  // still healthy (#1105): keep the daemon (and sessions) alive like snapshot/wait/find,
+  // and rely on request cancellation + the per-request runner recycle budget to abort the
+  // stuck Apple runner work.
   {
     name: PUBLIC_COMMANDS.click,
     daemon: { route: 'interaction', replayScopedAction: true, androidBlockingDialogGuard: true },
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
   },
   {
     name: PUBLIC_COMMANDS.fill,
     daemon: { route: 'interaction', replayScopedAction: true, androidBlockingDialogGuard: true },
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
   },
   {
     name: PUBLIC_COMMANDS.longPress,
     daemon: { route: 'interaction', replayScopedAction: true, androidBlockingDialogGuard: true },
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
   },
   {
     name: PUBLIC_COMMANDS.press,
     daemon: { route: 'interaction', replayScopedAction: true, androidBlockingDialogGuard: true },
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
   },
   {
     name: PUBLIC_COMMANDS.type,
     daemon: { route: 'interaction', replayScopedAction: true, androidBlockingDialogGuard: true },
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
   },
   {
     name: PUBLIC_COMMANDS.get,
     daemon: { route: 'interaction', replayScopedAction: true },
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
   },
   {
     name: PUBLIC_COMMANDS.is,
     daemon: { route: 'interaction', replayScopedAction: true },
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
-    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
     batchable: true,
   },
 

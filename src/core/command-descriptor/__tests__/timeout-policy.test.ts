@@ -48,13 +48,27 @@ test('declared timeout policies are structurally valid', () => {
 
 test('daemon-preserving timeout commands are a bounded, reviewed set', () => {
   // CONSERVATIVE: this list may only change in the same PR that updates it
-  // here. Preserving the daemon on timeout is for read-only capture/polling
-  // commands that can block in platform accessibility bridges — a timed-out
+  // here. Preserving the daemon on timeout is for commands whose dominant
+  // hang mode is a blocked platform accessibility bridge — a timed-out
   // poll must not turn into a daemon reset that loses every session (#1075).
+  // Interaction commands joined in #1105: their target resolution runs the
+  // same capture as snapshot, and resetting the daemon on a wedged capture
+  // destroyed healthy app sessions.
   const preserving = commandDescriptors
     .filter((descriptor) => descriptor.timeoutPolicy.onTimeout === 'preserve-daemon')
     .map((descriptor) => descriptor.name);
-  assert.deepEqual(preserving.sort(), ['find', 'snapshot', 'wait']);
+  assert.deepEqual(preserving.sort(), [
+    'click',
+    'fill',
+    'find',
+    'get',
+    'is',
+    'longpress',
+    'press',
+    'snapshot',
+    'type',
+    'wait',
+  ]);
 });
 
 test('budget sources deviating from the default are bounded, reviewed sets', () => {

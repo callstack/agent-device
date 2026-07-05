@@ -233,23 +233,126 @@ extension RunnerTests {
     )
   }
 
+  /// Tracks one main-queue dispatch so the watchdog and the dispatched block can agree —
+  /// under `mainThreadWorkLock` — on exactly one of: finished in time, or abandoned.
+  private final class MainThreadWorkState {
+    var finished = false
+    var abandoned = false
+  }
+
+  enum MainThreadBusyState {
+    case idle
+    case busy(abandonedForSeconds: TimeInterval)
+    case wedged(abandonedForSeconds: TimeInterval)
+  }
+
+  func currentMainThreadBusyState() -> MainThreadBusyState {
+    mainThreadWorkLock.lock()
+    defer { mainThreadWorkLock.unlock() }
+    guard abandonedMainThreadWorkCount > 0 else { return .idle }
+    let abandonedFor = abandonedMainThreadWorkSince.map { Date().timeIntervalSince($0) } ?? 0
+    if abandonedFor > mainThreadWedgeThreshold {
+      return .wedged(abandonedForSeconds: abandonedFor)
+    }
+    return .busy(abandonedForSeconds: abandonedFor)
+  }
+
+  private func runnerBusyResponse(command: Command, abandonedForSeconds: TimeInterval) -> Response {
+    NSLog(
+      "AGENT_DEVICE_RUNNER_BUSY command=%@ commandId=%@ abandonedForSeconds=%.1f",
+      command.command.rawValue,
+      command.commandId ?? "",
+      abandonedForSeconds
+    )
+    return Response(
+      ok: false,
+      error: ErrorPayload(
+        code: "RUNNER_BUSY",
+        message:
+          "The iOS runner is still finishing a previous command that exceeded its execution watchdog (usually an accessibility capture on a heavy or animating screen).",
+        hint:
+          "Wait a few seconds and retry. If snapshots keep failing on this screen, use screenshot as visual truth and interact by coordinates, or navigate to another screen."
+      )
+    )
+  }
+
+  private func runnerWedgedResponse(command: Command, abandonedForSeconds: TimeInterval) -> Response {
+    NSLog(
+      "AGENT_DEVICE_RUNNER_WEDGED command=%@ commandId=%@ abandonedForSeconds=%.1f",
+      command.command.rawValue,
+      command.commandId ?? "",
+      abandonedForSeconds
+    )
+    return Response(
+      ok: false,
+      error: ErrorPayload(
+        code: "RUNNER_WEDGED",
+        message:
+          "The iOS runner main thread has been stuck in abandoned work for \(Int(abandonedForSeconds)) seconds and cannot recover on its own.",
+        hint:
+          "The runner session will be restarted. Retry the command after the restart; if this screen keeps wedging captures, use screenshot as visual truth and interact by coordinates."
+      )
+    )
+  }
+
   private func executeDispatched(command: Command) throws -> Response {
     if Thread.isMainThread {
       return try executeOnMainSafely(command: command)
     }
+    // XCTest work cannot be cancelled mid-flight: once the watchdog abandons a main-queue
+    // block, queueing more main-thread commands behind it only buries the runner deeper.
+    // Refuse fast instead so the daemon backs off while the abandoned work drains; past the
+    // wedge threshold, escalate so the daemon recycles this runner (#1105).
+    switch currentMainThreadBusyState() {
+    case .idle:
+      break
+    case .busy(let abandonedForSeconds):
+      return runnerBusyResponse(command: command, abandonedForSeconds: abandonedForSeconds)
+    case .wedged(let abandonedForSeconds):
+      return runnerWedgedResponse(command: command, abandonedForSeconds: abandonedForSeconds)
+    }
     var result: Result<Response, Error>?
     let semaphore = DispatchSemaphore(value: 0)
+    let workState = MainThreadWorkState()
     DispatchQueue.main.async {
       do {
         result = .success(try self.executeOnMainSafely(command: command))
       } catch {
         result = .failure(error)
       }
+      self.mainThreadWorkLock.lock()
+      if workState.abandoned {
+        self.abandonedMainThreadWorkCount -= 1
+        if self.abandonedMainThreadWorkCount == 0 {
+          self.abandonedMainThreadWorkSince = nil
+          NSLog("AGENT_DEVICE_RUNNER_ABANDONED_WORK_DRAINED")
+        }
+      } else {
+        workState.finished = true
+      }
+      self.mainThreadWorkLock.unlock()
       semaphore.signal()
     }
     let waitResult = semaphore.wait(timeout: .now() + mainThreadExecutionTimeout)
     if waitResult == .timedOut {
       // The main queue work may still be running; we stop waiting and report timeout.
+      mainThreadWorkLock.lock()
+      let stillRunning = !workState.finished
+      if stillRunning {
+        workState.abandoned = true
+        abandonedMainThreadWorkCount += 1
+        if abandonedMainThreadWorkSince == nil {
+          abandonedMainThreadWorkSince = Date()
+        }
+      }
+      mainThreadWorkLock.unlock()
+      if stillRunning && command.command == .snapshot {
+        // The next capture on this screen must not re-grind the tree backend.
+        penalizeSnapshotTreeBackend(
+          bundleId: command.appBundleId,
+          reason: "main_thread_watchdog"
+        )
+      }
       throw NSError(
         domain: RunnerErrorDomain.general,
         code: RunnerErrorCode.mainThreadExecutionTimedOut,

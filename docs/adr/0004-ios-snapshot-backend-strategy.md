@@ -70,6 +70,16 @@ Later work moved recovery into the regular visible capture plan so healthy apps 
 recursive tree path while degraded simulator app classes can still return bounded, honest output
 when fallback query tiers are the only available source of visible controls.
 
+Issue #1105 showed a second failure shape on the same app class: instead of failing fast with
+`kAXErrorIllegalArgument`, the recursive tree capture can grind for many seconds on
+heavy/animating screens before failing, pushing the chained plan past the runner's main-thread
+watchdog and burying the main queue under retries. The plan now carries its umbrella deadline
+into the query-sweep and private-AX tiers (later ladder rungs stop when the budget is spent),
+and a slow or watchdog-abandoned tree capture penalizes the tree backend for that bundle for a
+bounded window: subsequent regular plans lead with the private-AX backend
+(`effectiveSnapshotCapturePlan`), stamped as `recovered` with a `budget` reason so the deferral
+stays observable. The raw diagnostic plan is exempt — it keeps tree-first error propagation.
+
 ## Consequences
 
 Regular snapshots remain the right tool for agents and Maestro compatibility because they describe

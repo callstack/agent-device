@@ -12,7 +12,8 @@ extension RunnerTests {
 
   func privateAXSnapshotCapture(
     app: XCUIApplication,
-    options: SnapshotOptions
+    options: SnapshotOptions,
+    deadline: Date = .distantFuture
   ) -> SnapshotBackendCapture? {
     #if os(iOS) && targetEnvironment(simulator)
       let requestedDepth = options.depth ?? 64
@@ -24,6 +25,13 @@ extension RunnerTests {
       var effectiveDepth = requestedDepth
       var lastError = "unknown private AX snapshot failure"
       for depth in attemptDepths {
+        // The first rung always runs (the plan gated entry on its own budget); later rungs
+        // stop when the capture-plan deadline is spent so ladder retries can never stack
+        // past the runner's main-thread watchdog (#1105).
+        if depth != attemptDepths.first, Date() >= deadline {
+          NSLog("AGENT_DEVICE_RUNNER_PRIVATE_AX_SNAPSHOT_BUDGET_EXHAUSTED depth=%ld", depth)
+          break
+        }
         response = RunnerAXSnapshotBridge.snapshotTree(
           for: app,
           maxDepth: depth,

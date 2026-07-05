@@ -212,7 +212,10 @@ test('read-only polling command timeouts preserve the daemon like snapshot', () 
   // must not turn one timed-out poll into a daemon reset that loses every session.
   assert.equal(shouldResetDaemonAfterRequestTimeout('wait'), false);
   assert.equal(shouldResetDaemonAfterRequestTimeout('find'), false);
-  assert.equal(shouldResetDaemonAfterRequestTimeout('press'), true);
+  // Interaction commands resolve targets through the same capture, so their
+  // timeouts preserve the daemon too (#1105); non-capture commands still reset.
+  assert.equal(shouldResetDaemonAfterRequestTimeout('press'), false);
+  assert.equal(shouldResetDaemonAfterRequestTimeout('open'), true);
 });
 
 test('wait request timeout extends past the user-supplied wait budget', () => {

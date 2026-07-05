@@ -116,6 +116,12 @@ extension RunnerTests {
         completion((jsonResponse(status: 200, response: executeUptime()), false))
         return
       }
+      // Re-sends of a still-executing commandId (the daemon's transport retry loop) attach to
+      // the in-flight execution and receive its response instead of piling a second execution
+      // onto the main queue behind it (#1105 capture pileup).
+      if attachToInFlightCommandIfNeeded(command: command, completion: completion) {
+        return
+      }
       NSLog(
         "AGENT_DEVICE_RUNNER_COMMAND_ACCEPTED command=%@ commandId=%@",
         command.command.rawValue,
@@ -131,7 +137,11 @@ extension RunnerTests {
             command.commandId ?? "",
             response.ok ? 1 : 0
           )
-          completion((self.jsonResponse(status: 200, response: response), command.command == .shutdown))
+          self.deliverCommandResult(
+            command: command,
+            result: (self.jsonResponse(status: 200, response: response), command.command == .shutdown),
+            completion: completion
+          )
         } catch {
           NSLog(
             "AGENT_DEVICE_RUNNER_COMMAND_FAILED command=%@ commandId=%@ error=%@",
@@ -139,17 +149,21 @@ extension RunnerTests {
             command.commandId ?? "",
             String(describing: error)
           )
-          completion((
-            self.jsonResponse(
-              status: 500,
-              response: self.errorResponse(
-                code: "COMMAND_FAILED",
-                message: error.localizedDescription,
-                hint: "Check the runner log for XCTest details, then retry after the app is foregrounded if this was a timeout or activation failure."
-              )
+          self.deliverCommandResult(
+            command: command,
+            result: (
+              self.jsonResponse(
+                status: 500,
+                response: self.errorResponse(
+                  code: "COMMAND_FAILED",
+                  message: error.localizedDescription,
+                  hint: "Check the runner log for XCTest details, then retry after the app is foregrounded if this was a timeout or activation failure."
+                )
+              ),
+              false
             ),
-            false
-          ))
+            completion: completion
+          )
         }
       }
     } catch {
@@ -165,6 +179,59 @@ extension RunnerTests {
         false
       ))
     }
+  }
+
+  // MARK: - In-Flight Command Coalescing
+
+  /// Returns true when this send duplicated a still-executing commandId and was attached as a
+  /// waiter of the in-flight execution. Otherwise marks the commandId in flight and returns
+  /// false so the caller enqueues the (single) execution.
+  private func attachToInFlightCommandIfNeeded(
+    command: Command,
+    completion: @escaping ((data: Data, shouldFinish: Bool)) -> Void
+  ) -> Bool {
+    guard let commandId = normalizedInFlightCommandId(command.commandId) else { return false }
+    inFlightCommandLock.lock()
+    if inFlightCommandIds.contains(commandId) {
+      inFlightCommandWaiters[commandId, default: []].append(completion)
+      inFlightCommandLock.unlock()
+      NSLog(
+        "AGENT_DEVICE_RUNNER_COMMAND_COALESCED command=%@ commandId=%@",
+        command.command.rawValue,
+        commandId
+      )
+      return true
+    }
+    inFlightCommandIds.insert(commandId)
+    inFlightCommandLock.unlock()
+    return false
+  }
+
+  private func deliverCommandResult(
+    command: Command,
+    result: (data: Data, shouldFinish: Bool),
+    completion: ((data: Data, shouldFinish: Bool)) -> Void
+  ) {
+    var waiters: [((data: Data, shouldFinish: Bool)) -> Void] = []
+    if let commandId = normalizedInFlightCommandId(command.commandId) {
+      inFlightCommandLock.lock()
+      inFlightCommandIds.remove(commandId)
+      waiters = inFlightCommandWaiters.removeValue(forKey: commandId) ?? []
+      inFlightCommandLock.unlock()
+    }
+    completion(result)
+    for waiter in waiters {
+      waiter(result)
+    }
+  }
+
+  private func normalizedInFlightCommandId(_ commandId: String?) -> String? {
+    guard let trimmed = commandId?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !trimmed.isEmpty
+    else {
+      return nil
+    }
+    return trimmed
   }
 
   // MARK: - Response Encoding
@@ -203,6 +270,9 @@ extension RunnerTests {
   private func finish() {
     listener?.cancel()
     listener = nil
+    // Guard against double-fulfill: coalesced shutdown sends deliver one result to
+    // multiple waiters, each of which may ask to finish.
     doneExpectation?.fulfill()
+    doneExpectation = nil
   }
 }

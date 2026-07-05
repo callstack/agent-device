@@ -213,7 +213,11 @@ timeoutPolicy: {
 
 with a completeness gate over all public commands. Read-only polling commands
 declare `preserve-daemon`; the client derives the envelope from the declared
-budget source instead of special-casing command names.
+budget source instead of special-casing command names. Since #1105 the
+capture-resolving interaction commands (`click`, `fill`, `longpress`, `press`,
+`type`, `get`, `is`) also declare `preserve-daemon`: their dominant timeout
+mode is the same blocked accessibility capture as `snapshot`, and resetting
+the daemon there destroyed every healthy app session the daemon owned.
 
 ## Consequences
 

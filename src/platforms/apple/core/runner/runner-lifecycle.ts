@@ -6,6 +6,7 @@ import { RUNNER_COMMAND_TIMEOUT_MS, RUNNER_STARTUP_TIMEOUT_MS } from './runner-t
 import {
   type RunnerSession,
   ensureRunnerSession,
+  getRunnerSessionSnapshot,
   invalidateRunnerSession,
   executeRunnerCommandWithSession,
   readRunnerStartupTimeoutMs,
@@ -24,6 +25,13 @@ import type {
 } from './runner-provider.ts';
 import { markRunnerXctestrunArtifactBadForRun } from './runner-xctestrun.ts';
 import { handleRunnerTransportErrorAfterCommandSend } from './runner-command-recovery.ts';
+import {
+  buildRunnerRecycleBudgetExhaustedError,
+  hasRunnerRequestTouchedSession,
+  markRunnerRequestTouchedSession,
+  runnerRecycleLedgerKey,
+  tryConsumeRunnerRecycle,
+} from './runner-recycle-ledger.ts';
 
 export type PrepareIosRunnerOptions = AppleRunnerPrepareOptions;
 export type PrepareIosRunnerResult = AppleRunnerPrepareResult;
@@ -241,9 +249,21 @@ export async function executeRunnerCommand(
 ): Promise<Record<string, unknown>> {
   assertRunnerRequestActive(options.requestId);
   const signal = getRequestSignal(options.requestId);
+  const recycleKey = runnerRecycleLedgerKey(options, command);
   let session: RunnerSession | undefined;
   try {
+    // A request that already used a runner session and finds none alive is about to pay for
+    // a recycle boot (~25s): bound that to the per-request recycle budget so a hostile screen
+    // fails fast with a preserved session instead of stacking runner boots (#1105).
+    if (
+      !getRunnerSessionSnapshot(device.id)?.alive &&
+      hasRunnerRequestTouchedSession(recycleKey) &&
+      !tryConsumeRunnerRecycle(recycleKey)
+    ) {
+      throw buildRunnerRecycleBudgetExhaustedError(command, options);
+    }
     session = await ensureRunnerSession(device, options);
+    markRunnerRequestTouchedSession(recycleKey);
     const timeoutMs = session.ready
       ? RUNNER_COMMAND_TIMEOUT_MS
       : readRunnerStartupTimeoutMs(session);
@@ -314,6 +334,12 @@ async function restartSessionAndRunCommand(params: {
   recoveredDiagnosticPhase?: string;
 }): Promise<Record<string, unknown>> {
   const { device, command, options, signal, restartReason } = params;
+  // At most one recycle per request: when the budget is spent, fail fast and KEEP the current
+  // session — if the runner is merely busy draining abandoned work it answers the next request
+  // cheaply, and a dead process is detected and cleaned by the next ensureRunnerSession (#1105).
+  if (!tryConsumeRunnerRecycle(runnerRecycleLedgerKey(options, command))) {
+    throw buildRunnerRecycleBudgetExhaustedError(command, options);
+  }
   await invalidateRunnerSession(params.session, restartReason);
   const restartedSession = await ensureRunnerSession(device, {
     ...options,

@@ -57,10 +57,12 @@ import {
   prewarmIosRunnerSession,
   runAppleRunnerCommand,
 } from '../runner/runner-client.ts';
+import { resetRunnerRecycleLedgerForTests } from '../runner/runner-recycle-ledger.ts';
 import type { RunnerXctestrunArtifact } from '../runner/runner-xctestrun.ts';
 
 beforeEach(() => {
   vi.resetAllMocks();
+  resetRunnerRecycleLedgerForTests();
   mockMarkRunnerXctestrunArtifactBadForRun.mockResolvedValue(undefined);
 });
 
@@ -1162,3 +1164,60 @@ async function captureDiagnostics(callback: () => Promise<void>): Promise<string
   await callback();
   return JSON.stringify(mockEmitDiagnostic.mock.calls.map(([event]) => event));
 }
+
+test('a request pays for at most one runner recycle, then fails fast with a preserved-session hint', async () => {
+  // Dead-runner wedge (#1105): every send fails, every recovery boots a fresh runner. The
+  // request must stop after ONE recycle instead of stacking ~25s xcodebuild boots until the
+  // client envelope kills the daemon.
+  const requestId = 'req-recycle-cap';
+  mockEnsureRunnerSession.mockImplementation(async () => makeRunnerSession({ ready: true }));
+  mockExecuteRunnerCommandWithSession.mockRejectedValue(
+    new AppError('COMMAND_FAILED', 'fetch failed'),
+  );
+
+  await assert.rejects(
+    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'snapshot' }, { requestId }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.recovery, 'runner_recycle_budget_exhausted');
+      assert.match(String(error.details?.hint), /session is preserved/);
+      return true;
+    },
+  );
+
+  // Attempt 1 (initial boot, free) + attempt 2 (the single recycle); attempt 3 fails fast
+  // before paying for another boot.
+  assert.equal(mockEnsureRunnerSession.mock.calls.length, 2);
+});
+
+test('a later command in the same request cannot pay for a second recycle boot', async () => {
+  const requestId = 'req-restart-cap';
+  const staleSession = makeRunnerSession({ port: 8100, ready: true });
+  const freshSession = makeRunnerSession({ port: 8101, ready: false });
+
+  mockEnsureRunnerSession.mockResolvedValueOnce(staleSession).mockResolvedValueOnce(freshSession);
+  mockExecuteRunnerCommandWithSession
+    .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'Runner did not accept connection'))
+    .mockResolvedValueOnce({ message: 'tapped' });
+
+  // First command consumes the request's only recycle via restart-and-replay.
+  const result = await runAppleRunnerCommand(
+    IOS_SIMULATOR,
+    { command: 'tap', x: 120, y: 240 },
+    { requestId },
+  );
+  assert.deepEqual(result, { message: 'tapped' });
+  assert.equal(mockEnsureRunnerSession.mock.calls.length, 2);
+
+  // Second command in the same request finds no live session (runner died again): it must
+  // fail fast instead of booting a third runner.
+  await assert.rejects(
+    () => runAppleRunnerCommand(IOS_SIMULATOR, { command: 'tap', x: 120, y: 240 }, { requestId }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.recovery, 'runner_recycle_budget_exhausted');
+      return true;
+    },
+  );
+  assert.equal(mockEnsureRunnerSession.mock.calls.length, 2);
+});

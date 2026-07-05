@@ -54,6 +54,27 @@ final class RunnerTests: XCTestCase {
   var needsFirstInteractionDelay = false
   var activeRecording: ScreenRecorder?
   let commandJournal = RunnerCommandJournal()
+  // Coalesces duplicate transport sends of the same commandId onto the single in-flight
+  // execution instead of enqueueing them again behind it (#1105 capture pileup).
+  let inFlightCommandLock = NSLock()
+  var inFlightCommandIds: Set<String> = []
+  var inFlightCommandWaiters: [String: [((data: Data, shouldFinish: Bool)) -> Void]] = [:]
+  // Tracks main-queue work abandoned by the execution watchdog so new main-thread commands
+  // fail fast as busy instead of queueing behind work that cannot be cancelled (#1105).
+  let mainThreadWorkLock = NSLock()
+  var abandonedMainThreadWorkCount = 0
+  var abandonedMainThreadWorkSince: Date?
+  // Past this age the runner stops claiming "busy, retry soon" and reports itself wedged so
+  // the daemon recycles it — the only cure once the main thread is stuck for good.
+  let mainThreadWedgeThreshold: TimeInterval = 120
+  // Sticky per-bundle hint: after the XCTest tree backend ground past its slice (or a snapshot
+  // was abandoned by the watchdog), later capture plans lead with the private AX backend
+  // instead of re-grinding the tree on the same screen class (#1105).
+  let snapshotTreePenaltyLock = NSLock()
+  var snapshotTreePenaltyBundleId: String?
+  var snapshotTreePenaltyUntil = Date.distantPast
+  let snapshotTreePenaltyDuration: TimeInterval = 120
+  let snapshotTreeSlowCaptureThreshold: TimeInterval = 5
   let interactiveTypes: Set<XCUIElement.ElementType> = [
     .button,
     .cell,

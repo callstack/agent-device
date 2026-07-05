@@ -908,6 +908,10 @@ function resolveRunnerFatalErrorReason(error: unknown): string | undefined {
   if (!(error instanceof AppError)) return undefined;
   if (error.code === 'IOS_AX_SNAPSHOT_FAILED') return 'ax_snapshot_failure';
   if (error.code === 'XCTEST_RECORDED_FAILURE') return 'xctest_recorded_failure';
+  // The runner reported its main thread stuck in abandoned work past the wedge threshold
+  // (#1105): only a restart cures it. The per-request recycle budget still bounds how many
+  // boots one request pays for.
+  if (error.code === 'RUNNER_WEDGED') return 'runner_main_thread_wedged';
   return undefined;
 }
 

@@ -302,7 +302,11 @@ extension RunnerTests {
     return DataPayload(nodes: nodes, truncated: false)
   }
 
-  func snapshotFlatInteractive(app: XCUIApplication, options: SnapshotOptions) -> DataPayload {
+  func snapshotFlatInteractive(
+    app: XCUIApplication,
+    options: SnapshotOptions,
+    planDeadline: Date = .distantFuture
+  ) -> DataPayload {
     var nodes: [SnapshotNode] = [
       interactiveRootNode(rect: .zero)
     ]
@@ -310,9 +314,12 @@ extension RunnerTests {
       return DataPayload(nodes: nodes, truncated: false)
     }
 
-    let deadline = options.interactiveOnly
+    // Bounded by both its own sweep budget and the umbrella capture-plan deadline, so a
+    // chained recovery tier can never push the plan past the main-thread watchdog (#1105).
+    let sweepDeadline = options.interactiveOnly
       ? Date().addingTimeInterval(Self.flatInteractiveFallbackBudget)
       : Date.distantFuture
+    let deadline = min(sweepDeadline, planDeadline)
     let viewport = safeSnapshotViewport(app: app)
     var seen = Set<String>()
     var candidates: [SnapshotNode] = []
