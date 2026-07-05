@@ -85,6 +85,10 @@ final class RunnerTests: XCTestCase {
   let treeCaptureLock = NSLock()
   var abandonedTreeCaptureCount = 0
   let treeCaptureSliceBudget: TimeInterval = 8
+  // Observability for the record(_:) suppression below: how many AX-broken-screen snapshot
+  // issues this session muted, so wedge investigations see the volume without grepping logs.
+  let suppressedIssueLock = NSLock()
+  var suppressedAxSnapshotIssueCount = 0
   let interactiveTypes: Set<XCUIElement.ElementType> = [
     .button,
     .cell,
@@ -119,16 +123,38 @@ final class RunnerTests: XCTestCase {
     continueAfterFailure = true
   }
 
-  /// On AX-broken screens (deep RN trees, #758/#1105) every XCUIApplication query can record a
-  /// "Failed to get matching snapshot: kAXErrorIllegalArgument" issue. Those are capture-plan
-  /// noise — the plan already classifies and recovers from AX failures — but XCTest tears the
-  /// whole test case down once such issues accumulate, killing the long-lived runner right
-  /// after the command completes and forcing a ~25s restart per capture. Swallow exactly this
-  /// issue class; everything else still records (and still drives XCTEST_RECORDED_FAILURE).
+  /// True for the one recorded-issue class the runner deliberately mutes: an AX-server error
+  /// (`kAXError*`) inside a "Failed to get matching snapshot" fetch. The kAXError token
+  /// intentionally covers kAXErrorIllegalArgument and its sibling AX server codes (e.g.
+  /// kAXErrorCannotComplete): any AX-server rejection inside a matching-snapshot fetch is the
+  /// same capture-plan noise the plan already classifies and recovers from. The timeout
+  /// variant ("Failed to get matching snapshot: Timed out while evaluating UI query.") carries
+  /// no kAXError token and MUST keep recording — it signals a genuinely hung query, exactly
+  /// the pathology XCTEST_RECORDED_FAILURE must stay able to see.
+  static func isSuppressedAxSnapshotIssueDescription(_ description: String) -> Bool {
+    description.contains("Failed to get matching snapshot") && description.contains("kAXError")
+  }
+
+  /// On AX-broken screens (deep RN trees, #758/#1105) XCUIApplication queries record
+  /// "Failed to get matching snapshot: ... kAXError..." issues; XCTest tears the whole test
+  /// case down once a few accumulate, killing the long-lived runner right after the command
+  /// completes and forcing a ~25s restart per capture. This override is deliberately
+  /// suite-global (all commands, not just snapshot capture): tap-triggered element queries on
+  /// the same screens record the same noise and would still tear the runner down, and command
+  /// outcomes stay honest through their own error paths — only this issue side-channel is
+  /// muted. Everything else still records (and still drives XCTEST_RECORDED_FAILURE).
   override func record(_ issue: XCTIssue) {
     let description = issue.compactDescription
-    if description.contains("Failed to get matching snapshot") {
-      NSLog("AGENT_DEVICE_RUNNER_AX_SNAPSHOT_ISSUE_SUPPRESSED=%@", description)
+    if Self.isSuppressedAxSnapshotIssueDescription(description) {
+      suppressedIssueLock.lock()
+      suppressedAxSnapshotIssueCount += 1
+      let count = suppressedAxSnapshotIssueCount
+      suppressedIssueLock.unlock()
+      NSLog(
+        "AGENT_DEVICE_RUNNER_AX_SNAPSHOT_ISSUE_SUPPRESSED count=%ld description=%@",
+        count,
+        description
+      )
       return
     }
     super.record(issue)
