@@ -58,112 +58,43 @@ function objectSchema(
 
 const stringArraySchema: JsonSchema = { type: 'array', items: { type: 'string' } };
 
-const rectSchema: JsonSchema = objectSchema(
-  {
-    x: numberSchema(),
-    y: numberSchema(),
-    width: numberSchema(),
-    height: numberSchema(),
-  },
-  ['x', 'y', 'width', 'height'],
-);
-
-const pointSchema: JsonSchema = objectSchema({ x: numberSchema(), y: numberSchema() }, ['x', 'y']);
-
-// SnapshotNode = RawSnapshotNode & { ref } (src/kernel/snapshot.ts). `index` and
-// `ref` are the only always-present fields; all others are optional.
-const snapshotNodeSchema: JsonSchema = objectSchema(
-  {
-    index: numberSchema(),
-    ref: stringSchema('Stable snapshot ref such as e12.'),
-    type: stringSchema(),
-    role: stringSchema(),
-    subrole: stringSchema(),
-    label: stringSchema(),
-    value: stringSchema(),
-    identifier: stringSchema(),
-    rect: rectSchema,
-    enabled: booleanSchema(),
-    selected: booleanSchema(),
-    focused: booleanSchema(),
-    visibleToUser: booleanSchema(),
-    hittable: booleanSchema(),
-    depth: numberSchema(),
-    parentIndex: numberSchema(),
-    pid: numberSchema(),
-    bundleId: stringSchema(),
-    appName: stringSchema(),
-    windowTitle: stringSchema(),
-    surface: stringSchema(),
-    hiddenContentAbove: booleanSchema(),
-    hiddenContentBelow: booleanSchema(),
-    interactionBlocked: enumSchema(['covered']),
-    presentationHints: stringArraySchema,
-  },
-  ['index', 'ref'],
-  'Resolved snapshot node for the matched element.',
-);
-
-const resolvedRefTargetSchema: JsonSchema = objectSchema(
-  { kind: constSchema('ref'), ref: stringSchema() },
-  ['kind', 'ref'],
-);
-
-const resolvedSelectorTargetSchema: JsonSchema = objectSchema(
-  { kind: constSchema('selector'), selector: stringSchema() },
-  ['kind', 'selector'],
-);
-
 type InteractionExtra = {
   properties?: Record<string, JsonSchema>;
   required?: readonly string[];
 };
 
 /**
- * `ResolvedInteractionTarget & extra` — a `kind` discriminated union (point / ref
- * / selector) shared by press / fill / longpress. The `const` discriminant keeps
- * the branches mutually exclusive, so the additive `cost` field never breaks the
- * exactly-one-of contract.
+ * Canonical interaction wire response built by buildInteractionResponseData:
+ * shared target/coordinate/evidence fields plus per-command extras. The runtime
+ * result still has richer internal node/backend data; this schema documents the
+ * JSON payload returned to clients.
  */
-function interactionResultSchema(extra: InteractionExtra = {}): JsonSchema {
+function interactionWireResultSchema(extra: InteractionExtra = {}): JsonSchema {
   const extraProperties = extra.properties ?? {};
   const extraRequired = extra.required ?? [];
-  const pointBranch = objectSchema(
-    { kind: constSchema('point'), point: pointSchema, ...extraProperties },
-    ['kind', 'point', ...extraRequired],
-  );
-  const refBranch = objectSchema(
+  return objectSchema(
     {
-      kind: constSchema('ref'),
-      point: pointSchema,
-      target: resolvedRefTargetSchema,
-      node: snapshotNodeSchema,
+      targetKind: enumSchema(['point', 'ref', 'selector'], 'Resolved interaction target kind.'),
+      x: numberSchema('Resolved interaction x coordinate when available.'),
+      y: numberSchema('Resolved interaction y coordinate when available.'),
+      referenceWidth: numberSchema('Reference frame width for visualizing the interaction point.'),
+      referenceHeight: numberSchema(
+        'Reference frame height for visualizing the interaction point.',
+      ),
+      ref: stringSchema('Snapshot ref without the @ prefix when the target was an @ref.'),
+      selector: stringSchema('Selector expression when the target was a selector.'),
       selectorChain: stringArraySchema,
       refLabel: stringSchema(),
       targetHittable: booleanSchema(),
       hint: stringSchema(),
+      warning: stringSchema(),
+      message: stringSchema(),
+      evidence: interactionEvidenceSchema,
       ...extraProperties,
     },
-    ['kind', 'target', ...extraRequired],
+    ['targetKind', ...extraRequired],
   );
-  const selectorBranch = objectSchema(
-    {
-      kind: constSchema('selector'),
-      point: pointSchema,
-      target: resolvedSelectorTargetSchema,
-      node: snapshotNodeSchema,
-      selectorChain: stringArraySchema,
-      refLabel: stringSchema(),
-      targetHittable: booleanSchema(),
-      hint: stringSchema(),
-      ...extraProperties,
-    },
-    ['kind', 'point', 'target', 'node', 'selectorChain', ...extraRequired],
-  );
-  return { type: 'object', oneOf: [pointBranch, refBranch, selectorBranch] };
 }
-
-const backendResultSchema = looseObjectSchema('Raw backend result passthrough.');
 
 // InteractionEvidence (src/contracts/interaction.ts) — opt-in `--verify` cheap
 // post-condition evidence (#1047).
@@ -257,34 +188,28 @@ const targetShutdownResultSchema: JsonSchema = objectSchema(
 );
 
 export const COMMAND_OUTPUT_SCHEMAS = {
-  // src/contracts/interaction.ts
-  press: interactionResultSchema({
+  // buildInteractionResponseData wire payloads for interaction commands.
+  press: interactionWireResultSchema({
     properties: {
-      backendResult: backendResultSchema,
-      message: stringSchema(),
-      warning: stringSchema(),
       evidence: interactionEvidenceSchema,
       settle: settleObservationSchema,
+      button: enumSchema(['secondary', 'middle']),
     },
   }),
-  fill: interactionResultSchema({
+  fill: interactionWireResultSchema({
     properties: {
       text: stringSchema('Text submitted to the field.'),
-      warning: stringSchema(),
-      backendResult: backendResultSchema,
-      message: stringSchema(),
+      delayMs: numberSchema('Delay between typed characters in milliseconds.'),
       evidence: interactionEvidenceSchema,
       settle: settleObservationSchema,
     },
     required: ['text'],
   }),
-  longpress: interactionResultSchema({
+  longpress: interactionWireResultSchema({
     properties: {
       durationMs: numberSchema(),
-      backendResult: backendResultSchema,
-      message: stringSchema(),
-      warning: stringSchema(),
       settle: settleObservationSchema,
+      gesture: constSchema('longpress'),
     },
   }),
 

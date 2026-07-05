@@ -16,7 +16,7 @@ import {
   type ProviderScenarioTranscript,
 } from '../provider-scenarios/transcript.ts';
 
-const CONTRACT_APP = 'com.example.app';
+export const CONTRACT_APP = 'com.example.app';
 const CONTRACT_DEVICE_ID = PROVIDER_SCENARIO_IOS_SIMULATOR.id;
 
 /**
@@ -67,11 +67,41 @@ export function runnerSnapshotEntry(nodes: readonly unknown[]): ProviderScenario
   };
 }
 
-export function runnerTapEntry(result: Record<string, unknown>): ProviderScenarioProviderEntry {
+export function runnerTapEntry(
+  result: Record<string, unknown>,
+  request?: Record<string, unknown>,
+): ProviderScenarioProviderEntry {
   return {
     command: 'ios.runner.tap',
     deviceId: CONTRACT_DEVICE_ID,
     platform: 'apple',
+    ...(request ? { request } : {}),
+    result,
+  };
+}
+
+export function runnerTypeEntry(
+  result: Record<string, unknown>,
+  request?: Record<string, unknown>,
+): ProviderScenarioProviderEntry {
+  return {
+    command: 'ios.runner.type',
+    deviceId: CONTRACT_DEVICE_ID,
+    platform: 'apple',
+    ...(request ? { request } : {}),
+    result,
+  };
+}
+
+export function runnerLongPressEntry(
+  result: Record<string, unknown>,
+  request?: Record<string, unknown>,
+): ProviderScenarioProviderEntry {
+  return {
+    command: 'ios.runner.longPress',
+    deviceId: CONTRACT_DEVICE_ID,
+    platform: 'apple',
+    ...(request ? { request } : {}),
     result,
   };
 }

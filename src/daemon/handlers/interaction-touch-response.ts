@@ -6,7 +6,7 @@ import type {
   SettleObservation,
 } from '../../contracts/interaction.ts';
 import { successText } from '../../utils/success-text.ts';
-import { interactionResultExtra, stripAtPrefix } from './interaction-touch-targets.ts';
+import { interactionResultExtra } from './interaction-touch-targets.ts';
 
 /**
  * The single construction site for interaction response payloads (ADR 0011
@@ -26,17 +26,12 @@ export type InteractionResponseSource =
   | {
       kind: 'runtime';
       result: InteractionRuntimeResult;
-      /**
-       * Wire-compat for fill @ref: the response echoes backendResult (or a
-       * minimal ref/point fallback) plus the identity extras instead of the
-       * visualization shape. Only applies when the result resolved as a ref.
-       */
-      refBackendWireShape?: boolean;
     }
   | {
       // Direct iOS selector dispatch: no runtime result exists, only the raw
       // runner payload; identity extras are a declared gap on that path.
       kind: 'runner-payload';
+      targetKind: InteractionRuntimeResult['kind'];
       data: Record<string, unknown>;
       point: { x: number; y: number };
     };
@@ -77,39 +72,49 @@ export function buildInteractionResponseData(params: {
 }): InteractionResponsePayloads {
   const { source, referenceFrame, extra } = params;
   if (source.kind === 'runner-payload') {
-    const payload = buildTouchVisualizationResult({
+    const commonExtra = {
+      targetKind: source.targetKind,
+      ...(extra ?? {}),
+    };
+    const result = buildTouchPayload({
       data: source.data,
       fallbackX: source.point.x,
       fallbackY: source.point.y,
       referenceFrame,
-      extra,
+      extra: commonExtra,
     });
-    return { result: payload, responseData: payload };
+    const responseData = buildTouchPayload({
+      data: sanitizeWireBackendData(source.data),
+      fallbackX: source.point.x,
+      fallbackY: source.point.y,
+      referenceFrame,
+      extra: commonExtra,
+    });
+    return { result, responseData };
   }
 
   const { result } = source;
-  const visualization = buildTouchVisualizationResult({
+  const resultExtra = interactionResultExtra(result);
+  const commonExtra = {
+    targetKind: result.kind,
+    ...resultExtra,
+    ...settleExtra(result.settle, params.settleRefsGeneration),
+    ...(extra ?? {}),
+  };
+  const visualization = buildTouchPayload({
     data: result.backendResult,
     fallbackX: result.point?.x,
     fallbackY: result.point?.y,
     referenceFrame,
-    extra: {
-      ...interactionResultExtra(result),
-      ...settleExtra(result.settle, params.settleRefsGeneration),
-      ...(extra ?? {}),
-    },
+    extra: commonExtra,
   });
-  const responseData =
-    source.refBackendWireShape && result.kind === 'ref'
-      ? {
-          ...(result.backendResult ?? {
-            ref: stripAtPrefix(result.target?.kind === 'ref' ? result.target.ref : undefined),
-            ...(result.point ? { x: result.point.x, y: result.point.y } : {}),
-          }),
-          ...interactionResultExtra(result),
-          ...settleExtra(result.settle, params.settleRefsGeneration),
-        }
-      : visualization;
+  const responseData = buildTouchPayload({
+    data: sanitizeWireBackendData(result.backendResult),
+    fallbackX: result.point?.x,
+    fallbackY: result.point?.y,
+    referenceFrame,
+    extra: commonExtra,
+  });
   const warning = composeResponseWarning(
     'warning' in result ? result.warning : undefined,
     params.staleRefsWarning,
@@ -140,7 +145,7 @@ function composeResponseWarning(
   return resultWarning ? `${resultWarning} ${staleRefsWarning}` : staleRefsWarning;
 }
 
-function buildTouchVisualizationResult(params: {
+function buildTouchPayload(params: {
   data: Record<string, unknown> | undefined;
   fallbackX?: number;
   fallbackY?: number;
@@ -151,13 +156,46 @@ function buildTouchVisualizationResult(params: {
   const message =
     buildTouchMessage(extra, fallbackX, fallbackY) ??
     (typeof data?.message === 'string' ? data.message : undefined);
-  return {
+  return stripUndefinedFields({
+    ...(data ?? {}),
     ...(fallbackX === undefined || fallbackY === undefined ? {} : { x: fallbackX, y: fallbackY }),
     ...(referenceFrame ?? {}),
     ...(extra ?? {}),
-    ...(data ?? {}),
     ...successText(message),
-  };
+  });
+}
+
+function stripUndefinedFields(data: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined));
+}
+
+function sanitizeWireBackendData(
+  data: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!data) return undefined;
+  const sanitized = Object.fromEntries(
+    Object.entries(data).filter(([key, value]) => shouldKeepWireBackendField(key, value)),
+  );
+  return Object.keys(sanitized).length > 0 ? sanitized : undefined;
+}
+
+function shouldKeepWireBackendField(key: string, value: unknown): boolean {
+  switch (key) {
+    case 'gestureStartUptimeMs':
+    case 'gestureEndUptimeMs':
+    case 'sequenceResults':
+      return false;
+    case 'count':
+      return value !== 1;
+    case 'intervalMs':
+    case 'holdMs':
+    case 'jitterPx':
+      return value !== 0;
+    case 'doubleTap':
+      return value !== false;
+    default:
+      return true;
+  }
 }
 
 function buildTouchMessage(
@@ -169,22 +207,27 @@ function buildTouchMessage(
     return `Filled ${Array.from(extra.text).length} chars`;
   }
   const ref = typeof extra?.ref === 'string' ? extra.ref : undefined;
-  if (!ref) return undefined;
+  const selector = typeof extra?.selector === 'string' ? extra.selector : undefined;
   const pointSuffix = x === undefined || y === undefined ? '' : ` (${x}, ${y})`;
-  return buildRefTouchMessage(ref, extra ?? {}, pointSuffix);
+  const label = ref ? `@${ref}` : (selector ?? '');
+  if (!label) {
+    if (x === undefined || y === undefined) return undefined;
+    return extra?.gesture === 'longpress' ? `Long pressed (${x}, ${y})` : `Tapped (${x}, ${y})`;
+  }
+  return buildTouchTargetMessage(label, extra ?? {}, pointSuffix);
 }
 
-function buildRefTouchMessage(
-  ref: string,
+function buildTouchTargetMessage(
+  label: string,
   extra: Record<string, unknown>,
   pointSuffix: string,
 ): string {
   const button = typeof extra.button === 'string' ? extra.button : undefined;
   if (extra.gesture === 'longpress') {
-    return `Long pressed @${ref}${pointSuffix}`;
+    return `Long pressed ${label}${pointSuffix}`;
   }
   if (button && button !== 'primary') {
-    return `Clicked ${button} @${ref}${pointSuffix}`;
+    return `Clicked ${button} ${label}${pointSuffix}`;
   }
-  return `Tapped @${ref}${pointSuffix}`;
+  return `Tapped ${label}${pointSuffix}`;
 }

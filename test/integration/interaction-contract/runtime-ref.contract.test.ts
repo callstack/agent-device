@@ -153,13 +153,13 @@ test(scenario('responseConstruction'), async () => {
       const snapshot = await daemon.callCommand('snapshot', [], { snapshotInteractiveOnly: true });
       assertRpcOk(snapshot);
 
-      const press = await daemon.callCommand('press', ['@e1']);
+      const press = await daemon.callCommand('press', ['@e2']);
       const data = assertRpcOk(press);
       // Canonical ref response set from the shared construction site.
-      assert.equal(data.ref, 'e1');
+      assert.equal(data.ref, 'e2');
       assert.equal(data.x, 200);
       assert.equal(data.y, 322);
-      assert.match(String(data.message), /Tapped @e1/);
+      assert.match(String(data.message), /Tapped @e2/);
     },
   );
 });

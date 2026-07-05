@@ -2214,7 +2214,7 @@ test('press @ref does not promote to a full-screen hittable ancestor', async () 
   expect(mockDispatch.mock.calls[0]?.[2]).toEqual(['201', '319']);
 });
 
-test('fill @ref preserves fallback coordinates for recording when platform result is sparse', async () => {
+test('fill @ref returns canonical wire coordinates and records fallback coordinates when platform result is sparse', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'default';
   const session = makeSession(sessionName);
@@ -2262,7 +2262,12 @@ test('fill @ref preserves fallback coordinates for recording when platform resul
   expect(response?.ok).toBe(true);
   if (response?.ok) {
     expect(response.data?.filled).toBe(true);
-    expect(response.data?.x).toBeUndefined();
+    expect(response.data?.targetKind).toBe('ref');
+    expect(response.data?.ref).toBe('e1');
+    expect(response.data?.x).toBe(60);
+    expect(response.data?.y).toBe(40);
+    expect(response.data?.text).toBe('hello@example.com');
+    expect(response.data?.message).toBe('Filled 17 chars');
   }
 
   const stored = sessionStore.get(sessionName);
