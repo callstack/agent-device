@@ -108,6 +108,38 @@ jobs:
         # (no deps needed) so the job stays fast and does not require a pnpm install.
         run: node --experimental-strip-types scripts/layering/check.ts
 
+  packaged-cli-node-22-12:
+    name: Packaged CLI Node 22.12
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup build toolchain
+        uses: ./.github/actions/setup-node-pnpm
+
+      - name: Build and pack CLI
+        run: |
+          pnpm build
+          mkdir -p .tmp/node-compat
+          npm pack --ignore-scripts --pack-destination .tmp/node-compat
+
+      - name: Setup Node.js 22.12
+        uses: actions/setup-node@6044e13b5dc448c55e2357c09f80417699197238 # v6.2.0
+        with:
+          node-version: "22.12"
+
+      - name: Install and run global CLI on Node.js 22.12
+        run: |
+          set -euo pipefail
+          prefix="$RUNNER_TEMP/agent-device-node-22-12"
+          tarball="$(find "$GITHUB_WORKSPACE/.tmp/node-compat" -name 'agent-device-*.tgz' -print -quit)"
+          test -n "$tarball"
+          npm install --global --prefix "$prefix" --ignore-scripts "$tarball"
+          "$prefix/bin/agent-device" --version
+          "$prefix/bin/agent-device" help
+
   fallow:
     name: Fallow Code Quality
     runs-on: ubuntu-latest
