@@ -35,7 +35,7 @@ test('integration paths get the larger budget', () => {
 test('pinned tests never become offenders', () => {
   const offender = classifySlowTest({
     root: '/repo',
-    moduleId: '/repo/src/platforms/android/__tests__/index.test.ts',
+    moduleId: '/repo/src/platforms/android/__tests__/app-lifecycle-install.test.ts',
     name: 'installAndroidApp installs .apk via adb install -r',
     fullName: 'installAndroidApp installs .apk via adb install -r',
     durationMs: 9_000,

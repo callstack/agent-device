@@ -1,6 +1,9 @@
 import { defineConfig } from 'vitest/config';
 import slowTestGateReporter from './scripts/vitest-slow-test-reporter.ts';
 
+const ANDROID_ADB_STUB_TESTS =
+  'src/platforms/android/__tests__/{app-lifecycle-install,app-lifecycle-open,device-input-state,input-actions,notifications,settings}.test.ts';
+
 export default defineConfig({
   test: {
     // Wall-clock discipline: unit tests must not wait real time. Measured
@@ -17,7 +20,24 @@ export default defineConfig({
         test: {
           name: 'unit',
           include: ['src/**/*.test.ts'],
+          exclude: [ANDROID_ADB_STUB_TESTS],
           setupFiles: ['src/__tests__/process-memo-setup.ts'],
+        },
+      },
+      {
+        // The scripted-adb tests stub the adb binary by mutating process.env
+        // (PATH, AGENT_DEVICE_TEST_ARGS_FILE) and wait real retry/poll time,
+        // so the group runs serialized in one fork — the same execution
+        // contract the pre-split android index.test.ts aggregation provided.
+        test: {
+          name: 'android-adb',
+          include: [ANDROID_ADB_STUB_TESTS],
+          setupFiles: ['src/__tests__/process-memo-setup.ts'],
+          poolOptions: {
+            forks: {
+              singleFork: true,
+            },
+          },
         },
       },
       {
