@@ -569,12 +569,14 @@ extension RunnerTests {
 
   func makeSnapshotTraversalContext(
     app: XCUIApplication,
-    options: SnapshotOptions
+    options: SnapshotOptions,
+    captureDeadline: Date = .distantFuture
   ) throws -> SnapshotTraversalContext? {
     let viewport = safeSnapshotViewport(app: app)
     let queryRoot = options.scope.flatMap { findScopeElement(app: app, scope: $0) } ?? app
 
-    guard let rootSnapshot = try captureSnapshotRoot(queryRoot) else {
+    let slice = min(treeCaptureSliceBudget, max(0.5, captureDeadline.timeIntervalSinceNow))
+    guard let rootSnapshot = try captureSnapshotRootBounded(queryRoot, sliceSeconds: slice) else {
       return nil
     }
 
@@ -587,6 +589,74 @@ extension RunnerTests {
       snapshotRanges: snapshotRanges,
       maxDepth: options.depth ?? Int.max
     )
+  }
+
+  static let treeCaptureTimeoutCode = "IOS_TREE_CAPTURE_TIMEOUT"
+
+  func hasAbandonedTreeCapture() -> Bool {
+    treeCaptureLock.lock()
+    defer { treeCaptureLock.unlock() }
+    return abandonedTreeCaptureCount > 0
+  }
+
+  /// Runs the blocking tree-snapshot XPC on a worker thread bounded by `sliceSeconds`. On
+  /// timeout the XPC keeps running on its worker (it cannot be cancelled); the capture is
+  /// marked abandoned so plans avoid XCTest-backed tiers until it drains, the tree backend is
+  /// penalized for this bundle, and the plan moves on to the private AX backend (#1105).
+  private func captureSnapshotRootBounded(
+    _ element: XCUIElement,
+    sliceSeconds: TimeInterval
+  ) throws -> XCUIElementSnapshot? {
+    final class TreeCaptureBox {
+      var abandoned = false
+      var outcome: Result<XCUIElementSnapshot?, Error>?
+    }
+    let box = TreeCaptureBox()
+    let semaphore = DispatchSemaphore(value: 0)
+    DispatchQueue.global(qos: .userInitiated).async {
+      var result: Result<XCUIElementSnapshot?, Error>
+      do {
+        result = .success(try self.captureSnapshotRoot(element))
+      } catch {
+        result = .failure(error)
+      }
+      self.treeCaptureLock.lock()
+      if box.abandoned {
+        self.abandonedTreeCaptureCount -= 1
+        self.treeCaptureLock.unlock()
+        NSLog("AGENT_DEVICE_RUNNER_TREE_CAPTURE_DRAINED")
+      } else {
+        box.outcome = result
+        self.treeCaptureLock.unlock()
+      }
+      semaphore.signal()
+    }
+    if semaphore.wait(timeout: .now() + sliceSeconds) == .timedOut {
+      treeCaptureLock.lock()
+      let timedOut = box.outcome == nil
+      if timedOut {
+        box.abandoned = true
+        abandonedTreeCaptureCount += 1
+      }
+      treeCaptureLock.unlock()
+      if timedOut {
+        NSLog("AGENT_DEVICE_RUNNER_TREE_CAPTURE_SLICE_TIMEOUT slice=%.1f", sliceSeconds)
+        penalizeSnapshotTreeBackend(bundleId: currentBundleId, reason: "tree_capture_slice_timeout")
+        throw SnapshotCaptureFailure(
+          code: Self.treeCaptureTimeoutCode,
+          message: "the XCTest tree capture exceeded its \(Int(sliceSeconds))s time slice",
+          hint: "The capture plan recovers through the private AX backend on this screen."
+        )
+      }
+    }
+    switch box.outcome {
+    case .success(let snapshot):
+      return snapshot
+    case .failure(let error):
+      throw error
+    case .none:
+      return nil
+    }
   }
 
   private func captureSnapshotRoot(_ element: XCUIElement) throws -> XCUIElementSnapshot? {

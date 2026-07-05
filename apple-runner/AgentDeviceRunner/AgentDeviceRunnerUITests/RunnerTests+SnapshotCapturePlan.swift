@@ -142,6 +142,18 @@ extension RunnerTests {
         }
         break
       }
+      // While an abandoned tree capture is still grinding inside testmanagerd, XCTest-backed
+      // tiers would block behind it; only the private AX backend stays responsive (#1105).
+      if kind != .privateAX, hasAbandonedTreeCapture() {
+        NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_TIER_SKIPPED_XCTEST_OCCUPIED tier=%@", kind.rawValue)
+        if firstFailure == nil {
+          firstFailure = (
+            "the XCTest capture channel is occupied by an abandoned tree capture",
+            "budget"
+          )
+        }
+        continue
+      }
       let capture: SnapshotBackendCapture
       let backendStartedAt = Date()
       do {
@@ -240,7 +252,13 @@ extension RunnerTests {
   ) throws -> SnapshotBackendCapture? {
     switch kind {
     case .recursiveTree:
-      guard let context = try makeSnapshotTraversalContext(app: app, options: options) else {
+      guard
+        let context = try makeSnapshotTraversalContext(
+          app: app,
+          options: options,
+          captureDeadline: deadline
+        )
+      else {
         return nil
       }
       let payload = options.raw

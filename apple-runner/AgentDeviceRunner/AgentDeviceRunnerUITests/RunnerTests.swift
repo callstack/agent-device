@@ -75,6 +75,14 @@ final class RunnerTests: XCTestCase {
   var snapshotTreePenaltyUntil = Date.distantPast
   let snapshotTreePenaltyDuration: TimeInterval = 120
   let snapshotTreeSlowCaptureThreshold: TimeInterval = 5
+  // The blocking XCTest tree snapshot XPC runs on a worker thread with this slice so a
+  // content-dependent grind (#1105: seconds to minutes on live Bluesky screens) cannot pin
+  // the capture plan. On timeout the XPC keeps grinding on its worker; while any abandoned
+  // tree capture is outstanding, plans skip the XCTest-backed tiers (tree, query sweep) and
+  // use the private AX backend, which does not go through testmanagerd.
+  let treeCaptureLock = NSLock()
+  var abandonedTreeCaptureCount = 0
+  let treeCaptureSliceBudget: TimeInterval = 8
   let interactiveTypes: Set<XCUIElement.ElementType> = [
     .button,
     .cell,
