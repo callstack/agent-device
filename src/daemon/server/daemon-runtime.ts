@@ -41,6 +41,8 @@ import {
 import { prewarmPngWorker, terminatePngWorker } from '../../utils/png-worker-client.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import { setRunnerLeaseOwnerStateDir } from '../../platforms/apple/core/runner/runner-lease.ts';
+import { cleanupManagedAgentBrowserOrphans } from '../../platforms/web/agent-browser-lifecycle.ts';
+import { getManagedAgentBrowserStatus } from '../../platforms/web/agent-browser-tool.ts';
 
 const DAEMON_SESSION_TEARDOWN_TIMEOUT_MS = 5_000;
 const DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS = 1_000;
@@ -212,10 +214,25 @@ export async function startDaemonRuntime(
     return null;
   }
 
+  const cleanupWebBrowserOrphans = async (): Promise<void> => {
+    const status = getManagedAgentBrowserStatus({ stateDir: baseDir });
+    if (!status.installed) return;
+    try {
+      await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup');
+    } catch (error) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'web_agent_browser_orphan_cleanup_failed',
+        data: { error: error instanceof Error ? error.message : String(error) },
+      });
+    }
+  };
+
   let servers: DaemonServer[] = [];
   let socketPort: number | undefined;
   let httpPort: number | undefined;
   try {
+    await cleanupWebBrowserOrphans();
     const opened = await openDaemonServers();
     servers = opened.servers;
     socketPort = opened.socketPort;

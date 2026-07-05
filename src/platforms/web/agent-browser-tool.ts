@@ -6,6 +6,10 @@ import { runCmd } from '../../utils/exec.ts';
 import { AppError, asAppError } from '../../kernel/errors.ts';
 import { acquireProcessLock } from '../../utils/process-lock.ts';
 import { readProcessStartTime } from '../../utils/process-identity.ts';
+import {
+  appendAgentDeviceChromeArgs,
+  resolveAgentBrowserIdleTimeoutMs,
+} from './agent-browser-lifecycle.ts';
 
 const MANAGED_AGENT_BROWSER_VERSION = '0.27.1';
 
@@ -89,7 +93,9 @@ export async function doctorManagedAgentBrowser(options: {
   return { status, ...result };
 }
 
-function getManagedAgentBrowserStatus(options: { stateDir?: string }): AgentBrowserToolStatus {
+export function getManagedAgentBrowserStatus(options: {
+  stateDir?: string;
+}): AgentBrowserToolStatus {
   const stateDir = options.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR ?? defaultStateDir();
   const installDir = path.join(stateDir, 'tools', 'agent-browser', MANAGED_AGENT_BROWSER_VERSION);
   const binaryPath = resolveManagedBinaryPath(installDir);
@@ -161,6 +167,8 @@ function managedAgentBrowserEnv(
     ...env,
     HOME: status.runtimeHomeDir,
     AGENT_BROWSER_SOCKET_DIR: status.socketDir,
+    AGENT_BROWSER_IDLE_TIMEOUT_MS: String(resolveAgentBrowserIdleTimeoutMs(env)),
+    AGENT_BROWSER_ARGS: appendAgentDeviceChromeArgs(env.AGENT_BROWSER_ARGS, status),
   };
 }
 

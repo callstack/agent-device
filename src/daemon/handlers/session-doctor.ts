@@ -33,6 +33,7 @@ import {
   hasCachedAppleRunnerArtifact,
   prewarmAppleRunnerCache,
 } from '../../platforms/apple/core/runner/runner-client.ts';
+import { appendWebBrowserLifecycleCheck } from './session-doctor-web.ts';
 
 export async function handleDoctorCommand(params: {
   req: DaemonRequest;
@@ -71,6 +72,7 @@ export async function handleDoctorCommand(params: {
     inventory,
     options,
     session,
+    stateDir,
   });
   await appendIosRunnerWarmupCheck(checks, appCheckDevice ?? resolveWarmupSimulator(inventory));
   return doctorResponse(checks, options, { device: appCheckDevice, includeMetro: true, inventory });
@@ -139,8 +141,9 @@ async function appendLocalDoctorChecks(params: {
   inventory: DoctorDeviceInventory | undefined;
   options: DoctorOptions;
   session: SessionState | undefined;
+  stateDir: string;
 }): Promise<DeviceInfo | undefined> {
-  const { checks, inventory, options, session, androidAdbExecutor } = params;
+  const { checks, inventory, options, session, androidAdbExecutor, stateDir } = params;
   const appCheckDevice =
     session?.device ?? resolveDoctorDeviceForAppCheck(checks, inventory, options.targetApp);
   if (appCheckDevice) {
@@ -154,6 +157,7 @@ async function appendLocalDoctorChecks(params: {
   if (options.shouldProbeMetro) {
     appendDoctorCheck(checks, await probeMetro(options.metroHost, options.metroPort, options.kind));
   }
+  await appendWebBrowserLifecycleCheck(checks, stateDir);
   return appCheckDevice;
 }
 
