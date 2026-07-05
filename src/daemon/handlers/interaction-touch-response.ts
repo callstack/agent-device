@@ -203,18 +203,36 @@ function buildTouchMessage(
   x: number | undefined,
   y: number | undefined,
 ): string | undefined {
-  if (typeof extra?.text === 'string') {
-    return `Filled ${Array.from(extra.text).length} chars`;
-  }
-  const ref = typeof extra?.ref === 'string' ? extra.ref : undefined;
-  const selector = typeof extra?.selector === 'string' ? extra.selector : undefined;
-  const pointSuffix = x === undefined || y === undefined ? '' : ` (${x}, ${y})`;
-  const label = ref ? `@${ref}` : (selector ?? '');
-  if (!label) {
-    if (x === undefined || y === undefined) return undefined;
-    return extra?.gesture === 'longpress' ? `Long pressed (${x}, ${y})` : `Tapped (${x}, ${y})`;
-  }
-  return buildTouchTargetMessage(label, extra ?? {}, pointSuffix);
+  const fillText = readString(extra, 'text');
+  if (fillText !== undefined) return `Filled ${Array.from(fillText).length} chars`;
+
+  const pointSuffix = buildPointSuffix(x, y);
+  const label = buildTouchTargetLabel(extra);
+  if (label) return buildTouchTargetMessage(label, extra ?? {}, pointSuffix);
+  if (!pointSuffix) return undefined;
+
+  return buildPointTouchMessage(extra, pointSuffix);
+}
+
+function readString(data: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = data?.[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+function buildPointSuffix(x: number | undefined, y: number | undefined): string {
+  return x === undefined || y === undefined ? '' : ` (${x}, ${y})`;
+}
+
+function buildTouchTargetLabel(extra: Record<string, unknown> | undefined): string | undefined {
+  const ref = readString(extra, 'ref');
+  return ref === undefined ? readString(extra, 'selector') : `@${ref}`;
+}
+
+function buildPointTouchMessage(
+  extra: Record<string, unknown> | undefined,
+  pointSuffix: string,
+): string {
+  return extra?.gesture === 'longpress' ? `Long pressed${pointSuffix}` : `Tapped${pointSuffix}`;
 }
 
 function buildTouchTargetMessage(
