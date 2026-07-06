@@ -6,14 +6,20 @@ import type {
 } from '../../platforms/android/adb-executor.ts';
 import { shellQuote } from '../../utils/shell-quote.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import type { DaemonResponse, SessionState } from '../types.ts';
+import type { DaemonResponse, RecordingChunk, SessionState } from '../types.ts';
 import { errorResponse } from './response.ts';
+import type { RecordingExportQuality } from '../../core/recording-export-quality.ts';
 
 const ANDROID_RECOVERY_WARNING =
-  'Recovered Android recording after daemon recording state was missing; gesture overlays and earlier rotated chunks may be unavailable.';
+  'Recovered Android recording after daemon restart from durable device manifest.';
+const ANDROID_RECOVERY_OVERLAY_WARNING =
+  'touch overlay burn-in is unavailable after daemon restart because gesture telemetry is stored in daemon memory';
+const ANDROID_OWNERLESS_RECOVERY_WARNING =
+  'Recovered Android recording from a live screenrecord process without a durable manifest; session ownership, gesture overlays, and earlier rotated chunks could not be validated.';
 const ANDROID_RECOVERY_METADATA_FILE = 'agent-device-recording-active.json';
 const ANDROID_RECOVERY_PROBE_TIMEOUT_MS = 5_000;
 const ANDROID_RECOVERY_METADATA_DIRS = ['/sdcard', '/data/local/tmp'] as const;
+const ANDROID_RECOVERY_MANIFEST_VERSION = 1;
 
 type AndroidDevice = SessionState['device'];
 type AndroidRecording = Extract<NonNullable<SessionState['recording']>, { platform: 'android' }>;
@@ -33,6 +39,23 @@ type AndroidRecordingRecoveryMetadata = {
   remotePath: string;
   remotePid: string;
   startedAt: number;
+};
+
+type AndroidRecordingRecoveryManifest = {
+  version: 1;
+  sessionName: string;
+  sessionScope?: SessionState['sessionScope'];
+  recordingId: string;
+  deviceId: string;
+  startedAt: number;
+  outPath: string;
+  clientOutPath?: string;
+  telemetryPath?: string;
+  maxSize?: number;
+  exportQuality?: RecordingExportQuality;
+  showTouches: boolean;
+  current: AndroidRecordingRecoveryMetadata;
+  chunks: RecordingChunk[];
 };
 
 async function runAndroidRecoveryAdb(
@@ -66,24 +89,7 @@ function parseRecoverableAndroidScreenrecord(
   };
 }
 
-function parseAndroidRecoveryMetadata(value: string): AndroidRecordingRecoveryMetadata | undefined {
-  const metadata = parseAndroidRecoveryMetadataObject(value);
-  if (!metadata) {
-    return undefined;
-  }
-  const remotePid = parseAndroidRecoveryRemotePid(metadata.remotePid);
-  const remotePath = parseAndroidRecoveryRemotePath(metadata.remotePath);
-  if (!remotePid || !remotePath) {
-    return undefined;
-  }
-  return {
-    remotePid,
-    remotePath,
-    startedAt: parseAndroidRecoveryStartedAt(metadata.startedAt),
-  };
-}
-
-function parseAndroidRecoveryMetadataObject(value: string): Record<string, unknown> | undefined {
+function parseAndroidRecoveryManifest(value: string): AndroidRecordingRecoveryManifest | undefined {
   let parsed: unknown;
   try {
     parsed = JSON.parse(value);
@@ -93,19 +99,114 @@ function parseAndroidRecoveryMetadataObject(value: string): Record<string, unkno
   if (!parsed || typeof parsed !== 'object') {
     return undefined;
   }
-  return parsed as Record<string, unknown>;
+  const metadata = parsed as Record<string, unknown>;
+  const current = metadata.current;
+  if (
+    metadata.version !== ANDROID_RECOVERY_MANIFEST_VERSION ||
+    typeof metadata.sessionName !== 'string' ||
+    typeof metadata.recordingId !== 'string' ||
+    typeof metadata.deviceId !== 'string' ||
+    typeof metadata.startedAt !== 'number' ||
+    !Number.isFinite(metadata.startedAt) ||
+    typeof metadata.outPath !== 'string' ||
+    typeof metadata.showTouches !== 'boolean' ||
+    !current ||
+    typeof current !== 'object' ||
+    !Array.isArray(metadata.chunks)
+  ) {
+    return undefined;
+  }
+  const parsedCurrent = parseAndroidRecoveryMetadata(current);
+  if (!parsedCurrent) return undefined;
+  const chunks = metadata.chunks
+    .map(parseAndroidRecordingChunk)
+    .filter((chunk): chunk is RecordingChunk => chunk !== undefined);
+  if (chunks.length === 0 || chunks.length !== metadata.chunks.length) {
+    return undefined;
+  }
+
+  return {
+    version: ANDROID_RECOVERY_MANIFEST_VERSION,
+    sessionName: metadata.sessionName,
+    sessionScope: parseSessionScope(metadata.sessionScope),
+    recordingId: metadata.recordingId,
+    deviceId: metadata.deviceId,
+    startedAt: metadata.startedAt,
+    outPath: metadata.outPath,
+    clientOutPath: readOptionalString(metadata.clientOutPath),
+    telemetryPath: readOptionalString(metadata.telemetryPath),
+    maxSize: readOptionalNumber(metadata.maxSize),
+    exportQuality: parseRecordingExportQuality(metadata.exportQuality),
+    showTouches: metadata.showTouches,
+    current: parsedCurrent,
+    chunks,
+  };
 }
 
-function parseAndroidRecoveryRemotePid(value: unknown): string | undefined {
-  return typeof value === 'string' && /^\d+$/.test(value) ? value : undefined;
+function parseAndroidRecoveryMetadata(
+  value: unknown,
+): AndroidRecordingRecoveryMetadata | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const metadata = value as Partial<AndroidRecordingRecoveryMetadata>;
+  if (
+    typeof metadata.remotePid !== 'string' ||
+    !/^\d+$/.test(metadata.remotePid) ||
+    typeof metadata.remotePath !== 'string' ||
+    !isAndroidAgentRecordingPath(metadata.remotePath)
+  ) {
+    return undefined;
+  }
+  return {
+    remotePid: metadata.remotePid,
+    remotePath: metadata.remotePath,
+    startedAt:
+      typeof metadata.startedAt === 'number' && Number.isFinite(metadata.startedAt)
+        ? metadata.startedAt
+        : Date.now(),
+  };
 }
 
-function parseAndroidRecoveryRemotePath(value: unknown): string | undefined {
-  return typeof value === 'string' && isAndroidAgentRecordingPath(value) ? value : undefined;
+function parseAndroidRecordingChunk(value: unknown): RecordingChunk | undefined {
+  if (!value || typeof value !== 'object') {
+    return undefined;
+  }
+  const chunk = value as Partial<RecordingChunk>;
+  if (
+    typeof chunk.index !== 'number' ||
+    !Number.isInteger(chunk.index) ||
+    chunk.index < 1 ||
+    typeof chunk.path !== 'string' ||
+    typeof chunk.remotePath !== 'string' ||
+    !isAndroidAgentRecordingPath(chunk.remotePath)
+  ) {
+    return undefined;
+  }
+  return {
+    index: chunk.index,
+    path: chunk.path,
+    remotePath: chunk.remotePath,
+  };
 }
 
-function parseAndroidRecoveryStartedAt(value: unknown): number {
-  return typeof value === 'number' && Number.isFinite(value) ? value : Date.now();
+function parseSessionScope(value: unknown): SessionState['sessionScope'] | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const scope = value as Partial<NonNullable<SessionState['sessionScope']>>;
+  if (scope.kind !== 'cwd' || typeof scope.id !== 'string') return undefined;
+  return { kind: 'cwd', id: scope.id };
+}
+
+function parseRecordingExportQuality(value: unknown): RecordingExportQuality | undefined {
+  return value === 'medium' || value === 'high' ? value : undefined;
+}
+
+function readOptionalString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function readOptionalNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 function isAndroidAgentRecordingPath(remotePath: string): boolean {
@@ -122,7 +223,8 @@ function androidRecoveryMetadataPaths(): string[] {
 
 async function readAndroidRecoveryMetadata(
   deviceId: string,
-): Promise<AndroidRecordingRecoveryMetadata | undefined> {
+): Promise<AndroidRecordingRecoveryManifest[]> {
+  const manifests: AndroidRecordingRecoveryManifest[] = [];
   for (const metadataPath of androidRecoveryMetadataPaths()) {
     const result = await runAndroidRecoveryAdb(deviceId, ['shell', 'cat', metadataPath], {
       allowFailure: true,
@@ -131,7 +233,7 @@ async function readAndroidRecoveryMetadata(
     if (result.exitCode !== 0) {
       continue;
     }
-    const metadata = parseAndroidRecoveryMetadata(result.stdout);
+    const metadata = parseAndroidRecoveryManifest(result.stdout);
     if (!metadata) {
       await cleanupAndroidRecoveryMetadataPath({
         deviceId,
@@ -140,9 +242,18 @@ async function readAndroidRecoveryMetadata(
       });
       continue;
     }
-    const liveness = await checkLiveRecoverableAndroidScreenrecord(deviceId, metadata);
+    if (metadata.deviceId !== deviceId) {
+      await cleanupAndroidRecoveryMetadataPath({
+        deviceId,
+        metadataPath,
+        phase: 'record_stop_android_recovery_metadata_device_mismatch_cleanup_failed',
+      });
+      continue;
+    }
+    const liveness = await checkLiveRecoverableAndroidScreenrecord(deviceId, metadata.current);
     if (liveness === 'live') {
-      return metadata;
+      manifests.push(metadata);
+      continue;
     }
     if (liveness === 'uncertain') {
       continue;
@@ -153,7 +264,7 @@ async function readAndroidRecoveryMetadata(
       phase: 'record_stop_android_recovery_metadata_stale_cleanup_failed',
     });
   }
-  return undefined;
+  return manifests;
 }
 
 async function checkLiveRecoverableAndroidScreenrecord(
@@ -238,12 +349,15 @@ async function findRecoverableAndroidScreenrecord(
   return matches[0];
 }
 
-export async function writeAndroidRecoveryMetadata(
-  deviceId: string,
-  metadata: AndroidRecordingRecoveryMetadata,
-): Promise<void> {
-  const metadataPath = androidRecoveryMetadataPathForRemotePath(metadata.remotePath);
-  const payload = JSON.stringify(metadata);
+export async function writeAndroidRecoveryMetadata(params: {
+  deviceId: string;
+  activeSession: SessionState;
+  recording: AndroidRecording;
+}): Promise<void> {
+  const { deviceId, activeSession, recording } = params;
+  const metadataPath = androidRecoveryMetadataPathForRemotePath(recording.remotePath);
+  const manifest = buildAndroidRecoveryManifest({ deviceId, activeSession, recording });
+  const payload = JSON.stringify(manifest);
   const result = await runAndroidRecoveryAdb(
     deviceId,
     ['shell', `printf %s ${shellQuote(payload)} > ${shellQuote(metadataPath)}`],
@@ -276,6 +390,42 @@ export async function writeAndroidRecoveryMetadata(
       });
     }
   }
+}
+
+function buildAndroidRecoveryManifest(params: {
+  deviceId: string;
+  activeSession: SessionState;
+  recording: AndroidRecording;
+}): AndroidRecordingRecoveryManifest {
+  const { deviceId, activeSession, recording } = params;
+  return {
+    version: ANDROID_RECOVERY_MANIFEST_VERSION,
+    sessionName: activeSession.name,
+    sessionScope: activeSession.sessionScope,
+    recordingId:
+      recording.recordingId ??
+      `android-${recording.remotePid}-${recording.remoteStartedAt ?? recording.startedAt}`,
+    deviceId,
+    startedAt: recording.startedAt,
+    outPath: recording.outPath,
+    clientOutPath: recording.clientOutPath,
+    telemetryPath: recording.telemetryPath,
+    maxSize: recording.maxSize,
+    exportQuality: recording.exportQuality,
+    showTouches: recording.showTouches,
+    current: {
+      remotePath: recording.remotePath,
+      remotePid: recording.remotePid,
+      startedAt: recording.remoteStartedAt ?? recording.startedAt,
+    },
+    chunks: recording.chunks ?? [
+      {
+        index: 1,
+        path: recording.outPath,
+        remotePath: recording.remotePath,
+      },
+    ],
+  };
 }
 
 export async function cleanupAndroidRecoveryMetadata(deviceId: string): Promise<void> {
@@ -314,13 +464,17 @@ async function cleanupAndroidRecoveryMetadataPath(params: {
 }
 
 export async function recoverMissingAndroidRecording(params: {
+  activeSession: SessionState;
   device: AndroidDevice;
   recordingBase: AndroidRecordingBase;
 }): Promise<DaemonResponse | AndroidRecording | null> {
-  const { device, recordingBase } = params;
-  const recovered =
-    (await readAndroidRecoveryMetadata(device.id)) ??
-    (await findRecoverableAndroidScreenrecord(device.id));
+  const { activeSession, device, recordingBase } = params;
+  const manifests = await readAndroidRecoveryMetadata(device.id);
+  if (manifests.length > 0) {
+    return recoverAndroidRecordingFromManifest({ activeSession, device, manifests });
+  }
+
+  const recovered = await findRecoverableAndroidScreenrecord(device.id);
   if (!recovered) {
     return null;
   }
@@ -341,8 +495,10 @@ export async function recoverMissingAndroidRecording(params: {
 
   return {
     platform: 'android',
+    recordingId: `recovered-${recovered.remotePid}-${recovered.startedAt}`,
     remotePath: recovered.remotePath,
     remotePid: recovered.remotePid,
+    remoteStartedAt: recovered.startedAt,
     chunks: [
       {
         index: 1,
@@ -352,6 +508,108 @@ export async function recoverMissingAndroidRecording(params: {
     ],
     ...recordingBase,
     startedAt: recovered.startedAt,
-    warning: ANDROID_RECOVERY_WARNING,
+    showTouches: false,
+    warning: ANDROID_OWNERLESS_RECOVERY_WARNING,
   };
+}
+
+function recoverAndroidRecordingFromManifest(params: {
+  activeSession: SessionState;
+  device: AndroidDevice;
+  manifests: AndroidRecordingRecoveryManifest[];
+}): DaemonResponse | AndroidRecording {
+  const { activeSession, device, manifests } = params;
+  const matches = manifests.filter((manifest) =>
+    androidRecoveryManifestMatchesSession(manifest, activeSession),
+  );
+  if (matches.length === 0) {
+    return errorResponse('INVALID_ARGS', formatAndroidRecordingOwnerMismatch(manifests), {
+      activeRecordings: manifests.map((manifest) => ({
+        sessionName: manifest.sessionName,
+        sessionScope: manifest.sessionScope,
+        recordingId: manifest.recordingId,
+        remotePid: manifest.current.remotePid,
+        remotePath: manifest.current.remotePath,
+      })),
+    });
+  }
+  if (matches.length > 1 || manifests.length > 1) {
+    return errorResponse(
+      'INVALID_ARGS',
+      'multiple active Android recording manifests exist; cannot safely recover missing recording state',
+      {
+        activeRecordings: manifests.map((manifest) => ({
+          sessionName: manifest.sessionName,
+          sessionScope: manifest.sessionScope,
+          recordingId: manifest.recordingId,
+          remotePid: manifest.current.remotePid,
+          remotePath: manifest.current.remotePath,
+        })),
+      },
+    );
+  }
+
+  const manifest = matches[0]!;
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'record_stop_android_recovered_missing_state',
+    data: {
+      deviceId: device.id,
+      sessionName: manifest.sessionName,
+      recordingId: manifest.recordingId,
+      remotePath: manifest.current.remotePath,
+      remotePid: manifest.current.remotePid,
+      outPath: manifest.outPath,
+      chunks: manifest.chunks.length,
+    },
+  });
+
+  return {
+    platform: 'android',
+    recordingId: manifest.recordingId,
+    remotePath: manifest.current.remotePath,
+    remotePid: manifest.current.remotePid,
+    remoteStartedAt: manifest.current.startedAt,
+    chunks: manifest.chunks,
+    outPath: manifest.outPath,
+    clientOutPath: manifest.clientOutPath,
+    telemetryPath: manifest.telemetryPath,
+    startedAt: manifest.startedAt,
+    maxSize: manifest.maxSize,
+    exportQuality: manifest.exportQuality,
+    showTouches: false,
+    gestureEvents: [],
+    warning: manifest.showTouches
+      ? `${ANDROID_RECOVERY_WARNING} ${ANDROID_RECOVERY_OVERLAY_WARNING}.`
+      : ANDROID_RECOVERY_WARNING,
+    overlayWarning: manifest.showTouches ? ANDROID_RECOVERY_OVERLAY_WARNING : undefined,
+  };
+}
+
+function androidRecoveryManifestMatchesSession(
+  manifest: AndroidRecordingRecoveryManifest,
+  activeSession: SessionState,
+): boolean {
+  return (
+    manifest.sessionName === activeSession.name &&
+    sessionScopesEqual(manifest.sessionScope, activeSession.sessionScope)
+  );
+}
+
+function sessionScopesEqual(
+  left: SessionState['sessionScope'] | undefined,
+  right: SessionState['sessionScope'] | undefined,
+): boolean {
+  if (!left && !right) return true;
+  if (!left || !right) return false;
+  return left.kind === right.kind && left.id === right.id;
+}
+
+function formatAndroidRecordingOwnerMismatch(
+  manifests: AndroidRecordingRecoveryManifest[],
+): string {
+  if (manifests.length === 1) {
+    return `active Android recording belongs to session "${manifests[0]!.sessionName}"; run record stop --session ${manifests[0]!.sessionName} to recover it`;
+  }
+  return 'active Android recordings belong to other sessions; cannot safely recover missing recording state';
 }

@@ -55,13 +55,15 @@ export function scheduleAndroidRecordingRotation(params: {
   recording: AndroidRecording;
   startNextChunk: (preferredRemoteDir: string) => Promise<AndroidScreenrecordChunk>;
   finishCurrentChunk: () => Promise<string | undefined>;
+  persistRecordingState?: (recording: AndroidRecording) => Promise<void>;
 }): void {
-  const { recording, startNextChunk, finishCurrentChunk } = params;
+  const { recording, startNextChunk, finishCurrentChunk, persistRecordingState } = params;
   const timer = setTimeout(() => {
     recording.rotationPromise = rotateAndroidRecordingChunk({
       recording,
       startNextChunk,
       finishCurrentChunk,
+      persistRecordingState,
     })
       .catch((error: unknown) => {
         recording.rotationFailedReason = error instanceof Error ? error.message : String(error);
@@ -69,7 +71,12 @@ export function scheduleAndroidRecordingRotation(params: {
       .finally(() => {
         recording.rotationPromise = undefined;
         if (!recording.stopping && !recording.rotationFailedReason) {
-          scheduleAndroidRecordingRotation({ recording, startNextChunk, finishCurrentChunk });
+          scheduleAndroidRecordingRotation({
+            recording,
+            startNextChunk,
+            finishCurrentChunk,
+            persistRecordingState,
+          });
         }
       });
   }, ANDROID_SCREENRECORD_CHUNK_MS);
@@ -81,8 +88,9 @@ async function rotateAndroidRecordingChunk(params: {
   recording: AndroidRecording;
   startNextChunk: (preferredRemoteDir: string) => Promise<AndroidScreenrecordChunk>;
   finishCurrentChunk: () => Promise<string | undefined>;
+  persistRecordingState?: (recording: AndroidRecording) => Promise<void>;
 }): Promise<void> {
-  const { recording, startNextChunk, finishCurrentChunk } = params;
+  const { recording, startNextChunk, finishCurrentChunk, persistRecordingState } = params;
   if (recording.stopping) return;
   const stopError = await finishCurrentChunk();
   if (stopError) {
@@ -95,6 +103,7 @@ async function rotateAndroidRecordingChunk(params: {
   const nextChunk = await startNextChunk(path.posix.dirname(recording.remotePath));
   recording.remotePath = nextChunk.remotePath;
   recording.remotePid = nextChunk.remotePid;
+  recording.remoteStartedAt = nextChunk.startedAt;
   chunks.push({
     index: nextIndex,
     path: deriveAndroidChunkOutPath(recording.outPath, nextIndex),
@@ -102,6 +111,7 @@ async function rotateAndroidRecordingChunk(params: {
   });
   recording.warning ??=
     'Android adb screenrecord is capped at 180s, so this recording was split into multiple MP4 chunks.';
+  await persistRecordingState?.(recording);
 }
 
 export async function finalizeAndroidRecordingOutput(params: {

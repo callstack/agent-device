@@ -325,8 +325,10 @@ export type SessionState = {
       })
     | (SessionRecordingBase & {
         platform: 'android';
+        recordingId?: string;
         remotePath: string;
         remotePid: string;
+        remoteStartedAt?: number;
         chunks?: RecordingChunk[];
         rotationTimer?: NodeJS.Timeout;
         rotationPromise?: Promise<void>;

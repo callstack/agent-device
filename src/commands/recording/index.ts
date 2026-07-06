@@ -60,7 +60,7 @@ const recordCliSchema = {
     'record start [path] [--fps <n>] [--max-size <px>] [--quality <medium|high>] [--hide-touches] | record stop',
   listUsageOverride: 'record start [path] | record stop',
   helpDescription:
-    'Start/stop screen recording; Android recordings longer than the 180s adb screenrecord limit are returned as multiple MP4 chunks. Use --max-size to limit dimensions and --quality to choose medium or high export quality',
+    'Start/stop screen recording; Android recordings longer than the 180s adb screenrecord limit are returned as multiple MP4 chunks while the daemon stays alive, and manifest-known chunks can be recovered after daemon restart. Use --max-size to limit dimensions and --quality to choose medium or high export quality',
   summary: 'Start or stop screen recording',
   positionalArgs: ['start|stop', 'path?'],
   allowedFlags: ['fps', 'screenshotMaxSize', 'quality', 'hideTouches'],
