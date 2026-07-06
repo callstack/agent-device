@@ -38,6 +38,44 @@ test('runtime focus and longPress share selector/ref target resolution', async (
   ]);
 });
 
+test('runtime longPress with settle drops the non-hittable hint when the diff proves a change', async () => {
+  let captureCount = 0;
+  const nonHittableSnapshot = selectorSnapshot();
+  const nonHittableNode = nonHittableSnapshot.nodes[0];
+  assert.ok(nonHittableNode);
+  nonHittableSnapshot.nodes[0] = {
+    ...nonHittableNode,
+    hittable: false,
+  };
+  const changedSnapshot = selectorSnapshot();
+  const changedNode = changedSnapshot.nodes[0];
+  assert.ok(changedNode);
+  changedSnapshot.nodes[0] = {
+    ...changedNode,
+    label: 'Context menu',
+    value: undefined,
+    hittable: true,
+  };
+  const device = createInteractionDevice(nonHittableSnapshot, {
+    captureSnapshot: async () => {
+      captureCount += 1;
+      return { snapshot: captureCount === 1 ? nonHittableSnapshot : changedSnapshot };
+    },
+    longPress: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.longPress(selector('label=Continue'), {
+    session: 'default',
+    settle: { quietMs: 25, timeoutMs: 2_000 },
+  });
+
+  assert.equal(result.kind, 'selector');
+  if (result.kind !== 'selector') return;
+  assert.equal(result.targetHittable, false);
+  assert.deepEqual(result.settle?.diff?.summary, { additions: 1, removals: 1, unchanged: 0 });
+  assert.equal('hint' in result, false);
+});
+
 test('runtime scroll resolves selector targets before calling the backend primitive', async () => {
   const calls: unknown[] = [];
   const device = createInteractionDevice(selectorSnapshot(), {

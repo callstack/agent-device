@@ -99,13 +99,19 @@ const INSTALL_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   envelopeMs: INSTALL_REQUEST_TIMEOUT_MS,
 };
 
+const DEFAULT_SETTLE_TIMEOUT_MS = 10_000;
+
 // press/click/fill/longpress --settle (#1101): --timeout bounds the SETTLE
 // wait, not the whole request. The client envelope keeps the normal
 // selector/action envelope and adds the settle budget plus margin; a slow tap
 // must not die at a user-supplied settle deadline.
 const SETTLE_FLAG_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   ...DEFAULT_TIMEOUT_POLICY,
-  budget: { source: 'flag', envelope: 'widen' },
+  budget: {
+    source: 'flag',
+    envelope: 'widen',
+    defaultBudgetMs: DEFAULT_SETTLE_TIMEOUT_MS,
+  },
 };
 
 // press/click/fill/longpress also resolve their target through the same

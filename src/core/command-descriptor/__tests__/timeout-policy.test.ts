@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
 import { commandDescriptors, resolveCommandTimeoutPolicy } from '../registry.ts';
 import { DEFAULT_TIMEOUT_POLICY } from '../timeout-policy.ts';
+import { DEFAULT_STABLE_TIMEOUT_MS } from '../../../commands/interaction/runtime/stable-capture.ts';
 
 // ADR 0011 completeness gate for the descriptor timeout policy (the layer that
 // replaced the two hand-maintained client lists `isExplicitTimeoutCommand` and
@@ -92,6 +93,19 @@ test('budget sources deviating from the default are bounded, reviewed sets', () 
   assert.deepEqual(flagWidenBudget.sort(), ['click', 'fill', 'longpress', 'press']);
   // wait's budget travels as a positional and must widen the envelope.
   assert.deepEqual(positionalBudget, ['wait']);
+});
+
+test('settle timeout policy default matches the runtime settle loop default', () => {
+  for (const command of ['click', 'fill', 'longpress', 'press']) {
+    const budget = resolveCommandTimeoutPolicy(command).budget;
+    assert.equal(budget.source, 'flag', `${command}: expected flag budget`);
+    assert.equal(budget.envelope, 'widen', `${command}: expected widening budget`);
+    assert.equal(
+      budget.defaultBudgetMs,
+      DEFAULT_STABLE_TIMEOUT_MS,
+      `${command}: default settle budget must match runtime default`,
+    );
+  }
 });
 
 test('request envelopes deviating from the default are bounded, reviewed sets', () => {

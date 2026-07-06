@@ -10,6 +10,9 @@ const formatPress = (result: Record<string, unknown>) =>
 const formatFill = (result: Record<string, unknown>) =>
   interactionCliOutputFormatters.fill({ input: {}, result });
 
+const formatLongPress = (result: Record<string, unknown>) =>
+  interactionCliOutputFormatters.longpress({ input: {}, result });
+
 describe('find CLI output', () => {
   test('click prints the same success line as a direct press', () => {
     const output = formatFind({
@@ -114,6 +117,30 @@ describe('fill CLI output', () => {
         '- @e4 [text-field] "Search"',
         '+ @e23 [text-field] "alpenglow"',
         '+ @e31 [static-text] "Alpenglow"',
+      ].join('\n'),
+    );
+  });
+});
+
+describe('longpress CLI output', () => {
+  test('appends settle verdict and diff lines when present', () => {
+    const output = formatLongPress({
+      message: 'Long pressed (60, 40)',
+      settle: {
+        settled: true,
+        waitedMs: 600,
+        diff: {
+          summary: { additions: 1, removals: 0, unchanged: 6 },
+          lines: [{ kind: 'added', text: '@e12 [button] "Copy"' }],
+        },
+      },
+    });
+
+    expect(output.text).toBe(
+      [
+        'Long pressed (60, 40)',
+        'settled after 600ms: +1 -0 (~6 unchanged)',
+        '+ @e12 [button] "Copy"',
       ].join('\n'),
     );
   });

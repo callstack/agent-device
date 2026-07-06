@@ -43,9 +43,10 @@ function tapCliOutput(result: CommandRequestResult): CliOutput {
   return { data, text: appendSettleText(`Tapped @${ref} (${x}, ${y})`, data.settle) };
 }
 
-function fillCliOutput(result: CommandRequestResult): CliOutput {
+function messageWithSettleCliOutput(result: CommandRequestResult): CliOutput {
   const data = result as Record<string, unknown>;
-  return { data, text: appendSettleText(readCommandMessage(data), data.settle) };
+  const output = defaultCommandCliOutput(data);
+  return { data: output.data, text: appendSettleText(output.text, data.settle) };
 }
 
 function appendSettleText(text: string | null | undefined, settle: unknown): string {
@@ -96,7 +97,8 @@ function formatSettleVerdict(view: SettleTextView): string {
 export const interactionCliOutputFormatters = {
   click: resultOutput(tapCliOutput),
   press: resultOutput(tapCliOutput),
-  fill: resultOutput(fillCliOutput),
+  fill: resultOutput(messageWithSettleCliOutput),
+  longpress: resultOutput(messageWithSettleCliOutput),
   get: ({ input, result }) =>
     getCliOutput({
       result: result as CommandRequestResult,

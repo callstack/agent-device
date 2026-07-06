@@ -241,6 +241,7 @@ const longPressCommandFacet = defineCommandFacet({
   cliSchema: interactionCliSchemas.longpress,
   cliReader: interactionCliReaders.longpress,
   daemonWriter: interactionDaemonWriters.longpress,
+  cliOutputFormatter: interactionCliOutputFormatters.longpress,
 });
 
 const swipeCommandFacet = defineCommandFacet({

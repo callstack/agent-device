@@ -293,6 +293,16 @@ test('interaction --settle budgets add post-action settle time on top of the nor
     }),
     125_000,
   );
+  // Bare --settle uses the settle loop's default budget, so a slow pre-action
+  // capture still leaves room for the post-action observation to report.
+  assert.equal(
+    resolveDaemonRequestTimeoutMs({
+      ...base,
+      command: 'longpress',
+      flags: { settle: true },
+    }),
+    130_000,
+  );
   // Bare timeoutMs without --settle remains wire-compatible with older touch
   // command clients: it is ignored instead of opting into settle semantics.
   assert.equal(

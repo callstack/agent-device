@@ -40,6 +40,7 @@ import {
   type ResolvedInteractionTarget,
   resolveInteractionTarget,
 } from './resolution.ts';
+import { reconcileNonHittableHintWithEvidence } from './non-hittable-hint.ts';
 import { settleAfterInteraction } from './settle.ts';
 
 export type FocusCommandOptions = CommandContext & {
@@ -179,13 +180,13 @@ export const longPressCommand: RuntimeCommand<
   const settle = options.settle
     ? (await settleAfterInteraction(runtime, options, { ...options.settle, resolved })).observation
     : undefined;
-  return {
+  return reconcileNonHittableHintWithEvidence({
     ...resolved,
     ...(durationMs !== undefined ? { durationMs } : {}),
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
     ...(settle ? { settle } : {}),
     ...successText(`Long pressed (${point.x}, ${point.y})`),
-  };
+  });
 };
 
 export const scrollCommand: RuntimeCommand<ScrollCommandOptions, ScrollCommandResult> = async (

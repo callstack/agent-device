@@ -133,19 +133,25 @@ export function resolveDaemonRequestTimeoutMs(
       return Math.max(policy.envelopeMs, budgetMs + REQUEST_TIMEOUT_BUDGET_MARGIN_MS);
     }
   }
-  if (policy.budget.source === 'flag' && typeof req.flags?.timeoutMs === 'number') {
+  if (policy.budget.source === 'flag') {
     // 'widen' budgets (interaction --settle, #1101) bound an internal wait the
     // request must outlive after selector resolution/action overhead. They are
     // settle-gated for touch-command back-compat: a bare timeoutMs without
     // --settle was historically ignored. Plain 'bound' budgets (replay,
     // prepare, snapshot) replace the envelope verbatim.
     if (policy.budget.envelope === 'widen') {
-      if (req.flags.settle !== true) return policy.envelopeMs;
+      if (req.flags?.settle !== true) return policy.envelopeMs;
+      const budgetMs =
+        typeof req.flags?.timeoutMs === 'number'
+          ? req.flags.timeoutMs
+          : policy.budget.defaultBudgetMs;
+      if (typeof budgetMs !== 'number') return policy.envelopeMs;
       return Math.max(
         policy.envelopeMs,
-        policy.envelopeMs + req.flags.timeoutMs + REQUEST_TIMEOUT_BUDGET_MARGIN_MS,
+        policy.envelopeMs + budgetMs + REQUEST_TIMEOUT_BUDGET_MARGIN_MS,
       );
     }
+    if (typeof req.flags?.timeoutMs !== 'number') return policy.envelopeMs;
     return req.flags.timeoutMs;
   }
   return policy.envelopeMs;
