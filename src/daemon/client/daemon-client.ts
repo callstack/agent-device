@@ -5,7 +5,6 @@ import type {
 import type { RequestProgressSink } from '../request-progress.ts';
 import { createRequestId, emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { resolveCommandTimeoutPolicy } from '../../core/command-descriptor/registry.ts';
 import { prepareRemoteRequestArtifacts } from '../../remote/daemon-artifacts.ts';
 import {
   cleanupDaemonAfterRequest,
@@ -13,6 +12,7 @@ import {
   resolveClientSettings,
 } from './daemon-client-lifecycle.ts';
 import { sendRequest } from './daemon-client-transport.ts';
+import { resolveDaemonRequestTimeoutMs } from './daemon-client-timeout.ts';
 
 export { computeDaemonCodeSignature } from '../code-signature.ts';
 export { downloadRemoteArtifact } from '../../remote/daemon-artifacts.ts';
@@ -21,7 +21,10 @@ export {
   resolveDaemonStartupHint,
 } from './daemon-client-metadata.ts';
 export { canConnectSocket } from './daemon-client-transport.ts';
-export { shouldResetDaemonAfterRequestTimeout } from './daemon-client-timeout.ts';
+export {
+  resolveDaemonRequestTimeoutMs,
+  shouldResetDaemonAfterRequestTimeout,
+} from './daemon-client-timeout.ts';
 export type DaemonRequest = SharedDaemonRequest;
 export type DaemonResponse = SharedDaemonResponse;
 type DaemonTransportOptions = {
@@ -116,48 +119,3 @@ function isInstallLikeCommand(command: string | undefined): boolean {
     command === INTERNAL_COMMANDS.installSource
   );
 }
-
-// Derives the request envelope from the command's declared timeout policy
-// (ADR-0011) instead of the former per-command-name special cases.
-export function resolveDaemonRequestTimeoutMs(
-  req: Omit<DaemonRequest, 'token'>,
-): number | undefined {
-  const policy = resolveCommandTimeoutPolicy(req.command);
-  if (policy.envelopeMs === 'unbounded') return undefined;
-  if (policy.budget.source === 'positional-parser') {
-    // The user budget travels inside the positionals (e.g. `wait ... 180000`).
-    // Without extending the envelope past it, the request dies at the default
-    // timeout with the runner/daemon torn down as collateral (#1075).
-    const budgetMs = policy.budget.parser(req.positionals ?? []);
-    if (budgetMs !== null) {
-      return Math.max(policy.envelopeMs, budgetMs + REQUEST_TIMEOUT_BUDGET_MARGIN_MS);
-    }
-  }
-  if (policy.budget.source === 'flag') {
-    // 'widen' budgets (interaction --settle, #1101) bound an internal wait the
-    // request must outlive after selector resolution/action overhead. They are
-    // settle-gated for touch-command back-compat: a bare timeoutMs without
-    // --settle was historically ignored. Plain 'bound' budgets (replay,
-    // prepare, snapshot) replace the envelope verbatim.
-    if (policy.budget.envelope === 'widen') {
-      if (req.flags?.settle !== true) return policy.envelopeMs;
-      const budgetMs =
-        typeof req.flags?.timeoutMs === 'number'
-          ? req.flags.timeoutMs
-          : policy.budget.defaultBudgetMs;
-      if (typeof budgetMs !== 'number') return policy.envelopeMs;
-      return Math.max(
-        policy.envelopeMs,
-        policy.envelopeMs + budgetMs + REQUEST_TIMEOUT_BUDGET_MARGIN_MS,
-      );
-    }
-    if (typeof req.flags?.timeoutMs !== 'number') return policy.envelopeMs;
-    return req.flags.timeoutMs;
-  }
-  return policy.envelopeMs;
-}
-
-// Margin over a user-supplied positional budget so the daemon-side timeout
-// result (with its stable/wait diagnostics) wins the race against the client
-// envelope. Never shrinks the envelope below the command's declared base.
-const REQUEST_TIMEOUT_BUDGET_MARGIN_MS = 30_000;
