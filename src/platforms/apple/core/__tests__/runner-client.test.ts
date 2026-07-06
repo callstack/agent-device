@@ -700,6 +700,59 @@ test('parseRunnerResponse preserves XCTest recorded failure code and hint', asyn
   );
 });
 
+test('parseRunnerResponse maps RUNNER_BUSY to retriable command failure', async () => {
+  const hint = 'Wait a few seconds and retry.';
+  const response = new Response(
+    JSON.stringify({
+      ok: false,
+      error: {
+        code: 'RUNNER_BUSY',
+        message: 'The runner is still finishing abandoned work.',
+        hint,
+      },
+    }),
+  );
+  const session = { ready: true };
+
+  await assert.rejects(
+    () => parseRunnerResponse(response, session, '/tmp/runner.log'),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'COMMAND_FAILED');
+      assert.equal(error.details?.runnerErrorCode, 'RUNNER_BUSY');
+      assert.equal(error.details?.retriable, true);
+      assert.equal(error.details?.hint, hint);
+      assert.equal(isRetryableRunnerError(error), true);
+      return true;
+    },
+  );
+});
+
+test('parseRunnerResponse preserves RUNNER_WEDGED as a fatal runner code', async () => {
+  const response = new Response(
+    JSON.stringify({
+      ok: false,
+      error: {
+        code: 'RUNNER_WEDGED',
+        message: 'The runner main thread is wedged.',
+        hint: 'The runner session will be restarted.',
+      },
+    }),
+  );
+  const session = { ready: true };
+
+  await assert.rejects(
+    () => parseRunnerResponse(response, session, '/tmp/runner.log'),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'RUNNER_WEDGED');
+      assert.equal(error.details?.runnerErrorCode, 'RUNNER_WEDGED');
+      assert.equal(isRetryableRunnerError(error), false);
+      return true;
+    },
+  );
+});
+
 test('parseRunnerResponse classifies target app AXRuntime CoreText font crashes from runner log tail', async () => {
   const logPath = writeRunnerLogTail(`
 Thread 0 Crashed::  Dispatch queue: com.apple.main-thread

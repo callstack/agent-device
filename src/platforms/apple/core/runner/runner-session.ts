@@ -853,15 +853,21 @@ export async function parseRunnerResponse(
   }
   if (!json.ok) {
     const rawCode = json.error?.code;
+    const runnerErrorCode =
+      typeof rawCode === 'string' && rawCode.trim().length > 0 ? rawCode.trim() : undefined;
     const errorCode =
-      typeof rawCode === 'string' && rawCode.trim().length > 0
-        ? toAppErrorCode(rawCode)
-        : 'COMMAND_FAILED';
+      runnerErrorCode === 'RUNNER_BUSY'
+        ? 'COMMAND_FAILED'
+        : runnerErrorCode
+          ? toAppErrorCode(runnerErrorCode)
+          : 'COMMAND_FAILED';
     const errorMessage = typeof json.error?.message === 'string' ? json.error.message : undefined;
     const hint = typeof json.error?.hint === 'string' ? json.error.hint : undefined;
     throw await enrichRunnerFailureFromLog({
       error: new AppError(errorCode, errorMessage ?? 'Runner error', {
         runner: json,
+        runnerErrorCode,
+        retriable: runnerErrorCode === 'RUNNER_BUSY' ? true : undefined,
         xcodebuild: {
           exitCode: 1,
           stdout: '',

@@ -181,6 +181,38 @@ extension RunnerTests {
     )
     XCTAssertNil(xctestRecordedFailureResponse(command: tapCommand, response: runnerFatalResponse))
   }
+
+  func testExecuteDispatchedReturnsBusyBeforeMainThreadFastPath() throws {
+    let command = try runnerCommandFixture(#"{"command":"snapshot","commandId":"snapshot-busy"}"#)
+    abandonedMainThreadWorkCount = 1
+    abandonedMainThreadWorkSince = Date(timeIntervalSinceNow: -2)
+    defer {
+      abandonedMainThreadWorkCount = 0
+      abandonedMainThreadWorkSince = nil
+    }
+
+    let response = try executeDispatched(command: command)
+
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "RUNNER_BUSY")
+    XCTAssertTrue(response.error?.message?.contains("previous command") == true)
+  }
+
+  func testExecuteDispatchedReturnsWedgedBeforeMainThreadFastPath() throws {
+    let command = try runnerCommandFixture(#"{"command":"snapshot","commandId":"snapshot-wedged"}"#)
+    abandonedMainThreadWorkCount = 1
+    abandonedMainThreadWorkSince = Date(timeIntervalSinceNow: -(mainThreadWedgeThreshold + 1))
+    defer {
+      abandonedMainThreadWorkCount = 0
+      abandonedMainThreadWorkSince = nil
+    }
+
+    let response = try executeDispatched(command: command)
+
+    XCTAssertFalse(response.ok)
+    XCTAssertEqual(response.error?.code, "RUNNER_WEDGED")
+    XCTAssertTrue(response.error?.hint?.contains("runner session will be restarted") == true)
+  }
 #endif
 
   func execute(command: Command) throws -> Response {
@@ -296,9 +328,6 @@ extension RunnerTests {
   }
 
   private func executeDispatched(command: Command) throws -> Response {
-    if Thread.isMainThread {
-      return try executeOnMainSafely(command: command)
-    }
     // XCTest work cannot be cancelled mid-flight: once the watchdog abandons a main-queue
     // block, queueing more main-thread commands behind it only buries the runner deeper.
     // Refuse fast instead so the daemon backs off while the abandoned work drains; past the
@@ -310,6 +339,9 @@ extension RunnerTests {
       return runnerBusyResponse(command: command, abandonedForSeconds: abandonedForSeconds)
     case .wedged(let abandonedForSeconds):
       return runnerWedgedResponse(command: command, abandonedForSeconds: abandonedForSeconds)
+    }
+    if Thread.isMainThread {
+      return try executeOnMainSafely(command: command)
     }
     var result: Result<Response, Error>?
     let semaphore = DispatchSemaphore(value: 0)

@@ -114,6 +114,17 @@ extension RunnerTests {
 
   func focusTextInputForTextEntry(app: XCUIApplication, x: Double?, y: Double?) -> TextEntryTarget {
     guard let x, let y else {
+      // Bare `type` targets the current first responder. On iOS we intentionally do not trust
+      // `hasKeyboardFocus`, but an already-visible software keyboard is sufficient evidence that
+      // app.typeText has a receiver; waiting the full readiness timeout cannot prove a stronger
+      // target because there is no selector/coordinate focus move to validate.
+      if isKeyboardVisible(app: app) {
+        return TextEntryTarget(
+          element: focusedTextInput(app: app),
+          refreshPoint: nil,
+          prefersFocusedElement: true
+        )
+      }
       let focused = waitForTextEntryReadiness(
         app: app,
         target: TextEntryTarget(

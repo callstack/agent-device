@@ -118,6 +118,8 @@ export type RunnerSequenceStep = {
 export function isRetryableRunnerError(err: unknown): boolean {
   if (!(err instanceof AppError)) return false;
   if (err.code !== 'COMMAND_FAILED') return false;
+  if (err.details?.retriable === true) return true;
+  if (err.details?.runnerErrorCode === 'RUNNER_BUSY') return true;
   const message = `${err.message ?? ''}`.toLowerCase();
   if (message.includes('xcodebuild exited early')) return false;
   if (message.includes('device is busy') && message.includes('connecting')) return false;

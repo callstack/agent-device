@@ -47,19 +47,38 @@ export function hasRunnerRequestTouchedSession(key: string | undefined): boolean
 }
 
 /**
- * Consumes one recycle from the request's budget. Returns false when the
- * budget is exhausted — the caller must fail fast instead of booting another
- * runner. Untracked keys always allow (no scope to account against).
+ * Checks whether a request may attempt a recycle boot. The caller must pair a
+ * successful boot with `commitRunnerRecycle`; failed boots stay free so a
+ * transient xcodebuild/simulator startup failure does not spend the request's
+ * only hostile-screen recovery slot.
  */
-export function tryConsumeRunnerRecycle(key: string | undefined): boolean {
+export function tryBeginRunnerRecycle(key: string | undefined): boolean {
   if (!key) return true;
   const entry = readEntry(key);
   if (entry.recycles >= MAX_RUNNER_RECYCLES_PER_REQUEST) {
     writeEntry(key, entry);
     return false;
   }
+  writeEntry(key, entry);
+  return true;
+}
+
+/** Consumes one recycle after the replacement runner has booted successfully. */
+export function commitRunnerRecycle(key: string | undefined): void {
+  if (!key) return;
+  const entry = readEntry(key);
   entry.recycles += 1;
   writeEntry(key, entry);
+}
+
+/**
+ * Consumes one recycle from the request's budget. Returns false when the
+ * budget is exhausted — the caller must fail fast instead of booting another
+ * runner. Untracked keys always allow (no scope to account against).
+ */
+export function tryConsumeRunnerRecycle(key: string | undefined): boolean {
+  if (!tryBeginRunnerRecycle(key)) return false;
+  commitRunnerRecycle(key);
   return true;
 }
 

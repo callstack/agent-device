@@ -1650,6 +1650,38 @@ test('runner session clears recency when an allowlisted command returns XCTest r
   assert.equal(getRunnerSessionSnapshot(device.id), null);
 });
 
+test('runner session invalidates when the runner reports abandoned main-thread work is wedged', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-wedged-sim' };
+  const session = await ensureRunnerSession(device, {});
+  session.ready = true;
+  mockWaitForRunner.mockClear();
+  mockWaitForRunner.mockResolvedValueOnce(runnerResponse({ uptimeMs: 42 }));
+  mockSendRunnerCommandOnce.mockResolvedValueOnce(
+    runnerError({
+      code: 'RUNNER_WEDGED',
+      message: 'The runner main thread is wedged.',
+    }),
+  );
+
+  await assert.rejects(
+    () =>
+      executeRunnerCommandWithSession(
+        device,
+        session,
+        { command: 'tap', x: 1, y: 2, appBundleId: 'com.example.demo' },
+        '/tmp/runner.log',
+        30_000,
+      ),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'RUNNER_WEDGED');
+      return true;
+    },
+  );
+
+  assert.equal(getRunnerSessionSnapshot(device.id), null);
+});
+
 function makeRunnerSession(overrides: Partial<RunnerSession> = {}): RunnerSession {
   return {
     sessionId: `session-${overrides.port ?? 8100}`,

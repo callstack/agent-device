@@ -1190,6 +1190,23 @@ test('a request pays for at most one runner recycle, then fails fast with a pres
   assert.equal(mockEnsureRunnerSession.mock.calls.length, 2);
 });
 
+test('a failed replacement boot does not consume the request recycle budget', async () => {
+  const requestId = 'req-recycle-transient-boot-failure';
+  mockEnsureRunnerSession
+    .mockResolvedValueOnce(makeRunnerSession({ port: 8100, ready: true }))
+    .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'Runner did not accept connection'))
+    .mockResolvedValueOnce(makeRunnerSession({ port: 8101, ready: true }));
+  mockExecuteRunnerCommandWithSession
+    .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
+    .mockRejectedValueOnce(new AppError('COMMAND_FAILED', 'fetch failed'))
+    .mockResolvedValueOnce({ nodes: [], truncated: false });
+
+  const result = await runAppleRunnerCommand(IOS_SIMULATOR, { command: 'snapshot' }, { requestId });
+
+  assert.deepEqual(result, { nodes: [], truncated: false });
+  assert.equal(mockEnsureRunnerSession.mock.calls.length, 3);
+});
+
 test('a later command in the same request cannot pay for a second recycle boot', async () => {
   const requestId = 'req-restart-cap';
   const staleSession = makeRunnerSession({ port: 8100, ready: true });

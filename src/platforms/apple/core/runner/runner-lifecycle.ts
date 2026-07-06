@@ -27,10 +27,11 @@ import { markRunnerXctestrunArtifactBadForRun } from './runner-xctestrun.ts';
 import { handleRunnerTransportErrorAfterCommandSend } from './runner-command-recovery.ts';
 import {
   buildRunnerRecycleBudgetExhaustedError,
+  commitRunnerRecycle,
   hasRunnerRequestTouchedSession,
   markRunnerRequestTouchedSession,
   runnerRecycleLedgerKey,
-  tryConsumeRunnerRecycle,
+  tryBeginRunnerRecycle,
 } from './runner-recycle-ledger.ts';
 
 export type PrepareIosRunnerOptions = AppleRunnerPrepareOptions;
@@ -258,11 +259,14 @@ export async function executeRunnerCommand(
     if (
       !getRunnerSessionSnapshot(device.id)?.alive &&
       hasRunnerRequestTouchedSession(recycleKey) &&
-      !tryConsumeRunnerRecycle(recycleKey)
+      !tryBeginRunnerRecycle(recycleKey)
     ) {
       throw buildRunnerRecycleBudgetExhaustedError(command, options);
     }
     session = await ensureRunnerSession(device, options);
+    if (hasRunnerRequestTouchedSession(recycleKey)) {
+      commitRunnerRecycle(recycleKey);
+    }
     markRunnerRequestTouchedSession(recycleKey);
     const timeoutMs = session.ready
       ? RUNNER_COMMAND_TIMEOUT_MS
@@ -337,7 +341,8 @@ async function restartSessionAndRunCommand(params: {
   // At most one recycle per request: when the budget is spent, fail fast and KEEP the current
   // session — if the runner is merely busy draining abandoned work it answers the next request
   // cheaply, and a dead process is detected and cleaned by the next ensureRunnerSession (#1105).
-  if (!tryConsumeRunnerRecycle(runnerRecycleLedgerKey(options, command))) {
+  const recycleKey = runnerRecycleLedgerKey(options, command);
+  if (!tryBeginRunnerRecycle(recycleKey)) {
     throw buildRunnerRecycleBudgetExhaustedError(command, options);
   }
   await invalidateRunnerSession(params.session, restartReason);
@@ -345,6 +350,7 @@ async function restartSessionAndRunCommand(params: {
     ...options,
     cleanStaleBundles: true,
   });
+  commitRunnerRecycle(recycleKey);
   try {
     const recovered = await executeRunnerCommandWithSession(
       device,
