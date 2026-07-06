@@ -141,7 +141,11 @@ function collectReport(root, options) {
 }
 
 function prepareGeneratedPackageAssets(root) {
-  execFileSync(process.execPath, ['scripts/package-apple-runner-source.mjs', '--quiet'], {
+  const packageAppleRunnerScript = path.join(root, 'scripts', 'package-apple-runner-source.mjs');
+  if (!fs.existsSync(packageAppleRunnerScript)) {
+    return;
+  }
+  execFileSync(process.execPath, [packageAppleRunnerScript, '--quiet'], {
     cwd: root,
     stdio: ['ignore', 'ignore', 'inherit'],
   });

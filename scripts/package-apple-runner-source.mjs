@@ -31,37 +31,46 @@ export function packageAppleRunnerSource(options = {}) {
 
 export function stripRunnerUnitTestBlocks(source, filePath = '<swift source>') {
   const lines = source.match(/[^\n]*\n|[^\n]+/g) ?? [];
-  const output = [];
-  let strippedBlocks = 0;
-  let skippedDepth = 0;
+  const state = {
+    output: [],
+    strippedBlocks: 0,
+    skippedDepth: 0,
+  };
 
   for (const line of lines) {
-    if (skippedDepth === 0) {
-      if (isRunnerUnitTestBlockStart(line)) {
-        skippedDepth = 1;
-        strippedBlocks += 1;
-        continue;
-      }
-      output.push(line);
-      continue;
-    }
-
-    if (isConditionalStart(line)) {
-      skippedDepth += 1;
-    }
-    if (isConditionalEnd(line)) {
-      skippedDepth -= 1;
-    }
+    consumeSwiftLine(state, line);
   }
 
-  if (skippedDepth !== 0) {
+  if (state.skippedDepth !== 0) {
     throw new Error(`Unterminated ${UNIT_TEST_CONDITION} block in ${filePath}`);
   }
 
   return {
-    contents: output.join(''),
-    strippedBlocks,
+    contents: state.output.join(''),
+    strippedBlocks: state.strippedBlocks,
   };
+}
+
+function consumeSwiftLine(state, line) {
+  if (state.skippedDepth > 0) {
+    consumeSkippedConditionalLine(state, line);
+    return;
+  }
+  if (isRunnerUnitTestBlockStart(line)) {
+    state.skippedDepth = 1;
+    state.strippedBlocks += 1;
+    return;
+  }
+  state.output.push(line);
+}
+
+function consumeSkippedConditionalLine(state, line) {
+  if (isConditionalStart(line)) {
+    state.skippedDepth += 1;
+  }
+  if (isConditionalEnd(line)) {
+    state.skippedDepth -= 1;
+  }
 }
 
 function copyDirectory(sourceDir, outputDir, relativeDir, summary) {
@@ -69,21 +78,23 @@ function copyDirectory(sourceDir, outputDir, relativeDir, summary) {
   const entries = fs.readdirSync(sourceDir, { withFileTypes: true });
 
   for (const entry of entries) {
-    const relativePath = path.join(relativeDir, entry.name);
-    if (shouldSkipEntry(entry, relativePath)) {
-      continue;
-    }
+    copyDirectoryEntry(entry, sourceDir, outputDir, relativeDir, summary);
+  }
+}
 
-    const sourcePath = path.join(sourceDir, entry.name);
-    const outputPath = path.join(outputDir, entry.name);
-    if (entry.isDirectory()) {
-      copyDirectory(sourcePath, outputPath, relativePath, summary);
-      continue;
-    }
-    if (!entry.isFile()) {
-      continue;
-    }
+function copyDirectoryEntry(entry, sourceDir, outputDir, relativeDir, summary) {
+  const relativePath = path.join(relativeDir, entry.name);
+  if (shouldSkipEntry(entry, relativePath)) {
+    return;
+  }
 
+  const sourcePath = path.join(sourceDir, entry.name);
+  const outputPath = path.join(outputDir, entry.name);
+  if (entry.isDirectory()) {
+    copyDirectory(sourcePath, outputPath, relativePath, summary);
+    return;
+  }
+  if (entry.isFile()) {
     copyFile(sourcePath, outputPath, summary);
   }
 }
@@ -106,13 +117,23 @@ function copyFile(sourcePath, outputPath, summary) {
 }
 
 function shouldSkipEntry(entry, relativePath) {
-  if (entry.isDirectory() && SKIPPED_DIR_NAMES.has(entry.name)) {
-    return true;
-  }
-  if (entry.isFile() && entry.name.endsWith('.xcuserstate')) {
-    return true;
-  }
-  return entry.isFile() && !relativePath.includes(path.sep) && SKIPPED_ROOT_FILES.has(entry.name);
+  return shouldSkipDirectory(entry) || shouldSkipFile(entry, relativePath);
+}
+
+function shouldSkipDirectory(entry) {
+  return entry.isDirectory() && SKIPPED_DIR_NAMES.has(entry.name);
+}
+
+function shouldSkipFile(entry, relativePath) {
+  return entry.isFile() && (isXcodeUserStateFile(entry) || isSkippedRootFile(entry, relativePath));
+}
+
+function isXcodeUserStateFile(entry) {
+  return entry.name.endsWith('.xcuserstate');
+}
+
+function isSkippedRootFile(entry, relativePath) {
+  return !relativePath.includes(path.sep) && SKIPPED_ROOT_FILES.has(entry.name);
 }
 
 function isRunnerUnitTestBlockStart(line) {
@@ -129,24 +150,32 @@ function isConditionalEnd(line) {
 
 function parseArgs(argv) {
   const parsed = { root: process.cwd(), quiet: false };
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index];
-    if (arg === '--quiet') {
-      parsed.quiet = true;
-      continue;
-    }
-    if (arg === '--root') {
-      const value = argv[index + 1];
-      if (!value || value.startsWith('--')) {
-        throw new Error('--root requires a path');
-      }
-      parsed.root = value;
-      index += 1;
-      continue;
-    }
-    throw new Error(`Unknown argument: ${arg}`);
+  let index = 0;
+  while (index < argv.length) {
+    index = parseArg(argv, index, parsed);
   }
   return parsed;
+}
+
+function parseArg(argv, index, parsed) {
+  const arg = argv[index];
+  if (arg === '--quiet') {
+    parsed.quiet = true;
+    return index + 1;
+  }
+  if (arg === '--root') {
+    return parseRootArg(argv, index, parsed);
+  }
+  throw new Error(`Unknown argument: ${arg}`);
+}
+
+function parseRootArg(argv, index, parsed) {
+  const value = argv[index + 1];
+  if (!value || value.startsWith('--')) {
+    throw new Error('--root requires a path');
+  }
+  parsed.root = value;
+  return index + 2;
 }
 
 function isMainModule() {
