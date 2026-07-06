@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { STRUCTURED_BATCH_COMMAND_NAMES } from '../../../batch-policy.ts';
-import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
+import { listCliCommandNames, PUBLIC_COMMANDS } from '../../../command-catalog.ts';
 import { BASE_COMMAND_CAPABILITY_MATRIX } from '../../capabilities.ts';
 import {
   DAEMON_COMMAND_DESCRIPTORS,
@@ -9,7 +9,11 @@ import {
 } from '../../../daemon/daemon-command-registry.ts';
 import type { DaemonRequest } from '../../../daemon/types.ts';
 import { deriveDaemonCommandDescriptors, deriveStructuredBatchCommandNames } from '../derive.ts';
-import { commandDescriptors } from '../registry.ts';
+import {
+  commandDescriptors,
+  listCapabilityCheckedCommandNames,
+  listMcpExposedCommandNames,
+} from '../registry.ts';
 
 // Function-valued traits cannot be deep-equaled across re-authored closures, so
 // (mirroring daemon-command-registry.test.ts) they are compared by presence and
@@ -173,4 +177,41 @@ test('structured-batch allowlist is built from descriptors', () => {
   for (const excluded of NON_BATCHABLE_COMMANDS) {
     assert.ok(!batchable.has(excluded), `${excluded} is not batchable`);
   }
+});
+
+test('MCP exposure list is built from descriptors', () => {
+  const cliCommands = new Set<string>(listCliCommandNames());
+  const expected = commandDescriptors
+    .filter((descriptor) => descriptor.mcpExposed && cliCommands.has(descriptor.name))
+    .map((descriptor) => descriptor.name)
+    .sort();
+  const expectedNames = new Set<string>(expected);
+
+  assert.deepEqual(listMcpExposedCommandNames(), expected);
+  assert.ok(expectedNames.has('debug'), 'local debug command stays MCP-exposed');
+  assert.ok(expectedNames.has('metro'), 'local metro command stays MCP-exposed');
+  assert.ok(expectedNames.has('session'), 'local session command stays MCP-exposed');
+  assert.equal(expectedNames.has(PUBLIC_COMMANDS.prepare), false, 'prepare stays out of MCP');
+  assert.equal(expectedNames.has('auth'), false, 'schema-only auth command stays out of MCP');
+});
+
+test('capability-checked command list is built from descriptor capabilities', () => {
+  const cliCommands = new Set<string>(listCliCommandNames());
+  const expected = commandDescriptors
+    .filter(
+      (descriptor) =>
+        'capability' in descriptor && descriptor.capability && cliCommands.has(descriptor.name),
+    )
+    .map((descriptor) => descriptor.name)
+    .sort();
+  const expectedNames = new Set<string>(expected);
+
+  assert.deepEqual(listCapabilityCheckedCommandNames(), expected);
+  assert.ok(expectedNames.has(PUBLIC_COMMANDS.snapshot), 'snapshot remains capability-checked');
+  assert.equal(
+    expectedNames.has(PUBLIC_COMMANDS.capabilities),
+    false,
+    'control-plane capabilities command stays capability-exempt',
+  );
+  assert.equal(expectedNames.has('debug'), false, 'local debug command stays capability-exempt');
 });

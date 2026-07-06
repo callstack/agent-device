@@ -8,10 +8,10 @@ import { listCapabilityCommands } from '../../core/capabilities.ts';
 import {
   INTERNAL_COMMANDS,
   isKnownCliCommandName,
-  listCapabilityCheckedCommandNames,
   listCliCommandNames,
   SPECIAL_CLI_COMMANDS,
 } from '../../command-catalog.ts';
+import { listCapabilityCheckedCommandNames } from '../../core/command-descriptor/registry.ts';
 import { getCliCommandSchema } from '../command-schema.ts';
 
 test('every public capability command has a parser schema entry', () => {

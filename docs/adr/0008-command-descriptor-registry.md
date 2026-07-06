@@ -72,7 +72,11 @@ Each derived table must be asserted **byte-for-byte equivalent** to the hand-aut
 **before** the hand table is deleted. The principal risk is the import-cycle inversion: `command-catalog.ts`
 has ~95 importers and the family facet currently imports `AgentDeviceClient`, so the descriptor module must
 own the `Input`/`Result` types and the client must be derived as a view type, enforced by a lint boundary.
-Until this lands and the registry tests pin it, the hand-authored tables remain the source of truth.
+As of 2026-07, the descriptor is live for the daemon registry, capability matrix, structured-batch
+allowlist, daemon-client timeout policy, MCP exposure list, and capability-checked CLI command list.
+The catalog still owns command identity and the command family facet still owns surface metadata, so
+future migration steps should keep deleting one live hand-maintained table at a time rather than
+introducing a parallel manifest.
 
 This ADR owns the decision and its constraints; the roadmap that prototyped it has been retired, with
 the delivered end-state recorded in [CONTEXT.md](../../CONTEXT.md) (Architecture).

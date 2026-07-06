@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { listMcpExposedCommandNames } from '../../command-catalog.ts';
+import { listMcpExposedCommandNames } from '../../core/command-descriptor/registry.ts';
 import {
   listCommandMetadata,
   listCommandMetadataNames,

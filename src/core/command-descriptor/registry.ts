@@ -1,6 +1,7 @@
 import {
   INTERNAL_COMMANDS,
-  listMcpExposedCommandNames,
+  listCliCommandNames,
+  type CliCommandName,
   PUBLIC_COMMANDS,
 } from '../../command-catalog.ts';
 import type { CommandCapability } from '../capabilities.ts';
@@ -14,6 +15,10 @@ import {
 import { resolvePostActionObservationSupport } from './post-action-observation.ts';
 import type { PostActionObservationSupport } from './post-action-observation.ts';
 import type { CommandDescriptor, CommandTimeoutPolicy } from './types.ts';
+
+type RawCommandDescriptor = Omit<CommandDescriptor, 'mcpExposed'> & {
+  mcpExposed?: boolean;
+};
 
 // ---------------------------------------------------------------------------
 // Daemon request-policy trait bundles — copied VERBATIM from
@@ -396,6 +401,7 @@ const RAW_COMMAND_DESCRIPTORS = [
       onTimeout: 'reset-daemon',
     },
     batchable: false,
+    mcpExposed: false,
   },
   {
     name: PUBLIC_COMMANDS.batch,
@@ -694,9 +700,26 @@ const RAW_COMMAND_DESCRIPTORS = [
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
-] as const satisfies readonly Omit<CommandDescriptor, 'mcpExposed'>[];
 
-const MCP_EXPOSED_COMMAND_NAMES = new Set<string>(listMcpExposedCommandNames());
+  // -- local client-backed CLI/MCP commands (no daemon route/capability) --
+  {
+    name: 'debug',
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+  },
+  {
+    name: 'metro',
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+  },
+  {
+    name: 'session',
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+  },
+] as const satisfies readonly RawCommandDescriptor[];
+
+const CLI_COMMAND_NAMES = new Set<string>(listCliCommandNames());
 
 /**
  * The additive single source of truth (ADR-0008, Phase 1 step 1). Proven
@@ -708,15 +731,45 @@ const MCP_EXPOSED_COMMAND_NAMES = new Set<string>(listMcpExposedCommandNames());
  */
 export const commandDescriptors = RAW_COMMAND_DESCRIPTORS.map((descriptor) => ({
   ...descriptor,
-  mcpExposed: MCP_EXPOSED_COMMAND_NAMES.has(descriptor.name),
+  mcpExposed: resolveMcpExposure(descriptor),
 })) satisfies readonly CommandDescriptor[];
 
 /** The literal union of every registered command name. */
 export type Command = (typeof commandDescriptors)[number]['name'];
 
+export function listMcpExposedCommandNames(): CliCommandName[] {
+  return commandDescriptors
+    .filter((descriptor) => isMcpExposedCliCommand(descriptor))
+    .map((descriptor) => descriptor.name as CliCommandName)
+    .sort();
+}
+
+export function listCapabilityCheckedCommandNames(): CliCommandName[] {
+  return commandDescriptors
+    .filter((descriptor) => isCapabilityCheckedCliCommand(descriptor))
+    .map((descriptor) => descriptor.name as CliCommandName)
+    .sort();
+}
+
 const COMMAND_DESCRIPTOR_BY_NAME: ReadonlyMap<string, CommandDescriptor> = new Map(
   commandDescriptors.map((descriptor) => [descriptor.name, descriptor]),
 );
+
+function isCliCommandName(command: string): command is CliCommandName {
+  return CLI_COMMAND_NAMES.has(command);
+}
+
+function resolveMcpExposure(descriptor: RawCommandDescriptor): boolean {
+  return descriptor.mcpExposed ?? CLI_COMMAND_NAMES.has(descriptor.name);
+}
+
+function isMcpExposedCliCommand(descriptor: CommandDescriptor): boolean {
+  return descriptor.mcpExposed && isCliCommandName(descriptor.name);
+}
+
+function isCapabilityCheckedCliCommand(descriptor: CommandDescriptor): boolean {
+  return Boolean(descriptor.capability) && isCliCommandName(descriptor.name);
+}
 
 const TIMEOUT_POLICY_BY_COMMAND: ReadonlyMap<string, CommandTimeoutPolicy> = new Map(
   commandDescriptors.map((descriptor) => [descriptor.name, descriptor.timeoutPolicy]),

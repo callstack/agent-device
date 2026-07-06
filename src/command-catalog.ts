@@ -98,49 +98,6 @@ export type ClientBackedCliCommandName =
   | typeof LOCAL_CLI_COMMANDS.metro
   | typeof LOCAL_CLI_COMMANDS.session;
 
-const MCP_UNEXPOSED_CLI_COMMANDS = commandSet(
-  LOCAL_CLI_COMMANDS.auth,
-  LOCAL_CLI_COMMANDS.cdp,
-  LOCAL_CLI_COMMANDS.connect,
-  LOCAL_CLI_COMMANDS.connection,
-  LOCAL_CLI_COMMANDS.disconnect,
-  LOCAL_CLI_COMMANDS.mcp,
-  LOCAL_CLI_COMMANDS.proxy,
-  LOCAL_CLI_COMMANDS.reactDevtools,
-  LOCAL_CLI_COMMANDS.web,
-  PUBLIC_COMMANDS.prepare,
-);
-
-const CAPABILITY_EXEMPT_CLI_COMMANDS = commandSet(
-  LOCAL_CLI_COMMANDS.auth,
-  LOCAL_CLI_COMMANDS.cdp,
-  LOCAL_CLI_COMMANDS.connect,
-  LOCAL_CLI_COMMANDS.connection,
-  LOCAL_CLI_COMMANDS.debug,
-  LOCAL_CLI_COMMANDS.disconnect,
-  LOCAL_CLI_COMMANDS.mcp,
-  LOCAL_CLI_COMMANDS.metro,
-  LOCAL_CLI_COMMANDS.proxy,
-  LOCAL_CLI_COMMANDS.reactDevtools,
-  LOCAL_CLI_COMMANDS.session,
-  LOCAL_CLI_COMMANDS.web,
-  PUBLIC_COMMANDS.artifacts,
-  PUBLIC_COMMANDS.appState,
-  PUBLIC_COMMANDS.prepare,
-  PUBLIC_COMMANDS.batch,
-  PUBLIC_COMMANDS.capabilities,
-  PUBLIC_COMMANDS.devices,
-  PUBLIC_COMMANDS.doctor,
-  PUBLIC_COMMANDS.gesture,
-  PUBLIC_COMMANDS.replay,
-  PUBLIC_COMMANDS.test,
-  PUBLIC_COMMANDS.trace,
-);
-
-function commandSet(...commands: readonly string[]): ReadonlySet<string> {
-  return new Set(commands);
-}
-
 export function listCliCommandNames(): CliCommandName[] {
   return [...Object.values(PUBLIC_COMMANDS), ...Object.values(LOCAL_CLI_COMMANDS)].sort();
 }
@@ -160,12 +117,4 @@ export function isClientBackedCliCommandName(
     command === LOCAL_CLI_COMMANDS.metro ||
     command === LOCAL_CLI_COMMANDS.session
   );
-}
-
-export function listMcpExposedCommandNames(): CliCommandName[] {
-  return listCliCommandNames().filter((command) => !MCP_UNEXPOSED_CLI_COMMANDS.has(command));
-}
-
-export function listCapabilityCheckedCommandNames(): CliCommandName[] {
-  return listCliCommandNames().filter((command) => !CAPABILITY_EXEMPT_CLI_COMMANDS.has(command));
 }
