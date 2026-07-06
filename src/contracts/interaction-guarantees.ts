@@ -236,12 +236,12 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       verifyEvidence: {
         kind: 'delegated',
         to: 'runtime-selector',
-        via: '--verify disables the direct path (readDirectIosSelectorTapTarget / fill flags.verify check)',
+        via: '--verify disables the direct path when the descriptor post-action observation trait supports verify evidence',
       },
       settleObservation: {
         kind: 'delegated',
         to: 'runtime-selector',
-        via: '--settle disables the direct path (readDirectIosSelectorTapTarget / readDirectIosSelectorFillTarget flags.settle checks) — settling needs the tree-based baseline and captures',
+        via: '--settle disables the direct path when the descriptor post-action observation trait supports settle observation — settling needs the tree-based baseline and captures',
       },
       errorTaxonomy: {
         kind: 'delegated',
@@ -287,12 +287,12 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       verifyEvidence: {
         kind: 'delegated',
         to: 'runtime-ref',
-        via: '--verify disables the native ref fast path (maybeTapRefTarget / maybeFillRefTarget verify check)',
+        via: '--verify disables the native ref fast path when the descriptor post-action observation trait supports verify evidence',
       },
       settleObservation: {
         kind: 'delegated',
         to: 'runtime-ref',
-        via: '--settle disables the native ref fast path (maybeTapRefTarget / maybeFillRefTarget settle checks) — settling needs the tree-based baseline and captures',
+        via: '--settle disables the native ref fast path when the descriptor post-action observation trait supports settle observation — settling needs the tree-based baseline and captures',
       },
       errorTaxonomy: {
         kind: 'runtime',

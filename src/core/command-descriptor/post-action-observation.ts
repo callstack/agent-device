@@ -22,13 +22,3 @@ export function resolvePostActionObservationSupport(
   if (command === undefined) return undefined;
   return POST_ACTION_OBSERVATION_BY_COMMAND[command as PostActionObservationCommandName];
 }
-
-export function supportsSettleObservation(command: string | undefined): boolean {
-  return resolvePostActionObservationSupport(command) !== undefined;
-}
-
-export function listSettleObservationCommandNames(): PostActionObservationCommandName[] {
-  return Object.keys(
-    POST_ACTION_OBSERVATION_BY_COMMAND,
-  ).sort() as PostActionObservationCommandName[];
-}

@@ -1,5 +1,6 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
 import { findCommandMetadata } from '../../../commands/command-metadata.ts';
 import { getCliCommandSchema } from '../../../utils/command-schema.ts';
 import {
@@ -8,7 +9,13 @@ import {
   commandSupportsVerifyEvidence,
   resolveCommandPostActionObservationSupport,
 } from '../registry.ts';
-import { listSettleObservationCommandNames } from '../post-action-observation.ts';
+
+const SETTLE_OBSERVATION_COMMANDS = [
+  PUBLIC_COMMANDS.click,
+  PUBLIC_COMMANDS.fill,
+  PUBLIC_COMMANDS.longPress,
+  PUBLIC_COMMANDS.press,
+] as const;
 
 test('post-action observation descriptor traits are the source for settle command support', () => {
   const descriptorCommands = commandDescriptors
@@ -17,7 +24,7 @@ test('post-action observation descriptor traits are the source for settle comman
     )
     .map((descriptor) => descriptor.name)
     .sort();
-  assert.deepEqual(descriptorCommands, listSettleObservationCommandNames());
+  assert.deepEqual(descriptorCommands, [...SETTLE_OBSERVATION_COMMANDS].sort());
 
   assert.equal(resolveCommandPostActionObservationSupport('click'), 'settle-and-verify');
   assert.equal(resolveCommandPostActionObservationSupport('press'), 'settle-and-verify');
@@ -27,7 +34,7 @@ test('post-action observation descriptor traits are the source for settle comman
 });
 
 test('post-action observation CLI flags follow descriptor traits', () => {
-  for (const command of listSettleObservationCommandNames()) {
+  for (const command of SETTLE_OBSERVATION_COMMANDS) {
     const schema = getCliCommandSchema(command);
     const allowedFlags = new Set(schema.allowedFlags ?? []);
     assert.equal(allowedFlags.has('settle'), true, `${command}: missing --settle`);

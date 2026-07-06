@@ -11,10 +11,7 @@ import {
   INSTALL_REQUEST_TIMEOUT_MS,
   PREPARE_REQUEST_TIMEOUT_MS,
 } from './timeout-policy.ts';
-import {
-  resolvePostActionObservationSupport,
-  supportsSettleObservation as commandNameSupportsSettleObservation,
-} from './post-action-observation.ts';
+import { resolvePostActionObservationSupport } from './post-action-observation.ts';
 import type { PostActionObservationSupport } from './post-action-observation.ts';
 import type { CommandDescriptor, CommandTimeoutPolicy } from './types.ts';
 
@@ -106,30 +103,25 @@ const INSTALL_TIMEOUT_POLICY: CommandTimeoutPolicy = {
 
 const DEFAULT_SETTLE_TIMEOUT_MS = 10_000;
 
-// Descriptor post-action observation commands with --settle (#1101): --timeout
-// bounds the SETTLE wait, not the whole request. The client envelope keeps the
-// normal selector/action envelope and adds the settle budget plus margin; a slow
-// tap must not die at a user-supplied settle deadline.
-const SETTLE_FLAG_TIMEOUT_POLICY: CommandTimeoutPolicy = {
-  ...DEFAULT_TIMEOUT_POLICY,
-  budget: {
-    source: 'flag',
-    envelope: 'widen',
-    defaultBudgetMs: DEFAULT_SETTLE_TIMEOUT_MS,
-  },
-};
-
 // Settle-capable interaction commands also resolve their target through the
 // same platform accessibility capture as snapshot/find (#1105): a hung capture
 // is their dominant timeout mode, so on top of the --settle flag-sourced
 // widening envelope above, keep the daemon (and sessions) alive on timeout too.
 const SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY: CommandTimeoutPolicy = {
-  ...SETTLE_FLAG_TIMEOUT_POLICY,
+  ...DEFAULT_TIMEOUT_POLICY,
+  // --settle (#1101) makes --timeout bound the SETTLE wait, not the whole
+  // request. Widen the envelope by the settle budget so selector/action
+  // overhead still has room before the post-action wait.
+  budget: {
+    source: 'flag',
+    envelope: 'widen',
+    defaultBudgetMs: DEFAULT_SETTLE_TIMEOUT_MS,
+  },
   onTimeout: 'preserve-daemon',
 };
 
 function interactionTimeoutPolicy(command: string): CommandTimeoutPolicy {
-  return commandNameSupportsSettleObservation(command)
+  return resolvePostActionObservationSupport(command) !== undefined
     ? SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY
     : PRESERVE_DAEMON_TIMEOUT_POLICY;
 }
