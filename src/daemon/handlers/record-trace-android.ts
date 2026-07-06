@@ -389,10 +389,12 @@ function scheduleAndroidRecordingChunks(params: {
   const { activeSession, device, recording, recordingSize, quality } = params;
   scheduleAndroidRecordingRotation({
     recording,
-    finishCurrentChunk: async () =>
+    finishCurrentChunk: async (chunk) =>
       await finishCurrentAndroidRecordingChunk({
         device,
         recording,
+        remotePath: chunk.remotePath,
+        remotePid: chunk.remotePid,
         waitForRemoteFileStability: false,
       }),
     startNextChunk: async (preferredRemoteDir) => {
@@ -424,29 +426,33 @@ function scheduleAndroidRecordingChunks(params: {
 async function finishCurrentAndroidRecordingChunk(params: {
   device: AndroidDevice;
   recording: AndroidRecording;
+  remotePath?: string;
+  remotePid?: string;
   waitForRemoteFileStability?: boolean;
 }): Promise<string | undefined> {
-  const { device, recording, waitForRemoteFileStability = true } = params;
-  const wasRunningBeforeStop = await isAndroidProcessRunning(device.id, recording.remotePid);
+  const {
+    device,
+    recording,
+    remotePath = recording.remotePath,
+    remotePid = recording.remotePid,
+    waitForRemoteFileStability = true,
+  } = params;
+  const wasRunningBeforeStop = await isAndroidProcessRunning(device.id, remotePid);
   if (!wasRunningBeforeStop) {
     appendAndroidRecordingWarning(recording, resolveAndroidScreenrecordLimitWarning(recording));
   }
 
-  const stopResult = await runAndroidRecordingAdb(
-    device.id,
-    ['shell', 'kill', '-2', recording.remotePid],
-    {
-      allowFailure: true,
-      timeoutMs: ANDROID_RECORDING_PROBE_TIMEOUT_MS,
-    },
-  );
+  const stopResult = await runAndroidRecordingAdb(device.id, ['shell', 'kill', '-2', remotePid], {
+    allowFailure: true,
+    timeoutMs: ANDROID_RECORDING_PROBE_TIMEOUT_MS,
+  });
   emitDiagnostic({
     level: 'debug',
     phase: 'record_stop_android_signal',
     data: {
       deviceId: device.id,
-      remotePath: recording.remotePath,
-      remotePid: recording.remotePid,
+      remotePath,
+      remotePid,
       exitCode: stopResult.exitCode,
       stdout: stopResult.stdout.trim(),
       stderr: stopResult.stderr.trim(),
@@ -454,15 +460,15 @@ async function finishCurrentAndroidRecordingChunk(params: {
   });
 
   if (stopResult.exitCode !== 0) {
-    return await recoverAndroidStopSignalFailure(device.id, recording.remotePid, stopResult);
+    return await recoverAndroidStopSignalFailure(device.id, remotePid, stopResult);
   }
-  const exitError = await waitForAndroidStopExit(device.id, recording.remotePid);
+  const exitError = await waitForAndroidStopExit(device.id, remotePid);
   if (exitError) {
     return exitError;
   }
 
   if (waitForRemoteFileStability) {
-    await waitForAndroidRemoteFileStability(device.id, recording.remotePath);
+    await waitForAndroidRemoteFileStability(device.id, remotePath);
   }
   return undefined;
 }

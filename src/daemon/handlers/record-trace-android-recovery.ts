@@ -9,6 +9,7 @@ import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { DaemonResponse, RecordingChunk, SessionState } from '../types.ts';
 import { errorResponse } from './response.ts';
 import type { RecordingExportQuality } from '../../core/recording-export-quality.ts';
+import { deriveAndroidChunkOutPath } from './record-trace-android-chunks.ts';
 
 const ANDROID_RECOVERY_WARNING =
   'Recovered Android recording after daemon restart from durable device manifest.';
@@ -61,6 +62,12 @@ type AndroidRecordingRecoveryManifest = {
 type AndroidRecoveryManifestScan = {
   live: AndroidRecordingRecoveryManifest[];
   uncertain: AndroidRecordingRecoveryManifest[];
+  blocked: AndroidRecoveryBlockedManifest[];
+};
+
+type AndroidRecoveryBlockedManifest = {
+  metadataPath: string;
+  reason: string;
 };
 
 type AndroidRecordingRecoveryManifestRequired = Pick<
@@ -107,24 +114,32 @@ function parseRecoverableAndroidScreenrecord(
   };
 }
 
-function parseAndroidRecoveryManifest(value: string): AndroidRecordingRecoveryManifest | undefined {
+function parseAndroidRecoveryManifest(
+  value: string,
+):
+  | { kind: 'manifest'; manifest: AndroidRecordingRecoveryManifest }
+  | { kind: 'delete' }
+  | { kind: 'blocked'; reason: string } {
   const metadata = parseJsonObject(value);
-  if (!metadata) return undefined;
+  if (!metadata) return { kind: 'delete' };
   const required = readAndroidRecoveryManifestRequired(metadata);
-  if (!required) return undefined;
+  if (!required) return { kind: 'blocked', reason: 'unsupported_or_malformed_manifest' };
   const parsedCurrent = parseAndroidRecoveryMetadata(metadata.current);
-  if (!parsedCurrent) return undefined;
+  if (!parsedCurrent) return { kind: 'blocked', reason: 'invalid_current_recording' };
   const chunks = parseAndroidRecordingChunks(metadata.chunks);
-  if (!chunks) return undefined;
+  if (!chunks) return { kind: 'blocked', reason: 'invalid_recording_chunks' };
   return {
-    ...required,
-    sessionScope: parseSessionScope(metadata.sessionScope),
-    clientOutPath: readOptionalString(metadata.clientOutPath),
-    telemetryPath: readOptionalString(metadata.telemetryPath),
-    maxSize: readOptionalNumber(metadata.maxSize),
-    exportQuality: parseRecordingExportQuality(metadata.exportQuality),
-    current: parsedCurrent,
-    chunks,
+    kind: 'manifest',
+    manifest: {
+      ...required,
+      sessionScope: parseSessionScope(metadata.sessionScope),
+      clientOutPath: readOptionalString(metadata.clientOutPath),
+      telemetryPath: readOptionalString(metadata.telemetryPath),
+      maxSize: readOptionalNumber(metadata.maxSize),
+      exportQuality: parseRecordingExportQuality(metadata.exportQuality),
+      current: parsedCurrent,
+      chunks,
+    },
   };
 }
 
@@ -266,7 +281,7 @@ function androidRecoveryMetadataPaths(): string[] {
 }
 
 async function readAndroidRecoveryMetadata(deviceId: string): Promise<AndroidRecoveryManifestScan> {
-  const scan: AndroidRecoveryManifestScan = { live: [], uncertain: [] };
+  const scan: AndroidRecoveryManifestScan = { live: [], uncertain: [], blocked: [] };
   for (const metadataPath of androidRecoveryMetadataPaths()) {
     const result = await runAndroidRecoveryAdb(deviceId, ['shell', 'cat', metadataPath], {
       allowFailure: true,
@@ -275,8 +290,8 @@ async function readAndroidRecoveryMetadata(deviceId: string): Promise<AndroidRec
     if (result.exitCode !== 0) {
       continue;
     }
-    const metadata = parseAndroidRecoveryManifest(result.stdout);
-    if (!metadata) {
+    const parsed = parseAndroidRecoveryManifest(result.stdout);
+    if (parsed.kind === 'delete') {
       await cleanupAndroidRecoveryMetadataPath({
         deviceId,
         metadataPath,
@@ -284,12 +299,13 @@ async function readAndroidRecoveryMetadata(deviceId: string): Promise<AndroidRec
       });
       continue;
     }
+    if (parsed.kind === 'blocked') {
+      scan.blocked.push({ metadataPath, reason: parsed.reason });
+      continue;
+    }
+    const metadata = parsed.manifest;
     if (metadata.deviceId !== deviceId) {
-      await cleanupAndroidRecoveryMetadataPath({
-        deviceId,
-        metadataPath,
-        phase: 'record_stop_android_recovery_metadata_device_mismatch_cleanup_failed',
-      });
+      scan.blocked.push({ metadataPath, reason: 'device_mismatch' });
       continue;
     }
     const liveness = await checkLiveRecoverableAndroidScreenrecord(deviceId, metadata.current);
@@ -337,9 +353,10 @@ async function checkLiveRecoverableAndroidScreenrecord(
     });
     return 'uncertain';
   }
-  const sawPid = result.stdout
+  const pidLine = result.stdout
     .split(/\r?\n/)
-    .some((line) => line.trim().startsWith(metadata.remotePid));
+    .map((line) => line.trim())
+    .find((line) => line.startsWith(metadata.remotePid));
   const matched = result.stdout
     .split(/\r?\n/)
     .map(parseRecoverableAndroidScreenrecord)
@@ -350,7 +367,7 @@ async function checkLiveRecoverableAndroidScreenrecord(
   if (matched) {
     return 'live';
   }
-  return sawPid ? 'uncertain' : 'stale';
+  return pidLine?.includes('screenrecord') ? 'uncertain' : 'stale';
 }
 
 async function findRecoverableAndroidScreenrecord(
@@ -517,6 +534,7 @@ export async function recoverMissingAndroidRecording(params: {
     return recoverAndroidRecordingFromManifest({
       activeSession,
       device,
+      recordingBase,
       manifests: manifests.live,
     });
   }
@@ -525,6 +543,9 @@ export async function recoverMissingAndroidRecording(params: {
       activeSession,
       manifests: manifests.uncertain,
     });
+  }
+  if (manifests.blocked.length > 0) {
+    return blockAndroidOwnerlessRecoveryForBlockedManifest(manifests.blocked);
   }
 
   const recovered = await findRecoverableAndroidScreenrecord(device.id);
@@ -597,16 +618,31 @@ function blockAndroidOwnerlessRecoveryForUncertainManifest(params: {
   );
 }
 
+function blockAndroidOwnerlessRecoveryForBlockedManifest(
+  manifests: AndroidRecoveryBlockedManifest[],
+): DaemonResponse {
+  return errorResponse(
+    'INVALID_ARGS',
+    'active Android recording manifest could not be validated; ownerless recovery is disabled while durable recovery state remains',
+    {
+      recoveryBlocked: 'manifest_invalid_or_unsupported',
+      manifests,
+      hint: 'Retry with the same agent-device version that started the recording, or inspect and remove stale device recovery metadata after confirming no recording is active.',
+    },
+  );
+}
+
 function recoverAndroidRecordingFromManifest(params: {
   activeSession: SessionState;
   device: AndroidDevice;
+  recordingBase: AndroidRecordingBase;
   manifests: AndroidRecordingRecoveryManifest[];
 }): DaemonResponse | AndroidRecording {
-  const { activeSession, device, manifests } = params;
+  const { activeSession, device, recordingBase, manifests } = params;
   const selected = selectAndroidRecoveryManifest({ activeSession, manifests });
   if ('ok' in selected) return selected;
   emitAndroidRecoveryDiagnostic(device, selected);
-  return buildAndroidRecordingFromManifest(selected);
+  return buildAndroidRecordingFromManifest(selected, recordingBase);
 }
 
 function selectAndroidRecoveryManifest(params: {
@@ -666,6 +702,7 @@ function emitAndroidRecoveryDiagnostic(
 
 function buildAndroidRecordingFromManifest(
   manifest: AndroidRecordingRecoveryManifest,
+  recordingBase: AndroidRecordingBase,
 ): AndroidRecording {
   return {
     platform: 'android',
@@ -673,13 +710,17 @@ function buildAndroidRecordingFromManifest(
     remotePath: manifest.current.remotePath,
     remotePid: manifest.current.remotePid,
     remoteStartedAt: manifest.current.startedAt,
-    chunks: manifest.chunks,
-    outPath: manifest.outPath,
-    clientOutPath: manifest.clientOutPath,
-    telemetryPath: manifest.telemetryPath,
+    chunks: manifest.chunks.map((chunk) => ({
+      index: chunk.index,
+      path: deriveAndroidChunkOutPath(recordingBase.outPath, chunk.index),
+      remotePath: chunk.remotePath,
+    })),
+    outPath: recordingBase.outPath,
+    clientOutPath: recordingBase.clientOutPath,
+    telemetryPath: recordingBase.telemetryPath,
     startedAt: manifest.startedAt,
-    maxSize: manifest.maxSize,
-    exportQuality: manifest.exportQuality,
+    maxSize: recordingBase.maxSize,
+    exportQuality: recordingBase.exportQuality,
     showTouches: false,
     gestureEvents: [],
     warning: manifest.showTouches

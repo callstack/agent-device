@@ -54,7 +54,7 @@ export function resolveAndroidScreenrecordLimitWarning(
 export function scheduleAndroidRecordingRotation(params: {
   recording: AndroidRecording;
   startNextChunk: (preferredRemoteDir: string) => Promise<AndroidScreenrecordChunk>;
-  finishCurrentChunk: () => Promise<string | undefined>;
+  finishCurrentChunk: (chunk: AndroidScreenrecordChunk) => Promise<string | undefined>;
   persistRecordingState?: (recording: AndroidRecording) => Promise<void>;
 }): void {
   const { recording, startNextChunk, finishCurrentChunk, persistRecordingState } = params;
@@ -87,19 +87,19 @@ export function scheduleAndroidRecordingRotation(params: {
 async function rotateAndroidRecordingChunk(params: {
   recording: AndroidRecording;
   startNextChunk: (preferredRemoteDir: string) => Promise<AndroidScreenrecordChunk>;
-  finishCurrentChunk: () => Promise<string | undefined>;
+  finishCurrentChunk: (chunk: AndroidScreenrecordChunk) => Promise<string | undefined>;
   persistRecordingState?: (recording: AndroidRecording) => Promise<void>;
 }): Promise<void> {
   const { recording, startNextChunk, finishCurrentChunk, persistRecordingState } = params;
   if (recording.stopping) return;
-  const stopError = await finishCurrentChunk();
-  if (stopError) {
-    throw new Error(stopError);
-  }
-  if (recording.stopping) return;
 
   const chunks = ensureAndroidRecordingChunks(recording);
   const nextIndex = chunks.length + 1;
+  const previousChunk = {
+    remotePath: recording.remotePath,
+    remotePid: recording.remotePid,
+    startedAt: recording.remoteStartedAt ?? recording.startedAt,
+  };
   const nextChunk = await startNextChunk(path.posix.dirname(recording.remotePath));
   recording.remotePath = nextChunk.remotePath;
   recording.remotePid = nextChunk.remotePid;
@@ -112,6 +112,10 @@ async function rotateAndroidRecordingChunk(params: {
   recording.warning ??=
     'Android adb screenrecord is capped at 180s, so this recording was split into multiple MP4 chunks.';
   await persistRecordingState?.(recording);
+  const stopError = await finishCurrentChunk(previousChunk);
+  if (stopError) {
+    throw new Error(stopError);
+  }
 }
 
 export async function finalizeAndroidRecordingOutput(params: {
