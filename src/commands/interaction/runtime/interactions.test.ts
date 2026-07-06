@@ -338,6 +338,48 @@ test('runtime press with verify drops the non-hittable hint when evidence proves
   assert.equal('hint' in result, false);
 });
 
+test('runtime press with settle drops the non-hittable hint when the diff proves a change', async () => {
+  const nonHittableSnapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Button',
+      label: 'Continue',
+      rect: { x: 10, y: 20, width: 100, height: 40 },
+      hittable: false,
+    },
+  ]);
+  const changedSnapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'StaticText',
+      label: 'Welcome',
+      rect: { x: 10, y: 20, width: 100, height: 40 },
+      hittable: true,
+    },
+  ]);
+  let captureCount = 0;
+  const device = createInteractionDevice(nonHittableSnapshot, {
+    captureSnapshot: async () => {
+      captureCount += 1;
+      return { snapshot: captureCount === 1 ? nonHittableSnapshot : changedSnapshot };
+    },
+    tap: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+    settle: { quietMs: 25, timeoutMs: 2_000 },
+  });
+
+  assert.equal(result.kind, 'selector');
+  if (result.kind !== 'selector') return;
+  assert.equal(result.targetHittable, false);
+  assert.deepEqual(result.settle?.diff?.summary, { additions: 1, removals: 1, unchanged: 0 });
+  assert.equal('hint' in result, false);
+});
+
 test('runtime press keeps the non-hittable hint when evidence shows no change', async () => {
   const nonHittableSnapshot = makeSnapshotState([
     {

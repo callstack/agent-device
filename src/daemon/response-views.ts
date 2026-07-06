@@ -139,8 +139,33 @@ function interactionSettleView(data: DaemonResponseData, level: ResponseLevel): 
   if (!settle || typeof settle !== 'object' || Array.isArray(settle)) return data;
   const { diff, ...rest } = settle as Record<string, unknown>;
   if (!diff || typeof diff !== 'object' || Array.isArray(diff)) return data;
-  const summary = (diff as Record<string, unknown>).summary;
-  return { ...data, settle: { ...rest, diff: { summary } } };
+  const diffRecord = diff as Record<string, unknown>;
+  const summary = diffRecord.summary;
+  const refs = readSettleDigestRefs(diffRecord.lines);
+  return {
+    ...data,
+    settle: {
+      ...rest,
+      ...(refs.length > 0 ? { refs } : {}),
+      diff: { summary },
+    },
+  };
+}
+
+function readSettleDigestRefs(lines: unknown): Array<{ ref: string }> {
+  if (!Array.isArray(lines)) return [];
+  const refs: Array<{ ref: string }> = [];
+  for (const line of lines) {
+    const record = line && typeof line === 'object' && !Array.isArray(line) ? line : undefined;
+    if (!record) continue;
+    const kind = (record as Record<string, unknown>).kind;
+    const ref = (record as Record<string, unknown>).ref;
+    if (kind === 'added' && typeof ref === 'string' && ref.length > 0) {
+      refs.push({ ref });
+      if (refs.length >= DIGEST_REF_LIMIT) break;
+    }
+  }
+  return refs;
 }
 
 export const RESPONSE_VIEWS: Record<string, ResponseView> = {

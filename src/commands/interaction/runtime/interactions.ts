@@ -290,8 +290,9 @@ async function captureVerifyEvidence(
 
 // The resolution-time non-hittable hint warns the action "may have had no
 // visible effect". When --verify evidence proves the interactive tree changed,
-// that warning is contradicted by data sitting next to it in the same response
-// — drop it and let targetHittable + evidence speak for themselves.
+// or --settle returns a material diff, that warning is contradicted by data
+// sitting next to it in the same response — drop it and let targetHittable plus
+// the observation speak for themselves.
 function reconcileNonHittableHintWithEvidence<T extends object>(result: T): T {
   // Widened view: point-target results carry none of these fields, which is
   // exactly the no-op path.
@@ -299,16 +300,26 @@ function reconcileNonHittableHintWithEvidence<T extends object>(result: T): T {
     targetHittable?: boolean;
     hint?: string;
     evidence?: InteractionEvidence;
+    settle?: SettleObservation;
   };
   if (
     view.targetHittable !== false ||
-    view.evidence?.changedFromBefore !== true ||
+    !hasMaterialPostActionChange(view) ||
     view.hint === undefined
   ) {
     return result;
   }
   const { hint: _hint, ...rest } = view;
   return rest as T;
+}
+
+function hasMaterialPostActionChange(view: {
+  evidence?: InteractionEvidence;
+  settle?: SettleObservation;
+}): boolean {
+  if (view.evidence?.changedFromBefore === true) return true;
+  const summary = view.settle?.diff?.summary;
+  return !!summary && (summary.additions > 0 || summary.removals > 0);
 }
 
 function requireResolvedPoint(result: { point?: Point }): Point {

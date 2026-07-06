@@ -474,6 +474,48 @@ test('MCP merges per-ref pins from a settle response diff (merge-only)', async (
   });
 });
 
+test('MCP merges digest-level settle refs too, including never-settled diffs', async () => {
+  const runCalls: Array<{ name: string; input: unknown }> = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      runCalls.push({ name, input });
+      if (name === 'press' && runCalls.length === 1) {
+        return {
+          ref: 'e2',
+          settle: {
+            settled: false,
+            waitedMs: 2000,
+            captures: 7,
+            quietMs: 25,
+            timeoutMs: 2000,
+            refsGeneration: 9,
+            refs: [{ ref: 'e4' }],
+            diff: {
+              summary: { additions: 1, removals: 1, unchanged: 1 },
+            },
+            hint: 'The UI kept changing for the whole settle budget.',
+          },
+        };
+      }
+      return {};
+    },
+  });
+
+  await executor.execute('press', {
+    session: 'demo',
+    responseLevel: 'digest',
+    target: { kind: 'ref', ref: '@e2' },
+    settle: true,
+  });
+  await executor.execute('press', { session: 'demo', target: { kind: 'ref', ref: '@e4' } });
+
+  assert.deepEqual(runCalls[1]?.input, {
+    session: 'demo',
+    target: { kind: 'ref', ref: '@e4~s9' },
+  });
+});
+
 test('MCP leaves pins untouched for plain (non-settle) interaction responses', async () => {
   const runCalls: Array<{ name: string; input: unknown }> = [];
   const executor = createCommandToolExecutor({

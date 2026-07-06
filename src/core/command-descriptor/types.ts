@@ -19,11 +19,10 @@ export type DaemonCommandTraits = Omit<DaemonCommandDescriptor, 'command'>;
  *  - `'flag'`             — the `--timeout` flag (`flags.timeoutMs`). By default it
  *                           REPLACES the envelope (replay semantics: --timeout
  *                           bounds the request). With `envelope: 'widen'` it only
- *                           ever EXTENDS the envelope to budget + margin, never
- *                           shrinking below `envelopeMs` (interaction --settle
- *                           semantics, #1101: the flag bounds an internal wait
- *                           the request must outlive — mirroring wait's
- *                           positional budget).
+ *                           ever EXTENDS the envelope to envelopeMs + budget +
+ *                           margin (interaction --settle semantics, #1101: the
+ *                           flag bounds a post-action wait, so the request must
+ *                           also cover selector/action overhead).
  *  - `'positional-parser'`— the budget travels inside the positionals; `parser`
  *                           extracts it (or returns null when none was given).
  *                           The client widens the envelope to

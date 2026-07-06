@@ -194,6 +194,15 @@ const settleObservationSchema: JsonSchema = objectSchema(
     refsGeneration: numberSchema(
       'Snapshot generation of the stored settled tree; refs on added diff lines were minted from it.',
     ),
+    refs: {
+      type: 'array',
+      items: objectSchema(
+        {
+          ref: stringSchema('Plain ref body (e12) minted from the stored settled tree.'),
+        },
+        ['ref'],
+      ),
+    },
     diff: objectSchema(
       {
         summary: objectSchema(

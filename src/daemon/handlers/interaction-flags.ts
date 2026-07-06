@@ -37,9 +37,9 @@ export function unsupportedRefSnapshotFlags(flags: CommandFlags | undefined): st
  * `--settle` opts in, `--settle-quiet <ms>` overrides the quiet window, and
  * `--timeout <ms>` bounds the settle wait (the same budget the descriptor's
  * flag-sourced timeout policy widens the request envelope past, mirroring
- * wait's positional budget). The two tuning flags without `--settle` would
- * silently do nothing — reject them so a typo cannot masquerade as a settled
- * interaction.
+ * wait's positional budget). Preserve compatibility for a bare `--timeout`
+ * without `--settle`: older touch commands silently ignored it. Only
+ * `--settle-quiet` is settle-specific enough to reject when orphaned.
  */
 export function settleFlagGuardResponse(
   command: 'press' | 'click' | 'fill' | 'longpress',
@@ -48,7 +48,6 @@ export function settleFlagGuardResponse(
   if (!flags || flags.settle === true) return null;
   const orphaned: string[] = [];
   if (flags.settleQuietMs !== undefined) orphaned.push('--settle-quiet');
-  if (flags.timeoutMs !== undefined) orphaned.push('--timeout');
   if (orphaned.length === 0) return null;
   return errorResponse(
     'INVALID_ARGS',

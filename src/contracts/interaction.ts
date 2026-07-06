@@ -124,6 +124,12 @@ export type SettleObservation = {
    * exactly like snapshot/find responses.
    */
   refsGeneration?: number;
+  /**
+   * Digest response view only: capped added-line refs preserved without the
+   * verbose diff line text, so MCP can still pin refs when `diff.lines` is
+   * intentionally omitted.
+   */
+  refs?: Array<{ ref: string }>;
   diff?: {
     summary: { additions: number; removals: number; unchanged: number };
     lines: SettleDiffLine[];

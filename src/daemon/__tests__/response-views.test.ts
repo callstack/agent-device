@@ -284,7 +284,7 @@ test('interaction settle views are registered for all four touch commands', () =
   expect(RESPONSE_VIEWS.press).toBe(RESPONSE_VIEWS.longpress);
 });
 
-test('settle digest keeps the verdict, summary, and refsGeneration; drops the line texts', () => {
+test('settle digest keeps the verdict, summary, refsGeneration, and capped added refs; drops the line texts', () => {
   const digest = RESPONSE_VIEWS.press!(SETTLE_DATA, 'digest');
   expect(digest.settle).toEqual({
     settled: true,
@@ -293,11 +293,42 @@ test('settle digest keeps the verdict, summary, and refsGeneration; drops the li
     quietMs: 25,
     timeoutMs: 2000,
     refsGeneration: 8,
+    refs: [{ ref: 'e4' }],
     diff: { summary: { additions: 1, removals: 1, unchanged: 4 } },
   });
   // Every other (cheap) field is preserved verbatim.
   expect(digest.ref).toBe('e2');
   expect(digest.message).toBe('Tapped @e2 (200, 322)');
+});
+
+test('settle digest caps added refs at the snapshot digest ref limit', () => {
+  const lines = Array.from({ length: 20 }, (_, index) => ({
+    kind: 'added' as const,
+    text: `@e${index + 1} [button] "Item ${index + 1}"`,
+    ref: `e${index + 1}`,
+  }));
+  const digest = RESPONSE_VIEWS.press!(
+    {
+      settle: {
+        settled: false,
+        waitedMs: 2000,
+        captures: 7,
+        quietMs: 25,
+        timeoutMs: 2000,
+        refsGeneration: 9,
+        diff: {
+          summary: { additions: 20, removals: 0, unchanged: 0 },
+          lines,
+          truncated: true,
+        },
+      },
+    },
+    'digest',
+  );
+
+  expect((digest.settle as { refs?: unknown[] }).refs).toHaveLength(12);
+  expect((digest.settle as { refs?: unknown[] }).refs?.at(0)).toEqual({ ref: 'e1' });
+  expect((digest.settle as { refs?: unknown[] }).refs?.at(11)).toEqual({ ref: 'e12' });
 });
 
 test('plain interaction responses pass through UNCHANGED at every level', () => {

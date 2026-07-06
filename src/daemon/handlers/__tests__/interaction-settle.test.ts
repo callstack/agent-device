@@ -248,10 +248,29 @@ test('a settle observation without a diff leaves ref staleness untouched', async
   expect(sessionStore.get(sessionName)?.snapshotRefsStale).toBe(true);
 });
 
-test('settle tuning flags without --settle are rejected', async () => {
+test('settle-specific tuning flags without --settle are rejected, but bare timeout stays compatible', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'settle-guard';
   seedSession(sessionName, sessionStore);
+  mockCommandDispatch({ snapshots: [BEFORE_NODES] });
+
+  const compatible = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'press',
+      positionals: ['label=Continue'],
+      flags: { timeoutMs: 2_000 },
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  expect(compatible?.ok).toBe(true);
+  if (compatible?.ok) {
+    expect(compatible.data?.settle).toBeUndefined();
+  }
 
   const response = await handleInteractionCommands({
     req: {
@@ -259,7 +278,7 @@ test('settle tuning flags without --settle are rejected', async () => {
       session: sessionName,
       command: 'press',
       positionals: ['label=Continue'],
-      flags: { settleQuietMs: 25, timeoutMs: 2_000 },
+      flags: { settleQuietMs: 25 },
     },
     sessionName,
     sessionStore,
@@ -269,7 +288,7 @@ test('settle tuning flags without --settle are rejected', async () => {
   expect(response?.ok).toBe(false);
   if (response?.ok !== false) return;
   expect(response.error?.code).toBe('INVALID_ARGS');
-  expect(response.error?.message).toMatch(/--settle-quiet, --timeout require --settle/);
+  expect(response.error?.message).toMatch(/--settle-quiet requires --settle/);
 });
 
 test('fill @ref --settle carries the settle payload on the ref wire shape', async () => {

@@ -194,7 +194,8 @@ function mergeIssuedRefPins(
  * lines move to the settle generation; every other pin stays put (the settle
  * capture replaced the tree, so an old pin on an unchanged-looking element is
  * exactly what makes the daemon warn precisely). No settle payload, no diff,
- * or no generation → not an issuing response; pins are left untouched.
+ * no digest refs, or no generation → not an issuing response; pins are left
+ * untouched.
  */
 function mergeSettleIssuedRefPins(
   refPinsByScope: Map<string, Map<string, number>>,
@@ -202,11 +203,13 @@ function mergeSettleIssuedRefPins(
   result: unknown,
 ): void {
   const settle = asOptionalRecord(asOptionalRecord(result)?.settle);
+  if (!settle) return;
   const refsGeneration = settle?.refsGeneration;
   if (typeof refsGeneration !== 'number') return;
   const lines = asOptionalRecord(settle?.diff)?.lines;
   const issuedRefs: string[] = [];
   collectRefBodies(lines, issuedRefs);
+  collectRefBodies(settle.refs, issuedRefs);
   if (issuedRefs.length === 0) return;
   const pins = refPinsByScope.get(scopeKey) ?? new Map<string, number>();
   refPinsByScope.set(scopeKey, pins);

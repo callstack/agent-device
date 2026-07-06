@@ -100,9 +100,9 @@ const INSTALL_TIMEOUT_POLICY: CommandTimeoutPolicy = {
 };
 
 // press/click/fill/longpress --settle (#1101): --timeout bounds the SETTLE
-// wait, not the request — the envelope only ever WIDENS past the budget
-// (mirroring wait's positional budget, #1075), never shrinks below the
-// default; a slow tap must not die at a user-supplied settle deadline.
+// wait, not the whole request. The client envelope keeps the normal
+// selector/action envelope and adds the settle budget plus margin; a slow tap
+// must not die at a user-supplied settle deadline.
 const SETTLE_FLAG_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   ...DEFAULT_TIMEOUT_POLICY,
   budget: { source: 'flag', envelope: 'widen' },

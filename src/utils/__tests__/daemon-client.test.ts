@@ -265,29 +265,41 @@ test('wait request timeout extends past the user-supplied wait budget', () => {
   assert.equal(resolveDaemonRequestTimeoutMs({ ...base, command: 'wait' }), 90_000);
 });
 
-test('interaction --settle budgets widen the envelope like wait budgets, never shrink it', () => {
+test('interaction --settle budgets add post-action settle time on top of the normal envelope', () => {
   const base = {
     session: 'default',
     positionals: ['@e2'],
     meta: {},
   };
 
-  // --timeout bounds the SETTLE wait, so the envelope extends past it…
+  // --timeout bounds the SETTLE wait after selector resolution and the action,
+  // so the envelope keeps the normal touch-command overhead and then adds the
+  // settle budget plus the same safety margin used by wait.
   assert.equal(
     resolveDaemonRequestTimeoutMs({
       ...base,
       command: 'press',
       flags: { settle: true, timeoutMs: 120_000 },
     }),
-    150_000,
+    240_000,
   );
-  // …and a small settle deadline never shrinks the envelope (a slow tap must
-  // not die at the user-supplied settle budget).
+  // A small settle deadline still needs the normal touch-command envelope plus
+  // room for post-action observation.
   assert.equal(
     resolveDaemonRequestTimeoutMs({
       ...base,
       command: 'fill',
       flags: { settle: true, timeoutMs: 5_000 },
+    }),
+    125_000,
+  );
+  // Bare timeoutMs without --settle remains wire-compatible with older touch
+  // command clients: it is ignored instead of opting into settle semantics.
+  assert.equal(
+    resolveDaemonRequestTimeoutMs({
+      ...base,
+      command: 'press',
+      flags: { timeoutMs: 120_000 },
     }),
     90_000,
   );

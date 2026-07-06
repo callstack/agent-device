@@ -158,3 +158,89 @@ test('Provider-backed integration press --settle returns the settled diff and fr
     },
   );
 });
+
+test('Provider-backed integration never-settled press --settle keeps added refs actionable', async () => {
+  const loadingNodes = (label: string) => [
+    {
+      index: 0,
+      type: 'Application',
+      label: 'Example',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+    },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'StaticText',
+      label,
+      hittable: true,
+      rect: { x: 100, y: 300, width: 200, height: 44 },
+    },
+  ];
+  const runnerTranscript = createProviderTranscript([
+    // press label=Continue --settle: resolution capture, tap, then a changing
+    // settle stream. The loop times out and stores the last capture.
+    snapshotEntry(BEFORE_NODES),
+    tapEntry(200, 322),
+    snapshotEntry(loadingNodes('Loading 1')),
+    snapshotEntry(loadingNodes('Loading 2')),
+    snapshotEntry(SETTLED_NODES),
+    // press @e2 (the Done ref from the never-settled final diff): tap on the
+    // stored last tree, with no fresh snapshot round trip.
+    tapEntry(200, 522),
+  ]);
+  const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
+    runnerTranscript,
+    'ios.runner',
+  );
+  const appleTool = createRecordingAppleToolProvider({
+    simctl: simctlListDevicesHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
+      { name: PROVIDER_SCENARIO_IOS_SIMULATOR.name, udid: DEVICE_ID },
+    ]),
+  });
+
+  await withProviderScenarioResource(
+    async () =>
+      await createProviderScenarioHarness({
+        appleRunnerProvider: () => appleRunnerProvider,
+        appleToolProvider: () => appleTool.provider,
+        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
+      }),
+    async (daemon) => {
+      const open = await daemon.callCommand('open', [APP], {
+        platform: 'ios',
+        udid: DEVICE_ID,
+      });
+      assertRpcOk(open);
+
+      const press = await daemon.callCommand('press', ['label=Continue'], {
+        settle: true,
+        settleQuietMs: 25,
+        timeoutMs: 60,
+      });
+      const pressData = assertRpcOk(press);
+      const settle = pressData.settle as {
+        settled: boolean;
+        refsGeneration?: number;
+        diff?: {
+          summary: { additions: number; removals: number; unchanged: number };
+          lines: Array<{ kind: string; text: string; ref?: string }>;
+        };
+        hint?: string;
+      };
+      assert.equal(settle.settled, false);
+      assert.equal(typeof settle.refsGeneration, 'number');
+      assert.match(settle.hint ?? '', /kept changing/);
+      const added = settle.diff?.lines.find((line) => line.kind === 'added');
+      assert.match(added?.text ?? '', /Done/);
+      assert.equal(added?.ref, 'e2');
+
+      const followUp = await daemon.callCommand('press', ['@e2'], {});
+      const followUpData = assertRpcOk(followUp);
+      assert.equal(followUpData.warning, undefined);
+      assert.equal(followUpData.x, 200);
+      assert.equal(followUpData.y, 522);
+
+      runnerTranscript.assertComplete();
+    },
+  );
+});
