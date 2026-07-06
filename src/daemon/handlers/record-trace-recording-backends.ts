@@ -58,6 +58,7 @@ type RecordingOutputPathContext = {
 
 type RecordingStartContext = {
   req: DaemonRequest;
+  sessionName: string;
   activeSession: SessionState;
   sessionStore: SessionStore;
   device: SessionState['device'];
@@ -276,10 +277,10 @@ const iosSimulatorRecordingBackend: RecordingBackend<'ios'> = {
 
 const androidRecordingBackend: RecordingBackend<'android'> = {
   resolveOutputPath: resolveNativeRecordingOutputPath,
-  start: async ({ activeSession, device, recordingBase }) =>
-    await startAndroidRecording({ activeSession, device, recordingBase }),
-  recoverMissingStop: async ({ activeSession, device, recordingBase }) =>
-    await recoverMissingAndroidRecording({ activeSession, device, recordingBase }),
+  start: async ({ sessionName, activeSession, device, recordingBase }) =>
+    await startAndroidRecording({ sessionName, activeSession, device, recordingBase }),
+  recoverMissingStop: async ({ sessionName, activeSession, device, recordingBase }) =>
+    await recoverMissingAndroidRecording({ sessionName, activeSession, device, recordingBase }),
   stop: async ({ deps, device, recording, stopRequestedAt }) =>
     await stopAndroidRecording({
       deps,

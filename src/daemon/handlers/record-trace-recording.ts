@@ -49,6 +49,7 @@ type StartRecordingParams = {
 
 type StopRecordingParams = {
   req: DaemonRequest;
+  sessionName: string;
   sessionStore: SessionStore;
   activeSession: SessionState;
   device: SessionState['device'];
@@ -114,6 +115,7 @@ async function startRecording(params: StartRecordingParams): Promise<DaemonRespo
 
   const recording = await startPlan.backend.start({
     req,
+    sessionName,
     activeSession,
     sessionStore,
     device,
@@ -315,7 +317,7 @@ async function resolveRecordingToStop(
 async function recoverMissingRecordingState(
   params: StopRecordingParams,
 ): Promise<DaemonResponse | NonNullable<SessionState['recording']> | null> {
-  const { req, sessionStore, activeSession, device, logPath, deps } = params;
+  const { req, sessionName, sessionStore, activeSession, device, logPath, deps } = params;
   if (hasActiveRecordingSessionForDevice(sessionStore, device.id)) {
     return null;
   }
@@ -328,6 +330,7 @@ async function recoverMissingRecordingState(
   const { resolvedOut, recordingBase } = prepareRecoveredRecording(req, backend);
   const recovered = await backend.recoverMissingStop({
     req,
+    sessionName,
     activeSession,
     sessionStore,
     device,
@@ -507,7 +510,15 @@ export async function handleRecordCommand(params: {
     return startRecording({ req, sessionName, sessionStore, activeSession, device, logPath, deps });
   }
 
-  const response = await stopRecording({ req, sessionStore, activeSession, device, logPath, deps });
+  const response = await stopRecording({
+    req,
+    sessionName,
+    sessionStore,
+    activeSession,
+    device,
+    logPath,
+    deps,
+  });
   if (!response.ok) {
     await releaseRecordOnlySession(sessionStore, sessionName, activeSession);
     return response;

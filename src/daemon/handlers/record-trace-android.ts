@@ -367,11 +367,12 @@ async function tryStartAndroidScreenrecordAtPath(params: {
 }
 
 export async function startAndroidRecording(params: {
+  sessionName: string;
   activeSession: SessionState;
   device: AndroidDevice;
   recordingBase: AndroidRecordingBase;
 }): Promise<DaemonResponse | AndroidRecording> {
-  const { activeSession, device, recordingBase } = params;
+  const { sessionName, activeSession, device, recordingBase } = params;
   let recordingSize: AndroidRecordingSize | undefined;
   try {
     recordingSize = await resolveAndroidRecordingSize({
@@ -392,7 +393,8 @@ export async function startAndroidRecording(params: {
       prepareRemotePath: async (remotePath) =>
         await writeAndroidRecoveryPendingMetadata({
           deviceId: device.id,
-          activeSession,
+          sessionName,
+          sessionScope: activeSession.sessionScope,
           recordingId,
           startedAt: recordingBase.startedAt,
           showTouches: recordingBase.showTouches,
@@ -410,7 +412,8 @@ export async function startAndroidRecording(params: {
   const recording = buildAndroidRecording({ recordingBase, chunk, recordingId });
   const metadataError = await writeAndroidRecoveryMetadata({
     deviceId: device.id,
-    activeSession,
+    sessionName,
+    sessionScope: activeSession.sessionScope,
     recording,
   });
   if (metadataError) {
@@ -421,6 +424,7 @@ export async function startAndroidRecording(params: {
   }
   scheduleAndroidRecordingChunks({
     activeSession,
+    sessionName,
     device,
     recording,
     recordingSize,
@@ -455,12 +459,13 @@ function buildAndroidRecording(params: {
 
 function scheduleAndroidRecordingChunks(params: {
   activeSession: SessionState;
+  sessionName: string;
   device: AndroidDevice;
   recording: AndroidRecording;
   recordingSize: AndroidRecordingSize | undefined;
   quality: RecordingExportQuality;
 }): void {
-  const { activeSession, device, recording, recordingSize, quality } = params;
+  const { activeSession, sessionName, device, recording, recordingSize, quality } = params;
   scheduleAndroidRecordingRotation({
     recording,
     finishCurrentChunk: async (chunk) =>
@@ -484,7 +489,8 @@ function scheduleAndroidRecordingChunks(params: {
           prepareRemotePath: async (remotePath) =>
             await writeAndroidRecoveryRotatingMetadata({
               deviceId: device.id,
-              activeSession,
+              sessionName,
+              sessionScope: activeSession.sessionScope,
               recording,
               nextRemotePath: remotePath,
               nextIndex,
@@ -492,7 +498,8 @@ function scheduleAndroidRecordingChunks(params: {
           cleanupPreparedRemotePath: async () => {
             await writeAndroidRecoveryMetadata({
               deviceId: device.id,
-              activeSession,
+              sessionName,
+              sessionScope: activeSession.sessionScope,
               recording,
             });
           },
@@ -510,7 +517,8 @@ function scheduleAndroidRecordingChunks(params: {
     persistRecordingState: async (updatedRecording) => {
       const metadataError = await writeAndroidRecoveryMetadata({
         deviceId: device.id,
-        activeSession,
+        sessionName,
+        sessionScope: activeSession.sessionScope,
         recording: updatedRecording,
       });
       if (metadataError) {

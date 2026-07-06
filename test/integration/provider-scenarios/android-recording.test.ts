@@ -45,6 +45,13 @@ test('Provider-backed integration Android record stop recovers cwd-scoped durabl
   );
 });
 
+test('Provider-backed integration Android record stop recovers opened cwd-scoped recording after daemon state loss', async () => {
+  await withProviderScenarioTempDir(
+    'agent-device-provider-scenario-android-record-open-scoped-recovery-',
+    runAndroidOpenScopedRecordingRecoveryScenario,
+  );
+});
+
 test('Provider-backed integration Android record stop does not recover ownerless live screenrecord', async () => {
   await withProviderScenarioTempDir(
     'agent-device-provider-scenario-android-record-ownerless-recovery-',
@@ -348,6 +355,68 @@ async function runAndroidScopedManifestRecoveryScenario(tmpDir: string): Promise
     assert.deepEqual(pullCalls, [{ remotePath, localPath: recordingPath }]);
   } finally {
     await daemon.close();
+  }
+}
+
+async function runAndroidOpenScopedRecordingRecoveryScenario(tmpDir: string): Promise<void> {
+  const adbCalls: string[][] = [];
+  const pullCalls: PullCall[] = [];
+  const scopeRoot = path.join(tmpDir, 'worktree');
+  const recordingPath = path.join(tmpDir, 'opened-scoped-recovered.mp4');
+  fs.mkdirSync(path.join(scopeRoot, '.git'), { recursive: true });
+  const scopeId = hashScopeRoot(fs.realpathSync.native(scopeRoot));
+  const provider = createStatefulAndroidRecordingProvider({ adbCalls, pullCalls });
+  const createDaemon = async () =>
+    await createProviderScenarioHarness({
+      androidAdbProvider: () => provider,
+      deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+    });
+  const firstDaemon = await createDaemon();
+  try {
+    const open = await firstDaemon.callCommand(
+      'open',
+      ['settings'],
+      {
+        platform: 'android',
+        serial: PROVIDER_SCENARIO_ANDROID.id,
+      },
+      { meta: { cwd: scopeRoot } },
+    );
+    assertRpcOk(open);
+    const recordStart = await firstDaemon.callCommand(
+      'record',
+      ['start', recordingPath],
+      {
+        platform: 'android',
+        serial: PROVIDER_SCENARIO_ANDROID.id,
+      },
+      { meta: { cwd: scopeRoot } },
+    );
+    assertRecordingStarted(recordStart, { showTouches: true });
+    assert.equal(provider.manifest?.sessionName, `cwd:${scopeId}:default`);
+    assert.deepEqual(provider.manifest?.sessionScope, { kind: 'cwd', id: scopeId });
+  } finally {
+    await firstDaemon.close();
+  }
+
+  const secondDaemon = await createDaemon();
+  try {
+    const recordStop = await secondDaemon.callCommand(
+      'record',
+      ['stop', recordingPath],
+      {
+        platform: 'android',
+        serial: PROVIDER_SCENARIO_ANDROID.id,
+      },
+      { meta: { cwd: scopeRoot } },
+    );
+    const data = assertRpcOk<{ recording?: unknown; outPath?: unknown }>(recordStop);
+    assert.equal(data.recording, 'stopped');
+    assert.equal(data.outPath, recordingPath);
+    assert.equal(fs.existsSync(recordingPath), true);
+    assert.equal(pullCalls.length, 1);
+  } finally {
+    await secondDaemon.close();
   }
 }
 
@@ -1137,6 +1206,58 @@ function createPullingAndroidProvider(params: {
   };
 }
 
+function createStatefulAndroidRecordingProvider(params: {
+  adbCalls: string[][];
+  pullCalls: PullCall[];
+}): AndroidAdbProvider & { manifest?: ReturnType<typeof buildAndroidRecordingManifest> } {
+  const { adbCalls, pullCalls } = params;
+  const provider: AndroidAdbProvider & {
+    manifest?: ReturnType<typeof buildAndroidRecordingManifest>;
+  } = {
+    exec: async (args) => {
+      adbCalls.push([...args]);
+      const command = args.join(' ');
+      const manifestPayload = extractManifestWritePayload(command);
+      if (manifestPayload) {
+        provider.manifest = JSON.parse(manifestPayload);
+        return { stdout: '', stderr: '', exitCode: 0 };
+      }
+      if (command === 'shell cat /sdcard/agent-device-recording-active.json') {
+        return provider.manifest
+          ? { stdout: JSON.stringify(provider.manifest), stderr: '', exitCode: 0 }
+          : { stdout: '', stderr: 'missing manifest', exitCode: 1 };
+      }
+      if (command === 'shell rm -f /sdcard/agent-device-recording-active.json') {
+        delete provider.manifest;
+        return { stdout: '', stderr: '', exitCode: 0 };
+      }
+      if (command === 'shell ps -o pid=,args= -p 4321' && provider.manifest?.current) {
+        return {
+          stdout: `4321 screenrecord --bit-rate 8000000 ${provider.manifest.current.remotePath}\n`,
+          stderr: '',
+          exitCode: 0,
+        };
+      }
+      return androidAdbResult(args);
+    },
+    pull: async (remotePath, localPath) => {
+      pullCalls.push({ remotePath, localPath });
+      writePlayableMp4(localPath);
+      return { stdout: '', stderr: '', exitCode: 0 };
+    },
+  };
+  return provider;
+}
+
+function extractManifestWritePayload(command: string): string | undefined {
+  const prefix = "shell printf %s '";
+  if (!command.startsWith(prefix)) return undefined;
+  if (!command.includes('agent-device-recording-active.json.tmp')) return undefined;
+  const payloadEnd = command.indexOf("' >", prefix.length);
+  if (payloadEnd === -1) return undefined;
+  return command.slice(prefix.length, payloadEnd).replace(/'\\''/g, "'");
+}
+
 function createAndroidManifestProvider(params: {
   adbCalls: string[][];
   manifests: Array<ReturnType<typeof buildAndroidRecordingManifest>>;
@@ -1249,7 +1370,6 @@ function buildAndroidRecordingManifest(options: AndroidRecordingManifestFixtureO
   const status = options.status ?? 'live';
   return {
     version: 1,
-    status,
     sessionName: options.sessionName,
     sessionScope: options.sessionScope,
     recordingId: `recording-${startedAt}`,

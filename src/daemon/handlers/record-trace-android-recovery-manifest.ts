@@ -17,11 +17,8 @@ type AndroidRecordingRecoveryPending = {
   remotePath: string;
 };
 
-type AndroidRecordingRecoveryManifestStatus = 'pending' | 'live' | 'rotating';
-
 export type AndroidRecordingRecoveryManifest = {
   version: 1;
-  status: AndroidRecordingRecoveryManifestStatus;
   sessionName: string;
   sessionScope?: SessionState['sessionScope'];
   recordingId: string;
@@ -77,25 +74,13 @@ export function parseAndroidRecoveryManifest(
   const parsedPending = parseAndroidRecoveryPending(metadata.pending);
   const chunks = parseAndroidRecordingChunks(metadata.chunks);
   if (!chunks) return { kind: 'blocked', reason: 'invalid_recording_chunks' };
-  const status = readAndroidRecoveryManifestStatus(metadata.status, {
-    hasCurrent: parsedCurrent !== undefined,
-    hasPending: parsedPending !== undefined,
-  });
-  if (!status) return { kind: 'blocked', reason: 'invalid_recording_status' };
-  if (status === 'live' && !parsedCurrent) {
-    return { kind: 'blocked', reason: 'invalid_current_recording' };
-  }
-  if (status === 'pending' && !parsedPending) {
-    return { kind: 'blocked', reason: 'invalid_pending_recording' };
-  }
-  if (status === 'rotating' && (!parsedCurrent || !parsedPending)) {
-    return { kind: 'blocked', reason: 'invalid_rotating_recording' };
+  if (!parsedCurrent && !parsedPending) {
+    return { kind: 'blocked', reason: 'invalid_recording_state' };
   }
   return {
     kind: 'manifest',
     manifest: {
       ...required,
-      status,
       sessionScope: parseSessionScope(metadata.sessionScope),
       current: parsedCurrent,
       pending: parsedPending,
@@ -114,18 +99,19 @@ export function androidRecoveryMetadataPaths(): string[] {
 
 export function buildAndroidRecoveryPendingManifest(params: {
   deviceId: string;
-  activeSession: SessionState;
+  sessionName: string;
+  sessionScope?: SessionState['sessionScope'];
   recordingId: string;
   startedAt: number;
   showTouches: boolean;
   remotePath: string;
 }): AndroidRecordingRecoveryManifest {
-  const { deviceId, activeSession, recordingId, startedAt, showTouches, remotePath } = params;
+  const { deviceId, sessionName, sessionScope, recordingId, startedAt, showTouches, remotePath } =
+    params;
   return {
     version: ANDROID_RECOVERY_MANIFEST_VERSION,
-    status: 'pending',
-    sessionName: activeSession.name,
-    sessionScope: activeSession.sessionScope,
+    sessionName,
+    sessionScope,
     recordingId,
     deviceId,
     startedAt,
@@ -137,15 +123,15 @@ export function buildAndroidRecoveryPendingManifest(params: {
 
 export function buildAndroidRecoveryManifest(params: {
   deviceId: string;
-  activeSession: SessionState;
+  sessionName: string;
+  sessionScope?: SessionState['sessionScope'];
   recording: AndroidRecording;
 }): AndroidRecordingRecoveryManifest {
-  const { deviceId, activeSession, recording } = params;
+  const { deviceId, sessionName, sessionScope, recording } = params;
   return {
     version: ANDROID_RECOVERY_MANIFEST_VERSION,
-    status: 'live',
-    sessionName: activeSession.name,
-    sessionScope: activeSession.sessionScope,
+    sessionName,
+    sessionScope,
     recordingId:
       recording.recordingId ??
       `android-${recording.remotePid}-${recording.remoteStartedAt ?? recording.startedAt}`,
@@ -166,19 +152,19 @@ export function buildAndroidRecoveryManifest(params: {
 
 export function buildAndroidRecoveryRotatingManifest(params: {
   deviceId: string;
-  activeSession: SessionState;
+  sessionName: string;
+  sessionScope?: SessionState['sessionScope'];
   recording: AndroidRecording;
   nextRemotePath: string;
   nextIndex: number;
 }): AndroidRecordingRecoveryManifest {
-  const { deviceId, activeSession, recording, nextRemotePath, nextIndex } = params;
+  const { deviceId, sessionName, sessionScope, recording, nextRemotePath, nextIndex } = params;
   const chunks = [
     ...(recording.chunks ?? [{ index: 1, remotePath: recording.remotePath }]),
     { index: nextIndex, remotePath: nextRemotePath },
   ].map((chunk) => ({ index: chunk.index, remotePath: chunk.remotePath }));
   return {
-    ...buildAndroidRecoveryManifest({ deviceId, activeSession, recording }),
-    status: 'rotating',
+    ...buildAndroidRecoveryManifest({ deviceId, sessionName, sessionScope, recording }),
     pending: { remotePath: nextRemotePath },
     chunks,
   };
@@ -225,15 +211,6 @@ function readAndroidRecoveryManifestStrings(
   const deviceId = readOptionalString(metadata.deviceId);
   if (!sessionName || !recordingId || !deviceId) return undefined;
   return { sessionName, recordingId, deviceId };
-}
-
-function readAndroidRecoveryManifestStatus(
-  value: unknown,
-  metadata: { hasCurrent: boolean; hasPending: boolean },
-): AndroidRecordingRecoveryManifestStatus | undefined {
-  if (value === undefined && metadata.hasCurrent) return 'live';
-  if (value === 'pending' || value === 'live' || value === 'rotating') return value;
-  return undefined;
 }
 
 function parseAndroidRecoveryMetadata(

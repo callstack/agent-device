@@ -55,6 +55,10 @@ type AndroidRecordingRecoveryCandidate = Omit<
   chunks: AndroidRecordingRecoveryChunk[];
   recoveryWarning?: string;
 };
+type AndroidRecoveryResolution =
+  | { kind: 'live'; manifest: AndroidRecordingRecoveryCandidate }
+  | { kind: 'stale' }
+  | { kind: 'uncertain' };
 
 type AndroidRecoveryManifestScan = {
   live: AndroidRecordingRecoveryCandidate[];
@@ -132,91 +136,81 @@ async function readAndroidRecoveryMetadata(deviceId: string): Promise<AndroidRec
 async function resolveAndroidRecoveryCandidate(
   deviceId: string,
   manifest: AndroidRecordingRecoveryManifest,
-): Promise<
-  | { kind: 'live'; manifest: AndroidRecordingRecoveryCandidate }
-  | { kind: 'stale' }
-  | { kind: 'uncertain' }
-> {
-  if (manifest.status === 'pending') {
+): Promise<AndroidRecoveryResolution> {
+  if (manifest.pending) {
     return await resolvePendingAndroidRecoveryCandidate(deviceId, manifest);
   }
-  if (manifest.status === 'rotating') {
-    return await resolveRotatingAndroidRecoveryCandidate(deviceId, manifest);
-  }
-  if (!manifest.current) return { kind: 'stale' };
-  const liveness = await checkRecoverableAndroidScreenrecord(deviceId, manifest.current);
-  if (liveness === 'live') {
-    return { kind: 'live', manifest: { ...manifest, current: manifest.current } };
-  }
-  if (liveness === 'finished') {
-    return {
-      kind: 'live',
-      manifest: {
-        ...manifest,
-        current: manifest.current,
-        recoveryWarning: ANDROID_RECOVERY_FINISHED_WARNING,
-      },
-    };
-  }
-  return { kind: liveness };
+  return await resolveCurrentAndroidRecoveryCandidate(deviceId, manifest);
 }
 
 async function resolvePendingAndroidRecoveryCandidate(
   deviceId: string,
   manifest: AndroidRecordingRecoveryManifest,
-): Promise<
-  | { kind: 'live'; manifest: AndroidRecordingRecoveryCandidate }
-  | { kind: 'stale' }
-  | { kind: 'uncertain' }
-> {
-  if (!manifest.pending) return { kind: 'stale' };
-  const pending = await findLiveAndroidScreenrecordByPath(deviceId, manifest.pending.remotePath);
-  if (pending === 'uncertain') return { kind: 'uncertain' };
-  if (!pending) return { kind: 'stale' };
-  return {
-    kind: 'live',
-    manifest: {
-      ...manifest,
-      current: pending,
-      recoveryWarning: ANDROID_RECOVERY_WARNING,
-    },
-  };
-}
-
-async function resolveRotatingAndroidRecoveryCandidate(
-  deviceId: string,
-  manifest: AndroidRecordingRecoveryManifest,
-): Promise<
-  | { kind: 'live'; manifest: AndroidRecordingRecoveryCandidate }
-  | { kind: 'stale' }
-  | { kind: 'uncertain' }
-> {
-  if (!manifest.pending || !manifest.current) return { kind: 'stale' };
+): Promise<AndroidRecoveryResolution> {
+  if (!manifest.pending) {
+    return await resolveCurrentAndroidRecoveryCandidate(deviceId, manifest);
+  }
   const pending = await findLiveAndroidScreenrecordByPath(deviceId, manifest.pending.remotePath);
   if (pending && pending !== 'uncertain') {
-    return {
-      kind: 'live',
-      manifest: {
-        ...manifest,
-        current: pending,
-        recoveryWarning: ANDROID_RECOVERY_ROTATION_WARNING,
-      },
-    };
+    return liveAndroidRecoveryCandidate({
+      manifest,
+      current: pending,
+      recoveryWarning: manifest.current
+        ? ANDROID_RECOVERY_ROTATION_WARNING
+        : ANDROID_RECOVERY_WARNING,
+    });
+  }
+  if (!manifest.current) {
+    return pending === 'uncertain' ? { kind: 'uncertain' } : { kind: 'stale' };
   }
 
   const liveness = await checkRecoverableAndroidScreenrecord(deviceId, manifest.current);
   if (liveness === 'uncertain' || pending === 'uncertain') return { kind: 'uncertain' };
   if (liveness === 'stale') return { kind: 'stale' };
+  return liveAndroidRecoveryCandidate({
+    manifest,
+    current: manifest.current,
+    chunks: chunksThroughRemotePath(manifest.chunks, manifest.current.remotePath),
+    recoveryWarning:
+      liveness === 'finished'
+        ? `${ANDROID_RECOVERY_ROTATION_WARNING} ${ANDROID_RECOVERY_FINISHED_WARNING}`
+        : ANDROID_RECOVERY_ROTATION_WARNING,
+  });
+}
+
+async function resolveCurrentAndroidRecoveryCandidate(
+  deviceId: string,
+  manifest: AndroidRecordingRecoveryManifest,
+): Promise<AndroidRecoveryResolution> {
+  if (!manifest.current) return { kind: 'stale' };
+  const liveness = await checkRecoverableAndroidScreenrecord(deviceId, manifest.current);
+  if (liveness === 'live') {
+    return liveAndroidRecoveryCandidate({ manifest, current: manifest.current });
+  }
+  if (liveness === 'finished') {
+    return liveAndroidRecoveryCandidate({
+      manifest,
+      current: manifest.current,
+      recoveryWarning: ANDROID_RECOVERY_FINISHED_WARNING,
+    });
+  }
+  return { kind: liveness };
+}
+
+function liveAndroidRecoveryCandidate(params: {
+  manifest: AndroidRecordingRecoveryManifest;
+  current: AndroidRecordingRecoveryMetadata;
+  chunks?: AndroidRecordingRecoveryChunk[];
+  recoveryWarning?: string;
+}): { kind: 'live'; manifest: AndroidRecordingRecoveryCandidate } {
+  const { manifest, current, chunks, recoveryWarning } = params;
   return {
     kind: 'live',
     manifest: {
       ...manifest,
-      current: manifest.current,
-      chunks: chunksThroughRemotePath(manifest.chunks, manifest.current.remotePath),
-      recoveryWarning:
-        liveness === 'finished'
-          ? `${ANDROID_RECOVERY_ROTATION_WARNING} ${ANDROID_RECOVERY_FINISHED_WARNING}`
-          : ANDROID_RECOVERY_ROTATION_WARNING,
+      current,
+      chunks: chunks ?? manifest.chunks,
+      ...(recoveryWarning ? { recoveryWarning } : {}),
     },
   };
 }
@@ -315,18 +309,21 @@ function chunksThroughRemotePath(
 
 export async function writeAndroidRecoveryPendingMetadata(params: {
   deviceId: string;
-  activeSession: SessionState;
+  sessionName: string;
+  sessionScope?: SessionState['sessionScope'];
   recordingId: string;
   startedAt: number;
   showTouches: boolean;
   remotePath: string;
 }): Promise<string | undefined> {
-  const { deviceId, activeSession, recordingId, startedAt, showTouches, remotePath } = params;
+  const { deviceId, sessionName, sessionScope, recordingId, startedAt, showTouches, remotePath } =
+    params;
   return await writeAndroidRecoveryManifest({
     deviceId,
     manifest: buildAndroidRecoveryPendingManifest({
       deviceId,
-      activeSession,
+      sessionName,
+      sessionScope,
       recordingId,
       startedAt,
       showTouches,
@@ -338,17 +335,19 @@ export async function writeAndroidRecoveryPendingMetadata(params: {
 
 export async function writeAndroidRecoveryRotatingMetadata(params: {
   deviceId: string;
-  activeSession: SessionState;
+  sessionName: string;
+  sessionScope?: SessionState['sessionScope'];
   recording: AndroidRecording;
   nextRemotePath: string;
   nextIndex: number;
 }): Promise<string | undefined> {
-  const { deviceId, activeSession, recording, nextRemotePath, nextIndex } = params;
+  const { deviceId, sessionName, sessionScope, recording, nextRemotePath, nextIndex } = params;
   return await writeAndroidRecoveryManifest({
     deviceId,
     manifest: buildAndroidRecoveryRotatingManifest({
       deviceId,
-      activeSession,
+      sessionName,
+      sessionScope,
       recording,
       nextRemotePath,
       nextIndex,
@@ -359,13 +358,14 @@ export async function writeAndroidRecoveryRotatingMetadata(params: {
 
 export async function writeAndroidRecoveryMetadata(params: {
   deviceId: string;
-  activeSession: SessionState;
+  sessionName: string;
+  sessionScope?: SessionState['sessionScope'];
   recording: AndroidRecording;
 }): Promise<string | undefined> {
-  const { deviceId, activeSession, recording } = params;
+  const { deviceId, sessionName, sessionScope, recording } = params;
   return await writeAndroidRecoveryManifest({
     deviceId,
-    manifest: buildAndroidRecoveryManifest({ deviceId, activeSession, recording }),
+    manifest: buildAndroidRecoveryManifest({ deviceId, sessionName, sessionScope, recording }),
     phase: 'record_start_android_recovery_metadata_failed',
   });
 }
@@ -470,14 +470,16 @@ function emitAndroidRecoveryAdbFailure(params: {
 }
 
 export async function recoverMissingAndroidRecording(params: {
+  sessionName: string;
   activeSession: SessionState;
   device: AndroidDevice;
   recordingBase: AndroidRecordingBase;
 }): Promise<DaemonResponse | AndroidRecording | null> {
-  const { activeSession, device, recordingBase } = params;
+  const { sessionName, activeSession, device, recordingBase } = params;
   const manifests = await readAndroidRecoveryMetadata(device.id);
   if (manifests.live.length > 0) {
     return recoverAndroidRecordingFromManifest({
+      sessionName,
       activeSession,
       device,
       recordingBase,
@@ -486,6 +488,7 @@ export async function recoverMissingAndroidRecording(params: {
   }
   if (manifests.uncertain.length > 0) {
     return blockAndroidManifestRecoveryForUncertainManifest({
+      sessionName,
       activeSession,
       manifests: manifests.uncertain,
     });
@@ -498,12 +501,13 @@ export async function recoverMissingAndroidRecording(params: {
 }
 
 function blockAndroidManifestRecoveryForUncertainManifest(params: {
+  sessionName: string;
   activeSession: SessionState;
   manifests: AndroidRecordingRecoveryManifest[];
 }): DaemonResponse {
-  const { activeSession, manifests } = params;
+  const { sessionName, activeSession, manifests } = params;
   const matches = manifests.filter((manifest) =>
-    androidRecoveryManifestMatchesSession(manifest, activeSession),
+    androidRecoveryManifestMatchesSession(manifest, sessionName, activeSession),
   );
   const activeRecordings = summarizeAndroidActiveRecordings(manifests);
   const details = {
@@ -539,25 +543,27 @@ function blockAndroidManifestRecoveryForBlockedManifest(
 }
 
 function recoverAndroidRecordingFromManifest(params: {
+  sessionName: string;
   activeSession: SessionState;
   device: AndroidDevice;
   recordingBase: AndroidRecordingBase;
   manifests: AndroidRecordingRecoveryCandidate[];
 }): DaemonResponse | AndroidRecording {
-  const { activeSession, device, recordingBase, manifests } = params;
-  const selected = selectAndroidRecoveryManifest({ activeSession, manifests });
+  const { sessionName, activeSession, device, recordingBase, manifests } = params;
+  const selected = selectAndroidRecoveryManifest({ sessionName, activeSession, manifests });
   if ('ok' in selected) return selected;
   emitAndroidRecoveryDiagnostic(device, selected);
   return buildAndroidRecordingFromManifest(selected, recordingBase);
 }
 
 function selectAndroidRecoveryManifest(params: {
+  sessionName: string;
   activeSession: SessionState;
   manifests: AndroidRecordingRecoveryCandidate[];
 }): DaemonResponse | AndroidRecordingRecoveryCandidate {
-  const { activeSession, manifests } = params;
+  const { sessionName, activeSession, manifests } = params;
   const matches = manifests.filter((manifest) =>
-    androidRecoveryManifestMatchesSession(manifest, activeSession),
+    androidRecoveryManifestMatchesSession(manifest, sessionName, activeSession),
   );
   const activeRecordings = summarizeAndroidActiveRecordings(manifests);
   if (matches.length === 0) {
@@ -638,10 +644,11 @@ function buildAndroidRecordingFromManifest(
 
 function androidRecoveryManifestMatchesSession(
   manifest: AndroidRecordingRecoveryManifest,
+  sessionName: string,
   activeSession: SessionState,
 ): boolean {
   return (
-    manifest.sessionName === activeSession.name &&
+    manifest.sessionName === sessionName &&
     sessionScopesEqual(manifest.sessionScope, activeSession.sessionScope)
   );
 }
