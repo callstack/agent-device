@@ -79,6 +79,15 @@ type AndroidActiveRecordingSummary = {
   remotePath?: string;
 };
 
+type AndroidOwnedManifestSelection<T extends AndroidRecordingRecoveryManifest> =
+  | {
+      kind: 'selected';
+      manifest: T;
+      activeRecordings: AndroidActiveRecordingSummary[];
+    }
+  | { kind: 'owner-mismatch'; activeRecordings: AndroidActiveRecordingSummary[] }
+  | { kind: 'ambiguous'; activeRecordings: AndroidActiveRecordingSummary[] };
+
 async function runAndroidRecoveryAdb(
   deviceId: string,
   args: string[],
@@ -242,12 +251,11 @@ async function checkRecoverableAndroidScreenrecord(
     });
     return 'uncertain';
   }
-  const pidLine = result.stdout
-    .split(/\r?\n/)
+  const lines = result.stdout.split(/\r?\n/);
+  const pidLine = lines
     .map((line) => line.trim())
     .find((line) => line.startsWith(metadata.remotePid));
-  const matched = result.stdout
-    .split(/\r?\n/)
+  const matched = lines
     .map(parseRecoverableAndroidScreenrecord)
     .some(
       (candidate) =>
@@ -506,19 +514,16 @@ function blockAndroidManifestRecoveryForUncertainManifest(params: {
   manifests: AndroidRecordingRecoveryManifest[];
 }): DaemonResponse {
   const { sessionName, activeSession, manifests } = params;
-  const matches = manifests.filter((manifest) =>
-    androidRecoveryManifestMatchesSession(manifest, sessionName, activeSession),
-  );
-  const activeRecordings = summarizeAndroidActiveRecordings(manifests);
+  const selection = selectOwnedAndroidRecoveryManifest({ sessionName, activeSession, manifests });
   const details = {
-    activeRecordings,
+    activeRecordings: selection.activeRecordings,
     recoveryBlocked: 'manifest_liveness_uncertain',
     hint: 'Retry record stop after the device responds. Android recording recovery requires a verified durable manifest.',
   };
-  if (matches.length === 0) {
+  if (selection.kind === 'owner-mismatch') {
     return errorResponse('INVALID_ARGS', formatAndroidRecordingOwnerMismatch(manifests), details);
   }
-  if (matches.length > 1 || manifests.length > 1) {
+  if (selection.kind === 'ambiguous') {
     return errorResponse(
       'INVALID_ARGS',
       'multiple active Android recording manifests could not be verified; cannot safely recover missing recording state',
@@ -562,23 +567,37 @@ function selectAndroidRecoveryManifest(params: {
   manifests: AndroidRecordingRecoveryCandidate[];
 }): DaemonResponse | AndroidRecordingRecoveryCandidate {
   const { sessionName, activeSession, manifests } = params;
+  const selection = selectOwnedAndroidRecoveryManifest({ sessionName, activeSession, manifests });
+  if (selection.kind === 'selected') return selection.manifest;
+  if (selection.kind === 'owner-mismatch') {
+    return errorResponse('INVALID_ARGS', formatAndroidRecordingOwnerMismatch(manifests), {
+      activeRecordings: selection.activeRecordings,
+    });
+  }
+  return errorResponse(
+    'INVALID_ARGS',
+    'multiple active Android recording manifests exist; cannot safely recover missing recording state',
+    { activeRecordings: selection.activeRecordings },
+  );
+}
+
+function selectOwnedAndroidRecoveryManifest<T extends AndroidRecordingRecoveryManifest>(params: {
+  sessionName: string;
+  activeSession: SessionState;
+  manifests: T[];
+}): AndroidOwnedManifestSelection<T> {
+  const { sessionName, activeSession, manifests } = params;
   const matches = manifests.filter((manifest) =>
     androidRecoveryManifestMatchesSession(manifest, sessionName, activeSession),
   );
   const activeRecordings = summarizeAndroidActiveRecordings(manifests);
   if (matches.length === 0) {
-    return errorResponse('INVALID_ARGS', formatAndroidRecordingOwnerMismatch(manifests), {
-      activeRecordings,
-    });
+    return { kind: 'owner-mismatch', activeRecordings };
   }
   if (matches.length > 1 || manifests.length > 1) {
-    return errorResponse(
-      'INVALID_ARGS',
-      'multiple active Android recording manifests exist; cannot safely recover missing recording state',
-      { activeRecordings },
-    );
+    return { kind: 'ambiguous', activeRecordings };
   }
-  return matches[0]!;
+  return { kind: 'selected', manifest: matches[0]!, activeRecordings };
 }
 
 function summarizeAndroidActiveRecordings(

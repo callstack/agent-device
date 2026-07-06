@@ -143,10 +143,7 @@ export function buildAndroidRecoveryManifest(params: {
       remotePid: recording.remotePid,
       startedAt: recording.remoteStartedAt ?? recording.startedAt,
     },
-    chunks: (recording.chunks ?? [{ index: 1, remotePath: recording.remotePath }]).map((chunk) => ({
-      index: chunk.index,
-      remotePath: chunk.remotePath,
-    })),
+    chunks: toManifestChunks(recording),
   };
 }
 
@@ -159,15 +156,24 @@ export function buildAndroidRecoveryRotatingManifest(params: {
   nextIndex: number;
 }): AndroidRecordingRecoveryManifest {
   const { deviceId, sessionName, sessionScope, recording, nextRemotePath, nextIndex } = params;
-  const chunks = [
-    ...(recording.chunks ?? [{ index: 1, remotePath: recording.remotePath }]),
-    { index: nextIndex, remotePath: nextRemotePath },
-  ].map((chunk) => ({ index: chunk.index, remotePath: chunk.remotePath }));
   return {
     ...buildAndroidRecoveryManifest({ deviceId, sessionName, sessionScope, recording }),
     pending: { remotePath: nextRemotePath },
-    chunks,
+    chunks: toManifestChunks(recording, { index: nextIndex, remotePath: nextRemotePath }),
   };
+}
+
+function toManifestChunks(
+  recording: AndroidRecording,
+  extraChunk?: AndroidRecordingRecoveryChunk,
+): AndroidRecordingRecoveryChunk[] {
+  return [
+    ...(recording.chunks ?? [{ index: 1, remotePath: recording.remotePath }]),
+    ...(extraChunk ? [extraChunk] : []),
+  ].map((chunk) => ({
+    index: chunk.index,
+    remotePath: chunk.remotePath,
+  }));
 }
 
 function parseJsonObject(value: string): Record<string, unknown> | undefined {
