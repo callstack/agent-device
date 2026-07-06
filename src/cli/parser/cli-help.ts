@@ -66,12 +66,14 @@ const AGENT_QUICKSTART_LINES = [
   'Default loop: devices/apps -> open -> snapshot -i -> press/fill/get/is/wait/find -> verify with diff snapshot -> close.',
   'Verify a mutation with diff snapshot (or diff snapshot -i), not a full snapshot: it prints only the added/removed/changed lines since the last snapshot in this session, so confirming an action costs a few lines instead of the whole tree.',
   'Collapse act+observe into one call with --settle on press/click/fill/longpress: the response waits for the UI to go quiet and carries the settled diff with fresh refs (settled: false plus a hint on never-quiet content; the action itself never fails). Tune with --settle-quiet <ms> and --timeout <ms>.',
-  'Use selectors or refs as positional targets: id="submit", label="Allow", or @e12 from snapshot -i.',
+  'Treat the --settle diff as the post-action observation: if it already shows the next target or final evidence, act on that fresh ref or answer from it instead of taking another snapshot.',
+  'Network-backed or debounced results may arrive after the --settle quiet window; follow the settled action with wait text "Expected result" or wait <selector> instead of polling full snapshots.',
+  'Use selectors or refs as positional targets: id="submit", label="Allow", role=button label="Send", or @e12 from snapshot -i. Do not write role names as selector keys, such as button="Search".',
   'Pin a ref to the snapshot that minted it with ~s<n> (n = refsGeneration in the snapshot response): press @e12~s4. Pinned refs get exact staleness warnings instead of the coarse tree-changed one; plain refs stay valid input.',
   'Plain snapshot reads state; snapshot -i refreshes current interactive refs only.',
   'Default snapshot text is an agent-facing, token-efficient view for planning and targeting actions.',
   'Read-only visible/state question: use snapshot/get/is/find; use snapshot -i only when refs are needed.',
-  'Anti-pattern: snapshot -i followed by snapshot -i | grep ...; prior refs stay valid until app state changes, and --force-full is the explicit full re-read.',
+  'Anti-pattern: snapshot -i followed by snapshot -i | grep ... or hiding command output with 2>/dev/null | jq ...; inspect raw agent-device output first, since hints and errors are part of the planning contract.',
   'Truncated text/input preview: expand first with snapshot -s @e12, not get text.',
   'React Native apps: read help react-native for Metro, DevTools routing, and RN-specific blockers; use react-native dismiss-overlay for LogBox/RedBox overlays.',
   'React Native JS memory leaks: read help cdp; use heap usage samples for a quick signal, then snapshot diff/leak-triplet for retained object proof.',
@@ -147,6 +149,7 @@ Fresh machine or first iOS run:
 Command shape:
   Plans should use agent-device commands, not raw platform tools, pseudo commands, package-manager aliases, or helper prose.
   If the user asks for a command plan, final output should be command lines only: no intro sentence, numbered list, Markdown fence, shell pipe, grep/head/tail helper, or explanatory bullets.
+  While exploring, do not pipe or redirect agent-device output through jq/grep/head/tail or 2>/dev/null; raw output carries refs, warnings, hints, and diagnostics needed for the next step.
   Put subcommand first, then positionals, then flags:
     agent-device open com.example.app --session checkout --platform android --relaunch
     agent-device record start ./checkout.mp4 --session checkout
@@ -180,8 +183,9 @@ Snapshots and refs:
     @e14 [cell] label="Profiles" focused -> tvOS focus is currently on this row.
     [off-screen below] 4 items: "Privacy", "About" -> scroll down, then snapshot -i; those are hints, not refs.
   Re-snapshot after navigation, submit, typing/fill, modal/list/reload/dynamic changes when you need new refs.
-  Anti-pattern: snapshot -i followed by snapshot -i | grep ...
+  Anti-pattern: snapshot -i followed by snapshot -i | grep ..., or adding 2>/dev/null | jq ... before reading the raw command output.
   Refs from the first snapshot remain valid until you press, click, fill, type, scroll, go back, wait for async UI, or otherwise change app state.
+  A --settle response is the observation for that mutation. If its diff already shows the next target or final evidence, use that fresh ref or answer from the diff instead of taking a follow-up snapshot.
   After a mutation, prefer a known selector/label directly (for example press 'label="Send"') because interaction commands refresh interactive state internally. If you need to discover the new control, use snapshot -i, or snapshot -i -s "Composer" when a stable container label/id can scope the refresh.
   If typing/fill opened the keyboard or changed layout and the next target has no stable selector, run snapshot -i, use the fresh ref, then verify with wait/find or diff snapshot -i.
   For a targeted query, use find/get/is. If you truly need the full tree again, pass --force-full.
@@ -192,6 +196,7 @@ Snapshots and refs:
 
 Selectors:
   Use selectors as positional targets: id="field-email" or label="Allow".
+  Selector terms are key=value filters such as id="submit", label="Search", text="Search", or role=button label="Search". Do not write role names as keys, such as button="Search"; use role=button label="Search" or the @ref from the latest snapshot/settle diff.
   Do not use CSS selectors, pseudo refs, --selector, --text, or raw x/y when refs/selectors exist.
     agent-device fill 'id="catalog-search"' "tart" --delay-ms 80
     agent-device press 'id="submit-order"'
@@ -228,6 +233,7 @@ Read-only and waits:
   agent-device wait 'label="Ready"' 3000
   agent-device wait stable
   agent-device wait stable 500 10000
+  For network-backed search/typeahead, --settle confirms the local UI quieted after fill/press; use wait text "Expected result" or wait <result selector> for server-loaded content that can arrive later.
   agent-device find "Increment" press --json
   For async/list text presence, prefer wait text over is visible when no interaction is needed.
   wait stable [quietMs] [timeoutMs] (defaults 500/10000) replaces guessed sleeps between actions and snapshots in the core loop: it polls the interactive-only tree and resolves once two or more consecutive captures are unchanged for quietMs, or fails with the standard wait-timeout shape plus the last capture stats (captures, nodeCount) on timeout; use it after relaunch/navigation instead of a fixed wait <ms> before the next snapshot or action.

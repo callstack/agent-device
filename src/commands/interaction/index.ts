@@ -231,6 +231,7 @@ const fillCommandFacet = defineCommandFacet({
   cliSchema: interactionCliSchemas.fill,
   cliReader: interactionCliReaders.fill,
   daemonWriter: interactionDaemonWriters.fill,
+  cliOutputFormatter: interactionCliOutputFormatters.fill,
 });
 
 const longPressCommandFacet = defineCommandFacet({

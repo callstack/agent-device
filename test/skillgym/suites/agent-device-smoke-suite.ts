@@ -423,6 +423,8 @@ const RAW_COORDINATE_TARGET =
   /(?:^|\n)(?:agent-device\s+)?(?:click|fill|press)\s+-?\d+(?:\.\d+)?\s+-?\d+(?:\.\d+)?/i;
 const PSEUDO_ASSERTION_COMMAND = /(?:^|\n)\s*(?:assert|assertVisible|waitFor|waitForText)\b/i;
 const RAW_RECT_SNAPSHOT = /snapshot\b(?=[^\n]*-i\b)(?=[^\n]*(?:--json|--raw))/i;
+const SHELL_OUTPUT_PROJECTION = /(?:2>\s*\/dev\/null|\|\s*(?:jq|grep|head|tail)\b)/i;
+const ROLE_NAME_SELECTOR_KEY = /(?:^|[\s'"])button\s*=/i;
 const BOUNDED_PROFILE_SLOW = /react-devtools\s+profile\s+slow\b[^\n]*--limit\s+(?:5|10)\b/i;
 const BOUNDED_PROFILE_RERENDERS =
   /react-devtools\s+profile\s+rerenders\b[^\n]*--limit\s+(?:5|10)\b/i;
@@ -992,6 +994,94 @@ const SKILL_GUIDANCE_CASES: Case[] = [
       /--selector\b/i,
       /--text\b/i,
     ],
+  }),
+  makeCase({
+    id: 'network-search-settle-then-wait',
+    contract: [
+      'App name: Agent Device Tester',
+      'Current screen: Catalog search tab',
+      'Search field selector: id="catalog-search"',
+      'Search results are network-backed and may arrive after the local UI has gone quiet',
+      'Expected result text: Alpenglow Trail Mug',
+    ],
+    task: 'Plan commands to search for "alpenglow" with the durable field selector, use --settle for the fill action, then wait for the network-backed result text. Do not verify this by taking repeated snapshots.',
+    outputs: [
+      plannedCommand('fill'),
+      /id=(?:["']catalog-search["']|catalog-search)/i,
+      /alpenglow/i,
+      /--settle\b/i,
+      plannedCommand('wait text'),
+      /Alpenglow Trail Mug/i,
+    ],
+    forbiddenOutputs: [
+      SHELL_OUTPUT_PROJECTION,
+      /(?:^|\n)(?:agent-device\s+)?snapshot\b[\s\S]*(?:^|\n)(?:agent-device\s+)?snapshot\b/i,
+      RAW_COORDINATE_TARGET,
+    ],
+    strictFinalOutput: true,
+    allowOnlyLocalCliHelpCommands: true,
+  }),
+  makeCase({
+    id: 'raw-output-before-shell-projection',
+    contract: [
+      'App name: Agent Device Tester',
+      'Current screen: Home tab',
+      'The target control has no stable selector in the task context',
+      'Fresh interactive snapshot will expose the target as @e12',
+      'agent-device output includes refs, warnings, hints, and diagnostics needed for the next step',
+    ],
+    task: 'Plan robust commands to inspect interactive refs, press the discovered @e12 target, then verify the nearby change. Do not pipe, grep, jq, or hide command output while exploring.',
+    outputs: [
+      /snapshot -i/i,
+      /(?:^|\n)(?:agent-device\s+)?(?:press|click)\s+@e12\b/i,
+      /(?:diff snapshot -i|snapshot\b.*(?:-i\b.*--diff|--diff\b.*-i\b)|wait\b|find\b)/i,
+    ],
+    forbiddenOutputs: [SHELL_OUTPUT_PROJECTION, RAW_COORDINATE_TARGET],
+    strictFinalOutput: true,
+    allowOnlyLocalCliHelpCommands: true,
+  }),
+  makeCase({
+    id: 'selector-role-filter-not-role-key',
+    contract: [
+      'App name: Agent Device Tester',
+      'Current screen: Feed directory',
+      'Fresh interactive snapshot shows @e37 [button] "Search for more feeds"',
+      'If a role filter is needed, the supported selector shape is role=button label="Search for more feeds"',
+      'button="Search for more feeds" is not a valid selector key',
+      'Need the resulting UI after pressing this control',
+    ],
+    task: 'Plan the command to press Search for more feeds with settle. Prefer the visible @e37 ref or a valid selector; do not invent a role-name selector key.',
+    outputs: [
+      plannedCommandAlternatives(['press', 'click']),
+      /(?:@e37|label=(?:["']Search for more feeds["']|Search for more feeds)|role=button)/i,
+      /--settle\b/i,
+    ],
+    forbiddenOutputs: [ROLE_NAME_SELECTOR_KEY, RAW_COORDINATE_TARGET],
+    strictFinalOutput: true,
+    allowOnlyLocalCliHelpCommands: true,
+  }),
+  makeCase({
+    id: 'settle-diff-is-observation',
+    contract: [
+      'App name: Agent Device Tester',
+      'Previous command: press @e37 --settle',
+      'The settled diff already showed + @e64 [text-field] "Search"',
+      'The settled diff already showed + @e65 [text] "Recent searches"',
+      'The task was to confirm the feed-search UI and close the session',
+      'No more refs or visible evidence are needed',
+    ],
+    task: 'Plan the next command. Do not take another snapshot just to re-read evidence that was already present in the settled diff.',
+    outputs: [plannedCommand('close')],
+    forbiddenOutputs: [
+      plannedCommand('snapshot'),
+      plannedCommand('wait'),
+      plannedCommand('find'),
+      plannedCommand('get'),
+      plannedCommand('is'),
+      plannedCommandAlternatives(['press', 'click']),
+    ],
+    strictFinalOutput: true,
+    allowOnlyLocalCliHelpCommands: true,
   }),
   makeCase({
     id: 'text-replace-uses-fill',
