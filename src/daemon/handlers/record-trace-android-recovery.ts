@@ -67,6 +67,23 @@ function parseRecoverableAndroidScreenrecord(
 }
 
 function parseAndroidRecoveryMetadata(value: string): AndroidRecordingRecoveryMetadata | undefined {
+  const metadata = parseAndroidRecoveryMetadataObject(value);
+  if (!metadata) {
+    return undefined;
+  }
+  const remotePid = parseAndroidRecoveryRemotePid(metadata.remotePid);
+  const remotePath = parseAndroidRecoveryRemotePath(metadata.remotePath);
+  if (!remotePid || !remotePath) {
+    return undefined;
+  }
+  return {
+    remotePid,
+    remotePath,
+    startedAt: parseAndroidRecoveryStartedAt(metadata.startedAt),
+  };
+}
+
+function parseAndroidRecoveryMetadataObject(value: string): Record<string, unknown> | undefined {
   let parsed: unknown;
   try {
     parsed = JSON.parse(value);
@@ -76,23 +93,19 @@ function parseAndroidRecoveryMetadata(value: string): AndroidRecordingRecoveryMe
   if (!parsed || typeof parsed !== 'object') {
     return undefined;
   }
-  const metadata = parsed as Partial<AndroidRecordingRecoveryMetadata>;
-  if (
-    typeof metadata.remotePid !== 'string' ||
-    !/^\d+$/.test(metadata.remotePid) ||
-    typeof metadata.remotePath !== 'string' ||
-    !isAndroidAgentRecordingPath(metadata.remotePath)
-  ) {
-    return undefined;
-  }
-  return {
-    remotePid: metadata.remotePid,
-    remotePath: metadata.remotePath,
-    startedAt:
-      typeof metadata.startedAt === 'number' && Number.isFinite(metadata.startedAt)
-        ? metadata.startedAt
-        : Date.now(),
-  };
+  return parsed as Record<string, unknown>;
+}
+
+function parseAndroidRecoveryRemotePid(value: unknown): string | undefined {
+  return typeof value === 'string' && /^\d+$/.test(value) ? value : undefined;
+}
+
+function parseAndroidRecoveryRemotePath(value: unknown): string | undefined {
+  return typeof value === 'string' && isAndroidAgentRecordingPath(value) ? value : undefined;
+}
+
+function parseAndroidRecoveryStartedAt(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : Date.now();
 }
 
 function isAndroidAgentRecordingPath(remotePath: string): boolean {

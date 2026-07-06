@@ -37,6 +37,37 @@ const IOS_SIMULATOR_RECORDING_TAIL_SETTLE_MS = 350;
 
 export type { RecordTraceDeps, RecordingBase } from './record-trace-types.ts';
 
+type StartRecordingParams = {
+  req: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+  activeSession: SessionState;
+  device: SessionState['device'];
+  logPath?: string;
+  deps: RecordTraceDeps;
+};
+
+type StopRecordingParams = {
+  req: DaemonRequest;
+  sessionStore: SessionStore;
+  activeSession: SessionState;
+  device: SessionState['device'];
+  logPath?: string;
+  deps: RecordTraceDeps;
+};
+
+type PreparedRecordingStart = {
+  outPath: string;
+  resolvedOut: string;
+  recordingBase: RecordingBase;
+};
+type RecordingQualityInput = Parameters<typeof recordingQualityInputToExportQuality>[0];
+type RecordingStartBackend = ReturnType<typeof resolveRecordingBackendForDevice>;
+type RecordingStartPlan = PreparedRecordingStart & {
+  backend: RecordingStartBackend;
+  fpsFlag: number | undefined;
+};
+
 function buildRecordTraceDeps(): RecordTraceDeps {
   return {
     runCmd: async (cmd, args, options) =>
@@ -76,74 +107,82 @@ function buildRecordingBase(req: DaemonRequest, outPath: string): RecordingBase 
 
 // --- Start recording orchestrator ---
 
-// fallow-ignore-next-line complexity
-async function startRecording(params: {
-  req: DaemonRequest;
-  sessionName: string;
-  sessionStore: SessionStore;
-  activeSession: SessionState;
-  device: SessionState['device'];
-  logPath?: string;
-  deps: RecordTraceDeps;
-}): Promise<DaemonResponse> {
+async function startRecording(params: StartRecordingParams): Promise<DaemonResponse> {
   const { req, sessionName, sessionStore, activeSession, device, logPath, deps } = params;
+  const startPlan = resolveRecordingStartPlan(params);
+  if (!('backend' in startPlan)) return startPlan;
 
-  if (activeSession.recording) {
-    return errorResponse('INVALID_ARGS', 'recording already in progress');
-  }
-
-  const fpsFlag = req.flags?.fps;
-  const qualityFlag = req.flags?.quality;
-  const maxSizeFlag = req.flags?.screenshotMaxSize;
-  const backend = resolveRecordingBackendForDevice(device);
-  const platformValidationError = backend.validateStart?.(req) ?? null;
-  if (platformValidationError) {
-    return platformValidationError;
-  }
-  if (
-    fpsFlag !== undefined &&
-    (!Number.isInteger(fpsFlag) ||
-      fpsFlag < IOS_DEVICE_RECORD_MIN_FPS ||
-      fpsFlag > IOS_DEVICE_RECORD_MAX_FPS)
-  ) {
-    return errorResponse(
-      'INVALID_ARGS',
-      `fps must be an integer between ${IOS_DEVICE_RECORD_MIN_FPS} and ${IOS_DEVICE_RECORD_MAX_FPS}`,
-    );
-  }
-  if (
-    qualityFlag !== undefined &&
-    recordingQualityInputToExportQuality(qualityFlag) === undefined
-  ) {
-    return errorResponse(
-      'INVALID_ARGS',
-      `quality must be one of: ${RECORDING_EXPORT_QUALITIES.join(', ')} (legacy numeric values 5-10 are accepted)`,
-    );
-  }
-  if (maxSizeFlag !== undefined && (!Number.isInteger(maxSizeFlag) || maxSizeFlag < 1)) {
-    return errorResponse('INVALID_ARGS', 'max-size must be a positive integer');
-  }
-  const unsupported = requireCommandSupported('record', device);
-  if (unsupported) return unsupported;
-
-  const outPath = backend.resolveOutputPath({ req });
-  const resolvedOut = SessionStore.expandHome(outPath, req.meta?.cwd);
-  const recordingBase = buildRecordingBase(req, resolvedOut);
-  fs.mkdirSync(path.dirname(resolvedOut), { recursive: true });
-  fs.rmSync(resolvedOut, { force: true });
-
-  const recording = await backend.start({
+  const recording = await startPlan.backend.start({
     req,
     activeSession,
     sessionStore,
     device,
     logPath,
     deps,
-    fpsFlag,
-    recordingBase,
-    resolvedOut,
+    fpsFlag: startPlan.fpsFlag,
+    recordingBase: startPlan.recordingBase,
+    resolvedOut: startPlan.resolvedOut,
   });
 
+  return persistStartedRecording({
+    req,
+    sessionName,
+    sessionStore,
+    activeSession,
+    recording,
+    outPath: startPlan.outPath,
+  });
+}
+
+function resolveRecordingStartPlan(
+  params: StartRecordingParams,
+): DaemonResponse | RecordingStartPlan {
+  const { req, activeSession, device } = params;
+  const backend = resolveRecordingBackendForDevice(device);
+  const startError = validateRecordingStartRequest({ req, activeSession, device, backend });
+  if (startError) return startError;
+
+  return {
+    ...prepareRecordingStart(req, backend),
+    backend,
+    fpsFlag: req.flags?.fps,
+  };
+}
+
+function validateRecordingStartRequest(params: {
+  req: DaemonRequest;
+  activeSession: SessionState;
+  device: SessionState['device'];
+  backend: RecordingStartBackend;
+}): DaemonResponse | null {
+  const { req, activeSession, device, backend } = params;
+  const validators = [
+    () => validateNoActiveRecording(activeSession),
+    () => backend.validateStart?.(req) ?? null,
+    () =>
+      validateRecordingStartFlags({
+        fpsFlag: req.flags?.fps,
+        qualityFlag: req.flags?.quality,
+        maxSizeFlag: req.flags?.screenshotMaxSize,
+      }),
+    () => requireCommandSupported('record', device),
+  ];
+  for (const validate of validators) {
+    const error = validate();
+    if (error) return error;
+  }
+  return null;
+}
+
+function persistStartedRecording(params: {
+  req: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+  activeSession: SessionState;
+  recording: Awaited<ReturnType<RecordingStartBackend['start']>>;
+  outPath: string;
+}): DaemonResponse {
+  const { req, sessionName, sessionStore, activeSession, recording, outPath } = params;
   if ('ok' in recording) {
     return recording;
   }
@@ -167,24 +206,77 @@ async function startRecording(params: {
   };
 }
 
-async function stopRecording(params: {
-  req: DaemonRequest;
-  sessionStore: SessionStore;
-  activeSession: SessionState;
-  device: SessionState['device'];
-  logPath?: string;
-  deps: RecordTraceDeps;
-}): Promise<DaemonResponse> {
-  const { req, sessionStore, activeSession, device, logPath, deps } = params;
+function validateNoActiveRecording(activeSession: SessionState): DaemonResponse | null {
+  return activeSession.recording
+    ? errorResponse('INVALID_ARGS', 'recording already in progress')
+    : null;
+}
 
-  let recording = activeSession.recording;
-  if (!recording) {
-    const recovered = await recoverMissingRecordingState();
-    if (recovered && 'ok' in recovered) {
-      return recovered;
-    }
-    recording = recovered ?? undefined;
+function validateRecordingStartFlags(flags: {
+  fpsFlag: number | undefined;
+  qualityFlag: RecordingQualityInput;
+  maxSizeFlag: number | undefined;
+}): DaemonResponse | null {
+  const { fpsFlag, qualityFlag, maxSizeFlag } = flags;
+  return (
+    validateRecordingFpsFlag(fpsFlag) ??
+    validateRecordingQualityFlag(qualityFlag) ??
+    validateRecordingMaxSizeFlag(maxSizeFlag)
+  );
+}
+
+function validateRecordingFpsFlag(fpsFlag: number | undefined): DaemonResponse | null {
+  if (
+    fpsFlag !== undefined &&
+    (!Number.isInteger(fpsFlag) ||
+      fpsFlag < IOS_DEVICE_RECORD_MIN_FPS ||
+      fpsFlag > IOS_DEVICE_RECORD_MAX_FPS)
+  ) {
+    return errorResponse(
+      'INVALID_ARGS',
+      `fps must be an integer between ${IOS_DEVICE_RECORD_MIN_FPS} and ${IOS_DEVICE_RECORD_MAX_FPS}`,
+    );
   }
+  return null;
+}
+
+function validateRecordingQualityFlag(qualityFlag: RecordingQualityInput): DaemonResponse | null {
+  if (
+    qualityFlag !== undefined &&
+    recordingQualityInputToExportQuality(qualityFlag) === undefined
+  ) {
+    return errorResponse(
+      'INVALID_ARGS',
+      `quality must be one of: ${RECORDING_EXPORT_QUALITIES.join(', ')} (legacy numeric values 5-10 are accepted)`,
+    );
+  }
+  return null;
+}
+
+function validateRecordingMaxSizeFlag(maxSizeFlag: number | undefined): DaemonResponse | null {
+  if (maxSizeFlag !== undefined && (!Number.isInteger(maxSizeFlag) || maxSizeFlag < 1)) {
+    return errorResponse('INVALID_ARGS', 'max-size must be a positive integer');
+  }
+  return null;
+}
+
+function prepareRecordingStart(
+  req: DaemonRequest,
+  backend: ReturnType<typeof resolveRecordingBackendForDevice>,
+): PreparedRecordingStart {
+  const outPath = backend.resolveOutputPath({ req });
+  const resolvedOut = SessionStore.expandHome(outPath, req.meta?.cwd);
+  const recordingBase = buildRecordingBase(req, resolvedOut);
+  fs.mkdirSync(path.dirname(resolvedOut), { recursive: true });
+  fs.rmSync(resolvedOut, { force: true });
+  return { outPath, resolvedOut, recordingBase };
+}
+
+async function stopRecording(params: StopRecordingParams): Promise<DaemonResponse> {
+  const { req, activeSession, device, logPath, deps } = params;
+
+  const recording = await resolveRecordingToStop(params);
+  if (recording && 'ok' in recording) return recording;
   if (!recording) {
     return errorResponse('INVALID_ARGS', 'no active recording');
   }
@@ -205,49 +297,81 @@ async function stopRecording(params: {
     return stopError;
   }
 
-  if (invalidatedReason && recording.platform === 'ios' && recording.showTouches) {
-    recording.overlayWarning ??= `overlay unavailable: ${invalidatedReason}`;
-  } else if (invalidatedReason) {
-    return errorResponse('COMMAND_FAILED', invalidatedReason);
-  }
+  const invalidatedError = applyRecordingInvalidation(recording, invalidatedReason);
+  if (invalidatedError) return invalidatedError;
 
   return buildRecordStopResponse(recording);
+}
 
-  async function recoverMissingRecordingState(): Promise<
-    DaemonResponse | NonNullable<SessionState['recording']> | null
-  > {
-    if (hasActiveRecordingSession(sessionStore)) {
-      return null;
-    }
-
-    const backend = resolveRecordingBackendForDevice(device);
-    if (!backend.recoverMissingStop) {
-      return null;
-    }
-
-    const outPath = backend.resolveOutputPath({ req });
-    const resolvedOut = SessionStore.expandHome(outPath, req.meta?.cwd);
-    const recordingBase = buildRecordingBase(req, resolvedOut);
-
-    const recovered = await backend.recoverMissingStop({
-      req,
-      activeSession,
-      sessionStore,
-      device,
-      logPath,
-      deps,
-      recordingBase,
-      resolvedOut,
-    });
-    if (!recovered) {
-      return null;
-    }
-    if (!('ok' in recovered)) {
-      fs.mkdirSync(path.dirname(resolvedOut), { recursive: true });
-      fs.rmSync(resolvedOut, { force: true });
-    }
-    return recovered;
+async function resolveRecordingToStop(
+  params: StopRecordingParams,
+): Promise<DaemonResponse | NonNullable<SessionState['recording']> | null> {
+  if (params.activeSession.recording) {
+    return params.activeSession.recording;
   }
+  return await recoverMissingRecordingState(params);
+}
+
+async function recoverMissingRecordingState(
+  params: StopRecordingParams,
+): Promise<DaemonResponse | NonNullable<SessionState['recording']> | null> {
+  const { req, sessionStore, activeSession, device, logPath, deps } = params;
+  if (hasActiveRecordingSession(sessionStore)) {
+    return null;
+  }
+
+  const backend = resolveRecordingBackendForDevice(device);
+  if (!backend.recoverMissingStop) {
+    return null;
+  }
+
+  const { resolvedOut, recordingBase } = prepareRecoveredRecording(req, backend);
+  const recovered = await backend.recoverMissingStop({
+    req,
+    activeSession,
+    sessionStore,
+    device,
+    logPath,
+    deps,
+    recordingBase,
+    resolvedOut,
+  });
+  if (!recovered) {
+    return null;
+  }
+  if (!('ok' in recovered)) {
+    resetRecoveredRecordingOutput(resolvedOut);
+  }
+  return recovered;
+}
+
+function prepareRecoveredRecording(
+  req: DaemonRequest,
+  backend: ReturnType<typeof resolveRecordingBackendForDevice>,
+): Pick<PreparedRecordingStart, 'resolvedOut' | 'recordingBase'> {
+  const outPath = backend.resolveOutputPath({ req });
+  const resolvedOut = SessionStore.expandHome(outPath, req.meta?.cwd);
+  const recordingBase = buildRecordingBase(req, resolvedOut);
+  return { resolvedOut, recordingBase };
+}
+
+function resetRecoveredRecordingOutput(resolvedOut: string): void {
+  fs.mkdirSync(path.dirname(resolvedOut), { recursive: true });
+  fs.rmSync(resolvedOut, { force: true });
+}
+
+function applyRecordingInvalidation(
+  recording: NonNullable<SessionState['recording']>,
+  invalidatedReason: string | undefined,
+): DaemonResponse | null {
+  if (!invalidatedReason) {
+    return null;
+  }
+  if (recording.platform === 'ios' && recording.showTouches) {
+    recording.overlayWarning ??= `overlay unavailable: ${invalidatedReason}`;
+    return null;
+  }
+  return errorResponse('COMMAND_FAILED', invalidatedReason);
 }
 
 function hasActiveRecordingSession(sessionStore: SessionStore): boolean {
