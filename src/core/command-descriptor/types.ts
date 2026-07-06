@@ -1,5 +1,6 @@
 import type { CommandCapability } from '../capabilities.ts';
 import type { DaemonCommandDescriptor } from '../../daemon/daemon-command-registry.ts';
+import type { PostActionObservationSupport } from './post-action-observation.ts';
 
 /**
  * The daemon route + request-policy traits for a command, minus the `command`
@@ -11,8 +12,9 @@ import type { DaemonCommandDescriptor } from '../../daemon/daemon-command-regist
 export type DaemonCommandTraits = Omit<DaemonCommandDescriptor, 'command'>;
 
 /**
- * Where a command's user-facing time budget comes from (ADR-0011, "Timeout
- * policy joins the descriptor registry").
+ * Where a command's user-facing time budget comes from. The policy lives on
+ * command descriptors (ADR 0008); ADR 0011 moved the former timeout hand lists
+ * onto that descriptor surface.
  *
  *  - `'none'`             — the command has no user-supplied budget; the request
  *                           envelope is exactly `envelopeMs`.
@@ -72,9 +74,13 @@ export type CommandTimeoutPolicy = {
  *                   (from STRUCTURED_BATCH_COMMAND_NAMES).
  *  - `mcpExposed` — whether the command is surfaced over MCP.
  *  - `timeoutPolicy` — the request-envelope budget source + on-timeout daemon
- *                   policy (ADR-0011). REQUIRED on every entry — most commands
- *                   share the explicit `DEFAULT_TIMEOUT_POLICY` constant, but a
- *                   new command must say so rather than inherit silently.
+ *                   policy. REQUIRED on every entry — most commands share the
+ *                   explicit `DEFAULT_TIMEOUT_POLICY` constant, but a new
+ *                   command must say so rather than inherit silently.
+ *  - `postActionObservation` — optional interaction observation trait for
+ *                   commands that support `--settle`/`--verify`; consumed by
+ *                   command surfaces and timeout policy instead of repeated
+ *                   command-name lists.
  *
  * The registry started dormant (proven byte-equal to the hand tables by the
  * parity tests) and is now the live source: the daemon registry, capability
@@ -88,4 +94,5 @@ export type CommandDescriptor = {
   batchable: boolean;
   mcpExposed: boolean;
   timeoutPolicy: CommandTimeoutPolicy;
+  postActionObservation?: PostActionObservationSupport;
 };

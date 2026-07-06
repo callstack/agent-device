@@ -37,6 +37,11 @@ import {
 } from '../../core/scroll-gesture.ts';
 import { SCROLL_INPUT_DIRECTIONS } from './runtime/gestures.ts';
 import { FIND_LOCATORS } from '../../utils/finders.ts';
+import {
+  commandSupportsSettleObservation,
+  commandSupportsVerifyEvidence,
+} from '../../core/command-descriptor/registry.ts';
+import type { PostActionObservationSupportFor } from '../../core/command-descriptor/post-action-observation.ts';
 
 const FIND_ACTION_VALUES = [
   'click',
@@ -79,21 +84,37 @@ const settleFields = () => ({
   timeoutMs: integerField('Settle: wait deadline in milliseconds (default 10000).', { min: 1 }),
 });
 
+type VerifyFieldMap = { verify: ReturnType<typeof verifyField> };
+type SettleFieldMap = ReturnType<typeof settleFields>;
+type PostActionObservationFields<TName extends string> =
+  PostActionObservationSupportFor<TName> extends 'settle-and-verify'
+    ? VerifyFieldMap & SettleFieldMap
+    : PostActionObservationSupportFor<TName> extends 'settle'
+      ? SettleFieldMap
+      : {};
+
+function postActionObservationFields<const TName extends InteractionCommandName>(
+  command: TName,
+): PostActionObservationFields<TName> {
+  return {
+    ...(commandSupportsVerifyEvidence(command) ? { verify: verifyField() } : {}),
+    ...(commandSupportsSettleObservation(command) ? settleFields() : {}),
+  } as PostActionObservationFields<TName>;
+}
+
 const clickFields = {
   target: requiredField(interactionTargetField()),
   button: enumField(CLICK_BUTTONS, 'Pointer button for platforms that support mouse buttons.'),
   ...selectorSnapshotFields(),
   ...repeatedFields(),
-  verify: verifyField(),
-  ...settleFields(),
+  ...postActionObservationFields('click'),
 };
 
 const pressFields = {
   target: requiredField(interactionTargetField()),
   ...selectorSnapshotFields(),
   ...repeatedFields(),
-  verify: verifyField(),
-  ...settleFields(),
+  ...postActionObservationFields('press'),
 };
 
 const fillFields = {
@@ -101,15 +122,14 @@ const fillFields = {
   text: requiredField(stringField('Text to enter into the target.')),
   delayMs: integerField('Delay between typed characters.', { min: 0 }),
   ...selectorSnapshotFields(),
-  verify: verifyField(),
-  ...settleFields(),
+  ...postActionObservationFields('fill'),
 };
 
 const longPressFields = {
   target: requiredField(interactionTargetField()),
   durationMs: integerField('Long press duration in milliseconds.', { min: 0 }),
   ...selectorSnapshotFields(),
-  ...settleFields(),
+  ...postActionObservationFields('longpress'),
 };
 
 const swipeFields = {

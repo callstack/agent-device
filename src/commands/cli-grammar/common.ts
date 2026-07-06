@@ -88,8 +88,9 @@ export function selectorSnapshotOptionsFromFlags(flags: CliFlags): SelectorSnaps
   };
 }
 
-// press/click/fill/longpress --settle (#1101). --timeout doubles as the settle
-// deadline on these commands (the daemon rejects it without --settle).
+// Descriptor post-action observation commands use --settle (#1101).
+// --timeout doubles as the settle deadline only when --settle is present; a
+// bare --timeout stays compatible and is ignored by touch commands.
 export function settleInputFromFlags(flags: CliFlags): Record<string, unknown> {
   return compactRecord({
     settle: flags.settle,

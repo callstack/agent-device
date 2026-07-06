@@ -31,6 +31,9 @@ every consumer table is **derived** by pure, parity-tested projection:
 - The descriptor composes a `surface` facet (owned by `src/commands/**`: identity, CLI schema/reader, MCP),
   a `capability` facet (owned by `src/core/capabilities`), and a `daemon` facet (route + request-policy
   traits, **owned under `src/daemon/`** per ADR 0003), plus a typed result.
+- Narrow command traits that affect multiple projections, such as interaction post-action observation
+  (`--settle` / `--verify`), live on the descriptor so CLI flags, command metadata, timeout policy, and
+  tests derive from one fact instead of repeating command-name lists.
 - The public catalog, capability matrix, daemon command registry, batch allowlist, MCP tool list, CLI
   schema, and the Node client surface become pure projections of the descriptor set. The
   `src/core/dispatch.ts` `switch` is replaced by a total map keyed on the command-name union, so a missing

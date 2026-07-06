@@ -28,7 +28,7 @@ type FlagTimeoutBudget = Extract<CommandTimeoutBudget, { source: 'flag' }>;
 type RequestFlags = Omit<DaemonRequest, 'token'>['flags'];
 
 // Derives the request envelope from the command's declared timeout policy
-// (ADR-0011) instead of the former per-command-name special cases.
+// (ADR 0008) instead of the former per-command-name special cases.
 export function resolveDaemonRequestTimeoutMs(
   req: Omit<DaemonRequest, 'token'>,
 ): number | undefined {
@@ -127,7 +127,7 @@ export function handleRequestTimeout(
 }
 
 // Whether a timed-out request tears down the local daemon is declared on the
-// command's descriptor (ADR-0011, `timeoutPolicy.onTimeout`): read-only
+// command's descriptor (ADR 0008, `timeoutPolicy.onTimeout`): read-only
 // capture/polling commands preserve the daemon so sessions survive and evidence
 // commands still work; everything else resets it. Unknown/undefined commands
 // fall back to the default reset-daemon policy.

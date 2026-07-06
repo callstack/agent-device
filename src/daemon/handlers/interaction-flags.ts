@@ -1,4 +1,5 @@
 import type { CommandFlags } from '../../core/dispatch.ts';
+import type { PostActionObservationCommandName } from '../../core/command-descriptor/post-action-observation.ts';
 import type { SettleParams } from '../../contracts/interaction.ts';
 import type { DaemonResponse } from '../types.ts';
 import { errorResponse } from './response.ts';
@@ -33,16 +34,17 @@ export function unsupportedRefSnapshotFlags(flags: CommandFlags | undefined): st
 }
 
 /**
- * `--settle` (#1101) flag grammar on press/click/fill/longpress:
- * `--settle` opts in, `--settle-quiet <ms>` overrides the quiet window, and
- * `--timeout <ms>` bounds the settle wait (the same budget the descriptor's
- * flag-sourced timeout policy widens the request envelope past, mirroring
- * wait's positional budget). Preserve compatibility for a bare `--timeout`
- * without `--settle`: older touch commands silently ignored it. Only
- * `--settle-quiet` is settle-specific enough to reject when orphaned.
+ * `--settle` (#1101) flag grammar for commands carrying the descriptor
+ * post-action observation trait: `--settle` opts in, `--settle-quiet <ms>`
+ * overrides the quiet window, and `--timeout <ms>` bounds the settle wait (the
+ * same budget the descriptor's flag-sourced timeout policy widens the request
+ * envelope past, mirroring wait's positional budget). Preserve compatibility
+ * for a bare `--timeout` without `--settle`: older touch commands silently
+ * ignored it. Only `--settle-quiet` is settle-specific enough to reject when
+ * orphaned.
  */
 export function settleFlagGuardResponse(
-  command: 'press' | 'click' | 'fill' | 'longpress',
+  command: PostActionObservationCommandName,
   flags: CommandFlags | undefined,
 ): DaemonResponse | null {
   if (!flags || flags.settle === true) return null;

@@ -22,7 +22,12 @@ import {
   REPEATED_TOUCH_FLAGS,
   SELECTOR_SNAPSHOT_FLAGS,
   SETTLE_FLAGS,
+  type FlagKey,
 } from '../../cli/parser/cli-flags.ts';
+import {
+  commandSupportsSettleObservation,
+  commandSupportsVerifyEvidence,
+} from '../../core/command-descriptor/registry.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import {
@@ -77,8 +82,7 @@ const interactionCliSchemas = {
     allowedFlags: [
       ...REPEATED_TOUCH_FLAGS,
       'clickButton',
-      'verify',
-      ...SETTLE_FLAGS,
+      ...postActionObservationCliFlags('click'),
       ...SELECTOR_SNAPSHOT_FLAGS,
     ],
   },
@@ -88,7 +92,11 @@ const interactionCliSchemas = {
       'Short press a semantic UI target by ref, selector, or point. For native context menus or hold gestures, use longpress <target> <durationMs> instead of press --hold-ms.',
     positionalArgs: ['targetOrX', 'y?'],
     allowsExtraPositionals: true,
-    allowedFlags: [...REPEATED_TOUCH_FLAGS, 'verify', ...SETTLE_FLAGS, ...SELECTOR_SNAPSHOT_FLAGS],
+    allowedFlags: [
+      ...REPEATED_TOUCH_FLAGS,
+      ...postActionObservationCliFlags('press'),
+      ...SELECTOR_SNAPSHOT_FLAGS,
+    ],
   },
   longpress: {
     usageOverride: 'longpress <x y|@ref|selector> [durationMs]',
@@ -96,7 +104,7 @@ const interactionCliSchemas = {
       'Open native context menus or long-press targets by ref, selector, or point. Duration is positional, for example longpress @e12 800 or longpress 300 500 800.',
     positionalArgs: ['targetOrX', 'yOrDurationMs?', 'durationMs?'],
     allowsExtraPositionals: true,
-    allowedFlags: [...SETTLE_FLAGS, ...SELECTOR_SNAPSHOT_FLAGS],
+    allowedFlags: [...postActionObservationCliFlags('longpress'), ...SELECTOR_SNAPSHOT_FLAGS],
   },
   swipe: {
     helpDescription: 'Swipe coordinates with optional repeat pattern',
@@ -124,7 +132,7 @@ const interactionCliSchemas = {
     usageOverride: 'fill <x> <y> <text> | fill <@ref|selector> <text>',
     positionalArgs: ['targetOrX', 'yOrText', 'text?'],
     allowsExtraPositionals: true,
-    allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS, 'delayMs', 'verify', ...SETTLE_FLAGS],
+    allowedFlags: [...SELECTOR_SNAPSHOT_FLAGS, 'delayMs', ...postActionObservationCliFlags('fill')],
   },
   scroll: {
     usageOverride: 'scroll <direction|top|bottom> [amount] [--pixels <n>] [--duration-ms <ms>]',
@@ -139,6 +147,13 @@ type InteractionCommandMetadata = (typeof interactionCommandMetadata)[number];
 type InteractionCommandName = InteractionCommandMetadata['name'];
 const { gesture: _gestureDaemonWriter, ...gestureProjectionAliasDaemonWriters } =
   gestureDaemonWriters;
+
+function postActionObservationCliFlags(command: InteractionCommandName): readonly FlagKey[] {
+  const flags: FlagKey[] = [];
+  if (commandSupportsVerifyEvidence(command)) flags.push('verify');
+  if (commandSupportsSettleObservation(command)) flags.push(...SETTLE_FLAGS);
+  return flags;
+}
 
 const clickCommandDefinition = defineExecutableCommand(metadata('click'), (client, input) =>
   client.interactions.click(toClickOptions(input)),

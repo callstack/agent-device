@@ -634,7 +634,8 @@ export type CaptureDiffOptions = DeviceCommandBaseOptions &
  * settled diff vs the pre-action tree (`settle` on the result) in the same
  * response. Best-effort — never fails the action. `settleQuietMs` tunes the
  * quiet window (default 500ms); `timeoutMs` bounds the settle wait (default
- * 10s) and is rejected without `settle`.
+ * 10s) when `settle` is true. A bare `timeoutMs` without `settle` is ignored
+ * for compatibility; `settleQuietMs` still requires `settle`.
  */
 type SettleCommandOptions = {
   settle?: boolean;

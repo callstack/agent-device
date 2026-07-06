@@ -45,6 +45,10 @@ import {
 import { getActiveAndroidSnapshotFreshness } from '../android-snapshot-freshness.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { dispatchCommand, type CommandFlags } from '../../core/dispatch.ts';
+import {
+  commandSupportsSettleObservation,
+  commandSupportsVerifyEvidence,
+} from '../../core/command-descriptor/registry.ts';
 import { MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE } from '../../core/interactor-types.ts';
 import {
   isDirectIosSelectorFallbackError,
@@ -299,9 +303,8 @@ function readDirectIosSelectorTapTarget(params: {
   if (commandLabel !== 'click') return null;
   if (target.kind !== 'selector') return null;
   if (hasNonDefaultClickOptions(flags)) return null;
-  if (flags?.verify === true) return null;
-  // --settle needs the tree-based runtime path (baseline + settle captures).
-  if (flags?.settle === true) return null;
+  if (commandSupportsVerifyEvidence(commandLabel) && flags?.verify === true) return null;
+  if (commandSupportsSettleObservation(commandLabel) && flags?.settle === true) return null;
   return readDirectSelectorWithMaestroFallback(session, target.selector, flags);
 }
 
@@ -574,9 +577,8 @@ function readDirectIosSelectorFillTarget(params: {
 }): DirectIosSelectorTarget | null {
   const { session, target, flags } = params;
   if (target.kind !== 'selector') return null;
-  if (flags?.verify === true) return null;
-  // --settle needs the tree-based runtime path (baseline + settle captures).
-  if (flags?.settle === true) return null;
+  if (commandSupportsVerifyEvidence('fill') && flags?.verify === true) return null;
+  if (commandSupportsSettleObservation('fill') && flags?.settle === true) return null;
   return readDirectSelectorWithMaestroFallback(session, target.selector, flags);
 }
 

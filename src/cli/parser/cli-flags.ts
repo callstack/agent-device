@@ -213,9 +213,10 @@ export const REPEATED_TOUCH_FLAGS = flagKeys(
   'jitterPx',
   'doubleTap',
 );
-// press/click/fill/longpress --settle (#1101): opt-in settled-diff observation.
-// --timeout doubles as the settle deadline (flag-sourced budget on the
-// interaction descriptors, mirroring wait's positional budget).
+// Interaction commands with the descriptor post-action observation trait use
+// these flags for `--settle` (#1101). --timeout doubles as the settle deadline
+// (flag-sourced budget on the interaction descriptors, mirroring wait's
+// positional budget).
 export const SETTLE_FLAGS = flagKeys('settle', 'settleQuietMs', 'timeoutMs');
 export const REPLAY_FLAGS = flagKeys('replayUpdate', 'replayEnv');
 
