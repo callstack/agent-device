@@ -4,23 +4,40 @@ import { fileURLToPath } from 'node:url';
 import { runCmd } from '../utils/exec.ts';
 import { AppError } from '../kernel/errors.ts';
 import { buildSwiftToolEnv, compileSwiftSourceFile } from '../utils/swift-cache.ts';
+import { findProjectRoot } from '../utils/version.ts';
 import { waitForPlayableVideo, waitForStableFile } from '../utils/video.ts';
 import {
   DEFAULT_RECORDING_EXPORT_QUALITY,
   type RecordingExportQuality,
 } from '../core/recording-export-quality.ts';
 
-function resolveScriptPath(scriptName: string): string {
-  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
-  const scriptCandidates = [
-    fileURLToPath(new URL(`./${scriptName}`, import.meta.url)),
-    path.resolve(moduleDir, `../../apple-runner/AgentDeviceRunner/RecordingScripts/${scriptName}`),
-    path.resolve(
-      moduleDir,
-      `../../../apple-runner/AgentDeviceRunner/RecordingScripts/${scriptName}`,
-    ),
-    path.resolve(process.cwd(), `apple-runner/AgentDeviceRunner/RecordingScripts/${scriptName}`),
+export function buildRecordingScriptPathCandidates(
+  scriptName: string,
+  moduleDir: string,
+  projectRoot: string,
+  cwd: string,
+): string[] {
+  const sourceScriptPath = `apple-runner/AgentDeviceRunner/RecordingScripts/${scriptName}`;
+  const packagedScriptPath = `dist/${sourceScriptPath}`;
+  return [
+    path.resolve(moduleDir, scriptName),
+    path.resolve(projectRoot, sourceScriptPath),
+    path.resolve(moduleDir, `../${sourceScriptPath}`),
+    path.resolve(moduleDir, `../../${sourceScriptPath}`),
+    path.resolve(moduleDir, `../../../${sourceScriptPath}`),
+    path.resolve(projectRoot, packagedScriptPath),
+    path.resolve(cwd, sourceScriptPath),
   ];
+}
+
+export function resolveRecordingScriptPath(scriptName: string): string {
+  const moduleDir = path.dirname(fileURLToPath(import.meta.url));
+  const scriptCandidates = buildRecordingScriptPathCandidates(
+    scriptName,
+    moduleDir,
+    findProjectRoot(),
+    process.cwd(),
+  );
 
   for (const candidate of scriptCandidates) {
     if (fs.existsSync(candidate)) {
@@ -29,7 +46,7 @@ function resolveScriptPath(scriptName: string): string {
   }
 
   throw new AppError('COMMAND_FAILED', `Missing recording helper script: ${scriptName}`, {
-    hint: 'Ensure apple-runner/AgentDeviceRunner/RecordingScripts is present in this checkout or bundled with the package.',
+    hint: 'Ensure apple-runner/AgentDeviceRunner/RecordingScripts is present in this checkout or bundled under dist/apple-runner in the package.',
     scriptName,
     searchedPaths: scriptCandidates,
   });
@@ -49,17 +66,17 @@ export function getRecordingOverlaySupportWarning(
 }
 
 function getOverlayScriptPath(): string {
-  overlayScriptPath ??= resolveScriptPath('recording-overlay.swift');
+  overlayScriptPath ??= resolveRecordingScriptPath('recording-overlay.swift');
   return overlayScriptPath;
 }
 
 function getTrimScriptPath(): string {
-  trimScriptPath ??= resolveScriptPath('recording-trim.swift');
+  trimScriptPath ??= resolveRecordingScriptPath('recording-trim.swift');
   return trimScriptPath;
 }
 
 function getResizeScriptPath(): string {
-  resizeScriptPath ??= resolveScriptPath('recording-resize.swift');
+  resizeScriptPath ??= resolveRecordingScriptPath('recording-resize.swift');
   return resizeScriptPath;
 }
 
