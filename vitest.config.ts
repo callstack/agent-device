@@ -18,7 +18,7 @@ export default defineConfig({
     projects: [
       {
         test: {
-          name: 'unit',
+          name: 'unit-core',
           include: ['src/**/*.test.ts'],
           exclude: [ANDROID_ADB_STUB_TESTS],
           setupFiles: ['src/__tests__/process-memo-setup.ts'],
@@ -27,17 +27,16 @@ export default defineConfig({
       {
         // The scripted-adb tests stub the adb binary by mutating process.env
         // (PATH, AGENT_DEVICE_TEST_ARGS_FILE) and wait real retry/poll time,
-        // so the group runs serialized in one fork — the same execution
-        // contract the pre-split android index.test.ts aggregation provided.
+        // so the group runs serialized with per-file isolation — the same
+        // execution contract the pre-split android index.test.ts aggregation
+        // provided without leaking module caches between split files.
         test: {
           name: 'android-adb',
           include: [ANDROID_ADB_STUB_TESTS],
           setupFiles: ['src/__tests__/process-memo-setup.ts'],
-          poolOptions: {
-            forks: {
-              singleFork: true,
-            },
-          },
+          fileParallelism: false,
+          isolate: true,
+          maxWorkers: 1,
         },
       },
       {
