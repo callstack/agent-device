@@ -290,7 +290,7 @@ function normalizePathSeparators(value: string): string {
 }
 
 function readLatestManagedBrowserActivityMs(status: AgentBrowserToolStatus): number | undefined {
-  const mtimes = [status.socketDir, ...readDirectoryEntries(status.socketDir)]
+  const mtimes = readDirectoryEntries(status.socketDir)
     .map((entryPath) => readPathMtimeMs(entryPath))
     .filter((mtimeMs): mtimeMs is number => mtimeMs !== undefined);
   return mtimes.length > 0 ? Math.max(...mtimes) : undefined;

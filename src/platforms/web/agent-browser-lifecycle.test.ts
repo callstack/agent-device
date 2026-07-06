@@ -193,6 +193,30 @@ test('cleanup skips reaping when managed browser socket activity is recent', asy
   }
 });
 
+test('cleanup does not treat the shared socket directory mtime as browser activity', async () => {
+  const stateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-web-life-'));
+  const originalIdleTimeout = process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS;
+  process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS = '60000';
+  try {
+    installFakeManagedAgentBrowser(stateDir);
+    const status = getManagedAgentBrowserStatus({ stateDir });
+    fs.mkdirSync(status.socketDir, { recursive: true });
+    mockRunCmd.mockResolvedValue({ stdout: '', stderr: '', exitCode: 0 });
+
+    const result = await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup');
+
+    assert.equal(result.skipped, undefined);
+    assert.equal(mockRunCmd.mock.calls.length, 1);
+  } finally {
+    if (originalIdleTimeout === undefined) {
+      delete process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS;
+    } else {
+      process.env.AGENT_BROWSER_IDLE_TIMEOUT_MS = originalIdleTimeout;
+    }
+    fs.rmSync(stateDir, { recursive: true, force: true });
+  }
+});
+
 test('process tree expansion includes descendants of matched browser roots', () => {
   const expanded = expandProcessTree(
     [{ process: { pid: 101, ppid: 1, command: 'chrome' }, reason: 'launch-marker' }],

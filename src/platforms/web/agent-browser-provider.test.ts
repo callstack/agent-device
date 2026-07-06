@@ -118,6 +118,26 @@ test('agent-browser provider runs provider-startup cleanup before the first mana
   });
 });
 
+test('agent-browser provider ignores provider-startup cleanup failures', async () => {
+  const calls: AgentBrowserCall[] = [];
+  mockProviderStartupCleanup.mockRejectedValue(new Error('ps failed'));
+
+  await withManagedAgentBrowserProvider(
+    { session: 'web-session', openWebSessionNames: () => [] },
+    async (provider) => {
+      await withCommandExecutorOverride(recordingExecutor(calls), async () => {
+        await provider.open('https://example.test');
+      });
+    },
+  );
+
+  assert.deepEqual(
+    calls.map((call) => call.args),
+    [['open', 'https://example.test', '--json', '--session', 'web-session']],
+  );
+  assert.equal(mockProviderStartupCleanup.mock.calls.length, 1);
+});
+
 test('agent-browser provider normalizes snapshot refs, labels, values, and parents', async () => {
   await withManagedAgentBrowserProvider({ session: 'web-session' }, async (provider) => {
     const calls: AgentBrowserCall[] = [];

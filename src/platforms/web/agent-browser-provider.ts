@@ -1,5 +1,6 @@
 import { execFailureDetails, runCmd } from '../../utils/exec.ts';
 import { AppError } from '../../kernel/errors.ts';
+import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import type { Rect } from '../../kernel/snapshot.ts';
 import {
@@ -247,9 +248,17 @@ async function cleanupProviderStartupOrphans(options: AgentBrowserProviderOption
   if (!options.openWebSessionNames) return;
   const status = getManagedAgentBrowserStatus({ stateDir: options.stateDir });
   if (!status.installed) return;
-  await cleanupManagedAgentBrowserOrphansForProviderStartup(status, {
-    openWebSessionNames: options.openWebSessionNames(),
-  });
+  try {
+    await cleanupManagedAgentBrowserOrphansForProviderStartup(status, {
+      openWebSessionNames: options.openWebSessionNames(),
+    });
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'web_agent_browser_provider_orphan_cleanup_failed',
+      data: { error: error instanceof Error ? error.message : String(error) },
+    });
+  }
 }
 
 function unwrapAgentBrowserJson(
