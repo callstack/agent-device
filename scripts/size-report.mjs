@@ -105,6 +105,7 @@ function collectReport(root, options) {
   if (jsFiles.length === 0) {
     throw new Error('No dist/src JavaScript files found. Run `pnpm build` before measuring size.');
   }
+  prepareGeneratedPackageAssets(root);
 
   const chunks = jsFiles
     .map((file) => {
@@ -132,9 +133,18 @@ function collectReport(root, options) {
     generatedAt: new Date().toISOString(),
     js,
     npmPack: collectNpmPack(root),
-    ...(options.startupRuns > 0 ? { startup: collectStartupBenchmarks(root, options.startupRuns) } : {}),
+    ...(options.startupRuns > 0
+      ? { startup: collectStartupBenchmarks(root, options.startupRuns) }
+      : {}),
     chunks: chunks.slice(0, 20),
   };
+}
+
+function prepareGeneratedPackageAssets(root) {
+  execFileSync(process.execPath, ['scripts/package-apple-runner-source.mjs', '--quiet'], {
+    cwd: root,
+    stdio: ['ignore', 'ignore', 'inherit'],
+  });
 }
 
 function collectStartupBenchmarks(root, runs) {
@@ -297,7 +307,9 @@ function formatDiff(base, current) {
 
 function formatStartupBenchmarks(startup, baseStartup) {
   if (!startup) return '';
-  const baseByName = new Map((baseStartup?.benchmarks ?? []).map((benchmark) => [benchmark.name, benchmark]));
+  const baseByName = new Map(
+    (baseStartup?.benchmarks ?? []).map((benchmark) => [benchmark.name, benchmark]),
+  );
   const rows = startup.benchmarks.map((benchmark) => {
     const base = baseByName.get(benchmark.name);
     return `| ${benchmark.name} | ${formatMaybeMs(base?.medianMs)} | ${formatMs(benchmark.medianMs)} | ${formatMsDiff(base?.medianMs, benchmark.medianMs)} |`;
@@ -369,7 +381,9 @@ function readGitHubCommentConfig(explicitPrNumber) {
 function assertGitHubCommentConfig(token, repository, prNumber) {
   for (const value of [token, repository, prNumber]) {
     if (!value) {
-      throw new Error('GITHUB_TOKEN, GITHUB_REPOSITORY, and PR number are required to post a comment.');
+      throw new Error(
+        'GITHUB_TOKEN, GITHUB_REPOSITORY, and PR number are required to post a comment.',
+      );
     }
   }
 }

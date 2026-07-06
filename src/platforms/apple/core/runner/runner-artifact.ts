@@ -40,6 +40,7 @@ import {
   resolveRunnerBuildDestination,
   resolveRunnerXctestrunHints,
 } from '../apple-runner-platform.ts';
+import { resolveAppleRunnerProjectPath } from './runner-source.ts';
 export { prepareXctestrunWithEnv } from './runner-artifact-env.ts';
 
 const runnerXctestrunBuildLocks = new Map<string, Promise<unknown>>();
@@ -234,12 +235,7 @@ async function buildXctestrunArtifact(params: {
   reason: ExistingXctestrunState['reason'];
 }): Promise<RunnerXctestrunArtifact> {
   const { device, options, projectRoot, expectedCacheMetadata, derived, cache, reason } = params;
-  const projectPath = path.join(
-    projectRoot,
-    'apple-runner',
-    'AgentDeviceRunner',
-    'AgentDeviceRunner.xcodeproj',
-  );
+  const projectPath = resolveAppleRunnerProjectPath(projectRoot);
 
   if (!fs.existsSync(projectPath)) {
     throw new AppError('COMMAND_FAILED', 'iOS runner project not found', { projectPath });

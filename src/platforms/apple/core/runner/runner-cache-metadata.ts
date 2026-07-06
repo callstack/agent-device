@@ -13,6 +13,7 @@ import {
   resolveRunnerPlatformName,
   resolveRunnerSdkName,
 } from '../apple-runner-platform.ts';
+import { resolveAppleRunnerSourceRoot } from './runner-source.ts';
 
 const DEFAULT_IOS_RUNNER_APP_BUNDLE_ID = 'com.callstack.agentdevice.runner';
 const RUNNER_DERIVED_ROOT = path.join(os.homedir(), '.agent-device', 'apple-runner');
@@ -232,7 +233,7 @@ type RunnerSourceFingerprintCacheEntry = {
 const runnerSourceFingerprintCache = new Map<string, RunnerSourceFingerprintCacheEntry>();
 
 function computeRunnerSourceFingerprint(projectRoot: string): string {
-  const runnerRoot = path.join(projectRoot, 'apple-runner', 'AgentDeviceRunner');
+  const runnerRoot = resolveAppleRunnerSourceRoot(projectRoot);
   const files = collectRunnerSourceFiles(runnerRoot);
   const fileStatsFingerprint = computeRunnerSourceFileStatsFingerprint(runnerRoot, files);
   const cached = runnerSourceFingerprintCache.get(runnerRoot);
