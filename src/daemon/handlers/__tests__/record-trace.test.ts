@@ -2148,6 +2148,83 @@ test('Android recording rotation retries sequentially when concurrent screenreco
   expect(sequentialStart).toBeGreaterThan(-1);
 });
 
+test('Android recording rotation discards next chunk when manifest commit fails', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-screenrecord-rotation-manifest-failure';
+  sessionStore.set(
+    sessionName,
+    makeSession(sessionName, {
+      platform: 'android',
+      id: 'emulator-5554',
+      name: 'Android',
+      kind: 'device',
+      booted: true,
+    }),
+  );
+
+  const adbCommands: string[] = [];
+  let startAttempt = 0;
+  let manifestWriteCount = 0;
+  let nextPidStopped = false;
+  mockRunCmd.mockImplementation(async (_cmd, args) => {
+    const command = args.join(' ');
+    adbCommands.push(command);
+    if (command.includes('agent-device-recording-active.json.tmp')) {
+      manifestWriteCount += 1;
+      return manifestWriteCount === 4
+        ? { stdout: '', stderr: 'manifest write failed', exitCode: 1 }
+        : { stdout: '', stderr: '', exitCode: 0 };
+    }
+    if (isAndroidScreenrecordStartCommand(command)) {
+      startAttempt += 1;
+      return { stdout: `${4320 + startAttempt}\n`, stderr: '', exitCode: 0 };
+    }
+    if (
+      /^-s emulator-5554 shell stat -c %s \/sdcard\/agent-device-recording-\d+\.mp4$/.test(command)
+    ) {
+      return { stdout: '2048\n', stderr: '', exitCode: 0 };
+    }
+    if (command === '-s emulator-5554 shell ps -o pid= -p 4322') {
+      return nextPidStopped
+        ? { stdout: '', stderr: '', exitCode: 1 }
+        : { stdout: '4322\n', stderr: '', exitCode: 0 };
+    }
+    if (command === '-s emulator-5554 shell kill -2 4322') {
+      nextPidStopped = true;
+      return { stdout: '', stderr: '', exitCode: 0 };
+    }
+    return { stdout: '', stderr: '', exitCode: 0 };
+  });
+
+  const response = await runRecordCommand({
+    sessionStore,
+    sessionName,
+    positionals: ['start', './android-rotation-manifest-failure.mp4'],
+  });
+  expect(response?.ok).toBe(true);
+
+  await vi.advanceTimersByTimeAsync(170_000);
+
+  const recording = sessionStore.get(sessionName)?.recording;
+  expect(recording?.platform).toBe('android');
+  if (recording?.platform !== 'android') {
+    throw new Error('expected Android recording');
+  }
+  expect(recording.remotePid).toBe('4321');
+  expect(recording.chunks).toHaveLength(1);
+  expect(recording.rotationFailedReason).toMatch(
+    /failed to write Android recording recovery manifest/,
+  );
+  expect(adbCommands).toContain('-s emulator-5554 shell kill -2 4322');
+  expect(
+    adbCommands.some((command) =>
+      /^-s emulator-5554 shell rm -f \/sdcard\/agent-device-recording-\d+\.mp4$/.test(command),
+    ),
+  ).toBe(true);
+});
+
 test('record stop keeps iOS simulator video when touch overlay recording was invalidated', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-invalidated-recording';

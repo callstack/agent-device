@@ -53,16 +53,27 @@ export function resolveAndroidScreenrecordLimitWarning(
 
 export function scheduleAndroidRecordingRotation(params: {
   recording: AndroidRecording;
-  startNextChunk: (preferredRemoteDir: string) => Promise<AndroidScreenrecordChunk>;
+  startNextChunk: (
+    preferredRemoteDir: string,
+    nextIndex: number,
+  ) => Promise<AndroidScreenrecordChunk>;
   finishCurrentChunk: (chunk: AndroidScreenrecordChunk) => Promise<string | undefined>;
+  cleanupStartedChunk?: (chunk: AndroidScreenrecordChunk) => Promise<void>;
   persistRecordingState?: (recording: AndroidRecording) => Promise<void>;
 }): void {
-  const { recording, startNextChunk, finishCurrentChunk, persistRecordingState } = params;
+  const {
+    recording,
+    startNextChunk,
+    finishCurrentChunk,
+    cleanupStartedChunk,
+    persistRecordingState,
+  } = params;
   const timer = setTimeout(() => {
     recording.rotationPromise = rotateAndroidRecordingChunk({
       recording,
       startNextChunk,
       finishCurrentChunk,
+      cleanupStartedChunk,
       persistRecordingState,
     })
       .catch((error: unknown) => {
@@ -75,6 +86,7 @@ export function scheduleAndroidRecordingRotation(params: {
             recording,
             startNextChunk,
             finishCurrentChunk,
+            cleanupStartedChunk,
             persistRecordingState,
           });
         }
@@ -86,11 +98,21 @@ export function scheduleAndroidRecordingRotation(params: {
 
 async function rotateAndroidRecordingChunk(params: {
   recording: AndroidRecording;
-  startNextChunk: (preferredRemoteDir: string) => Promise<AndroidScreenrecordChunk>;
+  startNextChunk: (
+    preferredRemoteDir: string,
+    nextIndex: number,
+  ) => Promise<AndroidScreenrecordChunk>;
   finishCurrentChunk: (chunk: AndroidScreenrecordChunk) => Promise<string | undefined>;
+  cleanupStartedChunk?: (chunk: AndroidScreenrecordChunk) => Promise<void>;
   persistRecordingState?: (recording: AndroidRecording) => Promise<void>;
 }): Promise<void> {
-  const { recording, startNextChunk, finishCurrentChunk, persistRecordingState } = params;
+  const {
+    recording,
+    startNextChunk,
+    finishCurrentChunk,
+    cleanupStartedChunk,
+    persistRecordingState,
+  } = params;
   if (recording.stopping) return;
 
   const chunks = ensureAndroidRecordingChunks(recording);
@@ -100,26 +122,105 @@ async function rotateAndroidRecordingChunk(params: {
     remotePid: recording.remotePid,
     startedAt: recording.remoteStartedAt ?? recording.startedAt,
   };
-  let previousChunkFinished = false;
-  let nextChunk: AndroidScreenrecordChunk;
+  const started = await startNextAndroidRecordingChunkWithFallback({
+    recording,
+    nextIndex,
+    previousChunk,
+    startNextChunk,
+    finishCurrentChunk,
+  });
+  if (!started) return;
+  const { nextChunk, previousChunkFinished } = started;
+  const previousState = applyNextAndroidRecordingChunk({
+    recording,
+    nextChunk,
+  });
+  await commitNextAndroidRecordingChunk({
+    recording,
+    chunks,
+    nextChunk,
+    nextIndex,
+    previousState,
+    finishCurrentChunk,
+    cleanupStartedChunk,
+    persistRecordingState,
+  });
+  if (previousChunkFinished) {
+    return;
+  }
+  await finishAndroidRecordingChunkOrThrow(finishCurrentChunk, previousChunk);
+}
+
+async function startNextAndroidRecordingChunkWithFallback(params: {
+  recording: AndroidRecording;
+  nextIndex: number;
+  previousChunk: AndroidScreenrecordChunk;
+  startNextChunk: (
+    preferredRemoteDir: string,
+    nextIndex: number,
+  ) => Promise<AndroidScreenrecordChunk>;
+  finishCurrentChunk: (chunk: AndroidScreenrecordChunk) => Promise<string | undefined>;
+}): Promise<{ nextChunk: AndroidScreenrecordChunk; previousChunkFinished: boolean } | undefined> {
+  const { recording, nextIndex, previousChunk, startNextChunk, finishCurrentChunk } = params;
+  const preferredRemoteDir = path.posix.dirname(recording.remotePath);
   try {
-    nextChunk = await startNextChunk(path.posix.dirname(recording.remotePath));
+    return {
+      nextChunk: await startNextChunk(preferredRemoteDir, nextIndex),
+      previousChunkFinished: false,
+    };
   } catch (concurrentStartError) {
     const stopError = await finishCurrentChunk(previousChunk);
-    previousChunkFinished = true;
     if (stopError) {
       throw new Error(stopError);
     }
-    if (recording.stopping) return;
+    if (recording.stopping) return undefined;
     try {
-      nextChunk = await startNextChunk(path.posix.dirname(recording.remotePath));
+      return {
+        nextChunk: await startNextChunk(preferredRemoteDir, nextIndex),
+        previousChunkFinished: true,
+      };
     } catch (sequentialStartError) {
       throw sequentialStartError instanceof Error ? sequentialStartError : concurrentStartError;
     }
   }
+}
+
+function applyNextAndroidRecordingChunk(params: {
+  recording: AndroidRecording;
+  nextChunk: AndroidScreenrecordChunk;
+}): Pick<AndroidRecording, 'remotePath' | 'remotePid' | 'remoteStartedAt'> {
+  const { recording, nextChunk } = params;
+  const previousState = {
+    remotePath: recording.remotePath,
+    remotePid: recording.remotePid,
+    remoteStartedAt: recording.remoteStartedAt,
+  };
   recording.remotePath = nextChunk.remotePath;
   recording.remotePid = nextChunk.remotePid;
   recording.remoteStartedAt = nextChunk.startedAt;
+  return previousState;
+}
+
+async function commitNextAndroidRecordingChunk(params: {
+  recording: AndroidRecording;
+  chunks: NonNullable<AndroidRecording['chunks']>;
+  nextChunk: AndroidScreenrecordChunk;
+  nextIndex: number;
+  previousState: Pick<AndroidRecording, 'remotePath' | 'remotePid' | 'remoteStartedAt'>;
+  finishCurrentChunk: (chunk: AndroidScreenrecordChunk) => Promise<string | undefined>;
+  cleanupStartedChunk?: (chunk: AndroidScreenrecordChunk) => Promise<void>;
+  persistRecordingState?: (recording: AndroidRecording) => Promise<void>;
+}): Promise<void> {
+  const {
+    recording,
+    chunks,
+    nextChunk,
+    nextIndex,
+    previousState,
+    finishCurrentChunk,
+    cleanupStartedChunk,
+    persistRecordingState,
+  } = params;
   chunks.push({
     index: nextIndex,
     path: deriveAndroidChunkOutPath(recording.outPath, nextIndex),
@@ -127,14 +228,60 @@ async function rotateAndroidRecordingChunk(params: {
   });
   recording.warning ??=
     'Android adb screenrecord is capped at 180s, so this recording was split into multiple MP4 chunks.';
-  await persistRecordingState?.(recording);
-  if (previousChunkFinished) {
-    return;
+  try {
+    await persistRecordingState?.(recording);
+  } catch (error) {
+    rollbackNextAndroidRecordingChunk({ recording, chunks, previousState });
+    const cleanupError = await discardNextAndroidRecordingChunk({
+      nextChunk,
+      finishCurrentChunk,
+      cleanupStartedChunk,
+    });
+    if (cleanupError) throw cleanupError;
+    throw error;
   }
-  const stopError = await finishCurrentChunk(previousChunk);
+}
+
+function rollbackNextAndroidRecordingChunk(params: {
+  recording: AndroidRecording;
+  chunks: NonNullable<AndroidRecording['chunks']>;
+  previousState: Pick<AndroidRecording, 'remotePath' | 'remotePid' | 'remoteStartedAt'>;
+}): void {
+  const { recording, chunks, previousState } = params;
+  chunks.pop();
+  recording.remotePath = previousState.remotePath;
+  recording.remotePid = previousState.remotePid;
+  recording.remoteStartedAt = previousState.remoteStartedAt;
+}
+
+async function finishAndroidRecordingChunkOrThrow(
+  finishCurrentChunk: (chunk: AndroidScreenrecordChunk) => Promise<string | undefined>,
+  chunk: AndroidScreenrecordChunk,
+): Promise<void> {
+  const stopError = await finishCurrentChunk(chunk);
   if (stopError) {
     throw new Error(stopError);
   }
+}
+
+async function discardNextAndroidRecordingChunk(params: {
+  nextChunk: AndroidScreenrecordChunk;
+  finishCurrentChunk: (chunk: AndroidScreenrecordChunk) => Promise<string | undefined>;
+  cleanupStartedChunk?: (chunk: AndroidScreenrecordChunk) => Promise<void>;
+}): Promise<unknown | undefined> {
+  const { nextChunk, finishCurrentChunk, cleanupStartedChunk } = params;
+  let discardError: unknown;
+  try {
+    await finishAndroidRecordingChunkOrThrow(finishCurrentChunk, nextChunk);
+  } catch (error) {
+    discardError = error;
+  }
+  try {
+    await cleanupStartedChunk?.(nextChunk);
+  } catch (error) {
+    discardError ??= error;
+  }
+  return discardError;
 }
 
 export async function finalizeAndroidRecordingOutput(params: {

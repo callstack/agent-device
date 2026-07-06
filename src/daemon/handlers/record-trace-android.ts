@@ -24,6 +24,8 @@ import {
 import {
   cleanupAndroidRecoveryMetadata,
   writeAndroidRecoveryMetadata,
+  writeAndroidRecoveryPendingMetadata,
+  writeAndroidRecoveryRotatingMetadata,
 } from './record-trace-android-recovery.ts';
 
 type AndroidRecordingSize = { width: number; height: number };
@@ -59,6 +61,14 @@ type AndroidRecordingChunkStart = {
   remotePath: string;
   remotePid: string;
   startedAt: number;
+};
+type AndroidRecordingChunkStartAttempt =
+  | { kind: 'started'; chunk: AndroidRecordingChunkStart }
+  | { kind: 'failed'; message: string };
+
+type AndroidRecordingChunkStartHooks = {
+  prepareRemotePath?: (remotePath: string) => Promise<string | undefined>;
+  cleanupPreparedRemotePath?: (remotePath: string) => Promise<void>;
 };
 
 async function runAndroidRecordingAdb(
@@ -264,58 +274,96 @@ async function startAndroidScreenrecordChunk(params: {
   recordingSize: AndroidRecordingSize | undefined;
   quality: RecordingExportQuality;
   preferredRemoteDir?: string;
+  hooks?: AndroidRecordingChunkStartHooks;
 }): Promise<AndroidRecordingChunkStart | { error: DaemonResponse }> {
-  const { device, recordingSize, quality, preferredRemoteDir } = params;
+  const { device, recordingSize, quality, preferredRemoteDir, hooks } = params;
   let lastStartError =
     'failed to start recording: Android screenrecord did not begin producing frames';
 
   for (const remotePath of androidRemoteRecordingPaths(Date.now(), preferredRemoteDir)) {
-    const startResult = await runAndroidRecordingAdb(
-      device.id,
-      ['shell', buildAndroidScreenrecordCommand(remotePath, recordingSize, quality)],
-      {
-        allowFailure: true,
-        timeoutMs: ANDROID_RECORDING_PROBE_TIMEOUT_MS,
-      },
-    );
-    if (startResult.exitCode !== 0) {
-      lastStartError = `failed to start recording: ${formatRecordTraceExecFailure(startResult, 'adb shell screenrecord')}`;
-      continue;
-    }
-
-    const remotePid = parseAndroidRemotePid(startResult.stdout);
-    if (!remotePid) {
-      lastStartError =
-        'failed to start recording: adb did not return a valid Android screenrecord pid';
-      await cleanupAndroidRemoteRecording(device.id, remotePath);
-      continue;
-    }
-
-    emitDiagnostic({
-      level: 'debug',
-      phase: 'record_start_android_started',
-      data: {
-        deviceId: device.id,
-        remotePath,
-        remotePid,
-      },
+    const attempt = await tryStartAndroidScreenrecordAtPath({
+      device,
+      recordingSize,
+      quality,
+      remotePath,
+      hooks,
     });
-
-    if (await waitForAndroidRecordingReady(device.id, remotePath, remotePid)) {
-      return {
-        remotePath,
-        remotePid,
-        startedAt: Date.now(),
-      };
+    if (attempt.kind === 'started') {
+      return attempt.chunk;
     }
-
-    lastStartError =
-      'failed to start recording: Android screenrecord did not begin producing frames';
-    await forceStopAndroidProcess(device.id, remotePid);
-    await cleanupAndroidRemoteRecording(device.id, remotePath);
+    lastStartError = attempt.message;
   }
 
   return { error: errorResponse('COMMAND_FAILED', lastStartError) };
+}
+
+async function tryStartAndroidScreenrecordAtPath(params: {
+  device: AndroidDevice;
+  recordingSize: AndroidRecordingSize | undefined;
+  quality: RecordingExportQuality;
+  remotePath: string;
+  hooks?: AndroidRecordingChunkStartHooks;
+}): Promise<AndroidRecordingChunkStartAttempt> {
+  const { device, recordingSize, quality, remotePath, hooks } = params;
+  const prepareError = await hooks?.prepareRemotePath?.(remotePath);
+  if (prepareError) {
+    return { kind: 'failed', message: prepareError };
+  }
+
+  const startResult = await runAndroidRecordingAdb(
+    device.id,
+    ['shell', buildAndroidScreenrecordCommand(remotePath, recordingSize, quality)],
+    {
+      allowFailure: true,
+      timeoutMs: ANDROID_RECORDING_PROBE_TIMEOUT_MS,
+    },
+  );
+  if (startResult.exitCode !== 0) {
+    await hooks?.cleanupPreparedRemotePath?.(remotePath);
+    return {
+      kind: 'failed',
+      message: `failed to start recording: ${formatRecordTraceExecFailure(startResult, 'adb shell screenrecord')}`,
+    };
+  }
+
+  const remotePid = parseAndroidRemotePid(startResult.stdout);
+  if (!remotePid) {
+    await hooks?.cleanupPreparedRemotePath?.(remotePath);
+    await cleanupAndroidRemoteRecording(device.id, remotePath);
+    return {
+      kind: 'failed',
+      message: 'failed to start recording: adb did not return a valid Android screenrecord pid',
+    };
+  }
+
+  emitDiagnostic({
+    level: 'debug',
+    phase: 'record_start_android_started',
+    data: {
+      deviceId: device.id,
+      remotePath,
+      remotePid,
+    },
+  });
+
+  if (await waitForAndroidRecordingReady(device.id, remotePath, remotePid)) {
+    return {
+      kind: 'started',
+      chunk: {
+        remotePath,
+        remotePid,
+        startedAt: Date.now(),
+      },
+    };
+  }
+
+  await forceStopAndroidProcess(device.id, remotePid);
+  await hooks?.cleanupPreparedRemotePath?.(remotePath);
+  await cleanupAndroidRemoteRecording(device.id, remotePath);
+  return {
+    kind: 'failed',
+    message: 'failed to start recording: Android screenrecord did not begin producing frames',
+  };
 }
 
 export async function startAndroidRecording(params: {
@@ -335,17 +383,42 @@ export async function startAndroidRecording(params: {
   }
 
   const quality = recordingBase.exportQuality ?? DEFAULT_RECORDING_EXPORT_QUALITY;
+  const recordingId = randomUUID();
   const chunk = await startAndroidScreenrecordChunk({
     device,
     recordingSize,
     quality,
+    hooks: {
+      prepareRemotePath: async (remotePath) =>
+        await writeAndroidRecoveryPendingMetadata({
+          deviceId: device.id,
+          activeSession,
+          recordingId,
+          startedAt: recordingBase.startedAt,
+          showTouches: recordingBase.showTouches,
+          remotePath,
+        }),
+      cleanupPreparedRemotePath: async () => {
+        await cleanupAndroidRecoveryMetadata(device.id);
+      },
+    },
   });
   if ('error' in chunk) {
     return chunk.error;
   }
 
-  const recording = buildAndroidRecording({ recordingBase, chunk });
-  await writeAndroidRecoveryMetadata({ deviceId: device.id, activeSession, recording });
+  const recording = buildAndroidRecording({ recordingBase, chunk, recordingId });
+  const metadataError = await writeAndroidRecoveryMetadata({
+    deviceId: device.id,
+    activeSession,
+    recording,
+  });
+  if (metadataError) {
+    await forceStopAndroidProcess(device.id, recording.remotePid);
+    await cleanupAndroidRemoteRecording(device.id, recording.remotePath);
+    await cleanupAndroidRecoveryMetadata(device.id);
+    return errorResponse('COMMAND_FAILED', `failed to start recording: ${metadataError}`);
+  }
   scheduleAndroidRecordingChunks({
     activeSession,
     device,
@@ -359,11 +432,12 @@ export async function startAndroidRecording(params: {
 function buildAndroidRecording(params: {
   recordingBase: AndroidRecordingBase;
   chunk: AndroidRecordingChunkStart;
+  recordingId: string;
 }): AndroidRecording {
-  const { recordingBase, chunk } = params;
+  const { recordingBase, chunk, recordingId } = params;
   return {
     platform: 'android',
-    recordingId: randomUUID(),
+    recordingId,
     remotePath: chunk.remotePath,
     remotePid: chunk.remotePid,
     remoteStartedAt: chunk.startedAt,
@@ -397,12 +471,32 @@ function scheduleAndroidRecordingChunks(params: {
         remotePid: chunk.remotePid,
         waitForRemoteFileStability: false,
       }),
-    startNextChunk: async (preferredRemoteDir) => {
+    cleanupStartedChunk: async (chunk) => {
+      await cleanupAndroidRemoteRecording(device.id, chunk.remotePath);
+    },
+    startNextChunk: async (preferredRemoteDir, nextIndex) => {
       const nextChunk = await startAndroidScreenrecordChunk({
         device,
         recordingSize,
         quality,
         preferredRemoteDir,
+        hooks: {
+          prepareRemotePath: async (remotePath) =>
+            await writeAndroidRecoveryRotatingMetadata({
+              deviceId: device.id,
+              activeSession,
+              recording,
+              nextRemotePath: remotePath,
+              nextIndex,
+            }),
+          cleanupPreparedRemotePath: async () => {
+            await writeAndroidRecoveryMetadata({
+              deviceId: device.id,
+              activeSession,
+              recording,
+            });
+          },
+        },
       });
       if ('error' in nextChunk) {
         throw new Error(
@@ -414,11 +508,14 @@ function scheduleAndroidRecordingChunks(params: {
       return nextChunk;
     },
     persistRecordingState: async (updatedRecording) => {
-      await writeAndroidRecoveryMetadata({
+      const metadataError = await writeAndroidRecoveryMetadata({
         deviceId: device.id,
         activeSession,
         recording: updatedRecording,
       });
+      if (metadataError) {
+        throw new Error(metadataError);
+      }
     },
   });
 }
