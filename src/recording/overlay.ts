@@ -30,7 +30,7 @@ export function buildRecordingScriptPathCandidates(
   ];
 }
 
-export function resolveRecordingScriptPath(scriptName: string): string {
+function resolveRecordingScriptPath(scriptName: string): string {
   const moduleDir = path.dirname(fileURLToPath(import.meta.url));
   const scriptCandidates = buildRecordingScriptPathCandidates(
     scriptName,
