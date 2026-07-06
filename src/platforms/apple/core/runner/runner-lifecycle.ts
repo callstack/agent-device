@@ -252,19 +252,19 @@ export async function executeRunnerCommand(
   const signal = getRequestSignal(options.requestId);
   const recycleKey = runnerRecycleLedgerKey(options, command);
   let session: RunnerSession | undefined;
+  let recycleBootBegun = false;
   try {
     // A request that already used a runner session and finds none alive is about to pay for
     // a recycle boot (~25s): bound that to the per-request recycle budget so a hostile screen
     // fails fast with a preserved session instead of stacking runner boots (#1105).
-    if (
-      !getRunnerSessionSnapshot(device.id)?.alive &&
-      hasRunnerRequestTouchedSession(recycleKey) &&
-      !tryBeginRunnerRecycle(recycleKey)
-    ) {
-      throw buildRunnerRecycleBudgetExhaustedError(command, options);
+    if (!getRunnerSessionSnapshot(device.id)?.alive && hasRunnerRequestTouchedSession(recycleKey)) {
+      if (!tryBeginRunnerRecycle(recycleKey)) {
+        throw buildRunnerRecycleBudgetExhaustedError(command, options);
+      }
+      recycleBootBegun = true;
     }
     session = await ensureRunnerSession(device, options);
-    if (hasRunnerRequestTouchedSession(recycleKey)) {
+    if (recycleBootBegun) {
       commitRunnerRecycle(recycleKey);
     }
     markRunnerRequestTouchedSession(recycleKey);

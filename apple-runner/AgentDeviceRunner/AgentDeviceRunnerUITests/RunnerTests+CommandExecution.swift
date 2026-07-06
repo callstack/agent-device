@@ -195,7 +195,7 @@ extension RunnerTests {
 
     XCTAssertFalse(response.ok)
     XCTAssertEqual(response.error?.code, "RUNNER_BUSY")
-    XCTAssertTrue(response.error?.message?.contains("previous command") == true)
+    XCTAssertTrue(response.error?.message.contains("previous command") == true)
   }
 
   func testExecuteDispatchedReturnsWedgedBeforeMainThreadFastPath() throws {

@@ -843,49 +843,58 @@ export async function parseRunnerResponse(
   session: Pick<RunnerSession, 'ready'>,
   logPath?: string,
 ): Promise<Record<string, unknown>> {
-  const text = await response.text();
-  let json: RunnerResponsePayload;
-  try {
-    const parsed: unknown = JSON.parse(text);
-    json = parsed && typeof parsed === 'object' ? (parsed as RunnerResponsePayload) : {};
-  } catch {
-    throw new AppError('COMMAND_FAILED', 'Invalid runner response', { text });
-  }
+  const json = parseRunnerResponsePayload(await response.text());
   if (!json.ok) {
-    const rawCode = json.error?.code;
-    const runnerErrorCode =
-      typeof rawCode === 'string' && rawCode.trim().length > 0 ? rawCode.trim() : undefined;
-    const errorCode =
-      runnerErrorCode === 'RUNNER_BUSY'
-        ? 'COMMAND_FAILED'
-        : runnerErrorCode
-          ? toAppErrorCode(runnerErrorCode)
-          : 'COMMAND_FAILED';
-    const errorMessage = typeof json.error?.message === 'string' ? json.error.message : undefined;
-    const hint = typeof json.error?.hint === 'string' ? json.error.hint : undefined;
     throw await enrichRunnerFailureFromLog({
-      error: new AppError(errorCode, errorMessage ?? 'Runner error', {
-        runner: json,
-        runnerErrorCode,
-        retriable: runnerErrorCode === 'RUNNER_BUSY' ? true : undefined,
-        xcodebuild: {
-          exitCode: 1,
-          stdout: '',
-          stderr: '',
-        },
-        hint,
-        logPath,
-      }),
+      error: buildRunnerResponseError(json, logPath),
       logPath,
     });
   }
   session.ready = true;
-  if (json.data && typeof json.data === 'object' && !Array.isArray(json.data)) {
-    const data = json.data as Record<string, unknown>;
-    emitRunnerResponseDiagnostics(data);
-    return data;
+  return readRunnerResponseData(json);
+}
+
+function parseRunnerResponsePayload(text: string): RunnerResponsePayload {
+  try {
+    const parsed: unknown = JSON.parse(text);
+    return parsed && typeof parsed === 'object' ? (parsed as RunnerResponsePayload) : {};
+  } catch {
+    throw new AppError('COMMAND_FAILED', 'Invalid runner response', { text });
   }
-  return {};
+}
+
+function buildRunnerResponseError(json: RunnerResponsePayload, logPath?: string): AppError {
+  const runnerErrorCode = readRunnerErrorCode(json.error?.code);
+  const errorMessage = typeof json.error?.message === 'string' ? json.error.message : undefined;
+  const hint = typeof json.error?.hint === 'string' ? json.error.hint : undefined;
+  return new AppError(runnerAppErrorCode(runnerErrorCode), errorMessage ?? 'Runner error', {
+    runner: json,
+    runnerErrorCode,
+    retriable: runnerErrorCode === 'RUNNER_BUSY' ? true : undefined,
+    xcodebuild: {
+      exitCode: 1,
+      stdout: '',
+      stderr: '',
+    },
+    hint,
+    logPath,
+  });
+}
+
+function readRunnerErrorCode(rawCode: unknown): string | undefined {
+  return typeof rawCode === 'string' && rawCode.trim().length > 0 ? rawCode.trim() : undefined;
+}
+
+function runnerAppErrorCode(runnerErrorCode: string | undefined): AppError['code'] {
+  if (runnerErrorCode === 'RUNNER_BUSY') return 'COMMAND_FAILED';
+  return runnerErrorCode ? toAppErrorCode(runnerErrorCode) : 'COMMAND_FAILED';
+}
+
+function readRunnerResponseData(json: RunnerResponsePayload): Record<string, unknown> {
+  if (!json.data || typeof json.data !== 'object' || Array.isArray(json.data)) return {};
+  const data = json.data as Record<string, unknown>;
+  emitRunnerResponseDiagnostics(data);
+  return data;
 }
 
 function emitRunnerResponseDiagnostics(data: Record<string, unknown>): void {
