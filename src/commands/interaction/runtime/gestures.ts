@@ -40,8 +40,7 @@ import {
   type ResolvedInteractionTarget,
   resolveInteractionTarget,
 } from './resolution.ts';
-import { reconcileNonHittableHintWithEvidence } from './non-hittable-hint.ts';
-import { settleAfterInteraction } from './settle.ts';
+import { applyPostActionObservation } from './post-action-observation.ts';
 
 export type FocusCommandOptions = CommandContext & {
   target: InteractionTarget;
@@ -177,16 +176,18 @@ export const longPressCommand: RuntimeCommand<
     durationMs,
   });
   const formattedBackendResult = toBackendResult(backendResult);
-  const settle = options.settle
-    ? (await settleAfterInteraction(runtime, options, { ...options.settle, resolved })).observation
-    : undefined;
-  return reconcileNonHittableHintWithEvidence({
-    ...resolved,
-    ...(durationMs !== undefined ? { durationMs } : {}),
-    ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
-    ...(settle ? { settle } : {}),
-    ...successText(`Long pressed (${point.x}, ${point.y})`),
-  });
+  return await applyPostActionObservation(
+    runtime,
+    options,
+    resolved,
+    {
+      ...resolved,
+      ...(durationMs !== undefined ? { durationMs } : {}),
+      ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
+      ...successText(`Long pressed (${point.x}, ${point.y})`),
+    },
+    { settle: options.settle },
+  );
 };
 
 export const scrollCommand: RuntimeCommand<ScrollCommandOptions, ScrollCommandResult> = async (

@@ -2,18 +2,14 @@ import { AppError } from '../../../kernel/errors.ts';
 import type { ClickButton } from '../../../core/click-button.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { isFillableType } from '../../../snapshot/snapshot-processing.ts';
-import type { Point, SnapshotNode } from '../../../kernel/snapshot.ts';
+import type { Point } from '../../../kernel/snapshot.ts';
 import { requireIntInRange } from '../../../utils/validation.ts';
 import { successText } from '../../../utils/success-text.ts';
 import { findMistargetedTypeRefToken } from '../../../utils/type-target-warning.ts';
-import { summarizeAxEvidence } from '../../../utils/ax-digest.ts';
 import type {
   FillCommandResult,
-  InteractionEvidence,
   PressCommandResult,
-  ResolvedInteractionTarget,
   ResolvedTarget,
-  SettleObservation,
   SettleParams,
 } from '../../../contracts/interaction.ts';
 import { toBackendContext } from '../../runtime-common.ts';
@@ -24,13 +20,11 @@ import {
 } from '../../runtime-types.ts';
 import type { RepeatedInput } from '../../command-input.ts';
 import {
-  captureInteractionSnapshot,
   type InteractionTarget,
   preflightNativeRefInteraction,
   resolveInteractionTarget,
 } from './resolution.ts';
-import { settleAfterInteraction, settleEvidence } from './settle.ts';
-import { reconcileNonHittableHintWithEvidence } from './non-hittable-hint.ts';
+import { applyPostActionObservation } from './post-action-observation.ts';
 
 export {
   focusCommand,
@@ -143,17 +137,18 @@ export const fillCommand: RuntimeCommand<FillCommandOptions, FillCommandResult> 
     nodeType && !isFillableType(nodeType, runtime.backend.platform)
       ? `fill target ${formatTargetForWarning(resolved)} resolved to "${nodeType}", attempting fill anyway.`
       : undefined;
-  const observed = await observeAfterInteraction(runtime, options, resolved, {
-    verify,
-    settle: options.settle,
-  });
-  return reconcileNonHittableHintWithEvidence({
-    ...resolved,
-    text: options.text,
-    ...(warning ? { warning } : {}),
-    ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
-    ...observed,
-  });
+  return await applyPostActionObservation(
+    runtime,
+    options,
+    resolved,
+    {
+      ...resolved,
+      text: options.text,
+      ...(warning ? { warning } : {}),
+      ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
+    },
+    { verify, settle: options.settle },
+  );
 };
 
 export const typeTextCommand: RuntimeCommand<
@@ -220,73 +215,16 @@ async function tapCommand(
     doubleTap: options.doubleTap,
   });
   const formattedBackendResult = toBackendResult(backendResult);
-  const observed = await observeAfterInteraction(runtime, options, resolved, {
-    verify,
-    settle: options.settle,
-  });
-  return reconcileNonHittableHintWithEvidence({
-    ...resolved,
-    ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
-    ...observed,
-  });
-}
-
-/**
- * Post-action observation composition: `--settle` runs the quiet-window loop
- * (settle.ts) and, when `--verify` rides along, its final capture doubles as
- * the evidence source — the pair costs zero captures beyond the settle loop's
- * own. Without settle, verify keeps its single dedicated capture.
- */
-async function observeAfterInteraction(
-  runtime: AgentDeviceRuntime,
-  options: CommandContext,
-  resolved: ResolvedInteractionTarget,
-  params: { verify: boolean; settle: SettleParams | undefined },
-): Promise<{ evidence?: InteractionEvidence; settle?: SettleObservation }> {
-  if (params.settle) {
-    const outcome = await settleAfterInteraction(runtime, options, {
-      ...params.settle,
-      resolved,
-    });
-    const evidence = params.verify
-      ? settleEvidence(
-          outcome.settledNodes,
-          'preActionNodes' in resolved ? resolved.preActionNodes : undefined,
-        )
-      : undefined;
-    return { settle: outcome.observation, ...(evidence ? { evidence } : {}) };
-  }
-  if (!params.verify) return {};
-  const evidence = await captureVerifyEvidence(runtime, options, resolved);
-  return evidence ? { evidence } : {};
-}
-
-/**
- * Post-action side of `--verify` (#1047): one interactive-only capture through
- * the same capture helper the resolution path already uses, digested and then
- * discarded — the node tree itself is never attached to the result, only the
- * cheap summary. Best-effort: a failed capture must not turn a successful
- * action into a failure, so this returns `undefined` instead of throwing.
- */
-async function captureVerifyEvidence(
-  runtime: AgentDeviceRuntime,
-  options: CommandContext,
-  resolved: ResolvedInteractionTarget,
-): Promise<InteractionEvidence | undefined> {
-  const preActionNodes: SnapshotNode[] | undefined =
-    'preActionNodes' in resolved ? resolved.preActionNodes : undefined;
-  try {
-    const capture = await captureInteractionSnapshot(runtime, options, true);
-    const after = summarizeAxEvidence(capture.snapshot.nodes);
-    // No pre-action baseline (for example the baseline capture itself failed)
-    // means we cannot claim a change happened — default to false rather than
-    // asserting a change we did not actually observe.
-    const changedFromBefore =
-      preActionNodes !== undefined && after.digest !== summarizeAxEvidence(preActionNodes).digest;
-    return { ...after, changedFromBefore };
-  } catch {
-    return undefined;
-  }
+  return await applyPostActionObservation(
+    runtime,
+    options,
+    resolved,
+    {
+      ...resolved,
+      ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
+    },
+    { verify, settle: options.settle },
+  );
 }
 
 function requireResolvedPoint(result: { point?: Point }): Point {
