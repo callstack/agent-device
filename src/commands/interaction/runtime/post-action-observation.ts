@@ -15,17 +15,51 @@ type ObservedResult<T extends object> = T & {
   settle?: SettleObservation;
 };
 
+export type PostActionObservationOptions = {
+  /**
+   * Opt-in (#1047): take one post-action interactive-only capture, digest it,
+   * and return it as `evidence` instead of forcing a follow-up snapshot.
+   */
+  verify?: boolean;
+  /**
+   * Opt-in (#1101): after the action, wait for the UI to go quiet and return
+   * the settled diff vs the pre-action tree in the same response.
+   */
+  settle?: SettleParams;
+};
+
+export type SettlePostActionObservationOptions = Pick<PostActionObservationOptions, 'settle'>;
+
+export type PostActionObservationPlan = {
+  verify: boolean;
+  /**
+   * Verify and settle compare against the pre-action tree, so callers must use
+   * the resolution path instead of native ref fast paths.
+   */
+  needsPreActionBaseline: boolean;
+  settle?: SettleParams;
+};
+
+export function planPostActionObservation(
+  options: PostActionObservationOptions,
+): PostActionObservationPlan {
+  const verify = options.verify === true;
+  const needsPreActionBaseline = verify || options.settle !== undefined;
+  return {
+    verify,
+    needsPreActionBaseline,
+    ...(options.settle !== undefined ? { settle: options.settle } : {}),
+  };
+}
+
 export async function applyPostActionObservation<T extends object>(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
   resolved: ResolvedInteractionTarget,
   result: T,
-  params: { verify?: boolean; settle?: SettleParams | undefined },
+  params: PostActionObservationPlan,
 ): Promise<ObservedResult<T>> {
-  const observed = await observeAfterInteraction(runtime, options, resolved, {
-    verify: params.verify === true,
-    settle: params.settle,
-  });
+  const observed = await observeAfterInteraction(runtime, options, resolved, params);
   return reconcileNonHittableHintWithEvidence({ ...result, ...observed });
 }
 
@@ -40,9 +74,9 @@ async function observeAfterInteraction(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
   resolved: ResolvedInteractionTarget,
-  params: { verify: boolean; settle: SettleParams | undefined },
+  params: PostActionObservationPlan,
 ): Promise<{ evidence?: InteractionEvidence; settle?: SettleObservation }> {
-  if (params.settle) {
+  if (params.settle !== undefined) {
     const outcome = await settleAfterInteraction(runtime, options, {
       ...params.settle,
       resolved,

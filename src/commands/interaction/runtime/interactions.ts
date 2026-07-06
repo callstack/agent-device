@@ -10,7 +10,6 @@ import type {
   FillCommandResult,
   PressCommandResult,
   ResolvedTarget,
-  SettleParams,
 } from '../../../contracts/interaction.ts';
 import { toBackendContext } from '../../runtime-common.ts';
 import {
@@ -24,7 +23,11 @@ import {
   preflightNativeRefInteraction,
   resolveInteractionTarget,
 } from './resolution.ts';
-import { applyPostActionObservation } from './post-action-observation.ts';
+import {
+  applyPostActionObservation,
+  planPostActionObservation,
+  type PostActionObservationOptions,
+} from './post-action-observation.ts';
 
 export {
   focusCommand,
@@ -54,21 +57,7 @@ export type PressCommandOptions = CommandContext &
   RepeatedInput & {
     target: InteractionTarget;
     button?: ClickButton;
-    /**
-     * Opt-in (#1047): take one post-action interactive-only capture, digest it,
-     * and return it as `evidence` instead of the caller having to spend a full
-     * follow-up snapshot round trip to confirm the action had an effect.
-     */
-    verify?: boolean;
-    /**
-     * Opt-in (#1101): after the action, wait for the UI to go quiet and return
-     * the settled diff vs the pre-action tree in the same response. Presence
-     * enables settling; quiet window and deadline default in settle.ts.
-     * Best-effort — never fails the action. Composes with `verify`: the settle
-     * loop's final capture doubles as the evidence source (no extra captures).
-     */
-    settle?: SettleParams;
-  };
+  } & PostActionObservationOptions;
 
 export type ClickCommandOptions = PressCommandOptions;
 
@@ -78,9 +67,7 @@ export type FillCommandOptions = CommandContext & {
   target: InteractionTarget;
   text: string;
   delayMs?: number;
-  verify?: boolean;
-  settle?: SettleParams;
-};
+} & PostActionObservationOptions;
 
 export type TypeTextCommandOptions = CommandContext & {
   text: string;
@@ -108,18 +95,17 @@ export const fillCommand: RuntimeCommand<FillCommandOptions, FillCommandResult> 
   options,
 ): Promise<FillCommandResult> => {
   if (!options.text) throw new AppError('INVALID_ARGS', 'fill requires text');
-  const verify = options.verify === true;
-  // --settle needs the resolution-path baseline and post-action captures, so
-  // it disables the native ref fast path exactly like --verify does.
-  const nativeRefFill =
-    verify || options.settle ? null : await maybeFillRefTarget(runtime, options);
+  const observation = planPostActionObservation(options);
+  const nativeRefFill = observation.needsPreActionBaseline
+    ? null
+    : await maybeFillRefTarget(runtime, options);
   if (nativeRefFill) return nativeRefFill;
 
   const resolved = await resolveInteractionTarget(runtime, options, {
     action: 'fill',
     requireInteractive: true,
     promoteToHittableAncestor: false,
-    captureEvidenceBaseline: verify || options.settle !== undefined,
+    captureEvidenceBaseline: observation.needsPreActionBaseline,
   });
   if (!runtime.backend.fill) {
     throw new AppError('UNSUPPORTED_OPERATION', 'fill is not supported by this backend');
@@ -147,7 +133,7 @@ export const fillCommand: RuntimeCommand<FillCommandOptions, FillCommandResult> 
       ...(warning ? { warning } : {}),
       ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
     },
-    { verify, settle: options.settle },
+    observation,
   );
 };
 
@@ -189,18 +175,17 @@ async function tapCommand(
   options: PressCommandOptions,
   action: 'click' | 'press',
 ): Promise<PressCommandResult> {
-  const verify = options.verify === true;
-  // --settle needs the resolution-path baseline and post-action captures, so
-  // it disables the native ref fast path exactly like --verify does.
-  const nativeRefTap =
-    verify || options.settle ? null : await maybeTapRefTarget(runtime, options, action);
+  const observation = planPostActionObservation(options);
+  const nativeRefTap = observation.needsPreActionBaseline
+    ? null
+    : await maybeTapRefTarget(runtime, options, action);
   if (nativeRefTap) return nativeRefTap;
 
   const resolved = await resolveInteractionTarget(runtime, options, {
     action,
     requireInteractive: true,
     promoteToHittableAncestor: true,
-    captureEvidenceBaseline: verify || options.settle !== undefined,
+    captureEvidenceBaseline: observation.needsPreActionBaseline,
   });
   if (!runtime.backend.tap) {
     throw new AppError('UNSUPPORTED_OPERATION', 'tap is not supported by this backend');
@@ -223,7 +208,7 @@ async function tapCommand(
       ...resolved,
       ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
     },
-    { verify, settle: options.settle },
+    observation,
   );
 }
 

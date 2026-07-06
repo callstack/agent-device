@@ -32,7 +32,7 @@ import {
   type BackendResultVariant,
   type RuntimeCommand,
 } from '../../runtime-types.ts';
-import type { LongPressCommandResult, SettleParams } from '../../../contracts/interaction.ts';
+import type { LongPressCommandResult } from '../../../contracts/interaction.ts';
 import {
   assertSupportedInteractionSurface,
   captureInteractionSnapshot,
@@ -40,7 +40,11 @@ import {
   type ResolvedInteractionTarget,
   resolveInteractionTarget,
 } from './resolution.ts';
-import { applyPostActionObservation } from './post-action-observation.ts';
+import {
+  applyPostActionObservation,
+  planPostActionObservation,
+  type SettlePostActionObservationOptions,
+} from './post-action-observation.ts';
 
 export type FocusCommandOptions = CommandContext & {
   target: InteractionTarget;
@@ -51,9 +55,7 @@ export type FocusCommandResult = ResolvedInteractionTarget & BackendResultEnvelo
 export type LongPressCommandOptions = CommandContext & {
   target: InteractionTarget;
   durationMs?: number;
-  /** Opt-in (#1101): settled-diff observation after the press; see settle.ts. */
-  settle?: SettleParams;
-};
+} & SettlePostActionObservationOptions;
 
 export type { LongPressCommandResult };
 
@@ -158,11 +160,12 @@ export const longPressCommand: RuntimeCommand<
   LongPressCommandOptions,
   LongPressCommandResult
 > = async (runtime, options): Promise<LongPressCommandResult> => {
+  const observation = planPostActionObservation(options);
   const resolved = await resolveInteractionTarget(runtime, options, {
     action: 'longPress',
     requireInteractive: true,
     promoteToHittableAncestor: true,
-    captureEvidenceBaseline: options.settle !== undefined,
+    captureEvidenceBaseline: observation.needsPreActionBaseline,
   });
   if (!runtime.backend.longPress) {
     throw new AppError('UNSUPPORTED_OPERATION', 'longPress is not supported by this backend');
@@ -186,7 +189,7 @@ export const longPressCommand: RuntimeCommand<
       ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
       ...successText(`Long pressed (${point.x}, ${point.y})`),
     },
-    { settle: options.settle },
+    observation,
   );
 };
 
