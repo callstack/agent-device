@@ -37,6 +37,13 @@ test('Provider-backed integration Android record stop recovers missing daemon re
   );
 });
 
+test('Provider-backed integration Android record stop recovers missing daemon recording state from live screenrecord fallback', async () => {
+  await withProviderScenarioTempDir(
+    'agent-device-provider-scenario-android-record-live-recovery-',
+    runAndroidRecordingRecoveryScenario,
+  );
+});
+
 test('Provider-backed integration Android record stop refuses another session durable manifest', async () => {
   await withProviderScenarioTempDir(
     'agent-device-provider-scenario-android-record-wrong-session-',
@@ -121,7 +128,7 @@ test('Provider-backed integration Android record stop cleans stale durable manif
             return { stdout: JSON.stringify(manifest), stderr: '', exitCode: 0 };
           }
           if (command === 'shell ps -o pid=,args= -p 4321') {
-            return { stdout: '', stderr: '', exitCode: 1 };
+            return { stdout: '', stderr: '', exitCode: 0 };
           }
           if (command === 'shell ps -A -o pid=,args=') {
             return { stdout: '', stderr: '', exitCode: 0 };
@@ -481,31 +488,37 @@ async function runAndroidCrossDeviceRecordingRecoveryScenario(tmpDir: string): P
 
   await withAndroidProviderScenarioEnv(tmpDir, async () => {
     try {
+      const recoveredPath = path.join(tmpDir, 'recovered-cross-device.mp4');
+      seedAndroidSession(daemon, 'default', PROVIDER_SCENARIO_ANDROID);
       const busyRecordingPath = path.join(tmpDir, 'busy-recording.mp4');
-      const openBusy = await daemon.callCommand(
-        'open',
-        ['settings'],
-        { platform: 'android', serial: otherAndroid.id },
-        { session: 'busy' },
-      );
-      assertRpcOk(openBusy);
-      const startBusy = await daemon.callCommand(
-        'record',
-        ['start', busyRecordingPath],
-        {},
-        { session: 'busy' },
-      );
-      assertRecordingStarted(startBusy);
-
+      const busyRemotePath = '/sdcard/agent-device-recording-623456789.mp4';
+      daemon.setSession('busy', {
+        name: 'busy',
+        device: otherAndroid,
+        createdAt: Date.now(),
+        actions: [],
+        recording: {
+          platform: 'android',
+          recordingId: 'busy-recording',
+          remotePath: busyRemotePath,
+          remotePid: '6789',
+          remoteStartedAt: 623456789,
+          chunks: [{ index: 1, path: busyRecordingPath, remotePath: busyRemotePath }],
+          outPath: busyRecordingPath,
+          startedAt: 623456789,
+          showTouches: true,
+          gestureEvents: [],
+        },
+      });
       const recordStop = await daemon.callCommand(
         'record',
-        ['stop'],
-        { platform: 'android', serial: PROVIDER_SCENARIO_ANDROID.id },
-        { meta: { cwd: tmpDir } },
+        ['stop', recoveredPath],
+        {},
+        { session: 'default' },
       );
       const data = assertRpcOk<{ recording?: unknown; outPath?: unknown }>(recordStop);
       assert.equal(data.recording, 'stopped');
-      assert.match(String(data.outPath), /\/recording-\d+\.mp4$/);
+      assert.equal(data.outPath, recoveredPath);
       assert.equal(daemon.session('busy')?.recording !== undefined, true);
       assertCommandCall(adbCalls, ['shell', 'ps', '-A', '-o', 'pid=,args=']);
       assert.equal(pullCalls.length, 1);
@@ -519,7 +532,9 @@ async function runAndroidRecordingRecoveryScenario(tmpDir: string): Promise<void
   const context = await createAndroidRecordingRecoveryContext();
   await withAndroidProviderScenarioEnv(tmpDir, async () => {
     try {
-      const outPath = await exerciseAndroidRecordingRecoveryStop(context, tmpDir);
+      const outPath = path.join(tmpDir, 'recovered-live.mp4');
+      seedAndroidSession(context.daemon, 'default', PROVIDER_SCENARIO_ANDROID);
+      await exerciseAndroidRecordingRecoveryStop(context, outPath);
       assertAndroidRecordingRecovery(context, outPath);
     } finally {
       await context.daemon.close();
@@ -550,24 +565,21 @@ async function createAndroidRecordingRecoveryContext(): Promise<{
 
 async function exerciseAndroidRecordingRecoveryStop(
   context: { daemon: ProviderScenarioDaemon },
-  tmpDir: string,
-): Promise<string> {
+  outPath: string,
+): Promise<void> {
   const recordStop = await context.daemon.callCommand(
     'record',
-    ['stop'],
-    {
-      platform: 'android',
-      serial: PROVIDER_SCENARIO_ANDROID.id,
-    },
-    { meta: { cwd: tmpDir } },
+    ['stop', outPath],
+    {},
+    { session: 'default' },
   );
   const data = assertRpcOk<{ recording?: unknown; outPath?: unknown; warning?: unknown }>(
     recordStop,
   );
   assert.equal(data.recording, 'stopped');
   assert.match(String(data.warning), /Recovered Android recording/);
-  assert.match(String(data.warning), /MP4 may be truncated/);
-  return requireStringOutPath(data.outPath);
+  assert.match(String(data.warning), /without a durable manifest/);
+  assert.equal(data.outPath, outPath);
 }
 
 function assertAndroidRecordingRecovery(
@@ -575,7 +587,7 @@ function assertAndroidRecordingRecovery(
   outPath: string,
 ): void {
   const { remotePath, adbCalls, pullCalls } = context;
-  assert.match(outPath, /\/recording-\d+\.mp4$/);
+  assert.equal(path.extname(outPath), '.mp4');
   assert.equal(fs.existsSync(outPath), true);
   assertCommandCall(adbCalls, ['shell', 'ps', '-A', '-o', 'pid=,args=']);
   assertCommandCall(adbCalls, ['shell', 'kill', '-2', '4321']);
@@ -584,24 +596,34 @@ function assertAndroidRecordingRecovery(
   assertCommandCall(adbCalls, ['shell', 'rm', '-f', remotePath]);
 }
 
-async function runAndroidUncertainMetadataScenario(_tmpDir: string): Promise<void> {
+function seedAndroidSession(
+  daemon: ProviderScenarioDaemon,
+  name: string,
+  device: typeof PROVIDER_SCENARIO_ANDROID,
+): void {
+  daemon.setSession(name, {
+    name,
+    device,
+    createdAt: Date.now(),
+    actions: [],
+  });
+}
+
+async function runAndroidUncertainMetadataScenario(tmpDir: string): Promise<void> {
   const adbCalls: string[][] = [];
   const remotePath = '/sdcard/agent-device-recording-123456789.mp4';
+  const manifest = buildAndroidRecordingManifest({
+    outPath: path.join(tmpDir, 'uncertain.mp4'),
+    remotePath,
+    sessionName: 'default',
+  });
   const daemon = await createProviderScenarioHarness({
     androidAdbProvider: () => ({
       exec: async (args) => {
         adbCalls.push([...args]);
         const command = args.join(' ');
         if (command === 'shell cat /sdcard/agent-device-recording-active.json') {
-          return {
-            stdout: JSON.stringify({
-              remotePath,
-              remotePid: '4321',
-              startedAt: 123456789,
-            }),
-            stderr: '',
-            exitCode: 0,
-          };
+          return { stdout: JSON.stringify(manifest), stderr: '', exitCode: 0 };
         }
         if (command === 'shell cat /data/local/tmp/agent-device-recording-active.json') {
           return { stdout: '', stderr: '', exitCode: 1 };
@@ -809,6 +831,20 @@ function createRecordingOnlyAndroidProvider(adbCalls: string[][]): AndroidAdbPro
       return androidAdbResult(args);
     },
   };
+}
+
+function androidRecoveryAdbResult(
+  args: string[],
+  remotePath: string,
+): ReturnType<typeof androidAdbResult> {
+  if (args.join(' ') === 'shell ps -A -o pid=,args=') {
+    return {
+      stdout: `4321 screenrecord --bit-rate 8000000 ${remotePath}\n`,
+      stderr: '',
+      exitCode: 0,
+    };
+  }
+  return androidAdbResult(args);
 }
 
 function buildAndroidRecordingManifest(options: {

@@ -32,6 +32,7 @@ export type ProviderScenarioHarness = {
   ) => Promise<ProviderScenarioRpcResult>;
   client: () => AgentDeviceClient;
   session: (name?: string) => SessionState | undefined;
+  setSession: (name: string, session: SessionState) => void;
   close: () => Promise<void>;
 };
 
@@ -74,6 +75,7 @@ export async function createProviderScenarioHarness(
       ),
     client: () => createAgentDeviceClient({}, { transport }),
     session: (name = 'default') => sessionStore.get(name),
+    setSession: (name, session) => sessionStore.set(name, session),
     close: async () => {
       fs.rmSync(sessionDir, { recursive: true, force: true });
     },
