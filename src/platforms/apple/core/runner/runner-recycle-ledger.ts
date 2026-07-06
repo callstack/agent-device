@@ -71,17 +71,6 @@ export function commitRunnerRecycle(key: string | undefined): void {
   writeEntry(key, entry);
 }
 
-/**
- * Consumes one recycle from the request's budget. Returns false when the
- * budget is exhausted — the caller must fail fast instead of booting another
- * runner. Untracked keys always allow (no scope to account against).
- */
-export function tryConsumeRunnerRecycle(key: string | undefined): boolean {
-  if (!tryBeginRunnerRecycle(key)) return false;
-  commitRunnerRecycle(key);
-  return true;
-}
-
 export function buildRunnerRecycleBudgetExhaustedError(
   command: Pick<RunnerCommand, 'command' | 'commandId'>,
   options: { requestId?: string; logPath?: string },

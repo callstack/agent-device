@@ -3,11 +3,12 @@ import assert from 'node:assert/strict';
 import { AppError } from '../../../../kernel/errors.ts';
 import {
   buildRunnerRecycleBudgetExhaustedError,
+  commitRunnerRecycle,
   hasRunnerRequestTouchedSession,
   markRunnerRequestTouchedSession,
   resetRunnerRecycleLedgerForTests,
   runnerRecycleLedgerKey,
-  tryConsumeRunnerRecycle,
+  tryBeginRunnerRecycle,
 } from '../runner/runner-recycle-ledger.ts';
 
 beforeEach(() => {
@@ -23,18 +24,28 @@ test('ledger key prefers the request id and falls back to the command id', () =>
   assert.equal(runnerRecycleLedgerKey({ requestId: '  ' }, { commandId: ' ' }), undefined);
 });
 
-test('a request gets exactly one runner recycle, then must fail fast', () => {
+test('a request gets exactly one successful runner recycle, then must fail fast', () => {
   const key = 'request:req-wedge';
-  assert.equal(tryConsumeRunnerRecycle(key), true);
-  assert.equal(tryConsumeRunnerRecycle(key), false);
-  assert.equal(tryConsumeRunnerRecycle(key), false);
+  assert.equal(tryBeginRunnerRecycle(key), true);
+  commitRunnerRecycle(key);
+  assert.equal(tryBeginRunnerRecycle(key), false);
+  assert.equal(tryBeginRunnerRecycle(key), false);
   // Other requests keep their own budget.
-  assert.equal(tryConsumeRunnerRecycle('request:req-other'), true);
+  assert.equal(tryBeginRunnerRecycle('request:req-other'), true);
+});
+
+test('failed replacement boots do not consume the recycle budget', () => {
+  const key = 'request:req-transient-boot-failure';
+  assert.equal(tryBeginRunnerRecycle(key), true);
+  assert.equal(tryBeginRunnerRecycle(key), true);
+  commitRunnerRecycle(key);
+  assert.equal(tryBeginRunnerRecycle(key), false);
 });
 
 test('untracked keys never block (no scope to account against)', () => {
-  assert.equal(tryConsumeRunnerRecycle(undefined), true);
-  assert.equal(tryConsumeRunnerRecycle(undefined), true);
+  assert.equal(tryBeginRunnerRecycle(undefined), true);
+  assert.equal(tryBeginRunnerRecycle(undefined), true);
+  commitRunnerRecycle(undefined); // no-op, must not throw
   assert.equal(hasRunnerRequestTouchedSession(undefined), false);
   markRunnerRequestTouchedSession(undefined); // no-op, must not throw
 });
