@@ -142,6 +142,15 @@ function expectOkData(
   return (response.data ?? {}) as Record<string, unknown>;
 }
 
+function expectInvalidArgs(
+  response: Awaited<ReturnType<typeof handleInteractionCommands>>,
+): Record<string, unknown> {
+  expect(response?.ok).toBe(false);
+  if (!response || response.ok !== false) throw new Error('expected an invalid daemon response');
+  expect(response.error?.code).toBe('INVALID_ARGS');
+  return (response.error ?? {}) as Record<string, unknown>;
+}
+
 test('press --settle responds with the settled diff, refsGeneration, and clears the stale marker', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'settle-press';
@@ -248,7 +257,7 @@ test('a settle observation without a diff leaves ref staleness untouched', async
   expect(sessionStore.get(sessionName)?.snapshotRefsStale).toBe(true);
 });
 
-test('settle-specific tuning flags without --settle are rejected, but bare timeout stays compatible', async () => {
+test('bare timeout without --settle stays compatible', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'settle-guard';
   seedSession(sessionName, sessionStore);
@@ -267,10 +276,15 @@ test('settle-specific tuning flags without --settle are rejected, but bare timeo
     contextFromFlags,
   });
 
-  expect(compatible?.ok).toBe(true);
-  if (compatible?.ok) {
-    expect(compatible.data?.settle).toBeUndefined();
-  }
+  const data = expectOkData(compatible);
+  expect(data.settle).toBeUndefined();
+});
+
+test('settle-specific tuning flags without --settle are rejected', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'settle-guard';
+  seedSession(sessionName, sessionStore);
+  mockCommandDispatch({ snapshots: [BEFORE_NODES] });
 
   const response = await handleInteractionCommands({
     req: {
@@ -285,10 +299,8 @@ test('settle-specific tuning flags without --settle are rejected, but bare timeo
     contextFromFlags,
   });
 
-  expect(response?.ok).toBe(false);
-  if (response?.ok !== false) return;
-  expect(response.error?.code).toBe('INVALID_ARGS');
-  expect(response.error?.message).toMatch(/--settle-quiet requires --settle/);
+  const error = expectInvalidArgs(response);
+  expect(error.message).toMatch(/--settle-quiet requires --settle/);
 });
 
 test('fill @ref --settle carries the settle payload on the ref wire shape', async () => {

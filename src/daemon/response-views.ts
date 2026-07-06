@@ -152,20 +152,27 @@ function interactionSettleView(data: DaemonResponseData, level: ResponseLevel): 
   };
 }
 
-function readSettleDigestRefs(lines: unknown): Array<{ ref: string }> {
+type DigestRef = { ref: string };
+
+function readSettleDigestRefs(lines: unknown): DigestRef[] {
   if (!Array.isArray(lines)) return [];
-  const refs: Array<{ ref: string }> = [];
-  for (const line of lines) {
-    const record = line && typeof line === 'object' && !Array.isArray(line) ? line : undefined;
-    if (!record) continue;
-    const kind = (record as Record<string, unknown>).kind;
-    const ref = (record as Record<string, unknown>).ref;
-    if (kind === 'added' && typeof ref === 'string' && ref.length > 0) {
-      refs.push({ ref });
-      if (refs.length >= DIGEST_REF_LIMIT) break;
-    }
-  }
-  return refs;
+  return lines.flatMap(readSettleDigestRef).slice(0, DIGEST_REF_LIMIT);
+}
+
+function readSettleDigestRef(line: unknown): DigestRef[] {
+  const record = readObjectRecord(line);
+  if (record?.kind !== 'added') return [];
+  return readDigestRef(record.ref);
+}
+
+function readDigestRef(ref: unknown): DigestRef[] {
+  return typeof ref === 'string' && ref.length > 0 ? [{ ref }] : [];
+}
+
+function readObjectRecord(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }
 
 export const RESPONSE_VIEWS: Record<string, ResponseView> = {
