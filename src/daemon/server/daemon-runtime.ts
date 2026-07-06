@@ -214,25 +214,11 @@ export async function startDaemonRuntime(
     return null;
   }
 
-  const cleanupWebBrowserOrphans = async (): Promise<void> => {
-    const status = getManagedAgentBrowserStatus({ stateDir: baseDir });
-    if (!status.installed) return;
-    try {
-      await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup');
-    } catch (error) {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'web_agent_browser_orphan_cleanup_failed',
-        data: { error: error instanceof Error ? error.message : String(error) },
-      });
-    }
-  };
-
   let servers: DaemonServer[] = [];
   let socketPort: number | undefined;
   let httpPort: number | undefined;
   try {
-    await cleanupWebBrowserOrphans();
+    await cleanupWebBrowserOrphansForDaemonStartup({ stateDir: baseDir, sessionStore });
     const opened = await openDaemonServers();
     servers = opened.servers;
     socketPort = opened.socketPort;
@@ -315,4 +301,30 @@ export async function startDaemonRuntime(
     socketPort,
     token,
   };
+}
+
+export async function cleanupWebBrowserOrphansForDaemonStartup(params: {
+  stateDir: string;
+  sessionStore: SessionStore;
+}): Promise<void> {
+  const status = getManagedAgentBrowserStatus({ stateDir: params.stateDir });
+  if (!status.installed) return;
+  try {
+    await cleanupManagedAgentBrowserOrphans(status, 'daemon-startup', {
+      openWebSessionNames: openWebSessionNames(params.sessionStore),
+    });
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'web_agent_browser_orphan_cleanup_failed',
+      data: { error: error instanceof Error ? error.message : String(error) },
+    });
+  }
+}
+
+function openWebSessionNames(sessionStore: SessionStore): string[] {
+  return sessionStore
+    .toArray()
+    .filter((session) => session.device.platform === 'web')
+    .map((session) => session.name);
 }

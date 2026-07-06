@@ -1,7 +1,8 @@
 import crypto from 'node:crypto';
+import fs from 'node:fs';
 import path from 'node:path';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { runCmd } from '../../utils/exec.ts';
+import { runCmd, withoutCommandExecutorOverride } from '../../utils/exec.ts';
 import { isProcessAlive, waitForProcessExit } from '../../utils/process-identity.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import type { AgentBrowserToolStatus } from './agent-browser-tool.ts';
@@ -9,6 +10,7 @@ import type { AgentBrowserToolStatus } from './agent-browser-tool.ts';
 const HOST_PROCESS_LIST_TIMEOUT_MS = 1_500;
 const WEB_BROWSER_REAP_TERM_TIMEOUT_MS = 1_500;
 const WEB_BROWSER_REAP_KILL_TIMEOUT_MS = 1_000;
+const PROVIDER_STARTUP_CLEANUP_DEBOUNCE_MS = 30_000;
 const AGENT_DEVICE_BROWSER_MARKER_PREFIX = '--agent-device-managed-web=';
 export const DEFAULT_AGENT_BROWSER_IDLE_TIMEOUT_MS = 5 * 60_000;
 
@@ -23,11 +25,29 @@ export type AgentBrowserProcessMatch = {
   reason: 'launch-marker' | 'managed-browser-home';
 };
 
+export type AgentBrowserCleanupSkipReason = 'open-web-session' | 'recent-browser-activity';
+
 export type AgentBrowserProcessSummary = {
   count: number;
   pids: number[];
   processes: AgentBrowserProcessMatch[];
 };
+
+export type AgentBrowserCleanupResult = AgentBrowserProcessSummary & {
+  signalPids: number[];
+  skipped?: {
+    reason: AgentBrowserCleanupSkipReason;
+    openWebSessionNames?: string[];
+    idleTimeoutMs?: number;
+    latestActivityMs?: number;
+  };
+};
+
+export type AgentBrowserCleanupOptions = {
+  openWebSessionNames?: readonly string[];
+};
+
+const providerStartupCleanupAttempts = new Map<string, number>();
 
 export function agentBrowserChromeLaunchMarker(status: AgentBrowserToolStatus): string {
   const hash = crypto.createHash('sha256');
@@ -79,7 +99,7 @@ export function matchAgentBrowserChromeProcess(
   if (processInfo.command.includes(agentBrowserChromeLaunchMarker(status))) {
     return { process: processInfo, reason: 'launch-marker' };
   }
-  if (managedBrowserHomeMarkers(status).some((marker) => processInfo.command.includes(marker))) {
+  if (managedBrowserHomeMarkers(status).some((marker) => isCommandUnderPath(processInfo, marker))) {
     return { process: processInfo, reason: 'managed-browser-home' };
   }
   return undefined;
@@ -110,9 +130,26 @@ export async function inspectManagedAgentBrowserProcesses(
 export async function cleanupManagedAgentBrowserOrphans(
   status: AgentBrowserToolStatus,
   reason: 'daemon-startup' | 'provider-startup',
-): Promise<AgentBrowserProcessSummary> {
-  const summary = await inspectManagedAgentBrowserProcesses(status);
-  if (summary.count === 0) return summary;
+  options: AgentBrowserCleanupOptions = {},
+): Promise<AgentBrowserCleanupResult> {
+  const openWebSessionNames = uniqueStrings([...(options.openWebSessionNames ?? [])]);
+  if (openWebSessionNames.length > 0) {
+    return skippedCleanupResult('open-web-session', { openWebSessionNames });
+  }
+
+  const idleTimeoutMs = resolveAgentBrowserIdleTimeoutMs(process.env);
+  const latestActivityMs = readLatestManagedBrowserActivityMs(status);
+  if (latestActivityMs !== undefined && Date.now() - latestActivityMs < idleTimeoutMs) {
+    return skippedCleanupResult('recent-browser-activity', { idleTimeoutMs, latestActivityMs });
+  }
+
+  const processes = await listHostProcesses();
+  const summary = summarizeAgentBrowserProcesses(processes, status);
+  const signalPids = expandProcessTree(summary.processes, processes).map(
+    (processInfo) => processInfo.pid,
+  );
+  const result = { ...summary, signalPids };
+  if (summary.count === 0) return result;
   emitDiagnostic({
     level: 'warn',
     phase: 'web_agent_browser_orphan_cleanup',
@@ -120,26 +157,62 @@ export async function cleanupManagedAgentBrowserOrphans(
       reason,
       count: summary.count,
       pids: summary.pids,
+      signalPids,
       stateDir: status.stateDir,
       installDir: status.installDir,
       matchReasons: summary.processes.map((match) => match.reason),
     },
   });
-  await stopMatchedProcesses(summary.processes);
-  return summary;
+  await stopPids(signalPids);
+  return result;
+}
+
+export async function cleanupManagedAgentBrowserOrphansForProviderStartup(
+  status: AgentBrowserToolStatus,
+  options: AgentBrowserCleanupOptions = {},
+): Promise<AgentBrowserCleanupResult | undefined> {
+  const now = Date.now();
+  const key = path.resolve(status.stateDir);
+  const lastAttemptMs = providerStartupCleanupAttempts.get(key);
+  if (lastAttemptMs !== undefined && now - lastAttemptMs < PROVIDER_STARTUP_CLEANUP_DEBOUNCE_MS) {
+    return undefined;
+  }
+  providerStartupCleanupAttempts.set(key, now);
+  return await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', options);
+}
+
+export function expandProcessTree(
+  matches: AgentBrowserProcessMatch[],
+  processes: HostProcessInfo[],
+): HostProcessInfo[] {
+  const selected = new Set(matches.map((match) => match.process.pid));
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const processInfo of processes) {
+      if (processInfo.ppid === undefined || !selected.has(processInfo.ppid)) continue;
+      if (selected.has(processInfo.pid)) continue;
+      selected.add(processInfo.pid);
+      changed = true;
+    }
+  }
+  return processes.filter((processInfo) => selected.has(processInfo.pid));
 }
 
 async function listHostProcesses(): Promise<HostProcessInfo[]> {
-  const result = await runCmd('ps', ['-ax', '-o', 'pid=,ppid=,command='], {
-    allowFailure: true,
-    timeoutMs: HOST_PROCESS_LIST_TIMEOUT_MS,
-  });
+  const result = await withoutCommandExecutorOverride(
+    async () =>
+      await runCmd('ps', ['-ax', '-o', 'pid=,ppid=,command='], {
+        allowFailure: true,
+        timeoutMs: HOST_PROCESS_LIST_TIMEOUT_MS,
+      }),
+  );
   if (result.exitCode !== 0) return [];
   return parseHostProcessList(result.stdout);
 }
 
-async function stopMatchedProcesses(matches: AgentBrowserProcessMatch[]): Promise<void> {
-  const pids = uniquePids(matches.map((match) => match.process.pid));
+async function stopPids(pidsToStop: number[]): Promise<void> {
+  const pids = uniquePids(pidsToStop);
   for (const pid of pids) {
     signalProcess(pid, 'SIGTERM');
   }
@@ -186,11 +259,55 @@ function managedBrowserHomeMarkers(status: AgentBrowserToolStatus): string[] {
   return uniqueStrings([
     path.join(status.homeDir, '.agent-browser', 'browsers'),
     path.join(status.runtimeHomeDir, '.agent-browser', 'browsers'),
-    status.homeDir,
-    status.runtimeHomeDir,
   ]);
 }
 
 function uniqueStrings(values: string[]): string[] {
   return [...new Set(values.filter((value) => value.length > 0))];
+}
+
+function skippedCleanupResult(
+  reason: AgentBrowserCleanupSkipReason,
+  details: Omit<NonNullable<AgentBrowserCleanupResult['skipped']>, 'reason'>,
+): AgentBrowserCleanupResult {
+  return {
+    count: 0,
+    pids: [],
+    processes: [],
+    signalPids: [],
+    skipped: { reason, ...details },
+  };
+}
+
+function isCommandUnderPath(processInfo: HostProcessInfo, rootPath: string): boolean {
+  const command = normalizePathSeparators(processInfo.command);
+  const root = `${normalizePathSeparators(path.resolve(rootPath)).replace(/\/+$/, '')}/`;
+  return command.includes(root);
+}
+
+function normalizePathSeparators(value: string): string {
+  return value.replace(/\\/g, '/');
+}
+
+function readLatestManagedBrowserActivityMs(status: AgentBrowserToolStatus): number | undefined {
+  const mtimes = [status.socketDir, ...readDirectoryEntries(status.socketDir)]
+    .map((entryPath) => readPathMtimeMs(entryPath))
+    .filter((mtimeMs): mtimeMs is number => mtimeMs !== undefined);
+  return mtimes.length > 0 ? Math.max(...mtimes) : undefined;
+}
+
+function readDirectoryEntries(dirPath: string): string[] {
+  try {
+    return fs.readdirSync(dirPath).map((entry) => path.join(dirPath, entry));
+  } catch {
+    return [];
+  }
+}
+
+function readPathMtimeMs(filePath: string): number | undefined {
+  try {
+    return fs.statSync(filePath).mtimeMs;
+  } catch {
+    return undefined;
+  }
 }

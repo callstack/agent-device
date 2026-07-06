@@ -176,7 +176,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
                 webProvider:
                   webProvider ??
                   (shouldUseDefaultWebProvider(lockedScope)
-                    ? createDefaultWebProvider(stateDir)
+                    ? createDefaultWebProvider(stateDir, sessionStore)
                     : undefined),
                 appLogProvider,
                 recordingProvider,
@@ -244,12 +244,23 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
 }
 
 const createDefaultWebProvider =
-  (stateDir: string | undefined): WebProviderResolver =>
+  (stateDir: string | undefined, sessionStore: SessionStore): WebProviderResolver =>
   ({ req, session }) =>
-    createAgentBrowserWebProvider({ session: session?.name ?? req.session, stateDir });
+    createAgentBrowserWebProvider({
+      session: session?.name ?? req.session,
+      stateDir,
+      openWebSessionNames: () => openWebSessionNames(sessionStore),
+    });
 
 function shouldUseDefaultWebProvider(scope: LockedRequestScope): boolean {
   return scope.existingSession?.device.platform === 'web' || scope.req.flags?.platform === 'web';
+}
+
+function openWebSessionNames(sessionStore: SessionStore): string[] {
+  return sessionStore
+    .toArray()
+    .filter((session) => session.device.platform === 'web')
+    .map((session) => session.name);
 }
 
 function unauthorizedResponse(): DaemonResponse {
