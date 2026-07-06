@@ -68,6 +68,7 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
   // -- platform-bearing priority commands (success responses emit the leaf) --
   [PUBLIC_COMMANDS.open]: ({ world }) => [WORLDS[world].open],
   [PUBLIC_COMMANDS.appState]: () => one(),
+  [PUBLIC_COMMANDS.capabilities]: () => one(),
   [PUBLIC_COMMANDS.devices]: () => one(),
   [PUBLIC_COMMANDS.doctor]: () => one(),
   [PUBLIC_COMMANDS.boot]: () => one(),

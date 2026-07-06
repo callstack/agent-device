@@ -7,6 +7,7 @@ import {
   serializeSessionListEntry,
 } from '../../client/client-shared.ts';
 import type {
+  AgentDeviceCapabilitiesResult,
   AgentDeviceDevice,
   AgentDeviceSession,
   AppCloseResult,
@@ -38,6 +39,20 @@ import {
 function devicesCliOutput(result: AgentDeviceDevice[]): CliOutput {
   const data = { devices: result.map(serializeDevice) };
   return { data, text: result.map(formatDeviceLine).join('\n') };
+}
+
+function capabilitiesCliOutput(result: AgentDeviceCapabilitiesResult): CliOutput {
+  const data = {
+    device: serializeDevice(result.device),
+    availableCommands: result.availableCommands,
+  };
+  return {
+    data,
+    text: [
+      `${formatDeviceLine(result.device)} supports ${result.availableCommands.length} commands:`,
+      result.availableCommands.join(' '),
+    ].join('\n'),
+  };
 }
 
 function appsCliOutput(params: {
@@ -163,6 +178,7 @@ export const managementCliOutputFormatters = {
   boot: resultOutput(bootCliOutput),
   shutdown: resultOutput(shutdownCliOutput),
   devices: resultOutput(devicesCliOutput),
+  capabilities: resultOutput(capabilitiesCliOutput),
   doctor: resultOutput(doctorCliOutput),
   apps: ({ input, result }) =>
     appsCliOutput({

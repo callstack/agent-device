@@ -35,6 +35,23 @@ test('Provider-backed integration daemon command policies gate admission and pro
       );
       assertRpcOk(devices);
 
+      const capabilities = await daemon.callCommand(
+        'capabilities',
+        [],
+        { platform: 'android' },
+        { meta: inactiveLeaseMeta },
+      );
+      const capabilitiesData = assertRpcOk<{
+        device?: { id?: unknown; platform?: unknown; kind?: unknown };
+        availableCommands?: string[];
+      }>(capabilities);
+      assert.equal(capabilitiesData.device?.id, PROVIDER_SCENARIO_ANDROID.id);
+      assert.equal(capabilitiesData.device?.platform, 'android');
+      assert.equal(capabilitiesData.device?.kind, 'emulator');
+      assert.ok(Array.isArray(capabilitiesData.availableCommands));
+      assert.ok(capabilitiesData.availableCommands.includes('open'));
+      assert.ok(capabilitiesData.availableCommands.includes('press'));
+
       const blockedSnapshot = await daemon.callCommand(
         'snapshot',
         [],

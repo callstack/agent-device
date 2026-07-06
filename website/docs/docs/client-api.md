@@ -76,10 +76,14 @@ const client = createAgentDeviceClient({
 });
 
 const devices = await client.devices.list({ platform: 'ios' });
+const capabilities = await client.devices.capabilities({ platform: 'ios' });
 const apps = await client.apps.list({ platform: 'ios' });
 const device = devices.find((candidate) => candidate.name === 'iPhone 16') ?? devices[0];
 if (!device) {
   throw new Error('No iOS device available');
+}
+if (!capabilities.availableCommands.includes('snapshot')) {
+  throw new Error('Selected target does not support snapshots');
 }
 
 await client.apps.open({
@@ -96,6 +100,8 @@ const snapshot = await client.capture.snapshot({ interactiveOnly: true });
 
 await client.sessions.close();
 ```
+
+`client.devices.capabilities()` returns `{ device, availableCommands }`, using the same capability matrix as the CLI. Use it when a dynamic integration needs to decide which command names are valid for the selected target.
 
 For direct iOS simulator app launches, `client.apps.open({ app, platform: 'ios', launchConsole: './artifacts/app.console.log' })` captures launch-time
 stdout/stderr. The option mirrors `open --launch-console` and is not valid for URL opens or non-simulator targets.
@@ -240,6 +246,7 @@ Supported command methods:
 Additional CLI-backed methods are exposed on their domain groups with typed option objects so Node consumers do not need to build raw daemon requests:
 
 - `client.devices.boot()`
+- `client.devices.capabilities()`
 - `client.devices.shutdown()`
 - `client.apps.push()`
 - `client.apps.triggerEvent()`

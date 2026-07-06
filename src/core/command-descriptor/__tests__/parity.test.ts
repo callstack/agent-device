@@ -32,6 +32,7 @@ const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.appState,
   PUBLIC_COMMANDS.artifacts,
   PUBLIC_COMMANDS.batch,
+  PUBLIC_COMMANDS.capabilities,
   PUBLIC_COMMANDS.devices,
   PUBLIC_COMMANDS.doctor,
   PUBLIC_COMMANDS.gesture,

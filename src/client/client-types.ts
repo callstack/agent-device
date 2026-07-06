@@ -178,6 +178,11 @@ export type AgentDeviceDevice = {
   };
 };
 
+export type AgentDeviceCapabilitiesResult = {
+  device: AgentDeviceDevice;
+  availableCommands: string[];
+};
+
 export type AgentDeviceSessionDevice = {
   platform: PublicPlatform;
   target: DeviceTarget;
@@ -989,6 +994,9 @@ export type AgentDeviceClient = {
     list: (
       options?: AgentDeviceRequestOverrides & AgentDeviceSelectionOptions,
     ) => Promise<AgentDeviceDevice[]>;
+    capabilities: (
+      options?: AgentDeviceRequestOverrides & AgentDeviceSelectionOptions,
+    ) => Promise<AgentDeviceCapabilitiesResult>;
     boot: (options?: DeviceBootOptions) => Promise<CommandResult<'boot'>>;
     shutdown: (options?: DeviceShutdownOptions) => Promise<CommandResult<'shutdown'>>;
   };

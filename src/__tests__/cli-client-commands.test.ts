@@ -1088,6 +1088,7 @@ function createStubClient(params: {
     command,
     devices: {
       list: async () => [],
+      capabilities: unexpectedCommandCall,
       boot: unexpectedCommandCall,
       shutdown: unexpectedCommandCall,
     },

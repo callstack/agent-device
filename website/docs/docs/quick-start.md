@@ -53,6 +53,7 @@ agent-device shutdown --platform android --device Pixel_9_Pro_XL
 
 ```bash
 agent-device apps --platform android    # Discover the exact package name when unsure
+agent-device capabilities --platform android # Discover target-supported commands for dynamic integrations
 agent-device open SampleApp
 agent-device snapshot -i                 # Get visible interactive elements with refs
 agent-device diff snapshot               # Preferred exploration form for structural deltas

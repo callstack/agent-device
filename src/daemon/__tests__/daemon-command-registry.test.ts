@@ -40,6 +40,7 @@ test('daemon command registry owns specialized handler routes', () => {
 test('daemon command registry owns session handler subroutes', () => {
   assert.equal(getSessionCommandKind(INTERNAL_COMMANDS.sessionList), 'inventory');
   assert.equal(getSessionCommandKind(PUBLIC_COMMANDS.devices), 'inventory');
+  assert.equal(getSessionCommandKind(PUBLIC_COMMANDS.capabilities), 'inventory');
   assert.equal(getSessionCommandKind(PUBLIC_COMMANDS.doctor), 'inventory');
   assert.equal(getSessionCommandKind(PUBLIC_COMMANDS.apps), 'inventory');
   assert.equal(getSessionCommandKind(PUBLIC_COMMANDS.boot), 'state');
@@ -54,6 +55,7 @@ test('daemon command registry owns session handler subroutes', () => {
 test('daemon command registry preserves request admission traits', () => {
   for (const command of [
     INTERNAL_COMMANDS.sessionList,
+    PUBLIC_COMMANDS.capabilities,
     PUBLIC_COMMANDS.devices,
     PUBLIC_COMMANDS.doctor,
     INTERNAL_COMMANDS.releaseMaterializedPaths,
@@ -67,6 +69,7 @@ test('daemon command registry preserves request admission traits', () => {
 
   for (const command of [
     INTERNAL_COMMANDS.sessionList,
+    PUBLIC_COMMANDS.capabilities,
     PUBLIC_COMMANDS.devices,
     PUBLIC_COMMANDS.doctor,
     INTERNAL_COMMANDS.releaseMaterializedPaths,
@@ -142,6 +145,7 @@ test('daemon command registry preserves Android modal and lock-policy traits', (
 
   assert.equal(shouldGuardAndroidBlockingDialog(PUBLIC_COMMANDS.get), false);
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.apps), true);
+  assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.capabilities), true);
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.devices), true);
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.doctor), true);
   assert.equal(canOverrideLockPolicySelector(PUBLIC_COMMANDS.open), false);
@@ -150,6 +154,10 @@ test('daemon command registry preserves Android modal and lock-policy traits', (
 test('daemon command registry preserves provider device resolution traits', () => {
   assert.equal(
     shouldPreferExplicitDeviceOverExistingSession(makeRequest(PUBLIC_COMMANDS.apps)),
+    true,
+  );
+  assert.equal(
+    shouldPreferExplicitDeviceOverExistingSession(makeRequest(PUBLIC_COMMANDS.capabilities)),
     true,
   );
   assert.equal(

@@ -152,6 +152,7 @@ Command shape:
 
 Bootstrap:
   agent-device devices --platform ios
+  agent-device capabilities --platform android
   agent-device apps --platform android
   agent-device open MyApp --platform ios --device "iPhone 17 Pro"
   agent-device open <discovered-app-id> --session checkout --platform android
@@ -160,7 +161,7 @@ Bootstrap:
   agent-device install-from-source --github-actions-artifact org/repo:app-debug --platform android
   agent-device open com.example.app --platform android --relaunch
   agent-device prepare ios-runner --platform ios --timeout 240000
-  If app id is unknown, plan devices, apps, then open <discovered-app-id>. Discovery is not enough when the task asks to open/start the app.
+  If app id is unknown, plan devices, apps, then open <discovered-app-id>. Use capabilities only when a dynamic integration needs the command names supported by the selected target; normal app-driving loops do not need it. Discovery is not enough when the task asks to open/start the app.
   Install arguments are app/package id then artifact path. If the task says install, use install; use reinstall only when explicitly requested. Fresh runtime state is open --relaunch after install.
   In Apple CI, run prepare ios-runner after boot/install and before replay/test. prepare ios-runner builds/reuses the XCTest runner, health-checks it with a lightweight command, and retries one stuck/non-connecting runner launch before the first snapshot pays that setup cost. It is not a recovery step for "runner already owned by another agent-device daemon"; stop the owning daemon on the Mac with simulator access instead. If the replay/test step starts a separate daemon, stop the prepare daemon before replay/test so the prepared runner does not keep a live lease owned by that daemon.
   CI may cache ~/.agent-device/apple-runner/derived with an exact key that includes the agent-device package and Xcode version. Avoid broad restore-key fallbacks; prepare ios-runner already recovers bad restored runner artifacts and one retryable non-connecting runner launch. Runner build/start output is written to the session's runner.log; daemon.log is for daemon lifecycle/startup issues.

@@ -154,6 +154,18 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
+    name: PUBLIC_COMMANDS.capabilities,
+    daemon: {
+      route: 'session',
+      sessionKind: 'inventory',
+      lockPolicySelectorOverride: true,
+      preferExplicitDeviceOverExistingSession: true,
+      ...REQUEST_EXECUTION_EXEMPT,
+    },
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: true,
+  },
+  {
     name: PUBLIC_COMMANDS.doctor,
     daemon: {
       route: 'session',

@@ -20,6 +20,8 @@ export {
 
 export { makeSnapshotState } from './snapshot-builders.ts';
 
+export { makeSessionStore } from './store-factory.ts';
+
 export { withNoColor } from './color.ts';
 
 export {

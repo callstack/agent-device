@@ -134,6 +134,18 @@ export function createAgentDeviceClient(
         const devices = Array.isArray(data.devices) ? data.devices : [];
         return devices.map(normalizeDevice);
       },
+      capabilities: async (options = {}) => {
+        const data = await executeCommand<Record<string, unknown>>('capabilities', options);
+        const availableCommands = Array.isArray(data.availableCommands)
+          ? data.availableCommands.filter(
+              (command): command is string => typeof command === 'string',
+            )
+          : [];
+        return {
+          device: normalizeDevice(data.device),
+          availableCommands,
+        };
+      },
       boot: async (options = {}) => await executeCommand<CommandResult<'boot'>>('boot', options),
       shutdown: async (options = {}) =>
         await executeCommand<CommandResult<'shutdown'>>('shutdown', options),

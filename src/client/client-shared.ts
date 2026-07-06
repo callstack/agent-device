@@ -81,6 +81,7 @@ export function serializeSessionListEntry(session: AgentDeviceSession): Record<s
 export function serializeDevice(device: AgentDeviceDevice): Record<string, unknown> {
   return {
     platform: device.platform,
+    ...(device.appleOs ? { appleOs: device.appleOs } : {}),
     id: device.id,
     name: device.name,
     kind: device.kind,

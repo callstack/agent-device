@@ -1,3 +1,4 @@
+import { isCommandSupportedOnDevice, listCapabilityCommands } from '../../core/capabilities.ts';
 import { listDeviceInventory } from '../../core/dispatch-resolve.ts';
 import { assertResolvedAppsFilter } from '../../contracts/app-inventory.ts';
 import { asAppError } from '../../kernel/errors.ts';
@@ -104,18 +105,35 @@ export async function handleSessionInventoryCommands(params: {
       // `platform` stays the PUBLIC leaf via `publicPlatformString` (approach b). The
       // internal-only `simulatorSetPath` is still stripped. `appleOs` values never equal
       // the internal `apple` token, so this does not affect the apple-leak guard.
-      const publicDevices = filtered.map(
-        ({ simulatorSetPath: _simulatorSetPath, appleOs, ...device }) => ({
-          ...device,
-          platform: publicPlatformString({ platform: device.platform, appleOs }),
-          ...(isApplePlatform(device.platform) && appleOs ? { appleOs } : {}),
-        }),
-      );
+      const publicDevices = filtered.map(publicDeviceInfo);
       return { ok: true, data: { devices: publicDevices } };
     } catch (err) {
       const appErr = asAppError(err);
       return errorResponse(appErr.code, appErr.message, appErr.details);
     }
+  }
+
+  if (req.command === 'capabilities') {
+    const session = sessionStore.get(sessionName);
+    const flags = req.flags ?? {};
+    const guard = requireSessionOrExplicitSelector(req.command, session, flags);
+    if (guard) return guard;
+
+    const device = await resolveCommandDevice({
+      session,
+      flags,
+      ensureReady: false,
+      allowStoppedAndroidAvdPlaceholders: true,
+    });
+    return {
+      ok: true,
+      data: {
+        device: publicDeviceInfo(device),
+        availableCommands: listCapabilityCommands().filter((command) =>
+          isCommandSupportedOnDevice(command, device),
+        ),
+      },
+    };
   }
 
   if (req.command === 'apps') {
@@ -157,6 +175,18 @@ export async function handleSessionInventoryCommands(params: {
   }
 
   return null;
+}
+
+function publicDeviceInfo({
+  simulatorSetPath: _simulatorSetPath,
+  appleOs,
+  ...device
+}: DeviceInfo): Record<string, unknown> {
+  return {
+    ...device,
+    platform: publicPlatformString({ platform: device.platform, appleOs }),
+    ...(isApplePlatform(device.platform) && appleOs ? { appleOs } : {}),
+  };
 }
 
 function matchesRequestedPlatform(
