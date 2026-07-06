@@ -91,6 +91,80 @@ test('Provider-backed integration Android recording flow uses scripted ADB provi
   );
 });
 
+test('Provider-backed integration Android record stop recovers missing daemon recording state', async () => {
+  await withProviderScenarioTempDir(
+    'agent-device-provider-scenario-android-record-recovery-',
+    async (tmpDir) => {
+      const adbCalls: string[][] = [];
+      const pullCalls: Array<{ remotePath: string; localPath: string }> = [];
+      const remotePath = '/sdcard/agent-device-recording-123456789.mp4';
+      const adbProvider: AndroidAdbProvider = {
+        exec: async (args) => {
+          adbCalls.push([...args]);
+          if (args.join(' ') === 'shell ps -A -o pid=,args=') {
+            return {
+              stdout: `4321 screenrecord --bit-rate 8000000 ${remotePath}\n`,
+              stderr: '',
+              exitCode: 0,
+            };
+          }
+          return androidAdbResult(args);
+        },
+        pull: async (from, to) => {
+          pullCalls.push({ remotePath: from, localPath: to });
+          fs.writeFileSync(to, likelyPlayableMp4Container());
+          return { stdout: '', stderr: '', exitCode: 0 };
+        },
+      };
+      const daemon = await createProviderScenarioHarness({
+        androidAdbProvider: () => adbProvider,
+        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+      });
+
+      const previousPath = process.env.PATH;
+      const previousSwiftCacheDir = process.env.AGENT_DEVICE_SWIFT_CACHE_DIR;
+      process.env.PATH = tmpDir;
+      process.env.AGENT_DEVICE_SWIFT_CACHE_DIR = path.join(tmpDir, 'swift-cache');
+
+      try {
+        const recordStop = await daemon.callCommand(
+          'record',
+          ['stop'],
+          {
+            platform: 'android',
+            serial: PROVIDER_SCENARIO_ANDROID.id,
+          },
+          { meta: { cwd: tmpDir } },
+        );
+        const data = assertRpcOk<{
+          recording?: unknown;
+          outPath?: unknown;
+          warning?: unknown;
+        }>(recordStop);
+        assert.equal(data.recording, 'stopped');
+        const outPath = data.outPath;
+        assert.equal(typeof outPath, 'string');
+        if (typeof outPath !== 'string') {
+          throw new Error(`expected string outPath, got ${String(outPath)}`);
+        }
+        assert.match(outPath, /\/recording-\d+\.mp4$/);
+        assert.match(String(data.warning), /Recovered Android recording/);
+        assert.equal(fs.existsSync(outPath), true);
+
+        assertCommandCall(adbCalls, ['shell', 'ps', '-A', '-o', 'pid=,args=']);
+        assertCommandCall(adbCalls, ['shell', 'kill', '-2', '4321']);
+        assert.equal(pullCalls.length, 1);
+        assert.deepEqual(pullCalls[0], { remotePath, localPath: outPath });
+        assertCommandCall(adbCalls, ['shell', 'rm', '-f', remotePath]);
+      } finally {
+        await daemon.close();
+        restoreEnv('PATH', previousPath);
+        restoreEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', previousSwiftCacheDir);
+      }
+    },
+  );
+});
+
 test('Provider-backed integration Android record start without a session scopes default-device providers', async () => {
   await withMockedAdb(
     'agent-device-provider-scenario-android-sessionless-record-',

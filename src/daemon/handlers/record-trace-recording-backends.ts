@@ -12,6 +12,7 @@ import {
 import { resolveWebProvider } from '../../platforms/web/provider.ts';
 import { errorResponse } from './response.ts';
 import { startAndroidRecording, stopAndroidRecording } from './record-trace-android.ts';
+import { recoverMissingAndroidRecording } from './record-trace-android-recovery.ts';
 import {
   normalizeAppBundleId,
   startIosDeviceRecording,
@@ -77,6 +78,8 @@ type RecordingStopContext<P extends RecordingPlatform = RecordingPlatform> = {
   stopRequestedAt: number;
 };
 
+type MissingRecordingStopContext = Omit<RecordingStartContext, 'fpsFlag'>;
+
 // A backend is parameterized by the recording tag it owns, so its `stop` receives an
 // already-narrowed recording — no `recording as Extract<ActiveRecording, ...>` casts.
 // `start` stays wide because the device platform does not map 1:1 to a recording tag
@@ -86,6 +89,9 @@ export type RecordingBackend<P extends RecordingPlatform = RecordingPlatform> = 
   resolveOutputPath: (context: RecordingOutputPathContext) => string;
   start: (context: RecordingStartContext) => Promise<DaemonResponse | ActiveRecording>;
   stop: (context: RecordingStopContext<P>) => Promise<DaemonResponse | null>;
+  recoverMissingStop?: (
+    context: MissingRecordingStopContext,
+  ) => Promise<DaemonResponse | ActiveRecording | null>;
   cleanupRecordOnlySession?: (session: SessionState) => Promise<void>;
 };
 
@@ -272,6 +278,8 @@ const androidRecordingBackend: RecordingBackend<'android'> = {
   resolveOutputPath: resolveNativeRecordingOutputPath,
   start: async ({ device, recordingBase }) =>
     await startAndroidRecording({ device, recordingBase }),
+  recoverMissingStop: async ({ device, recordingBase }) =>
+    await recoverMissingAndroidRecording({ device, recordingBase }),
   stop: async ({ deps, device, recording, stopRequestedAt }) =>
     await stopAndroidRecording({
       deps,

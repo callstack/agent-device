@@ -20,6 +20,10 @@ import {
   DEFAULT_RECORDING_EXPORT_QUALITY,
   type RecordingExportQuality,
 } from '../../core/recording-export-quality.ts';
+import {
+  cleanupAndroidRecoveryMetadata,
+  writeAndroidRecoveryMetadata,
+} from './record-trace-android-recovery.ts';
 
 type AndroidRecordingSize = { width: number; height: number };
 
@@ -343,6 +347,11 @@ export async function startAndroidRecording(params: {
     ...recordingBase,
     startedAt: chunk.startedAt,
   };
+  await writeAndroidRecoveryMetadata(device.id, {
+    remotePath: recording.remotePath,
+    remotePid: recording.remotePid,
+    startedAt: recording.startedAt,
+  });
   scheduleAndroidRecordingRotation({
     recording,
     finishCurrentChunk: async () =>
@@ -365,6 +374,11 @@ export async function startAndroidRecording(params: {
             : nextChunk.error.error.message,
         );
       }
+      await writeAndroidRecoveryMetadata(device.id, {
+        remotePath: nextChunk.remotePath,
+        remotePid: nextChunk.remotePid,
+        startedAt: nextChunk.startedAt,
+      });
       return nextChunk;
     },
   });
@@ -527,6 +541,7 @@ export async function stopAndroidRecording(params: {
         cleanupError = `failed to clean up remote recording: ${formatRecordTraceExecFailure(rmResult, 'adb shell rm')}`;
       }
     }
+    await cleanupAndroidRecoveryMetadata(device.id);
   }
 }
 

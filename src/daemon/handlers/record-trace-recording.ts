@@ -169,18 +169,26 @@ async function startRecording(params: {
 
 async function stopRecording(params: {
   req: DaemonRequest;
+  sessionStore: SessionStore;
   activeSession: SessionState;
   device: SessionState['device'];
   logPath?: string;
   deps: RecordTraceDeps;
 }): Promise<DaemonResponse> {
-  const { req, activeSession, device, logPath, deps } = params;
+  const { req, sessionStore, activeSession, device, logPath, deps } = params;
 
-  if (!activeSession.recording) {
+  let recording = activeSession.recording;
+  if (!recording) {
+    const recovered = await recoverMissingRecordingState();
+    if (recovered && 'ok' in recovered) {
+      return recovered;
+    }
+    recording = recovered ?? undefined;
+  }
+  if (!recording) {
     return errorResponse('INVALID_ARGS', 'no active recording');
   }
 
-  const recording = activeSession.recording;
   const stopRequestedAt = Date.now();
   const invalidatedReason = recording.invalidatedReason;
   activeSession.recording = undefined;
@@ -204,6 +212,51 @@ async function stopRecording(params: {
   }
 
   return buildRecordStopResponse(recording);
+
+  async function recoverMissingRecordingState(): Promise<
+    DaemonResponse | NonNullable<SessionState['recording']> | null
+  > {
+    if (hasActiveRecordingSession(sessionStore)) {
+      return null;
+    }
+
+    const backend = resolveRecordingBackendForDevice(device);
+    if (!backend.recoverMissingStop) {
+      return null;
+    }
+
+    const outPath = backend.resolveOutputPath({ req });
+    const resolvedOut = SessionStore.expandHome(outPath, req.meta?.cwd);
+    const recordingBase = buildRecordingBase(req, resolvedOut);
+
+    const recovered = await backend.recoverMissingStop({
+      req,
+      activeSession,
+      sessionStore,
+      device,
+      logPath,
+      deps,
+      recordingBase,
+      resolvedOut,
+    });
+    if (!recovered) {
+      return null;
+    }
+    if (!('ok' in recovered)) {
+      fs.mkdirSync(path.dirname(resolvedOut), { recursive: true });
+      fs.rmSync(resolvedOut, { force: true });
+    }
+    return recovered;
+  }
+}
+
+function hasActiveRecordingSession(sessionStore: SessionStore): boolean {
+  for (const session of sessionStore.values()) {
+    if (session.recording) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function buildRecordStopResponse(
@@ -330,7 +383,7 @@ export async function handleRecordCommand(params: {
     return startRecording({ req, sessionName, sessionStore, activeSession, device, logPath, deps });
   }
 
-  const response = await stopRecording({ req, activeSession, device, logPath, deps });
+  const response = await stopRecording({ req, sessionStore, activeSession, device, logPath, deps });
   if (!response.ok) {
     await releaseRecordOnlySession(sessionStore, sessionName, activeSession);
     return response;
