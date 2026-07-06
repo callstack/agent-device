@@ -58,6 +58,11 @@ type AndroidRecordingRecoveryManifest = {
   chunks: RecordingChunk[];
 };
 
+type AndroidRecoveryManifestScan = {
+  live: AndroidRecordingRecoveryManifest[];
+  uncertain: AndroidRecordingRecoveryManifest[];
+};
+
 type AndroidRecordingRecoveryManifestRequired = Pick<
   AndroidRecordingRecoveryManifest,
   'version' | 'sessionName' | 'recordingId' | 'deviceId' | 'startedAt' | 'outPath' | 'showTouches'
@@ -260,10 +265,8 @@ function androidRecoveryMetadataPaths(): string[] {
   return ANDROID_RECOVERY_METADATA_DIRS.map((dir) => `${dir}/${ANDROID_RECOVERY_METADATA_FILE}`);
 }
 
-async function readAndroidRecoveryMetadata(
-  deviceId: string,
-): Promise<AndroidRecordingRecoveryManifest[]> {
-  const manifests: AndroidRecordingRecoveryManifest[] = [];
+async function readAndroidRecoveryMetadata(deviceId: string): Promise<AndroidRecoveryManifestScan> {
+  const scan: AndroidRecoveryManifestScan = { live: [], uncertain: [] };
   for (const metadataPath of androidRecoveryMetadataPaths()) {
     const result = await runAndroidRecoveryAdb(deviceId, ['shell', 'cat', metadataPath], {
       allowFailure: true,
@@ -291,10 +294,11 @@ async function readAndroidRecoveryMetadata(
     }
     const liveness = await checkLiveRecoverableAndroidScreenrecord(deviceId, metadata.current);
     if (liveness === 'live') {
-      manifests.push(metadata);
+      scan.live.push(metadata);
       continue;
     }
     if (liveness === 'uncertain') {
+      scan.uncertain.push(metadata);
       continue;
     }
     await cleanupAndroidRecoveryMetadataPath({
@@ -303,7 +307,7 @@ async function readAndroidRecoveryMetadata(
       phase: 'record_stop_android_recovery_metadata_stale_cleanup_failed',
     });
   }
-  return manifests;
+  return scan;
 }
 
 async function checkLiveRecoverableAndroidScreenrecord(
@@ -509,8 +513,18 @@ export async function recoverMissingAndroidRecording(params: {
 }): Promise<DaemonResponse | AndroidRecording | null> {
   const { activeSession, device, recordingBase } = params;
   const manifests = await readAndroidRecoveryMetadata(device.id);
-  if (manifests.length > 0) {
-    return recoverAndroidRecordingFromManifest({ activeSession, device, manifests });
+  if (manifests.live.length > 0) {
+    return recoverAndroidRecordingFromManifest({
+      activeSession,
+      device,
+      manifests: manifests.live,
+    });
+  }
+  if (manifests.uncertain.length > 0) {
+    return blockAndroidOwnerlessRecoveryForUncertainManifest({
+      activeSession,
+      manifests: manifests.uncertain,
+    });
   }
 
   const recovered = await findRecoverableAndroidScreenrecord(device.id);
@@ -550,6 +564,37 @@ export async function recoverMissingAndroidRecording(params: {
     showTouches: false,
     warning: ANDROID_OWNERLESS_RECOVERY_WARNING,
   };
+}
+
+function blockAndroidOwnerlessRecoveryForUncertainManifest(params: {
+  activeSession: SessionState;
+  manifests: AndroidRecordingRecoveryManifest[];
+}): DaemonResponse {
+  const { activeSession, manifests } = params;
+  const matches = manifests.filter((manifest) =>
+    androidRecoveryManifestMatchesSession(manifest, activeSession),
+  );
+  const activeRecordings = summarizeAndroidActiveRecordings(manifests);
+  const details = {
+    activeRecordings,
+    recoveryBlocked: 'manifest_liveness_uncertain',
+    hint: 'Retry record stop after the device responds. Ownerless Android recording recovery is disabled while a valid durable manifest remains unverified.',
+  };
+  if (matches.length === 0) {
+    return errorResponse('INVALID_ARGS', formatAndroidRecordingOwnerMismatch(manifests), details);
+  }
+  if (matches.length > 1 || manifests.length > 1) {
+    return errorResponse(
+      'INVALID_ARGS',
+      'multiple active Android recording manifests could not be verified; cannot safely recover missing recording state',
+      details,
+    );
+  }
+  return errorResponse(
+    'INVALID_ARGS',
+    'active Android recording manifest could not be verified; retry record stop after the device responds',
+    details,
+  );
 }
 
 function recoverAndroidRecordingFromManifest(params: {

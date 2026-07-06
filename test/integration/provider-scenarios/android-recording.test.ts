@@ -100,6 +100,13 @@ test('Provider-backed integration Android record stop refuses another session du
   );
 });
 
+test('Provider-backed integration Android record stop refuses another session uncertain manifest before ownerless fallback', async () => {
+  await withProviderScenarioTempDir(
+    'agent-device-provider-scenario-android-record-wrong-session-uncertain-',
+    runAndroidOtherSessionUncertainManifestScenario,
+  );
+});
+
 test('Provider-backed integration Android record stop refuses ambiguous durable manifests', async () => {
   await withProviderScenarioTempDir(
     'agent-device-provider-scenario-android-record-ambiguous-',
@@ -263,6 +270,72 @@ async function runAndroidAmbiguousManifestRecoveryScenario(tmpDir: string): Prom
       adbCalls.some((args) => args.join(' ').startsWith('shell kill -2')),
       false,
     );
+  } finally {
+    await daemon.close();
+  }
+}
+
+async function runAndroidOtherSessionUncertainManifestScenario(tmpDir: string): Promise<void> {
+  const adbCalls: string[][] = [];
+  const pullCalls: PullCall[] = [];
+  const remotePath = '/sdcard/agent-device-recording-723456789.mp4';
+  const manifest = buildAndroidRecordingManifest({
+    outPath: path.join(tmpDir, 'other-session-uncertain.mp4'),
+    remotePath,
+    sessionName: 'checkout',
+  });
+  const daemon = await createProviderScenarioHarness({
+    androidAdbProvider: () => ({
+      exec: async (args) => {
+        adbCalls.push([...args]);
+        const command = args.join(' ');
+        if (command === 'shell cat /sdcard/agent-device-recording-active.json') {
+          return { stdout: JSON.stringify(manifest), stderr: '', exitCode: 0 };
+        }
+        if (command === 'shell cat /data/local/tmp/agent-device-recording-active.json') {
+          return { stdout: '', stderr: '', exitCode: 1 };
+        }
+        if (command === 'shell ps -o pid=,args= -p 4321') {
+          return { stdout: '', stderr: 'transient ps failure', exitCode: 1 };
+        }
+        if (command === 'shell ps -A -o pid=,args=') {
+          return {
+            stdout: `4321 screenrecord --bit-rate 8000000 ${remotePath}\n`,
+            stderr: '',
+            exitCode: 0,
+          };
+        }
+        return androidAdbResult(args);
+      },
+      pull: async (from, to) => {
+        pullCalls.push({ remotePath: from, localPath: to });
+        return { stdout: '', stderr: '', exitCode: 0 };
+      },
+    }),
+    deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+  });
+
+  try {
+    const recordStop = await daemon.callCommand('record', ['stop'], {
+      platform: 'android',
+      serial: PROVIDER_SCENARIO_ANDROID.id,
+    });
+    assertRpcError(recordStop, 'INVALID_ARGS', /belongs to session "checkout"/);
+    assert.equal(
+      adbCalls.some((args) => args.join(' ') === 'shell ps -A -o pid=,args='),
+      false,
+    );
+    assert.equal(
+      adbCalls.some((args) => args.join(' ') === 'shell kill -2 4321'),
+      false,
+    );
+    assert.equal(
+      adbCalls.some(
+        (args) => args.join(' ') === 'shell rm -f /sdcard/agent-device-recording-active.json',
+      ),
+      false,
+    );
+    assert.equal(pullCalls.length, 0);
   } finally {
     await daemon.close();
   }
@@ -645,7 +718,11 @@ async function runAndroidUncertainMetadataScenario(tmpDir: string): Promise<void
       platform: 'android',
       serial: PROVIDER_SCENARIO_ANDROID.id,
     });
-    assertRpcError(recordStop, 'INVALID_ARGS', /no active recording/);
+    assertRpcError(recordStop, 'INVALID_ARGS', /could not be verified/);
+    assert.equal(
+      adbCalls.some((args) => args.join(' ') === 'shell ps -A -o pid=,args='),
+      false,
+    );
     assert.equal(
       adbCalls.some(
         (args) => args.join(' ') === 'shell rm -f /sdcard/agent-device-recording-active.json',
