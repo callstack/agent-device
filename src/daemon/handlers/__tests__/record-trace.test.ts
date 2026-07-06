@@ -185,6 +185,12 @@ function makeIosSimulatorRecordingSession(
   return session;
 }
 
+function isAndroidScreenrecordStartCommand(command: string): boolean {
+  return /^-s emulator-5554 shell screenrecord (?:--size 756x1344 )?--bit-rate (?:8000000|20000000) \/(?:sdcard|data\/local\/tmp)\/agent-device-recording-\d+\.mp4 >\/dev\/null 2>&1 & echo \$!$/.test(
+    command,
+  );
+}
+
 async function runRecordCommand(params: {
   sessionStore: SessionStore;
   sessionName: string;
@@ -2062,6 +2068,84 @@ test('record stop returns multiple Android recording chunks', async () => {
         path.resolve('./android-long.part-002.mp4'),
     ]),
   );
+});
+
+test('Android recording rotation retries sequentially when concurrent screenrecord start fails', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-screenrecord-sequential-rotation';
+  sessionStore.set(
+    sessionName,
+    makeSession(sessionName, {
+      platform: 'android',
+      id: 'emulator-5554',
+      name: 'Android',
+      kind: 'device',
+      booted: true,
+    }),
+  );
+
+  const adbCommands: string[] = [];
+  let startAttempt = 0;
+  let firstFailedStartIndex = -1;
+  let oldPidStopped = false;
+  mockRunCmd.mockImplementation(async (_cmd, args) => {
+    const command = args.join(' ');
+    adbCommands.push(command);
+    if (isAndroidScreenrecordStartCommand(command)) {
+      startAttempt += 1;
+      if (startAttempt === 1) return { stdout: '4321\n', stderr: '', exitCode: 0 };
+      if (startAttempt <= 3) {
+        if (firstFailedStartIndex === -1) firstFailedStartIndex = adbCommands.length - 1;
+        return { stdout: '', stderr: 'encoder busy', exitCode: 1 };
+      }
+      return { stdout: '4322\n', stderr: '', exitCode: 0 };
+    }
+    if (
+      /^-s emulator-5554 shell stat -c %s \/(?:sdcard|data\/local\/tmp)\/agent-device-recording-\d+\.mp4$/.test(
+        command,
+      )
+    ) {
+      return { stdout: '2048\n', stderr: '', exitCode: 0 };
+    }
+    if (command === '-s emulator-5554 shell ps -o pid= -p 4321') {
+      return oldPidStopped
+        ? { stdout: '', stderr: '', exitCode: 1 }
+        : { stdout: '4321\n', stderr: '', exitCode: 0 };
+    }
+    if (command === '-s emulator-5554 shell kill -2 4321') {
+      oldPidStopped = true;
+      return { stdout: '', stderr: '', exitCode: 0 };
+    }
+    return { stdout: '', stderr: '', exitCode: 0 };
+  });
+
+  const response = await runRecordCommand({
+    sessionStore,
+    sessionName,
+    positionals: ['start', './android-sequential-rotation.mp4'],
+  });
+  expect(response?.ok).toBe(true);
+
+  await vi.advanceTimersByTimeAsync(170_000);
+
+  const recording = sessionStore.get(sessionName)?.recording;
+  expect(recording?.platform).toBe('android');
+  if (recording?.platform !== 'android') {
+    throw new Error('expected Android recording');
+  }
+  expect(recording.remotePid).toBe('4322');
+  expect(recording.chunks).toHaveLength(2);
+  const stopOldChunk = adbCommands.findIndex(
+    (command) => command === '-s emulator-5554 shell kill -2 4321',
+  );
+  const sequentialStart = adbCommands
+    .slice(stopOldChunk + 1)
+    .findIndex((command) => isAndroidScreenrecordStartCommand(command));
+  expect(firstFailedStartIndex).toBeGreaterThan(-1);
+  expect(stopOldChunk).toBeGreaterThan(firstFailedStartIndex);
+  expect(sequentialStart).toBeGreaterThan(-1);
 });
 
 test('record stop keeps iOS simulator video when touch overlay recording was invalidated', async () => {

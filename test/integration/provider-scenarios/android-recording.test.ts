@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { test } from 'vitest';
@@ -34,6 +35,13 @@ test('Provider-backed integration Android record stop recovers missing daemon re
   await withProviderScenarioTempDir(
     'agent-device-provider-scenario-android-record-recovery-',
     runAndroidManifestRecoveryScenario,
+  );
+});
+
+test('Provider-backed integration Android record stop recovers cwd-scoped durable manifest', async () => {
+  await withProviderScenarioTempDir(
+    'agent-device-provider-scenario-android-record-scoped-recovery-',
+    runAndroidScopedManifestRecoveryScenario,
   );
 });
 
@@ -285,6 +293,45 @@ async function runAndroidManifestHostPathScenario(tmpDir: string): Promise<void>
     assert.deepEqual(pullCalls, [{ remotePath, localPath: requestedPath }]);
     assert.equal(fs.existsSync(requestedPath), true);
     assert.equal(fs.existsSync(manifestPath), false);
+  } finally {
+    await daemon.close();
+  }
+}
+
+async function runAndroidScopedManifestRecoveryScenario(tmpDir: string): Promise<void> {
+  const adbCalls: string[][] = [];
+  const pullCalls: PullCall[] = [];
+  const remotePath = '/sdcard/agent-device-recording-923456123.mp4';
+  const recordingPath = path.join(tmpDir, 'scoped-recovered-recording.mp4');
+  const scopeRoot = path.join(tmpDir, 'worktree');
+  fs.mkdirSync(path.join(scopeRoot, '.git'), { recursive: true });
+  const scopeId = hashScopeRoot(fs.realpathSync.native(scopeRoot));
+  const manifest = buildAndroidRecordingManifest({
+    outPath: recordingPath,
+    remotePath,
+    sessionName: `cwd:${scopeId}:default`,
+    sessionScope: { kind: 'cwd', id: scopeId },
+  });
+  const daemon = await createProviderScenarioHarness({
+    androidAdbProvider: () =>
+      createAndroidManifestProvider({ adbCalls, pullCalls, manifests: [manifest] }),
+    deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+  });
+
+  try {
+    const recordStop = await daemon.callCommand(
+      'record',
+      ['stop', recordingPath],
+      {
+        platform: 'android',
+        serial: PROVIDER_SCENARIO_ANDROID.id,
+      },
+      { meta: { cwd: scopeRoot } },
+    );
+    const data = assertRpcOk<{ recording?: unknown; outPath?: unknown }>(recordStop);
+    assert.equal(data.recording, 'stopped');
+    assert.equal(data.outPath, recordingPath);
+    assert.deepEqual(pullCalls, [{ remotePath, localPath: recordingPath }]);
   } finally {
     await daemon.close();
   }
@@ -1078,6 +1125,7 @@ function buildAndroidRecordingManifest(options: {
   outPath: string;
   remotePath: string;
   sessionName: string;
+  sessionScope?: { kind: 'cwd'; id: string };
   remotePid?: string;
   startedAt?: number;
   chunks?: Array<{ index: number; path: string; remotePath: string }>;
@@ -1086,6 +1134,7 @@ function buildAndroidRecordingManifest(options: {
   return {
     version: 1,
     sessionName: options.sessionName,
+    sessionScope: options.sessionScope,
     recordingId: `recording-${startedAt}`,
     deviceId: PROVIDER_SCENARIO_ANDROID.id,
     startedAt,
@@ -1105,6 +1154,10 @@ function buildAndroidRecordingManifest(options: {
       },
     ],
   };
+}
+
+function hashScopeRoot(scopeRoot: string): string {
+  return crypto.createHash('sha256').update(scopeRoot).digest('hex').slice(0, 16);
 }
 
 function androidAdbResult(args: string[]): {

@@ -8,7 +8,6 @@ import { shellQuote } from '../../utils/shell-quote.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { DaemonResponse, RecordingChunk, SessionState } from '../types.ts';
 import { errorResponse } from './response.ts';
-import type { RecordingExportQuality } from '../../core/recording-export-quality.ts';
 import { deriveAndroidChunkOutPath } from './record-trace-android-chunks.ts';
 
 const ANDROID_RECOVERY_WARNING =
@@ -49,15 +48,12 @@ type AndroidRecordingRecoveryManifest = {
   recordingId: string;
   deviceId: string;
   startedAt: number;
-  outPath: string;
-  clientOutPath?: string;
-  telemetryPath?: string;
-  maxSize?: number;
-  exportQuality?: RecordingExportQuality;
   showTouches: boolean;
   current: AndroidRecordingRecoveryMetadata;
-  chunks: RecordingChunk[];
+  chunks: AndroidRecordingRecoveryChunk[];
 };
+
+type AndroidRecordingRecoveryChunk = Pick<RecordingChunk, 'index' | 'remotePath'>;
 
 type AndroidRecoveryManifestScan = {
   live: AndroidRecordingRecoveryManifest[];
@@ -72,7 +68,7 @@ type AndroidRecoveryBlockedManifest = {
 
 type AndroidRecordingRecoveryManifestRequired = Pick<
   AndroidRecordingRecoveryManifest,
-  'version' | 'sessionName' | 'recordingId' | 'deviceId' | 'startedAt' | 'outPath' | 'showTouches'
+  'version' | 'sessionName' | 'recordingId' | 'deviceId' | 'startedAt' | 'showTouches'
 >;
 
 type AndroidActiveRecordingSummary = {
@@ -133,10 +129,6 @@ function parseAndroidRecoveryManifest(
     manifest: {
       ...required,
       sessionScope: parseSessionScope(metadata.sessionScope),
-      clientOutPath: readOptionalString(metadata.clientOutPath),
-      telemetryPath: readOptionalString(metadata.telemetryPath),
-      maxSize: readOptionalNumber(metadata.maxSize),
-      exportQuality: parseRecordingExportQuality(metadata.exportQuality),
       current: parsedCurrent,
       chunks,
     },
@@ -177,17 +169,13 @@ function readAndroidRecoveryManifestRequired(
 function readAndroidRecoveryManifestStrings(
   metadata: Record<string, unknown>,
 ):
-  | Pick<
-      AndroidRecordingRecoveryManifestRequired,
-      'sessionName' | 'recordingId' | 'deviceId' | 'outPath'
-    >
+  | Pick<AndroidRecordingRecoveryManifestRequired, 'sessionName' | 'recordingId' | 'deviceId'>
   | undefined {
   const sessionName = readOptionalString(metadata.sessionName);
   const recordingId = readOptionalString(metadata.recordingId);
   const deviceId = readOptionalString(metadata.deviceId);
-  const outPath = readOptionalString(metadata.outPath);
-  if (!sessionName || !recordingId || !deviceId || !outPath) return undefined;
-  return { sessionName, recordingId, deviceId, outPath };
+  if (!sessionName || !recordingId || !deviceId) return undefined;
+  return { sessionName, recordingId, deviceId };
 }
 
 function parseAndroidRecoveryMetadata(
@@ -215,15 +203,15 @@ function parseAndroidRecoveryMetadata(
   };
 }
 
-function parseAndroidRecordingChunks(value: unknown): RecordingChunk[] | undefined {
+function parseAndroidRecordingChunks(value: unknown): AndroidRecordingRecoveryChunk[] | undefined {
   if (!Array.isArray(value)) return undefined;
   const chunks = value
     .map(parseAndroidRecordingChunk)
-    .filter((chunk): chunk is RecordingChunk => chunk !== undefined);
+    .filter((chunk): chunk is AndroidRecordingRecoveryChunk => chunk !== undefined);
   return chunks.length > 0 && chunks.length === value.length ? chunks : undefined;
 }
 
-function parseAndroidRecordingChunk(value: unknown): RecordingChunk | undefined {
+function parseAndroidRecordingChunk(value: unknown): AndroidRecordingRecoveryChunk | undefined {
   if (!value || typeof value !== 'object') {
     return undefined;
   }
@@ -232,7 +220,6 @@ function parseAndroidRecordingChunk(value: unknown): RecordingChunk | undefined 
     typeof chunk.index !== 'number' ||
     !Number.isInteger(chunk.index) ||
     chunk.index < 1 ||
-    typeof chunk.path !== 'string' ||
     typeof chunk.remotePath !== 'string' ||
     !isAndroidAgentRecordingPath(chunk.remotePath)
   ) {
@@ -240,7 +227,6 @@ function parseAndroidRecordingChunk(value: unknown): RecordingChunk | undefined 
   }
   return {
     index: chunk.index,
-    path: chunk.path,
     remotePath: chunk.remotePath,
   };
 }
@@ -250,10 +236,6 @@ function parseSessionScope(value: unknown): SessionState['sessionScope'] | undef
   const scope = value as Partial<NonNullable<SessionState['sessionScope']>>;
   if (scope.kind !== 'cwd' || typeof scope.id !== 'string') return undefined;
   return { kind: 'cwd', id: scope.id };
-}
-
-function parseRecordingExportQuality(value: unknown): RecordingExportQuality | undefined {
-  return value === 'medium' || value === 'high' ? value : undefined;
 }
 
 function readOptionalString(value: unknown): string | undefined {
@@ -467,24 +449,16 @@ function buildAndroidRecoveryManifest(params: {
       `android-${recording.remotePid}-${recording.remoteStartedAt ?? recording.startedAt}`,
     deviceId,
     startedAt: recording.startedAt,
-    outPath: recording.outPath,
-    clientOutPath: recording.clientOutPath,
-    telemetryPath: recording.telemetryPath,
-    maxSize: recording.maxSize,
-    exportQuality: recording.exportQuality,
     showTouches: recording.showTouches,
     current: {
       remotePath: recording.remotePath,
       remotePid: recording.remotePid,
       startedAt: recording.remoteStartedAt ?? recording.startedAt,
     },
-    chunks: recording.chunks ?? [
-      {
-        index: 1,
-        path: recording.outPath,
-        remotePath: recording.remotePath,
-      },
-    ],
+    chunks: (recording.chunks ?? [{ index: 1, remotePath: recording.remotePath }]).map((chunk) => ({
+      index: chunk.index,
+      remotePath: chunk.remotePath,
+    })),
   };
 }
 
@@ -694,7 +668,6 @@ function emitAndroidRecoveryDiagnostic(
       recordingId: manifest.recordingId,
       remotePath: manifest.current.remotePath,
       remotePid: manifest.current.remotePid,
-      outPath: manifest.outPath,
       chunks: manifest.chunks.length,
     },
   });

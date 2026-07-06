@@ -100,7 +100,23 @@ async function rotateAndroidRecordingChunk(params: {
     remotePid: recording.remotePid,
     startedAt: recording.remoteStartedAt ?? recording.startedAt,
   };
-  const nextChunk = await startNextChunk(path.posix.dirname(recording.remotePath));
+  let previousChunkFinished = false;
+  let nextChunk: AndroidScreenrecordChunk;
+  try {
+    nextChunk = await startNextChunk(path.posix.dirname(recording.remotePath));
+  } catch (concurrentStartError) {
+    const stopError = await finishCurrentChunk(previousChunk);
+    previousChunkFinished = true;
+    if (stopError) {
+      throw new Error(stopError);
+    }
+    if (recording.stopping) return;
+    try {
+      nextChunk = await startNextChunk(path.posix.dirname(recording.remotePath));
+    } catch (sequentialStartError) {
+      throw sequentialStartError instanceof Error ? sequentialStartError : concurrentStartError;
+    }
+  }
   recording.remotePath = nextChunk.remotePath;
   recording.remotePid = nextChunk.remotePid;
   recording.remoteStartedAt = nextChunk.startedAt;
@@ -112,6 +128,9 @@ async function rotateAndroidRecordingChunk(params: {
   recording.warning ??=
     'Android adb screenrecord is capped at 180s, so this recording was split into multiple MP4 chunks.';
   await persistRecordingState?.(recording);
+  if (previousChunkFinished) {
+    return;
+  }
   const stopError = await finishCurrentChunk(previousChunk);
   if (stopError) {
     throw new Error(stopError);

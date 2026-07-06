@@ -29,7 +29,7 @@ import {
   stopActiveRecording,
 } from './record-trace-recording-backends.ts';
 import type { RecordTraceDeps, RecordingBase } from './record-trace-types.ts';
-import { resolveImplicitSessionScope, resolvePublicSessionName } from '../session-routing.ts';
+import { resolveImplicitSessionScope } from '../session-routing.ts';
 
 const IOS_DEVICE_RECORD_MIN_FPS = 1;
 const IOS_DEVICE_RECORD_MAX_FPS = 120;
@@ -490,7 +490,7 @@ export async function handleRecordCommand(params: {
   const activeSession =
     session ??
     ({
-      name: resolvePublicSessionName(req),
+      name: sessionName,
       sessionScope: resolveImplicitSessionScope(req),
       device,
       createdAt: Date.now(),
