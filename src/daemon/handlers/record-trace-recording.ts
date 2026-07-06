@@ -316,7 +316,7 @@ async function recoverMissingRecordingState(
   params: StopRecordingParams,
 ): Promise<DaemonResponse | NonNullable<SessionState['recording']> | null> {
   const { req, sessionStore, activeSession, device, logPath, deps } = params;
-  if (hasActiveRecordingSession(sessionStore)) {
+  if (hasActiveRecordingSessionForDevice(sessionStore, device.id)) {
     return null;
   }
 
@@ -374,9 +374,9 @@ function applyRecordingInvalidation(
   return errorResponse('COMMAND_FAILED', invalidatedReason);
 }
 
-function hasActiveRecordingSession(sessionStore: SessionStore): boolean {
+function hasActiveRecordingSessionForDevice(sessionStore: SessionStore, deviceId: string): boolean {
   for (const session of sessionStore.values()) {
-    if (session.recording) {
+    if (session.recording && session.device.id === deviceId) {
       return true;
     }
   }

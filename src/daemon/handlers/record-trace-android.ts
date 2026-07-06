@@ -422,7 +422,7 @@ async function finishCurrentAndroidRecordingChunk(params: {
   const { device, recording, waitForRemoteFileStability = true } = params;
   const wasRunningBeforeStop = await isAndroidProcessRunning(device.id, recording.remotePid);
   if (!wasRunningBeforeStop) {
-    recording.warning ??= resolveAndroidScreenrecordLimitWarning(recording);
+    appendAndroidRecordingWarning(recording, resolveAndroidScreenrecordLimitWarning(recording));
   }
 
   const stopResult = await runAndroidRecordingAdb(
@@ -614,4 +614,14 @@ function formatAndroidStopFailure(
   stopRequestedAt: number,
 ): string {
   return buildRecordStopFailure(error, recording, stopRequestedAt).message;
+}
+
+function appendAndroidRecordingWarning(
+  recording: AndroidRecording,
+  warning: string | undefined,
+): void {
+  if (!warning || recording.warning?.includes(warning)) {
+    return;
+  }
+  recording.warning = recording.warning ? `${recording.warning} ${warning}` : warning;
 }

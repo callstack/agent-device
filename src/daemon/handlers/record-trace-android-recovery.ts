@@ -133,10 +133,19 @@ async function readAndroidRecoveryMetadata(
     }
     const metadata = parseAndroidRecoveryMetadata(result.stdout);
     if (!metadata) {
+      await cleanupAndroidRecoveryMetadataPath({
+        deviceId,
+        metadataPath,
+        phase: 'record_stop_android_recovery_metadata_invalid_cleanup_failed',
+      });
       continue;
     }
-    if (await isLiveRecoverableAndroidScreenrecord(deviceId, metadata)) {
+    const liveness = await checkLiveRecoverableAndroidScreenrecord(deviceId, metadata);
+    if (liveness === 'live') {
       return metadata;
+    }
+    if (liveness === 'uncertain') {
+      continue;
     }
     await cleanupAndroidRecoveryMetadataPath({
       deviceId,
@@ -147,10 +156,10 @@ async function readAndroidRecoveryMetadata(
   return undefined;
 }
 
-async function isLiveRecoverableAndroidScreenrecord(
+async function checkLiveRecoverableAndroidScreenrecord(
   deviceId: string,
   metadata: AndroidRecordingRecoveryMetadata,
-): Promise<boolean> {
+): Promise<'live' | 'stale' | 'uncertain'> {
   const result = await runAndroidRecoveryAdb(
     deviceId,
     ['shell', 'ps', '-o', 'pid=,args=', '-p', metadata.remotePid],
@@ -160,15 +169,34 @@ async function isLiveRecoverableAndroidScreenrecord(
     },
   );
   if (result.exitCode !== 0) {
-    return false;
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'record_stop_android_recovery_metadata_probe_uncertain',
+      data: {
+        deviceId,
+        remotePid: metadata.remotePid,
+        remotePath: metadata.remotePath,
+        exitCode: result.exitCode,
+        stdout: result.stdout.trim(),
+        stderr: result.stderr.trim(),
+      },
+    });
+    return 'uncertain';
   }
-  return result.stdout
+  const sawPid = result.stdout
+    .split(/\r?\n/)
+    .some((line) => line.trim().startsWith(metadata.remotePid));
+  const matched = result.stdout
     .split(/\r?\n/)
     .map(parseRecoverableAndroidScreenrecord)
     .some(
       (candidate) =>
         candidate?.remotePid === metadata.remotePid && candidate.remotePath === metadata.remotePath,
     );
+  if (matched) {
+    return 'live';
+  }
+  return sawPid ? 'uncertain' : 'stale';
 }
 
 async function findRecoverableAndroidScreenrecord(

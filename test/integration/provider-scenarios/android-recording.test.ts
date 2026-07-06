@@ -8,6 +8,7 @@ import {
   assertCommandCall,
   assertRecordingStarted,
   assertRecordingStopped,
+  assertRpcError,
   assertRpcOk,
 } from './assertions.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
@@ -32,6 +33,27 @@ test('Provider-backed integration Android record stop recovers missing daemon re
   await withProviderScenarioTempDir(
     'agent-device-provider-scenario-android-record-recovery-',
     runAndroidRecordingRecoveryScenario,
+  );
+});
+
+test('Provider-backed integration Android record stop recovers while another device is recording', async () => {
+  await withProviderScenarioTempDir(
+    'agent-device-provider-scenario-android-record-cross-device-recovery-',
+    runAndroidCrossDeviceRecordingRecoveryScenario,
+  );
+});
+
+test('Provider-backed integration Android record stop keeps valid metadata on uncertain liveness probe', async () => {
+  await withProviderScenarioTempDir(
+    'agent-device-provider-scenario-android-record-uncertain-metadata-',
+    runAndroidUncertainMetadataScenario,
+  );
+});
+
+test('Provider-backed integration Android record stop cleans corrupt recovery metadata', async () => {
+  await withProviderScenarioTempDir(
+    'agent-device-provider-scenario-android-record-corrupt-metadata-',
+    runAndroidCorruptMetadataScenario,
   );
 });
 
@@ -111,6 +133,57 @@ function assertAndroidRecordingFlow(context: {
   );
 }
 
+async function runAndroidCrossDeviceRecordingRecoveryScenario(tmpDir: string): Promise<void> {
+  const otherAndroid = { ...PROVIDER_SCENARIO_ANDROID, id: 'emulator-5556', name: 'Pixel 8 B' };
+  const remotePath = '/sdcard/agent-device-recording-123456789.mp4';
+  const adbCalls: string[][] = [];
+  const pullCalls: PullCall[] = [];
+  const daemon = await createProviderScenarioHarness({
+    androidAdbProvider: () =>
+      createPullingAndroidProvider({
+        adbCalls,
+        pullCalls,
+        exec: (args) => androidRecoveryAdbResult(args, remotePath),
+      }),
+    deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID, otherAndroid],
+  });
+
+  await withAndroidProviderScenarioEnv(tmpDir, async () => {
+    try {
+      const busyRecordingPath = path.join(tmpDir, 'busy-recording.mp4');
+      const openBusy = await daemon.callCommand(
+        'open',
+        ['settings'],
+        { platform: 'android', serial: otherAndroid.id },
+        { session: 'busy' },
+      );
+      assertRpcOk(openBusy);
+      const startBusy = await daemon.callCommand(
+        'record',
+        ['start', busyRecordingPath],
+        {},
+        { session: 'busy' },
+      );
+      assertRecordingStarted(startBusy);
+
+      const recordStop = await daemon.callCommand(
+        'record',
+        ['stop'],
+        { platform: 'android', serial: PROVIDER_SCENARIO_ANDROID.id },
+        { meta: { cwd: tmpDir } },
+      );
+      const data = assertRpcOk<{ recording?: unknown; outPath?: unknown }>(recordStop);
+      assert.equal(data.recording, 'stopped');
+      assert.match(String(data.outPath), /\/recording-\d+\.mp4$/);
+      assert.equal(daemon.session('busy')?.recording !== undefined, true);
+      assertCommandCall(adbCalls, ['shell', 'ps', '-A', '-o', 'pid=,args=']);
+      assert.equal(pullCalls.length, 1);
+    } finally {
+      await daemon.close();
+    }
+  });
+}
+
 async function runAndroidRecordingRecoveryScenario(tmpDir: string): Promise<void> {
   const context = await createAndroidRecordingRecoveryContext();
   await withAndroidProviderScenarioEnv(tmpDir, async () => {
@@ -162,6 +235,7 @@ async function exerciseAndroidRecordingRecoveryStop(
   );
   assert.equal(data.recording, 'stopped');
   assert.match(String(data.warning), /Recovered Android recording/);
+  assert.match(String(data.warning), /MP4 may be truncated/);
   return requireStringOutPath(data.outPath);
 }
 
@@ -177,6 +251,96 @@ function assertAndroidRecordingRecovery(
   assert.equal(pullCalls.length, 1);
   assert.deepEqual(pullCalls[0], { remotePath, localPath: outPath });
   assertCommandCall(adbCalls, ['shell', 'rm', '-f', remotePath]);
+}
+
+async function runAndroidUncertainMetadataScenario(_tmpDir: string): Promise<void> {
+  const adbCalls: string[][] = [];
+  const remotePath = '/sdcard/agent-device-recording-123456789.mp4';
+  const daemon = await createProviderScenarioHarness({
+    androidAdbProvider: () => ({
+      exec: async (args) => {
+        adbCalls.push([...args]);
+        const command = args.join(' ');
+        if (command === 'shell cat /sdcard/agent-device-recording-active.json') {
+          return {
+            stdout: JSON.stringify({
+              remotePath,
+              remotePid: '4321',
+              startedAt: 123456789,
+            }),
+            stderr: '',
+            exitCode: 0,
+          };
+        }
+        if (command === 'shell cat /data/local/tmp/agent-device-recording-active.json') {
+          return { stdout: '', stderr: '', exitCode: 1 };
+        }
+        if (command === 'shell ps -o pid=,args= -p 4321') {
+          return { stdout: '', stderr: 'transient ps failure', exitCode: 1 };
+        }
+        if (command === 'shell ps -A -o pid=,args=') {
+          return { stdout: '', stderr: '', exitCode: 0 };
+        }
+        return androidAdbResult(args);
+      },
+    }),
+    deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+  });
+
+  try {
+    const recordStop = await daemon.callCommand('record', ['stop'], {
+      platform: 'android',
+      serial: PROVIDER_SCENARIO_ANDROID.id,
+    });
+    assertRpcError(recordStop, 'INVALID_ARGS', /no active recording/);
+    assert.equal(
+      adbCalls.some(
+        (args) => args.join(' ') === 'shell rm -f /sdcard/agent-device-recording-active.json',
+      ),
+      false,
+    );
+  } finally {
+    await daemon.close();
+  }
+}
+
+async function runAndroidCorruptMetadataScenario(_tmpDir: string): Promise<void> {
+  const adbCalls: string[][] = [];
+  const daemon = await createProviderScenarioHarness({
+    androidAdbProvider: () => ({
+      exec: async (args) => {
+        adbCalls.push([...args]);
+        const command = args.join(' ');
+        if (command === 'shell cat /sdcard/agent-device-recording-active.json') {
+          return { stdout: '{', stderr: '', exitCode: 0 };
+        }
+        if (command === 'shell cat /data/local/tmp/agent-device-recording-active.json') {
+          return { stdout: '', stderr: '', exitCode: 1 };
+        }
+        if (command === 'shell ps -A -o pid=,args=') {
+          return { stdout: '', stderr: '', exitCode: 0 };
+        }
+        return androidAdbResult(args);
+      },
+    }),
+    deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+  });
+
+  try {
+    const recordStop = await daemon.callCommand('record', ['stop'], {
+      platform: 'android',
+      serial: PROVIDER_SCENARIO_ANDROID.id,
+    });
+    assertRpcError(recordStop, 'INVALID_ARGS', /no active recording/);
+    assertCommandCall(adbCalls, [
+      'shell',
+      'rm',
+      '-f',
+      '/sdcard/agent-device-recording-active.json',
+    ]);
+  } finally {
+    await daemon.close();
+  }
 }
 
 async function runAndroidSessionlessRecordingWithMockedAdb(logPath: string): Promise<void> {
