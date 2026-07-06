@@ -58,6 +58,19 @@ type AndroidRecordingRecoveryManifest = {
   chunks: RecordingChunk[];
 };
 
+type AndroidRecordingRecoveryManifestRequired = Pick<
+  AndroidRecordingRecoveryManifest,
+  'version' | 'sessionName' | 'recordingId' | 'deviceId' | 'startedAt' | 'outPath' | 'showTouches'
+>;
+
+type AndroidActiveRecordingSummary = {
+  sessionName: string;
+  sessionScope?: SessionState['sessionScope'];
+  recordingId: string;
+  remotePid: string;
+  remotePath: string;
+};
+
 async function runAndroidRecoveryAdb(
   deviceId: string,
   args: string[],
@@ -90,57 +103,71 @@ function parseRecoverableAndroidScreenrecord(
 }
 
 function parseAndroidRecoveryManifest(value: string): AndroidRecordingRecoveryManifest | undefined {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(value);
-  } catch {
-    return undefined;
-  }
-  if (!parsed || typeof parsed !== 'object') {
-    return undefined;
-  }
-  const metadata = parsed as Record<string, unknown>;
-  const current = metadata.current;
-  if (
-    metadata.version !== ANDROID_RECOVERY_MANIFEST_VERSION ||
-    typeof metadata.sessionName !== 'string' ||
-    typeof metadata.recordingId !== 'string' ||
-    typeof metadata.deviceId !== 'string' ||
-    typeof metadata.startedAt !== 'number' ||
-    !Number.isFinite(metadata.startedAt) ||
-    typeof metadata.outPath !== 'string' ||
-    typeof metadata.showTouches !== 'boolean' ||
-    !current ||
-    typeof current !== 'object' ||
-    !Array.isArray(metadata.chunks)
-  ) {
-    return undefined;
-  }
-  const parsedCurrent = parseAndroidRecoveryMetadata(current);
+  const metadata = parseJsonObject(value);
+  if (!metadata) return undefined;
+  const required = readAndroidRecoveryManifestRequired(metadata);
+  if (!required) return undefined;
+  const parsedCurrent = parseAndroidRecoveryMetadata(metadata.current);
   if (!parsedCurrent) return undefined;
-  const chunks = metadata.chunks
-    .map(parseAndroidRecordingChunk)
-    .filter((chunk): chunk is RecordingChunk => chunk !== undefined);
-  if (chunks.length === 0 || chunks.length !== metadata.chunks.length) {
-    return undefined;
-  }
-
+  const chunks = parseAndroidRecordingChunks(metadata.chunks);
+  if (!chunks) return undefined;
   return {
-    version: ANDROID_RECOVERY_MANIFEST_VERSION,
-    sessionName: metadata.sessionName,
+    ...required,
     sessionScope: parseSessionScope(metadata.sessionScope),
-    recordingId: metadata.recordingId,
-    deviceId: metadata.deviceId,
-    startedAt: metadata.startedAt,
-    outPath: metadata.outPath,
     clientOutPath: readOptionalString(metadata.clientOutPath),
     telemetryPath: readOptionalString(metadata.telemetryPath),
     maxSize: readOptionalNumber(metadata.maxSize),
     exportQuality: parseRecordingExportQuality(metadata.exportQuality),
-    showTouches: metadata.showTouches,
     current: parsedCurrent,
     chunks,
   };
+}
+
+function parseJsonObject(value: string): Record<string, unknown> | undefined {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return isRecord(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object';
+}
+
+function readAndroidRecoveryManifestRequired(
+  metadata: Record<string, unknown>,
+): AndroidRecordingRecoveryManifestRequired | undefined {
+  if (metadata.version !== ANDROID_RECOVERY_MANIFEST_VERSION) return undefined;
+  const strings = readAndroidRecoveryManifestStrings(metadata);
+  if (!strings) return undefined;
+  const startedAt = readOptionalNumber(metadata.startedAt);
+  if (startedAt === undefined) return undefined;
+  const showTouches = readOptionalBoolean(metadata.showTouches);
+  if (showTouches === undefined) return undefined;
+  return {
+    version: ANDROID_RECOVERY_MANIFEST_VERSION,
+    ...strings,
+    startedAt,
+    showTouches,
+  };
+}
+
+function readAndroidRecoveryManifestStrings(
+  metadata: Record<string, unknown>,
+):
+  | Pick<
+      AndroidRecordingRecoveryManifestRequired,
+      'sessionName' | 'recordingId' | 'deviceId' | 'outPath'
+    >
+  | undefined {
+  const sessionName = readOptionalString(metadata.sessionName);
+  const recordingId = readOptionalString(metadata.recordingId);
+  const deviceId = readOptionalString(metadata.deviceId);
+  const outPath = readOptionalString(metadata.outPath);
+  if (!sessionName || !recordingId || !deviceId || !outPath) return undefined;
+  return { sessionName, recordingId, deviceId, outPath };
 }
 
 function parseAndroidRecoveryMetadata(
@@ -166,6 +193,14 @@ function parseAndroidRecoveryMetadata(
         ? metadata.startedAt
         : Date.now(),
   };
+}
+
+function parseAndroidRecordingChunks(value: unknown): RecordingChunk[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const chunks = value
+    .map(parseAndroidRecordingChunk)
+    .filter((chunk): chunk is RecordingChunk => chunk !== undefined);
+  return chunks.length > 0 && chunks.length === value.length ? chunks : undefined;
 }
 
 function parseAndroidRecordingChunk(value: unknown): RecordingChunk | undefined {
@@ -207,6 +242,10 @@ function readOptionalString(value: unknown): string | undefined {
 
 function readOptionalNumber(value: unknown): number | undefined {
   return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+}
+
+function readOptionalBoolean(value: unknown): boolean | undefined {
+  return typeof value === 'boolean' ? value : undefined;
 }
 
 function isAndroidAgentRecordingPath(remotePath: string): boolean {
@@ -519,37 +558,52 @@ function recoverAndroidRecordingFromManifest(params: {
   manifests: AndroidRecordingRecoveryManifest[];
 }): DaemonResponse | AndroidRecording {
   const { activeSession, device, manifests } = params;
+  const selected = selectAndroidRecoveryManifest({ activeSession, manifests });
+  if ('ok' in selected) return selected;
+  emitAndroidRecoveryDiagnostic(device, selected);
+  return buildAndroidRecordingFromManifest(selected);
+}
+
+function selectAndroidRecoveryManifest(params: {
+  activeSession: SessionState;
+  manifests: AndroidRecordingRecoveryManifest[];
+}): DaemonResponse | AndroidRecordingRecoveryManifest {
+  const { activeSession, manifests } = params;
   const matches = manifests.filter((manifest) =>
     androidRecoveryManifestMatchesSession(manifest, activeSession),
   );
+  const activeRecordings = summarizeAndroidActiveRecordings(manifests);
   if (matches.length === 0) {
     return errorResponse('INVALID_ARGS', formatAndroidRecordingOwnerMismatch(manifests), {
-      activeRecordings: manifests.map((manifest) => ({
-        sessionName: manifest.sessionName,
-        sessionScope: manifest.sessionScope,
-        recordingId: manifest.recordingId,
-        remotePid: manifest.current.remotePid,
-        remotePath: manifest.current.remotePath,
-      })),
+      activeRecordings,
     });
   }
   if (matches.length > 1 || manifests.length > 1) {
     return errorResponse(
       'INVALID_ARGS',
       'multiple active Android recording manifests exist; cannot safely recover missing recording state',
-      {
-        activeRecordings: manifests.map((manifest) => ({
-          sessionName: manifest.sessionName,
-          sessionScope: manifest.sessionScope,
-          recordingId: manifest.recordingId,
-          remotePid: manifest.current.remotePid,
-          remotePath: manifest.current.remotePath,
-        })),
-      },
+      { activeRecordings },
     );
   }
+  return matches[0]!;
+}
 
-  const manifest = matches[0]!;
+function summarizeAndroidActiveRecordings(
+  manifests: AndroidRecordingRecoveryManifest[],
+): AndroidActiveRecordingSummary[] {
+  return manifests.map((manifest) => ({
+    sessionName: manifest.sessionName,
+    sessionScope: manifest.sessionScope,
+    recordingId: manifest.recordingId,
+    remotePid: manifest.current.remotePid,
+    remotePath: manifest.current.remotePath,
+  }));
+}
+
+function emitAndroidRecoveryDiagnostic(
+  device: AndroidDevice,
+  manifest: AndroidRecordingRecoveryManifest,
+): void {
   emitDiagnostic({
     level: 'warn',
     phase: 'record_stop_android_recovered_missing_state',
@@ -563,7 +617,11 @@ function recoverAndroidRecordingFromManifest(params: {
       chunks: manifest.chunks.length,
     },
   });
+}
 
+function buildAndroidRecordingFromManifest(
+  manifest: AndroidRecordingRecoveryManifest,
+): AndroidRecording {
   return {
     platform: 'android',
     recordingId: manifest.recordingId,
