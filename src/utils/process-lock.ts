@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '../kernel/errors.ts';
-import { isProcessAlive, readProcessStartTime } from './process-identity.ts';
+import { isProcessAlive, readProcessStartTime } from './host-process.ts';
 import { sleep } from './timeouts.ts';
 
 const DEFAULT_LOCK_TIMEOUT_MS = 30_000;

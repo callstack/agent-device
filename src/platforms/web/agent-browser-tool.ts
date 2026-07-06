@@ -5,7 +5,7 @@ import path from 'node:path';
 import { runCmd } from '../../utils/exec.ts';
 import { AppError, asAppError } from '../../kernel/errors.ts';
 import { acquireProcessLock } from '../../utils/process-lock.ts';
-import { readProcessStartTime } from '../../utils/process-identity.ts';
+import { readProcessStartTime } from '../../utils/host-process.ts';
 import {
   appendAgentDeviceChromeArgs,
   resolveAgentBrowserIdleTimeoutMs,

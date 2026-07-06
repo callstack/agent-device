@@ -22,9 +22,7 @@ import {
   agentBrowserChromeLaunchMarker,
   appendAgentDeviceChromeArgs,
   cleanupManagedAgentBrowserOrphans,
-  expandProcessTree,
   matchAgentBrowserChromeProcess,
-  parseHostProcessList,
   resolveAgentBrowserIdleTimeoutMs,
   summarizeAgentBrowserProcesses,
 } from './agent-browser-lifecycle.ts';
@@ -77,26 +75,6 @@ test('managed agent-browser idle timeout defaults to five minutes and respects o
   assert.equal(
     resolveAgentBrowserIdleTimeoutMs({ AGENT_BROWSER_IDLE_TIMEOUT_MS: '0' }),
     DEFAULT_AGENT_BROWSER_IDLE_TIMEOUT_MS,
-  );
-});
-
-test('host process parser preserves command text after pid and parent pid', () => {
-  assert.deepEqual(
-    parseHostProcessList(
-      [
-        '  101     1 /Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-        '  202   101 /tmp/chrome --type=renderer --flag value',
-        'not a process',
-      ].join('\n'),
-    ),
-    [
-      {
-        pid: 101,
-        ppid: 1,
-        command: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-      },
-      { pid: 202, ppid: 101, command: '/tmp/chrome --type=renderer --flag value' },
-    ],
   );
 });
 
@@ -215,23 +193,6 @@ test('cleanup does not treat the shared socket directory mtime as browser activi
     }
     fs.rmSync(stateDir, { recursive: true, force: true });
   }
-});
-
-test('process tree expansion includes descendants of matched browser roots', () => {
-  const expanded = expandProcessTree(
-    [{ process: { pid: 101, ppid: 1, command: 'chrome' }, reason: 'launch-marker' }],
-    [
-      { pid: 101, ppid: 1, command: 'chrome' },
-      { pid: 201, ppid: 101, command: 'Chrome Helper --type=renderer' },
-      { pid: 301, ppid: 201, command: 'Chrome Helper --type=gpu' },
-      { pid: 999, ppid: 1, command: 'Google Chrome' },
-    ],
-  );
-
-  assert.deepEqual(
-    expanded.map((processInfo) => processInfo.pid),
-    [101, 201, 301],
-  );
 });
 
 test('cleanup signals matched browser process trees with TERM then KILL only for live pids', async () => {

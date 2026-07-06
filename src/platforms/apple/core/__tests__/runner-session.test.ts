@@ -60,9 +60,9 @@ vi.mock('../../../../utils/exec.ts', async () => {
   };
 });
 
-vi.mock('../../../../utils/process-identity.ts', async () => {
-  const actual = await vi.importActual<typeof import('../../../../utils/process-identity.ts')>(
-    '../../../../utils/process-identity.ts',
+vi.mock('../../../../utils/host-process.ts', async () => {
+  const actual = await vi.importActual<typeof import('../../../../utils/host-process.ts')>(
+    '../../../../utils/host-process.ts',
   );
   return {
     ...actual,

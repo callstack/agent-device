@@ -8,7 +8,7 @@ vi.mock('../utils/exec.ts', () => ({
   runCmdDetached: vi.fn(),
 }));
 
-vi.mock('../utils/process-identity.ts', () => ({
+vi.mock('../utils/host-process.ts', () => ({
   isProcessAlive: vi.fn(),
   readProcessCommand: vi.fn(),
   readProcessStartTime: vi.fn(),
@@ -21,7 +21,7 @@ import {
   readProcessCommand,
   readProcessStartTime,
   waitForProcessExit,
-} from '../utils/process-identity.ts';
+} from '../utils/host-process.ts';
 import { ensureMetroCompanion, stopMetroCompanion } from '../metro/client-metro-companion.ts';
 import { ensureReactDevtoolsCompanion } from '../client/client-react-devtools-companion.ts';
 

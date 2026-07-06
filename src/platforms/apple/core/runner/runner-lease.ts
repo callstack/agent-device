@@ -5,7 +5,7 @@ import path from 'node:path';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
 import { AppError } from '../../../../kernel/errors.ts';
 import { acquireProcessLock } from '../../../../utils/process-lock.ts';
-import { isProcessAlive, readProcessStartTime } from '../../../../utils/process-identity.ts';
+import { isProcessAlive, readProcessStartTime } from '../../../../utils/host-process.ts';
 import type { RunnerLogicalLeaseContext } from '../../../../core/runner-lease-context.ts';
 
 const RUNNER_LEASE_SCHEMA_VERSION = 1;

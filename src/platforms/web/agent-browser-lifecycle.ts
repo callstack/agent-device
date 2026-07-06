@@ -2,9 +2,13 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { runCmd, withoutCommandExecutorOverride } from '../../utils/exec.ts';
-import { isProcessAlive, waitForProcessExit } from '../../utils/process-identity.ts';
-import { sleep } from '../../utils/timeouts.ts';
+import {
+  expandProcessTree,
+  listHostProcesses,
+  stopPidsWithEscalation,
+  type HostProcessInfo,
+} from '../../utils/host-process.ts';
+import { withoutCommandExecutorOverride } from '../../utils/exec.ts';
 import type { AgentBrowserToolStatus } from './agent-browser-tool.ts';
 
 const HOST_PROCESS_LIST_TIMEOUT_MS = 1_500;
@@ -13,12 +17,6 @@ const WEB_BROWSER_REAP_KILL_TIMEOUT_MS = 1_000;
 const PROVIDER_STARTUP_CLEANUP_DEBOUNCE_MS = 30_000;
 const AGENT_DEVICE_BROWSER_MARKER_PREFIX = '--agent-device-managed-web=';
 export const DEFAULT_AGENT_BROWSER_IDLE_TIMEOUT_MS = 5 * 60_000;
-
-export type HostProcessInfo = {
-  pid: number;
-  ppid?: number;
-  command: string;
-};
 
 export type AgentBrowserProcessMatch = {
   process: HostProcessInfo;
@@ -76,20 +74,6 @@ export function resolveAgentBrowserIdleTimeoutMs(env: NodeJS.ProcessEnv): number
   );
 }
 
-export function parseHostProcessList(stdout: string): HostProcessInfo[] {
-  const processes: HostProcessInfo[] = [];
-  for (const line of stdout.split('\n')) {
-    const match = /^\s*(\d+)\s+(\d+)\s+(.+?)\s*$/.exec(line);
-    if (!match) continue;
-    const pid = Number.parseInt(match[1]!, 10);
-    const ppid = Number.parseInt(match[2]!, 10);
-    const command = match[3]!;
-    if (!Number.isInteger(pid) || pid <= 0) continue;
-    processes.push({ pid, ppid: Number.isInteger(ppid) && ppid > 0 ? ppid : undefined, command });
-  }
-  return processes;
-}
-
 export function matchAgentBrowserChromeProcess(
   processInfo: HostProcessInfo,
   status: AgentBrowserToolStatus,
@@ -123,7 +107,7 @@ export function summarizeAgentBrowserProcesses(
 export async function inspectManagedAgentBrowserProcesses(
   status: AgentBrowserToolStatus,
 ): Promise<AgentBrowserProcessSummary> {
-  const processes = await listHostProcesses();
+  const processes = await listRealHostProcesses();
   return summarizeAgentBrowserProcesses(processes, status);
 }
 
@@ -143,11 +127,12 @@ export async function cleanupManagedAgentBrowserOrphans(
     return skippedCleanupResult('recent-browser-activity', { idleTimeoutMs, latestActivityMs });
   }
 
-  const processes = await listHostProcesses();
+  const processes = await listRealHostProcesses();
   const summary = summarizeAgentBrowserProcesses(processes, status);
-  const signalPids = expandProcessTree(summary.processes, processes).map(
-    (processInfo) => processInfo.pid,
-  );
+  const signalPids = expandProcessTree(
+    summary.processes.map((match) => match.process.pid),
+    processes,
+  ).map((processInfo) => processInfo.pid);
   const result = { ...summary, signalPids };
   if (summary.count === 0) return result;
   emitDiagnostic({
@@ -163,7 +148,11 @@ export async function cleanupManagedAgentBrowserOrphans(
       matchReasons: summary.processes.map((match) => match.reason),
     },
   });
-  await stopPids(signalPids);
+  await stopPidsWithEscalation({
+    pids: signalPids,
+    termTimeoutMs: WEB_BROWSER_REAP_TERM_TIMEOUT_MS,
+    killTimeoutMs: WEB_BROWSER_REAP_KILL_TIMEOUT_MS,
+  });
   return result;
 }
 
@@ -181,59 +170,10 @@ export async function cleanupManagedAgentBrowserOrphansForProviderStartup(
   return await cleanupManagedAgentBrowserOrphans(status, 'provider-startup', options);
 }
 
-export function expandProcessTree(
-  matches: AgentBrowserProcessMatch[],
-  processes: HostProcessInfo[],
-): HostProcessInfo[] {
-  const selected = new Set(matches.map((match) => match.process.pid));
-  let changed = true;
-  while (changed) {
-    changed = false;
-    for (const processInfo of processes) {
-      if (processInfo.ppid === undefined || !selected.has(processInfo.ppid)) continue;
-      if (selected.has(processInfo.pid)) continue;
-      selected.add(processInfo.pid);
-      changed = true;
-    }
-  }
-  return processes.filter((processInfo) => selected.has(processInfo.pid));
-}
-
-async function listHostProcesses(): Promise<HostProcessInfo[]> {
-  const result = await withoutCommandExecutorOverride(
-    async () =>
-      await runCmd('ps', ['-ax', '-o', 'pid=,ppid=,command='], {
-        allowFailure: true,
-        timeoutMs: HOST_PROCESS_LIST_TIMEOUT_MS,
-      }),
+async function listRealHostProcesses(): Promise<HostProcessInfo[]> {
+  return await withoutCommandExecutorOverride(
+    async () => await listHostProcesses({ timeoutMs: HOST_PROCESS_LIST_TIMEOUT_MS }),
   );
-  if (result.exitCode !== 0) return [];
-  return parseHostProcessList(result.stdout);
-}
-
-async function stopPids(pidsToStop: number[]): Promise<void> {
-  const pids = uniquePids(pidsToStop);
-  for (const pid of pids) {
-    signalProcess(pid, 'SIGTERM');
-  }
-  await sleep(WEB_BROWSER_REAP_TERM_TIMEOUT_MS);
-  for (const pid of pids) {
-    if (!isProcessAlive(pid)) continue;
-    signalProcess(pid, 'SIGKILL');
-  }
-  await Promise.all(
-    pids.map(async (pid) => await waitForProcessExit(pid, WEB_BROWSER_REAP_KILL_TIMEOUT_MS)),
-  );
-}
-
-function signalProcess(pid: number, signal: NodeJS.Signals): void {
-  try {
-    process.kill(pid, signal);
-  } catch {}
-}
-
-function uniquePids(pids: number[]): number[] {
-  return [...new Set(pids.filter((pid) => Number.isInteger(pid) && pid > 0))];
 }
 
 function splitAgentBrowserArgs(args: string): string[] {

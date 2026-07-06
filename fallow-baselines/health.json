@@ -636,7 +636,6 @@
     "src/cli/parser/args.ts:high impact",
     "src/daemon/snapshot-presentation/tree.ts:high impact",
     "src/platforms/apple/core/perf-xml.ts:high impact",
-    "src/utils/process-identity.ts:high impact",
     "src/platforms/web/json-utils.ts:high impact",
     "src/utils/rect-center.ts:high impact",
     "src/daemon/handlers/session-doctor-output.ts:high impact",

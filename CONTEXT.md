@@ -38,6 +38,10 @@
   such as `proxy`, cloud bridge, or `limrun`.
 - Runner/process lease: backend helper mutual-exclusion guard for platform
   runners or tools; it is not the remote client ownership boundary.
+- Host process primitive: low-level host PID helpers in `src/utils/host-process.ts` for liveness,
+  start-time/command reads, process listing, process-tree expansion, PID de-duplication, and
+  best-effort signaling. It must not own domain cleanup policy such as browser ownership markers,
+  runner lease reclamation, daemon takeover checks, or app-log PID metadata verification.
 - Command surface: catalog of public command identity, interface exposure, adapter policy, and shared command metadata across CLI, Node.js, MCP, and batch entrypoints.
 - Daemon command registry: daemon-side source of truth for command route ownership and request-policy traits, including admission exemptions, session locking, selector validation, replay-scoped actions, recording invalidation, Android dialog guards, and request provider device resolution.
 - Runner command traits: per-command-type classification for iOS/macOS runner lifecycle behavior, distinct from the public command surface and daemon command registry. The Swift runner traits classify interaction, read-only, and runner-lifecycle axes for XCTest execution; Swift resolves the alert command as read-only only for its `get` action. The TypeScript runner command traits classify daemon-side runner send/recovery policy such as read-only retry routing, readiness probes, and recent-healthy-mutation preflight skips; the TypeScript table is command-type keyed and currently classifies alert as read-only for daemon retry policy. Each side keeps one source of truth keyed by runner command type.

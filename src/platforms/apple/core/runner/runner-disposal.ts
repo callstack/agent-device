@@ -1,6 +1,10 @@
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
-import { isProcessAlive, isProcessGroupAlive } from '../../../../utils/process-identity.ts';
+import {
+  isProcessAlive,
+  isProcessGroupAlive,
+  signalPidsBestEffort,
+} from '../../../../utils/host-process.ts';
 import type { ExecBackgroundResult } from '../../../../utils/exec.ts';
 import { cleanupTempFile, waitForRunner } from './runner-transport.ts';
 import { withRunnerCommandId, type RunnerCommand } from './runner-contract.ts';
@@ -187,9 +191,7 @@ async function killRunnerProcessTree(
   try {
     process.kill(-pid, signal);
   } catch {}
-  try {
-    process.kill(pid, signal);
-  } catch {}
+  signalPidsBestEffort([pid], signal);
   const pkillSignal = signal === 'SIGINT' ? 'INT' : signal === 'SIGTERM' ? 'TERM' : 'KILL';
   try {
     await runAppleToolCommand('pkill', [`-${pkillSignal}`, '-P', String(pid)], {

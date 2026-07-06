@@ -5,7 +5,7 @@ import path from 'node:path';
 import { AppError } from '../kernel/errors.ts';
 import { runCmd } from './exec.ts';
 import { acquireProcessLock } from './process-lock.ts';
-import { readProcessStartTime } from './process-identity.ts';
+import { readProcessStartTime } from './host-process.ts';
 
 const SWIFT_CACHE_VERSION = '2';
 const LOCK_RETRY_DELAY_MS = 25;

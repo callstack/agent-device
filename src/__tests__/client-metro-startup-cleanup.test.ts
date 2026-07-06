@@ -9,12 +9,12 @@ vi.mock('../utils/exec.ts', () => ({
   runCmdSync: vi.fn(),
 }));
 
-vi.mock('../utils/process-identity.ts', () => ({
+vi.mock('../utils/host-process.ts', () => ({
   waitForProcessExit: vi.fn(),
 }));
 
 import { runCmdDetached } from '../utils/exec.ts';
-import { waitForProcessExit } from '../utils/process-identity.ts';
+import { waitForProcessExit } from '../utils/host-process.ts';
 import { prepareMetroRuntime } from '../metro/client-metro.ts';
 
 afterEach(() => {

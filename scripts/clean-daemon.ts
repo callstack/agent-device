@@ -5,7 +5,7 @@ import { resolveDaemonPaths } from '../src/daemon/config.ts';
 import {
   isAgentDeviceDaemonProcess,
   stopProcessForTakeover,
-} from '../src/utils/process-identity.ts';
+} from '../src/daemon/daemon-process.ts';
 import { cleanupRunnerLeasesForOwner } from '../src/platforms/apple/core/runner/runner-lease.ts';
 import { runnerLeaseCleanupAdapter } from '../src/platforms/apple/core/runner/runner-disposal.ts';
 

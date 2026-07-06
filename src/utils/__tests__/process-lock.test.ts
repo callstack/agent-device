@@ -5,7 +5,7 @@ import path from 'node:path';
 import { afterEach, beforeEach, test } from 'vitest';
 import { AppError } from '../../kernel/errors.ts';
 import { acquireProcessLock, type ProcessLockOwner } from '../process-lock.ts';
-import { readProcessStartTime } from '../process-identity.ts';
+import { readProcessStartTime } from '../host-process.ts';
 
 let tmpDir: string;
 

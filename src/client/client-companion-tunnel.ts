@@ -24,7 +24,7 @@ import {
   readProcessCommand,
   readProcessStartTime,
   waitForProcessExit,
-} from '../utils/process-identity.ts';
+} from '../utils/host-process.ts';
 
 const COMPANION_TUNNEL_TERM_TIMEOUT_MS = 1_000;
 const COMPANION_TUNNEL_KILL_TIMEOUT_MS = 1_000;

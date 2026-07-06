@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
 import { runCmdSync } from '../../src/utils/exec.ts';
-import { isProcessAlive, stopProcessForTakeover } from '../../src/utils/process-identity.ts';
+import { stopProcessForTakeover } from '../../src/daemon/daemon-process.ts';
+import { isProcessAlive } from '../../src/utils/host-process.ts';
 import { runCliJson } from './test-helpers.ts';
 
 type DaemonInfo = {

@@ -1,9 +1,6 @@
 import fs from 'node:fs';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import {
-  isAgentDeviceDaemonProcess,
-  stopProcessForTakeover,
-} from '../../utils/process-identity.ts';
+import { isAgentDeviceDaemonProcess, stopProcessForTakeover } from '../daemon-process.ts';
 import { shellQuote } from '../../utils/shell-quote.ts';
 import { resolveDaemonPaths, type DaemonPaths, type DaemonServerMode } from '../config.ts';
 

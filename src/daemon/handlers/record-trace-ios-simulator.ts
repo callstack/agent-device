@@ -1,6 +1,7 @@
 import { sleep } from '../../utils/timeouts.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { ExecResult } from '../../utils/exec.ts';
+import { signalPidsBestEffort, uniquePositivePids } from '../../utils/host-process.ts';
 import { formatRecordTraceError } from '../record-trace-errors.ts';
 import type { SessionState } from '../types.ts';
 import type { RecordTraceDeps } from './record-trace-types.ts';
@@ -88,8 +89,8 @@ async function signalMatchingIosSimulatorRecorders(
     return;
   }
 
-  const pids = uniquePositivePids(parseProcessIds(result.stdout));
-  const signaled = signalProcessIds(pids, signal);
+  const pids = uniquePositivePids(parseProcessIds(result.stdout), { excludePid: process.pid });
+  const signaled = signalPidsBestEffort(pids, signal);
 
   emitDiagnostic({
     level: signaled > 0 ? 'warn' : 'debug',
@@ -124,8 +125,10 @@ async function signalSessionOwnedIosSimulatorRecorders(
   }
 
   const childResult = await findChildProcessIds(deps, recorderPid, recording.outPath, signal);
-  const pids = uniquePositivePids([recorderPid, ...childResult.pids]);
-  const signaled = signalProcessIds(pids, signal);
+  const pids = uniquePositivePids([recorderPid, ...childResult.pids], {
+    excludePid: process.pid,
+  });
+  const signaled = signalPidsBestEffort(pids, signal);
 
   emitDiagnostic({
     level: signaled > 0 ? 'warn' : 'debug',
@@ -171,25 +174,6 @@ async function findChildProcessIds(
     pids: parseProcessIds(result.stdout),
     exitCode: result.exitCode,
   };
-}
-
-function uniquePositivePids(values: number[]): number[] {
-  return Array.from(new Set(values)).filter(
-    (pid) => Number.isInteger(pid) && pid > 0 && pid !== process.pid,
-  );
-}
-
-function signalProcessIds(pids: number[], signal: NodeJS.Signals): number {
-  let signaled = 0;
-  for (const pid of pids) {
-    try {
-      process.kill(pid, signal);
-      signaled += 1;
-    } catch {
-      // Process already exited or cannot be signaled; cleanup remains best-effort.
-    }
-  }
-  return signaled;
 }
 
 function parseProcessIds(stdout: string): number[] {

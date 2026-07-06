@@ -1,7 +1,7 @@
 import { AppError } from '../../kernel/errors.ts';
 import { runCmdSync } from '../../utils/exec.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import { isAgentDeviceDaemonProcess } from '../../utils/process-identity.ts';
+import { isAgentDeviceDaemonProcess } from '../daemon-process.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { resolveCommandTimeoutPolicy } from '../../core/command-descriptor/registry.ts';
 import type { DaemonPaths } from '../config.ts';

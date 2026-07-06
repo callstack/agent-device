@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '../../../../kernel/errors.ts';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
-import { readProcessStartTime } from '../../../../utils/process-identity.ts';
+import { readProcessStartTime } from '../../../../utils/host-process.ts';
 import { acquireProcessLock, type ProcessLockOwner } from '../../../../utils/process-lock.ts';
 import { isEnvTruthy } from '../../../../utils/retry.ts';
 import { findProjectRoot } from '../../../../utils/version.ts';

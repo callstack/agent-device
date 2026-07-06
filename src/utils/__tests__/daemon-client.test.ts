@@ -28,9 +28,9 @@ import {
   isProcessAlive,
   readProcessCommand,
   readProcessStartTime,
-  stopProcessForTakeover,
   waitForProcessExit,
-} from '../process-identity.ts';
+} from '../host-process.ts';
+import { stopProcessForTakeover } from '../../daemon/daemon-process.ts';
 import { findProjectRoot, readVersion } from '../version.ts';
 
 type MockHttpResponse = EventEmitter & {

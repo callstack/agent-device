@@ -5,7 +5,7 @@ import { AppError } from '../../../../kernel/errors.ts';
 import { isIosFamily, type DeviceInfo } from '../../../../kernel/device.ts';
 import { resolveIosSimulatorDeviceSetPath } from '../../../../utils/device-isolation.ts';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
-import { readProcessStartTime } from '../../../../utils/process-identity.ts';
+import { readProcessStartTime } from '../../../../utils/host-process.ts';
 import { acquireProcessLock, type ProcessLockOwner } from '../../../../utils/process-lock.ts';
 
 const XCTEST_DEVICE_SET_BASE_NAME = 'XCTestDevices';

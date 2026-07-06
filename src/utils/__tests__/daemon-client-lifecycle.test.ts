@@ -36,7 +36,7 @@ import {
 } from '../../__tests__/test-utils/index.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { runCmdDetachedMonitored, runCmdSync } from '../exec.ts';
-import { readProcessStartTime } from '../process-identity.ts';
+import { readProcessStartTime } from '../host-process.ts';
 import { sleep } from '../timeouts.ts';
 import { findProjectRoot, readVersion } from '../version.ts';
 

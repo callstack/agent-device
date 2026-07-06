@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '../../src/daemon/http-health.ts';
 import { skipWhenLoopbackUnavailable } from '../../src/__tests__/test-utils/loopback.ts';
-import { stopProcessForTakeover } from '../../src/utils/process-identity.ts';
+import { stopProcessForTakeover } from '../../src/daemon/daemon-process.ts';
 import { runCliJson } from './test-helpers.ts';
 
 type DaemonInfo = {

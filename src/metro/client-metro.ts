@@ -12,7 +12,7 @@ import type {
 import { AppError } from '../kernel/errors.ts';
 import { runCmdSync, runCmdDetached } from '../utils/exec.ts';
 import { resolveUserPath } from '../utils/path-resolution.ts';
-import { waitForProcessExit } from '../utils/process-identity.ts';
+import { waitForProcessExit } from '../utils/host-process.ts';
 import {
   detectProjectRuntimeKindFromPackageJson,
   readProjectPackageJson,

@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { prepareMetroRuntime, reloadMetro } from '../metro/client-metro.ts';
 import { AppError } from '../kernel/errors.ts';
-import { isProcessAlive, waitForProcessExit } from '../utils/process-identity.ts';
+import { isProcessAlive, waitForProcessExit } from '../utils/host-process.ts';
 
 const TEST_TOKEN = 'agent-device-proxy-test-token';
 

@@ -15,7 +15,7 @@ import {
   tryAdoptRunnerSessionFromLease,
 } from '../runner/runner-adoption.ts';
 import { sendRunnerCommandOnce } from '../runner/runner-transport.ts';
-import { isProcessAlive } from '../../../../utils/process-identity.ts';
+import { isProcessAlive } from '../../../../utils/host-process.ts';
 import {
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
@@ -25,8 +25,8 @@ vi.mock('../runner/runner-transport.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../runner/runner-transport.ts')>();
   return { ...actual, sendRunnerCommandOnce: vi.fn() };
 });
-vi.mock('../../../../utils/process-identity.ts', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../../../utils/process-identity.ts')>();
+vi.mock('../../../../utils/host-process.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../../utils/host-process.ts')>();
   return { ...actual, isProcessAlive: vi.fn(() => false) };
 });
 

@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { readProcessCommand, readProcessStartTime } from '../utils/process-identity.ts';
+import { readProcessCommand, readProcessStartTime } from '../utils/host-process.ts';
 import type { LogBackend } from './network-log.ts';
 import type { ExecResult } from '../utils/exec.ts';
 

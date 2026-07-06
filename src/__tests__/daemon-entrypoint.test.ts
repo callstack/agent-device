@@ -10,7 +10,7 @@ import {
   trackDownloadableArtifact,
 } from '../daemon/artifact-tracking.ts';
 import { runCmdBackground } from '../utils/exec.ts';
-import { isProcessAlive, waitForProcessExit } from '../utils/process-identity.ts';
+import { isProcessAlive, waitForProcessExit } from '../utils/host-process.ts';
 import { waitForHttpOk } from './test-utils/index.ts';
 
 type DaemonInfoFile = {
