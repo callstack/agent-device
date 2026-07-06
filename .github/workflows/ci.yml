@@ -139,6 +139,7 @@ jobs:
           npm install --global --prefix "$prefix" --ignore-scripts "$tarball"
           "$prefix/bin/agent-device" --version
           "$prefix/bin/agent-device" help
+          "$prefix/bin/agent-device" doctor --remote --json
 
   fallow:
     name: Fallow Code Quality

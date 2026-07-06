@@ -105,7 +105,7 @@ Keep `src/daemon.ts` a thin router and `src/daemon/request-router.ts` orchestrat
 
 A new snapshot/command flag touches only the layers that need to understand it. Follow this checklist in order:
 
-1. `src/cli/parser/cli-flags.ts`: add to `CliFlags`, `FLAG_DEFINITIONS`, and the relevant exported flag group (e.g. `SNAPSHOT_FLAGS`). Then update the command family metadata/schema that exposes the flag; find the owner with `rg -n "<command>|supportedFlags|allowedFlags" src/commands src/cli/parser`.
+1. `src/cli/parser/cli-flags.ts`: add to `CliFlags`, `FLAG_DEFINITIONS`, and the relevant exported flag group (e.g. `SNAPSHOT_FLAGS`). Then update the command family metadata/schema that exposes the flag; find the owner with `rg -n "<command>|supportedFlags|allowedFlags" src/commands src/cli/parser`. For schema-only CLI commands (`cdp`, `auth`, `connect`, `proxy`, `react-devtools`, `web`), the flag schema owner is `src/utils/cli-command-overrides.ts` (`SCHEMA_ONLY_CLI_COMMAND_SCHEMAS`).
 2. `src/commands/cli-grammar/*`: read the CLI flag into command input when the CLI accepts it.
 3. `src/commands/command-projection.ts` and command-family projection helpers: write the input into the daemon request only if the flag affects daemon execution.
 4. `src/commands/*-command-contracts.ts`: add or update the command input schema only if the option should be available through Node.js or MCP as structured input.
@@ -248,7 +248,7 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
 
 ## Docs & Skills
 - Versioned CLI help is the agent-facing source of truth. Put workflow guidance/help topics in `src/cli/parser/cli-help.ts`, flags in `src/cli/parser/cli-flags.ts`, command-specific schema/help metadata with the owning command family, and assertions near the focused CLI parser/help tests.
-- Keep parser schema and help rendering separate: parser/help rendering lives in `src/cli/parser/`, while command schema metadata is derived from command metadata and command family declarations.
+- Keep parser schema and help rendering separate: parser/help rendering lives in `src/cli/parser/`, while command schema metadata is derived from command metadata, command family declarations, and the schema-only merge path in `src/utils/cli-command-overrides.ts`.
 - Before planning device automation commands, read `agent-device help workflow`; then read topic help such as `debugging`, `react-native`, `react-devtools`, `physical-device`, `macos`, or `dogfood` when relevant. This is required even when local agent skills are unavailable.
 - Skills are thin routers. Keep `skills/**/SKILL.md` focused on when to use the skill, version gating, which `agent-device help <topic>` page to read, and a short default loop. Do not duplicate full CLI manuals in skills.
 - For behavior/CLI surface changes, update help/metadata, README or `website/docs/**` when user-facing, and a SkillGym case in `test/skillgym/suites/agent-device-smoke-suite.ts` when command-planning guidance changes.
@@ -269,7 +269,7 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
 - Command identity and projection: search command descriptors and command contracts first with `rg -n "<command>|CommandDescriptor|defineCommand" src/core/command-descriptor src/command-catalog.ts src/commands`.
 - Daemon routing and policy: start with `src/daemon/daemon-command-registry.ts`, then trace to the named handler/request module with `rg -n "<command>|route|policy" src/daemon`.
 - Platform behavior and capabilities: start with `src/core/capabilities.ts` and the relevant platform under `src/platforms/`; use `rg`, not broad directory reads.
-- CLI help and command-planning guidance: start with `src/cli/parser/cli-help.ts` and `src/cli/parser/cli-flags.ts`; for command-specific schema, search `rg -n "helpDescription|summary|supportedFlags|allowedFlags" src/commands src/cli/parser`.
+- CLI help and command-planning guidance: start with `src/cli/parser/cli-help.ts` and `src/cli/parser/cli-flags.ts`; for command-specific schema, search `rg -n "helpDescription|summary|supportedFlags|allowedFlags" src/commands src/cli/parser src/utils/cli-command-overrides.ts`, and check `SCHEMA_ONLY_CLI_COMMAND_SCHEMAS` for schema-only CLI commands (`cdp`, `auth`, `connect`, `proxy`, `react-devtools`, `web`).
 
 ## Pull Requests
 - Before opening PR: ensure no conflict markers/unmerged paths.
