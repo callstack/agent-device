@@ -128,17 +128,20 @@ test('interaction response shape: press selector uses the canonical selector env
 });
 
 test('interaction response shape: fill selector uses the canonical selector envelope', async () => {
-  await withIosContractDaemon([runnerTypeEntry({ x: 200, y: 322 })], async (daemon, transcript) => {
-    const data = assertRpcOk(await daemon.callCommand('fill', ['label=Continue', 'Hello']));
-    assertRunnerRequest(transcript, 'ios.runner.type', selectorTypeRequest('Hello'));
+  await withIosContractDaemon(
+    [runnerTypeEntry({ ...NOISY_DEFAULT_TAP_RESULT, x: 200, y: 322 })],
+    async (daemon, transcript) => {
+      const data = assertRpcOk(await daemon.callCommand('fill', ['label=Continue', 'Hello']));
+      assertRunnerRequest(transcript, 'ios.runner.type', selectorTypeRequest('Hello'));
 
-    assertCanonicalDirectSelector(data, {
-      message: 'Filled 5 chars',
-      x: 200,
-      y: 322,
-      extra: { delayMs: 0, text: 'Hello' },
-    });
-  });
+      assertCanonicalDirectSelector(data, {
+        message: 'Filled 5 chars',
+        x: 200,
+        y: 322,
+        extra: { delayMs: 0, text: 'Hello' },
+      });
+    },
+  );
 });
 
 test('interaction response shape: longpress selector uses the canonical selector envelope', async () => {

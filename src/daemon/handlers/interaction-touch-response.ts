@@ -179,24 +179,25 @@ function sanitizeWireBackendData(
   return Object.keys(sanitized).length > 0 ? sanitized : undefined;
 }
 
+const OMITTED_WIRE_BACKEND_FIELDS = new Set([
+  'gestureStartUptimeMs',
+  'gestureEndUptimeMs',
+  'currentUptimeMs',
+  'sequenceResults',
+]);
+
+const DEFAULT_WIRE_BACKEND_FIELD_VALUES = new Map<string, unknown>([
+  ['count', 1],
+  ['intervalMs', 0],
+  ['holdMs', 0],
+  ['jitterPx', 0],
+  ['doubleTap', false],
+]);
+
 function shouldKeepWireBackendField(key: string, value: unknown): boolean {
-  switch (key) {
-    case 'gestureStartUptimeMs':
-    case 'gestureEndUptimeMs':
-    case 'currentUptimeMs':
-    case 'sequenceResults':
-      return false;
-    case 'count':
-      return value !== 1;
-    case 'intervalMs':
-    case 'holdMs':
-    case 'jitterPx':
-      return value !== 0;
-    case 'doubleTap':
-      return value !== false;
-    default:
-      return true;
-  }
+  if (OMITTED_WIRE_BACKEND_FIELDS.has(key)) return false;
+  if (!DEFAULT_WIRE_BACKEND_FIELD_VALUES.has(key)) return true;
+  return value !== DEFAULT_WIRE_BACKEND_FIELD_VALUES.get(key);
 }
 
 function buildTouchMessage(
