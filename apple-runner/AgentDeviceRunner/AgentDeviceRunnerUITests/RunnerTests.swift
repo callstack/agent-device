@@ -52,6 +52,7 @@ final class RunnerTests: XCTestCase {
   let maxRecordingFps = 120
   var needsPostSnapshotInteractionDelay = false
   var needsFirstInteractionDelay = false
+  var lastSnapshotHadAccessibilityUnavailable = false
   var activeRecording: ScreenRecorder?
   let commandJournal = RunnerCommandJournal()
   // Coalesces duplicate transport sends of the same commandId onto the single in-flight

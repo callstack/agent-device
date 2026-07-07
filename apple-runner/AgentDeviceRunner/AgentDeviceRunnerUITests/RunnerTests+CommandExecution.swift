@@ -182,7 +182,7 @@ extension RunnerTests {
     XCTAssertNil(xctestRecordedFailureResponse(command: tapCommand, response: runnerFatalResponse))
   }
 
-  func testSkipAppActivationPreflightIncludesCoordinateOnlySynthesizedGestures() throws {
+  func testSkipAppActivationPreflightOnlyIncludesCoordinateOnlySynthesizedTaps() throws {
     currentApp = app
     currentBundleId = nil
     defer {
@@ -192,25 +192,8 @@ extension RunnerTests {
     let tap = try runnerCommandFixture(
       #"{"command":"tap","commandId":"tap-1","x":10,"y":20,"synthesized":true}"#
     )
-    let drag = try runnerCommandFixture(
-      #"{"command":"drag","commandId":"drag-1","x":10,"y":20,"x2":30,"y2":40,"synthesized":true}"#
-    )
-    let scroll = try runnerCommandFixture(
-      #"{"command":"scroll","commandId":"scroll-1","direction":"down","pixels":400}"#
-    )
-    let sequence = try runnerCommandFixture(
-      """
-      {"command":"sequence","commandId":"seq-1","steps":[
-        {"kind":"tap","x":10,"y":20,"synthesized":true},
-        {"kind":"drag","x":10,"y":200,"x2":10,"y2":100,"synthesized":true}
-      ]}
-      """
-    )
 
     XCTAssertTrue(shouldSkipAppActivationPreflight(tap))
-    XCTAssertTrue(shouldSkipAppActivationPreflight(drag))
-    XCTAssertTrue(shouldSkipAppActivationPreflight(scroll))
-    XCTAssertTrue(shouldSkipAppActivationPreflight(sequence))
   }
 
   func testSkipAppActivationPreflightRejectsSelectorAndMixedSequenceGestures() throws {
@@ -248,6 +231,33 @@ extension RunnerTests {
     )
 
     XCTAssertFalse(shouldSkipAppActivationPreflight(scroll))
+  }
+
+  func testSkipAppActivationPreflightKeepsDragScrollAndSequenceOnForegroundGuard() throws {
+    currentApp = app
+    currentBundleId = nil
+    defer {
+      currentApp = nil
+      currentBundleId = nil
+    }
+    let drag = try runnerCommandFixture(
+      #"{"command":"drag","commandId":"drag-1","x":10,"y":20,"x2":30,"y2":40,"synthesized":true}"#
+    )
+    let scroll = try runnerCommandFixture(
+      #"{"command":"scroll","commandId":"scroll-1","direction":"down","pixels":400}"#
+    )
+    let sequence = try runnerCommandFixture(
+      """
+      {"command":"sequence","commandId":"seq-1","steps":[
+        {"kind":"tap","x":10,"y":20,"synthesized":true},
+        {"kind":"drag","x":10,"y":200,"x2":10,"y2":100,"synthesized":true}
+      ]}
+      """
+    )
+
+    XCTAssertFalse(shouldSkipAppActivationPreflight(drag))
+    XCTAssertFalse(shouldSkipAppActivationPreflight(scroll))
+    XCTAssertFalse(shouldSkipAppActivationPreflight(sequence))
   }
 
   func testExecuteDispatchedReturnsBusyBeforeMainThreadFastPath() throws {
@@ -855,7 +865,9 @@ extension RunnerTests {
         y2: frame.minY + plan.y2,
         durationMs: command.durationMs,
         synthesized: shouldUseSynthesizedScrollPath(),
-        message: "scrolled"
+        message: "scrolled",
+        synthesizedReferenceFrame: frame,
+        allowSynthesizedCoordinateFallback: false
       )
     case .desktopScroll:
       guard let direction = command.direction,
@@ -1218,7 +1230,9 @@ extension RunnerTests {
     y2: Double,
     durationMs: Double?,
     synthesized: Bool,
-    message: String
+    message: String,
+    synthesizedReferenceFrame: CGRect? = nil,
+    allowSynthesizedCoordinateFallback: Bool = true
   ) -> Response {
     let commandName = dragCommandName(message: message)
     guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite else {
@@ -1234,7 +1248,9 @@ extension RunnerTests {
       x2: x2,
       y2: y2,
       durationMs: durationMs,
-      message: message
+      message: message,
+      referenceFrame: synthesizedReferenceFrame,
+      allowCoordinateFallback: allowSynthesizedCoordinateFallback
     ) {
       return synthesizedResponse
     }
@@ -1295,11 +1311,33 @@ extension RunnerTests {
     x2: Double,
     y2: Double,
     durationMs: Double?,
-    message: String
+    message: String,
+    referenceFrame: CGRect?,
+    allowCoordinateFallback: Bool
   ) -> Response? {
 #if os(iOS)
-    guard let plan = axFreeSynthesizedDragPlan(app: activeApp, x: x, y: y, x2: x2, y2: y2)
+    guard let plan = axFreeSynthesizedDragPlan(
+      app: activeApp,
+      x: x,
+      y: y,
+      x2: x2,
+      y2: y2,
+      referenceFrame: referenceFrame,
+      avoidKeyboardWhenSafe: true
+    )
     else {
+      if allowCoordinateFallback {
+        return executeCoordinateDragFallback(
+          activeApp: activeApp,
+          x: x,
+          y: y,
+          x2: x2,
+          y2: y2,
+          durationMs: durationMs,
+          message: message,
+          fallback: nil
+        )
+      }
       return Response(
         ok: false,
         error: ErrorPayload(
@@ -1323,11 +1361,24 @@ extension RunnerTests {
         y: plan.points.y,
         x2: plan.points.x2,
         y2: plan.points.y2,
-        durationMs: durationMs
+        durationMs: durationMs,
+        referenceFrame: plan.referenceFrame
       )
     }
     if case .performed = outcome {
       return gestureResponse(message: message, timing: timing, frame: .drag(dragFrame))
+    }
+    if allowCoordinateFallback {
+      return executeCoordinateDragFallback(
+        activeApp: activeApp,
+        x: plan.points.x,
+        y: plan.points.y,
+        x2: plan.points.x2,
+        y2: plan.points.y2,
+        durationMs: durationMs,
+        message: message,
+        fallback: gestureFallback(strategy: "xctest-coordinate-drag", from: outcome)
+      )
     }
     return unsupportedResponse(for: outcome)
 #else
@@ -1335,9 +1386,52 @@ extension RunnerTests {
 #endif
   }
 
+  private func executeCoordinateDragFallback(
+    activeApp: XCUIApplication,
+    x: Double,
+    y: Double,
+    x2: Double,
+    y2: Double,
+    durationMs: Double?,
+    message: String,
+    fallback: GestureFallback?
+  ) -> Response {
+    let dragPoints = keyboardAvoidingDragPoints(app: activeApp, x: x, y: y, x2: x2, y2: y2)
+    let dragFrame = resolvedDragVisualizationFrame(
+      app: activeApp,
+      x: dragPoints.x,
+      y: dragPoints.y,
+      x2: dragPoints.x2,
+      y2: dragPoints.y2
+    )
+    let holdDuration = synthesizedSwipeFallbackHoldDuration(durationMs: durationMs ?? 250)
+    let (timing, outcome) = performGesture(activeApp) {
+      dragAt(
+        app: activeApp,
+        x: dragPoints.x,
+        y: dragPoints.y,
+        x2: dragPoints.x2,
+        y2: dragPoints.y2,
+        holdDuration: holdDuration
+      )
+    }
+    if let response = unsupportedResponse(for: outcome) {
+      return response
+    }
+    return gestureResponse(
+      message: message,
+      timing: timing,
+      frame: .drag(dragFrame),
+      fallback: fallback
+    )
+  }
+
   private func scrollReferenceFrame(app: XCUIApplication) -> CGRect {
 #if os(iOS)
-    return synthesizedGestureReferenceFrame(app: app) ?? CGRect(x: 0, y: 0, width: 0, height: 0)
+    guard let frame = synthesizedGestureReferenceFrame(app: app) else {
+      return CGRect(x: 0, y: 0, width: 0, height: 0)
+    }
+    return synthesizedFrameAvoidingKeyboardWhenSafe(app: app, frame: frame)
 #else
     return resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
 #endif
@@ -1387,42 +1481,16 @@ extension RunnerTests {
 
   private func shouldSkipAppActivationPreflight(_ command: Command) -> Bool {
 #if os(iOS)
-    // Coordinate-only synthesized gestures can run after an AX-fatal screen because they do not
+    // Coordinate-only synthesized taps can run after an AX-fatal screen because they do not
     // need app activation, window lookup, keyboard lookup, or element resolution. Selector/text
     // interactions intentionally stay on the normal AX path because they need an element query.
+    // Scroll/drag/sequence keep the normal foreground guard and stabilization path.
     guard command.text == nil, command.selectorKey == nil else { return false }
     guard hasCachedTargetForActivationSkip(command: command) else { return false }
-    switch command.command {
-    case .tap:
-      return command.synthesized == true
-        && command.x != nil
-        && command.y != nil
-    case .drag:
-      return command.synthesized == true
-        && command.x != nil
-        && command.y != nil
-        && command.x2 != nil
-        && command.y2 != nil
-    case .scroll:
-      return true
-    case .sequence:
-      guard let steps = command.steps, !steps.isEmpty else { return false }
-      return steps.allSatisfy { step in
-        if step.kind == "tap" {
-          return step.synthesized == true && step.x != nil && step.y != nil
-        }
-        if step.kind == "drag" {
-          return step.synthesized == true
-            && step.x != nil
-            && step.y != nil
-            && step.x2 != nil
-            && step.y2 != nil
-        }
-        return false
-      }
-    default:
-      return false
-    }
+    return command.command == .tap
+      && command.synthesized == true
+      && command.x != nil
+      && command.y != nil
 #else
     return false
 #endif

@@ -792,7 +792,8 @@ extension RunnerTests {
     y: Double,
     x2: Double,
     y2: Double,
-    durationMs: Double
+    durationMs: Double,
+    referenceFrame: CGRect? = nil
   ) -> RunnerInteractionOutcome {
 #if os(iOS)
     guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite else {
@@ -802,7 +803,7 @@ extension RunnerTests {
       )
     }
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    guard let frame = synthesizedGestureReferenceFrame(app: app) else {
+    guard let frame = referenceFrame ?? synthesizedGestureReferenceFrame(app: app) else {
       return .unsupported(
         message: "synthesized coordinate drag could not resolve a finite screen frame",
         hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
@@ -837,7 +838,7 @@ extension RunnerTests {
 #endif
   }
 
-  func synthesizedTapAt(app: XCUIApplication, x: Double, y: Double) -> RunnerInteractionOutcome {
+  func synthesizedTapAt(app: XCUIApplication, x: Double, y: Double, referenceFrame: CGRect? = nil) -> RunnerInteractionOutcome {
 #if os(iOS)
     guard x.isFinite, y.isFinite else {
       return .unsupported(
@@ -846,7 +847,7 @@ extension RunnerTests {
       )
     }
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    guard let frame = synthesizedGestureReferenceFrame(app: app) else {
+    guard let frame = referenceFrame ?? synthesizedGestureReferenceFrame(app: app) else {
       return .unsupported(
         message: "synthesized coordinate tap could not resolve a finite screen frame",
         hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
@@ -1027,16 +1028,21 @@ extension RunnerTests {
     x: Double,
     y: Double,
     x2: Double,
-    y2: Double
+    y2: Double,
+    referenceFrame: CGRect? = nil,
+    avoidKeyboardWhenSafe: Bool = false
   ) -> SynthesizedDragPlan? {
 #if os(iOS)
     guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite,
-      let frame = synthesizedGestureReferenceFrame(app: app)
+      let frame = referenceFrame ?? synthesizedGestureReferenceFrame(app: app)
     else {
       return nil
     }
+    let points = avoidKeyboardWhenSafe
+      ? keyboardAvoidingSynthesizedDragPoints(app: app, x: x, y: y, x2: x2, y2: y2)
+      : DragPoints(x: x, y: y, x2: x2, y2: y2)
     return SynthesizedDragPlan(
-      points: DragPoints(x: x, y: y, x2: x2, y2: y2),
+      points: points,
       referenceFrame: frame
     )
 #else
@@ -1061,7 +1067,7 @@ extension RunnerTests {
     )
   }
 
-  func synthesizedGestureReferenceFrame(app _: XCUIApplication) -> CGRect? {
+  func synthesizedGestureReferenceFrame(app: XCUIApplication) -> CGRect? {
 #if os(iOS)
     return finiteSynthesizedReferenceFrame(
       appFrame: .zero,
@@ -1092,6 +1098,40 @@ extension RunnerTests {
       return nil
     }
     return CGRect(x: 0, y: 0, width: screenshotSize.width, height: screenshotSize.height)
+  }
+
+  func synthesizedFrameAvoidingKeyboardWhenSafe(app: XCUIApplication, frame: CGRect) -> CGRect {
+#if os(iOS)
+    guard shouldProbeKeyboardForSynthesizedGesture() else { return frame }
+    return frameAvoidingKeyboard(app: app, frame: frame)
+#else
+    return frame
+#endif
+  }
+
+  func keyboardAvoidingSynthesizedDragPoints(
+    app: XCUIApplication,
+    x: Double,
+    y: Double,
+    x2: Double,
+    y2: Double
+  ) -> DragPoints {
+#if os(iOS)
+    guard shouldProbeKeyboardForSynthesizedGesture() else {
+      return DragPoints(x: x, y: y, x2: x2, y2: y2)
+    }
+    return keyboardAvoidingDragPoints(app: app, x: x, y: y, x2: x2, y2: y2)
+#else
+    return DragPoints(x: x, y: y, x2: x2, y2: y2)
+#endif
+  }
+
+  private func shouldProbeKeyboardForSynthesizedGesture() -> Bool {
+#if os(iOS)
+    return !lastSnapshotHadAccessibilityUnavailable
+#else
+    return false
+#endif
   }
 
   private func isUsableReferenceFrame(_ frame: CGRect) -> Bool {
@@ -1452,7 +1492,7 @@ extension RunnerTests {
       finiteSynthesizedReferenceFrame(
         appFrame: .infinite,
         fallbackBounds: .zero,
-        fallbackScreenshotSize: { CGSize(width: .infinity, height: 932) }
+        fallbackScreenshotSize: { CGSize(width: CGFloat.infinity, height: 932) }
       )
     )
   }

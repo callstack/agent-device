@@ -166,13 +166,15 @@ extension RunnerTests {
     }
     if step.kind == "drag", step.synthesized == true {
       let dragPoints: DragPoints
+      let referenceFrame: CGRect?
 #if os(iOS)
       guard let dragPlan = axFreeSynthesizedDragPlan(
         app: activeApp,
         x: x,
         y: y,
         x2: step.x2 ?? x,
-        y2: step.y2 ?? y
+        y2: step.y2 ?? y,
+        avoidKeyboardWhenSafe: true
       ) else {
         let nowMs = ProcessInfo.processInfo.systemUptime * 1000
         return SequenceStepOutcome(
@@ -185,9 +187,11 @@ extension RunnerTests {
         )
       }
       dragPoints = dragPlan.points
+      referenceFrame = dragPlan.referenceFrame
 #else
       dragPoints = keyboardAvoidingDragPoints(
         app: activeApp, x: x, y: y, x2: step.x2 ?? x, y2: step.y2 ?? y)
+      referenceFrame = nil
 #endif
       let durationMs = min(max(step.durationMs ?? 250, 16), 10000)
       let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
@@ -197,7 +201,8 @@ extension RunnerTests {
           y: dragPoints.y,
           x2: dragPoints.x2,
           y2: dragPoints.y2,
-          durationMs: durationMs
+          durationMs: durationMs,
+          referenceFrame: referenceFrame
         )
       }
       if case .performed = outcome {
