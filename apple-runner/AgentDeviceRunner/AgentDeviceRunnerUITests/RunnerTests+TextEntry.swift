@@ -477,7 +477,12 @@ extension RunnerTests {
       expectedText: expectedText,
       repairMode: repairMode
     ) else {
-      return initialResult
+      return verifyTextEntry(
+        app: app,
+        target: target,
+        expectedText: expectedText,
+        repaired: false
+      )
     }
 
     guard let repairTarget = resolveTextEntryElement(app: app, target: target) else {
