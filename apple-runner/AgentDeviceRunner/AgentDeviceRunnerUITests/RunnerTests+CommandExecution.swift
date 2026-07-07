@@ -213,6 +213,34 @@ extension RunnerTests {
     XCTAssertEqual(response.error?.code, "RUNNER_WEDGED")
     XCTAssertTrue(response.error?.hint?.contains("runner session will be restarted") == true)
   }
+
+  func testRunMainThreadWorkExecutesOffMainCallerOnMainThread() {
+    final class ResultBox {
+      var observedMainThread: Bool?
+      var error: Error?
+    }
+    let box = ResultBox()
+    let finished = expectation(description: "off-main caller finished")
+
+    DispatchQueue(label: "agent-device.runner.tests.off-main").async {
+      do {
+        box.observedMainThread = try self.runMainThreadWork(
+          command: nil,
+          timeout: 1,
+          timeoutError: self.mainThreadExecutionTimeoutError
+        ) {
+          Thread.isMainThread
+        }
+      } catch {
+        box.error = error
+      }
+      finished.fulfill()
+    }
+
+    wait(for: [finished], timeout: 2)
+    XCTAssertNil(box.error)
+    XCTAssertEqual(box.observedMainThread, true)
+  }
 #endif
 
   func execute(command: Command) throws -> Response {
@@ -270,6 +298,15 @@ extension RunnerTests {
   private final class MainThreadWorkState {
     var finished = false
     var abandoned = false
+  }
+
+  struct ActiveCommandContext {
+    let app: XCUIApplication
+  }
+
+  enum ActiveCommandPreparation {
+    case response(Response)
+    case context(ActiveCommandContext)
   }
 
   enum MainThreadBusyState {
@@ -343,12 +380,35 @@ extension RunnerTests {
     if Thread.isMainThread {
       return try executeOnMainSafely(command: command)
     }
-    var result: Result<Response, Error>?
+    if command.command == .snapshot {
+      return try executeSnapshotDispatched(command: command)
+    }
+    return try runMainThreadWork(
+      command: command,
+      timeout: mainThreadExecutionTimeout,
+      timeoutError: mainThreadExecutionTimeoutError
+    ) {
+      try self.executeOnMainSafely(command: command)
+    }
+  }
+
+  func runMainThreadWork<T>(
+    command: Command?,
+    timeout: TimeInterval,
+    timeoutError: @escaping () -> Error,
+    onAbandoned: (() -> Void)? = nil,
+    onDrained: (() -> Void)? = nil,
+    _ work: @escaping () throws -> T
+  ) throws -> T {
+    if Thread.isMainThread {
+      return try work()
+    }
+    var result: Result<T, Error>?
     let semaphore = DispatchSemaphore(value: 0)
     let workState = MainThreadWorkState()
     DispatchQueue.main.async {
       do {
-        result = .success(try self.executeOnMainSafely(command: command))
+        result = .success(try work())
       } catch {
         result = .failure(error)
       }
@@ -359,15 +419,16 @@ extension RunnerTests {
           self.abandonedMainThreadWorkSince = nil
           NSLog("AGENT_DEVICE_RUNNER_ABANDONED_WORK_DRAINED")
         }
+        self.mainThreadWorkLock.unlock()
+        onDrained?()
       } else {
         workState.finished = true
+        self.mainThreadWorkLock.unlock()
       }
-      self.mainThreadWorkLock.unlock()
       semaphore.signal()
     }
-    let waitResult = semaphore.wait(timeout: .now() + mainThreadExecutionTimeout)
+    let waitResult = semaphore.wait(timeout: .now() + timeout)
     if waitResult == .timedOut {
-      // The main queue work may still be running; we stop waiting and report timeout.
       mainThreadWorkLock.lock()
       let stillRunning = !workState.finished
       if stillRunning {
@@ -376,24 +437,14 @@ extension RunnerTests {
         if abandonedMainThreadWorkSince == nil {
           abandonedMainThreadWorkSince = Date()
         }
+        onAbandoned?()
       }
       mainThreadWorkLock.unlock()
-      if stillRunning && command.command == .snapshot {
-        // The next capture on this screen must not re-grind the tree backend.
-        penalizeSnapshotTreeBackend(
-          bundleId: command.appBundleId,
-          reason: "main_thread_watchdog"
-        )
-      }
-      throw NSError(
-        domain: RunnerErrorDomain.general,
-        code: RunnerErrorCode.mainThreadExecutionTimedOut,
-        userInfo: [NSLocalizedDescriptionKey: "main thread execution timed out"]
-      )
+      throw timeoutError()
     }
     switch result {
-    case .success(let response):
-      return response
+    case .success(let value):
+      return value
     case .failure(let error):
       throw error
     case .none:
@@ -403,6 +454,14 @@ extension RunnerTests {
         userInfo: [NSLocalizedDescriptionKey: "no response from main thread"]
       )
     }
+  }
+
+  private func mainThreadExecutionTimeoutError() -> Error {
+    NSError(
+      domain: RunnerErrorDomain.general,
+      code: RunnerErrorCode.mainThreadExecutionTimedOut,
+      userInfo: [NSLocalizedDescriptionKey: "main thread execution timed out"]
+    )
   }
 
   // MARK: - Command Handling
@@ -468,68 +527,145 @@ extension RunnerTests {
     }
   }
 
-  private func executeOnMain(command: Command) throws -> Response {
-    var activeApp = currentApp ?? app
-    if shouldSkipAppActivationPreflight(command) {
-      activeApp = resolveAppWithoutActivation(command: command)
-    } else if !isRunnerLifecycleCommand(command.command) {
-      let normalizedBundleId = command.appBundleId?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-      let requestedBundleId = (normalizedBundleId?.isEmpty == true) ? nil : normalizedBundleId
-      if let bundleId = requestedBundleId {
-        if currentBundleId != bundleId || currentApp == nil {
-          _ = activateTarget(bundleId: bundleId, reason: "bundle_changed")
-        }
-      } else {
-        // Do not reuse stale bundle targets when the caller does not explicitly request one.
-        currentApp = nil
-        currentBundleId = nil
+  private func executeSnapshotDispatched(command: Command) throws -> Response {
+    var hasRetried = false
+    while true {
+      let failureCountBefore = try runMainThreadWork(
+        command: command,
+        timeout: mainThreadExecutionTimeout,
+        timeoutError: mainThreadExecutionTimeoutError
+      ) {
+        self.currentXCTestFailureCount()
       }
-
-      activeApp = currentApp ?? app
-      if let bundleId = requestedBundleId, targetNeedsActivation(activeApp) {
-        activeApp = activateTarget(bundleId: bundleId, reason: "stale_target")
-      } else if requestedBundleId == nil, targetNeedsActivation(activeApp) {
-        ensureRunnerHostAppActive(reason: "missing_app_bundle")
-        activeApp = app
+      let response = try executeSnapshotDispatchedOnce(command: command)
+      let recordedFailureResponse = try runMainThreadWork(
+        command: command,
+        timeout: mainThreadExecutionTimeout,
+        timeoutError: mainThreadExecutionTimeoutError
+      ) {
+        self.didRecordXCTestFailure(since: failureCountBefore)
+          ? self.xctestRecordedFailureResponse(command: command, response: response)
+          : nil
       }
-
-      let skipExistenceWait = canUseFastForegroundAppGuard(
-        activeApp: activeApp,
-        requestedBundleId: requestedBundleId,
-        command: command.command
-      )
-      if !skipExistenceWait && !activeApp.waitForExistence(timeout: appExistenceTimeout) {
-        if let bundleId = requestedBundleId {
-          activeApp = activateTarget(bundleId: bundleId, reason: "missing_after_wait")
-          guard activeApp.waitForExistence(timeout: appExistenceTimeout) else {
-            return Response(ok: false, error: ErrorPayload(message: "app '\(bundleId)' is not available"))
-          }
-        } else {
-          return Response(ok: false, error: ErrorPayload(message: "runner app is not available"))
+      if let recordedFailureResponse {
+        try runMainThreadWork(
+          command: command,
+          timeout: mainThreadExecutionTimeout,
+          timeoutError: mainThreadExecutionTimeoutError
+        ) {
+          self.invalidateCachedTarget(reason: "xctest_recorded_failure")
         }
+        return recordedFailureResponse
       }
-
-      if isInteractionCommand(command.command) {
-        if let bundleId = requestedBundleId, activeApp.state != .runningForeground {
-          activeApp = activateTarget(bundleId: bundleId, reason: "interaction_foreground_guard")
-        } else if requestedBundleId == nil, activeApp.state != .runningForeground {
-          ensureRunnerHostAppActive(reason: "interaction_missing_app_bundle")
-          activeApp = app
-        }
-        let skipInteractionExistenceWait = canUseFastForegroundAppGuard(
-          activeApp: activeApp,
-          requestedBundleId: requestedBundleId,
-          command: command.command
+      if !hasRetried, shouldRetryCommand(command), shouldRetryResponse(response) {
+        NSLog(
+          "AGENT_DEVICE_RUNNER_RETRY command=%@ reason=response_unavailable",
+          command.command.rawValue
         )
-        if !skipInteractionExistenceWait && !activeApp.waitForExistence(timeout: 2) {
-          if let bundleId = requestedBundleId {
-            return Response(ok: false, error: ErrorPayload(message: "app '\(bundleId)' is not available"))
-          }
-          return Response(ok: false, error: ErrorPayload(message: "runner app is not available"))
+        hasRetried = true
+        try runMainThreadWork(
+          command: command,
+          timeout: mainThreadExecutionTimeout,
+          timeoutError: mainThreadExecutionTimeoutError
+        ) {
+          self.invalidateCachedTarget(reason: "response_unavailable")
+          self.sleepFor(self.retryCooldown)
         }
-        applyInteractionStabilizationIfNeeded()
+        continue
       }
+      return response
+    }
+  }
+
+  private func executeSnapshotDispatchedOnce(command: Command) throws -> Response {
+    let preparation = try runMainThreadWork(
+      command: command,
+      timeout: mainThreadExecutionTimeout,
+      timeoutError: mainThreadExecutionTimeoutError
+    ) {
+      self.prepareActiveCommandContext(command: command)
+    }
+    switch preparation {
+    case .response(let response):
+      return response
+    case .context(let context):
+      return try executeSnapshotPrepared(command: command, activeApp: context.app)
+    }
+  }
+
+  private func executeSnapshotPrepared(command: Command, activeApp: XCUIApplication) throws -> Response {
+    let options = SnapshotOptions(
+      interactiveOnly: command.interactiveOnly ?? false,
+      depth: command.depth,
+      scope: command.scope,
+      raw: command.raw ?? false
+    )
+    do {
+      let payload: DataPayload
+      if options.raw {
+        payload = try snapshotRaw(app: activeApp, options: options)
+      } else {
+        payload = try snapshotFast(app: activeApp, options: options)
+      }
+      setNeedsPostSnapshotInteractionDelay()
+      return Response(ok: true, data: payload)
+    } catch let failure as SnapshotCaptureFailure {
+      invalidateCachedTargetAfterSnapshotFailure()
+      return Response(
+        ok: false,
+        error: ErrorPayload(
+          code: failure.code,
+          message: failure.message,
+          hint: failure.hint
+        )
+      )
+    }
+  }
+
+  private func setNeedsPostSnapshotInteractionDelay() {
+    if Thread.isMainThread {
+      needsPostSnapshotInteractionDelay = true
+      return
+    }
+    do {
+      try runMainThreadWork(
+        command: nil,
+        timeout: 1,
+        timeoutError: mainThreadExecutionTimeoutError
+      ) {
+        self.needsPostSnapshotInteractionDelay = true
+      }
+    } catch {
+      NSLog("AGENT_DEVICE_RUNNER_POST_SNAPSHOT_DELAY_MARK_FAILED=%@", String(describing: error))
+    }
+  }
+
+  private func invalidateCachedTargetAfterSnapshotFailure() {
+    if Thread.isMainThread {
+      invalidateCachedTarget(reason: "ax_snapshot_failure")
+      return
+    }
+    do {
+      try runMainThreadWork(
+        command: nil,
+        timeout: 1,
+        timeoutError: mainThreadExecutionTimeoutError
+      ) {
+        self.invalidateCachedTarget(reason: "ax_snapshot_failure")
+      }
+    } catch {
+      NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_INVALIDATION_FAILED=%@", String(describing: error))
+    }
+  }
+
+  private func executeOnMain(command: Command) throws -> Response {
+    let preparation = prepareActiveCommandContext(command: command)
+    let activeApp: XCUIApplication
+    switch preparation {
+    case .response(let response):
+      return response
+    case .context(let context):
+      activeApp = context.app
     }
 
     switch command.command {
@@ -599,6 +735,89 @@ extension RunnerTests {
       }
     case .uptime:
       return executeUptime()
+    default:
+      break
+    }
+    return try executeOnMainPrepared(command: command, activeApp: activeApp)
+  }
+
+  private func prepareActiveCommandContext(command: Command) -> ActiveCommandPreparation {
+    var activeApp = currentApp ?? app
+    if shouldSkipAppActivationPreflight(command) {
+      activeApp = resolveAppWithoutActivation(command: command)
+    } else if !isRunnerLifecycleCommand(command.command) {
+      let normalizedBundleId = command.appBundleId?
+        .trimmingCharacters(in: .whitespacesAndNewlines)
+      let requestedBundleId = (normalizedBundleId?.isEmpty == true) ? nil : normalizedBundleId
+      if let bundleId = requestedBundleId {
+        if currentBundleId != bundleId || currentApp == nil {
+          _ = activateTarget(bundleId: bundleId, reason: "bundle_changed")
+        }
+      } else {
+        // Do not reuse stale bundle targets when the caller does not explicitly request one.
+        currentApp = nil
+        currentBundleId = nil
+      }
+
+      activeApp = currentApp ?? app
+      if let bundleId = requestedBundleId, targetNeedsActivation(activeApp) {
+        activeApp = activateTarget(bundleId: bundleId, reason: "stale_target")
+      } else if requestedBundleId == nil, targetNeedsActivation(activeApp) {
+        ensureRunnerHostAppActive(reason: "missing_app_bundle")
+        activeApp = app
+      }
+
+      let skipExistenceWait = canUseFastForegroundAppGuard(
+        activeApp: activeApp,
+        requestedBundleId: requestedBundleId,
+        command: command.command
+      )
+      if !skipExistenceWait && !activeApp.waitForExistence(timeout: appExistenceTimeout) {
+        if let bundleId = requestedBundleId {
+          activeApp = activateTarget(bundleId: bundleId, reason: "missing_after_wait")
+          guard activeApp.waitForExistence(timeout: appExistenceTimeout) else {
+            return .response(Response(ok: false, error: ErrorPayload(message: "app '\(bundleId)' is not available")))
+          }
+        } else {
+          return .response(Response(ok: false, error: ErrorPayload(message: "runner app is not available")))
+        }
+      }
+
+      if isInteractionCommand(command.command) {
+        if let bundleId = requestedBundleId, activeApp.state != .runningForeground {
+          activeApp = activateTarget(bundleId: bundleId, reason: "interaction_foreground_guard")
+        } else if requestedBundleId == nil, activeApp.state != .runningForeground {
+          ensureRunnerHostAppActive(reason: "interaction_missing_app_bundle")
+          activeApp = app
+        }
+        let skipInteractionExistenceWait = canUseFastForegroundAppGuard(
+          activeApp: activeApp,
+          requestedBundleId: requestedBundleId,
+          command: command.command
+        )
+        if !skipInteractionExistenceWait && !activeApp.waitForExistence(timeout: 2) {
+          if let bundleId = requestedBundleId {
+            return .response(Response(ok: false, error: ErrorPayload(message: "app '\(bundleId)' is not available")))
+          }
+          return .response(Response(ok: false, error: ErrorPayload(message: "runner app is not available")))
+        }
+        applyInteractionStabilizationIfNeeded()
+      }
+    }
+    return .context(ActiveCommandContext(app: activeApp))
+  }
+
+  private func executeOnMainPrepared(command: Command, activeApp: XCUIApplication) throws -> Response {
+    var activeApp = activeApp
+    switch command.command {
+    case .status, .shutdown, .recordStart, .recordStop, .uptime:
+      return Response(
+        ok: false,
+        error: ErrorPayload(
+          code: "UNSUPPORTED_OPERATION",
+          message: "\(command.command.rawValue) cannot be executed through the prepared command path"
+        )
+      )
     case .tap:
       if let selectorKey = command.selectorKey, let selectorValue = command.selectorValue {
         let match = findElement(
@@ -921,33 +1140,7 @@ extension RunnerTests {
       }
       return Response(ok: true, data: DataPayload(text: text))
     case .snapshot:
-      let options = SnapshotOptions(
-        interactiveOnly: command.interactiveOnly ?? false,
-        depth: command.depth,
-        scope: command.scope,
-        raw: command.raw ?? false
-      )
-      do {
-        let payload: DataPayload
-        if options.raw {
-          payload = try snapshotRaw(app: activeApp, options: options)
-        } else {
-          payload = try snapshotFast(app: activeApp, options: options)
-        }
-        needsPostSnapshotInteractionDelay = true
-        return Response(ok: true, data: payload)
-      } catch let failure as SnapshotCaptureFailure {
-        invalidateCachedTarget(reason: "ax_snapshot_failure")
-        // Other thrown errors fall through to executeOnMainSafely's generic error response.
-        return Response(
-          ok: false,
-          error: ErrorPayload(
-            code: failure.code,
-            message: failure.message,
-            hint: failure.hint
-          )
-        )
-      }
+      return try executeSnapshotPrepared(command: command, activeApp: activeApp)
     case .screenshot:
       let screenshot: XCUIScreenshot
 #if os(macOS)

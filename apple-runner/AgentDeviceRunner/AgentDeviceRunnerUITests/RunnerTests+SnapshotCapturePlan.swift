@@ -261,15 +261,25 @@ extension RunnerTests {
       else {
         return nil
       }
-      let payload = options.raw
-        ? try rawTreeSnapshotPayload(context: context, options: options)
-        : recursiveTreeSnapshotPayload(context: context, options: options)
+      let payload = try runMainThreadWork(
+        command: nil,
+        timeout: min(treeCaptureSliceBudget, max(0.5, deadline.timeIntervalSinceNow)),
+        timeoutError: snapshotMainThreadTimeoutError("processing tree snapshot")
+      ) {
+        options.raw
+          ? try self.rawTreeSnapshotPayload(context: context, options: options)
+          : self.recursiveTreeSnapshotPayload(context: context, options: options)
+      }
       return SnapshotBackendCapture(payload: payload, effectiveDepth: nil)
     case .querySweep:
-      return SnapshotBackendCapture(
-        payload: snapshotFlatInteractive(app: app, options: options, planDeadline: deadline),
-        effectiveDepth: nil
-      )
+      let payload = try runMainThreadWork(
+        command: nil,
+        timeout: min(Self.flatInteractiveFallbackBudget, max(0.1, deadline.timeIntervalSinceNow)),
+        timeoutError: snapshotMainThreadTimeoutError("running query-sweep snapshot")
+      ) {
+        self.snapshotFlatInteractive(app: app, options: options, planDeadline: deadline)
+      }
+      return SnapshotBackendCapture(payload: payload, effectiveDepth: nil)
     case .privateAX:
       return privateAXSnapshotCapture(app: app, options: options, deadline: deadline)
     }

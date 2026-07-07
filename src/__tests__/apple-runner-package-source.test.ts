@@ -8,6 +8,10 @@ import { runCmd } from '../utils/exec.ts';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const packageScript = path.join(repoRoot, 'scripts', 'package-apple-runner-source.mjs');
+const runnerSnapshotSwiftPath = path.join(
+  repoRoot,
+  'apple-runner/AgentDeviceRunner/AgentDeviceRunnerUITests/RunnerTests+Snapshot.swift',
+);
 
 test('package apple runner source strips unit-test blocks without mutating checkout source', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-runner-package-'));
@@ -82,8 +86,32 @@ test('package apple runner source strips unit-test blocks without mutating check
   );
 });
 
+test('apple runner tree snapshot capture stays on the main queue', () => {
+  const source = fs.readFileSync(runnerSnapshotSwiftPath, 'utf8');
+  const boundedCapture = extractSwiftFunction(source, 'captureSnapshotRootBounded');
+
+  assert.doesNotMatch(boundedCapture, /DispatchQueue\.global/);
+  assert.match(boundedCapture, /runMainThreadWork/);
+  assert.match(boundedCapture, /captureSnapshotRoot\(element\)/);
+});
+
 function writeFixtureFile(root: string, relativePath: string, contents: string): void {
   const filePath = path.join(root, relativePath);
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
   fs.writeFileSync(filePath, contents);
+}
+
+function extractSwiftFunction(source: string, name: string): string {
+  const signatureIndex = source.indexOf(`func ${name}`);
+  assert.notEqual(signatureIndex, -1, `missing Swift function ${name}`);
+  const bodyStart = source.indexOf('{', signatureIndex);
+  assert.notEqual(bodyStart, -1, `missing Swift function body ${name}`);
+  let depth = 0;
+  for (let index = bodyStart; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '{') depth += 1;
+    if (char === '}') depth -= 1;
+    if (depth === 0) return source.slice(signatureIndex, index + 1);
+  }
+  assert.fail(`unterminated Swift function ${name}`);
 }

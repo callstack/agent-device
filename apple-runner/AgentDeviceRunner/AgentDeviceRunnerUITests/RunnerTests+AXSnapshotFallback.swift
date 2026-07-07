@@ -57,14 +57,8 @@ extension RunnerTests {
         return nil
       }
 
-      // If the app frame is unavailable, the private root's own frame is the reliable screen
-      // rect here. Avoid public window queries: stale transient windows can record XCTest
-      // failures after the runner already returned a successful command response.
-      var viewport = safeSnapshotViewport(app: app)
       let rootFrame = privateAXRect(root["frame"])
-      if viewport.isInfinite || viewport.isNull || viewport.isEmpty, !rootFrame.isEmpty {
-        viewport = rootFrame
-      }
+      let viewport = privateAXSnapshotViewport(app: app, rootFrame: rootFrame)
       var nodes: [SnapshotNode] = []
       appendPrivateAXNode(
         root,
@@ -93,6 +87,29 @@ extension RunnerTests {
     #else
       return nil
     #endif
+  }
+
+  private func privateAXSnapshotViewport(app: XCUIApplication, rootFrame: CGRect) -> CGRect {
+    let fallback = rootFrame.isEmpty ? CGRect.infinite : rootFrame
+    guard !hasAbandonedTreeCapture() else {
+      return fallback
+    }
+    do {
+      let viewport = try runMainThreadWork(
+        command: nil,
+        timeout: 1,
+        timeoutError: snapshotMainThreadTimeoutError("reading private AX viewport")
+      ) {
+        self.safeSnapshotViewport(app: app)
+      }
+      if viewport.isInfinite || viewport.isNull || viewport.isEmpty {
+        return fallback
+      }
+      return viewport
+    } catch {
+      NSLog("AGENT_DEVICE_RUNNER_PRIVATE_AX_VIEWPORT_FALLBACK=%@", String(describing: error))
+      return fallback
+    }
   }
 
   private func appendPrivateAXNode(

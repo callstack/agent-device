@@ -99,7 +99,7 @@ extension RunnerTests {
     .table
   ]
 
-  private static let flatInteractiveFallbackBudget: TimeInterval = 1.0
+  static let flatInteractiveFallbackBudget: TimeInterval = 1.0
 
   func snapshotFast(app: XCUIApplication, options: SnapshotOptions) throws -> DataPayload {
     if let blocking = blockingSystemAlertSnapshot() {
@@ -572,8 +572,16 @@ extension RunnerTests {
     options: SnapshotOptions,
     captureDeadline: Date = .distantFuture
   ) throws -> SnapshotTraversalContext? {
-    let viewport = safeSnapshotViewport(app: app)
-    let queryRoot = options.scope.flatMap { findScopeElement(app: app, scope: $0) } ?? app
+    let (viewport, queryRoot) = try runMainThreadWork(
+      command: nil,
+      timeout: min(1.0, max(0.1, captureDeadline.timeIntervalSinceNow)),
+      timeoutError: snapshotMainThreadTimeoutError("preparing tree snapshot")
+    ) {
+      (
+        self.safeSnapshotViewport(app: app),
+        options.scope.flatMap { self.findScopeElement(app: app, scope: $0) } ?? app
+      )
+    }
 
     let slice = min(treeCaptureSliceBudget, max(0.5, captureDeadline.timeIntervalSinceNow))
     guard let rootSnapshot = try captureSnapshotRootBounded(queryRoot, sliceSeconds: slice) else {
@@ -599,63 +607,59 @@ extension RunnerTests {
     return abandonedTreeCaptureCount > 0
   }
 
-  /// Runs the blocking tree-snapshot XPC on a worker thread bounded by `sliceSeconds`. On
-  /// timeout the XPC keeps running on its worker (it cannot be cancelled); the capture is
-  /// marked abandoned so plans avoid XCTest-backed tiers until it drains, the tree backend is
-  /// penalized for this bundle, and the plan moves on to the private AX backend (#1105).
+  /// Runs the blocking tree-snapshot XPC on the main thread bounded by `sliceSeconds`. On
+  /// timeout the XPC keeps running on main (it cannot be cancelled); the capture is marked
+  /// abandoned so plans avoid XCTest-backed tiers until it drains, the tree backend is penalized
+  /// for this bundle, and the plan moves on to the private AX backend (#1105/#1122).
   private func captureSnapshotRootBounded(
     _ element: XCUIElement,
     sliceSeconds: TimeInterval
   ) throws -> XCUIElementSnapshot? {
-    final class TreeCaptureBox {
-      var abandoned = false
-      var outcome: Result<XCUIElementSnapshot?, Error>?
+    if Thread.isMainThread {
+      return try captureSnapshotRoot(element)
     }
-    let box = TreeCaptureBox()
-    let semaphore = DispatchSemaphore(value: 0)
-    DispatchQueue.global(qos: .userInitiated).async {
-      var result: Result<XCUIElementSnapshot?, Error>
-      do {
-        result = .success(try self.captureSnapshotRoot(element))
-      } catch {
-        result = .failure(error)
-      }
-      self.treeCaptureLock.lock()
-      if box.abandoned {
+    return try runMainThreadWork(
+      command: nil,
+      timeout: sliceSeconds,
+      timeoutError: treeCaptureTimeoutError(sliceSeconds: sliceSeconds),
+      onAbandoned: {
+        self.treeCaptureLock.lock()
+        self.abandonedTreeCaptureCount += 1
+        self.treeCaptureLock.unlock()
+        NSLog("AGENT_DEVICE_RUNNER_TREE_CAPTURE_SLICE_TIMEOUT slice=%.1f", sliceSeconds)
+        self.penalizeSnapshotTreeBackend(
+          bundleId: self.currentBundleId,
+          reason: "tree_capture_slice_timeout"
+        )
+      },
+      onDrained: {
+        self.treeCaptureLock.lock()
         self.abandonedTreeCaptureCount -= 1
         self.treeCaptureLock.unlock()
         NSLog("AGENT_DEVICE_RUNNER_TREE_CAPTURE_DRAINED")
-      } else {
-        box.outcome = result
-        self.treeCaptureLock.unlock()
       }
-      semaphore.signal()
+    ) {
+      try self.captureSnapshotRoot(element)
     }
-    if semaphore.wait(timeout: .now() + sliceSeconds) == .timedOut {
-      treeCaptureLock.lock()
-      let timedOut = box.outcome == nil
-      if timedOut {
-        box.abandoned = true
-        abandonedTreeCaptureCount += 1
-      }
-      treeCaptureLock.unlock()
-      if timedOut {
-        NSLog("AGENT_DEVICE_RUNNER_TREE_CAPTURE_SLICE_TIMEOUT slice=%.1f", sliceSeconds)
-        penalizeSnapshotTreeBackend(bundleId: currentBundleId, reason: "tree_capture_slice_timeout")
-        throw SnapshotCaptureFailure(
-          code: Self.treeCaptureTimeoutCode,
-          message: "the XCTest tree capture exceeded its \(Int(sliceSeconds))s time slice",
-          hint: "The capture plan recovers through the private AX backend on this screen."
-        )
-      }
+  }
+
+  private func treeCaptureTimeoutError(sliceSeconds: TimeInterval) -> () -> Error {
+    {
+      SnapshotCaptureFailure(
+        code: Self.treeCaptureTimeoutCode,
+        message: "the XCTest tree capture exceeded its \(Int(sliceSeconds))s time slice",
+        hint: "The capture plan recovers through the private AX backend on this screen."
+      )
     }
-    switch box.outcome {
-    case .success(let snapshot):
-      return snapshot
-    case .failure(let error):
-      throw error
-    case .none:
-      return nil
+  }
+
+  func snapshotMainThreadTimeoutError(_ operation: String) -> () -> Error {
+    {
+      SnapshotCaptureFailure(
+        code: Self.treeCaptureTimeoutCode,
+        message: "timed out while \(operation) on the XCTest main thread",
+        hint: "The capture plan will skip XCTest-backed snapshot tiers while the previous main-thread work drains."
+      )
     }
   }
 
