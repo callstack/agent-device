@@ -205,6 +205,20 @@ test('parseUiHierarchy excludes Android nodes that are not visible to the user',
   );
 });
 
+test('parseUiHierarchy keeps focused non-clickable Android TV nodes in interactive snapshots', () => {
+  const xml = `<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][960,540]" enabled="true" visible-to-user="true">
+    <node class="android.widget.TextView" text="Featured" bounds="[80,80][360,160]" clickable="false" focusable="true" focused="true" enabled="true" visible-to-user="true"/>
+  </node>
+</hierarchy>`;
+
+  const result = parseUiHierarchy(xml, 800, { interactiveOnly: true });
+  const focused = result.nodes.find((node) => node.label === 'Featured');
+
+  assert.equal(focused?.focused, true);
+  assert.equal(focused?.hittable, false);
+});
+
 test('parseUiHierarchy prunes Android nodes that are not visible to the user in raw snapshots', () => {
   const xml = `<hierarchy>
   <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" enabled="true" visible-to-user="true">

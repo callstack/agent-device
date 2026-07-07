@@ -173,6 +173,7 @@ function appendAndroidSnapshotNode(
     bundleId: node.packageName ?? undefined,
     rect: node.rect,
     enabled: node.enabled,
+    focused: node.focused,
     visibleToUser: node.visibleToUser,
     hittable: node.hittable,
     depth,
@@ -422,6 +423,7 @@ export type AndroidUiHierarchy = {
   enabled?: boolean;
   visibleToUser?: boolean;
   drawingOrder?: number;
+  focused?: boolean;
   hittable?: boolean;
   depth: number;
   parentIndex?: number;
@@ -490,6 +492,7 @@ export function parseUiHierarchyTree(xml: string): AndroidUiHierarchy {
       packageName: attrs.packageName,
       rect: attrs.rect,
       enabled: attrs.enabled,
+      focused: attrs.focused,
       visibleToUser: attrs.visibleToUser,
       drawingOrder: attrs.drawingOrder,
       hittable: attrs.clickable ?? attrs.focusable,
@@ -735,6 +738,7 @@ function shouldIncludeInteractiveAndroidNode(
   ancestorCollection: boolean,
 ): boolean {
   if (hasNonPositiveRect(node)) return false;
+  if (node.focused) return true;
   if (node.hittable) return true;
   if (isScrollableType(info.type) && descendantHittable) return true;
   return shouldIncludeInteractiveProxyNode(

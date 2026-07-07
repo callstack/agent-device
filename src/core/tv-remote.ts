@@ -6,60 +6,53 @@ type TvRemoteButtonDefinition = {
   aliases: readonly string[];
   androidKeyevent: string;
   appleRemoteButton: string;
-  durationMode: {
-    android: TvRemoteDurationMode;
-    apple: TvRemoteDurationMode;
-  };
 };
+
+const TV_REMOTE_DURATION_MODE = {
+  android: 'longpress',
+  apple: 'exact',
+} as const satisfies Record<string, TvRemoteDurationMode>;
 
 const TV_REMOTE_BUTTON_DEFINITIONS = {
   up: {
     aliases: [],
     androidKeyevent: 'KEYCODE_DPAD_UP',
     appleRemoteButton: 'up',
-    durationMode: { android: 'longpress', apple: 'exact' },
   },
   down: {
     aliases: [],
     androidKeyevent: 'KEYCODE_DPAD_DOWN',
     appleRemoteButton: 'down',
-    durationMode: { android: 'longpress', apple: 'exact' },
   },
   left: {
     aliases: [],
     androidKeyevent: 'KEYCODE_DPAD_LEFT',
     appleRemoteButton: 'left',
-    durationMode: { android: 'longpress', apple: 'exact' },
   },
   right: {
     aliases: [],
     androidKeyevent: 'KEYCODE_DPAD_RIGHT',
     appleRemoteButton: 'right',
-    durationMode: { android: 'longpress', apple: 'exact' },
   },
   select: {
     aliases: ['ok', 'center', 'enter'],
     androidKeyevent: 'KEYCODE_DPAD_CENTER',
     appleRemoteButton: 'select',
-    durationMode: { android: 'longpress', apple: 'exact' },
   },
   menu: {
     aliases: [],
     androidKeyevent: 'KEYCODE_MENU',
     appleRemoteButton: 'menu',
-    durationMode: { android: 'longpress', apple: 'exact' },
   },
   home: {
     aliases: [],
     androidKeyevent: 'KEYCODE_HOME',
     appleRemoteButton: 'home',
-    durationMode: { android: 'longpress', apple: 'exact' },
   },
   back: {
     aliases: [],
     androidKeyevent: 'KEYCODE_BACK',
     appleRemoteButton: 'menu',
-    durationMode: { android: 'longpress', apple: 'exact' },
   },
 } as const satisfies Record<string, TvRemoteButtonDefinition>;
 
@@ -98,9 +91,9 @@ export function toAndroidTvRemoteKeyevent(button: TvRemoteButton): string {
 }
 
 export function tvRemoteDurationMode(
-  platform: keyof TvRemoteButtonDefinition['durationMode'],
+  platform: keyof typeof TV_REMOTE_DURATION_MODE,
 ): TvRemoteDurationMode {
-  return TV_REMOTE_BUTTON_DEFINITIONS.select.durationMode[platform];
+  return TV_REMOTE_DURATION_MODE[platform];
 }
 
 const TV_REMOTE_BUTTON_ALIAS_MAP = new Map<string, TvRemoteButton>(

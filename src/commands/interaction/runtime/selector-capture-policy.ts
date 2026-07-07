@@ -1,5 +1,5 @@
-import type { SelectorChain } from '../../../utils/selectors-parse.ts';
 import type { IsPredicate } from '../../../utils/selector-is-predicates.ts';
+import type { SelectorChain } from '../../../utils/selectors-parse.ts';
 
 export type SelectorCapturePolicyInput = {
   predicate?: IsPredicate;
@@ -17,14 +17,8 @@ export function deriveSelectorCapturePolicy(
   const includeRects = predicateNeedsRects(input.predicate);
   return {
     includeRects,
-    interactiveOnly:
-      input.predicate === 'focused' ||
-      (input.selectorChain ? selectorChainReadsFocus(input.selectorChain) : false),
+    interactiveOnly: false,
   };
-}
-
-function selectorChainReadsFocus(chain: SelectorChain): boolean {
-  return chain.selectors.some((selector) => selector.terms.some((term) => term.key === 'focused'));
 }
 
 function predicateNeedsRects(predicate: IsPredicate | undefined): boolean {

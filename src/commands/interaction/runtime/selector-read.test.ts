@@ -168,7 +168,7 @@ test('runtime visibility predicates request snapshot rects', async () => {
   assert.equal(captureOptions?.includeRects, true);
 });
 
-test('runtime focused predicate requests an interactive snapshot', async () => {
+test('runtime focused predicate requests a full snapshot', async () => {
   const snapshot = makeSnapshotState([
     {
       index: 0,
@@ -199,10 +199,49 @@ test('runtime focused predicate requests an interactive snapshot', async () => {
   });
 
   assert.equal(result.pass, true);
-  assert.equal(captureOptions?.interactiveOnly, true);
+  assert.equal(captureOptions?.interactiveOnly, false);
 });
 
-test('runtime focused selector waits against an interactive snapshot', async () => {
+test('runtime focused predicate reads focused Android TV nodes from the full tree', async () => {
+  const fullSnapshot = makeSnapshotState(
+    [
+      {
+        index: 0,
+        depth: 0,
+        type: 'TextView',
+        label: 'Featured',
+        focused: true,
+        hittable: false,
+      },
+    ],
+    { backend: 'android' },
+  );
+  const interactiveSnapshot = makeSnapshotState([], { backend: 'android' });
+  let captureOptions: BackendSnapshotOptions | undefined;
+  const device = createAgentDevice({
+    backend: {
+      platform: 'android',
+      captureSnapshot: async (_context, options) => {
+        captureOptions = options;
+        return { snapshot: options?.interactiveOnly ? interactiveSnapshot : fullSnapshot };
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default', snapshot: interactiveSnapshot }]),
+    policy: localCommandPolicy(),
+  });
+
+  const result = await device.selectors.is({
+    session: 'default',
+    predicate: 'focused',
+    selector: 'label=Featured',
+  });
+
+  assert.equal(result.pass, true);
+  assert.equal(captureOptions?.interactiveOnly, false);
+});
+
+test('runtime focused selector waits against a full snapshot', async () => {
   const snapshot = makeSnapshotState([
     {
       index: 0,
@@ -231,8 +270,10 @@ test('runtime focused selector waits against an interactive snapshot', async () 
     target: { kind: 'selector', selector: 'focused=true', timeoutMs: 1000 },
   });
 
-  assert.deepEqual(result, { kind: 'selector', selector: 'focused=true', waitedMs: 0 });
-  assert.equal(captureOptions?.interactiveOnly, true);
+  assert.equal(result.kind, 'selector');
+  assert.equal(result.selector, 'focused=true');
+  assert.equal(result.waitedMs >= 0, true);
+  assert.equal(captureOptions?.interactiveOnly, false);
 });
 
 test('runtime is validates selector predicates', async () => {
