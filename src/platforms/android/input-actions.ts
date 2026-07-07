@@ -3,7 +3,7 @@ import type { DeviceInfo } from '../../kernel/device.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { DeviceRotation } from '../../core/device-rotation.ts';
 import { buildScrollGesturePlan, type ScrollDirection } from '../../core/scroll-gesture.ts';
-import type { TvRemoteButton } from '../../core/tv-remote.ts';
+import { toAndroidTvRemoteKeyevent, type TvRemoteButton } from '../../core/tv-remote.ts';
 import { runAndroidAdb, sleep } from './adb.ts';
 import { resolveAndroidTextInjector, type AndroidTextInputAction } from './adb-executor.ts';
 import { getAndroidKeyboardState, type AndroidKeyboardState } from './device-input-state.ts';
@@ -20,23 +20,12 @@ export async function pressAndroid(device: DeviceInfo, x: number, y: number): Pr
   await runAndroidAdb(device, ['shell', 'input', 'tap', String(x), String(y)]);
 }
 
-const ANDROID_TV_REMOTE_KEYEVENTS = {
-  up: 'KEYCODE_DPAD_UP',
-  down: 'KEYCODE_DPAD_DOWN',
-  left: 'KEYCODE_DPAD_LEFT',
-  right: 'KEYCODE_DPAD_RIGHT',
-  select: 'KEYCODE_DPAD_CENTER',
-  menu: 'KEYCODE_MENU',
-  home: 'KEYCODE_HOME',
-  back: 'KEYCODE_BACK',
-} as const satisfies Record<TvRemoteButton, string>;
-
 export async function pressAndroidTvRemote(
   device: DeviceInfo,
   button: TvRemoteButton,
   durationMs?: number,
 ): Promise<void> {
-  const keyevent = ANDROID_TV_REMOTE_KEYEVENTS[button];
+  const keyevent = toAndroidTvRemoteKeyevent(button);
   const keyeventArgs = durationMs && durationMs > 0 ? ['keyevent', '--longpress'] : ['keyevent'];
   await runAndroidAdb(device, ['shell', 'input', ...keyeventArgs, keyevent]);
 }

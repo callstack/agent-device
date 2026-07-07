@@ -18,6 +18,7 @@ export type CommandFamilyFacet<TCommandName extends string = string> = {
   clientSurface?: boolean;
   metadata: readonly AnyCommandMetadata<TCommandName>[];
   definitions: readonly AnyCommandDefinition<TCommandName>[];
+  clientCommandMethods?: Readonly<Record<string, TCommandName>>;
   cliSchemas?: Readonly<Partial<Record<TCommandName, CommandSchemaOverride>>>;
   cliReaders: Readonly<Record<TCommandName, CliReader>>;
   daemonWriters?: Readonly<Record<string, DaemonWriter>>;
@@ -29,6 +30,7 @@ export type CommandFacet<TCommandName extends string = string> = {
   metadata: AnyCommandMetadata<TCommandName>;
   definition: AnyCommandDefinition<TCommandName>;
   cliSchema?: CommandSchemaOverride;
+  clientMethod?: string;
   cliReader: CliReader;
   daemonWriter?: DaemonWriter;
   extraDaemonWriters?: Readonly<Record<string, DaemonWriter>>;
@@ -57,6 +59,7 @@ export function defineCommandFamilyFromFacets<
   const TCommands extends readonly CommandFacet[],
 >(family: { name: TFamilyName; clientSurface?: boolean; commands: TCommands }) {
   const cliSchemas: Record<string, CommandSchemaOverride> = {};
+  const clientCommandMethods: Record<string, string> = {};
   const cliReaders: Record<string, CliReader> = {};
   const daemonWriters: Record<string, DaemonWriter> = {};
   const cliOutputFormatters: Record<string, CliOutputFormatter> = {};
@@ -64,6 +67,14 @@ export function defineCommandFamilyFromFacets<
   for (const command of family.commands) {
     if (command.cliSchema) {
       addRecordEntry(cliSchemas, 'CLI schema', command.name, command.cliSchema);
+    }
+    if (command.clientMethod) {
+      addRecordEntry(
+        clientCommandMethods,
+        'client command method',
+        command.clientMethod,
+        command.name,
+      );
     }
     addRecordEntry(cliReaders, 'CLI reader', command.name, command.cliReader);
     if (command.daemonWriter) {
@@ -91,6 +102,7 @@ export function defineCommandFamilyFromFacets<
     definitions: family.commands.map(
       (command) => command.definition,
     ) as CommandFacetDefinitions<TCommands>,
+    clientCommandMethods: clientCommandMethods as Record<string, CommandFacetName<TCommands>>,
     cliSchemas: cliSchemas as Partial<Record<CommandFacetName<TCommands>, CommandSchemaOverride>>,
     cliReaders: cliReaders as Record<CommandFacetName<TCommands>, CliReader>,
     daemonWriters,

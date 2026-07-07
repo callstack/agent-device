@@ -198,14 +198,21 @@ agent-device prepare ios-runner --platform ios --timeout 240000
 ```bash
 agent-device open YouTube --platform android --target tv
 agent-device apps --platform android --target tv
+agent-device snapshot -i --platform android --target tv
+agent-device tv-remote press down --platform android --target tv
+agent-device tv-remote press select --platform android --target tv
+agent-device screenshot tv-focus.png --overlay-refs --platform android --target tv
 agent-device open Settings --platform ios --target tv
 agent-device screenshot apple-tv.png --platform ios --target tv
 ```
 
 - AndroidTV app launch and app listing resolve TV launchable activities via `LEANBACK_LAUNCHER`.
 - TV target selection supports both simulator/emulator and connected physical devices (AppleTV + AndroidTV).
+- TV targets are focus-first. Use `tv-remote` (or the CLI alias `d-pad`) to move focus before selecting a control; avoid raw `adb shell input keyevent` in command plans.
+- On Android TV, `tv-remote` maps to ADB keyevents. `--duration-ms` uses Android's longpress keyevent form for any positive duration because the platform command does not expose exact hold timing.
 - tvOS supports the same runner-driven interaction/snapshot flow as iOS (`snapshot`, `wait`, `press`, `fill`, `get`, `scroll`, `back`, `home`, `app-switcher`, `record`, and related selector flows).
-- On tvOS, runner `back`/`home`/`app-switcher` map to Siri Remote actions (`menu`, `home`, double-home).
+- On tvOS, `tv-remote`, runner `back`/`home`/`app-switcher` map to Siri Remote actions (`back` is Menu, `home` is Home, app switcher is double-home). `--duration-ms` is an exact remote-button hold duration.
+- Use `screenshot --overlay-refs` when visual focus evidence is useful or when focus metadata is unavailable/transient.
 - tvOS follows iOS simulator-only command semantics for helpers like `gesture pinch`, `settings`, and `push`.
 
 ## Desktop targets

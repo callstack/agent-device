@@ -228,6 +228,18 @@ await client.command.back({
   mode: 'system',
 });
 
+await client.command.tvRemote({
+  platform: 'android',
+  target: 'tv',
+  button: 'down',
+});
+
+await client.command.tvRemote({
+  platform: 'ios',
+  target: 'tv',
+  button: 'select',
+});
+
 await client.command.appSwitcher();
 ```
 
@@ -241,6 +253,7 @@ Supported command methods:
 - `appSwitcher`
 - `keyboard`
 - `clipboard`
+- `tvRemote`
 - `alert`
 
 Additional CLI-backed methods are exposed on their domain groups with typed option objects so Node consumers do not need to build raw daemon requests:

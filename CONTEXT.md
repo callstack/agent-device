@@ -72,8 +72,9 @@ The perfect-shape refactor is complete and merged. Its end-state:
   (`src/core/command-descriptor/registry.ts`) is the single declaration site from which the
   capability matrix, daemon command registry, batch allowlist, timeout policy, MCP exposure list, and
   capability-checked CLI command list are *derived* by parity-tested projection. The command catalog
-  still owns identity, command families still own surface metadata/CLI schema, and the Node client
-  surface remains a deferred derivation target. One
+  still owns identity, command families still own surface metadata/CLI schema, and system command
+  facets now project their simple Node client command methods; the rest of the Node client surface
+  remains a deferred derivation target. One
   `PlatformPlugin` per platform family (`src/core/platform-plugin/`) stops core/daemon from branching
   on platform, with the Apple plugin the first instance. See
   [ADR 0008](docs/adr/0008-command-descriptor-registry.md).

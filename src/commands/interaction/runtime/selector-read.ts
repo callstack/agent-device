@@ -24,7 +24,6 @@ import {
   evaluateIsPredicate,
   isSupportedPredicate,
   IS_PREDICATE_REQUIRED_MESSAGE,
-  type IsPredicate,
 } from '../../../utils/selector-is-predicates.ts';
 import type {
   ElementTarget,
@@ -49,6 +48,7 @@ import {
   TINY_STABLE_TREE_NODE_COUNT,
 } from './stable-capture.ts';
 import { now, sleep, toBackendContext } from '../../runtime-common.ts';
+import { deriveSelectorCapturePolicy } from './selector-capture-policy.ts';
 
 export type { SelectorSnapshotOptions } from './selector-read-shared.ts';
 export type { ElementTarget, RefTarget, ResolvedTarget, SelectorTarget };
@@ -275,11 +275,9 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
     throw new AppError('INVALID_ARGS', 'is text requires expected text value');
   }
   const chain = parseSelectorChain(options.selector);
-  const includeRects = predicateNeedsRects(options.predicate);
   const capture = await captureSelectorSnapshot(runtime, options, {
     updateSession: true,
-    includeRects,
-    interactiveOnly: options.predicate === 'focused' || selectorChainReadsFocus(chain),
+    ...deriveSelectorCapturePolicy({ predicate: options.predicate, selectorChain: chain }),
   });
 
   if (options.predicate === 'exists') {
@@ -436,7 +434,7 @@ async function findFirstLocatorMatch(
   const capture = await captureSelectorSnapshot(runtime, options, {
     updateSession: true,
     scope: findSnapshotScope(runtime, locator, options.query, selectorChain),
-    interactiveOnly: selectorChain ? selectorChainReadsFocus(selectorChain) : false,
+    ...deriveSelectorCapturePolicy({ selectorChain }),
   });
   if (isSparseSnapshotQualityVerdict(capture.snapshot.snapshotQuality)) {
     throw sparseSelectorSnapshotError(capture.snapshot.snapshotQuality);
@@ -473,14 +471,6 @@ function sparseSelectorSnapshotError(verdict: SnapshotQualityVerdict): AppError 
   });
 }
 
-function predicateNeedsRects(predicate: IsPredicate): boolean {
-  return predicate === 'visible' || predicate === 'hidden';
-}
-
-function selectorChainReadsFocus(chain: SelectorChain): boolean {
-  return chain.selectors.some((selector) => selector.terms.some((term) => term.key === 'focused'));
-}
-
 async function waitForSelector(
   runtime: AgentDeviceRuntime,
   options: WaitCommandOptions,
@@ -490,11 +480,11 @@ async function waitForSelector(
   const timeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const start = now(runtime);
   const chain = parseSelectorChain(selectorExpression);
-  const interactiveOnly = selectorChainReadsFocus(chain);
+  const capturePolicy = deriveSelectorCapturePolicy({ selectorChain: chain });
   while (now(runtime) - start < timeout) {
     const capture = await captureSelectorSnapshot(runtime, options, {
       updateSession: true,
-      interactiveOnly,
+      ...capturePolicy,
     });
     const match = findSelectorChainMatch(capture.snapshot.nodes, chain, {
       platform: runtime.backend.platform,
@@ -584,7 +574,7 @@ async function resolveSelectorNode(
     { ...options, session: sessionName },
     {
       updateSession: true,
-      interactiveOnly: selectorChainReadsFocus(chain),
+      ...deriveSelectorCapturePolicy({ selectorChain: chain }),
     },
   );
   const resolved = resolveSelectorChain(capture.snapshot.nodes, chain, {

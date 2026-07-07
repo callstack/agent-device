@@ -17,6 +17,7 @@ import {
   rotateDaemonWriter,
   tvRemoteCliReader,
   tvRemoteDaemonWriter,
+  systemCommandFamily,
 } from './index.ts';
 
 function flags(overrides: Partial<CliFlags> = {}): CliFlags {
@@ -33,6 +34,19 @@ function expectInvalidArgs(fn: () => unknown, messageFragment: string) {
 }
 
 describe('system command interface', () => {
+  test('system command family projects Node client command methods', () => {
+    expect(systemCommandFamily.clientCommandMethods).toEqual({
+      appState: 'appstate',
+      back: 'back',
+      home: 'home',
+      rotate: 'rotate',
+      appSwitcher: 'app-switcher',
+      keyboard: 'keyboard',
+      clipboard: 'clipboard',
+      tvRemote: 'tv-remote',
+    });
+  });
+
   test('parameterless readers project common selection flags through', () => {
     for (const reader of [appStateCliReader, homeCliReader, appSwitcherCliReader]) {
       expect(reader([], flags({ platform: 'ios' }))).toEqual({
@@ -128,6 +142,9 @@ describe('system command interface', () => {
     expect(tvRemoteCliReader(['press', 'select'], flags())).toMatchObject({
       button: 'select',
     });
+    expect(tvRemoteCliReader(['ok'], flags())).toMatchObject({ button: 'select' });
+    expect(tvRemoteCliReader(['center'], flags())).toMatchObject({ button: 'select' });
+    expect(tvRemoteCliReader(['enter'], flags())).toMatchObject({ button: 'select' });
   });
 
   test('tv-remote reader and writer validate button arguments', () => {

@@ -20,6 +20,10 @@ const AGENT_WORKFLOWS = [
       'Use when logs, network, audio, perf memory, traces, alerts, or diagnostics matter',
   },
   {
+    label: 'agent-device help tv',
+    description: 'Use when navigating Android TV or tvOS focus-first surfaces',
+  },
+  {
     label: 'agent-device help react-native',
     description: 'Use when the target app is React Native, Expo, or a dev client',
   },
@@ -94,7 +98,7 @@ const AGENT_QUICKSTART_LINES = [
   'Direct proxy: run agent-device connect proxy --daemon-base-url <proxy-agent-device-url> before using a shared Mac proxy. Device leases are automatic on open and expire after five minutes of inactivity.',
   'Batch JSON steps use "command" and structured "input"; legacy "positionals"/"flags" steps still run in CLI but are deprecated until the next major version.',
   'Navigation: app-owned back uses back; system back uses back --system.',
-  'TV targets are focus-first: use tv-remote press up|down|left|right|select (d-pad is a CLI alias) to move focus and activate focused controls. Do not assume press/click @ref works on Android TV or tvOS until the desired element is focused.',
+  'TV targets are focus-first: read help tv; use tv-remote press up|down|left|right|select (d-pad is a CLI alias) to move focus and activate focused controls before assuming press/click @ref works.',
   'Web browser sessions: read help web; first slice is web setup if needed -> web doctor -> open <url> --platform web -> snapshot -i -> click/fill/get/is/find/wait/screenshot -> close.',
   'Verification commands must name the expected text/selector; bare screenshots/snapshots are not enough.',
   'Debug evidence: Session state contains request diagnostics and runner.log; use logs clear --restart/mark/path, trace, and network dump --include headers for app evidence.',
@@ -157,7 +161,7 @@ Command shape:
   Snapshot refs look like @e12. After snapshot -i, use the exact @eN ref from that output.
   If the exact ref is not known yet, first output snapshot -i, then use a concrete example shape like press @e12 in the next command; do not write @<ref>, @ref, @Label_Name, or @eN placeholders.
   Close means agent-device close. App-owned back means back; system back means back --system.
-  Taps are press or click; tap is an alias for press. On Android TV and tvOS, use tv-remote press up|down|left|right|select (or the d-pad alias) to move focus before activating controls. Gestures use swipe, longpress, or gesture <pan|fling|swipe|pinch|rotate|transform>. Use gesture swipe left|right for reliable in-page horizontal swipes, and gesture swipe right-edge for left-edge navigation/back gestures. Android swipe, pinch, rotate, and transform use provider-native touch injection when available, then the bundled touch helper. iOS simulator transform uses private XCTest synthesis for a continuous two-finger pan/scale/rotation path; otherwise it reports UNSUPPORTED_OPERATION.
+  Taps are press or click; tap is an alias for press. On Android TV and tvOS, read help tv and use tv-remote press up|down|left|right|select (or the d-pad alias) to move focus before activating controls. Gestures use swipe, longpress, or gesture <pan|fling|swipe|pinch|rotate|transform>. Use gesture swipe left|right for reliable in-page horizontal swipes, and gesture swipe right-edge for left-edge navigation/back gestures. Android swipe, pinch, rotate, and transform use provider-native touch injection when available, then the bundled touch helper. iOS simulator transform uses private XCTest synthesis for a continuous two-finger pan/scale/rotation path; otherwise it reports UNSUPPORTED_OPERATION.
 
 Bootstrap:
   agent-device devices --platform ios
@@ -195,7 +199,7 @@ Snapshots and refs:
   Missing target in a long list: use a short manual scroll + snapshot loop with a max attempt count. If a named target is summarized as off-screen below/above, use scroll down/up, then snapshot -i; do not use scroll bottom/top because the target may appear before the absolute list edge. Use scroll bottom/top only when the task explicitly asks for the list edge. Edge scrolls verify hidden content with snapshots and stop when no matching hidden content remains.
   Truncated text/input previews: do not use get text first; expand with snapshot -s @ref (for example snapshot -s @e7), then read the scoped output.
   Rare iOS accessibility gaps: if a row ref is shown disabled/hittable:false and press @ref reports success but no UI change, or a horizontal tab/filter bar is collapsed into one composite/seekbar with no child refs, run agent-device snapshot -i --json to read rects, compute the target center, press x y, then diff snapshot -i. Coordinates are fallback-only; document why you used them.
-  TV focus gaps: if a fresh snapshot exposes focused nodes, verify with is focused <selector>; use wait focused=true only on apps where repeated snapshots preserve focus metadata. If the app exposes only a surface view or focus metadata is transient, use screenshot/snapshot diff as visual truth and tv-remote press directions/select; do not switch to raw adb keyevent in command plans.
+  TV focus gaps: read help tv. If a fresh snapshot exposes focused nodes, verify with is focused <selector>; use wait focused=true only on apps where repeated snapshots preserve focus metadata. If the app exposes only a surface view or focus metadata is transient, use screenshot/snapshot diff as visual truth and tv-remote press directions/select; do not switch to raw adb keyevent in command plans.
 
 Selectors:
   Use selectors as positional targets: id="field-email" or label="Allow".
@@ -353,11 +357,47 @@ Guarantees:
 
 Escalate:
   help debugging       logs, network, alerts, traces, flaky runtime failures
+  help tv              Android TV and tvOS focus-first remote navigation
   help react-devtools  React Native performance, profiling, props/state/hooks, slow renders, rerenders
   help react-native   React Native app automation hazards, overlays, Metro, and routing
   help remote          remote/cloud config, tenant, lease, local service tunnels
   help macos           desktop, frontmost-app, menu bar surfaces
   help dogfood         exploratory QA report workflow`,
+  },
+  tv: {
+    summary: 'Android TV and tvOS focus-first remote navigation',
+    body: `agent-device help tv
+
+Use this when the target is Android TV, Apple TV, or tvOS. TV surfaces are focus-first: move focus with remote/D-pad buttons, then activate the focused control.
+
+Core loop:
+  agent-device open Settings --platform android --target tv --session tv
+  agent-device snapshot -i --platform android --target tv --session tv
+  agent-device tv-remote press down --platform android --target tv --session tv
+  agent-device is focused 'label="Profiles"' --platform android --target tv --session tv
+  agent-device tv-remote press select --platform android --target tv --session tv
+  agent-device screenshot ./tv-focus.png --overlay-refs --platform android --target tv --session tv
+
+Buttons:
+  tv-remote press up|down|left|right|select|menu|home|back
+  d-pad is a CLI alias for tv-remote, not a separate Node/MCP command.
+  ok, center, and enter are input aliases for select; command output still reports button: "select".
+  --duration-ms holds a tvOS remote button for that duration. On Android TV, any positive duration maps to the ADB longpress form because Android input keyevent has no exact hold duration.
+
+Android TV:
+  Android TV uses ADB keyevents behind agent-device tv-remote. Keep command plans on agent-device; do not switch to raw adb keyevent.
+  Use --target tv when a host has both phone/tablet and TV emulators/devices.
+
+tvOS:
+  tvOS is driven by the Siri Remote focus engine, not coordinate taps.
+  back maps to the Menu remote button; home maps to the Home remote button.
+  Use --platform ios --target tv for Apple TV simulators and devices.
+
+Focus and visual truth:
+  If snapshot -i exposes a focused node, verify it with is focused <selector>.
+  Use wait focused=true only when repeated snapshots preserve focus metadata for the app.
+  If the app exposes only a surface view, or focus metadata is transient, use screenshot --overlay-refs, screenshot, or diff snapshot as visual truth and keep moving focus with tv-remote.
+  Do not assume press/click @ref works on Android TV or tvOS until the desired element is focused.`,
   },
   debugging: {
     summary: 'Targeted failure evidence without dumping stale context',
