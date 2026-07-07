@@ -12,7 +12,7 @@ type TvRemoteButtonDefinition = {
   };
 };
 
-export const TV_REMOTE_BUTTON_DEFINITIONS = {
+const TV_REMOTE_BUTTON_DEFINITIONS = {
   up: {
     aliases: [],
     androidKeyevent: 'KEYCODE_DPAD_UP',
@@ -69,14 +69,7 @@ export const TV_REMOTE_BUTTONS = Object.keys(
 
 export const TV_REMOTE_BUTTON_USAGE = `<${TV_REMOTE_BUTTONS.join('|')}>`;
 
-export const TV_REMOTE_BUTTON_INPUTS = [
-  ...TV_REMOTE_BUTTONS,
-  ...Object.values(TV_REMOTE_BUTTON_DEFINITIONS).flatMap((definition) => definition.aliases),
-] as const;
-
 export type TvRemoteButton = (typeof TV_REMOTE_BUTTONS)[number];
-
-export type TvRemoteButtonInput = (typeof TV_REMOTE_BUTTON_INPUTS)[number];
 
 export type AppleTvRemoteButton =
   (typeof TV_REMOTE_BUTTON_DEFINITIONS)[TvRemoteButton]['appleRemoteButton'];
@@ -92,7 +85,7 @@ export function parseTvRemoteButton(value: string | undefined): TvRemoteButton {
   );
 }
 
-export function isTvRemoteButton(value: unknown): value is TvRemoteButton {
+function isTvRemoteButton(value: unknown): value is TvRemoteButton {
   return typeof value === 'string' && TV_REMOTE_BUTTONS.includes(value as TvRemoteButton);
 }
 

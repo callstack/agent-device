@@ -23,7 +23,7 @@ export function deriveSelectorCapturePolicy(
   };
 }
 
-export function selectorChainReadsFocus(chain: SelectorChain): boolean {
+function selectorChainReadsFocus(chain: SelectorChain): boolean {
   return chain.selectors.some((selector) => selector.terms.some((term) => term.key === 'focused'));
 }
 
