@@ -12,6 +12,7 @@ export {
   captureAndroidSnapshotWithHelperSession,
   getAndroidSnapshotHelperSessionDeviceKey,
   resetAndroidSnapshotHelperSessions,
+  resolveAndroidSnapshotHelperSessionRequestTimeoutMs,
   stopAndroidSnapshotHelperSession,
   stopAndroidSnapshotHelperSessionForDevice,
 } from './snapshot-helper-session.ts';

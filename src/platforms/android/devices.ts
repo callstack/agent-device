@@ -506,7 +506,9 @@ export async function ensureAndroidEmulatorBooted(params: {
 export async function waitForAndroidBoot(serial: string, timeoutMs = 60000): Promise<void> {
   const timeoutBudget = timeoutMs;
   const deadline = Deadline.fromTimeoutMs(timeoutBudget);
-  const maxAttempts = Math.max(1, Math.ceil(timeoutBudget / ANDROID_BOOT_POLL_MS));
+  // Aim for at least 20 polls without busy-looping, capped at the production cadence.
+  const pollMs = Math.min(ANDROID_BOOT_POLL_MS, Math.max(50, Math.floor(timeoutBudget / 20)));
+  const maxAttempts = Math.max(1, Math.ceil(timeoutBudget / pollMs));
   let lastBootResult: ExecResult | undefined;
   let timedOut = false;
   try {
@@ -539,8 +541,8 @@ export async function waitForAndroidBoot(serial: string, timeoutMs = 60000): Pro
       },
       {
         maxAttempts,
-        baseDelayMs: ANDROID_BOOT_POLL_MS,
-        maxDelayMs: ANDROID_BOOT_POLL_MS,
+        baseDelayMs: pollMs,
+        maxDelayMs: pollMs,
         jitter: 0,
         shouldRetry: (error) => {
           const reason = classifyBootFailure({

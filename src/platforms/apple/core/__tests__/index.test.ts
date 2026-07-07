@@ -77,7 +77,11 @@ import {
 } from '../screenshot-status-bar.ts';
 import { runAppleRunnerCommand } from '../runner/runner-client.ts';
 import { iosRunnerOverrides } from '../../interactions.ts';
-import { IOS_DEVICE_INSTALL_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from '../config.ts';
+import {
+  IOS_DEVICE_INSTALL_TIMEOUT_MS,
+  IOS_SIMULATOR_FOCUS_TIMEOUT_MS,
+  IOS_SIMULATOR_TERMINATE_TIMEOUT_MS,
+} from '../config.ts';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import { withDiagnosticsScope } from '../../../../utils/diagnostics.ts';
 import { AppError } from '../../../../kernel/errors.ts';
@@ -1035,34 +1039,26 @@ test('captureSimulatorScreenshotWithFallback uses simulator runner fallback by d
   }
 });
 
-test(
-  'openIosSimulatorApp times out instead of hanging indefinitely',
-  { timeout: 15_000 },
-  async () => {
-    const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-focus-timeout-test-'));
-    const openPath = path.join(tmpDir, 'open');
-    await fs.writeFile(openPath, '#!/bin/sh\nsleep 10\n', 'utf8');
-    await fs.chmod(openPath, 0o755);
+test('openIosSimulatorApp times out instead of hanging indefinitely', async () => {
+  mockRunCmd.mockImplementation(async (cmd, args, options) => {
+    assert.equal(cmd, 'open');
+    assert.deepEqual(args, ['-a', 'Simulator']);
+    assert.equal(options?.timeoutMs, IOS_SIMULATOR_FOCUS_TIMEOUT_MS);
+    throw new AppError('COMMAND_FAILED', 'open timed out after 10000ms', {
+      timeoutMs: options?.timeoutMs,
+    });
+  });
 
-    const previousPath = process.env.PATH;
-    process.env.PATH = `${tmpDir}${path.delimiter}${previousPath ?? ''}`;
-
-    try {
-      await assert.rejects(
-        () => openIosSimulatorApp(),
-        (error: unknown) => {
-          assert.equal(error instanceof AppError, true);
-          assert.equal((error as AppError).code, 'COMMAND_FAILED');
-          assert.match((error as AppError).message, /open timed out after 10000ms/);
-          return true;
-        },
-      );
-    } finally {
-      process.env.PATH = previousPath;
-      await fs.rm(tmpDir, { recursive: true, force: true });
-    }
-  },
-);
+  await assert.rejects(
+    () => openIosSimulatorApp(),
+    (error: unknown) => {
+      assert.equal(error instanceof AppError, true);
+      assert.equal((error as AppError).code, 'COMMAND_FAILED');
+      assert.match((error as AppError).message, /open timed out after 10000ms/);
+      return true;
+    },
+  );
+});
 
 test('prepareSimulatorStatusBarForScreenshot restores prior visible overrides', async () => {
   await withMockedXcrun(
@@ -1263,6 +1259,28 @@ test('screenshotIos retries simulator capture timeouts and eventually succeeds',
   process.env.PATH = `${tmpDir}${path.delimiter}${previousPath ?? ''}`;
   process.env.AGENT_DEVICE_TEST_COMMAND_LOG = commandLogPath;
   process.env.AGENT_DEVICE_TEST_SCREENSHOT_COUNT_FILE = screenshotCountPath;
+  mockRetryWithPolicy.mockImplementation(async (fn, policy, options) => {
+    assert.ok(policy);
+    assert.ok(options);
+    assert.equal(options.phase, 'ios_simulator_screenshot');
+    assert.equal(policy.maxAttempts, 5);
+    assert.equal(policy.baseDelayMs, 1_000);
+    assert.equal(policy.maxDelayMs, 5_000);
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= policy.maxAttempts; attempt += 1) {
+      try {
+        return await fn({
+          attempt,
+          maxAttempts: policy.maxAttempts,
+          deadline: options.deadline,
+        });
+      } catch (error) {
+        lastError = error;
+        if (!policy.shouldRetry?.(error, attempt)) throw error;
+      }
+    }
+    throw lastError;
+  });
 
   try {
     await screenshotIos(IOS_TEST_SIMULATOR, outPath);

@@ -1,6 +1,6 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { appendFileSync, promises as fs, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, promises as fs, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 vi.mock('../../../utils/exec.ts', async (importOriginal) => {
@@ -12,7 +12,8 @@ const execActual =
   await vi.importActual<typeof import('../../../utils/exec.ts')>('../../../utils/exec.ts');
 
 import { AppError } from '../../../kernel/errors.ts';
-import { runCmdDetached } from '../../../utils/exec.ts';
+import { runCmdDetached, withCommandExecutorOverride } from '../../../utils/exec.ts';
+import type { CommandExecutorOverride, ExecResult } from '../../../utils/exec.ts';
 import {
   ensureAndroidEmulatorBooted,
   listAndroidDevices,
@@ -199,7 +200,14 @@ async function withMockedAndroidTools(
         ANDROID_SDK_ROOT: undefined,
         ANDROID_HOME: undefined,
       },
-      async () => await run({ emulatorLogPath, emulatorBootedPath }),
+      async () =>
+        await withCommandExecutorOverride(
+          createMockedAndroidToolsCommandOverride({
+            emulatorBootedPath,
+            avdNameMode: options.avdNameMode ?? 'success',
+          }),
+          async () => await run({ emulatorLogPath, emulatorBootedPath }),
+        ),
     );
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
@@ -238,11 +246,81 @@ async function withMockedAndroidSdkRoot(
         ANDROID_SDK_ROOT: sdkRoot,
         ANDROID_HOME: undefined,
       },
-      async () => await run({ emulatorLogPath, emulatorBootedPath, sdkRoot }),
+      async () =>
+        await withCommandExecutorOverride(
+          createMockedAndroidToolsCommandOverride({ emulatorBootedPath }),
+          async () => await run({ emulatorLogPath, emulatorBootedPath, sdkRoot }),
+        ),
     );
   } finally {
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
+}
+
+function createMockedAndroidToolsCommandOverride(params: {
+  emulatorBootedPath: string;
+  avdNameMode?: 'success' | 'missing';
+}): CommandExecutorOverride {
+  return async (cmd, args) => {
+    if (cmd === 'emulator') return handleMockedEmulatorCommand(args);
+    if (cmd === 'adb') return handleMockedAdbCommand(args, params);
+    throw new Error(`Unexpected command: ${cmd} ${args.join(' ')}`);
+  };
+}
+
+function handleMockedEmulatorCommand(args: string[]): ExecResult {
+  const emulatorKey = args.join('\0');
+  if (emulatorKey === '-list-avds') return execResult('Pixel_9_Pro_XL\n');
+  throw new Error(`Unexpected emulator args: ${args.join(' ')}`);
+}
+
+function handleMockedAdbCommand(
+  args: string[],
+  params: { emulatorBootedPath: string; avdNameMode?: 'success' | 'missing' },
+): ExecResult {
+  const adbArgs = stripAdbSerial(args);
+  const adbKey = adbArgs.join('\0');
+  if (adbKey === 'devices\0-l') return mockedAdbDevicesResult(params.emulatorBootedPath);
+  if (isAdbAvdNameProbe(adbKey)) {
+    return execResult(params.avdNameMode === 'missing' ? '' : 'Pixel_9_Pro_XL\n');
+  }
+  if (adbKey === 'shell\0getprop\0sys.boot_completed') {
+    return execResult(existsSync(params.emulatorBootedPath) ? '1\n' : '0\n');
+  }
+  if (adbKey === 'shell\0getprop\0ro.build.characteristics') return execResult('phone\n');
+  if (isAdbPackageProbe(adbArgs)) return execResult('false\n');
+  if (adbKey === 'shell\0pm\0list\0features') return execResult('\n');
+  throw new Error(`Unexpected adb args: ${args.join(' ')}`);
+}
+
+function mockedAdbDevicesResult(emulatorBootedPath: string): ExecResult {
+  const bootedDevice = existsSync(emulatorBootedPath)
+    ? [
+        'emulator-5554 device product:sdk_gphone64 model:Pixel_9_Pro_XL device:emu64a transport_id:2',
+      ]
+    : [];
+  return execResult(['List of devices attached', ...bootedDevice, ''].join('\n'));
+}
+
+function isAdbAvdNameProbe(adbKey: string): boolean {
+  return (
+    adbKey === 'emu\0avd\0name' ||
+    adbKey === 'shell\0getprop\0ro.boot.qemu.avd_name' ||
+    adbKey === 'shell\0getprop\0persist.sys.avd_name'
+  );
+}
+
+function isAdbPackageProbe(adbArgs: string[]): boolean {
+  return adbArgs[0] === 'shell' && adbArgs[1] === 'cmd' && adbArgs[2] === 'package';
+}
+
+function stripAdbSerial(args: string[]): string[] {
+  if (args[0] === '-s') return args.slice(2);
+  return args;
+}
+
+function execResult(stdout = '', stderr = '', exitCode = 0): ExecResult {
+  return { stdout, stderr, exitCode };
 }
 
 test('resolveAndroidEmulatorAvdName ignores probe timeouts and keeps probing', async () => {

@@ -32,7 +32,7 @@ test('integration paths get the larger budget', () => {
   assert.equal(offender, null);
 });
 
-test('pinned tests never become offenders', () => {
+test('known slow tests are reported when they exceed the budget', () => {
   const offender = classifySlowTest({
     root: '/repo',
     moduleId: '/repo/src/platforms/android/__tests__/app-lifecycle-install.test.ts',
@@ -40,7 +40,8 @@ test('pinned tests never become offenders', () => {
     fullName: 'installAndroidApp installs .apk via adb install -r',
     durationMs: 9_000,
   });
-  assert.equal(offender, null);
+  assert.ok(offender);
+  assert.equal(offender.enforce, true);
 });
 
 test('reportSlowTests fails only on enforced offenders and prints both bands', () => {

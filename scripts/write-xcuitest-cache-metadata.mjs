@@ -3,19 +3,16 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 
-const args = process.argv.slice(2);
-const [platform, derivedPath, destination] = args;
+let platform = '';
+let derivedPath = '';
+let destination = '';
+let projectRoot = '';
+let metadataPath = '';
 
-if (!platform || !derivedPath || !destination) {
-  console.error(
-    'Usage: write-xcuitest-cache-metadata.mjs <ios|macos|tvos|visionos> <derived> <destination>',
-  );
-  process.exit(1);
-}
-
-const projectRoot = process.cwd();
-const metadataPath = path.join(derivedPath, '.agent-device-runner-cache.json');
+const USAGE =
+  'Usage: write-xcuitest-cache-metadata.mjs <ios|macos|tvos|visionos> <derived> <destination>';
 
 const DEFAULT_IOS_RUNNER_APP_BUNDLE_ID = 'com.callstack.agentdevice.runner';
 
@@ -215,39 +212,62 @@ function resolveSandboxBuildArgs() {
   ];
 }
 
-const appBundleId = resolveRunnerAppBundleId();
-const testBundleId = resolveRunnerTestBundleId();
-const metadata = {
-  schemaVersion: 2,
-  packageVersion: readPackageVersion(),
-  runnerSourceFingerprint: computeRunnerSourceFingerprint(),
-  ...resolveRunnerToolchainFingerprint(),
-  platformName: resolvePlatformName(),
-  deviceKind: resolveDeviceKind(),
-  target: resolveTarget(),
-  buildDestinationFamily: resolveBuildDestinationFamily(),
-  runnerBundleBuildSettings: [
-    `AGENT_DEVICE_IOS_RUNNER_APP_BUNDLE_ID=${appBundleId}`,
-    `AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID=${testBundleId}`,
-  ],
-  runnerSigningBuildSettings: resolveSigningBuildSettings(),
-  runnerPerformanceBuildSettings: [
-    'COMPILER_INDEX_STORE_ENABLE=NO',
-    'ENABLE_CODE_COVERAGE=NO',
-    'ONLY_ACTIVE_ARCH=YES',
-    'ENABLE_PREVIEWS=NO',
-    'ENABLE_DEBUG_DYLIB=NO',
-  ],
-  runnerSandboxBuildArgs: resolveSandboxBuildArgs(),
-};
+export function writeXcuitestCacheMetadata(args = process.argv.slice(2), cwd = process.cwd()) {
+  const [nextPlatform, nextDerivedPath, nextDestination] = args;
+  if (!nextPlatform || !nextDerivedPath || !nextDestination) {
+    throw new Error(USAGE);
+  }
 
-const artifacts = resolveRunnerCacheArtifacts();
-if (artifacts) {
-  metadata.artifacts = artifacts;
+  platform = nextPlatform;
+  derivedPath = nextDerivedPath;
+  destination = nextDestination;
+  projectRoot = cwd;
+  metadataPath = path.join(derivedPath, '.agent-device-runner-cache.json');
+
+  const appBundleId = resolveRunnerAppBundleId();
+  const testBundleId = resolveRunnerTestBundleId();
+  const metadata = {
+    schemaVersion: 2,
+    packageVersion: readPackageVersion(),
+    runnerSourceFingerprint: computeRunnerSourceFingerprint(),
+    ...resolveRunnerToolchainFingerprint(),
+    platformName: resolvePlatformName(),
+    deviceKind: resolveDeviceKind(),
+    target: resolveTarget(),
+    buildDestinationFamily: resolveBuildDestinationFamily(),
+    runnerBundleBuildSettings: [
+      `AGENT_DEVICE_IOS_RUNNER_APP_BUNDLE_ID=${appBundleId}`,
+      `AGENT_DEVICE_IOS_RUNNER_TEST_BUNDLE_ID=${testBundleId}`,
+    ],
+    runnerSigningBuildSettings: resolveSigningBuildSettings(),
+    runnerPerformanceBuildSettings: [
+      'COMPILER_INDEX_STORE_ENABLE=NO',
+      'ENABLE_CODE_COVERAGE=NO',
+      'ONLY_ACTIVE_ARCH=YES',
+      'ENABLE_PREVIEWS=NO',
+      'ENABLE_DEBUG_DYLIB=NO',
+    ],
+    runnerSandboxBuildArgs: resolveSandboxBuildArgs(),
+  };
+
+  const artifacts = resolveRunnerCacheArtifacts();
+  if (artifacts) {
+    metadata.artifacts = artifacts;
+  }
+
+  fs.mkdirSync(path.dirname(metadataPath), { recursive: true });
+  fs.writeFileSync(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`);
+  return metadata;
 }
 
-fs.mkdirSync(path.dirname(metadataPath), { recursive: true });
-fs.writeFileSync(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`);
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    writeXcuitestCacheMetadata();
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(1);
+  }
+}
 
 function resolveRunnerCacheArtifacts() {
   const xctestrunPath = findXctestrun(derivedPath);

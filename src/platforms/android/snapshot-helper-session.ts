@@ -137,6 +137,16 @@ export function getAndroidSnapshotHelperSessionDeviceKey(
   return `${device.platform}:${device.id}`;
 }
 
+export function resolveAndroidSnapshotHelperSessionRequestTimeoutMs(params: {
+  timeoutMs: number;
+  commandTimeoutMs: number;
+}): number {
+  return Math.min(
+    params.commandTimeoutMs,
+    Math.max(params.timeoutMs + SESSION_REQUEST_OVERHEAD_MS, 3_000),
+  );
+}
+
 export async function resetAndroidSnapshotHelperSessions(): Promise<void> {
   await Promise.all(
     [...sessions.keys()].map((deviceKey) => stopAndroidSnapshotHelperSession(deviceKey)),
@@ -264,10 +274,7 @@ async function requestSessionSnapshot(
   const requestId = `snapshot-${Date.now()}-${Math.random().toString(16).slice(2)}`;
   // Keep the session request generous enough for slow UIAutomator captures, but never
   // beyond the command budget the caller already assigned to this snapshot.
-  const timeoutMs = Math.min(
-    resolved.commandTimeoutMs,
-    Math.max(resolved.timeoutMs + SESSION_REQUEST_OVERHEAD_MS, 3_000),
-  );
+  const timeoutMs = resolveAndroidSnapshotHelperSessionRequestTimeoutMs(resolved);
   const response = await sendSessionCommand(session, `snapshot ${requestId}`, timeoutMs);
   return parseSessionSnapshotResponse(response, requestId);
 }

@@ -1,9 +1,9 @@
 import { test, vi } from 'vitest';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import { withCommandExecutorOverride } from '../../../../utils/exec.ts';
@@ -209,8 +209,21 @@ test('scoreXctestrunCandidate penalizes macos and env xctestrun files for simula
 
 test('setup metadata script matches expected iOS simulator cache metadata', async () => {
   await withTempDir('runner-cache-metadata-', async (root) => {
+    const repoRoot = process.cwd();
+    const scriptPath = path.join(repoRoot, 'scripts', 'write-xcuitest-cache-metadata.mjs');
+    const projectRoot = path.join(root, 'project');
+    const derivedRoot = path.join(root, 'derived');
     const binDir = path.join(root, 'bin');
-    fs.mkdirSync(binDir);
+    fs.mkdirSync(binDir, { recursive: true });
+    fs.mkdirSync(derivedRoot, { recursive: true });
+    fs.mkdirSync(path.join(projectRoot, 'apple-runner', 'AgentDeviceRunner'), {
+      recursive: true,
+    });
+    fs.writeFileSync(path.join(projectRoot, 'package.json'), '{"version":"0.19.0"}\n');
+    fs.writeFileSync(
+      path.join(projectRoot, 'apple-runner', 'AgentDeviceRunner', 'Runner.swift'),
+      'final class Runner {}\n',
+    );
     writeExecutable(
       path.join(binDir, 'xcodebuild'),
       ['#!/bin/sh', 'printf "Xcode 26.2\\nBuild version 17C52\\n"'].join('\n'),
@@ -226,53 +239,24 @@ test('setup metadata script matches expected iOS simulator cache metadata', asyn
         'esac',
       ].join('\n'),
     );
-    writeExecutable(
-      path.join(binDir, 'plutil'),
-      [
-        '#!/bin/sh',
-        "cat <<'JSON'",
-        '{"TestConfigurations":[{"TestTargets":[{"ProductPaths":["__TESTROOT__/Debug-iphonesimulator/AgentDeviceRunner.app","__TESTROOT__/Debug-iphonesimulator/AgentDeviceRunnerUITests-Runner.app"]}]}]}',
-        'JSON',
-      ].join('\n'),
-    );
-    fs.writeFileSync(
-      path.join(
-        root,
-        'AgentDeviceRunner_AgentDeviceRunnerUITests_iphonesimulator26.2-arm64.xctestrun',
-      ),
-      '{}',
-    );
-    fs.mkdirSync(path.join(root, 'Debug-iphonesimulator', 'AgentDeviceRunner.app'), {
-      recursive: true,
-    });
-    fs.mkdirSync(path.join(root, 'Debug-iphonesimulator', 'AgentDeviceRunnerUITests-Runner.app'), {
-      recursive: true,
-    });
     const previousPath = process.env.PATH;
     process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ''}`;
 
     try {
-      execFileSync(
-        process.execPath,
-        [
-          'scripts/write-xcuitest-cache-metadata.mjs',
-          'ios',
-          root,
-          'generic/platform=iOS Simulator',
-        ],
-        {
-          cwd: process.cwd(),
-          env: { ...process.env, PATH: process.env.PATH },
-          stdio: ['ignore', 'ignore', 'inherit'],
-        },
+      const { writeXcuitestCacheMetadata } = await import(
+        `${pathToFileURL(scriptPath).href}?case=${Date.now()}`
+      );
+      writeXcuitestCacheMetadata(
+        ['ios', derivedRoot, 'generic/platform=iOS Simulator'],
+        projectRoot,
       );
 
       const actual = JSON.parse(
-        fs.readFileSync(path.join(root, '.agent-device-runner-cache.json'), 'utf8'),
+        fs.readFileSync(path.join(derivedRoot, '.agent-device-runner-cache.json'), 'utf8'),
       );
       const { artifacts: _actualArtifacts, ...actualComparable } = actual;
       const { artifacts: _expectedArtifacts, ...expectedComparable } =
-        resolveExpectedRunnerCacheMetadata(iosSimulator);
+        resolveExpectedRunnerCacheMetadata(iosSimulator, projectRoot);
 
       assert.deepEqual(actualComparable, expectedComparable);
     } finally {
