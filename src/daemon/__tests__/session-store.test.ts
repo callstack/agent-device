@@ -171,12 +171,14 @@ test('recordAction event log redacts typed text from display positionals', () =>
     command: 'fill',
     positionals: ['@14', 'super-secret-token'],
     flags: {},
-    result: { ref: '14', text: 'super-secret-token', message: 'Filled 18 chars' },
+    result: { ref: '14', text: 'super-secret-token', message: 'Filled super-secret-token' },
   });
 
   const page = store.readEvents(session.name);
   const serialized = JSON.stringify(page.events);
   assert.equal(serialized.includes('super-secret-token'), false);
+  assert.equal(page.events[0]?.summary, 'Filled <text:18 chars>');
+  assert.equal(page.events[0]?.details?.message, 'Filled <text:18 chars>');
   assert.deepEqual(page.events[0]?.details?.positionals, ['@14', '<text:18 chars>']);
   assert.equal(page.events[0]?.details?.textLength, 18);
 });
@@ -210,7 +212,7 @@ test('recordAction event log redacts payload-bearing and unknown positionals', (
     command: 'future-command',
     positionals: ['public-ish', futurePayload],
     flags: {},
-    result: {},
+    result: { message: `Ran ${futurePayload}` },
   });
 
   const page = store.readEvents(session.name);
@@ -223,6 +225,8 @@ test('recordAction event log redacts payload-bearing and unknown positionals', (
   assert.deepEqual(page.events[1]?.details?.positionals, ['com.example.app', '<payload:29 chars>']);
   assert.deepEqual(page.events[2]?.details?.positionals, ['checkout', '<payload:30 chars>']);
   assert.deepEqual(page.events[3]?.details?.positionals, ['<arg:10 chars>', '<arg:19 chars>']);
+  assert.equal(page.events[3]?.summary, 'Ran <arg:19 chars>');
+  assert.equal(page.events[3]?.details?.message, 'Ran <arg:19 chars>');
 });
 
 test('saveScript path writes session log to custom location', () => {

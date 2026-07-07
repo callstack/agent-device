@@ -464,6 +464,12 @@ Logs:
     agent-device open MyApp --platform ios --relaunch --launch-console ./artifacts/app.console.log
   --launch-console is only for direct iOS simulator app launches, not URL opens.
 
+Events:
+  Use events for a compact session timeline without dumping full app logs.
+    agent-device events
+    agent-device events 50 100
+  Events preserve command names, status, durations, paths, session/device/app identifiers, refs/selectors, and coordinates. Typed text, clipboard writes, push/event payloads, raw unknown command arguments, and matching raw message fragments are replaced with length-only placeholders. --no-record suppresses action.recorded entries, but request start/finish entries still record command, status, and timing.
+
 Network:
   Use network dump for recent session HTTP traffic parsed from app logs.
     agent-device network dump --include headers

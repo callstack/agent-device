@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { StringDecoder } from 'node:string_decoder';
 import { PUBLIC_COMMANDS } from '../command-catalog.ts';
 import { AppError } from '../kernel/errors.ts';
 import { redactDiagnosticData } from '../kernel/redaction.ts';
@@ -12,6 +13,7 @@ const SESSION_EVENT_LOG_FILENAME = 'events.ndjson';
 const EVENT_LOG_VERSION = 1;
 const DEFAULT_EVENT_LIMIT = 100;
 const MAX_EVENT_LIMIT = 500;
+const EVENT_LOG_READ_CHUNK_BYTES = 64 * 1024;
 
 export type SessionEventLogEntry = {
   version: 1;
@@ -155,12 +157,8 @@ export function readSessionEventLog(
     return { path: eventLogPath, cursor: String(cursor), limit, events: [] };
   }
 
-  const rawLines = fs
-    .readFileSync(eventLogPath, 'utf8')
-    .split(/\r?\n/)
-    .filter((line) => line.trim().length > 0);
-  const end = Math.min(rawLines.length, cursor + limit);
-  const events = rawLines.slice(cursor, end).flatMap((line) => {
+  const page = readSessionEventLogLines(eventLogPath, cursor, limit);
+  const events = page.lines.flatMap((line) => {
     const parsed = parseSessionEventLogLine(line);
     return parsed ? [parsed] : [];
   });
@@ -169,8 +167,76 @@ export function readSessionEventLog(
     cursor: String(cursor),
     limit,
     events,
-    ...(end < rawLines.length ? { nextCursor: String(end) } : {}),
+    ...(page.nextCursor !== undefined ? { nextCursor: String(page.nextCursor) } : {}),
   };
+}
+
+function readSessionEventLogLines(
+  eventLogPath: string,
+  cursor: number,
+  limit: number,
+): { lines: string[]; nextCursor?: number } {
+  const fd = fs.openSync(eventLogPath, 'r');
+  try {
+    const decoder = new StringDecoder('utf8');
+    const buffer = Buffer.allocUnsafe(EVENT_LOG_READ_CHUNK_BYTES);
+    const state = createLineScanState(cursor, limit);
+    let pending = '';
+    let bytesRead = 0;
+    do {
+      bytesRead = fs.readSync(fd, buffer, 0, buffer.length, null);
+      const chunk = decoder.write(buffer.subarray(0, bytesRead));
+      pending = consumeEventLogChunk(`${pending}${chunk}`, state);
+    } while (bytesRead > 0 && state.nextCursor === undefined);
+    const remainder = `${pending}${decoder.end()}`;
+    if (state.nextCursor === undefined && remainder.length > 0) {
+      consumeEventLogLine(remainder, state);
+    }
+    return { lines: state.lines, nextCursor: state.nextCursor };
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
+function createLineScanState(
+  cursor: number,
+  limit: number,
+): {
+  cursor: number;
+  limit: number;
+  lineIndex: number;
+  lines: string[];
+  nextCursor?: number;
+} {
+  return {
+    cursor,
+    limit,
+    lineIndex: 0,
+    lines: [],
+  };
+}
+
+function consumeEventLogChunk(text: string, state: ReturnType<typeof createLineScanState>): string {
+  let start = 0;
+  for (let index = text.indexOf('\n'); index !== -1; index = text.indexOf('\n', start)) {
+    consumeEventLogLine(text.slice(start, index), state);
+    start = index + 1;
+    if (state.nextCursor !== undefined) return '';
+  }
+  return text.slice(start);
+}
+
+function consumeEventLogLine(rawLine: string, state: ReturnType<typeof createLineScanState>): void {
+  const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
+  if (line.trim().length === 0) return;
+  if (state.lineIndex >= state.cursor + state.limit) {
+    state.nextCursor = state.cursor + state.limit;
+    return;
+  }
+  if (state.lineIndex >= state.cursor) {
+    state.lines.push(line);
+  }
+  state.lineIndex += 1;
 }
 
 function normalizeCursor(value: string | undefined): number {

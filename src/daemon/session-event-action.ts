@@ -2,7 +2,7 @@ import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../command-catalog.ts';
 import type { SessionAction } from './types.ts';
 
 export function buildActionSummary(action: SessionAction): string {
-  const message = readString(action.result?.message);
+  const message = readSanitizedActionMessage(action);
   if (message) return message;
   switch (action.command) {
     case PUBLIC_COMMANDS.open:
@@ -32,7 +32,7 @@ export function buildActionDetails(action: SessionAction): Record<string, unknow
     positionals: buildDisplayPositionals(action),
     flags: action.flags,
     action: result.action,
-    message: result.message,
+    message: readSanitizedActionMessage(action),
     ref: result.ref,
     refLabel: result.refLabel,
     selector: result.selector,
@@ -61,6 +61,29 @@ export function buildActionDetails(action: SessionAction): Record<string, unknow
     textLength: typeof result.text === 'string' ? Array.from(result.text).length : undefined,
     nodeCount: Array.isArray(result.nodes) ? result.nodes.length : undefined,
   };
+}
+
+function readSanitizedActionMessage(action: SessionAction): string | undefined {
+  const message = readString(action.result?.message);
+  if (!message) return undefined;
+  return sanitizeActionDisplayText(action, message);
+}
+
+function sanitizeActionDisplayText(action: SessionAction, value: string): string {
+  let sanitized = value;
+  const displayPositionals = buildDisplayPositionals(action) ?? [];
+  for (const [index, positional] of action.positionals.entries()) {
+    if (!positional) continue;
+    const replacement = displayPositionals[index] ?? redactDisplayPositional(positional);
+    if (replacement !== positional) {
+      sanitized = sanitized.split(positional).join(replacement);
+    }
+  }
+  const resultText = action.result?.text;
+  if (typeof resultText === 'string' && resultText.length > 0) {
+    sanitized = sanitized.split(resultText).join(hiddenValue('text', resultText));
+  }
+  return sanitized;
 }
 
 function readActionTargetLabel(action: SessionAction): string | undefined {
