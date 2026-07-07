@@ -1,6 +1,8 @@
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../command-catalog.ts';
 import type { SessionAction } from './types.ts';
 
+type ActionTextReplacement = { raw: string; display: string };
+
 export function buildActionSummary(action: SessionAction): string {
   const message = readSanitizedActionMessage(action);
   if (message) return message;
@@ -70,20 +72,57 @@ function readSanitizedActionMessage(action: SessionAction): string | undefined {
 }
 
 function sanitizeActionDisplayText(action: SessionAction, value: string): string {
-  let sanitized = value;
+  const replacements = buildActionTextReplacements(action);
+  if (replacements.length === 0) return value;
+  const replacementByRaw = new Map(replacements.map(({ raw, display }) => [raw, display]));
+  const pattern = replacements.map(({ raw }) => escapeRegExp(raw)).join('|');
+  return value.replace(new RegExp(pattern, 'g'), (raw) => replacementByRaw.get(raw) ?? raw);
+}
+
+function buildActionTextReplacements(action: SessionAction): ActionTextReplacement[] {
+  return uniqueActionTextReplacements(
+    buildActionTextReplacementCandidates(action).sort(
+      (left, right) => right.raw.length - left.raw.length,
+    ),
+  );
+}
+
+function buildActionTextReplacementCandidates(action: SessionAction): ActionTextReplacement[] {
   const displayPositionals = buildDisplayPositionals(action) ?? [];
-  for (const [index, positional] of action.positionals.entries()) {
-    if (!positional) continue;
-    const replacement = displayPositionals[index] ?? redactDisplayPositional(positional);
-    if (replacement !== positional) {
-      sanitized = sanitized.split(positional).join(replacement);
-    }
-  }
+  const replacements = action.positionals.flatMap((positional, index) => {
+    const replacement = buildPositionalTextReplacement(positional, displayPositionals[index]);
+    return replacement ? [replacement] : [];
+  });
   const resultText = action.result?.text;
-  if (typeof resultText === 'string' && resultText.length > 0) {
-    sanitized = sanitized.split(resultText).join(hiddenValue('text', resultText));
+  return typeof resultText === 'string' && resultText.length > 0
+    ? [{ raw: resultText, display: hiddenValue('text', resultText) }, ...replacements]
+    : replacements;
+}
+
+function buildPositionalTextReplacement(
+  raw: string,
+  display: string | undefined,
+): ActionTextReplacement | undefined {
+  if (!raw) return undefined;
+  const replacement = display ?? redactDisplayPositional(raw);
+  return replacement === raw ? undefined : { raw, display: replacement };
+}
+
+function uniqueActionTextReplacements(
+  candidates: ActionTextReplacement[],
+): ActionTextReplacement[] {
+  const seen = new Set<string>();
+  const replacements: ActionTextReplacement[] = [];
+  for (const { raw, display } of candidates) {
+    if (seen.has(raw)) continue;
+    seen.add(raw);
+    replacements.push({ raw, display });
   }
-  return sanitized;
+  return replacements;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 function readActionTargetLabel(action: SessionAction): string | undefined {

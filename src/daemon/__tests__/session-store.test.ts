@@ -229,6 +229,34 @@ test('recordAction event log redacts payload-bearing and unknown positionals', (
   assert.equal(page.events[3]?.details?.message, 'Ran <arg:19 chars>');
 });
 
+test('recordAction event log redacts overlapping unknown positionals in one pass', () => {
+  const { store, session } = makeFixture('agent-device-session-events-overlap-redaction-');
+
+  store.recordAction(session, {
+    command: 'future-command',
+    positionals: ['token', 'my-token-123'],
+    flags: {},
+    result: { message: 'Ran my-token-123 after token' },
+  });
+  store.recordAction(session, {
+    command: 'future-command',
+    positionals: ['arg', 'my-arg-123'],
+    flags: {},
+    result: { message: 'Ran my-arg-123 after arg' },
+  });
+
+  const page = store.readEvents(session.name);
+  const serialized = JSON.stringify(page.events);
+  assert.equal(serialized.includes('my-token-123'), false);
+  assert.equal(serialized.includes('token'), false);
+  assert.equal(serialized.includes('my-arg-123'), false);
+  assert.equal(page.events[0]?.summary, 'Ran <arg:12 chars> after <arg:5 chars>');
+  assert.equal(page.events[0]?.details?.message, 'Ran <arg:12 chars> after <arg:5 chars>');
+  assert.deepEqual(page.events[0]?.details?.positionals, ['<arg:5 chars>', '<arg:12 chars>']);
+  assert.equal(page.events[1]?.summary, 'Ran <arg:10 chars> after <arg:3 chars>');
+  assert.equal(page.events[1]?.details?.message, 'Ran <arg:10 chars> after <arg:3 chars>');
+});
+
 test('saveScript path writes session log to custom location', () => {
   const { root, store, session } = makeFixture('agent-device-session-log-custom-path-', 'sessions');
   const customPath = path.join(root, 'workflows', 'my-flow.ad');
