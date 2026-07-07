@@ -182,6 +182,74 @@ extension RunnerTests {
     XCTAssertNil(xctestRecordedFailureResponse(command: tapCommand, response: runnerFatalResponse))
   }
 
+  func testSkipAppActivationPreflightIncludesCoordinateOnlySynthesizedGestures() throws {
+    currentApp = app
+    currentBundleId = nil
+    defer {
+      currentApp = nil
+      currentBundleId = nil
+    }
+    let tap = try runnerCommandFixture(
+      #"{"command":"tap","commandId":"tap-1","x":10,"y":20,"synthesized":true}"#
+    )
+    let drag = try runnerCommandFixture(
+      #"{"command":"drag","commandId":"drag-1","x":10,"y":20,"x2":30,"y2":40,"synthesized":true}"#
+    )
+    let scroll = try runnerCommandFixture(
+      #"{"command":"scroll","commandId":"scroll-1","direction":"down","pixels":400}"#
+    )
+    let sequence = try runnerCommandFixture(
+      """
+      {"command":"sequence","commandId":"seq-1","steps":[
+        {"kind":"tap","x":10,"y":20,"synthesized":true},
+        {"kind":"drag","x":10,"y":200,"x2":10,"y2":100,"synthesized":true}
+      ]}
+      """
+    )
+
+    XCTAssertTrue(shouldSkipAppActivationPreflight(tap))
+    XCTAssertTrue(shouldSkipAppActivationPreflight(drag))
+    XCTAssertTrue(shouldSkipAppActivationPreflight(scroll))
+    XCTAssertTrue(shouldSkipAppActivationPreflight(sequence))
+  }
+
+  func testSkipAppActivationPreflightRejectsSelectorAndMixedSequenceGestures() throws {
+    currentApp = app
+    currentBundleId = nil
+    defer {
+      currentApp = nil
+      currentBundleId = nil
+    }
+    let selectorTap = try runnerCommandFixture(
+      #"{"command":"tap","commandId":"tap-1","selectorKey":"label","selectorValue":"Search","synthesized":true}"#
+    )
+    let standardDrag = try runnerCommandFixture(
+      #"{"command":"drag","commandId":"drag-1","x":10,"y":20,"x2":30,"y2":40}"#
+    )
+    let mixedSequence = try runnerCommandFixture(
+      """
+      {"command":"sequence","commandId":"seq-1","steps":[
+        {"kind":"tap","x":10,"y":20,"synthesized":true},
+        {"kind":"doubleTap","x":30,"y":40}
+      ]}
+      """
+    )
+
+    XCTAssertFalse(shouldSkipAppActivationPreflight(selectorTap))
+    XCTAssertFalse(shouldSkipAppActivationPreflight(standardDrag))
+    XCTAssertFalse(shouldSkipAppActivationPreflight(mixedSequence))
+  }
+
+  func testSkipAppActivationPreflightRequiresCachedTarget() throws {
+    currentApp = nil
+    currentBundleId = nil
+    let scroll = try runnerCommandFixture(
+      #"{"command":"scroll","commandId":"scroll-1","direction":"down","pixels":400}"#
+    )
+
+    XCTAssertFalse(shouldSkipAppActivationPreflight(scroll))
+  }
+
   func testExecuteDispatchedReturnsBusyBeforeMainThreadFastPath() throws {
     let command = try runnerCommandFixture(#"{"command":"snapshot","commandId":"snapshot-busy"}"#)
     abandonedMainThreadWorkCount = 1
@@ -732,9 +800,9 @@ extension RunnerTests {
         message: "dragged"
       )
     case .scroll:
-      // Fused frame-resolve + drag scroll for non-tvOS. Resolves the interaction frame via
-      // resolvedTouchReferenceFrame, computes drag endpoints with the Swift port of
-      // buildScrollGesturePlan, then runs the same non-synthesized drag path scroll's drag used.
+      // Fused frame-resolve + drag scroll for non-tvOS. On iOS this intentionally stays on the
+      // AX-free synthesized coordinate lane so scroll keeps working when XCTest cannot serialize
+      // the accessibility tree.
       guard let direction = command.direction,
         direction == "up" || direction == "down" || direction == "left" || direction == "right"
       else {
@@ -746,7 +814,7 @@ extension RunnerTests {
           )
         )
       }
-      let frame = resolvedTouchReferenceFrame(app: activeApp, appFrame: activeApp.frame)
+      let frame = scrollReferenceFrame(app: activeApp)
       guard frame.width > 0, frame.height > 0 else {
         return Response(
           ok: false,
@@ -786,7 +854,7 @@ extension RunnerTests {
         x2: frame.minX + plan.x2,
         y2: frame.minY + plan.y2,
         durationMs: command.durationMs,
-        synthesized: command.durationMs != nil,
+        synthesized: shouldUseSynthesizedScrollPath(),
         message: "scrolled"
       )
     case .desktopScroll:
@@ -1139,10 +1207,9 @@ extension RunnerTests {
     }
   }
 
-  /// Shared drag execution for `.drag` and the fused `.scroll`. Mirrors the original `.drag` body
-  /// exactly: keyboardAvoidingDragPoints -> resolvedDragVisualizationFrame -> synthesized branch
-  /// (16-10000ms clamp) or non-synthesized dragAt with coordinateDragHoldDuration ->
-  /// gestureResponse(.drag). `.scroll` uses the synthesized path only when a duration is requested.
+  /// Shared drag execution for `.drag` and the fused `.scroll`. The iOS synthesized lane avoids
+  /// keyboard/window lookup and `XCUICoordinate` fallback so coordinate gestures remain usable on
+  /// screens whose XCTest accessibility tree is unhealthy.
   private func executeDragGesture(
     activeApp: XCUIApplication,
     x: Double,
@@ -1153,6 +1220,24 @@ extension RunnerTests {
     synthesized: Bool,
     message: String
   ) -> Response {
+    let commandName = dragCommandName(message: message)
+    guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite else {
+      return Response(
+        ok: false,
+        error: ErrorPayload(code: "INVALID_ARGS", message: "\(commandName) requires finite coordinates")
+      )
+    }
+    if synthesized, let synthesizedResponse = executeSynthesizedDragGesture(
+      activeApp: activeApp,
+      x: x,
+      y: y,
+      x2: x2,
+      y2: y2,
+      durationMs: durationMs,
+      message: message
+    ) {
+      return synthesizedResponse
+    }
     let dragPoints = keyboardAvoidingDragPoints(app: activeApp, x: x, y: y, x2: x2, y2: y2)
     let dragFrame = resolvedDragVisualizationFrame(
       app: activeApp,
@@ -1203,6 +1288,73 @@ extension RunnerTests {
     )
   }
 
+  private func executeSynthesizedDragGesture(
+    activeApp: XCUIApplication,
+    x: Double,
+    y: Double,
+    x2: Double,
+    y2: Double,
+    durationMs: Double?,
+    message: String
+  ) -> Response? {
+#if os(iOS)
+    guard let plan = axFreeSynthesizedDragPlan(app: activeApp, x: x, y: y, x2: x2, y2: y2)
+    else {
+      return Response(
+        ok: false,
+        error: ErrorPayload(
+          code: "INVALID_ARGS",
+          message: "\(dragCommandName(message: message)) could not resolve a finite synthesized coordinate frame"
+        )
+      )
+    }
+    let durationMs = min(max(durationMs ?? 250, 16), 10000)
+    let dragFrame = axFreeDragVisualizationFrame(
+      x: plan.points.x,
+      y: plan.points.y,
+      x2: plan.points.x2,
+      y2: plan.points.y2,
+      referenceFrame: plan.referenceFrame
+    )
+    let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
+      synthesizedDragAt(
+        app: activeApp,
+        x: plan.points.x,
+        y: plan.points.y,
+        x2: plan.points.x2,
+        y2: plan.points.y2,
+        durationMs: durationMs
+      )
+    }
+    if case .performed = outcome {
+      return gestureResponse(message: message, timing: timing, frame: .drag(dragFrame))
+    }
+    return unsupportedResponse(for: outcome)
+#else
+    return nil
+#endif
+  }
+
+  private func scrollReferenceFrame(app: XCUIApplication) -> CGRect {
+#if os(iOS)
+    return synthesizedGestureReferenceFrame(app: app) ?? CGRect(x: 0, y: 0, width: 0, height: 0)
+#else
+    return resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
+#endif
+  }
+
+  private func shouldUseSynthesizedScrollPath() -> Bool {
+#if os(iOS)
+    return true
+#else
+    return false
+#endif
+  }
+
+  private func dragCommandName(message: String) -> String {
+    return message == "scrolled" ? "scroll" : "drag"
+  }
+
   private func currentXCTestFailureCount() -> Int {
     return testRun?.failureCount ?? 0
   }
@@ -1235,18 +1387,55 @@ extension RunnerTests {
 
   private func shouldSkipAppActivationPreflight(_ command: Command) -> Bool {
 #if os(iOS)
-    // Coordinate-only synthesized taps can run after an AX-fatal screen because they do not need
-    // app activation, window lookup, keyboard lookup, or element resolution. Selector/text taps
-    // intentionally stay on the normal AX path because they need an element query.
-    return command.command == .tap
-      && command.synthesized == true
-      && command.x != nil
-      && command.y != nil
-      && command.text == nil
-      && command.selectorKey == nil
+    // Coordinate-only synthesized gestures can run after an AX-fatal screen because they do not
+    // need app activation, window lookup, keyboard lookup, or element resolution. Selector/text
+    // interactions intentionally stay on the normal AX path because they need an element query.
+    guard command.text == nil, command.selectorKey == nil else { return false }
+    guard hasCachedTargetForActivationSkip(command: command) else { return false }
+    switch command.command {
+    case .tap:
+      return command.synthesized == true
+        && command.x != nil
+        && command.y != nil
+    case .drag:
+      return command.synthesized == true
+        && command.x != nil
+        && command.y != nil
+        && command.x2 != nil
+        && command.y2 != nil
+    case .scroll:
+      return true
+    case .sequence:
+      guard let steps = command.steps, !steps.isEmpty else { return false }
+      return steps.allSatisfy { step in
+        if step.kind == "tap" {
+          return step.synthesized == true && step.x != nil && step.y != nil
+        }
+        if step.kind == "drag" {
+          return step.synthesized == true
+            && step.x != nil
+            && step.y != nil
+            && step.x2 != nil
+            && step.y2 != nil
+        }
+        return false
+      }
+    default:
+      return false
+    }
 #else
     return false
 #endif
+  }
+
+  private func hasCachedTargetForActivationSkip(command: Command) -> Bool {
+    guard currentApp != nil else { return false }
+    guard let bundleId = command.appBundleId?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !bundleId.isEmpty
+    else {
+      return true
+    }
+    return currentBundleId == bundleId
   }
 
   private func resolveAppWithoutActivation(command: Command) -> XCUIApplication {

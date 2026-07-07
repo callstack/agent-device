@@ -390,6 +390,30 @@ test('iosRunnerOverrides maps iOS scroll to a single fused scroll command', asyn
   });
 });
 
+test('iosRunnerOverrides maps iOS scroll without duration to a fused runner scroll', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValueOnce({
+    x: 200,
+    y: 640,
+    x2: 200,
+    y2: 240,
+    referenceWidth: 400,
+    referenceHeight: 800,
+  });
+
+  const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
+    appBundleId: 'com.example.App',
+  });
+
+  await overrides.scroll('down', { pixels: 400 });
+
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
+    command: 'scroll',
+    direction: 'down',
+    pixels: 400,
+    appBundleId: 'com.example.App',
+  });
+});
+
 test('iosRunnerOverrides maps tvOS scroll duration to remote press hold duration', async () => {
   mockRunAppleRunnerCommand.mockResolvedValueOnce({
     ok: true,
