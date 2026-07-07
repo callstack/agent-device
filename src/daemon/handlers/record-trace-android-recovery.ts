@@ -59,6 +59,7 @@ type AndroidRecoveryResolution =
   | { kind: 'live'; manifest: AndroidRecordingRecoveryCandidate }
   | { kind: 'stale' }
   | { kind: 'uncertain' };
+type AndroidScreenrecordProbe = AndroidRecordingRecoveryMetadata | 'uncertain' | undefined;
 
 type AndroidRecoveryManifestScan = {
   live: AndroidRecordingRecoveryCandidate[];
@@ -147,7 +148,7 @@ async function resolveAndroidRecoveryCandidate(
   manifest: AndroidRecordingRecoveryManifest,
 ): Promise<AndroidRecoveryResolution> {
   if (manifest.pending) {
-    return await resolvePendingAndroidRecoveryCandidate(deviceId, manifest);
+    return await resolvePendingAndroidRecoveryCandidate(deviceId, manifest, manifest.pending);
   }
   return await resolveCurrentAndroidRecoveryCandidate(deviceId, manifest);
 }
@@ -155,36 +156,51 @@ async function resolveAndroidRecoveryCandidate(
 async function resolvePendingAndroidRecoveryCandidate(
   deviceId: string,
   manifest: AndroidRecordingRecoveryManifest,
+  pendingMetadata: { remotePath: string },
 ): Promise<AndroidRecoveryResolution> {
-  if (!manifest.pending) {
-    return await resolveCurrentAndroidRecoveryCandidate(deviceId, manifest);
-  }
-  const pending = await findLiveAndroidScreenrecordByPath(deviceId, manifest.pending.remotePath);
-  if (pending && pending !== 'uncertain') {
-    return liveAndroidRecoveryCandidate({
-      manifest,
-      current: pending,
-      recoveryWarning: manifest.current
-        ? ANDROID_RECOVERY_ROTATION_WARNING
-        : ANDROID_RECOVERY_WARNING,
-    });
-  }
-  if (!manifest.current) {
-    return pending === 'uncertain' ? { kind: 'uncertain' } : { kind: 'stale' };
-  }
+  const pending = await findLiveAndroidScreenrecordByPath(deviceId, pendingMetadata.remotePath);
+  const adoptedPending = resolveLivePendingScreenrecord(manifest, pending);
+  if (adoptedPending) return adoptedPending;
+  if (!manifest.current) return pendingOnlyResolution(pending);
+  return await resolveInterruptedRotationCurrent(deviceId, manifest, manifest.current, pending);
+}
 
-  const liveness = await checkRecoverableAndroidScreenrecord(deviceId, manifest.current);
+async function resolveInterruptedRotationCurrent(
+  deviceId: string,
+  manifest: AndroidRecordingRecoveryManifest,
+  current: AndroidRecordingRecoveryMetadata,
+  pending: AndroidScreenrecordProbe,
+): Promise<AndroidRecoveryResolution> {
+  const liveness = await checkRecoverableAndroidScreenrecord(deviceId, current);
   if (liveness === 'uncertain' || pending === 'uncertain') return { kind: 'uncertain' };
   if (liveness === 'stale') return { kind: 'stale' };
   return liveAndroidRecoveryCandidate({
     manifest,
-    current: manifest.current,
-    chunks: chunksThroughRemotePath(manifest.chunks, manifest.current.remotePath),
+    current,
+    chunks: chunksThroughRemotePath(manifest.chunks, current.remotePath),
     recoveryWarning:
       liveness === 'finished'
         ? `${ANDROID_RECOVERY_ROTATION_WARNING} ${ANDROID_RECOVERY_FINISHED_WARNING}`
         : ANDROID_RECOVERY_ROTATION_WARNING,
   });
+}
+
+function resolveLivePendingScreenrecord(
+  manifest: AndroidRecordingRecoveryManifest,
+  pending: AndroidScreenrecordProbe,
+): AndroidRecoveryResolution | undefined {
+  if (!pending || pending === 'uncertain') return undefined;
+  return liveAndroidRecoveryCandidate({
+    manifest,
+    current: pending,
+    recoveryWarning: manifest.current
+      ? ANDROID_RECOVERY_ROTATION_WARNING
+      : ANDROID_RECOVERY_WARNING,
+  });
+}
+
+function pendingOnlyResolution(pending: AndroidScreenrecordProbe): AndroidRecoveryResolution {
+  return pending === 'uncertain' ? { kind: 'uncertain' } : { kind: 'stale' };
 }
 
 async function resolveCurrentAndroidRecoveryCandidate(
