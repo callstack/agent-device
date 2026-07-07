@@ -20,6 +20,7 @@ import {
   requiredNumber,
   selectorSnapshotFields,
   stringField,
+  wireEchoField,
   type CommandFieldMap,
   type CommonCommandInput,
   type InferCommandInput,
@@ -42,6 +43,7 @@ import {
   commandSupportsVerifyEvidence,
 } from '../../core/command-descriptor/registry.ts';
 import type { PostActionObservationSupportFor } from '../../core/command-descriptor/post-action-observation.ts';
+import { FILL_DELAY_WIRE_ECHO } from '../../core/interaction-wire-projection.ts';
 
 const FIND_ACTION_VALUES = [
   'click',
@@ -120,7 +122,9 @@ const pressFields = {
 const fillFields = {
   target: requiredField(interactionTargetField()),
   text: requiredField(stringField('Text to enter into the target.')),
-  delayMs: integerField('Delay between typed characters.', { min: 0 }),
+  delayMs: wireEchoField(integerField('Delay between typed characters.', { min: 0 }), {
+    ...FILL_DELAY_WIRE_ECHO,
+  }),
   ...selectorSnapshotFields(),
   ...postActionObservationFields('fill'),
 };

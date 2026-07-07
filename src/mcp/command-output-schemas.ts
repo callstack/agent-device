@@ -194,6 +194,11 @@ export const COMMAND_OUTPUT_SCHEMAS = {
       evidence: interactionEvidenceSchema,
       settle: settleObservationSchema,
       button: enumSchema(['secondary', 'middle']),
+      count: numberSchema('Number of press/click repetitions.'),
+      intervalMs: numberSchema('Delay between repeated press/click actions.'),
+      holdMs: numberSchema('Hold duration for each action.'),
+      jitterPx: numberSchema('Randomization radius in pixels.'),
+      doubleTap: booleanSchema('Whether the command requested a double-tap action.'),
     },
   }),
   fill: interactionWireResultSchema({
