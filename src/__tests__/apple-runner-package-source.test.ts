@@ -106,6 +106,8 @@ function extractSwiftFunction(source: string, name: string): string {
   assert.notEqual(signatureIndex, -1, `missing Swift function ${name}`);
   const bodyStart = source.indexOf('{', signatureIndex);
   assert.notEqual(bodyStart, -1, `missing Swift function body ${name}`);
+  // This lightweight guard assumes the target Swift function does not contain unmatched braces
+  // inside string literals or comments; keep the source guard focused on small functions.
   let depth = 0;
   for (let index = bodyStart; index < source.length; index += 1) {
     const char = source[index];

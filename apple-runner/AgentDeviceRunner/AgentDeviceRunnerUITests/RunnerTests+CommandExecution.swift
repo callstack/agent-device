@@ -241,6 +241,81 @@ extension RunnerTests {
     XCTAssertNil(box.error)
     XCTAssertEqual(box.observedMainThread, true)
   }
+
+  func testRunMainThreadWorkTimeoutMarksAbandonedUntilDrained() {
+    final class ResultBox {
+      var error: Error?
+      var abandonedCount: Int?
+      var abandonedSinceSet: Bool?
+      var drainedCount: Int?
+      var drainedSinceCleared: Bool?
+    }
+    let box = ResultBox()
+    let releaseWork = DispatchSemaphore(value: 0)
+    let observedAbandoned = DispatchSemaphore(value: 0)
+    let finished = expectation(description: "off-main caller timed out")
+    let drained = expectation(description: "abandoned main work drained")
+
+    DispatchQueue(label: "agent-device.runner.tests.timeout").async {
+      do {
+        _ = try self.runMainThreadWork(
+          command: nil,
+          timeout: 0,
+          timeoutError: self.mainThreadExecutionTimeoutError,
+          onAbandoned: {
+            box.abandonedCount = self.abandonedMainThreadWorkCount
+            box.abandonedSinceSet = self.abandonedMainThreadWorkSince != nil
+            observedAbandoned.signal()
+          },
+          onDrained: {
+            self.mainThreadWorkLock.lock()
+            box.drainedCount = self.abandonedMainThreadWorkCount
+            box.drainedSinceCleared = self.abandonedMainThreadWorkSince == nil
+            self.mainThreadWorkLock.unlock()
+            drained.fulfill()
+          }
+        ) {
+          _ = releaseWork.wait(timeout: .now() + 1)
+          return true
+        }
+      } catch {
+        box.error = error
+      }
+      finished.fulfill()
+    }
+
+    DispatchQueue(label: "agent-device.runner.tests.release-timeout").async {
+      _ = observedAbandoned.wait(timeout: .now() + 1)
+      releaseWork.signal()
+    }
+
+    wait(for: [finished, drained], timeout: 2)
+    XCTAssertEqual((box.error as NSError?)?.code, RunnerErrorCode.mainThreadExecutionTimedOut)
+    XCTAssertEqual(box.abandonedCount, 1)
+    XCTAssertEqual(box.abandonedSinceSet, true)
+    XCTAssertEqual(box.drainedCount, 0)
+    XCTAssertEqual(box.drainedSinceCleared, true)
+  }
+
+  func testPostSnapshotDelayMarkDoesNotQueueBehindAbandonedTreeCapture() {
+    abandonedTreeCaptureCount = 1
+    defer {
+      abandonedTreeCaptureCount = 0
+      needsPostSnapshotInteractionDelay = false
+    }
+
+    let finished = expectation(description: "off-main caller finished")
+    DispatchQueue(label: "agent-device.runner.tests.post-snapshot-delay").async {
+      self.setNeedsPostSnapshotInteractionDelay()
+      finished.fulfill()
+    }
+
+    wait(for: [finished], timeout: 1)
+    mainThreadWorkLock.lock()
+    let abandonedWorkCount = abandonedMainThreadWorkCount
+    mainThreadWorkLock.unlock()
+    XCTAssertEqual(abandonedWorkCount, 0)
+  }
 #endif
 
   func execute(command: Command) throws -> Response {
@@ -583,7 +658,7 @@ extension RunnerTests {
       timeout: mainThreadExecutionTimeout,
       timeoutError: mainThreadExecutionTimeoutError
     ) {
-      self.prepareActiveCommandContext(command: command)
+      try self.prepareActiveCommandContextSafely(command: command)
     }
     switch preparation {
     case .response(let response):
@@ -627,6 +702,10 @@ extension RunnerTests {
       needsPostSnapshotInteractionDelay = true
       return
     }
+    guard !hasAbandonedTreeCapture() else {
+      NSLog("AGENT_DEVICE_RUNNER_POST_SNAPSHOT_DELAY_MARK_SKIPPED_XCTEST_OCCUPIED")
+      return
+    }
     do {
       try runMainThreadWork(
         command: nil,
@@ -656,6 +735,28 @@ extension RunnerTests {
     } catch {
       NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_INVALIDATION_FAILED=%@", String(describing: error))
     }
+  }
+
+  private func prepareActiveCommandContextSafely(command: Command) throws -> ActiveCommandPreparation {
+    var preparation: ActiveCommandPreparation?
+    let exceptionMessage = RunnerObjCExceptionCatcher.catchException({
+      preparation = self.prepareActiveCommandContext(command: command)
+    })
+    if let exceptionMessage {
+      throw NSError(
+        domain: RunnerErrorDomain.exception,
+        code: RunnerErrorCode.objcException,
+        userInfo: [NSLocalizedDescriptionKey: exceptionMessage]
+      )
+    }
+    guard let preparation else {
+      throw NSError(
+        domain: RunnerErrorDomain.general,
+        code: RunnerErrorCode.commandReturnedNoResponse,
+        userInfo: [NSLocalizedDescriptionKey: "snapshot preflight returned no response"]
+      )
+    }
+    return preparation
   }
 
   private func executeOnMain(command: Command) throws -> Response {

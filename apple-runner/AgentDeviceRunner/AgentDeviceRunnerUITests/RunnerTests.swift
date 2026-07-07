@@ -77,9 +77,9 @@ final class RunnerTests: XCTestCase {
   // Bluesky-class screens grind ~4-8s before the tree backend fails; anything past this
   // threshold marks the screen hostile so the next capture leads with private AX.
   let snapshotTreeSlowCaptureThreshold: TimeInterval = 3
-  // The blocking XCTest tree snapshot XPC runs on a worker thread with this slice so a
+  // The blocking XCTest tree snapshot XPC runs on the main thread with this slice so a
   // content-dependent grind (#1105: seconds to minutes on live Bluesky screens) cannot pin
-  // the capture plan. On timeout the XPC keeps grinding on its worker; while any abandoned
+  // the capture plan. On timeout the XPC keeps grinding on main; while any abandoned
   // tree capture is outstanding, plans skip the XCTest-backed tiers (tree, query sweep) and
   // use the private AX backend, which does not go through testmanagerd.
   let treeCaptureLock = NSLock()

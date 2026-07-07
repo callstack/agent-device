@@ -103,6 +103,10 @@ extension RunnerTests {
     return ([.privateAX, .querySweep, .recursiveTree], true)
   }
 
+  func shouldSkipSnapshotBackendForAbandonedTreeCapture(_ kind: SnapshotBackendKind) -> Bool {
+    kind != .privateAX && hasAbandonedTreeCapture()
+  }
+
   // MARK: Plan runner
 
   func runSnapshotCapturePlan(
@@ -144,7 +148,7 @@ extension RunnerTests {
       }
       // While an abandoned tree capture is still grinding inside testmanagerd, XCTest-backed
       // tiers would block behind it; only the private AX backend stays responsive (#1105).
-      if kind != .privateAX, hasAbandonedTreeCapture() {
+      if shouldSkipSnapshotBackendForAbandonedTreeCapture(kind) {
         NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_TIER_SKIPPED_XCTEST_OCCUPIED tier=%@", kind.rawValue)
         if firstFailure == nil {
           firstFailure = (
@@ -541,6 +545,15 @@ extension RunnerTests {
     // Expired penalties stop applying.
     snapshotTreePenaltyUntil = Date(timeIntervalSinceNow: -1)
     XCTAssertFalse(isSnapshotTreeBackendPenalized(bundleId: "com.other.app"))
+  }
+
+  func testAbandonedTreeCaptureSkipsOnlyXCTestBackedSnapshotTiers() {
+    abandonedTreeCaptureCount = 1
+    defer { abandonedTreeCaptureCount = 0 }
+
+    XCTAssertTrue(shouldSkipSnapshotBackendForAbandonedTreeCapture(.recursiveTree))
+    XCTAssertTrue(shouldSkipSnapshotBackendForAbandonedTreeCapture(.querySweep))
+    XCTAssertFalse(shouldSkipSnapshotBackendForAbandonedTreeCapture(.privateAX))
   }
 
   // Pins the record(_:) suppression class via its pure classifier. record(_:) itself is not
