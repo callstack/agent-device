@@ -1,7 +1,10 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 
-import { readSnapshotQualityVerdict } from '../../snapshot/snapshot-quality.ts';
+import {
+  readSnapshotQualityVerdict,
+  renderSnapshotQualityWarnings,
+} from '../../snapshot/snapshot-quality.ts';
 
 test('readSnapshotQualityVerdict accepts a well-formed verdict', () => {
   const verdict = readSnapshotQualityVerdict({
@@ -40,4 +43,23 @@ test('readSnapshotQualityVerdict keeps the verdict but drops an unknown reasonCo
   });
   assert.equal(verdict?.state, 'sparse');
   assert.equal(verdict?.reasonCode, undefined);
+});
+
+test('renderSnapshotQualityWarnings keeps recovered snapshot copy concise', () => {
+  const warnings = renderSnapshotQualityWarnings(
+    {
+      state: 'recovered',
+      backend: 'private-ax',
+      reason:
+        'iOS XCTest snapshot failed while serializing the accessibility tree. Error kAXErrorIllegalArgument getting snapshot for element <AXUIElementRef 0x1>',
+      reasonCode: 'ax-rejected',
+      effectiveDepth: 56,
+    },
+    [],
+  );
+
+  assert.deepEqual(warnings, [
+    'Recovered this snapshot with the private-ax accessibility backend. It is OK to continue; use --json to inspect snapshotQuality.reason if you need recovery details.',
+    'Some deeper accessibility nodes were omitted; this tree is capped at depth 56. Re-run with --depth 56 --scope <container> only if you need deeper content.',
+  ]);
 });

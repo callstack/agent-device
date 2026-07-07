@@ -80,14 +80,8 @@ export function renderSnapshotQualityWarnings(
 
 function stateWarning(verdict: SnapshotQualityVerdict): string[] {
   if (verdict.state === 'recovered') {
-    const meaning =
-      verdict.reasonCode === 'budget'
-        ? ' The primary capture ran out of its time budget (busy app or simulator); the recovered tree is authoritative for this screen.'
-        : " This usually means the app publishes an unhealthy accessibility tree — fixing the app's accessibility is the real cure. Treat screenshot as visual truth when this warning appears.";
     return [
-      `Recovered this snapshot with the ${verdict.backend} accessibility backend` +
-        (verdict.reason ? ` after: ${verdict.reason}.` : '.') +
-        meaning,
+      `Recovered this snapshot with the ${verdict.backend} accessibility backend. It is OK to continue; use --json to inspect snapshotQuality.reason if you need recovery details.`,
     ];
   }
   if (verdict.state === 'sparse') {
@@ -103,7 +97,7 @@ function stateWarning(verdict: SnapshotQualityVerdict): string[] {
 function depthWarning(verdict: SnapshotQualityVerdict): string[] {
   if (verdict.effectiveDepth === undefined) return [];
   return [
-    `The accessibility server rejected deeper requests; this tree is capped at depth ${verdict.effectiveDepth} — re-run with --depth ${verdict.effectiveDepth} --scope <container> for deeper content.`,
+    `Some deeper accessibility nodes were omitted; this tree is capped at depth ${verdict.effectiveDepth}. Re-run with --depth ${verdict.effectiveDepth} --scope <container> only if you need deeper content.`,
   ];
 }
 
