@@ -186,7 +186,7 @@ function parseJsonObject(value: string): Record<string, unknown> | undefined {
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object';
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function readAndroidRecoveryManifestRequired(
