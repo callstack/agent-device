@@ -161,7 +161,14 @@ async function resolvePendingAndroidRecoveryCandidate(
   const pending = await findLiveAndroidScreenrecordByPath(deviceId, pendingMetadata.remotePath);
   const adoptedPending = resolveLivePendingScreenrecord(manifest, pending);
   if (adoptedPending) return adoptedPending;
-  if (!manifest.current) return pendingOnlyResolution(pending);
+  if (!manifest.current) {
+    return await resolvePendingOnlyAndroidRecoveryCandidate(
+      deviceId,
+      manifest,
+      pendingMetadata.remotePath,
+      pending,
+    );
+  }
   return await resolveInterruptedRotationCurrent(deviceId, manifest, manifest.current, pending);
 }
 
@@ -199,8 +206,34 @@ function resolveLivePendingScreenrecord(
   });
 }
 
-function pendingOnlyResolution(pending: AndroidScreenrecordProbe): AndroidRecoveryResolution {
-  return pending === 'uncertain' ? { kind: 'uncertain' } : { kind: 'stale' };
+async function resolvePendingOnlyAndroidRecoveryCandidate(
+  deviceId: string,
+  manifest: AndroidRecordingRecoveryManifest,
+  pendingRemotePath: string,
+  pending: AndroidScreenrecordProbe,
+): Promise<AndroidRecoveryResolution> {
+  if (pending === 'uncertain') {
+    return { kind: 'uncertain' };
+  }
+  // The pending screenrecord process is gone. If it already produced an on-device file,
+  // recover it as a finished recording rather than discarding a completed capture — the
+  // same treatment resolveCurrentAndroidRecoveryCandidate gives a finished `current`.
+  if (await androidRemoteFileExists(deviceId, pendingRemotePath)) {
+    return liveAndroidRecoveryCandidate({
+      manifest,
+      current: {
+        remotePath: pendingRemotePath,
+        // A pending chunk never recorded a pid — the manifest is written before the
+        // screenrecord process starts. The process is confirmed gone, so there is
+        // nothing to signal; the empty pid tells finishCurrentAndroidRecordingChunk to
+        // skip the stop signal.
+        remotePid: '',
+        startedAt: manifest.startedAt,
+      },
+      recoveryWarning: ANDROID_RECOVERY_FINISHED_WARNING,
+    });
+  }
+  return { kind: 'stale' };
 }
 
 async function resolveCurrentAndroidRecoveryCandidate(

@@ -229,6 +229,13 @@ test('Provider-backed integration Android record stop recovers pending manifest 
   );
 });
 
+test('Provider-backed integration Android record stop recovers finished pending manifest after process exit', async () => {
+  await withProviderScenarioTempDir(
+    'agent-device-provider-scenario-android-record-pending-finished-',
+    runAndroidPendingFinishedManifestRecoveryScenario,
+  );
+});
+
 test('Provider-backed integration Android record stop recovers rotating manifest after daemon state loss', async () => {
   await withProviderScenarioTempDir(
     'agent-device-provider-scenario-android-record-rotating-recovery-',
@@ -632,6 +639,65 @@ async function runAndroidPendingManifestRecoveryScenario(tmpDir: string): Promis
     assertCommandCall(adbCalls, ['shell', 'ps', '-A', '-o', 'pid=,args=']);
     assertCommandCall(adbCalls, ['shell', 'kill', '-2', '4321']);
     assert.deepEqual(pullCalls, [{ remotePath, localPath: recordingPath }]);
+  } finally {
+    await daemon.close();
+  }
+}
+
+async function runAndroidPendingFinishedManifestRecoveryScenario(tmpDir: string): Promise<void> {
+  const adbCalls: string[][] = [];
+  const pullCalls: PullCall[] = [];
+  const remotePath = '/sdcard/agent-device-recording-624000001.mp4';
+  const recordingPath = path.join(tmpDir, 'pending-finished-recovered.mp4');
+  const manifest = buildAndroidRecordingManifest({
+    outPath: recordingPath,
+    remotePath,
+    sessionName: 'default',
+    status: 'pending',
+  });
+  const daemon = await createProviderScenarioHarness({
+    androidAdbProvider: () => ({
+      exec: async (args) => {
+        adbCalls.push([...args]);
+        const command = args.join(' ');
+        if (command === 'shell cat /sdcard/agent-device-recording-active.json') {
+          return { stdout: JSON.stringify(manifest), stderr: '', exitCode: 0 };
+        }
+        if (command === 'shell cat /data/local/tmp/agent-device-recording-active.json') {
+          return { stdout: '', stderr: '', exitCode: 1 };
+        }
+        // The pending screenrecord process already exited: the full process scan finds no
+        // match, but the on-device file still exists (default stat returns a non-zero size).
+        if (command === 'shell ps -A -o pid=,args=') {
+          return { stdout: '', stderr: '', exitCode: 0 };
+        }
+        return androidAdbResult(args);
+      },
+      pull: async (from, to) => {
+        pullCalls.push({ remotePath: from, localPath: to });
+        writePlayableMp4(to);
+        return { stdout: '', stderr: '', exitCode: 0 };
+      },
+    }),
+    deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+  });
+
+  try {
+    const recordStop = await stopAndroidRecording(daemon, recordingPath);
+    const data = assertRpcOk<{ recording?: unknown; outPath?: unknown; warning?: unknown }>(
+      recordStop,
+    );
+    assert.equal(data.recording, 'stopped');
+    assert.equal(data.outPath, recordingPath);
+    assert.match(String(data.warning), /no longer running/);
+    // A pending manifest never recorded a pid and the process is confirmed gone, so stop
+    // sends no signal — it just pulls the completed file instead of discarding it.
+    assert.equal(
+      adbCalls.some((args) => args.join(' ').startsWith('shell kill -2')),
+      false,
+    );
+    assert.deepEqual(pullCalls, [{ remotePath, localPath: recordingPath }]);
+    assert.equal(fs.existsSync(recordingPath), true);
   } finally {
     await daemon.close();
   }

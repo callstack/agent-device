@@ -542,6 +542,17 @@ async function finishCurrentAndroidRecordingChunk(params: {
     remotePid = recording.remotePid,
     waitForRemoteFileStability = true,
   } = params;
+  if (!remotePid) {
+    // A recovered finished recording with no tracked process (a pending chunk whose
+    // screenrecord already exited): there is nothing to signal, and the on-device file
+    // is already complete. Skip the kill entirely — probing/signalling an empty pid is
+    // unsafe (`isAndroidProcessRunning('')` can report a false positive).
+    appendAndroidRecordingWarning(recording, resolveAndroidScreenrecordLimitWarning(recording));
+    if (waitForRemoteFileStability) {
+      await waitForAndroidRemoteFileStability(device.id, remotePath);
+    }
+    return undefined;
+  }
   const wasRunningBeforeStop = await isAndroidProcessRunning(device.id, remotePid);
   if (!wasRunningBeforeStop) {
     appendAndroidRecordingWarning(recording, resolveAndroidScreenrecordLimitWarning(recording));
