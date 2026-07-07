@@ -181,6 +181,50 @@ test('recordAction event log redacts typed text from display positionals', () =>
   assert.equal(page.events[0]?.details?.textLength, 18);
 });
 
+test('recordAction event log redacts payload-bearing and unknown positionals', () => {
+  const { store, session } = makeFixture('agent-device-session-events-payload-redaction-');
+  const clipboardText = 'super-secret-token';
+  const pushPayload = '{"token":"push-secret-token"}';
+  const eventPayload = '{"token":"event-secret-token"}';
+  const futurePayload = 'future-secret-token';
+
+  store.recordAction(session, {
+    command: 'clipboard',
+    positionals: ['write', clipboardText],
+    flags: {},
+    result: { action: 'write', textLength: Array.from(clipboardText).length },
+  });
+  store.recordAction(session, {
+    command: 'push',
+    positionals: ['com.example.app', pushPayload],
+    flags: {},
+    result: { message: 'Pushed notification to com.example.app' },
+  });
+  store.recordAction(session, {
+    command: 'trigger-app-event',
+    positionals: ['checkout', eventPayload],
+    flags: {},
+    result: { message: 'Triggered app event checkout' },
+  });
+  store.recordAction(session, {
+    command: 'future-command',
+    positionals: ['public-ish', futurePayload],
+    flags: {},
+    result: {},
+  });
+
+  const page = store.readEvents(session.name);
+  const serialized = JSON.stringify(page.events);
+  assert.equal(serialized.includes(clipboardText), false);
+  assert.equal(serialized.includes(pushPayload), false);
+  assert.equal(serialized.includes(eventPayload), false);
+  assert.equal(serialized.includes(futurePayload), false);
+  assert.deepEqual(page.events[0]?.details?.positionals, ['write', '<text:18 chars>']);
+  assert.deepEqual(page.events[1]?.details?.positionals, ['com.example.app', '<payload:29 chars>']);
+  assert.deepEqual(page.events[2]?.details?.positionals, ['checkout', '<payload:30 chars>']);
+  assert.deepEqual(page.events[3]?.details?.positionals, ['<arg:10 chars>', '<arg:19 chars>']);
+});
+
 test('saveScript path writes session log to custom location', () => {
   const { root, store, session } = makeFixture('agent-device-session-log-custom-path-', 'sessions');
   const customPath = path.join(root, 'workflows', 'my-flow.ad');

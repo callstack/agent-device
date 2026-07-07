@@ -69,7 +69,7 @@ function readActionTargetLabel(action: SessionAction): string | undefined {
     readElementTargetLabel(result) ??
     readPointTargetLabel(result) ??
     readAppTargetLabel(result) ??
-    action.positionals[0]
+    readSafeDisplayPositional(action.positionals[0])
   );
 }
 
@@ -98,8 +98,9 @@ function readAppTargetLabel(result: Record<string, unknown>): string | undefined
 }
 
 function buildDisplayPositionals(action: SessionAction): string[] | undefined {
+  if (action.positionals.length === 0) return undefined;
   if (action.command === PUBLIC_COMMANDS.type) {
-    return [`<text:${readActionTextLength(action)} chars>`];
+    return [hiddenValueFromLength('text', readActionTextLength(action))];
   }
   if (action.command === PUBLIC_COMMANDS.fill) {
     return buildFillDisplayPositionals(action);
@@ -107,11 +108,20 @@ function buildDisplayPositionals(action: SessionAction): string[] | undefined {
   if (action.command === PUBLIC_COMMANDS.find) {
     return buildFindDisplayPositionals(action);
   }
-  return action.positionals.length > 0 ? action.positionals : undefined;
+  if (action.command === PUBLIC_COMMANDS.clipboard) {
+    return buildClipboardDisplayPositionals(action);
+  }
+  if (action.command === PUBLIC_COMMANDS.push) {
+    return buildPayloadDisplayPositionals(action, 'payload');
+  }
+  if (action.command === PUBLIC_COMMANDS.triggerAppEvent) {
+    return buildPayloadDisplayPositionals(action, 'payload');
+  }
+  return action.positionals.map(redactDisplayPositional);
 }
 
 function buildFillDisplayPositionals(action: SessionAction): string[] {
-  const textPlaceholder = `<text:${readActionTextLength(action)} chars>`;
+  const textPlaceholder = hiddenValueFromLength('text', readActionTextLength(action));
   const result = action.result ?? {};
   const ref = readString(result.ref);
   if (ref) return [ref.startsWith('@') ? ref : `@${ref}`, textPlaceholder];
@@ -124,16 +134,53 @@ function buildFillDisplayPositionals(action: SessionAction): string[] {
 }
 
 function buildFindDisplayPositionals(action: SessionAction): string[] | undefined {
-  const sensitiveActionIndex = action.positionals.findIndex(
-    (value) => value === 'fill' || value === 'type',
-  );
-  if (sensitiveActionIndex < 0) {
-    return action.positionals.length > 0 ? action.positionals : undefined;
-  }
-  return [
-    ...action.positionals.slice(0, sensitiveActionIndex + 1),
-    `<text:${readActionTextLength(action)} chars>`,
+  const queryIndex = isFindLocator(action.positionals[0]) ? 1 : 0;
+  const query = action.positionals[queryIndex];
+  if (query === undefined) return undefined;
+  const actionIndex = queryIndex + 1;
+  const prefix = [
+    ...(queryIndex === 1 ? [String(action.positionals[0])] : []),
+    hiddenValue('query', query),
   ];
+  const findAction = action.positionals[actionIndex];
+  if (!findAction) return prefix;
+  if (findAction === 'fill' || findAction === 'type') {
+    return [...prefix, findAction, hiddenValueFromLength('text', readActionTextLength(action))];
+  }
+  return [...prefix, ...action.positionals.slice(actionIndex).map(redactFindActionPositional)];
+}
+
+function buildClipboardDisplayPositionals(action: SessionAction): string[] {
+  const clipboardAction = action.positionals[0]?.toLowerCase();
+  if (clipboardAction === 'read') return ['read'];
+  if (clipboardAction === 'write') {
+    return ['write', hiddenValueFromLength('text', readClipboardWriteLength(action))];
+  }
+  return action.positionals.map(redactDisplayPositional);
+}
+
+function buildPayloadDisplayPositionals(action: SessionAction, payloadLabel: string): string[] {
+  const [target, payload, ...extra] = action.positionals;
+  return [
+    ...(target ? [target] : []),
+    ...(payload ? [hiddenValue(payloadLabel, payload)] : []),
+    ...extra.map(redactDisplayPositional),
+  ];
+}
+
+function redactFindActionPositional(value: string): string {
+  if (
+    value === 'click' ||
+    value === 'focus' ||
+    value === 'exists' ||
+    value === 'get' ||
+    value === 'text' ||
+    value === 'attrs' ||
+    value === 'wait'
+  ) {
+    return value;
+  }
+  return redactDisplayPositional(value);
 }
 
 function readActionTextLength(action: SessionAction): number {
@@ -143,6 +190,37 @@ function readActionTextLength(action: SessionAction): number {
     return Array.from(action.positionals.join(' ')).length;
   }
   return 0;
+}
+
+function readClipboardWriteLength(action: SessionAction): number {
+  const textLength = action.result?.textLength;
+  if (typeof textLength === 'number' && Number.isFinite(textLength)) return textLength;
+  return Array.from(action.positionals.slice(1).join(' ')).length;
+}
+
+function redactDisplayPositional(value: string): string {
+  return readSafeDisplayPositional(value) ?? hiddenValue('arg', value);
+}
+
+function readSafeDisplayPositional(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const trimmed = value.trim();
+  if (/^@[a-zA-Z0-9:_-]+$/.test(trimmed)) return trimmed;
+  return undefined;
+}
+
+function hiddenValue(label: string, value: string): string {
+  return hiddenValueFromLength(label, Array.from(value).length);
+}
+
+function hiddenValueFromLength(label: string, length: number): string {
+  return `<${label}:${length} chars>`;
+}
+
+function isFindLocator(value: string | undefined): boolean {
+  return (
+    value === 'text' || value === 'label' || value === 'value' || value === 'role' || value === 'id'
+  );
 }
 
 function readString(value: unknown): string | undefined {
