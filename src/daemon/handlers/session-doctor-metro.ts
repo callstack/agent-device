@@ -32,10 +32,10 @@ export async function probeMetro(
       status: running ? 'pass' : 'warn',
       summary: running
         ? metroRunningSummary(url, processInfo)
-        : `Metro responded at ${url}, but did not report packager-status:running.`,
+        : `React Native dev server responded at ${url}, but did not report packager-status:running.`,
       hint: running
         ? undefined
-        : 'Verify this is the Metro instance for the target app, or restart Metro.',
+        : 'Verify this is the Metro/Re.Pack instance for the target app, or restart the dev server.',
       evidence: {
         url,
         statusCode: response.status,
@@ -48,8 +48,8 @@ export async function probeMetro(
     return {
       id: 'metro',
       status: kind === 'auto' ? 'warn' : 'fail',
-      summary: `Metro is not reachable at ${url}.`,
-      hint: 'Start Metro for this project. For non-default endpoints, launch with open --metro-host/--metro-port, or run metro prepare with --public-base-url/--proxy-base-url before retrying doctor.',
+      summary: `React Native dev server is not reachable at ${url}.`,
+      hint: 'Start Metro or Re.Pack for this project. For non-default endpoints, launch with open --metro-host/--metro-port, or run metro prepare with --public-base-url/--proxy-base-url before retrying doctor.',
       command: `curl -fsS ${url}`,
       evidence: { url, error: error instanceof Error ? error.message : String(error), kind },
     };
@@ -70,9 +70,9 @@ async function resolveMetroProcessInfoSafely(
 
 function metroRunningSummary(url: string, processInfo: MetroProcessInfo | undefined): string {
   if (processInfo?.cwd) {
-    return `Metro is reachable at ${url} (cwd: ${processInfo.cwd}).`;
+    return `React Native dev server is reachable at ${url} (cwd: ${processInfo.cwd}).`;
   }
-  return `Metro is reachable at ${url}.`;
+  return `React Native dev server is reachable at ${url}.`;
 }
 
 async function resolveMetroProcessInfo(

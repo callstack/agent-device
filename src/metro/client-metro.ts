@@ -26,12 +26,14 @@ import {
 
 const DEFAULT_METRO_HOST = 'localhost';
 const DEFAULT_METRO_PORT = 8081;
+const DEV_SERVER_STATUS_READY_TEXT = 'packager-status:running';
 const METRO_TERM_TIMEOUT_MS = 1_000;
 const METRO_KILL_TIMEOUT_MS = 1_000;
 
-export type MetroPrepareKind = 'auto' | 'react-native' | 'expo';
+export type MetroPrepareKind = 'auto' | 'react-native' | 'expo' | 'repack';
 type ResolvedMetroKind = Exclude<MetroPrepareKind, 'auto'>;
 type EnvSource = NodeJS.ProcessEnv | Record<string, string | undefined>;
+type RepackBundlerKind = 'rspack' | 'webpack';
 
 export type {
   CompanionTunnelScope,
@@ -51,6 +53,7 @@ type ResolvedMetroPrepareSettings = {
   env: EnvSource;
   projectRoot: string;
   kind: ResolvedMetroKind;
+  repackBundler: RepackBundlerKind | null;
   metroPort: number;
   listenHost: string;
   statusHost: string;
@@ -186,13 +189,42 @@ function detectPackageManager(projectRoot: string): PackageManagerConfig {
   return { command: 'npm', installArgs: ['install'] };
 }
 
-function detectMetroKind(projectRoot: string, requestedKind: MetroPrepareKind): ResolvedMetroKind {
+function detectMetroKind(
+  packageJson: PackageJsonShape,
+  requestedKind: MetroPrepareKind,
+): ResolvedMetroKind {
   if (requestedKind !== 'auto') {
     return requestedKind;
   }
 
-  const detected = detectProjectRuntimeKindFromPackageJson(readPackageJson(projectRoot));
-  return detected === 'expo' ? 'expo' : 'react-native';
+  const detected = detectProjectRuntimeKindFromPackageJson(packageJson);
+  if (detected === 'expo' || detected === 'repack') return detected;
+  return 'react-native';
+}
+
+function hasPackageDependency(packageJson: PackageJsonShape, dependencyName: string): boolean {
+  const dependencies = {
+    ...(packageJson.dependencies ?? {}),
+    ...(packageJson.devDependencies ?? {}),
+  };
+  return typeof dependencies[dependencyName] === 'string';
+}
+
+function hasBundlerConfig(projectRoot: string, basename: RepackBundlerKind): boolean {
+  return ['js', 'mjs', 'cjs', 'ts', 'mts', 'cts'].some((extension) =>
+    fileExists(path.join(projectRoot, `${basename}.config.${extension}`)),
+  );
+}
+
+function detectRepackBundler(
+  projectRoot: string,
+  packageJson: PackageJsonShape,
+): RepackBundlerKind {
+  if (hasBundlerConfig(projectRoot, 'rspack')) return 'rspack';
+  if (hasBundlerConfig(projectRoot, 'webpack')) return 'webpack';
+  if (hasPackageDependency(packageJson, '@rspack/core')) return 'rspack';
+  if (hasPackageDependency(packageJson, 'webpack')) return 'webpack';
+  return 'rspack';
 }
 
 function parseTimeout(
@@ -287,7 +319,7 @@ async function fetchText(
 async function isMetroReady(statusUrl: string, timeoutMs: number): Promise<boolean> {
   try {
     const response = await fetchText(statusUrl, timeoutMs);
-    return response.ok && response.body.includes('packager-status:running');
+    return response.ok && response.body.includes(DEV_SERVER_STATUS_READY_TEXT);
   } catch {
     return false;
   }
@@ -354,6 +386,7 @@ function resolveMetroReloadUrl(input: ReloadMetroOptions): string {
 
 function buildMetroCommand(
   kind: ResolvedMetroKind,
+  repackBundler: RepackBundlerKind | null,
   port: number,
   listenHost: string,
 ): PackageManagerConfig {
@@ -361,6 +394,13 @@ function buildMetroCommand(
     return {
       command: 'npx',
       installArgs: ['expo', 'start', '--host', 'lan', '--port', String(port)],
+    };
+  }
+  if (kind === 'repack') {
+    const commandName = repackBundler === 'webpack' ? 'webpack-start' : 'rspack-start';
+    return {
+      command: 'npx',
+      installArgs: ['react-native', commandName, '--host', listenHost, '--port', String(port)],
     };
   }
 
@@ -373,12 +413,13 @@ function buildMetroCommand(
 function startMetroProcess(
   projectRoot: string,
   kind: ResolvedMetroKind,
+  repackBundler: RepackBundlerKind | null,
   port: number,
   listenHost: string,
   logPath: string,
   env: EnvSource,
 ): MetroProcessResult {
-  const metro = buildMetroCommand(kind, port, listenHost);
+  const metro = buildMetroCommand(kind, repackBundler, port, listenHost);
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   const logFd = fs.openSync(logPath, 'a');
   let pid = 0;
@@ -393,7 +434,10 @@ function startMetroProcess(
   }
 
   if (!Number.isInteger(pid) || pid <= 0) {
-    throw new AppError('COMMAND_FAILED', 'Failed to start Metro. Expected a detached child PID.');
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Failed to start React Native dev server. Expected a detached child PID.',
+    );
   }
 
   return {
@@ -689,6 +733,20 @@ function resolveMetroPrepareSettings(
   const env = input.env ?? process.env;
   const cwd = process.cwd();
   const projectRoot = resolvePath(input.projectRoot ?? cwd, env, cwd);
+  const requestedKind = input.kind ?? 'auto';
+  let packageJson: PackageJsonShape | null = null;
+  let kind: ResolvedMetroKind;
+  if (requestedKind === 'auto') {
+    packageJson = readPackageJson(projectRoot);
+    kind = detectMetroKind(packageJson, requestedKind);
+  } else {
+    kind = requestedKind;
+  }
+  let repackBundler: RepackBundlerKind | null = null;
+  if (kind === 'repack') {
+    packageJson ??= readPackageJson(projectRoot);
+    repackBundler = detectRepackBundler(projectRoot, packageJson);
+  }
   const publicBaseUrl = normalizeOptionalBaseUrl(input.publicBaseUrl);
   const proxyBaseUrlInput = normalizeOptionalBaseUrl(input.proxyBaseUrl);
   requireMetroBaseUrl(publicBaseUrl, proxyBaseUrlInput);
@@ -702,7 +760,8 @@ function resolveMetroPrepareSettings(
   return {
     env,
     projectRoot,
-    kind: detectMetroKind(projectRoot, input.kind ?? 'auto'),
+    kind,
+    repackBundler,
     metroPort: parsePort(input.metroPort ?? 8081, 8081),
     listenHost: normalizeOptionalString(input.listenHost) ?? '0.0.0.0',
     statusHost: normalizeOptionalString(input.statusHost) ?? '127.0.0.1',
@@ -814,6 +873,7 @@ async function ensureMetroProcessReady(
   const startedProcess = startMetroProcess(
     settings.projectRoot,
     settings.kind,
+    settings.repackBundler,
     settings.metroPort,
     settings.listenHost,
     settings.logPath,
@@ -827,7 +887,7 @@ async function ensureMetroProcessReady(
   await stopSpawnedMetroProcess(startedProcess.pid).catch(() => {});
   throw new AppError(
     'COMMAND_FAILED',
-    `Metro did not become ready at ${statusUrl} within ${settings.startupTimeoutMs}ms. Check ${settings.logPath}.`,
+    `React Native dev server did not become ready at ${statusUrl} within ${settings.startupTimeoutMs}ms. Check ${settings.logPath}.`,
     { logPath: settings.logPath },
   );
 }
@@ -984,12 +1044,16 @@ export async function reloadMetro(input: ReloadMetroOptions = {}): Promise<Reloa
   const reloadUrl = resolveMetroReloadUrl(input);
   const response = await fetchText(reloadUrl, timeoutMs);
   if (!response.ok) {
-    throw new AppError('COMMAND_FAILED', `Metro reload failed (${response.status}).`, {
-      reloadUrl,
-      status: response.status,
-      body: response.body,
-      hint: 'Verify Metro is running and the target React Native app is connected to this Metro instance.',
-    });
+    throw new AppError(
+      'COMMAND_FAILED',
+      `React Native dev server reload failed (${response.status}).`,
+      {
+        reloadUrl,
+        status: response.status,
+        body: response.body,
+        hint: 'Verify Metro or Re.Pack is running and the target React Native app is connected to this dev server instance.',
+      },
+    );
   }
   return {
     reloaded: true,

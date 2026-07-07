@@ -69,9 +69,9 @@ export function buildAgentCdpPassthroughArgs(
   if (!cdpUrl) {
     throw new AppError(
       'INVALID_ARGS',
-      'cdp remote bridge target discovery requires a Metro public base URL.',
+      'cdp remote bridge target discovery requires a React Native dev-server public base URL.',
       {
-        hint: 'Include metroPublicBaseUrl in the remote config so cdp can reach the local or tunneled Metro CDP endpoint without bridge proxy authentication.',
+        hint: 'Include metroPublicBaseUrl in the remote config so cdp can reach the local or tunneled Metro/Re.Pack CDP endpoint without bridge proxy authentication.',
       },
     );
   }

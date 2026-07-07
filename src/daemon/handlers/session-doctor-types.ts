@@ -1,6 +1,6 @@
 export type DoctorStatus = 'pass' | 'warn' | 'fail' | 'info';
 
-export type DoctorKind = 'auto' | 'react-native' | 'expo';
+export type DoctorKind = 'auto' | 'react-native' | 'expo' | 'repack';
 
 export type DoctorOptions = {
   targetApp?: string;

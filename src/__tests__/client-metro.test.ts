@@ -169,6 +169,72 @@ test('prepareMetroRuntime starts Metro, bridges through proxy, and writes runtim
   }
 });
 
+for (const { configFileName, commandName } of [
+  { configFileName: 'rspack.config.ts', commandName: 'rspack-start' },
+  { configFileName: 'webpack.config.js', commandName: 'webpack-start' },
+]) {
+  test(`prepareMetroRuntime starts Re.Pack with ${commandName} for ${configFileName}`, async () => {
+    const tempRoot = path.join(os.tmpdir(), `agent-device-repack-${randomUUID()}`);
+    const projectRoot = path.join(tempRoot, 'project');
+    const binDir = path.join(tempRoot, 'bin');
+    const argsFile = path.join(tempRoot, 'npx-args.json');
+    const metroPort = await findFreePort();
+
+    mkdirSync(projectRoot, { recursive: true });
+    mkdirSync(binDir, { recursive: true });
+    writeFileSync(
+      path.join(projectRoot, 'package.json'),
+      JSON.stringify({
+        name: 'repack-runtime-test',
+        private: true,
+        dependencies: {
+          'react-native': '0.0.0-test',
+        },
+        devDependencies: {
+          '@callstack/repack': '5.2.5',
+        },
+      }),
+    );
+    writeFileSync(path.join(projectRoot, configFileName), 'module.exports = {};\n');
+    writeFakeNpx(binDir);
+
+    let pid = 0;
+    try {
+      const result = await prepareMetroRuntime({
+        projectRoot,
+        publicBaseUrl: `http://127.0.0.1:${metroPort}`,
+        metroPort,
+        reuseExisting: false,
+        installDependenciesIfNeeded: false,
+        env: {
+          ...process.env,
+          AGENT_DEVICE_TEST_NPX_ARGS_FILE: argsFile,
+          PATH: `${binDir}:${process.env.PATH || ''}`,
+        },
+      });
+
+      pid = result.pid;
+      assert.equal(result.kind, 'repack');
+      assert.equal(result.started, true);
+      assert.deepEqual(JSON.parse(readFileSync(argsFile, 'utf8')), [
+        'react-native',
+        commandName,
+        '--host',
+        '0.0.0.0',
+        '--port',
+        String(metroPort),
+      ]);
+      assert.equal(
+        result.iosRuntime.bundleUrl,
+        `http://127.0.0.1:${metroPort}/index.bundle?platform=ios&dev=true&minify=false`,
+      );
+    } finally {
+      await stopProcess(pid);
+      rmSync(tempRoot, { recursive: true, force: true });
+    }
+  });
+}
+
 test('prepareMetroRuntime rejects incomplete proxy configuration', async () => {
   await assert.rejects(
     () =>
@@ -304,8 +370,12 @@ function writeFakeNpx(binDir: string): void {
   writeFileSync(
     filePath,
     `#!/usr/bin/env node
+const fs = require("node:fs")
 const http = require("node:http")
 const args = process.argv.slice(2)
+if (process.env.AGENT_DEVICE_TEST_NPX_ARGS_FILE) {
+  fs.writeFileSync(process.env.AGENT_DEVICE_TEST_NPX_ARGS_FILE, JSON.stringify(args))
+}
 const portIndex = args.indexOf("--port")
 const hostIndex = args.indexOf("--host")
 const port = portIndex === -1 ? 8081 : Number(args[portIndex + 1] || "8081")

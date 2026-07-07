@@ -75,9 +75,9 @@ const AGENT_QUICKSTART_LINES = [
   'Read-only visible/state question: use snapshot/get/is/find; use snapshot -i only when refs are needed.',
   'Anti-pattern: snapshot -i followed by snapshot -i | grep ... or hiding command output with 2>/dev/null | jq ...; inspect raw agent-device output first, since hints and errors are part of the planning contract.',
   'Truncated text/input preview: expand first with snapshot -s @e12, not get text.',
-  'React Native apps: read help react-native for Metro, DevTools routing, and RN-specific blockers; use react-native dismiss-overlay for LogBox/RedBox overlays.',
+  'React Native apps: read help react-native for Metro/Re.Pack, DevTools routing, and RN-specific blockers; use react-native dismiss-overlay for LogBox/RedBox overlays.',
   'React Native JS memory leaks: read help cdp; use heap usage samples for a quick signal, then snapshot diff/leak-triplet for retained object proof.',
-  'Android RN/Expo Metro: direct Android localhost URL opens with a port auto-configure host reachability.',
+  'Android RN/Expo/Re.Pack dev server: direct Android localhost URL opens with a port auto-configure host reachability.',
   'Expo Go/dev clients: use the provided URL when given; on iOS use open "Expo Go" <url> --platform ios, then snapshot -i --platform ios to verify project UI. Do not use plain snapshot or snapshot --diff for this recovery check. Android URL opens infer the foreground package for logs/perf when possible.',
   'Install flows: install/install-from-source first, then open the installed id with --relaunch.',
   'Text: fill \'id="field-email"\' "qa@example.com" replaces; type appends after press.',
@@ -320,12 +320,12 @@ Validation and evidence:
     agent-device test ./e2e/maestro --maestro --device udid1,emulator-5554 --shard-all 2
 
 React Native dev loop:
-  JS-only change with Metro connected:
+  JS-only change with Metro or Re.Pack connected:
     agent-device metro reload
     agent-device find "Home"
   Do not use agent-device reload. Use open --relaunch for native startup reset.
-  React Native apps: use help react-native for Metro/Fast Refresh, DevTools routing, and RN-specific blockers; use react-native dismiss-overlay for LogBox/RedBox overlays.
-  Android RN/Expo Metro: direct Android URL opens to localhost/127.0.0.1/[::1] with a port auto-configure host reachability. Manual adb reverse tcp:<port> tcp:<port> is only needed for app/package launches or unsupported flows where the app cannot reach local Metro.
+  React Native apps: use help react-native for Metro/Re.Pack Fast Refresh, DevTools routing, and RN-specific blockers; use react-native dismiss-overlay for LogBox/RedBox overlays.
+  Android RN/Expo/Re.Pack dev server: direct Android URL opens to localhost/127.0.0.1/[::1] with a port auto-configure host reachability. Manual adb reverse tcp:<port> tcp:<port> is only needed for app/package launches or unsupported flows where the app cannot reach the local dev server.
   Expo Go is a host shell. Use a provided project URL instead of inventing a bundle id; if no URL is provided but a target/app name is provided, open that target and do not inspect project files to find one. On iOS, prefer host + URL when the host shell is known because direct URL open can report success while leaving the runner/shell focused; verify with snapshot -i after opening:
     agent-device open "Expo Go" exp://127.0.0.1:8081 --platform ios
     agent-device snapshot -i --platform ios
@@ -337,7 +337,9 @@ React Native dev loop:
     agent-device open exp://127.0.0.1:8081 --platform android
   Android URL/deep-link opens infer the foreground package after launch when possible, so logs/perf can remain package-bound. If perf still says no package is associated, open the host package/app id first, then open the URL in the same session.
   If apps lookup misses the project but shows Expo Go/dev-client and a project URL is available, open the URL/host shell; if no URL is available, ask instead of inventing an app id.
-  Expo Dev Client/development builds: open the installed dev-client app id/name; if a dev-client URL is provided, open that URL next. For Metro setup use metro prepare --kind expo.
+  Expo Dev Client/development builds: open the installed dev-client app id/name; if a dev-client URL is provided, open that URL next. For Expo setup use metro prepare --kind expo.
+  Re.Pack/Rspack apps: use metro prepare --kind repack, or rely on auto-detection when @callstack/repack is in the selected package.json. The command name remains metro for compatibility, but prepare/reload use the shared React Native dev-server /status, /reload, and bundle URL protocol. prepare runs react-native rspack-start when rspack.config.* exists, and react-native webpack-start when webpack.config.* exists.
+  Module Federation super-apps: treat the native host and each JS-only remote as separate dev-server endpoints. Prepare or reload the host/root with its port, and pass a remote's --bundle-url or --metro-port when you need to target that remote's Re.Pack server.
 
 Guarantees:
   Statements of fact for agents to reason from without probing them via trial commands. Each is backed by source in the agent-device repo; behavior changes land with an updated statement here.
@@ -352,7 +354,7 @@ Guarantees:
 Escalate:
   help debugging       logs, network, alerts, traces, flaky runtime failures
   help react-devtools  React Native performance, profiling, props/state/hooks, slow renders, rerenders
-  help react-native   React Native app automation hazards, overlays, Metro, and routing
+  help react-native   React Native app automation hazards, overlays, Metro/Re.Pack, and routing
   help remote          remote/cloud config, tenant, lease, local service tunnels
   help macos           desktop, frontmost-app, menu bar surfaces
   help dogfood         exploratory QA report workflow`,
@@ -609,14 +611,14 @@ React Native dev loop:
     agent-device doctor --platform android --app com.example.app
     agent-device doctor --remote --remote-config ./remote.json
   For "start from screen X" flows, prefer open --relaunch before the first snapshot so the app does not reuse a prior in-progress navigation state.
-  JS-only change with Metro connected:
+  JS-only change with Metro or Re.Pack connected:
     agent-device metro reload
     agent-device find "Home"
   Do not use agent-device reload. Use open --relaunch for native startup reset.
-  Android RN/Expo Metro: direct Android localhost URL opens with a port auto-configure host reachability. For app/package launches, run metro prepare when the app cannot reach local Metro.
-  Verify Metro from the same host context that owns Metro. If a sandboxed shell cannot curl localhost:8081/status but an unrestricted host shell can, Metro is running and the sandbox probe is not authoritative.
-  adb reverse only affects Android device-to-host traffic. It does not prove host-to-Metro reachability, and it does not fix a redbox caused by a stale or wrong Metro/app state.
-  Multiple local worktrees can reuse one native iOS simulator build by running each worktree's Metro on a different port and opening the same installed app on different simulators with explicit runtime hints:
+  Android RN/Expo/Re.Pack dev server: direct Android localhost URL opens with a port auto-configure host reachability. For app/package launches, run metro prepare when the app cannot reach the local dev server.
+  Verify Metro/Re.Pack from the same host context that owns the dev server. If a sandboxed shell cannot curl localhost:8081/status but an unrestricted host shell can, the dev server is running and the sandbox probe is not authoritative.
+  adb reverse only affects Android device-to-host traffic. It does not prove host-to-dev-server reachability, and it does not fix a redbox caused by a stale or wrong bundle/app state.
+  Multiple local worktrees can reuse one native iOS simulator build by running each worktree's dev server on a different port and opening the same installed app on different simulators with explicit runtime hints:
     agent-device open "React Navigation Example" --platform ios --device "iPhone 17" --session rn-a --metro-host 127.0.0.1 --metro-port 8081 --relaunch
     agent-device open "React Navigation Example" --platform ios --device "iPhone 17 Pro" --session rn-b --metro-host 127.0.0.1 --metro-port 8082 --relaunch
   iOS simulator opens write React Native's per-simulator debug server settings before launch, so those ports do not conflict across simulators. Use separate sessions/devices, close both sessions when done, and rebuild only for native changes or dependency changes that affect the binary. One simulator cannot run two copies of the same bundle id.
@@ -894,7 +896,7 @@ Coverage:
   Navigation, forms, empty/error/loading states, offline or retry behavior, permissions, settings, accessibility labels, orientation/keyboard, and obvious performance stalls.
   React Native warning/error overlays can be real findings or test blockers. Capture them, use react-native dismiss-overlay if unrelated, re-snapshot, and report them.
   Expo Go/dev-client shells: use the provided exp:// or dev-client URL and record whether the shell, project load, or app UI is being tested. On iOS dogfood, prefer agent-device open "Expo Go" <url> when Expo Go is the known shell, then snapshot -i to confirm the project UI rather than the runner splash.
-  Android RN/Expo Metro: direct Android localhost URL opens with a port auto-configure host reachability.
+  Android RN/Expo/Re.Pack dev server: direct Android localhost URL opens with a port auto-configure host reachability.
   Categories: visual, functional, UX, content, performance, diagnostics, permissions, accessibility.
   Severity: critical blocks a core flow/data/crashes; high breaks a major feature; medium has friction or workaround; low is polish.
 

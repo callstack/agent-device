@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export type ProjectRuntimeKind = 'auto' | 'react-native' | 'expo';
+export type ProjectRuntimeKind = 'auto' | 'react-native' | 'expo' | 'repack';
 
 export type PackageJsonShape = {
   dependencies?: Record<string, unknown>;
@@ -21,6 +21,7 @@ export function detectProjectRuntimeKindFromPackageJson(
     ...(packageJson.dependencies ?? {}),
     ...(packageJson.devDependencies ?? {}),
   };
+  if (typeof dependencies['@callstack/repack'] === 'string') return 'repack';
   if (typeof dependencies.expo === 'string') return 'expo';
   if (typeof dependencies['react-native'] === 'string') return 'react-native';
   return 'auto';

@@ -19,6 +19,7 @@ test('public remote-config helpers resolve file paths and merged profiles', () =
       JSON.stringify({
         platform: 'ios',
         metroProjectRoot: '../project',
+        metroKind: 'repack',
         metroPublicBaseUrl: 'https://public.example.test',
       }),
       'utf8',
@@ -35,6 +36,7 @@ test('public remote-config helpers resolve file paths and merged profiles', () =
       profile: {
         platform: 'ios',
         metroProjectRoot: projectRoot,
+        metroKind: 'repack',
         metroPublicBaseUrl: 'https://public.example.test',
         metroPreparePort: 9090,
       },

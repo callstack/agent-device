@@ -29,7 +29,10 @@ test('probeMetro ignores local process lookup failures', async () => {
     });
 
     assert.equal(check.status, 'pass');
-    assert.equal(check.summary, `Metro is reachable at http://127.0.0.1:${server.port}/status.`);
+    assert.equal(
+      check.summary,
+      `React Native dev server is reachable at http://127.0.0.1:${server.port}/status.`,
+    );
     assert.equal(check.evidence?.process, undefined);
   } finally {
     await server.close();

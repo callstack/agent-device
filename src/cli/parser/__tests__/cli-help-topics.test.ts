@@ -11,7 +11,7 @@ test('usage includes concise top-level commands', async () => {
   assert.match(usageText, /prepare\s{2,}Pre-warm platform helpers/);
   assert.match(
     usageText,
-    /metro\s{2,}Prepare Metro reachability for React Native\/Expo apps or trigger app reloads/,
+    /metro\s{2,}Prepare Metro\/Re\.Pack reachability for React Native\/Expo apps or trigger app reloads/,
   );
   assert.match(usageText, /batch --steps <json> \| --steps-file <path>/);
   assert.match(usageText, /network\s{2,}Inspect HTTP\(S\) traffic parsed from session app logs/);
@@ -224,7 +224,7 @@ test('usageForCommand resolves workflow help topic', async () => {
   assert.match(help, /instead of exact numeric deltas/);
   assert.match(help, /prefer isolated gesture pan, gesture pinch, or gesture rotate/);
   assert.match(help, /longpress accepts coordinates, @refs, or selectors/);
-  assert.match(help, /use help react-native for Metro\/Fast Refresh/);
+  assert.match(help, /use help react-native for Metro\/Re\.Pack Fast Refresh/);
   assert.match(help, /iOS Allow Paste prompt cannot be exercised under XCUITest/);
   assert.match(help, /Empty replacement is not a supported clear-field command/);
   assert.match(help, /do not plan fill <target> ""/);
@@ -518,7 +518,7 @@ test('usageForCommand resolves react-native help topic', async () => {
   assert.match(help, /agent-device doctor --platform android --app com\.example\.app/);
   assert.match(help, /agent-device doctor --platform ios/);
   assert.match(help, /agent-device doctor --remote --remote-config \.\/remote\.json/);
-  assert.match(help, /same host context that owns Metro/);
+  assert.match(help, /same host context that owns the dev server/);
   assert.match(help, /sandbox probe is not authoritative/);
   assert.match(help, /adb reverse only affects Android device-to-host traffic/);
   assert.match(help, /Multiple local worktrees can reuse one native iOS simulator build/);
@@ -564,7 +564,10 @@ test('usage renders concise commands inline with descriptions', async () => {
   assert.match(help, /Commands:[\s\S]*\n  boot\s{2,}Boot target device\/simulator/);
   assert.match(help, /Commands:[\s\S]*\n  shutdown\s{2,}Shutdown target simulator\/emulator/);
   assert.match(help, /  prepare\s{2,}Pre-warm platform helpers/);
-  assert.match(help, /  metro\s{2,}Prepare Metro reachability for React Native\/Expo apps/);
+  assert.match(
+    help,
+    /  metro\s{2,}Prepare Metro\/Re\.Pack reachability for React Native\/Expo apps/,
+  );
   assert.match(help, /  perf\s{2,}Check runtime metrics, frames, memory, CPU profiles/);
   assert.match(help, /  cdp\s{2,}Inspect React Native CDP targets, JS heap growth/);
   assert.match(help, /  react-devtools\s{2,}Inspect React Native components, props, hooks/);

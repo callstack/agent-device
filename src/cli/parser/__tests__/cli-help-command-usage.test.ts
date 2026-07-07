@@ -307,7 +307,7 @@ test('command usage shows record touch-overlay opt-out flag', async () => {
 test('command usage keeps detailed descriptions', async () => {
   const help = await usageForCommand('metro');
   if (help === null) throw new Error('Expected command help text');
-  assert.match(help, /Prepare a local Metro runtime or ask Metro to reload/);
+  assert.match(help, /Prepare a local React Native dev-server runtime/);
   assert.match(help, /metro reload/);
   assert.match(help, /--metro-host <host>/);
   assert.match(help, /AGENT_DEVICE_METRO_BEARER_TOKEN/);

@@ -1,4 +1,3 @@
-import type { MetroPrepareKind } from '../../metro/client-metro.ts';
 import type {
   MetroPrepareOptions,
   MetroPrepareResult,
@@ -22,11 +21,12 @@ import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import type { CliReader } from '../cli-grammar/types.ts';
 import { METRO_PREPARE_FLAGS, METRO_RELOAD_FLAGS } from '../../cli/parser/cli-flags.ts';
 import { metroCliOutputFormatters } from './output.ts';
+import { readMetroPrepareKind } from './prepare-kind.ts';
 
 const METRO_COMMAND_NAME = 'metro';
 const METRO_ACTION_VALUES = ['prepare', 'reload'] as const;
 
-const metroCommandDescription = 'Prepare Metro runtime or reload React Native apps.';
+const metroCommandDescription = 'Prepare React Native dev-server runtime or reload apps.';
 
 export const metroCommandMetadata = defineFieldCommandMetadata(
   METRO_COMMAND_NAME,
@@ -71,11 +71,11 @@ export const metroCommandDefinition = defineExecutableCommand(
 
 const metroCliSchema = {
   usageOverride:
-    'metro prepare (--public-base-url <url> | --proxy-base-url <url>) [--project-root <path>] [--port <port>] [--kind auto|react-native|expo]\n  agent-device metro reload [--metro-host <host>] [--metro-port <port>] [--bundle-url <url>]',
+    'metro prepare (--public-base-url <url> | --proxy-base-url <url>) [--project-root <path>] [--port <port>] [--kind auto|react-native|expo|repack]\n  agent-device metro reload [--metro-host <host>] [--metro-port <port>] [--bundle-url <url>]',
   listUsageOverride: 'metro',
   helpDescription:
-    'Prepare a local Metro runtime or ask Metro to reload connected React Native apps',
-  summary: 'Prepare Metro reachability for React Native/Expo apps or trigger app reloads',
+    'Prepare a local React Native dev-server runtime or ask connected apps to reload',
+  summary: 'Prepare Metro/Re.Pack reachability for React Native/Expo apps or trigger app reloads',
   positionalArgs: ['prepare|reload'],
   allowedFlags: [...METRO_RELOAD_FLAGS, ...METRO_PREPARE_FLAGS],
 } as const satisfies CommandSchemaOverride;
@@ -178,10 +178,4 @@ function toMetroReloadOptions(input: MetroInput): MetroReloadOptions {
     bundleUrl: input.bundleUrl,
     timeoutMs: input.timeoutMs,
   };
-}
-
-function readMetroPrepareKind(value: string | undefined): MetroPrepareKind | undefined {
-  if (value === undefined) return undefined;
-  if (value === 'auto' || value === 'react-native' || value === 'expo') return value;
-  throw new AppError('INVALID_ARGS', 'metro prepare --kind must be auto, react-native, or expo');
 }

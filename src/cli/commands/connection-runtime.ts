@@ -27,8 +27,8 @@ import type { LeaseBackend, SessionRuntimeHints } from '../../kernel/contracts.t
 import type { CliFlags } from '../parser/cli-flags.ts';
 import type { AgentDeviceClient, Lease } from '../../client/client.ts';
 import type { CloudProviderSessionResult } from '../../cloud-artifacts.ts';
-import type { MetroPrepareKind } from '../../metro/client-metro.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
+import { readMetroPrepareKind } from '../../commands/metro/prepare-kind.ts';
 import { connectionProviderRequiresRemoteDaemon } from '../connection/provider-policy.ts';
 import { isCloudWebDriverProviderName } from '../../cloud-webdriver/providers.ts';
 
@@ -423,7 +423,7 @@ async function prepareConnectedMetro(
   }
   const prepared = await client.metro.prepare({
     projectRoot: flags.metroProjectRoot,
-    kind: readDeferredMetroKind(flags.metroKind),
+    kind: readMetroPrepareKind(flags.metroKind),
     publicBaseUrl: flags.metroPublicBaseUrl,
     proxyBaseUrl: flags.metroProxyBaseUrl,
     bearerToken: flags.metroBearerToken,
@@ -585,12 +585,6 @@ function isRuntimeCompatibleWithPlatform(
     return true;
   }
   return runtime.platform === platform;
-}
-
-function readDeferredMetroKind(value: string | undefined): MetroPrepareKind | undefined {
-  if (value === undefined) return undefined;
-  if (value === 'auto' || value === 'react-native' || value === 'expo') return value;
-  throw new AppError('INVALID_ARGS', 'metro prepare --kind must be auto, react-native, or expo');
 }
 
 function isSameMetroCleanup(

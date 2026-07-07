@@ -92,7 +92,7 @@ test('cdp wrapper streams through npm exec and returns downstream exit code', as
   assert.equal(vi.mocked(runCmdStreaming).mock.calls[0]?.[2]?.allowFailure, true);
 });
 
-test('cdp injects remote Metro public url for target discovery', async () => {
+test('cdp injects remote React Native dev-server public url for target discovery', async () => {
   const args = buildAgentCdpPassthroughArgs(['target', 'list'], {
     flags: {
       leaseBackend: 'android-instance',
@@ -133,7 +133,7 @@ test('cdp preserves explicit target url for remote sessions', () => {
   ]);
 });
 
-test('cdp rejects remote bridge target discovery without Metro public url', () => {
+test('cdp rejects remote bridge target discovery without React Native dev-server public url', () => {
   assert.throws(
     () =>
       buildAgentCdpPassthroughArgs(['target', 'list'], {
@@ -147,7 +147,7 @@ test('cdp rejects remote bridge target discovery without Metro public url', () =
             'https://bridge.example.test/api/metro/runtimes/runtime-1/index.bundle?platform=android&dev=true',
         },
       }),
-    /cdp remote bridge target discovery requires a Metro public base URL/,
+    /cdp remote bridge target discovery requires a React Native dev-server public base URL/,
   );
 });
 

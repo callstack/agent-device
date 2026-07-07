@@ -130,7 +130,7 @@ export const REMOTE_CONFIG_FIELD_SPECS = [
     enumValues: ['INTERACTIVE', 'NO_VIDEO', 'VIDEO_ONLY'],
   },
   { key: 'metroProjectRoot', type: 'string', path: true },
-  { key: 'metroKind', type: 'enum', enumValues: ['auto', 'react-native', 'expo'] },
+  { key: 'metroKind', type: 'enum', enumValues: ['auto', 'react-native', 'expo', 'repack'] },
   { key: 'metroPublicBaseUrl', type: 'string' },
   { key: 'metroProxyBaseUrl', type: 'string' },
   { key: 'metroBearerToken', type: 'string' },

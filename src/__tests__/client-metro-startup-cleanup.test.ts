@@ -64,7 +64,7 @@ test('prepareMetroRuntime stops a spawned Metro process when startup readiness t
 
     const expectedFailure = assert.rejects(
       preparePromise,
-      /Metro did not become ready at http:\/\/127\.0\.0\.1:8081\/status within 30000ms/,
+      /React Native dev server did not become ready at http:\/\/127\.0\.0\.1:8081\/status within 30000ms/,
     );
     await vi.advanceTimersByTimeAsync(30_000);
     await expectedFailure;

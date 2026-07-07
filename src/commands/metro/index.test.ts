@@ -38,7 +38,7 @@ describe('metro command interface', () => {
           metroRuntimeFile: './runtime.json',
           metroNoReuseExisting: true,
           metroNoInstallDeps: true,
-          kind: 'expo',
+          kind: 'repack',
           tenant: 'tenant-a',
           runId: 'run-a',
           leaseId: 'lease-a',
@@ -58,7 +58,7 @@ describe('metro command interface', () => {
       runtimeFilePath: './runtime.json',
       reuseExisting: false,
       installDependenciesIfNeeded: false,
-      kind: 'expo',
+      kind: 'repack',
       bridgeScope: {
         tenantId: 'tenant-a',
         runId: 'run-a',
@@ -95,7 +95,7 @@ describe('metro command interface', () => {
     );
     expectInvalidArgs(
       () => metroCliReader(['prepare'], flags({ metroPublicBaseUrl: 'https://x', kind: 'web' })),
-      'metro prepare --kind must be',
+      'metro prepare --kind must be auto, react-native, expo, or repack',
     );
   });
 });

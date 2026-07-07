@@ -58,7 +58,7 @@ test('deferred Metro config ignores perf-style kind values', () => {
       json: true,
       help: false,
       version: false,
-      metroKind: 'expo',
+      metroKind: 'repack',
     }),
     true,
   );
@@ -1119,7 +1119,7 @@ test('deferred materialization re-prepares runtime when explicit Metro overrides
       session: 'adc-android',
       platform: 'android',
       metroProjectRoot: '/tmp/project-new',
-      metroKind: 'expo',
+      metroKind: 'repack',
       metroPublicBaseUrl: 'https://sandbox.example.test',
       metroProxyBaseUrl: 'https://proxy.example.test',
       launchUrl: 'myapp://open',
@@ -1129,7 +1129,7 @@ test('deferred materialization re-prepares runtime when explicit Metro overrides
         prepareRequest = options;
         return {
           projectRoot: '/tmp/project-new',
-          kind: 'expo',
+          kind: 'repack',
           dependenciesInstalled: false,
           packageManager: null,
           started: false,
@@ -1151,7 +1151,7 @@ test('deferred materialization re-prepares runtime when explicit Metro overrides
   });
 
   assert.equal(prepareRequest?.projectRoot, '/tmp/project-new');
-  assert.equal(prepareRequest?.kind, 'expo');
+  assert.equal(prepareRequest?.kind, 'repack');
   assert.equal(prepareRequest?.publicBaseUrl, 'https://sandbox.example.test');
   assert.equal(prepareRequest?.proxyBaseUrl, 'https://proxy.example.test');
   assert.equal(prepareRequest?.launchUrl, 'myapp://open');

@@ -30,7 +30,7 @@ const doctorCliSchema = {
     'doctor [--platform ios|android|macos|linux|web|apple] [--app <id-or-name>] [--remote]',
   helpDescription:
     'Preflight for QA and dogfood runs. Reports local device inventory, active sessions, optional app discovery, scoped toolchain info, and Metro reachability inferred from cwd/runtime. On iOS simulators it also warms the XCTest runner build cache in the background when missing, so the first open on a fresh machine skips the runner build — run doctor first on new setups. Pass --app to verify a target app on the one matching booted device without opening a session. Use --remote to check remote connection setup without probing local devices. Default output is compact; use --json for full checks and evidence.',
-  summary: 'Preflight device, app, Metro, and RN/Expo readiness',
+  summary: 'Preflight device, app, dev-server, and RN/Expo readiness',
   allowedFlags: ['targetApp', 'remote'],
 } as const satisfies CommandSchemaOverride;
 
