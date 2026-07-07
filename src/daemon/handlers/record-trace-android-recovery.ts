@@ -701,7 +701,11 @@ function formatAndroidRecordingOwnerMismatch(
   manifests: AndroidRecordingRecoveryManifest[],
 ): string {
   if (manifests.length === 1) {
-    return `active Android recording belongs to session "${manifests[0]!.sessionName}"; run record stop --session ${manifests[0]!.sessionName} to recover it`;
+    const manifest = manifests[0]!;
+    if (manifest.sessionScope) {
+      return `active Android recording belongs to session "${manifest.sessionName}" in ${manifest.sessionScope.kind} scope; retry record stop from the original working directory without --session to recover it`;
+    }
+    return `active Android recording belongs to session "${manifest.sessionName}"; run record stop --session ${manifest.sessionName} to recover it`;
   }
   return 'active Android recordings belong to other sessions; cannot safely recover missing recording state';
 }

@@ -45,6 +45,13 @@ test('Provider-backed integration Android record stop recovers cwd-scoped durabl
   );
 });
 
+test('Provider-backed integration Android record stop gives cwd retry hint for scoped owner mismatch', async () => {
+  await withProviderScenarioTempDir(
+    'agent-device-provider-scenario-android-record-scoped-owner-mismatch-',
+    runAndroidScopedOwnerMismatchHintScenario,
+  );
+});
+
 test('Provider-backed integration Android record stop recovers opened cwd-scoped recording after daemon state loss', async () => {
   await withProviderScenarioTempDir(
     'agent-device-provider-scenario-android-record-open-scoped-recovery-',
@@ -353,6 +360,48 @@ async function runAndroidScopedManifestRecoveryScenario(tmpDir: string): Promise
     assert.equal(data.recording, 'stopped');
     assert.equal(data.outPath, recordingPath);
     assert.deepEqual(pullCalls, [{ remotePath, localPath: recordingPath }]);
+  } finally {
+    await daemon.close();
+  }
+}
+
+async function runAndroidScopedOwnerMismatchHintScenario(tmpDir: string): Promise<void> {
+  const adbCalls: string[][] = [];
+  const pullCalls: PullCall[] = [];
+  const remotePath = '/sdcard/agent-device-recording-923456124.mp4';
+  const recordingPath = path.join(tmpDir, 'scoped-owner-mismatch.mp4');
+  const scopeRoot = path.join(tmpDir, 'worktree');
+  fs.mkdirSync(path.join(scopeRoot, '.git'), { recursive: true });
+  const scopeId = hashScopeRoot(fs.realpathSync.native(scopeRoot));
+  const effectiveSessionName = `cwd:${scopeId}:default`;
+  const manifest = buildAndroidRecordingManifest({
+    outPath: recordingPath,
+    remotePath,
+    sessionName: effectiveSessionName,
+    sessionScope: { kind: 'cwd', id: scopeId },
+  });
+  const daemon = await createProviderScenarioHarness({
+    androidAdbProvider: () =>
+      createAndroidManifestProvider({ adbCalls, pullCalls, manifests: [manifest] }),
+    deviceInventoryProvider: async () => [PROVIDER_SCENARIO_ANDROID],
+  });
+
+  try {
+    const recordStop = await daemon.callCommand('record', ['stop', recordingPath], {
+      platform: 'android',
+      serial: PROVIDER_SCENARIO_ANDROID.id,
+      session: effectiveSessionName,
+    });
+    assertRpcError(
+      recordStop,
+      'INVALID_ARGS',
+      /retry record stop from the original working directory without --session/,
+    );
+    assert.equal(
+      adbCalls.some((args) => args.join(' ') === 'shell kill -2 4321'),
+      false,
+    );
+    assert.equal(pullCalls.length, 0);
   } finally {
     await daemon.close();
   }
