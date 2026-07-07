@@ -845,7 +845,7 @@ AGENT_DEVICE_RUNNER_COMMAND_FAILED command=snapshot error=fetch failed
   );
 });
 
-test('parseRunnerResponse keeps ordinary runner failures generic without crash log evidence', async () => {
+test('parseRunnerResponse hints when XCTest main-thread execution times out', async () => {
   const logPath = writeRunnerLogTail(
     'AGENT_DEVICE_RUNNER_COMMAND_FAILED command=type error=main thread execution timed out',
   );
@@ -865,8 +865,10 @@ test('parseRunnerResponse keeps ordinary runner failures generic without crash l
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'COMMAND_FAILED');
-      assert.equal(error.details?.runnerFailureReason, undefined);
-      assert.equal(error.details?.hint, undefined);
+      assert.equal(error.details?.runnerFailureReason, 'runner_main_thread_execution_timeout');
+      assert.match(String(error.details?.hint), /XCTest timed out waiting for main-thread work/);
+      assert.match(String(error.details?.hint), /screenshot as visual truth/);
+      assert.match(String(error.details?.hint), /coordinate presses/);
       return true;
     },
   );
