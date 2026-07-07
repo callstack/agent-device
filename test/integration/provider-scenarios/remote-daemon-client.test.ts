@@ -568,28 +568,34 @@ async function assertEventsRpc(
   rpcRequests: RemoteRpcRequest[],
 ): Promise<void> {
   const page = await client.observability.events({ limit: 2, cursor: '4' });
+  assertEventsPage(page);
+  assertEventsRpcRequest(rpcRequests.at(-1), ['2', '4']);
+
+  const cursorOnlyPage = await client.observability.events({ cursor: '6' });
+  assert.equal(cursorOnlyPage.cursor, '6');
+  assert.equal(cursorOnlyPage.limit, 100);
+  assertEventsRpcRequest(rpcRequests.at(-1), ['', '6']);
+}
+
+function assertEventsPage(
+  page: Awaited<ReturnType<RemoteClient['observability']['events']>>,
+): void {
   assert.equal(page.path, '/remote/sessions/default/events.ndjson');
   assert.equal(page.cursor, '4');
   assert.equal(page.limit, 2);
   assert.equal(page.nextCursor, '6');
   assert.equal(Array.isArray(page.events), true);
   assert.equal((page.events as Array<{ command?: string }>)[0]?.command, 'click');
+}
 
-  const eventsRpc = rpcRequests.at(-1);
+function assertEventsRpcRequest(
+  eventsRpc: RemoteRpcRequest | undefined,
+  positionals: string[],
+): void {
   assert.equal(eventsRpc?.method, 'agent_device.command');
   assert.equal(eventsRpc?.params?.command, 'events');
-  assert.deepEqual(eventsRpc?.params?.positionals, ['2', '4']);
+  assert.deepEqual(eventsRpc?.params?.positionals, positionals);
   assert.equal(eventsRpc?.params?.token, 'remote-token');
-
-  const cursorOnlyPage = await client.observability.events({ cursor: '6' });
-  assert.equal(cursorOnlyPage.cursor, '6');
-  assert.equal(cursorOnlyPage.limit, 100);
-
-  const cursorOnlyRpc = rpcRequests.at(-1);
-  assert.equal(cursorOnlyRpc?.method, 'agent_device.command');
-  assert.equal(cursorOnlyRpc?.params?.command, 'events');
-  assert.deepEqual(cursorOnlyRpc?.params?.positionals, ['', '6']);
-  assert.equal(cursorOnlyRpc?.params?.token, 'remote-token');
 }
 
 async function assertRemoteRpcErrorNormalization(client: RemoteClient): Promise<void> {

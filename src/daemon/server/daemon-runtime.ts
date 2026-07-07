@@ -43,6 +43,7 @@ import { sleep } from '../../utils/timeouts.ts';
 import { setRunnerLeaseOwnerStateDir } from '../../platforms/apple/core/runner/runner-lease.ts';
 import { cleanupManagedAgentBrowserOrphans } from '../../platforms/web/agent-browser-lifecycle.ts';
 import { getManagedAgentBrowserStatus } from '../../platforms/web/agent-browser-tool.ts';
+import { openWebSessionNames } from '../web-session-names.ts';
 
 const DAEMON_SESSION_TEARDOWN_TIMEOUT_MS = 5_000;
 const DAEMON_PNG_WORKER_TERMINATE_TIMEOUT_MS = 1_000;
@@ -320,11 +321,4 @@ export async function cleanupWebBrowserOrphansForDaemonStartup(params: {
       data: { error: error instanceof Error ? error.message : String(error) },
     });
   }
-}
-
-function openWebSessionNames(sessionStore: SessionStore): string[] {
-  return sessionStore
-    .toArray()
-    .filter((session) => session.device.platform === 'web')
-    .map((session) => session.name);
 }

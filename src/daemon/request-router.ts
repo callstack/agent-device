@@ -42,6 +42,7 @@ import { buildRequestFinishedEvent, shouldRecordEventForRequest } from './sessio
 import { canRunReplayScopedAction } from './daemon-command-registry.ts';
 import { createAgentBrowserWebProvider } from '../platforms/web/agent-browser-provider.ts';
 import type { LeaseLifecycleProvider } from './handlers/lease.ts';
+import { openWebSessionNames } from './web-session-names.ts';
 
 // ---------------------------------------------------------------------------
 // Request handler API
@@ -261,13 +262,6 @@ const createDefaultWebProvider =
 
 function shouldUseDefaultWebProvider(scope: LockedRequestScope): boolean {
   return scope.existingSession?.device.platform === 'web' || scope.req.flags?.platform === 'web';
-}
-
-function openWebSessionNames(sessionStore: SessionStore): string[] {
-  return sessionStore
-    .toArray()
-    .filter((session) => session.device.platform === 'web')
-    .map((session) => session.name);
 }
 
 function unauthorizedResponse(): DaemonResponse {
