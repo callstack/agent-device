@@ -112,6 +112,9 @@ const supportsSynthesisGesture = (device: DeviceInfo): boolean =>
   device.platform === 'android' || isIosMobileSimulator(device);
 const supportsAndroidOrIosNonTv = (device: DeviceInfo): boolean =>
   device.platform === 'android' || (isIosFamily(device) && device.target !== 'tv');
+const supportsTvRemote = (device: DeviceInfo): boolean =>
+  (device.platform === 'android' && device.target === 'tv') ||
+  (isIosFamily(device) && device.target === 'tv');
 const supportsHostAudioProbe = (device: DeviceInfo): boolean =>
   device.platform === 'web' ||
   (process.platform === 'darwin' &&
@@ -146,6 +149,7 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
     device.kind === 'simulator',
   keyboard: supportsAndroidOrIosNonTv,
   rotate: supportsAndroidOrIosNonTv,
+  'tv-remote': supportsTvRemote,
   alert: (device) => device.platform === 'android' || isMacOsOrAppleSimulator(device),
   settings: (device) =>
     device.platform === 'android' || isMacOs(device) || device.kind === 'simulator',
@@ -155,6 +159,17 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   'transform-gesture': supportsSynthesisGesture,
 };
 const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
+  'tv-remote': (device) => {
+    if (device.platform === 'android') {
+      return device.target === 'tv'
+        ? undefined
+        : 'tv-remote is supported only on Android TV targets.';
+    }
+    if (isIosFamily(device)) {
+      return device.target === 'tv' ? undefined : 'tv-remote is supported only on tvOS devices.';
+    }
+    return isMacOs(device) ? 'tv-remote is supported only on tvOS devices.' : undefined;
+  },
   pinch: synthesisGestureUnsupportedHint,
   'rotate-gesture': synthesisGestureUnsupportedHint,
   'transform-gesture': synthesisGestureUnsupportedHint,
@@ -277,8 +292,13 @@ test('(b.2) non-Apple families only carry their own non-portable support gates',
   // Most relocated closures are Apple-only. Audio is the one host-dependent command
   // that also gates Android emulator support on macOS hosts, so Android carries only
   // that command-specific predicate.
-  assert.deepEqual(Object.keys(getPlugin('android').capability.supportsByDefault ?? {}), ['audio']);
-  assert.equal(getPlugin('android').capability.unsupportedHintByDefault, undefined);
+  assert.deepEqual(Object.keys(getPlugin('android').capability.supportsByDefault ?? {}), [
+    'audio',
+    'tv-remote',
+  ]);
+  assert.deepEqual(Object.keys(getPlugin('android').capability.unsupportedHintByDefault ?? {}), [
+    'tv-remote',
+  ]);
   for (const platform of ['linux', 'web'] as const) {
     const capability = getPlugin(platform).capability;
     assert.equal(capability.supportsByDefault, undefined, `${platform} has no supportsByDefault`);

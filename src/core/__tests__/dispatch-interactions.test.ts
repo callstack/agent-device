@@ -63,6 +63,7 @@ function makeUnusedInteractor(): Interactor {
     rotateGesture: fail,
     transformGesture: fail,
     appSwitcher: fail,
+    tvRemote: fail,
     readClipboard: fail,
     writeClipboard: fail,
     setSetting: fail,

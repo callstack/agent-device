@@ -48,6 +48,7 @@ export const PUBLIC_COMMANDS = {
   trace: 'trace',
   triggerAppEvent: 'trigger-app-event',
   type: 'type',
+  tvRemote: 'tv-remote',
   viewport: 'viewport',
   wait: 'wait',
 } as const;

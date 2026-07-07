@@ -15,6 +15,8 @@ import {
   keyboardDaemonWriter,
   rotateCliReader,
   rotateDaemonWriter,
+  tvRemoteCliReader,
+  tvRemoteDaemonWriter,
 } from './index.ts';
 
 function flags(overrides: Partial<CliFlags> = {}): CliFlags {
@@ -116,5 +118,30 @@ describe('system command interface', () => {
       'write',
       'copied',
     ]);
+  });
+
+  test('tv-remote reader parses button and optional press subcommand', () => {
+    expect(tvRemoteCliReader(['down'], flags({ durationMs: 250 }))).toMatchObject({
+      button: 'down',
+      durationMs: 250,
+    });
+    expect(tvRemoteCliReader(['press', 'select'], flags())).toMatchObject({
+      button: 'select',
+    });
+  });
+
+  test('tv-remote reader and writer validate button arguments', () => {
+    expect(
+      tvRemoteDaemonWriter({ button: 'right' } as Record<string, unknown>).positionals,
+    ).toEqual(['right']);
+    expectInvalidArgs(
+      () => tvRemoteCliReader([], flags()),
+      'tv-remote requires exactly one button',
+    );
+    expectInvalidArgs(
+      () => tvRemoteCliReader(['press', 'left', 'extra'], flags()),
+      'tv-remote requires exactly one button',
+    );
+    expectInvalidArgs(() => tvRemoteCliReader(['blue'], flags()), 'button must be one of');
   });
 });

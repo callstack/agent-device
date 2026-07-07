@@ -4,6 +4,7 @@ import { booleanSchema, looseObjectSchema, stringSchema } from '../commands/comm
 import { BACK_MODES } from '../core/back-mode.ts';
 import { DEVICE_ROTATIONS } from '../core/device-rotation.ts';
 import { SESSION_SURFACES } from '../core/session-surface.ts';
+import { TV_REMOTE_BUTTONS } from '../core/tv-remote.ts';
 import { DEVICE_TARGETS, PLATFORMS } from '../kernel/device.ts';
 
 /**
@@ -250,6 +251,15 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     'action',
     'message',
   ]),
+  'tv-remote': objectSchema(
+    {
+      action: constSchema('tv-remote'),
+      button: enumSchema(TV_REMOTE_BUTTONS),
+      durationMs: numberSchema(),
+      message: stringSchema(),
+    },
+    ['action', 'button', 'message'],
+  ),
 
   // src/contracts/clipboard.ts — discriminated union on `action`.
   clipboard: {

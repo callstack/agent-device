@@ -12,6 +12,7 @@ export type SelectorKey =
   | 'hidden'
   | 'editable'
   | 'selected'
+  | 'focused'
   | 'enabled'
   | 'hittable';
 
@@ -44,6 +45,7 @@ const BOOLEAN_KEYS = new Set<SelectorKey>([
   'hidden',
   'editable',
   'selected',
+  'focused',
   'enabled',
   'hittable',
 ]);

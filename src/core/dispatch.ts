@@ -13,6 +13,7 @@ import {
 import { emitDiagnostic, withDiagnosticTimer } from '../utils/diagnostics.ts';
 import { readLocationCoordinate } from '../utils/location-coordinates.ts';
 import { successText, withSuccessText } from '../utils/success-text.ts';
+import { requireIntInRange } from '../utils/validation.ts';
 import { screenshotOptionsFromFlags } from '../contracts/screenshot.ts';
 import { isKeyboardAction, type KeyboardAction } from '../utils/keyboard-actions.ts';
 import type { DispatchContext } from './dispatch-context.ts';
@@ -34,6 +35,7 @@ import {
 } from './dispatch-interactions.ts';
 import { readNotificationPayload } from './dispatch-payload.ts';
 import { parseDeviceRotation } from './device-rotation.ts';
+import { parseTvRemoteButton } from './tv-remote.ts';
 import { readViewportDimension } from './viewport-dimension.ts';
 
 export { resolveTargetDevice } from './dispatch-resolve.ts';
@@ -120,6 +122,7 @@ type DispatchCommand =
   | 'app-switcher'
   | 'clipboard'
   | 'keyboard'
+  | 'tv-remote'
   | 'settings'
   | 'push'
   | 'snapshot'
@@ -204,6 +207,8 @@ const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
   clipboard: ({ interactor, positionals }) => handleClipboardCommand(interactor, positionals),
   keyboard: ({ device, positionals, context, runnerCtx }) =>
     handleKeyboardCommand(device, positionals, context, runnerCtx),
+  'tv-remote': ({ device, interactor, positionals, context }) =>
+    handleTvRemoteCommand(device, interactor, positionals, context),
   settings: ({ device, interactor, positionals, context }) =>
     handleSettingsCommand(device, interactor, positionals, context),
   push: ({ device, positionals, context }) => handlePushCommand(device, positionals, context),
@@ -387,6 +392,34 @@ async function handleClipboardCommand(
     action,
     textLength: Array.from(text).length,
     ...successText('Clipboard updated'),
+  };
+}
+
+async function handleTvRemoteCommand(
+  device: DeviceInfo,
+  interactor: Interactor,
+  positionals: string[],
+  context: DispatchContext | undefined,
+): Promise<Record<string, unknown>> {
+  if (device.target !== 'tv') {
+    throw new AppError('UNSUPPORTED_OPERATION', 'tv-remote is supported only on TV targets', {
+      hint: 'Select an Android TV or tvOS target with --target tv.',
+    });
+  }
+  if (positionals.length !== 1) {
+    throw new AppError('INVALID_ARGS', 'tv-remote requires exactly one button');
+  }
+  const button = parseTvRemoteButton(positionals[0]);
+  const durationMs =
+    context?.durationMs === undefined
+      ? undefined
+      : requireIntInRange(context.durationMs, 'durationMs', 0, 10_000);
+  await interactor.tvRemote(button, durationMs);
+  return {
+    action: 'tv-remote',
+    button,
+    ...(durationMs !== undefined ? { durationMs } : {}),
+    ...successText(`Pressed TV remote ${button}`),
   };
 }
 

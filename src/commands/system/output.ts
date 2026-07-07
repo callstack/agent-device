@@ -48,6 +48,7 @@ export const systemCliOutputFormatters = {
   'app-switcher': messageOutput,
   keyboard: resultOutput(keyboardCliOutput),
   clipboard: resultOutput(clipboardCliOutput),
+  'tv-remote': messageOutput,
 } as const satisfies Record<string, CliOutputFormatter>;
 
 function formatAppState(data: AppStateCommandResult): string | null {

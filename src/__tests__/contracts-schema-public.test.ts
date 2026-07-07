@@ -12,6 +12,7 @@ import type {
   BackCommandResult,
   HomeCommandResult,
   RotateCommandResult,
+  TvRemoteCommandResult,
 } from '../contracts/navigation.ts';
 import type { ViewportCommandResult } from '../contracts/viewport.ts';
 import { centerOfRect, defaultHintForCode, normalizeError } from '../sdk/contracts.ts';
@@ -166,6 +167,13 @@ test('command result contracts are assignable to command result map', () => {
   } satisfies RotateCommandResult;
   const rotateFromMap: CommandResult<'rotate'> = rotate;
 
+  const tvRemote = {
+    action: 'tv-remote',
+    button: 'select',
+    message: 'Pressed TV remote select',
+  } satisfies TvRemoteCommandResult;
+  const tvRemoteFromMap: CommandResult<'tv-remote'> = tvRemote;
+
   const clipboard = {
     action: 'write',
     textLength: 11,
@@ -187,6 +195,7 @@ test('command result contracts are assignable to command result map', () => {
   assert.equal(homeFromMap.action, 'home');
   assert.equal(appSwitcherFromMap.action, 'app-switcher');
   assert.equal(rotateFromMap.orientation, 'portrait');
+  assert.equal(tvRemoteFromMap.button, 'select');
   assert.equal(clipboardFromMap.action === 'write' ? clipboardFromMap.textLength : -1, 11);
   assert.equal(
     appstateFromMap.platform === 'android' ? appstateFromMap.package : '',

@@ -10,19 +10,26 @@ import {
   normalizeType,
 } from '../snapshot/snapshot-processing.ts';
 
-export type IsPredicate = 'visible' | 'hidden' | 'exists' | 'editable' | 'selected' | 'text';
+export type IsPredicate =
+  | 'visible'
+  | 'hidden'
+  | 'exists'
+  | 'editable'
+  | 'selected'
+  | 'focused'
+  | 'text';
 
 export function isSupportedPredicate(input: string): input is IsPredicate {
-  return ['visible', 'hidden', 'exists', 'editable', 'selected', 'text'].includes(input);
+  return ['visible', 'hidden', 'exists', 'editable', 'selected', 'focused', 'text'].includes(input);
 }
 
 export const IS_PREDICATE_REQUIRED_MESSAGE =
-  'is requires predicate: visible|hidden|exists|editable|selected|text';
+  'is requires predicate: visible|hidden|exists|editable|selected|focused|text';
 
 export const IS_PREDICATE_USAGE_HINT =
-  'Use "is <predicate> <selector>" or "is <selector> <predicate>". visible|hidden|editable|selected double as selector keys: a bare predicate token after the selector is read as the predicate, so write key=true (e.g. visible=true) inside the selector to use it as a filter instead.';
+  'Use "is <predicate> <selector>" or "is <selector> <predicate>". visible|hidden|editable|selected|focused double as selector keys: a bare predicate token after the selector is read as the predicate, so write key=true (e.g. visible=true) inside the selector to use it as a filter instead.';
 
-// visible|hidden|editable|selected double as selector boolean keys, so the selector-first
+// visible|hidden|editable|selected|focused double as selector boolean keys, so the selector-first
 // form (`is <selector> <predicate>`) cannot survive greedy selector parsing: the trailing
 // predicate token would be swallowed as a boolean selector term. Reserve the first bare
 // predicate token that terminates a valid selector prefix and rotate the positionals into
@@ -49,6 +56,7 @@ export function evaluateIsPredicate(params: {
   const actualText = extractNodeText(node);
   const editable = isNodeEditable(node, platform);
   const selected = node.selected === true;
+  const focused = node.focused === true;
   const visible =
     predicate === 'text' ? isNodeVisible(node) : isAssertionVisible(node, nodes, platform);
   let pass = false;
@@ -65,6 +73,9 @@ export function evaluateIsPredicate(params: {
     case 'selected':
       pass = selected;
       break;
+    case 'focused':
+      pass = focused;
+      break;
     case 'text':
       pass = actualText === (expectedText ?? '');
       break;
@@ -76,6 +87,7 @@ export function evaluateIsPredicate(params: {
           visible,
           editable,
           selected,
+          focused,
         })}`;
   return { pass, actualText, details };
 }

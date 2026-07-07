@@ -49,6 +49,7 @@ test('catalog commands use generic routing only when intentionally passthrough o
     PUBLIC_COMMANDS.screenshot,
     PUBLIC_COMMANDS.scroll,
     PUBLIC_COMMANDS.swipe,
+    PUBLIC_COMMANDS.tvRemote,
     PUBLIC_COMMANDS.viewport,
   ].sort();
   const genericCatalogCommands = [

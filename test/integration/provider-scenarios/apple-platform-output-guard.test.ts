@@ -121,6 +121,7 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
   [PUBLIC_COMMANDS.rotate]: () => one(['left']),
   [PUBLIC_COMMANDS.scroll]: () => one(['down']),
   [PUBLIC_COMMANDS.swipe]: () => one(['up']),
+  [PUBLIC_COMMANDS.tvRemote]: () => one(['select']),
   [PUBLIC_COMMANDS.appSwitcher]: () => one(),
 
   // -- orchestration (drive to an error response; still scanned) --

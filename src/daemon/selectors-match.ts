@@ -43,6 +43,8 @@ function matchesTerm(
       return isNodeEditable(node, platform) === Boolean(term.value);
     case 'selected':
       return Boolean(node.selected === true) === Boolean(term.value);
+    case 'focused':
+      return Boolean(node.focused === true) === Boolean(term.value);
     case 'enabled':
       return Boolean(node.enabled !== false) === Boolean(term.value);
     case 'hittable':

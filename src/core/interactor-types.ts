@@ -1,6 +1,7 @@
 import type { BackMode } from './back-mode.ts';
 import type { DeviceRotation } from './device-rotation.ts';
 import type { ScrollDirection, TransformGestureParams } from './scroll-gesture.ts';
+import type { TvRemoteButton } from './tv-remote.ts';
 import type { SettingOptions } from '../platforms/permission-utils.ts';
 import type { SessionSurface } from './session-surface.ts';
 import type { BackendSnapshotResult } from '../backend.ts';
@@ -145,6 +146,7 @@ export type Interactor = {
   ): Promise<Record<string, unknown> | void>;
   transformGesture(options: TransformGestureParams): Promise<Record<string, unknown> | void>;
   appSwitcher(): Promise<void>;
+  tvRemote(button: TvRemoteButton, durationMs?: number): Promise<void>;
   readClipboard(): Promise<string>;
   writeClipboard(text: string): Promise<void>;
   setSetting(

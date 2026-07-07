@@ -169,7 +169,7 @@ const getFields = {
 
 const isFields = {
   predicate: requiredField(
-    enumField(['visible', 'hidden', 'exists', 'editable', 'selected', 'text'] as const),
+    enumField(['visible', 'hidden', 'exists', 'editable', 'selected', 'focused', 'text'] as const),
   ),
   selector: requiredField(stringField()),
   value: stringField(),

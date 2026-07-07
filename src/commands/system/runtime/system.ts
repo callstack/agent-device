@@ -4,9 +4,11 @@ import type {
   BackendAlertResult,
   BackendDeviceOrientation,
   BackendKeyboardResult,
+  BackendTvRemoteOptions,
 } from '../../../backend.ts';
 import type { CommandContext } from '../../../runtime-contract.ts';
 import type { BackMode } from '../../../core/back-mode.ts';
+import { parseTvRemoteButton } from '../../../core/tv-remote.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { successText } from '../../../utils/success-text.ts';
 import { requireIntInRange } from '../../../utils/validation.ts';
@@ -127,6 +129,14 @@ export type SystemAppSwitcherCommandResult = {
   kind: 'appSwitcherOpened';
 } & BackendResultEnvelope;
 
+export type SystemTvRemoteCommandOptions = CommandContext & BackendTvRemoteOptions;
+
+export type SystemTvRemoteCommandResult = {
+  kind: 'tvRemotePressed';
+  button: BackendTvRemoteOptions['button'];
+  durationMs?: number;
+} & BackendResultEnvelope;
+
 export const backCommand: RuntimeCommand<
   SystemBackCommandOptions | undefined,
   SystemBackCommandResult
@@ -163,6 +173,32 @@ export const homeCommand: RuntimeCommand<
     kind: 'systemHome',
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
     ...successText('Home'),
+  };
+};
+
+export const tvRemoteCommand: RuntimeCommand<
+  SystemTvRemoteCommandOptions,
+  SystemTvRemoteCommandResult
+> = async (runtime, options): Promise<SystemTvRemoteCommandResult> => {
+  if (!runtime.backend.pressTvRemote) {
+    throw new AppError('UNSUPPORTED_OPERATION', 'system.tvRemote is not supported by this backend');
+  }
+  const button = parseTvRemoteButton(options.button);
+  const durationMs =
+    options.durationMs === undefined
+      ? undefined
+      : requireIntInRange(options.durationMs, 'durationMs', 0, 10_000);
+  const backendResult = await runtime.backend.pressTvRemote(toBackendContext(runtime, options), {
+    button,
+    ...(durationMs !== undefined ? { durationMs } : {}),
+  });
+  const formattedBackendResult = toBackendResult(backendResult);
+  return {
+    kind: 'tvRemotePressed',
+    button,
+    ...(durationMs !== undefined ? { durationMs } : {}),
+    ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
+    ...successText(`Pressed TV remote ${button}`),
   };
 };
 

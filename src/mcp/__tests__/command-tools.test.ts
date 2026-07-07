@@ -259,6 +259,14 @@ test('MCP typed commands advertise an outputSchema with the contract discriminan
     (branch) => (branch.properties?.action as { const?: unknown } | undefined)?.const,
   );
   assert.deepEqual(clipboardActions, ['read', 'write']);
+
+  const tvRemote = tools.find((tool) => tool.name === 'tv-remote');
+  assert.ok(tvRemote);
+  assert.ok(tvRemote.outputSchema);
+  assert.deepEqual(
+    (tvRemote.outputSchema.properties?.button as { enum?: unknown[] } | undefined)?.enum,
+    ['up', 'down', 'left', 'right', 'select', 'menu', 'home', 'back'],
+  );
 });
 
 test('MCP untyped tools stay byte-identical: no outputSchema key', () => {

@@ -7,6 +7,7 @@ import type {
 import type { BackMode } from '../core/back-mode.ts';
 import type { DeviceRotation } from '../core/device-rotation.ts';
 import type { ScrollDirection, TransformGestureParams } from '../core/scroll-gesture.ts';
+import type { TvRemoteButton } from '../core/tv-remote.ts';
 import type { SettingOptions } from '../platforms/permission-utils.ts';
 import { AppError } from '../kernel/errors.ts';
 import { buildScrollGesturePlan } from '../core/scroll-gesture.ts';
@@ -251,6 +252,10 @@ class WebDriverInteractor implements Interactor {
   async appSwitcher(): Promise<void> {
     this.requireSupport('appSwitcher');
     await this.client.executeScript('mobile: pressButton', [{ name: 'appSwitch' }]);
+  }
+
+  async tvRemote(_button: TvRemoteButton, _durationMs?: number): Promise<void> {
+    this.unsupported('tvRemote');
   }
 
   async readClipboard(): Promise<string> {

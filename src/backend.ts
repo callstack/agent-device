@@ -9,6 +9,7 @@ import type { ClickButton } from './core/click-button.ts';
 import type { DeviceRotation } from './core/device-rotation.ts';
 import type { ScrollDirection } from './core/scroll-gesture.ts';
 import type { SessionSurface } from './core/session-surface.ts';
+import type { TvRemoteButton } from './core/tv-remote.ts';
 import type { RecordingExportQuality } from './core/recording-export-quality.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 import type {
@@ -85,6 +86,11 @@ export type BackendDeviceOrientation = DeviceRotation;
 
 export type BackendBackOptions = {
   mode?: BackMode;
+};
+
+export type BackendTvRemoteOptions = {
+  button: TvRemoteButton;
+  durationMs?: number;
 };
 
 export type BackendKeyboardOptions = {
@@ -491,6 +497,10 @@ export type AgentDeviceBackend = {
     options?: BackendBackOptions,
   ): Promise<BackendActionResult>;
   pressHome?(context: BackendCommandContext): Promise<BackendActionResult>;
+  pressTvRemote?(
+    context: BackendCommandContext,
+    options: BackendTvRemoteOptions,
+  ): Promise<BackendActionResult>;
   rotate?(
     context: BackendCommandContext,
     orientation: BackendDeviceOrientation,

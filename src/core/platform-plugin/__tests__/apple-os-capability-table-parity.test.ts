@@ -52,6 +52,9 @@ const supportsSynthesisGesture = (device: DeviceInfo): boolean =>
   device.platform === 'android' || isIosMobileSimulator(device);
 const supportsAndroidOrIosNonTv = (device: DeviceInfo): boolean =>
   device.platform === 'android' || (isIosFamily(device) && device.target !== 'tv');
+const supportsTvRemote = (device: DeviceInfo): boolean =>
+  (device.platform === 'android' && device.target === 'tv') ||
+  (isIosFamily(device) && device.target === 'tv');
 const synthesisGestureUnsupportedHint = (device: DeviceInfo): string | undefined => {
   if (isMacOs(device))
     return 'macOS automation has no multi-touch input — this gesture is supported on Android and the iOS simulator only.';
@@ -77,6 +80,7 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
     device.kind === 'simulator',
   keyboard: supportsAndroidOrIosNonTv,
   rotate: supportsAndroidOrIosNonTv,
+  'tv-remote': supportsTvRemote,
   alert: (device) => device.platform === 'android' || isMacOsOrAppleSimulator(device),
   settings: (device) =>
     device.platform === 'android' || isMacOs(device) || device.kind === 'simulator',
@@ -90,6 +94,17 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   'transform-gesture': supportsSynthesisGesture,
 };
 const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
+  'tv-remote': (device) => {
+    if (device.platform === 'android') {
+      return device.target === 'tv'
+        ? undefined
+        : 'tv-remote is supported only on Android TV targets.';
+    }
+    if (isIosFamily(device)) {
+      return device.target === 'tv' ? undefined : 'tv-remote is supported only on tvOS devices.';
+    }
+    return isMacOs(device) ? 'tv-remote is supported only on tvOS devices.' : undefined;
+  },
   pinch: synthesisGestureUnsupportedHint,
   'rotate-gesture': synthesisGestureUnsupportedHint,
   'transform-gesture': synthesisGestureUnsupportedHint,

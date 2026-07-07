@@ -590,6 +590,17 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
+    name: PUBLIC_COMMANDS.tvRemote,
+    daemon: { route: 'generic', replayScopedAction: true, androidBlockingDialogGuard: true },
+    capability: {
+      apple: APPLE_SIM_AND_DEVICE,
+      android: ANDROID_ALL,
+      linux: LINUX_NONE,
+    },
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: true,
+  },
+  {
     name: PUBLIC_COMMANDS.rotate,
     daemon: { route: 'generic', replayScopedAction: true, androidBlockingDialogGuard: true },
     capability: {

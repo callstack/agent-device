@@ -98,7 +98,7 @@ export type GetAttrsCommandOptions = CommandContext &
 
 export type IsCommandOptions = CommandContext &
   SelectorSnapshotOptions & {
-    predicate: 'visible' | 'hidden' | 'exists' | 'editable' | 'selected' | 'text';
+    predicate: 'visible' | 'hidden' | 'exists' | 'editable' | 'selected' | 'focused' | 'text';
     selector: string;
     expectedText?: string;
   };
@@ -274,12 +274,13 @@ export const isCommand: RuntimeCommand<IsCommandOptions, IsCommandResult> = asyn
   if (options.predicate === 'text' && !options.expectedText) {
     throw new AppError('INVALID_ARGS', 'is text requires expected text value');
   }
+  const chain = parseSelectorChain(options.selector);
   const includeRects = predicateNeedsRects(options.predicate);
   const capture = await captureSelectorSnapshot(runtime, options, {
     updateSession: true,
     includeRects,
+    interactiveOnly: options.predicate === 'focused' || selectorChainReadsFocus(chain),
   });
-  const chain = parseSelectorChain(options.selector);
 
   if (options.predicate === 'exists') {
     const matched = findSelectorChainMatch(capture.snapshot.nodes, chain, {
@@ -435,6 +436,7 @@ async function findFirstLocatorMatch(
   const capture = await captureSelectorSnapshot(runtime, options, {
     updateSession: true,
     scope: findSnapshotScope(runtime, locator, options.query, selectorChain),
+    interactiveOnly: selectorChain ? selectorChainReadsFocus(selectorChain) : false,
   });
   if (isSparseSnapshotQualityVerdict(capture.snapshot.snapshotQuality)) {
     throw sparseSelectorSnapshotError(capture.snapshot.snapshotQuality);
@@ -475,6 +477,10 @@ function predicateNeedsRects(predicate: IsPredicate): boolean {
   return predicate === 'visible' || predicate === 'hidden';
 }
 
+function selectorChainReadsFocus(chain: SelectorChain): boolean {
+  return chain.selectors.some((selector) => selector.terms.some((term) => term.key === 'focused'));
+}
+
 async function waitForSelector(
   runtime: AgentDeviceRuntime,
   options: WaitCommandOptions,
@@ -484,8 +490,12 @@ async function waitForSelector(
   const timeout = timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const start = now(runtime);
   const chain = parseSelectorChain(selectorExpression);
+  const interactiveOnly = selectorChainReadsFocus(chain);
   while (now(runtime) - start < timeout) {
-    const capture = await captureSelectorSnapshot(runtime, options, { updateSession: true });
+    const capture = await captureSelectorSnapshot(runtime, options, {
+      updateSession: true,
+      interactiveOnly,
+    });
     const match = findSelectorChainMatch(capture.snapshot.nodes, chain, {
       platform: runtime.backend.platform,
     });
@@ -568,14 +578,15 @@ async function resolveSelectorNode(
   sessionName: string,
   params: { selector: string; disambiguateAmbiguous: boolean },
 ): Promise<{ capture: CapturedSnapshot; node: SnapshotNode; selector: string; ref: string }> {
+  const chain = parseSelectorChain(params.selector);
   const capture = await captureSelectorSnapshot(
     runtime,
     { ...options, session: sessionName },
     {
       updateSession: true,
+      interactiveOnly: selectorChainReadsFocus(chain),
     },
   );
-  const chain = parseSelectorChain(params.selector);
   const resolved = resolveSelectorChain(capture.snapshot.nodes, chain, {
     platform: runtime.backend.platform,
     requireRect: false,

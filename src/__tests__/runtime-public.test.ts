@@ -265,6 +265,7 @@ test('internal backend, commands, and io modules are usable', () => {
   assert.equal(typeof commands.system.settings, 'function');
   assert.equal(typeof commands.system.alert, 'function');
   assert.equal(typeof commands.system.appSwitcher, 'function');
+  assert.equal(typeof commands.system.tvRemote, 'function');
   assert.equal(typeof commands.admin.devices, 'function');
   assert.equal(typeof commands.admin.install, 'function');
   assert.equal(typeof commands.recording.record, 'function');

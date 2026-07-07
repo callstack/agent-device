@@ -32,6 +32,14 @@ const androidEmulator: DeviceInfo = {
   kind: 'emulator',
 };
 
+const androidTvEmulator: DeviceInfo = {
+  platform: 'android',
+  id: 'emulator-5556',
+  name: 'Android TV',
+  kind: 'emulator',
+  target: 'tv',
+};
+
 const macOsDevice: DeviceInfo = {
   platform: 'apple',
   appleOs: 'macos',
@@ -122,6 +130,16 @@ test('device capability matrix stays consistent across shared command groups', (
         { device: iosSimulator, expected: true, label: 'on iOS sim' },
         { device: iosDevice, expected: true, label: 'on iOS device' },
         { device: androidDevice, expected: true, label: 'on Android' },
+      ],
+    },
+    {
+      commands: ['tv-remote'],
+      checks: [
+        { device: iosSimulator, expected: false, label: 'on iOS sim' },
+        { device: androidDevice, expected: false, label: 'on Android phone' },
+        { device: androidTvEmulator, expected: true, label: 'on Android TV' },
+        { device: macOsDevice, expected: false, label: 'on macOS' },
+        { device: tvOsSimulator, expected: true, label: 'on tvOS simulator' },
       ],
     },
     {
@@ -312,6 +330,7 @@ test('tvOS follows iOS capability matrix by device kind', () => {
       'back',
       'home',
       'app-switcher',
+      'tv-remote',
       'record',
     ],
     [{ device: tvOsSimulator, expected: true, label: 'on tvOS' }],

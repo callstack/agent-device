@@ -120,7 +120,8 @@ function readIsOptionsFromPositionals(positionals: string[], flags: CliFlags): I
     predicate !== 'hidden' &&
     predicate !== 'exists' &&
     predicate !== 'editable' &&
-    predicate !== 'selected'
+    predicate !== 'selected' &&
+    predicate !== 'focused'
   ) {
     throw new AppError('INVALID_ARGS', IS_PREDICATE_REQUIRED_MESSAGE, {
       hint: IS_PREDICATE_USAGE_HINT,

@@ -20,6 +20,7 @@ export type CloudWebDriverOperation =
   | 'home'
   | 'rotate'
   | 'appSwitcher'
+  | 'tvRemote'
   | 'clipboard.read'
   | 'clipboard.write'
   | 'settings'
@@ -99,6 +100,7 @@ const BASE_WEBDRIVER_CAPABILITIES: CloudWebDriverCapabilityMap = {
     support: 'partial',
     note: 'Uses provider/Appium mobile pressButton support where available.',
   },
+  tvRemote: unsupported,
   'clipboard.read': {
     support: 'partial',
     note: 'Uses provider/Appium clipboard extension support where available.',

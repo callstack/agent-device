@@ -11,6 +11,7 @@ import {
   homeAndroid,
   longPressAndroid,
   pressAndroid,
+  pressAndroidTvRemote,
   rotateAndroid,
   scrollAndroid,
   typeAndroid,
@@ -92,6 +93,7 @@ export function createAndroidInteractor(device: DeviceInfo): Interactor {
       rotateGestureAndroid(device, { degrees, x, y, velocity }),
     transformGesture: (options) => transformGestureAndroid(device, options),
     appSwitcher: () => appSwitcherAndroid(device),
+    tvRemote: (button, durationMs) => pressAndroidTvRemote(device, button, durationMs),
     readClipboard: () => readAndroidClipboardText(device),
     writeClipboard: (text) => writeAndroidClipboardText(device, text),
     setSetting: (setting, state, appId, options) =>

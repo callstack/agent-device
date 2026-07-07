@@ -9,6 +9,7 @@ import {
   keyboardCommand,
   rotateCommand,
   settingsCommand,
+  tvRemoteCommand,
   type SystemAlertCommandOptions,
   type SystemAlertCommandResult,
   type SystemAppSwitcherCommandOptions,
@@ -25,6 +26,8 @@ import {
   type SystemRotateCommandResult,
   type SystemSettingsCommandOptions,
   type SystemSettingsCommandResult,
+  type SystemTvRemoteCommandOptions,
+  type SystemTvRemoteCommandResult,
 } from './system.ts';
 
 export type SystemCommands = {
@@ -39,6 +42,7 @@ export type SystemCommands = {
     SystemAppSwitcherCommandOptions | undefined,
     SystemAppSwitcherCommandResult
   >;
+  tvRemote: RuntimeCommand<SystemTvRemoteCommandOptions, SystemTvRemoteCommandResult>;
 };
 
 export type BoundSystemCommands = {
@@ -52,6 +56,7 @@ export type BoundSystemCommands = {
   appSwitcher: (
     options?: SystemAppSwitcherCommandOptions,
   ) => Promise<SystemAppSwitcherCommandResult>;
+  tvRemote: BoundRuntimeCommand<SystemTvRemoteCommandOptions, SystemTvRemoteCommandResult>;
 };
 
 export const systemCommands: SystemCommands = {
@@ -63,6 +68,7 @@ export const systemCommands: SystemCommands = {
   settings: settingsCommand,
   alert: alertCommand,
   appSwitcher: appSwitcherCommand,
+  tvRemote: tvRemoteCommand,
 };
 
 export function bindSystemCommands(runtime: AgentDeviceRuntime): BoundSystemCommands {
@@ -75,5 +81,6 @@ export function bindSystemCommands(runtime: AgentDeviceRuntime): BoundSystemComm
     settings: (options) => systemCommands.settings(runtime, options),
     alert: (options) => systemCommands.alert(runtime, options),
     appSwitcher: (options) => systemCommands.appSwitcher(runtime, options),
+    tvRemote: (options) => systemCommands.tvRemote(runtime, options),
   };
 }

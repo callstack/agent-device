@@ -3,7 +3,7 @@ import type { PlatformPlugin } from '../../core/platform-plugin/plugin.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { isAudioProbeSupportedDevice } from '../../kernel/audio-probe-support.ts';
 import { shouldUseHostMacFastPath } from '../../core/platform-inventory.ts';
-import { isMacOs, type DeviceInfo } from '../../kernel/device.ts';
+import { isMacOs, isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
 import type { DeviceInventoryRequest } from '../../core/platform-inventory.ts';
 import type { RunnerContext } from '../../core/interactor-types.ts';
 
@@ -62,6 +62,15 @@ const supportsSynthesisGesture = (device: DeviceInfo): boolean => {
     : device.platform === 'android';
 };
 
+// `tv-remote` is Android-TV or tvOS only. Off Apple this preserves the Android-TV
+// branch so the relocated Apple closure stays equivalent to the full original
+// supports predicate under the parity guard; the closure is only consulted for Apple
+// devices in production capability routing.
+const supportsTvRemote = (device: DeviceInfo): boolean => {
+  if (device.platform === 'android') return device.target === 'tv';
+  return isTvOsDevice(device);
+};
+
 const synthesisGestureUnsupportedHint = (device: DeviceInfo): string | undefined => {
   const caps = appleOsCapabilities(device);
   if (!caps) return undefined; // non-Apple: no multi-touch gate, no hint
@@ -91,6 +100,7 @@ const APPLE_SUPPORTS_BY_DEFAULT: Record<string, (device: DeviceInfo) => boolean>
     supportsHostOrSimulatorSurface(device),
   [PUBLIC_COMMANDS.keyboard]: supportsKeyboard,
   [PUBLIC_COMMANDS.rotate]: supportsOrientation,
+  [PUBLIC_COMMANDS.tvRemote]: supportsTvRemote,
   [PUBLIC_COMMANDS.alert]: (device) =>
     device.platform === 'android' || supportsHostOrSimulatorSurface(device),
   [PUBLIC_COMMANDS.settings]: (device) =>
@@ -105,6 +115,16 @@ const APPLE_UNSUPPORTED_HINT_BY_DEFAULT: Record<
   string,
   (device: DeviceInfo) => string | undefined
 > = {
+  [PUBLIC_COMMANDS.tvRemote]: (device) =>
+    device.platform === 'android'
+      ? device.target === 'tv'
+        ? undefined
+        : 'tv-remote is supported only on Android TV targets.'
+      : !appleOsCapabilities(device)
+        ? undefined
+        : isTvOsDevice(device)
+          ? undefined
+          : 'tv-remote is supported only on tvOS devices.',
   pinch: synthesisGestureUnsupportedHint,
   'rotate-gesture': synthesisGestureUnsupportedHint,
   'transform-gesture': synthesisGestureUnsupportedHint,

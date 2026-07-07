@@ -504,6 +504,33 @@ test('role selector normalization matches Android class names by leaf type', () 
   assert.equal(resolved.node.ref, 'a1');
 });
 
+test('focused selector matches snapshot focus state', () => {
+  const tvNodes: SnapshotState['nodes'] = [
+    {
+      ref: 'tv1',
+      index: 0,
+      type: 'android.widget.TextView',
+      label: 'Search',
+      focused: false,
+    },
+    {
+      ref: 'tv2',
+      index: 1,
+      type: 'android.widget.Button',
+      label: 'Play',
+      focused: true,
+    },
+  ];
+  const chain = parseSelectorChain('focused=true');
+  const resolved = resolveSelectorChain(tvNodes, chain, {
+    platform: 'android',
+    requireUnique: true,
+  });
+
+  assert.ok(resolved);
+  assert.equal(resolved.node.ref, 'tv2');
+});
+
 // ── appName / windowTitle selectors ──────────────────────────────────────
 
 test('appName selector matches nodes with appName field', () => {

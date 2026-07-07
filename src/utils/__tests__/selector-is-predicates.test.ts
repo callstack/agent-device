@@ -34,6 +34,7 @@ test('normalizeIsPositionals rotates the selector-first form to predicate-first'
     'text=Foo',
     'visible=true',
   ]);
+  assert.deepEqual(normalizeIsPositionals(['label=Play', 'focused']), ['focused', 'label=Play']);
 });
 
 test('normalizeIsPositionals leaves unparseable arguments untouched', () => {
@@ -42,6 +43,26 @@ test('normalizeIsPositionals leaves unparseable arguments untouched', () => {
   // The token before `visible` is not a valid selector, so no rotation applies.
   assert.deepEqual(normalizeIsPositionals(['Some Label', 'visible']), ['Some Label', 'visible']);
   assert.deepEqual(normalizeIsPositionals([]), []);
+});
+
+test('focused predicate reads snapshot focus state', () => {
+  const node: SnapshotNode = {
+    index: 0,
+    ref: 'e0',
+    type: 'android.widget.Button',
+    label: 'Play',
+    focused: true,
+  };
+
+  const result = evaluateIsPredicate({
+    predicate: 'focused',
+    node,
+    nodes: [node],
+    platform: 'android',
+  });
+
+  assert.equal(result.pass, true);
+  assert.match(result.details, /"focused":true/);
 });
 
 test('visible predicate treats zero-height hittable Android nodes as hidden', () => {

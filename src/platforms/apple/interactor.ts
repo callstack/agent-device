@@ -11,6 +11,7 @@ import { iosRunnerOverrides, resolveAppleBackRunnerCommand } from './interaction
 import { appleRemotePressCommand } from './os/tvos/remote.ts';
 import { runMacOsScreenshotAction } from './os/macos/helper.ts';
 import { runAppleRunnerCommand } from './core/runner/runner-client.ts';
+import { toAppleTvRemoteButton } from '../../core/tv-remote.ts';
 import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
@@ -142,6 +143,17 @@ export function createAppleInteractor(
       await runAppleRunnerCommand(
         device,
         { command: 'appSwitcher', appBundleId: runnerContext.appBundleId },
+        runnerOpts,
+      );
+    },
+    tvRemote: async (button, durationMs) => {
+      await runAppleRunnerCommand(
+        device,
+        appleRemotePressCommand(
+          toAppleTvRemoteButton(button),
+          runnerContext.appBundleId,
+          durationMs,
+        ),
         runnerOpts,
       );
     },

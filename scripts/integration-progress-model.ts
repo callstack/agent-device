@@ -152,7 +152,7 @@ function summarizeProviderScenarioFlagCoverage(files) {
     ['hideTouches', 'recording without touch overlays'],
     ['intervalMs', 'repeated press interval'],
     ['delayMs', 'typing/fill delay'],
-    ['durationMs', 'scroll and gesture duration'],
+    ['durationMs', 'scroll, gesture, and TV remote duration'],
     ['holdMs', 'press hold duration'],
     ['jitterPx', 'press jitter'],
     ['pixels', 'scroll distance'],

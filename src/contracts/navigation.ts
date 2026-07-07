@@ -1,5 +1,6 @@
 import type { BackMode } from '../core/back-mode.ts';
 import type { DeviceRotation } from '../core/device-rotation.ts';
+import type { TvRemoteButton } from '../core/tv-remote.ts';
 
 /**
  * Closed results of the navigation/global action commands. Each mirrors the
@@ -34,5 +35,13 @@ export type RotateCommandResult = {
 /** `app-switcher` — `{ action: 'app-switcher', message: 'Opened app switcher' }`. */
 export type AppSwitcherCommandResult = {
   action: 'app-switcher';
+  message: string;
+};
+
+/** `tv-remote` — `{ action: 'tv-remote', button, durationMs?, message }`. */
+export type TvRemoteCommandResult = {
+  action: 'tv-remote';
+  button: TvRemoteButton;
+  durationMs?: number;
   message: string;
 };

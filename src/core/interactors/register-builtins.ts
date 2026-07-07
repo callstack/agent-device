@@ -25,7 +25,14 @@ const androidPlugin = {
   platforms: ['android'],
   capability: {
     bucket: 'android',
-    supportsByDefault: { [PUBLIC_COMMANDS.audio]: isAudioProbeSupportedDevice },
+    supportsByDefault: {
+      [PUBLIC_COMMANDS.audio]: isAudioProbeSupportedDevice,
+      [PUBLIC_COMMANDS.tvRemote]: (device) => device.target === 'tv',
+    },
+    unsupportedHintByDefault: {
+      [PUBLIC_COMMANDS.tvRemote]: (device) =>
+        device.target === 'tv' ? undefined : 'tv-remote is supported only on Android TV targets.',
+    },
   },
   // Wraps the Android arm of `resolveLogBackend`: every Android device -> 'android'.
   appLog: { resolveBackend: () => 'android' },

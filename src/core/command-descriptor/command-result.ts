@@ -10,6 +10,7 @@ import type {
   BackCommandResult,
   HomeCommandResult,
   RotateCommandResult,
+  TvRemoteCommandResult,
 } from '../../contracts/navigation.ts';
 import type { ClipboardCommandResult } from '../../contracts/clipboard.ts';
 import type { AppStateCommandResult } from '../../contracts/app-state.ts';
@@ -47,6 +48,7 @@ export interface CommandResultMap {
   clipboard: ClipboardCommandResult;
   appstate: AppStateCommandResult;
   keyboard: KeyboardCommandResult;
+  'tv-remote': TvRemoteCommandResult;
 }
 
 /**

@@ -5,6 +5,7 @@ import type {
   BackendAlertAction,
   BackendDeviceOrientation,
   BackendKeyboardOptions,
+  BackendTvRemoteOptions,
 } from '../../../backend.ts';
 import { createLocalArtifactAdapter } from '../../../io.ts';
 import { createAgentDevice, localCommandPolicy } from '../../../runtime.ts';
@@ -26,6 +27,7 @@ test('runtime system commands call typed backend primitives', async () => {
   const settings = await device.system.settings({ target: 'privacy' });
   const alert = await device.system.alert({ action: 'accept', timeoutMs: 500 });
   const appSwitcher = await device.system.appSwitcher();
+  const tvRemote = await device.system.tvRemote({ button: 'select', durationMs: 300 });
 
   assert.equal(back.kind, 'systemBack');
   assert.equal(home.kind, 'systemHome');
@@ -37,6 +39,8 @@ test('runtime system commands call typed backend primitives', async () => {
   assert.equal(settings.target, 'privacy');
   assert.equal(alert.kind, 'alertHandled');
   assert.equal(appSwitcher.kind, 'appSwitcherOpened');
+  assert.equal(tvRemote.kind, 'tvRemotePressed');
+  assert.equal(tvRemote.button, 'select');
   assert.deepEqual(calls, [
     { command: 'pressBack', mode: 'system', session: 'default' },
     { command: 'pressHome', session: 'default' },
@@ -47,6 +51,7 @@ test('runtime system commands call typed backend primitives', async () => {
     { command: 'openSettings', target: 'privacy' },
     { command: 'handleAlert', action: 'accept', timeoutMs: 500 },
     { command: 'openAppSwitcher' },
+    { command: 'pressTvRemote', options: { button: 'select', durationMs: 300 } },
   ]);
 });
 
@@ -73,6 +78,10 @@ test('runtime system commands validate options before backend calls', async () =
   await assert.rejects(
     () => device.system.alert({ action: 'tap' as BackendAlertAction }),
     /action must be/,
+  );
+  await assert.rejects(
+    () => device.system.tvRemote({ button: 'blue' as BackendTvRemoteOptions['button'] }),
+    /button must be/,
   );
 
   assert.deepEqual(calls, []);
@@ -111,6 +120,9 @@ function createSystemBackend(calls: unknown[]): AgentDeviceBackend {
     },
     openAppSwitcher: async () => {
       calls.push({ command: 'openAppSwitcher' });
+    },
+    pressTvRemote: async (_context, options) => {
+      calls.push({ command: 'pressTvRemote', options });
     },
   };
 }

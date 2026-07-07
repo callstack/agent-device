@@ -23,6 +23,7 @@ import type { BackMode } from '../core/back-mode.ts';
 import type { ClickButton } from '../core/click-button.ts';
 import type { RecordingExportQuality } from '../core/recording-export-quality.ts';
 import type { DeviceRotation } from '../core/device-rotation.ts';
+import type { TvRemoteButton } from '../core/tv-remote.ts';
 import type {
   ScrollDirection,
   SwipePattern,
@@ -70,6 +71,7 @@ export type {
   BackCommandResult,
   HomeCommandResult,
   RotateCommandResult,
+  TvRemoteCommandResult,
 } from '../contracts/navigation.ts';
 export type { ClipboardCommandResult } from '../contracts/clipboard.ts';
 export type { AppStateCommandResult } from '../contracts/app-state.ts';
@@ -534,6 +536,11 @@ export type ClipboardCommandOptions =
       text: string;
     });
 
+export type TvRemoteCommandOptions = DeviceCommandBaseOptions & {
+  button: TvRemoteButton;
+  durationMs?: number;
+};
+
 export type ReactNativeCommandOptions = DeviceCommandBaseOptions & {
   action: 'dismiss-overlay';
 };
@@ -563,6 +570,7 @@ export type AgentDeviceCommandClient = {
   appSwitcher: (options?: AppSwitcherCommandOptions) => Promise<CommandResult<'app-switcher'>>;
   keyboard: (options?: KeyboardCommandOptions) => Promise<CommandResult<'keyboard'>>;
   clipboard: (options: ClipboardCommandOptions) => Promise<CommandResult<'clipboard'>>;
+  tvRemote: (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>;
   reactNative: (options: ReactNativeCommandOptions) => Promise<CommandRequestResult>;
   doctor: (options?: DoctorCommandOptions) => Promise<CommandRequestResult>;
   /**
@@ -763,7 +771,7 @@ type IsTextPredicateOptions = DeviceCommandBaseOptions &
 
 type IsStatePredicateOptions = DeviceCommandBaseOptions &
   SelectorSnapshotCommandOptions & {
-    predicate: 'visible' | 'hidden' | 'exists' | 'editable' | 'selected';
+    predicate: 'visible' | 'hidden' | 'exists' | 'editable' | 'selected' | 'focused';
     selector: string;
     value?: never;
   };

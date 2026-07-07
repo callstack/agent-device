@@ -168,6 +168,73 @@ test('runtime visibility predicates request snapshot rects', async () => {
   assert.equal(captureOptions?.includeRects, true);
 });
 
+test('runtime focused predicate requests an interactive snapshot', async () => {
+  const snapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Cell',
+      label: 'Profiles and Accounts',
+      focused: true,
+    },
+  ]);
+  let captureOptions: BackendSnapshotOptions | undefined;
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      captureSnapshot: async (_context, options) => {
+        captureOptions = options;
+        return { snapshot };
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
+    policy: localCommandPolicy(),
+  });
+
+  const result = await device.selectors.is({
+    session: 'default',
+    predicate: 'focused',
+    selector: 'role=cell label="Profiles and Accounts"',
+  });
+
+  assert.equal(result.pass, true);
+  assert.equal(captureOptions?.interactiveOnly, true);
+});
+
+test('runtime focused selector waits against an interactive snapshot', async () => {
+  const snapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Cell',
+      label: 'Profiles and Accounts',
+      focused: true,
+    },
+  ]);
+  let captureOptions: BackendSnapshotOptions | undefined;
+  const device = createAgentDevice({
+    backend: {
+      platform: 'ios',
+      captureSnapshot: async (_context, options) => {
+        captureOptions = options;
+        return { snapshot };
+      },
+    } satisfies AgentDeviceBackend,
+    artifacts: createLocalArtifactAdapter(),
+    sessions: createMemorySessionStore([{ name: 'default', snapshot }]),
+    policy: localCommandPolicy(),
+  });
+
+  const result = await device.selectors.wait({
+    session: 'default',
+    target: { kind: 'selector', selector: 'focused=true', timeoutMs: 1000 },
+  });
+
+  assert.deepEqual(result, { kind: 'selector', selector: 'focused=true', waitedMs: 0 });
+  assert.equal(captureOptions?.interactiveOnly, true);
+});
+
 test('runtime is validates selector predicates', async () => {
   const device = createSelectorDevice(selectorReadSnapshot());
 

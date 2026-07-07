@@ -40,6 +40,7 @@ export function createWebInteractor(): Interactor {
     rotateGesture: () => unsupportedWebOperation('rotateGesture'),
     transformGesture: () => unsupportedWebOperation('transformGesture'),
     appSwitcher: () => unsupportedWebOperation('appSwitcher'),
+    tvRemote: () => unsupportedWebOperation('tvRemote'),
     readClipboard: () => unsupportedWebOperation('readClipboard'),
     writeClipboard: () => unsupportedWebOperation('writeClipboard'),
     setSetting: () => unsupportedWebOperation('setSetting'),

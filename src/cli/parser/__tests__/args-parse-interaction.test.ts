@@ -26,6 +26,19 @@ test('parseArgs accepts keyboard subcommands', () => {
   assert.deepEqual(enter.positionals, ['enter']);
 });
 
+test('parseArgs accepts tv-remote and d-pad alias', () => {
+  const remote = parseArgs(['tv-remote', 'press', 'select', '--duration-ms', '250'], {
+    strictFlags: true,
+  });
+  assert.equal(remote.command, 'tv-remote');
+  assert.deepEqual(remote.positionals, ['press', 'select']);
+  assert.equal(remote.flags.durationMs, 250);
+
+  const dpad = parseArgs(['d-pad', 'down'], { strictFlags: true });
+  assert.equal(dpad.command, 'tv-remote');
+  assert.deepEqual(dpad.positionals, ['down']);
+});
+
 test('parseArgs accepts scroll pixel distance and duration flags', () => {
   const parsed = parseArgs(['scroll', 'down', '--pixels', '240', '--duration-ms', '50'], {
     strictFlags: true,
