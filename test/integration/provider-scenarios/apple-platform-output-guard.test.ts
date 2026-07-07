@@ -92,6 +92,7 @@ const DRIVEN_COMMANDS: Record<string, DriveSpec> = {
 
   // -- observability --
   [PUBLIC_COMMANDS.logs]: () => one(),
+  [PUBLIC_COMMANDS.events]: () => one(),
   [PUBLIC_COMMANDS.network]: () => one(),
   [PUBLIC_COMMANDS.audio]: () => one(),
   [PUBLIC_COMMANDS.screenshot]: ({ tmpDir }) => one([], { out: path.join(tmpDir, 'shot.png') }),
