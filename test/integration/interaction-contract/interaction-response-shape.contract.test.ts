@@ -40,9 +40,20 @@ const SELECTOR_KEYS = [
 
 const POINT_KEYS = ['message', 'targetKind', 'x', 'y'] as const;
 
+const NOISY_DEFAULT_TAP_RESULT = {
+  count: 1,
+  currentUptimeMs: 1_418_719_052.9,
+  doubleTap: false,
+  gestureEndUptimeMs: 1_418_719_052.338875,
+  gestureStartUptimeMs: 1_418_718_741.4275,
+  holdMs: 0,
+  intervalMs: 0,
+  jitterPx: 0,
+};
+
 test('interaction response shape: press @ref uses the canonical ref envelope', async () => {
   await withIosContractDaemon(
-    [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTapEntry({})],
+    [runnerSnapshotEntry(RUNNER_CONTINUE_NODES), runnerTapEntry(NOISY_DEFAULT_TAP_RESULT)],
     async (daemon, transcript) => {
       assertRpcOk(await daemon.callCommand('snapshot', [], { snapshotInteractiveOnly: true }));
 
@@ -317,6 +328,7 @@ function assertExactKeys(data: WireData, expectedKeys: readonly string[]): void 
 function assertNoWireNoise(data: WireData): void {
   for (const key of [
     'count',
+    'currentUptimeMs',
     'doubleTap',
     'gestureEndUptimeMs',
     'gestureStartUptimeMs',

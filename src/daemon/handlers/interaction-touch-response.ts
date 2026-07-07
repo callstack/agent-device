@@ -183,6 +183,7 @@ function shouldKeepWireBackendField(key: string, value: unknown): boolean {
   switch (key) {
     case 'gestureStartUptimeMs':
     case 'gestureEndUptimeMs':
+    case 'currentUptimeMs':
     case 'sequenceResults':
       return false;
     case 'count':
