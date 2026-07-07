@@ -1269,6 +1269,7 @@ extension RunnerTests {
     let delaySeconds = Double(max(command.delayMs ?? 0, 0)) / 1000.0
     let textEntryMode = resolveTextEntryMode(command)
     let target: TextEntryTarget
+    let focusStartedAt = Date()
     if let selectorKey = command.selectorKey, let selectorValue = command.selectorValue {
       let match = findElement(
         app: activeApp,
@@ -1289,6 +1290,13 @@ extension RunnerTests {
     } else {
       target = focusTextInputForTextEntry(app: activeApp, x: command.x, y: command.y)
     }
+    NSLog(
+      "AGENT_DEVICE_RUNNER_TEXT_ENTRY_PHASE commandId=%@ phase=focus durationMs=%.1f chars=%d mode=%@",
+      command.commandId ?? "",
+      Date().timeIntervalSince(focusStartedAt) * 1000.0,
+      text.count,
+      textEntryModeName(textEntryMode)
+    )
     if textEntryMode == .replacement {
       guard target.element != nil else {
         let message =
@@ -1303,7 +1311,8 @@ extension RunnerTests {
       target: target,
       text: text,
       delaySeconds: delaySeconds,
-      repairMode: textEntryMode
+      repairMode: textEntryMode,
+      commandId: command.commandId
     )
     if textResult.verified == false {
       let expected = textResult.expectedText ?? ""

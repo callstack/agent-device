@@ -45,6 +45,11 @@ extension RunnerTests {
     }
   }
 
+  struct TextEntryStabilization {
+    let element: XCUIElement?
+    let focusConfirmed: Bool
+  }
+
   func clearTextInput(_ element: XCUIElement) {
     // Skip the clear (delete burst + moveCaretToEnd edge-tap) ONLY when we can confirm the
     // field is empty. Why skip: the edge-tap computes a point from the element frame, which can
@@ -90,25 +95,29 @@ extension RunnerTests {
 #endif
   }
 
-  func stabilizeTextInputBeforeTyping(app: XCUIApplication, target: XCUIElement?) -> XCUIElement? {
+  func stabilizeTextInputBeforeTyping(
+    app: XCUIApplication,
+    target: XCUIElement?,
+    keyboardVisibleBeforeTap: Bool? = nil
+  ) -> TextEntryStabilization {
 #if os(tvOS)
-    return target
+    return TextEntryStabilization(element: target, focusConfirmed: true)
 #else
     let latest = target
-    let keyboardVisibleAtEntry = isKeyboardVisible(app: app)
+    let keyboardVisibleAtEntry = keyboardVisibleBeforeTap ?? isKeyboardVisible(app: app)
     let deadline = Date().addingTimeInterval(TextEntryTiming.focusTimeout)
     while Date() < deadline {
       if let focused = focusedTextInput(app: app) {
-        return focused
+        return TextEntryStabilization(element: focused, focusConfirmed: true)
       }
       // focusedTextInput is intentionally nil on iOS; treat the keyboard transitioning to
       // visible after our tap as the focus-moved signal. Don't fast-path when it was already up.
       if keyboardBecameVisible(app: app, wasVisibleAtEntry: keyboardVisibleAtEntry) {
-        return latest
+        return TextEntryStabilization(element: latest, focusConfirmed: true)
       }
       sleepFor(TextEntryTiming.pollInterval)
     }
-    return latest
+    return TextEntryStabilization(element: latest, focusConfirmed: false)
 #endif
   }
 
@@ -136,6 +145,7 @@ extension RunnerTests {
       return TextEntryTarget(element: focused, refreshPoint: nil, prefersFocusedElement: true)
     }
 
+    let keyboardVisibleBeforeTap = isKeyboardVisible(app: app)
     let target = textInputAt(app: app, x: x, y: y)
     let requestedPoint = CGPoint(x: x, y: y)
     if let target {
@@ -148,15 +158,30 @@ extension RunnerTests {
     } else {
       _ = tapAt(app: app, x: x, y: y)
     }
-    let stabilized = stabilizeTextInputBeforeTyping(app: app, target: target)
-    let element = waitForTextEntryReadiness(
-      app: app,
-      target: TextEntryTarget(
-        element: stabilized ?? target,
-        refreshPoint: requestedPoint,
+    // A visible keyboard is not enough evidence for app.typeText, because focus may still
+    // belong to a previous field. With a concrete target we type through XCUIElement.typeText,
+    // so after tapping it the iOS readiness timeout cannot prove anything stronger.
+    if keyboardVisibleBeforeTap, let target {
+      return TextEntryTarget(
+        element: target,
+        refreshPoint: textEntryRefreshPoint(for: target) ?? requestedPoint,
         prefersFocusedElement: false
       )
-    ) ?? stabilized ?? target
+    }
+    let stabilized = stabilizeTextInputBeforeTyping(
+      app: app,
+      target: target,
+      keyboardVisibleBeforeTap: keyboardVisibleBeforeTap
+    )
+    let readyTarget = TextEntryTarget(
+      element: stabilized.element ?? target,
+      refreshPoint: requestedPoint,
+      prefersFocusedElement: false
+    )
+    let concreteTargetReady = keyboardVisibleBeforeTap && readyTarget.element != nil
+    let element = stabilized.focusConfirmed || concreteTargetReady
+      ? (stabilized.element ?? target)
+      : (waitForTextEntryReadiness(app: app, target: readyTarget) ?? stabilized.element ?? target)
     return TextEntryTarget(
       element: element,
       refreshPoint: textEntryRefreshPoint(for: element) ?? requestedPoint,
@@ -166,18 +191,32 @@ extension RunnerTests {
 
   func focusTextInputForTextEntry(app: XCUIApplication, element: XCUIElement) -> TextEntryTarget {
     let point = textEntryRefreshPoint(for: element)
+    let keyboardVisibleBeforeTap = isKeyboardVisible(app: app)
     if let point {
       _ = tapAt(app: app, x: point.x, y: point.y)
     }
-    let stabilized = stabilizeTextInputBeforeTyping(app: app, target: element)
-    let resolved = waitForTextEntryReadiness(
-      app: app,
-      target: TextEntryTarget(
-        element: stabilized ?? element,
-        refreshPoint: point,
+    // See the coordinate-target path above: direct element typing keeps this scoped to the
+    // tapped target, while the first-character warmup and final verify still catch dropped input.
+    if keyboardVisibleBeforeTap {
+      return TextEntryTarget(
+        element: element,
+        refreshPoint: textEntryRefreshPoint(for: element) ?? point,
         prefersFocusedElement: false
       )
-    ) ?? stabilized ?? element
+    }
+    let stabilized = stabilizeTextInputBeforeTyping(
+      app: app,
+      target: element,
+      keyboardVisibleBeforeTap: keyboardVisibleBeforeTap
+    )
+    let readyTarget = TextEntryTarget(
+      element: stabilized.element ?? element,
+      refreshPoint: point,
+      prefersFocusedElement: false
+    )
+    let resolved = stabilized.focusConfirmed
+      ? (stabilized.element ?? element)
+      : (waitForTextEntryReadiness(app: app, target: readyTarget) ?? stabilized.element ?? element)
     return TextEntryTarget(
       element: resolved,
       refreshPoint: textEntryRefreshPoint(for: resolved) ?? point,
@@ -210,31 +249,51 @@ extension RunnerTests {
     target: TextEntryTarget,
     text: String,
     delaySeconds: Double,
-    repairMode: TextTypingRepairMode = .none
+    repairMode: TextTypingRepairMode = .none,
+    commandId: String? = nil
   ) -> TextEntryResult {
+    let totalStartedAt = Date()
     guard !text.isEmpty else {
+      logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: 0, mode: repairMode)
       return TextEntryResult(verified: true, repaired: false, expectedText: "", observedText: "")
     }
     var activeTarget = target
+    let initialResolveStartedAt = Date()
     let initialTarget = resolveTextEntryElement(app: app, target: activeTarget)
     activeTarget = activeTarget.withElement(initialTarget)
     let currentText = editableTextValue(for: initialTarget, treatingPlaceholderAsEmpty: true)
     let initialText = repairMode == .append ? currentText : nil
     let expectedText = expectedTextEntryValue(typedText: text, mode: repairMode, initialText: initialText)
+    logTextEntryPhase(
+      commandId: commandId,
+      phase: "initial-resolve",
+      startedAt: initialResolveStartedAt,
+      chars: text.count,
+      mode: repairMode
+    )
 
     if repairMode == .replacement {
       guard let replacementTarget = initialTarget else {
+        logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
         return TextEntryResult(verified: nil, repaired: false, expectedText: expectedText, observedText: nil)
       }
       if currentText == nil || currentText?.isEmpty == false {
+        let clearStartedAt = Date()
         clearTextInput(replacementTarget)
         activeTarget = activeTarget.withElement(replacementTarget)
+        logTextEntryPhase(
+          commandId: commandId,
+          phase: "clear",
+          startedAt: clearStartedAt,
+          chars: text.count,
+          mode: repairMode
+        )
       }
     }
 
     func typeIntoCurrentTarget(_ value: String) -> XCUIElement? {
       if let currentTarget = resolveTextEntryElement(app: app, target: activeTarget) {
-        app.typeText(value)
+        currentTarget.typeText(value)
         return currentTarget
       } else {
         app.typeText(value)
@@ -259,76 +318,158 @@ extension RunnerTests {
     let characters = Array(text)
     if delaySeconds > 0 && characters.count > 1 {
       var typedTarget: XCUIElement?
+      let delayedTypeStartedAt = Date()
       for (index, character) in characters.enumerated() {
         typedTarget = typeIntoCurrentTarget(String(character)) ?? typedTarget
         if index + 1 < characters.count {
           sleepFor(delaySeconds)
         }
       }
+      logTextEntryPhase(
+        commandId: commandId,
+        phase: "type-delayed",
+        startedAt: delayedTypeStartedAt,
+        chars: characters.count,
+        mode: repairMode
+      )
       if repairMode == .none {
+        logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
         return TextEntryResult(verified: nil, repaired: false, expectedText: nil, observedText: nil)
       }
-      let repairResult = repairTextEntryIfNeeded(
+      let verifyStartedAt = Date()
+      let result = verifyTextEntryWithRepairIfNeeded(
         app: app,
         target: activeTarget.withElement(typedTarget),
         expectedText: expectedText,
         repairMode: repairMode
       )
-      return verifyTextEntry(
-        app: app,
-        target: activeTarget.withElement(typedTarget),
-        expectedText: expectedText,
-        repaired: repairResult.repaired
+      logTextEntryPhase(
+        commandId: commandId,
+        phase: "verify",
+        startedAt: verifyStartedAt,
+        chars: characters.count,
+        mode: repairMode
       )
+      logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
+      return result
     }
 
     let typedTarget: XCUIElement?
     if repairMode != .none && characters.count > 1 {
       let firstCharacter = String(characters[0])
+      let firstStartedAt = Date()
       var firstTypedTarget = typeIntoCurrentTarget(firstCharacter)
+      logTextEntryPhase(
+        commandId: commandId,
+        phase: "type-first",
+        startedAt: firstStartedAt,
+        chars: 1,
+        mode: repairMode
+      )
       activeTarget = activeTarget.withElement(firstTypedTarget)
       let warmupExpectedText = expectedTextEntryValue(
         typedText: firstCharacter,
         mode: repairMode,
         initialText: initialText
       )
+      let warmupStartedAt = Date()
       waitForWarmupValue(warmupExpectedText, target: activeTarget)
+      logTextEntryPhase(
+        commandId: commandId,
+        phase: "warmup",
+        startedAt: warmupStartedAt,
+        chars: 1,
+        mode: repairMode
+      )
       let remainingText = String(characters.dropFirst())
+      let remainingStartedAt = Date()
       firstTypedTarget = typeIntoCurrentTarget(remainingText) ?? firstTypedTarget
+      logTextEntryPhase(
+        commandId: commandId,
+        phase: "type-remaining",
+        startedAt: remainingStartedAt,
+        chars: characters.count - 1,
+        mode: repairMode
+      )
       typedTarget = firstTypedTarget
     } else {
+      let typeStartedAt = Date()
       typedTarget = typeIntoCurrentTarget(text)
+      logTextEntryPhase(
+        commandId: commandId,
+        phase: "type-all",
+        startedAt: typeStartedAt,
+        chars: characters.count,
+        mode: repairMode
+      )
     }
     if repairMode == .none {
+      logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
       return TextEntryResult(verified: nil, repaired: false, expectedText: nil, observedText: nil)
     }
-    let repairResult = repairTextEntryIfNeeded(
+    let verifyStartedAt = Date()
+    let result = verifyTextEntryWithRepairIfNeeded(
       app: app,
       target: activeTarget.withElement(typedTarget),
       expectedText: expectedText,
       repairMode: repairMode
     )
-    return verifyTextEntry(
-      app: app,
-      target: activeTarget.withElement(typedTarget),
-      expectedText: expectedText,
-      repaired: repairResult.repaired
+    logTextEntryPhase(
+      commandId: commandId,
+      phase: "verify",
+      startedAt: verifyStartedAt,
+      chars: characters.count,
+      mode: repairMode
+    )
+    logTextEntryPhase(commandId: commandId, phase: "total", startedAt: totalStartedAt, chars: text.count, mode: repairMode)
+    return result
+  }
+
+  private func logTextEntryPhase(
+    commandId: String?,
+    phase: String,
+    startedAt: Date,
+    chars: Int,
+    mode: TextTypingRepairMode
+  ) {
+    NSLog(
+      "AGENT_DEVICE_RUNNER_TEXT_ENTRY_PHASE commandId=%@ phase=%@ durationMs=%.1f chars=%d mode=%@",
+      commandId ?? "",
+      phase,
+      Date().timeIntervalSince(startedAt) * 1000.0,
+      chars,
+      textEntryModeName(mode)
     )
   }
 
-  private func repairTextEntryIfNeeded(
+  func textEntryModeName(_ mode: TextTypingRepairMode) -> String {
+    switch mode {
+    case .none:
+      return "none"
+    case .append:
+      return "append"
+    case .replacement:
+      return "replacement"
+    }
+  }
+
+  private func verifyTextEntryWithRepairIfNeeded(
     app: XCUIApplication,
     target: TextEntryTarget,
     expectedText: String?,
     repairMode: TextTypingRepairMode
   ) -> TextEntryResult {
+    let initialResult = verifyTextEntry(
+      app: app,
+      target: target,
+      expectedText: expectedText,
+      repaired: false
+    )
 #if os(iOS)
-    guard let targetElement = resolveTextEntryElement(app: app, target: target) else {
-      return TextEntryResult(verified: nil, repaired: false, expectedText: expectedText, observedText: nil)
-    }
-    guard let expectedText else {
-      let observedText = editableTextValue(for: targetElement)
-      return TextEntryResult(verified: nil, repaired: false, expectedText: nil, observedText: observedText)
+    guard initialResult.verified == false,
+          let expectedText = initialResult.expectedText
+    else {
+      return initialResult
     }
     guard shouldRepairTextEntry(
       app: app,
@@ -336,11 +477,11 @@ extension RunnerTests {
       expectedText: expectedText,
       repairMode: repairMode
     ) else {
-      return verifyTextEntry(app: app, target: target, expectedText: expectedText, repaired: false)
+      return initialResult
     }
 
     guard let repairTarget = resolveTextEntryElement(app: app, target: target) else {
-      return TextEntryResult(verified: nil, repaired: false, expectedText: expectedText, observedText: nil)
+      return initialResult
     }
     let observedText = editableTextValue(for: repairTarget) ?? ""
     NSLog(
@@ -349,10 +490,15 @@ extension RunnerTests {
       observedText.count
     )
     clearTextInput(repairTarget)
-    app.typeText(expectedText)
-    return verifyTextEntry(app: app, target: target, expectedText: expectedText, repaired: true)
+    repairTarget.typeText(expectedText)
+    return verifyTextEntry(
+      app: app,
+      target: target.withElement(repairTarget),
+      expectedText: expectedText,
+      repaired: true
+    )
 #else
-    return TextEntryResult(verified: nil, repaired: false, expectedText: expectedText, observedText: nil)
+    return initialResult
 #endif
   }
 
