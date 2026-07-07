@@ -239,7 +239,7 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         childScope = await createRequestExecutionScope({ req, sessionStore, leaseRegistry });
         return childScope.sessionName === parentScope.sessionName
           ? await executeRequestScope(childScope, providerScope)
-          : await handleRequest(req);
+          : await executeRequestScope(childScope);
       } catch (error) {
         const response = finalizeThrownRequestError(error);
         recordThrownRequestEvent(sessionStore, childScope, response);

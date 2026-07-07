@@ -4,8 +4,6 @@ import type { SessionAction } from './types.ts';
 type ActionTextReplacement = { raw: string; display: string };
 
 export function buildActionSummary(action: SessionAction): string {
-  const message = readSanitizedActionMessage(action);
-  if (message) return message;
   switch (action.command) {
     case PUBLIC_COMMANDS.open:
       return `Opened ${readActionTargetLabel(action) ?? 'session'}`;
@@ -18,12 +16,14 @@ export function buildActionSummary(action: SessionAction): string {
       return `Long pressed ${readActionTargetLabel(action) ?? 'target'}`;
     case PUBLIC_COMMANDS.fill:
       return `Filled ${readActionTargetLabel(action) ?? 'target'}`;
+    case PUBLIC_COMMANDS.type:
+      return `Typed ${hiddenValueFromLength('text', readActionTextLength(action))}`;
     case PUBLIC_COMMANDS.install:
     case PUBLIC_COMMANDS.reinstall:
     case INTERNAL_COMMANDS.installSource:
       return `Installed ${readActionTargetLabel(action) ?? 'app'}`;
     default:
-      return `Ran ${action.command}`;
+      return readSafeActionMessage(action) ?? `Ran ${action.command}`;
   }
 }
 
@@ -34,11 +34,10 @@ export function buildActionDetails(action: SessionAction): Record<string, unknow
     positionals: buildDisplayPositionals(action),
     flags: action.flags,
     action: result.action,
-    message: readSanitizedActionMessage(action),
+    message: readSafeActionMessage(action),
     ref: result.ref,
-    refLabel: result.refLabel,
-    selector: result.selector,
-    selectorChain: readStringArray(result.selectorChain),
+    targetLabel: readActionTargetLabel(action),
+    selectorChainLength: readStringArray(result.selectorChain)?.length,
     x: result.x,
     y: result.y,
     x2: result.x2,
@@ -65,18 +64,25 @@ export function buildActionDetails(action: SessionAction): Record<string, unknow
   };
 }
 
-function readSanitizedActionMessage(action: SessionAction): string | undefined {
+function readSafeActionMessage(action: SessionAction): string | undefined {
   const message = readString(action.result?.message);
   if (!message) return undefined;
-  return sanitizeActionDisplayText(action, message);
+  if (hasRedactedActionInput(action) || hasValueBearingTargetDetails(action.result ?? {})) {
+    return undefined;
+  }
+  return message;
 }
 
-function sanitizeActionDisplayText(action: SessionAction, value: string): string {
-  const replacements = buildActionTextReplacements(action);
-  if (replacements.length === 0) return value;
-  const replacementByRaw = new Map(replacements.map(({ raw, display }) => [raw, display]));
-  const pattern = replacements.map(({ raw }) => escapeRegExp(raw)).join('|');
-  return value.replace(new RegExp(pattern, 'g'), (raw) => replacementByRaw.get(raw) ?? raw);
+function hasRedactedActionInput(action: SessionAction): boolean {
+  return buildActionTextReplacements(action).length > 0;
+}
+
+function hasValueBearingTargetDetails(result: Record<string, unknown>): boolean {
+  return (
+    readString(result.refLabel) !== undefined ||
+    readString(result.selector) !== undefined ||
+    readStringArray(result.selectorChain) !== undefined
+  );
 }
 
 function buildActionTextReplacements(action: SessionAction): ActionTextReplacement[] {
@@ -121,10 +127,6 @@ function uniqueActionTextReplacements(
   return replacements;
 }
 
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function readActionTargetLabel(action: SessionAction): string | undefined {
   const result = action.result ?? {};
   return (
@@ -138,9 +140,7 @@ function readActionTargetLabel(action: SessionAction): string | undefined {
 function readElementTargetLabel(result: Record<string, unknown>): string | undefined {
   const ref = readString(result.ref);
   if (ref) return ref.startsWith('@') ? ref : `@${ref}`;
-  const selector = readString(result.selector);
-  if (selector) return selector;
-  return readString(result.refLabel);
+  return undefined;
 }
 
 function readPointTargetLabel(result: Record<string, unknown>): string | undefined {
@@ -188,7 +188,7 @@ function buildFillDisplayPositionals(action: SessionAction): string[] {
   const ref = readString(result.ref);
   if (ref) return [ref.startsWith('@') ? ref : `@${ref}`, textPlaceholder];
   const selector = readString(result.selector);
-  if (selector) return [selector, textPlaceholder];
+  if (selector) return [hiddenValue('target', selector), textPlaceholder];
   const x = readNumber(result.x);
   const y = readNumber(result.y);
   if (x !== undefined && y !== undefined) return [String(x), String(y), textPlaceholder];

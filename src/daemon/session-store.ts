@@ -8,6 +8,7 @@ import { SessionScriptWriter } from './session-script-writer.ts';
 import {
   appendActionEvent,
   appendSessionEvent,
+  flushSessionEventLogWrites,
   readSessionEventLog,
   resolveSessionEventLogPath,
   type SessionEventLogInput,
@@ -72,9 +73,15 @@ export class SessionStore {
 
   readEvents(
     sessionName: string,
-    options: { cursor?: string; limit?: number } = {},
+    options: { cursor?: string; limit?: number | string } = {},
   ): SessionEventLogPage {
     return readSessionEventLog(this.resolveEventLogPath(sessionName), options);
+  }
+
+  async flushEvents(sessionName?: string): Promise<void> {
+    await flushSessionEventLogWrites(
+      sessionName ? this.resolveEventLogPath(sessionName) : undefined,
+    );
   }
 
   writeSessionLog(session: SessionState): void {

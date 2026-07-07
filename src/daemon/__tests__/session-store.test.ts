@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
+import { buildRequestFinishedEvent } from '../session-event-log.ts';
 
 type RecordActionEntry = Parameters<SessionStore['recordAction']>[1];
 
@@ -143,7 +144,7 @@ test('saveScript flag enables .ad session log writing', () => {
   assert.equal(listSessionScriptFiles(root).length, 1);
 });
 
-test('recordAction writes a paged session event log', () => {
+test('recordAction writes a paged session event log', async () => {
   const { store, session } = makeFixture('agent-device-session-events-');
   recordOpen(store, session, { platform: 'ios' });
   store.recordAction(session, {
@@ -152,6 +153,7 @@ test('recordAction writes a paged session event log', () => {
     flags: { platform: 'ios' },
     result: { ref: '14', refLabel: 'Checkout', x: 120, y: 240, message: 'Tapped @14 (120, 240)' },
   });
+  await store.flushEvents(session.name);
 
   const eventLogPath = store.resolveEventLogPath(session.name);
   assert.equal(fs.existsSync(eventLogPath), true);
@@ -161,11 +163,11 @@ test('recordAction writes a paged session event log', () => {
   assert.equal(firstPage.nextCursor, '1');
 
   const secondPage = store.readEvents(session.name, { cursor: firstPage.nextCursor, limit: 1 });
-  assert.equal(secondPage.events[0]?.summary, 'Tapped @14 (120, 240)');
+  assert.equal(secondPage.events[0]?.summary, 'Tapped @14');
   assert.equal(secondPage.nextCursor, undefined);
 });
 
-test('recordAction event log redacts typed text from display positionals', () => {
+test('recordAction event log redacts typed text from display positionals', async () => {
   const { store, session } = makeFixture('agent-device-session-events-redaction-');
   store.recordAction(session, {
     command: 'fill',
@@ -173,17 +175,18 @@ test('recordAction event log redacts typed text from display positionals', () =>
     flags: {},
     result: { ref: '14', text: 'super-secret-token', message: 'Filled super-secret-token' },
   });
+  await store.flushEvents(session.name);
 
   const page = store.readEvents(session.name);
   const serialized = JSON.stringify(page.events);
   assert.equal(serialized.includes('super-secret-token'), false);
-  assert.equal(page.events[0]?.summary, 'Filled <text:18 chars>');
-  assert.equal(page.events[0]?.details?.message, 'Filled <text:18 chars>');
+  assert.equal(page.events[0]?.summary, 'Filled @14');
+  assert.equal(page.events[0]?.details?.message, undefined);
   assert.deepEqual(page.events[0]?.details?.positionals, ['@14', '<text:18 chars>']);
   assert.equal(page.events[0]?.details?.textLength, 18);
 });
 
-test('recordAction event log redacts payload-bearing and unknown positionals', () => {
+test('recordAction event log redacts payload-bearing and unknown positionals', async () => {
   const { store, session } = makeFixture('agent-device-session-events-payload-redaction-');
   const clipboardText = 'super-secret-token';
   const pushPayload = '{"token":"push-secret-token"}';
@@ -214,6 +217,7 @@ test('recordAction event log redacts payload-bearing and unknown positionals', (
     flags: {},
     result: { message: `Ran ${futurePayload}` },
   });
+  await store.flushEvents(session.name);
 
   const page = store.readEvents(session.name);
   const serialized = JSON.stringify(page.events);
@@ -225,11 +229,11 @@ test('recordAction event log redacts payload-bearing and unknown positionals', (
   assert.deepEqual(page.events[1]?.details?.positionals, ['com.example.app', '<payload:29 chars>']);
   assert.deepEqual(page.events[2]?.details?.positionals, ['checkout', '<payload:30 chars>']);
   assert.deepEqual(page.events[3]?.details?.positionals, ['<arg:10 chars>', '<arg:19 chars>']);
-  assert.equal(page.events[3]?.summary, 'Ran <arg:19 chars>');
-  assert.equal(page.events[3]?.details?.message, 'Ran <arg:19 chars>');
+  assert.equal(page.events[3]?.summary, 'Ran future-command');
+  assert.equal(page.events[3]?.details?.message, undefined);
 });
 
-test('recordAction event log redacts overlapping unknown positionals in one pass', () => {
+test('recordAction event log omits transformed messages for redacted positionals', async () => {
   const { store, session } = makeFixture('agent-device-session-events-overlap-redaction-');
 
   store.recordAction(session, {
@@ -244,26 +248,106 @@ test('recordAction event log redacts overlapping unknown positionals in one pass
     flags: {},
     result: { message: 'Ran my-arg-123 after arg' },
   });
+  await store.flushEvents(session.name);
 
   const page = store.readEvents(session.name);
   const serialized = JSON.stringify(page.events);
   assert.equal(serialized.includes('my-token-123'), false);
   assert.equal(serialized.includes('token'), false);
   assert.equal(serialized.includes('my-arg-123'), false);
-  assert.equal(page.events[0]?.summary, 'Ran <arg:12 chars> after <arg:5 chars>');
-  assert.equal(page.events[0]?.details?.message, 'Ran <arg:12 chars> after <arg:5 chars>');
+  assert.equal(page.events[0]?.summary, 'Ran future-command');
+  assert.equal(page.events[0]?.details?.message, undefined);
   assert.deepEqual(page.events[0]?.details?.positionals, ['<arg:5 chars>', '<arg:12 chars>']);
-  assert.equal(page.events[1]?.summary, 'Ran <arg:10 chars> after <arg:3 chars>');
-  assert.equal(page.events[1]?.details?.message, 'Ran <arg:10 chars> after <arg:3 chars>');
+  assert.equal(page.events[1]?.summary, 'Ran future-command');
+  assert.equal(page.events[1]?.details?.message, undefined);
 });
 
-test('saveScript path writes session log to custom location', () => {
+test('recordAction event log does not leak short typed text through message replacement', async () => {
+  const { store, session } = makeFixture('agent-device-session-events-short-text-');
+  store.recordAction(session, {
+    command: 'type',
+    positionals: ['e'],
+    flags: {},
+    result: { text: 'e', message: 'Typed 1 chars' },
+  });
+  await store.flushEvents(session.name);
+
+  const page = store.readEvents(session.name);
+  const serialized = JSON.stringify(page.events);
+  assert.equal(serialized.includes('"e"'), false);
+  assert.equal(page.events[0]?.summary, 'Typed <text:1 chars>');
+  assert.equal(page.events[0]?.details?.message, undefined);
+  assert.deepEqual(page.events[0]?.details?.positionals, ['<text:1 chars>']);
+});
+
+test('recordAction event log omits value-bearing selector details', async () => {
+  const { store, session } = makeFixture('agent-device-session-events-selector-redaction-');
+  store.recordAction(session, {
+    command: 'click',
+    positionals: ['value=123456'],
+    flags: {},
+    result: {
+      refLabel: '123456',
+      selector: 'value="123456"',
+      selectorChain: ['value="123456" editable=true'],
+      message: 'Tapped 123456',
+    },
+  });
+  await store.flushEvents(session.name);
+
+  const page = store.readEvents(session.name);
+  const serialized = JSON.stringify(page.events);
+  assert.equal(serialized.includes('123456'), false);
+  assert.equal(page.events[0]?.summary, 'Tapped target');
+  assert.equal(page.events[0]?.details?.message, undefined);
+  assert.equal(page.events[0]?.details?.refLabel, undefined);
+  assert.equal(page.events[0]?.details?.selector, undefined);
+  assert.equal(page.events[0]?.details?.selectorChain, undefined);
+  assert.equal(page.events[0]?.details?.selectorChainLength, 1);
+});
+
+test('request failure event log omits raw error message and hint', async () => {
+  const { store, session } = makeFixture('agent-device-session-events-error-redaction-');
+  const secretPayload = '{"ssn":"123-45-6789"';
+  store.recordEvent(
+    session.name,
+    buildRequestFinishedEvent({
+      req: {
+        token: 'test-token',
+        session: session.name,
+        command: 'trigger-app-event',
+        positionals: ['login', secretPayload],
+        meta: { requestId: 'req-secret-error' },
+      },
+      response: {
+        ok: false,
+        error: {
+          code: 'INVALID_ARGS',
+          message: `Invalid trigger-app-event payload JSON: ${secretPayload}`,
+          hint: `Fix payload ${secretPayload}`,
+        },
+      },
+      durationMs: 12,
+    }),
+  );
+  await store.flushEvents(session.name);
+
+  const page = store.readEvents(session.name);
+  const serialized = JSON.stringify(page.events);
+  assert.equal(serialized.includes(secretPayload), false);
+  assert.equal(page.events[0]?.summary, 'Failed trigger-app-event: INVALID_ARGS');
+  assert.equal(page.events[0]?.details?.message, undefined);
+  assert.equal(page.events[0]?.details?.hint, undefined);
+});
+
+test('saveScript path writes session log to custom location', async () => {
   const { root, store, session } = makeFixture('agent-device-session-log-custom-path-', 'sessions');
   const customPath = path.join(root, 'workflows', 'my-flow.ad');
   recordOpen(store, session, { platform: 'ios', saveScript: customPath });
   recordClose(store, session);
 
   store.writeSessionLog(session);
+  await store.flushEvents(session.name);
   assert.equal(fs.existsSync(customPath), true);
   assert.equal(fs.existsSync(store.resolveEventLogPath(session.name)), true);
 });

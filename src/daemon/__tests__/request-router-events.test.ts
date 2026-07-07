@@ -90,6 +90,84 @@ test('events accepts a blank limit placeholder for cursor-only reads', async () 
   ]);
 });
 
+test('events returns structured errors for invalid limit and cursor', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-events-invalid-');
+  sessionStore.recordEvent('events-session', {
+    kind: 'action.recorded',
+    command: 'open',
+    summary: 'Opened session',
+  });
+
+  const handler = createRequestHandler({
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+
+  const invalidLimit = await handler({
+    token: 'test-token',
+    session: 'events-session',
+    command: 'events',
+    positionals: ['0'],
+    flags: {},
+    meta: { requestId: 'req-events-limit' },
+  });
+  const invalidCursor = await handler({
+    token: 'test-token',
+    session: 'events-session',
+    command: 'events',
+    positionals: ['10', 'abc'],
+    flags: {},
+    meta: { requestId: 'req-events-cursor' },
+  });
+
+  expect(invalidLimit).toMatchObject({
+    ok: false,
+    error: { code: 'INVALID_ARGS', message: 'events limit must be between 1 and 500.' },
+  });
+  expect(invalidCursor).toMatchObject({
+    ok: false,
+    error: {
+      code: 'INVALID_ARGS',
+      message: 'events cursor must be a non-negative integer string.',
+    },
+  });
+});
+
+test('events flushes pending event writes before reading', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-events-flush-');
+  sessionStore.recordEvent('events-session', {
+    kind: 'action.recorded',
+    command: 'open',
+    summary: 'Opened session',
+  });
+
+  const handler = createRequestHandler({
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'events-session',
+    command: 'events',
+    positionals: ['10'],
+    flags: {},
+    meta: { requestId: 'req-events-flush' },
+  });
+
+  expect(response.ok).toBe(true);
+  if (!response.ok) return;
+  expect(response.data?.events).toEqual([
+    expect.objectContaining({ kind: 'action.recorded', summary: 'Opened session' }),
+  ]);
+});
+
 test('request timeline records thrown request failures after scope creation', async () => {
   const sessionStore = makeSessionStore('agent-device-router-events-throws-');
   sessionStore.set('events-session', makeIosSession('events-session'));
@@ -112,6 +190,7 @@ test('request timeline records thrown request failures after scope creation', as
   });
 
   expect(response.ok).toBe(false);
+  await sessionStore.flushEvents('events-session');
   const page = sessionStore.readEvents('events-session');
   expect(page.events).toEqual([
     expect.objectContaining({
@@ -149,6 +228,7 @@ test('request timeline records setup failures after start is appended', async ()
   });
 
   expect(response.ok).toBe(false);
+  await sessionStore.flushEvents('default');
   const page = sessionStore.readEvents('default');
   expect(page.events).toEqual([
     expect.objectContaining({

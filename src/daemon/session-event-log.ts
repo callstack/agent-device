@@ -14,6 +14,8 @@ const EVENT_LOG_VERSION = 1;
 const DEFAULT_EVENT_LIMIT = 100;
 const MAX_EVENT_LIMIT = 500;
 const EVENT_LOG_READ_CHUNK_BYTES = 64 * 1024;
+const pendingEventLogWrites = new Map<string, Promise<void>>();
+const ensuredEventLogDirs = new Set<string>();
 
 export type SessionEventLogEntry = {
   version: 1;
@@ -39,7 +41,7 @@ export type SessionEventLogInput = Omit<SessionEventLogEntry, 'version' | 'ts' |
   ts?: string;
 };
 
-type ReadSessionEventLogOptions = { cursor?: string; limit?: number };
+type ReadSessionEventLogOptions = { cursor?: string; limit?: number | string };
 type RawSessionEventLogEntry = Record<string, unknown> &
   Pick<SessionEventLogEntry, 'version' | 'ts' | 'session' | 'kind'>;
 
@@ -56,24 +58,64 @@ export function appendSessionEvent(
   sessionName: string,
   event: SessionEventLogInput,
 ): void {
+  const entry = redactDiagnosticData({
+    version: EVENT_LOG_VERSION,
+    ts: event.ts ?? new Date().toISOString(),
+    session: sessionName,
+    ...event,
+  } satisfies SessionEventLogEntry);
+  queueEventLogWrite(eventLogPath, `${JSON.stringify(entry)}\n`);
+}
+
+export async function flushSessionEventLogWrites(eventLogPath?: string): Promise<void> {
+  const pending = eventLogPath
+    ? pendingEventLogWrites.get(eventLogPath)
+    : Promise.all(pendingEventLogWrites.values());
+  await pending;
+}
+
+function queueEventLogWrite(eventLogPath: string, line: string): void {
+  const previous = pendingEventLogWrites.get(eventLogPath) ?? Promise.resolve();
+  const pending = previous
+    .catch(() => undefined)
+    .then(async () => {
+      await ensureEventLogDir(eventLogPath);
+      await fs.promises.appendFile(eventLogPath, line, 'utf8');
+    })
+    .catch((error) => {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'session_event_log_write_failed',
+        data: {
+          path: eventLogPath,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    })
+    .finally(() => {
+      if (pendingEventLogWrites.get(eventLogPath) === pending) {
+        pendingEventLogWrites.delete(eventLogPath);
+      }
+    });
+  pendingEventLogWrites.set(eventLogPath, pending);
+}
+
+async function ensureEventLogDir(eventLogPath: string): Promise<void> {
+  const dir = path.dirname(eventLogPath);
+  if (ensuredEventLogDirs.has(dir)) return;
   try {
-    fs.mkdirSync(path.dirname(eventLogPath), { recursive: true });
-    const entry = redactDiagnosticData({
-      version: EVENT_LOG_VERSION,
-      ts: event.ts ?? new Date().toISOString(),
-      session: sessionName,
-      ...event,
-    } satisfies SessionEventLogEntry);
-    fs.appendFileSync(eventLogPath, `${JSON.stringify(entry)}\n`, 'utf8');
+    await fs.promises.mkdir(dir, { recursive: true });
+    ensuredEventLogDirs.add(dir);
   } catch (error) {
     emitDiagnostic({
       level: 'warn',
-      phase: 'session_event_log_write_failed',
+      phase: 'session_event_log_dir_failed',
       data: {
         path: eventLogPath,
         error: error instanceof Error ? error.message : String(error),
       },
     });
+    throw error;
   }
 }
 
@@ -135,12 +177,10 @@ export function buildRequestFinishedEvent(params: {
     requestId: req.meta?.requestId ?? getDiagnosticsMeta().requestId,
     command: req.command,
     status: 'error',
-    summary: `Failed ${req.command}: ${response.error.message}`,
+    summary: `Failed ${req.command}: ${response.error.code}`,
     details: {
       durationMs,
       code: response.error.code,
-      message: response.error.message,
-      hint: response.error.hint,
       diagnosticId: response.error.diagnosticId,
       logPath: response.error.logPath,
     },
@@ -246,9 +286,11 @@ function normalizeCursor(value: string | undefined): number {
   throw new AppError('INVALID_ARGS', 'events cursor must be a non-negative integer string.');
 }
 
-function normalizeLimit(value: number | undefined): number {
+function normalizeLimit(value: number | string | undefined): number {
   if (value === undefined) return DEFAULT_EVENT_LIMIT;
-  if (Number.isInteger(value) && value >= 1 && value <= MAX_EVENT_LIMIT) return value;
+  if (typeof value === 'string' && value.trim() === '') return DEFAULT_EVENT_LIMIT;
+  const limit = typeof value === 'string' ? Number(value) : value;
+  if (Number.isInteger(limit) && limit >= 1 && limit <= MAX_EVENT_LIMIT) return limit;
   throw new AppError('INVALID_ARGS', `events limit must be between 1 and ${MAX_EVENT_LIMIT}.`);
 }
 
