@@ -2,7 +2,7 @@
   "dimensions": {
     "commandPolicyMapping": {
       "via": "RunnerTests+SynthesizedGesturePolicy.swift#synthesizedGesturePolicyKind",
-      "policy": "maps each command or sequence step to an explicit synthesized gesture policy kind"
+      "policy": "command branches pass explicit synthesized gesture policy kinds; sequence synthesized steps are mapped by kind"
     },
     "axFreeSynthesis": {
       "via": "RunnerTests+Interaction.swift#synthesizedCoordinateContext",

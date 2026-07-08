@@ -152,7 +152,7 @@ extension RunnerTests {
     // a tapAt fallback when synthesis is unsupported), so fusing a jittered tap series does not
     // change the touch mechanism for these inputs.
     if step.kind == "tap", step.synthesized == true {
-      let policyKind = synthesizedGesturePolicyKind(for: step) ?? .sequenceSynthesizedTap
+      let policyKind = SynthesizedGesturePolicyKind.sequenceSynthesizedTap
       let synthesizedContext = synthesizedContexts[policyKind]
 #if os(iOS)
       guard let synthesizedContext else {
@@ -196,7 +196,7 @@ extension RunnerTests {
       // Synthesis unsupported (e.g. macOS) — fall through to the drag-based tapAt below.
     }
     if step.kind == "drag", step.synthesized == true {
-      let policyKind = synthesizedGesturePolicyKind(for: step) ?? .sequenceSynthesizedDrag
+      let policyKind = SynthesizedGesturePolicyKind.sequenceSynthesizedDrag
       let synthesizedContext = synthesizedContexts[policyKind]
       let dragPoints: DragPoints
       let dragContext: SynthesizedCoordinateContext?

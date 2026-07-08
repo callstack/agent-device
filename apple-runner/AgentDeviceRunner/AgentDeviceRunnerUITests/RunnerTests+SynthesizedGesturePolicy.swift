@@ -105,21 +105,6 @@ func synthesizedGesturePolicy(_ kind: SynthesizedGesturePolicyKind) -> Synthesiz
   }
 }
 
-func synthesizedGesturePolicyKind(for command: Command) -> SynthesizedGesturePolicyKind? {
-  switch command.command {
-  case .tap:
-    return command.synthesized == true && command.x != nil && command.y != nil
-      ? .coordinateTap
-      : nil
-  case .drag:
-    return command.synthesized == true ? .synthesizedDrag : nil
-  case .scroll:
-    return .scroll
-  default:
-    return nil
-  }
-}
-
 func synthesizedGesturePolicyKind(for step: SequenceStep) -> SynthesizedGesturePolicyKind? {
   guard step.synthesized == true else { return nil }
   switch step.kind {
@@ -290,41 +275,5 @@ extension RunnerTests {
     )
   }
 
-  func testSynthesizedGesturePolicyKindMapsCommandPaths() throws {
-    XCTAssertEqual(
-      synthesizedGesturePolicyKind(for: try decodedSynthesizedGesturePolicyCommand(#"{"command":"scroll","direction":"down"}"#)),
-      .scroll
-    )
-    XCTAssertEqual(
-      synthesizedGesturePolicyKind(
-        for: try decodedSynthesizedGesturePolicyCommand(
-          #"{"command":"drag","x":1,"y":2,"x2":3,"y2":4,"synthesized":true}"#
-        )
-      ),
-      .synthesizedDrag
-    )
-    XCTAssertNil(
-      synthesizedGesturePolicyKind(
-        for: try decodedSynthesizedGesturePolicyCommand(#"{"command":"drag","x":1,"y":2,"x2":3,"y2":4}"#)
-      )
-    )
-    XCTAssertEqual(
-      synthesizedGesturePolicyKind(
-        for: try decodedSynthesizedGesturePolicyCommand(#"{"command":"tap","x":1,"y":2,"synthesized":true}"#)
-      ),
-      .coordinateTap
-    )
-    XCTAssertNil(
-      synthesizedGesturePolicyKind(
-        for: try decodedSynthesizedGesturePolicyCommand(
-          #"{"command":"tap","selectorKey":"text","selectorValue":"Done","synthesized":true}"#
-        )
-      )
-    )
-  }
-
-  private func decodedSynthesizedGesturePolicyCommand(_ json: String) throws -> Command {
-    try JSONDecoder().decode(Command.self, from: Data(json.utf8))
-  }
 }
 #endif

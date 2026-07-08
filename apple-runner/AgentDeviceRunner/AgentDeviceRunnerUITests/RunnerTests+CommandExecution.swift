@@ -1058,7 +1058,7 @@ extension RunnerTests {
       if let x = command.x, let y = command.y {
         var fallback: GestureFallback?
         if command.synthesized == true {
-          let policyKind = synthesizedGesturePolicyKind(for: command) ?? .coordinateTap
+          let policyKind = SynthesizedGesturePolicyKind.coordinateTap
           let context = synthesizedCoordinateContext(policy: synthesizedGesturePolicy(policyKind))
           let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
             synthesizedTapAt(app: activeApp, x: x, y: y, context: context)
@@ -1132,7 +1132,7 @@ extension RunnerTests {
         durationMs: command.durationMs,
         synthesized: command.synthesized == true,
         message: "dragged",
-        synthesizedPolicyKind: synthesizedGesturePolicyKind(for: command) ?? .synthesizedDrag
+        synthesizedPolicyKind: .synthesizedDrag
       )
     case .scroll:
       // Fused frame-resolve + drag scroll for non-tvOS. On iOS this intentionally stays on the
@@ -1149,7 +1149,7 @@ extension RunnerTests {
           )
         )
       }
-      let scrollPolicyKind = synthesizedGesturePolicyKind(for: command) ?? .scroll
+      let scrollPolicyKind = SynthesizedGesturePolicyKind.scroll
       guard let scrollContext = synthesizedCoordinateContext(policy: synthesizedGesturePolicy(scrollPolicyKind)) else {
         return Response(
           ok: false,
