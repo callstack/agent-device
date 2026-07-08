@@ -407,6 +407,43 @@ test('iOS simulator screenshot response includes output dimensions and logical d
   }
 });
 
+test('non-iOS screenshot response tolerates malformed PNG metadata', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-screenshot-');
+  sessionStore.set('default', makeSession('default'));
+  const screenshotPath = path.join(os.tmpdir(), `agent-device-android-truncated-${Date.now()}.png`);
+
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'screenshot') {
+      fs.writeFileSync(screenshotPath, Buffer.alloc(0));
+      return { path: screenshotPath };
+    }
+    return {};
+  });
+
+  const handler = createRequestHandler({
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'screenshot',
+    positionals: [screenshotPath],
+    meta: { requestId: 'req-android-screenshot-malformed-png' },
+  });
+
+  expect(response.ok).toBe(true);
+  if (response.ok) {
+    expect(response.data).toMatchObject({ path: screenshotPath });
+    expect(response.data).not.toHaveProperty('width');
+    expect(response.data).not.toHaveProperty('height');
+  }
+});
+
 test('iOS simulator screenshot omits logical density metadata after --max-size downscale', async () => {
   const sessionStore = makeSessionStore('agent-device-router-screenshot-');
   sessionStore.set('default', makeIosSession('default'));

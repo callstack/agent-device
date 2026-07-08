@@ -65,6 +65,9 @@ const defaultSimulatorScreenshotFlowDeps: SimulatorScreenshotFlowDeps = {
   captureWithRunner: captureScreenshotViaRunner,
   shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
 };
+
+const iosSimulatorMainScreenScaleCache = new Map<string, number>();
+
 export async function screenshotIos(
   device: DeviceInfo,
   outPath: string,
@@ -487,6 +490,10 @@ async function normalizeIosSimulatorScreenshotDensity(
 }
 
 async function readIosSimulatorMainScreenScale(device: DeviceInfo): Promise<number> {
+  const cachedScale = iosSimulatorMainScreenScaleCache.get(device.id);
+  if (cachedScale !== undefined) {
+    return cachedScale;
+  }
   const scaleResult = await runSimctl(device, ['getenv', device.id, 'SIMULATOR_MAINSCREEN_SCALE'], {
     timeoutMs: 5_000,
   });
@@ -497,6 +504,7 @@ async function readIosSimulatorMainScreenScale(device: DeviceInfo): Promise<numb
       'Failed to read iOS simulator screenshot scale from SIMULATOR_MAINSCREEN_SCALE',
     );
   }
+  iosSimulatorMainScreenScaleCache.set(device.id, scale);
   return scale;
 }
 
