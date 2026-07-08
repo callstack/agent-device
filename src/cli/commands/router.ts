@@ -1,9 +1,6 @@
 import type { CliFlags } from '../parser/cli-flags.ts';
 import type { AgentDeviceClient } from '../../client/client.ts';
-import {
-  isClientBackedCliCommandName,
-  type ClientBackedCliCommandName,
-} from '../../command-catalog.ts';
+import { isClientBackedCliCommandName, type ClientBackedCliCommandName } from './client-backed.ts';
 import { connectCommand, connectionCommand, disconnectCommand } from './connection.ts';
 import { authCommand } from './auth.ts';
 import { proxyCommand } from './proxy.ts';

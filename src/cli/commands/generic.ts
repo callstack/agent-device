@@ -7,7 +7,7 @@ import type { CliFlags } from '../parser/cli-flags.ts';
 import { readCommandMessage } from '../../utils/success-text.ts';
 import { isNonDefaultResponseLevel } from '../../kernel/contracts.ts';
 import { writeCommandOutput } from './shared.ts';
-import type { ClientBackedCliCommandName } from '../../command-catalog.ts';
+import type { ClientBackedCliCommandName } from './client-backed.ts';
 import type { ClientCommandParams } from './router-types.ts';
 
 export async function runGenericClientBackedCommand({

@@ -93,11 +93,6 @@ export type SpecialCliCommandName =
   (typeof SPECIAL_CLI_COMMANDS)[keyof typeof SPECIAL_CLI_COMMANDS];
 export type CliCommandName = PublicCommandName | LocalCliCommandName;
 export type KnownCliCommandName = CliCommandName | InternalCommandName | SpecialCliCommandName;
-export type ClientBackedCliCommandName =
-  | PublicCommandName
-  | typeof LOCAL_CLI_COMMANDS.debug
-  | typeof LOCAL_CLI_COMMANDS.metro
-  | typeof LOCAL_CLI_COMMANDS.session;
 
 export function listCliCommandNames(): CliCommandName[] {
   return [...Object.values(PUBLIC_COMMANDS), ...Object.values(LOCAL_CLI_COMMANDS)].sort();
@@ -107,15 +102,4 @@ export function isKnownCliCommandName(command: string): command is KnownCliComma
   if ((Object.values(SPECIAL_CLI_COMMANDS) as readonly string[]).includes(command)) return true;
   if ((Object.values(INTERNAL_COMMANDS) as readonly string[]).includes(command)) return true;
   return (listCliCommandNames() as readonly string[]).includes(command);
-}
-
-export function isClientBackedCliCommandName(
-  command: string,
-): command is ClientBackedCliCommandName {
-  return (
-    Object.values(PUBLIC_COMMANDS).includes(command as PublicCommandName) ||
-    command === LOCAL_CLI_COMMANDS.debug ||
-    command === LOCAL_CLI_COMMANDS.metro ||
-    command === LOCAL_CLI_COMMANDS.session
-  );
 }
