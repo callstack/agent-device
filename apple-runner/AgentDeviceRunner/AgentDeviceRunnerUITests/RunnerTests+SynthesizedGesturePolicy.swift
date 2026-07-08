@@ -5,8 +5,6 @@ import XCTest
 // This policy is intentionally separate from the TS interaction guarantee matrix:
 // ADR 0011 models element-targeting guarantees, while this module models command
 // paths that must keep scroll/drag/sequence usable when XCTest AX is unhealthy.
-//
-// Manifest: contracts/fixtures/synthesized-gesture-policy.json
 
 enum RunnerAccessibilityHealth: String, Equatable {
   case unknown
@@ -52,8 +50,6 @@ enum SynthesizedGesturePolicyKind: String, Equatable, Hashable {
   case coordinateTap
   case scroll
   case synthesizedDrag
-  case sequenceSynthesizedTap
-  case sequenceSynthesizedDrag
 }
 
 struct SynthesizedGesturePolicy: Equatable, Hashable {
@@ -97,7 +93,7 @@ func synthesizedGesturePolicy(_ kind: SynthesizedGesturePolicyKind) -> Synthesiz
       keyboardPolicy: .whenAccessibilityHealthy,
       fallbackPolicy: .privateSynthesisRequired
     )
-  case .synthesizedDrag, .sequenceSynthesizedTap, .sequenceSynthesizedDrag:
+  case .synthesizedDrag:
     return SynthesizedGesturePolicy(
       keyboardPolicy: .requiredWhenAvailable,
       fallbackPolicy: .xctestCoordinateWhenAccessibilityAvailable
@@ -114,7 +110,7 @@ func sequenceHasSynthesizedCoordinateStep(_ steps: [SequenceStep]) -> Bool {
 extension RunnerTests {
   func synthesizedSequenceCoordinateContext(steps: [SequenceStep]) -> SynthesizedCoordinateContext? {
     guard sequenceHasSynthesizedCoordinateStep(steps) else { return nil }
-    return synthesizedCoordinateContext(policy: synthesizedGesturePolicy(.sequenceSynthesizedTap))
+    return synthesizedCoordinateContext(policy: synthesizedGesturePolicy(.synthesizedDrag))
   }
 
   func logSynthesizedGesturePolicyDecision(
@@ -145,60 +141,7 @@ extension RunnerTests {
 }
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
-private struct SynthesizedGesturePolicyManifest: Decodable {
-  struct Path: Decodable {
-    let pathId: String
-    let policyKind: String
-    let keyboardPolicy: String
-    let fallbackPolicy: String
-  }
-
-  let paths: [Path]
-}
-
 extension RunnerTests {
-  func testSynthesizedGesturePolicyResolverMatchesManifest() throws {
-    let manifestURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent() // AgentDeviceRunnerUITests
-      .deletingLastPathComponent() // AgentDeviceRunner
-      .deletingLastPathComponent() // apple-runner
-      .deletingLastPathComponent() // repo root
-      .appendingPathComponent("contracts")
-      .appendingPathComponent("fixtures")
-      .appendingPathComponent("synthesized-gesture-policy.json")
-    let data = try Data(contentsOf: manifestURL)
-    let manifest = try JSONDecoder().decode(SynthesizedGesturePolicyManifest.self, from: data)
-    XCTAssertEqual(
-      Set(manifest.paths.map(\.policyKind)),
-      Set([
-        SynthesizedGesturePolicyKind.coordinateTap.rawValue,
-        SynthesizedGesturePolicyKind.scroll.rawValue,
-        SynthesizedGesturePolicyKind.synthesizedDrag.rawValue,
-        SynthesizedGesturePolicyKind.sequenceSynthesizedTap.rawValue,
-        SynthesizedGesturePolicyKind.sequenceSynthesizedDrag.rawValue,
-      ])
-    )
-
-    for path in manifest.paths {
-      let kind = try XCTUnwrap(
-        SynthesizedGesturePolicyKind(rawValue: path.policyKind),
-        "\(path.pathId) has unknown policy kind \(path.policyKind)"
-      )
-      let keyboardPolicy = try XCTUnwrap(
-        SynthesizedKeyboardPolicy(rawValue: path.keyboardPolicy),
-        "\(path.pathId) has unknown keyboard policy \(path.keyboardPolicy)"
-      )
-      let fallbackPolicy = try XCTUnwrap(
-        SynthesizedFallbackPolicy(rawValue: path.fallbackPolicy),
-        "\(path.pathId) has unknown fallback policy \(path.fallbackPolicy)"
-      )
-      let policy = synthesizedGesturePolicy(kind)
-
-      XCTAssertEqual(policy.keyboardPolicy, keyboardPolicy, path.pathId)
-      XCTAssertEqual(policy.fallbackPolicy, fallbackPolicy, path.pathId)
-    }
-  }
-
   func testSynthesizedFallbackPolicyRequiresPrivateSynthesisForScrollWhenAxUnavailableOrUnknown() {
     XCTAssertFalse(
       SynthesizedFallbackPolicy.privateSynthesisRequired
@@ -241,6 +184,30 @@ extension RunnerTests {
     XCTAssertFalse(
       SynthesizedKeyboardPolicy.requiredWhenAvailable
         .allowsProbe(accessibilityHealth: .unavailable)
+    )
+  }
+
+  func testSynthesizedGesturePoliciesMatchCommandContracts() {
+    XCTAssertEqual(
+      synthesizedGesturePolicy(.coordinateTap),
+      SynthesizedGesturePolicy(
+        keyboardPolicy: .never,
+        fallbackPolicy: .xctestCoordinateAllowed
+      )
+    )
+    XCTAssertEqual(
+      synthesizedGesturePolicy(.scroll),
+      SynthesizedGesturePolicy(
+        keyboardPolicy: .whenAccessibilityHealthy,
+        fallbackPolicy: .privateSynthesisRequired
+      )
+    )
+    XCTAssertEqual(
+      synthesizedGesturePolicy(.synthesizedDrag),
+      SynthesizedGesturePolicy(
+        keyboardPolicy: .requiredWhenAvailable,
+        fallbackPolicy: .xctestCoordinateWhenAccessibilityAvailable
+      )
     )
   }
 
