@@ -276,9 +276,9 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
 - Commit messages and PR titles should use conventional prefixes such as `feat:`, `fix:`, `chore:`, `perf:`, `refactor:`, `docs:`, `test:`, `build:`, or `ci:` as appropriate.
 - Do not use bracketed automation prefixes such as `[codex]` or similar bot tags in commit messages or PR titles.
 - Open a ready-for-review PR by default. Use a draft PR only when the user explicitly asks for one or the work is intentionally incomplete.
-- PR body must be short and include:
-  - `## Summary`: lead with benefits and reviewer-relevant outcomes. Prefer a compact before/after when it makes the improvement clearer. Include the issue closed by the PR using `Closes #123` when applicable.
-  - `## Validation`: answer this prompt in concise prose: "How did you verify the change, and what passed or changed on screen?" Prefer evidence over command dumps; mention the relevant check category or scenario, and include screenshots when visual/UI behavior is relevant.
+- PR body must be short, reviewer-oriented, and include:
+  - `## Summary`: describe the user/API behavior, not the implementation file tour. Lead with what changed for operators, clients, command authors, or platform behavior. Use a compact before/after when it clarifies the workflow or bug fix. For new or changed public APIs, include 1-3 concrete CLI/Node/MCP examples that reviewers can scan. Include `Closes #123` when applicable.
+  - `## Validation`: summarize meaningful evidence in concise prose or bullets. Prefer scenario names, manual device/browser evidence, changed screenshots, CI status, and notable failures/retries with their outcome. Avoid command accounting for routine local gates; mention an exact command only when it is unusual, manually reproducible evidence, or necessary to explain a residual risk. For docs-only changes, say why runtime validation is not applicable instead of writing a command checklist.
 - Call out real tradeoffs, known gaps, or follow-ups explicitly; omit boilerplate when there are none.
 - Include touched-file count and note if scope expanded beyond initial command family.
 
