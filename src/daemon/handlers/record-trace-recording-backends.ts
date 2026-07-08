@@ -10,6 +10,7 @@ import {
   WEB_RECORDING_EXTENSION,
 } from '../../recording/output-path.ts';
 import { resolveWebProvider } from '../../platforms/web/provider.ts';
+import { IOS_RUNNER_CONTAINER_BUNDLE_IDS } from '../../platforms/apple/core/runner/runner-client.ts';
 import { errorResponse } from './response.ts';
 import { startAndroidRecording, stopAndroidRecording } from './record-trace-android.ts';
 import { recoverMissingAndroidRecording } from './record-trace-android-recovery.ts';
@@ -86,6 +87,7 @@ type MissingRecordingStopContext = Omit<RecordingStartContext, 'fpsFlag'>;
 // `start` stays wide because the device platform does not map 1:1 to a recording tag
 // (e.g. an iOS device resolves to either the `ios` or `ios-device-runner` recording).
 export type RecordingBackend<P extends RecordingPlatform = RecordingPlatform> = {
+  recordingBackend: string;
   validateStart?: (req: DaemonRequest) => DaemonResponse | null;
   resolveOutputPath: (context: RecordingOutputPathContext) => string;
   start: (context: RecordingStartContext) => Promise<DaemonResponse | ActiveRecording>;
@@ -145,6 +147,7 @@ function resolveWebRecordingOutputPath({ req }: RecordingOutputPathContext): str
 }
 
 const webRecordingBackend: RecordingBackend<'web'> = {
+  recordingBackend: 'agent-browser recording',
   validateStart: (req) => validateWebRecordingFlags(req),
   resolveOutputPath: resolveWebRecordingOutputPath,
   start: async ({ activeSession, recordingBase, resolvedOut }) => {
@@ -182,6 +185,7 @@ const webRecordingBackend: RecordingBackend<'web'> = {
 };
 
 const iosDeviceRecordingBackend: RecordingBackend<'ios-device-runner'> = {
+  recordingBackend: 'runner AVAssetWriter',
   resolveOutputPath: resolveNativeRecordingOutputPath,
   start: async ({
     req,
@@ -224,6 +228,7 @@ const iosDeviceRecordingBackend: RecordingBackend<'ios-device-runner'> = {
 };
 
 const macOsRecordingBackend: RecordingBackend<'macos-runner'> = {
+  recordingBackend: 'runner AVAssetWriter',
   resolveOutputPath: resolveNativeRecordingOutputPath,
   start: async ({ req, activeSession, device, logPath, deps, fpsFlag, recordingBase }) => {
     const appBundleId = normalizeAppBundleId(activeSession);
@@ -256,9 +261,23 @@ const macOsRecordingBackend: RecordingBackend<'macos-runner'> = {
 };
 
 const iosSimulatorRecordingBackend: RecordingBackend<'ios'> = {
+  recordingBackend: 'simctl recordVideo',
   resolveOutputPath: resolveNativeRecordingOutputPath,
-  start: async ({ req, activeSession, device, logPath, deps, recordingBase, resolvedOut }) =>
-    await startIosSimulatorRecording({
+  start: async ({ req, activeSession, device, logPath, deps, recordingBase, resolvedOut }) => {
+    const appBundleId = normalizeAppBundleId(activeSession);
+    if (!activeSession.recordOnlySession && !appBundleId) {
+      return errorResponse(
+        'INVALID_ARGS',
+        'record on iOS Simulator requires an active app session; run open <app> first, or start recording without an existing session for record-only simulator capture',
+      );
+    }
+    if (!activeSession.recordOnlySession && appBundleId && isAgentDeviceRunnerBundle(appBundleId)) {
+      return errorResponse(
+        'INVALID_ARGS',
+        'record on iOS Simulator cannot use Agent Device Runner as the active app session; run open <app> first',
+      );
+    }
+    return await startIosSimulatorRecording({
       req,
       activeSession,
       device,
@@ -266,7 +285,8 @@ const iosSimulatorRecordingBackend: RecordingBackend<'ios'> = {
       deps,
       recordingBase,
       resolvedOut,
-    }),
+    });
+  },
   stop: async ({ deps, recording, stopRequestedAt }) =>
     await stopIosSimulatorRecording({
       deps,
@@ -276,6 +296,7 @@ const iosSimulatorRecordingBackend: RecordingBackend<'ios'> = {
 };
 
 const androidRecordingBackend: RecordingBackend<'android'> = {
+  recordingBackend: 'adb screenrecord',
   resolveOutputPath: resolveNativeRecordingOutputPath,
   start: async ({ sessionName, activeSession, device, recordingBase }) =>
     await startAndroidRecording({ sessionName, activeSession, device, recordingBase }),
@@ -291,6 +312,7 @@ const androidRecordingBackend: RecordingBackend<'android'> = {
 };
 
 const unsupportedRecordingBackend: RecordingBackend = {
+  recordingBackend: 'unsupported',
   resolveOutputPath: resolveNativeRecordingOutputPath,
   start: async () =>
     errorResponse('UNSUPPORTED_OPERATION', 'record is not supported on this device'),
@@ -339,6 +361,10 @@ function validateWebRecordingOutputPath(outPath: string): DaemonResponse | null 
     );
   }
   return null;
+}
+
+function isAgentDeviceRunnerBundle(bundleId: string): boolean {
+  return IOS_RUNNER_CONTAINER_BUNDLE_IDS.includes(bundleId);
 }
 
 function removeInvalidRecordingOutput(outPath: string): void {

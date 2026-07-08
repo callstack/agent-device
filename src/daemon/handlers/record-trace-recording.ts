@@ -29,7 +29,7 @@ import {
   stopActiveRecording,
 } from './record-trace-recording-backends.ts';
 import type { RecordTraceDeps, RecordingBase } from './record-trace-types.ts';
-import { resolveImplicitSessionScope } from '../session-routing.ts';
+import { hasExplicitSessionFlag, resolveImplicitSessionScope } from '../session-routing.ts';
 
 const IOS_DEVICE_RECORD_MIN_FPS = 1;
 const IOS_DEVICE_RECORD_MAX_FPS = 120;
@@ -93,12 +93,26 @@ async function waitForRecordingTail(
   await sleep(IOS_SIMULATOR_RECORDING_TAIL_SETTLE_MS);
 }
 
-function buildRecordingBase(req: DaemonRequest, outPath: string): RecordingBase {
+function buildRecordingBase(params: {
+  req: DaemonRequest;
+  outPath: string;
+  activeSession: SessionState;
+  recordingBackend: string;
+}): RecordingBase {
+  const { req, outPath, activeSession, recordingBackend } = params;
   const exportQuality = recordingQualityInputToExportQuality(req.flags?.quality);
   return {
     outPath,
     clientOutPath: req.meta?.clientArtifactPaths?.outPath,
     startedAt: Date.now(),
+    recordingBackend,
+    recordOnlySession: activeSession.recordOnlySession === true,
+    activeSessionApp: activeSession.appBundleId
+      ? {
+          bundleId: activeSession.appBundleId,
+          ...(activeSession.appName ? { name: activeSession.appName } : {}),
+        }
+      : undefined,
     maxSize: req.flags?.screenshotMaxSize,
     exportQuality: exportQuality ?? DEFAULT_RECORDING_EXPORT_QUALITY,
     showTouches: req.flags?.hideTouches !== true,
@@ -145,7 +159,7 @@ function resolveRecordingStartPlan(
   if (startError) return startError;
 
   return {
-    ...prepareRecordingStart(req, backend),
+    ...prepareRecordingStart(req, backend, activeSession),
     backend,
     fpsFlag: req.flags?.fps,
   };
@@ -203,6 +217,9 @@ function persistStartedRecording(params: {
       recording: 'started',
       outPath: recording.clientOutPath ?? outPath,
       sessionStateDir,
+      recordingBackend: recording.recordingBackend,
+      recordOnlySession: recording.recordOnlySession,
+      activeSessionApp: recording.activeSessionApp,
       showTouches: recording.showTouches,
     },
   };
@@ -265,10 +282,16 @@ function validateRecordingMaxSizeFlag(maxSizeFlag: number | undefined): DaemonRe
 function prepareRecordingStart(
   req: DaemonRequest,
   backend: ReturnType<typeof resolveRecordingBackendForDevice>,
+  activeSession: SessionState,
 ): PreparedRecordingStart {
   const outPath = backend.resolveOutputPath({ req });
   const resolvedOut = SessionStore.expandHome(outPath, req.meta?.cwd);
-  const recordingBase = buildRecordingBase(req, resolvedOut);
+  const recordingBase = buildRecordingBase({
+    req,
+    outPath: resolvedOut,
+    activeSession,
+    recordingBackend: backend.recordingBackend,
+  });
   fs.mkdirSync(path.dirname(resolvedOut), { recursive: true });
   fs.rmSync(resolvedOut, { force: true });
   return { outPath, resolvedOut, recordingBase };
@@ -327,7 +350,7 @@ async function recoverMissingRecordingState(
     return null;
   }
 
-  const { resolvedOut, recordingBase } = prepareRecoveredRecording(req, backend);
+  const { resolvedOut, recordingBase } = prepareRecoveredRecording(req, backend, activeSession);
   const recovered = await backend.recoverMissingStop({
     req,
     sessionName,
@@ -351,10 +374,16 @@ async function recoverMissingRecordingState(
 function prepareRecoveredRecording(
   req: DaemonRequest,
   backend: ReturnType<typeof resolveRecordingBackendForDevice>,
+  activeSession: SessionState,
 ): Pick<PreparedRecordingStart, 'resolvedOut' | 'recordingBase'> {
   const outPath = backend.resolveOutputPath({ req });
   const resolvedOut = SessionStore.expandHome(outPath, req.meta?.cwd);
-  const recordingBase = buildRecordingBase(req, resolvedOut);
+  const recordingBase = buildRecordingBase({
+    req,
+    outPath: resolvedOut,
+    activeSession,
+    recordingBackend: backend.recordingBackend,
+  });
   return { resolvedOut, recordingBase };
 }
 
@@ -427,6 +456,10 @@ function buildRecordStopResponse(
       outPath: recording.outPath,
       telemetryPath: recording.telemetryPath,
       artifacts,
+      recordingBackend: recording.recordingBackend,
+      recordOnlySession: recording.recordOnlySession,
+      activeSessionApp: recording.activeSessionApp,
+      durationMs: Date.now() - recording.startedAt,
       showTouches: recording.showTouches,
       warning: recording.warning,
       overlayWarning: recording.overlayWarning,
@@ -485,6 +518,18 @@ export async function handleRecordCommand(params: {
   const { req, sessionName, sessionStore, logPath } = params;
   const deps = buildRecordTraceDeps();
   const session = sessionStore.get(sessionName);
+  const action = (req.positionals?.[0] ?? '').toLowerCase();
+  if (!['start', 'stop'].includes(action)) {
+    return errorResponse('INVALID_ARGS', 'record requires start|stop');
+  }
+
+  if (action === 'start' && !session && hasExplicitSessionFlag(req)) {
+    return errorResponse(
+      'INVALID_ARGS',
+      'record start with an explicit session requires an active app session; run open <app> first, or omit --session for record-only capture',
+    );
+  }
+
   const device = session?.device ?? (await resolveTargetDevice(req.flags ?? {}));
   if (!session) {
     await ensureDeviceReady(device);
@@ -500,11 +545,6 @@ export async function handleRecordCommand(params: {
       recordOnlySession: true,
       actions: [],
     } satisfies SessionState);
-
-  const action = (req.positionals?.[0] ?? '').toLowerCase();
-  if (!['start', 'stop'].includes(action)) {
-    return errorResponse('INVALID_ARGS', 'record requires start|stop');
-  }
 
   if (action === 'start') {
     return startRecording({ req, sessionName, sessionStore, activeSession, device, logPath, deps });

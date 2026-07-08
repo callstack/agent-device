@@ -57,7 +57,10 @@ import { handleRecordTraceCommands } from '../record-trace.ts';
 import { deriveRecordingTelemetryPath } from '../../recording-telemetry.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { SessionState } from '../../types.ts';
-import { runAppleRunnerCommand } from '../../../platforms/apple/core/runner/runner-client.ts';
+import {
+  IOS_RUNNER_CONTAINER_BUNDLE_IDS,
+  runAppleRunnerCommand,
+} from '../../../platforms/apple/core/runner/runner-client.ts';
 import {
   getRecordingOverlaySupportWarning,
   resizeRecording,
@@ -65,6 +68,7 @@ import {
   overlayRecordingTouches,
 } from '../../../recording/overlay.ts';
 import { resolveTargetDevice } from '../../../core/dispatch.ts';
+import { ensureDeviceReady } from '../../device-ready.ts';
 import { runCmd, runCmdBackground } from '../../../utils/exec.ts';
 import { isPlayableVideo, waitForStableFile } from '../../../utils/video.ts';
 import { withWebProvider, type WebProvider } from '../../../platforms/web/provider.ts';
@@ -83,6 +87,7 @@ const mockRunCmd = vi.mocked(runCmd);
 const mockRunCmdBackground = vi.mocked(runCmdBackground);
 const mockRunAppleRunnerCommand = vi.mocked(runAppleRunnerCommand);
 const mockResolveTargetDevice = vi.mocked(resolveTargetDevice);
+const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 const mockResizeRecording = vi.mocked(resizeRecording);
 const mockTrimRecordingStart = vi.mocked(trimRecordingStart);
 const mockOverlayRecordingTouches = vi.mocked(overlayRecordingTouches);
@@ -127,6 +132,13 @@ function makeIosSimulatorSession(name: string): SessionState {
     kind: 'simulator',
     booted: true,
   });
+}
+
+function makeOpenedIosSimulatorSession(name: string): SessionState {
+  const session = makeIosSimulatorSession(name);
+  session.appBundleId = 'com.apple.Preferences';
+  session.appName = 'Settings';
+  return session;
 }
 
 function makeWebSession(name: string): SessionState {
@@ -203,6 +215,7 @@ async function runRecordCommand(params: {
     screenshotMaxSize?: number;
     hideTouches?: boolean;
   };
+  sessionExplicit?: boolean;
   clientArtifactPaths?: Record<string, string>;
 }) {
   return handleRecordTraceCommands({
@@ -213,12 +226,13 @@ async function runRecordCommand(params: {
       positionals: params.positionals,
       flags: params.flags ?? {},
       meta:
-        params.cwd || params.clientArtifactPaths
+        params.cwd || params.clientArtifactPaths || params.sessionExplicit
           ? {
               ...(params.cwd ? { cwd: params.cwd } : {}),
               ...(params.clientArtifactPaths
                 ? { clientArtifactPaths: params.clientArtifactPaths }
                 : {}),
+              ...(params.sessionExplicit ? { sessionExplicit: true } : {}),
             }
           : undefined,
     },
@@ -879,16 +893,7 @@ test('record stop trims iOS device recordings from target app readiness before o
 test('record stop resizes iOS simulator recording when max-size is explicit', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-quality';
-  sessionStore.set(
-    sessionName,
-    makeSession(sessionName, {
-      platform: 'apple',
-      id: 'sim-1',
-      name: 'Simulator',
-      kind: 'simulator',
-      booted: true,
-    }),
-  );
+  sessionStore.set(sessionName, makeOpenedIosSimulatorSession(sessionName));
 
   mockRunCmdBackground.mockImplementation(() => ({
     child: { kill: () => {} } as any,
@@ -920,16 +925,7 @@ test('record stop resizes iOS simulator recording when max-size is explicit', as
 test('record stop forwards the requested quality to the resize step', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-export-quality';
-  sessionStore.set(
-    sessionName,
-    makeSession(sessionName, {
-      platform: 'apple',
-      id: 'sim-1',
-      name: 'Simulator',
-      kind: 'simulator',
-      booted: true,
-    }),
-  );
+  sessionStore.set(sessionName, makeOpenedIosSimulatorSession(sessionName));
 
   mockRunCmdBackground.mockImplementation(() => ({
     child: { kill: () => {} } as any,
@@ -1128,19 +1124,109 @@ test('record stop measures too-short Android failures from stop request time', a
   expect((response as any).error?.message).toMatch(/failed to stop/i);
 });
 
+test('record start on iOS simulator requires active app session context', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-sim-no-app';
+  sessionStore.set(sessionName, makeIosSimulatorSession(sessionName));
+
+  mockRunCmdBackground.mockImplementation(() => {
+    throw new Error('simctl recordVideo should not start without active app context');
+  });
+
+  const response = await runRecordCommand({
+    sessionStore,
+    sessionName,
+    positionals: ['start', './sim-no-app.mp4'],
+    flags: { hideTouches: true },
+  });
+
+  expect(response?.ok).toBe(false);
+  expect((response as any).error?.code).toBe('INVALID_ARGS');
+  expect((response as any).error?.message ?? '').toMatch(/requires an active app session/i);
+  expect(sessionStore.get(sessionName)?.recording).toBeUndefined();
+});
+
+test('record start with explicit missing session does not fall back to record-only capture', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-sim-explicit-missing';
+  mockRunCmdBackground.mockImplementation(() => {
+    throw new Error('simctl recordVideo should not start for an explicit missing session');
+  });
+
+  const response = await runRecordCommand({
+    sessionStore,
+    sessionName,
+    positionals: ['start', './sim-explicit-missing.mp4'],
+    flags: { hideTouches: true },
+    sessionExplicit: true,
+  });
+
+  expect(response?.ok).toBe(false);
+  expect((response as any).error?.code).toBe('INVALID_ARGS');
+  expect((response as any).error?.message ?? '').toMatch(/explicit session/i);
+  expect(mockResolveTargetDevice).not.toHaveBeenCalled();
+  expect(mockEnsureDeviceReady).not.toHaveBeenCalled();
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+});
+
+test('record start on iOS simulator rejects Agent Device Runner as active app context', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-sim-runner-app';
+  const session = makeIosSimulatorSession(sessionName);
+  session.appBundleId = IOS_RUNNER_CONTAINER_BUNDLE_IDS[0];
+  sessionStore.set(sessionName, session);
+
+  mockRunCmdBackground.mockImplementation(() => {
+    throw new Error('simctl recordVideo should not start for the runner app');
+  });
+
+  const response = await runRecordCommand({
+    sessionStore,
+    sessionName,
+    positionals: ['start', './sim-runner-app.mp4'],
+    flags: { hideTouches: true },
+  });
+
+  expect(response?.ok).toBe(false);
+  expect((response as any).error?.code).toBe('INVALID_ARGS');
+  expect((response as any).error?.message ?? '').toMatch(/Agent Device Runner/);
+  expect(sessionStore.get(sessionName)?.recording).toBeUndefined();
+});
+
+test('record start on iOS simulator still supports record-only capture without a session', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-sim-record-only';
+  mockResolveTargetDevice.mockResolvedValueOnce({
+    platform: 'apple',
+    id: 'ios-sim-1',
+    name: 'iPhone 16',
+    kind: 'simulator',
+    booted: true,
+  });
+  mockRunCmdBackground.mockImplementation(() => ({
+    child: { kill: () => {}, pid: 5152 } as any,
+    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
+  }));
+
+  const response = await runRecordCommand({
+    sessionStore,
+    sessionName,
+    positionals: ['start', './sim-record-only.mp4'],
+    flags: { hideTouches: true },
+  });
+
+  expect(response?.ok).toBe(true);
+  expect((response as any).data?.recordingBackend).toBe('simctl recordVideo');
+  expect((response as any).data?.recordOnlySession).toBe(true);
+  expect((response as any).data?.activeSessionApp).toBeUndefined();
+  expect(sessionStore.get(sessionName)?.recordOnlySession).toBe(true);
+  expect(sessionStore.get(sessionName)?.recording?.platform).toBe('ios');
+});
+
 test('record start stores iOS simulator recorder pid for scoped cleanup', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-recorder-pid';
-  sessionStore.set(
-    sessionName,
-    makeSession(sessionName, {
-      platform: 'apple',
-      id: 'sim-1',
-      name: 'Simulator',
-      kind: 'simulator',
-      booted: true,
-    }),
-  );
+  sessionStore.set(sessionName, makeOpenedIosSimulatorSession(sessionName));
   mockRunCmdBackground.mockImplementation(() => ({
     child: { kill: () => {}, pid: 5151 } as any,
     wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
@@ -1154,6 +1240,12 @@ test('record start stores iOS simulator recorder pid for scoped cleanup', async 
   });
 
   expect(response?.ok).toBe(true);
+  expect((response as any).data?.recordingBackend).toBe('simctl recordVideo');
+  expect((response as any).data?.recordOnlySession).toBe(false);
+  expect((response as any).data?.activeSessionApp).toEqual({
+    bundleId: 'com.apple.Preferences',
+    name: 'Settings',
+  });
   const recording = sessionStore.get(sessionName)?.recording;
   expect(recording?.platform).toBe('ios');
   if (recording?.platform === 'ios') {
@@ -1283,16 +1375,7 @@ test('record stop falls back to path matching for stale iOS simulator recordVide
 test('record stop keeps iOS simulator video when overlay export fails', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-overlay-warning';
-  sessionStore.set(
-    sessionName,
-    makeSession(sessionName, {
-      platform: 'apple',
-      id: 'sim-1',
-      name: 'Simulator',
-      kind: 'simulator',
-      booted: true,
-    }),
-  );
+  sessionStore.set(sessionName, makeOpenedIosSimulatorSession(sessionName));
 
   mockRunCmdBackground.mockImplementation(() => ({
     child: { kill: () => {} } as any,
@@ -1329,16 +1412,7 @@ test('record stop keeps iOS simulator video when overlay export fails', async ()
 test('record stop skips touch overlay export when no gestures were recorded', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-no-gestures';
-  sessionStore.set(
-    sessionName,
-    makeSession(sessionName, {
-      platform: 'apple',
-      id: 'sim-1',
-      name: 'Simulator',
-      kind: 'simulator',
-      booted: true,
-    }),
-  );
+  sessionStore.set(sessionName, makeOpenedIosSimulatorSession(sessionName));
 
   mockRunCmdBackground.mockImplementation(() => ({
     child: { kill: () => {} } as any,
@@ -1365,16 +1439,7 @@ test('record stop skips touch overlay export when no gestures were recorded', as
 test('record stop keeps iOS simulator video when resize export fails', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-resize-fail';
-  sessionStore.set(
-    sessionName,
-    makeSession(sessionName, {
-      platform: 'apple',
-      id: 'sim-1',
-      name: 'Simulator',
-      kind: 'simulator',
-      booted: true,
-    }),
-  );
+  sessionStore.set(sessionName, makeOpenedIosSimulatorSession(sessionName));
 
   mockRunCmdBackground.mockImplementation(() => ({
     child: { kill: () => {} } as any,

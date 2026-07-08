@@ -28,6 +28,12 @@ export type RecordingBase = {
   outPath: string;
   clientOutPath?: string;
   startedAt: number;
+  recordingBackend?: string;
+  recordOnlySession?: boolean;
+  activeSessionApp?: {
+    bundleId: string;
+    name?: string;
+  };
   maxSize?: number;
   exportQuality?: RecordingExportQuality;
   showTouches: boolean;

@@ -207,6 +207,12 @@ type SessionRecordingBase = {
   warning?: string;
   overlayWarning?: string;
   startedAt: number;
+  recordingBackend?: string;
+  recordOnlySession?: boolean;
+  activeSessionApp?: {
+    bundleId: string;
+    name?: string;
+  };
   maxSize?: number;
   exportQuality?: RecordingExportQuality;
   showTouches: boolean;

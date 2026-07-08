@@ -53,7 +53,7 @@ export function isImplicitSessionScopeConflict(req: DaemonRequest, session: Sess
   return !sessionMatchesScope(session, scope);
 }
 
-function hasExplicitSessionFlag(req: DaemonRequest): boolean {
+export function hasExplicitSessionFlag(req: DaemonRequest): boolean {
   if (req.meta?.sessionExplicit === true) return true;
   const value = (req.flags as CommandFlags | undefined)?.session;
   return typeof value === 'string' && value.trim().length > 0;
