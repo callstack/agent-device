@@ -380,6 +380,7 @@ Core loop:
 
 Buttons:
   tv-remote press up|down|left|right|select|menu|home|back
+  tv-remote press select --duration-ms 500
   ok, center, and enter are input aliases for select; command output still reports button: "select".
   --duration-ms holds a tvOS remote button for that duration. On Android TV, any positive duration maps to the ADB longpress form because Android input keyevent has no exact hold duration.
 

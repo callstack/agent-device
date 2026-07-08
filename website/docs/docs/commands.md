@@ -201,6 +201,7 @@ agent-device apps --platform android --target tv
 agent-device snapshot -i --platform android --target tv
 agent-device tv-remote press down --platform android --target tv
 agent-device tv-remote press select --platform android --target tv
+agent-device tv-remote press select --duration-ms 500 --platform android --target tv
 agent-device screenshot tv-focus.png --overlay-refs --platform android --target tv
 agent-device open Settings --platform ios --target tv
 agent-device screenshot apple-tv.png --platform ios --target tv

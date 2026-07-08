@@ -181,8 +181,8 @@ const clipboardCliSchema = {
 } as const satisfies CommandSchemaOverride;
 
 const tvRemoteCliSchema = {
-  usageOverride: `tv-remote [press] ${TV_REMOTE_BUTTON_USAGE}`,
-  listUsageOverride: 'tv-remote press <button>',
+  usageOverride: `tv-remote [press] ${TV_REMOTE_BUTTON_USAGE} [--duration-ms <ms>]`,
+  listUsageOverride: 'tv-remote press <button> [--duration-ms <ms>]',
   helpDescription:
     'Press a TV remote/D-pad button on Android TV or tvOS. Use this instead of press/click when navigating focus-first TV apps. Aliases ok, center, and enter map to select.',
   summary: 'Press a TV remote/D-pad button',
