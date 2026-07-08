@@ -40,6 +40,7 @@ export const screenshotCommand: RuntimeCommand<
       {
         fullscreen: options.fullscreen,
         overlayRefs: options.overlayRefs,
+        pixelDensity: options.pixelDensity,
         stabilize: options.stabilize,
         normalizeStatusBar: options.normalizeStatusBar,
         surface: options.surface,

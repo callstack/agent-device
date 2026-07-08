@@ -53,17 +53,26 @@ test('screenshot --level digest --json preserves the digest payload through the 
   assert.deepEqual(parsed.data, digest);
 });
 
-test('screenshot --json at the default level still emits the normalized { path, overlayRefs } shape', async () => {
+test('screenshot --json at the default level still emits normalized screenshot metadata', async () => {
   const full = {
     path: '/tmp/shot.png',
+    width: 402,
+    height: 874,
+    logicalWidth: 402,
+    logicalHeight: 874,
+    pixelDensity: 1,
     overlayRefs: [{ ref: 'e1', label: 'Login', x: 0, y: 0, width: 10, height: 10 }],
   };
   const client = clientReturning(full);
   const flags = { json: true } as CliFlags;
 
   const out = await captureStdout(() => screenshotCommand({ positionals: [], flags, client }));
-  const parsed = JSON.parse(out) as { data: { path: string; overlayCount?: number } };
+  const parsed = JSON.parse(out) as {
+    data: { path: string; width?: number; pixelDensity?: number };
+  };
 
   assert.equal(parsed.data.path, '/tmp/shot.png');
+  assert.equal(parsed.data.width, 402);
+  assert.equal(parsed.data.pixelDensity, 1);
   assert.ok(!('overlayCount' in parsed.data));
 });

@@ -28,6 +28,23 @@ export async function resizePngFileToMaxSize(filePath: string, maxSize: number):
   await fs.writeFile(filePath, await encodePngAsync(resized));
 }
 
+export async function resizePngFile(
+  filePath: string,
+  width: number,
+  height: number,
+): Promise<void> {
+  if (!Number.isInteger(width) || width < 1 || !Number.isInteger(height) || height < 1) {
+    throw new AppError('INVALID_ARGS', 'Screenshot resize dimensions must be positive integers');
+  }
+
+  const source = await decodePngAsync(await fs.readFile(filePath), 'screenshot');
+  if (source.width === width && source.height === height) {
+    return;
+  }
+
+  await fs.writeFile(filePath, await encodePngAsync(resizePngBox(source, width, height)));
+}
+
 function resizePngBox(source: PNG, width: number, height: number): PNG {
   const output = new PNG({ width, height });
   for (let y = 0; y < height; y += 1) {

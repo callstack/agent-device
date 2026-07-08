@@ -88,6 +88,7 @@ import { AppError } from '../../../../kernel/errors.ts';
 import { runCmd } from '../../../../utils/exec.ts';
 import { retryWithPolicy } from '../../../../utils/retry.ts';
 import { parseIosDeviceAppsPayload, parseIosDeviceProcessesPayload } from '../devicectl.ts';
+import { PNG } from '../../../../utils/png.ts';
 
 const IOS_TEST_DEVICE: DeviceInfo = {
   platform: 'apple',
@@ -785,6 +786,7 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after retry ex
         ensureBooted: ensureBootedSimulator,
         prepareStatusBarForScreenshot: prepareStatusBarForScreenshot,
         captureWithRetry: captureSimulatorScreenshotWithRetry,
+        normalizeDensity: async () => {},
         captureWithRunner: captureScreenshotViaRunner,
         shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
       },
@@ -829,6 +831,7 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after simctl s
         ensureBooted: ensureBootedSimulator,
         prepareStatusBarForScreenshot: prepareStatusBarForScreenshot,
         captureWithRetry: captureSimulatorScreenshotWithRetry,
+        normalizeDensity: async () => {},
         captureWithRunner: captureScreenshotViaRunner,
         shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
       },
@@ -850,6 +853,7 @@ test('captureSimulatorScreenshotWithFallback continues when status bar preparati
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
     appBundleId: 'com.example.app',
     normalizeStatusBar: true,
+    deps: { normalizeDensity: async () => {} },
   });
   assert.equal(mockPrepareStatusBarForScreenshot.mock.calls.length, 1);
   assert.equal(mockRetryWithPolicy.mock.calls.length > 0, true);
@@ -864,6 +868,7 @@ test('captureSimulatorScreenshotWithFallback can skip session-backed simulator b
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
     appBundleId: 'com.example.app',
     skipIosSimulatorBootCheck: true,
+    deps: { normalizeDensity: async () => {} },
   });
 
   assert.equal(mockEnsureBootedSimulator.mock.calls.length, 0);
@@ -893,6 +898,7 @@ test('captureSimulatorScreenshotWithFallback boots skipped-check simulator after
       ensureBooted,
       prepareStatusBarForScreenshot,
       captureWithRetry,
+      normalizeDensity: async () => {},
       captureWithRunner,
       shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
     },
@@ -929,6 +935,7 @@ test('captureSimulatorScreenshotWithFallback keeps runner fallback after skipped
       ensureBooted,
       prepareStatusBarForScreenshot,
       captureWithRetry,
+      normalizeDensity: async () => {},
       captureWithRunner,
       shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
     },
@@ -949,6 +956,7 @@ test('captureSimulatorScreenshotWithFallback ignores status bar restore failures
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
     appBundleId: 'com.example.app',
     normalizeStatusBar: true,
+    deps: { normalizeDensity: async () => {} },
   });
   assert.equal(mockPrepareStatusBarForScreenshot.mock.calls.length, 1);
   assert.equal(mockRetryWithPolicy.mock.calls.length > 0, true);
@@ -963,6 +971,7 @@ test('captureSimulatorScreenshotWithFallback skips status bar normalization by d
 
   await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, '/tmp/out.png', {
     appBundleId: 'com.example.app',
+    deps: { normalizeDensity: async () => {} },
   });
 
   assert.equal(mockPrepareStatusBarForScreenshot.mock.calls.length, 0);
@@ -1009,6 +1018,7 @@ test('captureSimulatorScreenshotWithFallback emits fallback diagnostic before us
             ensureBooted: ensureBootedSimulator,
             prepareStatusBarForScreenshot: prepareStatusBarForScreenshot,
             captureWithRetry: captureSimulatorScreenshotWithRetry,
+            normalizeDensity: async () => {},
             captureWithRunner: captureScreenshotViaRunner,
             shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
           },
@@ -1055,6 +1065,7 @@ test('captureSimulatorScreenshotWithFallback uses simulator runner fallback by d
     const outPath = path.join(tmpDir, 'out.png');
     await captureSimulatorScreenshotWithFallback(IOS_TEST_SIMULATOR, outPath, {
       appBundleId: 'com.example.app',
+      deps: { normalizeDensity: async () => {} },
     });
     assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 1);
     assert.equal(await fs.readFile(outPath, 'utf8'), 'default-fallback');
@@ -1238,6 +1249,9 @@ test('screenshotIos retries simulator capture timeouts and eventually succeeds',
   const commandLogPath = path.join(tmpDir, 'commands.log');
   const screenshotCountPath = path.join(tmpDir, 'screenshot-attempts.count');
   const outPath = path.join(tmpDir, 'screen.png');
+  const sourcePngPath = path.join(tmpDir, 'source.png');
+
+  await fs.writeFile(sourcePngPath, PNG.sync.write(new PNG({ width: 1206, height: 2622 })));
 
   await fs.writeFile(
     xcrunPath,
@@ -1246,6 +1260,10 @@ test('screenshotIos retries simulator capture timeouts and eventually succeeds',
       'echo "__XCRUN__ $*" >> "$AGENT_DEVICE_TEST_COMMAND_LOG"',
       'if [ "$1" = "simctl" ] && [ "$2" = "list" ] && [ "$3" = "devices" ] && [ "$4" = "-j" ]; then',
       '  echo \'{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-18-0":[{"udid":"sim-1","state":"Booted"}]}}\'',
+      '  exit 0',
+      'fi',
+      'if [ "$1" = "simctl" ] && [ "$2" = "getenv" ] && [ "$3" = "sim-1" ] && [ "$4" = "SIMULATOR_MAINSCREEN_SCALE" ]; then',
+      '  echo "3"',
       '  exit 0',
       'fi',
       'if [ "$1" = "simctl" ] && [ "$2" = "io" ] && [ "$3" = "sim-1" ] && [ "$4" = "screenshot" ]; then',
@@ -1260,7 +1278,7 @@ test('screenshotIos retries simulator capture timeouts and eventually succeeds',
       '    echo "Timeout waiting for screen surfaces" >&2',
       '    exit 60',
       '  fi',
-      '  printf "png-bytes" > "$5"',
+      '  cp "$AGENT_DEVICE_TEST_SCREENSHOT_SOURCE_FILE" "$5"',
       '  exit 0',
       'fi',
       'echo "unexpected xcrun args: $*" >&2',
@@ -1280,9 +1298,11 @@ test('screenshotIos retries simulator capture timeouts and eventually succeeds',
   const previousPath = process.env.PATH;
   const previousCommandLog = process.env.AGENT_DEVICE_TEST_COMMAND_LOG;
   const previousScreenshotCountFile = process.env.AGENT_DEVICE_TEST_SCREENSHOT_COUNT_FILE;
+  const previousScreenshotSourceFile = process.env.AGENT_DEVICE_TEST_SCREENSHOT_SOURCE_FILE;
   process.env.PATH = `${tmpDir}${path.delimiter}${previousPath ?? ''}`;
   process.env.AGENT_DEVICE_TEST_COMMAND_LOG = commandLogPath;
   process.env.AGENT_DEVICE_TEST_SCREENSHOT_COUNT_FILE = screenshotCountPath;
+  process.env.AGENT_DEVICE_TEST_SCREENSHOT_SOURCE_FILE = sourcePngPath;
   mockRetryWithPolicy.mockImplementation(async (fn, policy, options) => {
     assert.ok(policy);
     assert.ok(options);
@@ -1308,7 +1328,9 @@ test('screenshotIos retries simulator capture timeouts and eventually succeeds',
 
   try {
     await screenshotIos(IOS_TEST_SIMULATOR, outPath);
-    assert.equal(await fs.readFile(outPath, 'utf8'), 'png-bytes');
+    const png = PNG.sync.read(await fs.readFile(outPath));
+    assert.equal(png.width, 402);
+    assert.equal(png.height, 874);
     assert.equal(await fs.readFile(screenshotCountPath, 'utf8'), '3\n');
 
     const logLines = (await fs.readFile(commandLogPath, 'utf8')).trim().split('\n').filter(Boolean);
@@ -1335,9 +1357,62 @@ test('screenshotIos retries simulator capture timeouts and eventually succeeds',
     if (previousScreenshotCountFile === undefined)
       delete process.env.AGENT_DEVICE_TEST_SCREENSHOT_COUNT_FILE;
     else process.env.AGENT_DEVICE_TEST_SCREENSHOT_COUNT_FILE = previousScreenshotCountFile;
+    if (previousScreenshotSourceFile === undefined)
+      delete process.env.AGENT_DEVICE_TEST_SCREENSHOT_SOURCE_FILE;
+    else process.env.AGENT_DEVICE_TEST_SCREENSHOT_SOURCE_FILE = previousScreenshotSourceFile;
     await fs.rm(tmpDir, { recursive: true, force: true });
   }
 }, 10_000);
+
+test('screenshotIos keeps requested simulator pixel density', async () => {
+  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-screenshot-density-'));
+  const xcrunPath = path.join(tmpDir, 'xcrun');
+  const outPath = path.join(tmpDir, 'screen.png');
+  const sourcePngPath = path.join(tmpDir, 'source.png');
+
+  await fs.writeFile(sourcePngPath, PNG.sync.write(new PNG({ width: 1206, height: 2622 })));
+  await fs.writeFile(
+    xcrunPath,
+    [
+      '#!/bin/sh',
+      'if [ "$1" = "simctl" ] && [ "$2" = "list" ] && [ "$3" = "devices" ] && [ "$4" = "-j" ]; then',
+      '  echo \'{"devices":{"com.apple.CoreSimulator.SimRuntime.iOS-18-0":[{"udid":"sim-1","state":"Booted"}]}}\'',
+      '  exit 0',
+      'fi',
+      'if [ "$1" = "simctl" ] && [ "$2" = "getenv" ] && [ "$3" = "sim-1" ] && [ "$4" = "SIMULATOR_MAINSCREEN_SCALE" ]; then',
+      '  echo "3"',
+      '  exit 0',
+      'fi',
+      'if [ "$1" = "simctl" ] && [ "$2" = "io" ] && [ "$3" = "sim-1" ] && [ "$4" = "screenshot" ]; then',
+      '  cp "$AGENT_DEVICE_TEST_SCREENSHOT_SOURCE_FILE" "$5"',
+      '  exit 0',
+      'fi',
+      'echo "unexpected xcrun args: $*" >&2',
+      'exit 1',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+  await fs.chmod(xcrunPath, 0o755);
+
+  const previousPath = process.env.PATH;
+  const previousScreenshotSourceFile = process.env.AGENT_DEVICE_TEST_SCREENSHOT_SOURCE_FILE;
+  process.env.PATH = `${tmpDir}${path.delimiter}${previousPath ?? ''}`;
+  process.env.AGENT_DEVICE_TEST_SCREENSHOT_SOURCE_FILE = sourcePngPath;
+
+  try {
+    await screenshotIos(IOS_TEST_SIMULATOR, outPath, { pixelDensity: 2 });
+    const png = PNG.sync.read(await fs.readFile(outPath));
+    assert.equal(png.width, 804);
+    assert.equal(png.height, 1748);
+  } finally {
+    process.env.PATH = previousPath;
+    if (previousScreenshotSourceFile === undefined)
+      delete process.env.AGENT_DEVICE_TEST_SCREENSHOT_SOURCE_FILE;
+    else process.env.AGENT_DEVICE_TEST_SCREENSHOT_SOURCE_FILE = previousScreenshotSourceFile;
+    await fs.rm(tmpDir, { recursive: true, force: true });
+  }
+});
 
 test('openIosApp web URL on iOS device without app falls back to Safari', async () => {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-ios-safari-test-'));

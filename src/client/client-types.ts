@@ -433,6 +433,7 @@ export type CaptureSnapshotResult = {
 export type CaptureScreenshotOptions = AgentDeviceRequestOverrides & {
   path?: string;
   overlayRefs?: boolean;
+  pixelDensity?: number;
   fullscreen?: boolean;
   maxSize?: number;
   stabilize?: boolean;

@@ -310,6 +310,11 @@ export function createAgentDeviceClient(
         const screenshot = readScreenshotResultData(data);
         return {
           path: readRequiredString(data, 'path'),
+          width: screenshot?.width,
+          height: screenshot?.height,
+          logicalWidth: screenshot?.logicalWidth,
+          logicalHeight: screenshot?.logicalHeight,
+          pixelDensity: screenshot?.pixelDensity,
           overlayRefs: screenshot?.overlayRefs,
           identifiers: { session },
         };

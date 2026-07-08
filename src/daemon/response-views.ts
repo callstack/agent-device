@@ -61,6 +61,11 @@ function screenshotView(data: DaemonResponseData, level: ResponseLevel): DaemonR
     .map((overlay) => ({ ref: overlay.ref, label: overlay.label }));
   return {
     ...(typeof data.path === 'string' ? { path: data.path } : {}),
+    ...(typeof data.width === 'number' ? { width: data.width } : {}),
+    ...(typeof data.height === 'number' ? { height: data.height } : {}),
+    ...(typeof data.logicalWidth === 'number' ? { logicalWidth: data.logicalWidth } : {}),
+    ...(typeof data.logicalHeight === 'number' ? { logicalHeight: data.logicalHeight } : {}),
+    ...(typeof data.pixelDensity === 'number' ? { pixelDensity: data.pixelDensity } : {}),
     overlayCount: overlays.length,
     overlayRefs,
     ...(data.artifacts !== undefined ? { artifacts: data.artifacts } : {}),

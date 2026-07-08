@@ -3,6 +3,11 @@ import { isRecord, parsePoint, parseRect } from './parsing.ts';
 
 export type ScreenshotResultData = {
   path?: string;
+  width?: number;
+  height?: number;
+  logicalWidth?: number;
+  logicalHeight?: number;
+  pixelDensity?: number;
   overlayRefs?: ScreenshotOverlayRef[];
 };
 
@@ -17,6 +22,11 @@ type ScreenshotOverlayRefData = {
 export function readScreenshotResultData(value: unknown): ScreenshotResultData | undefined {
   if (!isRecord(value)) return undefined;
   const path = typeof value.path === 'string' ? value.path : undefined;
+  const width = typeof value.width === 'number' ? value.width : undefined;
+  const height = typeof value.height === 'number' ? value.height : undefined;
+  const logicalWidth = typeof value.logicalWidth === 'number' ? value.logicalWidth : undefined;
+  const logicalHeight = typeof value.logicalHeight === 'number' ? value.logicalHeight : undefined;
+  const pixelDensity = typeof value.pixelDensity === 'number' ? value.pixelDensity : undefined;
   const overlayRefs = Array.isArray(value.overlayRefs)
     ? value.overlayRefs.filter(isScreenshotOverlayRefData).flatMap((entry) => {
         const overlayRef = readScreenshotOverlayRef(entry);
@@ -25,6 +35,11 @@ export function readScreenshotResultData(value: unknown): ScreenshotResultData |
     : undefined;
   return {
     ...(path ? { path } : {}),
+    ...(width !== undefined ? { width } : {}),
+    ...(height !== undefined ? { height } : {}),
+    ...(logicalWidth !== undefined ? { logicalWidth } : {}),
+    ...(logicalHeight !== undefined ? { logicalHeight } : {}),
+    ...(pixelDensity !== undefined ? { pixelDensity } : {}),
     ...(overlayRefs ? { overlayRefs } : {}),
   };
 }

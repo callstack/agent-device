@@ -74,16 +74,25 @@ test('screenshot replay script round-trips screenshot flags', () => {
       ts: Date.now(),
       command: 'screenshot',
       positionals: ['./page.png'],
-      flags: { screenshotFullscreen: true, screenshotMaxSize: 1024, screenshotNoStabilize: true },
+      flags: {
+        screenshotPixelDensity: 2,
+        screenshotFullscreen: true,
+        screenshotMaxSize: 1024,
+        screenshotNoStabilize: true,
+      },
     },
   ];
 
   writeReplayScript(replayPath, actions, makeSession());
   const script = fs.readFileSync(replayPath, 'utf8');
-  assert.match(script, /screenshot "\.\/page\.png" --fullscreen --max-size 1024 --no-stabilize/);
+  assert.match(
+    script,
+    /screenshot "\.\/page\.png" --pixel-density 2 --fullscreen --max-size 1024 --no-stabilize/,
+  );
 
   const parsed = parseReplayScriptDetailed(script).actions;
   assert.deepEqual(parsed[0]?.positionals, ['./page.png']);
+  assert.equal(parsed[0]?.flags.screenshotPixelDensity, 2);
   assert.equal(parsed[0]?.flags.screenshotFullscreen, true);
   assert.equal(parsed[0]?.flags.screenshotMaxSize, 1024);
   assert.equal(parsed[0]?.flags.screenshotNoStabilize, true);

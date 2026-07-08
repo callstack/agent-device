@@ -4,6 +4,8 @@ import { isMacOs, type DeviceInfo } from '../../../kernel/device.ts';
 import { emitDiagnostic } from '../../../utils/diagnostics.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import type { ExecOptions } from '../../../utils/exec.ts';
+import { resizePngFile } from '../../../utils/png-resize.ts';
+import { readPngSize } from '../../../utils/png-size.ts';
 import { Deadline, retryWithPolicy } from '../../../utils/retry.ts';
 
 import {
@@ -30,6 +32,11 @@ type SimulatorScreenshotFlowDeps = {
   ensureBooted: (device: DeviceInfo) => Promise<void>;
   prepareStatusBarForScreenshot: (device: DeviceInfo) => Promise<() => Promise<void>>;
   captureWithRetry: (device: DeviceInfo, outPath: string) => Promise<void>;
+  normalizeDensity: (
+    device: DeviceInfo,
+    outPath: string,
+    pixelDensity: number | undefined,
+  ) => Promise<void>;
   captureWithRunner: (
     device: DeviceInfo,
     outPath: string,
@@ -43,16 +50,18 @@ type SimulatorScreenshotFlowDeps = {
 type SimulatorScreenshotFlowOptions = {
   appBundleId?: string;
   fullscreen?: boolean;
+  pixelDensity?: number;
   normalizeStatusBar?: boolean;
   runnerOptions?: AppleRunnerCommandOptions;
   skipIosSimulatorBootCheck?: boolean;
-  deps?: SimulatorScreenshotFlowDeps;
+  deps?: Partial<SimulatorScreenshotFlowDeps>;
 };
 
 const defaultSimulatorScreenshotFlowDeps: SimulatorScreenshotFlowDeps = {
   ensureBooted: ensureBootedSimulator,
   prepareStatusBarForScreenshot: prepareSimulatorStatusBarForScreenshot,
   captureWithRetry: captureSimulatorScreenshotWithRetry,
+  normalizeDensity: normalizeIosSimulatorScreenshotDensity,
   captureWithRunner: captureScreenshotViaRunner,
   shouldFallbackToRunner: shouldRetryIosSimulatorScreenshot,
 };
@@ -110,7 +119,7 @@ export async function captureSimulatorScreenshotWithFallback(
     );
   }
 
-  const deps = options.deps ?? defaultSimulatorScreenshotFlowDeps;
+  const deps = { ...defaultSimulatorScreenshotFlowDeps, ...(options.deps ?? {}) };
 
   if (!options.skipIosSimulatorBootCheck) {
     await deps.ensureBooted(device);
@@ -126,6 +135,7 @@ export async function captureSimulatorScreenshotWithFallback(
   try {
     try {
       await deps.captureWithRetry(device, outPath);
+      await deps.normalizeDensity(device, outPath, options.pixelDensity);
       return;
     } catch (error) {
       let screenshotError = error;
@@ -136,6 +146,7 @@ export async function captureSimulatorScreenshotWithFallback(
         await deps.ensureBooted(device);
         try {
           await deps.captureWithRetry(device, outPath);
+          await deps.normalizeDensity(device, outPath, options.pixelDensity);
           return;
         } catch (retryError) {
           screenshotError = retryError;
@@ -153,6 +164,7 @@ export async function captureSimulatorScreenshotWithFallback(
       options.fullscreen,
       options.runnerOptions,
     );
+    await deps.normalizeDensity(device, outPath, options.pixelDensity);
   } finally {
     await restoreStatusBar().catch((error) =>
       emitStatusBarDiagnostic(device, 'restore_failed', error),
@@ -453,6 +465,39 @@ function commandFailureText(error: AppError): string {
     ? details.args.filter((value): value is string => typeof value === 'string').join(' ')
     : '';
   return `${error.message}\n${stdout}\n${stderr}\n${args}`.toLowerCase();
+}
+
+async function normalizeIosSimulatorScreenshotDensity(
+  device: DeviceInfo,
+  outPath: string,
+  pixelDensity: number | undefined,
+): Promise<void> {
+  const sourcePixelDensity = await readIosSimulatorMainScreenScale(device);
+  const targetPixelDensity = pixelDensity ?? 1;
+  if (sourcePixelDensity === targetPixelDensity) {
+    return;
+  }
+
+  const metadata = await readPngSize(outPath);
+  const logicalWidth = metadata.width / sourcePixelDensity;
+  const logicalHeight = metadata.height / sourcePixelDensity;
+  const targetWidth = Math.max(1, Math.round(logicalWidth * targetPixelDensity));
+  const targetHeight = Math.max(1, Math.round(logicalHeight * targetPixelDensity));
+  await resizePngFile(outPath, targetWidth, targetHeight);
+}
+
+async function readIosSimulatorMainScreenScale(device: DeviceInfo): Promise<number> {
+  const scaleResult = await runSimctl(device, ['getenv', device.id, 'SIMULATOR_MAINSCREEN_SCALE'], {
+    timeoutMs: 5_000,
+  });
+  const scale = Number(scaleResult.stdout.trim());
+  if (!Number.isFinite(scale) || scale <= 0) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Failed to read iOS simulator screenshot scale from SIMULATOR_MAINSCREEN_SCALE',
+    );
+  }
+  return scale;
 }
 
 export { prepareSimulatorStatusBarForScreenshot } from './screenshot-status-bar.ts';

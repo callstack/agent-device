@@ -4,6 +4,7 @@ import { requireCommandSupported } from './handlers/response.ts';
 import { SessionStore } from './session-store.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
+import { isIosFamily } from '../kernel/device.ts';
 import { buildSnapshotState, captureSnapshotData } from './handlers/snapshot-capture.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
 import {
@@ -24,9 +25,10 @@ import {
   recordTouchVisualizationEvent,
 } from './recording-gestures.ts';
 import { markPostGestureStabilization } from './post-gesture-stabilization.ts';
-import { normalizeError } from '../kernel/errors.ts';
+import { AppError, normalizeError } from '../kernel/errors.ts';
 import { shouldGuardAndroidBlockingDialog } from './daemon-command-registry.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
+import { readPngSize } from '../utils/png-size.ts';
 
 const GESTURE_PLATFORM_COMMANDS: Readonly<Record<string, string>> = {
   pan: 'pan',
@@ -191,6 +193,7 @@ async function executeGenericPlatformCommand(params: {
       ...dispatchContext,
     });
   }
+  assertSupportedScreenshotPixelDensity(session, request.flags?.screenshotPixelDensity);
   const data = await dispatchScreenshotViaRuntime({
     session,
     sessionName: params.sessionName,
@@ -200,6 +203,9 @@ async function executeGenericPlatformCommand(params: {
   });
   if (request.flags?.overlayRefs && typeof data?.path === 'string') {
     await applyScreenshotOverlay(session, data, params.logPath);
+  }
+  if (typeof data?.path === 'string') {
+    await attachScreenshotMetadata(session, data, request.flags?.screenshotPixelDensity);
   }
   return data;
 }
@@ -331,6 +337,36 @@ async function applyScreenshotOverlay(
     snapshot: overlaySnapshot,
   });
   data.overlayRefs = overlayRefs;
+}
+
+function assertSupportedScreenshotPixelDensity(
+  session: SessionState,
+  pixelDensity: number | undefined,
+): void {
+  if (pixelDensity === undefined) return;
+  if (isIosFamily(session.device) && session.device.kind === 'simulator') return;
+  throw new AppError(
+    'UNSUPPORTED_OPERATION',
+    '--pixel-density is currently supported only on iOS-family simulators',
+  );
+}
+
+async function attachScreenshotMetadata(
+  session: SessionState,
+  data: Record<string, unknown>,
+  requestedPixelDensity: number | undefined,
+): Promise<void> {
+  const path = data.path;
+  if (typeof path !== 'string') return;
+  const size = await readPngSize(path);
+  data.width = size.width;
+  data.height = size.height;
+  if (isIosFamily(session.device) && session.device.kind === 'simulator') {
+    const pixelDensity = requestedPixelDensity ?? 1;
+    data.pixelDensity = pixelDensity;
+    data.logicalWidth = Math.round(size.width / pixelDensity);
+    data.logicalHeight = Math.round(size.height / pixelDensity);
+  }
 }
 
 function recordVisualizationAndAction(params: {

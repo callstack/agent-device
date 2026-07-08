@@ -227,6 +227,8 @@ test('parseArgs recognizes screenshot flags', () => {
     [
       'screenshot',
       'page.png',
+      '--pixel-density',
+      '2',
       '--full',
       '-f',
       '--fullscreen',
@@ -241,6 +243,7 @@ test('parseArgs recognizes screenshot flags', () => {
   );
   assert.equal(parsed.command, 'screenshot');
   assert.deepEqual(parsed.positionals, ['page.png']);
+  assert.equal(parsed.flags.screenshotPixelDensity, 2);
   assert.equal(parsed.flags.screenshotFullscreen, true);
   assert.equal(parsed.flags.screenshotMaxSize, 1024);
   assert.equal(parsed.flags.screenshotNoStabilize, true);

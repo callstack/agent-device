@@ -14,6 +14,7 @@ test('screenshot flag projection maps CLI flags to runtime options', () => {
   assert.deepEqual(
     screenshotOptionsFromFlags({
       overlayRefs: true,
+      screenshotPixelDensity: 2,
       screenshotFullscreen: true,
       screenshotMaxSize: 1024,
       screenshotNoStabilize: true,
@@ -21,6 +22,7 @@ test('screenshot flag projection maps CLI flags to runtime options', () => {
     }),
     {
       overlayRefs: true,
+      pixelDensity: 2,
       fullscreen: true,
       maxSize: 1024,
       stabilize: false,
@@ -33,6 +35,7 @@ test('screenshot flag projection maps public options to request flags', () => {
   assert.deepEqual(
     screenshotFlagsFromOptions({
       overlayRefs: true,
+      pixelDensity: 3,
       fullscreen: true,
       maxSize: 512,
       stabilize: false,
@@ -40,6 +43,7 @@ test('screenshot flag projection maps public options to request flags', () => {
     }),
     {
       overlayRefs: true,
+      screenshotPixelDensity: 3,
       screenshotFullscreen: true,
       screenshotMaxSize: 512,
       screenshotNoStabilize: true,
@@ -64,10 +68,14 @@ test('screenshot script flags use the shared recorded flag contract', () => {
   assert.deepEqual(result, { handled: true, nextIndex: 0 });
   result = readScreenshotScriptFlag({ args: ['--normalize-status-bar'], index: 0, flags });
   assert.deepEqual(result, { handled: true, nextIndex: 0 });
+  result = readScreenshotScriptFlag({ args: ['--pixel-density', '3'], index: 0, flags });
+  assert.deepEqual(result, { handled: true, nextIndex: 1 });
 
   appendScreenshotScriptFlags(parts, flags);
 
   assert.deepEqual(parts, [
+    '--pixel-density',
+    '3',
     '--fullscreen',
     '--max-size',
     '640',
@@ -75,6 +83,7 @@ test('screenshot script flags use the shared recorded flag contract', () => {
     '--normalize-status-bar',
   ]);
   assert.deepEqual(SCREENSHOT_ACTION_FLAG_KEYS, [
+    'screenshotPixelDensity',
     'screenshotFullscreen',
     'screenshotMaxSize',
     'screenshotNoStabilize',
@@ -87,6 +96,7 @@ test('screenshot script flags use the shared recorded flag contract', () => {
   assert.deepEqual(SCREENSHOT_COMMAND_FLAG_KEYS, [
     'out',
     'overlayRefs',
+    'screenshotPixelDensity',
     'screenshotFullscreen',
     'screenshotMaxSize',
     'screenshotNoStabilize',

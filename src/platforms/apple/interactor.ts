@@ -58,6 +58,7 @@ export function createAppleInteractor(
       }
       await screenshotIos(device, outPath, {
         appBundleId: options?.appBundleId,
+        pixelDensity: options?.pixelDensity,
         fullscreen: options?.fullscreen,
         runnerOptions: runnerOpts,
         normalizeStatusBar: options?.normalizeStatusBar,

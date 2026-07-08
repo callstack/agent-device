@@ -61,6 +61,11 @@ const overlayRef = (ref: string, label: string | undefined) => ({
 
 const SCREENSHOT_DATA: DaemonResponseData = {
   path: '/tmp/agent-device-screenshot-xyz/screenshot.png',
+  width: 402,
+  height: 874,
+  logicalWidth: 402,
+  logicalHeight: 874,
+  pixelDensity: 1,
   overlayRefs: [
     overlayRef('e1', 'Continue'),
     overlayRef('e2', undefined), // label omitted → stays undefined in the digest
@@ -83,6 +88,11 @@ test('digest collapses overlay geometry to count + leveled refs, keeps cheap fie
   const digest = screenshotView!(SCREENSHOT_DATA, 'digest');
   expect(digest).toEqual({
     path: '/tmp/agent-device-screenshot-xyz/screenshot.png',
+    width: 402,
+    height: 874,
+    logicalWidth: 402,
+    logicalHeight: 874,
+    pixelDensity: 1,
     overlayCount: 2,
     overlayRefs: [
       { ref: 'e1', label: 'Continue' },

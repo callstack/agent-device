@@ -3,6 +3,7 @@ import { AppError } from '../kernel/errors.ts';
 export const SCREENSHOT_COMMAND_FLAG_KEYS = [
   'out',
   'overlayRefs',
+  'screenshotPixelDensity',
   'screenshotFullscreen',
   'screenshotMaxSize',
   'screenshotNoStabilize',
@@ -10,6 +11,7 @@ export const SCREENSHOT_COMMAND_FLAG_KEYS = [
 ] as const;
 
 export const SCREENSHOT_ACTION_FLAG_KEYS = [
+  'screenshotPixelDensity',
   'screenshotFullscreen',
   'screenshotMaxSize',
   'screenshotNoStabilize',
@@ -28,6 +30,15 @@ type ScreenshotSpecificFlagDefinition = {
 };
 
 export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFlagDefinition[] = [
+  {
+    key: 'screenshotPixelDensity',
+    names: ['--pixel-density'],
+    type: 'int',
+    min: 1,
+    usageLabel: '--pixel-density <n>',
+    usageDescription:
+      'Screenshot: output PNG pixel density in pixels per logical point (currently supported on iOS simulators)',
+  },
   {
     key: 'screenshotFullscreen',
     names: ['--fullscreen', '--full', '-f'],
@@ -65,6 +76,7 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
 export type ScreenshotRequestFlags = {
   out?: string;
   overlayRefs?: boolean;
+  screenshotPixelDensity?: number;
   screenshotFullscreen?: boolean;
   screenshotMaxSize?: number;
   screenshotNoStabilize?: boolean;
@@ -73,11 +85,15 @@ export type ScreenshotRequestFlags = {
 
 export type ScreenshotDispatchFlags = Pick<
   ScreenshotRequestFlags,
-  'screenshotFullscreen' | 'screenshotNoStabilize' | 'screenshotNormalizeStatusBar'
+  | 'screenshotPixelDensity'
+  | 'screenshotFullscreen'
+  | 'screenshotNoStabilize'
+  | 'screenshotNormalizeStatusBar'
 >;
 
 export type ScreenshotRuntimeFlags = Pick<
   ScreenshotRequestFlags,
+  | 'screenshotPixelDensity'
   | 'screenshotFullscreen'
   | 'screenshotMaxSize'
   | 'screenshotNoStabilize'
@@ -86,6 +102,7 @@ export type ScreenshotRuntimeFlags = Pick<
 
 export type ScreenshotPublicOptions = {
   overlayRefs?: boolean;
+  pixelDensity?: number;
   fullscreen?: boolean;
   maxSize?: number;
   stabilize?: boolean;
@@ -94,6 +111,7 @@ export type ScreenshotPublicOptions = {
 
 export type ScreenshotRuntimeOptions = {
   overlayRefs?: boolean;
+  pixelDensity?: number;
   fullscreen?: boolean;
   maxSize?: number;
   stabilize?: boolean;
@@ -105,6 +123,7 @@ export function screenshotOptionsFromFlags(
 ): ScreenshotRuntimeOptions {
   return stripUndefined({
     overlayRefs: flags?.overlayRefs,
+    pixelDensity: flags?.screenshotPixelDensity,
     fullscreen: flags?.screenshotFullscreen,
     maxSize: flags?.screenshotMaxSize,
     stabilize: flags?.screenshotNoStabilize ? false : undefined,
@@ -117,6 +136,7 @@ export function screenshotFlagsFromOptions(
 ): Partial<ScreenshotRequestFlags> {
   return stripUndefined({
     overlayRefs: options.overlayRefs,
+    screenshotPixelDensity: options.screenshotPixelDensity ?? options.pixelDensity,
     screenshotFullscreen: options.screenshotFullscreen ?? options.fullscreen,
     screenshotMaxSize: options.screenshotMaxSize ?? options.maxSize,
     screenshotNoStabilize:
@@ -130,6 +150,9 @@ export function appendScreenshotScriptFlags(
   parts: string[],
   flags: Partial<ScreenshotRequestFlags> | undefined,
 ): void {
+  if (typeof flags?.screenshotPixelDensity === 'number') {
+    parts.push('--pixel-density', String(flags.screenshotPixelDensity));
+  }
   if (flags?.screenshotFullscreen) parts.push('--fullscreen');
   if (typeof flags?.screenshotMaxSize === 'number') {
     parts.push('--max-size', String(flags.screenshotMaxSize));
@@ -156,6 +179,15 @@ export function readScreenshotScriptFlag(params: {
   if (token === '--normalize-status-bar') {
     flags.screenshotNormalizeStatusBar = true;
     return { handled: true, nextIndex: index };
+  }
+  if (token === '--pixel-density') {
+    const value = args[index + 1];
+    const pixelDensity = value === undefined ? NaN : Number(value);
+    if (!Number.isInteger(pixelDensity) || pixelDensity < 1) {
+      throw new AppError('INVALID_ARGS', 'screenshot --pixel-density requires a positive integer');
+    }
+    flags.screenshotPixelDensity = pixelDensity;
+    return { handled: true, nextIndex: index + 1 };
   }
   if (token === '--max-size') {
     const value = args[index + 1];

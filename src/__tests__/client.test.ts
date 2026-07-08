@@ -835,6 +835,11 @@ test('client capture.screenshot normalizes overlay refs from daemon response dat
     ok: true,
     data: {
       path: '/tmp/screenshot.png',
+      width: 402,
+      height: 874,
+      logicalWidth: 402,
+      logicalHeight: 874,
+      pixelDensity: 1,
       overlayRefs: [
         {
           ref: '@e1',
@@ -864,6 +869,11 @@ test('client capture.screenshot normalizes overlay refs from daemon response dat
 
   assert.deepEqual(result, {
     path: '/tmp/screenshot.png',
+    width: 402,
+    height: 874,
+    logicalWidth: 402,
+    logicalHeight: 874,
+    pixelDensity: 1,
     overlayRefs: [
       {
         ref: '@e1',
@@ -929,6 +939,11 @@ test('capture.screenshot normalizes the default-level result (unchanged)', async
       ok: true,
       data: {
         path: '/tmp/shot.png',
+        width: 1206,
+        height: 2622,
+        logicalWidth: 402,
+        logicalHeight: 874,
+        pixelDensity: 3,
         overlayRefs: [{ ref: 'e1', label: 'Login', x: 0, y: 0, width: 10, height: 10 }],
       },
     };
@@ -938,6 +953,11 @@ test('capture.screenshot normalizes the default-level result (unchanged)', async
   const result = await client.capture.screenshot();
 
   assert.equal(result.path, '/tmp/shot.png');
+  assert.equal(result.width, 1206);
+  assert.equal(result.height, 2622);
+  assert.equal(result.logicalWidth, 402);
+  assert.equal(result.logicalHeight, 874);
+  assert.equal(result.pixelDensity, 3);
   assert.deepEqual(result.identifiers, { session: 'qa' });
 });
 

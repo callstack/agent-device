@@ -312,6 +312,7 @@ async function handleScreenshotCommand(
   const screenshotOptions = screenshotOptionsFromFlags(context);
   await interactor.screenshot(screenshotPath, {
     appBundleId: context?.appBundleId,
+    pixelDensity: screenshotOptions.pixelDensity,
     fullscreen: screenshotOptions.fullscreen,
     normalizeStatusBar: screenshotOptions.normalizeStatusBar,
     stabilize: screenshotOptions.stabilize,

@@ -25,12 +25,17 @@ export const screenshotCommand: ClientCommandHandler = async ({ positionals, fla
   }
   const data = {
     path: result.path,
+    ...(typeof result.width === 'number' ? { width: result.width } : {}),
+    ...(typeof result.height === 'number' ? { height: result.height } : {}),
+    ...(typeof result.logicalWidth === 'number' ? { logicalWidth: result.logicalWidth } : {}),
+    ...(typeof result.logicalHeight === 'number' ? { logicalHeight: result.logicalHeight } : {}),
+    ...(typeof result.pixelDensity === 'number' ? { pixelDensity: result.pixelDensity } : {}),
     ...(result.overlayRefs ? { overlayRefs: result.overlayRefs } : {}),
   };
   writeCommandOutput(flags, data, () =>
     result.overlayRefs
-      ? `Annotated ${result.overlayRefs.length} refs onto ${result.path}`
-      : result.path,
+      ? `${formatScreenshotSummary(result)} with ${result.overlayRefs.length} refs annotated`
+      : formatScreenshotSummary(result),
   );
   return true;
 };
@@ -99,6 +104,7 @@ function createClientScreenshotBackend(
         path: outPath,
         session: context.session,
         overlayRefs: options?.overlayRefs,
+        pixelDensity: options?.pixelDensity,
         fullscreen: options?.fullscreen,
         normalizeStatusBar: options?.normalizeStatusBar,
         stabilize: options?.stabilize,
@@ -106,10 +112,25 @@ function createClientScreenshotBackend(
       });
       return {
         path: result.path,
+        ...(typeof result.width === 'number' ? { width: result.width } : {}),
+        ...(typeof result.height === 'number' ? { height: result.height } : {}),
+        ...(typeof result.logicalWidth === 'number' ? { logicalWidth: result.logicalWidth } : {}),
+        ...(typeof result.logicalHeight === 'number'
+          ? { logicalHeight: result.logicalHeight }
+          : {}),
+        ...(typeof result.pixelDensity === 'number' ? { pixelDensity: result.pixelDensity } : {}),
         ...(result.overlayRefs ? { overlayRefs: result.overlayRefs } : {}),
       };
     },
   };
+}
+
+function formatScreenshotSummary(result: CaptureScreenshotResult): string {
+  if (typeof result.width !== 'number' || typeof result.height !== 'number') {
+    return result.path;
+  }
+  const densitySuffix = typeof result.pixelDensity === 'number' ? ` @${result.pixelDensity}x` : '';
+  return `${result.path} (${result.width}x${result.height}${densitySuffix})`;
 }
 
 function resolveClientBackendPlatform(flags: CliFlags): AgentDeviceBackend['platform'] {
