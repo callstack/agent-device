@@ -6,11 +6,11 @@
     },
     "axFreeSynthesis": {
       "via": "RunnerTests+Interaction.swift#synthesizedCoordinateContext",
-      "policy": "resolves AX health, frame source, keyboard policy, and fallback policy once per command/step"
+      "policy": "resolves AX health, screenshot frame, keyboard policy, and fallback policy once per command/step"
     },
     "frameSourcePolicy": {
-      "via": "RunnerTests+Interaction.swift#finiteSynthesizedReferenceFrame",
-      "policy": "provided frame, then fallback bounds, then screenshot size; synthesized command contexts use screenshot size so full-screen screenshot coordinates are not offset by app.frame"
+      "via": "RunnerTests+Interaction.swift#synthesizedScreenshotReferenceFrame",
+      "policy": "screenshot size only; synthesized command contexts do not use app.frame, windows, accessibility frames, or native screen bounds"
     },
     "activationPreflightPolicy": {
       "via": "RunnerTests+CommandExecution.swift#shouldSkipAppActivationPreflight",

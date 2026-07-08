@@ -14,12 +14,6 @@ enum RunnerAccessibilityHealth: String, Equatable {
   case unavailable
 }
 
-enum SynthesizedCoordinateFrameSource: String, Equatable {
-  case provided
-  case fallbackBounds
-  case screenshot
-}
-
 enum SynthesizedKeyboardPolicy: String, Equatable, Hashable {
   case never
   case whenAccessibilityHealthy
@@ -69,7 +63,6 @@ struct SynthesizedGesturePolicy: Equatable, Hashable {
 
 struct SynthesizedCoordinateContext {
   let referenceFrame: CGRect
-  let frameSource: SynthesizedCoordinateFrameSource
   let keyboardPolicy: SynthesizedKeyboardPolicy
   let fallbackPolicy: SynthesizedFallbackPolicy
   let accessibilityHealth: RunnerAccessibilityHealth
@@ -77,7 +70,6 @@ struct SynthesizedCoordinateContext {
   func withReferenceFrame(_ frame: CGRect) -> SynthesizedCoordinateContext {
     SynthesizedCoordinateContext(
       referenceFrame: frame,
-      frameSource: frameSource,
       keyboardPolicy: keyboardPolicy,
       fallbackPolicy: fallbackPolicy,
       accessibilityHealth: accessibilityHealth
@@ -154,7 +146,6 @@ func synthesizedGesturePolicyKinds(for steps: [SequenceStep]) -> [SynthesizedGes
 
 extension RunnerTests {
   func synthesizedCoordinateContexts(
-    app: XCUIApplication,
     policyKinds: [SynthesizedGesturePolicyKind]
   ) -> [SynthesizedGesturePolicyKind: SynthesizedCoordinateContext] {
     var contexts: [SynthesizedGesturePolicyKind: SynthesizedCoordinateContext] = [:]
@@ -165,7 +156,7 @@ extension RunnerTests {
         contexts[kind] = existing
         continue
       }
-      guard let context = synthesizedCoordinateContext(app: app, policy: policy) else { continue }
+      guard let context = synthesizedCoordinateContext(policy: policy) else { continue }
       contexts[kind] = context
       contextByPolicy[policy] = context
     }
@@ -187,10 +178,9 @@ extension RunnerTests {
       return
     }
     NSLog(
-      "AGENT_DEVICE_RUNNER_SYNTHESIZED_GESTURE_POLICY kind=%@ axHealth=%@ frameSource=%@ keyboardPolicy=%@ fallbackPolicy=%@ fallbackAllowed=%@ fallbackAttempted=%@",
+      "AGENT_DEVICE_RUNNER_SYNTHESIZED_GESTURE_POLICY kind=%@ axHealth=%@ frameSource=screenshot keyboardPolicy=%@ fallbackPolicy=%@ fallbackAllowed=%@ fallbackAttempted=%@",
       kind.rawValue,
       context.accessibilityHealth.rawValue,
-      context.frameSource.rawValue,
       context.keyboardPolicy.rawValue,
       context.fallbackPolicy.rawValue,
       context.allowsXCTestCoordinateFallback.description,

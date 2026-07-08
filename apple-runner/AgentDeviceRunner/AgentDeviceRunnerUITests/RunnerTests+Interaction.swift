@@ -807,10 +807,7 @@ extension RunnerTests {
       )
     }
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    guard let context = context ?? synthesizedCoordinateContext(
-      app: app,
-      policy: synthesizedGesturePolicy(.synthesizedDrag)
-    ) else {
+    guard let context = context ?? synthesizedCoordinateContext(policy: synthesizedGesturePolicy(.synthesizedDrag)) else {
       return .unsupported(
         message: "synthesized coordinate drag could not resolve a finite screen frame",
         hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
@@ -860,10 +857,7 @@ extension RunnerTests {
       )
     }
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    guard let context = context ?? synthesizedCoordinateContext(
-      app: app,
-      policy: synthesizedGesturePolicy(.coordinateTap)
-    ) else {
+    guard let context = context ?? synthesizedCoordinateContext(policy: synthesizedGesturePolicy(.coordinateTap)) else {
       return .unsupported(
         message: "synthesized coordinate tap could not resolve a finite screen frame",
         hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
@@ -1049,10 +1043,7 @@ extension RunnerTests {
     context: SynthesizedCoordinateContext? = nil
   ) -> SynthesizedDragPlan? {
 #if os(iOS)
-    let context = context ?? synthesizedCoordinateContext(
-      app: app,
-      policy: synthesizedGesturePolicy(.synthesizedDrag)
-    )
+    let context = context ?? synthesizedCoordinateContext(policy: synthesizedGesturePolicy(.synthesizedDrag))
     guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite,
       let context
     else {
@@ -1092,21 +1083,16 @@ extension RunnerTests {
     )
   }
 
-  func synthesizedCoordinateContext(
-    app: XCUIApplication,
-    policy: SynthesizedGesturePolicy
-  ) -> SynthesizedCoordinateContext? {
+  func synthesizedCoordinateContext(policy: SynthesizedGesturePolicy) -> SynthesizedCoordinateContext? {
 #if os(iOS)
     let health = runnerAccessibilityHealth
-    guard let resolved = finiteSynthesizedReferenceFrame(
-      fallbackBounds: .zero,
-      fallbackScreenshotSize: { XCUIScreen.main.screenshot().image.size }
+    guard let referenceFrame = synthesizedScreenshotReferenceFrame(
+      screenshotSize: { XCUIScreen.main.screenshot().image.size }
     ) else {
       return nil
     }
     return SynthesizedCoordinateContext(
-      referenceFrame: resolved.frame,
-      frameSource: resolved.source,
+      referenceFrame: referenceFrame,
       keyboardPolicy: policy.keyboardPolicy,
       fallbackPolicy: policy.fallbackPolicy,
       accessibilityHealth: health
@@ -1116,25 +1102,15 @@ extension RunnerTests {
 #endif
   }
 
-  func finiteSynthesizedReferenceFrame(
-    providedFrame: CGRect? = nil,
-    fallbackBounds: CGRect,
-    fallbackScreenshotSize: () -> CGSize
-  ) -> (frame: CGRect, source: SynthesizedCoordinateFrameSource)? {
-    if let providedFrame, isUsableReferenceFrame(providedFrame) {
-      return (providedFrame, .provided)
-    }
-    if isUsableReferenceFrame(fallbackBounds) {
-      return (CGRect(x: 0, y: 0, width: fallbackBounds.width, height: fallbackBounds.height), .fallbackBounds)
-    }
-    let screenshotSize = fallbackScreenshotSize()
+  func synthesizedScreenshotReferenceFrame(screenshotSize: () -> CGSize) -> CGRect? {
+    let screenshotSize = screenshotSize()
     guard screenshotSize.width.isFinite, screenshotSize.height.isFinite,
       screenshotSize.width > 0,
       screenshotSize.height > 0
     else {
       return nil
     }
-    return (CGRect(x: 0, y: 0, width: screenshotSize.width, height: screenshotSize.height), .screenshot)
+    return CGRect(x: 0, y: 0, width: screenshotSize.width, height: screenshotSize.height)
   }
 
   func synthesizedFrameAvoidingKeyboardWhenAllowed(
@@ -1166,19 +1142,6 @@ extension RunnerTests {
     return DragPoints(x: x, y: y, x2: x2, y2: y2)
 #endif
   }
-
-  private func isUsableReferenceFrame(_ frame: CGRect) -> Bool {
-    return !frame.isNull
-      && !frame.isEmpty
-      && !frame.isInfinite
-      && frame.minX.isFinite
-      && frame.minY.isFinite
-      && frame.width.isFinite
-      && frame.height.isFinite
-      && frame.width > 0
-      && frame.height > 0
-  }
-
 
   func swipe(app: XCUIApplication, direction: String) -> DragVisualizationFrame? {
     if performTvRemoteSwipeIfAvailable(direction: direction) {
@@ -1481,56 +1444,20 @@ extension RunnerTests {
     }
   }
 
-  func testFiniteSynthesizedReferenceFrameFallsBackToBoundsBeforeScreenshot() throws {
+  func testSynthesizedScreenshotReferenceFrameUsesScreenshotSize() throws {
     let resolved = try XCTUnwrap(
-      finiteSynthesizedReferenceFrame(
-        fallbackBounds: CGRect(x: 20, y: 30, width: 430, height: 932),
-        fallbackScreenshotSize: {
-          XCTFail("screenshot fallback should not be used when screen bounds are finite")
-          return CGSize(width: 1, height: 1)
-        }
-      )
+      synthesizedScreenshotReferenceFrame(screenshotSize: { CGSize(width: 430, height: 932) })
     )
 
-    XCTAssertEqual(resolved.frame, CGRect(x: 0, y: 0, width: 430, height: 932))
-    XCTAssertEqual(resolved.source, .fallbackBounds)
+    XCTAssertEqual(resolved, CGRect(x: 0, y: 0, width: 430, height: 932))
   }
 
-  func testFiniteSynthesizedReferenceFrameFallsBackToScreenshotSize() throws {
-    let resolved = try XCTUnwrap(
-      finiteSynthesizedReferenceFrame(
-        fallbackBounds: .zero,
-        fallbackScreenshotSize: { CGSize(width: 430, height: 932) }
-      )
-    )
-
-    XCTAssertEqual(resolved.frame, CGRect(x: 0, y: 0, width: 430, height: 932))
-    XCTAssertEqual(resolved.source, .screenshot)
-  }
-
-  func testFiniteSynthesizedReferenceFrameRejectsInvalidSources() {
+  func testSynthesizedScreenshotReferenceFrameRejectsInvalidSize() {
     XCTAssertNil(
-      finiteSynthesizedReferenceFrame(
-        fallbackBounds: .zero,
-        fallbackScreenshotSize: { CGSize(width: CGFloat.infinity, height: 932) }
+      synthesizedScreenshotReferenceFrame(
+        screenshotSize: { CGSize(width: CGFloat.infinity, height: 932) }
       )
     )
-  }
-
-  func testFiniteSynthesizedReferenceFramePrefersProvidedFrame() throws {
-    let resolved = try XCTUnwrap(
-      finiteSynthesizedReferenceFrame(
-        providedFrame: CGRect(x: 1, y: 2, width: 300, height: 600),
-        fallbackBounds: CGRect(x: 0, y: 0, width: 430, height: 932),
-        fallbackScreenshotSize: {
-          XCTFail("screenshot fallback should not be used when a provided frame is finite")
-          return CGSize(width: 1, height: 1)
-        }
-      )
-    )
-
-    XCTAssertEqual(resolved.frame, CGRect(x: 1, y: 2, width: 300, height: 600))
-    XCTAssertEqual(resolved.source, .provided)
   }
 
   func testDesktopScrollWheelDeltasMapDirections() throws {

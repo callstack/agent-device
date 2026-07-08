@@ -1059,10 +1059,7 @@ extension RunnerTests {
         var fallback: GestureFallback?
         if command.synthesized == true {
           let policyKind = synthesizedGesturePolicyKind(for: command) ?? .coordinateTap
-          let context = synthesizedCoordinateContext(
-            app: activeApp,
-            policy: synthesizedGesturePolicy(policyKind)
-          )
+          let context = synthesizedCoordinateContext(policy: synthesizedGesturePolicy(policyKind))
           let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
             synthesizedTapAt(app: activeApp, x: x, y: y, context: context)
           }
@@ -1153,10 +1150,7 @@ extension RunnerTests {
         )
       }
       let scrollPolicyKind = synthesizedGesturePolicyKind(for: command) ?? .scroll
-      guard let scrollContext = synthesizedCoordinateContext(
-        app: activeApp,
-        policy: synthesizedGesturePolicy(scrollPolicyKind)
-      ) else {
+      guard let scrollContext = synthesizedCoordinateContext(policy: synthesizedGesturePolicy(scrollPolicyKind)) else {
         return Response(
           ok: false,
           error: ErrorPayload(message: "scroll could not resolve a usable interaction frame")
@@ -1577,10 +1571,7 @@ extension RunnerTests {
     var fallback: GestureFallback?
     if synthesized {
       let durationMs = min(max(durationMs ?? 250, 16), 10000)
-      let context = synthesizedCoordinateContext(
-        app: activeApp,
-        policy: synthesizedGesturePolicy(synthesizedPolicyKind)
-      )
+      let context = synthesizedCoordinateContext(policy: synthesizedGesturePolicy(synthesizedPolicyKind))
       let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
         synthesizedDragAt(
           app: activeApp,
@@ -1634,10 +1625,7 @@ extension RunnerTests {
   ) -> Response? {
 #if os(iOS)
     let policy = synthesizedGesturePolicy(policyKind)
-    let context = context ?? synthesizedCoordinateContext(
-      app: activeApp,
-      policy: policy
-    )
+    let context = context ?? synthesizedCoordinateContext(policy: policy)
     guard let plan = axFreeSynthesizedDragPlan(
       app: activeApp,
       x: x,

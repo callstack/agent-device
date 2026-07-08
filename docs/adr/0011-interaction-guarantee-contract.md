@@ -253,6 +253,10 @@ resolver, keeping the non-obvious rule visible: default iOS scroll must not fall
 back to `XCUICoordinate` when AX health is unknown or unavailable. Explicit
 synthesized drag and sequence steps may still use the coordinate fallback before
 AX health is known, but stop using it once a snapshot stamps AX unavailable.
+Synthesized coordinate contexts use screenshot dimensions as their only frame
+source; cheaper frame sources such as `app.frame`, windows, accessibility
+frames, or native screen bounds are intentionally excluded because they can
+diverge from full-screen screenshot coordinates on affected simulators.
 
 ## Migration plan
 
