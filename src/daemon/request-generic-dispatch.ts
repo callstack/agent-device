@@ -4,7 +4,6 @@ import { requireCommandSupported } from './handlers/response.ts';
 import { SessionStore } from './session-store.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
-import { isIosFamily } from '../kernel/device.ts';
 import { buildSnapshotState, captureSnapshotData } from './handlers/snapshot-capture.ts';
 import { setSessionSnapshot } from './session-snapshot.ts';
 import {
@@ -25,10 +24,13 @@ import {
   recordTouchVisualizationEvent,
 } from './recording-gestures.ts';
 import { markPostGestureStabilization } from './post-gesture-stabilization.ts';
-import { AppError, normalizeError } from '../kernel/errors.ts';
+import { normalizeError } from '../kernel/errors.ts';
 import { shouldGuardAndroidBlockingDialog } from './daemon-command-registry.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
-import { readPngSize } from '../utils/png-size.ts';
+import {
+  assertSupportedScreenshotPixelDensity,
+  readScreenshotResultMetadata,
+} from '../utils/screenshot-density.ts';
 
 const GESTURE_PLATFORM_COMMANDS: Readonly<Record<string, string>> = {
   pan: 'pan',
@@ -206,7 +208,7 @@ async function executeScreenshotPlatformCommand(params: {
   dispatchContext: DaemonCommandContext;
 }): Promise<Record<string, unknown>> {
   const { session, request, positionals, out, dispatchContext } = params;
-  assertSupportedScreenshotPixelDensity(session, request.flags?.screenshotPixelDensity);
+  assertSupportedScreenshotPixelDensity(session.device, request.flags?.screenshotPixelDensity);
   const data = await dispatchScreenshotViaRuntime({
     session,
     sessionName: params.sessionName,
@@ -220,10 +222,15 @@ async function executeScreenshotPlatformCommand(params: {
   if (request.flags?.overlayRefs) {
     await applyScreenshotOverlay(session, data, params.logPath);
   }
-  await attachScreenshotMetadata(session, data, {
-    requestedPixelDensity: request.flags?.screenshotPixelDensity,
-    maxSize: request.flags?.screenshotMaxSize,
-  });
+  Object.assign(
+    data,
+    await readScreenshotResultMetadata({
+      device: session.device,
+      path: data.path,
+      requestedPixelDensity: request.flags?.screenshotPixelDensity,
+      maxSize: request.flags?.screenshotMaxSize,
+    }),
+  );
   return data;
 }
 
@@ -354,43 +361,6 @@ async function applyScreenshotOverlay(
     snapshot: overlaySnapshot,
   });
   data.overlayRefs = overlayRefs;
-}
-
-function assertSupportedScreenshotPixelDensity(
-  session: SessionState,
-  pixelDensity: number | undefined,
-): void {
-  if (pixelDensity === undefined) return;
-  if (isIosFamily(session.device) && session.device.kind === 'simulator') return;
-  throw new AppError(
-    'UNSUPPORTED_OPERATION',
-    '--pixel-density is currently supported only on iOS-family simulators',
-  );
-}
-
-async function attachScreenshotMetadata(
-  session: SessionState,
-  data: Record<string, unknown>,
-  options: { requestedPixelDensity: number | undefined; maxSize: number | undefined },
-): Promise<void> {
-  const path = data.path;
-  if (typeof path !== 'string') return;
-  const requiresMetadata = isIosFamily(session.device) && session.device.kind === 'simulator';
-  let size: { width: number; height: number };
-  try {
-    size = await readPngSize(path);
-  } catch (error) {
-    if (requiresMetadata) throw error;
-    return;
-  }
-  data.width = size.width;
-  data.height = size.height;
-  if (requiresMetadata && options.maxSize === undefined) {
-    const pixelDensity = options.requestedPixelDensity ?? 1;
-    data.pixelDensity = pixelDensity;
-    data.logicalWidth = Math.round(size.width / pixelDensity);
-    data.logicalHeight = Math.round(size.height / pixelDensity);
-  }
 }
 
 function recordVisualizationAndAction(params: {

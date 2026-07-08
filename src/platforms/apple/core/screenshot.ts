@@ -6,6 +6,7 @@ import { AppError } from '../../../kernel/errors.ts';
 import type { ExecOptions } from '../../../utils/exec.ts';
 import { resizePngFile } from '../../../utils/png-resize.ts';
 import { readPngSize } from '../../../utils/png-size.ts';
+import { computeDensityScaledScreenshotSize } from '../../../utils/screenshot-density.ts';
 import { Deadline, retryWithPolicy } from '../../../utils/retry.ts';
 
 import {
@@ -476,17 +477,12 @@ async function normalizeIosSimulatorScreenshotDensity(
   pixelDensity: number | undefined,
 ): Promise<void> {
   const sourcePixelDensity = await readIosSimulatorMainScreenScale(device);
-  const targetPixelDensity = pixelDensity ?? 1;
-  if (sourcePixelDensity === targetPixelDensity) {
-    return;
-  }
-
-  const metadata = await readPngSize(outPath);
-  const logicalWidth = metadata.width / sourcePixelDensity;
-  const logicalHeight = metadata.height / sourcePixelDensity;
-  const targetWidth = Math.max(1, Math.round(logicalWidth * targetPixelDensity));
-  const targetHeight = Math.max(1, Math.round(logicalHeight * targetPixelDensity));
-  await resizePngFile(outPath, targetWidth, targetHeight);
+  const targetSize = computeDensityScaledScreenshotSize(
+    await readPngSize(outPath),
+    sourcePixelDensity,
+    pixelDensity,
+  );
+  if (targetSize) await resizePngFile(outPath, targetSize.width, targetSize.height);
 }
 
 async function readIosSimulatorMainScreenScale(device: DeviceInfo): Promise<number> {
