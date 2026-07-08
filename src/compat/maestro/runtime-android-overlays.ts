@@ -1,10 +1,11 @@
-import type { Point, SnapshotNode, SnapshotState } from '../../kernel/snapshot.ts';
+import type { SnapshotNode, SnapshotState } from '../../kernel/snapshot.ts';
 import {
   findAndroidGboardHandwritingTutorialCancel,
   hasAndroidGboardHandwritingTutorial,
   isAndroidInputMethodSnapshotNode,
-} from '../../platforms/android/input-method-overlays.ts';
+} from '../../snapshot/android-input-method-overlays.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { centerSnapshotRectPoint, invokeMaestroClickPoint } from './runtime-click.ts';
 import type { MaestroRuntimeInvoke, ReplayBaseRequest } from './runtime-support.ts';
 
 export async function dismissAndroidMaestroBlockingOverlay(params: {
@@ -20,7 +21,7 @@ export async function dismissAndroidMaestroBlockingOverlay(params: {
   const cancel = findAndroidGboardHandwritingTutorialCancel(params.snapshot);
   if (!cancel?.rect) return false;
 
-  const point = centerPoint(cancel.rect);
+  const point = centerSnapshotRectPoint(cancel.rect);
   emitDiagnostic({
     level: 'info',
     phase: 'maestro_android_blocking_overlay_dismiss',
@@ -32,15 +33,7 @@ export async function dismissAndroidMaestroBlockingOverlay(params: {
     },
   });
 
-  const response = await params.invoke({
-    ...params.baseReq,
-    command: 'click',
-    positionals: [String(point.x), String(point.y)],
-    flags: {
-      ...params.baseReq.flags,
-      postGestureStabilization: true,
-    },
-  });
+  const response = await invokeMaestroClickPoint({ ...params, point });
   return response.ok;
 }
 
@@ -52,11 +45,4 @@ export function hasAndroidMaestroBlockingOverlay(params: {
   if (params.baseReq.flags?.platform !== 'android') return false;
   if (isAndroidInputMethodSnapshotNode(params.targetNode)) return false;
   return hasAndroidGboardHandwritingTutorial(params.snapshot);
-}
-
-function centerPoint(rect: NonNullable<SnapshotNode['rect']>): Point {
-  return {
-    x: Math.round(rect.x + rect.width / 2),
-    y: Math.round(rect.y + rect.height / 2),
-  };
 }

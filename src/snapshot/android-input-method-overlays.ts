@@ -1,5 +1,5 @@
-import type { RawSnapshotNode, SnapshotNode, SnapshotState } from '../../kernel/snapshot.ts';
-import { classifyAndroidInputOwnership } from './input-ownership.ts';
+import { classifyAndroidInputOwnership } from '../core/android-input-ownership.ts';
+import type { RawSnapshotNode, SnapshotNode, SnapshotState } from '../kernel/snapshot.ts';
 
 const GBOARD_PACKAGE = 'com.google.android.inputmethod.latin';
 const GBOARD_HANDWRITING_TITLE = 'Try out your stylus';

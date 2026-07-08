@@ -16,7 +16,7 @@ import {
 import { annotateCoveredSnapshotNodes } from '../../snapshot/snapshot-occlusion.ts';
 import { normalizeSnapshotTree } from '../../snapshot/snapshot-tree.ts';
 export { buildSnapshotVisibility } from '../../snapshot/snapshot-visibility.ts';
-import { isAndroidInputMethodSnapshotNode } from '../../platforms/android/input-method-overlays.ts';
+import { isAndroidInputMethodSnapshotNode } from '../../snapshot/android-input-method-overlays.ts';
 import type { SessionState } from '../types.ts';
 import {
   ANDROID_FRESHNESS_RETRY_DEADLINE_MS,

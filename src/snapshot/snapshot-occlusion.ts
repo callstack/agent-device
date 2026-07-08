@@ -160,21 +160,34 @@ function isAdditionalOverlayRootNode(
   options: SnapshotOcclusionOptions,
 ): boolean {
   if (options.isAdditionalOverlayNode?.(node) !== true) return false;
+  return !hasRenderableAdditionalOverlayAncestor(node, byIndex, options);
+}
+
+function hasRenderableAdditionalOverlayAncestor(
+  node: RawSnapshotNode,
+  byIndex: Map<number, RawSnapshotNode>,
+  options: SnapshotOcclusionOptions,
+): boolean {
   let current = typeof node.parentIndex === 'number' ? byIndex.get(node.parentIndex) : undefined;
   const visited = new Set<number>();
   while (current && !visited.has(current.index)) {
-    if (
-      options.isAdditionalOverlayNode?.(current) === true &&
-      positiveRect(current.rect) &&
-      !isViewportRoot(current)
-    ) {
-      return false;
-    }
+    if (isRenderableAdditionalOverlayNode(current, options)) return true;
     visited.add(current.index);
     current =
       typeof current.parentIndex === 'number' ? byIndex.get(current.parentIndex) : undefined;
   }
-  return true;
+  return false;
+}
+
+function isRenderableAdditionalOverlayNode(
+  node: RawSnapshotNode,
+  options: SnapshotOcclusionOptions,
+): boolean {
+  return (
+    options.isAdditionalOverlayNode?.(node) === true &&
+    positiveRect(node.rect) !== null &&
+    !isViewportRoot(node)
+  );
 }
 
 function isSemanticTouchNode(node: RawSnapshotNode): boolean {

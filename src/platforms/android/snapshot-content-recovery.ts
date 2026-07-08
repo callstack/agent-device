@@ -1,5 +1,5 @@
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
-import { isAndroidInputMethodOwnedNode } from './input-ownership.ts';
+import { isAndroidInputMethodOwnedNode } from '../../core/android-input-ownership.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
 
 const ANDROID_WINDOW_TYPE_APPLICATION = 1;
@@ -7,6 +7,8 @@ const MAX_REPORTED_WINDOW_TYPES = 8;
 const MIN_FOREGROUND_APP_MEANINGFUL_NODES = 2;
 const MIN_INPUT_METHOD_MEANINGFUL_NODES = 2;
 const ANDROID_SYSTEM_PACKAGES = new Set(['android', 'com.android.systemui']);
+const INSUFFICIENT_APP_CONTENT_REASON =
+  'Android snapshot helper returned insufficient application window content';
 
 export type AndroidHelperContentRecoveryDecision = {
   reason: 'empty-helper-output' | 'system-window-only' | 'content-poor-app-window';
@@ -35,7 +37,7 @@ export function classifyAndroidHelperContentRecovery(
   if (metadata.backend !== 'android-helper') return undefined;
 
   const summary = summarizeAndroidHelperXml(xml, options.foregroundAppPackage);
-  if (summary.nodeCount === 0 || metadata.nodeCount === 0 || metadata.rootPresent === false) {
+  if (isEmptyHelperOutput(summary, metadata)) {
     return buildRecoveryDecision(
       summary,
       metadata,
@@ -44,16 +46,8 @@ export function classifyAndroidHelperContentRecovery(
     );
   }
 
-  const foregroundAppMeaningfulNodeCount = summary.foregroundAppMeaningfulNodeCount;
-  if (
-    foregroundAppMeaningfulNodeCount !== undefined &&
-    (foregroundAppMeaningfulNodeCount === 0 ||
-      (foregroundAppMeaningfulNodeCount < MIN_FOREGROUND_APP_MEANINGFUL_NODES &&
-        summary.meaningfulNodeCount > foregroundAppMeaningfulNodeCount))
-  ) {
-    if (summary.inputMethodMeaningfulNodeCount >= MIN_INPUT_METHOD_MEANINGFUL_NODES) {
-      return undefined;
-    }
+  if (isForegroundAppContentHiddenByInputMethod(summary)) return undefined;
+  if (isForegroundAppContentPoor(summary)) {
     return buildRecoveryDecision(
       summary,
       metadata,
@@ -62,34 +56,25 @@ export function classifyAndroidHelperContentRecovery(
     );
   }
 
-  if (
-    foregroundAppMeaningfulNodeCount === undefined &&
-    summary.applicationWindowRootCount > 0 &&
-    summary.applicationMeaningfulNodeCount < MIN_FOREGROUND_APP_MEANINGFUL_NODES
-  ) {
+  if (isApplicationWindowContentPoor(summary)) {
     return buildRecoveryDecision(
       summary,
       metadata,
       'content-poor-app-window',
-      'Android snapshot helper returned insufficient application window content',
+      INSUFFICIENT_APP_CONTENT_REASON,
     );
   }
 
-  if (
-    foregroundAppMeaningfulNodeCount === undefined &&
-    summary.windowRootCount === 0 &&
-    (metadata.windowCount ?? 0) > 1 &&
-    summary.nonSystemMeaningfulNodeCount < MIN_FOREGROUND_APP_MEANINGFUL_NODES
-  ) {
+  if (isWindowlessMultiWindowContentPoor(summary, metadata)) {
     return buildRecoveryDecision(
       summary,
       metadata,
       'content-poor-app-window',
-      'Android snapshot helper returned insufficient application window content',
+      INSUFFICIENT_APP_CONTENT_REASON,
     );
   }
 
-  if (summary.windowRootCount > 0 && summary.applicationWindowRootCount === 0) {
+  if (isSystemWindowOnly(summary)) {
     return buildRecoveryDecision(
       summary,
       metadata,
@@ -99,6 +84,54 @@ export function classifyAndroidHelperContentRecovery(
   }
 
   return undefined;
+}
+
+function isEmptyHelperOutput(
+  summary: AndroidHelperXmlSummary,
+  metadata: AndroidSnapshotBackendMetadata,
+): boolean {
+  return summary.nodeCount === 0 || metadata.nodeCount === 0 || metadata.rootPresent === false;
+}
+
+function isForegroundAppContentHiddenByInputMethod(summary: AndroidHelperXmlSummary): boolean {
+  return (
+    isForegroundAppContentPoor(summary) &&
+    summary.inputMethodMeaningfulNodeCount >= MIN_INPUT_METHOD_MEANINGFUL_NODES
+  );
+}
+
+function isForegroundAppContentPoor(summary: AndroidHelperXmlSummary): boolean {
+  const foregroundCount = summary.foregroundAppMeaningfulNodeCount;
+  if (foregroundCount === undefined) return false;
+  if (foregroundCount === 0) return true;
+  return (
+    foregroundCount < MIN_FOREGROUND_APP_MEANINGFUL_NODES &&
+    summary.meaningfulNodeCount > foregroundCount
+  );
+}
+
+function isApplicationWindowContentPoor(summary: AndroidHelperXmlSummary): boolean {
+  return (
+    summary.foregroundAppMeaningfulNodeCount === undefined &&
+    summary.applicationWindowRootCount > 0 &&
+    summary.applicationMeaningfulNodeCount < MIN_FOREGROUND_APP_MEANINGFUL_NODES
+  );
+}
+
+function isWindowlessMultiWindowContentPoor(
+  summary: AndroidHelperXmlSummary,
+  metadata: AndroidSnapshotBackendMetadata,
+): boolean {
+  return (
+    summary.foregroundAppMeaningfulNodeCount === undefined &&
+    summary.windowRootCount === 0 &&
+    (metadata.windowCount ?? 0) > 1 &&
+    summary.nonSystemMeaningfulNodeCount < MIN_FOREGROUND_APP_MEANINGFUL_NODES
+  );
+}
+
+function isSystemWindowOnly(summary: AndroidHelperXmlSummary): boolean {
+  return summary.windowRootCount > 0 && summary.applicationWindowRootCount === 0;
 }
 
 function buildRecoveryDecision(
