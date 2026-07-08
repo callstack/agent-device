@@ -1,8 +1,8 @@
 {
   "dimensions": {
     "commandPolicyMapping": {
-      "via": "RunnerTests+SynthesizedGesturePolicy.swift#synthesizedGesturePolicyKind",
-      "policy": "command branches pass explicit synthesized gesture policy kinds; sequence synthesized steps are mapped by kind"
+      "via": "RunnerTests+SynthesizedGesturePolicy.swift#SynthesizedGesturePolicyKind",
+      "policy": "command and sequence branches pass explicit synthesized gesture policy kinds; sequence contexts are resolved once when any synthesized tap or drag step is present"
     },
     "axFreeSynthesis": {
       "via": "RunnerTests+Interaction.swift#synthesizedCoordinateContext",

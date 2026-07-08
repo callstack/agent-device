@@ -105,47 +105,16 @@ func synthesizedGesturePolicy(_ kind: SynthesizedGesturePolicyKind) -> Synthesiz
   }
 }
 
-func synthesizedGesturePolicyKind(for step: SequenceStep) -> SynthesizedGesturePolicyKind? {
-  guard step.synthesized == true else { return nil }
-  switch step.kind {
-  case "tap":
-    return .sequenceSynthesizedTap
-  case "drag":
-    return .sequenceSynthesizedDrag
-  default:
-    return nil
+func sequenceHasSynthesizedCoordinateStep(_ steps: [SequenceStep]) -> Bool {
+  steps.contains { step in
+    step.synthesized == true && (step.kind == "tap" || step.kind == "drag")
   }
-}
-
-func synthesizedGesturePolicyKinds(for steps: [SequenceStep]) -> [SynthesizedGesturePolicyKind] {
-  var seen: Set<SynthesizedGesturePolicyKind> = []
-  var kinds: [SynthesizedGesturePolicyKind] = []
-  for step in steps {
-    guard let kind = synthesizedGesturePolicyKind(for: step), seen.insert(kind).inserted else {
-      continue
-    }
-    kinds.append(kind)
-  }
-  return kinds
 }
 
 extension RunnerTests {
-  func synthesizedCoordinateContexts(
-    policyKinds: [SynthesizedGesturePolicyKind]
-  ) -> [SynthesizedGesturePolicyKind: SynthesizedCoordinateContext] {
-    var contexts: [SynthesizedGesturePolicyKind: SynthesizedCoordinateContext] = [:]
-    var contextByPolicy: [SynthesizedGesturePolicy: SynthesizedCoordinateContext] = [:]
-    for kind in policyKinds {
-      let policy = synthesizedGesturePolicy(kind)
-      if let existing = contextByPolicy[policy] {
-        contexts[kind] = existing
-        continue
-      }
-      guard let context = synthesizedCoordinateContext(policy: policy) else { continue }
-      contexts[kind] = context
-      contextByPolicy[policy] = context
-    }
-    return contexts
+  func synthesizedSequenceCoordinateContext(steps: [SequenceStep]) -> SynthesizedCoordinateContext? {
+    guard sequenceHasSynthesizedCoordinateStep(steps) else { return nil }
+    return synthesizedCoordinateContext(policy: synthesizedGesturePolicy(.sequenceSynthesizedTap))
   }
 
   func logSynthesizedGesturePolicyDecision(

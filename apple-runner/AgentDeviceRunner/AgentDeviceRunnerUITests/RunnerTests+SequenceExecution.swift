@@ -40,10 +40,10 @@ extension RunnerTests {
       ? resolvedTouchVisualizationFrame(app: activeApp, x: firstStep.x!, y: firstStep.y!)
       : nil
 
-    let synthesizedContexts = synthesizedCoordinateContexts(policyKinds: synthesizedGesturePolicyKinds(for: steps))
+    let synthesizedContext = synthesizedSequenceCoordinateContext(steps: steps)
 
     let execution = assembleSequenceExecution(steps: steps) { _, step in
-      performSequenceStep(step, activeApp: activeApp, synthesizedContexts: synthesizedContexts)
+      performSequenceStep(step, activeApp: activeApp, synthesizedContext: synthesizedContext)
     }
     return sequenceResponse(execution: execution, touchFrame: firstFrame)
   }
@@ -144,7 +144,7 @@ extension RunnerTests {
   private func performSequenceStep(
     _ step: SequenceStep,
     activeApp: XCUIApplication,
-    synthesizedContexts: [SynthesizedGesturePolicyKind: SynthesizedCoordinateContext] = [:]
+    synthesizedContext: SynthesizedCoordinateContext? = nil
   ) -> SequenceStepOutcome {
     let x = step.x ?? 0
     let y = step.y ?? 0
@@ -153,7 +153,6 @@ extension RunnerTests {
     // change the touch mechanism for these inputs.
     if step.kind == "tap", step.synthesized == true {
       let policyKind = SynthesizedGesturePolicyKind.sequenceSynthesizedTap
-      let synthesizedContext = synthesizedContexts[policyKind]
 #if os(iOS)
       guard let synthesizedContext else {
         let nowMs = ProcessInfo.processInfo.systemUptime * 1000
@@ -197,7 +196,6 @@ extension RunnerTests {
     }
     if step.kind == "drag", step.synthesized == true {
       let policyKind = SynthesizedGesturePolicyKind.sequenceSynthesizedDrag
-      let synthesizedContext = synthesizedContexts[policyKind]
       let dragPoints: DragPoints
       let dragContext: SynthesizedCoordinateContext?
 #if os(iOS)
@@ -415,26 +413,30 @@ extension RunnerTests {
     XCTAssertTrue(response.error?.message.contains("step 1") ?? false)
   }
 
-  func testSynthesizedGesturePolicyKindMapsSequenceSteps() {
-    let synthesizedTap = sequenceStep(kind: "tap", x: 1, y: 2, synthesized: true)
-    let synthesizedDrag = sequenceStep(kind: "drag", x: 1, y: 2, x2: 3, y2: 4, synthesized: true)
-
-    XCTAssertEqual(synthesizedGesturePolicyKind(for: synthesizedTap), .sequenceSynthesizedTap)
-    XCTAssertEqual(synthesizedGesturePolicyKind(for: synthesizedDrag), .sequenceSynthesizedDrag)
-    XCTAssertNil(synthesizedGesturePolicyKind(for: sequenceStep(kind: "tap", x: 1, y: 2)))
-    XCTAssertNil(
-      synthesizedGesturePolicyKind(for: sequenceStep(kind: "doubleTap", x: 1, y: 2, synthesized: true))
+  func testSequenceHasSynthesizedCoordinateStep() {
+    XCTAssertTrue(
+      sequenceHasSynthesizedCoordinateStep([
+        sequenceStep(kind: "tap", x: 1, y: 2, synthesized: true),
+        sequenceStep(kind: "drag", x: 1, y: 2, x2: 3, y2: 4, synthesized: true),
+      ])
+    )
+    XCTAssertFalse(
+      sequenceHasSynthesizedCoordinateStep([
+        sequenceStep(kind: "tap", x: 1, y: 2),
+        sequenceStep(kind: "doubleTap", x: 1, y: 2, synthesized: true),
+      ])
     )
   }
 
-  func testSynthesizedGesturePolicyKindsPreserveSequenceStepPaths() {
-    let kinds = synthesizedGesturePolicyKinds(for: [
-      sequenceStep(kind: "tap", x: 1, y: 2, synthesized: true),
-      sequenceStep(kind: "drag", x: 1, y: 2, x2: 3, y2: 4, synthesized: true),
-      sequenceStep(kind: "tap", x: 5, y: 6, synthesized: true),
-    ])
-
-    XCTAssertEqual(kinds, [.sequenceSynthesizedTap, .sequenceSynthesizedDrag])
+  func testSequenceSynthesizedTapAndDragShareCoordinatePolicy() {
+    XCTAssertEqual(
+      synthesizedGesturePolicy(.sequenceSynthesizedTap),
+      synthesizedGesturePolicy(.sequenceSynthesizedDrag)
+    )
+    XCTAssertEqual(
+      synthesizedGesturePolicy(.sequenceSynthesizedTap),
+      synthesizedGesturePolicy(.synthesizedDrag)
+    )
   }
 
   func testAssembleSequencePreservesOrderOnSuccess() {
