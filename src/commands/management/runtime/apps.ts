@@ -6,6 +6,7 @@ import type {
   BackendOpenTarget,
   BackendPushInput,
 } from '../../../backend.ts';
+import type { JsonObject } from '../../../contracts/json.ts';
 import type { FileInputRef } from '../../../io.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { assertResolvedAppsFilter } from '../app-inventory-contract.ts';
@@ -66,7 +67,7 @@ export type GetAppStateCommandResult = {
 export type AppPushInput =
   | {
       kind: 'json';
-      payload: Record<string, unknown>;
+      payload: JsonObject;
     }
   | FileInputRef;
 
@@ -83,13 +84,13 @@ export type PushAppCommandResult = {
 
 export type TriggerAppEventCommandOptions = CommandContext & {
   name: string;
-  payload?: Record<string, unknown>;
+  payload?: JsonObject;
 };
 
 export type TriggerAppEventCommandResult = {
   kind: 'appEventTriggered';
   name: string;
-  payload?: Record<string, unknown>;
+  payload?: JsonObject;
 } & BackendResultEnvelope;
 
 export const openAppCommand: RuntimeCommand<OpenAppCommandOptions, OpenAppCommandResult> = async (
@@ -322,16 +323,12 @@ function requireAppEventName(name: string): string {
   return normalized;
 }
 
-function assertPayload(payload: Record<string, unknown> | undefined, field: string): void {
+function assertPayload(payload: JsonObject | undefined, field: string): void {
   if (payload === undefined) return;
   validateJsonObjectPayload(payload, field, MAX_APP_EVENT_PAYLOAD_BYTES);
 }
 
-function validateJsonObjectPayload(
-  payload: Record<string, unknown>,
-  field: string,
-  maxBytes: number,
-): void {
+function validateJsonObjectPayload(payload: JsonObject, field: string, maxBytes: number): void {
   assertJsonObject(payload, field);
   const payloadBytes = Buffer.byteLength(stringifyJsonObject(payload, field), 'utf8');
   if (payloadBytes > maxBytes) {
@@ -339,13 +336,13 @@ function validateJsonObjectPayload(
   }
 }
 
-function assertJsonObject(payload: Record<string, unknown>, field: string): void {
+function assertJsonObject(payload: JsonObject, field: string): void {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     throw new AppError('INVALID_ARGS', `${field} must be a JSON object`);
   }
 }
 
-function stringifyJsonObject(payload: Record<string, unknown>, field: string): string {
+function stringifyJsonObject(payload: JsonObject, field: string): string {
   try {
     const serialized = JSON.stringify(payload);
     if (typeof serialized !== 'string') {

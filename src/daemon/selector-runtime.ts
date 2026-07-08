@@ -373,7 +373,7 @@ async function dispatchDirectIosSelectorWait(
     selectorChain: [selector.raw],
   };
   recordIfSession(params.sessionStore, params.sessionName, params.req, payload);
-  const response: DaemonResponse = { ok: true, data: payload };
+  const response: DaemonResponse = { ok: true, data: stripSelectorChain(payload) };
   return await maybeWaitTimeoutSurfaceResponse(
     { req: params.req, logPath: params.logPath, session: params.session, device: params.device },
     response,

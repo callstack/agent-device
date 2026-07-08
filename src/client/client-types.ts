@@ -51,6 +51,7 @@ export type { TargetShutdownResult } from '../target-shutdown-contract.ts';
 import type { PerfAction, PerfArea, PerfKind, PerfSubject } from '../contracts/perf.ts';
 import type { AlertAction, AlertInfo } from '../alert-contract.ts';
 import type { DebugSymbolsOptions, DebugSymbolsResult } from '../contracts/debug-symbols.ts';
+import type { JsonObject } from '../contracts/json.ts';
 import type {
   CloudProviderProfileFields,
   RemoteConnectionProfileFields,
@@ -76,6 +77,11 @@ export type {
 export type { ClipboardCommandResult } from '../contracts/clipboard.ts';
 export type { AppStateCommandResult } from '../contracts/app-state.ts';
 export type { KeyboardCommandResult } from '../contracts/keyboard.ts';
+export type { WaitCommandResult } from '../contracts/wait.ts';
+export type { PrepareCommandResult } from '../contracts/prepare.ts';
+export type { PushCommandResult } from '../contracts/push.ts';
+export type { TriggerAppEventCommandResult } from '../contracts/app-events.ts';
+export type { JsonObject, JsonPrimitive, JsonValue } from '../contracts/json.ts';
 
 export type AgentDeviceDaemonTransport = (
   req: Omit<DaemonRequest, 'token'>,
@@ -561,7 +567,7 @@ export type ViewportCommandOptions = DeviceCommandBaseOptions & {
 };
 
 export type AgentDeviceCommandClient = {
-  wait: (options: WaitCommandOptions) => Promise<CommandRequestResult>;
+  wait: (options: WaitCommandOptions) => Promise<CommandResult<'wait'>>;
   alert: (options?: AlertCommandOptions) => Promise<CommandRequestResult>;
   appState: (options?: AppStateCommandOptions) => Promise<CommandResult<'appstate'>>;
   back: (options?: BackCommandOptions) => Promise<CommandResult<'back'>>;
@@ -577,7 +583,7 @@ export type AgentDeviceCommandClient = {
    * JSON prepare results include timing.additiveParts for additive wall-clock phases.
    * Top-level buildMs/connectMs/healthCheckMs are diagnostics and may overlap.
    */
-  prepare: (options: PrepareCommandOptions) => Promise<CommandRequestResult>;
+  prepare: (options: PrepareCommandOptions) => Promise<CommandResult<'prepare'>>;
   viewport: (options: ViewportCommandOptions) => Promise<CommandResult<'viewport'>>;
 };
 
@@ -628,12 +634,12 @@ export type DeviceShutdownOptions = DeviceCommandBaseOptions;
 
 export type AppPushOptions = DeviceCommandBaseOptions & {
   app: string;
-  payload: string | Record<string, unknown>;
+  payload: string | JsonObject;
 };
 
 export type AppTriggerEventOptions = DeviceCommandBaseOptions & {
   event: string;
-  payload?: Record<string, unknown>;
+  payload?: JsonObject;
 };
 
 export type CaptureDiffOptions = DeviceCommandBaseOptions &
@@ -1047,8 +1053,8 @@ export type AgentDeviceClient = {
     list: (options?: AppListOptions) => Promise<string[]>;
     open: (options: AppOpenOptions) => Promise<AppOpenResult>;
     close: (options?: AppCloseOptions) => Promise<AppCloseResult>;
-    push: (options: AppPushOptions) => Promise<CommandRequestResult>;
-    triggerEvent: (options: AppTriggerEventOptions) => Promise<CommandRequestResult>;
+    push: (options: AppPushOptions) => Promise<CommandResult<'push'>>;
+    triggerEvent: (options: AppTriggerEventOptions) => Promise<CommandResult<'trigger-app-event'>>;
   };
   materializations: {
     release: (options: MaterializationReleaseOptions) => Promise<MaterializationReleaseResult>;

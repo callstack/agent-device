@@ -133,6 +133,31 @@ async function withDirectSelectorScenario(
   );
 }
 
+test('Provider-backed direct iOS selector wait strips selectorChain from the public response', async () => {
+  const transcript = createProviderTranscript([
+    {
+      command: 'ios.runner.querySelector',
+      deviceId: DEVICE_ID,
+      platform: 'apple',
+      request: {
+        command: 'querySelector',
+        selectorKey: 'label',
+        selectorValue: 'Continue',
+        appBundleId: APP,
+      },
+      result: { found: true, node: { label: 'Continue' } },
+    },
+  ]);
+
+  await withDirectSelectorScenario(transcript, async (daemon) => {
+    const wait = await daemon.callCommand('wait', ['label="Continue"']);
+    const data = assertRpcOk(wait);
+    assert.equal(data.kind, 'selector');
+    assert.equal(data.selector, 'label="Continue"');
+    assert.equal('selectorChain' in data, false);
+  });
+});
+
 test('Provider-backed integration runner AMBIGUOUS_MATCH falls back to runtime disambiguation', async () => {
   const transcript = createProviderTranscript([
     // Direct selector tap attempt fails with the runner's semantic shape.

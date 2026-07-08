@@ -16,6 +16,10 @@ import type {
 import type { ClipboardCommandResult } from '../../../contracts/clipboard.ts';
 import type { AppStateCommandResult } from '../../../contracts/app-state.ts';
 import type { KeyboardCommandResult } from '../../../contracts/keyboard.ts';
+import type { WaitCommandResult } from '../../../contracts/wait.ts';
+import type { PrepareCommandResult } from '../../../contracts/prepare.ts';
+import type { PushCommandResult } from '../../../contracts/push.ts';
+import type { TriggerAppEventCommandResult } from '../../../contracts/app-events.ts';
 import type { CommandResult, CommandResultMap } from '../command-result.ts';
 
 /**
@@ -42,6 +46,13 @@ test('seeded CommandResult entries resolve to their existing contract result typ
   const appstate: Equal<CommandResult<'appstate'>, AppStateCommandResult> = true;
   const keyboard: Equal<CommandResult<'keyboard'>, KeyboardCommandResult> = true;
   const tvRemote: Equal<CommandResult<'tv-remote'>, TvRemoteCommandResult> = true;
+  const wait: Equal<CommandResult<'wait'>, WaitCommandResult> = true;
+  const prepare: Equal<CommandResult<'prepare'>, PrepareCommandResult> = true;
+  const push: Equal<CommandResult<'push'>, PushCommandResult> = true;
+  const triggerAppEvent: Equal<
+    CommandResult<'trigger-app-event'>,
+    TriggerAppEventCommandResult
+  > = true;
   expect([
     press,
     fill,
@@ -57,7 +68,30 @@ test('seeded CommandResult entries resolve to their existing contract result typ
     appstate,
     keyboard,
     tvRemote,
-  ]).toEqual([true, true, true, true, true, true, true, true, true, true, true, true, true, true]);
+    wait,
+    prepare,
+    push,
+    triggerAppEvent,
+  ]).toEqual([
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
+  ]);
 });
 
 test('unmigrated commands fall back to the untyped Record bag, keeping the union total', () => {
@@ -84,6 +118,10 @@ test('CommandResultMap is seeded only from already-existing contract result type
     | 'appstate'
     | 'keyboard'
     | 'tv-remote'
+    | 'wait'
+    | 'prepare'
+    | 'push'
+    | 'trigger-app-event'
   > = true;
   expect(keys).toBe(true);
 });

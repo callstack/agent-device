@@ -117,12 +117,13 @@ export function createAgentDeviceClient(
 
   return {
     command: {
-      wait: async (options) => await executeCommand('wait', options),
+      wait: async (options) => await executeCommand<CommandResult<'wait'>>('wait', options),
       alert: async (options = {}) => await executeCommand('alert', options),
       ...projectedSystemCommands,
       reactNative: async (options) => await executeCommand('react-native', options),
       doctor: async (options = {}) => await executeCommand('doctor', options),
-      prepare: async (options) => await executeCommand('prepare', options),
+      prepare: async (options) =>
+        await executeCommand<CommandResult<'prepare'>>('prepare', options),
       viewport: async (options) =>
         await executeCommand<CommandResult<'viewport'>>('viewport', options),
     },
@@ -226,8 +227,9 @@ export function createAgentDeviceClient(
           identifiers: { session },
         };
       },
-      push: async (options) => await executeCommand('push', options),
-      triggerEvent: async (options) => await executeCommand('trigger-app-event', options),
+      push: async (options) => await executeCommand<CommandResult<'push'>>('push', options),
+      triggerEvent: async (options) =>
+        await executeCommand<CommandResult<'trigger-app-event'>>('trigger-app-event', options),
     },
     materializations: {
       release: async (options: MaterializationReleaseOptions) =>

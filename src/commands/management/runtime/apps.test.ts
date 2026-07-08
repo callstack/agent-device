@@ -6,6 +6,7 @@ import type {
   BackendOpenTarget,
   BackendPushInput,
 } from '../../../backend.ts';
+import type { JsonObject } from '../../../contracts/json.ts';
 import { createLocalArtifactAdapter } from '../../../io.ts';
 import {
   createAgentDevice,
@@ -108,7 +109,7 @@ test('runtime app push rejects local payload paths under restricted policy', asy
   assert.equal(pushCalled, false);
 });
 
-test('runtime app commands validate JSON payloads', async () => {
+test('runtime app commands reject invalid event names', async () => {
   const device = createAgentDevice({
     backend: createAppsBackend([]),
     artifacts: createLocalArtifactAdapter(),
@@ -119,11 +120,16 @@ test('runtime app commands validate JSON payloads', async () => {
     () => device.apps.triggerEvent({ name: 'bad event' }),
     /Invalid apps\.triggerEvent name/,
   );
+});
+
+test('runtime app push validates JSON payloads', async () => {
+  const device = createAppsRuntimeDevice();
+
   await assert.rejects(
     () =>
       device.apps.push({
         app: 'com.example.app',
-        input: { kind: 'json', payload: [] as unknown as Record<string, unknown> },
+        input: { kind: 'json', payload: [] as unknown as JsonObject },
       }),
     /JSON payload must be a JSON object/,
   );
@@ -133,7 +139,7 @@ test('runtime app commands validate JSON payloads', async () => {
         app: 'com.example.app',
         input: {
           kind: 'json',
-          payload: { count: 1n } as unknown as Record<string, unknown>,
+          payload: { count: 1n } as unknown as JsonObject,
         },
       }),
     /JSON payload must be JSON-serializable/,
@@ -144,7 +150,7 @@ test('runtime app commands validate JSON payloads', async () => {
         app: 'com.example.app',
         input: {
           kind: 'json',
-          payload: { toJSON: () => undefined } as unknown as Record<string, unknown>,
+          payload: { toJSON: () => undefined } as unknown as JsonObject,
         },
       }),
     /JSON payload must be JSON-serializable/,
@@ -162,9 +168,22 @@ test('runtime app commands validate JSON payloads', async () => {
   );
   await assert.rejects(
     () =>
+      device.apps.push({
+        app: 'com.example.app',
+        input: undefined as unknown as Parameters<typeof device.apps.push>[0]['input'],
+      }),
+    /apps\.push requires an input/,
+  );
+});
+
+test('runtime app events validate JSON payloads', async () => {
+  const device = createAppsRuntimeDevice();
+
+  await assert.rejects(
+    () =>
       device.apps.triggerEvent({
         name: 'example.ready',
-        payload: { count: 1n } as unknown as Record<string, unknown>,
+        payload: { count: 1n } as unknown as JsonObject,
       }),
     /payload for "example.ready" must be JSON-serializable/,
   );
@@ -172,7 +191,7 @@ test('runtime app commands validate JSON payloads', async () => {
     () =>
       device.apps.triggerEvent({
         name: 'example.ready',
-        payload: { toJSON: () => undefined } as unknown as Record<string, unknown>,
+        payload: { toJSON: () => undefined } as unknown as JsonObject,
       }),
     /payload for "example.ready" must be JSON-serializable/,
   );
@@ -184,15 +203,15 @@ test('runtime app commands validate JSON payloads', async () => {
       }),
     /payload for "example.ready" exceeds 8192 bytes/,
   );
-  await assert.rejects(
-    () =>
-      device.apps.push({
-        app: 'com.example.app',
-        input: undefined as unknown as Parameters<typeof device.apps.push>[0]['input'],
-      }),
-    /apps\.push requires an input/,
-  );
 });
+
+function createAppsRuntimeDevice() {
+  return createAgentDevice({
+    backend: createAppsBackend([]),
+    artifacts: createLocalArtifactAdapter(),
+    policy: localCommandPolicy(),
+  });
+}
 
 function createAppsBackend(calls: unknown[]): AgentDeviceBackend {
   return {

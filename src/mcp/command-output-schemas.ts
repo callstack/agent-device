@@ -266,6 +266,111 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     ['action', 'button', 'message'],
   ),
 
+  // src/contracts/wait.ts — compact public daemon projection.
+  wait: objectSchema(
+    {
+      waitedMs: numberSchema(),
+      kind: constSchema('selector'),
+      text: stringSchema(),
+      selector: stringSchema(),
+      captures: numberSchema(),
+      nodeCount: numberSchema(),
+      hint: stringSchema(),
+      warning: stringSchema(),
+    },
+    ['waitedMs'],
+  ),
+
+  // src/contracts/prepare.ts — prepare is not MCP-exposed, but the schema stays
+  // map-complete with CommandResultMap.
+  prepare: objectSchema(
+    {
+      action: constSchema('ios-runner'),
+      platform: enumSchema(PLATFORMS),
+      deviceId: stringSchema(),
+      deviceName: stringSchema(),
+      kind: enumSchema(DEVICE_KINDS),
+      durationMs: numberSchema(),
+      runner: objectSchema({}, []),
+      cache: enumSchema(['exact', 'restore-key', 'miss', 'external']),
+      artifact: enumSchema(['valid', 'rebuilt']),
+      buildMs: numberSchema(),
+      connectMs: numberSchema(),
+      healthCheckMs: numberSchema(),
+      xctestrunPath: stringSchema(),
+      recoveryReason: stringSchema(),
+      failureReason: stringSchema(),
+      timing: objectSchema(
+        {
+          totalMs: numberSchema(),
+          additiveParts: objectSchema(
+            {
+              buildMs: numberSchema(),
+              connectAfterBuildMs: numberSchema(),
+              healthCheckMs: numberSchema(),
+            },
+            ['connectAfterBuildMs', 'healthCheckMs'],
+          ),
+          containment: objectSchema(
+            {
+              connectMs: { type: 'array', items: constSchema('buildMs') },
+              healthCheckMs: { type: 'array', items: stringSchema() },
+            },
+            ['healthCheckMs'],
+          ),
+          note: stringSchema(),
+        },
+        ['totalMs', 'additiveParts', 'containment', 'note'],
+      ),
+      message: stringSchema(),
+    },
+    [
+      'action',
+      'platform',
+      'deviceId',
+      'deviceName',
+      'kind',
+      'durationMs',
+      'runner',
+      'connectMs',
+      'healthCheckMs',
+      'timing',
+      'message',
+    ],
+  ),
+
+  // src/contracts/push.ts — discriminated union on public platform.
+  push: {
+    type: 'object',
+    oneOf: [
+      objectSchema(
+        { platform: constSchema('ios'), bundleId: stringSchema(), message: stringSchema() },
+        ['platform', 'bundleId', 'message'],
+      ),
+      objectSchema(
+        {
+          platform: constSchema('android'),
+          package: stringSchema(),
+          action: stringSchema(),
+          extrasCount: numberSchema(),
+          message: stringSchema(),
+        },
+        ['platform', 'package', 'action', 'extrasCount', 'message'],
+      ),
+    ],
+  },
+
+  // src/contracts/app-events.ts
+  'trigger-app-event': objectSchema(
+    {
+      event: stringSchema(),
+      eventUrl: stringSchema(),
+      transport: constSchema('deep-link'),
+      message: stringSchema(),
+    },
+    ['event', 'eventUrl', 'transport', 'message'],
+  ),
+
   // src/contracts/clipboard.ts — discriminated union on `action`.
   clipboard: {
     type: 'object',

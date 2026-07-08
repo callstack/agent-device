@@ -1,9 +1,60 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import { createAgentDeviceClient, type AgentDeviceClientConfig } from '../client/client.ts';
+import {
+  createAgentDeviceClient,
+  type AgentDeviceClient,
+  type AgentDeviceClientConfig,
+  type PrepareCommandResult,
+  type PushCommandResult,
+  type TriggerAppEventCommandResult,
+  type WaitCommandResult,
+} from '../client/client.ts';
 import { runCommand } from '../commands/command-surface.ts';
+import type { CommandResult } from '../core/command-descriptor/command-result.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData } from '../kernel/contracts.ts';
 import { AppError } from '../kernel/errors.ts';
+
+type Equal<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
+
+const closedProjectionResponses: Record<string, DaemonResponseData> = {
+  wait: { waitedMs: 25, text: 'Ready' },
+  prepare: {
+    action: 'ios-runner',
+    platform: 'ios',
+    deviceId: 'SIM-001',
+    deviceName: 'iPhone 16',
+    kind: 'simulator',
+    durationMs: 30,
+    runner: { uptimeMs: 42 },
+    cache: 'exact',
+    artifact: 'valid',
+    buildMs: 10,
+    connectMs: 20,
+    healthCheckMs: 10,
+    xctestrunPath: '/tmp/AgentDevice.xctestrun',
+    timing: {
+      totalMs: 30,
+      additiveParts: { buildMs: 10, connectAfterBuildMs: 10, healthCheckMs: 10 },
+      containment: { connectMs: ['buildMs'], healthCheckMs: [] },
+      note: 'Use additiveParts.',
+    },
+    message: 'Prepared Apple runner: iPhone 16',
+  },
+  push: {
+    platform: 'android',
+    package: 'com.example.demo',
+    action: 'com.example.demo.TEST_PUSH',
+    extrasCount: 1,
+    message: 'Pushed notification to com.example.demo',
+  },
+  'trigger-app-event': {
+    event: 'screenshot_taken',
+    eventUrl: 'demo://agent-device/event?name=screenshot_taken',
+    transport: 'deep-link',
+    message: 'Triggered app event: screenshot_taken',
+  },
+};
 
 function createTransport(
   handler: (req: Omit<DaemonRequest, 'token'>) => Promise<DaemonResponse> | DaemonResponse,
@@ -33,6 +84,43 @@ function createTransport(
       return await handler(req);
     },
   };
+}
+
+test('client exposes narrowed result types for closed daemon projections', async () => {
+  const setup = createTransport(async (req) => closedProjectionResponse(req.command));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const waitResult = await client.command.wait({ durationMs: 25 });
+  const prepareResult = await client.command.prepare({ action: 'ios-runner' });
+  const pushResult = await client.apps.push({
+    app: 'com.example.demo',
+    payload: { extras: { source: 'test' } },
+  });
+  const triggerResult = await client.apps.triggerEvent({ event: 'screenshot_taken' });
+
+  const waitType: Equal<typeof waitResult, WaitCommandResult> = true;
+  const prepareType: Equal<typeof prepareResult, PrepareCommandResult> = true;
+  const pushType: Equal<typeof pushResult, PushCommandResult> = true;
+  const triggerType: Equal<typeof triggerResult, TriggerAppEventCommandResult> = true;
+  const clientWaitType: Equal<
+    Awaited<ReturnType<AgentDeviceClient['command']['wait']>>,
+    CommandResult<'wait'>
+  > = true;
+
+  assert.deepEqual(
+    [waitType, prepareType, pushType, triggerType, clientWaitType],
+    [true, true, true, true, true],
+  );
+  assert.deepEqual(waitResult, { waitedMs: 25, text: 'Ready' });
+  assert.equal(prepareResult.timing.additiveParts.connectAfterBuildMs, 10);
+  assert.equal(pushResult.platform, 'android');
+  assert.equal(triggerResult.transport, 'deep-link');
+});
+
+function closedProjectionResponse(command: string): DaemonResponse {
+  const data = closedProjectionResponses[command];
+  if (!data) throw new Error(`Unexpected command: ${command}`);
+  return { ok: true, data };
 }
 
 test('apps.open resolves session device identifiers from open response', async () => {

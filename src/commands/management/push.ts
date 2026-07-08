@@ -1,10 +1,12 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { AppPushOptions, AppTriggerEventOptions } from '../../client/client-types.ts';
+import type { JsonObject } from '../../contracts/json.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import {
   jsonSchemaField,
   looseObjectField,
   looseObjectSchema,
+  type CommandField,
   requiredField,
   stringField,
   stringSchema,
@@ -23,7 +25,7 @@ import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 const pushCommandMetadata = defineFieldCommandMetadata('push', 'Deliver a push payload.', {
   app: requiredField(stringField()),
   payload: requiredField(
-    jsonSchemaField<string | Record<string, unknown>>({
+    jsonSchemaField<string | JsonObject>({
       oneOf: [stringSchema(), looseObjectSchema()],
     }),
   ),
@@ -34,7 +36,7 @@ const triggerAppEventCommandMetadata = defineFieldCommandMetadata(
   'Trigger an app-defined event.',
   {
     event: requiredField(stringField()),
-    payload: looseObjectField(),
+    payload: jsonObjectField(),
   },
 );
 
@@ -112,4 +114,8 @@ function pushPositionals(input: AppPushOptions): string[] {
 
 function triggerEventPositionals(input: AppTriggerEventOptions): string[] {
   return [input.event, ...(input.payload ? [JSON.stringify(input.payload)] : [])];
+}
+
+function jsonObjectField(): CommandField<JsonObject> {
+  return looseObjectField() as CommandField<JsonObject>;
 }

@@ -15,6 +15,10 @@ import type {
 import type { ClipboardCommandResult } from '../../contracts/clipboard.ts';
 import type { AppStateCommandResult } from '../../contracts/app-state.ts';
 import type { KeyboardCommandResult } from '../../contracts/keyboard.ts';
+import type { WaitCommandResult } from '../../contracts/wait.ts';
+import type { PrepareCommandResult } from '../../contracts/prepare.ts';
+import type { PushCommandResult } from '../../contracts/push.ts';
+import type { TriggerAppEventCommandResult } from '../../contracts/app-events.ts';
 
 /**
  * The additive typed-result spine (ADR-0008, Phase 1 step 6).
@@ -31,7 +35,8 @@ import type { KeyboardCommandResult } from '../../contracts/keyboard.ts';
  * interaction trio. Batch 3 adds `clipboard` (a closed `read`/`write` union) and
  * `appstate` (a closed `platform` union — Apple session state with the iOS-only
  * device locators, or Android package/activity). Batch 4 adds `keyboard` (a
- * closed flat shape). Each entry is grounded in a
+ * closed flat shape). Batch 5 adds the compact daemon projections for `wait`,
+ * `prepare`, `push`, and `trigger-app-event`. Each entry is grounded in a
  * re-read of the handler's literal return; see the per-type docstrings.
  */
 export interface CommandResultMap {
@@ -49,6 +54,10 @@ export interface CommandResultMap {
   appstate: AppStateCommandResult;
   keyboard: KeyboardCommandResult;
   'tv-remote': TvRemoteCommandResult;
+  wait: WaitCommandResult;
+  prepare: PrepareCommandResult;
+  push: PushCommandResult;
+  'trigger-app-event': TriggerAppEventCommandResult;
 }
 
 /**

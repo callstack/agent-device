@@ -54,6 +54,16 @@ test('common command input accepts web platform selector', () => {
   assert.equal(input.platform, 'web');
 });
 
+test('trigger-app-event rejects non-object payloads at command input read time', () => {
+  const metadata = listCommandMetadata().find((entry) => entry.name === 'trigger-app-event');
+  if (!metadata) throw new Error('Expected trigger-app-event command metadata');
+
+  assert.throws(
+    () => metadata.readInput({ event: 'screenshot_taken', payload: 'not-json-object' }),
+    /Expected payload to be an object\./,
+  );
+});
+
 test('command response data transforms reference command input fields', () => {
   const metadataByName = new Map<string, ReturnType<typeof listCommandMetadata>[number]>(
     listCommandMetadata().map((metadata) => [metadata.name, metadata] as const),

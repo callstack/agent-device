@@ -1,10 +1,9 @@
 import { promises as fs } from 'node:fs';
 import { AppError } from '../kernel/errors.ts';
 import { resolvePayloadInput } from '../utils/payload-input.ts';
+import type { JsonObject } from '../contracts/json.ts';
 
-export async function readNotificationPayload(
-  payloadArg: string,
-): Promise<Record<string, unknown>> {
+export async function readNotificationPayload(payloadArg: string): Promise<JsonObject> {
   const source = resolvePayloadInput(payloadArg, { subject: 'Push payload' });
   const payloadText =
     source.kind === 'inline' ? source.text : await readPushPayloadFile(source.path);
@@ -13,7 +12,7 @@ export async function readNotificationPayload(
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new AppError('INVALID_ARGS', 'push payload must be a JSON object');
     }
-    return parsed as Record<string, unknown>;
+    return parsed as JsonObject;
   } catch (error) {
     if (error instanceof AppError) throw error;
     throw new AppError('INVALID_ARGS', `Invalid push payload JSON: ${payloadArg}`);

@@ -1,5 +1,6 @@
 import type { AlertAction, AlertInfo } from './alert-contract.ts';
 import type { AppsFilter } from './contracts/app-inventory.ts';
+import type { JsonObject } from './contracts/json.ts';
 import type { Point, SnapshotNode, SnapshotOptions, SnapshotState } from './kernel/snapshot.ts';
 import type { NetworkIncludeMode } from './kernel/contracts.ts';
 import type { DeviceTarget, Platform, PlatformSelector, PublicPlatform } from './kernel/device.ts';
@@ -225,7 +226,7 @@ export type BackendAppState = {
 export type BackendPushInput =
   | {
       kind: 'json';
-      payload: Record<string, unknown>;
+      payload: JsonObject;
     }
   | {
       kind: 'file';
@@ -234,7 +235,7 @@ export type BackendPushInput =
 
 export type BackendAppEvent = {
   name: string;
-  payload?: Record<string, unknown>;
+  payload?: JsonObject;
 };
 
 export type BackendDeviceFilter = {

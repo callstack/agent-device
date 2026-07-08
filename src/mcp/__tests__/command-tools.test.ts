@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { AgentDeviceClient } from '../../client/client-types.ts';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
+import { COMMAND_OUTPUT_SCHEMAS } from '../command-output-schemas.ts';
 
 test('MCP command tool executor hides client creation behind an execution adapter', async () => {
   const client = {} as AgentDeviceClient;
@@ -234,10 +235,9 @@ test('MCP responseLevel rejects unknown values at the boundary', async () => {
   );
 });
 
-test('MCP typed commands advertise an outputSchema with the contract discriminant', () => {
+test('MCP keyboard outputSchema advertises flat contract discriminants', () => {
   const tools = listCommandTools();
 
-  // keyboard is a flat closed shape: platform + action discriminants at the top.
   const keyboard = tools.find((tool) => tool.name === 'keyboard');
   assert.ok(keyboard);
   assert.ok(keyboard.outputSchema);
@@ -250,8 +250,11 @@ test('MCP typed commands advertise an outputSchema with the contract discriminan
     (keyboard.outputSchema.properties?.platform as { enum?: unknown[] } | undefined)?.enum,
     ['android', 'ios'],
   );
+});
 
-  // clipboard is a discriminated union on `action`, modeled as oneOf branches.
+test('MCP clipboard outputSchema advertises action union branches', () => {
+  const tools = listCommandTools();
+
   const clipboard = tools.find((tool) => tool.name === 'clipboard');
   assert.ok(clipboard);
   assert.ok(clipboard.outputSchema);
@@ -259,6 +262,10 @@ test('MCP typed commands advertise an outputSchema with the contract discriminan
     (branch) => (branch.properties?.action as { const?: unknown } | undefined)?.const,
   );
   assert.deepEqual(clipboardActions, ['read', 'write']);
+});
+
+test('MCP tv remote outputSchema advertises button values', () => {
+  const tools = listCommandTools();
 
   const tvRemote = tools.find((tool) => tool.name === 'tv-remote');
   assert.ok(tvRemote);
@@ -267,6 +274,29 @@ test('MCP typed commands advertise an outputSchema with the contract discriminan
     (tvRemote.outputSchema.properties?.button as { enum?: unknown[] } | undefined)?.enum,
     ['up', 'down', 'left', 'right', 'select', 'menu', 'home', 'back'],
   );
+});
+
+test('MCP newly typed outputSchemas advertise public contract keys', () => {
+  const tools = listCommandTools();
+
+  const wait = tools.find((tool) => tool.name === 'wait');
+  assert.ok(wait);
+  assert.ok(wait.outputSchema);
+  assert.deepEqual(wait.outputSchema.required, ['waitedMs']);
+
+  const triggerAppEvent = tools.find((tool) => tool.name === 'trigger-app-event');
+  assert.ok(triggerAppEvent);
+  assert.ok(triggerAppEvent.outputSchema);
+  assert.equal(
+    (triggerAppEvent.outputSchema.properties?.transport as { const?: unknown } | undefined)?.const,
+    'deep-link',
+  );
+});
+
+test('MCP prepare outputSchema stays complete for the typed non-exposed command', () => {
+  const prepareSchema = COMMAND_OUTPUT_SCHEMAS.prepare;
+  assert.ok(prepareSchema.required?.includes('runner'));
+  assert.ok(prepareSchema.required?.includes('timing'));
 });
 
 test('MCP untyped tools stay byte-identical: no outputSchema key', () => {

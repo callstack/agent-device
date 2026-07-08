@@ -491,6 +491,7 @@ async function runAndroidSetupAndInstallWorkflow(
     },
     ...selection,
   });
+  assert.equal(push.platform, 'android');
   assert.equal(push.package, 'com.example.demo');
   assert.equal(push.action, 'com.example.demo.PUSH');
   assert.equal(push.extrasCount, 3);
