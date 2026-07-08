@@ -11,9 +11,13 @@ Install `agent-device` on the machine where the coding agent will run terminal c
 
 ```bash
 npm install -g agent-device@latest
+agent-device doctor
 agent-device --version
 agent-device help
 ```
+
+Run `agent-device doctor` yourself after installation to check local device,
+toolchain, and dev-server readiness before handing the CLI to an agent.
 
 Use global install for normal agent workflows. It gives agents a stable `agent-device` command and version-matched help topics:
 
@@ -32,6 +36,7 @@ Interactive CLI runs periodically check for a newer published `agent-device` pac
 
 ```bash
 npm install -g agent-device@latest
+agent-device doctor
 agent-device --version
 ```
 

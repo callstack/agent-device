@@ -38,8 +38,6 @@ agent-device help dogfood
 
 Default loop: `open -> snapshot/-i -> get/is/find or press/fill/scroll/wait -> verify -> close`.
 
-On a fresh machine (first iOS run), start with `agent-device doctor --platform ios`: it preflights the environment and warms the iOS runner build cache in the background so the first `open` is fast.
-
 Use this skill only to route into version-matched CLI help. Let the selected help topic provide exact command shapes, platform limits, and current workflow guidance; use `help workflow` as the full reference when a task-specific topic is too narrow.
 
 For precise location workflows, read the installed `settings` help before planning so coordinate support and platform limits come from the active CLI version.

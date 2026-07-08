@@ -57,11 +57,11 @@ const FIND_ACTION_VALUES = [
 const interactionCommandDescriptions = {
   click: 'Click or tap a semantic UI target by ref, selector, or point.',
   press: 'Press a semantic UI target by ref, selector, or point.',
-  fill: 'Fill text into a semantic UI target by ref, selector, or point.',
+  fill: 'Replace text in a semantic UI target by ref, selector, or point.',
   longpress: 'Long press by ref, selector, or point.',
   swipe: 'Swipe between two points.',
   focus: 'Focus input at coordinates.',
-  type: 'Type text in the focused field.',
+  type: 'Append text to the focused field.',
   scroll: 'Scroll in a direction or to an edge.',
   get: 'Get element text or attributes.',
   is: 'Assert UI state.',

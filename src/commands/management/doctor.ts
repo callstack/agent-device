@@ -10,7 +10,7 @@ import { managementCliOutputFormatters } from './output.ts';
 
 const doctorCommandMetadata = defineFieldCommandMetadata(
   'doctor',
-  'Diagnose device, app, Metro, and React Native readiness before a run.',
+  'Diagnose device, app, Metro, and React Native setup/readiness issues.',
   {
     targetApp: commandInput.stringField(
       'Installed app package/bundle id or app name to verify without opening a session.',
@@ -29,8 +29,8 @@ const doctorCliSchema = {
   usageOverride:
     'doctor [--platform ios|android|macos|linux|web|apple] [--app <id-or-name>] [--remote]',
   helpDescription:
-    'Preflight for QA and dogfood runs. Reports local device inventory, active sessions, optional app discovery, scoped toolchain info, and Metro reachability inferred from cwd/runtime. On iOS simulators it also warms the XCTest runner build cache in the background when missing, so the first open on a fresh machine skips the runner build — run doctor first on new setups. Pass --app to verify a target app on the one matching booted device without opening a session. Use --remote to check remote connection setup without probing local devices. Default output is compact; use --json for full checks and evidence.',
-  summary: 'Preflight device, app, dev-server, and RN/Expo readiness',
+    'Setup and recovery diagnostic for device, app, dev-server, and RN/Expo readiness issues. Reports local device inventory, active sessions, optional app discovery, scoped toolchain info, and Metro reachability inferred from cwd/runtime. On iOS simulators it also warms the XCTest runner build cache in the background when missing. Pass --app to verify a target app on the one matching booted device without opening a session. Use --remote to check remote connection setup without probing local devices. Default output is compact; use --json for full checks and evidence.',
+  summary: 'Diagnose device, app, dev-server, and RN/Expo readiness',
   allowedFlags: ['targetApp', 'remote'],
 } as const satisfies CommandSchemaOverride;
 

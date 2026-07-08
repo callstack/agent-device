@@ -93,7 +93,7 @@ const AGENT_QUICKSTART_LINES = [
   'Android RN/Expo/Re.Pack dev server: direct Android localhost URL opens with a port auto-configure host reachability.',
   'Expo Go/dev clients: use the provided URL when given; on iOS use open "Expo Go" <url> --platform ios, then snapshot -i --platform ios to verify project UI. Do not use plain snapshot or snapshot --diff for this recovery check. Android URL opens infer the foreground package for logs/perf when possible.',
   'Install flows: install/install-from-source first, then open the installed id with --relaunch.',
-  'Text: fill \'id="field-email"\' "qa@example.com" replaces; type appends after press.',
+  'Text fields: use fill <target> <text> --settle to replace a field value. Use type <text> only to append after focusing a field with press.',
   'Clearing text: do not use fill <target> ""; use a visible clear/reset control or report that clearing is unsupported.',
   'Android IME capture: if fill says input was captured by the keyboard/IME, inspect keyboard state and switch/disable handwriting before retrying; do not loop fill/type.',
   'Implicit default sessions are scoped to the current worktree; if a prompt names a Session, include --session <name> on every command in that flow.',
@@ -168,6 +168,7 @@ Loop:
 
 Targets:
   Prefer refs from the latest snapshot -i or settled diff. Use durable selectors when the label/id is known: label="Search", id="submit", role=button label="Follow".
+  For text fields, use fill <target> <text> --settle to replace the field value; use type only to append to an already-focused field.
   Do not use placeholders such as @ref, @eN, <button>, or <selector> in a final command plan. If the ref is unknown, first run snapshot -i.
   Coordinates are fallback-only after refs/selectors fail or accessibility omits the target; use screenshot or snapshot -i --json to choose a visible center point.
 
@@ -186,9 +187,6 @@ Version-matched operating guide for normal agent-device work.
 Core loop:
   Start with the top-level Agent Starting Point for the default settle-first loop. This topic is the full reference for command shapes, refs, selectors, waits, recovery, and platform limits.
   If you intentionally skip --settle or use a command that does not support it, verify a mutation with diff snapshot (or diff snapshot -i) instead of a full snapshot: it diffs the rendered snapshot lines against the previous one in this session and prints only what changed.
-
-Fresh machine or first iOS run:
-  Run agent-device doctor --platform ios first. Besides preflight checks it warms the iOS XCTest runner build cache in the background, so the first open skips the runner build (~10s). To block until fully warm instead, run agent-device prepare ios-runner.
 
 Command shape:
   Plans should use agent-device commands, not raw platform tools, pseudo commands, package-manager aliases, or helper prose.
@@ -690,11 +688,7 @@ Choose the next help topic:
   Remote/cloud config, leases, and local service tunnels: help remote.
 
 React Native dev loop:
-  Before QA/dogfood runs, use doctor to separate environment setup from app failures (on iOS simulators doctor also warms the runner build cache in the background):
-    agent-device doctor --platform android
-    agent-device doctor --platform ios
-    agent-device doctor --platform android --app com.example.app
-    agent-device doctor --remote --remote-config ./remote.json
+  Do not run doctor as routine QA/dogfood prep. Use doctor only when the user asks for setup diagnostics or a command failure points to an unhealthy device, runner, dev-server, or remote environment.
   For "start from screen X" flows, prefer open --relaunch before the first snapshot so the app does not reuse a prior in-progress navigation state.
   JS-only change with Metro or Re.Pack connected:
     agent-device metro reload

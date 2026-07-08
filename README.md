@@ -52,11 +52,15 @@ Install the CLI:
 
 ```bash
 npm install -g agent-device@latest
+agent-device doctor
 agent-device --version
 agent-device help workflow
 ```
 
-The installed CLI help is the source of truth for agents. Start with `agent-device help workflow`, then follow the topic-specific help when a task needs dogfooding, debugging, replay, or React Native profiling.
+Run `agent-device doctor` yourself after installation to check local setup before
+handing the CLI to an agent. The installed CLI help is the source of truth for
+agents. Start with `agent-device help workflow`, then follow the topic-specific
+help when a task needs dogfooding, debugging, replay, or React Native profiling.
 
 Prerequisites depend on the target platform: Node.js 22+, Xcode for iOS/tvOS/macOS targets, Android SDK + ADB for Android, and macOS Accessibility permission for desktop automation. Web automation requires Node 24+. See [Installation](https://oss.callstack.com/agent-device/docs/installation) for platform setup.
 

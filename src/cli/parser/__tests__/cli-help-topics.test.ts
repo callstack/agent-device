@@ -107,7 +107,8 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /open "Expo Go" <url> --platform ios/);
   assert.match(usageText, /Do not use plain snapshot or snapshot --diff for this recovery check/);
   assert.match(usageText, /Install flows: install\/install-from-source first/);
-  assert.match(usageText, /fill 'id="field-email"' "qa@example\.com" replaces/);
+  assert.match(usageText, /use fill <target> <text> --settle to replace a field value/);
+  assert.match(usageText, /Use type <text> only to append after focusing a field with press/);
   assert.match(usageText, /do not use fill <target> ""/);
   assert.match(usageText, /Android IME capture: if fill says input was captured/);
   assert.match(usageText, /Implicit default sessions are scoped to the current worktree/);
@@ -116,6 +117,8 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /After mutation: refs are stale/);
   assert.match(usageText, /use its selector directly; otherwise refresh with snapshot -i/);
   assert.match(usageText, /verify the action with diff snapshot -i or snapshot --diff/);
+  assert.match(usageText, /fill <targetOrX> <yOrText> \[text\]\s+Replace text in/);
+  assert.match(usageText, /type <text>\s+Append text to the focused field/);
   assert.match(usageText, /Sparse or AX-unavailable snapshot/);
   assert.match(usageText, /macOS context menus use click <ref> --button secondary/);
   assert.match(
@@ -456,6 +459,8 @@ test('usageForCommand resolves manual QA help topic', async () => {
   assert.match(help, /Run snapshot -i to get current refs/);
   assert.match(help, /press\/fill\/click\/longpress <ref-or-selector> --settle/);
   assert.match(help, /A bare screenshot\/snapshot is not verification/);
+  assert.match(help, /use fill <target> <text> --settle to replace/);
+  assert.match(help, /use type only to append to an already-focused field/);
   assert.match(help, /Do not use placeholders such as @ref/);
 });
 
@@ -556,10 +561,8 @@ test('usageForCommand resolves react-native help topic', async () => {
   assert.match(help, /help react-devtools/);
   assert.match(help, /Help workflow owns the full Expo URL command shapes/);
   assert.match(help, /For app\/package launches, run metro prepare/);
-  assert.match(help, /agent-device doctor --platform android/);
-  assert.match(help, /agent-device doctor --platform android --app com\.example\.app/);
-  assert.match(help, /agent-device doctor --platform ios/);
-  assert.match(help, /agent-device doctor --remote --remote-config \.\/remote\.json/);
+  assert.match(help, /Do not run doctor as routine QA\/dogfood prep/);
+  assert.match(help, /Use doctor only when the user asks for setup diagnostics/);
   assert.match(help, /same host context that owns the dev server/);
   assert.match(help, /sandbox probe is not authoritative/);
   assert.match(help, /adb reverse only affects Android device-to-host traffic/);
