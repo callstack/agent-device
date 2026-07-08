@@ -205,7 +205,10 @@ async function executeGenericPlatformCommand(params: {
     await applyScreenshotOverlay(session, data, params.logPath);
   }
   if (typeof data?.path === 'string') {
-    await attachScreenshotMetadata(session, data, request.flags?.screenshotPixelDensity);
+    await attachScreenshotMetadata(session, data, {
+      requestedPixelDensity: request.flags?.screenshotPixelDensity,
+      maxSize: request.flags?.screenshotMaxSize,
+    });
   }
   return data;
 }
@@ -354,15 +357,19 @@ function assertSupportedScreenshotPixelDensity(
 async function attachScreenshotMetadata(
   session: SessionState,
   data: Record<string, unknown>,
-  requestedPixelDensity: number | undefined,
+  options: { requestedPixelDensity: number | undefined; maxSize: number | undefined },
 ): Promise<void> {
   const path = data.path;
   if (typeof path !== 'string') return;
   const size = await readPngSize(path);
   data.width = size.width;
   data.height = size.height;
-  if (isIosFamily(session.device) && session.device.kind === 'simulator') {
-    const pixelDensity = requestedPixelDensity ?? 1;
+  if (
+    isIosFamily(session.device) &&
+    session.device.kind === 'simulator' &&
+    options.maxSize === undefined
+  ) {
+    const pixelDensity = options.requestedPixelDensity ?? 1;
     data.pixelDensity = pixelDensity;
     data.logicalWidth = Math.round(size.width / pixelDensity);
     data.logicalHeight = Math.round(size.height / pixelDensity);

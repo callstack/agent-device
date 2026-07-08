@@ -407,6 +407,49 @@ test('iOS simulator screenshot response includes output dimensions and logical d
   }
 });
 
+test('iOS simulator screenshot omits logical density metadata after --max-size downscale', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-screenshot-');
+  sessionStore.set('default', makeIosSession('default'));
+  const screenshotPath = path.join(os.tmpdir(), `agent-device-ios-max-size-${Date.now()}.png`);
+
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'screenshot') {
+      writeSolidPng(screenshotPath, 804, 1748);
+      return { path: screenshotPath };
+    }
+    return {};
+  });
+
+  const handler = createRequestHandler({
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    token: 'test-token',
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    trackDownloadableArtifact: () => 'artifact-id',
+  });
+
+  const response = await handler({
+    token: 'test-token',
+    session: 'default',
+    command: 'screenshot',
+    positionals: [screenshotPath],
+    flags: { screenshotMaxSize: 437, screenshotPixelDensity: 2 },
+    meta: { requestId: 'req-ios-screenshot-max-size-meta' },
+  });
+
+  expect(response.ok).toBe(true);
+  if (response.ok) {
+    expect(response.data).toMatchObject({
+      path: screenshotPath,
+      width: 201,
+      height: 437,
+    });
+    expect(response.data).not.toHaveProperty('logicalWidth');
+    expect(response.data).not.toHaveProperty('logicalHeight');
+    expect(response.data).not.toHaveProperty('pixelDensity');
+  }
+});
+
 test('screenshot resolves --out flag path against request cwd', async () => {
   const callerCwd = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-screenshot-out-cwd-'));
   const sessionStore = makeSessionStore('agent-device-router-screenshot-');
