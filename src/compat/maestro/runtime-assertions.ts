@@ -8,7 +8,6 @@ import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { Point, SnapshotState } from '../../kernel/snapshot.ts';
 import { buildSnapshotDisplayLines } from '../../snapshot/snapshot-lines.ts';
 import { sleep } from '../../utils/timeouts.ts';
-import { dismissAndroidMaestroBlockingOverlay } from './runtime-android-overlays.ts';
 import { pointForMaestroTapOnTarget } from './runtime-geometry.ts';
 import {
   captureMaestroSnapshot,
@@ -88,13 +87,6 @@ async function invokeNativeMaestroVisibleWaitWithSnapshotFallback(
   nativeWaitQuery: string,
 ): Promise<DaemonResponse> {
   const nativeStartedAt = Date.now();
-  const preflightResponse = await maybeDismissAndroidBlockingOverlayBeforeVisibleWait(
-    params,
-    args,
-    nativeStartedAt,
-  );
-  if (preflightResponse) return preflightResponse;
-
   const nativeResponse = await runNativeVisibleWait(params, args, nativeWaitQuery);
   if (nativeResponse.ok) {
     if (shouldVerifyNativeVisibleWait(params.baseReq)) {
@@ -134,43 +126,8 @@ async function invokeNativeMaestroVisibleWaitWithSnapshotFallback(
   );
 }
 
-async function maybeDismissAndroidBlockingOverlayBeforeVisibleWait(
-  params: MaestroAssertionRuntimeParams,
-  args: MaestroVisibilityAssertionArgs,
-  startedAt: number,
-): Promise<DaemonResponse | null> {
-  if (!shouldPreflightAndroidBlockingOverlay(params.baseReq, args)) return null;
-
-  const sample = await readMaestroVisibilitySample(params, args.selector, 'assertVisible');
-  if (sample.visible) return visibleAssertionResponse(sample.response, args.selector, startedAt);
-  if (!sample.snapshot) return null;
-
-  const dismissed = await dismissAndroidMaestroBlockingOverlay({
-    baseReq: params.baseReq,
-    invoke: params.invoke,
-    snapshot: sample.snapshot,
-    selector: args.selector,
-  });
-  if (!dismissed) return null;
-
-  return await invokeSnapshotMaestroAssertVisible(params, {
-    ...args,
-    timeoutMs: visibleAssertionRetryTimeoutMs(args.timeoutMs),
-  });
-}
-
 function shouldVerifyNativeVisibleWait(baseReq: ReplayBaseRequest): boolean {
   return baseReq.flags?.platform === 'android';
-}
-
-function shouldPreflightAndroidBlockingOverlay(
-  baseReq: ReplayBaseRequest,
-  args: MaestroVisibilityAssertionArgs,
-): boolean {
-  // Long launch waits can otherwise spend the full native wait budget before
-  // snapshot verification notices environment-owned keyboard overlays. Ordinary
-  // waits rely on the normal Android verification snapshot and core occlusion.
-  return baseReq.flags?.platform === 'android' && args.timeoutMs >= 30_000;
 }
 
 async function runNativeVisibleWait(

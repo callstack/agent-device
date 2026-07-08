@@ -1,5 +1,5 @@
 import type { DaemonResponse } from '../../daemon/types.ts';
-import type { Point, SnapshotNode } from '../../kernel/snapshot.ts';
+import type { Point } from '../../kernel/snapshot.ts';
 import type { MaestroRuntimeInvoke, ReplayBaseRequest } from './runtime-support.ts';
 
 export async function invokeMaestroClickPoint(params: {
@@ -16,11 +16,4 @@ export async function invokeMaestroClickPoint(params: {
       postGestureStabilization: true,
     },
   });
-}
-
-export function centerSnapshotRectPoint(rect: NonNullable<SnapshotNode['rect']>): Point {
-  return {
-    x: Math.round(rect.x + rect.width / 2),
-    y: Math.round(rect.y + rect.height / 2),
-  };
 }

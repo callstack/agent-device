@@ -555,38 +555,6 @@ test('invokeMaestroAssertVisible does not use Android raw fallback for generated
   );
 });
 
-test('invokeMaestroAssertVisible dismisses Android Gboard handwriting tutorial before native wait', async () => {
-  const calls: Array<[string, string[] | undefined]> = [];
-  const snapshots = [
-    gboardHandwritingTutorialSnapshot(),
-    snapshot([node('Input', { type: 'android.view.View' })]),
-  ];
-  const response = await invokeMaestroAssertVisible({
-    baseReq: {
-      token: 't',
-      session: 's',
-      flags: { platform: 'android' },
-    },
-    positionals: ['label="Input" || text="Input" || id="Input"', '60000'],
-    invoke: async (req): Promise<DaemonResponse> => {
-      calls.push([req.command, req.positionals]);
-      if (req.command === 'snapshot') {
-        return { ok: true, data: snapshots.shift() ?? snapshot([node('Input')]) };
-      }
-      if (req.command === 'click') return { ok: true, data: {} };
-      if (req.command === 'wait') return { ok: true, data: { matches: 1 } };
-      return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
-    },
-  });
-
-  assert.equal(response.ok, true);
-  assert.deepEqual(calls, [
-    ['snapshot', []],
-    ['click', ['588', '2758']],
-    ['snapshot', []],
-  ]);
-});
-
 test('invokeMaestroAssertVisible bounds Android verification retries after native wait succeeds', async () => {
   vi.useFakeTimers();
 
@@ -613,8 +581,8 @@ test('invokeMaestroAssertVisible bounds Android verification retries after nativ
 
   assert.equal(response.ok, false);
   assert.deepEqual(calls.slice(0, 3), [
-    ['snapshot', []],
     ['wait', ['Input', '60000']],
+    ['snapshot', []],
     ['snapshot', []],
   ]);
   assert.ok(calls.filter(([command]) => command === 'snapshot').length < 40);
@@ -881,33 +849,6 @@ function node(
     depth: 8,
     ...overrides,
   };
-}
-
-function gboardHandwritingTutorialSnapshot(): SnapshotState {
-  return snapshot([
-    node('Push Article', {
-      index: 2,
-      ref: 'e2',
-      type: 'android.widget.Button',
-      bundleId: 'org.reactnavigation.playground',
-    }),
-    node('Try out your stylus', {
-      index: 3,
-      ref: 'e3',
-      value: 'Try out your stylus',
-      bundleId: 'com.google.android.inputmethod.latin',
-      rect: { x: 376, y: 1650, width: 592, height: 90 },
-    }),
-    node('Cancel', {
-      index: 4,
-      ref: 'e4',
-      value: 'Cancel',
-      identifier: 'android:id/closeButton',
-      type: 'android.widget.Button',
-      bundleId: 'com.google.android.inputmethod.latin',
-      rect: { x: 450, y: 2699, width: 276, height: 118 },
-    }),
-  ]);
 }
 
 test('invokeMaestroAssertNotVisible accepts timeout overrides for short extended waits', async () => {

@@ -14,10 +14,6 @@ import { sleep } from '../../utils/timeouts.ts';
 import { invokeMaestroClickPoint } from './runtime-click.ts';
 import { pointForMaestroTapOnTarget, swipeCoordinatesFromTarget } from './runtime-geometry.ts';
 import {
-  dismissAndroidMaestroBlockingOverlay,
-  hasAndroidMaestroBlockingOverlay,
-} from './runtime-android-overlays.ts';
-import {
   captureMaestroSnapshot,
   clearMaestroRecoverableInteraction,
   clearMaestroVisibleContext,
@@ -59,10 +55,6 @@ type MaestroTapOnParams = {
   positionals: string[];
   invoke: MaestroRuntimeInvoke;
   scope?: ReplayVarScope;
-};
-
-type MaestroTapOnAttemptState = {
-  dismissedBlockingOverlay: boolean;
 };
 
 type MaestroScreenSwipeResolution =
@@ -194,9 +186,8 @@ export async function invokeMaestroTapOn(params: MaestroTapOnParams): Promise<Da
   const startedAt = Date.now();
   const timeoutMs = maestroTapOnTimeoutMs(params);
   let lastResponse: DaemonResponse | undefined;
-  const attemptState: MaestroTapOnAttemptState = { dismissedBlockingOverlay: false };
   while (Date.now() - startedAt < timeoutMs) {
-    const attempt = await attemptMaestroTapOn(params, selector, options.value ?? {}, attemptState);
+    const attempt = await attemptMaestroTapOn(params, selector, options.value ?? {});
     if (!attempt.retry) return attempt.response;
     lastResponse = attempt.response;
     await sleep(MAESTRO_INTERACTION_POLICY.tapOnRetryMs);
@@ -475,12 +466,11 @@ async function attemptMaestroTapOn(
   params: MaestroTapOnParams,
   selector: string,
   options: MaestroTapOnOptions,
-  attemptState: MaestroTapOnAttemptState,
 ): Promise<
   { retry: false; response: DaemonResponse } | { retry: true; response: FailedDaemonResponse }
 > {
   const fuzzyTextQuery = extractMaestroVisibleTextQuery(selector);
-  const attempt = await invokeMaestroResolvedTapOn(params, selector, options, attemptState);
+  const attempt = await invokeMaestroResolvedTapOn(params, selector, options);
   if (attempt.response.ok) return { retry: false, response: attempt.response };
   if (attempt.targetResolved && fuzzyTextQuery) {
     return await invokeMaestroFuzzyTapOn(params, fuzzyTextQuery);
@@ -492,46 +482,11 @@ async function invokeMaestroResolvedTapOn(
   params: MaestroTapOnParams,
   selector: string,
   options: MaestroTapOnOptions,
-  attemptState: MaestroTapOnAttemptState,
 ): Promise<{ response: DaemonResponse; targetResolved: boolean }> {
   const target = await resolveMaestroInteractionTarget(params, selector, options, 'tapOn', {
     promoteTapTarget: true,
   });
   if (!target.ok) return { response: target.response, targetResolved: false };
-  if (
-    attemptState.dismissedBlockingOverlay &&
-    hasAndroidMaestroBlockingOverlay({
-      baseReq: params.baseReq,
-      snapshot: target.snapshot,
-      targetNode: target.target.node,
-    })
-  ) {
-    return {
-      response: errorResponse(
-        'COMMAND_FAILED',
-        'Android input overlay is still blocking Maestro tap after dismissal attempt.',
-        { selector },
-      ),
-      targetResolved: false,
-    };
-  }
-  const dismissedOverlay = await dismissAndroidMaestroBlockingOverlay({
-    baseReq: params.baseReq,
-    invoke: params.invoke,
-    snapshot: target.snapshot,
-    targetNode: target.target.node,
-    selector,
-  });
-  if (dismissedOverlay) {
-    attemptState.dismissedBlockingOverlay = true;
-    return {
-      response: errorResponse(
-        'COMMAND_FAILED',
-        'Dismissed Android input overlay before Maestro tap; retrying target resolution.',
-      ),
-      targetResolved: false,
-    };
-  }
   return await clickMaestroResolvedTarget(params, selector, target.target, options);
 }
 
