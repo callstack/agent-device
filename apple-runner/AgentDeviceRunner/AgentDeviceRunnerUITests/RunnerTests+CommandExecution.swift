@@ -1525,9 +1525,9 @@ extension RunnerTests {
     }
   }
 
-  /// Shared drag execution for `.drag` and the fused `.scroll`. The iOS synthesized lane avoids
-  /// keyboard/window lookup and `XCUICoordinate` fallback so coordinate gestures remain usable on
-  /// screens whose XCTest accessibility tree is unhealthy.
+  /// Shared drag execution for `.drag` and the fused `.scroll`. The iOS synthesized lane keeps
+  /// each command's fallback policy explicit: scroll requires private synthesis, while explicit
+  /// synthesized drag can still use the coordinate fallback unless AX is known unavailable.
   private func executeDragGesture(
     activeApp: XCUIApplication,
     x: Double,
