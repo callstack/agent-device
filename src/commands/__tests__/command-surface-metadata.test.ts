@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { listCliCommandNames } from '../../command-catalog.ts';
 import {
   listCommandResponseDataTransforms,
   listMcpExposedCommandNames,
 } from '../../core/command-descriptor/registry.ts';
+import { getSchemaOnlyCliCommandSchema } from '../../utils/cli-command-overrides.ts';
 import {
   listCommandMetadata,
   listCommandMetadataNames,
@@ -85,6 +87,25 @@ test('command family facets expose one complete metadata and executable surface'
   assert.deepEqual(definitionNames, metadataNames);
   assert.deepEqual(metadataNames, listCommandMetadataNames());
   assert.deepEqual(definitionNames, listExecutableCommandNames());
+});
+
+test('descriptor CLI catalog and command surface metadata stay coherent', () => {
+  const cliCommandNames = listCliCommandNames();
+  const cliCommandNameSet = new Set<string>(cliCommandNames);
+  const metadataNames = listCommandMetadataNames();
+  const metadataNameSet = new Set<string>(metadataNames);
+
+  for (const name of metadataNames) {
+    assert.ok(cliCommandNameSet.has(name), `${name} command metadata must have a descriptor`);
+  }
+
+  for (const name of cliCommandNames) {
+    if (metadataNameSet.has(name)) continue;
+    assert.ok(
+      getSchemaOnlyCliCommandSchema(name),
+      `${name} descriptor CLI command needs metadata or a schema-only CLI schema`,
+    );
+  }
 });
 
 test('command family facets expose CLI schema and reader coverage centrally', () => {

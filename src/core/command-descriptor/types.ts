@@ -69,6 +69,29 @@ export type CommandTimeoutPolicy = {
   onTimeout: 'preserve-daemon' | 'reset-daemon';
 };
 
+export type CommandCatalogGroup = 'public' | 'internal' | 'local-cli' | 'dispatch-alias';
+
+export type CommandCatalogFacet = {
+  /**
+   * The command catalog group. This is explicit on every descriptor so new
+   * descriptors cannot accidentally become public CLI/MCP commands by omission.
+   */
+  group: CommandCatalogGroup;
+  /**
+   * Stable property name used by catalog object projections, e.g.
+   * `longPress` for the command name `longpress`.
+   */
+  key?: string;
+};
+
+export type CommandDispatchFacet = {
+  /**
+   * Platform dispatch command handled by src/core/dispatch.ts. The descriptor
+   * name is the dispatched command; dispatch-only names such as `read` are
+   * modeled as named descriptors rather than hidden aliases.
+   */
+} & Record<string, never>;
+
 /**
  * The single additive command-descriptor shape (ADR-0008, Phase 1 step 1).
  *
@@ -94,6 +117,10 @@ export type CommandTimeoutPolicy = {
  *                   command-owned fields in daemon responses. This keeps
  *                   response shaping on the same descriptor surface as other
  *                   command traits.
+ *  - `catalog` — command identity projection metadata. Every descriptor
+ *                   declares its catalog group explicitly.
+ *  - `dispatch` — whether src/core/dispatch.ts accepts this command name as a
+ *                   platform dispatch target.
  *
  * The registry started dormant (proven byte-equal to the hand tables by the
  * parity tests) and is now the live source: the daemon registry, capability
@@ -109,4 +136,6 @@ export type CommandDescriptor = {
   timeoutPolicy: CommandTimeoutPolicy;
   postActionObservation?: PostActionObservationSupport;
   responseDataTransform?: CommandResponseDataTransform;
+  catalog: CommandCatalogFacet;
+  dispatch?: CommandDispatchFacet;
 };

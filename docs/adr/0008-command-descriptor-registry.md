@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -28,14 +28,15 @@ model must preserve. This ADR is that model.
 Introduce one `CommandDescriptor` per command that **composes facets owned by their domains** and from which
 every consumer table is **derived** by pure, parity-tested projection:
 
-- The descriptor composes a `surface` facet (owned by `src/commands/**`: identity, CLI schema/reader, MCP),
-  a `capability` facet (owned by `src/core/capabilities`), and a `daemon` facet (route + request-policy
-  traits, **owned under `src/daemon/`** per ADR 0003), plus a typed result.
+- The descriptor composes catalog identity, command-family surface projection hooks
+  (`src/commands/**` remains the owner of CLI schema/reader and executable surface metadata), a
+  `capability` facet, a `daemon` facet (route + request-policy traits shaped by ADR 0003), platform
+  dispatch membership, response data transforms, and typed-result hooks.
 - Narrow command traits that affect multiple projections, such as interaction post-action observation
   (`--settle` / `--verify`), live on the descriptor so CLI flags, command metadata, timeout policy, and
   tests derive from one fact instead of repeating command-name lists.
 - The public catalog, capability matrix, daemon command registry, batch allowlist, MCP tool list, CLI
-  schema, and the Node client surface become pure projections of the descriptor set. The
+  schema exposure, and descriptor-backed Node client surface become pure projections of the descriptor set. The
   `src/core/dispatch.ts` `switch` is replaced by a total map keyed on the command-name union, so a missing
   handler is a compile error.
 - The cross-process `invoke` (client) and in-daemon `execute` seams stay distinct; the process boundary is
@@ -72,11 +73,20 @@ Each derived table must be asserted **byte-for-byte equivalent** to the hand-aut
 **before** the hand table is deleted. The principal risk is the import-cycle inversion: `command-catalog.ts`
 has ~95 importers and the family facet currently imports `AgentDeviceClient`, so the descriptor module must
 own the `Input`/`Result` types and the client must be derived as a view type, enforced by a lint boundary.
-As of 2026-07, the descriptor is live for the daemon registry, capability matrix, structured-batch
-allowlist, daemon-client timeout policy, MCP exposure list, and capability-checked CLI command list.
-The catalog still owns command identity and the command family facet still owns surface metadata, so
-future migration steps should keep deleting one live hand-maintained table at a time rather than
-introducing a parallel manifest.
+As of 2026-07, the descriptor registry is live for command identity (`PUBLIC_COMMANDS`,
+`INTERNAL_COMMANDS`, and local CLI names), daemon registry traits, capability matrix,
+structured-batch allowlist, daemon-client timeout policy, MCP exposure list,
+capability-checked CLI command list, post-action observation traits, and the platform dispatch
+command set (including dispatch-only aliases such as `read` and `swipe-preset`). Command-family
+surface metadata still lives under `src/commands/**`, where the CLI grammar and client-backed
+executors already live, but it is coherence-guarded against the descriptor CLI catalog so new
+surface names cannot drift from the descriptor root.
+
+The remaining deferred work is the public Node-client typed-result narrowing tracked outside this
+registry migration in [#1153](https://github.com/callstack/agent-device/issues/1153): commands whose
+daemon responses still expose dynamic payloads or whose closed result contracts live in runtime
+modules must move those contracts before their client methods can stop returning
+`CommandRequestResult`.
 
 This ADR owns the decision and its constraints; the roadmap that prototyped it has been retired, with
 the delivered end-state recorded in [CONTEXT.md](../../CONTEXT.md) (Architecture).

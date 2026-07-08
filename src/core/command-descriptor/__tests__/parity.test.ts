@@ -1,16 +1,23 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { STRUCTURED_BATCH_COMMAND_NAMES } from '../../../batch-policy.ts';
-import { listCliCommandNames, PUBLIC_COMMANDS } from '../../../command-catalog.ts';
+import {
+  INTERNAL_COMMANDS,
+  listCliCommandNames,
+  PUBLIC_COMMANDS,
+} from '../../../command-catalog.ts';
 import { BASE_COMMAND_CAPABILITY_MATRIX } from '../../capabilities.ts';
 import {
   DAEMON_COMMAND_DESCRIPTORS,
   type DaemonCommandDescriptor,
 } from '../../../daemon/daemon-command-registry.ts';
 import type { DaemonRequest } from '../../../daemon/types.ts';
+import { listRegisteredDispatchCommandNames } from '../../dispatch.ts';
 import { deriveDaemonCommandDescriptors, deriveStructuredBatchCommandNames } from '../derive.ts';
 import {
   commandDescriptors,
+  listDescriptorCatalogCommandNames,
+  listDescriptorDispatchCommandNames,
   listCapabilityCheckedCommandNames,
   listMcpExposedCommandNames,
 } from '../registry.ts';
@@ -46,6 +53,8 @@ const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.trace,
 ]);
 
+type TestCommandDescriptor = (typeof commandDescriptors)[number];
+
 function makeRequest(command: string, positionals: string[] = []): DaemonRequest {
   return { command, token: 'parity-token', session: 'parity-session', positionals, flags: {} };
 }
@@ -62,6 +71,26 @@ function sampleRequests(command: string): DaemonRequest[] {
     { ...makeRequest(PUBLIC_COMMANDS.test), flags: { shardAll: 2 } },
     { ...makeRequest(PUBLIC_COMMANDS.test), flags: { shardSplit: 1 } },
   ];
+}
+
+function hasDaemonFacet(descriptor: TestCommandDescriptor): boolean {
+  return 'daemon' in descriptor && descriptor.daemon !== undefined;
+}
+
+function hasCapabilityFacet(descriptor: TestCommandDescriptor): boolean {
+  return 'capability' in descriptor && descriptor.capability !== undefined;
+}
+
+function readCatalogGroupForTest(descriptor: TestCommandDescriptor): string {
+  return descriptor.catalog.group;
+}
+
+function isDescriptorOnlyCommand(descriptor: TestCommandDescriptor): boolean {
+  return !hasDaemonFacet(descriptor) && !hasCapabilityFacet(descriptor) && !descriptor.batchable;
+}
+
+function readDaemonRouteForTest(descriptor: TestCommandDescriptor): string | undefined {
+  return 'daemon' in descriptor ? descriptor.daemon?.route : undefined;
 }
 
 test('derived daemon registry holds its routing invariants', () => {
@@ -105,6 +134,59 @@ test('derived daemon descriptors preserve closure traits by presence and behavio
         }
       }
     }
+  }
+});
+
+test('command catalog projections are built from descriptor catalog facets', () => {
+  const publicCommands = listDescriptorCatalogCommandNames('public');
+  const internalCommands = listDescriptorCatalogCommandNames('internal');
+  const localCliCommands = listDescriptorCatalogCommandNames('local-cli');
+
+  assert.deepEqual(Object.values(PUBLIC_COMMANDS).sort(), publicCommands);
+  assert.deepEqual(Object.values(INTERNAL_COMMANDS).sort(), internalCommands);
+  assert.deepEqual(listCliCommandNames(), [...publicCommands, ...localCliCommands].sort());
+
+  assert.equal(PUBLIC_COMMANDS.appState, 'appstate');
+  assert.equal(PUBLIC_COMMANDS.longPress, 'longpress');
+  assert.equal(INTERNAL_COMMANDS.leaseAllocate, 'lease_allocate');
+});
+
+test('descriptor-only commands explicitly declare a non-public catalog group', () => {
+  const publicCommands = new Set<string>(listDescriptorCatalogCommandNames('public'));
+
+  for (const descriptor of commandDescriptors) {
+    if (!isDescriptorOnlyCommand(descriptor)) continue;
+
+    const group = readCatalogGroupForTest(descriptor);
+    assert.notEqual(group, 'public', `${descriptor.name} declares a non-public catalog group`);
+    assert.equal(publicCommands.has(descriptor.name), false, `${descriptor.name} is not public`);
+  }
+});
+
+test('platform dispatch command list is built from descriptor dispatch facets', () => {
+  const dispatchCommands = listDescriptorDispatchCommandNames();
+
+  assert.deepEqual(listRegisteredDispatchCommandNames(), dispatchCommands);
+  assert.ok(dispatchCommands.includes('read'), 'read stays dispatch-only');
+  assert.ok(dispatchCommands.includes('swipe-preset'), 'swipe-preset stays dispatch-only');
+  assert.equal(
+    (dispatchCommands as readonly string[]).includes(PUBLIC_COMMANDS.gesture),
+    false,
+    'gesture remains a daemon command that expands before platform dispatch',
+  );
+});
+
+test('generic route commands that reach platform dispatch declare the dispatch facet', () => {
+  const nonDispatchGenericCommands = new Set<string>([PUBLIC_COMMANDS.gesture]);
+
+  for (const descriptor of commandDescriptors) {
+    const route = readDaemonRouteForTest(descriptor);
+    if (route !== 'generic' || nonDispatchGenericCommands.has(descriptor.name)) continue;
+
+    assert.ok(
+      'dispatch' in descriptor && descriptor.dispatch !== undefined,
+      `${descriptor.name} declares dispatch coverage`,
+    );
   }
 });
 

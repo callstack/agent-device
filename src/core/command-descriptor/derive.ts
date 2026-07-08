@@ -3,10 +3,9 @@ import type { DaemonCommandDescriptor } from '../../daemon/daemon-command-regist
 import type { CommandDescriptor } from './types.ts';
 
 /**
- * Pure folds that reconstruct today's hand-authored tables from the additive
- * {@link CommandDescriptor} registry. These exist so the parity tests can prove
- * the registry is byte-equal to the live tables; no production code reads them
- * yet (ADR-0008, Phase 1 step 1).
+ * Pure folds that project live command tables from the
+ * {@link CommandDescriptor} registry. These started as parity-test helpers and
+ * are now the production derivation path for descriptor-owned views.
  */
 
 /** Reconstructs the DAEMON_COMMAND_DESCRIPTORS array (same order, same shape). */

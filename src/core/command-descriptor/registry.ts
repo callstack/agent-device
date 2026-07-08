@@ -1,9 +1,3 @@
-import {
-  INTERNAL_COMMANDS,
-  listCliCommandNames,
-  type CliCommandName,
-  PUBLIC_COMMANDS,
-} from '../../command-catalog.ts';
 import type { CommandCapability } from '../capabilities.ts';
 import type { DaemonRequest } from '../../daemon/types.ts';
 import { resolveWaitBudgetMs } from '../wait-positionals.ts';
@@ -15,6 +9,7 @@ import {
 import { resolvePostActionObservationSupport } from './post-action-observation.ts';
 import type { PostActionObservationSupport } from './post-action-observation.ts';
 import type {
+  CommandCatalogGroup,
   CommandDescriptor,
   CommandResponseDataTransform,
   CommandTimeoutPolicy,
@@ -23,6 +18,43 @@ import type {
 type RawCommandDescriptor = Omit<CommandDescriptor, 'mcpExposed'> & {
   mcpExposed?: boolean;
 };
+
+type RawCommandCatalogGroup<T> = T extends { catalog: { group: infer Group } } ? Group : never;
+
+type RawCommandCatalogKey<T> = T extends { catalog: { key: infer Key extends string } }
+  ? Key
+  : T extends { name: infer Name extends string }
+    ? Name
+    : never;
+
+export type DescriptorCommandNameForCatalogGroup<Group extends CommandCatalogGroup> =
+  Extract<(typeof commandDescriptors)[number], { name: string }> extends infer Descriptor
+    ? Descriptor extends { name: infer Name extends string }
+      ? RawCommandCatalogGroup<Descriptor> extends Group
+        ? Name
+        : never
+      : never
+    : never;
+
+export type DescriptorCliCommandName =
+  | DescriptorCommandNameForCatalogGroup<'public'>
+  | DescriptorCommandNameForCatalogGroup<'local-cli'>;
+
+export type DescriptorCatalogRecord<Group extends CommandCatalogGroup> = {
+  readonly [Descriptor in Extract<
+    (typeof commandDescriptors)[number],
+    { name: string }
+  > as RawCommandCatalogGroup<Descriptor> extends Group
+    ? RawCommandCatalogKey<Descriptor>
+    : never]: Descriptor['name'];
+};
+
+export type DescriptorDispatchCommandName =
+  Extract<(typeof commandDescriptors)[number], { dispatch: object }> extends infer Descriptor
+    ? Descriptor extends { name: infer Name extends string }
+      ? Name
+      : never
+    : never;
 
 // ---------------------------------------------------------------------------
 // Daemon request-policy trait bundles — copied VERBATIM from
@@ -46,7 +78,7 @@ const isRecordingStartRequest = (req: DaemonRequest): boolean =>
   (req.positionals?.[0] ?? '').toLowerCase() === 'start';
 
 const isShardedTestRequest = (req: DaemonRequest): boolean =>
-  req.command === PUBLIC_COMMANDS.test &&
+  req.command === 'test' &&
   (typeof req.flags?.shardAll === 'number' || typeof req.flags?.shardSplit === 'number');
 
 // ---------------------------------------------------------------------------
@@ -160,36 +192,39 @@ function postActionObservation(command: string): PostActionObservationSupport {
 }
 
 // ---------------------------------------------------------------------------
-// The additive single source. Each entry carries the daemon route/traits +
-// capability + batchable flag copied VERBATIM from today's hand tables.
-//
-// Entry order matches DAEMON_COMMAND_DESCRIPTORS exactly (the two trailing
-// entries — `app-switcher` and `install-from-source` — have no daemon route and
-// live only in the capability/batch hand tables).
+// The additive single source. Each entry carries the command identity facets
+// plus whichever daemon, capability, batch, MCP, timeout, observation, and
+// platform-dispatch traits that command owns. Public catalog identity and the
+// non-public dispatch aliases now live here too; leaf views derive from this
+// array rather than recreating command-name sets.
 // ---------------------------------------------------------------------------
 
 const RAW_COMMAND_DESCRIPTORS = [
   // -- lease (route: lease) --
   {
-    name: INTERNAL_COMMANDS.leaseAllocate,
+    name: 'lease_allocate',
+    catalog: { group: 'internal', key: 'leaseAllocate' },
     daemon: { route: 'lease', ...ADMISSION_AND_LOCK_EXEMPT },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },
   {
-    name: INTERNAL_COMMANDS.leaseHeartbeat,
+    name: 'lease_heartbeat',
+    catalog: { group: 'internal', key: 'leaseHeartbeat' },
     daemon: { route: 'lease', ...ADMISSION_AND_LOCK_EXEMPT },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },
   {
-    name: INTERNAL_COMMANDS.leaseRelease,
+    name: 'lease_release',
+    catalog: { group: 'internal', key: 'leaseRelease' },
     daemon: { route: 'lease', ...ADMISSION_AND_LOCK_EXEMPT },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },
   {
-    name: PUBLIC_COMMANDS.artifacts,
+    name: 'artifacts',
+    catalog: { group: 'public' },
     daemon: { route: 'lease', ...ADMISSION_AND_LOCK_EXEMPT },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
@@ -197,13 +232,15 @@ const RAW_COMMAND_DESCRIPTORS = [
 
   // -- session (route: session) --
   {
-    name: INTERNAL_COMMANDS.sessionList,
+    name: 'session_list',
+    catalog: { group: 'internal', key: 'sessionList' },
     daemon: { route: 'session', sessionKind: 'inventory', ...REQUEST_EXECUTION_EXEMPT },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },
   {
-    name: PUBLIC_COMMANDS.devices,
+    name: 'devices',
+    catalog: { group: 'public' },
     daemon: {
       route: 'session',
       sessionKind: 'inventory',
@@ -214,7 +251,8 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.capabilities,
+    name: 'capabilities',
+    catalog: { group: 'public' },
     daemon: {
       route: 'session',
       sessionKind: 'inventory',
@@ -226,7 +264,8 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.doctor,
+    name: 'doctor',
+    catalog: { group: 'public' },
     daemon: {
       route: 'session',
       sessionKind: 'inventory',
@@ -238,7 +277,8 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.apps,
+    name: 'apps',
+    catalog: { group: 'public' },
     daemon: {
       route: 'session',
       sessionKind: 'inventory',
@@ -250,7 +290,8 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.boot,
+    name: 'boot',
+    catalog: { group: 'public' },
     daemon: { route: 'session', sessionKind: 'state' },
     capability: {
       apple: APPLE_SIM_AND_DEVICE,
@@ -261,7 +302,8 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.shutdown,
+    name: 'shutdown',
+    catalog: { group: 'public' },
     daemon: { route: 'session', sessionKind: 'state' },
     capability: {
       apple: { simulator: true },
@@ -272,34 +314,39 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.appState,
+    name: 'appstate',
+    catalog: { group: 'public', key: 'appState' },
     daemon: { route: 'session', sessionKind: 'state' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.perf,
+    name: 'perf',
+    catalog: { group: 'public' },
     daemon: { route: 'session', sessionKind: 'observability' },
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.logs,
+    name: 'logs',
+    catalog: { group: 'public' },
     daemon: { route: 'session', sessionKind: 'observability' },
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.network,
+    name: 'network',
+    catalog: { group: 'public' },
     daemon: { route: 'session', sessionKind: 'observability' },
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.audio,
+    name: 'audio',
+    catalog: { group: 'public' },
     daemon: { route: 'session', sessionKind: 'observability' },
     capability: {
       apple: APPLE_SIM_AND_DEVICE,
@@ -310,7 +357,8 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.replay,
+    name: 'replay',
+    catalog: { group: 'public' },
     daemon: {
       route: 'session',
       sessionKind: 'replay',
@@ -321,7 +369,8 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: false,
   },
   {
-    name: PUBLIC_COMMANDS.test,
+    name: 'test',
+    catalog: { group: 'public' },
     daemon: {
       route: 'session',
       sessionKind: 'replay',
@@ -333,14 +382,17 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: INTERNAL_COMMANDS.runtime,
+    name: 'runtime',
+    catalog: { group: 'internal' },
     daemon: { route: 'session' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },
   {
-    name: PUBLIC_COMMANDS.clipboard,
+    name: 'clipboard',
+    catalog: { group: 'public' },
     daemon: { route: 'session', replayScopedAction: true },
+    dispatch: {},
     capability: {
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
@@ -350,8 +402,10 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.keyboard,
+    name: 'keyboard',
+    catalog: { group: 'public' },
     daemon: { route: 'session', replayScopedAction: true, androidBlockingDialogGuard: true },
+    dispatch: {},
     capability: {
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
@@ -361,34 +415,40 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.install,
+    name: 'install',
+    catalog: { group: 'public' },
     daemon: { route: 'session' },
     capability: APP_INSTALL_CAPABILITY,
     timeoutPolicy: INSTALL_TIMEOUT_POLICY,
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.reinstall,
+    name: 'reinstall',
+    catalog: { group: 'public' },
     daemon: { route: 'session' },
     capability: APP_INSTALL_CAPABILITY,
     timeoutPolicy: INSTALL_TIMEOUT_POLICY,
     batchable: true,
   },
   {
-    name: INTERNAL_COMMANDS.installSource,
+    name: 'install_source',
+    catalog: { group: 'internal', key: 'installSource' },
     daemon: { route: 'session' },
     timeoutPolicy: INSTALL_TIMEOUT_POLICY,
     batchable: false,
   },
   {
-    name: INTERNAL_COMMANDS.releaseMaterializedPaths,
+    name: 'release_materialized_paths',
+    catalog: { group: 'internal', key: 'releaseMaterializedPaths' },
     daemon: { route: 'session', ...REQUEST_EXECUTION_EXEMPT },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },
   {
-    name: PUBLIC_COMMANDS.push,
+    name: 'push',
+    catalog: { group: 'public' },
     daemon: { route: 'session' },
+    dispatch: {},
     capability: {
       apple: { simulator: true },
       android: ANDROID_ALL,
@@ -398,21 +458,26 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.triggerAppEvent,
+    name: 'trigger-app-event',
+    catalog: { group: 'public', key: 'triggerAppEvent' },
     daemon: { route: 'session' },
+    dispatch: {},
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.open,
+    name: 'open',
+    catalog: { group: 'public' },
     daemon: { route: 'session', allowSessionlessDefaultDevice: allowAnyDeviceSessionless },
+    dispatch: {},
     capability: APP_RUNTIME_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.prepare,
+    name: 'prepare',
+    catalog: { group: 'public' },
     daemon: { route: 'session' },
     // Runner warm-up builds are the longest fixed envelope; --timeout overrides.
     timeoutPolicy: {
@@ -424,14 +489,17 @@ const RAW_COMMAND_DESCRIPTORS = [
     mcpExposed: false,
   },
   {
-    name: PUBLIC_COMMANDS.batch,
+    name: 'batch',
+    catalog: { group: 'public' },
     daemon: { route: 'session' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },
   {
-    name: PUBLIC_COMMANDS.close,
+    name: 'close',
+    catalog: { group: 'public' },
     daemon: { route: 'session', allowInvalidRecording: true },
+    dispatch: {},
     capability: APP_RUNTIME_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
@@ -439,8 +507,10 @@ const RAW_COMMAND_DESCRIPTORS = [
 
   // -- snapshot (route: snapshot) --
   {
-    name: PUBLIC_COMMANDS.snapshot,
+    name: 'snapshot',
+    catalog: { group: 'public' },
     daemon: { route: 'snapshot', replayScopedAction: true },
+    dispatch: {},
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
     // First Apple snapshot on a device can sit behind runner startup; --timeout
     // widens the envelope, and a timeout must not tear down the daemon.
@@ -448,14 +518,16 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.diff,
+    name: 'diff',
+    catalog: { group: 'public' },
     daemon: { route: 'snapshot', replayScopedAction: true },
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.wait,
+    name: 'wait',
+    catalog: { group: 'public' },
     daemon: { route: 'snapshot', replayScopedAction: true },
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
     // The wait budget travels as a positional, not a flag; parse it the same
@@ -467,7 +539,8 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.alert,
+    name: 'alert',
+    catalog: { group: 'public' },
     daemon: { route: 'snapshot', replayScopedAction: true },
     capability: {
       apple: APPLE_SIM_AND_DEVICE,
@@ -478,8 +551,10 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.settings,
+    name: 'settings',
+    catalog: { group: 'public' },
     daemon: { route: 'snapshot', replayScopedAction: true },
+    dispatch: {},
     capability: {
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
@@ -491,14 +566,16 @@ const RAW_COMMAND_DESCRIPTORS = [
 
   // -- specialized routes --
   {
-    name: PUBLIC_COMMANDS.reactNative,
+    name: 'react-native',
+    catalog: { group: 'public', key: 'reactNative' },
     daemon: { route: 'reactNative', replayScopedAction: true },
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.record,
+    name: 'record',
+    catalog: { group: 'public' },
     daemon: {
       route: 'recordTrace',
       replayScopedAction: true,
@@ -510,13 +587,15 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.trace,
+    name: 'trace',
+    catalog: { group: 'public' },
     daemon: { route: 'recordTrace' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.find,
+    name: 'find',
+    catalog: { group: 'public' },
     daemon: { route: 'find', replayScopedAction: true },
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: PRESERVE_DAEMON_TIMEOUT_POLICY,
@@ -531,79 +610,102 @@ const RAW_COMMAND_DESCRIPTORS = [
   // and rely on request cancellation + the per-request runner recycle budget to abort the
   // stuck Apple runner work.
   {
-    name: PUBLIC_COMMANDS.click,
+    name: 'click',
+    catalog: { group: 'public' },
     daemon: { route: 'interaction', replayScopedAction: true, androidBlockingDialogGuard: true },
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: interactionTimeoutPolicy(PUBLIC_COMMANDS.click),
-    postActionObservation: postActionObservation(PUBLIC_COMMANDS.click),
+    timeoutPolicy: interactionTimeoutPolicy('click'),
+    postActionObservation: postActionObservation('click'),
     responseDataTransform: TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.fill,
+    name: 'fill',
+    catalog: { group: 'public' },
     daemon: { route: 'interaction', replayScopedAction: true, androidBlockingDialogGuard: true },
+    dispatch: {},
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: interactionTimeoutPolicy(PUBLIC_COMMANDS.fill),
-    postActionObservation: postActionObservation(PUBLIC_COMMANDS.fill),
+    timeoutPolicy: interactionTimeoutPolicy('fill'),
+    postActionObservation: postActionObservation('fill'),
     responseDataTransform: FILL_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.longPress,
+    name: 'longpress',
+    catalog: { group: 'public', key: 'longPress' },
     daemon: { route: 'interaction', replayScopedAction: true, androidBlockingDialogGuard: true },
+    dispatch: {},
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: interactionTimeoutPolicy(PUBLIC_COMMANDS.longPress),
-    postActionObservation: postActionObservation(PUBLIC_COMMANDS.longPress),
+    timeoutPolicy: interactionTimeoutPolicy('longpress'),
+    postActionObservation: postActionObservation('longpress'),
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.press,
+    name: 'press',
+    catalog: { group: 'public' },
     daemon: { route: 'interaction', replayScopedAction: true, androidBlockingDialogGuard: true },
+    dispatch: {},
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: interactionTimeoutPolicy(PUBLIC_COMMANDS.press),
-    postActionObservation: postActionObservation(PUBLIC_COMMANDS.press),
+    timeoutPolicy: interactionTimeoutPolicy('press'),
+    postActionObservation: postActionObservation('press'),
     responseDataTransform: TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.type,
+    name: 'type',
+    catalog: { group: 'public' },
     daemon: { route: 'interaction', replayScopedAction: true, androidBlockingDialogGuard: true },
+    dispatch: {},
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
-    timeoutPolicy: interactionTimeoutPolicy(PUBLIC_COMMANDS.type),
+    timeoutPolicy: interactionTimeoutPolicy('type'),
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.get,
+    name: 'get',
+    catalog: { group: 'public' },
     daemon: { route: 'interaction', replayScopedAction: true },
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
-    timeoutPolicy: interactionTimeoutPolicy(PUBLIC_COMMANDS.get),
+    timeoutPolicy: interactionTimeoutPolicy('get'),
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.is,
+    name: 'read',
+    catalog: { group: 'dispatch-alias' },
+    dispatch: {},
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+  },
+  {
+    name: 'is',
+    catalog: { group: 'public' },
     daemon: { route: 'interaction', replayScopedAction: true },
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
-    timeoutPolicy: interactionTimeoutPolicy(PUBLIC_COMMANDS.is),
+    timeoutPolicy: interactionTimeoutPolicy('is'),
     batchable: true,
   },
 
   // -- generic (route: generic) --
   {
-    name: PUBLIC_COMMANDS.back,
+    name: 'back',
+    catalog: { group: 'public' },
     daemon: { route: 'generic', replayScopedAction: true, androidBlockingDialogGuard: true },
+    dispatch: {},
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.gesture,
+    name: 'gesture',
+    catalog: { group: 'public' },
     daemon: { route: 'generic', replayScopedAction: true, androidBlockingDialogGuard: true },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.home,
+    name: 'home',
+    catalog: { group: 'public' },
     daemon: { route: 'generic', replayScopedAction: true, androidBlockingDialogGuard: true },
+    dispatch: {},
     capability: {
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
@@ -613,8 +715,10 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.tvRemote,
+    name: 'tv-remote',
+    catalog: { group: 'public', key: 'tvRemote' },
     daemon: { route: 'generic', replayScopedAction: true, androidBlockingDialogGuard: true },
+    dispatch: {},
     capability: {
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
@@ -624,8 +728,10 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.rotate,
+    name: 'rotate',
+    catalog: { group: 'public' },
     daemon: { route: 'generic', replayScopedAction: true, androidBlockingDialogGuard: true },
+    dispatch: {},
     capability: {
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
@@ -635,22 +741,35 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.scroll,
+    name: 'scroll',
+    catalog: { group: 'public' },
     daemon: { route: 'generic', replayScopedAction: true, androidBlockingDialogGuard: true },
+    dispatch: {},
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.swipe,
+    name: 'swipe',
+    catalog: { group: 'public' },
     daemon: { route: 'generic', replayScopedAction: true, androidBlockingDialogGuard: true },
+    dispatch: {},
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
+  },
+  {
+    name: 'swipe-preset',
+    catalog: { group: 'dispatch-alias' },
+    dispatch: {},
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
   },
   {
     name: 'pinch',
+    catalog: { group: 'dispatch-alias' },
     daemon: { route: 'generic', replayScopedAction: true, androidBlockingDialogGuard: true },
+    dispatch: {},
     capability: {
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
@@ -660,43 +779,55 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: false,
   },
   {
-    name: PUBLIC_COMMANDS.focus,
+    name: 'focus',
+    catalog: { group: 'public' },
     daemon: { route: 'generic', androidBlockingDialogGuard: true },
+    dispatch: {},
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.screenshot,
+    name: 'screenshot',
+    catalog: { group: 'public' },
     daemon: { route: 'generic', replayScopedAction: true },
+    dispatch: {},
     capability: ALL_DEVICE_COMMAND_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.viewport,
+    name: 'viewport',
+    catalog: { group: 'public' },
     daemon: { route: 'generic', replayScopedAction: true },
+    dispatch: {},
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },
   {
     name: 'pan',
+    catalog: { group: 'dispatch-alias' },
     daemon: { route: 'generic', androidBlockingDialogGuard: true },
+    dispatch: {},
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },
   {
     name: 'fling',
+    catalog: { group: 'dispatch-alias' },
     daemon: { route: 'generic', androidBlockingDialogGuard: true },
+    dispatch: {},
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_NONE },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },
   {
     name: 'rotate-gesture',
+    catalog: { group: 'dispatch-alias' },
     daemon: { route: 'generic', androidBlockingDialogGuard: true },
+    dispatch: {},
     capability: {
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
@@ -707,7 +838,9 @@ const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'transform-gesture',
+    catalog: { group: 'dispatch-alias' },
     daemon: { route: 'generic', androidBlockingDialogGuard: true },
+    dispatch: {},
     capability: {
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
@@ -719,7 +852,9 @@ const RAW_COMMAND_DESCRIPTORS = [
 
   // -- capability/batch-only commands (no daemon route) --
   {
-    name: PUBLIC_COMMANDS.appSwitcher,
+    name: 'app-switcher',
+    catalog: { group: 'public', key: 'appSwitcher' },
+    dispatch: {},
     capability: {
       apple: APPLE_SIM_AND_DEVICE,
       android: ANDROID_ALL,
@@ -729,7 +864,8 @@ const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: PUBLIC_COMMANDS.installFromSource,
+    name: 'install-from-source',
+    catalog: { group: 'public', key: 'installFromSource' },
     capability: APP_INSTALL_CAPABILITY,
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: true,
@@ -738,22 +874,94 @@ const RAW_COMMAND_DESCRIPTORS = [
   // -- local client-backed CLI/MCP commands (no daemon route/capability) --
   {
     name: 'debug',
+    catalog: { group: 'local-cli' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },
   {
     name: 'metro',
+    catalog: { group: 'local-cli' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },
   {
     name: 'session',
+    catalog: { group: 'local-cli' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
     batchable: false,
   },
+  {
+    name: 'cdp',
+    catalog: { group: 'local-cli' },
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+    mcpExposed: false,
+  },
+  {
+    name: 'auth',
+    catalog: { group: 'local-cli' },
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+    mcpExposed: false,
+  },
+  {
+    name: 'connect',
+    catalog: { group: 'local-cli' },
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+    mcpExposed: false,
+  },
+  {
+    name: 'connection',
+    catalog: { group: 'local-cli' },
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+    mcpExposed: false,
+  },
+  {
+    name: 'disconnect',
+    catalog: { group: 'local-cli' },
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+    mcpExposed: false,
+  },
+  {
+    name: 'mcp',
+    catalog: { group: 'local-cli' },
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+    mcpExposed: false,
+  },
+  {
+    name: 'proxy',
+    catalog: { group: 'local-cli' },
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+    mcpExposed: false,
+  },
+  {
+    name: 'react-devtools',
+    catalog: { group: 'local-cli', key: 'reactDevtools' },
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+    mcpExposed: false,
+  },
+  {
+    name: 'web',
+    catalog: { group: 'local-cli' },
+    timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
+    batchable: false,
+    mcpExposed: false,
+  },
 ] as const satisfies readonly RawCommandDescriptor[];
 
-const CLI_COMMAND_NAMES = new Set<string>(listCliCommandNames());
+const CLI_CATALOG_GROUPS = new Set<CommandCatalogGroup>(['public', 'local-cli']);
+
+const CLI_COMMAND_NAMES = new Set<string>(
+  RAW_COMMAND_DESCRIPTORS.filter((descriptor) =>
+    CLI_CATALOG_GROUPS.has(readCatalogGroup(descriptor)),
+  ).map((descriptor) => descriptor.name),
+);
 
 /**
  * The additive single source of truth (ADR-0008, Phase 1 step 1). Proven
@@ -771,17 +979,46 @@ export const commandDescriptors = RAW_COMMAND_DESCRIPTORS.map((descriptor) => ({
 /** The literal union of every registered command name. */
 export type Command = (typeof commandDescriptors)[number]['name'];
 
-export function listMcpExposedCommandNames(): CliCommandName[] {
-  return commandDescriptors
-    .filter((descriptor) => isMcpExposedCliCommand(descriptor))
-    .map((descriptor) => descriptor.name as CliCommandName)
+export function listDescriptorCatalogCommandNames<Group extends CommandCatalogGroup>(
+  group: Group,
+): Array<DescriptorCommandNameForCatalogGroup<Group>> {
+  return listDescriptorCatalogEntries(group)
+    .map(([, name]) => name)
     .sort();
 }
 
-export function listCapabilityCheckedCommandNames(): CliCommandName[] {
+export function listDescriptorCatalogEntries<Group extends CommandCatalogGroup>(
+  group: Group,
+): Array<readonly [key: string, name: DescriptorCommandNameForCatalogGroup<Group>]> {
+  return commandDescriptors
+    .filter((descriptor) => readCatalogGroup(descriptor) === group)
+    .map(
+      (descriptor) =>
+        [
+          readCatalogKey(descriptor),
+          descriptor.name as DescriptorCommandNameForCatalogGroup<Group>,
+        ] as const,
+    );
+}
+
+export function listDescriptorDispatchCommandNames(): DescriptorDispatchCommandName[] {
+  return commandDescriptors
+    .filter((descriptor) => 'dispatch' in descriptor && descriptor.dispatch !== undefined)
+    .map((descriptor) => descriptor.name as DescriptorDispatchCommandName)
+    .sort();
+}
+
+export function listMcpExposedCommandNames(): DescriptorCliCommandName[] {
+  return commandDescriptors
+    .filter((descriptor) => isMcpExposedCliCommand(descriptor))
+    .map((descriptor) => descriptor.name as DescriptorCliCommandName)
+    .sort();
+}
+
+export function listCapabilityCheckedCommandNames(): DescriptorCliCommandName[] {
   return commandDescriptors
     .filter((descriptor) => isCapabilityCheckedCliCommand(descriptor))
-    .map((descriptor) => descriptor.name as CliCommandName)
+    .map((descriptor) => descriptor.name as DescriptorCliCommandName)
     .sort();
 }
 
@@ -789,7 +1026,7 @@ const COMMAND_DESCRIPTOR_BY_NAME: ReadonlyMap<string, CommandDescriptor> = new M
   commandDescriptors.map((descriptor) => [descriptor.name, descriptor]),
 );
 
-function isCliCommandName(command: string): command is CliCommandName {
+function isCliCommandName(command: string): command is DescriptorCliCommandName {
   return CLI_COMMAND_NAMES.has(command);
 }
 
@@ -803,6 +1040,20 @@ function isMcpExposedCliCommand(descriptor: CommandDescriptor): boolean {
 
 function isCapabilityCheckedCliCommand(descriptor: CommandDescriptor): boolean {
   return Boolean(descriptor.capability) && isCliCommandName(descriptor.name);
+}
+
+function readCatalogGroup(descriptor: {
+  name: string;
+  catalog: { group: CommandCatalogGroup; key?: string };
+}): CommandCatalogGroup {
+  return descriptor.catalog.group;
+}
+
+function readCatalogKey(descriptor: {
+  name: string;
+  catalog: { group: CommandCatalogGroup; key?: string };
+}): string {
+  return descriptor.catalog.key ?? descriptor.name;
 }
 
 const TIMEOUT_POLICY_BY_COMMAND: ReadonlyMap<string, CommandTimeoutPolicy> = new Map(

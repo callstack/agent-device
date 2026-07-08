@@ -37,6 +37,7 @@ import { readNotificationPayload } from './dispatch-payload.ts';
 import { parseDeviceRotation } from './device-rotation.ts';
 import { parseTvRemoteButton } from './tv-remote.ts';
 import { readViewportDimension } from './viewport-dimension.ts';
+import type { DescriptorDispatchCommandName } from './command-descriptor/registry.ts';
 
 export { resolveTargetDevice } from './dispatch-resolve.ts';
 export type { CommandFlags, DispatchContext } from './dispatch-context.ts';
@@ -89,44 +90,7 @@ export async function dispatchCommand(
   );
 }
 
-/**
- * The exact set of commands routed by {@link dispatchKnownCommand}. Hand-authored
- * to match the former `switch` cases verbatim: it is NOT the registry's `generic`
- * daemon route (that set is both narrower — e.g. it has no `open`/`type`/`read` —
- * and includes `gesture`, which dispatch never handled), and `swipe-preset` /
- * `read` are not registry command names at all. Keeping it explicit makes the
- * dispatch surface self-describing and lets the `Record` below enforce coverage.
- */
-type DispatchCommand =
-  | 'open'
-  | 'close'
-  | 'press'
-  | 'swipe'
-  | 'swipe-preset'
-  | 'pan'
-  | 'fling'
-  | 'longpress'
-  | 'focus'
-  | 'type'
-  | 'fill'
-  | 'scroll'
-  | 'pinch'
-  | 'rotate-gesture'
-  | 'transform-gesture'
-  | 'trigger-app-event'
-  | 'screenshot'
-  | 'viewport'
-  | 'back'
-  | 'home'
-  | 'rotate'
-  | 'app-switcher'
-  | 'clipboard'
-  | 'keyboard'
-  | 'tv-remote'
-  | 'settings'
-  | 'push'
-  | 'snapshot'
-  | 'read';
+type DispatchCommand = DescriptorDispatchCommandName;
 
 type DispatchHandlerArgs = {
   device: DeviceInfo;
@@ -140,11 +104,12 @@ type DispatchHandlerArgs = {
 type DispatchHandler = (args: DispatchHandlerArgs) => Promise<Record<string, unknown> | void>;
 
 /**
- * Registry-driven exhaustive dispatch table. The `Record<DispatchCommand, …>`
- * type forces every dispatch command to have a handler — a missing entry is a
- * COMPILE error, which replaces the former runtime `default: throw` as the
- * coverage safety net. Each entry routes to the IDENTICAL handler with the
- * IDENTICAL arguments the `switch` used, so dispatch stays strictly behaviorless.
+ * Descriptor-driven exhaustive dispatch table. The `Record<DispatchCommand, …>`
+ * type forces every descriptor-declared dispatch command to have a handler — a
+ * missing entry is a COMPILE error, which replaces the former runtime `default:
+ * throw` as the coverage safety net. Each entry routes to the IDENTICAL handler
+ * with the IDENTICAL arguments the `switch` used, so dispatch stays strictly
+ * behaviorless.
  */
 const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
   open: ({ device, interactor, positionals, context }) =>
@@ -215,6 +180,10 @@ const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
   snapshot: ({ interactor, context }) => handleSnapshotCommand(interactor, context),
   read: ({ device, positionals, context }) => handleReadCommand(device, positionals, context),
 };
+
+export function listRegisteredDispatchCommandNames(): string[] {
+  return Object.keys(DISPATCH_HANDLERS).sort();
+}
 
 async function dispatchKnownCommand(
   device: DeviceInfo,

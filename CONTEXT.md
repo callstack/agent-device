@@ -70,11 +70,14 @@ The perfect-shape refactor is complete and merged. Its end-state:
 
 - Two derivation registries. One `CommandDescriptor` per command
   (`src/core/command-descriptor/registry.ts`) is the single declaration site from which the
-  capability matrix, daemon command registry, batch allowlist, timeout policy, MCP exposure list, and
-  capability-checked CLI command list are *derived* by parity-tested projection. The command catalog
-  still owns identity, command families still own surface metadata/CLI schema, and system command
-  facets now project their simple Node client command methods; the rest of the Node client surface
-  remains a deferred derivation target. One
+  public/internal/local command catalog, capability matrix, daemon command registry, batch allowlist,
+  timeout policy, MCP exposure list, capability-checked CLI command list, post-action observation
+  traits, and platform dispatch command set are *derived* by parity-tested projection. Command
+  families still own surface metadata/CLI schema in `src/commands/**`, but descriptor/catalog
+  coherence guards prevent surface names from drifting; system command facets now project their
+  simple Node client command methods. Public Node-client result narrowing remains a deferred typed
+  contract target ([#1153](https://github.com/callstack/agent-device/issues/1153)), separate from
+  the completed descriptor registry migration. One
   `PlatformPlugin` per platform family (`src/core/platform-plugin/`) stops core/daemon from branching
   on platform, with the Apple plugin the first instance. See
   [ADR 0008](docs/adr/0008-command-descriptor-registry.md).
