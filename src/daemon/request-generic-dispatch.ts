@@ -187,12 +187,25 @@ async function executeGenericPlatformCommand(params: {
   out: string | undefined;
   dispatchContext: DaemonCommandContext;
 }): Promise<Record<string, unknown> | void> {
-  const { session, command, request, positionals, out, dispatchContext } = params;
-  if (command !== 'screenshot') {
-    return await dispatchCommand(session.device, command, positionals, out, {
-      ...dispatchContext,
-    });
+  const { session, command, positionals, out, dispatchContext } = params;
+  if (command === 'screenshot') {
+    return await executeScreenshotPlatformCommand(params);
   }
+  return await dispatchCommand(session.device, command, positionals, out, {
+    ...dispatchContext,
+  });
+}
+
+async function executeScreenshotPlatformCommand(params: {
+  session: SessionState;
+  sessionName: string;
+  logPath: string;
+  request: DaemonRequest;
+  positionals: string[];
+  out: string | undefined;
+  dispatchContext: DaemonCommandContext;
+}): Promise<Record<string, unknown>> {
+  const { session, request, positionals, out, dispatchContext } = params;
   assertSupportedScreenshotPixelDensity(session, request.flags?.screenshotPixelDensity);
   const data = await dispatchScreenshotViaRuntime({
     session,
@@ -201,15 +214,16 @@ async function executeGenericPlatformCommand(params: {
     outputPlacement: resolveScreenshotOutputPlacement(request),
     dispatchContext,
   });
-  if (request.flags?.overlayRefs && typeof data?.path === 'string') {
+  if (typeof data.path !== 'string') {
+    return data;
+  }
+  if (request.flags?.overlayRefs) {
     await applyScreenshotOverlay(session, data, params.logPath);
   }
-  if (typeof data?.path === 'string') {
-    await attachScreenshotMetadata(session, data, {
-      requestedPixelDensity: request.flags?.screenshotPixelDensity,
-      maxSize: request.flags?.screenshotMaxSize,
-    });
-  }
+  await attachScreenshotMetadata(session, data, {
+    requestedPixelDensity: request.flags?.screenshotPixelDensity,
+    maxSize: request.flags?.screenshotMaxSize,
+  });
   return data;
 }
 

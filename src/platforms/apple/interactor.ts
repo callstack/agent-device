@@ -16,7 +16,12 @@ import { withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
-import type { Interactor, RunnerContext } from '../../core/interactor-types.ts';
+import type {
+  Interactor,
+  RunnerCallOptions,
+  RunnerContext,
+  ScreenshotOptions,
+} from '../../core/interactor-types.ts';
 import {
   readSnapshotQualityVerdict,
   type SnapshotQualityVerdict,
@@ -48,23 +53,7 @@ export function createAppleInteractor(
       }),
     openDevice: () => openIosDevice(device),
     close: (app) => closeIosApp(device, app),
-    screenshot: async (outPath, options) => {
-      if (isMacOs(device) && options?.surface && options.surface !== 'app') {
-        await runMacOsScreenshotAction(outPath, {
-          surface: options.surface,
-          fullscreen: options.fullscreen,
-        });
-        return;
-      }
-      await screenshotIos(device, outPath, {
-        appBundleId: options?.appBundleId,
-        pixelDensity: options?.pixelDensity,
-        fullscreen: options?.fullscreen,
-        runnerOptions: runnerOpts,
-        normalizeStatusBar: options?.normalizeStatusBar,
-        skipIosSimulatorBootCheck: options?.skipIosSimulatorBootCheck,
-      });
-    },
+    screenshot: (outPath, options) => runAppleScreenshot(device, outPath, options, runnerOpts),
     snapshot: async (options) => {
       const result = readAppleSnapshotResult(
         await withDiagnosticTimer(
@@ -164,6 +153,36 @@ export function createAppleInteractor(
       setIosSetting(device, setting, state, appId, options),
     ...overrides,
   };
+}
+
+async function runAppleScreenshot(
+  device: DeviceInfo,
+  outPath: string,
+  options: ScreenshotOptions = {},
+  runnerOpts: RunnerCallOptions,
+): Promise<void> {
+  if (usesMacOsSurfaceScreenshot(device, options.surface)) {
+    await runMacOsScreenshotAction(outPath, {
+      surface: options.surface,
+      fullscreen: options.fullscreen,
+    });
+    return;
+  }
+  await screenshotIos(device, outPath, {
+    appBundleId: options.appBundleId,
+    pixelDensity: options.pixelDensity,
+    fullscreen: options.fullscreen,
+    runnerOptions: runnerOpts,
+    normalizeStatusBar: options.normalizeStatusBar,
+    skipIosSimulatorBootCheck: options.skipIosSimulatorBootCheck,
+  });
+}
+
+function usesMacOsSurfaceScreenshot(
+  device: DeviceInfo,
+  surface: ScreenshotOptions['surface'],
+): surface is Exclude<ScreenshotOptions['surface'], undefined | 'app'> {
+  return isMacOs(device) && surface !== undefined && surface !== 'app';
 }
 
 function readAppleSnapshotResult(result: Record<string, unknown>): {

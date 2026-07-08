@@ -5,6 +5,7 @@ import { resolveUserPath } from '../../utils/path-resolution.ts';
 import type { AgentDeviceBackend } from '../../backend.ts';
 import type { AgentDeviceClient, CaptureScreenshotResult } from '../../client/client.ts';
 import { runCliCommand } from '../../commands/cli-runner.ts';
+import { pickScreenshotResultData } from '../../utils/screenshot-result.ts';
 import type { CliFlags } from '../parser/cli-flags.ts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
@@ -23,18 +24,10 @@ export const screenshotCommand: ClientCommandHandler = async ({ positionals, fla
     writeCommandOutput(flags, result, () => JSON.stringify(result, null, 2));
     return true;
   }
-  const data = {
-    path: result.path,
-    ...(typeof result.width === 'number' ? { width: result.width } : {}),
-    ...(typeof result.height === 'number' ? { height: result.height } : {}),
-    ...(typeof result.logicalWidth === 'number' ? { logicalWidth: result.logicalWidth } : {}),
-    ...(typeof result.logicalHeight === 'number' ? { logicalHeight: result.logicalHeight } : {}),
-    ...(typeof result.pixelDensity === 'number' ? { pixelDensity: result.pixelDensity } : {}),
-    ...(result.overlayRefs ? { overlayRefs: result.overlayRefs } : {}),
-  };
+  const data = pickScreenshotResultData(result);
   writeCommandOutput(flags, data, () =>
     result.overlayRefs
-      ? `${formatScreenshotSummary(result)} with ${result.overlayRefs.length} refs annotated`
+      ? `Annotated ${result.overlayRefs.length} refs onto ${result.path}`
       : formatScreenshotSummary(result),
   );
   return true;
@@ -110,17 +103,7 @@ function createClientScreenshotBackend(
         stabilize: options?.stabilize,
         surface: options?.surface,
       });
-      return {
-        path: result.path,
-        ...(typeof result.width === 'number' ? { width: result.width } : {}),
-        ...(typeof result.height === 'number' ? { height: result.height } : {}),
-        ...(typeof result.logicalWidth === 'number' ? { logicalWidth: result.logicalWidth } : {}),
-        ...(typeof result.logicalHeight === 'number'
-          ? { logicalHeight: result.logicalHeight }
-          : {}),
-        ...(typeof result.pixelDensity === 'number' ? { pixelDensity: result.pixelDensity } : {}),
-        ...(result.overlayRefs ? { overlayRefs: result.overlayRefs } : {}),
-      };
+      return pickScreenshotResultData(result);
     },
   };
 }

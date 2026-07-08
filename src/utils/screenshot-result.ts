@@ -11,6 +11,18 @@ export type ScreenshotResultData = {
   overlayRefs?: ScreenshotOverlayRef[];
 };
 
+export function pickScreenshotResultData(value: ScreenshotResultData): ScreenshotResultData {
+  return {
+    ...(typeof value.path === 'string' ? { path: value.path } : {}),
+    ...(typeof value.width === 'number' ? { width: value.width } : {}),
+    ...(typeof value.height === 'number' ? { height: value.height } : {}),
+    ...(typeof value.logicalWidth === 'number' ? { logicalWidth: value.logicalWidth } : {}),
+    ...(typeof value.logicalHeight === 'number' ? { logicalHeight: value.logicalHeight } : {}),
+    ...(typeof value.pixelDensity === 'number' ? { pixelDensity: value.pixelDensity } : {}),
+    ...(value.overlayRefs ? { overlayRefs: value.overlayRefs } : {}),
+  };
+}
+
 type ScreenshotOverlayRefData = {
   ref?: unknown;
   label?: unknown;
@@ -33,15 +45,15 @@ export function readScreenshotResultData(value: unknown): ScreenshotResultData |
         return overlayRef ? [overlayRef] : [];
       })
     : undefined;
-  return {
-    ...(path ? { path } : {}),
-    ...(width !== undefined ? { width } : {}),
-    ...(height !== undefined ? { height } : {}),
-    ...(logicalWidth !== undefined ? { logicalWidth } : {}),
-    ...(logicalHeight !== undefined ? { logicalHeight } : {}),
-    ...(pixelDensity !== undefined ? { pixelDensity } : {}),
-    ...(overlayRefs ? { overlayRefs } : {}),
-  };
+  return pickScreenshotResultData({
+    path,
+    width,
+    height,
+    logicalWidth,
+    logicalHeight,
+    pixelDensity,
+    overlayRefs,
+  });
 }
 
 function readScreenshotOverlayRef(

@@ -618,7 +618,7 @@ test('usage renders concise commands inline with descriptions', async () => {
   assert.match(help, /  test <path-or-glob>\.\.\.\s{2,}Run replay test suites/);
   assert.match(
     help,
-    /  screenshot \[path\]\s{2,}Capture screenshot with optional web full-page, desktop/,
+    /  screenshot \[path\]\s{2,}Capture screenshot with optional density, full-page, desktop/,
   );
   assert.match(
     help,

@@ -320,9 +320,9 @@ function summarizeProviderScenarioFlagExclusions() {
       keys: ['headless'],
     },
     {
-      name: 'Apple screenshot status-bar normalization',
+      name: 'Apple simulator screenshot rendering options',
       owner: 'iOS platform and screenshot-diff runtime tests',
-      keys: ['screenshotNormalizeStatusBar'],
+      keys: ['screenshotNormalizeStatusBar', 'screenshotPixelDensity'],
     },
   ];
 }

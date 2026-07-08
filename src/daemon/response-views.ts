@@ -40,6 +40,13 @@ function snapshotView(data: DaemonResponseData, level: ResponseLevel): DaemonRes
 }
 
 const DIGEST_OVERLAY_LIMIT = 12;
+const SCREENSHOT_DIGEST_NUMBER_FIELDS = [
+  'width',
+  'height',
+  'logicalWidth',
+  'logicalHeight',
+  'pixelDensity',
+] as const;
 
 /**
  * Token-cheap screenshot digest: the captured `path` (the primary result), the
@@ -60,16 +67,20 @@ function screenshotView(data: DaemonResponseData, level: ResponseLevel): DaemonR
     .slice(0, DIGEST_OVERLAY_LIMIT)
     .map((overlay) => ({ ref: overlay.ref, label: overlay.label }));
   return {
-    ...(typeof data.path === 'string' ? { path: data.path } : {}),
-    ...(typeof data.width === 'number' ? { width: data.width } : {}),
-    ...(typeof data.height === 'number' ? { height: data.height } : {}),
-    ...(typeof data.logicalWidth === 'number' ? { logicalWidth: data.logicalWidth } : {}),
-    ...(typeof data.logicalHeight === 'number' ? { logicalHeight: data.logicalHeight } : {}),
-    ...(typeof data.pixelDensity === 'number' ? { pixelDensity: data.pixelDensity } : {}),
+    ...pickScreenshotDigestMetadata(data),
     overlayCount: overlays.length,
     overlayRefs,
     ...(data.artifacts !== undefined ? { artifacts: data.artifacts } : {}),
   };
+}
+
+function pickScreenshotDigestMetadata(data: DaemonResponseData): DaemonResponseData {
+  const metadata: DaemonResponseData = {};
+  if (typeof data.path === 'string') metadata.path = data.path;
+  for (const field of SCREENSHOT_DIGEST_NUMBER_FIELDS) {
+    if (typeof data[field] === 'number') metadata[field] = data[field];
+  }
+  return metadata;
 }
 
 // The semantic attributes of a single matched node an agent reasons about. The

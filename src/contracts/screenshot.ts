@@ -73,6 +73,21 @@ export const SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS: readonly ScreenshotSpecificFl
   },
 ];
 
+const SCREENSHOT_SCRIPT_BOOLEAN_FLAGS = [
+  { tokens: ['--fullscreen', '--full', '-f'], key: 'screenshotFullscreen' },
+  { tokens: ['--no-stabilize'], key: 'screenshotNoStabilize' },
+  { tokens: ['--normalize-status-bar'], key: 'screenshotNormalizeStatusBar' },
+] as const;
+
+const SCREENSHOT_SCRIPT_INT_FLAGS = [
+  {
+    token: '--pixel-density',
+    key: 'screenshotPixelDensity',
+    label: 'screenshot --pixel-density',
+  },
+  { token: '--max-size', key: 'screenshotMaxSize', label: 'screenshot --max-size' },
+] as const;
+
 export type ScreenshotRequestFlags = {
   out?: string;
   overlayRefs?: boolean;
@@ -168,39 +183,42 @@ export function readScreenshotScriptFlag(params: {
 }): { handled: true; nextIndex: number } | { handled: false } {
   const { args, flags, index } = params;
   const token = args[index];
-  if (token === '--fullscreen' || token === '--full' || token === '-f') {
-    flags.screenshotFullscreen = true;
-    return { handled: true, nextIndex: index };
-  }
-  if (token === '--no-stabilize') {
-    flags.screenshotNoStabilize = true;
-    return { handled: true, nextIndex: index };
-  }
-  if (token === '--normalize-status-bar') {
-    flags.screenshotNormalizeStatusBar = true;
-    return { handled: true, nextIndex: index };
-  }
-  if (token === '--pixel-density') {
-    const value = args[index + 1];
-    const pixelDensity = value === undefined ? NaN : Number(value);
-    if (!Number.isInteger(pixelDensity) || pixelDensity < 1) {
-      throw new AppError('INVALID_ARGS', 'screenshot --pixel-density requires a positive integer');
-    }
-    flags.screenshotPixelDensity = pixelDensity;
-    return { handled: true, nextIndex: index + 1 };
-  }
-  if (token === '--max-size') {
-    const value = args[index + 1];
-    const maxSize = value === undefined ? NaN : Number(value);
-    if (!Number.isInteger(maxSize) || maxSize < 1) {
-      throw new AppError('INVALID_ARGS', 'screenshot --max-size requires a positive integer');
-    }
-    flags.screenshotMaxSize = maxSize;
-    return { handled: true, nextIndex: index + 1 };
-  }
-  return { handled: false };
+  return (
+    readScreenshotBooleanScriptFlag(token, flags, index) ??
+    readScreenshotIntScriptFlag({ args, index, flags, token }) ?? { handled: false }
+  );
 }
 
 function stripUndefined<T extends Record<string, unknown>>(value: T): T {
   return Object.fromEntries(Object.entries(value).filter((entry) => entry[1] !== undefined)) as T;
+}
+
+function readScreenshotBooleanScriptFlag(
+  token: string | undefined,
+  flags: Partial<ScreenshotRequestFlags>,
+  index: number,
+): { handled: true; nextIndex: number } | undefined {
+  const definition = SCREENSHOT_SCRIPT_BOOLEAN_FLAGS.find((entry) =>
+    entry.tokens.some((candidate) => candidate === token),
+  );
+  if (!definition) return undefined;
+  flags[definition.key] = true;
+  return { handled: true, nextIndex: index };
+}
+
+function readScreenshotIntScriptFlag(params: {
+  args: readonly string[];
+  index: number;
+  flags: Partial<ScreenshotRequestFlags>;
+  token: string | undefined;
+}): { handled: true; nextIndex: number } | undefined {
+  const definition = SCREENSHOT_SCRIPT_INT_FLAGS.find((entry) => entry.token === params.token);
+  if (!definition) return undefined;
+  const value = params.args[params.index + 1];
+  const parsed = value === undefined ? NaN : Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1) {
+    throw new AppError('INVALID_ARGS', `${definition.label} requires a positive integer`);
+  }
+  params.flags[definition.key] = parsed;
+  return { handled: true, nextIndex: params.index + 1 };
 }
