@@ -18,12 +18,16 @@ import { NEVER_SETTLED_HINT } from './settle.ts';
 function createFakeClock(stepMs = 300): {
   now: () => number;
   sleep: (ms: number) => Promise<void>;
+  advance: (ms: number) => void;
 } {
   let elapsed = 0;
   return {
     now: () => elapsed,
     sleep: async (ms: number) => {
       elapsed += ms > 0 ? ms : stepMs;
+    },
+    advance: (ms: number) => {
+      elapsed += ms;
     },
   };
 }
@@ -60,6 +64,7 @@ function createSettleDevice(params: {
   stored: SnapshotState;
   captureSnapshot: () => Promise<BackendSnapshotResult> | BackendSnapshotResult;
   tap?: () => Promise<Record<string, unknown>>;
+  clock?: ReturnType<typeof createFakeClock>;
 }): ReturnType<typeof createAgentDevice> {
   return createAgentDevice({
     backend: {
@@ -73,7 +78,7 @@ function createSettleDevice(params: {
     artifacts: createLocalArtifactAdapter(),
     sessions: createMemorySessionStore([{ name: 'default', snapshot: params.stored }]),
     policy: localCommandPolicy(),
-    clock: createFakeClock(),
+    clock: params.clock ?? createFakeClock(),
   });
 }
 
@@ -117,7 +122,7 @@ test('press --settle returns the settled diff and stores the settled tree', asyn
   assert.equal(stored.snapshot?.nodes[0]?.label, 'Welcome!');
 });
 
-test('never-settling content returns the last diff with settled: false and a hint', async () => {
+test('never-settling content returns settled: false without an actionable diff', async () => {
   const before = buttonSnapshot();
   let captures = 0;
   const device = createSettleDevice({
@@ -150,10 +155,46 @@ test('never-settling content returns the last diff with settled: false and a hin
   assert.ok(settle);
   assert.equal(settle.settled, false);
   assert.equal(settle.hint, NEVER_SETTLED_HINT);
-  // The LAST capture's diff still ships — best-effort observation.
+  assert.equal(settle.diff, undefined);
+});
+
+test('private-ax recovery resets the settle budget once', async () => {
+  const before = buttonSnapshot();
+  const recoveredAfter = welcomeSnapshot();
+  recoveredAfter.snapshotQuality = {
+    state: 'recovered',
+    backend: 'private-ax',
+    reasonCode: 'budget',
+    reason: 'tree backend was too slow',
+  };
+  let captures = 0;
+  const clock = createFakeClock();
+  const device = createSettleDevice({
+    stored: before,
+    clock,
+    captureSnapshot: () => {
+      captures += 1;
+      if (captures === 1) return { snapshot: before };
+      if (captures === 2) {
+        // This recovery arrives close enough to the original 1000ms timeout
+        // that the loop would time out before the 500ms quiet window without
+        // the one-shot private-AX budget reset.
+        clock.advance(900);
+      }
+      return { snapshot: recoveredAfter };
+    },
+  });
+
+  const result = await device.interactions.press(selector('label=Continue'), {
+    session: 'default',
+    settle: { quietMs: 500, timeoutMs: 1_000 },
+  });
+
+  const settle = result.settle;
+  assert.ok(settle);
+  assert.equal(settle.settled, true);
   assert.ok(settle.diff);
-  assert.equal(settle.diff.summary.additions, 1);
-  assert.match(settle.diff.lines.find((line) => line.kind === 'added')?.text ?? '', /Tick/);
+  assert.equal(captures, 4);
 });
 
 test('a broken settle capture never fails the action', async () => {

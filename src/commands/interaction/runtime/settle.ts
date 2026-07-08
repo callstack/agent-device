@@ -41,10 +41,10 @@ export type SettleOutcome = {
 const MAX_SETTLE_DIFF_LINES = 80;
 
 export const NEVER_SETTLED_HINT =
-  'The UI kept changing for the whole settle budget (animation, carousel, or ticker?). The diff reflects the last capture and may already be outdated. Raise --timeout, or verify the target content with wait text.';
+  'The UI kept changing for the whole settle budget (animation, carousel, or ticker?), so no settled diff is shown. Raise --timeout, wait for specific content, or take a fresh snapshot.';
 
 const SETTLE_CAPTURE_STALLED_HINT =
-  'A snapshot capture stalled past the settle budget, so no settle verdict is available. The action itself succeeded; retry the observation with snapshot or wait stable.';
+  'A snapshot capture stalled past the settle budget, so no settled diff is shown. The action itself succeeded; observe with wait stable or snapshot.';
 
 export async function settleAfterInteraction(
   runtime: AgentDeviceRuntime,
@@ -55,7 +55,11 @@ export async function settleAfterInteraction(
   const timeoutMs = params.timeoutMs ?? DEFAULT_STABLE_TIMEOUT_MS;
   const base: SettleObservation = { settled: false, waitedMs: 0, captures: 0, quietMs, timeoutMs };
   try {
-    const outcome = await runStableCaptureLoop(runtime, options, { quietMs, timeoutMs });
+    const outcome = await runStableCaptureLoop(runtime, options, {
+      quietMs,
+      timeoutMs,
+      resetBudgetOnPrivateAxRecovery: true,
+    });
     const observation: SettleObservation = {
       ...base,
       settled: outcome.settled,
@@ -78,8 +82,11 @@ export async function settleAfterInteraction(
         // The diff (with its added-line refs) is only attached when the settled
         // tree actually became the stored session snapshot: those refs must be
         // valid against the tree the next @ref command resolves on. The daemon
-        // treats `diff` presence as "this response issues refs".
-        ...(stored
+        // treats `diff` presence as "this response issues refs". Unsettled
+        // captures are intentionally diff-less: they are not a stable
+        // observation, so surfacing refs would invite agents to act on
+        // advisory state.
+        ...(outcome.settled && stored
           ? { diff: buildSettleDiff(resolveBaselineNodes(params.resolved), settledNodes) }
           : {}),
         ...resolveSettleHint(outcome, stored, settledNodes.length),
@@ -196,9 +203,11 @@ function resolveSettleHint(
 
 // The settle loop itself captures with updateSession: false (a capture that
 // later stalls must not race a session write past the response). The FINAL
-// settled tree IS stored — its refs ride the diff payload, so they must be
-// resolvable by the next @ref command. Sparse-quality captures are not stored
-// (mirroring captureSelectorSnapshot) and therefore issue no refs.
+// capture is stored so follow-up snapshots/selectors see the latest surface.
+// Only settled captures issue a diff/ref payload; unsettled stored captures
+// conservatively mark prior refs stale through the runtime session writer.
+// Sparse-quality captures are not stored (mirroring captureSelectorSnapshot)
+// and therefore issue no refs.
 async function storeSettledSnapshot(
   runtime: AgentDeviceRuntime,
   options: CommandContext,

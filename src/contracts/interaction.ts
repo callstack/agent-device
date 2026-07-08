@@ -98,7 +98,8 @@ export type SettleDiffLine = {
  *
  * Best-effort by contract: settling never fails the action. `settled: false`
  * means the quiet window was never reached inside the budget (carousel/ticker/
- * animation) — the diff then reflects the LAST capture, and `hint` says so.
+ * animation) or a capture stalled; no diff/refs are issued because the
+ * observation is advisory. `hint` tells callers how to observe explicitly.
  *
  * Token budget: `diff.lines` carries only added/removed display lines (the
  * unchanged bulk rides as `diff.summary.unchanged`), bounded by the daemon; a
@@ -130,6 +131,7 @@ export type SettleObservation = {
    * intentionally omitted.
    */
   refs?: Array<{ ref: string }>;
+  /** Present only for `settled: true` observations that stored the settled tree. */
   diff?: {
     summary: { additions: number; removals: number; unchanged: number };
     lines: SettleDiffLine[];

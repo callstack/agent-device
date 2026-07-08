@@ -1,4 +1,5 @@
 import type { SnapshotNode } from '../../../kernel/snapshot.ts';
+import type { SnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { now, sleep } from '../../runtime-common.ts';
 import {
@@ -43,10 +44,12 @@ export type StableCaptureLoopResult = {
 export async function runStableCaptureLoop(
   runtime: AgentDeviceRuntime,
   options: CommandContext & SelectorSnapshotOptions,
-  params: { quietMs: number; timeoutMs: number },
+  params: { quietMs: number; timeoutMs: number; resetBudgetOnPrivateAxRecovery?: boolean },
 ): Promise<StableCaptureLoopResult> {
   const { quietMs, timeoutMs } = params;
   const start = now(runtime);
+  let deadlineMs = start + timeoutMs;
+  let privateAxRecoveryBudgetReset = false;
   // Cadence derives from the quiet window (never slower than the default
   // poll): a caller asking for a 50ms quiet window should not be forced onto a
   // 300ms grid — and tests inject the budget instead of waiting real time.
@@ -56,11 +59,11 @@ export async function runStableCaptureLoop(
   let lastNodeCount = 0;
   let lastCapture: CapturedSnapshot | undefined;
   let quietSinceMs = start;
-  while (now(runtime) - start < timeoutMs) {
+  while (now(runtime) < deadlineMs) {
     const capture = await captureStableSignalWithinDeadline(
       runtime,
       options,
-      timeoutMs - (now(runtime) - start),
+      deadlineMs - now(runtime),
     );
     if (!capture) {
       return {
@@ -76,6 +79,19 @@ export async function runStableCaptureLoop(
     lastCapture = capture;
     const digest = digestSnapshotNodes(capture.snapshot.nodes);
     const nowMs = now(runtime);
+    if (
+      params.resetBudgetOnPrivateAxRecovery === true &&
+      !privateAxRecoveryBudgetReset &&
+      isPrivateAxRecovery(capture.snapshot.snapshotQuality)
+    ) {
+      privateAxRecoveryBudgetReset = true;
+      deadlineMs = Math.max(deadlineMs, nowMs + timeoutMs);
+      quietSinceMs = nowMs;
+      lastDigest = digest;
+      lastNodeCount = capture.snapshot.nodes.length;
+      await sleep(runtime, pollMs);
+      continue;
+    }
     if (digest !== lastDigest) {
       lastDigest = digest;
       lastNodeCount = capture.snapshot.nodes.length;
@@ -100,6 +116,10 @@ export async function runStableCaptureLoop(
     nodeCount: lastNodeCount,
     lastCapture,
   };
+}
+
+function isPrivateAxRecovery(verdict: SnapshotQualityVerdict | undefined): boolean {
+  return verdict?.state === 'recovered' && verdict.backend === 'private-ax';
 }
 
 // Intentionally does not update the session snapshot: the stable loop captures

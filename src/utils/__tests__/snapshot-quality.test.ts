@@ -59,7 +59,7 @@ test('renderSnapshotQualityWarnings keeps recovered snapshot copy concise', () =
   );
 
   assert.deepEqual(warnings, [
-    'Recovered this snapshot with the private-ax accessibility backend. It is OK to continue; use --json to inspect snapshotQuality.reason if you need recovery details.',
+    'Detected an overly complex or slow accessibility tree. Fell back to the private-ax snapshot backend. It is OK to continue; use --json to inspect snapshotQuality.reason if you need recovery details.',
     'Some deeper accessibility nodes were omitted; this tree is capped at depth 56. Re-run with --depth 56 --scope <container> only if you need deeper content.',
   ]);
 });

@@ -97,6 +97,7 @@
     "build:macos-helper": "swift build -c release --package-path macos-helper",
     "build:all": "pnpm build:node && pnpm build:xcuitest",
     "ad": "node bin/agent-device.mjs",
+    "bench:help-conformance": "node scripts/help-conformance-bench.mjs",
     "size": "node scripts/size-report.mjs",
     "size:markdown": "node scripts/size-report.mjs --json .tmp/size-report.json --markdown .tmp/size-report.md",
     "perf": "node --experimental-strip-types scripts/perf/run.ts",

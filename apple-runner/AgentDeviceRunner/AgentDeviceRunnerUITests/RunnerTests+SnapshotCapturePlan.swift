@@ -392,7 +392,7 @@ extension RunnerTests {
         ? " The primary capture ran out of its time budget (busy app or simulator); the recovered tree is authoritative for this screen."
         : " This usually means the app publishes an unhealthy accessibility tree — fixing the app's accessibility is the real cure. Treat screenshot as visual truth when this warning appears."
       parts.append(
-        "Recovered this snapshot with the \(quality.backend) accessibility backend"
+        "Detected an overly complex or slow accessibility tree. Fell back to the \(quality.backend) snapshot backend"
           + (quality.reason.map { " after: \($0)." } ?? ".")
           + meaning
       )
@@ -486,7 +486,7 @@ extension RunnerTests {
       collapsedLeafIndexes: nil
     )
     let message = Self.legacyQualityMessage(recovered)
-    XCTAssertTrue(message?.contains("queries accessibility backend") == true)
+    XCTAssertTrue(message?.contains("queries snapshot backend") == true)
     XCTAssertTrue(message?.contains("fixing the app's accessibility") == true)
     XCTAssertTrue(message?.contains("screenshot as visual truth") == true)
     XCTAssertNil(

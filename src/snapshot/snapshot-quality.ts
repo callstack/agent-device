@@ -81,7 +81,7 @@ export function renderSnapshotQualityWarnings(
 function stateWarning(verdict: SnapshotQualityVerdict): string[] {
   if (verdict.state === 'recovered') {
     return [
-      `Recovered this snapshot with the ${verdict.backend} accessibility backend. It is OK to continue; use --json to inspect snapshotQuality.reason if you need recovery details.`,
+      `Detected an overly complex or slow accessibility tree. Fell back to the ${verdict.backend} snapshot backend. It is OK to continue; use --json to inspect snapshotQuality.reason if you need recovery details.`,
     ];
   }
   if (verdict.state === 'sparse') {

@@ -253,8 +253,9 @@ test('runtime snapshot renders the structured quality verdict and skips legacy d
   assert.equal(result.warnings?.length, 2);
   assert.match(
     String(result.warnings?.[0]),
-    /Recovered this snapshot with the queries accessibility backend/,
+    /Detected an overly complex or slow accessibility tree/,
   );
+  assert.match(String(result.warnings?.[0]), /queries snapshot backend/);
   assert.match(String(result.warnings?.[0]), /It is OK to continue/);
   assert.match(String(result.warnings?.[0]), /snapshotQuality\.reason/);
   assert.match(String(result.warnings?.[1]), /@e2 \[Other\] merges many labels/);

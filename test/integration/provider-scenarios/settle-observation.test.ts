@@ -159,7 +159,7 @@ test('Provider-backed integration press --settle returns the settled diff and fr
   );
 });
 
-test('Provider-backed integration never-settled press --settle keeps added refs actionable', async () => {
+test('Provider-backed integration never-settled press --settle does not issue diff refs', async () => {
   const loadingNodes = (label: string) => [
     {
       index: 0,
@@ -178,15 +178,12 @@ test('Provider-backed integration never-settled press --settle keeps added refs 
   ];
   const runnerTranscript = createProviderTranscript([
     // press label=Continue --settle: resolution capture, tap, then a changing
-    // settle stream. The loop times out and stores the last capture.
+    // settle stream. The loop times out; the final capture is not actionable.
     snapshotEntry(BEFORE_NODES),
     tapEntry(200, 322),
     snapshotEntry(loadingNodes('Loading 1')),
     snapshotEntry(loadingNodes('Loading 2')),
     snapshotEntry(SETTLED_NODES),
-    // press @e2 (the Done ref from the never-settled final diff): tap on the
-    // stored last tree, with no fresh snapshot round trip.
-    tapEntry(200, 522),
   ]);
   const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
     runnerTranscript,
@@ -228,17 +225,9 @@ test('Provider-backed integration never-settled press --settle keeps added refs 
         hint?: string;
       };
       assert.equal(settle.settled, false);
-      assert.equal(typeof settle.refsGeneration, 'number');
+      assert.equal(settle.refsGeneration, undefined);
       assert.match(settle.hint ?? '', /kept changing/);
-      const added = settle.diff?.lines.find((line) => line.kind === 'added');
-      assert.match(added?.text ?? '', /Done/);
-      assert.equal(added?.ref, 'e2');
-
-      const followUp = await daemon.callCommand('press', ['@e2'], {});
-      const followUpData = assertRpcOk(followUp);
-      assert.equal(followUpData.warning, undefined);
-      assert.equal(followUpData.x, 200);
-      assert.equal(followUpData.y, 522);
+      assert.equal(settle.diff, undefined);
 
       runnerTranscript.assertComplete();
     },

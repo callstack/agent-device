@@ -482,7 +482,7 @@ test('MCP merges per-ref pins from a settle response diff (merge-only)', async (
   });
 });
 
-test('MCP merges digest-level settle refs too, including never-settled diffs', async () => {
+test('MCP merges digest-level settled refs too', async () => {
   const runCalls: Array<{ name: string; input: unknown }> = [];
   const executor = createCommandToolExecutor({
     createClient: () => ({}) as AgentDeviceClient,
@@ -492,7 +492,7 @@ test('MCP merges digest-level settle refs too, including never-settled diffs', a
         return {
           ref: 'e2',
           settle: {
-            settled: false,
+            settled: true,
             waitedMs: 2000,
             captures: 7,
             quietMs: 25,
@@ -502,7 +502,6 @@ test('MCP merges digest-level settle refs too, including never-settled diffs', a
             diff: {
               summary: { additions: 1, removals: 1, unchanged: 1 },
             },
-            hint: 'The UI kept changing for the whole settle budget.',
           },
         };
       }

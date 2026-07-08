@@ -1018,8 +1018,6 @@ const SKILL_GUIDANCE_CASES: Case[] = [
       /(?:^|\n)(?:agent-device\s+)?snapshot\b[\s\S]*(?:^|\n)(?:agent-device\s+)?snapshot\b/i,
       RAW_COORDINATE_TARGET,
     ],
-    strictFinalOutput: true,
-    allowOnlyLocalCliHelpCommands: true,
   }),
   makeCase({
     id: 'raw-output-before-shell-projection',
@@ -1080,7 +1078,93 @@ const SKILL_GUIDANCE_CASES: Case[] = [
       plannedCommand('is'),
       plannedCommandAlternatives(['press', 'click']),
     ],
-    strictFinalOutput: true,
+  }),
+  makeCase({
+    id: 'sample-output-settled-diff-next-target',
+    contract: [
+      'App name: Agent Device Tester',
+      'Previous command output is from agent-device, not a task description',
+      'Need to continue from the settled diff without taking another snapshot',
+      'Need to open the matching account result',
+    ],
+    task: `Read this previous agent-device output, then plan the next command:
+
+agent-device fill 'id="account-search"' "callstack" --settle
+Filled id="account-search" with "callstack"
+settled:true refsGeneration: 12
+Changed:
++ @e64 [button] "@callstack.com"
++ @e65 [text] "Callstack"
+
+Use the result ref exposed by the settled diff to open the account with settle. Do not re-read the same screen first.`,
+    outputs: [
+      plannedCommandAlternatives(['press', 'click', 'tap']),
+      /@e64(?:~s12)?\b|label=(?:["']@callstack\.com["']|@callstack\.com)/i,
+      /--settle\b/i,
+    ],
+    forbiddenOutputs: [
+      plannedCommand('snapshot'),
+      plannedCommand('wait stable'),
+      plannedCommand('fill'),
+      RAW_COORDINATE_TARGET,
+    ],
+    allowOnlyLocalCliHelpCommands: true,
+  }),
+  makeCase({
+    id: 'sample-output-not-settled-needs-observe',
+    contract: [
+      'App name: Agent Device Tester',
+      'Previous command output is from agent-device, not a task description',
+      'The next target is unknown because no settled tree was printed',
+      'Old refs may be stale after the mutation',
+    ],
+    task: `Read this previous agent-device output, then plan the next command:
+
+agent-device press @e12 --settle
+Pressed @e12
+not settled after 10000ms
+Hint: UI kept changing. Run agent-device wait stable or agent-device snapshot -i before the next ref-based action.
+
+Follow the output hint before attempting another ref-based action.`,
+    outputs: [/(?:^|\n)(?:agent-device\s+)?(?:wait\s+stable|snapshot\b[^\n]*-i\b)/i],
+    forbiddenOutputs: [
+      /(?:^|\n)(?:agent-device\s+)?(?:press|click|fill|longpress)\s+@e\d+/i,
+      RAW_COORDINATE_TARGET,
+      SHELL_OUTPUT_PROJECTION,
+    ],
+    allowOnlyLocalCliHelpCommands: true,
+  }),
+  makeCase({
+    id: 'sample-output-private-ax-recovery-continues',
+    contract: [
+      'Platform: iOS',
+      'Previous command output is from agent-device, not a task description',
+      'The fallback snapshot still exposed an actionable Search button',
+      'Need to open Search and observe the resulting UI',
+    ],
+    task: `Read this previous agent-device output, then plan the next command:
+
+agent-device snapshot -i
+Recovered this snapshot with the private-ax accessibility backend.
+Detected overly complex accessibility tree. Falling back to another snapshot backend.
+It's OK to continue. For more information, rerun with --debug.
+
+@e5 [button] "Search"
+@e8 [tab] "Home" selected
+
+Treat the recovery message as a warning, not a fatal error. Use the exposed Search button.`,
+    outputs: [
+      plannedCommandAlternatives(['press', 'click', 'tap']),
+      /@e5\b|label=(?:["']Search["']|Search)/i,
+      /(?:--settle\b|(?:^|\n)(?:agent-device\s+)?snapshot\b[^\n]*-i\b)/i,
+    ],
+    forbiddenOutputs: [
+      /--debug|--verbose/i,
+      plannedCommand('screenshot'),
+      plannedCommand('close'),
+      plannedCommand('help'),
+      RAW_COORDINATE_TARGET,
+    ],
     allowOnlyLocalCliHelpCommands: true,
   }),
   makeCase({

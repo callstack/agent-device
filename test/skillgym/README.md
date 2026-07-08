@@ -40,11 +40,14 @@ Skill-guidance regression cases cover distinct command-planning habits:
 
 - read-only inspection versus mutation
 - fresh `@ref` targeting, durable selectors, raw-rect fallbacks, and off-screen scroll recovery
+- interpreting representative `agent-device` output, including settled diffs, not-settled hints, and private-AX recovery warnings
 - text replacement, append semantics, supported field clearing, keyboard status, and keyboard fallback
 - install/open setup, Expo Go/dev-client launch paths, app discovery, session scoping, and app-owned navigation fallbacks
 - Metro reload, logs, network dump, alert fallback, and screenshot evidence
 - performance metrics, React DevTools profiling, gestures, settings, and trace capture
 - remote config, macOS menu bar surfaces, replay update, same-session mutation ordering, and batch schema/recording
+
+Use SkillGym for stable behavior regressions: can a runner choose the right next command from help, app-contract facts, or representative CLI output? For rapid help-layout A/B testing, prefer the lighter help conformance bench because it can feed only the top-level first screen or one help topic without letting the runner read the full help page.
 
 `assertAgentDeviceEvidence` is intentionally soft when a runner does not expose skill-detection telemetry. When telemetry exists, the suite asserts that `agent-device` was loaded; when it is absent, the cases still judge command-planning output instead of failing on missing runner metadata.
 

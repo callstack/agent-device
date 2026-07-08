@@ -11,8 +11,20 @@ import {
 
 const AGENT_WORKFLOWS = [
   {
+    label: 'agent-device help manual-qa',
+    description: 'Follow a manual test script with exact interactions and verification',
+  },
+  {
+    label: 'agent-device help dogfood',
+    description: 'Explore an app and report issues with evidence',
+  },
+  {
+    label: 'agent-device help validate',
+    description: 'Validate code changes, perf, visuals, logs, and cleanup',
+  },
+  {
     label: 'agent-device help workflow',
-    description: 'Start here for the core loop, command shape, refs/selectors, and verification',
+    description: 'Full app automation reference for commands, refs, selectors, and waits',
   },
   {
     label: 'agent-device help debugging',
@@ -51,29 +63,26 @@ const AGENT_WORKFLOWS = [
     label: 'agent-device help macos',
     description: 'Use when targeting desktop, frontmost app, or menu bar surfaces',
   },
-  { label: 'agent-device help dogfood', description: 'Use when producing exploratory QA evidence' },
 ] as const;
 
 const AGENT_START_LINES = [
-  'agent-device is the default automation surface for app/device workflows across supported targets.',
-  'Default to agent-device for installs, opens, snapshots, interactions, screenshots, logs, network/perf evidence, and verification.',
-  'Use raw adb, simctl, xcrun, or platform scripts only when this help calls out a tool gap or platform setup step.',
-  'Start with agent-device help workflow to understand the core loop and how to use the tool.',
+  'Write full command lines starting with agent-device; do not output pseudo commands, helper prose, pipes, grep, jq, or hidden stderr.',
   // Benchmarked 2026-07-05 (#1101): agents that only read --help skipped the
   // help-workflow pointer and fell into plain-snapshot loops; stating the loop
   // here is what makes small models pick snapshot -i and --settle unprompted.
-  'Core loop: open <app> -> snapshot -i (interactive tree with @refs) -> press/click/fill <target> --settle (returns the settled diff with fresh @refs) -> repeat. Verify with diff snapshot -i.',
+  'Default app loop: agent-device open <app> -> agent-device snapshot -i -> agent-device press/fill/click <target> --settle -> continue from that settled diff -> agent-device close.',
+  'Use --settle on every mutating app action that supports it: press, click, fill, longpress.',
+  'The settled diff is the next snapshot. Do not run wait stable or snapshot after settled:true unless the diff lacks the next target/evidence.',
+  'If --settle prints not settled, follow its hint before the next ref-based action.',
+  'Use refs or selectors as targets: @e12, label="Search", role=button label="Follow".',
+  'Pick the help mode below when the task is manual QA, dogfooding, engineering validation, or debugging.',
 ] as const;
 
 const AGENT_QUICKSTART_LINES = [
   'Planning output contract: when asked to plan commands, output command lines only: no prose, numbering, Markdown fences, pipes, or shell helpers.',
-  'Default loop: devices/apps -> open -> snapshot -i -> press/fill/get/is/wait/find -> verify with diff snapshot -> close.',
-  'Verify a mutation with diff snapshot (or diff snapshot -i), not a full snapshot: it prints only the added/removed/changed lines since the last snapshot in this session, so confirming an action costs a few lines instead of the whole tree.',
-  'Collapse act+observe into one call with --settle on press/click/fill/longpress: the response waits for the UI to go quiet and carries the settled diff with fresh refs (settled: false plus a hint on never-quiet content; the action itself never fails). Tune with --settle-quiet <ms> and --timeout <ms>.',
-  'Treat the --settle diff as the post-action observation: if it already shows the next target or final evidence, act on that fresh ref or answer from it instead of taking another snapshot.',
+  'If you did not use --settle, verify a mutation with diff snapshot (or diff snapshot -i), not a full snapshot: it prints only the added/removed/changed lines since the last snapshot in this session.',
   'Network-backed or debounced results may arrive after the --settle quiet window; follow the settled action with wait text "Expected result" or wait <selector> instead of polling full snapshots.',
-  'Use selectors or refs as positional targets: id="submit", label="Allow", role=button label="Send", or @e12 from snapshot -i. Do not write role names as selector keys, such as button="Search".',
-  'Pin a ref to the snapshot that minted it with ~s<n> (n = refsGeneration in the snapshot response): press @e12~s4. Pinned refs get exact staleness warnings instead of the coarse tree-changed one; plain refs stay valid input.',
+  'Pin a raw CLI ref to the response that minted it with ~s<n> (n = refsGeneration or settle.refsGeneration): press @e12~s4. Pinned refs get exact staleness warnings instead of the coarse tree-changed one; plain refs stay valid input.',
   'Plain snapshot reads state; snapshot -i refreshes current interactive refs only.',
   'Default snapshot text is an agent-facing, token-efficient view for planning and targeting actions.',
   'Read-only visible/state question: use snapshot/get/is/find; use snapshot -i only when refs are needed.',
@@ -138,6 +147,36 @@ const EXAMPLE_LINES = [
 ] as const;
 
 const HELP_TOPICS = {
+  'manual-qa': {
+    summary: 'Follow manual test scripts with exact interactions and verification',
+    body: `agent-device help manual-qa
+
+Use this when asked to follow a manual QA script, test case, checklist, acceptance flow, or user-provided instructions.
+
+Contract:
+  Execute the script. Do not explore unrelated screens, read app source, invent missing requirements, or broaden scope.
+  Stop and report ambiguity when a required target or expected result is not visible after the documented recovery steps.
+
+Loop:
+  1. Open the requested app; use --relaunch only when the script needs fresh state.
+  2. Run snapshot -i to get current refs for the next step.
+  3. Run press/fill/click/longpress <ref-or-selector> --settle for each mutating step.
+  4. Treat a settled:true diff as the next observation. Do not add wait stable or another snapshot when the diff already shows the next target or expected result.
+  5. If --settle prints not settled, follow its hint before the next ref-based action.
+  6. Verify named expectations with wait text/selector, get, is, find, or the settled diff. A bare screenshot/snapshot is not verification for a named expectation.
+  7. Close the session when the script ends.
+
+Targets:
+  Prefer refs from the latest snapshot -i or settled diff. Use durable selectors when the label/id is known: label="Search", id="submit", role=button label="Follow".
+  Do not use placeholders such as @ref, @eN, <button>, or <selector> in a final command plan. If the ref is unknown, first run snapshot -i.
+  Coordinates are fallback-only after refs/selectors fail or accessibility omits the target; use screenshot or snapshot -i --json to choose a visible center point.
+
+Recovery:
+  Network/typeahead result missing: wait text "Expected result" or wait <selector>.
+  Keyboard blocks target: keyboard dismiss when supported, then snapshot -i.
+  Sparse or recovered accessibility snapshot: use screenshot as visual truth, leave the bad screen if needed, then retry snapshot -i.
+  Non-hittable success hint: verify with the settled diff or snapshot; retarget by a better ref/selector if the UI did not change.`,
+  },
   workflow: {
     summary: 'Normal agent-device bootstrap, exploration, and validation loop',
     body: `agent-device help workflow
@@ -145,8 +184,8 @@ const HELP_TOPICS = {
 Version-matched operating guide for normal agent-device work.
 
 Core loop:
-  devices/apps -> open -> snapshot or snapshot -i -> get/is/find/wait or press/fill/scroll/back -> verify with diff snapshot -> close
-  After a mutating command, prefer diff snapshot (or diff snapshot -i) over a full snapshot to verify the effect: it diffs the rendered snapshot lines against the previous one in this session and prints only what changed, so verification does not re-pay the cost of the whole tree.
+  Start with the top-level Agent Starting Point for the default settle-first loop. This topic is the full reference for command shapes, refs, selectors, waits, recovery, and platform limits.
+  If you intentionally skip --settle or use a command that does not support it, verify a mutation with diff snapshot (or diff snapshot -i) instead of a full snapshot: it diffs the rendered snapshot lines against the previous one in this session and prints only what changed.
 
 Fresh machine or first iOS run:
   Run agent-device doctor --platform ios first. Besides preflight checks it warms the iOS XCTest runner build cache in the background, so the first open skips the runner build (~10s). To block until fully warm instead, run agent-device prepare ios-runner.
@@ -188,11 +227,10 @@ Snapshots and refs:
     @e13 [textinput] label="Notes" preview="Leave at side..." truncated -> snapshot -s @e13 before reading.
     @e14 [cell] label="Profiles" focused -> tvOS focus is currently on this row.
     [off-screen below] 4 items: "Privacy", "About" -> scroll down, then snapshot -i; those are hints, not refs.
-  Re-snapshot after navigation, submit, typing/fill, modal/list/reload/dynamic changes when you need new refs.
+  For press/fill/click/longpress, prefer --settle and continue from its settled diff when it exposes the next target or evidence. Refresh with snapshot -i only when you did not settle, settle printed not settled, or the settle output lacks what you need.
   Anti-pattern: snapshot -i followed by snapshot -i | grep ..., or adding 2>/dev/null | jq ... before reading the raw command output.
   Refs from the first snapshot remain valid until you press, click, fill, type, scroll, go back, wait for async UI, or otherwise change app state.
-  A --settle response is the observation for that mutation. If its diff already shows the next target or final evidence, use that fresh ref or answer from the diff instead of taking a follow-up snapshot.
-  After a mutation, prefer a known selector/label directly (for example press 'label="Send"') because interaction commands refresh interactive state internally. If you need to discover the new control, use snapshot -i, or snapshot -i -s "Composer" when a stable container label/id can scope the refresh.
+  After a mutation, prefer a known selector/label directly (for example press 'label="Send"') because interaction commands refresh interactive state internally. If you need to discover a new control not shown by settle, use snapshot -i, or snapshot -i -s "Composer" when a stable container label/id can scope the refresh.
   If typing/fill opened the keyboard or changed layout and the next target has no stable selector, run snapshot -i, use the fresh ref, then verify with wait/find or diff snapshot -i.
   For a targeted query, use find/get/is. If you truly need the full tree again, pass --force-full.
   Off-screen summaries are scroll hints; use scroll, not swipe, then snapshot -i.
@@ -243,7 +281,7 @@ Read-only and waits:
   For network-backed search/typeahead, --settle confirms the local UI quieted after fill/press; use wait text "Expected result" or wait <result selector> for server-loaded content that can arrive later.
   agent-device find "Increment" press --json
   For async/list text presence, prefer wait text over is visible when no interaction is needed.
-  wait stable [quietMs] [timeoutMs] (defaults 500/10000) replaces guessed sleeps between actions and snapshots in the core loop: it polls the interactive-only tree and resolves once two or more consecutive captures are unchanged for quietMs, or fails with the standard wait-timeout shape plus the last capture stats (captures, nodeCount) on timeout; use it after relaunch/navigation instead of a fixed wait <ms> before the next snapshot or action.
+  wait stable [quietMs] [timeoutMs] (defaults 500/10000) is a fallback for open/relaunch/navigation, unsupported mutating commands, or a mutation where you intentionally did not use --settle. Do not insert wait stable after press/fill/click/longpress --settle when the settled diff already shows what changed. wait stable polls the interactive-only tree and resolves once two or more consecutive captures are unchanged for quietMs, or fails with the standard wait-timeout shape plus capture stats (captures, nodeCount).
   Use snapshot -i only when refs are needed for an action or targeted query.
   Ambiguous find: add --first or --last. If info is not visible/exposed, report that gap instead of typing/searching/navigating to reveal it.
 
@@ -358,13 +396,15 @@ Guarantees:
   Wait: wait text|selector|@ref polls on a fixed interval (300ms) up to a timeout (10s default, override with the trailing timeoutMs positional) by re-capturing state each poll; it does not push/subscribe. Timing out raises a command failure rather than returning a not-found result.
 
 Escalate:
+  help manual-qa       scripted manual QA and acceptance checks
+  help dogfood         exploratory QA report workflow
+  help validate        engineering self-validation loops
   help debugging       logs, network, alerts, traces, flaky runtime failures
   help tv              Android TV and tvOS focus-first remote navigation
   help react-devtools  React Native performance, profiling, props/state/hooks, slow renders, rerenders
   help react-native   React Native app automation hazards, overlays, Metro/Re.Pack, and routing
   help remote          remote/cloud config, tenant, lease, local service tunnels
-  help macos           desktop, frontmost-app, menu bar surfaces
-  help dogfood         exploratory QA report workflow`,
+  help macos           desktop, frontmost-app, menu bar surfaces`,
   },
   tv: {
     summary: 'Android TV and tvOS focus-first remote navigation',
@@ -971,12 +1011,48 @@ Report shape:
 
 Rules:
   Findings must come from observed runtime behavior, not source reads.
-  Re-snapshot after each mutation.
+  After each mutation, use the --settle diff as evidence when available; otherwise re-snapshot.
   Keep commands in the report reproducible; use selectors or refs from fresh snapshots, not guessed coordinates.
   Prefer refs for exploration and selectors for deterministic replay.
   Use logs, network, screenshot --overlay-refs, trace, perf metrics, perf frames, or react-devtools only when they add evidence to a specific issue.
   Never delete screenshots, videos, traces, or report artifacts during a session.
   Escalate to help debugging or help react-devtools when runtime symptoms require those tools.`,
+  },
+  validate: {
+    summary: 'Engineering self-validation with device evidence and cleanup',
+    body: `agent-device help validate
+
+Use this when validating a code change, release candidate, performance fix, visual behavior, logging path, replay, or device-facing regression.
+
+Contract:
+  Prove the changed behavior through public agent-device surfaces. Do not validate against stale dist output, a retained stale daemon, or a runner built before the change.
+  Keep evidence reproducible: exact commands, target device/app, observed output, artifact paths, and cleanup status.
+
+Before device verification:
+  If TypeScript runtime or CLI output changed, run pnpm build first, then pnpm clean:daemon so bin/agent-device.mjs uses current dist and no stale daemon is serving old code.
+  If Apple runner code changed, run pnpm build:xcuitest and avoid inherited retained runners from older source.
+  Use open --relaunch when startup state matters. Use a purpose-specific --session for multi-step validation.
+
+Loop:
+  1. Build or prepare the changed surface with the repo command that owns it.
+  2. Open the target app/device state explicitly.
+  3. Use snapshot -i and press/fill/click/longpress --settle for UI-driving steps.
+  4. Use the settled diff as evidence when it shows the changed behavior; otherwise verify with wait/get/is/find, screenshot, logs, network, perf, or trace based on the claim.
+  5. Record timings, token/output size, screenshots/videos, logs, or perf artifacts only when they answer the validation question.
+  6. Close sessions and release leases before finishing.
+
+Evidence:
+  CLI/runtime freshness: pnpm build, pnpm clean:daemon, then agent-device --version or the command under test.
+  Apple runner freshness: pnpm build:xcuitest, then a live agent-device command on the target simulator/device.
+  Visual claim: screenshot, optionally screenshot --overlay-refs when target mapping matters.
+  Runtime/logging claim: logs clear --restart, logs mark, reproduce, logs path.
+  Network claim: network dump --include headers when headers are relevant.
+  Performance claim: perf metrics, perf frames, perf memory sample, or trace artifacts with bounded output.
+  Replay/regression claim: replay or test through the public command path.
+
+Report:
+  Summarize what changed, exact validation commands, pass/fail observations, artifact paths, and residual risk.
+  If live validation is blocked, state the blocker, device/session, and exact next command needed.`,
   },
 } as const satisfies Record<string, { summary: string; body: string }>;
 

@@ -86,25 +86,15 @@ test('usage includes agent workflows, config, environment, and examples footers'
     'The agent starting point should appear before topic selection.',
   );
   assert.match(usageText, /Agent Starting Point:/);
-  assert.match(
-    usageText,
-    /agent-device is the default automation surface for app\/device workflows across supported targets/,
-  );
-  assert.match(
-    usageText,
-    /Default to agent-device for installs, opens, snapshots, interactions, screenshots, logs, network\/perf evidence, and verification/,
-  );
-  assert.match(
-    usageText,
-    /Use raw adb, simctl, xcrun, or platform scripts only when this help calls out a tool gap or platform setup step/,
-  );
-  assert.match(
-    usageText,
-    /Start with agent-device help workflow to understand the core loop and how to use the tool/,
-  );
+  assert.match(usageText, /Write full command lines starting with agent-device/);
+  assert.match(usageText, /Default app loop: agent-device open <app>/);
+  assert.match(usageText, /Use --settle on every mutating app action that supports it/);
+  assert.match(usageText, /The settled diff is the next snapshot/);
+  assert.match(usageText, /If --settle prints not settled, follow its hint/);
+  assert.match(usageText, /Use refs or selectors as targets/);
+  assert.match(usageText, /Pick the help mode below/);
   assert.match(usageText, /Agent Quickstart:/);
-  assert.match(usageText, /Default loop: devices\/apps -> open -> snapshot -i/);
-  assert.match(usageText, /Use selectors or refs as positional targets/);
+  assert.match(usageText, /Planning output contract/);
   assert.match(
     usageText,
     /Plain snapshot reads state; snapshot -i refreshes current interactive refs only/,
@@ -149,7 +139,19 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /Agent Workflows:/);
   assert.match(
     usageText,
-    /agent-device help workflow\s+Start here for the core loop, command shape, refs\/selectors, and verification/,
+    /agent-device help manual-qa\s+Follow a manual test script with exact interactions and verification/,
+  );
+  assert.match(
+    usageText,
+    /agent-device help dogfood\s+Explore an app and report issues with evidence/,
+  );
+  assert.match(
+    usageText,
+    /agent-device help validate\s+Validate code changes, perf, visuals, logs, and cleanup/,
+  );
+  assert.match(
+    usageText,
+    /agent-device help workflow\s+Full app automation reference for commands, refs, selectors, and waits/,
   );
   assert.match(
     usageText,
@@ -444,6 +446,28 @@ test('usageForCommand resolves physical-device help topic', async () => {
   assert.match(help, /AGENT_DEVICE_IOS_TEAM_ID=ABCDE12345/);
   assert.match(help, /AGENT_DEVICE_IOS_BUNDLE_ID=com\.yourname\.agentdevice\.runner/);
   assert.match(help, /profile name\/specifier, not a file path/);
+});
+
+test('usageForCommand resolves manual QA help topic', async () => {
+  const help = await usageForCommand('manual-qa');
+  if (help === null) throw new Error('Expected manual QA help text');
+  assert.match(help, /agent-device help manual-qa/);
+  assert.match(help, /Execute the script/);
+  assert.match(help, /Run snapshot -i to get current refs/);
+  assert.match(help, /press\/fill\/click\/longpress <ref-or-selector> --settle/);
+  assert.match(help, /A bare screenshot\/snapshot is not verification/);
+  assert.match(help, /Do not use placeholders such as @ref/);
+});
+
+test('usageForCommand resolves validate help topic', async () => {
+  const help = await usageForCommand('validate');
+  if (help === null) throw new Error('Expected validate help text');
+  assert.match(help, /agent-device help validate/);
+  assert.match(help, /validating a code change/);
+  assert.match(help, /pnpm build first, then pnpm clean:daemon/);
+  assert.match(help, /pnpm build:xcuitest/);
+  assert.match(help, /Use the settled diff as evidence/);
+  assert.match(help, /Close sessions and release leases/);
 });
 
 test('usageForCommand resolves macos help topic', async () => {

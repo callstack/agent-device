@@ -80,6 +80,27 @@ describe('press CLI output', () => {
       ].join('\n'),
     );
   });
+
+  test('prints not-settled verdict without a dangling diff summary', () => {
+    const output = formatPress({
+      message: 'Tapped (278, 817)',
+      x: 278,
+      y: 817,
+      settle: {
+        settled: false,
+        waitedMs: 10000,
+        hint: 'The UI kept changing for the whole settle budget, so no settled diff is shown. Take a fresh snapshot.',
+      },
+    });
+
+    expect(output.text).toBe(
+      [
+        'Tapped (278, 817)',
+        'not settled after 10000ms',
+        'hint: The UI kept changing for the whole settle budget, so no settled diff is shown. Take a fresh snapshot.',
+      ].join('\n'),
+    );
+  });
 });
 
 describe('fill CLI output', () => {

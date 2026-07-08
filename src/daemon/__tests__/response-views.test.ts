@@ -310,7 +310,7 @@ test('settle digest caps added refs at the snapshot digest ref limit', () => {
   const digest = RESPONSE_VIEWS.press!(
     {
       settle: {
-        settled: false,
+        settled: true,
         waitedMs: 2000,
         captures: 7,
         quietMs: 25,
