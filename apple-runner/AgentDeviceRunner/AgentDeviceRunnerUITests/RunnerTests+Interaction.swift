@@ -51,28 +51,6 @@ extension RunnerTests {
     let usedNonHittableFallback: Bool
   }
 
-  // MARK: - Navigation Gestures
-
-  func tapInAppBackControl(app: XCUIApplication) -> Bool {
-#if os(macOS)
-    if let back = macOSNavigationBackElement(app: app) {
-      tapElementCenter(app: app, element: back)
-      return true
-    }
-    return false
-#elseif os(tvOS)
-    _ = pressTvRemote(.menu)
-    return true
-#else
-    let buttons = app.navigationBars.buttons.allElementsBoundByIndex
-    if let back = buttons.first(where: { $0.isHittable }) {
-      back.tap()
-      return true
-    }
-    return false
-#endif
-  }
-
   func performBackGesture(app: XCUIApplication) {
     if pressTvRemote(.menu) {
       return
@@ -1374,27 +1352,6 @@ extension RunnerTests {
 #endif
   }
 #endif
-
-  private func tapElementCenter(app: XCUIApplication, element: XCUIElement) {
-    let frame = element.frame
-    if !frame.isEmpty {
-      _ = tapAt(app: app, x: frame.midX, y: frame.midY)
-      return
-    }
-#if !os(tvOS)
-    element.tap()
-#endif
-  }
-
-  private func macOSNavigationBackElement(app: XCUIApplication) -> XCUIElement? {
-    let predicate = NSPredicate(
-      format: "identifier == %@ OR label == %@",
-      "go back",
-      "Back"
-    )
-    let element = app.descendants(matching: .any).matching(predicate).firstMatch
-    return element.exists ? element : nil
-  }
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
   // Identity in portrait/unknown, 90° per landscape, 180° upside-down.

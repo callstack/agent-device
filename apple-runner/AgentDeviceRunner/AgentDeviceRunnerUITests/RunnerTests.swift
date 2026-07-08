@@ -68,21 +68,22 @@ final class RunnerTests: XCTestCase {
   // Past this age the runner stops claiming "busy, retry soon" and reports itself wedged so
   // the daemon recycles it — the only cure once the main thread is stuck for good.
   let mainThreadWedgeThreshold: TimeInterval = 120
-  // Sticky per-bundle hint: after the XCTest tree backend ground past its slice (or a snapshot
-  // was abandoned by the watchdog), later capture plans lead with the private AX backend
-  // instead of re-grinding the tree on the same screen class (#1105).
-  let snapshotTreePenaltyLock = NSLock()
-  var snapshotTreePenaltyBundleId: String?
-  var snapshotTreePenaltyUntil = Date.distantPast
-  let snapshotTreePenaltyDuration: TimeInterval = 120
-  // Bluesky-class screens grind ~4-8s before the tree backend fails; anything past this
-  // threshold marks the screen hostile so the next capture leads with private AX.
-  let snapshotTreeSlowCaptureThreshold: TimeInterval = 3
+  // Sticky per-bundle hint: after an XCTest-backed snapshot tier ground past its slice (or a
+  // snapshot was abandoned by the watchdog), later capture plans avoid the XCTest accessibility
+  // channel when an independent recovery backend exists, or use a bounded XCTest probe when it
+  // does not, for the same screen class (#1105/#1156).
+  let snapshotXCTestChannelPenaltyLock = NSLock()
+  var snapshotXCTestChannelPenaltyBundleId: String?
+  var snapshotXCTestChannelPenaltyUntil = Date.distantPast
+  let snapshotXCTestChannelPenaltyDuration: TimeInterval = 120
+  // Bluesky-class screens can grind ~4-8s before an XCTest-backed snapshot tier fails; anything
+  // past this threshold marks the screen hostile so the next capture uses non-XCTest recovery.
+  let snapshotXCTestSlowCaptureThreshold: TimeInterval = 3
   // The blocking XCTest tree snapshot XPC runs on the main thread with this slice so a
   // content-dependent grind (#1105: seconds to minutes on live Bluesky screens) cannot pin
   // the capture plan. On timeout the XPC keeps grinding on main; while any abandoned
-  // tree capture is outstanding, plans skip the XCTest-backed tiers (tree, query sweep) and
-  // use the private AX backend, which does not go through testmanagerd.
+  // tree capture is outstanding, plans skip XCTest-backed tiers (tree, query sweep) until the
+  // abandoned work drains.
   let treeCaptureLock = NSLock()
   var abandonedTreeCaptureCount = 0
   let treeCaptureSliceBudget: TimeInterval = 8

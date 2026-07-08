@@ -21,11 +21,12 @@ runner has two durable snapshot needs:
   because it preserves hierarchy, static text, wrappers, scroll containers, and ancestry.
 
 These needs should not share one capture strategy blindly. Recursive `XCUIElement.snapshot()` is
-rich, but some real simulator app trees can make XCTest fail with `kAXErrorIllegalArgument` while
-the same app remains visually usable and can be inspected by lower-level simulator accessibility
-services. Bluesky is the current known example: Argent's `ax-service` can describe the screen, but
-XCTest recursive snapshots and typed `XCUIElementQuery` enumeration can degrade to no useful child
-nodes.
+rich, but some real app trees can make XCTest fail with `kAXErrorIllegalArgument` or main-thread
+timeouts while the same app remains visually usable. Bluesky is the current known example:
+lower-level accessibility services can describe simulator screens even when XCTest recursive
+snapshots and typed `XCUIElementQuery` enumeration degrade to no useful child nodes. Physical iOS
+devices can show the same XCTest accessibility-channel timeout shape even when no lower-level
+semantic backend is available.
 
 This is different from presentation filtering. The daemon's snapshot presentation can hide noisy
 or inaccessible nodes, but it cannot recover nodes that XCTest never returns. More filters,
@@ -50,11 +51,12 @@ strategies:
   carry the response, fail explicitly instead of silently truncating the tree at a hard node count.
   If XCTest reports a real AX serialization failure, preserve that error instead of pretending the
   UI is empty.
-- **Future simulator AX-service strategy**: treat Bluesky-class failures as evidence that XCTest is
+- **Future AX-service strategy**: treat Bluesky-class failures as evidence that XCTest is
   not a complete semantic snapshot backend. A robust semantic fix should add a host-side simulator
-  accessibility backend, similar in role to `idb` accessibility commands or Argent's `ax-service`,
+  accessibility backend, similar in role to existing simulator accessibility inspection tools,
   and normalize its output into the same `SnapshotNode` model. That backend can be simulator-only;
-  physical devices can continue using XCTest unless a supported lower-level API exists.
+  physical devices should use an equivalent non-XCTest semantic backend only if Apple exposes a
+  supported channel.
 
 The daemon should make degraded output observable. If an iOS interactive snapshot contains only the
 application root or another sparse shape, surface a structured quality verdict and warning so
@@ -67,18 +69,21 @@ snapshots. That was the correct diagnostic change, but it exposed apps whose acc
 XCTest cannot serialize.
 
 Later work moved recovery into the regular visible capture plan so healthy apps keep the fast
-recursive tree path while degraded simulator app classes can still return bounded, honest output
-when fallback query tiers are the only available source of visible controls.
+recursive tree path while degraded app classes can still return bounded, honest output when
+fallback tiers are the only available source of visible controls.
 
 Issue #1105 showed a second failure shape on the same app class: instead of failing fast with
 `kAXErrorIllegalArgument`, the recursive tree capture can grind for many seconds on
 heavy/animating screens before failing, pushing the chained plan past the runner's main-thread
 watchdog and burying the main queue under retries. The plan now carries its umbrella deadline
 into the query-sweep and private-AX tiers (later ladder rungs stop when the budget is spent),
-and a slow or watchdog-abandoned tree capture penalizes the tree backend for that bundle for a
-bounded window: subsequent regular plans lead with the private-AX backend
-(`effectiveSnapshotCapturePlan`), stamped as `recovered` with a `budget` reason so the deferral
-stays observable. The raw diagnostic plan is exempt — it keeps tree-first error propagation.
+and a slow, timed-out, or watchdog-abandoned XCTest-backed capture penalizes the XCTest
+accessibility channel for that bundle for a bounded window. Subsequent regular plans derive the
+next step from backend traits (`effectiveSnapshotCapturePlan`): when a runnable non-XCTest backend
+exists, they defer to that independent tier; when it does not, as on physical iOS devices today,
+they run a short XCTest probe instead of the full tree slice so healthy screens can recover without
+repeating the hostile-screen grind. The raw diagnostic plan is exempt — it keeps tree-first error
+propagation.
 
 ## Consequences
 

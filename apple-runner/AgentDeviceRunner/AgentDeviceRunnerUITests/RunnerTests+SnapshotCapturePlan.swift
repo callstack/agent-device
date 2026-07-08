@@ -28,6 +28,40 @@ enum SnapshotBackendKind: String, CaseIterable {
   case recursiveTree = "tree"
   case querySweep = "queries"
   case privateAX = "private-ax"
+
+  var usesXCTestAccessibilityChannel: Bool {
+    switch self {
+    case .recursiveTree, .querySweep:
+      return true
+    case .privateAX:
+      return false
+    }
+  }
+
+  var isAvailableOnCurrentPlatform: Bool {
+    switch self {
+    case .recursiveTree, .querySweep:
+      return true
+    case .privateAX:
+      #if os(iOS) && targetEnvironment(simulator)
+        return true
+      #else
+        return false
+      #endif
+    }
+  }
+}
+
+enum SnapshotXCTestChannelPlanState: Equatable {
+  case normal
+  case deferredToIndependentBackend
+  case boundedXCTestProbe
+}
+
+struct EffectiveSnapshotCapturePlan {
+  let plan: [SnapshotBackendKind]
+  let xCTestChannelState: SnapshotXCTestChannelPlanState
+  let treeCaptureSliceBudgetOverride: TimeInterval?
 }
 
 /// What the plan runner does when every backend failed or stayed sparse.
@@ -52,6 +86,7 @@ extension RunnerTests {
   /// but chained recovery tiers must never stack past the 30s main-thread watchdog: when the
   /// budget is spent, remaining tiers are skipped and the best payload so far is returned.
   static let snapshotPlanBudget: TimeInterval = 20
+  static let penalizedXCTestProbeTreeSliceBudget: TimeInterval = 1
   static let collapsedLeafMinimumSegments = 10
 
   static func payloadNodeCount(_ payload: DataPayload?) -> Int {
@@ -63,48 +98,68 @@ extension RunnerTests {
   static let regularVisiblePlan: [SnapshotBackendKind] = [.recursiveTree, .querySweep, .privateAX]
   static let rawDiagnosticPlan: [SnapshotBackendKind] = [.recursiveTree, .privateAX]
 
-  // MARK: Tree-backend penalty (cross-attempt memory, #1105)
+  // MARK: XCTest accessibility channel penalty (cross-attempt memory, #1105/#1156)
   //
   // On some deep/dynamic screens the XCTest bulk snapshot no longer fails fast with
   // kAXErrorIllegalArgument (the #758 signature) — it grinds for many seconds first. One slow
   // grind is tolerable; re-grinding on every subsequent capture of the same screen buries the
-  // main thread past the execution watchdog. After a slow or abandoned tree capture, later
-  // plans for the same bundle lead with the private AX backend until the penalty expires.
+  // main thread past the execution watchdog. After a slow, timed-out, or abandoned XCTest-backed
+  // capture, later plans for the same bundle use non-XCTest recovery tiers until the penalty expires.
 
-  func penalizeSnapshotTreeBackend(bundleId: String?, reason: String) {
-    snapshotTreePenaltyLock.lock()
-    snapshotTreePenaltyBundleId = bundleId
-    snapshotTreePenaltyUntil = Date().addingTimeInterval(snapshotTreePenaltyDuration)
-    snapshotTreePenaltyLock.unlock()
+  func penalizeSnapshotXCTestChannel(bundleId: String?, reason: String) {
+    snapshotXCTestChannelPenaltyLock.lock()
+    snapshotXCTestChannelPenaltyBundleId = bundleId
+    snapshotXCTestChannelPenaltyUntil = Date().addingTimeInterval(snapshotXCTestChannelPenaltyDuration)
+    snapshotXCTestChannelPenaltyLock.unlock()
     NSLog(
-      "AGENT_DEVICE_RUNNER_SNAPSHOT_TREE_PENALIZED bundle=%@ reason=%@",
+      "AGENT_DEVICE_RUNNER_SNAPSHOT_XCTEST_CHANNEL_PENALIZED bundle=%@ reason=%@",
       bundleId ?? "",
       reason
     )
   }
 
-  func isSnapshotTreeBackendPenalized(bundleId: String?) -> Bool {
-    snapshotTreePenaltyLock.lock()
-    defer { snapshotTreePenaltyLock.unlock() }
-    guard Date() < snapshotTreePenaltyUntil else { return false }
+  func isSnapshotXCTestChannelPenalized(bundleId: String?) -> Bool {
+    snapshotXCTestChannelPenaltyLock.lock()
+    defer { snapshotXCTestChannelPenaltyLock.unlock() }
+    guard Date() < snapshotXCTestChannelPenaltyUntil else { return false }
     // A penalty recorded without a bundle id applies to whatever target is current.
-    guard let penalized = snapshotTreePenaltyBundleId else { return true }
+    guard let penalized = snapshotXCTestChannelPenaltyBundleId else { return true }
     return penalized == bundleId
   }
 
-  /// Pure plan-reorder rule: a penalized tree backend defers to the private AX backend on the
-  /// regular plan only. The raw diagnostic plan keeps tree-first errors, and unknown plans are
-  /// left untouched.
+  /// Pure plan-reorder rule: a penalized XCTest accessibility channel uses independent backends
+  /// when the platform has one, otherwise it keeps XCTest work on a short probe. The raw
+  /// diagnostic plan keeps tree-first errors, and unknown plans are left untouched.
   static func effectiveSnapshotCapturePlan(
     _ plan: [SnapshotBackendKind],
-    treePenalized: Bool
-  ) -> (plan: [SnapshotBackendKind], treeDeferred: Bool) {
-    guard treePenalized, plan == Self.regularVisiblePlan else { return (plan, false) }
-    return ([.privateAX, .querySweep, .recursiveTree], true)
+    xCTestChannelPenalized: Bool,
+    availableBackends: Set<SnapshotBackendKind> = Set(SnapshotBackendKind.allCases)
+  ) -> EffectiveSnapshotCapturePlan {
+    guard xCTestChannelPenalized, plan == Self.regularVisiblePlan else {
+      return EffectiveSnapshotCapturePlan(
+        plan: plan,
+        xCTestChannelState: .normal,
+        treeCaptureSliceBudgetOverride: nil
+      )
+    }
+    let availablePlan = plan.filter { availableBackends.contains($0) }
+    let recoveryPlan = availablePlan.filter { !$0.usesXCTestAccessibilityChannel }
+    if !recoveryPlan.isEmpty {
+      return EffectiveSnapshotCapturePlan(
+        plan: recoveryPlan,
+        xCTestChannelState: .deferredToIndependentBackend,
+        treeCaptureSliceBudgetOverride: nil
+      )
+    }
+    return EffectiveSnapshotCapturePlan(
+      plan: availablePlan.filter(\.usesXCTestAccessibilityChannel),
+      xCTestChannelState: .boundedXCTestProbe,
+      treeCaptureSliceBudgetOverride: Self.penalizedXCTestProbeTreeSliceBudget
+    )
   }
 
   func shouldSkipSnapshotBackendForAbandonedTreeCapture(_ kind: SnapshotBackendKind) -> Bool {
-    kind != .privateAX && hasAbandonedTreeCapture()
+    kind.usesXCTestAccessibilityChannel && hasAbandonedTreeCapture()
   }
 
   // MARK: Plan runner
@@ -120,22 +175,34 @@ extension RunnerTests {
     var axFailure: SnapshotCaptureFailure?
     let deadline = Date().addingTimeInterval(Self.snapshotPlanBudget)
 
-    // Reorder is gated to iOS simulators — the only place the private AX backend exists, so
-    // the deferred plan cannot degrade platforms where the tree backend is the strongest tier.
-    var treePenalized = false
-#if os(iOS) && targetEnvironment(simulator)
-    treePenalized = isSnapshotTreeBackendPenalized(bundleId: currentBundleId)
+    // Reorder is iOS-only because hostile screens can make XCTest tree/query work grind while
+    // the app remains visually responsive. Simulators can avoid that channel through private AX;
+    // physical devices have no independent semantic backend yet, so they use a bounded probe.
+    var xCTestChannelPenalized = false
+#if os(iOS)
+    xCTestChannelPenalized = isSnapshotXCTestChannelPenalized(bundleId: currentBundleId)
 #endif
-    let (effectivePlan, treeDeferred) = Self.effectiveSnapshotCapturePlan(
+    let effective = Self.effectiveSnapshotCapturePlan(
       plan,
-      treePenalized: treePenalized
+      xCTestChannelPenalized: xCTestChannelPenalized,
+      availableBackends: Set(SnapshotBackendKind.allCases.filter(\.isAvailableOnCurrentPlatform))
     )
-    if treeDeferred {
+    let effectivePlan = effective.plan
+    switch effective.xCTestChannelState {
+    case .normal:
+      break
+    case .deferredToIndependentBackend:
       firstFailure = (
-        "the XCTest tree backend was deferred after a recent slow capture on this screen",
+        "XCTest-backed snapshot tiers were deferred after recent slow accessibility work on this screen",
         "budget"
       )
-      NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_TREE_DEFERRED bundle=%@", currentBundleId ?? "")
+      NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_XCTEST_CHANNEL_DEFERRED bundle=%@", currentBundleId ?? "")
+    case .boundedXCTestProbe:
+      firstFailure = (
+        "XCTest-backed snapshot tiers are running with a short recovery probe after recent slow accessibility work on this screen",
+        "budget"
+      )
+      NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_XCTEST_CHANNEL_PROBE_BOUNDED bundle=%@", currentBundleId ?? "")
     }
 
     for kind in effectivePlan {
@@ -147,7 +214,7 @@ extension RunnerTests {
         break
       }
       // While an abandoned tree capture is still grinding inside testmanagerd, XCTest-backed
-      // tiers would block behind it; only the private AX backend stays responsive (#1105).
+      // tiers would block behind it; only independent backends stay responsive (#1105).
       if shouldSkipSnapshotBackendForAbandonedTreeCapture(kind) {
         NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_TIER_SKIPPED_XCTEST_OCCUPIED tier=%@", kind.rawValue)
         if firstFailure == nil {
@@ -161,15 +228,23 @@ extension RunnerTests {
       let capture: SnapshotBackendCapture
       let backendStartedAt = Date()
       do {
-        guard let result = try captureWithBackend(kind, app: app, options: options, deadline: deadline)
+        guard
+          let result = try captureWithBackend(
+            kind,
+            app: app,
+            options: options,
+            deadline: deadline,
+            treeCaptureSliceBudgetOverride: effective.treeCaptureSliceBudgetOverride
+          )
         else {
-          recordSlowTreeBackendIfNeeded(kind, startedAt: backendStartedAt)
+          recordSlowXCTestSnapshotBackendIfNeeded(kind, startedAt: backendStartedAt)
           continue
         }
         capture = result
-        recordSlowTreeBackendIfNeeded(kind, startedAt: backendStartedAt)
+        recordSlowXCTestSnapshotBackendIfNeeded(kind, startedAt: backendStartedAt)
       } catch let failure as SnapshotCaptureFailure {
-        recordSlowTreeBackendIfNeeded(kind, startedAt: backendStartedAt)
+        recordXCTestSnapshotBackendFailureIfNeeded(kind, failure: failure)
+        recordSlowXCTestSnapshotBackendIfNeeded(kind, startedAt: backendStartedAt)
         if Self.isAxSnapshotFailure(failure) { axFailure = failure }
         if firstFailure == nil {
           firstFailure = (failure.message, Self.isAxSnapshotFailure(failure) ? "ax-rejected" : "capture-failed")
@@ -190,7 +265,7 @@ extension RunnerTests {
         continue
       }
 
-      let recovered = kind != effectivePlan.first || treeDeferred
+      let recovered = kind != effectivePlan.first || effective.xCTestChannelState != .normal
       if recovered {
         NSLog(
           "AGENT_DEVICE_RUNNER_SNAPSHOT_RECOVERED backend=%@ reason=%@",
@@ -229,22 +304,33 @@ extension RunnerTests {
       best.map { stampedSnapshotPayload($0.capture, backend: $0.kind, state: "sparse", reason: firstFailure) }
       ?? stampedSnapshotPayload(
         SnapshotBackendCapture(payload: sparseTruncatedSnapshotPayload(), effectiveDepth: nil),
-        backend: plan.last ?? .recursiveTree,
+        backend: effectivePlan.last ?? plan.last ?? .recursiveTree,
         state: "sparse",
         reason: firstFailure
       )
     return fallbackPayload
   }
 
-  /// Marks the tree backend as penalized when a capture attempt ground past the slow-capture
+  /// Marks XCTest-backed snapshot tiers as penalized when one attempt ground past the slow-capture
   /// threshold — even a successful one: the next capture of this screen must not re-grind.
-  private func recordSlowTreeBackendIfNeeded(_ kind: SnapshotBackendKind, startedAt: Date) {
-    guard kind == .recursiveTree else { return }
+  private func recordSlowXCTestSnapshotBackendIfNeeded(_ kind: SnapshotBackendKind, startedAt: Date) {
+    guard kind.usesXCTestAccessibilityChannel else { return }
     let elapsed = Date().timeIntervalSince(startedAt)
-    guard elapsed > snapshotTreeSlowCaptureThreshold else { return }
-    penalizeSnapshotTreeBackend(
+    guard elapsed > snapshotXCTestSlowCaptureThreshold else { return }
+    penalizeSnapshotXCTestChannel(
       bundleId: currentBundleId,
-      reason: "slow_tree_capture_\(Int(elapsed * 1000))ms"
+      reason: "slow_\(kind.rawValue)_capture_\(Int(elapsed * 1000))ms"
+    )
+  }
+
+  private func recordXCTestSnapshotBackendFailureIfNeeded(
+    _ kind: SnapshotBackendKind,
+    failure: SnapshotCaptureFailure
+  ) {
+    guard kind.usesXCTestAccessibilityChannel, failure.code == Self.xCTestSnapshotTimeoutCode else { return }
+    penalizeSnapshotXCTestChannel(
+      bundleId: currentBundleId,
+      reason: "\(kind.rawValue)_backend_timeout"
     )
   }
 
@@ -252,7 +338,8 @@ extension RunnerTests {
     _ kind: SnapshotBackendKind,
     app: XCUIApplication,
     options: SnapshotOptions,
-    deadline: Date
+    deadline: Date,
+    treeCaptureSliceBudgetOverride: TimeInterval?
   ) throws -> SnapshotBackendCapture? {
     switch kind {
     case .recursiveTree:
@@ -260,7 +347,8 @@ extension RunnerTests {
         let context = try makeSnapshotTraversalContext(
           app: app,
           options: options,
-          captureDeadline: deadline
+          captureDeadline: deadline,
+          treeCaptureSliceBudgetOverride: treeCaptureSliceBudgetOverride
         )
       else {
         return nil
@@ -514,38 +602,65 @@ extension RunnerTests {
     )
   }
 
-  func testEffectiveSnapshotCapturePlanDefersTreeOnlyWhenPenalizedRegularPlan() {
-    let regular = Self.effectiveSnapshotCapturePlan(Self.regularVisiblePlan, treePenalized: true)
-    XCTAssertEqual(regular.plan, [.privateAX, .querySweep, .recursiveTree])
-    XCTAssertTrue(regular.treeDeferred)
+  func testEffectiveSnapshotCapturePlanDefersXCTestBackedTiersOnlyWhenPenalizedRegularPlan() {
+    let regular = Self.effectiveSnapshotCapturePlan(
+      Self.regularVisiblePlan,
+      xCTestChannelPenalized: true
+    )
+    XCTAssertEqual(regular.plan, [.privateAX])
+    XCTAssertEqual(regular.xCTestChannelState, .deferredToIndependentBackend)
+    XCTAssertNil(regular.treeCaptureSliceBudgetOverride)
 
-    let unpenalized = Self.effectiveSnapshotCapturePlan(Self.regularVisiblePlan, treePenalized: false)
+    let unpenalized = Self.effectiveSnapshotCapturePlan(
+      Self.regularVisiblePlan,
+      xCTestChannelPenalized: false
+    )
     XCTAssertEqual(unpenalized.plan, Self.regularVisiblePlan)
-    XCTAssertFalse(unpenalized.treeDeferred)
+    XCTAssertEqual(unpenalized.xCTestChannelState, .normal)
+    XCTAssertNil(unpenalized.treeCaptureSliceBudgetOverride)
 
     // The raw diagnostic plan preserves tree-first error propagation even under penalty.
-    let raw = Self.effectiveSnapshotCapturePlan(Self.rawDiagnosticPlan, treePenalized: true)
+    let raw = Self.effectiveSnapshotCapturePlan(
+      Self.rawDiagnosticPlan,
+      xCTestChannelPenalized: true
+    )
     XCTAssertEqual(raw.plan, Self.rawDiagnosticPlan)
-    XCTAssertFalse(raw.treeDeferred)
+    XCTAssertEqual(raw.xCTestChannelState, .normal)
+    XCTAssertNil(raw.treeCaptureSliceBudgetOverride)
   }
 
-  func testSnapshotTreeBackendPenaltyMatchesBundleAndExpires() {
+  func testEffectiveSnapshotCapturePlanUsesBoundedXCTestProbeWhenNoIndependentBackendRuns() {
+    let physicalDevicePlan = Self.effectiveSnapshotCapturePlan(
+      Self.regularVisiblePlan,
+      xCTestChannelPenalized: true,
+      availableBackends: [.recursiveTree, .querySweep]
+    )
+
+    XCTAssertEqual(physicalDevicePlan.plan, [.recursiveTree, .querySweep])
+    XCTAssertEqual(physicalDevicePlan.xCTestChannelState, .boundedXCTestProbe)
+    XCTAssertEqual(
+      physicalDevicePlan.treeCaptureSliceBudgetOverride,
+      Self.penalizedXCTestProbeTreeSliceBudget
+    )
+  }
+
+  func testSnapshotXCTestChannelPenaltyMatchesBundleAndExpires() {
     defer {
-      snapshotTreePenaltyBundleId = nil
-      snapshotTreePenaltyUntil = .distantPast
+      snapshotXCTestChannelPenaltyBundleId = nil
+      snapshotXCTestChannelPenaltyUntil = .distantPast
     }
 
-    penalizeSnapshotTreeBackend(bundleId: "xyz.blueskyweb.app", reason: "test")
-    XCTAssertTrue(isSnapshotTreeBackendPenalized(bundleId: "xyz.blueskyweb.app"))
-    XCTAssertFalse(isSnapshotTreeBackendPenalized(bundleId: "com.other.app"))
+    penalizeSnapshotXCTestChannel(bundleId: "xyz.blueskyweb.app", reason: "test")
+    XCTAssertTrue(isSnapshotXCTestChannelPenalized(bundleId: "xyz.blueskyweb.app"))
+    XCTAssertFalse(isSnapshotXCTestChannelPenalized(bundleId: "com.other.app"))
 
     // A penalty recorded without a bundle applies to any current target.
-    penalizeSnapshotTreeBackend(bundleId: nil, reason: "test")
-    XCTAssertTrue(isSnapshotTreeBackendPenalized(bundleId: "com.other.app"))
+    penalizeSnapshotXCTestChannel(bundleId: nil, reason: "test")
+    XCTAssertTrue(isSnapshotXCTestChannelPenalized(bundleId: "com.other.app"))
 
     // Expired penalties stop applying.
-    snapshotTreePenaltyUntil = Date(timeIntervalSinceNow: -1)
-    XCTAssertFalse(isSnapshotTreeBackendPenalized(bundleId: "com.other.app"))
+    snapshotXCTestChannelPenaltyUntil = Date(timeIntervalSinceNow: -1)
+    XCTAssertFalse(isSnapshotXCTestChannelPenalized(bundleId: "com.other.app"))
   }
 
   func testAbandonedTreeCaptureSkipsOnlyXCTestBackedSnapshotTiers() {

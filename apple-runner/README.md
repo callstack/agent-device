@@ -28,7 +28,8 @@ Protocol and maintenance references:
 - `RunnerTests+Transport.swift`: TCP request handling and HTTP parsing/encoding.
 - `RunnerTests+CommandExecution.swift`: command dispatch (`execute*`) and command switch.
 - `RunnerTests+Lifecycle.swift`: activation/retry/stabilization and recording lifecycle helpers.
-- `RunnerTests+Interaction.swift`: tap/drag/swipe/type/back/home/rotate/app-switcher helpers.
+- `RunnerTests+Interaction.swift`: tap/drag/swipe/type/home/rotate/app-switcher helpers.
+- `RunnerTests+Navigation.swift`: back/navigation-control helpers.
 - `RunnerTests+Snapshot.swift`: fast/raw snapshot builders and include/filter helpers.
 - `RunnerTests+SystemModal.swift`: SpringBoard/system modal detection and modal snapshot shaping.
 - `RunnerTests+ScreenRecorder.swift`: nested `ScreenRecorder` implementation.
@@ -40,9 +41,11 @@ iOS snapshots have two explicit public capture modes:
 - full/raw snapshots use recursive XCTest snapshots for rich hierarchy and diagnostics;
 - interactive snapshots filter the same visible tree down to agent-facing refs.
 
-Some simulator apps expose accessibility trees that lower-level AX services can inspect but XCTest
-cannot serialize reliably. In those cases interactive snapshots may return a sparse root quickly,
-while full snapshots preserve the XCTest error. See
+Some iOS apps expose accessibility trees that lower-level AX services can inspect but XCTest cannot
+serialize reliably. In those cases interactive snapshots may return a sparse root quickly, while
+full snapshots preserve the XCTest error. A penalized simulator can recover through private AX;
+physical devices use a short XCTest probe because no non-XCTest semantic backend is available
+there. See
 [`../docs/adr/0004-ios-snapshot-backend-strategy.md`](../docs/adr/0004-ios-snapshot-backend-strategy.md)
 for the backend boundary and future simulator AX-service direction.
 

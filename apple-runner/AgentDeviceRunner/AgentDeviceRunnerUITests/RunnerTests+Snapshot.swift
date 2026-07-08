@@ -571,7 +571,8 @@ extension RunnerTests {
   func makeSnapshotTraversalContext(
     app: XCUIApplication,
     options: SnapshotOptions,
-    captureDeadline: Date = .distantFuture
+    captureDeadline: Date = .distantFuture,
+    treeCaptureSliceBudgetOverride: TimeInterval? = nil
   ) throws -> SnapshotTraversalContext? {
     let (viewport, queryRoot) = try runMainThreadWork(
       command: nil,
@@ -584,7 +585,8 @@ extension RunnerTests {
       )
     }
 
-    let slice = min(treeCaptureSliceBudget, max(0.5, captureDeadline.timeIntervalSinceNow))
+    let treeSliceBudget = treeCaptureSliceBudgetOverride ?? treeCaptureSliceBudget
+    let slice = min(treeSliceBudget, max(0.5, captureDeadline.timeIntervalSinceNow))
     guard let rootSnapshot = try captureSnapshotRootBounded(queryRoot, sliceSeconds: slice) else {
       return nil
     }
@@ -600,7 +602,7 @@ extension RunnerTests {
     )
   }
 
-  static let treeCaptureTimeoutCode = "IOS_TREE_CAPTURE_TIMEOUT"
+  static let xCTestSnapshotTimeoutCode = "IOS_TREE_CAPTURE_TIMEOUT"
 
   func hasAbandonedTreeCapture() -> Bool {
     treeCaptureLock.lock()
@@ -611,7 +613,8 @@ extension RunnerTests {
   /// Runs the blocking tree-snapshot XPC on the main thread bounded by `sliceSeconds`. On
   /// timeout the XPC keeps running on main (it cannot be cancelled); the capture is marked
   /// abandoned so plans avoid XCTest-backed tiers until it drains, the tree backend is penalized
-  /// for this bundle, and the plan moves on to the private AX backend (#1105/#1122).
+  /// for this bundle, and the plan moves to the platform's independent recovery tier when one
+  /// exists (#1105/#1122).
   private func captureSnapshotRootBounded(
     _ element: XCUIElement,
     sliceSeconds: TimeInterval
@@ -628,7 +631,7 @@ extension RunnerTests {
         self.abandonedTreeCaptureCount += 1
         self.treeCaptureLock.unlock()
         NSLog("AGENT_DEVICE_RUNNER_TREE_CAPTURE_SLICE_TIMEOUT slice=%.1f", sliceSeconds)
-        self.penalizeSnapshotTreeBackend(
+        self.penalizeSnapshotXCTestChannel(
           bundleId: self.currentBundleId,
           reason: "tree_capture_slice_timeout"
         )
@@ -647,9 +650,9 @@ extension RunnerTests {
   private func treeCaptureTimeoutError(sliceSeconds: TimeInterval) -> () -> Error {
     {
       SnapshotCaptureFailure(
-        code: Self.treeCaptureTimeoutCode,
+        code: Self.xCTestSnapshotTimeoutCode,
         message: "the XCTest tree capture exceeded its \(Int(sliceSeconds))s time slice",
-        hint: "The capture plan recovers through the private AX backend on this screen."
+        hint: "The capture plan will avoid or tightly bound XCTest-backed snapshot tiers on this screen."
       )
     }
   }
@@ -657,7 +660,7 @@ extension RunnerTests {
   func snapshotMainThreadTimeoutError(_ operation: String) -> () -> Error {
     {
       SnapshotCaptureFailure(
-        code: Self.treeCaptureTimeoutCode,
+        code: Self.xCTestSnapshotTimeoutCode,
         message: "timed out while \(operation) on the XCTest main thread",
         hint: "The capture plan will skip XCTest-backed snapshot tiers while the previous main-thread work drains."
       )
