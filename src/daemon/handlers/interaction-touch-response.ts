@@ -11,8 +11,8 @@ import { interactionResultExtra } from './interaction-touch-targets.ts';
 /**
  * The single construction site for interaction response payloads (ADR 0011
  * Layer 2). Every press/click/fill/longpress dispatch branch builds its
- * `result` (session history + touch visualization) and `responseData` (wire)
- * payloads here, so identity extras (ref/refLabel/selectorChain/
+ * `result` (session history + touch visualization) and `responseData` (public
+ * response) payloads here, so identity extras (ref/refLabel/selectorChain/
  * targetHittable/hint/evidence) are composed in exactly one place — the class
  * of bug where a hand-rolled branch dropped a field (fill @ref dropped
  * `evidence`, #1064 review) cannot recur. A guard test fails any interaction
@@ -26,7 +26,7 @@ export type InteractionResponseSource =
   | {
       kind: 'runtime';
       result: InteractionRuntimeResult;
-      wireData?: Record<string, unknown>;
+      publicData?: Record<string, unknown>;
     }
   | {
       // Direct iOS selector dispatch: no runtime result exists, only the raw
@@ -34,14 +34,14 @@ export type InteractionResponseSource =
       kind: 'runner-payload';
       targetKind: InteractionRuntimeResult['kind'];
       data: Record<string, unknown>;
-      wireData?: Record<string, unknown>;
+      publicData?: Record<string, unknown>;
       point: { x: number; y: number };
     };
 
 export type InteractionResponsePayloads = {
   /** Recorded in session history and used for touch visualization. */
   result: Record<string, unknown>;
-  /** The wire payload returned to the client. */
+  /** The public payload returned to the client. */
   responseData: Record<string, unknown>;
 };
 
@@ -86,7 +86,7 @@ export function buildInteractionResponseData(params: {
       extra: commonExtra,
     });
     const responseData = buildTouchPayload({
-      data: source.wireData,
+      data: source.publicData,
       fallbackX: source.point.x,
       fallbackY: source.point.y,
       referenceFrame,
@@ -111,7 +111,7 @@ export function buildInteractionResponseData(params: {
     extra: commonExtra,
   });
   const responseData = buildTouchPayload({
-    data: source.wireData,
+    data: source.publicData,
     fallbackX: result.point?.x,
     fallbackY: result.point?.y,
     referenceFrame,

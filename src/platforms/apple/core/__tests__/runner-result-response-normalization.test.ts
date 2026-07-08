@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import { projectAppleRunnerWireResult } from '../runner/runner-result-projection.ts';
+import { normalizeAppleRunnerResultForResponse } from '../runner/runner-result-response-normalization.ts';
 
-describe('projectAppleRunnerWireResult', () => {
+describe('normalizeAppleRunnerResultForResponse', () => {
   test('removes runner diagnostics while preserving public fields', () => {
     expect(
-      projectAppleRunnerWireResult({
+      normalizeAppleRunnerResultForResponse({
         completedSteps: 2,
         count: 1,
         currentUptimeMs: 123,

@@ -8,18 +8,17 @@ import type { CommandCapability } from '../capabilities.ts';
 import type { DaemonRequest } from '../../daemon/types.ts';
 import { resolveWaitBudgetMs } from '../wait-positionals.ts';
 import {
-  FILL_DELAY_WIRE_ECHO,
-  INTERACTION_REPEAT_WIRE_ECHO_FIELDS,
-  type CommandWireProjection,
-} from '../interaction-wire-echo.ts';
-import {
   DEFAULT_TIMEOUT_POLICY,
   INSTALL_REQUEST_TIMEOUT_MS,
   PREPARE_REQUEST_TIMEOUT_MS,
 } from './timeout-policy.ts';
 import { resolvePostActionObservationSupport } from './post-action-observation.ts';
 import type { PostActionObservationSupport } from './post-action-observation.ts';
-import type { CommandDescriptor, CommandTimeoutPolicy } from './types.ts';
+import type {
+  CommandDescriptor,
+  CommandResponseDataTransform,
+  CommandTimeoutPolicy,
+} from './types.ts';
 
 type RawCommandDescriptor = Omit<CommandDescriptor, 'mcpExposed'> & {
   mcpExposed?: boolean;
@@ -130,18 +129,22 @@ const SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   onTimeout: 'preserve-daemon',
 };
 
-const TOUCH_INTERACTION_WIRE_PROJECTION = {
-  wireEcho: {
-    ...INTERACTION_REPEAT_WIRE_ECHO_FIELDS,
+const TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM = {
+  fields: {
+    count: { defaultValue: 1, omitDefault: true },
+    intervalMs: { defaultValue: 0, omitDefault: true },
+    holdMs: { defaultValue: 0, omitDefault: true },
+    jitterPx: { defaultValue: 0, omitDefault: true },
+    doubleTap: { defaultValue: false, omitDefault: true },
   },
-} as const satisfies CommandWireProjection;
+} as const satisfies CommandResponseDataTransform;
 
-const FILL_INTERACTION_WIRE_PROJECTION = {
-  wireEcho: {
-    ...INTERACTION_REPEAT_WIRE_ECHO_FIELDS,
-    delayMs: FILL_DELAY_WIRE_ECHO,
+const FILL_INTERACTION_RESPONSE_DATA_TRANSFORM = {
+  fields: {
+    ...TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM.fields,
+    delayMs: { defaultValue: 0 },
   },
-} as const satisfies CommandWireProjection;
+} as const satisfies CommandResponseDataTransform;
 
 function interactionTimeoutPolicy(command: string): CommandTimeoutPolicy {
   return resolvePostActionObservationSupport(command) !== undefined
@@ -534,7 +537,7 @@ const RAW_COMMAND_DESCRIPTORS = [
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
     timeoutPolicy: interactionTimeoutPolicy(PUBLIC_COMMANDS.click),
     postActionObservation: postActionObservation(PUBLIC_COMMANDS.click),
-    wireProjection: TOUCH_INTERACTION_WIRE_PROJECTION,
+    responseDataTransform: TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
   },
   {
@@ -543,7 +546,7 @@ const RAW_COMMAND_DESCRIPTORS = [
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
     timeoutPolicy: interactionTimeoutPolicy(PUBLIC_COMMANDS.fill),
     postActionObservation: postActionObservation(PUBLIC_COMMANDS.fill),
-    wireProjection: FILL_INTERACTION_WIRE_PROJECTION,
+    responseDataTransform: FILL_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
   },
   {
@@ -560,7 +563,7 @@ const RAW_COMMAND_DESCRIPTORS = [
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
     timeoutPolicy: interactionTimeoutPolicy(PUBLIC_COMMANDS.press),
     postActionObservation: postActionObservation(PUBLIC_COMMANDS.press),
-    wireProjection: TOUCH_INTERACTION_WIRE_PROJECTION,
+    responseDataTransform: TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM,
     batchable: true,
   },
   {
@@ -796,11 +799,14 @@ const TIMEOUT_POLICY_BY_COMMAND: ReadonlyMap<string, CommandTimeoutPolicy> = new
   commandDescriptors.map((descriptor) => [descriptor.name, descriptor.timeoutPolicy]),
 );
 
-const WIRE_PROJECTION_BY_COMMAND: ReadonlyMap<string, CommandWireProjection> = new Map(
-  Array.from(COMMAND_DESCRIPTOR_BY_NAME.values()).flatMap((descriptor) =>
-    descriptor.wireProjection ? [[descriptor.name, descriptor.wireProjection] as const] : [],
-  ),
-);
+const RESPONSE_DATA_TRANSFORM_BY_COMMAND: ReadonlyMap<string, CommandResponseDataTransform> =
+  new Map(
+    Array.from(COMMAND_DESCRIPTOR_BY_NAME.values()).flatMap((descriptor) =>
+      descriptor.responseDataTransform
+        ? [[descriptor.name, descriptor.responseDataTransform] as const]
+        : [],
+    ),
+  );
 
 export function resolveCommandPostActionObservationSupport(
   command: string | undefined,
@@ -828,9 +834,9 @@ export function resolveCommandTimeoutPolicy(command: string | undefined): Comman
   return TIMEOUT_POLICY_BY_COMMAND.get(command) ?? DEFAULT_TIMEOUT_POLICY;
 }
 
-export function resolveCommandWireProjection(
+export function resolveCommandResponseDataTransform(
   command: string | undefined,
-): CommandWireProjection | undefined {
+): CommandResponseDataTransform | undefined {
   if (command === undefined) return undefined;
-  return WIRE_PROJECTION_BY_COMMAND.get(command);
+  return RESPONSE_DATA_TRANSFORM_BY_COMMAND.get(command);
 }

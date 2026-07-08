@@ -7,7 +7,7 @@ const APPLE_RUNNER_DIAGNOSTIC_RESULT_FIELDS = [
 
 const appleRunnerDiagnosticResultFields = new Set<string>(APPLE_RUNNER_DIAGNOSTIC_RESULT_FIELDS);
 
-export function projectAppleRunnerWireResult(
+export function normalizeAppleRunnerResultForResponse(
   data: Record<string, unknown> | undefined,
 ): Record<string, unknown> | undefined {
   if (!data) return undefined;

@@ -64,12 +64,12 @@ type InteractionExtra = {
 };
 
 /**
- * Canonical interaction wire response built by buildInteractionResponseData:
+ * Canonical interaction response data built by buildInteractionResponseData:
  * shared target/coordinate/evidence fields plus per-command extras. The runtime
  * result still has richer internal node/backend data; this schema documents the
  * JSON payload returned to clients.
  */
-function interactionWireResultSchema(extra: InteractionExtra = {}): JsonSchema {
+function interactionResponseDataSchema(extra: InteractionExtra = {}): JsonSchema {
   const extraProperties = extra.properties ?? {};
   const extraRequired = extra.required ?? [];
   return objectSchema(
@@ -188,8 +188,8 @@ const targetShutdownResultSchema: JsonSchema = objectSchema(
 );
 
 export const COMMAND_OUTPUT_SCHEMAS = {
-  // buildInteractionResponseData wire payloads for interaction commands.
-  press: interactionWireResultSchema({
+  // buildInteractionResponseData public payloads for interaction commands.
+  press: interactionResponseDataSchema({
     properties: {
       evidence: interactionEvidenceSchema,
       settle: settleObservationSchema,
@@ -201,7 +201,7 @@ export const COMMAND_OUTPUT_SCHEMAS = {
       doubleTap: booleanSchema('Whether the command requested a double-tap action.'),
     },
   }),
-  fill: interactionWireResultSchema({
+  fill: interactionResponseDataSchema({
     properties: {
       text: stringSchema('Text submitted to the field.'),
       delayMs: numberSchema('Delay between typed characters in milliseconds.'),
@@ -210,7 +210,7 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     },
     required: ['text'],
   }),
-  longpress: interactionWireResultSchema({
+  longpress: interactionResponseDataSchema({
     properties: {
       durationMs: numberSchema(),
       settle: settleObservationSchema,

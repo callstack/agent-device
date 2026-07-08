@@ -1,10 +1,10 @@
 import type { GestureReferenceFrame } from '../../core/scroll-gesture.ts';
 import {
-  projectInteractionWireData,
-  type InteractionWireEchoCommand,
-} from '../../core/interaction-wire-projection.ts';
+  transformInteractionResponseData,
+  type InteractionResponseDataTransformCommand,
+} from '../../core/interaction-response-data-transform.ts';
 import { isApplePlatform, publicPlatformString } from '../../kernel/device.ts';
-import { projectAppleRunnerWireResult } from '../../platforms/apple/core/runner/runner-result-projection.ts';
+import { normalizeAppleRunnerResultForResponse } from '../../platforms/apple/core/runner/runner-result-response-normalization.ts';
 import {
   buttonTag,
   getClickButtonValidationError,
@@ -193,7 +193,7 @@ async function dispatchTargetedTouchViaRuntime(
         session,
         result,
         staleRefsWarning,
-        wireData: projectTouchWireData({
+        publicData: transformTouchResponseData({
           session,
           command: command === 'longpress' ? undefined : command,
           flags: req.flags,
@@ -259,10 +259,10 @@ async function buildTargetedTouchResponsePayloads(params: {
   session: SessionState;
   result: TargetedTouchResult;
   staleRefsWarning: string | undefined;
-  wireData?: Record<string, unknown>;
+  publicData?: Record<string, unknown>;
   extra: Record<string, unknown>;
 }): Promise<InteractionResponsePayloads> {
-  const { params: handlerParams, session, result, wireData, extra } = params;
+  const { params: handlerParams, session, result, publicData, extra } = params;
   const referenceFrame =
     result.kind === 'point'
       ? await resolveDirectTouchReferenceFrameSafely({
@@ -274,7 +274,7 @@ async function buildTargetedTouchResponsePayloads(params: {
         })
       : readSnapshotNodesReferenceFrame(session.snapshot?.nodes ?? []);
   return buildInteractionResponseData({
-    source: { kind: 'runtime', result, wireData },
+    source: { kind: 'runtime', result, publicData },
     referenceFrame,
     extra,
     staleRefsWarning: params.staleRefsWarning,
@@ -394,14 +394,14 @@ async function dispatchDirectIosSelectorInteraction(params: {
       })) ?? {};
     const actionFinishedAt = Date.now();
     const point = readPointFromDirectSelectorTapResult(data);
-    const wireData = projectTouchWireData({
+    const publicData = transformTouchResponseData({
       session,
-      command: readInteractionWireEchoCommand(handlerParams.req.command, command),
+      command: readInteractionResponseDataTransformCommand(handlerParams.req.command, command),
       flags: handlerParams.req.flags,
       data,
     });
     const { result, responseData } = buildInteractionResponseData({
-      source: { kind: 'runner-payload', targetKind: 'selector', data, wireData, point },
+      source: { kind: 'runner-payload', targetKind: 'selector', data, publicData, point },
       referenceFrame: readReferenceFrameFromDirectSelectorTapResult(data),
       extra: {
         ...extra,
@@ -442,27 +442,27 @@ async function dispatchDirectIosSelectorInteraction(params: {
   }
 }
 
-function projectTouchWireData(params: {
+function transformTouchResponseData(params: {
   session: SessionState;
-  command?: InteractionWireEchoCommand;
+  command?: InteractionResponseDataTransformCommand;
   flags: CommandFlags | undefined;
   data: Record<string, unknown> | undefined;
 }): Record<string, unknown> | undefined {
   const base = isApplePlatform(params.session.device.platform)
-    ? projectAppleRunnerWireResult(params.data)
+    ? normalizeAppleRunnerResultForResponse(params.data)
     : params.data;
   if (!params.command) return base;
-  return projectInteractionWireData(
-    params.command,
-    params.flags as Record<string, unknown> | undefined,
-    base,
-  );
+  return transformInteractionResponseData({
+    command: params.command,
+    input: params.flags as Record<string, unknown> | undefined,
+    data: base,
+  });
 }
 
-function readInteractionWireEchoCommand(
+function readInteractionResponseDataTransformCommand(
   requestCommand: string,
   dispatchCommand: 'press' | 'fill',
-): InteractionWireEchoCommand {
+): InteractionResponseDataTransformCommand {
   if (requestCommand === 'click' || requestCommand === 'press' || requestCommand === 'fill') {
     return requestCommand;
   }
@@ -613,7 +613,7 @@ function buildFillResponsePayloads(params: {
     source: {
       kind: 'runtime',
       result,
-      wireData: projectTouchWireData({
+      publicData: transformTouchResponseData({
         session,
         command: 'fill',
         flags: params.flags,
