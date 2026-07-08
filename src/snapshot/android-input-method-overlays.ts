@@ -19,12 +19,17 @@ export function isAndroidInputMethodSnapshotNode(
 export function findAndroidGboardHandwritingTutorialCancel(
   snapshot: SnapshotState,
 ): SnapshotNode | undefined {
-  if (!snapshot.nodes.some(isAndroidGboardHandwritingTutorialTitle)) return undefined;
-  return snapshot.nodes.find(isAndroidGboardHandwritingTutorialCancel);
+  return (
+    snapshot.nodes.find(isAndroidGboardHandwritingTutorialCloseButton) ??
+    findEnglishAndroidGboardHandwritingTutorialCancel(snapshot)
+  );
 }
 
 export function hasAndroidGboardHandwritingTutorial(snapshot: SnapshotState): boolean {
-  return snapshot.nodes.some(isAndroidGboardHandwritingTutorialTitle);
+  return (
+    snapshot.nodes.some(isAndroidGboardHandwritingTutorialCloseButton) ||
+    snapshot.nodes.some(isAndroidGboardHandwritingTutorialTitle)
+  );
 }
 
 function isAndroidGboardHandwritingTutorialTitle(node: SnapshotNode): boolean {
@@ -35,6 +40,17 @@ function isAndroidGboardHandwritingTutorialCancel(node: SnapshotNode): boolean {
   if (!isGboardSnapshotNode(node)) return false;
   if (node.identifier === GBOARD_HANDWRITING_CANCEL_ID) return true;
   return nodeTextValues(node).includes(GBOARD_HANDWRITING_CANCEL_LABEL);
+}
+
+function isAndroidGboardHandwritingTutorialCloseButton(node: SnapshotNode): boolean {
+  return isGboardSnapshotNode(node) && node.identifier === GBOARD_HANDWRITING_CANCEL_ID;
+}
+
+function findEnglishAndroidGboardHandwritingTutorialCancel(
+  snapshot: SnapshotState,
+): SnapshotNode | undefined {
+  if (!snapshot.nodes.some(isAndroidGboardHandwritingTutorialTitle)) return undefined;
+  return snapshot.nodes.find(isAndroidGboardHandwritingTutorialCancel);
 }
 
 function isGboardSnapshotNode(node: SnapshotNode): boolean {
