@@ -1,4 +1,5 @@
 import type { CommandCapability } from '../capabilities.ts';
+import type { CommandWireProjection } from '../interaction-wire-echo.ts';
 import type { DaemonCommandDescriptor } from '../../daemon/daemon-command-registry.ts';
 import type { PostActionObservationSupport } from './post-action-observation.ts';
 
@@ -81,6 +82,9 @@ export type CommandTimeoutPolicy = {
  *                   commands that support `--settle`/`--verify`; consumed by
  *                   command surfaces and timeout policy instead of repeated
  *                   command-name lists.
+ *  - `wireProjection` — optional response projection metadata for command-owned
+ *                   echoes in daemon responses. This keeps response shaping on
+ *                   the same descriptor surface as other command traits.
  *
  * The registry started dormant (proven byte-equal to the hand tables by the
  * parity tests) and is now the live source: the daemon registry, capability
@@ -95,4 +99,5 @@ export type CommandDescriptor = {
   mcpExposed: boolean;
   timeoutPolicy: CommandTimeoutPolicy;
   postActionObservation?: PostActionObservationSupport;
+  wireProjection?: CommandWireProjection;
 };

@@ -8,6 +8,11 @@ import type { CommandCapability } from '../capabilities.ts';
 import type { DaemonRequest } from '../../daemon/types.ts';
 import { resolveWaitBudgetMs } from '../wait-positionals.ts';
 import {
+  FILL_DELAY_WIRE_ECHO,
+  INTERACTION_REPEAT_WIRE_ECHO_FIELDS,
+  type CommandWireProjection,
+} from '../interaction-wire-echo.ts';
+import {
   DEFAULT_TIMEOUT_POLICY,
   INSTALL_REQUEST_TIMEOUT_MS,
   PREPARE_REQUEST_TIMEOUT_MS,
@@ -124,6 +129,19 @@ const SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY: CommandTimeoutPolicy = {
   },
   onTimeout: 'preserve-daemon',
 };
+
+const TOUCH_INTERACTION_WIRE_PROJECTION = {
+  wireEcho: {
+    ...INTERACTION_REPEAT_WIRE_ECHO_FIELDS,
+  },
+} as const satisfies CommandWireProjection;
+
+const FILL_INTERACTION_WIRE_PROJECTION = {
+  wireEcho: {
+    ...INTERACTION_REPEAT_WIRE_ECHO_FIELDS,
+    delayMs: FILL_DELAY_WIRE_ECHO,
+  },
+} as const satisfies CommandWireProjection;
 
 function interactionTimeoutPolicy(command: string): CommandTimeoutPolicy {
   return resolvePostActionObservationSupport(command) !== undefined
@@ -516,6 +534,7 @@ const RAW_COMMAND_DESCRIPTORS = [
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
     timeoutPolicy: interactionTimeoutPolicy(PUBLIC_COMMANDS.click),
     postActionObservation: postActionObservation(PUBLIC_COMMANDS.click),
+    wireProjection: TOUCH_INTERACTION_WIRE_PROJECTION,
     batchable: true,
   },
   {
@@ -524,6 +543,7 @@ const RAW_COMMAND_DESCRIPTORS = [
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
     timeoutPolicy: interactionTimeoutPolicy(PUBLIC_COMMANDS.fill),
     postActionObservation: postActionObservation(PUBLIC_COMMANDS.fill),
+    wireProjection: FILL_INTERACTION_WIRE_PROJECTION,
     batchable: true,
   },
   {
@@ -540,6 +560,7 @@ const RAW_COMMAND_DESCRIPTORS = [
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
     timeoutPolicy: interactionTimeoutPolicy(PUBLIC_COMMANDS.press),
     postActionObservation: postActionObservation(PUBLIC_COMMANDS.press),
+    wireProjection: TOUCH_INTERACTION_WIRE_PROJECTION,
     batchable: true,
   },
   {
@@ -775,6 +796,12 @@ const TIMEOUT_POLICY_BY_COMMAND: ReadonlyMap<string, CommandTimeoutPolicy> = new
   commandDescriptors.map((descriptor) => [descriptor.name, descriptor.timeoutPolicy]),
 );
 
+const WIRE_PROJECTION_BY_COMMAND: ReadonlyMap<string, CommandWireProjection> = new Map(
+  Array.from(COMMAND_DESCRIPTOR_BY_NAME.values()).flatMap((descriptor) =>
+    descriptor.wireProjection ? [[descriptor.name, descriptor.wireProjection] as const] : [],
+  ),
+);
+
 export function resolveCommandPostActionObservationSupport(
   command: string | undefined,
 ): PostActionObservationSupport | undefined {
@@ -799,4 +826,11 @@ export function commandSupportsVerifyEvidence(command: string | undefined): bool
 export function resolveCommandTimeoutPolicy(command: string | undefined): CommandTimeoutPolicy {
   if (command === undefined) return DEFAULT_TIMEOUT_POLICY;
   return TIMEOUT_POLICY_BY_COMMAND.get(command) ?? DEFAULT_TIMEOUT_POLICY;
+}
+
+export function resolveCommandWireProjection(
+  command: string | undefined,
+): CommandWireProjection | undefined {
+  if (command === undefined) return undefined;
+  return WIRE_PROJECTION_BY_COMMAND.get(command);
 }

@@ -1,42 +1,13 @@
-export type WireEchoMode = 'always' | 'omit-default';
+import { resolveCommandWireProjection } from './command-descriptor/registry.ts';
+import type { WireEchoOptions } from './interaction-wire-echo.ts';
 
-export type WireEchoOptions = {
-  defaultValue?: unknown;
-  mode?: WireEchoMode;
-};
-
-export const INTERACTION_REPEAT_WIRE_ECHO_FIELDS = {
-  count: { defaultValue: 1, mode: 'omit-default' },
-  intervalMs: { defaultValue: 0, mode: 'omit-default' },
-  holdMs: { defaultValue: 0, mode: 'omit-default' },
-  jitterPx: { defaultValue: 0, mode: 'omit-default' },
-  doubleTap: { defaultValue: false, mode: 'omit-default' },
-} as const satisfies Record<string, WireEchoOptions>;
-
-export const FILL_DELAY_WIRE_ECHO = {
-  defaultValue: 0,
-} as const satisfies WireEchoOptions;
-
-const TOUCH_WIRE_ECHO_FIELDS = {
-  ...INTERACTION_REPEAT_WIRE_ECHO_FIELDS,
-} as const satisfies Record<string, WireEchoOptions>;
-
-const INTERACTION_WIRE_ECHO_FIELDS = {
-  click: TOUCH_WIRE_ECHO_FIELDS,
-  press: TOUCH_WIRE_ECHO_FIELDS,
-  fill: {
-    ...TOUCH_WIRE_ECHO_FIELDS,
-    delayMs: FILL_DELAY_WIRE_ECHO,
-  },
-} as const satisfies Record<string, Record<string, WireEchoOptions>>;
-
-export type InteractionWireEchoCommand = keyof typeof INTERACTION_WIRE_ECHO_FIELDS;
+export type InteractionWireEchoCommand = 'click' | 'press' | 'fill';
 
 export function interactionWireEchoFromInput(
   command: InteractionWireEchoCommand,
   input: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
-  return projectWireEchoSpecsFromInput(INTERACTION_WIRE_ECHO_FIELDS[command], input ?? {});
+  return projectWireEchoSpecsFromInput(readCommandWireEchoSpecs(command), input ?? {});
 }
 
 export function projectInteractionWireData(
@@ -44,7 +15,17 @@ export function projectInteractionWireData(
   input: Record<string, unknown> | undefined,
   base: Record<string, unknown> | undefined,
 ): Record<string, unknown> {
-  return projectWireEchoSpecsFromInput(INTERACTION_WIRE_ECHO_FIELDS[command], input ?? {}, base);
+  return projectWireEchoSpecsFromInput(readCommandWireEchoSpecs(command), input ?? {}, base);
+}
+
+function readCommandWireEchoSpecs(
+  command: InteractionWireEchoCommand,
+): Record<string, WireEchoOptions> {
+  const projection = resolveCommandWireProjection(command);
+  if (!projection) {
+    throw new Error(`Missing wire projection descriptor for ${command}`);
+  }
+  return projection.wireEcho;
 }
 
 function projectWireEchoSpecsFromInput(

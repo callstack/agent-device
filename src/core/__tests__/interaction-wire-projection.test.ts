@@ -3,8 +3,21 @@ import {
   interactionWireEchoFromInput,
   projectInteractionWireData,
 } from '../interaction-wire-projection.ts';
+import { resolveCommandWireProjection } from '../command-descriptor/registry.ts';
 
 describe('interaction wire projection', () => {
+  test('reads command-owned wire echo specs from descriptors', () => {
+    expect(resolveCommandWireProjection('press')?.wireEcho).toEqual({
+      count: { defaultValue: 1, mode: 'omit-default' },
+      intervalMs: { defaultValue: 0, mode: 'omit-default' },
+      holdMs: { defaultValue: 0, mode: 'omit-default' },
+      jitterPx: { defaultValue: 0, mode: 'omit-default' },
+      doubleTap: { defaultValue: false, mode: 'omit-default' },
+    });
+    expect(resolveCommandWireProjection('fill')?.wireEcho.delayMs).toEqual({ defaultValue: 0 });
+    expect(resolveCommandWireProjection('longpress')).toBeUndefined();
+  });
+
   test('omits default press repeat values', () => {
     expect(
       interactionWireEchoFromInput('press', {

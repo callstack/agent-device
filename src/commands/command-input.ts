@@ -10,10 +10,6 @@ import {
   type DeviceTarget,
   type PlatformSelector,
 } from '../kernel/device.ts';
-import {
-  INTERACTION_REPEAT_WIRE_ECHO_FIELDS,
-  type WireEchoOptions,
-} from '../core/interaction-wire-projection.ts';
 import type { JsonSchema } from './command-contract.ts';
 import { AppError } from '../kernel/errors.ts';
 
@@ -131,7 +127,6 @@ export type CommandField<T> = {
   schema: JsonSchema;
   required: boolean;
   read: FieldReader<T>;
-  wireEcho?: WireEchoOptions;
 };
 
 export type CommandFieldMap = Record<string, CommandField<unknown>>;
@@ -156,19 +151,6 @@ export function requiredField<T>(
 ): CommandField<Exclude<T, undefined>> & { required: true } {
   return { ...field, required: true } as CommandField<Exclude<T, undefined>> & {
     required: true;
-  };
-}
-
-export function wireEchoField<T>(
-  field: CommandField<T>,
-  options: WireEchoOptions = {},
-): CommandField<T> {
-  return {
-    ...field,
-    wireEcho: {
-      mode: options.mode ?? 'always',
-      ...(Object.hasOwn(options, 'defaultValue') ? { defaultValue: options.defaultValue } : {}),
-    },
   };
 }
 
@@ -249,24 +231,11 @@ export function selectorSnapshotFields() {
 
 export function repeatedFields() {
   return {
-    count: wireEchoField(integerField('Number of press/click repetitions.', { min: 1 }), {
-      ...INTERACTION_REPEAT_WIRE_ECHO_FIELDS.count,
-    }),
-    intervalMs: wireEchoField(
-      integerField('Delay between repeated press/click actions.', { min: 0 }),
-      {
-        ...INTERACTION_REPEAT_WIRE_ECHO_FIELDS.intervalMs,
-      },
-    ),
-    holdMs: wireEchoField(integerField('Hold duration for each action.', { min: 0 }), {
-      ...INTERACTION_REPEAT_WIRE_ECHO_FIELDS.holdMs,
-    }),
-    jitterPx: wireEchoField(integerField('Randomization radius in pixels.', { min: 0 }), {
-      ...INTERACTION_REPEAT_WIRE_ECHO_FIELDS.jitterPx,
-    }),
-    doubleTap: wireEchoField(booleanField('Request a double-tap action.'), {
-      ...INTERACTION_REPEAT_WIRE_ECHO_FIELDS.doubleTap,
-    }),
+    count: integerField('Number of press/click repetitions.', { min: 1 }),
+    intervalMs: integerField('Delay between repeated press/click actions.', { min: 0 }),
+    holdMs: integerField('Hold duration for each action.', { min: 0 }),
+    jitterPx: integerField('Randomization radius in pixels.', { min: 0 }),
+    doubleTap: booleanField('Request a double-tap action.'),
   };
 }
 
