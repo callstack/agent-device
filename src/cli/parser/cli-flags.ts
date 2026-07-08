@@ -27,6 +27,7 @@ import {
   SCREENSHOT_SPECIFIC_FLAG_DEFINITIONS,
   type ScreenshotRequestFlags,
 } from '../../contracts/screenshot.ts';
+import { RECORDING_SCOPE_VALUES, type RecordingScope } from '../../core/recording-scope.ts';
 import { PERF_KIND_VALUES } from '../../contracts/perf.ts';
 import {
   MAESTRO_COMPAT_TRACKER_URL,
@@ -98,6 +99,7 @@ export type CliFlags = CloudProviderProfileFields &
     fps?: number;
     quality?: RecordingExportQuality | string;
     hideTouches?: boolean;
+    recordingScope?: RecordingScope;
     intervalMs?: number;
     delayMs?: number;
     durationMs?: number;
@@ -786,6 +788,15 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--hide-touches',
     usageDescription: 'Record: skip touch-overlay post-processing for faster raw benchmark videos',
+  },
+  {
+    key: 'recordingScope',
+    names: ['--scope'],
+    type: 'enum',
+    enumValues: RECORDING_SCOPE_VALUES,
+    usageLabel: '--scope <app|device|system>',
+    usageDescription:
+      'Record: app requires an active app session; device/system records the whole screen',
   },
   {
     key: 'intervalMs',

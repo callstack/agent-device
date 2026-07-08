@@ -1,5 +1,6 @@
 import type { RecordOptions } from '../../client/client-types.ts';
 import { RECORDING_EXPORT_QUALITIES } from '../../core/recording-export-quality.ts';
+import { RECORDING_SCOPE_VALUES } from '../../core/recording-scope.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
@@ -33,6 +34,7 @@ export const recordCommandMetadata = defineFieldCommandMetadata(
     maxSize: integerField(),
     quality: enumField(RECORDING_EXPORT_QUALITIES),
     hideTouches: booleanField(),
+    recordingScope: enumField(RECORDING_SCOPE_VALUES),
   },
 );
 
@@ -57,13 +59,13 @@ export const traceCommandDefinition = defineExecutableCommand(
 
 const recordCliSchema = {
   usageOverride:
-    'record start [path] [--fps <n>] [--max-size <px>] [--quality <medium|high>] [--hide-touches] | record stop',
+    'record start [path] [--scope <app|device|system>] [--fps <n>] [--max-size <px>] [--quality <medium|high>] [--hide-touches] | record stop',
   listUsageOverride: 'record start [path] | record stop',
   helpDescription:
-    'Start/stop screen recording; Android record start publishes a durable device manifest, recordings longer than the 180s adb screenrecord limit are returned as multiple MP4 chunks while the daemon stays alive, and daemon-restart recovery uses only manifest-owned chunks. Use --max-size to limit dimensions and --quality to choose medium or high export quality',
+    'Start/stop screen recording. The default --scope app requires an active app session from open <app>; use --scope device/system to explicitly request whole-screen recording where the selected backend supports it. Android record start publishes a durable device manifest, recordings longer than the 180s adb screenrecord limit are returned as multiple MP4 chunks while the daemon stays alive, and daemon-restart recovery uses only manifest-owned chunks. Use --max-size to limit dimensions and --quality to choose medium or high export quality',
   summary: 'Start or stop screen recording',
   positionalArgs: ['start|stop', 'path?'],
-  allowedFlags: ['fps', 'screenshotMaxSize', 'quality', 'hideTouches'],
+  allowedFlags: ['recordingScope', 'fps', 'screenshotMaxSize', 'quality', 'hideTouches'],
 } as const satisfies CommandSchemaOverride;
 
 const traceCliSchema = {
@@ -83,6 +85,7 @@ export const recordCliReader: CliReader = (positionals, flags) => ({
   maxSize: flags.screenshotMaxSize,
   quality: flags.quality as RecordOptions['quality'],
   hideTouches: flags.hideTouches,
+  recordingScope: flags.recordingScope,
 });
 
 export const traceCliReader: CliReader = (positionals, flags) => ({

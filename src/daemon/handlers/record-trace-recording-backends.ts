@@ -11,6 +11,7 @@ import {
 } from '../../recording/output-path.ts';
 import { resolveWebProvider } from '../../platforms/web/provider.ts';
 import { IOS_RUNNER_CONTAINER_BUNDLE_IDS } from '../../platforms/apple/core/runner/runner-client.ts';
+import { isWholeScreenRecordingScope } from '../../core/recording-scope.ts';
 import { errorResponse } from './response.ts';
 import { startAndroidRecording, stopAndroidRecording } from './record-trace-android.ts';
 import { recoverMissingAndroidRecording } from './record-trace-android-recovery.ts';
@@ -265,13 +266,14 @@ const iosSimulatorRecordingBackend: RecordingBackend<'ios'> = {
   resolveOutputPath: resolveNativeRecordingOutputPath,
   start: async ({ req, activeSession, device, logPath, deps, recordingBase, resolvedOut }) => {
     const appBundleId = normalizeAppBundleId(activeSession);
-    if (!activeSession.recordOnlySession && !appBundleId) {
+    const appScopedRecording = !isWholeScreenRecordingScope(recordingBase.recordingScope ?? 'app');
+    if (appScopedRecording && !appBundleId) {
       return errorResponse(
         'INVALID_ARGS',
-        'record on iOS Simulator requires an active app session; run open <app> first, or start recording without an existing session for record-only simulator capture',
+        'record on iOS Simulator with app scope requires an active app session; run open <app> first, or use --scope device to record the full simulator screen',
       );
     }
-    if (!activeSession.recordOnlySession && appBundleId && isAgentDeviceRunnerBundle(appBundleId)) {
+    if (appScopedRecording && appBundleId && isAgentDeviceRunnerBundle(appBundleId)) {
       return errorResponse(
         'INVALID_ARGS',
         'record on iOS Simulator cannot use Agent Device Runner as the active app session; run open <app> first',
@@ -333,13 +335,21 @@ const RECORDING_BACKENDS_BY_TAG: Record<RecordingBackendTag, RecordingStartBacke
   unsupported: unsupportedRecordingBackend,
 };
 
+const WEB_UNSUPPORTED_RECORDING_FLAGS = [
+  ['fps', '--fps'],
+  ['quality', '--quality'],
+  ['screenshotMaxSize', '--max-size'],
+  ['hideTouches', '--hide-touches'],
+] as const satisfies readonly (readonly [keyof NonNullable<DaemonRequest['flags']>, string])[];
+
 function webRecordingUnsupportedFlags(req: DaemonRequest): string[] {
-  const unsupported: string[] = [];
-  if (req.flags?.fps !== undefined) unsupported.push('--fps');
-  if (req.flags?.quality !== undefined) unsupported.push('--quality');
-  if (req.flags?.screenshotMaxSize !== undefined) unsupported.push('--max-size');
-  if (req.flags?.hideTouches !== undefined) unsupported.push('--hide-touches');
-  return unsupported;
+  const flags = req.flags ?? {};
+  const unsupported = WEB_UNSUPPORTED_RECORDING_FLAGS.flatMap(([key, flag]) =>
+    flags[key] !== undefined ? [flag] : [],
+  );
+  return isWholeScreenRecordingScope(flags.recordingScope ?? 'app')
+    ? [...unsupported, '--scope']
+    : unsupported;
 }
 
 function validateWebRecordingFlags(req: DaemonRequest): DaemonResponse | null {

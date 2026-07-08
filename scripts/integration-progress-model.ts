@@ -150,6 +150,7 @@ function summarizeProviderScenarioFlagCoverage(files) {
     ['fps', 'recording frame-rate request'],
     ['quality', 'recording quality scaling'],
     ['hideTouches', 'recording without touch overlays'],
+    ['recordingScope', 'recording app vs whole-screen scope', ['scope']],
     ['intervalMs', 'repeated press interval'],
     ['delayMs', 'typing/fill delay'],
     ['durationMs', 'scroll, gesture, and TV remote duration'],

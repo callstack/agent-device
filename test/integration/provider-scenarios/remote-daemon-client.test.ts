@@ -507,6 +507,7 @@ async function assertRecordingArtifactRoundTrip(
   const start = await client.recording.record({
     action: 'start',
     path: paths.recordingPath,
+    recordingScope: 'device',
   });
   assert.equal(start.recording, 'started');
   assert.equal(fs.existsSync(paths.recordingPath), false);

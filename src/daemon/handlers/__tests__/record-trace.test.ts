@@ -214,6 +214,7 @@ async function runRecordCommand(params: {
     quality?: string;
     screenshotMaxSize?: number;
     hideTouches?: boolean;
+    recordingScope?: 'app' | 'device' | 'system';
   };
   sessionExplicit?: boolean;
   clientArtifactPaths?: Record<string, string>;
@@ -495,14 +496,6 @@ test('record start web rejects native recording flags before delegating', async 
 test('record start web requires an existing browser session', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'web-recording-no-open';
-  mockResolveTargetDevice.mockResolvedValueOnce({
-    platform: 'web',
-    id: 'agent-browser-chrome',
-    name: 'Agent Browser Chrome',
-    kind: 'device',
-    target: 'desktop',
-    booted: true,
-  });
 
   const response = await runRecordCommand({
     sessionStore,
@@ -515,7 +508,7 @@ test('record start web requires an existing browser session', async () => {
     throw new Error(`expected web recording start failure, got ${JSON.stringify(response)}`);
   }
   expect(response.error.code).toBe('INVALID_ARGS');
-  expect(response.error.message).toMatch(/run open <url> --platform web first/);
+  expect(response.error.message).toMatch(/requires an active app session/i);
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 
@@ -1169,6 +1162,58 @@ test('record start with explicit missing session does not fall back to record-on
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
 
+test('record start without a session defaults to app scope', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-sim-default-app-scope';
+  mockRunCmdBackground.mockImplementation(() => {
+    throw new Error('simctl recordVideo should not start without explicit whole-screen scope');
+  });
+
+  const response = await runRecordCommand({
+    sessionStore,
+    sessionName,
+    positionals: ['start', './sim-default-app-scope.mp4'],
+    flags: { hideTouches: true },
+  });
+
+  expect(response?.ok).toBe(false);
+  expect((response as any).error?.code).toBe('INVALID_ARGS');
+  expect((response as any).error?.message ?? '').toMatch(/defaults to app scope/i);
+  expect(mockResolveTargetDevice).not.toHaveBeenCalled();
+  expect(mockEnsureDeviceReady).not.toHaveBeenCalled();
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+});
+
+test('record start with explicit missing session can opt into device scope', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-sim-explicit-device-scope';
+  mockResolveTargetDevice.mockResolvedValueOnce({
+    platform: 'apple',
+    id: 'ios-sim-1',
+    name: 'iPhone 16',
+    kind: 'simulator',
+    booted: true,
+  });
+  mockRunCmdBackground.mockImplementation(() => ({
+    child: { kill: () => {}, pid: 5153 } as any,
+    wait: Promise.resolve({ stdout: '', stderr: '', exitCode: 0 }),
+  }));
+
+  const response = await runRecordCommand({
+    sessionStore,
+    sessionName,
+    positionals: ['start', './sim-explicit-device-scope.mp4'],
+    flags: { hideTouches: true, recordingScope: 'device' },
+    sessionExplicit: true,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect((response as any).data?.recordingScope).toBe('device');
+  expect((response as any).data?.recordOnlySession).toBe(true);
+  expect(sessionStore.get(sessionName)?.recordOnlySession).toBe(true);
+  expect(sessionStore.get(sessionName)?.recording?.platform).toBe('ios');
+});
+
 test('record start on iOS simulator rejects Agent Device Runner as active app context', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-runner-app';
@@ -1193,7 +1238,7 @@ test('record start on iOS simulator rejects Agent Device Runner as active app co
   expect(sessionStore.get(sessionName)?.recording).toBeUndefined();
 });
 
-test('record start on iOS simulator still supports record-only capture without a session', async () => {
+test('record start on iOS simulator supports explicit device-scope capture without a session', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-sim-record-only';
   mockResolveTargetDevice.mockResolvedValueOnce({
@@ -1212,11 +1257,12 @@ test('record start on iOS simulator still supports record-only capture without a
     sessionStore,
     sessionName,
     positionals: ['start', './sim-record-only.mp4'],
-    flags: { hideTouches: true },
+    flags: { hideTouches: true, recordingScope: 'device' },
   });
 
   expect(response?.ok).toBe(true);
   expect((response as any).data?.recordingBackend).toBe('simctl recordVideo');
+  expect((response as any).data?.recordingScope).toBe('device');
   expect((response as any).data?.recordOnlySession).toBe(true);
   expect((response as any).data?.activeSessionApp).toBeUndefined();
   expect(sessionStore.get(sessionName)?.recordOnlySession).toBe(true);

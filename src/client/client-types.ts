@@ -22,6 +22,7 @@ import type {
 import type { BackMode } from '../core/back-mode.ts';
 import type { ClickButton } from '../core/click-button.ts';
 import type { RecordingExportQuality } from '../core/recording-export-quality.ts';
+import type { RecordingScope } from '../core/recording-scope.ts';
 import type { DeviceRotation } from '../core/device-rotation.ts';
 import type { TvRemoteButton } from '../core/tv-remote.ts';
 import type {
@@ -876,6 +877,7 @@ export type RecordOptions = AgentDeviceRequestOverrides & {
   maxSize?: number;
   quality?: RecordingExportQuality;
   hideTouches?: boolean;
+  recordingScope?: RecordingScope;
 };
 
 export type TraceOptions = AgentDeviceRequestOverrides & {
@@ -955,6 +957,7 @@ type CommandExecutionOptions = Partial<ScreenshotRequestFlags> & {
   count?: number;
   fps?: number;
   maxSize?: number;
+  recordingScope?: RecordingScope;
   quality?: RecordingExportQuality;
   hideTouches?: boolean;
   intervalMs?: number;

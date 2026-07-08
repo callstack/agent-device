@@ -1266,7 +1266,9 @@ async function runAndroidSessionlessRecordingScenario(
   });
 
   try {
-    const recordStart = await daemon.callCommand('record', ['start', recordingPath]);
+    const recordStart = await daemon.callCommand('record', ['start', recordingPath], {
+      recordingScope: 'device',
+    });
     assertRecordingStarted(recordStart, { showTouches: true });
     assertAndroidSessionlessRecording(adbCalls, logPath);
   } finally {

@@ -791,15 +791,16 @@ agent-device open --platform macos --surface desktop && agent-device screenshot 
 agent-device diff screenshot --baseline baseline.png --out diff.png
 agent-device diff screenshot --baseline baseline.png current.png --out diff.png
 agent-device diff screenshot --baseline baseline.png --out diff.png --overlay-refs
-agent-device record start               # Start screen recording to auto filename
-agent-device record start session.mp4   # Start recording to explicit path
+agent-device record start               # Start app-scoped recording after open <app>
+agent-device record start session.mp4   # Start app-scoped recording to explicit path
+agent-device record start session.mp4 --scope device  # Intentionally record the full simulator/device screen
 agent-device record start session.mp4 --fps 30  # Override iOS device runner FPS
 agent-device record start session.mp4 --max-size 1024 # Downscale longest edge
 agent-device record start session.mp4 --quality high # Higher-quality export (slower)
 agent-device record stop                # Stop active recording
 ```
 
-- Recordings always produce a video artifact. When touch visualization is enabled, they also produce a gesture telemetry sidecar that can be used for post-processing or inspection.
+- Recordings always produce a video artifact. `record start` defaults to app scope and requires an active session from `open <app>`; use `--scope device` or `--scope system` to explicitly request whole-screen capture where the selected backend supports it, such as recordings that intentionally span the full screen, multiple apps, settings, home screen, or app transitions. When touch visualization is enabled, recordings also produce a gesture telemetry sidecar that can be used for post-processing or inspection.
 - `screenshot --max-size <px>` preserves aspect ratio and only downscales when the saved PNG's longest edge is larger than the requested size.
 - `screenshot --overlay-refs` captures a fresh full snapshot and burns visible `@eN` refs plus their target rectangles into the saved PNG.
 - `screenshot --normalize-status-bar` temporarily normalizes iOS simulator status-bar chrome for deterministic screenshot baselines; ordinary screenshots leave the simulator's current chrome visible.
@@ -881,7 +882,7 @@ tail -50 ~/.agent-device/sessions/default/app.log
 - iOS `record` works on simulators and physical devices.
 - iOS simulator recording uses native `simctl io ... recordVideo`.
 - Physical iOS device capture is runner-based and built from repeated `XCUIScreen.main.screenshot()` frames (no native video stream/audio capture).
-- Physical iOS device recording requires an active app session context (`open <app>` first).
+- App-scoped recording requires an active app session context (`open <app>` first). Use `--scope device`/`--scope system` only when whole-screen capture is the intended artifact.
 - Physical iOS device capture is best-effort: dropped frames are expected and true 60 FPS is not guaranteed even with `--fps 60`.
 - Physical-device capture defaults to 15 FPS.
 - `--fps <n>` (1-120) applies to physical iOS device recording as an explicit FPS cap.

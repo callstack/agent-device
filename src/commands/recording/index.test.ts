@@ -37,6 +37,7 @@ describe('recording command interface', () => {
         screenshotMaxSize: 1024,
         quality: 'high',
         hideTouches: true,
+        recordingScope: 'device',
       } as CliFlags),
     ).toEqual({
       action: 'start',
@@ -45,6 +46,7 @@ describe('recording command interface', () => {
       maxSize: 1024,
       quality: 'high',
       hideTouches: true,
+      recordingScope: 'device',
     });
   });
 

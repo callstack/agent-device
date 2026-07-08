@@ -60,7 +60,9 @@ test('Provider-backed integration daemon command policies gate admission and pro
       );
       assertRpcError(blockedSnapshot, 'UNAUTHORIZED', /Lease is not active/);
 
-      const recordStart = await daemon.callCommand('record', ['start', '/tmp/policy-record.mp4']);
+      const recordStart = await daemon.callCommand('record', ['start', '/tmp/policy-record.mp4'], {
+        recordingScope: 'device',
+      });
       assertRpcOk(recordStart);
       assert.ok(
         adbCalls.some((args) => isAndroidScreenrecordStartCommand(args.join(' '))),

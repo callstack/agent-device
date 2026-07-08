@@ -222,6 +222,15 @@ test('parseArgs recognizes record --hide-touches flag', () => {
   assert.equal(parsed.flags.hideTouches, true);
 });
 
+test('parseArgs recognizes record --scope flag', () => {
+  const parsed = parseArgs(['record', 'start', './capture.mp4', '--scope', 'device'], {
+    strictFlags: true,
+  });
+  assert.equal(parsed.command, 'record');
+  assert.deepEqual(parsed.positionals, ['start', './capture.mp4']);
+  assert.equal(parsed.flags.recordingScope, 'device');
+});
+
 test('parseArgs recognizes screenshot flags', () => {
   const parsed = parseArgs(
     [

@@ -335,6 +335,7 @@ export function buildFlags(options: InternalRequestOptions): CommandFlags {
     screenshotMaxSize: options.maxSize,
     quality: options.quality,
     hideTouches: options.hideTouches,
+    recordingScope: options.recordingScope,
     intervalMs: options.intervalMs,
     delayMs: options.delayMs,
     durationMs: options.durationMs,
