@@ -55,7 +55,7 @@ export async function readScreenshotResultMetadata(params: {
     width: size.width,
     height: size.height,
   };
-  if (!supportsScreenshotPixelDensity(params.device) || params.maxSize !== undefined) {
+  if (!requiresDensityMetadata || params.maxSize !== undefined) {
     return result;
   }
 
