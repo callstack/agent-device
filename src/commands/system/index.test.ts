@@ -147,6 +147,17 @@ describe('system command interface', () => {
     expect(tvRemoteCliReader(['enter'], flags())).toMatchObject({ button: 'select' });
   });
 
+  test('tv-remote reader maps longpress subcommand to duration preset', () => {
+    expect(tvRemoteCliReader(['longpress', 'select'], flags())).toMatchObject({
+      button: 'select',
+      durationMs: 500,
+    });
+    expect(tvRemoteCliReader(['longpress', 'back'], flags({ durationMs: 900 }))).toMatchObject({
+      button: 'back',
+      durationMs: 900,
+    });
+  });
+
   test('tv-remote reader and writer validate button arguments', () => {
     expect(
       tvRemoteDaemonWriter({ button: 'right' } as Record<string, unknown>).positionals,
@@ -157,6 +168,10 @@ describe('system command interface', () => {
     );
     expectInvalidArgs(
       () => tvRemoteCliReader(['press', 'left', 'extra'], flags()),
+      'tv-remote requires exactly one button',
+    );
+    expectInvalidArgs(
+      () => tvRemoteCliReader(['longpress', 'left', 'extra'], flags()),
       'tv-remote requires exactly one button',
     );
     expectInvalidArgs(() => tvRemoteCliReader(['blue'], flags()), 'button must be one of');

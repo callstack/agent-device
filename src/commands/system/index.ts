@@ -38,6 +38,7 @@ const APP_SWITCHER_COMMAND_NAME = 'app-switcher';
 const KEYBOARD_COMMAND_NAME = 'keyboard';
 const CLIPBOARD_COMMAND_NAME = 'clipboard';
 const TV_REMOTE_COMMAND_NAME = 'tv-remote';
+const TV_REMOTE_LONGPRESS_PRESET_MS = 500;
 
 const CLIPBOARD_ACTION_VALUES = ['read', 'write'] as const;
 const KEYBOARD_METADATA_ACTION_VALUES = ['status', 'dismiss'] as const;
@@ -181,12 +182,12 @@ const clipboardCliSchema = {
 } as const satisfies CommandSchemaOverride;
 
 const tvRemoteCliSchema = {
-  usageOverride: `tv-remote [press] ${TV_REMOTE_BUTTON_USAGE} [--duration-ms <ms>]`,
-  listUsageOverride: 'tv-remote press <button> [--duration-ms <ms>]',
+  usageOverride: `tv-remote [press|longpress] ${TV_REMOTE_BUTTON_USAGE} [--duration-ms <ms>]`,
+  listUsageOverride: 'tv-remote press|longpress <button> [--duration-ms <ms>]',
   helpDescription:
-    'Press a TV remote/D-pad button on Android TV or tvOS. Use this instead of press/click when navigating focus-first TV apps. Aliases ok, center, and enter map to select.',
+    'Press a TV remote/D-pad button on Android TV or tvOS. Use longpress for a 500ms held remote button; --duration-ms overrides the preset. Aliases ok, center, and enter map to select.',
   summary: 'Press a TV remote/D-pad button',
-  positionalArgs: ['press?', 'button'],
+  positionalArgs: ['press|longpress?', 'button'],
   allowedFlags: ['durationMs'],
 } as const satisfies CommandSchemaOverride;
 
@@ -380,16 +381,20 @@ function readTvRemoteInput(
   positionals: string[],
   durationMs: number | undefined,
 ): Record<string, unknown> {
-  const args = positionals[0]?.toLowerCase() === 'press' ? positionals.slice(1) : positionals;
+  const subcommand = positionals[0]?.toLowerCase();
+  const isNamedAction = subcommand === 'press' || subcommand === 'longpress';
+  const args = isNamedAction ? positionals.slice(1) : positionals;
   if (args.length !== 1) {
     throw new AppError(
       'INVALID_ARGS',
       `tv-remote requires exactly one button: ${TV_REMOTE_BUTTONS.join(', ')}.`,
     );
   }
+  const effectiveDurationMs =
+    durationMs ?? (subcommand === 'longpress' ? TV_REMOTE_LONGPRESS_PRESET_MS : undefined);
   return compactRecord({
     button: parseTvRemoteButton(args[0]),
-    durationMs,
+    durationMs: effectiveDurationMs,
   });
 }
 

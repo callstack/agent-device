@@ -35,6 +35,14 @@ test('usageForCommand resolves longpress help', async () => {
   assert.match(help ?? '', /agent-device longpress <x y\|@ref\|selector> \[durationMs\]/);
 });
 
+test('usageForCommand documents tv-remote longpress preset', async () => {
+  const help = await usageForCommand('tv-remote');
+  assert.equal(help === null, false);
+  assert.match(help ?? '', /agent-device tv-remote \[press\|longpress\]/);
+  assert.match(help ?? '', /--duration-ms <ms>/);
+  assert.match(help ?? '', /Use longpress for a 500ms held remote button/);
+});
+
 test('usageForCommand supports legacy long-press alias', async () => {
   const help = await usageForCommand('long-press');
   assert.equal(help === null, false);

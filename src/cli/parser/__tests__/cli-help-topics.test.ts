@@ -306,7 +306,9 @@ test('usageForCommand resolves tv help topic', async () => {
   assert.match(help, /agent-device help tv/);
   assert.match(help, /agent-device tv-remote press down/);
   assert.match(help, /agent-device screenshot \.\/tv-focus\.png --overlay-refs/);
+  assert.match(help, /tv-remote longpress select/);
   assert.match(help, /tv-remote press select --duration-ms 500/);
+  assert.match(help, /longpress is CLI sugar for --duration-ms 500/);
   assert.match(help, /ok, center, and enter are input aliases for select/);
   assert.match(help, /do not switch to raw adb keyevent/);
   assert.match(help, /Use --platform ios --target tv/);
