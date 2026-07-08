@@ -1,0 +1,58 @@
+{
+  "dimensions": {
+    "commandPolicyMapping": {
+      "via": "RunnerTests+SynthesizedGesturePolicy.swift#synthesizedGesturePolicyKind",
+      "policy": "maps each command or sequence step to an explicit synthesized gesture policy kind"
+    },
+    "axFreeSynthesis": {
+      "via": "RunnerTests+Interaction.swift#synthesizedCoordinateContext",
+      "policy": "resolves AX health, frame source, keyboard policy, and fallback policy once per command/step"
+    },
+    "frameSourcePolicy": {
+      "via": "RunnerTests+Interaction.swift#finiteSynthesizedReferenceFrame",
+      "policy": "provided frame, then healthy app frame, then fallback bounds, then screenshot size"
+    },
+    "activationPreflightPolicy": {
+      "via": "RunnerTests+CommandExecution.swift#shouldSkipAppActivationPreflight",
+      "policy": "only coordinate-only synthesized tap may skip activation preflight; scroll/drag/sequence keep normal activation"
+    }
+  },
+  "paths": [
+    {
+      "pathId": "ios-tap-synthesized-coordinate",
+      "commands": ["tap"],
+      "policyKind": "coordinateTap",
+      "keyboardPolicy": "never",
+      "fallbackPolicy": "xctestCoordinateAllowed",
+      "activationPreflightPolicy": "coordinate-only synthesized tap may skip activation preflight"
+    },
+    {
+      "pathId": "ios-scroll-default",
+      "commands": ["scroll"],
+      "policyKind": "scroll",
+      "keyboardPolicy": "whenAccessibilityHealthy",
+      "fallbackPolicy": "privateSynthesisRequired"
+    },
+    {
+      "pathId": "ios-drag-synthesized",
+      "commands": ["drag"],
+      "policyKind": "synthesizedDrag",
+      "keyboardPolicy": "whenAccessibilityHealthy",
+      "fallbackPolicy": "xctestCoordinateWhenAccessibilityHealthy"
+    },
+    {
+      "pathId": "ios-sequence-synthesized-tap",
+      "commands": ["sequence"],
+      "policyKind": "sequenceSynthesizedTap",
+      "keyboardPolicy": "whenAccessibilityHealthy",
+      "fallbackPolicy": "xctestCoordinateWhenAccessibilityHealthy"
+    },
+    {
+      "pathId": "ios-sequence-synthesized-drag",
+      "commands": ["sequence"],
+      "policyKind": "sequenceSynthesizedDrag",
+      "keyboardPolicy": "whenAccessibilityHealthy",
+      "fallbackPolicy": "xctestCoordinateWhenAccessibilityHealthy"
+    }
+  ]
+}

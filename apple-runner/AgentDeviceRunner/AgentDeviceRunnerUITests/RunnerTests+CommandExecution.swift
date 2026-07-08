@@ -1058,12 +1058,19 @@ extension RunnerTests {
       if let x = command.x, let y = command.y {
         var fallback: GestureFallback?
         if command.synthesized == true {
+          let policyKind = synthesizedGesturePolicyKind(for: command) ?? .coordinateTap
+          let context = synthesizedCoordinateContext(
+            app: activeApp,
+            policy: synthesizedGesturePolicy(policyKind)
+          )
           let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
-            synthesizedTapAt(app: activeApp, x: x, y: y)
+            synthesizedTapAt(app: activeApp, x: x, y: y, context: context)
           }
           if case .performed = outcome {
+            logSynthesizedGesturePolicyDecision(kind: policyKind, context: context, fallbackAttempted: false)
             return gestureResponse(message: "tapped", timing: timing)
           }
+          logSynthesizedGesturePolicyDecision(kind: policyKind, context: context, fallbackAttempted: true)
           fallback = gestureFallback(strategy: "xctest-coordinate-tap", from: outcome)
         }
         let touchFrame = resolvedTouchVisualizationFrame(app: activeApp, x: x, y: y)
@@ -1127,7 +1134,8 @@ extension RunnerTests {
         y2: y2,
         durationMs: command.durationMs,
         synthesized: command.synthesized == true,
-        message: "dragged"
+        message: "dragged",
+        synthesizedPolicyKind: synthesizedGesturePolicyKind(for: command) ?? .synthesizedDrag
       )
     case .scroll:
       // Fused frame-resolve + drag scroll for non-tvOS. On iOS this intentionally stays on the
@@ -1144,7 +1152,17 @@ extension RunnerTests {
           )
         )
       }
-      let frame = scrollReferenceFrame(app: activeApp)
+      let scrollPolicyKind = synthesizedGesturePolicyKind(for: command) ?? .scroll
+      guard let scrollContext = synthesizedCoordinateContext(
+        app: activeApp,
+        policy: synthesizedGesturePolicy(scrollPolicyKind)
+      ) else {
+        return Response(
+          ok: false,
+          error: ErrorPayload(message: "scroll could not resolve a usable interaction frame")
+        )
+      }
+      let frame = scrollReferenceFrame(app: activeApp, context: scrollContext)
       guard frame.width > 0, frame.height > 0 else {
         return Response(
           ok: false,
@@ -1186,8 +1204,8 @@ extension RunnerTests {
         durationMs: command.durationMs,
         synthesized: shouldUseSynthesizedScrollPath(),
         message: "scrolled",
-        synthesizedReferenceFrame: frame,
-        allowSynthesizedCoordinateFallback: false
+        synthesizedContext: scrollContext.withReferenceFrame(frame),
+        synthesizedPolicyKind: scrollPolicyKind
       )
     case .desktopScroll:
       guard let direction = command.direction,
@@ -1525,8 +1543,8 @@ extension RunnerTests {
     durationMs: Double?,
     synthesized: Bool,
     message: String,
-    synthesizedReferenceFrame: CGRect? = nil,
-    allowSynthesizedCoordinateFallback: Bool = true
+    synthesizedContext: SynthesizedCoordinateContext? = nil,
+    synthesizedPolicyKind: SynthesizedGesturePolicyKind
   ) -> Response {
     let commandName = dragCommandName(message: message)
     guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite else {
@@ -1543,8 +1561,8 @@ extension RunnerTests {
       y2: y2,
       durationMs: durationMs,
       message: message,
-      referenceFrame: synthesizedReferenceFrame,
-      allowCoordinateFallback: allowSynthesizedCoordinateFallback
+      context: synthesizedContext,
+      policyKind: synthesizedPolicyKind
     ) {
       return synthesizedResponse
     }
@@ -1559,6 +1577,10 @@ extension RunnerTests {
     var fallback: GestureFallback?
     if synthesized {
       let durationMs = min(max(durationMs ?? 250, 16), 10000)
+      let context = synthesizedCoordinateContext(
+        app: activeApp,
+        policy: synthesizedGesturePolicy(synthesizedPolicyKind)
+      )
       let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
         synthesizedDragAt(
           app: activeApp,
@@ -1566,7 +1588,8 @@ extension RunnerTests {
           y: dragPoints.y,
           x2: dragPoints.x2,
           y2: dragPoints.y2,
-          durationMs: durationMs
+          durationMs: durationMs,
+          context: context
         )
       }
       if case .performed = outcome {
@@ -1606,21 +1629,26 @@ extension RunnerTests {
     y2: Double,
     durationMs: Double?,
     message: String,
-    referenceFrame: CGRect?,
-    allowCoordinateFallback: Bool
+    context: SynthesizedCoordinateContext?,
+    policyKind: SynthesizedGesturePolicyKind
   ) -> Response? {
 #if os(iOS)
+    let policy = synthesizedGesturePolicy(policyKind)
+    let context = context ?? synthesizedCoordinateContext(
+      app: activeApp,
+      policy: policy
+    )
     guard let plan = axFreeSynthesizedDragPlan(
       app: activeApp,
       x: x,
       y: y,
       x2: x2,
       y2: y2,
-      referenceFrame: referenceFrame,
-      avoidKeyboardWhenSafe: true
+      context: context
     )
     else {
-      if allowCoordinateFallback {
+      if context?.allowsXCTestCoordinateFallback == true {
+        logSynthesizedGesturePolicyDecision(kind: policyKind, context: context, fallbackAttempted: true)
         return executeCoordinateDragFallback(
           activeApp: activeApp,
           x: x,
@@ -1632,6 +1660,7 @@ extension RunnerTests {
           fallback: nil
         )
       }
+      logSynthesizedGesturePolicyDecision(kind: policyKind, context: context, fallbackAttempted: false)
       return Response(
         ok: false,
         error: ErrorPayload(
@@ -1656,13 +1685,15 @@ extension RunnerTests {
         x2: plan.points.x2,
         y2: plan.points.y2,
         durationMs: durationMs,
-        referenceFrame: plan.referenceFrame
+        context: plan.context
       )
     }
     if case .performed = outcome {
+      logSynthesizedGesturePolicyDecision(kind: policyKind, context: plan.context, fallbackAttempted: false)
       return gestureResponse(message: message, timing: timing, frame: .drag(dragFrame))
     }
-    if allowCoordinateFallback {
+    if plan.context.allowsXCTestCoordinateFallback {
+      logSynthesizedGesturePolicyDecision(kind: policyKind, context: plan.context, fallbackAttempted: true)
       return executeCoordinateDragFallback(
         activeApp: activeApp,
         x: plan.points.x,
@@ -1674,6 +1705,7 @@ extension RunnerTests {
         fallback: gestureFallback(strategy: "xctest-coordinate-drag", from: outcome)
       )
     }
+    logSynthesizedGesturePolicyDecision(kind: policyKind, context: plan.context, fallbackAttempted: false)
     return unsupportedResponse(for: outcome)
 #else
     return nil
@@ -1720,12 +1752,9 @@ extension RunnerTests {
     )
   }
 
-  private func scrollReferenceFrame(app: XCUIApplication) -> CGRect {
+  private func scrollReferenceFrame(app: XCUIApplication, context: SynthesizedCoordinateContext) -> CGRect {
 #if os(iOS)
-    guard let frame = synthesizedGestureReferenceFrame(app: app) else {
-      return CGRect(x: 0, y: 0, width: 0, height: 0)
-    }
-    return synthesizedFrameAvoidingKeyboardWhenSafe(app: app, frame: frame)
+    return synthesizedFrameAvoidingKeyboardWhenAllowed(app: app, context: context)
 #else
     return resolvedTouchReferenceFrame(app: app, appFrame: app.frame)
 #endif

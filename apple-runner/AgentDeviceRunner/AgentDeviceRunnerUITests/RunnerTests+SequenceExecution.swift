@@ -40,8 +40,13 @@ extension RunnerTests {
       ? resolvedTouchVisualizationFrame(app: activeApp, x: firstStep.x!, y: firstStep.y!)
       : nil
 
+    let synthesizedContexts = synthesizedCoordinateContexts(
+      app: activeApp,
+      policyKinds: synthesizedGesturePolicyKinds(for: steps)
+    )
+
     let execution = assembleSequenceExecution(steps: steps) { _, step in
-      performSequenceStep(step, activeApp: activeApp)
+      performSequenceStep(step, activeApp: activeApp, synthesizedContexts: synthesizedContexts)
     }
     return sequenceResponse(execution: execution, touchFrame: firstFrame)
   }
@@ -141,7 +146,8 @@ extension RunnerTests {
 
   private func performSequenceStep(
     _ step: SequenceStep,
-    activeApp: XCUIApplication
+    activeApp: XCUIApplication,
+    synthesizedContexts: [SynthesizedGesturePolicyKind: SynthesizedCoordinateContext] = [:]
   ) -> SequenceStepOutcome {
     let x = step.x ?? 0
     let y = step.y ?? 0
@@ -149,10 +155,27 @@ extension RunnerTests {
     // a tapAt fallback when synthesis is unsupported), so fusing a jittered tap series does not
     // change the touch mechanism for these inputs.
     if step.kind == "tap", step.synthesized == true {
+      let policyKind = synthesizedGesturePolicyKind(for: step) ?? .sequenceSynthesizedTap
+      let synthesizedContext = synthesizedContexts[policyKind]
+#if os(iOS)
+      guard let synthesizedContext else {
+        let nowMs = ProcessInfo.processInfo.systemUptime * 1000
+        logSynthesizedGesturePolicyDecision(kind: policyKind, context: nil, fallbackAttempted: false)
+        return SequenceStepOutcome(
+          outcome: .unsupported(
+            message: "synthesized coordinate tap could not resolve a finite coordinate frame",
+            hint: "Retry after the app is foregrounded, or use a plain screenshot to choose coordinates."
+          ),
+          gestureStartUptimeMs: nowMs,
+          gestureEndUptimeMs: nowMs
+        )
+      }
+#endif
       let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
-        synthesizedTapAt(app: activeApp, x: x, y: y)
+        synthesizedTapAt(app: activeApp, x: x, y: y, context: synthesizedContext)
       }
       if case .performed = outcome {
+        logSynthesizedGesturePolicyDecision(kind: policyKind, context: synthesizedContext, fallbackAttempted: false)
         if let pauseMs = step.pauseMs, pauseMs > 0 {
           sleepFor(min(max(pauseMs, 0), 10000) / 1000.0)
         }
@@ -162,11 +185,24 @@ extension RunnerTests {
           gestureEndUptimeMs: timing.gestureEndUptimeMs
         )
       }
+#if os(iOS)
+      guard synthesizedContext.allowsXCTestCoordinateFallback else {
+        logSynthesizedGesturePolicyDecision(kind: policyKind, context: synthesizedContext, fallbackAttempted: false)
+        return SequenceStepOutcome(
+          outcome: outcome,
+          gestureStartUptimeMs: timing.gestureStartUptimeMs,
+          gestureEndUptimeMs: timing.gestureEndUptimeMs
+        )
+      }
+      logSynthesizedGesturePolicyDecision(kind: policyKind, context: synthesizedContext, fallbackAttempted: true)
+#endif
       // Synthesis unsupported (e.g. macOS) — fall through to the drag-based tapAt below.
     }
     if step.kind == "drag", step.synthesized == true {
+      let policyKind = synthesizedGesturePolicyKind(for: step) ?? .sequenceSynthesizedDrag
+      let synthesizedContext = synthesizedContexts[policyKind]
       let dragPoints: DragPoints
-      let referenceFrame: CGRect?
+      let dragContext: SynthesizedCoordinateContext?
 #if os(iOS)
       guard let dragPlan = axFreeSynthesizedDragPlan(
         app: activeApp,
@@ -174,9 +210,10 @@ extension RunnerTests {
         y: y,
         x2: step.x2 ?? x,
         y2: step.y2 ?? y,
-        avoidKeyboardWhenSafe: true
+        context: synthesizedContext
       ) else {
         let nowMs = ProcessInfo.processInfo.systemUptime * 1000
+        logSynthesizedGesturePolicyDecision(kind: policyKind, context: synthesizedContext, fallbackAttempted: false)
         return SequenceStepOutcome(
           outcome: .unsupported(
             message: "synthesized coordinate drag could not resolve a finite coordinate frame",
@@ -187,11 +224,11 @@ extension RunnerTests {
         )
       }
       dragPoints = dragPlan.points
-      referenceFrame = dragPlan.referenceFrame
+      dragContext = dragPlan.context
 #else
       dragPoints = keyboardAvoidingDragPoints(
         app: activeApp, x: x, y: y, x2: step.x2 ?? x, y2: step.y2 ?? y)
-      referenceFrame = nil
+      dragContext = nil
 #endif
       let durationMs = min(max(step.durationMs ?? 250, 16), 10000)
       let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
@@ -202,10 +239,11 @@ extension RunnerTests {
           x2: dragPoints.x2,
           y2: dragPoints.y2,
           durationMs: durationMs,
-          referenceFrame: referenceFrame
+          context: dragContext
         )
       }
       if case .performed = outcome {
+        logSynthesizedGesturePolicyDecision(kind: policyKind, context: dragContext, fallbackAttempted: false)
         if let pauseMs = step.pauseMs, pauseMs > 0 {
           sleepFor(min(max(pauseMs, 0), 10000) / 1000.0)
         }
@@ -216,12 +254,16 @@ extension RunnerTests {
         )
       }
 #if os(iOS)
-      return SequenceStepOutcome(
-        outcome: outcome,
-        gestureStartUptimeMs: timing.gestureStartUptimeMs,
-        gestureEndUptimeMs: timing.gestureEndUptimeMs
-      )
-#else
+      guard dragContext?.allowsXCTestCoordinateFallback == true else {
+        logSynthesizedGesturePolicyDecision(kind: policyKind, context: dragContext, fallbackAttempted: false)
+        return SequenceStepOutcome(
+          outcome: outcome,
+          gestureStartUptimeMs: timing.gestureStartUptimeMs,
+          gestureEndUptimeMs: timing.gestureEndUptimeMs
+        )
+      }
+#endif
+      logSynthesizedGesturePolicyDecision(kind: policyKind, context: dragContext, fallbackAttempted: true)
       let fallbackHoldDuration = synthesizedSwipeFallbackHoldDuration(durationMs: step.durationMs ?? 250)
       let (fallbackTiming, fallbackOutcome) = performGesture(activeApp) {
         dragAt(
@@ -241,7 +283,6 @@ extension RunnerTests {
         gestureStartUptimeMs: fallbackTiming.gestureStartUptimeMs,
         gestureEndUptimeMs: fallbackTiming.gestureEndUptimeMs
       )
-#endif
     }
     let (timing, outcome) = performGesture(activeApp) {
       switch step.kind {
@@ -377,6 +418,28 @@ extension RunnerTests {
     XCTAssertTrue(response.error?.message.contains("step 1") ?? false)
   }
 
+  func testSynthesizedGesturePolicyKindMapsSequenceSteps() {
+    let synthesizedTap = sequenceStep(kind: "tap", x: 1, y: 2, synthesized: true)
+    let synthesizedDrag = sequenceStep(kind: "drag", x: 1, y: 2, x2: 3, y2: 4, synthesized: true)
+
+    XCTAssertEqual(synthesizedGesturePolicyKind(for: synthesizedTap), .sequenceSynthesizedTap)
+    XCTAssertEqual(synthesizedGesturePolicyKind(for: synthesizedDrag), .sequenceSynthesizedDrag)
+    XCTAssertNil(synthesizedGesturePolicyKind(for: sequenceStep(kind: "tap", x: 1, y: 2)))
+    XCTAssertNil(
+      synthesizedGesturePolicyKind(for: sequenceStep(kind: "doubleTap", x: 1, y: 2, synthesized: true))
+    )
+  }
+
+  func testSynthesizedGesturePolicyKindsPreserveSequenceStepPaths() {
+    let kinds = synthesizedGesturePolicyKinds(for: [
+      sequenceStep(kind: "tap", x: 1, y: 2, synthesized: true),
+      sequenceStep(kind: "drag", x: 1, y: 2, x2: 3, y2: 4, synthesized: true),
+      sequenceStep(kind: "tap", x: 5, y: 6, synthesized: true),
+    ])
+
+    XCTAssertEqual(kinds, [.sequenceSynthesizedTap, .sequenceSynthesizedDrag])
+  }
+
   func testAssembleSequencePreservesOrderOnSuccess() {
     let steps = [
       sequenceStep(kind: "tap", x: 1, y: 1),
@@ -459,10 +522,11 @@ extension RunnerTests {
     x: Double?,
     y: Double? = nil,
     x2: Double? = nil,
-    y2: Double? = nil
+    y2: Double? = nil,
+    synthesized: Bool? = nil
   ) -> SequenceStep {
     SequenceStep(
-      kind: kind, x: x, y: y, x2: x2, y2: y2, durationMs: nil, pauseMs: nil, synthesized: nil)
+      kind: kind, x: x, y: y, x2: x2, y2: y2, durationMs: nil, pauseMs: nil, synthesized: synthesized)
   }
 
   /// Validation runs before any executor call, so the INVALID_ARGS paths are exercised without

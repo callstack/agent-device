@@ -363,7 +363,7 @@ extension RunnerTests {
     state: String,
     reason: (reason: String, code: String)?
   ) -> DataPayload {
-    lastSnapshotHadAccessibilityUnavailable = reason?.code == "ax-rejected"
+    runnerAccessibilityHealth = reason?.code == "ax-rejected" ? .unavailable : .healthy
     let payload = capture.payload
     let quality = SnapshotQuality(
       state: state,

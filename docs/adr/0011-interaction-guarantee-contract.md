@@ -238,6 +238,20 @@ the daemon there destroyed every healthy app session the daemon owned.
   press guarantees"), which matters for small-model agents that only read the
   contract, never the code.
 
+### Gesture policy sibling registry
+
+Synthesized iOS gestures (`scroll`, synthesized coordinate `tap`, synthesized
+`drag`, and synthesized `sequence` tap/drag steps) are intentionally not folded
+into the element dispatch-path matrix above. They do not resolve selectors or
+refs, so claiming the element-targeting guarantees would be misleading. Their
+AX-health, keyboard-probe, frame-source, activation-preflight, and
+XCTest-coordinate fallback rules are declared separately in
+`contracts/fixtures/synthesized-gesture-policy.json`, while the executable
+runner policy stays in `RunnerTests+SynthesizedGesturePolicy.swift`. The
+manifest is sanity-checked by vitest and matched against the gated XCTest policy
+resolver, keeping the non-obvious rule visible: default iOS scroll must not fall
+back to `XCUICoordinate` when AX health is unknown or unavailable.
+
 ## Migration plan
 
 Each step lands green and independently useful:

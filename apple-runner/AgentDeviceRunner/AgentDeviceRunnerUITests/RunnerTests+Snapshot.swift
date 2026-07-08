@@ -387,7 +387,7 @@ extension RunnerTests {
 
   func snapshotAccessibilityUnavailable(failure: SnapshotCaptureFailure) -> DataPayload {
     NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_AX_UNAVAILABLE=%@", failure.message)
-    lastSnapshotHadAccessibilityUnavailable = true
+    runnerAccessibilityHealth = .unavailable
     invalidateCachedTarget(reason: Self.axSnapshotUnavailableReason)
     // This is a planned terminal result, so it carries the structured verdict like every other
     // planned snapshot — downstream sparse handling keys off the verdict, not node shapes.
