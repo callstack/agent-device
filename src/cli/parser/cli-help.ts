@@ -98,7 +98,7 @@ const AGENT_QUICKSTART_LINES = [
   'Direct proxy: run agent-device connect proxy --daemon-base-url <proxy-agent-device-url> before using a shared Mac proxy. Device leases are automatic on open and expire after five minutes of inactivity.',
   'Batch JSON steps use "command" and structured "input"; legacy "positionals"/"flags" steps still run in CLI but are deprecated until the next major version.',
   'Navigation: app-owned back uses back; system back uses back --system.',
-  'TV targets are focus-first: read help tv; use tv-remote press up|down|left|right|select (d-pad is a CLI alias) to move focus and activate focused controls before assuming press/click @ref works.',
+  'TV targets are focus-first: read help tv; use tv-remote press up|down|left|right|select to move D-pad/remote focus and activate focused controls before assuming press/click @ref works.',
   'Web browser sessions: read help web; first slice is web setup if needed -> web doctor -> open <url> --platform web -> snapshot -i -> click/fill/get/is/find/wait/screenshot -> close.',
   'Verification commands must name the expected text/selector; bare screenshots/snapshots are not enough.',
   'Debug evidence: Session state contains request diagnostics and runner.log; use logs clear --restart/mark/path, trace, and network dump --include headers for app evidence.',
@@ -161,7 +161,7 @@ Command shape:
   Snapshot refs look like @e12. After snapshot -i, use the exact @eN ref from that output.
   If the exact ref is not known yet, first output snapshot -i, then use a concrete example shape like press @e12 in the next command; do not write @<ref>, @ref, @Label_Name, or @eN placeholders.
   Close means agent-device close. App-owned back means back; system back means back --system.
-  Taps are press or click; tap is an alias for press. On Android TV and tvOS, read help tv and use tv-remote press up|down|left|right|select (or the d-pad alias) to move focus before activating controls. Gestures use swipe, longpress, or gesture <pan|fling|swipe|pinch|rotate|transform>. Use gesture swipe left|right for reliable in-page horizontal swipes, and gesture swipe right-edge for left-edge navigation/back gestures. Android swipe, pinch, rotate, and transform use provider-native touch injection when available, then the bundled touch helper. iOS simulator transform uses private XCTest synthesis for a continuous two-finger pan/scale/rotation path; otherwise it reports UNSUPPORTED_OPERATION.
+  Taps are press or click; tap is an alias for press. On Android TV and tvOS, read help tv and use tv-remote press up|down|left|right|select to move D-pad/remote focus before activating controls. Gestures use swipe, longpress, or gesture <pan|fling|swipe|pinch|rotate|transform>. Use gesture swipe left|right for reliable in-page horizontal swipes, and gesture swipe right-edge for left-edge navigation/back gestures. Android swipe, pinch, rotate, and transform use provider-native touch injection when available, then the bundled touch helper. iOS simulator transform uses private XCTest synthesis for a continuous two-finger pan/scale/rotation path; otherwise it reports UNSUPPORTED_OPERATION.
 
 Bootstrap:
   agent-device devices --platform ios
@@ -380,7 +380,6 @@ Core loop:
 
 Buttons:
   tv-remote press up|down|left|right|select|menu|home|back
-  d-pad is a CLI alias for tv-remote, not a separate Node/MCP command.
   ok, center, and enter are input aliases for select; command output still reports button: "select".
   --duration-ms holds a tvOS remote button for that duration. On Android TV, any positive duration maps to the ADB longpress form because Android input keyevent has no exact hold duration.
 

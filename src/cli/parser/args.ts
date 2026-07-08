@@ -346,7 +346,6 @@ function normalizeParsedCommandAliases(parsed: ParsedArgs): ParsedArgs {
 }
 
 const COMMAND_ALIAS_SUGGESTIONS: Record<string, string> = {
-  'd-pad': 'tv-remote',
   tap: 'press or click',
 };
 
@@ -378,7 +377,6 @@ export async function usageForCommand(command: string): Promise<string | null> {
 }
 
 function normalizeCommandAlias(command: string): string {
-  if (command === 'd-pad') return 'tv-remote';
   if (command === 'long-press') return 'longpress';
   if (command === 'metrics') return 'perf';
   if (command === 'tap') return 'press';
