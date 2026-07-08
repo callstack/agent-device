@@ -16,6 +16,7 @@ import {
 import { annotateCoveredSnapshotNodes } from '../../snapshot/snapshot-occlusion.ts';
 import { normalizeSnapshotTree } from '../../snapshot/snapshot-tree.ts';
 export { buildSnapshotVisibility } from '../../snapshot/snapshot-visibility.ts';
+import { isAndroidInputMethodSnapshotNode } from '../../platforms/android/input-method-overlays.ts';
 import type { SessionState } from '../types.ts';
 import {
   ANDROID_FRESHNESS_RETRY_DEADLINE_MS,
@@ -402,7 +403,12 @@ export function buildSnapshotState(
     ? presentIosInteractiveSnapshot(scopedNodes)
     : scopedNodes;
   const nodes = attachRefs(
-    snapshotRaw ? presentableNodes : annotateCoveredSnapshotNodes(presentableNodes),
+    snapshotRaw
+      ? presentableNodes
+      : annotateCoveredSnapshotNodes(presentableNodes, {
+          isAdditionalOverlayNode:
+            data?.backend === 'android' ? isAndroidInputMethodSnapshotNode : undefined,
+        }),
   );
   const snapshotQuality = snapshotCaptureAnnotationsFrom(data).quality;
   return {

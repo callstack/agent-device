@@ -211,6 +211,35 @@ test('invokeMaestroTapOn resolves visible Android non-interactive text from a re
   expect(clicks).toEqual([['248', '231']]);
 });
 
+test('invokeMaestroTapOn dismisses Android Gboard handwriting tutorial before app tap', async () => {
+  const snapshots = [gboardHandwritingTutorialSnapshot(), buttonSnapshot('Push Article')];
+  const clicks: string[][] = [];
+  const response = await invokeMaestroTapOn({
+    baseReq: {
+      token: 'test',
+      session: 'android-input',
+      flags: { platform: 'android' },
+    },
+    positionals: ['label="Push Article" || text="Push Article" || id="Push Article"'],
+    invoke: async (req: DaemonRequest): Promise<DaemonResponse> => {
+      if (req.command === 'snapshot') {
+        return { ok: true, data: snapshots.shift() ?? buttonSnapshot('Push Article') };
+      }
+      if (req.command === 'click') {
+        clicks.push(req.positionals ?? []);
+        return { ok: true, data: {} };
+      }
+      return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
+    },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(clicks).toEqual([
+    ['588', '2758'],
+    ['201', '149'],
+  ]);
+});
+
 test('invokeMaestroTapOn taps resolved iOS buttons by coordinates', async () => {
   const { response, clicks } = await runTapOn(
     'label="Pop to top" || text="Pop to top" || id="Pop to top"',
@@ -686,6 +715,47 @@ function overlayDismissButtonSnapshot(): SnapshotState {
         depth: 2,
         parentIndex: 1,
         rect: { x: 0, y: 52, width: 402, height: 40 },
+      },
+    ],
+  };
+}
+
+function gboardHandwritingTutorialSnapshot(): SnapshotState {
+  return {
+    createdAt: Date.now(),
+    nodes: [
+      appNode(),
+      windowNode(),
+      {
+        index: 2,
+        ref: 'e3',
+        type: 'android.widget.Button',
+        label: 'Push Article',
+        bundleId: 'org.reactnavigation.playground',
+        depth: 21,
+        parentIndex: 1,
+        rect: { x: 142, y: 128.66666412353516, width: 118, height: 40 },
+      },
+      {
+        index: 3,
+        ref: 'e4',
+        type: 'android.widget.TextView',
+        label: 'Try out your stylus',
+        value: 'Try out your stylus',
+        bundleId: 'com.google.android.inputmethod.latin',
+        depth: 3,
+        rect: { x: 376, y: 1650, width: 592, height: 90 },
+      },
+      {
+        index: 4,
+        ref: 'e5',
+        type: 'android.widget.Button',
+        label: 'Cancel',
+        value: 'Cancel',
+        identifier: 'android:id/closeButton',
+        bundleId: 'com.google.android.inputmethod.latin',
+        depth: 4,
+        rect: { x: 450, y: 2699, width: 276, height: 118 },
       },
     ],
   };

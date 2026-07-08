@@ -34,20 +34,32 @@ const SEMANTIC_TOUCH_KIND_FRAGMENTS = [
 type OcclusionScan = {
   nodes: RawSnapshotNode[];
   byIndex: Map<number, RawSnapshotNode>;
+  overlayPositions: number[];
 };
 
-export function annotateCoveredSnapshotNodes(nodes: RawSnapshotNode[]): RawSnapshotNode[] {
+export type SnapshotOcclusionOptions = {
+  isAdditionalOverlayNode?: (node: RawSnapshotNode) => boolean;
+};
+
+export function annotateCoveredSnapshotNodes(
+  nodes: RawSnapshotNode[],
+  options: SnapshotOcclusionOptions = {},
+): RawSnapshotNode[] {
   if (nodes.length < 2) return nodes;
 
   const annotated = [...nodes];
+  const byIndex = new Map(annotated.map((node) => [node.index, node]));
   const scan: OcclusionScan = {
     nodes: annotated,
-    byIndex: new Map(annotated.map((node) => [node.index, node])),
+    byIndex,
+    overlayPositions: annotated.flatMap((node, position) =>
+      isOverlayLikeNode(node, byIndex, options) ? [position] : [],
+    ),
   };
   let changed = false;
   for (const [position, node] of annotated.entries()) {
     if (!isCandidateTouchNode(node)) continue;
-    const cover = findCoveringNode(scan, position, node);
+    const cover = findCoveringNode(scan, position, node, options);
     if (!cover) continue;
     changed = true;
     const coveredNode = {
@@ -73,14 +85,18 @@ function findCoveringNode(
   scan: OcclusionScan,
   targetPosition: number,
   target: RawSnapshotNode,
+  options: SnapshotOcclusionOptions,
 ): RawSnapshotNode | null {
   const targetRect = positiveRect(target.rect);
   if (!targetRect) return null;
   const center = centerOfRect(targetRect);
 
-  for (let position = targetPosition + 1; position < scan.nodes.length; position += 1) {
+  for (const position of scan.overlayPositions) {
+    if (position <= targetPosition) continue;
     const candidate = scan.nodes[position];
-    if (candidate && canCoverPoint(scan, position, target, targetRect, center)) return candidate;
+    if (candidate && canCoverPoint(scan, position, target, targetRect, center, options)) {
+      return candidate;
+    }
   }
 
   return null;
@@ -92,10 +108,11 @@ function canCoverPoint(
   target: RawSnapshotNode,
   targetRect: Rect,
   point: { x: number; y: number },
+  options: SnapshotOcclusionOptions,
 ): boolean {
   const candidate = scan.nodes[candidatePosition];
   if (!candidate) return false;
-  const coverRect = visibleCoverRect(scan, candidatePosition, target, targetRect);
+  const coverRect = visibleCoverRect(scan, candidatePosition, target, targetRect, options);
   return Boolean(coverRect && containsPoint(coverRect, point.x, point.y));
 }
 
@@ -104,13 +121,14 @@ function visibleCoverRect(
   candidatePosition: number,
   target: RawSnapshotNode,
   targetRect: Rect,
+  options: SnapshotOcclusionOptions,
 ): Rect | null {
   const candidate = scan.nodes[candidatePosition];
-  if (!candidate || !isOverlayLikeNode(candidate)) return null;
+  if (!candidate || !isOverlayLikeNode(candidate, scan.byIndex, options)) return null;
   if (areRelatedSnapshotNodes(target, candidate, scan.byIndex)) return null;
   const candidateRect = positiveRect(candidate.rect);
   if (!candidateRect || areRectsApproximatelyEqual(targetRect, candidateRect)) return null;
-  if (findCoveringNode(scan, candidatePosition, candidate)) return null;
+  if (findCoveringNode(scan, candidatePosition, candidate, options)) return null;
   return candidateRect;
 }
 
@@ -121,12 +139,42 @@ function isCandidateTouchNode(node: RawSnapshotNode): boolean {
   return Boolean(node.label?.trim() || node.value?.trim() || node.identifier?.trim());
 }
 
-function isOverlayLikeNode(node: RawSnapshotNode): boolean {
+function isOverlayLikeNode(
+  node: RawSnapshotNode,
+  byIndex: Map<number, RawSnapshotNode>,
+  options: SnapshotOcclusionOptions,
+): boolean {
   if (!positiveRect(node.rect)) return false;
   if (isViewportRoot(node)) return false;
   // This is a presentation-order heuristic: only known floating UI chrome should cover
   // later targets. Generic hittable containers can appear later without being visually on top.
-  return nodeKindIncludesAny(node, OVERLAY_KIND_FRAGMENTS);
+  return (
+    nodeKindIncludesAny(node, OVERLAY_KIND_FRAGMENTS) ||
+    isAdditionalOverlayRootNode(node, byIndex, options)
+  );
+}
+
+function isAdditionalOverlayRootNode(
+  node: RawSnapshotNode,
+  byIndex: Map<number, RawSnapshotNode>,
+  options: SnapshotOcclusionOptions,
+): boolean {
+  if (options.isAdditionalOverlayNode?.(node) !== true) return false;
+  let current = typeof node.parentIndex === 'number' ? byIndex.get(node.parentIndex) : undefined;
+  const visited = new Set<number>();
+  while (current && !visited.has(current.index)) {
+    if (
+      options.isAdditionalOverlayNode?.(current) === true &&
+      positiveRect(current.rect) &&
+      !isViewportRoot(current)
+    ) {
+      return false;
+    }
+    visited.add(current.index);
+    current =
+      typeof current.parentIndex === 'number' ? byIndex.get(current.parentIndex) : undefined;
+  }
+  return true;
 }
 
 function isSemanticTouchNode(node: RawSnapshotNode): boolean {

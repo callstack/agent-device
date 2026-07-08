@@ -139,6 +139,98 @@ test('buildSnapshotState marks content covered by floating overlays as visible b
   expect(state.nodes.some((node) => node.type === 'TabBar')).toBe(true);
 });
 
+test('buildSnapshotState marks Android app content covered by IME overlays as blocked', () => {
+  const state = buildSnapshotState(
+    {
+      nodes: [
+        {
+          index: 0,
+          depth: 0,
+          type: 'android.widget.FrameLayout',
+          bundleId: 'org.example',
+          rect: { x: 0, y: 0, width: 390, height: 844 },
+        },
+        {
+          index: 1,
+          depth: 1,
+          parentIndex: 0,
+          type: 'android.widget.Button',
+          label: 'Push Article',
+          bundleId: 'org.example',
+          rect: { x: 40, y: 600, width: 180, height: 56 },
+          hittable: true,
+        },
+        {
+          index: 2,
+          depth: 1,
+          type: 'android.widget.FrameLayout',
+          bundleId: 'com.google.android.inputmethod.latin',
+          rect: { x: 0, y: 400, width: 390, height: 444 },
+        },
+      ],
+      backend: 'android',
+    },
+    undefined,
+  );
+
+  expect(state.nodes.find((node) => node.label === 'Push Article')).toMatchObject({
+    hittable: false,
+    interactionBlocked: 'covered',
+    presentationHints: ['covered'],
+  });
+});
+
+test('buildSnapshotState treats large Android IME subtrees as one overlay root', () => {
+  const imeChildren = Array.from({ length: 2000 }, (_, offset) => ({
+    index: offset + 3,
+    depth: 2,
+    parentIndex: 2,
+    type: 'android.widget.TextView',
+    label: `Keyboard suggestion ${offset}`,
+    bundleId: 'com.google.android.inputmethod.latin',
+    rect: { x: offset % 300, y: 500 + (offset % 200), width: 80, height: 32 },
+  }));
+
+  const state = buildSnapshotState(
+    {
+      nodes: [
+        {
+          index: 0,
+          depth: 0,
+          type: 'android.widget.FrameLayout',
+          bundleId: 'org.example',
+          rect: { x: 0, y: 0, width: 390, height: 844 },
+        },
+        {
+          index: 1,
+          depth: 1,
+          parentIndex: 0,
+          type: 'android.widget.Button',
+          label: 'Covered action',
+          bundleId: 'org.example',
+          rect: { x: 40, y: 620, width: 180, height: 56 },
+          hittable: true,
+        },
+        {
+          index: 2,
+          depth: 1,
+          type: 'android.widget.FrameLayout',
+          bundleId: 'com.google.android.inputmethod.latin',
+          rect: { x: 0, y: 400, width: 390, height: 444 },
+        },
+        ...imeChildren,
+      ],
+      backend: 'android',
+    },
+    undefined,
+  );
+
+  expect(state.nodes.find((node) => node.label === 'Covered action')).toMatchObject({
+    hittable: false,
+    interactionBlocked: 'covered',
+  });
+});
+
 test('buildSnapshotState does not treat later generic hittable containers as covers', () => {
   const state = buildSnapshotState(
     {

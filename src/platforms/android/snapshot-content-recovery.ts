@@ -1,9 +1,11 @@
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
+import { isAndroidInputMethodOwnedNode } from './input-ownership.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
 
 const ANDROID_WINDOW_TYPE_APPLICATION = 1;
 const MAX_REPORTED_WINDOW_TYPES = 8;
 const MIN_FOREGROUND_APP_MEANINGFUL_NODES = 2;
+const MIN_INPUT_METHOD_MEANINGFUL_NODES = 2;
 const ANDROID_SYSTEM_PACKAGES = new Set(['android', 'com.android.systemui']);
 
 export type AndroidHelperContentRecoveryDecision = {
@@ -16,6 +18,7 @@ export type AndroidHelperContentRecoveryDecision = {
     helperMeaningfulNodeCount: number;
     helperApplicationMeaningfulNodeCount: number;
     helperNonSystemMeaningfulNodeCount: number;
+    helperInputMethodMeaningfulNodeCount: number;
     helperForegroundAppMeaningfulNodeCount?: number;
     helperForegroundAppPackage?: string;
     helperForegroundAppMeaningfulNodeThreshold?: number;
@@ -48,6 +51,9 @@ export function classifyAndroidHelperContentRecovery(
       (foregroundAppMeaningfulNodeCount < MIN_FOREGROUND_APP_MEANINGFUL_NODES &&
         summary.meaningfulNodeCount > foregroundAppMeaningfulNodeCount))
   ) {
+    if (summary.inputMethodMeaningfulNodeCount >= MIN_INPUT_METHOD_MEANINGFUL_NODES) {
+      return undefined;
+    }
     return buildRecoveryDecision(
       summary,
       metadata,
@@ -115,6 +121,7 @@ type AndroidHelperXmlSummary = {
   meaningfulNodeCount: number;
   applicationMeaningfulNodeCount: number;
   nonSystemMeaningfulNodeCount: number;
+  inputMethodMeaningfulNodeCount: number;
   foregroundAppPackage?: string;
   foregroundAppMeaningfulNodeCount?: number;
   windowTypes: number[];
@@ -148,6 +155,7 @@ function createAndroidHelperXmlSummaryState(
     meaningfulNodeCount: 0,
     applicationMeaningfulNodeCount: 0,
     nonSystemMeaningfulNodeCount: 0,
+    inputMethodMeaningfulNodeCount: 0,
     ...(foregroundAppPackage !== undefined
       ? { foregroundAppPackage, foregroundAppMeaningfulNodeCount: 0 }
       : {}),
@@ -192,6 +200,14 @@ function recordAndroidHelperMeaningfulNode(
     summary.nonSystemMeaningfulNodeCount += 1;
   }
   if (
+    isAndroidInputMethodOwnedNode({
+      packageName: node.packageName,
+      resourceId: node.resourceId,
+    })
+  ) {
+    summary.inputMethodMeaningfulNodeCount += 1;
+  }
+  if (
     summary.foregroundAppPackage !== undefined &&
     node.packageName === summary.foregroundAppPackage
   ) {
@@ -209,6 +225,7 @@ function finalizeAndroidHelperXmlSummary(
     meaningfulNodeCount: summary.meaningfulNodeCount,
     applicationMeaningfulNodeCount: summary.applicationMeaningfulNodeCount,
     nonSystemMeaningfulNodeCount: summary.nonSystemMeaningfulNodeCount,
+    inputMethodMeaningfulNodeCount: summary.inputMethodMeaningfulNodeCount,
     ...(summary.foregroundAppPackage !== undefined
       ? {
           foregroundAppPackage: summary.foregroundAppPackage,
@@ -243,6 +260,7 @@ function buildRecoveryDiagnostics(
     helperMeaningfulNodeCount: summary.meaningfulNodeCount,
     helperApplicationMeaningfulNodeCount: summary.applicationMeaningfulNodeCount,
     helperNonSystemMeaningfulNodeCount: summary.nonSystemMeaningfulNodeCount,
+    helperInputMethodMeaningfulNodeCount: summary.inputMethodMeaningfulNodeCount,
     ...(summary.foregroundAppPackage !== undefined
       ? {
           helperForegroundAppPackage: summary.foregroundAppPackage,
