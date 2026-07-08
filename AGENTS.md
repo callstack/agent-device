@@ -79,7 +79,7 @@ Keep `src/daemon.ts` a thin router and `src/daemon/request-router.ts` orchestrat
 - Lint/format stack is OXC:
   - config: `.oxlintrc.json`, `.oxfmtrc.json`
 - TypeScript is strict enough to surface dead code early: `strict`, `isolatedModules`, `noUnusedLocals`, and `noUnusedParameters` are enabled.
-- The repo emits with `tsdown` (Rolldown) and typechecks with `tsgo` (native preview); the `typescript` package is not a dependency, so there is no `tsc` to fall back to. If declaration generation fails, inspect `tsconfig.lib.json` first.
+- The repo emits with `tsdown` (Rolldown) and typechecks with TypeScript 7 via `tsc`; `typescript` is a direct dev dependency. Declaration generation is configured to use the TypeScript 7 native executable; if declaration generation fails, inspect `tsconfig.lib.json` and `tsdown.config.ts` first.
 - Dev-loop staleness has three layers; after editing runtime or runner code: `pnpm build` (dist), restart the daemon (it does not self-reload), and remember `shutdown` deliberately HANDS OFF a healthy simulator runner — the adopted runner keeps serving the old Swift binary until you kill its process or the source fingerprint changes. Verifying "my change did nothing" against an adopted runner is a classic false negative.
 - `tsconfig.lib.json` needs an explicit `rootDir: "./src"` for declaration layout.
 - Use the aggregate scripts in `package.json` when possible; they encode the expected validation bundles better than ad hoc command lists.

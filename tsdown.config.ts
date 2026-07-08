@@ -1,6 +1,11 @@
 import fs from 'node:fs';
 import { defineConfig } from 'tsdown';
 
+const typeScriptPackageJsonUrl = import.meta.resolve('typescript/package.json');
+const { default: getTypeScript7ExePath } = await import(
+  new URL('lib/getExePath.js', typeScriptPackageJsonUrl).href
+);
+
 const packageJson = JSON.parse(
   fs.readFileSync(new URL('./package.json', import.meta.url), 'utf8'),
 ) as { version: string };
@@ -80,6 +85,8 @@ export default defineConfig({
   outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
   minify: true,
   dts: {
-    tsgo: true,
+    tsgo: {
+      path: getTypeScript7ExePath(),
+    },
   },
 });
