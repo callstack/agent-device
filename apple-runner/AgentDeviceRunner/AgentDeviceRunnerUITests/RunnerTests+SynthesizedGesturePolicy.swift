@@ -16,7 +16,6 @@ enum RunnerAccessibilityHealth: String, Equatable {
 
 enum SynthesizedCoordinateFrameSource: String, Equatable {
   case provided
-  case appFrame
   case fallbackBounds
   case screenshot
 }
@@ -24,6 +23,7 @@ enum SynthesizedCoordinateFrameSource: String, Equatable {
 enum SynthesizedKeyboardPolicy: String, Equatable, Hashable {
   case never
   case whenAccessibilityHealthy
+  case requiredWhenAvailable
 
   func allowsProbe(accessibilityHealth: RunnerAccessibilityHealth) -> Bool {
     switch self {
@@ -31,21 +31,23 @@ enum SynthesizedKeyboardPolicy: String, Equatable, Hashable {
       return false
     case .whenAccessibilityHealthy:
       return accessibilityHealth == .healthy
+    case .requiredWhenAvailable:
+      return accessibilityHealth != .unavailable
     }
   }
 }
 
 enum SynthesizedFallbackPolicy: String, Equatable, Hashable {
   case privateSynthesisRequired
-  case xctestCoordinateWhenAccessibilityHealthy
+  case xctestCoordinateWhenAccessibilityAvailable
   case xctestCoordinateAllowed
 
   func allowsXCTestCoordinateFallback(accessibilityHealth: RunnerAccessibilityHealth) -> Bool {
     switch self {
     case .privateSynthesisRequired:
       return false
-    case .xctestCoordinateWhenAccessibilityHealthy:
-      return accessibilityHealth == .healthy
+    case .xctestCoordinateWhenAccessibilityAvailable:
+      return accessibilityHealth != .unavailable
     case .xctestCoordinateAllowed:
       return true
     }
@@ -105,8 +107,8 @@ func synthesizedGesturePolicy(_ kind: SynthesizedGesturePolicyKind) -> Synthesiz
     )
   case .synthesizedDrag, .sequenceSynthesizedTap, .sequenceSynthesizedDrag:
     return SynthesizedGesturePolicy(
-      keyboardPolicy: .whenAccessibilityHealthy,
-      fallbackPolicy: .xctestCoordinateWhenAccessibilityHealthy
+      keyboardPolicy: .requiredWhenAvailable,
+      fallbackPolicy: .xctestCoordinateWhenAccessibilityAvailable
     )
   }
 }
@@ -268,18 +270,33 @@ extension RunnerTests {
     )
   }
 
-  func testSynthesizedDragCoordinateFallbackRequiresHealthyAccessibility() {
+  func testSynthesizedDragCoordinateFallbackAllowsUnknownButNotUnavailableAccessibility() {
     XCTAssertTrue(
-      SynthesizedFallbackPolicy.xctestCoordinateWhenAccessibilityHealthy
+      SynthesizedFallbackPolicy.xctestCoordinateWhenAccessibilityAvailable
         .allowsXCTestCoordinateFallback(accessibilityHealth: .healthy)
     )
     XCTAssertFalse(
-      SynthesizedFallbackPolicy.xctestCoordinateWhenAccessibilityHealthy
+      SynthesizedFallbackPolicy.xctestCoordinateWhenAccessibilityAvailable
         .allowsXCTestCoordinateFallback(accessibilityHealth: .unavailable)
     )
-    XCTAssertFalse(
-      SynthesizedFallbackPolicy.xctestCoordinateWhenAccessibilityHealthy
+    XCTAssertTrue(
+      SynthesizedFallbackPolicy.xctestCoordinateWhenAccessibilityAvailable
         .allowsXCTestCoordinateFallback(accessibilityHealth: .unknown)
+    )
+  }
+
+  func testSynthesizedKeyboardPolicyKeepsUnknownDragProbeButNotUnknownScrollProbe() {
+    XCTAssertFalse(
+      SynthesizedKeyboardPolicy.whenAccessibilityHealthy
+        .allowsProbe(accessibilityHealth: .unknown)
+    )
+    XCTAssertTrue(
+      SynthesizedKeyboardPolicy.requiredWhenAvailable
+        .allowsProbe(accessibilityHealth: .unknown)
+    )
+    XCTAssertFalse(
+      SynthesizedKeyboardPolicy.requiredWhenAvailable
+        .allowsProbe(accessibilityHealth: .unavailable)
     )
   }
 

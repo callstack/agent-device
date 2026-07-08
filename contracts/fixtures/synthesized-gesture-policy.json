@@ -10,7 +10,7 @@
     },
     "frameSourcePolicy": {
       "via": "RunnerTests+Interaction.swift#finiteSynthesizedReferenceFrame",
-      "policy": "provided frame, then healthy app frame, then fallback bounds, then screenshot size"
+      "policy": "provided frame, then fallback bounds, then screenshot size; synthesized command contexts use screenshot size so full-screen screenshot coordinates are not offset by app.frame"
     },
     "activationPreflightPolicy": {
       "via": "RunnerTests+CommandExecution.swift#shouldSkipAppActivationPreflight",
@@ -37,22 +37,22 @@
       "pathId": "ios-drag-synthesized",
       "commands": ["drag"],
       "policyKind": "synthesizedDrag",
-      "keyboardPolicy": "whenAccessibilityHealthy",
-      "fallbackPolicy": "xctestCoordinateWhenAccessibilityHealthy"
+      "keyboardPolicy": "requiredWhenAvailable",
+      "fallbackPolicy": "xctestCoordinateWhenAccessibilityAvailable"
     },
     {
       "pathId": "ios-sequence-synthesized-tap",
       "commands": ["sequence"],
       "policyKind": "sequenceSynthesizedTap",
-      "keyboardPolicy": "whenAccessibilityHealthy",
-      "fallbackPolicy": "xctestCoordinateWhenAccessibilityHealthy"
+      "keyboardPolicy": "requiredWhenAvailable",
+      "fallbackPolicy": "xctestCoordinateWhenAccessibilityAvailable"
     },
     {
       "pathId": "ios-sequence-synthesized-drag",
       "commands": ["sequence"],
       "policyKind": "sequenceSynthesizedDrag",
-      "keyboardPolicy": "whenAccessibilityHealthy",
-      "fallbackPolicy": "xctestCoordinateWhenAccessibilityHealthy"
+      "keyboardPolicy": "requiredWhenAvailable",
+      "fallbackPolicy": "xctestCoordinateWhenAccessibilityAvailable"
     }
   ]
 }

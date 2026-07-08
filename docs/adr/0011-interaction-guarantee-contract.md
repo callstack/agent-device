@@ -250,7 +250,9 @@ XCTest-coordinate fallback rules are declared separately in
 runner policy stays in `RunnerTests+SynthesizedGesturePolicy.swift`. The
 manifest is sanity-checked by vitest and matched against the gated XCTest policy
 resolver, keeping the non-obvious rule visible: default iOS scroll must not fall
-back to `XCUICoordinate` when AX health is unknown or unavailable.
+back to `XCUICoordinate` when AX health is unknown or unavailable. Explicit
+synthesized drag and sequence steps may still use the coordinate fallback before
+AX health is known, but stop using it once a snapshot stamps AX unavailable.
 
 ## Migration plan
 

@@ -2,14 +2,8 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { assertRunnerSourceIncludes, PROJECT_ROOT } from './runner-source-assertions.ts';
 
-const PROJECT_ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
-const RUNNER_SOURCES_DIR = path.join(
-  PROJECT_ROOT,
-  'apple-runner',
-  'AgentDeviceRunner',
-  'AgentDeviceRunnerUITests',
-);
 const MANIFEST_PATH = path.join(
   PROJECT_ROOT,
   'contracts',
@@ -24,10 +18,10 @@ const POLICY_KINDS = new Set([
   'sequenceSynthesizedTap',
   'sequenceSynthesizedDrag',
 ]);
-const KEYBOARD_POLICIES = new Set(['never', 'whenAccessibilityHealthy']);
+const KEYBOARD_POLICIES = new Set(['never', 'whenAccessibilityHealthy', 'requiredWhenAvailable']);
 const FALLBACK_POLICIES = new Set([
   'privateSynthesisRequired',
-  'xctestCoordinateWhenAccessibilityHealthy',
+  'xctestCoordinateWhenAccessibilityAvailable',
   'xctestCoordinateAllowed',
 ]);
 
@@ -98,17 +92,7 @@ test('manifest dimensions reference real runner symbols', () => {
   ]);
   for (const [dimension, entry] of Object.entries(manifest.dimensions)) {
     assert.ok(entry.policy.trim().length > 0, `${dimension}: policy must be non-empty`);
-    const [fileName, symbol] = entry.via.split('#');
-    assert.ok(
-      fileName && symbol,
-      `${dimension}: via must be "<file>#<symbol>", got "${entry.via}"`,
-    );
-    const absolute = path.join(RUNNER_SOURCES_DIR, fileName);
-    assert.ok(fs.existsSync(absolute), `${dimension}: runner source not found`);
-    assert.ok(
-      fs.readFileSync(absolute, 'utf8').includes(symbol),
-      `${dimension}: "${symbol}" not found in ${fileName}`,
-    );
+    assertRunnerSourceIncludes(entry.via, dimension);
   }
 });
 
@@ -132,5 +116,16 @@ test('synthesized drag and sequence drag share fallback policy', () => {
   assert.equal(
     pathById(manifest, 'ios-drag-synthesized').fallbackPolicy,
     pathById(manifest, 'ios-sequence-synthesized-drag').fallbackPolicy,
+  );
+});
+
+test('drag and sequence keep keyboard avoidance available before the first snapshot', () => {
+  const manifest = readManifest();
+
+  assert.equal(pathById(manifest, 'ios-scroll-default').keyboardPolicy, 'whenAccessibilityHealthy');
+  assert.equal(pathById(manifest, 'ios-drag-synthesized').keyboardPolicy, 'requiredWhenAvailable');
+  assert.equal(
+    pathById(manifest, 'ios-sequence-synthesized-drag').keyboardPolicy,
+    'requiredWhenAvailable',
   );
 });

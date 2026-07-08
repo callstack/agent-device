@@ -1094,47 +1094,21 @@ extension RunnerTests {
 
   func synthesizedCoordinateContext(
     app: XCUIApplication,
-    providedFrame: CGRect? = nil,
-    policy: SynthesizedGesturePolicy,
-    accessibilityHealth: RunnerAccessibilityHealth? = nil,
-    fallbackBounds: CGRect = .zero,
-    fallbackScreenshotSize: (() -> CGSize)? = nil
-  ) -> SynthesizedCoordinateContext? {
-    synthesizedCoordinateContext(
-      app: app,
-      providedFrame: providedFrame,
-      keyboardPolicy: policy.keyboardPolicy,
-      fallbackPolicy: policy.fallbackPolicy,
-      accessibilityHealth: accessibilityHealth,
-      fallbackBounds: fallbackBounds,
-      fallbackScreenshotSize: fallbackScreenshotSize
-    )
-  }
-
-  func synthesizedCoordinateContext(
-    app: XCUIApplication,
-    providedFrame: CGRect? = nil,
-    keyboardPolicy: SynthesizedKeyboardPolicy,
-    fallbackPolicy: SynthesizedFallbackPolicy,
-    accessibilityHealth: RunnerAccessibilityHealth? = nil,
-    fallbackBounds: CGRect = .zero,
-    fallbackScreenshotSize: (() -> CGSize)? = nil
+    policy: SynthesizedGesturePolicy
   ) -> SynthesizedCoordinateContext? {
 #if os(iOS)
-    let health = accessibilityHealth ?? runnerAccessibilityHealth
+    let health = runnerAccessibilityHealth
     guard let resolved = finiteSynthesizedReferenceFrame(
-      providedFrame: providedFrame,
-      appFrame: health == .healthy ? app.frame : .zero,
-      fallbackBounds: fallbackBounds,
-      fallbackScreenshotSize: fallbackScreenshotSize ?? { XCUIScreen.main.screenshot().image.size }
+      fallbackBounds: .zero,
+      fallbackScreenshotSize: { XCUIScreen.main.screenshot().image.size }
     ) else {
       return nil
     }
     return SynthesizedCoordinateContext(
       referenceFrame: resolved.frame,
       frameSource: resolved.source,
-      keyboardPolicy: keyboardPolicy,
-      fallbackPolicy: fallbackPolicy,
+      keyboardPolicy: policy.keyboardPolicy,
+      fallbackPolicy: policy.fallbackPolicy,
       accessibilityHealth: health
     )
 #else
@@ -1144,15 +1118,11 @@ extension RunnerTests {
 
   func finiteSynthesizedReferenceFrame(
     providedFrame: CGRect? = nil,
-    appFrame: CGRect,
     fallbackBounds: CGRect,
     fallbackScreenshotSize: () -> CGSize
   ) -> (frame: CGRect, source: SynthesizedCoordinateFrameSource)? {
     if let providedFrame, isUsableReferenceFrame(providedFrame) {
       return (providedFrame, .provided)
-    }
-    if isUsableReferenceFrame(appFrame) {
-      return (appFrame, .appFrame)
     }
     if isUsableReferenceFrame(fallbackBounds) {
       return (CGRect(x: 0, y: 0, width: fallbackBounds.width, height: fallbackBounds.height), .fallbackBounds)
@@ -1511,23 +1481,9 @@ extension RunnerTests {
     }
   }
 
-  func testFiniteSynthesizedReferenceFramePrefersValidAppFrame() throws {
+  func testFiniteSynthesizedReferenceFrameFallsBackToBoundsBeforeScreenshot() throws {
     let resolved = try XCTUnwrap(
       finiteSynthesizedReferenceFrame(
-        appFrame: CGRect(x: 4, y: 8, width: 390, height: 844),
-        fallbackBounds: CGRect(x: 0, y: 0, width: 1, height: 1),
-        fallbackScreenshotSize: { CGSize(width: 2, height: 2) }
-      )
-    )
-
-    XCTAssertEqual(resolved.frame, CGRect(x: 4, y: 8, width: 390, height: 844))
-    XCTAssertEqual(resolved.source, .appFrame)
-  }
-
-  func testFiniteSynthesizedReferenceFrameFallsBackWithoutUsingInvalidAppFrame() throws {
-    let resolved = try XCTUnwrap(
-      finiteSynthesizedReferenceFrame(
-        appFrame: .infinite,
         fallbackBounds: CGRect(x: 20, y: 30, width: 430, height: 932),
         fallbackScreenshotSize: {
           XCTFail("screenshot fallback should not be used when screen bounds are finite")
@@ -1543,7 +1499,6 @@ extension RunnerTests {
   func testFiniteSynthesizedReferenceFrameFallsBackToScreenshotSize() throws {
     let resolved = try XCTUnwrap(
       finiteSynthesizedReferenceFrame(
-        appFrame: .infinite,
         fallbackBounds: .zero,
         fallbackScreenshotSize: { CGSize(width: 430, height: 932) }
       )
@@ -1556,7 +1511,6 @@ extension RunnerTests {
   func testFiniteSynthesizedReferenceFrameRejectsInvalidSources() {
     XCTAssertNil(
       finiteSynthesizedReferenceFrame(
-        appFrame: .infinite,
         fallbackBounds: .zero,
         fallbackScreenshotSize: { CGSize(width: CGFloat.infinity, height: 932) }
       )
@@ -1567,7 +1521,6 @@ extension RunnerTests {
     let resolved = try XCTUnwrap(
       finiteSynthesizedReferenceFrame(
         providedFrame: CGRect(x: 1, y: 2, width: 300, height: 600),
-        appFrame: CGRect(x: 4, y: 8, width: 390, height: 844),
         fallbackBounds: CGRect(x: 0, y: 0, width: 430, height: 932),
         fallbackScreenshotSize: {
           XCTFail("screenshot fallback should not be used when a provided frame is finite")

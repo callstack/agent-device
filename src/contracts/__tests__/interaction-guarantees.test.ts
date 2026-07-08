@@ -2,6 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { assertRunnerSourceIncludes, PROJECT_ROOT } from './runner-source-assertions.ts';
 import {
   INTERACTION_DISPATCH_PATHS,
   INTERACTION_GUARANTEES,
@@ -11,14 +12,6 @@ import {
 // ADR 0011 Layer-1 gate: the matrix must stay complete (typed) AND honest
 // (referenced implementations exist, waivers carry reasons). A cell that
 // points at a deleted symbol or an empty excuse fails here, not on-device.
-
-const PROJECT_ROOT = path.resolve(import.meta.dirname, '..', '..', '..');
-const RUNNER_SOURCES_DIR = path.join(
-  PROJECT_ROOT,
-  'apple-runner',
-  'AgentDeviceRunner',
-  'AgentDeviceRunnerUITests',
-);
 
 test('every dispatch path classifies every guarantee', () => {
   for (const pathId of INTERACTION_PATH_IDS) {
@@ -57,21 +50,7 @@ test('runner enforcement entries reference symbols present in runner sources', (
   for (const [pathId, contract] of Object.entries(INTERACTION_DISPATCH_PATHS)) {
     for (const [guarantee, enforcement] of Object.entries(contract.guarantees)) {
       if (enforcement.kind !== 'runner') continue;
-      const [fileName, symbol] = enforcement.via.split('#');
-      assert.ok(
-        fileName && symbol,
-        `${pathId}/${guarantee}: runner via must be "<file>#<symbol>", got "${enforcement.via}"`,
-      );
-      const absolute = path.join(RUNNER_SOURCES_DIR, fileName);
-      assert.ok(
-        fs.existsSync(absolute),
-        `${pathId}/${guarantee}: runner source not found: ${fileName}`,
-      );
-      const source = fs.readFileSync(absolute, 'utf8');
-      assert.ok(
-        source.includes(symbol),
-        `${pathId}/${guarantee}: "${symbol}" not found in ${fileName}`,
-      );
+      assertRunnerSourceIncludes(enforcement.via, `${pathId}/${guarantee}`);
       if (enforcement.parityTable !== undefined) {
         assert.ok(
           fs.existsSync(path.join(PROJECT_ROOT, enforcement.parityTable)),
