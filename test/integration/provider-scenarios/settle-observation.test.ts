@@ -122,7 +122,11 @@ test('Provider-backed integration press --settle returns the settled diff and fr
       const press = await daemon.callCommand('press', ['label=Continue'], {
         settle: true,
         settleQuietMs: 25,
-        timeoutMs: 2_000,
+        // Coverage instrumentation can slow provider-backed daemon dispatch
+        // enough that a 2s wall-clock budget expires before the two quiet
+        // captures complete. The contract under test is the settled response,
+        // not timeout pressure.
+        timeoutMs: 10_000,
       });
       const pressData = assertRpcOk(press);
       const settle = pressData.settle as {
