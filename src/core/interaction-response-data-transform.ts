@@ -1,7 +1,12 @@
-import { resolveCommandResponseDataTransform } from './command-descriptor/registry.ts';
+import {
+  listCommandResponseDataTransformFieldNames,
+  resolveCommandResponseDataTransform,
+} from './command-descriptor/registry.ts';
 import type { ResponseDataFieldTransform } from './command-descriptor/types.ts';
 
 export type InteractionResponseDataTransformCommand = 'click' | 'press' | 'fill';
+
+const controlledResponseDataFieldNames = new Set(listCommandResponseDataTransformFieldNames());
 
 export function transformInteractionResponseData(params: {
   command: InteractionResponseDataTransformCommand;
@@ -12,6 +17,7 @@ export function transformInteractionResponseData(params: {
     fields: readCommandResponseDataTransformFields(params.command),
     input: params.input ?? {},
     data: params.data,
+    controlledFields: controlledResponseDataFieldNames,
   });
 }
 
@@ -29,8 +35,11 @@ function applyResponseDataFieldTransforms(params: {
   fields: Record<string, ResponseDataFieldTransform>;
   input: Record<string, unknown>;
   data: Record<string, unknown> | undefined;
+  controlledFields: ReadonlySet<string>;
 }): Record<string, unknown> {
-  const transformed = { ...(params.data ?? {}) };
+  const transformed = Object.fromEntries(
+    Object.entries(params.data ?? {}).filter(([key]) => !params.controlledFields.has(key)),
+  );
   for (const [key, field] of Object.entries(params.fields)) {
     const value = params.input[key] === undefined ? field.defaultValue : params.input[key];
     if (value === undefined || (field.omitDefault === true && value === field.defaultValue)) {

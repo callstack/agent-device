@@ -141,7 +141,6 @@ const TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM = {
 
 const FILL_INTERACTION_RESPONSE_DATA_TRANSFORM = {
   fields: {
-    ...TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM.fields,
     delayMs: { defaultValue: 0 },
   },
 } as const satisfies CommandResponseDataTransform;
@@ -839,4 +838,24 @@ export function resolveCommandResponseDataTransform(
 ): CommandResponseDataTransform | undefined {
   if (command === undefined) return undefined;
   return RESPONSE_DATA_TRANSFORM_BY_COMMAND.get(command);
+}
+
+export function listCommandResponseDataTransforms(): Array<{
+  command: string;
+  transform: CommandResponseDataTransform;
+}> {
+  return Array.from(RESPONSE_DATA_TRANSFORM_BY_COMMAND, ([command, transform]) => ({
+    command,
+    transform,
+  }));
+}
+
+export function listCommandResponseDataTransformFieldNames(): string[] {
+  return [
+    ...new Set(
+      Array.from(RESPONSE_DATA_TRANSFORM_BY_COMMAND.values()).flatMap((transform) =>
+        Object.keys(transform.fields),
+      ),
+    ),
+  ].sort();
 }

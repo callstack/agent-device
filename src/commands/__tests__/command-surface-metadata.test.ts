@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { listMcpExposedCommandNames } from '../../core/command-descriptor/registry.ts';
+import {
+  listCommandResponseDataTransforms,
+  listMcpExposedCommandNames,
+} from '../../core/command-descriptor/registry.ts';
 import {
   listCommandMetadata,
   listCommandMetadataNames,
@@ -47,6 +50,25 @@ test('common command input accepts web platform selector', () => {
   const input = snapshotMetadata.readInput({ platform: 'web' }) as { platform?: unknown };
   assert.deepEqual(platformSchema?.enum, ['apple', 'android', 'linux', 'web', 'ios', 'macos']);
   assert.equal(input.platform, 'web');
+});
+
+test('command response data transforms reference command input fields', () => {
+  const metadataByName = new Map<string, ReturnType<typeof listCommandMetadata>[number]>(
+    listCommandMetadata().map((metadata) => [metadata.name, metadata] as const),
+  );
+
+  for (const { command, transform } of listCommandResponseDataTransforms()) {
+    const metadata = metadataByName.get(command);
+    assert.ok(metadata, `${command} response data transform must have command metadata`);
+
+    const inputFields = new Set(Object.keys(metadata.inputSchema.properties ?? {}));
+    for (const field of Object.keys(transform.fields)) {
+      assert.ok(
+        inputFields.has(field),
+        `${command} response data transform field ${field} must be declared by command input metadata`,
+      );
+    }
+  }
 });
 
 test('command family facets expose one complete metadata and executable surface', () => {
