@@ -1,5 +1,11 @@
 import { AppError } from '../kernel/errors.ts';
-import { isSelectorToken, splitSelectorFromArgs } from '../utils/selectors-parse.ts';
+import {
+  detectUnknownSelectorKeyToken,
+  isRoleHintWord,
+  isSelectorToken,
+  SELECTOR_KEY_NAMES,
+  splitSelectorFromArgs,
+} from '../utils/selectors-parse.ts';
 
 type PositionalInteractionTarget =
   | { x: number; y: number }
@@ -75,10 +81,23 @@ export function readFillTargetFromPositionals(positionals: string[]): DecodedFil
 }
 
 function readPointTarget(positionals: string[]): { x: number; y: number } {
+  const unknownKey = detectUnknownSelectorKeyToken(positionals[0] ?? '');
+  if (unknownKey) {
+    throw new AppError('INVALID_ARGS', formatUnknownSelectorKeyFailure(unknownKey));
+  }
   const x = Number(positionals[0]);
   const y = Number(positionals[1]);
   if (Number.isFinite(x) && Number.isFinite(y)) return { x, y };
   throw new AppError('INVALID_ARGS', formatTargetParseFailure(positionals));
+}
+
+function formatUnknownSelectorKeyFailure(unknownKey: { key: string; value: string }): string {
+  const { key, value } = unknownKey;
+  const supported = SELECTOR_KEY_NAMES.join(', ');
+  const hint = isRoleHintWord(key)
+    ? `Did you mean role=${key} label=${quoteSelectorValue(value)}?`
+    : `Did you mean label=${quoteSelectorValue(value)}?`;
+  return `Unknown selector key "${key}". Supported: ${supported}. ${hint}`;
 }
 
 function formatTargetParseFailure(positionals: string[]): string {
