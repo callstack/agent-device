@@ -82,36 +82,22 @@ const AGENT_QUICKSTART_LINES = [
   'Planning output contract: when asked to plan commands, output command lines only: no prose, numbering, Markdown fences, pipes, or shell helpers.',
   'If you did not use --settle, verify a mutation with diff snapshot (or diff snapshot -i), not a full snapshot: it prints only the added/removed/changed lines since the last snapshot in this session.',
   'Network-backed or debounced results may arrive after the --settle quiet window; follow the settled action with wait text "Expected result" or wait <selector> instead of polling full snapshots.',
-  'Pin a raw CLI ref to the response that minted it with ~s<n> (n = refsGeneration or settle.refsGeneration): press @e12~s4. Pinned refs get exact staleness warnings instead of the coarse tree-changed one; plain refs stay valid input.',
+  'Pin a raw CLI ref to the response that minted it with ~s<n> (n = refsGeneration): press @e12~s4; plain refs stay valid input.',
   'Plain snapshot reads state; snapshot -i refreshes current interactive refs only.',
   'Default snapshot text is an agent-facing, token-efficient view for planning and targeting actions.',
   'Read-only visible/state question: use snapshot/get/is/find; use snapshot -i only when refs are needed.',
-  'Anti-pattern: snapshot -i followed by snapshot -i | grep ... or hiding command output with 2>/dev/null | jq ...; inspect raw agent-device output first, since hints and errors are part of the planning contract.',
   'Truncated text/input preview: expand first with snapshot -s @e12, not get text.',
-  'React Native apps: read help react-native for Metro/Re.Pack, DevTools routing, and RN-specific blockers; use react-native dismiss-overlay for LogBox/RedBox overlays.',
-  'React Native JS memory leaks: read help cdp; use heap usage samples for a quick signal, then snapshot diff/leak-triplet for retained object proof.',
-  'Android RN/Expo/Re.Pack dev server: direct Android localhost URL opens with a port auto-configure host reachability.',
-  'Expo Go/dev clients: use the provided URL when given; on iOS use open "Expo Go" <url> --platform ios, then snapshot -i --platform ios to verify project UI. Do not use plain snapshot or snapshot --diff for this recovery check. Android URL opens infer the foreground package for logs/perf when possible.',
-  'Install flows: install/install-from-source first, then open the installed id with --relaunch.',
+  'React Native apps: read help react-native.',
   'Text fields: use fill <target> <text> --settle to replace a field value. Use type <text> only to append after focusing a field with press.',
   'Clearing text: do not use fill <target> ""; use a visible clear/reset control or report that clearing is unsupported.',
-  'Android IME capture: if fill says input was captured by the keyboard/IME, inspect keyboard state and switch/disable handwriting before retrying; do not loop fill/type.',
   'Implicit default sessions are scoped to the current worktree; if a prompt names a Session, include --session <name> on every command in that flow.',
   'Run mutating commands serially within one session; parallelize only read-only commands or separate sessions/devices.',
-  'Clipboard limits: iOS Allow Paste cannot be automated through XCUITest; prefill with clipboard write. Android non-ASCII should use fill/type, not raw adb input.',
   'After mutation: refs are stale. If the next target is known, use its selector directly; otherwise refresh with snapshot -i, scoped with -s when a stable container is known. Use press/click for taps.',
-  'Raw coordinates are fallback-only: use snapshot -i --json rects when iOS refs no-op or child refs are missing, then verify the action with diff snapshot -i or snapshot --diff.',
-  'Sparse or AX-unavailable snapshot: use screenshot for visual truth, press the visible coordinate to leave the bad screen, then retry AX with snapshot -i.',
   'macOS context menus use click <ref> --button secondary, then snapshot -i. Longpress is for mobile hold gestures, not macOS secondary-click menus.',
-  'Remote lifecycle: use connect, then open, commands, close, and disconnect. Cloud, remote-config, direct proxy, and limrun use the same flow.',
-  'Direct proxy: run agent-device connect proxy --daemon-base-url <proxy-agent-device-url> before using a shared Mac proxy. Device leases are automatic on open and expire after five minutes of inactivity.',
-  'Batch JSON steps use "command" and structured "input"; legacy "positionals"/"flags" steps still run in CLI but are deprecated until the next major version.',
-  'Navigation: app-owned back uses back; system back uses back --system.',
-  'TV targets are focus-first: read help tv; use tv-remote press up|down|left|right|select to move D-pad/remote focus, tv-remote longpress <button> for a held remote button, and activate focused controls before assuming press/click @ref works.',
-  'Web browser sessions: read help web; first slice is web setup if needed -> web doctor -> open <url> --platform web -> snapshot -i -> click/fill/get/is/find/wait/screenshot -> close.',
-  'Verification commands must name the expected text/selector; bare screenshots/snapshots are not enough.',
+  'Remote lifecycle: use connect, then open, commands, close, and disconnect. Read help remote for proxy, cloud, and device-cloud provider flows.',
+  'TV/D-pad targets: read help tv. Web browser sessions: read help web.',
   'Debug evidence: Session state contains request diagnostics and runner.log; use logs clear --restart/mark/path, trace, and network dump --include headers for app evidence.',
-  'Full operating guide: agent-device help workflow. Exploratory QA: agent-device help dogfood.',
+  'Routine QA loop with concrete command shapes: agent-device help manual-qa. Full operating guide: agent-device help workflow. Exploratory QA: agent-device help dogfood.',
 ] as const;
 
 const CONFIGURATION_LINES = [
@@ -137,10 +123,7 @@ const ENVIRONMENT_LINES = [
 const EXAMPLE_LINES = [
   'agent-device open Settings --platform ios',
   'agent-device open https://example.com --platform web',
-  'agent-device open TextEdit --platform macos',
   'agent-device snapshot -i',
-  'agent-device react-devtools get tree --depth 3',
-  'agent-device cdp memory usage sample --gc --label baseline',
   'agent-device fill @e3 "test@example.com"',
   'agent-device replay ./session.ad',
   'agent-device test ./suite --platform android',
@@ -165,6 +148,17 @@ Loop:
   5. If --settle prints not settled, follow its hint before the next ref-based action.
   6. Verify named expectations with wait text/selector, get, is, find, or the settled diff. A bare screenshot/snapshot is not verification for a named expectation.
   7. Close the session when the script ends.
+
+Command shapes:
+  agent-device open com.example.app --relaunch
+  agent-device open https://example.com/deep-link
+  agent-device snapshot -i
+  agent-device press @e12 --settle
+  agent-device press 'label="Follow"'
+  agent-device fill @e13 "qa@example.com" --settle
+  agent-device wait text "Order placed" 3000
+  agent-device close
+  --relaunch forces fresh app state; a deep link/URL open does not need it. Labels with an apostrophe or quote (label="Don't leave") are shell-quoting hazards: prefer the @ref from the latest snapshot/settle output over quoting the literal label.
 
 Targets:
   Prefer refs from the latest snapshot -i or settled diff. Use durable selectors when the label/id is known: label="Search", id="submit", role=button label="Follow".
@@ -687,7 +681,8 @@ This topic covers React Native-specific automation hazards and routes deeper
 questions to the owning help topic.
 
 Choose the next help topic:
-  Generic navigation, selectors, refs, verification, serial commands: help workflow.
+  Routine QA/dogfood/manual-test flow (open, snapshot -i, press/fill --settle, verify, close): help manual-qa; it has the concrete command shapes, so you should not need generic navigation help for a normal pass.
+  Deep exploration of navigation/selector/ref edge cases, or a serial-command question manual-qa does not answer: help workflow (full reference, larger read).
   Logs, network, diagnostics, traces, permission dialogs, or runtime failures: help debugging.
   Component tree, props/state/hooks, slow renders, rerenders, or render causes: help react-devtools.
   JS heap growth, heap snapshots, allocation hotspots, or retained-object leaks: help cdp.
@@ -763,7 +758,7 @@ Slow-flow investigation:
     body: `agent-device help physical-device
 
 Use this when the target is connected hardware instead of a simulator/emulator.
-For simulator/emulator workflows, use help workflow.
+For simulator/emulator flows, use help manual-qa for routine QA or help workflow for the full reference.
 
 Discovery:
   agent-device devices --platform ios
@@ -1170,6 +1165,13 @@ function renderFlagSection(title: string, definitions: FlagDefinition[]): string
   );
 }
 
+// Cap the alignment column so one long outlier label (for example a
+// combined tv-remote usage string) does not force padding whitespace onto
+// every other row. Rows whose label exceeds the cap fall back to a plain
+// two-space gap; they still read fine and every regex in the test suite
+// only requires \s{2,}, never an exact column width.
+const ALIGN_CAP = 26;
+
 function renderAlignedSection(
   title: string,
   items: ReadonlyArray<{ label: string; description: string }>,
@@ -1177,10 +1179,13 @@ function renderAlignedSection(
   if (items.length === 0) {
     return `${title}\n  (none)`;
   }
-  const maxLabelLength = Math.max(...items.map((item) => item.label.length)) + 2;
+  const columnWidth =
+    Math.max(...items.map((item) => Math.min(item.label.length, ALIGN_CAP))) + 2;
   const lines = [title];
   for (const item of items) {
-    lines.push(`  ${item.label.padEnd(maxLabelLength)}${item.description}`);
+    const label =
+      item.label.length <= ALIGN_CAP ? item.label.padEnd(columnWidth) : `${item.label}  `;
+    lines.push(`  ${label}${item.description}`);
   }
   return lines.join('\n');
 }
@@ -1234,6 +1239,7 @@ function buildHelpTopicUsageText(topicName: string): string | null {
 Related:
   agent-device help                  command list and global flags
   agent-device help <command>        command-specific flags
-  agent-device help workflow         normal app automation loop
+  agent-device help manual-qa        routine QA loop with concrete command shapes
+  agent-device help workflow         full app automation reference
 `;
 }

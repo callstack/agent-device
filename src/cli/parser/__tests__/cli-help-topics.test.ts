@@ -102,37 +102,31 @@ test('usage includes agent workflows, config, environment, and examples footers'
   assert.match(usageText, /agent-facing, token-efficient view for planning and targeting actions/);
   assert.match(usageText, /Truncated text\/input preview: expand first with snapshot -s @e12/);
   assert.match(usageText, /React Native apps: read help react-native/);
-  assert.match(usageText, /localhost URL opens with a port auto-configure host reachability/);
-  assert.match(usageText, /Expo Go\/dev clients: use the provided URL when given/);
-  assert.match(usageText, /open "Expo Go" <url> --platform ios/);
-  assert.match(usageText, /Do not use plain snapshot or snapshot --diff for this recovery check/);
-  assert.match(usageText, /Install flows: install\/install-from-source first/);
   assert.match(usageText, /use fill <target> <text> --settle to replace a field value/);
   assert.match(usageText, /Use type <text> only to append after focusing a field with press/);
   assert.match(usageText, /do not use fill <target> ""/);
-  assert.match(usageText, /Android IME capture: if fill says input was captured/);
   assert.match(usageText, /Implicit default sessions are scoped to the current worktree/);
   assert.match(usageText, /if a prompt names a Session, include --session <name>/);
   assert.match(usageText, /Run mutating commands serially within one session/);
   assert.match(usageText, /After mutation: refs are stale/);
   assert.match(usageText, /use its selector directly; otherwise refresh with snapshot -i/);
-  assert.match(usageText, /verify the action with diff snapshot -i or snapshot --diff/);
   assert.match(usageText, /fill <targetOrX> <yOrText> \[text\]\s+Replace text in/);
   assert.match(usageText, /type <text>\s+Append text to the focused field/);
-  assert.match(usageText, /Sparse or AX-unavailable snapshot/);
   assert.match(usageText, /macOS context menus use click <ref> --button secondary/);
   assert.match(
     usageText,
     /Remote lifecycle: use connect, then open, commands, close, and disconnect/,
   );
-  assert.match(usageText, /connect proxy --daemon-base-url <proxy-agent-device-url>/);
-  assert.match(usageText, /Device leases are automatic on open/);
-  assert.match(usageText, /expire after five minutes of inactivity/);
-  assert.match(usageText, /app-owned back uses back/);
-  assert.match(usageText, /Web browser sessions: read help web/);
+  // Deep topic-specific detail (Metro/Expo recovery, Android IME capture, coordinate
+  // fallback verification, sparse/AX recovery, direct-proxy flags, back/system-back
+  // wording, the full web command sequence) moved out of the bare-help Agent
+  // Quickstart section and now lives only in the owning topic (help react-native,
+  // help workflow, help remote, help web) so `agent-device help` alone stays small.
+  // Those topics assert the same content in their own usageForCommand tests below.
+  assert.match(usageText, /TV\/D-pad targets: read help tv\. Web browser sessions: read help web/);
   assert.match(
     usageText,
-    /open <url> --platform web -> snapshot -i -> click\/fill\/get\/is\/find\/wait\/screenshot -> close/,
+    /Routine QA loop with concrete command shapes: agent-device help manual-qa/,
   );
   assert.match(usageText, /Session state contains request diagnostics and runner\.log/);
   assert.match(usageText, /logs clear --restart\/mark\/path/);
