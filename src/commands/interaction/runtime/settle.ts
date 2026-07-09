@@ -2,12 +2,14 @@ import type { SnapshotNode } from '../../../kernel/snapshot.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { isSparseSnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
 import { buildSnapshotDiff } from '../../../snapshot/snapshot-diff.ts';
+import { displayLabel, formatRole } from '../../../snapshot/snapshot-lines.ts';
 import { summarizeAxEvidence } from '../../../utils/ax-digest.ts';
 import type {
   InteractionEvidence,
   ResolvedInteractionTarget,
   SettleObservation,
   SettleParams,
+  SettleTailEntry,
 } from '../../../contracts/interaction.ts';
 import type { CapturedSnapshot } from './selector-read-shared.ts';
 import {
@@ -39,6 +41,11 @@ export type SettleOutcome = {
 // added/removed lists on a full screen transition would crowd out everything
 // else. The summary always carries the true counts.
 const MAX_SETTLE_DIFF_LINES = 80;
+
+// Unchanged-interactive-tail bound: same token-budget principle as the diff
+// line cap, sized smaller since the tail is a fallback list, not the primary
+// payload.
+const MAX_SETTLE_TAIL_ENTRIES = 20;
 
 export const NEVER_SETTLED_HINT =
   'The UI kept changing for the whole settle budget (animation, carousel, or ticker?), so no settled diff is shown. Raise --timeout, wait for specific content, or take a fresh snapshot.';
@@ -87,7 +94,7 @@ export async function settleAfterInteraction(
         // observation, so surfacing refs would invite agents to act on
         // advisory state.
         ...(outcome.settled && stored
-          ? { diff: buildSettleDiff(resolveBaselineNodes(params.resolved), settledNodes) }
+          ? buildSettleDiffAndTail(resolveBaselineNodes(params.resolved), settledNodes)
           : {}),
         ...resolveSettleHint(outcome, stored, settledNodes.length),
       },
@@ -149,6 +156,61 @@ function buildSettleDiff(
     summary: diff.summary,
     lines,
     ...(changed.length > lines.length ? { truncated: true as const } : {}),
+  };
+}
+
+function buildSettleDiffAndTail(
+  baselineNodes: SnapshotNode[],
+  settledNodes: SnapshotNode[],
+): Pick<SettleObservation, 'diff' | 'tail' | 'tailTruncated'> {
+  const diff = buildSettleDiff(baselineNodes, settledNodes);
+  return { diff, ...buildSettleTail(diff, settledNodes) };
+}
+
+/**
+ * Unchanged interactive refs tail: attached ONLY when the settled diff carries
+ * zero added-line refs (a modal-dismiss/toast-only diff shows removals but
+ * nothing added, so the next actionable target is otherwise invisible). Every
+ * hittable, uncovered element on the settled tree is a candidate; refs already
+ * present on the diff's added lines are excluded so the tail never repeats
+ * what the diff already handed the caller.
+ */
+export function buildSettleTail(
+  diff: NonNullable<SettleObservation['diff']>,
+  settledNodes: SnapshotNode[],
+): Pick<SettleObservation, 'tail' | 'tailTruncated'> {
+  const addedRefs = new Set(
+    diff.lines.filter((line) => line.kind === 'added' && line.ref).map((line) => line.ref),
+  );
+  if (addedRefs.size > 0) return {};
+  return buildSettleTailEntries(settledNodes, addedRefs);
+}
+
+/**
+ * The filtering/cap step behind `buildSettleTail`, split out so the dedup
+ * rule (excludeRefs) is unit-testable independent of the trigger condition
+ * above.
+ */
+export function buildSettleTailEntries(
+  settledNodes: SnapshotNode[],
+  excludeRefs: ReadonlySet<string | undefined>,
+): Pick<SettleObservation, 'tail' | 'tailTruncated'> {
+  const candidates = settledNodes.filter(
+    (node) =>
+      node.ref &&
+      node.hittable === true &&
+      node.interactionBlocked !== 'covered' &&
+      !excludeRefs.has(node.ref),
+  );
+  if (candidates.length === 0) return {};
+  const tail: SettleTailEntry[] = candidates.slice(0, MAX_SETTLE_TAIL_ENTRIES).map((node) => {
+    const role = formatRole(node.type ?? 'Element');
+    const label = displayLabel(node, role);
+    return { ref: node.ref, role, ...(label ? { label } : {}) };
+  });
+  return {
+    tail,
+    ...(candidates.length > tail.length ? { tailTruncated: true as const } : {}),
   };
 }
 

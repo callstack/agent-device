@@ -553,6 +553,42 @@ test('MCP merges digest-level settled refs too', async () => {
   });
 });
 
+test('MCP merges per-ref pins from a settle response unchanged-interactive tail', async () => {
+  const runCalls: Array<{ name: string; input: unknown }> = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      runCalls.push({ name, input });
+      if (name === 'press') {
+        // A removals-only diff (modal dismiss) carries no added refs, so the
+        // tail is the only ref-issuing surface on this response.
+        return {
+          ref: 'e2',
+          settle: {
+            settled: true,
+            waitedMs: 60,
+            captures: 2,
+            quietMs: 25,
+            timeoutMs: 2000,
+            refsGeneration: 9,
+            diff: {
+              summary: { additions: 0, removals: 1, unchanged: 1 },
+              lines: [{ kind: 'removed', text: '@e2 [button] "OK"' }],
+            },
+            tail: [{ ref: 'e1', role: 'button', label: 'Continue' }],
+          },
+        };
+      }
+      return {};
+    },
+  });
+
+  await executor.execute('press', { session: 'demo', target: { kind: 'ref', ref: '@e2' } });
+  await executor.execute('press', { session: 'demo', target: { kind: 'ref', ref: '@e1' } });
+
+  assert.deepEqual(runCalls[1]?.input, { session: 'demo', target: { kind: 'ref', ref: '@e1~s9' } });
+});
+
 test('MCP leaves pins untouched for plain (non-settle) interaction responses', async () => {
   const runCalls: Array<{ name: string; input: unknown }> = [];
   const executor = createCommandToolExecutor({

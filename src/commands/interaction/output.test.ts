@@ -81,6 +81,70 @@ describe('press CLI output', () => {
     );
   });
 
+  test('appends the unchanged interactive tail after a removals-only diff', () => {
+    const output = formatPress({
+      message: 'Tapped @e4 (100, 200)',
+      x: 100,
+      y: 200,
+      settle: {
+        settled: true,
+        waitedMs: 500,
+        diff: {
+          summary: { additions: 0, removals: 2, unchanged: 3 },
+          lines: [
+            { kind: 'removed', text: '@e4 [button] "OK"' },
+            { kind: 'removed', text: '@e5 [text] "Are you sure?"' },
+          ],
+        },
+        tail: [
+          { ref: 'e9', role: 'button', label: 'Add to cart' },
+          { ref: 'e10', role: 'button' },
+        ],
+      },
+    });
+
+    expect(output.text).toBe(
+      [
+        'Tapped @e4 (100, 200)',
+        'settled after 500ms: +0 -2 (~3 unchanged)',
+        '- @e4 [button] "OK"',
+        '- @e5 [text] "Are you sure?"',
+        'unchanged interactive (2):',
+        '= @e9 [button] "Add to cart"',
+        '= @e10 [button]',
+      ].join('\n'),
+    );
+  });
+
+  test('marks the unchanged interactive tail as truncated', () => {
+    const output = formatPress({
+      message: 'Tapped @e4 (100, 200)',
+      x: 100,
+      y: 200,
+      settle: {
+        settled: true,
+        waitedMs: 500,
+        diff: {
+          summary: { additions: 0, removals: 1, unchanged: 20 },
+          lines: [{ kind: 'removed', text: '@e4 [button] "OK"' }],
+        },
+        tail: [{ ref: 'e9', role: 'button', label: 'Add to cart' }],
+        tailTruncated: true,
+      },
+    });
+
+    expect(output.text).toBe(
+      [
+        'Tapped @e4 (100, 200)',
+        'settled after 500ms: +0 -1 (~20 unchanged)',
+        '- @e4 [button] "OK"',
+        'unchanged interactive (1):',
+        '= @e9 [button] "Add to cart"',
+        '… more interactive elements not shown, use snapshot -i',
+      ].join('\n'),
+    );
+  });
+
   test('prints not-settled verdict without a dangling diff summary', () => {
     const output = formatPress({
       message: 'Tapped (278, 817)',

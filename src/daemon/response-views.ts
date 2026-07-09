@@ -146,14 +146,16 @@ function selectorReadView(data: DaemonResponseData, level: ResponseLevel): Daemo
  * responses stay byte-identical at every level. The digest keeps the verdict
  * fields and the changed-line COUNTS (`diff.summary`) plus `refsGeneration`,
  * and drops the diff line texts — the changed-count summary is the digest
- * answer; the lines are the default-level payload. `full` returns today's
- * shape unchanged (nothing richer is computed yet).
+ * answer; the lines are the default-level payload. The unchanged-interactive
+ * `tail` (when present) is capped to the same DIGEST_REF_LIMIT as the other
+ * ref lists here. `full` returns today's shape unchanged (nothing richer is
+ * computed yet).
  */
 function interactionSettleView(data: DaemonResponseData, level: ResponseLevel): DaemonResponseData {
   if (level !== 'digest') return data;
   const settle = data.settle;
   if (!settle || typeof settle !== 'object' || Array.isArray(settle)) return data;
-  const { diff, ...rest } = settle as Record<string, unknown>;
+  const { diff, tail, ...rest } = settle as Record<string, unknown>;
   if (!diff || typeof diff !== 'object' || Array.isArray(diff)) return data;
   const diffRecord = diff as Record<string, unknown>;
   const summary = diffRecord.summary;
@@ -163,6 +165,7 @@ function interactionSettleView(data: DaemonResponseData, level: ResponseLevel): 
     settle: {
       ...rest,
       ...(refs.length > 0 ? { refs } : {}),
+      ...(Array.isArray(tail) && tail.length > 0 ? { tail: tail.slice(0, DIGEST_REF_LIMIT) } : {}),
       diff: { summary },
     },
   };

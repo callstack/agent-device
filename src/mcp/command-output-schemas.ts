@@ -161,6 +161,20 @@ const settleObservationSchema: JsonSchema = objectSchema(
       ['summary', 'lines'],
       'Settled diff vs the pre-action tree (changed lines only).',
     ),
+    tail: {
+      type: 'array',
+      description:
+        'Unchanged interactive refs tail: still-present, actionable elements from the settled tree, attached only when diff carries zero added-line refs (a modal-dismiss/toast-only diff).',
+      items: objectSchema(
+        {
+          ref: stringSchema('Plain ref body (e12) minted from the stored settled tree.'),
+          role: stringSchema(),
+          label: stringSchema(),
+        },
+        ['ref', 'role'],
+      ),
+    },
+    tailTruncated: booleanSchema('Present (true) when tail candidates exceeded the response cap.'),
     hint: stringSchema(),
   },
   ['settled', 'waitedMs', 'captures', 'quietMs', 'timeoutMs'],

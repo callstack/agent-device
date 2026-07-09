@@ -131,6 +131,8 @@ type SettlePayload = {
     summary: { additions: number; removals: number; unchanged: number };
     lines: Array<{ kind: string; text: string; ref?: string }>;
   };
+  tail?: Array<{ ref: string; role: string; label?: string }>;
+  tailTruncated?: boolean;
   hint?: string;
 };
 
@@ -190,6 +192,72 @@ test('press --settle responds with the settled diff, refsGeneration, and clears 
   expect(settle.refsGeneration).toBe(session.snapshotGeneration);
   // The settled tree became the stored session snapshot.
   expect(session.snapshot?.nodes.some((node) => node.label === 'Welcome!')).toBe(true);
+});
+
+const MODAL_BEFORE_NODES = [
+  { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
+  {
+    index: 1,
+    parentIndex: 0,
+    type: 'Button',
+    label: 'Continue',
+    rect: { x: 10, y: 20, width: 120, height: 44 },
+    hittable: true,
+  },
+  {
+    index: 2,
+    parentIndex: 0,
+    type: 'Button',
+    label: 'OK',
+    rect: { x: 10, y: 100, width: 120, height: 44 },
+    hittable: true,
+  },
+];
+
+// Modal dismissed: Continue survives unchanged, OK is gone — a removals-only
+// diff with nothing added.
+const MODAL_AFTER_NODES = [
+  { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
+  {
+    index: 1,
+    parentIndex: 0,
+    type: 'Button',
+    label: 'Continue',
+    rect: { x: 10, y: 20, width: 120, height: 44 },
+    hittable: true,
+  },
+];
+
+test('press --settle on a removals-only diff attaches the unchanged interactive tail at the diff generation', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'settle-tail';
+  seedSession(sessionName, sessionStore);
+  mockCommandDispatch({
+    snapshots: [MODAL_BEFORE_NODES, MODAL_AFTER_NODES, MODAL_AFTER_NODES],
+  });
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'press',
+      positionals: ['label=OK'],
+      flags: { ...SETTLE_FLAGS },
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  const data = expectOkData(response);
+  const settle = data.settle as SettlePayload;
+  expect(settle.diff?.summary).toEqual({ additions: 0, removals: 1, unchanged: 2 });
+  expect(settle.diff?.lines.some((line) => line.kind === 'added')).toBe(false);
+  expect(settle.tail).toEqual([{ ref: 'e2', role: 'button', label: 'Continue' }]);
+  // Same generation as the diff: the tail rides the settled tree that was
+  // just stored as the session snapshot.
+  const session = sessionStore.get(sessionName) as SessionState;
+  expect(settle.refsGeneration).toBe(session.snapshotGeneration);
 });
 
 test('press --settle keeps the stale-refs input warning while re-issuing fresh refs', async () => {

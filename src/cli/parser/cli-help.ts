@@ -223,7 +223,7 @@ Snapshots and refs:
   Anti-pattern: snapshot -i followed by snapshot -i | grep ..., or adding 2>/dev/null | jq ... before reading the raw command output.
   Refs from the first snapshot remain valid until you press, click, fill, type, scroll, go back, wait for async UI, or otherwise change app state.
   Pinned refs (@e12~s4, generation from refsGeneration or settle.refsGeneration) get exact staleness warnings instead of the coarse tree-changed one; plain refs stay valid input.
-  After a mutation, prefer a known selector/label directly (for example press 'label="Send"') because interaction commands refresh interactive state internally. If you need to discover a new control not shown by settle, use snapshot -i, or snapshot -i -s "Composer" when a stable container label/id can scope the refresh.
+  After a mutation, prefer a known selector/label directly (for example press 'label="Send"') because interaction commands refresh interactive state internally. A settled diff with no added refs (for example a modal dismiss) also lists an "unchanged interactive" tail of still-present refs, so check that before falling back. If you need to discover a new control not shown by settle or its tail, use snapshot -i, or snapshot -i -s "Composer" when a stable container label/id can scope the refresh.
   If typing/fill opened the keyboard or changed layout and the next target has no stable selector, run snapshot -i, use the fresh ref, then verify with wait/find or diff snapshot -i.
   For a targeted query, use find/get/is. If you truly need the full tree again, pass --force-full.
   Off-screen summaries are scroll hints; use scroll, not swipe, then snapshot -i.

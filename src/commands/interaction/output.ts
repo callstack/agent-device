@@ -62,6 +62,8 @@ type SettleTextView = {
     lines?: Array<{ kind?: string; text?: string }>;
     truncated?: boolean;
   };
+  tail?: Array<{ ref?: string; role?: string; label?: string }>;
+  tailTruncated?: boolean;
 };
 
 /**
@@ -72,7 +74,11 @@ type SettleTextView = {
 function formatSettleText(settle: unknown): string {
   if (!settle || typeof settle !== 'object') return '';
   const view = settle as SettleTextView;
-  const parts = [formatSettleVerdict(view), ...formatSettleDiffLines(view.diff)];
+  const parts = [
+    formatSettleVerdict(view),
+    ...formatSettleDiffLines(view.diff),
+    ...formatSettleTailLines(view),
+  ];
   if (view.hint) parts.push(`hint: ${view.hint}`);
   return `\n${parts.join('\n')}`;
 }
@@ -82,6 +88,23 @@ function formatSettleDiffLines(diff: SettleTextView['diff']): string[] {
     (line) => `${line.kind === 'removed' ? '-' : '+'} ${line.text ?? ''}`,
   );
   if (diff?.truncated) lines.push('… changed lines truncated');
+  return lines;
+}
+
+// Unchanged interactive tail: only present when the diff's added lines
+// carried zero refs (modal-dismiss/toast-only diff), so the settled tree's
+// remaining actionable elements would otherwise be invisible.
+function formatSettleTailLines(view: SettleTextView): string[] {
+  const tail = view.tail ?? [];
+  if (tail.length === 0) return [];
+  const lines = [`unchanged interactive (${tail.length}):`];
+  for (const entry of tail) {
+    const label = entry.label ? ` "${entry.label}"` : '';
+    lines.push(`= @${entry.ref ?? ''} [${entry.role ?? ''}]${label}`);
+  }
+  if (view.tailTruncated) {
+    lines.push('… more interactive elements not shown, use snapshot -i');
+  }
   return lines;
 }
 

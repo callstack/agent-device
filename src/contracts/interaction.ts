@@ -90,6 +90,16 @@ export type SettleDiffLine = {
 };
 
 /**
+ * One still-present, actionable element on the settled tree, surfaced by the
+ * unchanged-interactive tail (see `SettleObservation.tail`).
+ */
+export type SettleTailEntry = {
+  ref: string;
+  role: string;
+  label?: string;
+};
+
+/**
  * Opt-in (`--settle`, #1101) post-action settled observation for mutating
  * interaction commands. After the action, the daemon re-captures the
  * interactive tree with `wait stable`'s quiet-window semantics and returns the
@@ -138,6 +148,22 @@ export type SettleObservation = {
     /** Present (true) when lines were capped to the response bound. */
     truncated?: boolean;
   };
+  /**
+   * Unchanged interactive refs tail: benchmarks (July 2026) showed 27% of
+   * `--settle` actions were followed by a fallback `snapshot -i` because a
+   * change-only diff omits refs for elements that did not change — after a
+   * modal dismiss the diff shows only removals, and the next button to press
+   * (already on screen, untouched) is absent from the response. `tail` lists
+   * the settled tree's remaining hittable, uncovered interactive elements so
+   * the response stays actionable without that extra round trip. Attached
+   * ONLY when `diff` carries zero added-line refs (the modal-dismiss/
+   * toast-only signature) — a diff with fresh added refs already hands the
+   * next target, so the tail would be pure byte cost. Refs already present on
+   * `diff`'s added lines are excluded. Capped; `tailTruncated` marks when
+   * candidates exceeded the cap.
+   */
+  tail?: SettleTailEntry[];
+  tailTruncated?: true;
   hint?: string;
 };
 
