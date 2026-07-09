@@ -169,9 +169,6 @@ async function maybeInvokeMaestroDirectionalSwipePreset(params: {
   const [mode, direction, durationMs] = params.positionals;
   if (mode !== 'direction') return undefined;
   const platform = readMaestroSelectorPlatform(params.baseReq.flags);
-  if (platform === 'android' && (direction === 'up' || direction === 'down')) {
-    return await invokeAndroidVerticalDirectionalScreenSwipe(params, direction, durationMs);
-  }
   if (direction !== 'left' && direction !== 'right') return undefined;
   if (platform === 'android') return undefined;
   return await params.invoke({
@@ -179,27 +176,6 @@ async function maybeInvokeMaestroDirectionalSwipePreset(params: {
     command: 'gesture',
     positionals: ['swipe', direction, ...(durationMs ? [durationMs] : [])],
   });
-}
-
-async function invokeAndroidVerticalDirectionalScreenSwipe(
-  params: {
-    baseReq: ReplayBaseRequest;
-    invoke: MaestroRuntimeInvoke;
-  },
-  direction: 'up' | 'down',
-  durationMs: string | undefined,
-): Promise<DaemonResponse> {
-  const scrollDirection = direction === 'up' ? 'down' : 'up';
-  const response = await params.invoke({
-    ...params.baseReq,
-    command: 'scroll',
-    positionals: [scrollDirection, '0.6'],
-    flags: {
-      ...params.baseReq.flags,
-      ...(durationMs ? { durationMs: Number(durationMs) } : {}),
-    },
-  });
-  return response;
 }
 
 export async function invokeMaestroTapOn(params: MaestroTapOnParams): Promise<DaemonResponse> {
@@ -356,11 +332,12 @@ function buildMaestroHorizontalDirectionalScreenSwipe(
   durationMs: string | undefined,
 ): MaestroScreenSwipeResolution {
   const [startX, endX] = direction === 'left' ? [85, 15] : [15, 85];
-  const marginPx = maestroPercentSwipeMarginPx(platform, frame, startX, 50, endX, 50);
+  const y = maestroHorizontalContentSwipeLanePercent(platform, startX, 50, endX, 50) ?? 50;
+  const marginPx = maestroPercentSwipeMarginPx(platform, frame, startX, y, endX, y);
   return {
     ok: true,
-    start: pointFromPercent(frame, startX, 50, { marginPx }),
-    end: pointFromPercent(frame, endX, 50, { marginPx }),
+    start: pointFromPercent(frame, startX, y, { marginPx }),
+    end: pointFromPercent(frame, endX, y, { marginPx }),
     durationMs,
   };
 }
@@ -400,13 +377,28 @@ function resolvePercentScreenSwipe(
     };
   }
   const [x1, y1, x2, y2] = values as [number, number, number, number];
-  const marginPx = maestroPercentSwipeMarginPx(platform, frame, x1, y1, x2, y2);
+  const horizontalLaneY = maestroHorizontalContentSwipeLanePercent(platform, x1, y1, x2, y2);
+  const [startLaneY, endLaneY] =
+    horizontalLaneY === undefined ? [y1, y2] : [horizontalLaneY, horizontalLaneY];
+  const marginPx = maestroPercentSwipeMarginPx(platform, frame, x1, startLaneY, x2, endLaneY);
   return {
     ok: true,
-    start: pointFromPercent(frame, x1, y1, { marginPx }),
-    end: pointFromPercent(frame, x2, y2, { marginPx }),
+    start: pointFromPercent(frame, x1, startLaneY, { marginPx }),
+    end: pointFromPercent(frame, x2, endLaneY, { marginPx }),
     durationMs,
   };
+}
+
+function maestroHorizontalContentSwipeLanePercent(
+  platform: string,
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+): number | undefined {
+  if (platform !== 'android') return undefined;
+  if (y1 !== y2 || Math.abs(x2 - x1) < 30) return undefined;
+  return 65;
 }
 
 function maestroPercentSwipeMarginPx(

@@ -16,6 +16,12 @@ import { SessionStore } from '../../../src/daemon/session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../../../src/daemon/types.ts';
 
 const PROVIDER_SCENARIO_TOKEN = 'provider-scenario-token';
+const PROVIDER_SCENARIO_TEMP_REMOVE_OPTIONS = {
+  recursive: true,
+  force: true,
+  maxRetries: 5,
+  retryDelay: 50,
+} as const;
 
 export type ProviderScenarioRpcResult = { statusCode: number; json: any };
 
@@ -77,7 +83,7 @@ export async function createProviderScenarioHarness(
     session: (name = 'default') => sessionStore.get(name),
     setSession: (name, session) => sessionStore.set(name, session),
     close: async () => {
-      fs.rmSync(sessionDir, { recursive: true, force: true });
+      removeProviderScenarioTempDir(sessionDir);
     },
   };
 }
@@ -111,8 +117,12 @@ export async function withProviderScenarioTempDir<TResult>(
   try {
     return await run(dir);
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    removeProviderScenarioTempDir(dir);
   }
+}
+
+function removeProviderScenarioTempDir(dir: string): void {
+  fs.rmSync(dir, PROVIDER_SCENARIO_TEMP_REMOVE_OPTIONS);
 }
 
 export function restoreEnv(key: string, previous: string | undefined): void {

@@ -1812,8 +1812,8 @@ test('runReplayScriptFile preserves Android Maestro horizontal screen swipe lane
     calls.map((call) => [call.command, call.positionals]),
     [
       ['snapshot', []],
-      ['swipe', ['340', '400', '60', '400', '300']],
-      ['swipe', ['360', '400', '40', '400', '300']],
+      ['swipe', ['340', '520', '60', '520', '300']],
+      ['swipe', ['360', '520', '40', '520', '300']],
     ],
   );
 });

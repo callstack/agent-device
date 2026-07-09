@@ -2,9 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export function readVersion(): string {
+export function readVersion(root: string = findProjectRoot()): string {
   try {
-    const root = findProjectRoot();
     const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')) as {
       version?: string;
     };

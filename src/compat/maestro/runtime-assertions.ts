@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getSnapshotReferenceFrame } from '../../daemon/touch-reference-frame.ts';
-import { parseSelectorChain } from '../../daemon/selectors.ts';
+import { tryParseSelectorChain } from '../../daemon/selectors.ts';
 import type { DaemonResponse } from '../../daemon/types.ts';
 import type { DaemonFailureResponse } from '../../daemon/handlers/response.ts';
 import type { ReplayVarScope } from '../../replay/vars.ts';
@@ -507,7 +507,9 @@ async function readMaestroVisibilitySample(
 ): Promise<MaestroVisibilitySample> {
   const response = await captureMaestroSnapshot(params);
   const sample = readMaestroVisibilitySampleFromResponse(params, selector, command, response);
-  if (!shouldRetryAndroidRawVisibilitySample(params.baseReq, selector, sample)) return sample;
+  if (!shouldRetryAndroidRawVisibilitySample(params.baseReq, selector, command, sample)) {
+    return sample;
+  }
 
   const rawResponse = await captureMaestroSnapshot({ ...params, raw: true });
   return readMaestroVisibilitySampleFromResponse(params, selector, command, rawResponse);
@@ -536,13 +538,12 @@ function readMaestroVisibilitySampleFromResponse(
     getSnapshotReferenceFrame(snapshot),
   );
   if (!target.ok) {
+    const missKind = readAndroidMaestroMissKind(snapshot, selector, platform);
     return {
       visible: false,
       response: errorResponse('COMMAND_FAILED', target.message, { selector }),
       infrastructureFailure: false,
-      missKind: hasMaestroSelectorMatchInSnapshot(snapshot, selector, platform)
-        ? 'notVisible'
-        : 'missing',
+      ...(missKind ? { missKind } : {}),
       snapshot,
     };
   }
@@ -567,9 +568,11 @@ function readMaestroVisibilitySampleFromResponse(
 function shouldRetryAndroidRawVisibilitySample(
   baseReq: ReplayBaseRequest,
   selector: string,
+  command: string,
   sample: MaestroVisibilitySample,
 ): boolean {
   return (
+    command === 'assertVisible' &&
     baseReq.flags?.platform === 'android' &&
     !sample.visible &&
     !sample.infrastructureFailure &&
@@ -579,7 +582,8 @@ function shouldRetryAndroidRawVisibilitySample(
 }
 
 function isIdOnlyMaestroSelector(selector: string): boolean {
-  const chain = parseSelectorChain(selector);
+  const chain = tryParseSelectorChain(selector);
+  if (!chain) return false;
   return (
     chain.selectors.length > 0 &&
     chain.selectors.every(
@@ -588,6 +592,15 @@ function isIdOnlyMaestroSelector(selector: string): boolean {
         entry.terms.every((term) => term.key === 'id' && typeof term.value === 'string'),
     )
   );
+}
+
+function readAndroidMaestroMissKind(
+  snapshot: SnapshotState,
+  selector: string,
+  platform: string,
+): 'missing' | 'notVisible' | undefined {
+  if (platform !== 'android') return undefined;
+  return hasMaestroSelectorMatchInSnapshot(snapshot, selector, platform) ? 'notVisible' : 'missing';
 }
 
 function isAlreadyPastLoadingState(selector: string, snapshot: SnapshotState): boolean {

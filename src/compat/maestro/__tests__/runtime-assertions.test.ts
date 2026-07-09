@@ -404,10 +404,10 @@ test('invokeMaestroAssertVisible does not retry stale Android taps after swipes'
   assert.equal(response.ok, false);
   assert.deepEqual(calls, [
     ['snapshot', []],
-    ['swipe', ['332', '422', '59', '422', '300']],
+    ['swipe', ['332', '549', '59', '549', '300']],
     ['wait', ['What is Lorem Ipsum?', '2000']],
     ['snapshot', []],
-    ['swipe', ['332', '422', '59', '422', '300']],
+    ['swipe', ['332', '549', '59', '549', '300']],
     ['wait', ['What is Lorem Ipsum?', '2000']],
     ['snapshot', []],
   ]);
@@ -565,6 +565,33 @@ test('invokeMaestroAssertVisible retries Android id-only selectors with a raw sn
   assert.deepEqual(
     snapshotFlags.map((flags) => flags?.snapshotRaw),
     [undefined, true],
+  );
+});
+
+test('invokeMaestroAssertNotVisible does not use Android raw fallback for absent id-only selectors', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(0);
+
+  const snapshotFlags: Array<DaemonRequest['flags']> = [];
+  const response = await invokeMaestroAssertNotVisible({
+    baseReq: {
+      token: 't',
+      session: 's',
+      flags: { platform: 'android' },
+    },
+    positionals: ['id="archived-banner"', '0'],
+    invoke: async (req): Promise<DaemonResponse> => {
+      if (req.command === 'snapshot') {
+        snapshotFlags.push(req.flags);
+        return { ok: true, data: snapshot([]) };
+      }
+      return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
+    },
+  });
+
+  assert.equal(response.ok, true);
+  assert.deepEqual(
+    snapshotFlags.map((flags) => flags?.snapshotRaw),
+    [undefined],
   );
 });
 
