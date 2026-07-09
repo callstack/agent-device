@@ -197,6 +197,18 @@ export function resolveVisibleMaestroNodeFromSnapshot(
   };
 }
 
+export function hasMaestroSelectorMatchInSnapshot(
+  snapshot: SnapshotState,
+  selector: string,
+  platform: 'ios' | 'android',
+): boolean {
+  return (
+    findMaestroSelectorMatches(snapshot, selector, platform, {
+      allowLeadingCompositeLabelMatch: false,
+    }).length > 0
+  );
+}
+
 function filterVisibleMaestroMatches(params: {
   nodes: SnapshotState['nodes'];
   matches: SnapshotNode[];

@@ -104,13 +104,13 @@ public final class MultiTouchInstrumentation extends Instrumentation {
     int count = 0;
 
     try {
-      inject(
+      injectScheduledEvent(
           automation,
           motionEvent(downTime, eventTime, MotionEvent.ACTION_DOWN, activePointers),
           true);
       count += 1;
       eventTime += 8;
-      inject(
+      injectScheduledEvent(
           automation,
           motionEvent(
               downTime,
@@ -127,13 +127,16 @@ public final class MultiTouchInstrumentation extends Instrumentation {
         double t = (double) index / (double) frameCount;
         PointerPair frame = pointerPairAt(spec, t);
         eventTime = downTime + Math.round(spec.durationMs * t);
-        inject(automation, motionEvent(downTime, eventTime, MotionEvent.ACTION_MOVE, frame), false);
+        injectScheduledEvent(
+            automation,
+            motionEvent(downTime, eventTime, MotionEvent.ACTION_MOVE, frame),
+            false);
         count += 1;
         activePointers = frame;
       }
 
       eventTime = downTime + spec.durationMs;
-      inject(
+      injectScheduledEvent(
           automation,
           motionEvent(
               downTime,
@@ -143,7 +146,7 @@ public final class MultiTouchInstrumentation extends Instrumentation {
           true);
       count += 1;
       activePointers = end.firstOnly();
-      inject(
+      injectScheduledEvent(
           automation,
           motionEvent(downTime, eventTime + 8, MotionEvent.ACTION_UP, activePointers),
           true);
@@ -165,7 +168,7 @@ public final class MultiTouchInstrumentation extends Instrumentation {
     int count = 0;
 
     try {
-      inject(
+      injectScheduledEvent(
           automation,
           motionEvent(downTime, eventTime, MotionEvent.ACTION_DOWN, activePointer),
           true);
@@ -177,14 +180,17 @@ public final class MultiTouchInstrumentation extends Instrumentation {
         double t = (double) index / (double) frameCount;
         PointerPair frame = pointerPairAt(spec, t);
         eventTime = downTime + Math.round(spec.durationMs * t);
-        inject(automation, motionEvent(downTime, eventTime, MotionEvent.ACTION_MOVE, frame), false);
+        injectScheduledEvent(
+            automation,
+            motionEvent(downTime, eventTime, MotionEvent.ACTION_MOVE, frame),
+            false);
         count += 1;
         activePointer = frame;
       }
 
       eventTime = downTime + spec.durationMs;
       activePointer = pointerPairAt(spec, 1);
-      inject(
+      injectScheduledEvent(
           automation,
           motionEvent(downTime, eventTime, MotionEvent.ACTION_UP, activePointer),
           true);
@@ -198,8 +204,11 @@ public final class MultiTouchInstrumentation extends Instrumentation {
     }
   }
 
-  private static void inject(UiAutomation automation, MotionEvent event, boolean waitForDispatch) {
+  private static void injectScheduledEvent(
+      UiAutomation automation, MotionEvent event, boolean waitForDispatch) {
     try {
+      // Event timestamps alone do not pace UiAutomation injection; recognizers need real time.
+      sleepUntil(event.getEventTime());
       if (!automation.injectInputEvent(event, waitForDispatch)) {
         throw new IllegalStateException("injectInputEvent returned false");
       }
@@ -208,10 +217,20 @@ public final class MultiTouchInstrumentation extends Instrumentation {
     }
   }
 
+  private static void sleepUntil(long targetUptimeMs) {
+    long delayMs = targetUptimeMs - SystemClock.uptimeMillis();
+    if (delayMs > 0) {
+      SystemClock.sleep(delayMs);
+    }
+  }
+
   private static void injectCancel(
       UiAutomation automation, long downTime, long eventTime, PointerPair pair) {
     try {
-      inject(automation, motionEvent(downTime, eventTime, MotionEvent.ACTION_CANCEL, pair), true);
+      injectScheduledEvent(
+          automation,
+          motionEvent(downTime, eventTime, MotionEvent.ACTION_CANCEL, pair),
+          true);
     } catch (RuntimeException ignored) {
       // Best-effort cleanup; preserve the original injection failure.
     }

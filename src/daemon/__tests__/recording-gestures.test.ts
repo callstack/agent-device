@@ -75,6 +75,21 @@ test('scroll amount scales swipe travel for visualization', () => {
   assert.equal(event.amount, 0.6);
 });
 
+test('scroll augmentation preserves explicit duration for visualization', () => {
+  const session = makeSession();
+  const result = augmentScrollVisualizationResult(session, 'scroll', ['up', '0.6'], {
+    direction: 'up',
+    amount: 0.6,
+    durationMs: 100,
+  });
+
+  recordTouchVisualizationEvent(session, 'scroll', ['up', '0.6'], result, {}, 1_500);
+
+  const event = session.recording?.gestureEvents[0];
+  assert.equal(event?.kind, 'scroll');
+  assert.equal(event?.durationMs, 100);
+});
+
 test('scroll augmentation preserves explicit reference frame from platform result', () => {
   const session = makeSession();
   session.snapshot = undefined;

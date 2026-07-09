@@ -106,6 +106,7 @@ export function augmentScrollVisualizationResult(
 
   const amountValue = readNumber(merged.amount) ?? readNumber(positionals[1]);
   const pixelValue = readNumber(merged.pixels);
+  const durationMs = readNumber(merged.durationMs) ?? DEFAULT_SWIPE_DURATION_MS;
   const explicitTravel = readTravelCoordinates(merged, []);
   const explicitReferenceWidth = readNumber(merged.referenceWidth);
   const explicitReferenceHeight = readNumber(merged.referenceHeight);
@@ -135,7 +136,7 @@ export function augmentScrollVisualizationResult(
       ...(pixelValue !== undefined ? { pixels: pixelValue } : {}),
       referenceWidth: fallbackReferenceFrame.referenceWidth,
       referenceHeight: fallbackReferenceFrame.referenceHeight,
-      durationMs: DEFAULT_SWIPE_DURATION_MS,
+      durationMs,
     };
   }
 
@@ -158,7 +159,7 @@ export function augmentScrollVisualizationResult(
     ...(plan.pixels !== undefined ? { pixels: plan.pixels } : {}),
     referenceWidth: fallbackReferenceFrame.referenceWidth,
     referenceHeight: fallbackReferenceFrame.referenceHeight,
-    durationMs: DEFAULT_SWIPE_DURATION_MS,
+    durationMs,
   };
 }
 

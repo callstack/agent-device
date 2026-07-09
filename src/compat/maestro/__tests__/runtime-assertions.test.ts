@@ -53,7 +53,7 @@ test('invokeMaestroAssertVisible takes a terminal snapshot when the last miss st
   if (response.ok) {
     assert.ok(response.data);
     assert.equal(response.data.nodeLabel, 'Details is preloaded!');
-    assert.equal(response.data.waitedMs, 6600);
+    assert.equal(response.data.waitedMs, 6500);
   }
 });
 
@@ -404,10 +404,10 @@ test('invokeMaestroAssertVisible does not retry stale Android taps after swipes'
   assert.equal(response.ok, false);
   assert.deepEqual(calls, [
     ['snapshot', []],
-    ['swipe', ['332', '549', '59', '549', '300']],
+    ['swipe', ['332', '422', '59', '422', '300']],
     ['wait', ['What is Lorem Ipsum?', '2000']],
     ['snapshot', []],
-    ['swipe', ['332', '549', '59', '549', '300']],
+    ['swipe', ['332', '422', '59', '422', '300']],
     ['wait', ['What is Lorem Ipsum?', '2000']],
     ['snapshot', []],
   ]);
@@ -528,6 +528,44 @@ test('invokeMaestroAssertVisible does not use raw fallback for Android identifie
   assert.equal(response.ok, true);
   assert.equal(snapshotFlags.length, 1);
   assert.equal(snapshotFlags[0]?.snapshotRaw, undefined);
+});
+
+test('invokeMaestroAssertVisible retries Android id-only selectors with a raw snapshot after a presentation miss', async () => {
+  const snapshotFlags: Array<DaemonRequest['flags']> = [];
+  const response = await invokeMaestroAssertVisible({
+    baseReq: {
+      token: 't',
+      session: 's',
+      flags: { platform: 'android' },
+    },
+    positionals: ['id="material-top-bar-post-auth-screen"', '1000'],
+    invoke: async (req): Promise<DaemonResponse> => {
+      if (req.command === 'snapshot') {
+        snapshotFlags.push(req.flags);
+        return {
+          ok: true,
+          data: snapshot(
+            req.flags?.snapshotRaw === true
+              ? [
+                  node('', {
+                    type: 'android.view.ViewGroup',
+                    identifier: 'material-top-bar-post-auth-screen',
+                    rect: { x: 0, y: 240, width: 1080, height: 1900 },
+                  }),
+                ]
+              : [],
+          ),
+        };
+      }
+      return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
+    },
+  });
+
+  assert.equal(response.ok, true);
+  assert.deepEqual(
+    snapshotFlags.map((flags) => flags?.snapshotRaw),
+    [undefined, true],
+  );
 });
 
 test('invokeMaestroAssertVisible does not use Android raw fallback for generated text selectors', async () => {

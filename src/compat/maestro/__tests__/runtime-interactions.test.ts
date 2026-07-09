@@ -242,7 +242,7 @@ test('invokeMaestroTapOn clicks explicit React Native overlay controls directly'
   expect(clicks).toEqual([['355', '30']]);
 });
 
-test('invokeMaestroSwipeScreen maps Android horizontal directional swipes to content lane', async () => {
+test('invokeMaestroSwipeScreen maps Android horizontal directional swipes to Maestro midpoint lane', async () => {
   const swipes: string[][] = [];
   const response = await invokeMaestroSwipeScreen({
     baseReq: {
@@ -262,10 +262,10 @@ test('invokeMaestroSwipeScreen maps Android horizontal directional swipes to con
   });
 
   expect(response.ok).toBe(true);
-  expect(swipes).toEqual([['340', '520', '60', '520', '300']]);
+  expect(swipes).toEqual([['340', '400', '60', '400', '300']]);
 });
 
-test('invokeMaestroSwipeScreen mirrors Android horizontal directional content lane swipes', async () => {
+test('invokeMaestroSwipeScreen mirrors Android horizontal directional midpoint lane swipes', async () => {
   const swipes: string[][] = [];
   const response = await invokeMaestroSwipeScreen({
     baseReq: {
@@ -285,7 +285,54 @@ test('invokeMaestroSwipeScreen mirrors Android horizontal directional content la
   });
 
   expect(response.ok).toBe(true);
-  expect(swipes).toEqual([['60', '520', '340', '520', '300']]);
+  expect(swipes).toEqual([['60', '400', '340', '400', '300']]);
+});
+
+test('invokeMaestroSwipeScreen delegates Android vertical down swipes to physical-screen scroll', async () => {
+  const scrolls: Array<{ positionals: string[]; durationMs: number | undefined }> = [];
+  const response = await invokeMaestroSwipeScreen({
+    baseReq: {
+      token: 'test',
+      session: 'pager',
+      flags: { platform: 'android' },
+    },
+    positionals: ['direction', 'down', '100'],
+    invoke: async (req: DaemonRequest): Promise<DaemonResponse> => {
+      if (req.command === 'scroll') {
+        scrolls.push({
+          positionals: req.positionals ?? [],
+          durationMs: req.flags?.durationMs,
+        });
+        return { ok: true, data: {} };
+      }
+      return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
+    },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(scrolls).toEqual([{ positionals: ['up', '0.6'], durationMs: 100 }]);
+});
+
+test('invokeMaestroSwipeScreen delegates Android vertical up swipes to physical-screen scroll', async () => {
+  const scrolls: string[][] = [];
+  const response = await invokeMaestroSwipeScreen({
+    baseReq: {
+      token: 'test',
+      session: 'pager',
+      flags: { platform: 'android' },
+    },
+    positionals: ['direction', 'up'],
+    invoke: async (req: DaemonRequest): Promise<DaemonResponse> => {
+      if (req.command === 'scroll') {
+        scrolls.push(req.positionals ?? []);
+        return { ok: true, data: {} };
+      }
+      return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
+    },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(scrolls).toEqual([['down', '0.6']]);
 });
 
 test('invokeMaestroSwipeOn resolves visible non-interactive text from a regular snapshot', async () => {
@@ -394,7 +441,7 @@ test('invokeMaestroSwipeScreen keeps iOS horizontal percentage swipes away from 
   expect(swipes).toEqual([['60', '400', '340', '400', '300']]);
 });
 
-test('invokeMaestroSwipeScreen keeps Android horizontal percentage swipes on the content lane', async () => {
+test('invokeMaestroSwipeScreen preserves Android horizontal percentage swipe lanes', async () => {
   const swipes: string[][] = [];
   const response = await invokeMaestroSwipeScreen({
     baseReq: {
@@ -416,7 +463,7 @@ test('invokeMaestroSwipeScreen keeps Android horizontal percentage swipes on the
   });
 
   expect(response.ok).toBe(true);
-  expect(swipes).toEqual([['351', '390', '39', '390', '300']]);
+  expect(swipes).toEqual([['351', '300', '39', '300', '300']]);
 });
 
 test('invokeMaestroTapPointPercent shares percentage point geometry without clamping', async () => {
