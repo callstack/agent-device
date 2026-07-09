@@ -168,7 +168,7 @@ Targets:
 
 Recovery:
   Network/typeahead result missing: wait text "Expected result" or wait <selector>.
-  Keyboard visible over the next target: the on-screen keyboard does not block agent-device interactions. Do not dismiss the keyboard; press the next target directly.
+  Keyboard visible over the next target: the on-screen keyboard usually does not block presses, so press the target directly instead of dismissing. If the press fails or reports no visible effect, scroll the target into view or use keyboard enter when submission is wanted.
   Sparse or recovered accessibility snapshot: use screenshot as visual truth, leave the bad screen if needed, then retry snapshot -i.
   Non-hittable success hint: verify with the settled diff or snapshot; retarget by a better ref/selector if the UI did not change.`,
   },
@@ -250,7 +250,7 @@ Text entry:
     agent-device press 'id="product-note"'
     agent-device type "Handle with care" --delay-ms 80
   Empty replacement is not a supported clear-field command: do not plan fill <target> "" or fill <target> ''. Prefer a visible clear/reset control; if the app exposes none, report the tool gap instead of inventing a clear command.
-  Debounced field with no result selector: agent-device wait 1000. Keyboard read-only: keyboard status/get. The on-screen keyboard does not block agent-device interactions; do not dismiss it just to reach the next control, press that target directly instead.
+  Debounced field with no result selector: agent-device wait 1000. Keyboard read-only: keyboard status/get. The on-screen keyboard usually does not block agent-device interactions; press the next target directly instead of dismissing. If that press fails or reports no visible effect, scroll the target into view or use keyboard enter when submission is wanted.
   Only dismiss the keyboard when hiding it is the actual goal. To hide the keyboard, use keyboard dismiss. It taps safe controls like Done when available and verifies the keyboard closed. If it reports UNSUPPORTED_OPERATION, press a visible app control such as Done only when that is the intended fallback, or press the next target directly instead of retrying dismiss.
   Use plain fill/type first for ordinary login and form fields. If an iOS debounced or search-as-you-type field actually drops characters, or must receive incremental updates, retry with --delay-ms before trying clipboard paste; --delay-ms intentionally paces character entry.
   iOS Allow Paste prompt cannot be exercised under XCUITest. To test paste-driven app behavior, prefill first with agent-device clipboard write "some text"; test the system prompt manually.

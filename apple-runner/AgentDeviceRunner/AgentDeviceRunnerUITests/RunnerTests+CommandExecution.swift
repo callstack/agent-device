@@ -1413,7 +1413,7 @@ extension RunnerTests {
             code: "UNSUPPORTED_OPERATION",
             message: "Unable to dismiss the iOS keyboard without a safe native dismiss control",
             hint:
-              "The on-screen keyboard does not block agent-device interactions: snapshot refs and presses still work through it. Press the next target directly instead of retrying dismiss; use keyboard enter to press the return key if submission is what you actually need."
+              "The on-screen keyboard usually does not block agent-device interactions: press the next target directly instead of retrying dismiss. If that press fails or reports no visible effect, scroll the target into view, or use keyboard enter to press the return key when submission is wanted."
           )
         )
       }

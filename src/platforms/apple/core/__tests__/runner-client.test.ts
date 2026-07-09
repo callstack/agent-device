@@ -646,7 +646,7 @@ test('parseRunnerResponse preserves runner unsupported-operation codes', async (
 
 test('parseRunnerResponse surfaces the keyboard-dismiss hint to press the next target directly', async () => {
   const hint =
-    'The on-screen keyboard does not block agent-device interactions: snapshot refs and presses still work through it. Press the next target directly instead of retrying dismiss; use keyboard enter to press the return key if submission is what you actually need.';
+    'The on-screen keyboard usually does not block agent-device interactions: press the next target directly instead of retrying dismiss. If that press fails or reports no visible effect, scroll the target into view, or use keyboard enter to press the return key when submission is wanted.';
   const response = new Response(
     JSON.stringify({
       ok: false,
@@ -665,8 +665,12 @@ test('parseRunnerResponse surfaces the keyboard-dismiss hint to press the next t
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'UNSUPPORTED_OPERATION');
       assert.equal(error.details?.hint, hint);
-      assert.match(String(error.details?.hint), /does not block agent-device interactions/i);
+      assert.match(
+        String(error.details?.hint),
+        /usually does not block agent-device interactions/i,
+      );
       assert.match(String(error.details?.hint), /press the next target directly/i);
+      assert.match(String(error.details?.hint), /scroll the target into view/i);
       assert.match(String(error.details?.hint), /keyboard enter/i);
       return true;
     },
