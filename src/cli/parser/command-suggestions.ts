@@ -4,10 +4,14 @@ import { listCliCommandNames } from '../../command-catalog.ts';
  * Curated guess -> canonical command mapping for unknown CLI command names.
  *
  * Agents (and humans) commonly guess command names that don't exist under that
- * spelling, such as `relaunch` instead of `open <app> --relaunch`. Each entry's
- * `command` must resolve to a real, registered CLI command name; the
- * "alias suggestion targets exist" test in
- * `src/cli/parser/__tests__/command-suggestions.test.ts` fails the build on drift.
+ * spelling, such as `relaunch` instead of `open <app> --relaunch`. Keys must be
+ * lowercase (lookups lowercase the input token first). Each entry's `command`
+ * must resolve to a real, registered CLI command name, and each `example` must
+ * parse as a valid invocation of it; the registry-drift tests in
+ * `src/cli/parser/__tests__/command-suggestions.test.ts` fail the build on drift.
+ *
+ * `tap` is normalized to `press` as a true alias before the unknown-command
+ * check runs, so its entry here only catches case variants such as `TAP`.
  */
 type CommandAliasSuggestion = {
   /** Canonical command name this guess should have used. */
@@ -16,11 +20,14 @@ type CommandAliasSuggestion = {
   example: string;
 };
 
+const OPEN_RELAUNCH_EXAMPLE = 'open <app> --relaunch';
+
 const COMMAND_ALIAS_SUGGESTIONS: Record<string, CommandAliasSuggestion> = {
-  launch: { command: 'open', example: 'open <app> --relaunch' },
-  relaunch: { command: 'open', example: 'open <app> --relaunch' },
-  start: { command: 'open', example: 'open <app> --relaunch' },
-  restart: { command: 'open', example: 'open <app> --relaunch' },
+  launch: { command: 'open', example: OPEN_RELAUNCH_EXAMPLE },
+  relaunch: { command: 'open', example: OPEN_RELAUNCH_EXAMPLE },
+  start: { command: 'open', example: OPEN_RELAUNCH_EXAMPLE },
+  restart: { command: 'open', example: OPEN_RELAUNCH_EXAMPLE },
+  tap: { command: 'press', example: 'press' },
   touch: { command: 'press', example: 'press' },
   input: { command: 'fill', example: 'fill' },
   settext: { command: 'fill', example: 'fill' },
@@ -34,29 +41,42 @@ export function listCommandAliasSuggestionEntries(): Array<[string, CommandAlias
   return Object.entries(COMMAND_ALIAS_SUGGESTIONS);
 }
 
-function getCuratedCommandSuggestion(command: string): string | undefined {
-  return COMMAND_ALIAS_SUGGESTIONS[command]?.example;
-}
-
 const NEAREST_COMMAND_SUGGESTION_LIMIT = 3;
 
 /**
- * Nearest registered command names for an unrecognized command, ranked by a
- * prefix-aware edit distance. Names are derived from the live command
- * descriptor registry (via `listCliCommandNames`), never hardcoded, so the
- * suggestion list can't drift from what the CLI actually supports.
+ * Nearest registered command names for an unrecognized (lowercased) command
+ * token. Names are derived from the live command descriptor registry (via
+ * `listCliCommandNames`), never hardcoded, so the suggestion list can't drift
+ * from what the CLI actually supports.
+ *
+ * Precision rules: 1-2 character tokens never get a suggestion, exact prefix
+ * matches win outright, and otherwise only ties at the minimum edit distance
+ * are kept so a strong match is not bundled with a coincidental weak one.
  */
-export function getNearestCommandNames(command: string): string[] {
+function getNearestCommandNames(command: string): string[] {
+  if (command.length <= 2) return [];
   const names = listCliCommandNames();
+  const prefixMatches = names.filter((name) => name.startsWith(command));
+  if (prefixMatches.length > 0) {
+    return prefixMatches
+      .sort((a, b) => a.length - b.length || a.localeCompare(b))
+      .slice(0, NEAREST_COMMAND_SUGGESTION_LIMIT);
+  }
+  const threshold = nearestMatchThreshold(command);
   const scored = names
     .map((name) => ({ name, distance: commandNameDistance(command, name) }))
-    .filter((entry) => entry.distance <= nearestMatchThreshold(command))
-    .sort((a, b) => a.distance - b.distance || a.name.localeCompare(b.name));
-  return scored.slice(0, NEAREST_COMMAND_SUGGESTION_LIMIT).map((entry) => entry.name);
+    .filter((entry) => entry.distance <= threshold);
+  if (scored.length === 0) return [];
+  const best = Math.min(...scored.map((entry) => entry.distance));
+  return scored
+    .filter((entry) => entry.distance === best)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .slice(0, NEAREST_COMMAND_SUGGESTION_LIMIT)
+    .map((entry) => entry.name);
 }
 
 function nearestMatchThreshold(command: string): number {
-  if (command.length <= 3) return 1;
+  if (command.length < 4) return 1;
   if (command.length <= 6) return 2;
   return 3;
 }
@@ -91,12 +111,14 @@ function levenshteinDistance(a: string, b: string): number {
 /**
  * Builds the "Did you mean ...?" fragment for an unknown command, or
  * `undefined` when neither the curated alias map nor the nearest-name
- * fallback has a confident suggestion.
+ * fallback has a confident suggestion. Matching is case-insensitive so
+ * `RELAUNCH` and `Touch` get the same hint as their lowercase forms.
  */
 export function suggestCommandFor(command: string): string | undefined {
-  const curated = getCuratedCommandSuggestion(command);
+  const normalized = command.toLowerCase();
+  const curated = COMMAND_ALIAS_SUGGESTIONS[normalized]?.example;
   if (curated) return curated;
-  const nearest = getNearestCommandNames(command);
+  const nearest = getNearestCommandNames(normalized);
   if (nearest.length === 0) return undefined;
   if (nearest.length === 1) return nearest[0];
   return `one of: ${nearest.join(', ')}`;
@@ -121,7 +143,7 @@ const POSITIONAL_APP_FLAG_GUESSES = new Set([
 
 export function formatUnknownFlagMessage(token: string): string {
   if (POSITIONAL_APP_FLAG_GUESSES.has(token.toLowerCase())) {
-    return `Unknown flag: ${token}. The app or bundle id is a positional argument, e.g. open <app> --relaunch.`;
+    return `Unknown flag: ${token}. The app or bundle id is a positional argument, e.g. ${OPEN_RELAUNCH_EXAMPLE}.`;
   }
   return `Unknown flag: ${token}`;
 }

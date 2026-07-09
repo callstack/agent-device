@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { isKnownCliCommandName } from '../../../command-catalog.ts';
+import { keyboardCliReader } from '../../../commands/system/index.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { parseArgs } from '../args.ts';
+import type { CliFlags } from '../cli-flags.ts';
 import { listCommandAliasSuggestionEntries, suggestCommandFor } from '../command-suggestions.ts';
 
 // Guards against the curated alias map drifting to a command that no longer
@@ -19,6 +21,26 @@ test('every curated alias suggestion target resolves to a registered command', (
       `alias suggestion example for "${guess}" ("${suggestion.example}") must start with its command ("${suggestion.command}")`,
     );
   }
+});
+
+// Guards the full example shapes, not just the leading command token: every
+// example must parse as a valid invocation (placeholders substituted), so a
+// renamed flag (e.g. open --relaunch) or a dropped subcommand fails here.
+test('every curated alias suggestion example parses as a valid invocation', () => {
+  for (const [guess, suggestion] of listCommandAliasSuggestionEntries()) {
+    const tokens = suggestion.example
+      .split(' ')
+      .map((token) => (token.startsWith('<') ? 'com.example.app' : token));
+    assert.doesNotThrow(
+      () => parseArgs(tokens, { strictFlags: true }),
+      `alias suggestion example for "${guess}" ("${suggestion.example}") no longer parses`,
+    );
+  }
+});
+
+test('the keyboard dismiss example uses a real keyboard action', () => {
+  const baseFlags: CliFlags = { json: false, help: false, version: false };
+  assert.doesNotThrow(() => keyboardCliReader(['dismiss'], baseFlags));
 });
 
 test('relaunch suggests the canonical open --relaunch shape', () => {
@@ -87,6 +109,18 @@ test('screencap and capture suggest screenshot', () => {
   }
 });
 
+test('curated suggestions are case-insensitive', () => {
+  assert.equal(suggestCommandFor('RELAUNCH'), 'open <app> --relaunch');
+  assert.equal(suggestCommandFor('Relaunch'), 'open <app> --relaunch');
+  assert.equal(suggestCommandFor('TAP'), 'press');
+  assert.equal(suggestCommandFor('Touch'), 'press');
+});
+
+test('known command names in the wrong case suggest their lowercase form', () => {
+  assert.equal(suggestCommandFor('OPEN'), 'open');
+  assert.equal(suggestCommandFor('Press'), 'press');
+});
+
 test('nonsense command names fall back to nearest-name suggestion or a plain error, never a crash', () => {
   assert.throws(
     () => parseArgs(['frobnicate']),
@@ -104,6 +138,28 @@ test('near-miss typos of real commands are suggested via edit distance', () => {
       error instanceof AppError &&
       error.code === 'INVALID_ARGS' &&
       error.message === 'Unknown command: presss. Did you mean press?',
+  );
+});
+
+test('a prefix match wins outright instead of bundling weaker edit-distance ties', () => {
+  // Without the prefix rule, `clos` would suggest "one of: close, logs".
+  assert.throws(
+    () => parseArgs(['clos']),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.message === 'Unknown command: clos. Did you mean close?',
+  );
+});
+
+test('1-2 character tokens never get a nearest-name suggestion', () => {
+  // `ls` is one edit from `is`, but suggesting `is` would be a false positive.
+  assert.throws(
+    () => parseArgs(['ls']),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.message === 'Unknown command: ls',
   );
 });
 
