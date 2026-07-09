@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, beforeEach, test } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 import { IOS_SIMULATOR } from '../../__tests__/test-utils/index.ts';
 import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
@@ -24,6 +24,7 @@ beforeEach(() => {
 
 afterEach(() => {
   fs.rmSync(stateDir, { recursive: true, force: true });
+  vi.useRealTimers();
 });
 
 function makeSession(overrides: Partial<SessionState> = {}): SessionState {
@@ -92,6 +93,7 @@ test('isDaemonIdle requires no in-flight requests, no sessions, and no recording
 });
 
 test('idle reap fires after the idle window when nothing is using the daemon', async () => {
+  vi.useFakeTimers();
   let reaped = 0;
   const idleReap = createDaemonIdleReap({
     sessionStore,
@@ -103,12 +105,15 @@ test('idle reap fires after the idle window when nothing is using the daemon', a
   });
 
   idleReap.noteActivity();
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  await vi.advanceTimersByTimeAsync(39);
+  assert.equal(reaped, 0);
+  await vi.advanceTimersByTimeAsync(1);
 
   assert.equal(reaped, 1);
 });
 
 test('idle reap does not fire while a session is open', async () => {
+  vi.useFakeTimers();
   let reaped = 0;
   sessionStore.set('default', makeSession());
   const idleReap = createDaemonIdleReap({
@@ -123,12 +128,13 @@ test('idle reap does not fire while a session is open', async () => {
   // Simulates a quiet mid-session pause: activity settles, but the session
   // itself stays open the whole time.
   idleReap.noteActivity();
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  await vi.advanceTimersByTimeAsync(150);
 
   assert.equal(reaped, 0);
 });
 
 test('idle reap does not fire while a recording is active', async () => {
+  vi.useFakeTimers();
   let reaped = 0;
   sessionStore.set(
     'default',
@@ -154,12 +160,13 @@ test('idle reap does not fire while a recording is active', async () => {
   });
 
   idleReap.noteActivity();
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  await vi.advanceTimersByTimeAsync(150);
 
   assert.equal(reaped, 0);
 });
 
 test('idle reap does not fire while a request is in flight', async () => {
+  vi.useFakeTimers();
   let reaped = 0;
   let inFlightRequestCount = 1;
   const idleReap = createDaemonIdleReap({
@@ -172,16 +179,17 @@ test('idle reap does not fire while a request is in flight', async () => {
   });
 
   idleReap.noteActivity();
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  await vi.advanceTimersByTimeAsync(150);
   assert.equal(reaped, 0);
 
   inFlightRequestCount = 0;
   idleReap.noteActivity();
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  await vi.advanceTimersByTimeAsync(40);
   assert.equal(reaped, 1);
 });
 
 test('idle reap is disabled when the window is zero', async () => {
+  vi.useFakeTimers();
   let reaped = 0;
   const idleReap = createDaemonIdleReap({
     sessionStore,
@@ -193,12 +201,13 @@ test('idle reap is disabled when the window is zero', async () => {
   });
 
   idleReap.noteActivity();
-  await new Promise((resolve) => setTimeout(resolve, 100));
+  await vi.advanceTimersByTimeAsync(100);
 
   assert.equal(reaped, 0);
 });
 
 test('cancel prevents a scheduled reap from firing', async () => {
+  vi.useFakeTimers();
   let reaped = 0;
   const idleReap = createDaemonIdleReap({
     sessionStore,
@@ -211,7 +220,7 @@ test('cancel prevents a scheduled reap from firing', async () => {
 
   idleReap.noteActivity();
   idleReap.cancel();
-  await new Promise((resolve) => setTimeout(resolve, 150));
+  await vi.advanceTimersByTimeAsync(150);
 
   assert.equal(reaped, 0);
 });
