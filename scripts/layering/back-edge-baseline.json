@@ -1,0 +1,8 @@
+{
+  "client -> daemon-client": 1,
+  "commands -> cli": 7,
+  "commands -> client": 3,
+  "commands -> daemon-server": 2,
+  "platforms -> core": 16,
+  "platforms -> daemon-server": 7
+}

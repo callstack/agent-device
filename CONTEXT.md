@@ -72,7 +72,7 @@ The perfect-shape refactor is complete and merged. Its end-state:
   (`src/core/command-descriptor/registry.ts`) is the single declaration site from which the
   public/internal/local command catalog, capability matrix, daemon command registry, batch allowlist,
   timeout policy, MCP exposure list, capability-checked CLI command list, post-action observation
-  traits, and platform dispatch command set are *derived* by parity-tested projection. Command
+  traits, and platform dispatch command set are _derived_ by parity-tested projection. Command
   families still own surface metadata/CLI schema in `src/commands/**`, but descriptor/catalog
   coherence guards prevent surface names from drifting; system command facets now project their
   simple Node client command methods. Public Node-client result narrowing remains a deferred typed
@@ -94,6 +94,8 @@ The perfect-shape refactor is complete and merged. Its end-state:
 - Folder DAG + layering lint. `kernel`/`remote`/`metro`/`client`/`snapshot`/`screenshot-diff`/
   `replay`/`cli-parser`/`daemon-client`+`server`/`sdk` are arranged as an import-direction DAG
   (imports point down toward the kernel sink), enforced in CI by `scripts/layering/check.ts`.
+  The gate rejects production value-import cycles and ratchets the ranked target-spine back-edge
+  counts down-only in `scripts/layering/back-edge-baseline.json`.
 - Agent-cost. Responses carry a cost block and MCP `outputSchema`, rendered through a leveled
   `ResponseView`.
 
@@ -107,8 +109,8 @@ The refactor is substantively done; these follow-ups are intentionally deferred,
 - b.3 perf sampling body — all four `PlatformPlugin` daemon facets now route through the plugin
   (`appLog`, the `perf` support gate, `recording`, and `providers`; the last two via #1007). Only
   the `perf` sampling body (`buildPerfResponseData`) still branches in the daemon.
-- Strict DAG back-edge inversion — the layering lint enforces the achievable subset; the full
-  zero-back-edge DAG (e.g. `commands` → `cli`/`client`) is not done.
+- Strict DAG back-edge inversion — the layering lint prevents target-spine back-edge growth, but
+  the full zero-back-edge DAG (e.g. `commands` → `cli`/`client`) is not done.
 - Legacy alias drops — ~175 LOC of legacy aliases/barrels remain, gated to the next major.
 
 ## Selector Capture Reliability Contract

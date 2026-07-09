@@ -127,7 +127,8 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
 - interaction responses build only through `buildInteractionResponseData`: the construction-guard test
 - every command declares a timeout policy on its descriptor: the timeout-policy completeness test
 - TS/Swift rule parity: golden tables under `contracts/fixtures/` consumed by vitest and the gated XCTest
-- cross-command apple-leak guard, folder DAG/import lint, fallow (dead code, duplication, complexity)
+- cross-command apple-leak guard, folder DAG/import lint (including zero value-import cycles and
+  down-only target-spine back-edge counts), fallow (dead code, duplication, complexity)
 
 ## Hard Rules
 - Use process helpers from `src/utils/exec.ts` for TypeScript process execution: `runCmd`, `runCmdStreaming`, `runCmdSync`, `runCmdBackground`, and `runCmdDetached`. Do not import raw `spawn`/`spawnSync` outside `src/utils/exec.ts`; add or extend an exec helper instead. Plain `.mjs` packaging fixtures that cannot import TypeScript helpers should keep child-process usage local and prefer `execFile`/`execFileSync` over spawn.

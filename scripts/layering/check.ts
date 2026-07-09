@@ -1,49 +1,30 @@
 // Import-direction lint — enforces the folder DAG established by the Phase-5
 // folder moves (see CONTEXT.md, "Architecture: folder DAG + layering lint").
 //
-// This generalizes the former inline "Layering Guard" CI grep (which only
-// checked that src/daemon and src/platforms do not import src/commands) into a
-// structured check over the resolved import graph.
-//
 // Target DAG (imports point DOWN, toward the kernel sink):
 //   kernel ◄ platforms ◄ core ◄ commands ◄ { cli, client, daemon/server }
 //   client ◄ daemon/client     remote, metro ◄ daemon/client
 //   sdk = re-export barrels only
 //
-// That full DAG is a *target*. Several Phase-5 folder moves are still pending
-// (the client/remote/metro extraction, the daemon/server split, and the utils
-// dissolution), so the tree still contains legitimate back-edges between
-// folders that have not yet been separated (e.g. platforms→core, commands→cli,
-// utils→*). Enforcing the whole DAG today would require a mass import rewrite,
-// which Phase 5 explicitly defers. This lint therefore enforces only the three
-// invariants that the *completed* moves (kernel/, daemon/client/) already
-// guarantee and that hold green today:
-//
-//   R1  kernel is the dependency sink — nothing under src/kernel/ imports
-//       another zone, except a type-only re-export from src/contracts/ (the one
-//       documented kernel→contracts type seam).
-//   R2  the command surface is a floor — nothing below it (kernel, platforms,
-//       core, daemon) imports src/commands/. Generalizes the former guard,
-//       which covered only daemon + platforms.
-//   R3  platforms/ is statically imported only at the interactor seam
-//       (src/core/interactors/) and by the daemon server (src/daemon/ minus
-//       src/daemon/client/). Everywhere else must reach platforms via a dynamic
-//       import() or a type-only import, which preserves CLI cold-start.
-//
-// Dynamic `import('../platforms/*')` and `import type` are always allowed by R3.
-//
-// Run: node --experimental-strip-types scripts/layering/check.ts
+// The full zero-back-edge DAG remains a target. This gate enforces the three
+// completed-move rules, rejects all production value-import cycles, and
+// ratchets the ranked target-spine back-edges so existing debt can only shrink.
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-
-type ImportEdge = {
-  spec: string;
-  dynamic: boolean;
-  typeOnly: boolean;
-  line: number;
-};
+import { pathToFileURL } from 'node:url';
+import {
+  backEdgePair,
+  compareBackEdgeBaseline,
+  countBackEdges,
+  findValueImportCycles,
+  resolveImportEdges,
+  topFolder,
+  type BackEdgeBaseline,
+  type ImportEdge,
+  type ResolvedImportEdge,
+} from './model.ts';
 
 type EdgeContext = {
   file: string;
@@ -62,6 +43,7 @@ type Violation = {
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
 }).trim();
+const baselinePath = path.join(repoRoot, 'scripts/layering/back-edge-baseline.json');
 
 function listSourceFiles(): string[] {
   const out = execFileSync('git', ['ls-files', 'src/**/*.ts'], {
@@ -71,92 +53,25 @@ function listSourceFiles(): string[] {
   return out
     .split('\n')
     .filter(Boolean)
-    .filter((f) => !/(?:^|\/)__tests__\//.test(f) && !/\.test\.ts$/.test(f));
+    .filter((file) => !/(?:^|\/)__tests__\//.test(file) && !/\.test\.ts$/.test(file));
 }
 
-// The DAG node ("zone") a src-relative path belongs to: its first path segment
-// under src/, e.g. src/core/interactors/apple.ts → "core".
-function topFolder(rel: string): string {
-  const match = /^src\/([^/]+)\//.exec(rel);
-  return match ? match[1] : '(root)';
+function readSources(files: readonly string[]): Map<string, string> {
+  return new Map(files.map((file) => [file, fs.readFileSync(path.join(repoRoot, file), 'utf8')]));
 }
 
-function isCoreInteractor(rel: string): boolean {
-  return rel.startsWith('src/core/interactors/');
+function isCoreInteractor(file: string): boolean {
+  return file.startsWith('src/core/interactors/');
 }
 
-function isDaemonServer(rel: string): boolean {
-  return rel.startsWith('src/daemon/') && !rel.startsWith('src/daemon/client/');
+function isDaemonServer(file: string): boolean {
+  return file.startsWith('src/daemon/') && !file.startsWith('src/daemon/client/');
 }
 
-// sdk/ are the package's PUBLIC re-export barrels ("sdk = re-export barrels only").
-// They legitimately re-export platform symbols as part of the public API,
-// and are OFF the CLI cold path (not imported by bin.ts/cli), so exempting them
-// from R3 does not regress cold-start — they sit above the internal DAG R3 governs.
-function isSdkBarrel(rel: string): boolean {
-  return rel.startsWith('src/sdk/');
+function isSdkBarrel(file: string): boolean {
+  return file.startsWith('src/sdk/');
 }
 
-// ── Import extraction ───────────────────────────────────────────────────────
-
-function scanDynamicImports(line: string, lineNo: number): ImportEdge[] {
-  const edges: ImportEdge[] = [];
-  const re = /import\s*\(\s*['"]([^'"]+)['"]/g;
-  let match: RegExpExecArray | null;
-  while ((match = re.exec(line))) {
-    edges.push({ spec: match[1]!, dynamic: true, typeOnly: false, line: lineNo });
-  }
-  return edges;
-}
-
-function scanSideEffectImport(line: string, lineNo: number): ImportEdge | null {
-  const match = /^\s*import\s+['"]([^'"]+)['"]/.exec(line);
-  return match ? { spec: match[1]!, dynamic: false, typeOnly: false, line: lineNo } : null;
-}
-
-// A `from '...'` clause on lines[i] (possibly the tail of a multi-line import).
-// Walk back to the statement start to read the import/export keyword and whether
-// it is a whole-statement `type` import.
-function scanFromImport(lines: string[], i: number): ImportEdge | null {
-  const fromMatch = /(?:^|[\s;}])from\s+['"]([^'"]+)['"]/.exec(lines[i]!);
-  if (!fromMatch) return null;
-
-  let start = i;
-  while (start >= 0 && !/^\s*(?:import|export)\b/.test(lines[start]!)) {
-    start--;
-  }
-  if (start < 0) return null;
-
-  const typeOnly = /^\s*(?:import|export)\s+type\b/.test(lines[start]!);
-  return { spec: fromMatch[1]!, dynamic: false, typeOnly, line: start + 1 };
-}
-
-function parseImports(source: string): ImportEdge[] {
-  const lines = source.split('\n');
-  const edges: ImportEdge[] = [];
-  for (let i = 0; i < lines.length; i++) {
-    edges.push(...scanDynamicImports(lines[i]!, i + 1));
-    const sideEffect = scanSideEffectImport(lines[i]!, i + 1);
-    if (sideEffect) {
-      edges.push(sideEffect);
-      continue;
-    }
-    const fromImport = scanFromImport(lines, i);
-    if (fromImport) edges.push(fromImport);
-  }
-  return edges;
-}
-
-function resolveTargetZone(fromFile: string, spec: string): string | null {
-  if (!spec.startsWith('.')) return null; // bare / external specifier
-  const resolved = path.normalize(path.join(path.dirname(fromFile), spec));
-  if (!resolved.startsWith('src/')) return null; // escapes src/
-  return resolved;
-}
-
-// ── Rules ───────────────────────────────────────────────────────────────────
-
-// R1 — kernel is the dependency sink.
 function ruleKernelSink(ctx: EdgeContext): Violation | null {
   if (ctx.fromTop !== 'kernel') return null;
   if (ctx.toTop === 'contracts' && ctx.imp.typeOnly) return null;
@@ -170,8 +85,8 @@ function ruleKernelSink(ctx: EdgeContext): Violation | null {
   };
 }
 
-// R2 — the command surface is a floor.
 const BELOW_COMMANDS = new Set(['kernel', 'platforms', 'core', 'daemon']);
+
 function ruleCommandsFloor(ctx: EdgeContext): Violation | null {
   if (ctx.toTop !== 'commands' || !BELOW_COMMANDS.has(ctx.fromTop)) return null;
   return {
@@ -184,8 +99,6 @@ function ruleCommandsFloor(ctx: EdgeContext): Violation | null {
   };
 }
 
-// R3 — platforms/ static value imports only at the interactor seam and the
-// daemon server; everywhere else use a dynamic import() or a type-only import.
 function rulePlatformsSeam(ctx: EdgeContext): Violation | null {
   if (ctx.toTop !== 'platforms' || ctx.imp.dynamic || ctx.imp.typeOnly) return null;
   if (isCoreInteractor(ctx.file) || isDaemonServer(ctx.file) || isSdkBarrel(ctx.file)) return null;
@@ -202,16 +115,13 @@ function rulePlatformsSeam(ctx: EdgeContext): Violation | null {
 
 const RULES = [ruleKernelSink, ruleCommandsFloor, rulePlatformsSeam];
 
-function checkFile(file: string): Violation[] {
-  const source = fs.readFileSync(path.join(repoRoot, file), 'utf8');
-  const fromTop = topFolder(file);
+function checkLayeringRules(edges: readonly ResolvedImportEdge[]): Violation[] {
   const violations: Violation[] = [];
-  for (const imp of parseImports(source)) {
-    const target = resolveTargetZone(file, imp.spec);
-    if (target === null) continue;
-    const toTop = topFolder(target);
-    if (toTop === fromTop) continue; // intra-zone imports are always fine
-    const ctx: EdgeContext = { file, fromTop, toTop, imp };
+  for (const edge of edges) {
+    const fromTop = topFolder(edge.file);
+    const toTop = topFolder(edge.target);
+    if (fromTop === toTop) continue;
+    const ctx: EdgeContext = { file: edge.file, fromTop, toTop, imp: edge };
     for (const rule of RULES) {
       const violation = rule(ctx);
       if (violation) violations.push(violation);
@@ -220,31 +130,75 @@ function checkFile(file: string): Violation[] {
   return violations;
 }
 
-// ── Report ──────────────────────────────────────────────────────────────────
+function checkCycles(edges: readonly ResolvedImportEdge[]): Violation[] {
+  return findValueImportCycles(edges).map((cycle) => ({
+    rule: 'R4 value-import-cycle',
+    file: cycle[0]!,
+    line: 1,
+    message: `production value-import cycle: ${cycle.join(' -> ')}`,
+  }));
+}
 
-function report(files: string[], violations: Violation[]): number {
+function readBaseline(): BackEdgeBaseline {
+  if (!fs.existsSync(baselinePath)) {
+    throw new Error(
+      `Missing ${path.relative(repoRoot, baselinePath)}. Run pnpm check:layering:baseline.`,
+    );
+  }
+  return JSON.parse(fs.readFileSync(baselinePath, 'utf8')) as BackEdgeBaseline;
+}
+
+function writeBaseline(actual: BackEdgeBaseline): void {
+  fs.writeFileSync(baselinePath, `${JSON.stringify(actual, null, 2)}\n`);
+  process.stdout.write(
+    `Layering guard: updated ${path.relative(repoRoot, baselinePath)} with current back-edge counts.\n`,
+  );
+}
+
+function checkBackEdgeRatchet(
+  edges: readonly ResolvedImportEdge[],
+  actual: BackEdgeBaseline,
+): Violation[] {
+  const baseline = readBaseline();
+  return compareBackEdgeBaseline(baseline, actual).map((drift) => {
+    const representative = edges.find((edge) => backEdgePair(edge) === drift.pair);
+    const direction = drift.actual > drift.baseline ? 'grew' : 'shrunk';
+    return {
+      rule: 'R5 back-edge-ratchet',
+      file: representative?.file ?? path.relative(repoRoot, baselinePath),
+      line: representative?.line ?? 1,
+      message:
+        `${drift.pair} ${direction}: baseline ${drift.baseline}, current ${drift.actual}. ` +
+        (direction === 'grew'
+          ? `Remove the new up-edge; the target-spine debt may not increase.`
+          : `Regenerate the baseline so the improvement becomes the new ceiling.`),
+    };
+  });
+}
+
+function report(files: readonly string[], violations: readonly Violation[]): number {
   if (violations.length === 0) {
     process.stdout.write(
-      `Layering guard: OK — ${files.length} source files satisfy the import-direction DAG ` +
-        `(R1 kernel-sink, R2 commands-floor, R3 platforms-seam).\n`,
+      `Layering guard: OK — ${files.length} source files satisfy R1-R3, contain no ` +
+        `value-import cycles, and match the down-only back-edge baseline.\n`,
     );
     return 0;
   }
 
   const byRule = new Map<string, Violation[]>();
-  for (const v of violations) {
-    const bucket = byRule.get(v.rule) ?? [];
-    bucket.push(v);
-    byRule.set(v.rule, bucket);
+  for (const violation of violations) {
+    const group = byRule.get(violation.rule) ?? [];
+    group.push(violation);
+    byRule.set(violation.rule, group);
   }
 
-  process.stderr.write(`Layering guard: ${violations.length} import-direction violation(s)\n\n`);
+  process.stderr.write(`Layering guard: ${violations.length} violation(s)\n\n`);
   for (const [rule, group] of byRule) {
     process.stderr.write(`  [${rule}] ${group.length} violation(s):\n`);
-    for (const v of group) {
-      process.stderr.write(`    ${v.file}:${v.line} — ${v.message}\n`);
+    for (const violation of group) {
+      process.stderr.write(`    ${violation.file}:${violation.line} — ${violation.message}\n`);
       process.stderr.write(
-        `::error file=${v.file},line=${v.line},title=Layering drift (${v.rule})::${v.message}\n`,
+        `::error file=${violation.file},line=${violation.line},title=Layering drift (${violation.rule})::${violation.message}\n`,
       );
     }
     process.stderr.write('\n');
@@ -252,6 +206,20 @@ function report(files: string[], violations: Violation[]): number {
   return 1;
 }
 
-const sourceFiles = listSourceFiles();
-const allViolations = sourceFiles.flatMap(checkFile);
-process.exit(report(sourceFiles, allViolations));
+export function main(argv = process.argv.slice(2)): number {
+  const sourceFiles = listSourceFiles();
+  const edges = resolveImportEdges(readSources(sourceFiles));
+  const violations = [...checkLayeringRules(edges), ...checkCycles(edges)];
+  const actualBackEdges = countBackEdges(edges);
+  if (argv.includes('--update-baseline')) {
+    if (violations.length > 0) return report(sourceFiles, violations);
+    writeBaseline(actualBackEdges);
+  } else {
+    violations.push(...checkBackEdgeRatchet(edges, actualBackEdges));
+  }
+  return report(sourceFiles, violations);
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
+  process.exit(main());
+}

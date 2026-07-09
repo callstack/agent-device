@@ -101,12 +101,14 @@ jobs:
         with:
           install-deps: false
 
-      - name: Check import-direction DAG (kernel-sink, commands-floor, platforms-seam)
+      - name: Check import-direction DAG and ratchets
         # Generalizes the former inline commands/-import grep into a structured
         # import-direction lint over the resolved graph. See scripts/layering/check.ts
         # and CONTEXT.md (Architecture: folder DAG + layering lint). Invoked directly
         # (no deps needed) so the job stays fast and does not require a pnpm install.
-        run: node --experimental-strip-types scripts/layering/check.ts
+        run: |
+          node --experimental-strip-types --test scripts/layering/model.test.ts
+          node --experimental-strip-types scripts/layering/check.ts
 
   packaged-cli-node-22-12:
     name: Packaged CLI Node 22.12

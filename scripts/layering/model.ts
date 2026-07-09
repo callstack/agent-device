@@ -1,0 +1,268 @@
+import path from 'node:path';
+
+export type ImportEdge = {
+  spec: string;
+  dynamic: boolean;
+  typeOnly: boolean;
+  line: number;
+};
+
+export type ResolvedImportEdge = ImportEdge & {
+  file: string;
+  target: string;
+  fromZone: string;
+  toZone: string;
+};
+
+export type BackEdgeBaseline = Record<string, number>;
+
+export type BackEdgeDrift = {
+  pair: string;
+  baseline: number;
+  actual: number;
+};
+
+const TARGET_DAG_RANK = new Map([
+  ['kernel', 0],
+  ['platforms', 1],
+  ['core', 2],
+  ['commands', 3],
+  ['client', 4],
+  ['daemon-server', 4],
+  ['daemon-client', 5],
+  ['cli', 6],
+]);
+
+function scanDynamicImports(line: string, lineNo: number): ImportEdge[] {
+  const edges: ImportEdge[] = [];
+  const re = /import\s*\(\s*['"]([^'"]+)['"]/g;
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(line))) {
+    edges.push({ spec: match[1]!, dynamic: true, typeOnly: false, line: lineNo });
+  }
+  return edges;
+}
+
+function scanSideEffectImport(line: string, lineNo: number): ImportEdge | null {
+  const match = /^\s*import\s+['"]([^'"]+)['"]/.exec(line);
+  return match ? { spec: match[1]!, dynamic: false, typeOnly: false, line: lineNo } : null;
+}
+
+function statementIsTypeOnly(statement: string): boolean {
+  if (/^\s*(?:import|export)\s+type\b/.test(statement)) return true;
+  const named = /\{([\s\S]*?)\}/.exec(statement);
+  if (!named) return false;
+  const prefix = statement
+    .slice(0, named.index)
+    .replace(/^\s*(?:import|export)\s+/, '')
+    .trim()
+    .replace(/,$/, '')
+    .trim();
+  if (prefix.length > 0) return false;
+  const specifiers = named[1]!
+    .split(',')
+    .map((specifier) => specifier.trim())
+    .filter(Boolean);
+  return specifiers.length > 0 && specifiers.every((specifier) => /^type\b/.test(specifier));
+}
+
+function scanFromImport(lines: string[], index: number): ImportEdge | null {
+  const fromMatch = /(?:^|[\s;}])from\s+['"]([^'"]+)['"]/.exec(lines[index]!);
+  if (!fromMatch) return null;
+
+  let start = index;
+  while (start >= 0 && !/^\s*(?:import|export)\b/.test(lines[start]!)) start--;
+  if (start < 0) return null;
+
+  const statement = lines.slice(start, index + 1).join('\n');
+  return {
+    spec: fromMatch[1]!,
+    dynamic: false,
+    typeOnly: statementIsTypeOnly(statement),
+    line: start + 1,
+  };
+}
+
+export function parseImports(source: string): ImportEdge[] {
+  const lines = source.split('\n');
+  const edges: ImportEdge[] = [];
+  for (let index = 0; index < lines.length; index++) {
+    edges.push(...scanDynamicImports(lines[index]!, index + 1));
+    const sideEffect = scanSideEffectImport(lines[index]!, index + 1);
+    if (sideEffect) {
+      edges.push(sideEffect);
+      continue;
+    }
+    const fromImport = scanFromImport(lines, index);
+    if (fromImport) edges.push(fromImport);
+  }
+  return edges;
+}
+
+export function topFolder(file: string): string {
+  const match = /^src\/([^/]+)\//.exec(file);
+  return match ? match[1]! : '(root)';
+}
+
+function targetDagZone(file: string): string {
+  if (file.startsWith('src/daemon/client/')) return 'daemon-client';
+  if (file.startsWith('src/daemon/')) return 'daemon-server';
+  return topFolder(file);
+}
+
+function resolveTargetFile(
+  fromFile: string,
+  spec: string,
+  sourceFiles: ReadonlySet<string>,
+): string | null {
+  if (!spec.startsWith('.')) return null;
+  const resolved = path.posix.normalize(path.posix.join(path.posix.dirname(fromFile), spec));
+  if (!resolved.startsWith('src/')) return null;
+  const candidates = [
+    resolved,
+    resolved.replace(/\.js$/, '.ts'),
+    `${resolved}.ts`,
+    path.posix.join(resolved, 'index.ts'),
+  ];
+  return candidates.find((candidate) => sourceFiles.has(candidate)) ?? null;
+}
+
+export function resolveImportEdges(sources: ReadonlyMap<string, string>): ResolvedImportEdge[] {
+  const sourceFiles = new Set(sources.keys());
+  const edges: ResolvedImportEdge[] = [];
+  for (const [file, source] of sources) {
+    for (const edge of parseImports(source)) {
+      const target = resolveTargetFile(file, edge.spec, sourceFiles);
+      if (!target) continue;
+      edges.push({
+        ...edge,
+        file,
+        target,
+        fromZone: targetDagZone(file),
+        toZone: targetDagZone(target),
+      });
+    }
+  }
+  return edges;
+}
+
+export function findValueImportCycles(edges: readonly ResolvedImportEdge[]): string[][] {
+  const graph = new Map<string, Set<string>>();
+  for (const edge of edges) {
+    if (edge.dynamic || edge.typeOnly) continue;
+    const targets = graph.get(edge.file) ?? new Set<string>();
+    targets.add(edge.target);
+    graph.set(edge.file, targets);
+    if (!graph.has(edge.target)) graph.set(edge.target, new Set());
+  }
+
+  const indexByFile = new Map<string, number>();
+  const lowLinkByFile = new Map<string, number>();
+  const stack: string[] = [];
+  const onStack = new Set<string>();
+  const components: string[][] = [];
+  let nextIndex = 0;
+
+  function visit(file: string): void {
+    const index = nextIndex++;
+    indexByFile.set(file, index);
+    lowLinkByFile.set(file, index);
+    stack.push(file);
+    onStack.add(file);
+
+    for (const target of graph.get(file) ?? []) {
+      if (!indexByFile.has(target)) {
+        visit(target);
+        lowLinkByFile.set(file, Math.min(lowLinkByFile.get(file)!, lowLinkByFile.get(target)!));
+      } else if (onStack.has(target)) {
+        lowLinkByFile.set(file, Math.min(lowLinkByFile.get(file)!, indexByFile.get(target)!));
+      }
+    }
+
+    if (lowLinkByFile.get(file) !== indexByFile.get(file)) return;
+    const component: string[] = [];
+    let member: string;
+    do {
+      member = stack.pop()!;
+      onStack.delete(member);
+      component.push(member);
+    } while (member !== file);
+    const selfCycle = component.length === 1 && graph.get(file)?.has(file);
+    if (component.length > 1 || selfCycle) components.push(component);
+  }
+
+  for (const file of graph.keys()) {
+    if (!indexByFile.has(file)) visit(file);
+  }
+  return components
+    .map((component) => findCyclePath(component, graph))
+    .sort((left, right) => left[0]!.localeCompare(right[0]!));
+}
+
+function findCyclePath(
+  component: readonly string[],
+  graph: ReadonlyMap<string, Set<string>>,
+): string[] {
+  const members = new Set(component);
+  const visited = new Set<string>();
+  const active = new Map<string, number>();
+  const stack: string[] = [];
+
+  function visit(file: string): string[] | null {
+    visited.add(file);
+    active.set(file, stack.length);
+    stack.push(file);
+    for (const target of graph.get(file) ?? []) {
+      if (!members.has(target)) continue;
+      const activeIndex = active.get(target);
+      if (activeIndex !== undefined) return [...stack.slice(activeIndex), target];
+      if (!visited.has(target)) {
+        const path = visit(target);
+        if (path) return path;
+      }
+    }
+    stack.pop();
+    active.delete(file);
+    return null;
+  }
+
+  for (const file of [...component].sort()) {
+    if (visited.has(file)) continue;
+    const path = visit(file);
+    if (path) return path;
+  }
+  throw new Error(`Expected a cycle inside strongly connected component: ${component.join(', ')}`);
+}
+
+export function backEdgePair(edge: ResolvedImportEdge): string | null {
+  if (edge.dynamic || edge.typeOnly || edge.fromZone === edge.toZone) return null;
+  const fromRank = TARGET_DAG_RANK.get(edge.fromZone);
+  const toRank = TARGET_DAG_RANK.get(edge.toZone);
+  if (fromRank === undefined || toRank === undefined || fromRank >= toRank) return null;
+  return `${edge.fromZone} -> ${edge.toZone}`;
+}
+
+export function countBackEdges(edges: readonly ResolvedImportEdge[]): BackEdgeBaseline {
+  const counts: BackEdgeBaseline = {};
+  for (const edge of edges) {
+    const pair = backEdgePair(edge);
+    if (pair) counts[pair] = (counts[pair] ?? 0) + 1;
+  }
+  return Object.fromEntries(
+    Object.entries(counts).sort(([left], [right]) => left.localeCompare(right)),
+  );
+}
+
+export function compareBackEdgeBaseline(
+  baseline: BackEdgeBaseline,
+  actual: BackEdgeBaseline,
+): BackEdgeDrift[] {
+  const pairs = new Set([...Object.keys(baseline), ...Object.keys(actual)]);
+  return [...pairs].sort().flatMap((pair) => {
+    const baselineCount = baseline[pair] ?? 0;
+    const actualCount = actual[pair] ?? 0;
+    return baselineCount === actualCount
+      ? []
+      : [{ pair, baseline: baselineCount, actual: actualCount }];
+  });
+}
