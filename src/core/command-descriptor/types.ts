@@ -129,6 +129,7 @@ export type CommandDispatchFacet = {
  */
 export type CommandDescriptor = {
   name: string;
+  ownerFiles: readonly [string, ...string[]];
   daemon?: DaemonCommandTraits;
   capability?: CommandCapability;
   batchable: boolean;

@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
+import { DAEMON_COMMAND_ROUTES } from '../../core/command-descriptor/daemon-routes.ts';
 import { commandDescriptors } from '../../core/command-descriptor/registry.ts';
 import { explainCommand, formatCommandExplanation } from '../command-explain.ts';
 
@@ -73,7 +74,11 @@ describe('explainCommand', () => {
         command: 'web',
         catalog: { group: 'local-cli' },
         cli: { usage: 'web setup | web doctor' },
-        files: ['src/core/command-descriptor/registry.ts', 'src/utils/cli-command-overrides.ts'],
+        files: expect.arrayContaining([
+          'src/core/command-descriptor/registry.ts',
+          'src/utils/cli-command-overrides.ts',
+          'src/cli/commands/web.ts',
+        ]),
       },
     });
   });
@@ -148,10 +153,18 @@ describe('explainCommand table-driven coverage', () => {
       const result = explainCommand(descriptor.name, { fileExists });
       expect(result.found).toBe(true);
       if (!result.found) continue;
-      expect(result.explanation.files.length).toBeGreaterThan(0);
+      for (const ownerFile of descriptor.ownerFiles) {
+        expect(result.explanation.files).toContain(ownerFile);
+      }
       for (const file of result.explanation.files) {
         expect(fileExists(file), `${descriptor.name} owner missing: ${file}`).toBe(true);
       }
+    }
+  });
+
+  test('every daemon route declaration names an existing handler owner', () => {
+    for (const [route, definition] of Object.entries(DAEMON_COMMAND_ROUTES)) {
+      expect(fileExists(definition.ownerFile), `${route} route owner missing`).toBe(true);
     }
   });
 

@@ -119,7 +119,7 @@ export function parseRawArgs(argv: string[]): RawParsedArgs {
 function applyAliasImpliedFlags(rawCommand: string | null, flags: CliFlags): void {
   if (!rawCommand) return;
   for (const key of cliCommandAlias(rawCommand)?.impliedFlags ?? []) {
-    (flags as Record<string, unknown>)[key] = true;
+    flags[key] = true;
   }
 }
 

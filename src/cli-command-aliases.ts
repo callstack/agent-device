@@ -1,7 +1,13 @@
+import type { CliFlags } from './cli/parser/cli-flags.ts';
+
+type BooleanCliFlagKey = {
+  [Key in keyof CliFlags]-?: Exclude<CliFlags[Key], undefined> extends boolean ? Key : never;
+}[keyof CliFlags];
+
 export type CliCommandAlias = {
   alias: string;
   command: string;
-  impliedFlags?: readonly string[];
+  impliedFlags?: readonly BooleanCliFlagKey[];
 };
 
 const CLI_COMMAND_ALIASES: readonly CliCommandAlias[] = [

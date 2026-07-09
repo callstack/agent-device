@@ -1,7 +1,10 @@
 import { listCliCommandNames } from '../command-catalog.ts';
 import { cliAliasesForCommand, normalizeCliCommandAlias } from '../cli-command-aliases.ts';
 import { buildCommandUsage } from '../utils/cli-usage.ts';
-import type { DaemonCommandRoute } from '../daemon/daemon-command-registry.ts';
+import {
+  DAEMON_COMMAND_ROUTES,
+  type DaemonCommandRoute,
+} from '../core/command-descriptor/daemon-routes.ts';
 import { commandDescriptors, type Command } from '../core/command-descriptor/registry.ts';
 import type { CommandCapability } from '../core/capabilities.ts';
 import type { CommandTimeoutPolicy } from '../core/command-descriptor/types.ts';
@@ -14,7 +17,6 @@ import {
   type FlagKey,
 } from '../utils/command-schema.ts';
 import { commandFamilies, type CommandFamilyMetadata } from './family/registry.ts';
-import { commandOwnerFiles } from './command-owner-files.ts';
 
 export type CommandFlagExplanation = {
   key: FlagKey;
@@ -26,7 +28,7 @@ export type CommandAliasExplanation = {
   /** User-typed CLI token the parser rewrites to this command. */
   alias: string;
   /** Flags the alias implicitly sets (e.g. `relaunch` => `open --relaunch`). */
-  impliedFlags?: string[];
+  impliedFlags?: FlagKey[];
 };
 
 export type CommandExplanation = {
@@ -110,6 +112,7 @@ function buildCommandExplanation(
     ...(cliSchema ? { cli: describeCliSurface(descriptor.name, cliSchema) } : {}),
     files: commandFiles(
       descriptor.name,
+      descriptor.ownerFiles,
       family?.name,
       'daemon' in descriptor ? descriptor.daemon?.route : undefined,
       Boolean('capability' in descriptor && descriptor.capability),
@@ -296,19 +299,9 @@ function groupFlagDefinitions(): Map<FlagKey, FlagDefinition[]> {
   return result;
 }
 
-const DAEMON_ROUTE_OWNER_FILES: Record<DaemonCommandRoute, string> = {
-  lease: 'src/daemon/handlers/lease.ts',
-  session: 'src/daemon/handlers/session.ts',
-  snapshot: 'src/daemon/handlers/snapshot.ts',
-  find: 'src/daemon/handlers/find.ts',
-  interaction: 'src/daemon/handlers/interaction.ts',
-  reactNative: 'src/daemon/handlers/react-native.ts',
-  recordTrace: 'src/daemon/handlers/record-trace.ts',
-  generic: 'src/daemon/request-generic-dispatch.ts',
-};
-
 function commandFiles(
   command: string,
+  ownerFiles: readonly string[],
   family: string | undefined,
   daemonRoute: DaemonCommandRoute | undefined,
   hasCapability: boolean,
@@ -316,7 +309,6 @@ function commandFiles(
   fileExists: FileExists | undefined,
 ): string[] {
   const derived = ['src/core/command-descriptor/registry.ts'];
-  const commandOwners = commandOwnerFiles(command);
   const opportunistic: string[] = [];
   if (family) {
     derived.push(`src/commands/${family}/index.ts`);
@@ -327,11 +319,11 @@ function commandFiles(
   } else if (cliCommandNames.has(command)) {
     derived.push('src/utils/cli-command-overrides.ts');
   }
-  if (daemonRoute) derived.push(DAEMON_ROUTE_OWNER_FILES[daemonRoute]);
+  if (daemonRoute) derived.push(DAEMON_COMMAND_ROUTES[daemonRoute].ownerFile);
   if (hasDispatch) derived.push('src/core/dispatch.ts');
   if (hasCapability) derived.push('src/core/capabilities.ts');
   const present = fileExists ? opportunistic.filter(fileExists) : opportunistic;
-  return [...new Set([...derived, ...commandOwners, ...present])];
+  return [...new Set([...derived, ...ownerFiles, ...present])];
 }
 
 function formatFlagList(flags: readonly CommandFlagExplanation[]): string {
