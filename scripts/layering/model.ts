@@ -266,3 +266,30 @@ export function compareBackEdgeBaseline(
       : [{ pair, baseline: baselineCount, actual: actualCount }];
   });
 }
+
+export type BaselineRaise = {
+  pair: string;
+  base: number;
+  committed: number;
+};
+
+/**
+ * The committed baseline is the ratchet ceiling, but it is a hand-editable file:
+ * a PR could add a real back-edge and raise the committed number to match,
+ * passing `compareBackEdgeBaseline` (actual === committed) while quietly lifting
+ * the ceiling. Monotonicity closes that: the committed baseline may only shrink
+ * relative to the merge-base version. Decreases (ratchet-down) and unchanged
+ * pairs pass; any pair whose committed count exceeds the base — including a new
+ * zero-to-positive pair absent at the base — is a raise and fails.
+ */
+export function findBaselineRaises(
+  base: BackEdgeBaseline,
+  committed: BackEdgeBaseline,
+): BaselineRaise[] {
+  const pairs = new Set([...Object.keys(base), ...Object.keys(committed)]);
+  return [...pairs].sort().flatMap((pair) => {
+    const baseCount = base[pair] ?? 0;
+    const committedCount = committed[pair] ?? 0;
+    return committedCount > baseCount ? [{ pair, base: baseCount, committed: committedCount }] : [];
+  });
+}

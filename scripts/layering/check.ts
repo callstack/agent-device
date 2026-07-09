@@ -18,6 +18,7 @@ import {
   backEdgePair,
   compareBackEdgeBaseline,
   countBackEdges,
+  findBaselineRaises,
   findValueImportCycles,
   resolveImportEdges,
   topFolder,
@@ -45,8 +46,11 @@ const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
 }).trim();
 const baselinePath = path.join(repoRoot, 'scripts/layering/back-edge-baseline.json');
 
-function listSourceFiles(): string[] {
-  const out = execFileSync('git', ['ls-files', 'src/**/*.ts'], {
+export function listSourceFiles(): string[] {
+  // `src/**/*.ts` only matches nested files; root-level `src/*.ts` (e.g.
+  // src/cli.ts, src/command-catalog.ts) needs its own pathspec or it silently
+  // drops out of cycle/back-edge analysis.
+  const out = execFileSync('git', ['ls-files', 'src/*.ts', 'src/**/*.ts'], {
     cwd: repoRoot,
     encoding: 'utf8',
   });
@@ -155,6 +159,59 @@ function writeBaseline(actual: BackEdgeBaseline): void {
   );
 }
 
+// The committed baseline is the ratchet ceiling. Resolve the merge-base commit
+// so the ceiling itself can be checked for monotonicity — a PR must not raise a
+// number it is simultaneously being measured against. `--base <ref>` (wired in
+// CI, mirroring the Fallow job) is authoritative; locally we fall back to the
+// merge-base with origin/main, and if neither resolves we skip the check rather
+// than fail an offline run.
+function resolveBaseRef(argv: readonly string[]): string | null {
+  const index = argv.indexOf('--base');
+  const explicit = index >= 0 ? argv[index + 1] : process.env.LAYERING_BASE;
+  if (explicit && explicit.length > 0) return explicit;
+  try {
+    return execFileSync('git', ['merge-base', 'HEAD', 'origin/main'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+function readBaselineAtRef(ref: string): BackEdgeBaseline | null {
+  try {
+    const contents = execFileSync(
+      'git',
+      ['show', `${ref}:scripts/layering/back-edge-baseline.json`],
+      { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    return JSON.parse(contents) as BackEdgeBaseline;
+  } catch {
+    // The baseline did not exist at the base commit (first introduction), so
+    // there is no prior ceiling to enforce monotonicity against.
+    return null;
+  }
+}
+
+function checkBaselineMonotonic(argv: readonly string[]): Violation[] {
+  const committed = readBaseline();
+  const baseRef = resolveBaseRef(argv);
+  if (!baseRef) return [];
+  const base = readBaselineAtRef(baseRef);
+  if (!base) return [];
+  return findBaselineRaises(base, committed).map((raise) => ({
+    rule: 'R6 back-edge-ceiling',
+    file: path.relative(repoRoot, baselinePath),
+    line: 1,
+    message:
+      `${raise.pair} baseline raised: merge-base ${raise.base}, committed ${raise.committed}. ` +
+      `The down-only ratchet forbids lifting the ceiling; remove the new back-edge ` +
+      `instead of raising the baseline (decreases and unchanged pairs are allowed).`,
+  }));
+}
+
 function checkBackEdgeRatchet(
   edges: readonly ResolvedImportEdge[],
   actual: BackEdgeBaseline,
@@ -216,6 +273,7 @@ export function main(argv = process.argv.slice(2)): number {
     writeBaseline(actualBackEdges);
   } else {
     violations.push(...checkBackEdgeRatchet(edges, actualBackEdges));
+    violations.push(...checkBaselineMonotonic(argv));
   }
   return report(sourceFiles, violations);
 }

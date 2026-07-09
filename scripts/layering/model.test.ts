@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { listSourceFiles } from './check.ts';
 import {
   compareBackEdgeBaseline,
   countBackEdges,
+  findBaselineRaises,
   findValueImportCycles,
   parseImports,
   resolveImportEdges,
@@ -76,4 +78,34 @@ test('back-edge counts follow the documented target spine and drift in either di
   assert.deepEqual(compareBackEdgeBaseline({ ...actual, 'commands -> client': 1 }, actual), [
     { pair: 'commands -> client', baseline: 1, actual: 0 },
   ]);
+});
+
+test('findBaselineRaises flags a raised ceiling but permits decreases and unchanged pairs', () => {
+  const base = { 'platforms -> core': 16, 'commands -> cli': 7 };
+  // Raising an existing pair and introducing a new zero-to-positive pair both
+  // lift the ceiling; a decrease and an unchanged pair must stay silent.
+  assert.deepEqual(
+    findBaselineRaises(base, {
+      'platforms -> core': 17,
+      'commands -> cli': 5,
+      'commands -> client': 2,
+    }),
+    [
+      { pair: 'commands -> client', base: 0, committed: 2 },
+      { pair: 'platforms -> core', base: 16, committed: 17 },
+    ],
+  );
+  assert.deepEqual(findBaselineRaises(base, base), []);
+  assert.deepEqual(findBaselineRaises(base, { 'platforms -> core': 15, 'commands -> cli': 7 }), []);
+});
+
+test('listSourceFiles includes root-level src/*.ts production files', () => {
+  const files = new Set(listSourceFiles());
+  // Regression guard: `git ls-files 'src/**/*.ts'` omits direct children of
+  // src/, so these production modules must be pulled in by the extra pathspec.
+  for (const rootFile of ['src/cli.ts', 'src/command-catalog.ts', 'src/backend.ts']) {
+    assert.ok(files.has(rootFile), `expected ${rootFile} in analyzed source files`);
+  }
+  // Tests are still excluded, root-level ones included.
+  assert.ok(![...files].some((file) => file.endsWith('.test.ts')));
 });
