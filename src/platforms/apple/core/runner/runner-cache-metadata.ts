@@ -107,7 +107,7 @@ export function resolveExpectedRunnerCacheMetadata(
   const platformName = resolveRunnerPlatformName(device);
   return {
     schemaVersion: RUNNER_CACHE_SCHEMA_VERSION,
-    packageVersion: readVersion(),
+    packageVersion: readVersion(projectRoot),
     runnerSourceFingerprint: computeRunnerSourceFingerprint(projectRoot),
     ...resolveRunnerToolchainFingerprint(platformName, device.kind),
     platformName,
