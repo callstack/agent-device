@@ -58,7 +58,9 @@ describe('explainCommand', () => {
       },
     });
   });
+});
 
+describe('formatCommandExplanation', () => {
   test('suggests close descriptor names for unknown queries', () => {
     expect(explainCommand('longpres')).toEqual({
       found: false,

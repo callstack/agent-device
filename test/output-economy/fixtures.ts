@@ -3,7 +3,7 @@ import type { DaemonResponseData } from '../../src/daemon/types.ts';
 import { AppError } from '../../src/kernel/errors.ts';
 import { attachRefs, type RawSnapshotNode } from '../../src/kernel/snapshot.ts';
 
-export const SNAPSHOT_NODES: RawSnapshotNode[] = [
+const SNAPSHOT_NODES: RawSnapshotNode[] = [
   {
     index: 0,
     type: 'Window',

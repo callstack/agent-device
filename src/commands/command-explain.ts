@@ -52,8 +52,9 @@ export type CommandExplanationResult =
   | { found: false; query: string; suggestions: string[] };
 
 type FileExists = (repoRelativePath: string) => boolean;
+type CommandDescriptor = (typeof commandDescriptors)[number];
 
-const descriptorByName: ReadonlyMap<string, (typeof commandDescriptors)[number]> = new Map(
+const descriptorByName: ReadonlyMap<string, CommandDescriptor> = new Map(
   commandDescriptors.map((descriptor) => [descriptor.name, descriptor]),
 );
 const cliCommandNames = new Set<string>(listCliCommandNames());
@@ -67,58 +68,38 @@ export function explainCommand(
   if (!descriptor) {
     return { found: false, query, suggestions: suggestCommands(query) };
   }
+  return { found: true, explanation: buildCommandExplanation(descriptor, options.fileExists) };
+}
 
+function buildCommandExplanation(
+  descriptor: CommandDescriptor,
+  fileExists: FileExists | undefined,
+): CommandExplanation {
   const family = commandFamilies.find((candidate) =>
     candidate.metadata.some((metadata) => metadata.name === descriptor.name),
-  );
-  const metadata = family?.metadata.find(
-    (candidate): candidate is CommandFamilyMetadata => candidate.name === descriptor.name,
   );
   const cliSchema = cliCommandNames.has(descriptor.name)
     ? getCliCommandSchema(descriptor.name as Parameters<typeof getCliCommandSchema>[0])
     : undefined;
   const catalogKey = readCatalogKey(descriptor);
-
   return {
-    found: true,
-    explanation: {
-      command: descriptor.name,
-      aliases: catalogKey === descriptor.name ? [] : [catalogKey],
-      description:
-        metadata?.description ??
-        cliSchema?.helpDescription ??
-        `Internal command ${descriptor.name}`,
-      catalog: { group: descriptor.catalog.group, key: catalogKey },
-      ...(family ? { family: family.name } : {}),
-      ...('daemon' in descriptor && descriptor.daemon
-        ? {
-            daemon: {
-              route: descriptor.daemon.route,
-              traits: describeDaemonTraits(descriptor.daemon),
-            },
-          }
-        : {}),
-      ...('capability' in descriptor && descriptor.capability
-        ? { capability: descriptor.capability }
-        : {}),
-      exposure: {
-        batchable: descriptor.batchable,
-        mcp: descriptor.mcpExposed,
-        dispatch: 'dispatch' in descriptor && descriptor.dispatch !== undefined,
-        ...('postActionObservation' in descriptor && descriptor.postActionObservation
-          ? { postActionObservation: descriptor.postActionObservation }
-          : {}),
-      },
-      timeout: describeTimeoutPolicy(descriptor.timeoutPolicy),
-      ...(cliSchema ? { cli: describeCliSurface(descriptor.name, cliSchema) } : {}),
-      files: commandFiles(
-        descriptor.name,
-        family?.name,
-        'daemon' in descriptor ? descriptor.daemon?.route : undefined,
-        Boolean('capability' in descriptor && descriptor.capability),
-        options.fileExists,
-      ),
-    },
+    command: descriptor.name,
+    aliases: catalogKey === descriptor.name ? [] : [catalogKey],
+    description: describeCommandText(descriptor, family, cliSchema),
+    catalog: { group: descriptor.catalog.group, key: catalogKey },
+    ...(family ? { family: family.name } : {}),
+    ...describeCommandDaemon(descriptor),
+    ...describeCommandCapability(descriptor),
+    exposure: describeCommandExposure(descriptor),
+    timeout: describeTimeoutPolicy(descriptor.timeoutPolicy),
+    ...(cliSchema ? { cli: describeCliSurface(descriptor.name, cliSchema) } : {}),
+    files: commandFiles(
+      descriptor.name,
+      family?.name,
+      'daemon' in descriptor ? descriptor.daemon?.route : undefined,
+      Boolean('capability' in descriptor && descriptor.capability),
+      fileExists,
+    ),
   };
 }
 
@@ -147,16 +128,57 @@ export function formatCommandExplanation(explanation: CommandExplanation): strin
   return lines.join('\n');
 }
 
-function resolveDescriptor(query: string) {
+function resolveDescriptor(query: string): CommandDescriptor | undefined {
   const direct = descriptorByName.get(query);
   if (direct) return direct;
   return commandDescriptors.find((descriptor) => readCatalogKey(descriptor) === query);
 }
 
-function readCatalogKey(descriptor: (typeof commandDescriptors)[number]): string {
+function readCatalogKey(descriptor: CommandDescriptor): string {
   return 'key' in descriptor.catalog && descriptor.catalog.key
     ? descriptor.catalog.key
     : descriptor.name;
+}
+
+function describeCommandText(
+  descriptor: CommandDescriptor,
+  family: (typeof commandFamilies)[number] | undefined,
+  cliSchema: CommandSchema | undefined,
+): string {
+  const metadata = family?.metadata.find(
+    (candidate): candidate is CommandFamilyMetadata => candidate.name === descriptor.name,
+  );
+  return (
+    metadata?.description ?? cliSchema?.helpDescription ?? `Internal command ${descriptor.name}`
+  );
+}
+
+function describeCommandDaemon(descriptor: CommandDescriptor): Pick<CommandExplanation, 'daemon'> {
+  if (!('daemon' in descriptor) || !descriptor.daemon) return {};
+  return {
+    daemon: {
+      route: descriptor.daemon.route,
+      traits: describeDaemonTraits(descriptor.daemon),
+    },
+  };
+}
+
+function describeCommandCapability(
+  descriptor: CommandDescriptor,
+): Pick<CommandExplanation, 'capability'> {
+  if (!('capability' in descriptor) || !descriptor.capability) return {};
+  return { capability: descriptor.capability };
+}
+
+function describeCommandExposure(descriptor: CommandDescriptor): CommandExplanation['exposure'] {
+  return {
+    batchable: descriptor.batchable,
+    mcp: descriptor.mcpExposed,
+    dispatch: 'dispatch' in descriptor && descriptor.dispatch !== undefined,
+    ...('postActionObservation' in descriptor && descriptor.postActionObservation
+      ? { postActionObservation: descriptor.postActionObservation }
+      : {}),
+  };
 }
 
 function suggestCommands(query: string): string[] {

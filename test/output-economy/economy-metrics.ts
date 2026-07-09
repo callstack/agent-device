@@ -36,14 +36,24 @@ function collectShape(
   path: string,
   counters: { refs: number; hints: number },
 ): string[] {
-  if (Array.isArray(value)) {
-    return [
-      `${path}:array`,
-      ...value.flatMap((entry) => collectShape(entry, `${path}[]`, counters)),
-    ];
-  }
+  if (Array.isArray(value)) return collectArrayShape(value, path, counters);
   if (!value || typeof value !== 'object') return [`${path}:${typeof value}`];
+  return collectObjectShape(value, path, counters);
+}
 
+function collectArrayShape(
+  value: unknown[],
+  path: string,
+  counters: { refs: number; hints: number },
+): string[] {
+  return [`${path}:array`, ...value.flatMap((entry) => collectShape(entry, `${path}[]`, counters))];
+}
+
+function collectObjectShape(
+  value: object,
+  path: string,
+  counters: { refs: number; hints: number },
+): string[] {
   const paths = [`${path}:object`];
   for (const [key, entry] of Object.entries(value).sort(([left], [right]) =>
     left.localeCompare(right),
