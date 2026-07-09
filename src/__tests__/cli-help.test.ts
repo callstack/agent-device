@@ -211,6 +211,25 @@ test('tap dispatches as press with positionals and flags preserved', async () =>
   assert.deepEqual(result.calls[0]?.positionals, ['@e3']);
 });
 
+test('relaunch dispatches as open with the relaunch flag injected', async () => {
+  const result = await runCliCapture(['relaunch', 'com.example.app', '--json']);
+  assert.doesNotMatch(result.stderr, /Unknown command/);
+  // Canonicalization: the daemon call must record open, never relaunch.
+  assert.equal(result.calls.length, 1);
+  assert.equal(result.calls[0]?.command, 'open');
+  assert.deepEqual(result.calls[0]?.positionals, ['com.example.app']);
+  assert.equal(result.calls[0]?.flags?.relaunch, true);
+});
+
+test('launch dispatches as a plain open without forcing a relaunch', async () => {
+  const result = await runCliCapture(['launch', 'com.example.app', '--json']);
+  assert.doesNotMatch(result.stderr, /Unknown command/);
+  assert.equal(result.calls.length, 1);
+  assert.equal(result.calls[0]?.command, 'open');
+  assert.deepEqual(result.calls[0]?.positionals, ['com.example.app']);
+  assert.notEqual(result.calls[0]?.flags?.relaunch, true);
+});
+
 // From #1052 (credit: @vku2018): the alias must compose with the bare-ref
 // hint — `tap e3` normalizes to press, then gets the @e3 suggestion.
 test('tap with a bare ref gets the @ref hint, not an unknown-command error', async () => {

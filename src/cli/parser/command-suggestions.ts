@@ -4,14 +4,17 @@ import { listCliCommandNames } from '../../command-catalog.ts';
  * Curated guess -> canonical command mapping for unknown CLI command names.
  *
  * Agents (and humans) commonly guess command names that don't exist under that
- * spelling, such as `relaunch` instead of `open <app> --relaunch`. Keys must be
+ * spelling, such as `restart` instead of `open <app> --relaunch`. Keys must be
  * lowercase (lookups lowercase the input token first). Each entry's `command`
  * must resolve to a real, registered CLI command name, and each `example` must
  * parse as a valid invocation of it; the registry-drift tests in
  * `src/cli/parser/__tests__/command-suggestions.test.ts` fail the build on drift.
  *
- * `tap` is normalized to `press` as a true alias before the unknown-command
- * check runs, so its entry here only catches case variants such as `TAP`.
+ * True aliases (`tap` -> press, `launch`/`relaunch` -> open) are normalized
+ * case-insensitively in `normalizeCommandAlias` (args.ts) before the
+ * unknown-command check runs, so they never reach this map and must not be
+ * listed here. `start`/`restart` stay suggestion-only: `start` is genuinely
+ * ambiguous, so a hint beats silently guessing.
  */
 type CommandAliasSuggestion = {
   /** Canonical command name this guess should have used. */
@@ -23,11 +26,8 @@ type CommandAliasSuggestion = {
 const OPEN_RELAUNCH_EXAMPLE = 'open <app> --relaunch';
 
 const COMMAND_ALIAS_SUGGESTIONS: Record<string, CommandAliasSuggestion> = {
-  launch: { command: 'open', example: OPEN_RELAUNCH_EXAMPLE },
-  relaunch: { command: 'open', example: OPEN_RELAUNCH_EXAMPLE },
   start: { command: 'open', example: OPEN_RELAUNCH_EXAMPLE },
   restart: { command: 'open', example: OPEN_RELAUNCH_EXAMPLE },
-  tap: { command: 'press', example: 'press' },
   touch: { command: 'press', example: 'press' },
   input: { command: 'fill', example: 'fill' },
   settext: { command: 'fill', example: 'fill' },

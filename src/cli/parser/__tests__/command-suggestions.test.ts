@@ -43,17 +43,17 @@ test('the keyboard dismiss example uses a real keyboard action', () => {
   assert.doesNotThrow(() => keyboardCliReader(['dismiss'], baseFlags));
 });
 
-test('relaunch suggests the canonical open --relaunch shape', () => {
-  assert.throws(
-    () => parseArgs(['relaunch', 'com.example.app']),
-    (error: unknown) =>
-      error instanceof AppError &&
-      error.code === 'INVALID_ARGS' &&
-      error.message === 'Unknown command: relaunch. Did you mean open <app> --relaunch?',
-  );
+// `launch`/`relaunch` (and `tap`) are true aliases normalized before the
+// unknown-command check, so they must never appear in the suggestion map —
+// a stale entry there would be dead code masking the alias.
+test('true aliases are not listed in the curated suggestion map', () => {
+  const guesses = new Set(listCommandAliasSuggestionEntries().map(([guess]) => guess));
+  for (const alias of ['launch', 'relaunch', 'tap']) {
+    assert.ok(!guesses.has(alias), `"${alias}" is a true alias and must not be a suggestion`);
+  }
 });
 
-for (const guess of ['launch', 'start', 'restart']) {
+for (const guess of ['start', 'restart']) {
   test(`${guess} suggests the canonical open --relaunch shape`, () => {
     assert.throws(
       () => parseArgs([guess, 'com.example.app']),
@@ -110,10 +110,10 @@ test('screencap and capture suggest screenshot', () => {
 });
 
 test('curated suggestions are case-insensitive', () => {
-  assert.equal(suggestCommandFor('RELAUNCH'), 'open <app> --relaunch');
-  assert.equal(suggestCommandFor('Relaunch'), 'open <app> --relaunch');
-  assert.equal(suggestCommandFor('TAP'), 'press');
+  assert.equal(suggestCommandFor('RESTART'), 'open <app> --relaunch');
+  assert.equal(suggestCommandFor('Restart'), 'open <app> --relaunch');
   assert.equal(suggestCommandFor('Touch'), 'press');
+  assert.equal(suggestCommandFor('DISMISS'), 'keyboard dismiss');
 });
 
 test('known command names in the wrong case suggest their lowercase form', () => {

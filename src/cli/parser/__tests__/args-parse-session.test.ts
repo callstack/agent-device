@@ -891,3 +891,51 @@ test('apps defaults to user-installed filter and allows overrides', () => {
     /Unknown flag: --user-installed/,
   );
 });
+
+// `relaunch` and `launch` are true command aliases for open (like tap ->
+// press): normalization is pre-dispatch, so command identity stays `open`
+// everywhere downstream (daemon requests, telemetry).
+test('relaunch is a true alias for open with --relaunch injected', () => {
+  const parsed = parseArgs(['relaunch', 'com.example.app'], { strictFlags: true });
+  assert.equal(parsed.command, 'open');
+  assert.deepEqual(parsed.positionals, ['com.example.app']);
+  assert.equal(parsed.flags.relaunch, true);
+});
+
+test('launch is a true alias for a plain open without --relaunch', () => {
+  // Aliasing launch to a forced restart would silently destroy app state.
+  const parsed = parseArgs(['launch', 'com.example.app'], { strictFlags: true });
+  assert.equal(parsed.command, 'open');
+  assert.deepEqual(parsed.positionals, ['com.example.app']);
+  assert.equal(parsed.flags.relaunch, undefined);
+});
+
+test('relaunch with an explicit --relaunch stays idempotent', () => {
+  const parsed = parseArgs(['relaunch', 'com.example.app', '--relaunch'], { strictFlags: true });
+  assert.equal(parsed.command, 'open');
+  assert.deepEqual(parsed.positionals, ['com.example.app']);
+  assert.equal(parsed.flags.relaunch, true);
+});
+
+test('command aliases normalize case-insensitively', () => {
+  const relaunch = parseArgs(['RELAUNCH', 'com.example.app'], { strictFlags: true });
+  assert.equal(relaunch.command, 'open');
+  assert.equal(relaunch.flags.relaunch, true);
+
+  const launch = parseArgs(['Launch', 'com.example.app'], { strictFlags: true });
+  assert.equal(launch.command, 'open');
+  assert.equal(launch.flags.relaunch, undefined);
+
+  const tap = parseArgs(['TAP', '@e3'], { strictFlags: true });
+  assert.equal(tap.command, 'press');
+  assert.deepEqual(tap.positionals, ['@e3']);
+});
+
+test('relaunch passes non-command args through to open validation untouched', () => {
+  // URL targets parse fine here; the daemon's existing "open --relaunch does
+  // not support URL targets" guidance owns the semantic rejection.
+  const parsed = parseArgs(['relaunch', 'rne://url'], { strictFlags: true });
+  assert.equal(parsed.command, 'open');
+  assert.deepEqual(parsed.positionals, ['rne://url']);
+  assert.equal(parsed.flags.relaunch, true);
+});
