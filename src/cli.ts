@@ -1,4 +1,5 @@
 import { parseRawArgs, usage, usageForCommand } from './cli/parser/args.ts';
+import { suggestCommandFor } from './cli/parser/command-suggestions.ts';
 import { asAppError, AppError, normalizeError } from './kernel/errors.ts';
 import { printHumanError, printJson } from './utils/output.ts';
 import { readVersion } from './utils/version.ts';
@@ -146,7 +147,7 @@ export async function runCli(argv: string[], deps: CliDeps = DEFAULT_CLI_DEPS): 
           process.stdout.write(commandHelp);
           process.exit(0);
         }
-        printHumanError(new AppError('INVALID_ARGS', `Unknown command: ${helpTarget}`));
+        printHumanError(new AppError('INVALID_ARGS', formatUnknownHelpTargetMessage(helpTarget)));
         process.stdout.write(`${await usage()}\n`);
         process.exit(1);
       }
@@ -460,6 +461,13 @@ function isDebugRequested(argv: string[]): boolean {
   } catch {
     return argv.includes('--debug') || argv.includes('-v') || argv.includes('--verbose');
   }
+}
+
+function formatUnknownHelpTargetMessage(helpTarget: string): string {
+  const hint = suggestCommandFor(helpTarget);
+  return hint
+    ? `Unknown command: ${helpTarget}. Did you mean ${hint}?`
+    : `Unknown command: ${helpTarget}`;
 }
 
 function formatUnhandledCommandMessage(command: string): string {

@@ -11,6 +11,7 @@ import {
 } from '../../utils/command-schema.ts';
 import { isFlagSupportedForCommand } from '../../utils/cli-option-schema.ts';
 import { isKnownCliCommandName } from '../../command-catalog.ts';
+import { formatUnknownFlagMessage, suggestCommandFor } from './command-suggestions.ts';
 
 type ParsedArgs = {
   command: string | null;
@@ -86,7 +87,7 @@ export function parseRawArgs(argv: string[]): RawParsedArgs {
         else positionals.push(arg);
         continue;
       }
-      throw new AppError('INVALID_ARGS', `Unknown flag: ${token}`);
+      throw new AppError('INVALID_ARGS', formatUnknownFlagMessage(token));
     }
 
     const parsed = parseFlagValue(definition, token, inlineValue, argv[i + 1]);
@@ -153,7 +154,7 @@ export function finalizeParsedArgs(
   // This ensures "Unknown command" errors take precedence over flag validation errors
   // However, skip this check if --help is provided, since cli.ts will handle it gracefully
   if (parsed.command && !isKnownCliCommandName(parsed.command) && !flags.help) {
-    const hint = getCommandAliasSuggestion(parsed.command);
+    const hint = suggestCommandFor(parsed.command);
     const message = hint
       ? `Unknown command: ${parsed.command}. Did you mean ${hint}?`
       : `Unknown command: ${parsed.command}`;
@@ -343,14 +344,6 @@ function normalizeParsedCommandAliases(parsed: ParsedArgs): ParsedArgs {
     };
   }
   return parsed;
-}
-
-const COMMAND_ALIAS_SUGGESTIONS: Record<string, string> = {
-  tap: 'press or click',
-};
-
-function getCommandAliasSuggestion(command: string): string | undefined {
-  return COMMAND_ALIAS_SUGGESTIONS[command];
 }
 
 function formatUnsupportedFlagMessage(command: string | null, unsupported: string[]): string {
