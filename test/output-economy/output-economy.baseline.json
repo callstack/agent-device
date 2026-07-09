@@ -1,0 +1,100 @@
+{
+  "snapshot.default.text": {
+    "bytes": 160,
+    "lines": 6,
+    "refs": 4,
+    "hints": 0,
+    "shape": "text"
+  },
+  "snapshot.default.json": {
+    "bytes": 860,
+    "lines": 1,
+    "refs": 4,
+    "hints": 0,
+    "shape": "$.nodes:array|$.nodes[].depth:number|$.nodes[].enabled:boolean|$.nodes[].hittable:boolean|$.nodes[].identifier:string|$.nodes[].index:number|$.nodes[].label:string|$.nodes[].parentIndex:number|$.nodes[].rect.height:number|$.nodes[].rect.width:number|$.nodes[].rect.x:number|$.nodes[].rect.y:number|$.nodes[].rect:object|$.nodes[].ref:string|$.nodes[].role:string|$.nodes[].type:string|$.nodes[].value:string|$.nodes[]:object|$.truncated:boolean|$.visibility.partial:boolean|$.visibility.reasons:array|$.visibility.totalNodeCount:number|$.visibility.visibleNodeCount:number|$.visibility:object|$:object"
+  },
+  "snapshot.digest.json": {
+    "bytes": 210,
+    "lines": 1,
+    "refs": 2,
+    "hints": 0,
+    "shape": "$.nodeCount:number|$.refs:array|$.refsGeneration:number|$.refs[].label:string|$.refs[].ref:string|$.refs[]:object|$.truncated:boolean|$.visibility.partial:boolean|$.visibility.reasons:array|$.visibility.totalNodeCount:number|$.visibility.visibleNodeCount:number|$.visibility:object|$:object"
+  },
+  "settle.default.text": {
+    "bytes": 153,
+    "lines": 5,
+    "refs": 3,
+    "hints": 0,
+    "shape": "text"
+  },
+  "settle.default.json": {
+    "bytes": 431,
+    "lines": 1,
+    "refs": 3,
+    "hints": 0,
+    "shape": "$.message:string|$.ref:string|$.settle.captures:number|$.settle.diff.lines:array|$.settle.diff.lines[].kind:string|$.settle.diff.lines[].ref:string|$.settle.diff.lines[].text:string|$.settle.diff.lines[]:object|$.settle.diff.summary.additions:number|$.settle.diff.summary.removals:number|$.settle.diff.summary.unchanged:number|$.settle.diff.summary:object|$.settle.diff:object|$.settle.quietMs:number|$.settle.refsGeneration:number|$.settle.settled:boolean|$.settle.timeoutMs:number|$.settle.waitedMs:number|$.settle:object|$.x:number|$.y:number|$:object"
+  },
+  "settle.digest.json": {
+    "bytes": 264,
+    "lines": 1,
+    "refs": 3,
+    "hints": 0,
+    "shape": "$.message:string|$.ref:string|$.settle.captures:number|$.settle.diff.summary.additions:number|$.settle.diff.summary.removals:number|$.settle.diff.summary.unchanged:number|$.settle.diff.summary:object|$.settle.diff:object|$.settle.quietMs:number|$.settle.refs:array|$.settle.refsGeneration:number|$.settle.refs[].ref:string|$.settle.refs[]:object|$.settle.settled:boolean|$.settle.timeoutMs:number|$.settle.waitedMs:number|$.settle:object|$.x:number|$.y:number|$:object"
+  },
+  "settle-tail.default.text": {
+    "bytes": 180,
+    "lines": 7,
+    "refs": 4,
+    "hints": 0,
+    "shape": "text"
+  },
+  "settle-tail.digest.json": {
+    "bytes": 325,
+    "lines": 1,
+    "refs": 3,
+    "hints": 0,
+    "shape": "$.message:string|$.ref:string|$.settle.captures:number|$.settle.diff.summary.additions:number|$.settle.diff.summary.removals:number|$.settle.diff.summary.unchanged:number|$.settle.diff.summary:object|$.settle.diff:object|$.settle.quietMs:number|$.settle.refsGeneration:number|$.settle.settled:boolean|$.settle.tail:array|$.settle.tail[].label:string|$.settle.tail[].ref:string|$.settle.tail[].role:string|$.settle.tail[]:object|$.settle.timeoutMs:number|$.settle.waitedMs:number|$.settle:object|$.x:number|$.y:number|$:object"
+  },
+  "not-settled.default.text": {
+    "bytes": 119,
+    "lines": 3,
+    "refs": 1,
+    "hints": 1,
+    "shape": "text"
+  },
+  "selector-read.default.json": {
+    "bytes": 440,
+    "lines": 1,
+    "refs": 2,
+    "hints": 0,
+    "shape": "$.node.appName:string|$.node.bundleId:string|$.node.depth:number|$.node.enabled:boolean|$.node.hittable:boolean|$.node.identifier:string|$.node.index:number|$.node.label:string|$.node.parentIndex:number|$.node.pid:number|$.node.rect.height:number|$.node.rect.width:number|$.node.rect.x:number|$.node.rect.y:number|$.node.rect:object|$.node.ref:string|$.node.role:string|$.node.surface:string|$.node.type:string|$.node.value:string|$.node.windowTitle:string|$.node:object|$.ref:string|$.text:string|$.warning:string|$:object"
+  },
+  "selector-read.digest.json": {
+    "bytes": 89,
+    "lines": 1,
+    "refs": 1,
+    "hints": 0,
+    "shape": "$.ref:string|$.text:string|$.warning:string|$:object"
+  },
+  "screenshot.default.json": {
+    "bytes": 603,
+    "lines": 1,
+    "refs": 2,
+    "hints": 0,
+    "shape": "$.artifacts:array|$.artifacts[].artifactId:string|$.artifacts[].artifactType:string|$.artifacts[].field:string|$.artifacts[].fileName:string|$.artifacts[]:object|$.height:number|$.logicalHeight:number|$.logicalWidth:number|$.overlayRefs:array|$.overlayRefs[].center.x:number|$.overlayRefs[].center.y:number|$.overlayRefs[].center:object|$.overlayRefs[].label:string|$.overlayRefs[].overlayRect.height:number|$.overlayRefs[].overlayRect.width:number|$.overlayRefs[].overlayRect.x:number|$.overlayRefs[].overlayRect.y:number|$.overlayRefs[].overlayRect:object|$.overlayRefs[].rect.height:number|$.overlayRefs[].rect.width:number|$.overlayRefs[].rect.x:number|$.overlayRefs[].rect.y:number|$.overlayRefs[].rect:object|$.overlayRefs[].ref:string|$.overlayRefs[]:object|$.path:string|$.pixelDensity:number|$.width:number|$:object"
+  },
+  "screenshot.digest.json": {
+    "bytes": 360,
+    "lines": 1,
+    "refs": 2,
+    "hints": 0,
+    "shape": "$.artifacts:array|$.artifacts[].artifactId:string|$.artifacts[].artifactType:string|$.artifacts[].field:string|$.artifacts[].fileName:string|$.artifacts[]:object|$.height:number|$.logicalHeight:number|$.logicalWidth:number|$.overlayCount:number|$.overlayRefs:array|$.overlayRefs[].label:string|$.overlayRefs[].ref:string|$.overlayRefs[]:object|$.path:string|$.pixelDensity:number|$.width:number|$:object"
+  },
+  "error.normalized.json": {
+    "bytes": 212,
+    "lines": 1,
+    "refs": 0,
+    "hints": 1,
+    "shape": "$.code:string|$.details.reason:string|$.details:object|$.hint:string|$.message:string|$.retriable:boolean|$:object"
+  }
+}

@@ -55,6 +55,13 @@ export default defineConfig({
           setupFiles: ['src/__tests__/process-memo-setup.ts'],
         },
       },
+      {
+        test: {
+          name: 'output-economy',
+          include: ['test/output-economy/**/*.test.ts'],
+          setupFiles: ['src/__tests__/process-memo-setup.ts'],
+        },
+      },
     ],
     coverage: {
       provider: 'v8',
