@@ -28,6 +28,15 @@ test('readInteractionTargetFromPositionals points a role word used as a key at r
   );
 });
 
+test('readInteractionTargetFromPositionals folds unquoted multi-word values into the suggestion', () => {
+  // An unquoted value splits across positionals; the hint must keep the full text, not just
+  // the fragment attached to the key.
+  assertInvalidArgs(
+    () => readInteractionTargetFromPositionals(['button=Push', 'Article']),
+    'Did you mean role=button label="Push Article"?',
+  );
+});
+
 test('readInteractionTargetFromPositionals points an unknown non-role key at label=', () => {
   assertInvalidArgs(
     () => readInteractionTargetFromPositionals(['color="red"']),
@@ -69,6 +78,11 @@ test('readInteractionTargetFromPositionals still resolves @refs and valid select
 test('readFillTargetFromPositionals points a role word used as a key at role=/label= too', () => {
   assertInvalidArgs(
     () => readFillTargetFromPositionals(['button="Push Article"', 'hello']),
+    'Did you mean role=button label="Push Article"?',
+  );
+  // Fill treats the first two positionals as the target; an unquoted split value folds back in.
+  assertInvalidArgs(
+    () => readFillTargetFromPositionals(['button=Push', 'Article', 'hello']),
     'Did you mean role=button label="Push Article"?',
   );
 });

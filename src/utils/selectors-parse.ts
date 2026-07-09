@@ -55,16 +55,17 @@ const ALL_KEYS = new Set<SelectorKey>([...TEXT_KEYS, ...BOOLEAN_KEYS]);
 export const SELECTOR_KEY_NAMES: readonly SelectorKey[] = [...ALL_KEYS];
 
 // Role/element-type words that show up as accessibility roles, not selector keys (e.g. the
-// `button` in `button="Push Article"`). Mirrors the vocabulary of ROLE_LABELS in
-// src/snapshot/snapshot-lines.ts, kept as a local copy to avoid a utils/ -> snapshot/ layering
-// dependency (scripts/layering/check.ts). Drifts silently if ROLE_LABELS grows; that's fine here
-// since this is only used to sharpen a hint, not to validate anything.
+// `button` in `button="Push Article"`). Superset of the ROLE_LABELS vocabulary in
+// src/snapshot/snapshot-lines.ts (plus a few common role words like list/tab/alert/dialog/header,
+// minus valid selector keys such as `text`, which ALL_KEYS short-circuits before this set is
+// consulted), kept as a local copy to avoid a utils/ -> snapshot/ layering dependency
+// (scripts/layering/check.ts). Drifts silently if ROLE_LABELS grows; that's fine here since this
+// is only used to sharpen a hint, not to validate anything.
 const ROLE_HINT_WORDS = new Set([
   'button',
   'imagebutton',
   'link',
   'cell',
-  'text',
   'statictext',
   'checkedtextview',
   'textfield',
@@ -163,7 +164,8 @@ export function isSelectorToken(token: string): boolean {
  * Detects a `key=value` token whose key is not a recognized selector key, e.g.
  * `button="Push Article"`. Returns the lowercased key and unquoted value so callers can build a
  * targeted "did you mean role=/label=" hint instead of treating the whole token as free text.
- * Returns null for tokens without an `=`, an empty key, an empty value, or a recognized key.
+ * Returns null for tokens without an `=`, an empty key, an empty or whitespace-only value, or a
+ * recognized key.
  */
 export function detectUnknownSelectorKeyToken(
   token: string,
@@ -176,7 +178,7 @@ export function detectUnknownSelectorKeyToken(
   if (ALL_KEYS.has(key as SelectorKey)) return null;
   const valueRaw = trimmed.slice(equalsIdx + 1).trim();
   if (!valueRaw) return null;
-  const value = unquote(valueRaw);
+  const value = unquote(valueRaw).trim();
   if (!value) return null;
   return { key, value };
 }

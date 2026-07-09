@@ -32,6 +32,7 @@ test('detectUnknownSelectorKeyToken returns null without an "=", an empty key, o
   assert.equal(detectUnknownSelectorKeyToken('=value'), null);
   assert.equal(detectUnknownSelectorKeyToken('button='), null);
   assert.equal(detectUnknownSelectorKeyToken('button=""'), null);
+  assert.equal(detectUnknownSelectorKeyToken('button="   "'), null);
 });
 
 test('isRoleHintWord recognizes common accessibility role words, case-insensitively', () => {
