@@ -400,57 +400,242 @@ test('Provider-backed integration modal-dismiss press --settle attaches the unch
 });
 
 // #1167 post-merge benchmark, Bug B: filling a field summons the iOS keyboard,
-// and the keyboard chrome (real XCUIElementTypeButton nodes like shift/return
-// — not Key nodes) used to show up as fresh added-line refs on the settled
-// diff. Those refs defeated the "diff has zero added refs" tail trigger, so
-// exactly the post-fill case the tail exists for never fired.
+// and the keyboard chrome (real XCUIElementTypeButton nodes like shift/return/
+// Next keyboard/Dictate — not Key nodes) used to show up as fresh added-line
+// refs on the settled diff. Those refs defeated the "diff has zero added refs"
+// tail trigger, so exactly the post-fill case the tail exists for never fired.
+//
+// Both fixtures are TRIMMED REAL CAPTURES (iPhone 17 Pro simulator, iOS 26,
+// July 2026, org.reactnavigation.playground rne://stack-prevent-remove Input
+// screen; `snapshot -i --json` before and after `fill @e6 "hello" --settle`,
+// with the 31-key block reduced to 2 representative keys and rects rounded).
+// The load-bearing real-world facts they preserve:
+// - The keyboard renders in its OWN window; the "Next keyboard" and "Dictate"
+//   candidate-bar buttons are SIBLINGS of the [Keyboard] container's wrapper,
+//   NOT its descendants (an earlier hand-built fixture modeled them one hop
+//   under the container and hid the sibling-branch bug on real hardware).
+// - The app's main window does not survive the interactive-only settled
+//   capture; app content re-parents onto the Application node.
+// - The filled field re-labels itself ("hello") and its ancestor wrappers
+//   inherit that label, so the diff carries self-echo added refs.
 const FILL_BEFORE_NODES = [
   {
     index: 0,
-    type: 'TextField',
-    label: 'Search',
+    depth: 0,
+    type: 'Application',
+    label: 'React Navigation Example',
     hittable: true,
-    rect: { x: 0, y: 0, width: 200, height: 40 },
+    rect: { x: 0, y: 0, width: 402, height: 874 },
   },
   {
     index: 1,
-    type: 'Button',
-    label: 'Cancel',
+    depth: 1,
+    parentIndex: 0,
+    type: 'Window',
     hittable: true,
-    rect: { x: 0, y: 50, width: 100, height: 40 },
+    rect: { x: 0, y: 0, width: 402, height: 874 },
   },
   {
     index: 2,
-    type: 'Button',
-    label: 'Search now',
-    hittable: true,
-    rect: { x: 110, y: 50, width: 100, height: 40 },
+    depth: 1,
+    parentIndex: 0,
+    type: 'Other',
+    label: 'Input',
+    rect: { x: 0, y: 0, width: 402, height: 117 },
   },
-];
-
-// The field and its screen buttons are unchanged by the fill; the keyboard
-// (container + chrome) is the only tree change.
-const FILL_SETTLED_NODES = [
-  ...FILL_BEFORE_NODES,
   {
     index: 3,
-    type: 'Keyboard',
-    label: 'keyboard',
-    rect: { x: 0, y: 500, width: 400, height: 300 },
+    depth: 4,
+    parentIndex: 2,
+    type: 'Button',
+    label: 'Home, back',
+    rect: { x: 10, y: 64, width: 44, height: 44 },
   },
   {
     index: 4,
-    parentIndex: 3,
-    type: 'Button',
-    label: 'shift',
-    rect: { x: 0, y: 520, width: 30, height: 40 },
+    depth: 3,
+    parentIndex: 0,
+    type: 'ScrollView',
+    label: 'Discard and go back',
+    rect: { x: 0, y: 145, width: 402, height: 667 },
   },
   {
     index: 5,
+    depth: 4,
+    parentIndex: 4,
+    type: 'TextField',
+    rect: { x: 12, y: 129, width: 377, height: 41 },
+  },
+  {
+    index: 6,
+    depth: 4,
+    parentIndex: 4,
+    type: 'Button',
+    label: 'Discard and go back',
+    rect: { x: 12, y: 182, width: 378, height: 40 },
+  },
+  {
+    index: 7,
+    depth: 4,
+    parentIndex: 4,
+    type: 'Button',
+    label: 'Push Article',
+    rect: { x: 12, y: 234, width: 378, height: 40 },
+  },
+];
+
+const FILL_SETTLED_NODES = [
+  {
+    index: 0,
+    depth: 0,
+    type: 'Application',
+    label: 'React Navigation Example',
+    hittable: true,
+    rect: { x: 0, y: 0, width: 402, height: 874 },
+  },
+  {
+    index: 1,
+    depth: 1,
+    parentIndex: 0,
+    type: 'Window',
+    label: 'Next keyboard',
+    hittable: true,
+    rect: { x: 0, y: 0, width: 402, height: 874 },
+  },
+  {
+    index: 2,
+    depth: 3,
+    parentIndex: 1,
+    type: 'Other',
+    label: 'Next keyboard',
+    hittable: true,
+    rect: { x: 0, y: 566, width: 402, height: 308 },
+  },
+  {
+    index: 3,
+    depth: 4,
+    parentIndex: 2,
+    type: 'Other',
+    label: 'Padding-Left',
+    rect: { x: 0, y: 583, width: 402, height: 233 },
+  },
+  {
+    index: 4,
+    depth: 5,
     parentIndex: 3,
+    type: 'Keyboard',
+    label: 'Padding-Left',
+    rect: { x: 0, y: 583, width: 402, height: 233 },
+  },
+  {
+    index: 5,
+    depth: 7,
+    parentIndex: 4,
+    type: 'Key',
+    label: 'q',
+    rect: { x: 5, y: 590, width: 39, height: 54 },
+  },
+  {
+    index: 6,
+    depth: 7,
+    parentIndex: 4,
+    type: 'Key',
+    label: 'space',
+    rect: { x: 103, y: 752, width: 197, height: 54 },
+  },
+  {
+    index: 7,
+    depth: 7,
+    parentIndex: 4,
+    type: 'Button',
+    label: 'shift',
+    identifier: 'shift',
+    rect: { x: 5, y: 698, width: 51, height: 54 },
+  },
+  {
+    index: 8,
+    depth: 7,
+    parentIndex: 4,
     type: 'Button',
     label: 'return',
-    rect: { x: 350, y: 520, width: 50, height: 40 },
+    identifier: 'Return',
+    rect: { x: 301, y: 752, width: 99, height: 54 },
+  },
+  {
+    index: 9,
+    depth: 5,
+    parentIndex: 2,
+    type: 'Button',
+    label: 'Next keyboard',
+    value: 'Polski',
+    hittable: true,
+    rect: { x: 8, y: 806, width: 68, height: 69 },
+  },
+  {
+    index: 10,
+    depth: 5,
+    parentIndex: 2,
+    type: 'Button',
+    label: 'Dictate',
+    identifier: 'dictation',
+    rect: { x: 325, y: 805, width: 68, height: 69 },
+  },
+  {
+    index: 11,
+    depth: 1,
+    parentIndex: 0,
+    type: 'Other',
+    label: 'Input',
+    rect: { x: 0, y: 0, width: 402, height: 117 },
+  },
+  {
+    index: 12,
+    depth: 4,
+    parentIndex: 11,
+    type: 'Button',
+    label: 'Home, back',
+    rect: { x: 10, y: 64, width: 44, height: 44 },
+  },
+  {
+    index: 13,
+    depth: 2,
+    parentIndex: 0,
+    type: 'Other',
+    label: 'Discard and go back',
+    rect: { x: 0, y: 117, width: 402, height: 757 },
+  },
+  {
+    index: 14,
+    depth: 3,
+    parentIndex: 13,
+    type: 'ScrollView',
+    label: 'hello',
+    rect: { x: 0, y: 145, width: 402, height: 667 },
+  },
+  {
+    index: 15,
+    depth: 6,
+    parentIndex: 14,
+    type: 'TextField',
+    label: 'hello',
+    value: 'hello',
+    rect: { x: 12, y: 129, width: 377, height: 41 },
+  },
+  {
+    index: 16,
+    depth: 5,
+    parentIndex: 14,
+    type: 'Button',
+    label: 'Discard and go back',
+    rect: { x: 12, y: 182, width: 378, height: 40 },
+  },
+  {
+    index: 17,
+    depth: 5,
+    parentIndex: 14,
+    type: 'Button',
+    label: 'Push Article',
+    rect: { x: 12, y: 234, width: 378, height: 40 },
   },
 ];
 
@@ -458,14 +643,15 @@ test('Provider-backed integration fill --settle summoning the keyboard still att
   const runnerTranscript = createProviderTranscript([
     // snapshot -i: issues refs
     snapshotEntry(FILL_BEFORE_NODES),
-    // fill label=Search 'hello' --settle: resolution capture, type, settle
-    // captures. The keyboard appears; the field/buttons are unchanged.
-    snapshotEntry(FILL_BEFORE_NODES),
-    typeEntry(100, 20),
+    // fill @e6 'hello' --settle: the ref resolves on the stored tree (no
+    // fresh capture), the runner types, then the settle loop captures. The
+    // keyboard window appears and the field re-labels itself.
+    typeEntry(201, 149),
     snapshotEntry(FILL_SETTLED_NODES),
     snapshotEntry(FILL_SETTLED_NODES),
-    // press @e2 (the Cancel ref from the tail): tap on the stored tree.
-    tapEntry(50, 70),
+    // press @e17 (the "Discard and go back" ref from the tail): tap on the
+    // stored settled tree.
+    tapEntry(201, 202),
   ]);
   const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
     runnerTranscript,
@@ -496,7 +682,7 @@ test('Provider-backed integration fill --settle summoning the keyboard still att
       });
       assertRpcOk(snapshot);
 
-      const fill = await daemon.callCommand('fill', ['label=Search', 'hello'], {
+      const fill = await daemon.callCommand('fill', ['@e6', 'hello'], {
         settle: true,
         settleQuietMs: 25,
         timeoutMs: 10_000,
@@ -514,25 +700,31 @@ test('Provider-backed integration fill --settle summoning the keyboard still att
       };
       assert.ok(settle, 'fill --settle must return a settle observation');
       assert.equal(settle.settled, true);
-      // Only the keyboard container line is added; its chrome buttons
-      // (shift/return) collapse into it and never reach the diff.
-      assert.deepEqual(settle.diff?.summary, { additions: 1, removals: 0, unchanged: 3 });
-      assert.ok(!settle.diff?.lines.some((line) => /shift|return/i.test(line.text)));
-      // The keyboard container's own added ref is chrome, not a next target:
-      // the trigger still fires and hands back the still-relevant controls.
+      // Added: the keyboard container signal line plus the filled field's
+      // self-echo relabels (wrapper, scroll-area, text-field now "hello").
+      // The keyboard window, its wrappers, keys, shift/return, and the
+      // candidate-bar siblings (Next keyboard/Dictate) all collapse.
+      assert.deepEqual(settle.diff?.summary, { additions: 4, removals: 3, unchanged: 5 });
+      const texts = settle.diff?.lines.map((line) => line.text).join('\n') ?? '';
+      assert.match(texts, /\[keyboard\]/);
+      assert.ok(!/shift|return|Dictate|Next keyboard|\[key\]/.test(texts));
+      // Chrome and self-echo added refs do not count as "the diff already
+      // handed back a target": the trigger still fires and the tail lists
+      // the screen's real controls.
       assert.deepEqual(settle.tail, [
-        { ref: 'e1', role: 'text-field', label: 'Search' },
-        { ref: 'e2', role: 'button', label: 'Cancel' },
-        { ref: 'e3', role: 'button', label: 'Search now' },
+        { ref: 'e12', role: 'other', label: 'Input' },
+        { ref: 'e13', role: 'button', label: 'Home, back' },
+        { ref: 'e17', role: 'button', label: 'Discard and go back' },
+        { ref: 'e18', role: 'button', label: 'Push Article' },
       ]);
       assert.equal(settle.tailTruncated, undefined);
       assert.equal(typeof settle.refsGeneration, 'number');
 
-      const followUp = await daemon.callCommand('press', ['@e2'], {});
+      const followUp = await daemon.callCommand('press', ['@e17'], {});
       const followUpData = assertRpcOk(followUp);
       assert.equal(followUpData.warning, undefined);
-      assert.equal(followUpData.x, 50);
-      assert.equal(followUpData.y, 70);
+      assert.equal(followUpData.x, 201);
+      assert.equal(followUpData.y, 202);
 
       runnerTranscript.assertComplete();
     },

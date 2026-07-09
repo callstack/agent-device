@@ -155,13 +155,16 @@ export type SettleObservation = {
    * modal dismiss the diff shows only removals, and the next button to press
    * (already on screen, untouched) is absent from the response. `tail` lists
    * the settled tree's remaining uncovered interactive elements (excluding
-   * structural application/window chrome and keyboard chrome) so the
-   * response stays actionable without that extra round trip. Attached
-   * ONLY when `diff` carries zero added-line refs (the modal-dismiss/
-   * toast-only signature) — a diff with fresh added refs already hands the
-   * next target, so the tail would be pure byte cost. Refs already present on
-   * `diff`'s added lines are excluded. Capped; `tailTruncated` marks when
-   * candidates exceeded the cap.
+   * structural application/window chrome and the keyboard window's chrome)
+   * so the response stays actionable without that extra round trip. Attached
+   * ONLY when `diff` carries zero added-line refs naming a NEW target (the
+   * modal-dismiss/toast-only/fill signature) — a diff whose added refs hand
+   * the next target already pays its way, so the tail would be pure byte
+   * cost. Keyboard-chrome refs and self-echo refs (added lines whose node
+   * contains the action point: the acted-on element re-describing itself,
+   * e.g. a filled field re-labeled with its new value) do not count as new
+   * targets. Refs already present on `diff`'s added lines are excluded.
+   * Capped; `tailTruncated` marks when candidates exceeded the cap.
    */
   tail?: SettleTailEntry[];
   tailTruncated?: true;
