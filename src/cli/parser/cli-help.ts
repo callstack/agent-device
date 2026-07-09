@@ -8,6 +8,7 @@ import {
   type FlagDefinition,
   type FlagKey,
 } from '../../utils/command-schema.ts';
+import { buildCommandUsage } from '../../utils/cli-usage.ts';
 
 const AGENT_WORKFLOWS = [
   {
@@ -1056,12 +1057,6 @@ Report:
 
 export type HelpTopicName = keyof typeof HELP_TOPICS;
 
-function formatPositionalArg(arg: string): string {
-  const optional = arg.endsWith('?');
-  const name = optional ? arg.slice(0, -1) : arg;
-  return optional ? `[${name}]` : `<${name}>`;
-}
-
 function formatCommandListArg(commandName: string, schema: CommandSchema, arg: string): string {
   const optional = arg.endsWith('?');
   const name = optional ? arg.slice(0, -1) : arg;
@@ -1076,20 +1071,6 @@ function formatCommandListArg(commandName: string, schema: CommandSchema, arg: s
     return `[${name}]`;
   }
   return isLiteralToken ? name : `<${name}>`;
-}
-
-function buildCommandUsage(commandName: string, schema: CommandSchema): string {
-  if (schema.usageOverride) return schema.usageOverride;
-  const positionals = (schema.positionalArgs ?? []).map(formatPositionalArg);
-  const flagLabels = (schema.allowedFlags ?? []).flatMap((key) =>
-    flagDefinitionsForKey(key).map((definition) => definition.usageLabel ?? definition.names[0]),
-  );
-  const optionalFlags = flagLabels.map((label) => `[${label}]`);
-  return [commandName, ...positionals, ...optionalFlags].join(' ');
-}
-
-function flagDefinitionsForKey(key: FlagKey): FlagDefinition[] {
-  return getFlagDefinitions().filter((definition) => definition.key === key);
 }
 
 function buildCommandListUsage(commandName: string, schema: CommandSchema): string {

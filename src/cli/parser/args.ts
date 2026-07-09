@@ -11,6 +11,7 @@ import {
 } from '../../utils/command-schema.ts';
 import { isFlagSupportedForCommand } from '../../utils/cli-option-schema.ts';
 import { isKnownCliCommandName } from '../../command-catalog.ts';
+import { cliCommandAlias, normalizeCliCommandAlias } from '../../cli-command-aliases.ts';
 import { formatUnknownFlagMessage, suggestCommandFor } from './command-suggestions.ts';
 
 type ParsedArgs = {
@@ -116,12 +117,13 @@ export function parseRawArgs(argv: string[]): RawParsedArgs {
 }
 
 // `relaunch <app>` is a true alias for `open <app> --relaunch`: the command
-// token normalizes to open and the flag is injected here. Setting the flag is
-// idempotent with an explicit --relaunch; everything else passes through to
-// open's normal validation.
+// token normalizes to open and the alias's implied flags are injected here.
+// Setting a flag is idempotent with an explicit one; everything else passes
+// through to the canonical command's normal validation.
 function applyAliasImpliedFlags(rawCommand: string | null, flags: CliFlags): void {
-  if (rawCommand?.toLowerCase() === 'relaunch') {
-    flags.relaunch = true;
+  if (!rawCommand) return;
+  for (const key of cliCommandAlias(rawCommand)?.impliedFlags ?? []) {
+    (flags as Record<string, unknown>)[key] = true;
   }
 }
 
@@ -385,17 +387,8 @@ export async function usageForCommand(command: string): Promise<string | null> {
   return buildCommandUsageText(normalizeCommandAlias(command));
 }
 
-// Alias matching is case-insensitive (`TAP`, `Relaunch`) so agent-typed case
-// variants normalize instead of erroring. Non-alias tokens pass through
-// unchanged, keeping the user's original casing in unknown-command errors.
+// Canonical alias normalization lives in cli-command-aliases.ts (shared with
+// `explain`); this wrapper keeps the parser's existing call sites unchanged.
 function normalizeCommandAlias(command: string): string {
-  const normalized = command.toLowerCase();
-  if (normalized === 'long-press') return 'longpress';
-  if (normalized === 'metrics') return 'perf';
-  if (normalized === 'tap') return 'press';
-  // `launch` maps to a plain open: forcing --relaunch here would silently
-  // destroy app state. `relaunch` additionally injects --relaunch via
-  // applyAliasImpliedFlags in parseRawArgs.
-  if (normalized === 'launch' || normalized === 'relaunch') return 'open';
-  return command;
+  return normalizeCliCommandAlias(command);
 }
