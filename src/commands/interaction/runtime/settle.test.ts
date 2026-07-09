@@ -313,10 +313,12 @@ test('the settled diff line list is bounded with a truncation marker', async () 
   assert.equal(diff.truncated, true);
 });
 
-test('keyboard Key nodes never spend the settled diff budget', async () => {
+test('keyboard Key nodes and chrome buttons never spend the settled diff budget', async () => {
   const before = buttonSnapshot();
-  // A fill-style settled tree: a summoned keyboard (container + keys) plus the
-  // content change the agent actually cares about.
+  // A fill-style settled tree: a summoned keyboard (container + keys + real
+  // XCUIElementTypeButton chrome like shift/Emoji/return/Dictate/Next
+  // keyboard — NOT Key nodes) plus the content change the agent actually
+  // cares about.
   const keyboardTree = makeSnapshotState([
     {
       index: 0,
@@ -343,8 +345,17 @@ test('keyboard Key nodes never spend the settled diff budget', async () => {
       rect: { x: key * 10, y: 520, width: 10, height: 40 },
       hittable: true,
     })),
-    ...['Next', 'Back', 'Home'].map((label, extra) => ({
+    ...['shift', 'Emoji', 'return', 'Dictate', 'Next keyboard'].map((label, extra) => ({
       index: extra + 28,
+      depth: 1,
+      parentIndex: 1,
+      type: 'Button',
+      label,
+      rect: { x: extra * 40, y: 780, width: 40, height: 40 },
+      hittable: true,
+    })),
+    ...['Next', 'Back', 'Home'].map((label, extra) => ({
+      index: extra + 33,
       depth: 0,
       type: 'Button',
       label,
@@ -371,9 +382,100 @@ test('keyboard Key nodes never spend the settled diff budget', async () => {
   const texts = diff.lines.map((line) => line.text).join('\n');
   assert.match(texts, /Results for alpenglow/);
   assert.match(texts, /keyboard/);
-  // The container line survives as the keyboard signal; individual keys do not.
+  // The container line survives as the keyboard signal; individual keys and
+  // chrome buttons (real XCUIElementTypeButton nodes, not Key nodes) do not.
   assert.ok(!diff.lines.some((line) => /\[key\]/.test(line.text)));
+  assert.ok(!diff.lines.some((line) => /shift|Emoji|return|Dictate|Next keyboard/.test(line.text)));
   assert.equal(diff.summary.additions, 5);
+});
+
+test('keyboard-only changes (container + chrome) do not suppress the settle tail trigger', async () => {
+  // The field and its screen buttons are unchanged by the fill itself; the
+  // keyboard summoning is the only tree change. Before #1167's fix, the
+  // chrome buttons' fresh added-line refs (or, after the diff-only fix, the
+  // container's own added ref) would read as "the diff already handed back a
+  // target" and suppress the tail — leaving the still-relevant screen
+  // buttons invisible.
+  const controls = [
+    {
+      index: 0,
+      depth: 0,
+      type: 'TextField',
+      label: 'Search',
+      rect: { x: 0, y: 0, width: 200, height: 40 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 0,
+      type: 'Button',
+      label: 'Cancel',
+      rect: { x: 0, y: 50, width: 100, height: 40 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      depth: 0,
+      type: 'Button',
+      label: 'Search now',
+      rect: { x: 110, y: 50, width: 100, height: 40 },
+      hittable: true,
+    },
+  ];
+  const before = makeSnapshotState(controls);
+  const settledTree = makeSnapshotState([
+    ...controls,
+    {
+      index: 3,
+      depth: 0,
+      type: 'Keyboard',
+      label: 'keyboard',
+      rect: { x: 0, y: 500, width: 400, height: 300 },
+      hittable: true,
+    },
+    {
+      index: 4,
+      depth: 1,
+      parentIndex: 3,
+      type: 'Button',
+      label: 'shift',
+      rect: { x: 0, y: 520, width: 30, height: 40 },
+      hittable: true,
+    },
+    {
+      index: 5,
+      depth: 1,
+      parentIndex: 3,
+      type: 'Button',
+      label: 'return',
+      rect: { x: 350, y: 520, width: 50, height: 40 },
+      hittable: true,
+    },
+  ]);
+  let captures = 0;
+  const device = createSettleDevice({
+    stored: before,
+    captureSnapshot: () => {
+      captures += 1;
+      return { snapshot: captures === 1 ? before : settledTree };
+    },
+  });
+
+  const result = await device.interactions.fill(selector('label=Search'), 'hello', {
+    session: 'default',
+    settle: {},
+  });
+
+  const settle = result.settle;
+  assert.ok(settle);
+  // Only the keyboard container line is added; its chrome buttons collapse.
+  assert.equal(settle.diff?.summary.additions, 1);
+  assert.ok(!settle.diff?.lines.some((line) => /shift|return/i.test(line.text)));
+  assert.ok(settle.tail, 'keyboard-only additions must not suppress the tail');
+  assert.deepEqual(
+    settle.tail?.map((entry) => entry.label),
+    ['Search', 'Cancel', 'Search now'],
+  );
 });
 
 test('added lines win diff-budget slots over removals under truncation', async () => {
@@ -514,13 +616,19 @@ test('a removals-only settled diff (modal dismiss) attaches an unchanged interac
   assert.ok(settle);
   assert.deepEqual(settle.diff?.summary, { additions: 0, removals: 3, unchanged: 2 });
   assert.ok(!settle.diff?.lines.some((line) => line.kind === 'added'));
-  // The StaticText survives but is not interactive; only the hittable button
-  // makes the tail.
-  assert.deepEqual(settle.tail, [{ ref: 'e1', role: 'button', label: 'Add to cart' }]);
+  // The tail matches `snapshot -i`'s own bar for the settled tree: both
+  // surviving elements are candidates, `hittable` is not required (#1167 post-
+  // merge benchmark: real buttons commonly report `hittable: false`/undefined
+  // right after a dismiss animation, so requiring it silently dropped exactly
+  // the elements the tail exists to surface).
+  assert.deepEqual(settle.tail, [
+    { ref: 'e1', role: 'button', label: 'Add to cart' },
+    { ref: 'e2', role: 'text', label: 'Price: $12' },
+  ]);
   assert.equal(settle.tailTruncated, undefined);
 });
 
-test('the unchanged interactive tail excludes non-hittable and covered candidates', async () => {
+test('the unchanged interactive tail includes non-hittable candidates but excludes covered ones', async () => {
   // Every surviving node's attributes (hittable/blocked-relevant fields) must
   // match a `before` line exactly, or it would read as an added line and
   // suppress the tail entirely (see the trigger-condition test above).
@@ -594,9 +702,73 @@ test('the unchanged interactive tail excludes non-hittable and covered candidate
   const settle = result.settle;
   assert.ok(settle);
   assert.equal(settle.diff?.summary.additions, 0);
-  // Not hittable, then covered, are both excluded; only the plain hittable
-  // button remains.
-  assert.deepEqual(settle.tail, [{ ref: 'e3', role: 'button', label: 'Share' }]);
+  // `hittable: false` no longer excludes a candidate (matches `snapshot -i`'s
+  // own bar); `interactionBlocked: 'covered'` still does.
+  assert.deepEqual(settle.tail, [
+    { ref: 'e1', role: 'button', label: 'Add to cart' },
+    { ref: 'e3', role: 'button', label: 'Share' },
+  ]);
+});
+
+test('the unchanged interactive tail excludes structural application/window chrome', async () => {
+  // The flagship #1167 post-merge benchmark case: after a dialog dismiss, the
+  // old `hittable === true` bar let a lone application/window pair through
+  // (both routinely report `hittable: true` on their full-screen root frame)
+  // while excluding the real button because its `hittable` state was
+  // undefined right after the dismiss animation.
+  const before = makeSnapshotState([
+    { index: 0, depth: 0, type: 'Application', label: 'React Navigation Example' },
+    { index: 1, depth: 0, type: 'Window' },
+    {
+      index: 2,
+      depth: 0,
+      type: 'Button',
+      label: 'Discard and go back',
+      rect: { x: 10, y: 20, width: 200, height: 40 },
+    },
+    {
+      index: 3,
+      depth: 0,
+      type: 'Button',
+      label: 'Cancel',
+      rect: { x: 10, y: 80, width: 200, height: 40 },
+    },
+  ]);
+  // The dialog's own Cancel button is dismissed with it; the application,
+  // window, and the real actionable button survive unchanged. None of the
+  // three carry `hittable: true` here, mirroring the real post-dismiss
+  // capture shape.
+  const after = makeSnapshotState([
+    { index: 0, depth: 0, type: 'Application', label: 'React Navigation Example' },
+    { index: 1, depth: 0, type: 'Window' },
+    {
+      index: 2,
+      depth: 0,
+      type: 'Button',
+      label: 'Discard and go back',
+      rect: { x: 10, y: 20, width: 200, height: 40 },
+    },
+  ]);
+  let captures = 0;
+  const device = createSettleDevice({
+    stored: before,
+    captureSnapshot: () => {
+      captures += 1;
+      return { snapshot: captures === 1 ? before : after };
+    },
+  });
+
+  const result = await device.interactions.press(selector('label=Cancel'), {
+    session: 'default',
+    settle: {},
+  });
+
+  const settle = result.settle;
+  assert.ok(settle);
+  assert.equal(settle.diff?.summary.additions, 0);
+  // Application/window chrome is dropped; the real button is the only entry,
+  // despite carrying no `hittable: true` flag.
+  assert.deepEqual(settle.tail, [{ ref: 'e3', role: 'button', label: 'Discard and go back' }]);
 });
 
 test('the unchanged interactive tail is capped with a truncation marker', async () => {
@@ -656,4 +828,44 @@ test('buildSettleTailEntries dedups candidates already carrying an excluded ref'
   const result = buildSettleTailEntries(settledNodes, new Set(['e1']));
 
   assert.deepEqual(result.tail, [{ ref: 'e2', role: 'button', label: 'Share' }]);
+});
+
+test('buildSettleTailEntries drops application/window chrome and does not require hittable', () => {
+  const settledNodes = makeSnapshotState([
+    { index: 0, depth: 0, type: 'Application', label: 'Example' },
+    { index: 1, depth: 0, type: 'Window' },
+    {
+      index: 2,
+      depth: 0,
+      type: 'Button',
+      label: 'Discard and go back',
+      rect: { x: 10, y: 20, width: 100, height: 40 },
+      // Deliberately no `hittable` field, mirroring a real post-dismiss
+      // capture: the tail bar no longer requires `hittable === true`.
+    },
+  ]).nodes;
+
+  const result = buildSettleTailEntries(settledNodes, new Set());
+
+  assert.deepEqual(result.tail, [{ ref: 'e3', role: 'button', label: 'Discard and go back' }]);
+});
+
+test('buildSettleTailEntries drops the keyboard container and its chrome descendants', () => {
+  const settledNodes = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Button',
+      label: 'Send',
+      rect: { x: 10, y: 20, width: 100, height: 40 },
+      hittable: true,
+    },
+    { index: 1, depth: 0, type: 'Keyboard', label: 'keyboard' },
+    { index: 2, depth: 1, parentIndex: 1, type: 'Key', label: 'q' },
+    { index: 3, depth: 1, parentIndex: 1, type: 'Button', label: 'shift' },
+  ]).nodes;
+
+  const result = buildSettleTailEntries(settledNodes, new Set());
+
+  assert.deepEqual(result.tail, [{ ref: 'e1', role: 'button', label: 'Send' }]);
 });

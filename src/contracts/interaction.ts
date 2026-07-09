@@ -154,8 +154,9 @@ export type SettleObservation = {
    * change-only diff omits refs for elements that did not change — after a
    * modal dismiss the diff shows only removals, and the next button to press
    * (already on screen, untouched) is absent from the response. `tail` lists
-   * the settled tree's remaining hittable, uncovered interactive elements so
-   * the response stays actionable without that extra round trip. Attached
+   * the settled tree's remaining uncovered interactive elements (excluding
+   * structural application/window chrome and keyboard chrome) so the
+   * response stays actionable without that extra round trip. Attached
    * ONLY when `diff` carries zero added-line refs (the modal-dismiss/
    * toast-only signature) — a diff with fresh added refs already hands the
    * next target, so the tail would be pure byte cost. Refs already present on
