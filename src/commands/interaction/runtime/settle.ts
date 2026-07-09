@@ -175,7 +175,7 @@ function buildSettleDiffAndTail(
  * present on the diff's added lines are excluded so the tail never repeats
  * what the diff already handed the caller.
  */
-export function buildSettleTail(
+function buildSettleTail(
   diff: NonNullable<SettleObservation['diff']>,
   settledNodes: SnapshotNode[],
 ): Pick<SettleObservation, 'tail' | 'tailTruncated'> {

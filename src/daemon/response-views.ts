@@ -165,10 +165,15 @@ function interactionSettleView(data: DaemonResponseData, level: ResponseLevel): 
     settle: {
       ...rest,
       ...(refs.length > 0 ? { refs } : {}),
-      ...(Array.isArray(tail) && tail.length > 0 ? { tail: tail.slice(0, DIGEST_REF_LIMIT) } : {}),
+      ...cappedSettleDigestTail(tail),
       diff: { summary },
     },
   };
+}
+
+function cappedSettleDigestTail(tail: unknown): Record<string, unknown> {
+  if (!Array.isArray(tail) || tail.length === 0) return {};
+  return { tail: tail.slice(0, DIGEST_REF_LIMIT) };
 }
 
 type DigestRef = { ref: string };
