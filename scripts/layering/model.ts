@@ -14,12 +14,12 @@ export type ResolvedImportEdge = ImportEdge & {
   toZone: string;
 };
 
-export type BackEdgeBaseline = Record<string, number>;
+export type BackEdgeBaseline = Record<string, string[]>;
 
 export type BackEdgeDrift = {
   pair: string;
-  baseline: number;
-  actual: number;
+  added: string[];
+  removed: string[];
 };
 
 const TARGET_DAG_RANK = new Map([
@@ -242,14 +242,19 @@ export function backEdgePair(edge: ResolvedImportEdge): string | null {
   return `${edge.fromZone} -> ${edge.toZone}`;
 }
 
-export function countBackEdges(edges: readonly ResolvedImportEdge[]): BackEdgeBaseline {
-  const counts: BackEdgeBaseline = {};
+export function collectBackEdges(edges: readonly ResolvedImportEdge[]): BackEdgeBaseline {
+  const identitiesByPair = new Map<string, Set<string>>();
   for (const edge of edges) {
     const pair = backEdgePair(edge);
-    if (pair) counts[pair] = (counts[pair] ?? 0) + 1;
+    if (!pair) continue;
+    const identities = identitiesByPair.get(pair) ?? new Set<string>();
+    identities.add(`${edge.file} -> ${edge.target}`);
+    identitiesByPair.set(pair, identities);
   }
   return Object.fromEntries(
-    Object.entries(counts).sort(([left], [right]) => left.localeCompare(right)),
+    [...identitiesByPair]
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([pair, identities]) => [pair, [...identities].sort()]),
   );
 }
 
@@ -259,37 +264,27 @@ export function compareBackEdgeBaseline(
 ): BackEdgeDrift[] {
   const pairs = new Set([...Object.keys(baseline), ...Object.keys(actual)]);
   return [...pairs].sort().flatMap((pair) => {
-    const baselineCount = baseline[pair] ?? 0;
-    const actualCount = actual[pair] ?? 0;
-    return baselineCount === actualCount
-      ? []
-      : [{ pair, baseline: baselineCount, actual: actualCount }];
+    const baselineIdentities = new Set(baseline[pair] ?? []);
+    const actualIdentities = new Set(actual[pair] ?? []);
+    const added = [...actualIdentities].filter((identity) => !baselineIdentities.has(identity));
+    const removed = [...baselineIdentities].filter((identity) => !actualIdentities.has(identity));
+    return added.length === 0 && removed.length === 0 ? [] : [{ pair, added, removed }];
   });
 }
 
 export type BaselineRaise = {
   pair: string;
-  base: number;
-  committed: number;
+  added: string[];
 };
 
-/**
- * The committed baseline is the ratchet ceiling, but it is a hand-editable file:
- * a PR could add a real back-edge and raise the committed number to match,
- * passing `compareBackEdgeBaseline` (actual === committed) while quietly lifting
- * the ceiling. Monotonicity closes that: the committed baseline may only shrink
- * relative to the merge-base version. Decreases (ratchet-down) and unchanged
- * pairs pass; any pair whose committed count exceeds the base — including a new
- * zero-to-positive pair absent at the base — is a raise and fails.
- */
 export function findBaselineRaises(
   base: BackEdgeBaseline,
   committed: BackEdgeBaseline,
 ): BaselineRaise[] {
   const pairs = new Set([...Object.keys(base), ...Object.keys(committed)]);
   return [...pairs].sort().flatMap((pair) => {
-    const baseCount = base[pair] ?? 0;
-    const committedCount = committed[pair] ?? 0;
-    return committedCount > baseCount ? [{ pair, base: baseCount, committed: committedCount }] : [];
+    const baseIdentities = new Set(base[pair] ?? []);
+    const added = (committed[pair] ?? []).filter((identity) => !baseIdentities.has(identity));
+    return added.length > 0 ? [{ pair, added }] : [];
   });
 }

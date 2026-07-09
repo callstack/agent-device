@@ -27,9 +27,6 @@ export function renderOutputFixtures() {
   const settleDigest = RESPONSE_VIEWS.press!(SETTLE_ADDED_REF_RESULT, 'digest');
   const settleTailDigest = RESPONSE_VIEWS.press!(SETTLE_TAIL_RESULT, 'digest');
   const selectorDigest = RESPONSE_VIEWS.find!(SELECTOR_READ_RESULT, 'digest');
-  // Default and digest screenshot samples both flow through the SAME production
-  // projection so their byte comparison is like-for-like; `default` returns the
-  // daemon payload unchanged, `digest` compacts it.
   const screenshotDefault = RESPONSE_VIEWS.screenshot!(SCREENSHOT_RESULT, 'default');
   const screenshotDigest = RESPONSE_VIEWS.screenshot!(SCREENSHOT_RESULT, 'digest');
   const error = normalizeError(ACTIONABLE_ERROR);

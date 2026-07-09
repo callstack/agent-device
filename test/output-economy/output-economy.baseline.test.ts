@@ -80,8 +80,6 @@ describe('actionability and reliability floors', () => {
   });
 
   test('policy-derived failures inherit hint and retry from production normalization', () => {
-    // No overrides on the fixture, so both fields must come from the shared
-    // error policy rather than fixture-supplied values.
     expect(rendered.errorPolicyNormalized).toMatchObject({
       code: 'DEVICE_IN_USE',
       hint: defaultHintForCode('DEVICE_IN_USE'),
@@ -93,9 +91,6 @@ describe('actionability and reliability floors', () => {
   });
 });
 
-// These floors assert on the rendered production surfaces directly, so they hold
-// regardless of the frozen byte/shape baseline above — a churn-driven baseline
-// refresh can never quietly drop the actionable content an agent depends on.
 describe('baseline-independent actionability floors', () => {
   test('default snapshot exposes actionable refs with their labels', () => {
     const text = rendered.snapshot.text ?? '';

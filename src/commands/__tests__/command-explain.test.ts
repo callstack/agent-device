@@ -94,8 +94,6 @@ describe('formatCommandExplanation', () => {
     if (!result.found) return;
     const text = formatCommandExplanation(result.explanation);
     expect(text).toContain('longpress [public]');
-    // The catalog key (longPress) and the true CLI alias (long-press) are
-    // distinct facets and both surface in the rendered catalog line.
     expect(text).toContain('catalog: longPress (alias: long-press)');
     expect(JSON.parse(JSON.stringify(result.explanation))).toMatchObject({
       command: 'longpress',
@@ -107,21 +105,19 @@ describe('formatCommandExplanation', () => {
 
 describe('explainCommand table-driven coverage', () => {
   test.each([
-    ['open', [{ alias: 'launch' }, { alias: 'relaunch', impliedFlags: ['relaunch'] }]],
-    ['longpress', [{ alias: 'long-press' }]],
-    ['perf', [{ alias: 'metrics' }]],
-    ['press', [{ alias: 'tap' }]],
-    ['click', []],
-  ])('resolves true CLI aliases for %s from parser normalization', (command, aliases) => {
-    const result = explainCommand(command as string, { fileExists });
+    ['launch', 'open', [{ alias: 'launch' }, { alias: 'relaunch', impliedFlags: ['relaunch'] }]],
+    ['long-press', 'longpress', [{ alias: 'long-press' }]],
+    ['metrics', 'perf', [{ alias: 'metrics' }]],
+    ['TAP', 'press', [{ alias: 'tap' }]],
+  ])('resolves CLI alias %s to %s', (query, command, aliases) => {
+    const result = explainCommand(query as string, { fileExists });
     expect(result.found).toBe(true);
     if (!result.found) return;
+    expect(result.explanation.command).toBe(command);
     expect(result.explanation.aliases).toEqual(aliases);
   });
 
   test('synthesizes usage with positionals and flags when no usageOverride', () => {
-    // `type` has no usageOverride; the canonical builder composes positionals
-    // and flags rather than emitting the bare command name.
     const result = explainCommand('type', { fileExists });
     expect(result.found).toBe(true);
     if (!result.found) return;
@@ -130,6 +126,8 @@ describe('explainCommand table-driven coverage', () => {
 
   test.each([
     ['press', ['src/commands/interaction/index.ts', 'src/daemon/handlers/interaction.ts']],
+    ['apps', ['src/commands/management/app.ts']],
+    ['screenshot', ['src/commands/capture/screenshot.ts', 'src/core/dispatch.ts']],
     ['react-native', ['src/daemon/handlers/react-native.ts']],
     ['record', ['src/daemon/handlers/record-trace.ts']],
     ['trace', ['src/daemon/handlers/record-trace.ts']],
@@ -175,13 +173,27 @@ describe('explain:command CLI', () => {
     expect(stdout).toContain('catalog: open (alias: launch, relaunch (implies --relaunch))');
   });
 
+  test('keeps default text compact and exposes exhaustive flags only on demand', () => {
+    const compact = runExplainCli(['apps']);
+    expect(compact.status).toBe(0);
+    expect(compact.stdout).toContain('usage: apps [--all]');
+    expect(compact.stdout).toContain('flags: --all');
+    expect(compact.stdout).not.toContain('supported:');
+    expect(compact.stdout).not.toContain('global:');
+
+    const full = runExplainCli(['apps', '--full']);
+    expect(full.status).toBe(0);
+    expect(full.stdout).toContain('supported:');
+    expect(full.stdout).toContain('global:');
+  });
+
   test('emits structured JSON with --json and exits 0', () => {
-    const { status, stdout } = runExplainCli(['open', '--json']);
+    const { status, stdout } = runExplainCli(['apps', '--json']);
     expect(status).toBe(0);
-    expect(JSON.parse(stdout)).toMatchObject({
-      command: 'open',
-      aliases: [{ alias: 'launch' }, { alias: 'relaunch', impliedFlags: ['relaunch'] }],
-    });
+    const data = JSON.parse(stdout);
+    expect(data).toMatchObject({ command: 'apps', cli: { commandFlags: [{ key: 'appsFilter' }] } });
+    expect(data.cli.supportedFlags.length).toBeGreaterThan(data.cli.commandFlags.length);
+    expect(data.cli.globalFlags.length).toBeGreaterThan(0);
   });
 
   test('reports unknown commands on stderr and exits 1', () => {

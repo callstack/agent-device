@@ -16,8 +16,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
   backEdgePair,
+  collectBackEdges,
   compareBackEdgeBaseline,
-  countBackEdges,
   findBaselineRaises,
   findValueImportCycles,
   resolveImportEdges,
@@ -54,14 +54,15 @@ export function listSourceFiles(): string[] {
     cwd: repoRoot,
     encoding: 'utf8',
   });
-  return out
-    .split('\n')
-    .filter(Boolean)
-    .filter((file) => !/(?:^|\/)__tests__\//.test(file) && !/\.test\.ts$/.test(file));
+  return out.split('\n').filter(Boolean).filter(isProductionSourceFile);
 }
 
 function readSources(files: readonly string[]): Map<string, string> {
   return new Map(files.map((file) => [file, fs.readFileSync(path.join(repoRoot, file), 'utf8')]));
+}
+
+function isProductionSourceFile(file: string): boolean {
+  return file.endsWith('.ts') && !/(?:^|\/)__tests__\//.test(file) && !/\.test\.ts$/.test(file);
 }
 
 function isCoreInteractor(file: string): boolean {
@@ -155,7 +156,7 @@ function readBaseline(): BackEdgeBaseline {
 function writeBaseline(actual: BackEdgeBaseline): void {
   fs.writeFileSync(baselinePath, `${JSON.stringify(actual, null, 2)}\n`);
   process.stdout.write(
-    `Layering guard: updated ${path.relative(repoRoot, baselinePath)} with current back-edge counts.\n`,
+    `Layering guard: updated ${path.relative(repoRoot, baselinePath)} with current back-edge identities.\n`,
   );
 }
 
@@ -195,20 +196,45 @@ function readBaselineAtRef(ref: string): BackEdgeBaseline | null {
   }
 }
 
+function deriveBaselineAtRef(ref: string, committed: BackEdgeBaseline): BackEdgeBaseline {
+  const files = execFileSync('git', ['ls-tree', '-r', '--name-only', ref, '--', 'src'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  })
+    .split('\n')
+    .filter(isProductionSourceFile);
+  const sources = new Map(files.map((file) => [file, '']));
+  const committedSources = new Set(
+    Object.values(committed)
+      .flat()
+      .map((identity) => identity.split(' -> ')[0]!),
+  );
+  for (const file of committedSources) {
+    if (!sources.has(file)) continue;
+    sources.set(
+      file,
+      execFileSync('git', ['show', `${ref}:${file}`], {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }),
+    );
+  }
+  return collectBackEdges(resolveImportEdges(sources));
+}
+
 function checkBaselineMonotonic(argv: readonly string[]): Violation[] {
   const committed = readBaseline();
   const baseRef = resolveBaseRef(argv);
   if (!baseRef) return [];
-  const base = readBaselineAtRef(baseRef);
-  if (!base) return [];
+  const base = readBaselineAtRef(baseRef) ?? deriveBaselineAtRef(baseRef, committed);
   return findBaselineRaises(base, committed).map((raise) => ({
     rule: 'R6 back-edge-ceiling',
     file: path.relative(repoRoot, baselinePath),
     line: 1,
     message:
-      `${raise.pair} baseline raised: merge-base ${raise.base}, committed ${raise.committed}. ` +
-      `The down-only ratchet forbids lifting the ceiling; remove the new back-edge ` +
-      `instead of raising the baseline (decreases and unchanged pairs are allowed).`,
+      `${raise.pair} baseline added ${raise.added.join(', ')}. ` +
+      `Remove the new back-edge instead of adding it to the baseline.`,
   }));
 }
 
@@ -219,15 +245,20 @@ function checkBackEdgeRatchet(
   const baseline = readBaseline();
   return compareBackEdgeBaseline(baseline, actual).map((drift) => {
     const representative = edges.find((edge) => backEdgePair(edge) === drift.pair);
-    const direction = drift.actual > drift.baseline ? 'grew' : 'shrunk';
+    const details = [
+      drift.added.length > 0 ? `added ${drift.added.join(', ')}` : '',
+      drift.removed.length > 0 ? `removed ${drift.removed.join(', ')}` : '',
+    ]
+      .filter(Boolean)
+      .join('; ');
     return {
       rule: 'R5 back-edge-ratchet',
       file: representative?.file ?? path.relative(repoRoot, baselinePath),
       line: representative?.line ?? 1,
       message:
-        `${drift.pair} ${direction}: baseline ${drift.baseline}, current ${drift.actual}. ` +
-        (direction === 'grew'
-          ? `Remove the new up-edge; the target-spine debt may not increase.`
+        `${drift.pair} changed: ${details}. ` +
+        (drift.added.length > 0
+          ? `Remove the new up-edge; existing debt may not be replaced or increased.`
           : `Regenerate the baseline so the improvement becomes the new ceiling.`),
     };
   });
@@ -267,7 +298,7 @@ export function main(argv = process.argv.slice(2)): number {
   const sourceFiles = listSourceFiles();
   const edges = resolveImportEdges(readSources(sourceFiles));
   const violations = [...checkLayeringRules(edges), ...checkCycles(edges)];
-  const actualBackEdges = countBackEdges(edges);
+  const actualBackEdges = collectBackEdges(edges);
   if (argv.includes('--update-baseline')) {
     if (violations.length > 0) return report(sourceFiles, violations);
     writeBaseline(actualBackEdges);

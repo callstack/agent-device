@@ -15,12 +15,6 @@ function flagDefinitionsForKey(key: FlagKey): FlagDefinition[] {
   return getFlagDefinitions().filter((definition) => definition.key === key);
 }
 
-/**
- * Canonical single-line usage for a command, shared by CLI `--help` rendering
- * and `explain`. Honors an explicit `usageOverride`; otherwise composes
- * `<command> <positionals> [flags]` from the schema so callers without an
- * override still surface positionals and flags rather than the bare name.
- */
 export function buildCommandUsage(commandName: string, schema: CommandSchema): string {
   if (schema.usageOverride) return schema.usageOverride;
   const positionals = (schema.positionalArgs ?? []).map(formatPositionalArg);

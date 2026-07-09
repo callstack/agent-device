@@ -116,10 +116,6 @@ export function parseRawArgs(argv: string[]): RawParsedArgs {
   return { command, positionals, flags, warnings, providedFlags };
 }
 
-// `relaunch <app>` is a true alias for `open <app> --relaunch`: the command
-// token normalizes to open and the alias's implied flags are injected here.
-// Setting a flag is idempotent with an explicit one; everything else passes
-// through to the canonical command's normal validation.
 function applyAliasImpliedFlags(rawCommand: string | null, flags: CliFlags): void {
   if (!rawCommand) return;
   for (const key of cliCommandAlias(rawCommand)?.impliedFlags ?? []) {
@@ -387,8 +383,6 @@ export async function usageForCommand(command: string): Promise<string | null> {
   return buildCommandUsageText(normalizeCommandAlias(command));
 }
 
-// Canonical alias normalization lives in cli-command-aliases.ts (shared with
-// `explain`); this wrapper keeps the parser's existing call sites unchanged.
 function normalizeCommandAlias(command: string): string {
   return normalizeCliCommandAlias(command);
 }

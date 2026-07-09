@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { listSourceFiles } from './check.ts';
 import {
   compareBackEdgeBaseline,
-  countBackEdges,
+  collectBackEdges,
   findBaselineRaises,
   findValueImportCycles,
   parseImports,
@@ -67,45 +67,101 @@ test('back-edge counts follow the documented target spine and drift in either di
       ['src/utils/shared.ts', "import '../core/platform-plugin.ts';"],
     ]),
   );
-  const actual = countBackEdges(edges);
+  const actual = collectBackEdges(edges);
   assert.deepEqual(actual, {
-    'commands -> cli': 1,
-    'platforms -> core': 1,
+    'commands -> cli': ['src/commands/help.ts -> src/cli/parser.ts'],
+    'platforms -> core': ['src/platforms/apple.ts -> src/core/platform-plugin.ts'],
   });
-  assert.deepEqual(compareBackEdgeBaseline({ 'commands -> cli': 1 }, actual), [
-    { pair: 'platforms -> core', baseline: 0, actual: 1 },
-  ]);
-  assert.deepEqual(compareBackEdgeBaseline({ ...actual, 'commands -> client': 1 }, actual), [
-    { pair: 'commands -> client', baseline: 1, actual: 0 },
+  assert.deepEqual(
+    compareBackEdgeBaseline(
+      { 'commands -> cli': ['src/commands/help.ts -> src/cli/parser.ts'] },
+      actual,
+    ),
+    [
+      {
+        pair: 'platforms -> core',
+        added: ['src/platforms/apple.ts -> src/core/platform-plugin.ts'],
+        removed: [],
+      },
+    ],
+  );
+  assert.deepEqual(
+    compareBackEdgeBaseline(
+      {
+        ...actual,
+        'commands -> client': ['src/commands/help.ts -> src/client/client.ts'],
+      },
+      actual,
+    ),
+    [
+      {
+        pair: 'commands -> client',
+        added: [],
+        removed: ['src/commands/help.ts -> src/client/client.ts'],
+      },
+    ],
+  );
+});
+
+test('exact back-edge identities reject same-count replacements', () => {
+  const baseline = {
+    'commands -> cli': ['src/commands/a.ts -> src/cli/a.ts'],
+  };
+  const actual = {
+    'commands -> cli': ['src/commands/b.ts -> src/cli/b.ts'],
+  };
+  assert.deepEqual(compareBackEdgeBaseline(baseline, actual), [
+    {
+      pair: 'commands -> cli',
+      added: ['src/commands/b.ts -> src/cli/b.ts'],
+      removed: ['src/commands/a.ts -> src/cli/a.ts'],
+    },
   ]);
 });
 
-test('findBaselineRaises flags a raised ceiling but permits decreases and unchanged pairs', () => {
-  const base = { 'platforms -> core': 16, 'commands -> cli': 7 };
-  // Raising an existing pair and introducing a new zero-to-positive pair both
-  // lift the ceiling; a decrease and an unchanged pair must stay silent.
+test('findBaselineRaises rejects additions and replacements but permits removal', () => {
+  const base = {
+    'platforms -> core': ['src/platforms/a.ts -> src/core/a.ts'],
+    'commands -> cli': ['src/commands/a.ts -> src/cli/a.ts'],
+  };
   assert.deepEqual(
     findBaselineRaises(base, {
-      'platforms -> core': 17,
-      'commands -> cli': 5,
-      'commands -> client': 2,
+      'platforms -> core': [
+        'src/platforms/a.ts -> src/core/a.ts',
+        'src/platforms/b.ts -> src/core/b.ts',
+      ],
+      'commands -> cli': ['src/commands/b.ts -> src/cli/b.ts'],
+      'commands -> client': ['src/commands/c.ts -> src/client/c.ts'],
     }),
     [
-      { pair: 'commands -> client', base: 0, committed: 2 },
-      { pair: 'platforms -> core', base: 16, committed: 17 },
+      {
+        pair: 'commands -> cli',
+        added: ['src/commands/b.ts -> src/cli/b.ts'],
+      },
+      {
+        pair: 'commands -> client',
+        added: ['src/commands/c.ts -> src/client/c.ts'],
+      },
+      {
+        pair: 'platforms -> core',
+        added: ['src/platforms/b.ts -> src/core/b.ts'],
+      },
     ],
   );
   assert.deepEqual(findBaselineRaises(base, base), []);
-  assert.deepEqual(findBaselineRaises(base, { 'platforms -> core': 15, 'commands -> cli': 7 }), []);
+  assert.deepEqual(
+    findBaselineRaises(base, {
+      'platforms -> core': [],
+      'commands -> cli': ['src/commands/a.ts -> src/cli/a.ts'],
+    }),
+    [],
+  );
 });
 
 test('listSourceFiles includes root-level src/*.ts production files', () => {
   const files = new Set(listSourceFiles());
-  // Regression guard: `git ls-files 'src/**/*.ts'` omits direct children of
-  // src/, so these production modules must be pulled in by the extra pathspec.
   for (const rootFile of ['src/cli.ts', 'src/command-catalog.ts', 'src/backend.ts']) {
     assert.ok(files.has(rootFile), `expected ${rootFile} in analyzed source files`);
   }
-  // Tests are still excluded, root-level ones included.
   assert.ok(![...files].some((file) => file.endsWith('.test.ts')));
 });

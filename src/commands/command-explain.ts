@@ -1,5 +1,5 @@
 import { listCliCommandNames } from '../command-catalog.ts';
-import { cliAliasesForCommand } from '../cli-command-aliases.ts';
+import { cliAliasesForCommand, normalizeCliCommandAlias } from '../cli-command-aliases.ts';
 import { buildCommandUsage } from '../utils/cli-usage.ts';
 import type { DaemonCommandRoute } from '../daemon/daemon-command-registry.ts';
 import { commandDescriptors, type Command } from '../core/command-descriptor/registry.ts';
@@ -14,6 +14,7 @@ import {
   type FlagKey,
 } from '../utils/command-schema.ts';
 import { commandFamilies, type CommandFamilyMetadata } from './family/registry.ts';
+import { commandOwnerFiles } from './command-owner-files.ts';
 
 export type CommandFlagExplanation = {
   key: FlagKey;
@@ -61,6 +62,10 @@ export type CommandExplanationResult =
   | { found: true; explanation: CommandExplanation }
   | { found: false; query: string; suggestions: string[] };
 
+export type CommandExplanationFormatOptions = {
+  detail?: 'compact' | 'full';
+};
+
 type FileExists = (repoRelativePath: string) => boolean;
 type CommandDescriptor = (typeof commandDescriptors)[number];
 
@@ -94,8 +99,6 @@ function buildCommandExplanation(
   const catalogKey = readCatalogKey(descriptor);
   return {
     command: descriptor.name,
-    // True CLI aliases resolved from parser normalization — distinct from the
-    // catalog key (`catalog.key`), which is the descriptor's internal name.
     aliases: describeCliAliases(descriptor.name),
     description: describeCommandText(descriptor, family, cliSchema),
     catalog: { group: descriptor.catalog.group, key: catalogKey },
@@ -110,12 +113,17 @@ function buildCommandExplanation(
       family?.name,
       'daemon' in descriptor ? descriptor.daemon?.route : undefined,
       Boolean('capability' in descriptor && descriptor.capability),
+      Boolean('dispatch' in descriptor && descriptor.dispatch),
       fileExists,
     ),
   };
 }
 
-export function formatCommandExplanation(explanation: CommandExplanation): string {
+export function formatCommandExplanation(
+  explanation: CommandExplanation,
+  options: CommandExplanationFormatOptions = {},
+): string {
+  const full = options.detail === 'full';
   const lines = [
     `${explanation.command} [${explanation.catalog.group}]`,
     explanation.description,
@@ -133,15 +141,17 @@ export function formatCommandExplanation(explanation: CommandExplanation): strin
   if (explanation.cli) {
     lines.push(`usage: ${explanation.cli.usage}`);
     lines.push(`flags: ${formatFlagList(explanation.cli.commandFlags)}`);
-    lines.push(`supported: ${formatFlagList(explanation.cli.supportedFlags)}`);
-    lines.push(`global: ${formatFlagList(explanation.cli.globalFlags)}`);
+    if (full) {
+      lines.push(`supported: ${formatFlagList(explanation.cli.supportedFlags)}`);
+      lines.push(`global: ${formatFlagList(explanation.cli.globalFlags)}`);
+    }
   }
   lines.push('files:', ...explanation.files.map((file) => `  ${file}`));
   return lines.join('\n');
 }
 
 function resolveDescriptor(query: string): CommandDescriptor | undefined {
-  const direct = descriptorByName.get(query);
+  const direct = descriptorByName.get(normalizeCliCommandAlias(query));
   if (direct) return direct;
   return commandDescriptors.find((descriptor) => readCatalogKey(descriptor) === query);
 }
@@ -216,6 +226,7 @@ function suggestCommands(query: string): string[] {
   const candidates = commandDescriptors.flatMap((descriptor) => [
     descriptor.name,
     readCatalogKey(descriptor),
+    ...cliAliasesForCommand(descriptor.name).map((alias) => alias.alias),
   ]);
   return [...new Set(candidates)]
     .map((candidate) => ({ candidate, distance: levenshtein(query, candidate) }))
@@ -253,8 +264,6 @@ function describeTimeoutPolicy(policy: CommandTimeoutPolicy): CommandExplanation
 
 function describeCliSurface(command: string, schema: CommandSchema): CommandExplanation['cli'] {
   return {
-    // Canonical builder: schemas without a usageOverride still get positionals
-    // and flags composed in, matching the CLI's own --help usage line.
     usage: buildCommandUsage(command, schema),
     positionalArgs: schema.positionalArgs ?? [],
     commandFlags: describeFlags(schema.allowedFlags ?? []),
@@ -287,11 +296,6 @@ function groupFlagDefinitions(): Map<FlagKey, FlagDefinition[]> {
   return result;
 }
 
-// Explicit daemon-route ownership, keyed by the closed `DaemonCommandRoute`
-// union so TypeScript fails the build if a new route ships without an owner
-// here. This replaces the previous `handlers/<route>.ts` guess, which silently
-// dropped the non-kebab routes (`reactNative`, `recordTrace`) and the
-// `generic` dispatch route because their owning files are named differently.
 const DAEMON_ROUTE_OWNER_FILES: Record<DaemonCommandRoute, string> = {
   lease: 'src/daemon/handlers/lease.ts',
   session: 'src/daemon/handlers/session.ts',
@@ -308,18 +312,15 @@ function commandFiles(
   family: string | undefined,
   daemonRoute: DaemonCommandRoute | undefined,
   hasCapability: boolean,
+  hasDispatch: boolean,
   fileExists: FileExists | undefined,
 ): string[] {
-  // The descriptor registry is every command's guaranteed owner seam.
   const derived = ['src/core/command-descriptor/registry.ts'];
-  // The family barrel is the derived owner for a family command (split family
-  // internals are re-exported through it); the per-command module and tests are
-  // added opportunistically when a matching file exists.
+  const commandOwners = commandOwnerFiles(command);
   const opportunistic: string[] = [];
   if (family) {
     derived.push(`src/commands/${family}/index.ts`);
     opportunistic.push(
-      `src/commands/${family}/${command}.ts`,
       `src/commands/${family}/${command}.test.ts`,
       `src/commands/${family}/index.test.ts`,
     );
@@ -327,11 +328,10 @@ function commandFiles(
     derived.push('src/utils/cli-command-overrides.ts');
   }
   if (daemonRoute) derived.push(DAEMON_ROUTE_OWNER_FILES[daemonRoute]);
+  if (hasDispatch) derived.push('src/core/dispatch.ts');
   if (hasCapability) derived.push('src/core/capabilities.ts');
-  // Derived owners come from registry seams and must exist; opportunistic
-  // guesses are the only entries filtered by existence.
   const present = fileExists ? opportunistic.filter(fileExists) : opportunistic;
-  return [...new Set([...derived, ...present])];
+  return [...new Set([...derived, ...commandOwners, ...present])];
 }
 
 function formatFlagList(flags: readonly CommandFlagExplanation[]): string {

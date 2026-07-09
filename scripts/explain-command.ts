@@ -5,10 +5,11 @@ import { explainCommand, formatCommandExplanation } from '../src/commands/comman
 const repoRoot = path.resolve(import.meta.dirname, '..');
 const args = process.argv.slice(2);
 const json = args.includes('--json');
-const query = args.find((arg) => arg !== '--json');
+const full = args.includes('--full');
+const query = args.find((arg) => arg !== '--json' && arg !== '--full');
 
 if (!query) {
-  process.stderr.write('Usage: pnpm explain:command <command-or-catalog-key> [--json]\n');
+  process.stderr.write('Usage: pnpm explain:command <command-or-catalog-key> [--json] [--full]\n');
   process.exitCode = 1;
 } else {
   const result = explainCommand(query, {
@@ -23,7 +24,7 @@ if (!query) {
     process.stdout.write(
       json
         ? `${JSON.stringify(result.explanation, null, 2)}\n`
-        : `${formatCommandExplanation(result.explanation)}\n`,
+        : `${formatCommandExplanation(result.explanation, { detail: full ? 'full' : 'compact' })}\n`,
     );
   }
 }
