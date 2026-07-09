@@ -644,6 +644,35 @@ test('parseRunnerResponse preserves runner unsupported-operation codes', async (
   );
 });
 
+test('parseRunnerResponse surfaces the keyboard-dismiss hint to press the next target directly', async () => {
+  const hint =
+    'The on-screen keyboard does not block agent-device interactions: snapshot refs and presses still work through it. Press the next target directly instead of retrying dismiss; use keyboard enter to press the return key if submission is what you actually need.';
+  const response = new Response(
+    JSON.stringify({
+      ok: false,
+      error: {
+        code: 'UNSUPPORTED_OPERATION',
+        message: 'Unable to dismiss the iOS keyboard without a safe native dismiss control',
+        hint,
+      },
+    }),
+  );
+  const session = { ready: false };
+
+  await assert.rejects(
+    () => parseRunnerResponse(response, session, '/tmp/runner.log'),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.code, 'UNSUPPORTED_OPERATION');
+      assert.equal(error.details?.hint, hint);
+      assert.match(String(error.details?.hint), /does not block agent-device interactions/i);
+      assert.match(String(error.details?.hint), /press the next target directly/i);
+      assert.match(String(error.details?.hint), /keyboard enter/i);
+      return true;
+    },
+  );
+});
+
 test('parseRunnerResponse preserves iOS AX snapshot failure code and hint', async () => {
   const hint =
     'Try a smaller read such as snapshot -s <visible label or id> -d 8, or use direct selector commands such as find id <value> click.';

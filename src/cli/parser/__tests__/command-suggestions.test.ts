@@ -97,6 +97,18 @@ test('input and settext suggest fill', () => {
   }
 });
 
+test('get-text, gettext, and get_text suggest get text', () => {
+  for (const guess of ['get-text', 'gettext', 'get_text']) {
+    assert.throws(
+      () => parseArgs([guess]),
+      (error: unknown) =>
+        error instanceof AppError &&
+        error.code === 'INVALID_ARGS' &&
+        error.message === `Unknown command: ${guess}. Did you mean get text?`,
+    );
+  }
+});
+
 test('screencap and capture suggest screenshot', () => {
   for (const guess of ['screencap', 'capture']) {
     assert.throws(

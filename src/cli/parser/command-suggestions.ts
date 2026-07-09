@@ -35,6 +35,9 @@ const COMMAND_ALIAS_SUGGESTIONS: Record<string, CommandAliasSuggestion> = {
   screencap: { command: 'screenshot', example: 'screenshot' },
   capture: { command: 'screenshot', example: 'screenshot' },
   dismiss: { command: 'keyboard', example: 'keyboard dismiss' },
+  'get-text': { command: 'get', example: 'get text' },
+  gettext: { command: 'get', example: 'get text' },
+  get_text: { command: 'get', example: 'get text' },
 };
 
 export function listCommandAliasSuggestionEntries(): Array<[string, CommandAliasSuggestion]> {
