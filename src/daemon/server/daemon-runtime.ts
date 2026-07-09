@@ -15,7 +15,8 @@ import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from '../request-router.ts';
 import { teardownSessionResources } from '../session-teardown.ts';
 import { closeDaemonServers } from './server-shutdown.ts';
-import type { SessionState } from '../types.ts';
+import type { DaemonInvokeFn, SessionState } from '../types.ts';
+import { createDaemonIdleReap } from './daemon-idle-reap.ts';
 import {
   emitDiagnostic,
   flushDiagnosticsToSessionFile,
@@ -101,7 +102,7 @@ export async function startDaemonRuntime(
     createDefaultCloudArtifactProvider(env),
   );
 
-  const handleRequest = createRequestHandler({
+  const dispatchRequest = createRequestHandler({
     logPath,
     stateDir: baseDir,
     token,
@@ -151,6 +152,31 @@ export async function startDaemonRuntime(
   const teardownDaemonSessions = async (): Promise<void> => {
     const sessionsToStop = sessionStore.toArray();
     await Promise.all(sessionsToStop.map(teardownDaemonSession));
+  };
+
+  // Reaps this daemon process when it sits fully idle (no open sessions, no
+  // in-flight requests, no active recording) past AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS.
+  // `shutdown` is defined below but only invoked asynchronously by the timer,
+  // well after this closure captures it.
+  let inFlightRequestCount = 0;
+  const idleReap = createDaemonIdleReap({
+    sessionStore,
+    getInFlightRequestCount: () => inFlightRequestCount,
+    onIdleReap: () => {
+      void shutdown();
+    },
+    env,
+  });
+
+  const handleRequest: DaemonInvokeFn = async (req) => {
+    inFlightRequestCount++;
+    idleReap.cancel();
+    try {
+      return await dispatchRequest(req);
+    } finally {
+      inFlightRequestCount--;
+      idleReap.noteActivity();
+    }
   };
 
   const openDaemonServers = async (): Promise<{
@@ -225,6 +251,9 @@ export async function startDaemonRuntime(
     socketPort = opened.socketPort;
     httpPort = opened.httpPort;
     publishDaemonInfo(socketPort, httpPort);
+    // Arms the initial idle-reap timer: a daemon that starts and never
+    // receives a request must still be able to reap itself.
+    idleReap.noteActivity();
   } catch (error) {
     const appErr = asAppError(error);
     stderr.write(`Daemon error: ${appErr.message}\n`);
@@ -243,6 +272,7 @@ export async function startDaemonRuntime(
 
   let shuttingDown = false;
   const shutdown = async (shutdownOptions: { exitCode?: number; cause?: unknown } = {}) => {
+    idleReap.cancel();
     if (shuttingDown) return;
     shuttingDown = true;
     if (shutdownOptions.cause) {

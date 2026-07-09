@@ -150,6 +150,22 @@ test('help workflow documents open/close/relaunch runner guarantees (#1051)', as
   assert.match(result.stdout, /default 5 minutes/);
 });
 
+test('help workflow documents daemon idle reap and stale lease takeover guarantees', async () => {
+  const result = await runCliCapture(['help', 'workflow']);
+  assert.equal(result.code, 0);
+  assert.equal(result.calls.length, 0);
+  assert.match(
+    result.stdout,
+    /self-exits after an idle window \(default 5 minutes, matching the runner idle-stop default\)/,
+  );
+  assert.match(result.stdout, /AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS/);
+  assert.match(
+    result.stdout,
+    /a stale iOS runner lease — its owner process dead, or its AGENT_DEVICE_STATE_DIR deleted — is reclaimed automatically/i,
+  );
+  assert.match(result.stdout, /genuinely live owner whose state dir still exists still rejects/);
+});
+
 test('help workflow documents ref lifetime, snapshot diff, and wait guarantees (#1051)', async () => {
   const result = await runCliCapture(['help', 'workflow']);
   assert.equal(result.code, 0);

@@ -388,12 +388,31 @@ function readFiniteNumber(value: unknown): number | null {
   return typeof value === 'number' && Number.isFinite(value) ? value : null;
 }
 
+// A lease owner counts as gone - and its lease reclaimable as stale - when its
+// PID is dead/recycled OR its AGENT_DEVICE_STATE_DIR no longer exists on disk.
+// The state-dir check covers daemons left running by a deleted sandbox/worktree:
+// the process is technically still alive, but nothing can ever route a request
+// to it again (its info/lock/session files are gone with the directory), so it
+// can never legitimately contend for the runner. Leases written before this
+// field existed (no ownerStateDir) skip the check and fall back to PID
+// liveness only.
 function isRunnerLeaseOwnerAlive(lease: RunnerLease): boolean {
   if (!isProcessAlive(lease.ownerPid)) return false;
-  if (lease.ownerStartTime) {
-    return readProcessStartTime(lease.ownerPid) === lease.ownerStartTime;
+  if (lease.ownerStartTime && readProcessStartTime(lease.ownerPid) !== lease.ownerStartTime) {
+    return false;
   }
-  return true;
+  return !isRunnerLeaseOwnerStateDirGone(lease);
+}
+
+function isRunnerLeaseOwnerStateDirGone(lease: RunnerLease): boolean {
+  if (!lease.ownerStateDir) return false;
+  try {
+    return !fs.existsSync(lease.ownerStateDir);
+  } catch {
+    // Unable to tell (e.g. permission error on an ancestor path): fail open
+    // and treat the owner as alive rather than force a takeover on a guess.
+    return false;
+  }
 }
 
 async function cleanupLeasedRunnerProcesses(
