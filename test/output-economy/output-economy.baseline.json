@@ -96,5 +96,12 @@
     "refs": 0,
     "hints": 1,
     "shape": "$.code:string|$.details.reason:string|$.details:object|$.hint:string|$.message:string|$.retriable:boolean|$:object"
+  },
+  "error.policy-normalized.json": {
+    "bytes": 235,
+    "lines": 1,
+    "refs": 0,
+    "hints": 1,
+    "shape": "$.code:string|$.details.reason:string|$.details:object|$.hint:string|$.message:string|$.retriable:boolean|$:object"
   }
 }

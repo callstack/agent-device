@@ -6,6 +6,7 @@ import type { EconomySample } from './economy-metrics.ts';
 import {
   ACTIONABLE_ERROR,
   NOT_SETTLED_RESULT,
+  POLICY_NORMALIZED_ERROR,
   SCREENSHOT_RESULT,
   SELECTOR_READ_RESULT,
   SETTLE_ADDED_REF_RESULT,
@@ -26,8 +27,13 @@ export function renderOutputFixtures() {
   const settleDigest = RESPONSE_VIEWS.press!(SETTLE_ADDED_REF_RESULT, 'digest');
   const settleTailDigest = RESPONSE_VIEWS.press!(SETTLE_TAIL_RESULT, 'digest');
   const selectorDigest = RESPONSE_VIEWS.find!(SELECTOR_READ_RESULT, 'digest');
+  // Default and digest screenshot samples both flow through the SAME production
+  // projection so their byte comparison is like-for-like; `default` returns the
+  // daemon payload unchanged, `digest` compacts it.
+  const screenshotDefault = RESPONSE_VIEWS.screenshot!(SCREENSHOT_RESULT, 'default');
   const screenshotDigest = RESPONSE_VIEWS.screenshot!(SCREENSHOT_RESULT, 'digest');
   const error = normalizeError(ACTIONABLE_ERROR);
+  const errorPolicyNormalized = normalizeError(POLICY_NORMALIZED_ERROR);
 
   return {
     snapshot,
@@ -35,8 +41,10 @@ export function renderOutputFixtures() {
     settleDigest,
     settleTailDigest,
     selectorDigest,
+    screenshotDefault,
     screenshotDigest,
     error,
+    errorPolicyNormalized,
     samples: {
       'snapshot.default.text': { text: snapshot.text ?? '' },
       'snapshot.default.json': { data: snapshot.jsonData },
@@ -49,9 +57,10 @@ export function renderOutputFixtures() {
       'not-settled.default.text': { text: interactionText(NOT_SETTLED_RESULT) },
       'selector-read.default.json': { data: SELECTOR_READ_RESULT },
       'selector-read.digest.json': { data: selectorDigest },
-      'screenshot.default.json': { data: SCREENSHOT_RESULT },
+      'screenshot.default.json': { data: screenshotDefault },
       'screenshot.digest.json': { data: screenshotDigest },
       'error.normalized.json': { data: error },
+      'error.policy-normalized.json': { data: errorPolicyNormalized },
     } satisfies Record<string, EconomySample>,
   };
 }

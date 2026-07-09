@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { describe, expect, test } from 'vitest';
+import { defaultHintForCode, retriableForErrorCode } from '../../src/kernel/errors.ts';
 import { measureEconomySample, type EconomyMetrics } from './economy-metrics.ts';
 import { renderOutputFixtures } from './render-fixtures.ts';
 
@@ -76,5 +77,58 @@ describe('actionability and reliability floors', () => {
       details: { reason: 'session-lock' },
     });
     expect(actual['not-settled.default.text']!.hints).toBe(1);
+  });
+
+  test('policy-derived failures inherit hint and retry from production normalization', () => {
+    // No overrides on the fixture, so both fields must come from the shared
+    // error policy rather than fixture-supplied values.
+    expect(rendered.errorPolicyNormalized).toMatchObject({
+      code: 'DEVICE_IN_USE',
+      hint: defaultHintForCode('DEVICE_IN_USE'),
+      retriable: retriableForErrorCode('DEVICE_IN_USE'),
+      details: { reason: 'session-lock' },
+    });
+    expect(rendered.errorPolicyNormalized.retriable).toBe(true);
+    expect(rendered.errorPolicyNormalized.hint).toBeTruthy();
+  });
+});
+
+// These floors assert on the rendered production surfaces directly, so they hold
+// regardless of the frozen byte/shape baseline above — a churn-driven baseline
+// refresh can never quietly drop the actionable content an agent depends on.
+describe('baseline-independent actionability floors', () => {
+  test('default snapshot exposes actionable refs with their labels', () => {
+    const text = rendered.snapshot.text ?? '';
+    expect(text).toContain('@e2 [text-field] "qa@example.com"');
+    expect(text).toContain('@e3 [button] "Place order"');
+    const nodes = (rendered.snapshot.jsonData as { nodes?: { ref?: string; label?: string }[] })
+      .nodes;
+    expect(nodes?.find((node) => node.ref === 'e3')).toMatchObject({ label: 'Place order' });
+  });
+
+  test('default settle output surfaces the newly added targets', () => {
+    const text = rendered.samples['settle.default.text'];
+    const settleText = 'text' in text ? text.text : '';
+    expect(settleText).toContain('@e4');
+    expect(settleText).toContain('@e5');
+    expect(settleText).toContain('Order confirmed');
+  });
+
+  test('screenshot digest keeps overlay refs and the artifact retrieval handle', () => {
+    expect(rendered.screenshotDigest).toMatchObject({
+      overlayRefs: [
+        { ref: 'e2', label: 'Email' },
+        { ref: 'e3', label: 'Place order' },
+      ],
+      artifacts: [{ artifactType: 'screenshot', artifactId: 'artifact-economy-fixture' }],
+    });
+  });
+
+  test('non-settled output carries the actual recovery guidance, not just a hint count', () => {
+    const sample = rendered.samples['not-settled.default.text'];
+    const text = 'text' in sample ? sample.text : '';
+    expect(text).toContain('not settled after 3000ms');
+    expect(text).toContain('wait stable');
+    expect(text).toContain('snapshot -i');
   });
 });

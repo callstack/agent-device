@@ -173,3 +173,13 @@ export const ACTIONABLE_ERROR = new AppError(
     reason: 'session-lock',
   },
 );
+
+// Carries no hint/retriable overrides, so both must be filled in by production
+// error policy (defaultHintForCode + retriableForErrorCode) at normalize time.
+// This exercises the default hint/retry normalization path that the override
+// fixture above bypasses.
+export const POLICY_NORMALIZED_ERROR = new AppError(
+  'DEVICE_IN_USE',
+  'Device android-emulator-2 is already used by session smoke',
+  { reason: 'session-lock' },
+);
