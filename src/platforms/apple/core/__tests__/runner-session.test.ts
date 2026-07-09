@@ -1101,9 +1101,7 @@ test('runner session startup reclaims dead foreign runner lease before launching
 
 test('runner session startup reclaims a foreign runner lease whose owner state dir is gone', async () => {
   const device = { ...IOS_SIMULATOR, id: 'runner-session-owner-state-dir-gone-sim' };
-  const goneStateDir = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-owner-state-dir-gone-'),
-  );
+  const goneStateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-owner-state-dir-gone-'));
   fs.rmSync(goneStateDir, { recursive: true, force: true });
   // The owner PID is alive (isProcessAlive defaults to true in beforeEach) but
   // its AGENT_DEVICE_STATE_DIR no longer exists - the orphaned-daemon shape
@@ -1124,10 +1122,53 @@ test('runner session startup reclaims a foreign runner lease whose owner state d
   const session = await ensureRunnerSession(device, {});
 
   assert.equal(session.deviceId, device.id);
+  // Force-stop path, never adoption: the alive-but-orphaned owner may still
+  // hold a live runner connection, so the old runner (pid 4321) must be
+  // killed and a FRESH runner launched instead of silently adopting it.
   assert.equal(mockRunCmdBackground.mock.calls.length, 1);
+  assert.notEqual(session.child.pid, 4_321);
   const pkillCalls = mockRunAppleToolCommand.mock.calls.filter(isXcodebuildPkillCall);
   assert.ok(pkillCalls.length >= 2);
   assert.match(String(pkillCalls[0]?.[1]?.[2] ?? ''), /owner-state-dir-gone/);
+});
+
+test('runner session startup fails closed when the owner state dir cannot be statted', async () => {
+  const device = { ...IOS_SIMULATOR, id: 'runner-session-owner-state-dir-eacces-sim' };
+  const unreadableStateDir = '/tmp/agent-device-owner-state-dir-eacces';
+  writeRunnerLease(
+    makeRunnerLease({
+      deviceId: device.id,
+      ownerToken: 'owner-state-dir-eacces',
+      ownerPid: process.pid,
+      ownerStartTime: RUNNER_OWNER_START_TIME,
+      ownerStateDir: unreadableStateDir,
+    }),
+  );
+  // A stat error that is NOT proof-of-absence (EACCES on an ancestor,
+  // transient IO failure) must classify the owner as ALIVE: taking over on a
+  // guess could steal the runner from a healthy daemon. fs.existsSync would
+  // swallow this error into `false` (gone), so the implementation must stat
+  // and inspect the error code instead.
+  const realStatSync = fs.statSync.bind(fs);
+  const statSyncSpy = vi.spyOn(fs, 'statSync').mockImplementation(((
+    target: fs.PathLike,
+    options?: fs.StatSyncOptions,
+  ) => {
+    if (target === unreadableStateDir) {
+      throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+    }
+    return realStatSync(target, options);
+  }) as typeof fs.statSync);
+
+  try {
+    await assert.rejects(
+      () => ensureRunnerSession(device, {}),
+      /already owned by another agent-device daemon/,
+    );
+    assert.equal(mockRunCmdBackground.mock.calls.length, 0);
+  } finally {
+    statSyncSpy.mockRestore();
+  }
 });
 
 test('runner session startup still rejects a live foreign lease whose owner state dir exists', async () => {

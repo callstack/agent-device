@@ -41,10 +41,7 @@ test('resolveDaemonIdleReapMs falls back to the 5 minute default', () => {
 });
 
 test('resolveDaemonIdleReapMs honors AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS', () => {
-  assert.equal(
-    resolveDaemonIdleReapMs({ AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '1200' }),
-    1_200,
-  );
+  assert.equal(resolveDaemonIdleReapMs({ AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '1200' }), 1_200);
 });
 
 test('resolveDaemonIdleReapMs treats 0 as an explicit value (disabled)', () => {

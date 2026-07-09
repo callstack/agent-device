@@ -7,6 +7,7 @@ import {
   buildDetachedRunnerLease,
   buildRunnerLease,
   readStaleRunnerLease,
+  RUNNER_OWNER_START_TIME,
   writeRunnerLease,
   type RunnerLease,
 } from '../runner/runner-lease.ts';
@@ -170,4 +171,25 @@ test('adoption is disabled by the kill switch', async () => {
   process.env.AGENT_DEVICE_IOS_RUNNER_DETACH = '0';
 
   expect(await tryAdoptRunnerSessionFromLease(simulator, {})).toBeNull();
+});
+
+test('adoption is refused when the owner state dir is gone but the owner process is alive', async () => {
+  // The owner daemon is ALIVE (same pid/start-time as this process) but its
+  // AGENT_DEVICE_STATE_DIR was deleted. Such a lease is reclaimable, but only
+  // via the force-stop path: silently adopting a runner whose live owner
+  // still believes it owns it would create two masters. Adoption must refuse
+  // it outright - before ever probing the runner.
+  const goneStateDir = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-adopt-dir-gone-'));
+  fs.rmSync(goneStateDir, { recursive: true, force: true });
+  writeStaleLease({
+    ownerToken: 'owner-foreign-dir-gone',
+    ownerPid: process.pid,
+    ownerStartTime: RUNNER_OWNER_START_TIME,
+    ownerStateDir: goneStateDir,
+  });
+  mockIsProcessAlive.mockReturnValue(true);
+
+  expect(readStaleRunnerLease(simulator.id)).toBeNull();
+  expect(await tryAdoptRunnerSessionFromLease(simulator, {})).toBeNull();
+  expect(mockSendRunnerCommandOnce).not.toHaveBeenCalled();
 });
