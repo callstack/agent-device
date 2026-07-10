@@ -15,10 +15,7 @@ import {
   tryParseSelectorChain,
   type Selector,
 } from '../selectors.ts';
-import {
-  collectReplaySelectorCandidates,
-  captureSnapshotForReplay,
-} from './session-replay-heal.ts';
+import { collectReplaySelectorCandidates } from './session-replay-heal.ts';
 import { formatScriptActionSummary, isTouchTargetCommand } from '../../replay/script-utils.ts';
 import { SessionStore } from '../session-store.ts';
 import type { SessionAction, SessionState } from '../types.ts';
@@ -26,7 +23,7 @@ import {
   REPLAY_DIVERGENCE_RESUME_NOT_SUPPORTED,
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
   boundReplayDivergence,
-  truncateUtf8Field,
+  sanitizeReplayDivergenceField,
   type ReplayDivergence,
   type ReplayDivergenceScreen,
   type ReplayDivergenceScreenRef,
@@ -39,6 +36,13 @@ import {
  * failed replay step. Report-only — no target-binding verification (decision
  * 3/step 4), no `--from` resume (step 5). `kind` is always `'action-failure'`
  * at this step.
+ *
+ * ONE post-failure snapshot serves both the screen digest and suggestion
+ * re-resolution: the digest's `refsGeneration` and the suggestions' refs must
+ * name the SAME stored tree, or the report would advertise refs a second
+ * capture already invalidated (the exact stale-ref hole a per-purpose double
+ * capture created in the first draft) — and one capture is also one fewer
+ * device round trip on a latency-sensitive path.
  */
 export async function buildReplayFailureDivergence(params: {
   error: DaemonError;
@@ -67,36 +71,32 @@ export async function buildReplayFailureDivergence(params: {
 
   const cause = {
     code: error.code,
-    message: truncateUtf8Field(error.message),
-    ...(error.hint ? { hint: truncateUtf8Field(error.hint) } : {}),
+    message: sanitizeReplayDivergenceField(error.message),
+    ...(error.hint ? { hint: sanitizeReplayDivergenceField(error.hint) } : {}),
   };
 
-  const screen = session
-    ? await captureReplayDivergenceScreen({ session, sessionName, sessionStore, logPath, action })
+  const observation = session
+    ? await captureDivergenceObservation({ session, sessionName, sessionStore, logPath, action })
     : ({
         state: 'unavailable',
         reason: 'no-session',
         hint: 'The session closed before a post-failure screen could be captured.',
-      } satisfies ReplayDivergenceScreen);
+      } satisfies DivergenceObservation);
 
-  const suggestions = session
-    ? await collectReplayDivergenceSuggestions({
-        action,
-        session,
-        sessionName,
-        sessionStore,
-        logPath,
-      })
-    : [];
+  const screen = buildDivergenceScreen(observation);
+  const suggestions =
+    observation.state === 'available' && session
+      ? collectReplayDivergenceSuggestions({ action, session, nodes: observation.nodes })
+      : [];
 
   const divergence: ReplayDivergence = {
     version: 1,
     kind: 'action-failure',
     step: {
       index: index + 1,
-      source: { path: truncateUtf8Field(sourcePath), line: sourceLine },
+      source: { path: sanitizeReplayDivergenceField(sourcePath), line: sourceLine },
     },
-    action: truncateUtf8Field(formatScriptActionSummary(action)),
+    action: sanitizeReplayDivergenceField(formatScriptActionSummary(action)),
     cause,
     screen,
     suggestions: suggestions.slice(0, REPLAY_DIVERGENCE_SUGGESTION_LIMIT),
@@ -112,19 +112,34 @@ export async function buildReplayFailureDivergence(params: {
   });
 }
 
-async function captureReplayDivergenceScreen(params: {
+type DivergenceObservation =
+  | { state: 'available'; nodes: SnapshotNode[]; refsGeneration: number }
+  | { state: 'unavailable'; reason: string; hint: string };
+
+/**
+ * The single post-failure capture. Blessing follows the settle/find/heal
+ * choke-point sequence exactly: `setSessionSnapshot` (advances the session's
+ * `snapshotGeneration`), `markSessionSnapshotRefsIssued` (clears the coarse
+ * staleness marker — the report's refs are minted from the tree the next
+ * `@ref` command resolves on), then `sessionStore.set`. Sparse captures do
+ * not write back (the selector-capture reliability contract), so a sparse
+ * verdict degrades the whole observation: no stored tree means no blessed
+ * refs AND no trustworthy nodes for suggestion re-resolution.
+ */
+async function captureDivergenceObservation(params: {
   session: SessionState;
   sessionName: string;
   sessionStore: SessionStore;
   logPath: string;
   action: SessionAction;
-}): Promise<ReplayDivergenceScreen> {
+}): Promise<DivergenceObservation> {
   const { session, sessionName, sessionStore, logPath, action } = params;
+  const snapshotInteractiveOnly = divergenceCaptureInteractiveOnly(action);
   try {
     const data = (await dispatchCommand(session.device, 'snapshot', [], undefined, {
       ...contextFromFlags(
         logPath,
-        { ...(action.flags ?? {}), snapshotInteractiveOnly: true },
+        { ...(action.flags ?? {}), snapshotInteractiveOnly },
         session.appBundleId,
         session.trace?.outPath,
       ),
@@ -136,7 +151,7 @@ async function captureReplayDivergenceScreen(params: {
     };
     const snapshot = buildSnapshotState(data, {
       ...(action.flags ?? {}),
-      snapshotInteractiveOnly: true,
+      snapshotInteractiveOnly,
     });
     if (isSparseSnapshotQualityVerdict(snapshot.snapshotQuality)) {
       return {
@@ -148,12 +163,10 @@ async function captureReplayDivergenceScreen(params: {
     setSessionSnapshot(session, snapshot);
     markSessionSnapshotRefsIssued(session);
     sessionStore.set(sessionName, session);
-    const { refs, truncated } = buildReplayDivergenceScreenRefs(snapshot.nodes);
     return {
       state: 'available',
+      nodes: snapshot.nodes,
       refsGeneration: session.snapshotGeneration ?? 0,
-      refs,
-      ...(truncated ? { truncated: true as const } : {}),
     };
   } catch (error) {
     return {
@@ -162,6 +175,31 @@ async function captureReplayDivergenceScreen(params: {
       hint: `Post-failure snapshot capture failed (${error instanceof Error ? error.message : String(error)}); the original replay failure is unaffected.`,
     };
   }
+}
+
+/**
+ * Capture flavor for the shared observation: interactive-only (the settle /
+ * `snapshot -i` default) except when the failing action is a non-rect
+ * selector read (`get`/`is`/`wait`) — heal's suggestion re-resolution has
+ * always used a full capture for those (`snapshotInteractiveOnly:
+ * requiresRect`) because static text nodes are legitimate targets, and the
+ * screen digest works over the full tree too (every node still carries a
+ * blessed ref).
+ */
+function divergenceCaptureInteractiveOnly(action: SessionAction): boolean {
+  if (!isSuggestionEligibleCommand(action.command)) return true;
+  return resolveSuggestionMatchingConfig(action).requiresRect;
+}
+
+function buildDivergenceScreen(observation: DivergenceObservation): ReplayDivergenceScreen {
+  if (observation.state === 'unavailable') return observation;
+  const { refs, truncated } = buildReplayDivergenceScreenRefs(observation.nodes);
+  return {
+    state: 'available',
+    refsGeneration: observation.refsGeneration,
+    refs,
+    ...(truncated ? { truncated: true as const } : {}),
+  };
 }
 
 // Full-resolution cap; response-level bounding (8/20) is applied afterwards
@@ -178,8 +216,8 @@ function buildReplayDivergenceScreenRefs(nodes: SnapshotNode[]): {
     const label = displayLabel(node, role);
     return {
       ref: node.ref!,
-      role: truncateUtf8Field(role),
-      ...(label ? { label: truncateUtf8Field(label) } : {}),
+      role: sanitizeReplayDivergenceField(role),
+      ...(label ? { label: sanitizeReplayDivergenceField(label) } : {}),
     };
   });
   return { refs, truncated: candidates.length > refs.length };
@@ -206,35 +244,24 @@ function classifySuggestionBasis(selector: Selector): ReplayDivergenceSuggestion
  * Decision 1's ranked-suggestions machinery, repurposed READ-ONLY:
  * `collectReplaySelectorCandidates` + `resolveSelectorChain` re-resolution
  * (the exact pieces `healReplayAction` already used) collect candidates
- * instead of applying the first one. Ranking: identity-component strength
+ * instead of applying the first one, resolved against the SAME captured
+ * nodes the screen digest was built from (see the single-capture note on
+ * `buildReplayFailureDivergence`). Ranking: identity-component strength
  * (id > role+label > label > other), then document order. The
  * same-scrollRegion-as-recorded tier from decision 1's total order is not
  * evaluated here — that requires decision 3's recorded target evidence,
  * which migration step 2 has no dependency on and does not consume.
  */
-async function collectReplayDivergenceSuggestions(params: {
+function collectReplayDivergenceSuggestions(params: {
   action: SessionAction;
   session: SessionState;
-  sessionName: string;
-  sessionStore: SessionStore;
-  logPath: string;
-}): Promise<ReplayDivergenceSuggestion[]> {
-  const { action, session, sessionName, sessionStore, logPath } = params;
+  nodes: SnapshotNode[];
+}): ReplayDivergenceSuggestion[] {
+  const { action, session, nodes } = params;
   if (!isSuggestionEligibleCommand(action.command)) return [];
   const candidates = collectReplaySelectorCandidates(action);
   if (candidates.length === 0) return [];
-
   const matching = resolveSuggestionMatchingConfig(action);
-  const nodes = await captureSuggestionSnapshotNodes({
-    session,
-    sessionName,
-    sessionStore,
-    logPath,
-    action,
-    requiresRect: matching.requiresRect,
-  });
-  if (!nodes) return [];
-
   return rankSuggestionCandidates({ candidates, nodes, session, action, matching });
 }
 
@@ -255,44 +282,11 @@ function resolveSuggestionMatchingConfig(action: SessionAction): SuggestionMatch
   };
 }
 
-/**
- * A fresh snapshot capture for suggestion re-resolution (a second capture
- * beyond the screen digest's own, matching healReplayAction's established
- * `snapshotInteractiveOnly: requiresRect` semantics exactly — see the module
- * doc comment on `collectReplayDivergenceSuggestions`). Returns `undefined`
- * on capture failure so the caller degrades to no suggestions, same as an
- * unavailable screen never masks the original cause.
- */
-async function captureSuggestionSnapshotNodes(params: {
-  session: SessionState;
-  sessionName: string;
-  sessionStore: SessionStore;
-  logPath: string;
-  action: SessionAction;
-  requiresRect: boolean;
-}): Promise<SnapshotNode[] | undefined> {
-  const { session, sessionName, sessionStore, logPath, action, requiresRect } = params;
-  try {
-    const snapshot = await captureSnapshotForReplay(
-      session,
-      action,
-      logPath,
-      requiresRect,
-      sessionStore,
-    );
-    // captureSnapshotForReplay already stored + advanced the session snapshot
-    // generation; re-read so suggestion refs are blessed against the tree
-    // they came from, same as the screen digest.
-    if (sessionStore.get(sessionName)?.snapshotGeneration !== undefined) {
-      markSessionSnapshotRefsIssued(session);
-    }
-    return snapshot.nodes;
-  } catch {
-    return undefined;
-  }
-}
-
-type RankedSuggestion = { suggestion: ReplayDivergenceSuggestion; basisRank: number; nodeIndex: number };
+type RankedSuggestion = {
+  suggestion: ReplayDivergenceSuggestion;
+  basisRank: number;
+  nodeIndex: number;
+};
 
 function rankSuggestionCandidates(params: {
   candidates: string[];
@@ -335,18 +329,19 @@ function resolveSuggestionCandidate(params: {
   if (!resolved) return undefined;
 
   const selectorChain = buildSelectorChainForNode(resolved.node, session.device.platform, {
-    action: action.command === 'fill' ? 'fill' : isTouchTargetCommand(action.command) ? 'click' : 'get',
+    action:
+      action.command === 'fill' ? 'fill' : isTouchTargetCommand(action.command) ? 'click' : 'get',
   });
   const basis = classifySuggestionBasis(resolved.selector);
   const role = formatRole(resolved.node.type ?? 'Element');
   const label = displayLabel(resolved.node, role);
   return {
     suggestion: {
-      selector: truncateUtf8Field(selectorChain.join(' || ')),
+      selector: sanitizeReplayDivergenceField(selectorChain.join(' || ')),
       basis,
       ...(resolved.node.ref ? { ref: resolved.node.ref } : {}),
-      role: truncateUtf8Field(role),
-      ...(label ? { label: truncateUtf8Field(label) } : {}),
+      role: sanitizeReplayDivergenceField(role),
+      ...(label ? { label: sanitizeReplayDivergenceField(label) } : {}),
     },
     basisRank: BASIS_RANK[basis],
     nodeIndex: resolved.node.index,

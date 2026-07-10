@@ -458,9 +458,10 @@ test('replay without --update does not heal or rewrite', async () => {
     expect(response!.error.logPath).toBe('/tmp/diag-replay-1.ndjson');
   }
   // No --update, so healReplayAction never runs (0 of its own capture calls) —
-  // but the divergence report's screen digest + suggestion re-resolution
-  // (ADR 0012 migration step 2) still fire unconditionally on failure.
-  expect(mockDispatchCommand).toHaveBeenCalledTimes(2);
+  // but the divergence report's single shared capture (screen digest +
+  // suggestion re-resolution, ADR 0012 migration step 2) still fires
+  // unconditionally on failure.
+  expect(mockDispatchCommand).toHaveBeenCalledTimes(1);
   expect(fs.readFileSync(replayPath, 'utf8')).toBe(originalPayload);
 });
 
@@ -516,11 +517,10 @@ test('replay --update skips malformed selector candidates and preserves replay e
     // ranking (tryParseSelectorChain rejects it), so no suggestion is produced.
     expect((divergence as unknown as { suggestions: unknown[] })?.suggestions).toEqual([]);
   }
-  // The divergence report's screen digest + suggestion re-resolution both
-  // attempt a fresh snapshot capture on every failure now, even when heal
-  // itself would have skipped (malformed candidate) — this is the ADR 0012
-  // migration step 2 behavior, not a heal regression.
-  expect(mockDispatchCommand).toHaveBeenCalled();
+  // The divergence report's single shared capture still fires on every
+  // failure, even when heal itself would have skipped (malformed candidate) —
+  // ADR 0012 migration step 2 behavior, not a heal regression.
+  expect(mockDispatchCommand).toHaveBeenCalledTimes(1);
   expect(fs.readFileSync(replayPath, 'utf8')).toBe('click "id=\\"old_continue\\" ||"\n');
 });
 
@@ -665,9 +665,9 @@ test('replay --update does not heal clicks from stored ref labels alone', async 
     // same non-healing guarantee this test title asserts, now for suggestions.
     expect(divergence?.suggestions).toEqual([]);
   }
-  // The divergence report's screen digest still captures a fresh snapshot on
-  // every failure (ADR 0012 migration step 2) even though no suggestion
-  // candidate exists for an @ref-targeted action.
+  // The divergence report's single shared capture still fires on every
+  // failure (ADR 0012 migration step 2) even though no suggestion candidate
+  // exists for an @ref-targeted action.
   expect(mockDispatchCommand).toHaveBeenCalledTimes(1);
   expect(invokeCalls).toEqual(['@e1']);
   expect(fs.readFileSync(replayPath, 'utf8')).toBe(originalPayload);
@@ -753,10 +753,10 @@ test('replay --update does not heal numeric get text drift from snapshot text al
     // isolated by re-resolving the recorded selector, so no suggestion either.
     expect(divergence?.suggestions).toEqual([]);
   }
-  // 1 capture from healReplayAction's own (unsuccessful) attempt, plus 2 more
-  // from the divergence report's screen digest + suggestion re-resolution
-  // (ADR 0012 migration step 2) once heal gives up and the step fails.
-  expect(mockDispatchCommand).toHaveBeenCalledTimes(3);
+  // 1 capture from healReplayAction's own (unsuccessful) attempt, plus the
+  // divergence report's single shared capture (ADR 0012 migration step 2)
+  // once heal gives up and the step fails.
+  expect(mockDispatchCommand).toHaveBeenCalledTimes(2);
   expect(invokeCalls.length).toBe(1);
   expect(fs.readFileSync(replayPath, 'utf8')).toBe(originalPayload);
 });

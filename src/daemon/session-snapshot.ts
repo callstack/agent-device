@@ -35,10 +35,13 @@ export const STALE_SNAPSHOT_REFS_WARNING =
  * refs: the snapshot command response (buildNextSnapshotSession), find
  * responses that return a ref minted from the freshly stored tree
  * (handlers/find.ts, dispatchFindReadOnlyViaRuntime in selector-runtime.ts),
- * and interaction --settle responses whose settled diff carries refs minted
+ * interaction --settle responses whose settled diff carries refs minted
  * from the freshly stored settled tree (settleRefsGenerationIssue in
  * handlers/interaction-touch.ts — the same accepted coarse blessing as find's
- * single re-issued ref; per-ref precision is the MCP pin layer's job).
+ * single re-issued ref; per-ref precision is the MCP pin layer's job), and
+ * replay divergence reports whose screen digest hands out refs from the
+ * freshly stored post-failure tree (captureDivergenceObservation in
+ * handlers/session-replay-divergence.ts, ADR 0012 migration step 2).
  */
 export function setSessionSnapshot(session: SessionState, snapshot: SnapshotState): void {
   if (session.snapshot !== snapshot) {

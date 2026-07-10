@@ -200,7 +200,7 @@ function isFiniteNumberString(value: string | undefined): boolean {
   return Number.isFinite(Number(value));
 }
 
-export async function captureSnapshotForReplay(
+async function captureSnapshotForReplay(
   session: SessionState,
   action: SessionAction,
   logPath: string,

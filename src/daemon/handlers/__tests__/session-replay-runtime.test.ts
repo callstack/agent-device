@@ -247,3 +247,147 @@ test('divergence screen never masks the original cause when the session already 
   expect(screen.state).toBe('unavailable');
   expect(screen.reason).toBe('no-session');
 });
+
+// --- Control-flow-wrapped include provenance (reviewer probe scenario) ---
+//
+// The RN suite's own launch include is retry-wrapped, so the single most
+// common real failure site (a launch wait timeout inside the include) must
+// report the INCLUDE's file+line, not the wrapping `retry:`/`runFlow.when:`
+// line in the root flow. Regression for the leak where replayControl.actions
+// kept the transient replaySource field but the runtime never consulted it.
+
+function writeMaestroInclude(root: string): string {
+  const childPath = path.join(root, 'child.yaml');
+  fs.writeFileSync(
+    childPath,
+    ['appId: com.callstack.agentdevicelab', '---', '- back', ''].join('\n'),
+  );
+  return childPath;
+}
+
+test('a failure inside a retry-wrapped runFlow include reports the include file and line', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-retry-provenance-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const childPath = writeMaestroInclude(root);
+  const mainPath = path.join(root, 'main.yaml');
+  fs.writeFileSync(
+    mainPath,
+    [
+      'appId: com.callstack.agentdevicelab',
+      '---',
+      '- retry:',
+      '    maxRetries: 1',
+      '    commands:',
+      '      - runFlow:',
+      '          file: child.yaml',
+      '',
+    ].join('\n'),
+  );
+  mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [mainPath], flags: { replayBackend: 'maestro' } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      if (req.command === 'back') {
+        return { ok: false, error: { code: 'COMMAND_FAILED', message: 'back failed' } };
+      }
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('REPLAY_DIVERGENCE');
+  const divergence = response.error.details?.divergence as Record<string, unknown>;
+  const step = divergence.step as { index: number; source: { path: string; line: number } };
+  // Plan index 1: the retry wrapper is one executable-plan step; the source
+  // names the failing NESTED action inside the include, not the retry: line.
+  expect(step.index).toBe(1);
+  expect(step.source.path).toBe(childPath);
+  expect(step.source.line).toBe(3);
+  // The transport-internal provenance marker is stripped from the flat details.
+  expect(response.error.details?.replaySource).toBeUndefined();
+});
+
+test('a failure inside a runtime runFlow.when-wrapped include reports the include file and line', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-when-provenance-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const childPath = writeMaestroInclude(root);
+  const mainPath = path.join(root, 'main.yaml');
+  fs.writeFileSync(
+    mainPath,
+    [
+      'appId: com.callstack.agentdevicelab',
+      '---',
+      '- runFlow:',
+      '    file: child.yaml',
+      '    when:',
+      '      notVisible: Continue',
+      '',
+    ].join('\n'),
+  );
+  mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [mainPath], flags: { replayBackend: 'maestro' } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      // The notVisible condition captures a snapshot; an empty tree means the
+      // selector is absent, so the wrapped steps run.
+      if (req.command === 'snapshot') return { ok: true, data: { nodes: [] } };
+      if (req.command === 'back') {
+        return { ok: false, error: { code: 'COMMAND_FAILED', message: 'back failed' } };
+      }
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('REPLAY_DIVERGENCE');
+  const divergence = response.error.details?.divergence as Record<string, unknown>;
+  const step = divergence.step as { index: number; source: { path: string; line: number } };
+  expect(step.index).toBe(1);
+  expect(step.source.path).toBe(childPath);
+  expect(step.source.line).toBe(3);
+  expect(response.error.details?.replaySource).toBeUndefined();
+});
+
+test('divergence cause and action strings pass through the central redactor at construction', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-redact-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const filePath = writeReplayFile(root, ['click "Save"']);
+  mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => ({
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'request rejected: api_key=sk-live-abc123def456 invalid',
+      },
+    }),
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  const divergence = response.error.details?.divergence as Record<string, unknown>;
+  const cause = divergence.cause as { message: string };
+  expect(cause.message).not.toContain('sk-live-abc123def456');
+  expect(cause.message).toContain('api_key=[REDACTED]');
+});

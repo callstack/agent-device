@@ -110,7 +110,8 @@ export async function runReplayScriptFile(params: {
         action,
         scope,
         filePath: resolved,
-        line: actionLines[index] ?? 0,
+        line: actionLines[index] ?? 1,
+        sourcePath: actionSourcePaths?.[index],
         step: index + 1,
         tracePath: actionTracePath,
         invoke,
@@ -130,7 +131,7 @@ export async function runReplayScriptFile(params: {
           index,
           replayPath: resolved,
           sourcePath: actionSourcePaths?.[index] ?? resolved,
-          sourceLine: actionLines[index] ?? 0,
+          sourceLine: actionLines[index] ?? 1,
           artifactPaths: [...artifactPaths],
           snapshotDiagnosticSamples,
           req,
@@ -153,7 +154,7 @@ export async function runReplayScriptFile(params: {
           index,
           replayPath: resolved,
           sourcePath: actionSourcePaths?.[index] ?? resolved,
-          sourceLine: actionLines[index] ?? 0,
+          sourceLine: actionLines[index] ?? 1,
           artifactPaths: [...artifactPaths],
           snapshotDiagnosticSamples,
           req,
@@ -171,7 +172,8 @@ export async function runReplayScriptFile(params: {
         action: nextAction,
         scope,
         filePath: resolved,
-        line: actionLines[index] ?? 0,
+        line: actionLines[index] ?? 1,
+        sourcePath: actionSourcePaths?.[index],
         step: index + 1,
         tracePath: actionTracePath,
         invoke,
@@ -187,7 +189,7 @@ export async function runReplayScriptFile(params: {
           index,
           replayPath: resolved,
           sourcePath: actionSourcePaths?.[index] ?? resolved,
-          sourceLine: actionLines[index] ?? 0,
+          sourceLine: actionLines[index] ?? 1,
           artifactPaths: [...artifactPaths],
           snapshotDiagnosticSamples,
           req,
@@ -406,29 +408,59 @@ async function withReplayFailureContext(params: {
     logPath,
   } = params;
   if (response.ok) return response;
-  const step = index + 1;
+  // Deepest-failure provenance (ADR 0012 migration step 2): a failure inside
+  // a control-flow wrapper (retry:/runFlow.when: around a runFlow include)
+  // attaches the failing NESTED action's resolved source to the error
+  // (session-replay-action-runtime.ts withReplayFailureSource); it wins over
+  // the top-level wrapper's own source. Transport-internal: stripped from the
+  // flat details in buildReplayDivergenceFailureResponse.
+  const failureSource = readReplayFailureSource(response.error.details?.replaySource);
   const divergence = await buildReplayFailureDivergence({
     error: response.error,
     action,
     index,
-    sourcePath,
-    sourceLine,
+    sourcePath: failureSource?.path ?? sourcePath,
+    sourceLine: failureSource?.line ?? sourceLine,
     session: sessionStore.get(sessionName),
     sessionName,
     sessionStore,
     logPath,
     responseLevel: req.meta?.responseLevel,
   });
+  return buildReplayDivergenceFailureResponse({
+    error: response.error,
+    action,
+    step: index + 1,
+    replayPath,
+    artifactPaths,
+    snapshotDiagnostics,
+    divergence,
+  });
+}
+
+/** Pure wire shaping for the REPLAY_DIVERGENCE failure response. */
+function buildReplayDivergenceFailureResponse(params: {
+  error: Extract<DaemonResponse, { ok: false }>['error'];
+  action: SessionAction;
+  step: number;
+  replayPath: string;
+  artifactPaths: string[];
+  snapshotDiagnostics?: SnapshotDiagnosticsSummary;
+  divergence: unknown;
+}): DaemonResponse {
+  const { error, action, step, replayPath, artifactPaths, snapshotDiagnostics, divergence } =
+    params;
+  const { replaySource: _replaySource, ...causeDetails } = error.details ?? {};
   return {
     ok: false,
     error: {
       code: 'REPLAY_DIVERGENCE',
-      message: `Replay failed at step ${step} (${formatScriptActionSummary(action)}): ${response.error.message}`,
-      hint: response.error.hint,
-      diagnosticId: response.error.diagnosticId,
-      logPath: response.error.logPath,
+      message: `Replay failed at step ${step} (${formatScriptActionSummary(action)}): ${error.message}`,
+      hint: error.hint,
+      diagnosticId: error.diagnosticId,
+      logPath: error.logPath,
       details: {
-        ...(response.error.details ?? {}),
+        ...causeDetails,
         replayPath,
         step,
         action: action.command,
@@ -439,6 +471,15 @@ async function withReplayFailureContext(params: {
       },
     },
   };
+}
+
+function readReplayFailureSource(value: unknown): { path?: string; line?: number } | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  const path = typeof record.path === 'string' && record.path.length > 0 ? record.path : undefined;
+  const line = typeof record.line === 'number' ? record.line : undefined;
+  if (path === undefined && line === undefined) return undefined;
+  return { path, line };
 }
 
 function formatReplaySuccessMessage(replayed: number, wallClockMs: number): string {
