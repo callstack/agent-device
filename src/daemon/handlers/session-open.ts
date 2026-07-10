@@ -310,7 +310,7 @@ async function completeOpenCommand(params: {
     ...(collapseSimulatorRelaunch ? { terminateRunningApp: true } : {}),
   });
   timing.openDispatchDurationMs = Math.max(0, Date.now() - openStartedAtMs);
-  await maybeActivateAndroidTestImeForOpen(device, req, sessionStore.resolveStateDir());
+  await maybeActivateAndroidTestImeForOpen(device, req, sessionStore.resolveDaemonStateDir());
   const launchUrlStartedAtMs = Date.now();
   await maybeApplySessionLaunchUrl({
     runtime,
