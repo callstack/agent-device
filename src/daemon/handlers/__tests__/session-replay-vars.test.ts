@@ -805,7 +805,9 @@ test('runReplayScriptFile reports iOS Maestro openLink setup failures before ass
     assert.match(response.error.message, /Replay failed at step 1/);
     assert.match(response.error.message, /open "demo\.app" "demo:\/\/screen"/);
     assert.match(response.error.message, /Developer mode is disabled/);
-    assert.match(String(response.error.details?.hint ?? ''), /DevToolsSecurity -enable/);
+    // The cause's details-borne hint is hoisted onto the error field by the
+    // divergence transport (arbitrary cause details are stripped).
+    assert.match(String(response.error.hint ?? ''), /DevToolsSecurity -enable/);
   }
   assert.deepEqual(
     calls.map((call) => [call.command, call.positionals]),

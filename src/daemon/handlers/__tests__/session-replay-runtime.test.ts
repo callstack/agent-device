@@ -414,9 +414,20 @@ test('a fill divergence never serializes the typed text at any response level', 
       sessionStore,
       invoke: async (req) => {
         if (req.command === 'fill') {
+          // A REAL fill-verification failure carries the entered text in
+          // details.expected (unmasked fields do, by the fill-diagnostics
+          // contract) — the divergence transport must strip it categorically.
           return {
             ok: false,
-            error: { code: 'COMMAND_FAILED', message: 'Selector did not match: label="Email"' },
+            error: {
+              code: 'COMMAND_FAILED',
+              message: 'Android fill verification failed',
+              details: {
+                expected: sentinel,
+                actual: sentinel.slice(0, 10),
+                failureReason: 'text_mismatch',
+              },
+            },
           };
         }
         return { ok: true, data: {} };
@@ -427,9 +438,10 @@ test('a fill divergence never serializes the typed text at any response level', 
     if (response.ok) return;
     const serializedDivergence = JSON.stringify(response.error.details?.divergence);
     expect(serializedDivergence).not.toContain(sentinel);
-    // The whole error details (flat positionals included) must not leak it either.
-    expect(JSON.stringify(response.error.details)).not.toContain(sentinel);
-    expect(response.error.message).not.toContain(sentinel);
+    // The WHOLE public error (flat details incl. the cause's own
+    // details.expected/actual, positionals, message) must not leak it either.
+    expect(JSON.stringify(response.error)).not.toContain(sentinel);
+    expect(JSON.stringify(response.error)).not.toContain(sentinel.slice(0, 10));
     // The action label still names the field, with the text categorically hidden.
     const divergence = response.error.details?.divergence as { action: string };
     expect(divergence.action).toContain('<text>');

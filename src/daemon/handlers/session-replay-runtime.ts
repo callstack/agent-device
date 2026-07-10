@@ -404,8 +404,9 @@ async function withReplayFailureContext(params: {
   // The failing action's own source (attached by withReplayFailureSource,
   // deepest failure wins) beats the top-level wrapper's source.
   const failureSource = readReplayFailureSource(response.error.details?.replaySource);
+  const cause = hoistCauseDiagnosticMeta(response.error);
   const divergence = await buildReplayFailureDivergence({
-    error: response.error,
+    error: cause,
     action,
     index,
     sourcePath: failureSource?.path ?? sourcePath,
@@ -417,7 +418,7 @@ async function withReplayFailureContext(params: {
     responseLevel: req.meta?.responseLevel,
   });
   return buildReplayDivergenceFailureResponse({
-    error: response.error,
+    error: cause,
     action,
     step: index + 1,
     replayPath,
@@ -425,6 +426,46 @@ async function withReplayFailureContext(params: {
     snapshotDiagnostics,
     divergence,
   });
+}
+
+type ReplayFailureCause = Extract<DaemonResponse, { ok: false }>['error'];
+
+// Throw sites may carry hint/diagnosticId/logPath inside details (the
+// documented AppErrorDetails meta keys, normally lifted by normalizeError);
+// the categorical cause-detail strip below would lose them, so hoist onto the
+// error fields first.
+function hoistCauseDiagnosticMeta(error: ReplayFailureCause): ReplayFailureCause {
+  return {
+    ...error,
+    hint: error.hint ?? readStringDetail(error.details, 'hint'),
+    diagnosticId: error.diagnosticId ?? readStringDetail(error.details, 'diagnosticId'),
+    logPath: error.logPath ?? readStringDetail(error.details, 'logPath'),
+  };
+}
+
+function readStringDetail(
+  details: Record<string, unknown> | undefined,
+  key: string,
+): string | undefined {
+  const value = details?.[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+// ADR 0012: arbitrary nested cause details are never serialized into the
+// public divergence error — value-bearing command details (fill
+// verification's `expected`/`actual`, selector diagnostics, process output)
+// are categorically dropped; only machine-dispatchable signals survive.
+const SAFE_CAUSE_DETAIL_KEYS = ['reason', 'retriable', 'supportedOn'] as const;
+
+function pickSafeCauseDetails(
+  details: Record<string, unknown> | undefined,
+): Record<string, unknown> {
+  if (!details) return {};
+  const safe: Record<string, unknown> = {};
+  for (const key of SAFE_CAUSE_DETAIL_KEYS) {
+    if (details[key] !== undefined) safe[key] = details[key];
+  }
+  return safe;
 }
 
 /** Pure wire shaping for the REPLAY_DIVERGENCE failure response. */
@@ -439,7 +480,6 @@ function buildReplayDivergenceFailureResponse(params: {
 }): DaemonResponse {
   const { error, action, step, replayPath, artifactPaths, snapshotDiagnostics, divergence } =
     params;
-  const { replaySource: _replaySource, ...causeDetails } = error.details ?? {};
   return {
     ok: false,
     error: {
@@ -449,7 +489,7 @@ function buildReplayDivergenceFailureResponse(params: {
       diagnosticId: error.diagnosticId,
       logPath: error.logPath,
       details: {
-        ...causeDetails,
+        ...pickSafeCauseDetails(error.details),
         replayPath,
         step,
         action: action.command,
