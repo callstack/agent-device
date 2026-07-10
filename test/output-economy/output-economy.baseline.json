@@ -112,24 +112,24 @@
     "shape": "$.content:array|$.content[].text:string|$.content[].type:string|$.content[]:object|$.isError:boolean|$.structuredContent.identifiers.session:string|$.structuredContent.identifiers:object|$.structuredContent.nodes:array|$.structuredContent.nodes[].depth:number|$.structuredContent.nodes[].enabled:boolean|$.structuredContent.nodes[].hittable:boolean|$.structuredContent.nodes[].identifier:string|$.structuredContent.nodes[].index:number|$.structuredContent.nodes[].label:string|$.structuredContent.nodes[].parentIndex:number|$.structuredContent.nodes[].rect.height:number|$.structuredContent.nodes[].rect.width:number|$.structuredContent.nodes[].rect.x:number|$.structuredContent.nodes[].rect.y:number|$.structuredContent.nodes[].rect:object|$.structuredContent.nodes[].ref:string|$.structuredContent.nodes[].role:string|$.structuredContent.nodes[].type:string|$.structuredContent.nodes[].value:string|$.structuredContent.nodes[]:object|$.structuredContent.refsGeneration:number|$.structuredContent.truncated:boolean|$.structuredContent.visibility.partial:boolean|$.structuredContent.visibility.reasons:array|$.structuredContent.visibility.totalNodeCount:number|$.structuredContent.visibility.visibleNodeCount:number|$.structuredContent.visibility:object|$.structuredContent:object|$:object"
   },
   "workflow.orient.cli.text": {
-    "bytes": 471,
+    "bytes": 154,
     "lines": 6,
-    "refs": 3,
-    "hints": 1,
+    "refs": 4,
+    "hints": 0,
     "shape": "text"
   },
   "workflow.orient.mcp.json": {
-    "bytes": 1294,
+    "bytes": 1173,
     "lines": 1,
-    "refs": 3,
+    "refs": 4,
     "hints": 0,
     "shape": "$.content:array|$.content[].text:string|$.content[].type:string|$.content[]:object|$.isError:boolean|$.structuredContent.identifiers.session:string|$.structuredContent.identifiers:object|$.structuredContent.nodes:array|$.structuredContent.nodes[].depth:number|$.structuredContent.nodes[].enabled:boolean|$.structuredContent.nodes[].hittable:boolean|$.structuredContent.nodes[].identifier:string|$.structuredContent.nodes[].index:number|$.structuredContent.nodes[].label:string|$.structuredContent.nodes[].parentIndex:number|$.structuredContent.nodes[].rect.height:number|$.structuredContent.nodes[].rect.width:number|$.structuredContent.nodes[].rect.x:number|$.structuredContent.nodes[].rect.y:number|$.structuredContent.nodes[].rect:object|$.structuredContent.nodes[].ref:string|$.structuredContent.nodes[].role:string|$.structuredContent.nodes[].type:string|$.structuredContent.nodes[].value:string|$.structuredContent.nodes[]:object|$.structuredContent.refsGeneration:number|$.structuredContent.truncated:boolean|$.structuredContent.visibility.partial:boolean|$.structuredContent.visibility.reasons:array|$.structuredContent.visibility.totalNodeCount:number|$.structuredContent.visibility.visibleNodeCount:number|$.structuredContent.visibility:object|$.structuredContent:object|$:object"
   },
   "workflow.recheck.cli.text": {
-    "bytes": 550,
-    "lines": 4,
+    "bytes": 193,
+    "lines": 3,
     "refs": 0,
-    "hints": 1,
+    "hints": 0,
     "shape": "text"
   },
   "workflow.mutation-confirm.cli.text": {
@@ -140,7 +140,7 @@
     "shape": "text"
   },
   "workflow.mutation-tail.cli.text": {
-    "bytes": 161,
+    "bytes": 165,
     "lines": 6,
     "refs": 3,
     "hints": 0,
@@ -154,16 +154,16 @@
     "shape": "text"
   },
   "workflow.failure.shared.json": {
-    "bytes": 328,
+    "bytes": 335,
     "lines": 1,
     "refs": 1,
     "hints": 1,
     "shape": "$.code:string|$.details.reason:string|$.details.ref:string|$.details.refsGeneration:number|$.details.session:string|$.details.timeoutMs:number|$.details:object|$.hint:string|$.message:string|$.retriable:boolean|$:object"
   },
   "workflow.retry.cli.text": {
-    "bytes": 131,
-    "lines": 5,
-    "refs": 2,
+    "bytes": 88,
+    "lines": 3,
+    "refs": 1,
     "hints": 0,
     "shape": "text"
   }

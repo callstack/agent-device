@@ -1,117 +1,45 @@
-import type {
-  AgentDeviceClient,
-  CaptureSnapshotResult,
-  CommandRequestResult,
-} from '../../src/client/client-types.ts';
-import type { DaemonResponseData } from '../../src/daemon/types.ts';
+import type { AgentDeviceClient, CommandRequestResult } from '../../src/client/client-types.ts';
 import { AppError, normalizeError, type NormalizedError } from '../../src/kernel/errors.ts';
-import { attachRefs, type RawSnapshotNode } from '../../src/kernel/snapshot.ts';
 import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
 import { interactionCliOutputFormatters } from '../../src/commands/interaction/output.ts';
 import { createCommandToolExecutor } from '../../src/mcp/command-tools.ts';
 import { REF_TOKEN_PATTERN, type EconomySample } from './economy-metrics.ts';
+import { SETTLE_ADDED_REF_RESULT, SNAPSHOT_DAEMON_RESULT, SNAPSHOT_RESULT } from './fixtures.ts';
 
 // A routine workflow-level oracle (#1180). PR #1174 pinned per-surface output
 // budgets; this pairs those bytes with the follow-up behavior they enable, so a
 // smaller response that forces an extra observation, an extra retry, or a lost
 // recovery handle is measured as more expensive, not less.
 //
-// The fixtures below form ONE coherent checkout session whose refs chain across
-// steps (orient -> mutate -> read -> recover), so the derived counts come from
-// the real formatters, not from hand-declared numbers: dropping the settled
-// diff's added refs, the unchanged-interactive tail, or the failure's recovery
-// details changes the measured counts and fails the regression tests.
+// The steps below chain into ONE coherent session (orient -> mutate -> read ->
+// recover) built on the shared per-surface fixtures in `./fixtures.ts`, so the
+// two suites cannot drift and the derived counts come from the real formatters,
+// not hand-declared numbers: dropping the settled diff's added refs, the
+// unchanged-interactive tail, or the failure's recovery details changes the
+// measured counts and fails the regression tests. Only the workflow-specific
+// adaptations (an unchanged recheck, the tail retargeted onto a surfaced ref,
+// the in-session timeout failure, and its recovered retry) are declared here.
 
-const WORKFLOW_SESSION = 'checkout';
-const ORIENT_GENERATION = 20;
-const SETTLE_CONFIRM_GENERATION = 21;
-const SETTLE_TAIL_GENERATION = 22;
+// Matches the shared snapshot fixture's session/generation so refs stay valid
+// across the whole chain (SNAPSHOT_RESULT.identifiers.session, and
+// SETTLE_TAIL_RESULT mints refsGeneration 14 — the last generation).
+const WORKFLOW_SESSION = 'economy-fixture';
+const REFS_GENERATION = 14;
 
-const ORIENT_NODES: RawSnapshotNode[] = [
-  {
-    index: 0,
-    type: 'Window',
-    label: 'Checkout',
-    depth: 0,
-    rect: { x: 0, y: 0, width: 390, height: 844 },
-  },
-  {
-    index: 1,
-    type: 'TextField',
-    role: 'text-field',
-    label: 'Email',
-    value: 'qa@example.com',
-    identifier: 'checkout-email',
-    hittable: true,
-    enabled: true,
-    depth: 1,
-    parentIndex: 0,
-    rect: { x: 20, y: 120, width: 350, height: 44 },
-  },
-  {
-    index: 2,
-    type: 'Button',
-    role: 'button',
-    label: 'Place order',
-    identifier: 'submit-order',
-    hittable: true,
-    enabled: true,
-    depth: 1,
-    parentIndex: 0,
-    rect: { x: 20, y: 720, width: 350, height: 48 },
-  },
-];
-
-// attachRefs numbers by position: e1 window, e2 email, e3 Place order.
-const ORIENT_RESULT: CaptureSnapshotResult = {
-  nodes: attachRefs(ORIENT_NODES),
-  truncated: false,
-  identifiers: { session: WORKFLOW_SESSION },
-  visibility: { partial: false, visibleNodeCount: 3, totalNodeCount: 3, reasons: [] },
+// snapshot -i again with nothing changed: the suppression notice instead of a
+// re-emitted tree (the cheapest re-orientation), reaffirming the prior @e refs.
+const RECHECK_RESULT = {
+  ...SNAPSHOT_RESULT,
+  unchanged: { ageMs: 480, nodeCount: SNAPSHOT_RESULT.nodes.length, interactiveOnly: true },
 };
 
-const ORIENT_DAEMON_RESULT: DaemonResponseData = {
-  ...ORIENT_RESULT,
-  refsGeneration: ORIENT_GENERATION,
-};
-
-// Re-taking snapshot -i with nothing changed collapses to the suppression
-// notice instead of re-emitting the tree: the cheapest possible re-orientation,
-// and it explicitly reaffirms the previous @e refs stay valid.
-const RECHECK_RESULT: CaptureSnapshotResult = {
-  ...ORIENT_RESULT,
-  unchanged: { ageMs: 480, nodeCount: 3, interactiveOnly: true },
-};
-
-// press @e3 (Place order) --settle: the settled diff hands out the refs the
-// next two steps target (e4 read target, e5 next mutation target).
-const SETTLE_CONFIRM_RESULT: CommandRequestResult = {
-  ref: 'e3',
-  x: 195,
-  y: 744,
-  message: 'Tapped @e3 (195, 744)',
-  settle: {
-    settled: true,
-    waitedMs: 540,
-    captures: 3,
-    quietMs: 250,
-    timeoutMs: 3000,
-    refsGeneration: SETTLE_CONFIRM_GENERATION,
-    diff: {
-      summary: { additions: 2, removals: 1, unchanged: 4 },
-      lines: [
-        { kind: 'removed', text: '@e3 [button] "Place order"' },
-        { kind: 'added', text: '@e4 [text] "Order confirmed"', ref: 'e4' },
-        { kind: 'added', text: '@e5 [button] "View receipt"', ref: 'e5' },
-      ],
-    },
-  },
-};
-
-// press @e5 (View receipt) --settle: a removals-only diff would otherwise hide
-// the settled tree's remaining actionable elements, so the unchanged-interactive
-// tail carries the next target (e6 Done) without a fresh snapshot.
-const SETTLE_TAIL_RESULT: CommandRequestResult = {
+// press @e5 (View receipt, surfaced by the settled diff) --settle: a
+// removals-only diff would hide the settled tree's remaining actionable
+// elements, so the unchanged-interactive tail carries the next target (@e7)
+// without a fresh snapshot. The shared SETTLE_TAIL_RESULT taps an @e6 nothing
+// upstream surfaced, so it cannot join this chain; this reuses its tail shape
+// (e7 Continue, e9 Home) on a ref the settled diff already handed out.
+const WORKFLOW_TAIL_RESULT: CommandRequestResult = {
   ref: 'e5',
   x: 320,
   y: 300,
@@ -122,60 +50,58 @@ const SETTLE_TAIL_RESULT: CommandRequestResult = {
     captures: 2,
     quietMs: 250,
     timeoutMs: 3000,
-    refsGeneration: SETTLE_TAIL_GENERATION,
+    refsGeneration: REFS_GENERATION,
     diff: {
       summary: { additions: 0, removals: 1, unchanged: 6 },
       lines: [{ kind: 'removed', text: '@e5 [button] "View receipt"' }],
     },
     tail: [
-      { ref: 'e6', role: 'button', label: 'Done' },
-      { ref: 'e7', role: 'tab', label: 'Home' },
+      { ref: 'e7', role: 'button', label: 'Continue' },
+      { ref: 'e9', role: 'tab', label: 'Home' },
     ],
   },
 };
 
-// get text @e4: answers the verification question from the already-surfaced ref,
+// get text @e4: answers the verification question from an already-surfaced ref,
 // no extra observation.
-const READ_RESULT: CommandRequestResult = {
-  ref: '@e4',
-  text: 'Order confirmed',
-};
+const READ_RESULT: CommandRequestResult = { ref: '@e4', text: 'Order confirmed' };
 
-// press @e6 (Done) --settle times out. The actionable failure keeps stable
-// identity (code + reason + the failing ref), the session it happened in, the
-// snapshot generation those refs belong to, an explicit retry signal, and
-// next-step guidance — everything the agent needs to retry IN THE SAME SESSION
-// without reopening or re-observing. Recovery keys on structured details, never
-// on the message text.
-const FAILURE_ERROR = new AppError('COMMAND_FAILED', 'Tap on @e6 did not settle within 10000ms', {
+// press @e7 (Continue, from the tail) --settle times out. The actionable failure
+// keeps stable identity (code + reason + the failing ref), the session it
+// happened in, the snapshot generation those refs belong to, an explicit retry
+// signal, and next-step guidance — everything the agent needs to retry IN THE
+// SAME SESSION without reopening or re-observing. Recovery keys on structured
+// details, never message text. (The shared ACTIONABLE_ERROR is a DEVICE_IN_USE
+// lock held by a *different* session, so it models cross-session recovery, not
+// in-session timeout recovery, and is intentionally not reused here.)
+const FAILURE_ERROR = new AppError('COMMAND_FAILED', 'Tap on @e7 did not settle within 10000ms', {
   reason: 'timeout',
   timeoutMs: 10_000,
-  ref: '@e6',
+  ref: '@e7',
   session: WORKFLOW_SESSION,
-  refsGeneration: SETTLE_TAIL_GENERATION,
+  refsGeneration: REFS_GENERATION,
   retriable: true,
-  hint: 'The tap did not settle in time. Retry press @e6 --settle with a higher --timeout; refs from this session are still valid.',
+  hint: 'The tap did not settle in time. Retry press @e7 --settle with a higher --timeout; refs from this session are still valid.',
 });
 
 // The recovered retry of the SAME target succeeds; no fresh observation was
 // needed because the failure preserved the session and its ref generation.
 const RETRY_RESULT: CommandRequestResult = {
-  ref: 'e6',
-  x: 195,
-  y: 640,
-  message: 'Tapped @e6 (195, 640)',
+  ref: 'e7',
+  x: 320,
+  y: 60,
+  message: 'Tapped @e7 (320, 60)',
   settle: {
     settled: true,
     waitedMs: 320,
     captures: 2,
     quietMs: 250,
     timeoutMs: 15_000,
-    refsGeneration: SETTLE_TAIL_GENERATION,
+    refsGeneration: REFS_GENERATION,
     diff: {
       summary: { additions: 0, removals: 1, unchanged: 6 },
-      lines: [{ kind: 'removed', text: '@e6 [button] "Done"' }],
+      lines: [{ kind: 'removed', text: '@e7 [button] "Continue"' }],
     },
-    tail: [{ ref: 'e7', role: 'tab', label: 'Home' }],
   },
 };
 
@@ -237,7 +163,7 @@ function interactionText(result: CommandRequestResult): string {
 async function renderMcpSnapshot(): Promise<unknown> {
   return await createCommandToolExecutor({
     createClient: () => ({}) as AgentDeviceClient,
-    runCommand: async () => ORIENT_DAEMON_RESULT,
+    runCommand: async () => SNAPSHOT_DAEMON_RESULT,
   }).execute('snapshot', {});
 }
 
@@ -249,7 +175,7 @@ export async function renderRoutineWorkflow(): Promise<{
 }> {
   const error = normalizeError(FAILURE_ERROR);
   const orientText = readCliText(
-    snapshotCliOutput({ result: ORIENT_RESULT, interactiveOnly: true }),
+    snapshotCliOutput({ result: SNAPSHOT_RESULT, interactiveOnly: true }),
   );
   const recheckText = readCliText(
     snapshotCliOutput({ result: RECHECK_RESULT, interactiveOnly: true }),
@@ -274,18 +200,18 @@ export async function renderRoutineWorkflow(): Promise<{
       command: 'press @e3 --settle',
       kind: 'mutation',
       targetRef: '@e3',
-      // Only the rendered CLI settled-diff carries e4/e5. If that formatter
-      // stops emitting added refs, `read` and `mutation-tail` lose their
-      // targets and the fallback-observation count rises — so this step is a
-      // genuine formatter guard, not a scan of the raw fixture object.
-      samples: { cli: { text: interactionText(SETTLE_CONFIRM_RESULT) } },
+      // Only the rendered CLI settled-diff carries e5. If that formatter stops
+      // emitting added refs, `mutation-tail` loses its target and the
+      // fallback-observation count rises — so this step is a genuine formatter
+      // guard, not a scan of the raw fixture object.
+      samples: { cli: { text: interactionText(SETTLE_ADDED_REF_RESULT) } },
     },
     {
       id: 'mutation-tail',
       command: 'press @e5 --settle',
       kind: 'mutation',
       targetRef: '@e5',
-      samples: { cli: { text: interactionText(SETTLE_TAIL_RESULT) } },
+      samples: { cli: { text: interactionText(WORKFLOW_TAIL_RESULT) } },
     },
     {
       id: 'read',
@@ -302,16 +228,16 @@ export async function renderRoutineWorkflow(): Promise<{
     },
     {
       id: 'failure',
-      command: 'press @e6 --settle',
+      command: 'press @e7 --settle',
       kind: 'failure',
-      targetRef: '@e6',
+      targetRef: '@e7',
       samples: { shared: { data: error } },
     },
     {
       id: 'retry',
-      command: 'press @e6 --settle --timeout 15000',
+      command: 'press @e7 --settle --timeout 15000',
       kind: 'retry',
-      targetRef: '@e6',
+      targetRef: '@e7',
       samples: { cli: { text: interactionText(RETRY_RESULT) } },
     },
   ];

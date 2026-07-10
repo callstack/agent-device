@@ -42,11 +42,13 @@ describe('routine-workflow output-behavior oracle', () => {
         .map((step) => [step.targetRef, step.targetSurfacedBy]),
     );
     expect(surfacedBy['@e3']).toBe('orient');
-    expect(surfacedBy['@e4']).toBe('mutation-confirm');
+    // @e5 (View receipt) exists only in the settled diff's added lines, never in
+    // the orienting snapshot — so its surfacer proves the rendered diff, not a
+    // re-observation, handed it over.
     expect(surfacedBy['@e5']).toBe('mutation-confirm');
-    // The removals-only settle's unchanged-interactive tail is the only place
-    // the Done button (e6) appears before it is tapped.
-    expect(surfacedBy['@e6']).toBe('mutation-tail');
+    // @e7 (Continue) first appears in the removals-only settle's unchanged-
+    // interactive tail, the only place it shows up before it is tapped.
+    expect(surfacedBy['@e7']).toBe('mutation-tail');
   });
 
   test('exactly one recovery retry, driven by an actionable failure', () => {
@@ -62,13 +64,13 @@ describe('routine-workflow output-behavior oracle', () => {
     expect(measurement.recoveryPreservesSession).toBe(true);
     expect(measurement.recoveryFields).toEqual({
       code: 'COMMAND_FAILED',
-      session: 'checkout',
-      refsGeneration: 22,
+      session: 'economy-fixture',
+      refsGeneration: 14,
       retriable: true,
       hint: expect.stringContaining('Retry'),
     });
     // Recovery identity keys on structured details, not on message text.
-    expect(error.details).toMatchObject({ reason: 'timeout', timeoutMs: 10_000, ref: '@e6' });
+    expect(error.details).toMatchObject({ reason: 'timeout', timeoutMs: 10_000, ref: '@e7' });
     expect(error.retriable).toBe(true);
   });
 
@@ -94,7 +96,7 @@ describe('routine-workflow output-behavior oracle', () => {
       orient.samples.mcp && 'data' in orient.samples.mcp ? orient.samples.mcp.data : undefined;
     expect(mcp).toMatchObject({
       isError: false,
-      structuredContent: { refsGeneration: 20 },
+      structuredContent: { refsGeneration: 12 },
       content: [{ type: 'text', text: expect.stringContaining('@e3 [button] "Place order"') }],
     });
   });
