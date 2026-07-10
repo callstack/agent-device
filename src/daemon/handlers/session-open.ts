@@ -31,7 +31,10 @@ import { STARTUP_SAMPLE_METHOD, type StartupPerfSample } from './session-startup
 import { buildNextOpenSession, buildOpenResult } from './session-open-surface.ts';
 import { markAndroidSnapshotFreshness } from '../android-snapshot-freshness.ts';
 import { resetAndroidFramePerfStats } from '../../platforms/android/perf.ts';
-import { activateAndroidTestIme } from '../../platforms/android/ime-lifecycle.ts';
+import {
+  activateAndroidTestIme,
+  markAndroidTestImeStartupRecovery,
+} from '../../platforms/android/ime-lifecycle.ts';
 import { withKeyedLock } from '../../utils/keyed-lock.ts';
 import { emitDiagnostic, getDiagnosticsMeta } from '../../utils/diagnostics.ts';
 import { inferAndroidPackageAfterOpen } from './session-open-target.ts';
@@ -130,10 +133,17 @@ function shouldActivateAndroidTestIme(device: DeviceInfo, req: DaemonRequest): b
 async function maybeActivateAndroidTestImeForOpen(
   device: DeviceInfo,
   req: DaemonRequest,
+  stateDir: string,
 ): Promise<void> {
   if (!shouldActivateAndroidTestIme(device, req)) return;
   try {
-    await activateAndroidTestIme(device);
+    const result = await activateAndroidTestIme(device);
+    if (result.activated || result.alreadyActive) {
+      // Record that this state dir now owns a switched IME, so daemon-startup recovery (and only
+      // then) will scan adb after a crash. Written after activation so a crash cannot leave the
+      // helper active without the marker that triggers recovery.
+      await markAndroidTestImeStartupRecovery(stateDir);
+    }
   } catch (error) {
     // Never block open on a helper install failure; fall open to the existing text-entry path.
     emitDiagnostic({
@@ -300,7 +310,7 @@ async function completeOpenCommand(params: {
     ...(collapseSimulatorRelaunch ? { terminateRunningApp: true } : {}),
   });
   timing.openDispatchDurationMs = Math.max(0, Date.now() - openStartedAtMs);
-  await maybeActivateAndroidTestImeForOpen(device, req);
+  await maybeActivateAndroidTestImeForOpen(device, req, sessionStore.resolveStateDir());
   const launchUrlStartedAtMs = Date.now();
   await maybeApplySessionLaunchUrl({
     runtime,

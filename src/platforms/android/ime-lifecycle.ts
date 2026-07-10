@@ -1,3 +1,5 @@
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { normalizeError } from '../../kernel/errors.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
@@ -16,6 +18,27 @@ import {
 const SETTINGS_KEY_PREVIOUS_IME = 'agent_device_ime_helper_previous_ime';
 const SETTINGS_NAMESPACE = 'secure';
 const DEFAULT_INPUT_METHOD_KEY = 'default_input_method';
+
+// Host-side marker written in the daemon state dir when a session activates the test IME. The
+// daemon-startup orphan scan is gated on it, so a host that never uses the Android test IME (e.g.
+// the macOS CI runner, which nonetheless ships adb) never spawns `adb devices` at startup.
+const STARTUP_RECOVERY_MARKER = 'android-test-ime-active.marker';
+
+function startupRecoveryMarkerPath(stateDir: string): string {
+  return path.join(stateDir, STARTUP_RECOVERY_MARKER);
+}
+
+export async function markAndroidTestImeStartupRecovery(stateDir: string): Promise<void> {
+  try {
+    await fs.writeFile(startupRecoveryMarkerPath(stateDir), '');
+  } catch (error) {
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'android_test_ime_marker_write_failed',
+      data: { stateDir, error: normalizeError(error).message },
+    });
+  }
+}
 
 // Per-daemon-process cache of devices with the test IME active; input-actions.ts reads this to
 // route text entry through the broadcast channel.
@@ -191,10 +214,22 @@ async function restoreAndroidTestImeFor(
   return { restored: true, previousIme, reason: 'ok' };
 }
 
-// Best-effort: restore any test IME left active by a crashed daemon run.
+// Best-effort: restore any test IME left active by a crashed daemon run. Gated on the host-side
+// marker so it never spawns adb unless a prior run on this state dir actually activated the test
+// IME — this keeps the fire-and-forget startup path off adb on hosts that don't use it.
 export async function restoreOrphanedAndroidTestImeOnDaemonStartup(params: {
+  stateDir: string;
   listSerials: () => Promise<string[]>;
 }): Promise<void> {
+  const markerPath = startupRecoveryMarkerPath(params.stateDir);
+  try {
+    await fs.access(markerPath);
+  } catch {
+    // No prior activation recorded for this state dir — nothing to recover, and importantly no
+    // reason to spawn adb (the macOS-CI regression this guard exists to prevent).
+    return;
+  }
+
   let serials: string[];
   try {
     serials = await params.listSerials();
@@ -206,6 +241,7 @@ export async function restoreOrphanedAndroidTestImeOnDaemonStartup(params: {
     });
     return;
   }
+  let anyStillStuck = false;
   for (const serial of serials) {
     const device: DeviceInfo = {
       platform: 'android',
@@ -223,14 +259,22 @@ export async function restoreOrphanedAndroidTestImeOnDaemonStartup(params: {
           phase: 'android_test_ime_orphan_restored',
           data: { device: serial, previousIme: result.previousIme },
         });
+      } else if (result.reason === 'set-failed') {
+        anyStillStuck = true;
       }
     } catch (error) {
+      anyStillStuck = true;
       emitDiagnostic({
         level: 'debug',
         phase: 'android_test_ime_orphan_restore_failed',
         data: { device: serial, error: normalizeError(error).message },
       });
     }
+  }
+  // Clear the marker once nothing is left stuck, so the next startup does not re-scan (and does
+  // not spawn adb) for an already-clean host. Keep it if a restore failed, so recovery retries.
+  if (!anyStillStuck) {
+    await fs.rm(markerPath, { force: true }).catch(() => {});
   }
 }
 

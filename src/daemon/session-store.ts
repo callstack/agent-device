@@ -105,6 +105,11 @@ export class SessionStore {
     return path.join(this.sessionsDir, safeSessionName(sessionName));
   }
 
+  // Daemon state dir (parent of the `sessions/` dir), matching daemonPaths.baseDir.
+  resolveStateDir(): string {
+    return path.dirname(this.sessionsDir);
+  }
+
   ensureSessionDir(sessionName: string): string {
     const sessionDir = this.resolveSessionDir(sessionName);
     fs.mkdirSync(sessionDir, { recursive: true });

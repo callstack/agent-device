@@ -250,8 +250,10 @@ export async function startDaemonRuntime(
   let httpPort: number | undefined;
   try {
     await cleanupWebBrowserOrphansForDaemonStartup({ stateDir: baseDir, sessionStore });
-    // Fire-and-forget: touches real adb (server cold-start can take seconds); must not delay readiness.
+    // Fire-and-forget: gated on a state-dir marker so it only touches adb when a prior run here
+    // actually activated the test IME (never on hosts that don't use it, e.g. the macOS runner).
     void restoreOrphanedAndroidTestImeOnDaemonStartup({
+      stateDir: baseDir,
       listSerials: listAndroidAdbSerialsQuick,
     }).catch(() => {});
     const opened = await openDaemonServers();

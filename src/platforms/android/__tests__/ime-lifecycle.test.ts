@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict';
+import { promises as fsp } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { beforeEach, test, vi } from 'vitest';
 
 const HELPER_SERVICE = 'com.callstack.agentdevice.imehelper/.TestInputMethodService';
 const SETTINGS_KEY = 'agent_device_ime_helper_previous_ime';
+const MARKER = 'android-test-ime-active.marker';
 
 // activateAndroidTestIme reads the bundled artifact for the service component; inject a fixture so
 // the suite passes on a fresh checkout that hasn't packaged android-ime-helper/dist (CI Coverage).
@@ -43,6 +47,21 @@ beforeEach(() => {
   resetAndroidImeHelperInstallCache();
   resetAndroidTestImeActivationCacheForTests();
 });
+
+async function makeStateDir(withMarker: boolean): Promise<string> {
+  const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'ime-lifecycle-state-'));
+  if (withMarker) await fsp.writeFile(path.join(dir, MARKER), '');
+  return dir;
+}
+
+async function markerExists(stateDir: string): Promise<boolean> {
+  try {
+    await fsp.access(path.join(stateDir, MARKER));
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 type FakeAdbResult = { exitCode: number; stdout: string; stderr: string };
 
@@ -182,18 +201,37 @@ test('a failed restore keeps the persisted recovery value for a later retry', as
   // A subsequent recovery (device now accepts the switch) uses the surviving value and succeeds.
   state.unblockImeSetTo(LATIN_IME);
   state.forceCurrentIme(HELPER_SERVICE);
+  const stateDir = await makeStateDir(true);
   await withAndroidAdbProvider(state.adb, { serial: ANDROID_EMULATOR.id }, async () => {
     await restoreOrphanedAndroidTestImeOnDaemonStartup({
+      stateDir,
       listSerials: async () => [ANDROID_EMULATOR.id],
     });
     assert.equal(state.getCurrentIme(), LATIN_IME);
     assert.equal(state.getPreviousImeRecord(), undefined);
+    // Nothing left stuck — marker cleared so the next startup does not re-scan (no adb).
+    assert.equal(await markerExists(stateDir), false);
   });
+});
+
+test('startup recovery does not scan adb when no state-dir marker exists', async () => {
+  const stateDir = await makeStateDir(false); // no marker: this host never used the test IME
+  let listSerialsCalled = false;
+  await restoreOrphanedAndroidTestImeOnDaemonStartup({
+    stateDir,
+    listSerials: async () => {
+      listSerialsCalled = true;
+      return [ANDROID_EMULATOR.id];
+    },
+  });
+  // The adb scan (listSerials -> `adb devices`) must not run — this is the macOS-CI regression fix.
+  assert.equal(listSerialsCalled, false);
 });
 
 test('startup recovery is a no-op when the current IME is no longer the helper', async () => {
   const state = fakeDeviceState(LATIN_IME);
   state.markInstalled();
+  const stateDir = await makeStateDir(true);
 
   await withAndroidAdbProvider(state.adb, { serial: ANDROID_EMULATOR.id }, async () => {
     await activateAndroidTestIme(ANDROID_EMULATOR);
@@ -203,6 +241,7 @@ test('startup recovery is a no-op when the current IME is no longer the helper',
     state.forceCurrentIme(OTHER_IME);
 
     await restoreOrphanedAndroidTestImeOnDaemonStartup({
+      stateDir,
       listSerials: async () => [ANDROID_EMULATOR.id],
     });
 
@@ -216,12 +255,14 @@ test('startup recovery is a no-op when the current IME is no longer the helper',
 test('startup recovery skips a device a live session in this process still owns', async () => {
   const state = fakeDeviceState(LATIN_IME);
   state.markInstalled();
+  const stateDir = await makeStateDir(true);
 
   await withAndroidAdbProvider(state.adb, { serial: ANDROID_EMULATOR.id }, async () => {
     await activateAndroidTestIme(ANDROID_EMULATOR);
     assert.equal(isAndroidTestImeActive(ANDROID_EMULATOR), true);
     // Fire-and-forget startup recovery races an open that just activated the helper here.
     await restoreOrphanedAndroidTestImeOnDaemonStartup({
+      stateDir,
       listSerials: async () => [ANDROID_EMULATOR.id],
     });
 
@@ -234,6 +275,7 @@ test('startup recovery skips a device a live session in this process still owns'
 test('restoreOrphanedAndroidTestImeOnDaemonStartup restores a stuck IME left by a crashed daemon', async () => {
   const state = fakeDeviceState(LATIN_IME);
   state.markInstalled();
+  const stateDir = await makeStateDir(true);
 
   await withAndroidAdbProvider(state.adb, { serial: ANDROID_EMULATOR.id }, async () => {
     // Simulate a previous process that activated the helper but crashed before restoring.
@@ -242,6 +284,7 @@ test('restoreOrphanedAndroidTestImeOnDaemonStartup restores a stuck IME left by 
     assert.equal(state.getCurrentIme(), HELPER_SERVICE);
 
     await restoreOrphanedAndroidTestImeOnDaemonStartup({
+      stateDir,
       listSerials: async () => [ANDROID_EMULATOR.id],
     });
 
@@ -250,7 +293,9 @@ test('restoreOrphanedAndroidTestImeOnDaemonStartup restores a stuck IME left by 
 });
 
 test('restoreOrphanedAndroidTestImeOnDaemonStartup tolerates a serial listing failure', async () => {
+  const stateDir = await makeStateDir(true);
   await restoreOrphanedAndroidTestImeOnDaemonStartup({
+    stateDir,
     listSerials: async () => {
       throw new Error('adb not found');
     },
