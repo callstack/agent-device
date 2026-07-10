@@ -670,9 +670,7 @@ async function dispatchRuntimeInteraction<
     afterRun?(result: TResult): Promise<void>;
     buildPayloads(
       result: TResult,
-    ):
-      | { result: Record<string, unknown>; responseData: Record<string, unknown> }
-      | Promise<{ result: Record<string, unknown>; responseData: Record<string, unknown> }>;
+    ): InteractionResponsePayloads | Promise<InteractionResponsePayloads>;
   },
 ): Promise<DaemonResponse> {
   const session = params.sessionStore.get(params.sessionName);
@@ -690,7 +688,7 @@ async function dispatchRuntimeInteraction<
       },
     );
     const actionFinishedAt = Date.now();
-    const { result, responseData } = await options.buildPayloads(runtimeResult);
+    const { result, responseData, recordedTarget } = await options.buildPayloads(runtimeResult);
     if (readiness.status === 'recovered') {
       // Append, don't clobber — the builder may already carry a warning
       // (e.g. stale-refs, #1076).
@@ -710,6 +708,7 @@ async function dispatchRuntimeInteraction<
       flags: params.req.flags,
       result,
       responseData,
+      recordedTarget,
       actionStartedAt,
       actionFinishedAt,
       androidFreshnessBaseline: options.androidFreshnessBaseline,

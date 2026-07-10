@@ -2,20 +2,10 @@
  * ADR 0012 decision 3: record-time computation of `.ad` target-binding
  * evidence (the `# agent-device:target-v1 {...}` annotation).
  *
- * `computeTargetEvidence` implements decision 3's "Record-time write"
- * algorithm steps 1-5 against the SAME record-time tree the interaction
- * resolver just captured (`ResolvedInteractionTarget.node` +
- * `.preActionNodes`, see `src/commands/interaction/runtime/resolution.ts`).
- * It never captures anything itself — callers own gating this on whether the
- * session is actually being recorded (`session.recordSession`), since the
- * ancestry/identity-set scan is O(nodes) and pointless otherwise.
- *
- * This module lives under `src/daemon/` (not `src/replay/`) because it needs
- * `SnapshotNode`/`findNearestScrollableContainer` from the daemon's
- * snapshot-presentation layer, which sits above `replay` in the import DAG;
- * `replay` (below `daemon`) owns only the tree-agnostic spec pieces
- * (`src/replay/target-identity.ts`) that both the writer here and the parser
- * share.
+ * `computeTargetEvidence` runs decision 3's "Record-time write" steps 1-5
+ * against the tree the resolver already captured; it never captures, and
+ * callers gate it on `session.recordSession`. Tree-agnostic spec pieces live
+ * in `src/replay/target-identity.ts`, shared with the parser.
  */
 
 import type { SnapshotNode } from '../kernel/snapshot.ts';
@@ -55,13 +45,9 @@ export function computeTargetEvidence(params: {
   const scrollRegion = computeScrollRegionKey(node, byIndex);
   const rect = boundedRect(node);
 
-  // Writer-parser invariant (decision 3): reduce ancestry from the root side
-  // until the canonical serialization fits the 4 KiB payload cap. Every
-  // string field is already bounded to 256 bytes by `boundedLocalIdentity`/
-  // `buildAncestryChain`/`computeScrollRegionKey`, so this loop only ever
-  // needs to shed ancestry entries. Decision 3 stops reducing once only
-  // `ancestry[0]` (the parent) is retained — the floor is 1 when the winner
-  // has any ancestor at all, else 0 (a root node has none to keep).
+  // Decision 3's writer-parser invariant: reduce ancestry from the root side
+  // until the payload fits, stopping once only `ancestry[0]` is retained
+  // (floor 0 for a root node with no ancestors).
   const floor = fullAncestry.length > 0 ? 1 : 0;
   const buildCandidate = (ancestryLength: number) => {
     const ancestry = fullAncestry.slice(0, ancestryLength);
@@ -88,13 +74,8 @@ export function computeTargetEvidence(params: {
 
   for (let ancestryLength = fullAncestry.length; ancestryLength >= floor; ancestryLength -= 1) {
     const { candidate, domain } = buildCandidate(ancestryLength);
-    // Size against the WORST-CASE verification value ("unverifiable" is 4
-    // serialized bytes longer than "verified") so the payload provably fits
-    // no matter what the self-check below returns — otherwise a payload
-    // within 4 bytes of the cap could pass this check as "verified" and then
-    // overflow once a fail-closed self-check downgraded it, violating the
-    // writer-parser invariant exactly in the rare capture-anomaly case it
-    // exists for.
+    // Size against the longest verification value so the payload fits
+    // whichever one the self-check returns.
     if (
       utf8ByteLength(serializeTargetAnnotationV1({ ...candidate, verification: 'unverifiable' })) <=
       TARGET_ANNOTATION_MAX_PAYLOAD_BYTES
@@ -103,12 +84,8 @@ export function computeTargetEvidence(params: {
       return candidate;
     }
     if (ancestryLength === floor) {
-      // Decision 3's terminal fail-closed guarantee: a parent-only (or, for a
-      // root node, ancestry-less) payload fits arithmetically once every
-      // field is already capped at 256 bytes, so this branch is not expected
-      // to run. If it somehow still doesn't fit, drop the diagnostic-only
-      // rect (never compared) as one last, spec-consistent reduction rather
-      // than emit a payload the parser would reject.
+      // Decision 3's terminal fail-closed downgrade; rect is diagnostic-only
+      // and is dropped before ever emitting an over-cap payload.
       candidate.verification = 'unverifiable';
       if (
         utf8ByteLength(serializeTargetAnnotationV1(candidate)) > TARGET_ANNOTATION_MAX_PAYLOAD_BYTES
@@ -132,22 +109,16 @@ function buildIndexMap(nodes: readonly SnapshotNode[]): Map<number, SnapshotNode
   return map;
 }
 
-function computeLocalIdentity(node: SnapshotNode): LocalIdentity {
+/** The one identity reader: normalized AND field-capped, on every path. */
+function boundedLocalIdentity(node: SnapshotNode): LocalIdentity {
   const role = normalizeRoleField(normalizeType(node.type ?? ''));
   const id = normalizeIdentifierField(node.identifier);
   const label = normalizeLabelField(node.label);
-  return { ...(id !== undefined ? { id } : {}), role, ...(label !== undefined ? { label } : {}) };
-}
-
-function boundedLocalIdentity(node: SnapshotNode): LocalIdentity {
-  const identity = computeLocalIdentity(node);
   return {
-    ...(identity.id !== undefined
-      ? { id: truncateToUtf8Bytes(identity.id, TARGET_ANNOTATION_MAX_FIELD_BYTES) }
-      : {}),
-    role: truncateToUtf8Bytes(identity.role, TARGET_ANNOTATION_MAX_FIELD_BYTES),
-    ...(identity.label !== undefined
-      ? { label: truncateToUtf8Bytes(identity.label, TARGET_ANNOTATION_MAX_FIELD_BYTES) }
+    ...(id !== undefined ? { id: truncateToUtf8Bytes(id, TARGET_ANNOTATION_MAX_FIELD_BYTES) } : {}),
+    role: truncateToUtf8Bytes(role, TARGET_ANNOTATION_MAX_FIELD_BYTES),
+    ...(label !== undefined
+      ? { label: truncateToUtf8Bytes(label, TARGET_ANNOTATION_MAX_FIELD_BYTES) }
       : {}),
   };
 }
@@ -195,10 +166,7 @@ function computeScrollRegionKey(
   node: SnapshotNode,
   byIndex: Map<number, SnapshotNode>,
 ): TargetScrollRegion | undefined {
-  // `findNearestScrollableContainer` is typed generically over
-  // `RawSnapshotNode`; every value in `byIndex` is actually a `SnapshotNode`
-  // (built from the same `nodes` array), so the cast back is safe.
-  const container = findNearestScrollableContainer(node, byIndex) as SnapshotNode | null;
+  const container = findNearestScrollableContainer(node, byIndex);
   if (!container) return undefined;
   const identity = boundedLocalIdentity(container);
   return {
@@ -254,12 +222,6 @@ function computeDisambiguationDomain(params: {
   // Step 2: all nodes sharing the winner's local identity with a matching
   // leaf-anchored ancestry prefix.
   const identitySet = nodes.filter((candidate) => {
-    // Compare through the SAME 256-byte bounding the recorded `identity` and
-    // ancestry entries already went through — otherwise a node whose own
-    // id/label exceeds the field cap would spuriously fail to match ITSELF
-    // (the recorded value is truncated; the raw candidate value is not),
-    // corrupting both this self-check and, if the replay-time matcher ever
-    // skipped the same bounding, a real node's identity check later.
     if (!matchesLocalIdentity(boundedLocalIdentity(candidate), identity)) return false;
     const observedAncestry = buildAncestryChain(candidate, byIndex, Math.max(ancestry.length, 1));
     return matchesAncestryPrefix(observedAncestry, ancestry);
@@ -301,12 +263,9 @@ function orderByViewportPosition(members: readonly SnapshotNode[]): SnapshotNode
 }
 
 /**
- * Decision 3 record-time write step 5: run the replay-time classification
- * (decision 3's paths 2-6, shared via `classifyTargetBindingMatch`) against
- * the record-time tree itself. Paths 2/3 are unreachable here by
- * construction — the winner always matched itself and is always a member of
- * its own identity set — but are still fed through the shared classifier so
- * the exact same function runs at record and (in a future step) replay time.
+ * Decision 3 record-time write step 5: run the shared replay-time
+ * classification (`classifyTargetBindingMatch`) against the record-time tree
+ * itself.
  */
 function runRecordTimeSelfCheck(params: {
   node: SnapshotNode;

@@ -52,35 +52,37 @@ export function parseReplayScriptDetailed(script: string): ParsedReplayScript {
   let sawAction = false;
   let pending: PendingTargetAnnotation | undefined;
 
-  const rejectUnbound = (index: number, why: string): never => {
+  const rejectUnbound = (
+    annotation: PendingTargetAnnotation,
+    index: number,
+    why: string,
+  ): never => {
     throw new AppError(
       'INVALID_ARGS',
-      // pending is only read here when set, right after the guard below.
-      `target-v1 annotation on line ${pending!.line} must be immediately followed by its action line (line ${index + 1} ${why}).`,
+      `target-v1 annotation on line ${annotation.line} must be immediately followed by its action line (line ${index + 1} ${why}).`,
     );
   };
 
   for (const [index, rawLine] of lines.entries()) {
     const trimmed = rawLine.trim();
     if (trimmed.length === 0) {
-      if (pending) rejectUnbound(index, 'is blank');
+      if (pending) rejectUnbound(pending, index, 'is blank');
       continue;
     }
     if (trimmed.startsWith('#')) {
       const annotation = parseTargetAnnotationCommentLine(trimmed);
       if (annotation.kind === 'v1') {
-        if (pending) rejectUnbound(index, 'is another target-v1 annotation');
+        if (pending) rejectUnbound(pending, index, 'is another target-v1 annotation');
         pending = { evidence: annotation.evidence, line: index + 1 };
         continue;
       }
-      // A plain comment or an unknown future `target-vN` is an ordinary
-      // comment to this (v1) reader — but it is still an intervening line
-      // for any annotation still pending binding.
-      if (pending) rejectUnbound(index, 'is a comment');
+      // An ordinary or future-target-vN comment still counts as an
+      // intervening line for a pending annotation.
+      if (pending) rejectUnbound(pending, index, 'is a comment');
       continue;
     }
     if (isReplayEnvLine(trimmed)) {
-      if (pending) rejectUnbound(index, 'is an env directive');
+      if (pending) rejectUnbound(pending, index, 'is an env directive');
       if (sawAction) {
         throw new AppError(
           'INVALID_ARGS',
@@ -91,7 +93,7 @@ export function parseReplayScriptDetailed(script: string): ParsedReplayScript {
     }
     const parsed = parseReplayScriptLine(rawLine);
     if (!parsed) {
-      if (pending) rejectUnbound(index, 'did not parse as an action');
+      if (pending) rejectUnbound(pending, index, 'did not parse as an action');
       continue;
     }
     if (pending) {
@@ -519,9 +521,7 @@ export function writeReplayScript(
     );
   }
   for (const action of actions) {
-    // ADR 0012 decision 3: a writer that reads then rewrites a script (this
-    // heal/`--update` path) must preserve v1 annotations in canonical form,
-    // never silently discard them.
+    // ADR 0012 decision 3: rewrites preserve v1 annotations in canonical form.
     lines.push(...formatTargetAnnotationLines(action));
     lines.push(formatReplayActionLine(action));
   }

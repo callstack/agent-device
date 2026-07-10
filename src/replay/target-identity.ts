@@ -1,35 +1,18 @@
 /**
- * ADR 0012 decision 3: versioned `.ad` target-binding evidence.
- *
- * This module is the shared, tree-agnostic spine consumed by both the writer
- * (`src/daemon/session-target-evidence.ts`, which has an actual snapshot tree
- * to compute the payload from) and the parser (`src/replay/script.ts`, which
- * only ever sees the JSON comment text). It owns:
- *
- * - the wire type and its canonical JSON.stringify field order,
- * - Unicode/whitespace normalization and the 256-byte-field / 4 KiB-payload
- *   caps,
- * - parsing + validation of a `target-v1` comment payload (`INVALID_ARGS` on
- *   anything malformed or oversized — the parser REJECTS, it never
- *   truncates), and
- * - the record/replay-shared classification core (decision 3's six-path
- *   verification algorithm), expressed generically over node refs so it has
- *   no dependency on `SnapshotNode`/the daemon tree. The writer's record-time
- *   self-check (decision 3, record-time write step 5) calls this; a future
- *   migration step (4) reuses the exact same function at replay time so the
- *   two can never drift.
- *
- * Nothing here enforces anything at replay time yet (migration step 3 is
- * parser/writer only) — parsed evidence is inert until step 4 lands.
+ * ADR 0012 decision 3: versioned `.ad` target-binding evidence — the
+ * tree-agnostic spine shared by the writer
+ * (`src/daemon/session-target-evidence.ts`) and the parser
+ * (`src/replay/script.ts`). Owns the wire type, canonical field order,
+ * normalization, size caps, payload parsing/validation, and the record/
+ * replay-shared classification core. Inert in migration step 3: nothing
+ * enforces parsed evidence at replay time until step 4.
  */
 
 import { AppError } from '../kernel/errors.ts';
 
 const TARGET_ANNOTATION_TAG = 'agent-device:target-v1';
-// Captures the version and the REST of the line verbatim, even when it isn't
-// well-formed JSON — a line that claims the tag but carries garbage must be
-// rejected as a malformed v1 annotation (INVALID_ARGS), not silently treated
-// as an ordinary comment because it failed to look like `{...}` up front.
+// Captures the rest of the line verbatim: a line claiming the tag with a
+// garbage payload is a malformed v1 annotation, never an ordinary comment.
 const TARGET_ANNOTATION_LINE_RE = /^#\s*agent-device:target-v(\d+)(?:\s+(.*))?$/;
 
 export const TARGET_ANNOTATION_MAX_FIELD_BYTES = 256;
@@ -229,14 +212,9 @@ export function parseTargetAnnotationV1Payload(jsonText: string): TargetAnnotati
 }
 
 /**
- * `role` keys are always PRESENT in writer output — the writer emits `role`
- * unconditionally at the top level, in every ancestry entry, and in
- * `scrollRegion` (possibly as the empty string for a typeless node, which
- * decision 3 explicitly allows). A MISSING role key can therefore only come
- * from a hand-edited/adversarial annotation and is rejected: once step-4
- * enforcement consumes this evidence, an implicitly-empty role in
- * `matchesLocalIdentity` could match anonymous wrapper nodes and produce a
- * false verified/rebind.
+ * The writer emits `role` unconditionally (possibly as the empty string for
+ * a typeless node), so a missing role key is always foreign input and is
+ * rejected rather than defaulted.
  */
 function parseRequiredRoleField(value: unknown, field: string): string {
   if (value === undefined) {
@@ -394,14 +372,8 @@ export function matchesAncestryPrefix(
 
 // ---------------------------------------------------------------------------
 // Classification core (decision 3 "Replay-time verification", paths 2-6;
-// path 1 — a recorded-`unverifiable` annotation — is checked by the caller
-// before any resolution and never reaches this function). Expressed
-// generically over node refs: the caller resolves matches/identity-set/
-// sibling-filter/region partition using its own tree, then hands the
-// resulting ref sets here for the total-order classification. This is what
-// both the writer's record-time self-check (decision 3 step 5) and — in a
-// future migration step — replay-time enforcement call, so the two decision
-// points can never diverge.
+// path 1 is the caller's pre-resolution check). Generic over node refs so
+// the record-time self-check and future replay-time enforcement share it.
 // ---------------------------------------------------------------------------
 
 export type TargetBindingClassificationInput = {

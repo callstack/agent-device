@@ -3596,9 +3596,7 @@ test('press @ref while recording attaches target-v1 evidence to the recorded act
       session: sessionName,
       command: 'press',
       positionals: ['@e1'],
-      // verify:true forces full runtime resolution (captures node/tree),
-      // sidestepping the native-ref fast path exactly like the sibling
-      // --verify tests above.
+      // verify:true forces full runtime resolution, which captures node/tree.
       flags: { verify: true },
     },
     sessionName,

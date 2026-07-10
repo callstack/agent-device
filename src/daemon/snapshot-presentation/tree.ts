@@ -71,11 +71,8 @@ function getDescendantEndPositions(nodes: RawSnapshotNode[]): number[] {
   return endPositions;
 }
 
-function collectAncestors(
-  node: RawSnapshotNode,
-  byIndex: Map<number, RawSnapshotNode>,
-): RawSnapshotNode[] {
-  const ancestors: RawSnapshotNode[] = [];
+function collectAncestors<T extends RawSnapshotNode>(node: T, byIndex: Map<number, T>): T[] {
+  const ancestors: T[] = [];
   let current = typeof node.parentIndex === 'number' ? byIndex.get(node.parentIndex) : undefined;
   const visited = new Set<number>();
   while (current && !visited.has(current.index)) {
@@ -87,11 +84,11 @@ function collectAncestors(
   return ancestors;
 }
 
-export function findNearestAncestor(
-  node: RawSnapshotNode,
-  byIndex: Map<number, RawSnapshotNode>,
-  predicate: (ancestor: RawSnapshotNode) => boolean,
-): RawSnapshotNode | null {
+export function findNearestAncestor<T extends RawSnapshotNode>(
+  node: T,
+  byIndex: Map<number, T>,
+  predicate: (ancestor: T) => boolean,
+): T | null {
   for (const ancestor of collectAncestors(node, byIndex)) {
     if (predicate(ancestor)) {
       return ancestor;
@@ -100,11 +97,11 @@ export function findNearestAncestor(
   return null;
 }
 
-export function findNearestScrollableContainer(
-  node: RawSnapshotNode,
-  byIndex: Map<number, RawSnapshotNode>,
+export function findNearestScrollableContainer<T extends RawSnapshotNode>(
+  node: T,
+  byIndex: Map<number, T>,
   options: { includeSelf?: boolean } = {},
-): RawSnapshotNode | null {
+): T | null {
   const self = options.includeSelf === true && isScrollableSnapshotType(node.type) ? node : null;
   return (
     self ??

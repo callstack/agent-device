@@ -509,13 +509,8 @@ export async function preflightNativeRefInteraction(
   assertVisibleRefTarget(resolved.node, nodes, target.ref, action);
   return {
     ...describeNonHittableTarget(resolved.node, action),
-    // Reuses the lookup above (zero extra capture cost) so the native-ref
-    // fast path — `click @ref`/`fill @ref` with default options — can still
-    // record ADR 0012 decision-3 target-binding evidence from the stored
-    // session tree, not only from the full resolution path. Stripped back
-    // out of the response before it reaches any caller (see
-    // `interaction-touch-response.ts`/`finalizeTouchInteraction`); never
-    // exposed publicly.
+    // ADR 0012 decision 3: the guard lookup above doubles as the record-time
+    // evidence source for the fast path, at zero extra capture cost.
     node: resolved.node,
     preActionNodes: nodes,
   };

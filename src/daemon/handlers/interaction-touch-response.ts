@@ -5,6 +5,7 @@ import type {
   PressCommandResult,
   SettleObservation,
 } from '../../contracts/interaction.ts';
+import type { SnapshotNode } from '../../kernel/snapshot.ts';
 import { successText } from '../../utils/success-text.ts';
 import { interactionResultExtra } from './interaction-touch-targets.ts';
 
@@ -38,11 +39,19 @@ export type InteractionResponseSource =
       point: { x: number; y: number };
     };
 
+/** ADR 0012 decision 3: record-time input for `computeTargetEvidence`. */
+export type RecordedTargetCapture = {
+  node: SnapshotNode;
+  preActionNodes: SnapshotNode[];
+};
+
 export type InteractionResponsePayloads = {
   /** Recorded in session history and used for touch visualization. */
   result: Record<string, unknown>;
   /** The public payload returned to the client. */
   responseData: Record<string, unknown>;
+  /** Typed side channel — never part of either serialized payload. */
+  recordedTarget?: RecordedTargetCapture;
 };
 
 export function buildInteractionResponseData(params: {
@@ -125,20 +134,15 @@ export function buildInteractionResponseData(params: {
     visualization.warning = warning;
     responseData.warning = warning;
   }
-  // ADR 0012 decision 3: the resolved node and the record-time tree it came
-  // from ride ONLY on `visualization` — a hand-off channel to
-  // `finalizeTouchInteraction` (interaction-common.ts), which turns them into
-  // the compact `targetEvidence` annotation when the session is being
-  // recorded and strips the raw tree back out BEFORE anything downstream
-  // consumes the payload (session history via recordAction and touch overlay
-  // telemetry both receive the stripped form). They are never attached to
-  // `responseData` (the public payload) — attaching them here, not via
-  // `commonExtra`, is what keeps them off the wire.
-  if ('node' in result && result.node) visualization.node = result.node;
-  if ('preActionNodes' in result && result.preActionNodes) {
-    visualization.preActionNodes = result.preActionNodes;
-  }
-  return { result: visualization, responseData };
+  return { result: visualization, responseData, ...recordedTargetCapture(result) };
+}
+
+function recordedTargetCapture(
+  result: InteractionRuntimeResult,
+): Pick<InteractionResponsePayloads, 'recordedTarget'> {
+  const node = 'node' in result ? result.node : undefined;
+  const preActionNodes = 'preActionNodes' in result ? result.preActionNodes : undefined;
+  return node && preActionNodes ? { recordedTarget: { node, preActionNodes } } : {};
 }
 
 // Attaches refsGeneration inside the settle payload when the response is

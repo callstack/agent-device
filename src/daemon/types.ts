@@ -401,10 +401,8 @@ export type SessionAction = {
   result?: Record<string, unknown>;
   /**
    * ADR 0012 decision 3: parsed or record-time-computed `target-v1`
-   * evidence, emitted as a `# agent-device:target-v1 {...}` comment
-   * immediately before this action's line. Inert — migration step 3 parses
-   * and preserves it, but nothing enforces it yet (that lands in a later
-   * migration step).
+   * evidence, written as a comment immediately before this action's line.
+   * Inert until migration step 4 adds enforcement.
    */
   targetEvidence?: TargetAnnotationV1;
 };

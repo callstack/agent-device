@@ -170,27 +170,25 @@ test(scenario('responseConstruction'), async () => {
   assert.deepEqual(result.target, { kind: 'ref', ref: '@e1' });
   assert.deepEqual(result.backendResult, { ref: 'e1' });
   assert.equal(result.point, undefined);
-  // ADR 0012 decision 3: the preflight's already-fetched stored-snapshot node
-  // and tree now ride on the INTERNAL runtime result so record-time
-  // target-binding evidence can be computed at zero extra capture cost. This
-  // is the internal boundary only — the shared construction site
-  // (buildInteractionResponseData) attaches them exclusively to the internal
-  // visualization payload, and the public responseData never carries them
-  // (asserted below).
+  // ADR 0012 decision 3: the preflight's guard lookup supplies the
+  // record-time evidence node on the runtime result.
   assert.equal(result.node?.ref, 'e1');
   assert.ok(Array.isArray(result.preActionNodes));
 
-  const { result: visualization, responseData } = buildInteractionResponseData({
+  const {
+    result: visualization,
+    responseData,
+    recordedTarget,
+  } = buildInteractionResponseData({
     source: { kind: 'runtime', result },
     referenceFrame: undefined,
   });
-  // Internal visualization payload: carries the node/tree for the recording
-  // pipeline (stripped again before session-history persistence by
-  // extractTargetEvidenceForRecording).
-  assert.ok(visualization.node);
-  assert.ok(visualization.preActionNodes);
-  // Public payload: the raw node/tree must never reach the wire.
-  assert.equal('node' in responseData, false);
-  assert.equal('preActionNodes' in responseData, false);
-  assert.equal('targetEvidence' in responseData, false);
+  // The construction site routes node/tree onto the typed recordedTarget
+  // channel only; neither serialized payload carries them.
+  assert.equal(recordedTarget?.node.ref, 'e1');
+  for (const payload of [visualization, responseData]) {
+    assert.equal('node' in payload, false);
+    assert.equal('preActionNodes' in payload, false);
+    assert.equal('targetEvidence' in payload, false);
+  }
 });
