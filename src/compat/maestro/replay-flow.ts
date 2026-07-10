@@ -83,7 +83,12 @@ function convertRootCommands(params: {
     const converted = convertMaestroCommandWithLine(command, config, line, context, {
       parseRunFlowFile,
     });
-    pushConvertedRootActions({ converted, line, actions, actionLines, actionSourcePaths });
+    for (const [actionIndex, action] of converted.actions.entries()) {
+      const source = converted.sources[actionIndex];
+      actions.push(action);
+      actionLines.push(source?.line ?? line);
+      actionSourcePaths.push(source?.path);
+    }
   }
   return optimizeInputTextActions(actions, actionLines, actionSourcePaths);
 }
@@ -95,29 +100,6 @@ function buildRootCommandLines(config: MaestroFlowConfig, commandLines: number[]
     ...commandLines,
     ...Array.from({ length: config.onFlowComplete?.length ?? 0 }, () => commandLines.at(-1) ?? 1),
   ];
-}
-
-/**
- * Appends one root command's converted actions to the flat accumulators. A
- * `runFlow` include stamps its own provenance on each produced action (see
- * `attachRunFlowProvenance` in flow-control.ts); every other command
- * inherits this root command's own line, in the current (root) file.
- */
-function pushConvertedRootActions(params: {
-  converted: SessionAction[];
-  line: number;
-  actions: SessionAction[];
-  actionLines: number[];
-  actionSourcePaths: (string | undefined)[];
-}): void {
-  const { converted, line, actions, actionLines, actionSourcePaths } = params;
-  for (const convertedAction of converted) {
-    const source = convertedAction.replaySource;
-    const { replaySource: _replaySource, ...cleanAction } = convertedAction;
-    actions.push(cleanAction);
-    actionLines.push(source?.line ?? line);
-    actionSourcePaths.push(source?.path);
-  }
 }
 
 function optimizeInputTextActions(
@@ -313,12 +295,9 @@ function normalizeConfig(value: unknown): MaestroFlowConfig {
 }
 
 /**
- * Parses a `runFlow`-included file, resolving its own per-action provenance
- * before returning: any action whose `actionSourcePaths` entry is still
- * `undefined` (i.e. it came directly from THIS file, not a deeper nested
- * include) is stamped with `resolved` — this file's own path — so every
- * entry the caller receives is a concrete, actionable path. Deeper nested
- * includes keep the path a recursive call already stamped.
+ * Parses a `runFlow`-included file, resolving `undefined` (this-file) source
+ * paths to the include's own resolved path; deeper nested includes keep the
+ * path a recursive call already stamped.
  */
 function parseRunFlowFile(filePath: string, context: MaestroParseContext): MaestroReplayFlow {
   const resolved = resolveRunFlowPath(filePath, context);

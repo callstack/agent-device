@@ -102,15 +102,10 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
 }
 
 /**
- * ADR 0012 migration step 2: "MCP treats this error as a ref-issuing
- * result" — a command failure (including a `REPLAY_DIVERGENCE`) returns
- * `isError: true` with the full normalized error as `structuredContent` (no
- * text-only path drops the divergence report), and when the error carries an
- * `available` `divergence.screen`, its refs are merged and pinned at
- * `refsGeneration` exactly like a successful ref-issuing response — so the
- * caller's next command against one of those refs works. MERGE-ONLY, like
- * every other pin path here: an unrelated command error never clears the
- * scope's existing pins.
+ * ADR 0012: a command error is a ref-issuing result — `isError: true`, the
+ * normalized error as `structuredContent`, and an `available`
+ * `divergence.screen`'s refs merged/pinned at `refsGeneration` like any
+ * ref-issuing success. Merge-only; never clears existing pins.
  */
 function buildErrorToolResult(
   error: unknown,

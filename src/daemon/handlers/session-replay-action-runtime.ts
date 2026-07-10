@@ -26,13 +26,7 @@ export async function invokeReplayAction(params: {
   filePath: string;
   line: number;
   step: number;
-  /**
-   * Resolved source file for THIS action when it differs from `filePath`
-   * (ADR 0012 migration step 2): a Maestro `runFlow` include's actions carry
-   * the include's path. Threaded into nested control-flow invocations and
-   * attached to a failing response (deepest failure wins) so the divergence
-   * report names the actual failing file+line.
-   */
+  /** Resolved source file when it differs from `filePath` (a `runFlow` include's path). */
   sourcePath?: string;
   tracePath?: string;
   invoke: DaemonInvokeFn;
@@ -49,8 +43,7 @@ export async function invokeReplayAction(params: {
       filePath,
       line: nested.line,
       step: nested.step,
-      // A nested action without its own recorded source belongs to the same
-      // file as its wrapper (e.g. a plain tapOn inside retry:).
+      // No recorded source on a nested action = same file as its wrapper.
       sourcePath: nested.sourcePath ?? sourcePath,
       tracePath,
       invoke,
@@ -96,11 +89,8 @@ export async function invokeReplayAction(params: {
 }
 
 /**
- * Attaches the failing action's resolved source to the error so the
- * top-level failure context (`withReplayFailureContext`) can report the
- * NESTED step's provenance when the failure happened inside a control-flow
- * wrapper. Deepest failure wins: an outer wrapper's invocation never
- * overwrites a source an inner invocation already attached.
+ * Attaches the failing action's resolved source for the top-level failure
+ * context; deepest failure wins (never overwrites an inner attachment).
  */
 function withReplayFailureSource(
   response: DaemonResponse,

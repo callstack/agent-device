@@ -1,3 +1,4 @@
+import type { ReplayControlActionSource, SessionAction } from '../../daemon/types.ts';
 import type { ParsedReplayScript, ReplayScriptMetadata } from '../../replay/script.ts';
 
 export type MaestroFlowConfig = {
@@ -10,6 +11,16 @@ export type MaestroFlowConfig = {
 
 export type MaestroReplayFlow = ParsedReplayScript & {
   metadata: ReplayScriptMetadata;
+};
+
+/**
+ * The Maestro conversion pipeline's uniform result: actions plus a parallel
+ * per-action source array (`undefined` = the file currently being parsed;
+ * concrete `{path, line}` = a `runFlow` include's own file).
+ */
+export type MaestroConvertedActions = {
+  actions: SessionAction[];
+  sources: (ReplayControlActionSource | undefined)[];
 };
 
 export type MaestroCommand = string | Record<string, unknown>;

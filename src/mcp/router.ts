@@ -62,12 +62,9 @@ async function callTool(params: unknown): Promise<ToolResult> {
   const record = asRecord(params);
   const name = stringField(record, 'name');
   try {
-    // The executor's own catch (command-tools.ts) handles command-level
-    // failures (including ADR 0012 replay divergence: it builds
-    // structuredContent and pins the error-path screen refs before
-    // returning). This catch is the fallback for failures OUTSIDE a resolved
-    // command call — unknown tool name, malformed params — which never reach
-    // the executor's try/catch at all.
+    // Command-level failures are handled (and ref-pinned) by the executor's
+    // own catch; this one covers failures outside a resolved command call
+    // (unknown tool name, malformed params).
     return await commandToolExecutor.execute(name, record.arguments);
   } catch (error) {
     return textToolResult(formatToolErrorText(normalizeToolError(error)), true);

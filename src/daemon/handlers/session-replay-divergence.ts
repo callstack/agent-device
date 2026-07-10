@@ -33,16 +33,10 @@ import {
 
 /**
  * ADR 0012 migration step 2: builds the `details.divergence` report for a
- * failed replay step. Report-only — no target-binding verification (decision
- * 3/step 4), no `--from` resume (step 5). `kind` is always `'action-failure'`
- * at this step.
- *
- * ONE post-failure snapshot serves both the screen digest and suggestion
- * re-resolution: the digest's `refsGeneration` and the suggestions' refs must
- * name the SAME stored tree, or the report would advertise refs a second
- * capture already invalidated (the exact stale-ref hole a per-purpose double
- * capture created in the first draft) — and one capture is also one fewer
- * device round trip on a latency-sensitive path.
+ * failed replay step. Report-only; `kind` is always `'action-failure'`.
+ * One capture serves both the screen digest and suggestion re-resolution:
+ * every ref in the report must name the same stored tree as
+ * `screen.refsGeneration`.
  */
 export async function buildReplayFailureDivergence(params: {
   error: DaemonError;
@@ -117,14 +111,10 @@ type DivergenceObservation =
   | { state: 'unavailable'; reason: string; hint: string };
 
 /**
- * The single post-failure capture. Blessing follows the settle/find/heal
- * choke-point sequence exactly: `setSessionSnapshot` (advances the session's
- * `snapshotGeneration`), `markSessionSnapshotRefsIssued` (clears the coarse
- * staleness marker — the report's refs are minted from the tree the next
- * `@ref` command resolves on), then `sessionStore.set`. Sparse captures do
- * not write back (the selector-capture reliability contract), so a sparse
- * verdict degrades the whole observation: no stored tree means no blessed
- * refs AND no trustworthy nodes for suggestion re-resolution.
+ * The single post-failure capture, blessed via the standard ref-issuing
+ * sequence (setSessionSnapshot -> markSessionSnapshotRefsIssued -> store).
+ * Sparse captures do not write back (selector-capture reliability contract),
+ * so a sparse verdict degrades the whole observation.
  */
 async function captureDivergenceObservation(params: {
   session: SessionState;
@@ -178,13 +168,9 @@ async function captureDivergenceObservation(params: {
 }
 
 /**
- * Capture flavor for the shared observation: interactive-only (the settle /
- * `snapshot -i` default) except when the failing action is a non-rect
- * selector read (`get`/`is`/`wait`) — heal's suggestion re-resolution has
- * always used a full capture for those (`snapshotInteractiveOnly:
- * requiresRect`) because static text nodes are legitimate targets, and the
- * screen digest works over the full tree too (every node still carries a
- * blessed ref).
+ * Interactive-only capture, except for non-rect selector reads
+ * (`get`/`is`/`wait`) whose suggestion targets include static text — the
+ * same `snapshotInteractiveOnly: requiresRect` rule heal always used.
  */
 function divergenceCaptureInteractiveOnly(action: SessionAction): boolean {
   if (!isSuggestionEligibleCommand(action.command)) return true;
@@ -241,16 +227,10 @@ function classifySuggestionBasis(selector: Selector): ReplayDivergenceSuggestion
 }
 
 /**
- * Decision 1's ranked-suggestions machinery, repurposed READ-ONLY:
- * `collectReplaySelectorCandidates` + `resolveSelectorChain` re-resolution
- * (the exact pieces `healReplayAction` already used) collect candidates
- * instead of applying the first one, resolved against the SAME captured
- * nodes the screen digest was built from (see the single-capture note on
- * `buildReplayFailureDivergence`). Ranking: identity-component strength
- * (id > role+label > label > other), then document order. The
- * same-scrollRegion-as-recorded tier from decision 1's total order is not
- * evaluated here — that requires decision 3's recorded target evidence,
- * which migration step 2 has no dependency on and does not consume.
+ * Decision 1's candidate machinery reused READ-ONLY over the shared capture.
+ * Ranking: identity-component strength (id > role+label > label > other),
+ * then document order; the same-scrollRegion tier awaits decision 3's
+ * recorded evidence (migration step 4).
  */
 function collectReplayDivergenceSuggestions(params: {
   action: SessionAction;

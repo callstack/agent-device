@@ -1,12 +1,8 @@
 import { normalizeError, type NormalizedError } from '../kernel/errors.ts';
 
 /**
- * Shared MCP error normalization + text rendering, used by both the tool
- * executor's own catch (`command-tools.ts`, so it can pin divergence screen
- * refs before returning) and the router's outer catch (`router.ts`, for
- * failures outside a resolved command — bad tool name, malformed params).
- * Keep the full error contract (code + hint) visible to MCP agents; a bare
- * message string strips exactly the guidance the hint system exists to give.
+ * Shared MCP error normalization + text rendering (executor and router
+ * catches). Keeps the full error contract (code + hint) visible to agents.
  */
 export function normalizeToolError(error: unknown): NormalizedError {
   return normalizeError(error);

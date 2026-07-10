@@ -371,13 +371,10 @@ export type SessionState = {
 };
 
 /**
- * Per-nested-action source provenance for control-flow wrappers (ADR 0012
- * migration step 2): parallel to `actions`, `undefined` at an index means
- * "the file the wrapping control action itself came from". Populated at
- * parse time by stripping the transient `SessionAction.replaySource` field
- * off nested actions (a `runFlow` include inside `retry:`/`runFlow.when:`
- * stamps it), so the runtime block invoker can report the failing NESTED
- * step's real file+line instead of the wrapper's.
+ * Per-nested-action source provenance for control-flow wrappers, parallel to
+ * `actions`; `undefined` at an index means "the wrapping control action's own
+ * file". The runtime block invoker reads it so a failure inside a wrapped
+ * `runFlow` include reports the include's file+line, not the wrapper's.
  */
 export type ReplayControlActionSource = { path: string; line: number };
 
@@ -418,17 +415,4 @@ export type SessionAction = {
    * Inert until migration step 4 adds enforcement.
    */
   targetEvidence?: TargetAnnotationV1;
-  /**
-   * Maestro-parse-only provenance (ADR 0012 migration step 2): set transiently
-   * on an action produced by inlining a `runFlow` include, carrying the
-   * include file's resolved path and its own line number. Stripped before an
-   * action leaves the parse pipeline at exactly two places: top-level actions
-   * in `convertRootCommands` (read back into the returned
-   * `actionSourcePaths`/`actionLines` arrays), and actions nested under a
-   * control-flow wrapper (`retry:`/runtime `runFlow.when:`) in
-   * `stripNestedActionSources` (moved into the wrapper's
-   * `replayControl.actionSources`, consulted by the runtime block invoker).
-   * It therefore never reaches dispatch, session history, or `.ad` rewriting.
-   */
-  replaySource?: { path: string; line: number };
 };

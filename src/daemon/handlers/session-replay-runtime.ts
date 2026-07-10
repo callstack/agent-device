@@ -215,10 +215,7 @@ export async function runReplayScriptFile(params: {
         session: sessionName,
         artifactPaths: [...artifactPaths],
         ...(snapshotDiagnosticsSummary ? { snapshotDiagnostics: snapshotDiagnosticsSummary } : {}),
-        // ADR 0012 migration step 2: text replay was previously silent on
-        // success (no `message` key at all — see readCommandMessage). One
-        // line with the step count and wall time closes that gap; --json is
-        // unchanged (message rides alongside the existing fields).
+        // ADR 0012: one-line text success summary; --json shape is additive.
         message: formatReplaySuccessMessage(actions.length, wallClockMs),
       },
     };
@@ -369,15 +366,10 @@ async function withReplayFailureDiagnostics(params: {
 }
 
 /**
- * Every replay step failure goes through this single choke point (ADR 0012
- * migration step 2): the daemon returns `ok:false` with code
- * `REPLAY_DIVERGENCE` and a bounded `details.divergence` report, replacing
- * the underlying failure's own code as the wire-level code (the original
- * code/message/hint move into `divergence.cause`, preserved verbatim). The
- * legacy flat detail fields (`replayPath`, `step`, `action`, `positionals`,
- * `artifactPaths`, `snapshotDiagnostics`) are kept for existing consumers
- * (e.g. `session-test-artifacts.ts`) — this is additive, not a breaking
- * reshape.
+ * Single choke point for replay step failures (ADR 0012 migration step 2):
+ * returns `REPLAY_DIVERGENCE` with a bounded `details.divergence` report;
+ * the original code/message/hint move into `divergence.cause` verbatim, and
+ * the pre-existing flat detail fields are kept for their consumers.
  */
 async function withReplayFailureContext(params: {
   response: DaemonResponse;
@@ -408,12 +400,8 @@ async function withReplayFailureContext(params: {
     logPath,
   } = params;
   if (response.ok) return response;
-  // Deepest-failure provenance (ADR 0012 migration step 2): a failure inside
-  // a control-flow wrapper (retry:/runFlow.when: around a runFlow include)
-  // attaches the failing NESTED action's resolved source to the error
-  // (session-replay-action-runtime.ts withReplayFailureSource); it wins over
-  // the top-level wrapper's own source. Transport-internal: stripped from the
-  // flat details in buildReplayDivergenceFailureResponse.
+  // The failing action's own source (attached by withReplayFailureSource,
+  // deepest failure wins) beats the top-level wrapper's source.
   const failureSource = readReplayFailureSource(response.error.details?.replaySource);
   const divergence = await buildReplayFailureDivergence({
     error: response.error,

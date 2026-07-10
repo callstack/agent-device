@@ -622,10 +622,9 @@ test('parseMaestroReplayFlow preserves provenance through a nested (include-of-i
   assert.equal(parsed.actionLines[1], 3); // tapOn: Deepest, in grandchild.yaml
 });
 
-// Deep replaySource leak check: control-flow wrappers (retry/runFlow.when)
-// carry nested actions under replayControl and never flow through the
-// top-level strip — the transient field must be stripped there too, moved
-// into replayControl.actionSources for the runtime block invoker.
+// Regression: provenance travels ONLY in the parallel structures
+// (actionSourcePaths / replayControl.actionSources) — no per-action
+// provenance field may (re)appear anywhere in parsed output.
 function collectReplaySourceLeaks(actions: unknown[], leaks: string[] = [], prefix = ''): string[] {
   for (const [index, entry] of actions.entries()) {
     const action = entry as {
@@ -643,7 +642,7 @@ function collectReplaySourceLeaks(actions: unknown[], leaks: string[] = [], pref
   return leaks;
 }
 
-test('parseMaestroReplayFlow strips replaySource from a retry-wrapped include and records actionSources', () => {
+test('parseMaestroReplayFlow carries retry-wrapped include provenance in replayControl.actionSources', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-retry-provenance-'));
   const childPath = path.join(root, 'child.yaml');
   const mainPath = path.join(root, 'main.yaml');
@@ -679,11 +678,10 @@ test('parseMaestroReplayFlow strips replaySource from a retry-wrapped include an
   assert.equal(parsed.actionSourcePaths?.[0], undefined);
   assert.equal(parsed.actionLines[0], 3);
 
-  // The transient field leaks nowhere — not on the wrapper, not on any
-  // nested action (the doc-comment claim "never reaches dispatch").
+  // No per-action provenance field anywhere in the parsed output.
   assert.deepEqual(collectReplaySourceLeaks(parsed.actions), []);
 
-  // The include's provenance moved into replayControl.actionSources.
+  // The include's provenance lives in replayControl.actionSources.
   const control = wrapper.replayControl;
   if (control?.kind !== 'retry') throw new Error('expected retry control');
   assert.equal(control.actions.length, 2);
@@ -693,7 +691,7 @@ test('parseMaestroReplayFlow strips replaySource from a retry-wrapped include an
   ]);
 });
 
-test('parseMaestroReplayFlow strips replaySource from a runtime-when-wrapped include and records actionSources', () => {
+test('parseMaestroReplayFlow carries when-wrapped include provenance in replayControl.actionSources', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-when-provenance-'));
   const childPath = path.join(root, 'child.yaml');
   const mainPath = path.join(root, 'main.yaml');

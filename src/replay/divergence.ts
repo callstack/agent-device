@@ -64,12 +64,7 @@ export type ReplayDivergenceSuggestion = {
   label?: string;
 };
 
-/**
- * Resume is decision 4's / migration step 5's territory. Step 2 attaches the
- * object with `allowed: false` and a clear reason per the ADR ("include the
- * object... WITHOUT --from existing yet"); `planDigest` is omitted entirely
- * until step 5 lands (not even as `undefined` — the key is absent).
- */
+/** Always `allowed: false` until migration step 5; `from`/`planDigest` keys absent until then. */
 export type ReplayDivergenceResume = {
   allowed: false;
   reason: string;
@@ -111,10 +106,8 @@ export const REPLAY_DIVERGENCE_LEVEL_BYTE_LIMITS: Record<BoundedResponseLevel, n
 export const REPLAY_DIVERGENCE_DEFAULT_REF_LIMIT = 20;
 export const REPLAY_DIVERGENCE_DIGEST_REF_LIMIT = 8;
 export const REPLAY_DIVERGENCE_SUGGESTION_LIMIT = 5;
-// ADR 0012's 256-UTF-8-byte per-field cap. Not exported: truncateUtf8Field's
-// default parameter is the only sanctioned way callers reach this value —
-// every field truncation call site should go through that function so the
-// cap stays enforced in exactly one place.
+// ADR 0012's 256-UTF-8-byte per-field cap; reached only through the field
+// sanitizers below so it is enforced in one place.
 const REPLAY_DIVERGENCE_FIELD_BYTE_LIMIT = 256;
 
 function levelForResponseLevel(level: ResponseLevel | undefined): BoundedResponseLevel {
@@ -142,15 +135,7 @@ export function truncateUtf8Field(
   return `${bytes.subarray(0, sliceEnd).toString('utf8')}${marker}`;
 }
 
-/**
- * The sanctioned field sanitizer for divergence report strings, in the
- * ADR-specified order: central diagnostics redactor FIRST, byte-accurate
- * truncation (with marker) second. Truncating first could split a secret
- * across the cut so the redactor's patterns no longer match the surviving
- * fragment — redact-then-truncate makes the ordering guarantee structural
- * rather than relying on the redactor's incidental robustness to partial
- * tokens.
- */
+/** Field sanitizer in the ADR-mandated order: redact first, then truncate. */
 export function sanitizeReplayDivergenceField(
   value: string,
   limit = REPLAY_DIVERGENCE_FIELD_BYTE_LIMIT,
@@ -186,13 +171,10 @@ export function measureReplayDivergenceBytes(divergence: ReplayDivergence): numb
 }
 
 /**
- * Bounds the FULL divergence object to the requested response level's byte
- * ceiling. When the level-capped shape still overflows the ceiling (rare,
- * given per-field 256-byte caps and the 5/20 array caps), the daemon writes
- * the fuller (`full`-level-capped) detail to a session-scoped artifact via
- * `writeOverflowArtifact` and returns a minimal divergence carrying only
- * `overflow`/`artifactUnavailable` plus the always-cheap fields — the
- * original cause is never dropped, only the screen digest and suggestions.
+ * Bounds the divergence to the response level's byte ceiling. On overflow,
+ * the fuller detail goes to a session-scoped artifact and a minimal
+ * divergence is returned; the cause is never dropped, only the screen digest
+ * and suggestions.
  */
 export function boundReplayDivergence(params: {
   divergence: ReplayDivergence;
@@ -217,11 +199,8 @@ export function boundReplayDivergence(params: {
     : { ...minimal, artifactUnavailable: true };
 }
 
-// Defensively re-truncates every string field to the 256-byte cap, even
-// though callers are expected to have already done so at construction time
-// (session-replay-divergence.ts): this is the function responsible for the
-// "the minimal fallback always fits the budget" guarantee, so it must not
-// depend on caller discipline to hold.
+// Owns the "the minimal fallback always fits the budget" guarantee, so it
+// sanitizes every field itself rather than trusting the caller did.
 function buildMinimalReplayDivergence(capped: ReplayDivergence): ReplayDivergence {
   return {
     version: capped.version,

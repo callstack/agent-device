@@ -46,10 +46,8 @@ export function printHumanError(
   if (normalized.logPath) {
     process.stderr.write(`Diagnostics Log: ${normalized.logPath}\n`);
   }
-  // ADR 0012 migration step 2: a replay divergence's compact text report is
-  // NOT gated behind --debug — text mode previously showed step+action+
-  // selector+a generic hint with no screen evidence; --debug's raw
-  // `normalized.details` JSON dump below stays available for the full object.
+  // ADR 0012: the divergence compact report always renders; --debug's raw
+  // details dump below remains the full-object view.
   const divergenceText = formatReplayDivergenceText(normalized.details);
   if (divergenceText) {
     process.stderr.write(`${divergenceText}\n`);
@@ -59,9 +57,7 @@ export function printHumanError(
   }
 }
 
-// ADR 0012 migration step 2: divergence compact text report. Split into one
-// line-builder per field so each stays a simple, low-complexity function —
-// `printHumanError` renders this unconditionally, not gated behind --debug.
+// ADR 0012 divergence compact text report; one line-builder per field.
 function formatReplayDivergenceText(details: Record<string, unknown> | undefined): string | null {
   const divergence = details?.divergence;
   if (!divergence || typeof divergence !== 'object') return null;

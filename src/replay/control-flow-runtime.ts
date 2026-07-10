@@ -4,14 +4,7 @@ export type ReplayActionBlockInvoker = (params: {
   action: SessionAction;
   line: number;
   step: number;
-  /**
-   * Resolved source file of the nested action when it differs from the
-   * wrapping control action's own file (ADR 0012 migration step 2): a
-   * `runFlow` include nested under `retry:`/`runFlow.when:` carries its
-   * include's path here (from `replayControl.actionSources`), so a failure
-   * inside the wrapped include reports the include's file+line, not the
-   * wrapper's. `undefined` falls back to the wrapper's source.
-   */
+  /** From `replayControl.actionSources`; `undefined` = the wrapper's own file. */
   sourcePath?: string;
 }) => Promise<DaemonResponse>;
 

@@ -30,17 +30,29 @@ import { MAESTRO_RUNTIME_COMMAND } from './runtime-commands.ts';
 import type {
   MaestroCommand,
   MaestroCommandMapperDeps,
+  MaestroConvertedActions,
   MaestroFlowConfig,
   MaestroParseContext,
 } from './types.ts';
 
+// Handlers that cannot produce foreign-file actions return bare actions;
+// toConvertedActions normalizes them to the pipeline's uniform shape.
 type MaestroCommandHandler = (params: {
   value: unknown;
   config: MaestroFlowConfig;
   context: MaestroParseContext;
   deps: MaestroCommandMapperDeps;
   name: string;
-}) => SessionAction[];
+}) => SessionAction[] | MaestroConvertedActions;
+
+function toConvertedActions(
+  result: SessionAction[] | MaestroConvertedActions,
+): MaestroConvertedActions {
+  if (Array.isArray(result)) {
+    return { actions: result, sources: result.map(() => undefined) };
+  }
+  return result;
+}
 
 const MAP_COMMAND_HANDLERS: Record<string, MaestroCommandHandler> = {
   launchApp: ({ value, config, context }) => [convertLaunchApp(value, config, context)],
@@ -106,7 +118,7 @@ export function convertMaestroCommandWithLine(
   line: number,
   context: MaestroParseContext,
   deps: MaestroCommandMapperDeps,
-): SessionAction[] {
+): MaestroConvertedActions {
   try {
     return convertMaestroCommand(command, config, context, deps);
   } catch (error) {
@@ -122,8 +134,10 @@ function convertMaestroCommand(
   config: MaestroFlowConfig,
   context: MaestroParseContext,
   deps: MaestroCommandMapperDeps,
-): SessionAction[] {
-  if (typeof command === 'string') return convertScalarCommand(command, config, context);
+): MaestroConvertedActions {
+  if (typeof command === 'string') {
+    return toConvertedActions(convertScalarCommand(command, config, context));
+  }
 
   const entries = Object.entries(command);
   if (entries.length !== 1) {
@@ -132,8 +146,8 @@ function convertMaestroCommand(
 
   const [name, value] = entries[0] as [string, unknown];
   const handler = MAP_COMMAND_HANDLERS[name];
-  if (!handler) return unsupportedCommand(name);
-  return handler({ value, config, context, deps, name });
+  if (!handler) return toConvertedActions(unsupportedCommand(name));
+  return toConvertedActions(handler({ value, config, context, deps, name }));
 }
 
 function convertScalarCommand(
@@ -176,8 +190,12 @@ function convertCommandList(
   config: MaestroFlowConfig,
   context: MaestroParseContext,
   deps: MaestroCommandMapperDeps,
-): SessionAction[] {
-  return commands.flatMap((command, index) =>
+): MaestroConvertedActions {
+  const converted = commands.map((command, index) =>
     convertMaestroCommandWithLine(command, config, index + 1, context, deps),
   );
+  return {
+    actions: converted.flatMap((entry) => entry.actions),
+    sources: converted.flatMap((entry) => entry.sources),
+  };
 }
