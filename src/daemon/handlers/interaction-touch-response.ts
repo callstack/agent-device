@@ -125,6 +125,17 @@ export function buildInteractionResponseData(params: {
     visualization.warning = warning;
     responseData.warning = warning;
   }
+  // ADR 0012 decision 3: the resolved node and the record-time tree it came
+  // from ride ONLY on `visualization` (session history / touch overlay
+  // input), never on `responseData` (the public payload) — attaching them
+  // here, not via `commonExtra`, is what keeps them off the wire.
+  // `finalizeTouchInteraction` (interaction-common.ts) turns them into the
+  // compact `targetEvidence` annotation when the session is being recorded
+  // and strips the raw tree back out either way.
+  if ('node' in result && result.node) visualization.node = result.node;
+  if ('preActionNodes' in result && result.preActionNodes) {
+    visualization.preActionNodes = result.preActionNodes;
+  }
   return { result: visualization, responseData };
 }
 

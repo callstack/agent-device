@@ -3,7 +3,10 @@ import path from 'node:path';
 import { publicPlatformString } from '../kernel/device.ts';
 import { inferFillText } from './action-utils.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
-import { formatPortableActionLine } from '../replay/script-formatting.ts';
+import {
+  formatPortableActionLine,
+  formatTargetAnnotationLines,
+} from '../replay/script-formatting.ts';
 import { expandSessionPath, safeSessionName } from './session-paths.ts';
 import {
   appendScriptSeriesFlags,
@@ -164,6 +167,7 @@ function formatScript(session: SessionState, actions: SessionAction[]): string {
   );
   for (const action of actions) {
     if (action.flags?.noRecord) continue;
+    lines.push(...formatTargetAnnotationLines(action));
     lines.push(formatActionLine(action));
   }
   return `${lines.join('\n')}\n`;

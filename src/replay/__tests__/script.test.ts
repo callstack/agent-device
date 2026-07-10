@@ -10,6 +10,7 @@ import {
   REPLAY_METADATA_PLATFORMS,
   writeReplayScript,
 } from '../script.ts';
+import type { TargetAnnotationV1 } from '../target-identity.ts';
 import type { SessionAction, SessionState } from '../../daemon/types.ts';
 
 function makeSession(): SessionState {
@@ -372,4 +373,117 @@ test('replay parsing strips versioned-ref pins from recorded refs (#1076)', () =
   // Malformed pins were never minted by us — left for the daemon to reject.
   const malformed = parseReplayScriptDetailed('press @e2~x3').actions[0];
   assert.deepEqual(malformed?.positionals, ['@e2~x3']);
+});
+
+// ---------------------------------------------------------------------------
+// ADR 0012 decision 3: `.ad` target-v1 annotation parsing/binding/preservation
+// (migration step 3 — parser/writer only, no replay-time enforcement).
+// ---------------------------------------------------------------------------
+
+const SAVE_EVIDENCE: TargetAnnotationV1 = {
+  id: 'save',
+  role: 'button',
+  label: 'Save',
+  ancestry: [{ role: 'toolbar', label: 'Editor' }, { role: 'window' }],
+  sibling: 0,
+  viewportOrder: 0,
+  scrollRegion: { role: 'scrollview', id: 'editor-scroll' },
+  verification: 'verified',
+};
+
+const SAVE_EVIDENCE_LINE =
+  '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[{"role":"toolbar","label":"Editor"},{"role":"window"}],"sibling":0,"viewportOrder":0,"scrollRegion":{"role":"scrollview","id":"editor-scroll"},"verification":"verified"}';
+
+test('a target-v1 annotation immediately preceding an action line attaches to that action', () => {
+  const script = ['context platform=ios device=iPhone', SAVE_EVIDENCE_LINE, 'click @e12 "Save"'].join(
+    '\n',
+  );
+  const { actions } = parseReplayScriptDetailed(script);
+  assert.equal(actions.length, 1);
+  assert.deepEqual(actions[0]?.targetEvidence, SAVE_EVIDENCE);
+});
+
+test('a target-v1 annotation followed by a blank line before the action is rejected as INVALID_ARGS', () => {
+  const script = [SAVE_EVIDENCE_LINE, '', 'click @e12 "Save"'].join('\n');
+  assert.throws(
+    () => parseReplayScriptDetailed(script),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      /must be immediately followed by its action line/.test(error.message),
+  );
+});
+
+test('a target-v1 annotation followed by another comment before the action is rejected as INVALID_ARGS', () => {
+  const script = [SAVE_EVIDENCE_LINE, '# note', 'click @e12 "Save"'].join('\n');
+  assert.throws(
+    () => parseReplayScriptDetailed(script),
+    (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
+  );
+});
+
+test('a target-v1 annotation as the last line of the script (no action follows) is rejected as INVALID_ARGS', () => {
+  assert.throws(
+    () => parseReplayScriptDetailed(SAVE_EVIDENCE_LINE),
+    (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
+  );
+});
+
+test('a malformed target-v1 payload is rejected as INVALID_ARGS, not silently dropped', () => {
+  const script = ['# agent-device:target-v1 {not json', 'click @e12 "Save"'].join('\n');
+  assert.throws(
+    () => parseReplayScriptDetailed(script),
+    (error: unknown) => error instanceof AppError && error.code === 'INVALID_ARGS',
+  );
+});
+
+test('an unknown future target-vN comment is an ordinary comment: no binding requirement, no evidence attached', () => {
+  const script = [
+    '# agent-device:target-v2 {"whatever":true}',
+    '',
+    'click @e12 "Save"',
+  ].join('\n');
+  const { actions } = parseReplayScriptDetailed(script);
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0]?.targetEvidence, undefined);
+});
+
+test('old readers ignoring the comment execute the action unchanged: an action without a preceding annotation carries no targetEvidence', () => {
+  const { actions } = parseReplayScriptDetailed('click @e12 "Save"');
+  assert.equal(actions[0]?.targetEvidence, undefined);
+});
+
+test('writeReplayScript (read-then-rewrite / heal path) preserves a v1 annotation in canonical form', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-script-target-v1-'));
+  const replayPath = path.join(root, 'flow.ad');
+  const actions: SessionAction[] = [
+    {
+      ts: Date.now(),
+      command: 'click',
+      positionals: ['@e12'],
+      flags: {},
+      targetEvidence: SAVE_EVIDENCE,
+    },
+  ];
+
+  writeReplayScript(replayPath, actions, makeSession());
+  const script = fs.readFileSync(replayPath, 'utf8');
+  const lines = script.trim().split('\n');
+  assert.equal(lines.at(-2), SAVE_EVIDENCE_LINE);
+  assert.equal(lines.at(-1), 'click @e12');
+
+  // Round trip: re-parsing the rewritten script recovers the same evidence.
+  const reparsed = parseReplayScriptDetailed(script);
+  assert.deepEqual(reparsed.actions[0]?.targetEvidence, SAVE_EVIDENCE);
+});
+
+test('session-recorded actions without target evidence never gain a fabricated annotation on rewrite', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-script-target-v1-none-'));
+  const replayPath = path.join(root, 'flow.ad');
+  const actions: SessionAction[] = [
+    { ts: Date.now(), command: 'click', positionals: ['@e12'], flags: {} },
+  ];
+  writeReplayScript(replayPath, actions, makeSession());
+  const script = fs.readFileSync(replayPath, 'utf8');
+  assert.equal(/agent-device:target-v1/.test(script), false);
 });

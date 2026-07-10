@@ -5,7 +5,7 @@ import { readScreenshotScriptFlag } from '../contracts/screenshot.ts';
 import type { DeviceTarget, PlatformSelector } from '../kernel/device.ts';
 import { PLATFORM_SELECTORS, publicPlatformString } from '../kernel/device.ts';
 import { parseReplayOpenFlags } from './open-script.ts';
-import { formatPortableActionLine } from './script-formatting.ts';
+import { formatPortableActionLine, formatTargetAnnotationLines } from './script-formatting.ts';
 import type { SessionAction, SessionState } from '../daemon/types.ts';
 import {
   formatScriptStringLiteral,
@@ -14,6 +14,7 @@ import {
   parseReplayRuntimeFlags,
   stripRecordedRefGeneration,
 } from './script-utils.ts';
+import { parseTargetAnnotationCommentLine } from './target-identity.ts';
 import { REPLAY_VAR_KEY_RE } from './vars.ts';
 
 // Replay metadata `context platform=` lines support every accepted `--platform`
@@ -41,15 +42,45 @@ export type ParsedReplayScript = {
   actionLines: number[];
 };
 
+type PendingTargetAnnotation = { evidence: SessionAction['targetEvidence']; line: number };
+
+// fallow-ignore-next-line complexity
 export function parseReplayScriptDetailed(script: string): ParsedReplayScript {
   const actions: SessionAction[] = [];
   const actionLines: number[] = [];
   const lines = script.split(/\r?\n/);
   let sawAction = false;
+  let pending: PendingTargetAnnotation | undefined;
+
+  const rejectUnbound = (index: number, why: string): never => {
+    throw new AppError(
+      'INVALID_ARGS',
+      // pending is only read here when set, right after the guard below.
+      `target-v1 annotation on line ${pending!.line} must be immediately followed by its action line (line ${index + 1} ${why}).`,
+    );
+  };
+
   for (const [index, rawLine] of lines.entries()) {
     const trimmed = rawLine.trim();
-    if (trimmed.length === 0 || trimmed.startsWith('#')) continue;
+    if (trimmed.length === 0) {
+      if (pending) rejectUnbound(index, 'is blank');
+      continue;
+    }
+    if (trimmed.startsWith('#')) {
+      const annotation = parseTargetAnnotationCommentLine(trimmed);
+      if (annotation.kind === 'v1') {
+        if (pending) rejectUnbound(index, 'is another target-v1 annotation');
+        pending = { evidence: annotation.evidence, line: index + 1 };
+        continue;
+      }
+      // A plain comment or an unknown future `target-vN` is an ordinary
+      // comment to this (v1) reader — but it is still an intervening line
+      // for any annotation still pending binding.
+      if (pending) rejectUnbound(index, 'is a comment');
+      continue;
+    }
     if (isReplayEnvLine(trimmed)) {
+      if (pending) rejectUnbound(index, 'is an env directive');
       if (sawAction) {
         throw new AppError(
           'INVALID_ARGS',
@@ -59,10 +90,23 @@ export function parseReplayScriptDetailed(script: string): ParsedReplayScript {
       continue;
     }
     const parsed = parseReplayScriptLine(rawLine);
-    if (!parsed) continue;
+    if (!parsed) {
+      if (pending) rejectUnbound(index, 'did not parse as an action');
+      continue;
+    }
+    if (pending) {
+      parsed.targetEvidence = pending.evidence;
+      pending = undefined;
+    }
     actions.push(parsed);
     actionLines.push(index + 1);
     sawAction = true;
+  }
+  if (pending) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `target-v1 annotation on line ${pending.line} must be immediately followed by its action line (end of script reached).`,
+    );
   }
   return { actions, actionLines };
 }
@@ -475,6 +519,10 @@ export function writeReplayScript(
     );
   }
   for (const action of actions) {
+    // ADR 0012 decision 3: a writer that reads then rewrites a script (this
+    // heal/`--update` path) must preserve v1 annotations in canonical form,
+    // never silently discard them.
+    lines.push(...formatTargetAnnotationLines(action));
     lines.push(formatReplayActionLine(action));
   }
   const serialized = `${lines.join('\n')}\n`;

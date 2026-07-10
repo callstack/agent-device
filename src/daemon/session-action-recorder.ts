@@ -3,6 +3,7 @@ import { SCREENSHOT_ACTION_FLAG_KEYS } from '../contracts/screenshot.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import type { SessionAction, SessionRuntimeHints, SessionState } from './types.ts';
 import { expandSessionPath } from './session-paths.ts';
+import type { TargetAnnotationV1 } from '../replay/target-identity.ts';
 
 export type RecordActionEntry = {
   command: string;
@@ -10,6 +11,7 @@ export type RecordActionEntry = {
   flags: CommandFlags;
   runtime?: SessionRuntimeHints;
   result?: Record<string, unknown>;
+  targetEvidence?: TargetAnnotationV1;
 };
 
 export function recordActionEntry(
@@ -30,6 +32,7 @@ export function recordActionEntry(
     runtime: entry.runtime,
     flags: sanitizeFlags(entry.flags),
     result: entry.result,
+    ...(entry.targetEvidence ? { targetEvidence: entry.targetEvidence } : {}),
   };
   session.actions.push(action);
   emitDiagnostic({

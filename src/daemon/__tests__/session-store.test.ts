@@ -6,6 +6,7 @@ import path from 'node:path';
 import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
 import { buildRequestFinishedEvent } from '../session-event-log.ts';
+import type { TargetAnnotationV1 } from '../../replay/target-identity.ts';
 
 type RecordActionEntry = Parameters<SessionStore['recordAction']>[1];
 
@@ -591,4 +592,57 @@ test('writeSessionLog preserves significant whitespace and empty string argument
     /screenshot " \.\/screens\/final\.png "/,
     /--metro-host " host\\t" --launch-url "myapp:\/\/dev "/,
   ]);
+});
+
+// ---------------------------------------------------------------------------
+// ADR 0012 decision 3: recorded target-v1 evidence flows end to end through
+// `recordAction` → `SessionScriptWriter` into the `.ad` file, immediately
+// before the action it annotates.
+// ---------------------------------------------------------------------------
+
+const SAVE_TARGET_EVIDENCE: TargetAnnotationV1 = {
+  id: 'save',
+  role: 'button',
+  label: 'Save',
+  ancestry: [{ role: 'toolbar', label: 'Editor' }],
+  sibling: 0,
+  viewportOrder: 0,
+  verification: 'verified',
+};
+
+test('writeSessionLog emits the target-v1 annotation immediately before its action line', () => {
+  const fixture = makeFixture('agent-device-session-log-target-evidence-');
+  recordOpen(fixture.store, fixture.session);
+  fixture.store.recordAction(fixture.session, {
+    command: 'click',
+    positionals: ['@e12'],
+    flags: { platform: 'ios' },
+    result: {},
+    targetEvidence: SAVE_TARGET_EVIDENCE,
+  });
+  recordClose(fixture.store, fixture.session);
+
+  const script = writeScript(fixture);
+  const lines = script.trim().split('\n');
+  const clickLineIndex = lines.findIndex((line) => line.startsWith('click '));
+  assert.ok(clickLineIndex > 0);
+  assert.equal(
+    lines[clickLineIndex - 1],
+    '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[{"role":"toolbar","label":"Editor"}],"sibling":0,"viewportOrder":0,"verification":"verified"}',
+  );
+});
+
+test('writeSessionLog never fabricates a target-v1 annotation for actions recorded without evidence', () => {
+  const fixture = makeFixture('agent-device-session-log-no-target-evidence-');
+  recordOpen(fixture.store, fixture.session);
+  fixture.store.recordAction(fixture.session, {
+    command: 'click',
+    positionals: ['@e12'],
+    flags: { platform: 'ios' },
+    result: {},
+  });
+  recordClose(fixture.store, fixture.session);
+
+  const script = writeScript(fixture);
+  assert.equal(/agent-device:target-v1/.test(script), false);
 });

@@ -127,7 +127,13 @@ test('runtime fill uses backend ref primitive without resolving snapshot geometr
   assert.deepEqual(calls, [{ ref: '@e1', text: 'hello', delayMs: 25 }]);
   assert.equal(result.kind, 'ref');
   assert.equal(result.point, undefined);
-  assert.equal(result.node, undefined);
+  // ADR 0012 decision 3: the native-ref preflight already looked this node up
+  // (for the offscreen/occlusion guards) and now reuses that lookup to carry
+  // `node`/`preActionNodes` for record-time target-binding evidence — at zero
+  // extra capture cost. These never reach the public response (stripped by
+  // `finalizeTouchInteraction`); this is the internal runtime result shape.
+  assert.equal(result.node?.ref, 'e1');
+  assert.ok(Array.isArray(result.preActionNodes));
   assert.deepEqual(result.target, { kind: 'ref', ref: '@e1' });
   assert.equal(result.text, 'hello');
   assert.deepEqual(result.backendResult, { ref: 'e1', text: 'hello' });

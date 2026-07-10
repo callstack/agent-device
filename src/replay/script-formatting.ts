@@ -6,6 +6,7 @@ import {
   appendScreenshotActionScriptArgs,
   appendSnapshotActionScriptArgs,
 } from './script-utils.ts';
+import { formatTargetAnnotationCommentLine } from './target-identity.ts';
 import type { SessionAction } from '../daemon/types.ts';
 
 export function formatPortableActionLine(
@@ -29,4 +30,17 @@ export function formatPortableActionLine(
     appendGenericActionScriptArgs(parts, action);
   }
   return parts.join(' ');
+}
+
+/**
+ * ADR 0012 decision 3: the `# agent-device:target-v1 {...}` annotation line
+ * that must immediately precede this action's line (no blank/intervening
+ * line — decision 3's binding rule), or `[]` when the action carries no
+ * target evidence. Shared by the live session-script writer
+ * (`src/daemon/session-script-writer.ts`) and `writeReplayScript`'s
+ * read-then-rewrite preservation (`script.ts`) so both emit the exact same
+ * canonical form.
+ */
+export function formatTargetAnnotationLines(action: SessionAction): string[] {
+  return action.targetEvidence ? [formatTargetAnnotationCommentLine(action.targetEvidence)] : [];
 }

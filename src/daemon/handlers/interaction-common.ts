@@ -1,5 +1,5 @@
 import type { CommandFlags } from '../../core/dispatch.ts';
-import type { SnapshotState } from '../../kernel/snapshot.ts';
+import type { SnapshotNode, SnapshotState } from '../../kernel/snapshot.ts';
 import type { DaemonCommandContext } from '../context.ts';
 import { recordTouchVisualizationEvent } from '../recording-gestures.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
@@ -13,6 +13,7 @@ import {
   stripInternalInteractionFlags,
 } from '../interaction-outcome-policy.ts';
 import { markPostGestureStabilization } from '../post-gesture-stabilization.ts';
+import { computeTargetEvidence } from '../session-target-evidence.ts';
 
 export type ContextFromFlags = (
   flags: CommandFlags | undefined,
@@ -55,11 +56,16 @@ export function finalizeTouchInteraction(params: {
     androidFreshnessBaseline,
   } = params;
   const actionFlags = stripInternalInteractionFlags(flags);
+  const { result: recordedResult, targetEvidence } = extractTargetEvidenceForRecording(
+    session,
+    result,
+  );
   sessionStore.recordAction(session, {
     command,
     positionals,
     flags: actionFlags ?? {},
-    result,
+    result: recordedResult,
+    ...(targetEvidence ? { targetEvidence } : {}),
   });
   markPendingInteractionOutcome({
     session,
@@ -76,10 +82,36 @@ export function finalizeTouchInteraction(params: {
     session,
     command,
     positionals,
-    result,
+    recordedResult,
     (actionFlags ?? {}) as Record<string, unknown>,
     actionStartedAt,
     actionFinishedAt,
   );
   return { ok: true, data: responseData };
+}
+
+/**
+ * ADR 0012 decision 3: `result.node`/`result.preActionNodes` (attached only
+ * to the internal visualization/session payload, see
+ * `interaction-touch-response.ts`) are the record-time winner and tree. When
+ * the session is being recorded (`--save-script`), turn them into the
+ * compact `target-v1` evidence the script writer emits; either way, strip the
+ * raw node/tree back out so no downstream consumer (session history, touch
+ * visualization telemetry) ever holds a full AX subtree per action.
+ */
+function extractTargetEvidenceForRecording(
+  session: SessionState,
+  result: Record<string, unknown>,
+): { result: Record<string, unknown>; targetEvidence: ReturnType<typeof computeTargetEvidence> } {
+  if (!('node' in result) && !('preActionNodes' in result)) {
+    return { result, targetEvidence: undefined };
+  }
+  const { node, preActionNodes, ...rest } = result as Record<string, unknown> & {
+    node?: SnapshotNode;
+    preActionNodes?: SnapshotNode[];
+  };
+  if (!session.recordSession || !node || !preActionNodes) {
+    return { result: rest, targetEvidence: undefined };
+  }
+  return { result: rest, targetEvidence: computeTargetEvidence({ node, nodes: preActionNodes }) };
 }
