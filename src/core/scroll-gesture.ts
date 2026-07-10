@@ -73,6 +73,8 @@ export type SwipePresetGesturePlan = {
 
 const DEFAULT_SCROLL_AMOUNT = 0.6;
 const DEFAULT_EDGE_PADDING_FRACTION = 0.05;
+// Edge presets stay close to the system gesture boundary without emitting edge coordinates.
+const SWIPE_PRESET_EDGE_MARGIN_PX = 8;
 
 export function buildScrollGesturePlan(options: ScrollGestureOptions): ScrollGesturePlan {
   const direction = options.direction;
@@ -140,9 +142,7 @@ export function buildSwipeGesturePlan(options: SwipeGestureOptions): SwipeGestur
 export function buildSwipePresetGesturePlan(
   preset: SwipePreset,
   frame: GestureReferenceFrame,
-  options: { platform?: string; marginPx?: number } = {},
 ): SwipePresetGesturePlan {
-  const marginPx = options.marginPx ?? 8;
   // Mid-screen keeps in-page swipes on visible content; lower lanes can land in blank pager space.
   const horizontalLanePercent = 50;
   const inPageStartPercent = 85;
@@ -155,8 +155,16 @@ export function buildSwipePresetGesturePlan(
         : preset === 'left-edge'
           ? [99, 15, 50]
           : [1, 85, 50];
-  const start = pointFromPercent(frame, startPercent, yPercent, { marginPx });
-  const end = pointFromPercent(frame, endPercent, yPercent, { marginPx });
+  const start = clampGesturePoint(
+    pointFromPercent(frame, startPercent, yPercent),
+    frame,
+    SWIPE_PRESET_EDGE_MARGIN_PX,
+  );
+  const end = clampGesturePoint(
+    pointFromPercent(frame, endPercent, yPercent),
+    frame,
+    SWIPE_PRESET_EDGE_MARGIN_PX,
+  );
   return {
     preset,
     x1: start.x,
@@ -183,18 +191,15 @@ export function inferGestureReferenceFrame(
   };
 }
 
-export function pointFromPercent(
+function pointFromPercent(
   frame: GestureReferenceFrame,
   xPercent: number,
   yPercent: number,
-  options: { marginPx?: number } = {},
 ): GesturePoint {
-  const point = {
+  return {
     x: Math.round((frame.referenceWidth * xPercent) / 100),
     y: Math.round((frame.referenceHeight * yPercent) / 100),
   };
-  if (options.marginPx === undefined) return point;
-  return clampGesturePoint(point, frame, options.marginPx);
 }
 
 export function pointFromPercentInFrame(

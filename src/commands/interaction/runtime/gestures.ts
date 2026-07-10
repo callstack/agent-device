@@ -306,7 +306,7 @@ async function runSwipePreset(
   await assertSupportedInteractionSurface(runtime, options, 'swipe');
   const capture = await captureInteractionSnapshot(runtime, options, false);
   const frame = resolveSnapshotReferenceFrame(capture.snapshot.nodes);
-  const plan = buildSwipePresetGesturePlan(preset, frame, { platform: runtime.backend.platform });
+  const plan = buildSwipePresetGesturePlan(preset, frame);
   const durationMs =
     options.durationMs === undefined
       ? undefined

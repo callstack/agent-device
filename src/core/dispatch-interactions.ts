@@ -599,7 +599,7 @@ export async function handleSwipePresetCommand(
   if (!frame) {
     throw new AppError('COMMAND_FAILED', 'Cannot infer viewport for gesture swipe preset');
   }
-  const plan = buildSwipePresetGesturePlan(preset, frame, { platform: device.platform });
+  const plan = buildSwipePresetGesturePlan(preset, frame);
   return await runSwipeCoordinates({
     device,
     interactor,
