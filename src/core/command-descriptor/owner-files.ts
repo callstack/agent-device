@@ -17,17 +17,25 @@ import { RAW_COMMAND_DESCRIPTORS, type Command } from './registry.ts';
  * import graph never reaches it, so the bundler drops it entirely.
  */
 type OwnerFilesFromDescriptors<
-  T extends readonly { readonly name: string; readonly ownerFiles?: readonly [string, ...string[]] }[],
+  T extends readonly {
+    readonly name: string;
+    readonly ownerFiles?: readonly [string, ...string[]];
+  }[],
 > = {
   [K in keyof T & number as T[K]['name']]: NonNullable<T[K]['ownerFiles']>;
 };
 
 const buildOwnerFiles = <
-  const T extends readonly { readonly name: string; readonly ownerFiles?: readonly [string, ...string[]] }[],
+  const T extends readonly {
+    readonly name: string;
+    readonly ownerFiles?: readonly [string, ...string[]];
+  }[],
 >(
   entries: T,
 ): OwnerFilesFromDescriptors<T> =>
-  Object.fromEntries(entries.map((entry) => [entry.name, entry.ownerFiles])) as OwnerFilesFromDescriptors<T>;
+  Object.fromEntries(
+    entries.map((entry) => [entry.name, entry.ownerFiles]),
+  ) as OwnerFilesFromDescriptors<T>;
 
 export const COMMAND_OWNER_FILES = buildOwnerFiles(RAW_COMMAND_DESCRIPTORS) satisfies Record<
   Command,

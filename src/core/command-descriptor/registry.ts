@@ -240,7 +240,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   // -- session (route: session) --
   {
     name: 'session_list',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/daemon/handlers/session-inventory.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['src/daemon/handlers/session-inventory.ts'] as const }
+      : {}),
     catalog: { group: 'internal', key: 'sessionList' },
     daemon: { route: 'session', sessionKind: 'inventory', ...REQUEST_EXECUTION_EXEMPT },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
@@ -417,7 +419,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'runtime',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/daemon/handlers/session-runtime-command.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['src/daemon/handlers/session-runtime-command.ts'] as const }
+      : {}),
     catalog: { group: 'internal' },
     daemon: { route: 'session' },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
@@ -471,7 +475,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'install_source',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/daemon/handlers/install-source.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['src/daemon/handlers/install-source.ts'] as const }
+      : {}),
     catalog: { group: 'internal', key: 'installSource' },
     daemon: { route: 'session' },
     timeoutPolicy: INSTALL_TIMEOUT_POLICY,
@@ -479,7 +485,9 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
   {
     name: 'release_materialized_paths',
-    ...(ownerFilesEnabled ? { ownerFiles: ['src/daemon/handlers/install-source.ts'] as const } : {}),
+    ...(ownerFilesEnabled
+      ? { ownerFiles: ['src/daemon/handlers/install-source.ts'] as const }
+      : {}),
     catalog: { group: 'internal', key: 'releaseMaterializedPaths' },
     daemon: { route: 'session', ...REQUEST_EXECUTION_EXEMPT },
     timeoutPolicy: DEFAULT_TIMEOUT_POLICY,
@@ -1048,7 +1056,6 @@ export const RAW_COMMAND_DESCRIPTORS = [
     mcpExposed: false,
   },
 ] as const satisfies readonly RawCommandDescriptor[];
-
 
 const CLI_CATALOG_GROUPS = new Set<CommandCatalogGroup>(['public', 'local-cli']);
 
