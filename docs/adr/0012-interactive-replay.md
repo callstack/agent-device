@@ -31,12 +31,21 @@ re-rendered node with the same id). PR #297 (closing #279) already trimmed heal 
 `refLabel`-synthesis and numeric `get text` drift healing to keep it "centered on recorded selectors and
 explicit selector expressions" — heal has a maintained history of narrowing, not growing.
 
-**Benchmark evidence** (2026-07-09/10, `~/.agent-device-bench/rnnav-matrix.py`, external harness): the
-`--settle` quiet-window loop is now at its 1-snapshot floor, so wall time for a QA flow is dominated by
-model turn latency, not device I/O. A happy-path agent-driven QA flow costs O(steps) model turns
-end-to-end; a deterministic replay of the same flow costs O(divergences). The entire economic case for
-replay is collapsing the per-step model-turn cost toward zero on the happy path and paying only where
-reality diverged from the recording.
+**Benchmark evidence** (2026-07-09/10, iOS simulator, react-navigation/RN playground matrix; harness
+follows the `~/.agent-device-bench/rnnav-matrix.py` pattern, external — the key numbers are recorded
+here so the evidence stays durable without the harness directory):
+
+| Measurement | Result |
+| --- | --- |
+| Snapshot captures per interaction, `--settle` off → on | 3.67 → 1.00 (the 1-snapshot floor) |
+| Commands per task, settled arm vs unsettled arms | 14.3 vs 23.3 / 26.7 |
+| react-navigation Maestro suite via deterministic replay | 38/38 flows green in 539 s, zero model turns |
+
+With the settle loop at its snapshot floor, wall time for an agent-driven QA flow is dominated by model
+turn latency, not device I/O. A happy-path agent-driven QA flow costs O(steps) model turns end-to-end; a
+deterministic replay of the same flow costs O(divergences) — the 38/38 sweep is that limit realized at
+zero divergences. The entire economic case for replay is collapsing the per-step model-turn cost toward
+zero on the happy path and paying only where reality diverged from the recording.
 
 **Audit evidence** (2026-07-10) on where that divergence cost actually goes:
 
@@ -202,29 +211,69 @@ Recording writes evidence for every action that resolves an element target. The 
 versioned comment immediately before the action it annotates:
 
 ```text
-# agent-device:target-v1 {"id":"save","role":"button","label":"Save","rect":{"x":12,"y":48,"width":80,"height":44},"ancestry":[{"role":"window"},{"role":"toolbar","id":"editor"}],"sibling":0,"verification":"verified"}
+# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[{"role":"toolbar","label":"Editor"},{"role":"window"}],"sibling":0,"viewportOrder":0,"scrollRegion":{"role":"scrollview","id":"editor-scroll"},"verification":"verified"}
 click @e12 "Save"
 ```
 
 The prefix is ASCII and the payload is one JSON object encoded on one line. JSON supplies all quoting and
-escaping; writers must use canonical `JSON.stringify` field order `id`, `role`, `label`, `rect`,
-`ancestry`, `sibling`, `verification`, `matchCount` and rect order `x`, `y`, `width`, `height`. `id`,
-`role`, and `label` are optional non-empty strings; `rect` is an optional object of four finite numbers.
-`verification` is `"verified"` or `"unverifiable"`; `matchCount` is required only for the latter. `role` is
-`normalizeType(node.type ?? "")`, exactly the normalized type used by `buildSelectorChainForNode`; it is
-never the raw optional `node.role`. `ancestry` is up to eight root-to-parent entries of the same normalized
-`role` plus optional id/label, derived through `parentIndex`; `sibling` is the zero-based ordinal among
-siblings with the same local identity. The writer normalizes strings to Unicode NFC and omits missing or
-empty fields. A v1 payload is at most **4 KiB** UTF-8; each string field is at most **256 bytes** after
-normalization; `ancestry` has at most eight entries; and `matchCount`, when present, is a positive safe
-integer. The parser rejects a v1 annotation exceeding these bounds with `INVALID_ARGS`.
+escaping; writers must use canonical `JSON.stringify` field order `id`, `role`, `label`, `ancestry`,
+`sibling`, `viewportOrder`, `scrollRegion`, `rect`, `verification`, and rect order `x`, `y`, `width`,
+`height`. `verification` is `"verified"` or `"unverifiable"`. The payload has **three tiers** with
+different comparison roles:
 
-The writer must test the tuple against the record-time tree. It writes `verification: "verified"` only
-when exactly one node matches id/role/label/rect/ancestry/sibling. If zero or multiple nodes match, it
-writes `verification: "unverifiable"` and `matchCount`; replay reports an
-`identity-unverifiable` target-binding divergence before acting. At replay, the observed tree must also
-produce exactly one tuple match. This closes the duplicate-label/identical-rect case even if the stronger
-structural context is itself duplicated: ambiguity is a visible divergence, never a silent binding.
+- **Identity** (compared exactly): `id` when recorded, else `role` plus normalized `label`, plus the
+  leaf-anchored `ancestry` prefix. `role` is `normalizeType(node.type ?? "")`, exactly the normalized
+  type used by `buildSelectorChainForNode`; it is never the raw optional `node.role`.
+- **Disambiguation signals** (consulted only when several current nodes share the identity): `sibling`,
+  then `viewportOrder` + `scrollRegion` — normalized, relative signals, never absolute pixels.
+- **Diagnostics** (never compared): optional `rect`, carried only so divergence reports can show where
+  the recorded target was.
+
+Absolute geometry is deliberately demoted out of identity: an absolute rect is the least stable component
+of a target's identity — scroll offset, device rotation, dynamic type, iPad/macOS window resizing, and
+ordinary RN layout shifts all move rects between healthy runs — and the audit's identical-rect
+"Prevent Remove" sibling pair proves absolute geometry cannot even separate identical siblings in the
+worst case. No absolute-coordinate tolerance exists in v1: the earlier draft's ±8-unit rect comparison is
+removed rather than tuned, because no measured drift distribution exists to justify any particular
+constant. If a future revision reintroduces an absolute tolerance, it must carry measured evidence.
+
+**Normalization.** All strings are Unicode NFC. `label` additionally trims leading/trailing whitespace
+and collapses internal whitespace runs to a single space. Comparison is case-sensitive after
+normalization (a label case change is a real UI change). A string that is empty after normalization is
+omitted by the writer and treated as absent by the comparator. Each string field is at most **256 UTF-8
+bytes** after normalization; the whole payload is at most **4 KiB**; `ancestry` has at most **eight**
+entries; `sibling` and `viewportOrder` are non-negative safe integers. The parser rejects a v1 annotation
+exceeding these bounds with `INVALID_ARGS`.
+
+**Local identity.** Two nodes share local identity when both carry `id` and the normalized ids are equal;
+or, when the recording carries no `id`, when their normalized roles are equal and their normalized labels
+are equal (label absent on both sides counts as equal; label present on exactly one side is a mismatch).
+A recorded `id` never matches a node without that id.
+
+**Ancestry.** The chain is the nearest **K = 8** ancestors of the target, ordered **leaf→root** (nearest
+ancestor first), each entry `{ role, label? }` under the same normalization (`role` may be the empty
+string when the node has no type; `label` is omitted when empty). Truncation drops entries from the
+**root side only** — the nearest ancestors are always kept. Comparison is a **leaf-anchored prefix
+match**: recorded chain R matches observed chain O iff for every index `i < |R|`, `O[i]` exists, the
+roles are equal, and — when `R[i]` carries a label — the labels are equal (a label absent in `R[i]` is
+unconstrained). `|O| < |R|` is a mismatch. An inserted or removed wrapper ancestor therefore changes
+identity by design: structure is part of identity.
+
+**Record-time write.**
+
+1. Resolve the action's winner and compute its identity tuple from the record-time tree.
+2. Compute the record-time identity set: all nodes sharing the winner's local identity with a matching
+   leaf-anchored ancestry prefix.
+3. `sibling` is the winner's zero-based ordinal within that set in tree (document) order.
+   `viewportOrder` is the winner's zero-based ordinal within that set ordered by rect center,
+   top-to-bottom then left-to-right; members without rects sort last, in tree order. `scrollRegion` is
+   the local identity (`role` + `id`/`label`) of the winner's nearest scrollable ancestor, omitted when
+   none exists.
+4. Run the replay-time verification algorithm below against the record-time tree itself. If it isolates
+   exactly the winner, write `verification: "verified"`; otherwise write `verification: "unverifiable"`.
+   An unverifiable annotation makes the step an `identity-unverifiable` divergence at replay, before
+   acting — the evidence declares its own limits at record time instead of permitting a silent best
+   guess later.
 
 A v1 parser accepts known fields in any JSON object order, ignores unknown fields, normalizes known
 strings to NFC, and rejects malformed annotations or invalid known field types with `INVALID_ARGS`. An
@@ -240,15 +289,35 @@ annotation and perform no target-binding check for those actions. A writer that 
 script preserves v1 annotations in canonical form; it must not silently discard them. This is an additive
 `.ad` format change, not merely per-line growth.
 
-At replay, every annotated resolved target is checked before its action is sent. A field present in the
-recording but absent in the observed node is a mismatch. `id` and normalized `role` compare exactly after
-NFC; `label` compares after NFC plus trim and internal whitespace collapse; rects match when every
-coordinate and dimension differs by at most **8** recorded coordinate units; ancestry and sibling compare
-exactly after their component normalization. Every recorded field must match. An old unannotated action
-remains executable without this check. Any mismatch is a
-**target-binding divergence**, reported before the device action, even when resolution was unique; this
-catches a unique-but-wrong rebind as well as a changed ambiguity winner. This is not general outcome
-verification: `--verify` remains post-action change evidence with a different contract.
+**Replay-time verification.** Every annotated resolved target is checked before its action is sent, by
+this exact classification. `matchCount` is the number of current nodes matching the **recorded selector**
+at replay time — the same match set resolution itself used — with range **0..N** and **always present**
+in the report's `targetBinding`. Identity verification applies only when `matchCount >= 1`.
+
+1. Recorded `verification` is `"unverifiable"` → **identity-unverifiable** divergence, before any
+   resolution.
+2. `matchCount == 0` → **selector-miss** divergence: the recorded selector no longer matches anything.
+   This class is distinct from an identity mismatch — the repair is a selector repair.
+3. `matchCount >= 1`; the identity set I (matched nodes sharing the recorded local identity with a
+   matching ancestry prefix) is empty → **identity-mismatch** divergence: the selector still matches,
+   but nothing carries the recorded identity.
+4. `|I| == 1` and the resolution winner W is that member → **verified**; the action proceeds. This is
+   the only path that sends the action.
+5. `|I| == 1` and W is a different node → **identity-mismatch** divergence: a unique-but-wrong rebind or
+   a changed ambiguity winner, caught even when resolution was unique.
+6. `|I| > 1` → apply the disambiguation signals in order: (i) order I in tree order; if the recorded
+   `sibling` ordinal is in range, the evidence denotes that member — compare with W as in paths 4/5.
+   (ii) Otherwise filter I to members whose nearest scrollable ancestor matches the recorded
+   `scrollRegion` local identity (no filter when none was recorded), order by rect center top-to-bottom
+   then left-to-right (rect-less members last, in tree order); if the recorded `viewportOrder` ordinal is
+   in range of the filtered set, the evidence denotes that member — compare with W as in paths 4/5.
+   If neither signal isolates a member, the step is an **identity-unverifiable** divergence with up to
+   **5** candidates listed — never a silent pick. That refusal is the point of this ADR.
+
+A field present in the recording but absent on the compared node is a mismatch; `rect` is never compared.
+An old unannotated action remains executable without this check. All three divergence classes are
+target-binding divergences reported before the device action. This is not general outcome verification:
+`--verify` remains post-action change evidence with a different contract.
 
 ### 4. Divergence wire contract and replay-only resume
 
@@ -256,7 +325,10 @@ verification: `--verify` remains post-action change evidence with a different co
 `REPLAY_DIVERGENCE` and a `details.divergence` object for both an action failure and a target-binding
 mismatch. The object has version `1` and contains `kind`, `step` (`index`, `source.path`, `source.line`),
 `action`, `cause`, `screen`, `suggestions`, `resume`, and, for binding failures, `targetBinding`
-(`recorded`, `observed`, `mismatches`). `step.index` is the 1-based executable-plan ordinal, not a source
+(`classification`, `matchCount`, `recorded`, `observed`, `mismatches`, `candidates`). `kind` is one of
+`action-failure`, `selector-miss`, `identity-mismatch`, or `identity-unverifiable` — the latter three are
+decision 3's target-binding classes, and `targetBinding.matchCount` is always present for them (0..N).
+`step.index` is the 1-based executable-plan ordinal, not a source
 line. Its source location is diagnostic only. A Maestro parser must preserve the original file and line
 through includes so that source location is actionable.
 
@@ -326,9 +398,13 @@ Implementation is not accepted on benchmark evidence alone. Required automated c
   MCP-pinned, a fresh snapshot is required before using an alternative, and a no-action target-binding
   divergence can issue and pin its fresh report refs;
 - parser/writer unit cases for v1 identity round trips, old/new reader compatibility, escaping,
-  normalized-role source, ancestry/sibling structural context, duplicate/unverifiable record and replay
-  evidence, rect tolerance, malformed annotations, and mismatch-before-action behavior;
-- replay runtime tests for every annotated target, unique-but-wrong and duplicate-evidence divergences,
+  normalized-role source, leaf-anchored ancestry prefix matching (including root-side truncation and
+  inserted-wrapper mismatch), duplicate/unverifiable record and replay evidence, rect-never-compared,
+  malformed annotations, and mismatch-before-action behavior;
+- replay runtime tests covering all six verification paths of decision 3 — recorded-unverifiable,
+  selector-miss (`matchCount == 0`), empty identity set, verified, unique-but-wrong rebind, and
+  post-signal tie (including out-of-range `sibling`/`viewportOrder` ordinals and `scrollRegion`
+  filtering) — plus divergence-report tests for
   compact/default/full field and byte ceilings, redaction, overflow artifacts and artifact-write failure,
   available versus sparse/capture-failed screen forms, and preservation of the original cause;
 - replay resume tests for plan-digest emission and mismatch rejection after script/include/expansion
