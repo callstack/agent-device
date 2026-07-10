@@ -1,10 +1,7 @@
 import { listCliCommandNames } from '../command-catalog.ts';
 import { cliAliasesForCommand, normalizeCliCommandAlias } from '../cli-command-aliases.ts';
 import { buildCommandUsage } from '../utils/cli-usage.ts';
-import {
-  DAEMON_COMMAND_ROUTES,
-  type DaemonCommandRoute,
-} from '../core/command-descriptor/daemon-routes.ts';
+import type { DaemonCommandRoute } from '../daemon/daemon-command-registry.ts';
 import { commandDescriptors, type Command } from '../core/command-descriptor/registry.ts';
 import type { CommandCapability } from '../core/capabilities.ts';
 import type { CommandTimeoutPolicy } from '../core/command-descriptor/types.ts';
@@ -70,6 +67,10 @@ export type CommandExplanationFormatOptions = {
 
 type FileExists = (repoRelativePath: string) => boolean;
 type CommandDescriptor = (typeof commandDescriptors)[number];
+type CommandExplanationOptions = {
+  fileExists?: FileExists;
+  daemonRouteOwnerFiles: Readonly<Record<DaemonCommandRoute, string>>;
+};
 
 const descriptorByName: ReadonlyMap<string, CommandDescriptor> = new Map(
   commandDescriptors.map((descriptor) => [descriptor.name, descriptor]),
@@ -79,18 +80,26 @@ const flagDefinitionsByKey = groupFlagDefinitions();
 
 export function explainCommand(
   query: string,
-  options: { fileExists?: FileExists } = {},
+  options: CommandExplanationOptions,
 ): CommandExplanationResult {
   const descriptor = resolveDescriptor(query);
   if (!descriptor) {
     return { found: false, query, suggestions: suggestCommands(query) };
   }
-  return { found: true, explanation: buildCommandExplanation(descriptor, options.fileExists) };
+  return {
+    found: true,
+    explanation: buildCommandExplanation(
+      descriptor,
+      options.fileExists,
+      options.daemonRouteOwnerFiles,
+    ),
+  };
 }
 
 function buildCommandExplanation(
   descriptor: CommandDescriptor,
   fileExists: FileExists | undefined,
+  daemonRouteOwnerFiles: Readonly<Record<DaemonCommandRoute, string>>,
 ): CommandExplanation {
   const family = commandFamilies.find((candidate) =>
     candidate.metadata.some((metadata) => metadata.name === descriptor.name),
@@ -118,6 +127,7 @@ function buildCommandExplanation(
       Boolean('capability' in descriptor && descriptor.capability),
       Boolean('dispatch' in descriptor && descriptor.dispatch),
       fileExists,
+      daemonRouteOwnerFiles,
     ),
   };
 }
@@ -307,6 +317,7 @@ function commandFiles(
   hasCapability: boolean,
   hasDispatch: boolean,
   fileExists: FileExists | undefined,
+  daemonRouteOwnerFiles: Readonly<Record<DaemonCommandRoute, string>>,
 ): string[] {
   const derived = ['src/core/command-descriptor/registry.ts'];
   const opportunistic: string[] = [];
@@ -319,7 +330,7 @@ function commandFiles(
   } else if (cliCommandNames.has(command)) {
     derived.push('src/utils/cli-command-overrides.ts');
   }
-  if (daemonRoute) derived.push(DAEMON_COMMAND_ROUTES[daemonRoute].ownerFile);
+  if (daemonRoute) derived.push(daemonRouteOwnerFiles[daemonRoute]);
   if (hasDispatch) derived.push('src/core/dispatch.ts');
   if (hasCapability) derived.push('src/core/capabilities.ts');
   const present = fileExists ? opportunistic.filter(fileExists) : opportunistic;

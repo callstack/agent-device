@@ -1,9 +1,9 @@
 import { deriveDaemonCommandDescriptors } from '../core/command-descriptor/derive.ts';
 import { commandDescriptors } from '../core/command-descriptor/registry.ts';
-import type { DaemonCommandRoute } from '../core/command-descriptor/daemon-routes.ts';
+import type { DaemonCommandRoute } from './request-handler-chain.ts';
 import type { DaemonRequest } from './types.ts';
 
-export type { DaemonCommandRoute } from '../core/command-descriptor/daemon-routes.ts';
+export type { DaemonCommandRoute } from './request-handler-chain.ts';
 
 export type SessionCommandKind = 'inventory' | 'state' | 'observability' | 'replay';
 

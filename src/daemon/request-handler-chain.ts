@@ -9,14 +9,6 @@ import type { LeaseRegistry } from './lease-registry.ts';
 import type { SessionStore } from './session-store.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from './types.ts';
 
-const loadLeaseHandlerModule = lazyImport(() => import('./handlers/lease.ts'));
-const loadSessionHandlerModule = lazyImport(() => import('./handlers/session.ts'));
-const loadSnapshotHandlerModule = lazyImport(() => import('./handlers/snapshot.ts'));
-const loadReactNativeHandlerModule = lazyImport(() => import('./handlers/react-native.ts'));
-const loadRecordTraceHandlerModule = lazyImport(() => import('./handlers/record-trace.ts'));
-const loadFindHandlerModule = lazyImport(() => import('./handlers/find.ts'));
-const loadInteractionHandlerModule = lazyImport(() => import('./handlers/interaction.ts'));
-
 type RequestHandlerChainParams = {
   req: DaemonRequest;
   sessionName: string;
@@ -35,31 +27,74 @@ type RequestHandlerChainParams = {
   ) => DaemonCommandContext;
 };
 
+const DAEMON_ROUTE_HANDLERS = {
+  lease: defineDaemonRoute({
+    ownerFile: 'src/daemon/handlers/lease.ts',
+    load: () => import('./handlers/lease.ts'),
+    run: runLeaseHandler,
+  }),
+  session: defineDaemonRoute({
+    ownerFile: 'src/daemon/handlers/session.ts',
+    load: () => import('./handlers/session.ts'),
+    run: runSessionHandler,
+  }),
+  snapshot: defineDaemonRoute({
+    ownerFile: 'src/daemon/handlers/snapshot.ts',
+    load: () => import('./handlers/snapshot.ts'),
+    run: runSnapshotHandler,
+  }),
+  reactNative: defineDaemonRoute({
+    ownerFile: 'src/daemon/handlers/react-native.ts',
+    load: () => import('./handlers/react-native.ts'),
+    run: runReactNativeHandler,
+  }),
+  recordTrace: defineDaemonRoute({
+    ownerFile: 'src/daemon/handlers/record-trace.ts',
+    load: () => import('./handlers/record-trace.ts'),
+    run: runRecordTraceHandler,
+  }),
+  find: defineDaemonRoute({
+    ownerFile: 'src/daemon/handlers/find.ts',
+    load: () => import('./handlers/find.ts'),
+    run: runFindHandler,
+  }),
+  interaction: defineDaemonRoute({
+    ownerFile: 'src/daemon/handlers/interaction.ts',
+    load: () => import('./handlers/interaction.ts'),
+    run: runInteractionHandler,
+  }),
+  generic: defineDaemonRoute({
+    ownerFile: 'src/daemon/request-generic-dispatch.ts',
+    load: () => import('./request-generic-dispatch.ts'),
+    run: async () => null,
+  }),
+} as const;
+
+export type DaemonCommandRoute = keyof typeof DAEMON_ROUTE_HANDLERS;
+
 export async function runRequestHandlerChain(
   params: RequestHandlerChainParams,
 ): Promise<DaemonResponse | null> {
-  switch (getDaemonCommandRoute(params.req.command)) {
-    case 'lease':
-      return await runLeaseHandler(params);
-    case 'session':
-      return await runSessionHandler(params);
-    case 'snapshot':
-      return await runSnapshotHandler(params);
-    case 'reactNative':
-      return await runReactNativeHandler(params);
-    case 'recordTrace':
-      return await runRecordTraceHandler(params);
-    case 'find':
-      return await runFindHandler(params);
-    case 'interaction':
-      return await runInteractionHandler(params);
-    case 'generic':
-      return null;
-  }
+  const route = getDaemonCommandRoute(params.req.command);
+  return await DAEMON_ROUTE_HANDLERS[route].run(params);
 }
 
-async function runLeaseHandler(params: RequestHandlerChainParams): Promise<DaemonResponse> {
-  const { handleLeaseCommands } = await loadLeaseHandlerModule();
+export function getDaemonRouteOwnerFiles(): Record<DaemonCommandRoute, string> {
+  const routes = Object.keys(DAEMON_ROUTE_HANDLERS) as DaemonCommandRoute[];
+  const entries = routes.map((route) => [route, DAEMON_ROUTE_HANDLERS[route].ownerFile] as const);
+  return Object.fromEntries(entries) as Record<DaemonCommandRoute, string>;
+}
+
+export async function loadGenericRequestHandlerModule(): Promise<
+  typeof import('./request-generic-dispatch.ts')
+> {
+  return await DAEMON_ROUTE_HANDLERS.generic.loadModule();
+}
+
+async function runLeaseHandler(
+  { handleLeaseCommands }: typeof import('./handlers/lease.ts'),
+  params: RequestHandlerChainParams,
+): Promise<DaemonResponse> {
   return expectHandlerResponse(
     params.req.command,
     'lease',
@@ -74,8 +109,10 @@ async function runLeaseHandler(params: RequestHandlerChainParams): Promise<Daemo
   );
 }
 
-async function runSessionHandler(params: RequestHandlerChainParams): Promise<DaemonResponse> {
-  const { handleSessionCommands } = await loadSessionHandlerModule();
+async function runSessionHandler(
+  { handleSessionCommands }: typeof import('./handlers/session.ts'),
+  params: RequestHandlerChainParams,
+): Promise<DaemonResponse> {
   return expectHandlerResponse(
     params.req.command,
     'session',
@@ -93,8 +130,10 @@ async function runSessionHandler(params: RequestHandlerChainParams): Promise<Dae
   );
 }
 
-async function runSnapshotHandler(params: RequestHandlerChainParams): Promise<DaemonResponse> {
-  const { handleSnapshotCommands } = await loadSnapshotHandlerModule();
+async function runSnapshotHandler(
+  { handleSnapshotCommands }: typeof import('./handlers/snapshot.ts'),
+  params: RequestHandlerChainParams,
+): Promise<DaemonResponse> {
   return expectHandlerResponse(
     params.req.command,
     'snapshot',
@@ -107,8 +146,10 @@ async function runSnapshotHandler(params: RequestHandlerChainParams): Promise<Da
   );
 }
 
-async function runReactNativeHandler(params: RequestHandlerChainParams): Promise<DaemonResponse> {
-  const { handleReactNativeCommands } = await loadReactNativeHandlerModule();
+async function runReactNativeHandler(
+  { handleReactNativeCommands }: typeof import('./handlers/react-native.ts'),
+  params: RequestHandlerChainParams,
+): Promise<DaemonResponse> {
   return expectHandlerResponse(
     params.req.command,
     'react-native',
@@ -122,8 +163,10 @@ async function runReactNativeHandler(params: RequestHandlerChainParams): Promise
   );
 }
 
-async function runRecordTraceHandler(params: RequestHandlerChainParams): Promise<DaemonResponse> {
-  const { handleRecordTraceCommands } = await loadRecordTraceHandlerModule();
+async function runRecordTraceHandler(
+  { handleRecordTraceCommands }: typeof import('./handlers/record-trace.ts'),
+  params: RequestHandlerChainParams,
+): Promise<DaemonResponse> {
   return expectHandlerResponse(
     params.req.command,
     'record-trace',
@@ -136,8 +179,10 @@ async function runRecordTraceHandler(params: RequestHandlerChainParams): Promise
   );
 }
 
-async function runFindHandler(params: RequestHandlerChainParams): Promise<DaemonResponse> {
-  const { handleFindCommands } = await loadFindHandlerModule();
+async function runFindHandler(
+  { handleFindCommands }: typeof import('./handlers/find.ts'),
+  params: RequestHandlerChainParams,
+): Promise<DaemonResponse> {
   return expectHandlerResponse(
     params.req.command,
     'find',
@@ -151,8 +196,10 @@ async function runFindHandler(params: RequestHandlerChainParams): Promise<Daemon
   );
 }
 
-async function runInteractionHandler(params: RequestHandlerChainParams): Promise<DaemonResponse> {
-  const { handleInteractionCommands } = await loadInteractionHandlerModule();
+async function runInteractionHandler(
+  { handleInteractionCommands }: typeof import('./handlers/interaction.ts'),
+  params: RequestHandlerChainParams,
+): Promise<DaemonResponse> {
   return expectHandlerResponse(
     params.req.command,
     'interaction',
@@ -164,6 +211,20 @@ async function runInteractionHandler(params: RequestHandlerChainParams): Promise
       contextFromFlags: params.contextFromFlags,
     }),
   );
+}
+
+function defineDaemonRoute<TModule>(definition: {
+  ownerFile: string;
+  load: () => Promise<TModule>;
+  run: (module: TModule, params: RequestHandlerChainParams) => Promise<DaemonResponse | null>;
+}) {
+  const loadModule = lazyImport(definition.load);
+  return {
+    ownerFile: definition.ownerFile,
+    loadModule,
+    run: async (params: RequestHandlerChainParams) =>
+      await definition.run(await loadModule(), params),
+  };
 }
 
 function lazyImport<T>(load: () => Promise<T>): () => Promise<T> {

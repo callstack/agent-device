@@ -30,8 +30,10 @@ import {
   withDiagnosticsScope,
 } from '../utils/diagnostics.ts';
 import type { LeaseRegistry } from './lease-registry.ts';
-import { dispatchGenericCommand } from './request-generic-dispatch.ts';
-import { runRequestHandlerChain } from './request-handler-chain.ts';
+import {
+  loadGenericRequestHandlerModule,
+  runRequestHandlerChain,
+} from './request-handler-chain.ts';
 import {
   createRequestExecutionScope,
   type LockedRequestScope,
@@ -282,6 +284,7 @@ async function dispatchGenericForLockedScope(params: {
     return lockedScope.finalize(noActiveSessionError());
   }
 
+  const { dispatchGenericCommand } = await loadGenericRequestHandlerModule();
   const dispatchResponse = await dispatchGenericCommand({
     req: lockedScope.req,
     session,

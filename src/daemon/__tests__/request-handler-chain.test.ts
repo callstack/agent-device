@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { test } from 'vitest';
 import { INTERNAL_COMMANDS } from '../../command-catalog.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { runRequestHandlerChain } from '../request-handler-chain.ts';
+import { getDaemonRouteOwnerFiles, runRequestHandlerChain } from '../request-handler-chain.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { makeIosSession } from '../../__tests__/test-utils/index.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
@@ -31,6 +32,23 @@ function makeChainParams(req: DaemonRequest) {
     contextFromFlags: () => ({ logPath: '/tmp/agent-device-request-chain.log' }),
   };
 }
+
+test('route owner files match the production module loaders', () => {
+  const source = fs.readFileSync(new URL('../request-handler-chain.ts', import.meta.url), 'utf8');
+  const definitions = [
+    ...source.matchAll(
+      /(\w+): defineDaemonRoute\(\{\s+ownerFile: '([^']+)',\s+load: \(\) => import\('([^']+)'\),/g,
+    ),
+  ];
+  const ownerFiles = getDaemonRouteOwnerFiles();
+
+  assert.equal(definitions.length, Object.keys(ownerFiles).length);
+  for (const [, route, ownerFile, modulePath] of definitions) {
+    assert.ok(route && ownerFile && modulePath);
+    assert.equal(ownerFile, `src/daemon/${modulePath.slice(2)}`);
+    assert.equal(ownerFiles[route as keyof typeof ownerFiles], ownerFile);
+  }
+});
 
 test('request handler chain routes trace commands to the record-trace family', async () => {
   const response = await runRequestHandlerChain(makeChainParams(makeRequest('trace', ['start'])));

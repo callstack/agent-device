@@ -2,12 +2,24 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
-import { DAEMON_COMMAND_ROUTES } from '../../core/command-descriptor/daemon-routes.ts';
 import { commandDescriptors } from '../../core/command-descriptor/registry.ts';
-import { explainCommand, formatCommandExplanation } from '../command-explain.ts';
+import { getDaemonRouteOwnerFiles } from '../../daemon/request-handler-chain.ts';
+import {
+  explainCommand as explainCommandFromMetadata,
+  formatCommandExplanation,
+} from '../command-explain.ts';
 
 const repoRoot = path.resolve(import.meta.dirname, '../../..');
 const fileExists = (file: string) => fs.existsSync(path.join(repoRoot, file));
+const daemonRouteOwnerFiles = getDaemonRouteOwnerFiles();
+const explainCommand = (
+  query: string,
+  options: Omit<Parameters<typeof explainCommandFromMetadata>[1], 'daemonRouteOwnerFiles'> = {},
+) =>
+  explainCommandFromMetadata(query, {
+    ...options,
+    daemonRouteOwnerFiles,
+  });
 
 function runExplainCli(args: string[]): { status: number; stdout: string; stderr: string } {
   try {
@@ -162,9 +174,15 @@ describe('explainCommand table-driven coverage', () => {
     }
   });
 
-  test('every daemon route declaration names an existing handler owner', () => {
-    for (const [route, definition] of Object.entries(DAEMON_COMMAND_ROUTES)) {
-      expect(fileExists(definition.ownerFile), `${route} route owner missing`).toBe(true);
+  test('every daemon explanation uses its production handler module owner', () => {
+    for (const descriptor of commandDescriptors) {
+      if (!('daemon' in descriptor) || !descriptor.daemon) continue;
+      const result = explainCommand(descriptor.name, { fileExists });
+      expect(result.found).toBe(true);
+      if (!result.found) continue;
+      const ownerFile = daemonRouteOwnerFiles[descriptor.daemon.route];
+      expect(result.explanation.files).toContain(ownerFile);
+      expect(fileExists(ownerFile), `${descriptor.daemon.route} route owner missing`).toBe(true);
     }
   });
 
