@@ -13,6 +13,31 @@ const RUN_TIMEOUT_MS = Number(process.env.HELP_BENCH_TIMEOUT_MS ?? 90_000);
 // and the CLI help subprocess calls behind loadDocs share this same machine.
 const CONCURRENCY = Number(process.env.HELP_BENCH_CONCURRENCY ?? 4);
 const DEFAULT_RUNNERS = ['codex:gpt-5.4-mini', 'claude:claude-haiku-4-5'];
+const USAGE = `Usage: node scripts/help-conformance-bench.mjs [options]
+
+Feeds a help slice + task into one non-agentic LLM call per runner x case and
+regex-scores the returned command plan.
+
+Options:
+  --runner <kind:model>    Add one runner (repeatable). Default: ${DEFAULT_RUNNERS.join(', ')}
+  --runners <a,b>          Comma-separated runner list
+  --case <id>              Add one case id (repeatable). Default: all cases
+  --cases <a,b>            Comma-separated case id list
+  --out <dir>              Output directory (default: .tmp/help-conformance-bench)
+  --override-doc <topicId>=<path>
+                           Grade a DRAFT doc: load this topic's text from the file
+                           instead of the live CLI help. Repeatable; the last
+                           occurrence per topic wins. Override text goes through the
+                           same post-processing as the live source (e.g. the
+                           --help:first30 doc id is still capped to its first 30
+                           lines), so an A/B grade compares like with like.
+  --dry-run                Build prompts and write the report without any LLM calls
+  --help                   Show this usage text
+
+Environment:
+  HELP_BENCH_CONCURRENCY   Concurrent runner x case calls (default: 4)
+  HELP_BENCH_TIMEOUT_MS    Per-call timeout (default: 90000)
+  HELP_BENCH_OUT           Default output directory`;
 const OPTION_SPECS = {
   '--runner': { target: 'runners', mode: 'append' },
   '--runners': { target: 'runners', mode: 'csv' },
@@ -182,6 +207,10 @@ function readArgs(args, argv, index) {
 
 function readArg(args, argv, index) {
   const arg = argv[index];
+  if (arg === '--help' || arg === '-h') {
+    console.log(USAGE);
+    process.exit(0);
+  }
   if (arg === '--dry-run') return applyDryRun(args, index);
   applyOption(args, optionSpec(arg), argv[index + 1]);
   return index + 2;
@@ -194,7 +223,7 @@ function applyDryRun(args, index) {
 
 function optionSpec(arg) {
   const spec = OPTION_SPECS[arg];
-  if (!spec) throw new Error(`Unknown argument: ${arg}`);
+  if (!spec) throw new Error(`Unknown argument: ${arg}. Run with --help for usage.`);
   return spec;
 }
 
@@ -218,7 +247,9 @@ async function main() {
   const outDir = resolveOutDir(args);
   await mkdir(outDir, { recursive: true });
   const selectedCases = selectCases(args.cases);
-  const docs = await loadDocs(requiredDocIds(selectedCases), args.overrideDocs);
+  const docIds = requiredDocIds(selectedCases);
+  assertOverrideDocIds(args.overrideDocs, docIds);
+  const docs = await loadDocs(docIds, args.overrideDocs);
 
   const results = await runBenchmarkMatrix(args.runners, selectedCases, docs, outDir, args.dryRun);
   const reportPath = join(outDir, `report-${Date.now()}.json`);
@@ -243,6 +274,16 @@ function assertCasesSelected(selectedCases) {
 
 function requiredDocIds(selectedCases) {
   return [...new Set(selectedCases.flatMap((testCase) => testCase.docs))];
+}
+
+// A typo'd or stale --override-doc topic id must not silently grade the real
+// doc while the caller believes the draft was measured: fail fast instead.
+function assertOverrideDocIds(overrideDocs, docIds) {
+  const unknown = [...overrideDocs.keys()].filter((topicId) => !docIds.includes(topicId));
+  if (unknown.length === 0) return;
+  throw new Error(
+    `--override-doc topic id(s) not used by the selected cases: ${unknown.join(', ')}. Valid doc ids: ${docIds.join(', ')}.`,
+  );
 }
 
 function updateExitCode(results, dryRun) {
@@ -304,10 +345,33 @@ async function loadDocEntry(docId, overrideDocs) {
 }
 
 async function loadDoc(docId, overrideDocs) {
+  // An override swaps only WHERE the text comes from; the per-doc
+  // post-processing below (e.g. the --help:first30 30-line cap) applies to
+  // both sources so an A/B grade compares like with like. Without this, a
+  // draft longer than 30 lines would be graded on content the live path
+  // always truncates away.
+  return postProcessDoc(docId, await loadDocSource(docId, overrideDocs));
+}
+
+async function loadDocSource(docId, overrideDocs) {
   const overridePath = overrideDocs?.get(docId);
-  if (overridePath) return (await readFile(overridePath, 'utf8')).trim();
-  if (docId === '--help:first30') return firstLines(await cliHelp(['--help']), 30);
-  return cliHelp(['help', docId]);
+  if (overridePath) return readOverrideDoc(docId, overridePath);
+  return docId === '--help:first30' ? cliHelp(['--help']) : cliHelp(['help', docId]);
+}
+
+async function readOverrideDoc(docId, overridePath) {
+  try {
+    return await readFile(overridePath, 'utf8');
+  } catch (error) {
+    throw new Error(
+      `--override-doc file for "${docId}" is not readable: ${overridePath} (${error?.code ?? errorMessage(error)})`,
+    );
+  }
+}
+
+function postProcessDoc(docId, text) {
+  const trimmed = text.trim();
+  return docId === '--help:first30' ? firstLines(trimmed, 30) : trimmed;
 }
 
 async function cliHelp(args) {
@@ -579,4 +643,11 @@ function safeName(name) {
   return basename(name).replace(/[^a-z0-9_.-]+/gi, '-');
 }
 
-await main();
+// Expected failures (bad flags, unreadable override files, unknown topic ids)
+// print as one clean line instead of an unhandled stack trace.
+try {
+  await main();
+} catch (error) {
+  console.error(`Error: ${errorMessage(error)}`);
+  process.exitCode = 1;
+}

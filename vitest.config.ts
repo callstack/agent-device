@@ -19,7 +19,9 @@ export default defineConfig({
       {
         test: {
           name: 'unit-core',
-          include: ['src/**/*.test.ts'],
+          // The explicit scripts entry keeps the help-bench guard tests in the
+          // suite without waking every ad-hoc *.test.ts under scripts/.
+          include: ['src/**/*.test.ts', 'scripts/__tests__/help-conformance-bench.test.ts'],
           exclude: [ANDROID_ADB_STUB_TESTS],
           setupFiles: ['src/__tests__/process-memo-setup.ts'],
         },
