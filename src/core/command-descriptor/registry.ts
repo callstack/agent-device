@@ -1057,6 +1057,16 @@ export const RAW_COMMAND_DESCRIPTORS = [
   },
 ] as const satisfies readonly RawCommandDescriptor[];
 
+/**
+ * Compile-time owner-claim totality. `keyof` on a union contains only keys
+ * shared by every member, so removing `ownerFiles` from any raw descriptor
+ * makes this resolve to `false` and fail the `AssertTrue` constraint.
+ */
+type AssertTrue<T extends true> = T;
+export type CommandOwnerFileClaimsAreComplete = AssertTrue<
+  'ownerFiles' extends keyof (typeof RAW_COMMAND_DESCRIPTORS)[number] ? true : false
+>;
+
 const CLI_CATALOG_GROUPS = new Set<CommandCatalogGroup>(['public', 'local-cli']);
 
 const CLI_COMMAND_NAMES = new Set<string>(
