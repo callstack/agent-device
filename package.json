@@ -114,7 +114,7 @@
     "check:fallow": "fallow audit",
     "check:layering": "node --experimental-strip-types --test scripts/layering/model.test.ts && node --experimental-strip-types scripts/layering/check.ts",
     "check:layering:baseline": "node --experimental-strip-types scripts/layering/check.ts --update-baseline",
-    "check:test-only-exports": "node --experimental-strip-types --test scripts/test-only-exports/check.test.ts && node --experimental-strip-types scripts/test-only-exports/check.ts",
+    "check:test-only-exports": "node --experimental-strip-types --test scripts/test-only-exports/*.test.ts && node --experimental-strip-types scripts/test-only-exports/check.ts",
     "check:test-only-exports:baseline": "node --experimental-strip-types scripts/test-only-exports/check.ts --update-baseline",
     "check:quick": "pnpm lint && pnpm typecheck",
     "sync:mcp-metadata": "node scripts/sync-mcp-metadata.mjs",

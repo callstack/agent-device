@@ -1,5 +1,10 @@
 [
   {
+    "path": "src/backend.ts",
+    "export": "BACKEND_CAPABILITY_NAMES",
+    "line": 28
+  },
+  {
     "path": "src/cli/parser/args.ts",
     "export": "parseArgs",
     "line": 41
@@ -30,6 +35,56 @@
     "line": 80
   },
   {
+    "path": "src/commands/capture/index.ts",
+    "export": "alertCliReader",
+    "line": 28
+  },
+  {
+    "path": "src/commands/capture/index.ts",
+    "export": "alertDaemonWriter",
+    "line": 29
+  },
+  {
+    "path": "src/commands/capture/index.ts",
+    "export": "diffCliReader",
+    "line": 30
+  },
+  {
+    "path": "src/commands/capture/index.ts",
+    "export": "screenshotCliReader",
+    "line": 31
+  },
+  {
+    "path": "src/commands/capture/index.ts",
+    "export": "screenshotDaemonWriter",
+    "line": 32
+  },
+  {
+    "path": "src/commands/capture/index.ts",
+    "export": "settingsCliReader",
+    "line": 33
+  },
+  {
+    "path": "src/commands/capture/index.ts",
+    "export": "settingsDaemonWriter",
+    "line": 34
+  },
+  {
+    "path": "src/commands/capture/index.ts",
+    "export": "snapshotCliReader",
+    "line": 35
+  },
+  {
+    "path": "src/commands/capture/index.ts",
+    "export": "waitCliReader",
+    "line": 36
+  },
+  {
+    "path": "src/commands/capture/index.ts",
+    "export": "waitDaemonWriter",
+    "line": 37
+  },
+  {
     "path": "src/commands/command-metadata.ts",
     "export": "listCommandMetadataNames",
     "line": 29
@@ -53,6 +108,16 @@
     "path": "src/commands/index.ts",
     "export": "selector",
     "line": 47
+  },
+  {
+    "path": "src/commands/interaction/runtime/selector-read.ts",
+    "export": "ref",
+    "line": 152
+  },
+  {
+    "path": "src/commands/interaction/runtime/selector-read.ts",
+    "export": "selector",
+    "line": 148
   },
   {
     "path": "src/core/command-descriptor/registry.ts",
@@ -83,6 +148,16 @@
     "path": "src/core/platform-plugin/plugin.ts",
     "export": "registeredPlatforms",
     "line": 176
+  },
+  {
+    "path": "src/daemon/app-log.ts",
+    "export": "APP_LOG_PID_FILENAME",
+    "line": 41
+  },
+  {
+    "path": "src/daemon/app-log.ts",
+    "export": "assertAndroidPackageArgSafe",
+    "line": 43
   },
   {
     "path": "src/daemon/app-log.ts",
@@ -126,6 +201,11 @@
   },
   {
     "path": "src/daemon/client/daemon-client.ts",
+    "export": "resolveDaemonRequestTimeoutMs",
+    "line": 25
+  },
+  {
+    "path": "src/daemon/client/daemon-client.ts",
     "export": "resolveDaemonStartupHint",
     "line": 21
   },
@@ -135,9 +215,24 @@
     "line": 26
   },
   {
+    "path": "src/daemon/handlers/find.ts",
+    "export": "parseFindArgs",
+    "line": 35
+  },
+  {
     "path": "src/daemon/handlers/snapshot-capture.ts",
     "export": "buildSnapshotVisibility",
     "line": 18
+  },
+  {
+    "path": "src/daemon/lease-context.ts",
+    "export": "buildLeaseDiagnosticsContext",
+    "line": 18
+  },
+  {
+    "path": "src/daemon/runtime-hints.ts",
+    "export": "resolveRuntimeTransportHints",
+    "line": 36
   },
   {
     "path": "src/kernel/contracts.ts",
@@ -168,6 +263,11 @@
     "path": "src/platforms/android/multitouch-helper.ts",
     "export": "resetAndroidMultiTouchHelperInstallCache",
     "line": 551
+  },
+  {
+    "path": "src/platforms/android/perf-frame.ts",
+    "export": "parseAndroidFramePerfSample",
+    "line": 9
   },
   {
     "path": "src/platforms/android/perf.ts",
@@ -258,6 +358,11 @@
     "path": "src/platforms/apple/core/runner/runner-client.ts",
     "export": "assertSafeDerivedCleanup",
     "line": 183
+  },
+  {
+    "path": "src/platforms/apple/core/runner/runner-client.ts",
+    "export": "isRetryableRunnerError",
+    "line": 27
   },
   {
     "path": "src/platforms/apple/core/runner/runner-client.ts",
@@ -363,6 +468,11 @@
     "path": "src/platforms/apple/core/runner/runner-xctestrun.ts",
     "export": "xctestrunReferencesProjectRoot",
     "line": 9
+  },
+  {
+    "path": "src/platforms/apple/core/screenshot.ts",
+    "export": "prepareSimulatorStatusBarForScreenshot",
+    "line": 507
   },
   {
     "path": "src/platforms/install-source.ts",

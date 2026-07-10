@@ -10,54 +10,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { computeTestOnlyExports, countIdentifierOccurrences } from './check.ts';
+import { computeTestOnlyExports, main } from './check.ts';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const fallowBin = path.join(repoRoot, 'node_modules/.bin/fallow');
 
-test('JSDoc and string mentions of the export name are not call sites', () => {
-  const source = [
-    '/**',
-    ' * clearHints is documented here mentioning clearHints by name.',
-    ' */',
-    'export function clearHints(): void {}',
-    "const note = 'clearHints is unused in prod';",
-    'const tpl = `template text clearHints`;',
-  ].join('\n');
-  assert.equal(countIdentifierOccurrences('t.ts', source, 'clearHints'), 1);
-});
-
-test('a template substitution or same-file call is a real occurrence', () => {
-  const called = ['export function clearHints(): void {}', 'clearHints();'].join('\n');
-  assert.equal(countIdentifierOccurrences('t.ts', called, 'clearHints'), 2);
-  const substituted = [
-    'export function clearHints(): string { return ""; }',
-    'const tpl = `${clearHints()}`;',
-  ].join('\n');
-  assert.equal(countIdentifierOccurrences('t.ts', substituted, 'clearHints'), 2);
-});
-
-test('a // inside a string does not hide a real usage after it', () => {
-  // The pre-review regex stripped everything after a `//` even inside a
-  // string literal, which could under-count real same-line usages.
-  const source = [
-    'export function clearHints(): void {}',
-    "const url = 'https://example.com'; clearHints();",
-  ].join('\n');
-  assert.equal(countIdentifierOccurrences('t.ts', source, 'clearHints'), 2);
-});
-
-test('a barrel re-export counts its source token once', () => {
-  const source = "export { clearHints } from './hints.ts';";
-  assert.equal(countIdentifierOccurrences('t.ts', source, 'clearHints'), 1);
-});
-
-test('an unparseable file reports undefined instead of a count', () => {
-  assert.equal(countIdentifierOccurrences('t.ts', 'export function {{{', 'clearHints'), undefined);
-});
-
 type FixtureOptions = {
-  annotated: boolean;
+  annotation: 'none' | 'direct' | 'detached';
 };
 
 function writeFixture(options: FixtureOptions): string {
@@ -77,9 +36,13 @@ function writeFixture(options: FixtureOptions): string {
     path.join(root, 'src/index.ts'),
     "export { persistSessionHints } from './session-hints.ts';\n",
   );
-  const annotation = options.annotated
-    ? '// test-seam: fixture twin proving the annotation is honored\n'
-    : '';
+  const annotation =
+    options.annotation === 'none'
+      ? []
+      : [
+          '// test-seam: fixture twin proving the annotation is honored',
+          ...(options.annotation === 'detached' ? ['const unrelated = true;'] : []),
+        ];
   fs.writeFileSync(
     path.join(root, 'src/session-hints.ts'),
     [
@@ -91,7 +54,8 @@ function writeFixture(options: FixtureOptions): string {
       ' * clearSessionHints removes the hint file; this JSDoc mentions',
       ' * clearSessionHints by name, like ordinary documentation does.',
       ' */',
-      `${annotation}export function clearSessionHints(session: string): string {`,
+      ...annotation,
+      'export function clearSessionHints(session: string): string {',
       '  return `cleared:${session}`;',
       '}',
       '',
@@ -110,7 +74,7 @@ function writeFixture(options: FixtureOptions): string {
 }
 
 test('flags an exported-and-tested function with zero production call sites', () => {
-  const root = writeFixture({ annotated: false });
+  const root = writeFixture({ annotation: 'none' });
   try {
     const findings = computeTestOnlyExports({ root, fallowBin });
     assert.deepEqual(findings, [
@@ -122,9 +86,55 @@ test('flags an exported-and-tested function with zero production call sites', ()
 });
 
 test('a test-seam annotation removes the export from the check', () => {
-  const root = writeFixture({ annotated: true });
+  const root = writeFixture({ annotation: 'direct' });
   try {
     assert.deepEqual(computeTestOnlyExports({ root, fallowBin }), []);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('a detached test-seam annotation does not suppress the finding', () => {
+  const root = writeFixture({ annotation: 'detached' });
+  try {
+    assert.deepEqual(computeTestOnlyExports({ root, fallowBin }), [
+      { path: 'src/session-hints.ts', export: 'clearSessionHints', line: 11 },
+    ]);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('an unannotated addition fails without modifying the baseline', () => {
+  const root = writeFixture({ annotation: 'none' });
+  const scripts = path.join(root, 'scripts');
+  const baselinePath = path.join(scripts, 'test-only-exports-baseline.json');
+  fs.mkdirSync(scripts);
+  fs.writeFileSync(baselinePath, '[]\n');
+  try {
+    assert.equal(main([], { root, fallowBin }), 1);
+    assert.equal(fs.readFileSync(baselinePath, 'utf8'), '[]\n');
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('baseline update removes a stale entry', () => {
+  const root = writeFixture({ annotation: 'direct' });
+  const scripts = path.join(root, 'scripts');
+  const baselinePath = path.join(scripts, 'test-only-exports-baseline.json');
+  fs.mkdirSync(scripts);
+  fs.writeFileSync(
+    baselinePath,
+    `${JSON.stringify(
+      [{ path: 'src/session-hints.ts', export: 'clearSessionHints', line: 9 }],
+      null,
+      2,
+    )}\n`,
+  );
+  try {
+    assert.equal(main(['--update-baseline'], { root, fallowBin }), 0);
+    assert.equal(fs.readFileSync(baselinePath, 'utf8'), '[]\n');
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

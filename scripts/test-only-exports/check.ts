@@ -1,14 +1,14 @@
 // Ratchet against exports reachable only from test files. See PR #1202 for
 // rationale and the fallow --production two-pass design. Known limitation:
 // dynamic property access (obj[name]) is invisible to fallow's import graph
-// and to the own-file identifier count — the same blind spot as fallow's own
+// and to the own-file binding scan — the same blind spot as fallow's own
 // dead-code check; annotate such exports as test seams or use ignoreExports.
 
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { parseSync } from 'oxc-parser';
+import { runCmdSync } from '../../src/utils/exec.ts';
+import { countOwnFileBindingReferences } from './own-file-binding.ts';
 
 type FallowUnusedExport = {
   path: string;
@@ -39,9 +39,7 @@ const TEST_SEAM_ANNOTATION = /^\/\/\s*test-seam:\s*\S/;
 const scriptRepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 
 function defaultOptions(): CheckOptions {
-  const root = execFileSync('git', ['rev-parse', '--show-toplevel'], {
-    encoding: 'utf8',
-  }).trim();
+  const root = runCmdSync('git', ['rev-parse', '--show-toplevel']).stdout.trim();
   return { root, fallowBin: path.join(scriptRepoRoot, 'node_modules/.bin/fallow') };
 }
 
@@ -49,60 +47,21 @@ function baselinePathFor(root: string): string {
   return path.join(root, 'scripts/test-only-exports-baseline.json');
 }
 
-function isIdentifierNodeNamed(record: Record<string, unknown>, identifier: string): boolean {
-  return (
-    typeof record.type === 'string' &&
-    record.type.includes('Identifier') &&
-    record.name === identifier &&
-    typeof record.start === 'number'
-  );
-}
-
-// Spans dedupe aliased AST nodes: `export { x }` puts two Identifier nodes
-// (local + exported) on the same source token, which must count once.
-function collectIdentifierSpans(node: unknown, identifier: string, spans: Set<number>): void {
-  if (Array.isArray(node)) {
-    for (const child of node) collectIdentifierSpans(child, identifier, spans);
-    return;
-  }
-  if (!node || typeof node !== 'object') return;
-  const record = node as Record<string, unknown>;
-  if (isIdentifierNodeNamed(record, identifier)) spans.add(record.start as number);
-  for (const key of Object.keys(record)) {
-    if (key !== 'type') collectIdentifierSpans(record[key], identifier, spans);
-  }
-}
-
-// AST-level identifier count via oxc-parser, so mentions of the export's
-// name inside comments, JSDoc, strings, and template-literal text do not
-// count as occurrences (a regex over raw source miscounts all of those).
-// Returns undefined when the file does not parse.
-export function countIdentifierOccurrences(
-  filePath: string,
-  source: string,
-  identifier: string,
-): number | undefined {
-  const result = parseSync(filePath, source);
-  if (result.errors.length > 0) return undefined;
-  const spans = new Set<number>();
-  collectIdentifierSpans(result.program, identifier, spans);
-  return spans.size;
-}
-
 function runFallowDeadCode(
   options: CheckOptions,
   extraArgs: readonly string[],
 ): FallowDeadCodeReport {
   const args = ['dead-code', '--unused-exports', '--format', 'json', '-q', ...extraArgs];
-  try {
-    return JSON.parse(
-      execFileSync(options.fallowBin, args, { cwd: options.root, encoding: 'utf8' }),
-    ) as FallowDeadCodeReport;
-  } catch (error) {
-    const stdout = (error as { stdout?: string }).stdout;
-    if (!stdout) throw error;
-    return JSON.parse(stdout) as FallowDeadCodeReport;
+  const result = runCmdSync(options.fallowBin, args, {
+    cwd: options.root,
+    allowFailure: true,
+  });
+  if (!result.stdout.trim()) {
+    throw new Error(
+      `fallow did not produce a JSON report (exit ${result.exitCode}): ${result.stderr.trim()}`,
+    );
   }
+  return JSON.parse(result.stdout) as FallowDeadCodeReport;
 }
 
 function findingKey(f: { path: string; export: string }): string {
@@ -126,16 +85,17 @@ function isAnnotatedTestSeam(lines: string[], exportLine: number): boolean {
   return false;
 }
 
-// A same-file identifier occurrence beyond the declaration is a real call
-// site: the export keyword is redundant, but it isn't the #1199 shape.
+// A value reference to the exported binding outside its own declaration is a
+// real call site: the export keyword is redundant, but it isn't the #1199
+// shape. Property/type names, shadowed locals, and self-recursion do not count.
 function hasOwnFileCallSite(filePath: string, lines: string[], exportName: string): boolean {
-  const occurrences = countIdentifierOccurrences(filePath, lines.join('\n'), exportName);
+  const occurrences = countOwnFileBindingReferences(filePath, lines.join('\n'), exportName);
   // CONSERVATIVE: an unparseable file cannot be inspected for same-file call
   // sites, so treat it as called rather than fabricate a finding on it.
   // Revisit if src/ ever intentionally contains non-TS/JS sources that
   // fallow still reports exports for.
   if (occurrences === undefined) return true;
-  return occurrences > 1;
+  return occurrences > 0;
 }
 
 // dead in both graphs — fallow's own dead-code check already owns this
@@ -270,8 +230,10 @@ function updateBaseline(
   return 0;
 }
 
-export function main(argv = process.argv.slice(2)): number {
-  const options = defaultOptions();
+export function main(
+  argv = process.argv.slice(2),
+  options: CheckOptions = defaultOptions(),
+): number {
   const baselinePath = baselinePathFor(options.root);
   const live = computeTestOnlyExports(options);
   const baseline = readBaseline(baselinePath);
