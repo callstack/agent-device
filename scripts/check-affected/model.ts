@@ -188,138 +188,202 @@ function vitestCheckId(project: string): CheckId | null {
   }
 }
 
+// --- Ownership rules --------------------------------------------------------
+// Each rule inspects one changed file and returns the reasons it contributes.
+// Splitting the selection into small, independent rules keeps every function
+// simple and makes the derivation self-documenting.
+type FileFacts = {
+  file: string;
+  isTs: boolean;
+  underSrc: boolean;
+  underTest: boolean;
+  underSkills: boolean;
+  isSrcProd: boolean;
+};
+
+type OwnershipRule = (facts: FileFacts, input: SelectInput) => SelectionReason[];
+
+function reason(check: CheckId, file: string, rule: string, detail: string): SelectionReason {
+  return { check, path: file, rule, detail };
+}
+
+const formatGate: OwnershipRule = ({ file, underSrc, underTest, underSkills }) =>
+  underSrc || underTest || underSkills
+    ? [reason('format', file, 'gate:format', 'oxfmt covers src/, test/, and skills/')]
+    : [];
+
+const staticTsGates: OwnershipRule = ({ file, isTs, underSrc, underTest }) =>
+  isTs && (underSrc || underTest)
+    ? [
+        reason('lint', file, 'gate:lint', 'oxlint covers the source tree'),
+        reason('typecheck', file, 'gate:typecheck', 'tsc includes src/ and test/'),
+        reason('fallow', file, 'gate:fallow', 'fallow audits changed TypeScript for dead code'),
+      ]
+    : [];
+
+const srcProdGate: OwnershipRule = ({ file, isSrcProd }) => {
+  if (!isSrcProd) return [];
+  const selections = [
+    reason('layering', file, 'gate:layering', 'layering guard reads production src/ modules'),
+    reason('build', file, 'src-prod', 'production source is compiled by the build'),
+    reason('unit', file, 'src-prod', 'unit suite mirrors production source 1:1'),
+  ];
+  if (file.startsWith('src/platforms/')) {
+    selections.push(
+      reason(
+        'provider-integration',
+        file,
+        'platform-src',
+        'platform source shapes device/provider wire behavior',
+      ),
+    );
+  }
+  return selections;
+};
+
+const vitestOwnership: OwnershipRule = ({ file }, input) => {
+  const selections: SelectionReason[] = [];
+  for (const project of input.vitestProjects) {
+    const excluded = project.exclude ? matchesAny(file, project.exclude) : false;
+    if (excluded || !matchesAny(file, project.include)) continue;
+    const check = vitestCheckId(project.name);
+    if (check) {
+      selections.push(
+        reason(
+          check,
+          file,
+          `vitest:${project.name}`,
+          `owned by the ${project.name} Vitest project`,
+        ),
+      );
+    }
+  }
+  return selections;
+};
+
+const nodeIntegrationOwnership: OwnershipRule = ({ file }) =>
+  matchesAny(file, ['test/integration/*.test.ts'])
+    ? [reason('integration-node', file, 'node-integration', 'node --test integration smoke')]
+    : [];
+
+const BUILD_OWNERSHIP: ReadonlyArray<{
+  check: CheckId;
+  rule: string;
+  detail: string;
+  owns: (file: string) => boolean;
+}> = [
+  {
+    check: 'swift-runner',
+    rule: 'own:swift',
+    detail: 'Swift runner sources require the XCUITest build',
+    owns: (file) => file.startsWith('apple-runner/') || file.endsWith('.swift'),
+  },
+  {
+    check: 'android-helpers',
+    rule: 'own:android-helpers',
+    detail: 'Android helper packages have their own build',
+    owns: (file) =>
+      file.startsWith('android-snapshot-helper/') || file.startsWith('android-multitouch-helper/'),
+  },
+  {
+    check: 'macos-helper',
+    rule: 'own:macos-helper',
+    detail: 'macOS helper is a separate Swift package build',
+    owns: (file) => file.startsWith('macos-helper/'),
+  },
+  {
+    check: 'mcp-metadata',
+    rule: 'own:mcp',
+    detail: 'MCP registry metadata must stay in sync',
+    owns: (file) => file === 'server.json' || file === 'smithery.yaml',
+  },
+];
+
+const buildOwnership: OwnershipRule = ({ file }, input) => {
+  const selections = BUILD_OWNERSHIP.filter((entry) => entry.owns(file)).map((entry) =>
+    reason(entry.check, file, entry.rule, entry.detail),
+  );
+  if ((input.packageEntryFiles ?? []).includes(file)) {
+    selections.push(
+      reason('build', file, 'own:public-surface', 'public package entry affects declarations'),
+    );
+  }
+  return selections;
+};
+
+const OWNERSHIP_RULES: readonly OwnershipRule[] = [
+  formatGate,
+  staticTsGates,
+  srcProdGate,
+  vitestOwnership,
+  nodeIntegrationOwnership,
+  buildOwnership,
+];
+
+function fileFacts(file: string): FileFacts {
+  const isTs = file.endsWith('.ts') && !file.endsWith('.d.ts');
+  const underSrc = file.startsWith('src/');
+  return {
+    file,
+    isTs,
+    underSrc,
+    underTest: file.startsWith('test/'),
+    underSkills: file.startsWith('skills/'),
+    isSrcProd: underSrc && isTs && !isTestPath(file),
+  };
+}
+
+function failOpenFor(file: string): FailOpenReason | null {
+  if (isSelectorOwning(file)) {
+    return {
+      path: file,
+      rule: 'selector-owning',
+      detail: 'change to the affected-check selector cannot be trusted to select itself',
+    };
+  }
+  if (isWorkflowTooling(file)) {
+    return {
+      path: file,
+      rule: 'workflow-tooling',
+      detail: 'workflow/tooling change can alter any gate',
+    };
+  }
+  return null;
+}
+
 // --- Selection --------------------------------------------------------------
 export function selectChecks(input: SelectInput): CheckPlan {
-  const packageEntryFiles = new Set(input.packageEntryFiles ?? []);
   const reasons: SelectionReason[] = [];
   const failOpenReasons: FailOpenReason[] = [];
   const docsOnlyPaths: string[] = [];
-  const selected = new Set<CheckId>();
-
-  const add = (check: CheckId, path: string, rule: string, detail: string): void => {
-    selected.add(check);
-    reasons.push({ check, path, rule, detail });
-  };
 
   for (const file of input.changedFiles) {
-    if (isSelectorOwning(file)) {
-      failOpenReasons.push({
-        path: file,
-        rule: 'selector-owning',
-        detail: 'change to the affected-check selector cannot be trusted to select itself',
-      });
-      continue;
-    }
-    if (isWorkflowTooling(file)) {
-      failOpenReasons.push({
-        path: file,
-        rule: 'workflow-tooling',
-        detail: 'workflow/tooling change can alter any gate',
-      });
+    const failOpen = failOpenFor(file);
+    if (failOpen) {
+      failOpenReasons.push(failOpen);
       continue;
     }
     if (isDocs(file)) {
       docsOnlyPaths.push(file);
       continue;
     }
-
-    let classified = false;
-    const isTs = file.endsWith('.ts') && !file.endsWith('.d.ts');
-    const underSrc = file.startsWith('src/');
-    const underTest = file.startsWith('test/');
-    const underSkills = file.startsWith('skills/');
-    const isTest = isTestPath(file);
-    const isSrcProd = underSrc && isTs && !isTest;
-
-    // Always-on gates (never silently skipped when their inputs may change).
-    if (underSrc || underTest || underSkills) {
-      add('format', file, 'gate:format', 'oxfmt covers src/, test/, and skills/');
-      classified = true;
-    }
-    if (isTs && (underSrc || underTest)) {
-      add('lint', file, 'gate:lint', 'oxlint covers the source tree');
-      add('typecheck', file, 'gate:typecheck', 'tsc includes src/ and test/');
-      add('fallow', file, 'gate:fallow', 'fallow audits changed TypeScript for dead code/complexity');
-      classified = true;
-    }
-    if (isSrcProd) {
-      add('layering', file, 'gate:layering', 'layering guard reads production src/ modules');
-      add('build', file, 'src-prod', 'production source is compiled by the build');
-      add('unit', file, 'src-prod', 'unit suite mirrors production source 1:1');
-      if (file.startsWith('src/platforms/')) {
-        add(
-          'provider-integration',
-          file,
-          'platform-src',
-          'platform source shapes device/provider wire behavior',
-        );
-      }
-      classified = true;
-    }
-
-    // Vitest-derived test ownership: a changed test file selects its project.
-    for (const project of input.vitestProjects) {
-      const excluded = project.exclude ? matchesAny(file, project.exclude) : false;
-      if (!excluded && matchesAny(file, project.include)) {
-        const check = vitestCheckId(project.name);
-        if (check) {
-          add(check, file, `vitest:${project.name}`, `owned by the ${project.name} Vitest project`);
-          classified = true;
-        }
-      }
-    }
-    if (underTest && isTs && isTest && !selected.has('provider-integration')) {
-      // Node-runner integration tests live outside the Vitest projects.
-      if (matchesAny(file, ['test/integration/*.test.ts'])) {
-        add('integration-node', file, 'node-integration', 'node --test integration smoke owns this file');
-        classified = true;
-      }
-    }
-
-    // Small explicit build-ownership layer.
-    if (file.startsWith('apple-runner/') || file.endsWith('.swift')) {
-      add('swift-runner', file, 'own:swift', 'Swift runner sources require the XCUITest build');
-      classified = true;
-    }
-    if (
-      file.startsWith('android-snapshot-helper/') ||
-      file.startsWith('android-multitouch-helper/')
-    ) {
-      add('android-helpers', file, 'own:android-helpers', 'Android helper packages have their own build');
-      classified = true;
-    }
-    if (file.startsWith('macos-helper/')) {
-      add('macos-helper', file, 'own:macos-helper', 'macOS helper is a separate Swift package build');
-      classified = true;
-    }
-    if (file === 'server.json' || file === 'smithery.yaml') {
-      add('mcp-metadata', file, 'own:mcp', 'MCP registry metadata must stay in sync');
-      classified = true;
-    }
-    if (packageEntryFiles.has(file)) {
-      add('build', file, 'own:public-surface', 'public package entry point affects declaration output');
-      classified = true;
-    }
-
-    if (!classified) {
+    const facts = fileFacts(file);
+    const selections = OWNERSHIP_RULES.flatMap((rule) => rule(facts, input));
+    if (selections.length === 0) {
       failOpenReasons.push({
         path: file,
         rule: 'unknown-path',
         detail: 'path has no derivable owner; run the full set to stay safe',
       });
+      continue;
     }
+    reasons.push(...selections);
   }
 
   if (failOpenReasons.length > 0) {
-    return {
-      failOpen: true,
-      checks: [...ALL_CHECKS],
-      reasons,
-      failOpenReasons,
-      docsOnlyPaths,
-    };
+    return { failOpen: true, checks: [...ALL_CHECKS], reasons, failOpenReasons, docsOnlyPaths };
   }
-
+  const selected = new Set(reasons.map((entry) => entry.check));
   return {
     failOpen: false,
     checks: ALL_CHECKS.filter((check) => selected.has(check)),

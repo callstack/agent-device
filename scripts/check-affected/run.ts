@@ -9,6 +9,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { parseArgs as parseNodeArgs } from 'node:util';
 import {
   assertCatalogComplete,
   CHECK_CATALOG,
@@ -24,22 +25,30 @@ const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
 }).trim();
 
+const USAGE = 'Usage: pnpm check:affected [--base <ref>] [--head <ref>] [--json] [--run]\n';
+
 function parseArgs(argv: readonly string[]): Args {
-  const args: Args = { base: 'origin/main', head: 'HEAD', json: false, run: false };
-  for (let i = 0; i < argv.length; i++) {
-    const arg = argv[i];
-    if (arg === '--base') args.base = argv[++i] ?? args.base;
-    else if (arg === '--head') args.head = argv[++i] ?? args.head;
-    else if (arg === '--json') args.json = true;
-    else if (arg === '--run') args.run = true;
-    else if (arg === '--help' || arg === '-h') {
-      process.stdout.write(
-        'Usage: pnpm check:affected [--base <ref>] [--head <ref>] [--json] [--run]\n',
-      );
-      process.exit(0);
-    } else throw new Error(`Unknown argument: ${arg}`);
+  const { values } = parseNodeArgs({
+    args: [...argv],
+    options: {
+      base: { type: 'string', default: 'origin/main' },
+      head: { type: 'string', default: 'HEAD' },
+      json: { type: 'boolean', default: false },
+      run: { type: 'boolean', default: false },
+      help: { type: 'boolean', short: 'h', default: false },
+    },
+    allowPositionals: false,
+  });
+  if (values.help) {
+    process.stdout.write(USAGE);
+    process.exit(0);
   }
-  return args;
+  return {
+    base: values.base ?? 'origin/main',
+    head: values.head ?? 'HEAD',
+    json: Boolean(values.json),
+    run: Boolean(values.run),
+  };
 }
 
 function readChangedFiles(base: string, head: string): string[] {
@@ -106,35 +115,42 @@ function printPlanJson(plan: CheckPlan, args: Args): void {
   );
 }
 
-function printPlanHuman(plan: CheckPlan, args: Args): void {
-  const write = (line: string): void => void process.stdout.write(`${line}\n`);
-  write(`check:affected — diff ${args.base}...${args.head}`);
-  if (plan.failOpen) {
-    write('Fail-open: selecting the full check set.');
-    for (const reason of plan.failOpenReasons) {
-      write(`  ! ${reason.path} [${reason.rule}] — ${reason.detail}`);
-    }
+function writeLine(line: string): void {
+  process.stdout.write(`${line}\n`);
+}
+
+function printCheckLine(plan: CheckPlan, id: (typeof plan.checks)[number]): void {
+  const spec = getCheckSpec(id);
+  const local = spec.localRunnable ? '' : ' (GitHub-authoritative; not run locally)';
+  writeLine(`  - ${id}: ${spec.label}${local}`);
+  if (plan.failOpen) return;
+  for (const reason of plan.reasons.filter((entry) => entry.check === id)) {
+    writeLine(`      · ${reason.path} [${reason.rule}] — ${reason.detail}`);
   }
+}
+
+function printFailOpen(plan: CheckPlan): void {
+  writeLine('Fail-open: selecting the full check set.');
+  for (const reason of plan.failOpenReasons) {
+    writeLine(`  ! ${reason.path} [${reason.rule}] — ${reason.detail}`);
+  }
+}
+
+function printSelected(plan: CheckPlan): void {
   if (plan.checks.length === 0) {
-    write('No local checks selected.');
-    if (plan.docsOnlyPaths.length > 0) {
-      write(`  Docs-only changes: ${plan.docsOnlyPaths.length} file(s).`);
-    }
+    writeLine('No local checks selected.');
     return;
   }
-  write(`Selected ${plan.checks.length} check(s):`);
-  for (const id of plan.checks) {
-    const spec = getCheckSpec(id);
-    const local = spec.localRunnable ? '' : ' (GitHub-authoritative; not run locally)';
-    write(`  - ${id}: ${spec.label}${local}`);
-    if (!plan.failOpen) {
-      for (const reason of plan.reasons.filter((entry) => entry.check === id)) {
-        write(`      · ${reason.path} [${reason.rule}] — ${reason.detail}`);
-      }
-    }
-  }
+  writeLine(`Selected ${plan.checks.length} check(s):`);
+  for (const id of plan.checks) printCheckLine(plan, id);
+}
+
+function printPlanHuman(plan: CheckPlan, args: Args): void {
+  writeLine(`check:affected — diff ${args.base}...${args.head}`);
+  if (plan.failOpen) printFailOpen(plan);
+  printSelected(plan);
   if (plan.docsOnlyPaths.length > 0) {
-    write(`Docs-only changes ignored: ${plan.docsOnlyPaths.length} file(s).`);
+    writeLine(`Docs-only changes ignored: ${plan.docsOnlyPaths.length} file(s).`);
   }
 }
 

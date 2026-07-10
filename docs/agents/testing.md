@@ -1,5 +1,39 @@
 # Testing Notes
 
+## Affected-check selector (`pnpm check:affected`)
+
+`pnpm check:affected --base <ref>` derives which local checks a diff needs, so
+agents stop interpreting the testing matrix by hand. It is a **fail-open
+advisory**: existing GitHub CI stays authoritative and required, and this only
+narrows the *local* feedback loop.
+
+```sh
+pnpm check:affected --base origin/main          # human-readable plan
+pnpm check:affected --base origin/main --json    # stable machine-readable plan
+pnpm check:affected --base origin/main --run      # also run the local checks
+```
+
+The selection is derived from repository sources of truth rather than a
+hand-maintained path map:
+
+- **Test ownership** comes from the Vitest project `include`/`exclude` globs in
+  `vitest.config.ts`. A changed test file selects the project that owns it; a
+  changed production `src/**` file selects the unit suite that mirrors it.
+- **Always-on gates** (`lint`, `typecheck`, `layering`, `fallow`, `format`) fire
+  for their input categories and are never silently skipped.
+- **Commands** are resolved from real `package.json` scripts, so a renamed
+  script fails loudly instead of dropping a gate.
+- A **small explicit build-ownership layer** covers the paths whose owning build
+  cannot be derived: Swift runner, Android helpers, macOS helper, MCP metadata,
+  and the public package surface (itself derived from `package.json` `exports`).
+
+Anything the selector cannot classify — unknown, ambiguous, workflow/tooling, or
+a change to the selector's own sources — **fails open to the full check set**.
+The plan documents the rule and changed path behind every selected check.
+
+Model and catalog live under `scripts/check-affected/`; the derivation is guarded
+by `pnpm check:affected:test` (the `Affected-check Selector` CI job).
+
 ## Live web smoke
 
 The live web platform smoke runs the public built CLI against a local fixture page through the managed web backend:

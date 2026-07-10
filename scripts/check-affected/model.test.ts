@@ -60,7 +60,15 @@ test('glob matcher handles **, *, ?, and brace groups like the vitest config', (
 test('production source change selects gates + build + unit, with reasons', () => {
   const result = plan(['src/daemon/selectors.ts']);
   assert.equal(result.failOpen, false);
-  for (const id of ['format', 'lint', 'typecheck', 'layering', 'fallow', 'build', 'unit'] as const) {
+  for (const id of [
+    'format',
+    'lint',
+    'typecheck',
+    'layering',
+    'fallow',
+    'build',
+    'unit',
+  ] as const) {
     assert.ok(result.checks.includes(id), `expected ${id}`);
   }
   assert.ok(!result.checks.includes('provider-integration'));
