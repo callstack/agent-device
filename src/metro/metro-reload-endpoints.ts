@@ -89,7 +89,7 @@ function resolveReloadMetroPort(
 // path keeps the bundle URL's mount prefix (e.g. /tenant-42/index.bundle -> /tenant-42/reload)
 // instead of collapsing every prefixed URL to the bare host root. The Expo virtual entry
 // (.expo/.virtual-metro-entry.bundle) is an entry-module path, not a server mount, so only the
-// prefix before it survives (verified live: Expo serves /message at the server root).
+// prefix before it survives.
 function resolveMetroEndpointPathPrefix(bundleUrl: string | undefined): string {
   const value = normalizeOptionalString(bundleUrl);
   if (!value) return '';

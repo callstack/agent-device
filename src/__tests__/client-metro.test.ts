@@ -613,6 +613,42 @@ test('reloadMetro preserves the bundle URL route prefix', async () => {
   }
 });
 
+test('reloadMetro preserves a path-prefixed Expo virtual-entry bundle URL supplied through --bundle-url', async () => {
+  const requests: string[] = [];
+  const server = createServer((req, res) => {
+    requests.push(req.url ?? '');
+    if (req.url === '/metro/runtime-1/reload') {
+      res.statusCode = 200;
+      res.end('OK');
+      return;
+    }
+    res.statusCode = 404;
+    res.end('not found');
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const address = server.address();
+  assert.ok(address && typeof address !== 'string');
+
+  try {
+    const result = await reloadMetro({
+      bundleUrl: `http://127.0.0.1:${address.port}/metro/runtime-1/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true`,
+      timeoutMs: 1_000,
+    });
+
+    assert.deepEqual(requests, ['/metro/runtime-1/reload']);
+    assert.deepEqual(result, {
+      reloaded: true,
+      reloadUrl: `http://127.0.0.1:${address.port}/metro/runtime-1/reload`,
+      status: 200,
+      body: 'OK',
+      transport: 'http',
+    });
+  } finally {
+    await closeServer(server);
+  }
+});
+
 test('reloadMetro defaults to local Metro host and port', async () => {
   const server = createServer((req, res) => {
     if (req.url === '/reload') {
@@ -800,12 +836,13 @@ test('metro reload targets the dev server bound by metro prepare in the same ses
   }
 });
 
-test('metro reload for an expo session resolves the bound virtual-entry bundle URL to root endpoints', async () => {
+test('metro prepare --kind expo keeps a prefixed public base URL for session reload', async () => {
   const tempRoot = path.join(os.tmpdir(), `agent-device-metro-expo-session-${randomUUID()}`);
   const projectRoot = path.join(tempRoot, 'project');
   const binDir = path.join(tempRoot, 'bin');
   const stateDir = path.join(tempRoot, 'state');
   const metroPort = await findFreePort();
+  const publicBasePath = '/metro/runtime-expo';
 
   mkdirSync(projectRoot, { recursive: true });
   mkdirSync(binDir, { recursive: true });
@@ -817,7 +854,7 @@ test('metro reload for an expo session resolves the bound virtual-entry bundle U
       dependencies: { expo: '51.0.0', 'react-native': '0.0.0-test' },
     }),
   );
-  writeFakeNpx(binDir);
+  writeFakeNpx(binDir, `${publicBasePath}/reload`);
 
   const client = createAgentDeviceClient(
     { session: 'metro-expo-session', stateDir, cwd: projectRoot },
@@ -836,7 +873,7 @@ test('metro reload for an expo session resolves the bound virtual-entry bundle U
     const prepared = await client.metro.prepare({
       projectRoot,
       kind: 'expo',
-      publicBaseUrl: `http://127.0.0.1:${metroPort}`,
+      publicBaseUrl: `http://127.0.0.1:${metroPort}${publicBasePath}`,
       port: metroPort,
       reuseExisting: false,
       installDependenciesIfNeeded: false,
@@ -850,13 +887,13 @@ test('metro reload for an expo session resolves the bound virtual-entry bundle U
     assert.deepEqual(storedHints, {
       metroHost: '127.0.0.1',
       metroPort,
-      bundleUrl: `http://127.0.0.1:${metroPort}/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true&minify=false`,
+      bundleUrl: `http://127.0.0.1:${metroPort}${publicBasePath}/.expo/.virtual-metro-entry.bundle?platform=ios&dev=true&minify=false`,
     });
 
-    // A flagless reload resolves from the stored virtual-entry bundle URL: the entry-module path
-    // maps to the server root, not to a phantom /.expo mount.
+    // The fake Metro process only serves this prefixed endpoint. A reload that discarded the
+    // public-base mount would receive 404 and fail its websocket fallback.
     const hintedReload = await client.metro.reload();
-    assert.equal(hintedReload.reloadUrl, `http://127.0.0.1:${metroPort}/reload`);
+    assert.equal(hintedReload.reloadUrl, `http://127.0.0.1:${metroPort}${publicBasePath}/reload`);
     assert.equal(hintedReload.body, 'RELOADED');
     assert.equal(hintedReload.transport, 'http');
   } finally {
@@ -969,7 +1006,7 @@ process.exit(1)
   chmodSync(filePath, 0o755);
 }
 
-function writeFakeNpx(binDir: string): void {
+function writeFakeNpx(binDir: string, reloadPath = '/reload'): void {
   const filePath = path.join(binDir, 'npx');
   writeFileSync(
     filePath,
@@ -987,6 +1024,7 @@ const port = portIndex === -1 ? 8081 : Number(args[portIndex + 1] || "8081")
 // address; every other caller (react-native/rspack/webpack start) passes a real bind address.
 const rawHost = hostIndex === -1 ? "0.0.0.0" : String(args[hostIndex + 1] || "0.0.0.0")
 const host = rawHost === "lan" || rawHost === "tunnel" ? "0.0.0.0" : rawHost
+const reloadPath = ${JSON.stringify(reloadPath)}
 const server = http.createServer((req, res) => {
   if (req.url === "/status") {
     res.statusCode = 200
@@ -999,7 +1037,7 @@ const server = http.createServer((req, res) => {
     res.end("console.log('metro-runtime-test')")
     return
   }
-  if (req.url === "/reload") {
+  if (req.url === reloadPath) {
     res.statusCode = 200
     res.end("RELOADED")
     return
