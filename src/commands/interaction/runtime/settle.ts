@@ -1,8 +1,13 @@
 import type { Point, SnapshotNode } from '../../../kernel/snapshot.ts';
-import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
+import type {
+  AgentDeviceRuntime,
+  CommandContext,
+  CommandSessionRecord,
+} from '../../../runtime-contract.ts';
 import { isSparseSnapshotQualityVerdict } from '../../../snapshot/snapshot-quality.ts';
 import { buildSnapshotDiff } from '../../../snapshot/snapshot-diff.ts';
 import { displayLabel, formatRole } from '../../../snapshot/snapshot-lines.ts';
+import { isAndroidInputMethodSnapshotNode } from '../../../snapshot/android-input-method-overlays.ts';
 import { normalizeType } from '../../../utils/text-surface.ts';
 import { summarizeAxEvidence } from '../../../utils/ax-digest.ts';
 import type {
@@ -82,7 +87,7 @@ export async function settleAfterInteraction(
         },
       };
     }
-    const stored = await storeSettledSnapshot(runtime, options, outcome.lastCapture);
+    const { stored, session } = await storeSettledSnapshot(runtime, options, outcome.lastCapture);
     const settledNodes = outcome.lastCapture.snapshot.nodes;
     return {
       observation: {
@@ -99,6 +104,7 @@ export async function settleAfterInteraction(
               resolveBaselineNodes(params.resolved),
               settledNodes,
               params.resolved.point,
+              session?.appBundleId,
             )
           : {}),
         ...resolveSettleHint(outcome, stored, settledNodes.length),
@@ -140,6 +146,7 @@ function resolveBaselineNodes(resolved: ResolvedInteractionTarget): SnapshotNode
 function buildSettleDiff(
   baselineNodes: SnapshotNode[],
   settledNodes: SnapshotNode[],
+  appBundleId: string | undefined,
 ): NonNullable<SettleObservation['diff']> {
   // Flattened compare, like `diff -i`: both sides are interactive-flavored
   // captures and depth jitter across captures should not read as change. When
@@ -147,8 +154,8 @@ function buildSettleDiff(
   // snapshot), extra baseline-only lines surface as removals — advisory noise,
   // the same baseline caveat --verify's changedFromBefore already accepts.
   const diff = buildSnapshotDiff(
-    withoutKeyboardChrome(baselineNodes),
-    withoutKeyboardChrome(settledNodes),
+    withoutSettleChrome(baselineNodes, appBundleId),
+    withoutSettleChrome(settledNodes, appBundleId),
     { flatten: true, withRefs: true },
   );
   const changed = diff.lines.filter((line) => line.kind !== 'unchanged');
@@ -168,9 +175,10 @@ function buildSettleDiffAndTail(
   baselineNodes: SnapshotNode[],
   settledNodes: SnapshotNode[],
   actionPoint: Point | undefined,
+  appBundleId: string | undefined,
 ): Pick<SettleObservation, 'diff' | 'tail' | 'tailTruncated'> {
-  const diff = buildSettleDiff(baselineNodes, settledNodes);
-  return { diff, ...buildSettleTail(diff, settledNodes, actionPoint) };
+  const diff = buildSettleDiff(baselineNodes, settledNodes, appBundleId);
+  return { diff, ...buildSettleTail(diff, settledNodes, actionPoint, appBundleId) };
 }
 
 /**
@@ -195,20 +203,19 @@ function buildSettleTail(
   diff: NonNullable<SettleObservation['diff']>,
   settledNodes: SnapshotNode[],
   actionPoint: Point | undefined,
+  appBundleId: string | undefined,
 ): Pick<SettleObservation, 'tail' | 'tailTruncated'> {
   const addedRefs = new Set(
     diff.lines.filter((line) => line.kind === 'added' && line.ref).map((line) => line.ref),
   );
-  const keyboardChromeRefs = collectKeyboardChromeRefs(settledNodes);
+  const chromeRefs = collectSettleChromeRefs(settledNodes, appBundleId);
   const byRef = new Map(settledNodes.filter((node) => node.ref).map((node) => [node.ref, node]));
   const hasMeaningfulAddedRef = [...addedRefs].some(
     (ref) =>
-      ref !== undefined &&
-      !keyboardChromeRefs.has(ref) &&
-      !isSelfEchoNode(byRef.get(ref), actionPoint),
+      ref !== undefined && !chromeRefs.has(ref) && !isSelfEchoNode(byRef.get(ref), actionPoint),
   );
   if (hasMeaningfulAddedRef) return {};
-  return buildSettleTailEntries(settledNodes, addedRefs);
+  return buildSettleTailEntries(settledNodes, addedRefs, appBundleId);
 }
 
 function isSelfEchoNode(node: SnapshotNode | undefined, actionPoint: Point | undefined): boolean {
@@ -242,20 +249,22 @@ const STRUCTURAL_TAIL_ROLES = new Set(['application', 'window']);
  * after the dismissing element leaves — requiring `hittable === true` here
  * was stricter than `snapshot -i`'s own bar and silently dropped exactly the
  * buttons the tail exists to surface (#1167 post-merge benchmark). Structural
- * application/window chrome and any keyboard container/chrome subtree are
- * excluded on top of that bar: never a next actionable target either way.
+ * application/window chrome, any keyboard container/chrome subtree (iOS), and
+ * any Android IME/foreign-app chrome (`appBundleId`, #1178) are excluded on
+ * top of that bar: never a next actionable target either way.
  */
 export function buildSettleTailEntries(
   settledNodes: SnapshotNode[],
   excludeRefs: ReadonlySet<string | undefined>,
+  appBundleId?: string,
 ): Pick<SettleObservation, 'tail' | 'tailTruncated'> {
-  const keyboardChromeRefs = collectKeyboardChromeRefs(settledNodes);
+  const chromeRefs = collectSettleChromeRefs(settledNodes, appBundleId);
   const candidates = settledNodes.filter(
     (node) =>
       node.ref &&
       node.interactionBlocked !== 'covered' &&
       !excludeRefs.has(node.ref) &&
-      !keyboardChromeRefs.has(node.ref) &&
+      !chromeRefs.has(node.ref) &&
       !STRUCTURAL_TAIL_ROLES.has(formatRole(node.type ?? 'Element')),
   );
   if (candidates.length === 0) return {};
@@ -347,14 +356,91 @@ function collectSubtreeIndexes(
   return indexes;
 }
 
-function withoutKeyboardChrome(nodes: SnapshotNode[]): SnapshotNode[] {
-  const { strippedIndexes } = collectKeyboardChrome(nodes);
+/**
+ * Android settle-diff scope (#1178): each node's own `bundleId` decides its
+ * fate — IME-owned nodes (`isAndroidInputMethodSnapshotNode`, same detector
+ * as the #1157 occlusion guard) collapse to one surviving line per
+ * contiguous run, and with an `appBundleId` every other foreign-package node
+ * (status bar, another app) is dropped from both diff sides (#1163's scope
+ * philosophy). Classification is strictly per-node, never a parentIndex
+ * subtree walk: Android's interactive-only pruning can chain an app node's
+ * `parentIndex` through another window's node (locked in by the settle.test.ts
+ * cross-window regression test). Inert on iOS/macOS: those nodes never set
+ * `bundleId`.
+ */
+function collectAndroidSettleChrome(
+  nodes: SnapshotNode[],
+  appBundleId: string | undefined,
+): KeyboardChrome {
+  const byIndex = new Map(nodes.map((node) => [node.index, node]));
+  const imeIndexes = new Set(
+    nodes.filter((node) => isAndroidInputMethodSnapshotNode(node)).map((node) => node.index),
+  );
+  const imeContainerIndexes = new Set(
+    [...imeIndexes].filter((index) => {
+      const parentIndex = byIndex.get(index)?.parentIndex;
+      const parent = parentIndex !== undefined ? byIndex.get(parentIndex) : undefined;
+      return !parent || !imeIndexes.has(parent.index);
+    }),
+  );
+  const foreignAppIndexes = appBundleId
+    ? new Set(
+        nodes
+          .filter(
+            (node) =>
+              node.bundleId !== undefined &&
+              node.bundleId !== appBundleId &&
+              !imeIndexes.has(node.index),
+          )
+          .map((node) => node.index),
+      )
+    : new Set<number>();
+  // The one surviving container line per IME run; every other IME-owned node
+  // (same rule as foreign-app nodes) never spends diff/tail budget.
+  const strippedIndexes = new Set(
+    [...imeIndexes].filter((index) => !imeContainerIndexes.has(index)),
+  );
+  for (const index of foreignAppIndexes) strippedIndexes.add(index);
+  const refs = new Set(
+    nodes
+      .filter(
+        (node) => node.ref && (imeIndexes.has(node.index) || foreignAppIndexes.has(node.index)),
+      )
+      .map((node) => node.ref),
+  );
+  if (strippedIndexes.size === 0 && refs.size === 0) return EMPTY_KEYBOARD_CHROME;
+  return { strippedIndexes, refs };
+}
+
+/** iOS keyboard-window chrome unioned with Android IME/foreign-app chrome. */
+function collectSettleChrome(
+  nodes: SnapshotNode[],
+  appBundleId: string | undefined,
+): KeyboardChrome {
+  const keyboard = collectKeyboardChrome(nodes);
+  const android = collectAndroidSettleChrome(nodes, appBundleId);
+  if (keyboard.strippedIndexes.size === 0 && keyboard.refs.size === 0) return android;
+  if (android.strippedIndexes.size === 0 && android.refs.size === 0) return keyboard;
+  return {
+    strippedIndexes: new Set([...keyboard.strippedIndexes, ...android.strippedIndexes]),
+    refs: new Set([...keyboard.refs, ...android.refs]),
+  };
+}
+
+function withoutSettleChrome(
+  nodes: SnapshotNode[],
+  appBundleId: string | undefined,
+): SnapshotNode[] {
+  const { strippedIndexes } = collectSettleChrome(nodes, appBundleId);
   if (strippedIndexes.size === 0) return nodes;
   return nodes.filter((node) => !strippedIndexes.has(node.index));
 }
 
-function collectKeyboardChromeRefs(nodes: SnapshotNode[]): ReadonlySet<string> {
-  return collectKeyboardChrome(nodes).refs;
+function collectSettleChromeRefs(
+  nodes: SnapshotNode[],
+  appBundleId: string | undefined,
+): ReadonlySet<string> {
+  return collectSettleChrome(nodes, appBundleId).refs;
 }
 
 /**
@@ -461,15 +547,17 @@ function resolveSettleHint(
 // Only settled captures issue a diff/ref payload; unsettled stored captures
 // conservatively mark prior refs stale through the runtime session writer.
 // Sparse-quality captures are not stored (mirroring captureSelectorSnapshot)
-// and therefore issue no refs.
+// and therefore issue no refs. The fetched session is returned alongside
+// `stored` so the caller can read `appBundleId` for settle-chrome scoping
+// (#1178) without a second `sessions.get` round trip.
 async function storeSettledSnapshot(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
   capture: CapturedSnapshot,
-): Promise<boolean> {
-  if (isSparseSnapshotQualityVerdict(capture.snapshot.snapshotQuality)) return false;
+): Promise<{ stored: boolean; session?: CommandSessionRecord }> {
+  if (isSparseSnapshotQualityVerdict(capture.snapshot.snapshotQuality)) return { stored: false };
   const session = await runtime.sessions.get(options.session ?? 'default');
-  if (!session) return false;
+  if (!session) return { stored: false };
   await runtime.sessions.set({ ...session, snapshot: capture.snapshot });
-  return true;
+  return { stored: true, session };
 }

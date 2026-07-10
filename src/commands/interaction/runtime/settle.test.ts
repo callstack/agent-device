@@ -65,6 +65,7 @@ function createSettleDevice(params: {
   captureSnapshot: () => Promise<BackendSnapshotResult> | BackendSnapshotResult;
   tap?: () => Promise<Record<string, unknown>>;
   clock?: ReturnType<typeof createFakeClock>;
+  appBundleId?: string;
 }): ReturnType<typeof createAgentDevice> {
   return createAgentDevice({
     backend: {
@@ -76,7 +77,13 @@ function createSettleDevice(params: {
       typeText: async () => {},
     } satisfies AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),
-    sessions: createMemorySessionStore([{ name: 'default', snapshot: params.stored }]),
+    sessions: createMemorySessionStore([
+      {
+        name: 'default',
+        snapshot: params.stored,
+        ...(params.appBundleId ? { appBundleId: params.appBundleId } : {}),
+      },
+    ]),
     policy: localCommandPolicy(),
     clock: params.clock ?? createFakeClock(),
   });
@@ -680,6 +687,470 @@ test('a keyboard window hosting an app composer field is never window-classified
   assert.ok(!diff.lines.some((line) => /\[key\]|shift/.test(line.text)));
 });
 
+// #1178: Android settle-diff scope. Shapes below are trimmed from a real
+// `snapshot --raw --json` capture against the react-navigation playground on
+// an Android emulator (July 2026, stock-UIAutomator fallback path) — status
+// bar and IME each render as their own whole top-level root, one node per
+// window, `bundleId` carrying the OWNING package on every node.
+const ANDROID_APP_BUNDLE_ID = 'org.reactnavigation.playground';
+const ANDROID_SYSTEM_UI_BUNDLE_ID = 'com.android.systemui';
+const ANDROID_IME_BUNDLE_ID = 'com.google.android.inputmethod.latin';
+
+function androidStatusBarNodes(startIndex: number, clockLabel = '12:23') {
+  const root = startIndex;
+  return [
+    {
+      index: root,
+      depth: 0,
+      type: 'android.widget.FrameLayout',
+      bundleId: ANDROID_SYSTEM_UI_BUNDLE_ID,
+      rect: { x: 0, y: 0, width: 1344, height: 159 },
+    },
+    {
+      index: root + 1,
+      depth: 10,
+      parentIndex: root,
+      type: 'android.widget.TextView',
+      identifier: 'com.android.systemui:id/clock',
+      label: clockLabel,
+      bundleId: ANDROID_SYSTEM_UI_BUNDLE_ID,
+      rect: { x: 40, y: 40, width: 80, height: 40 },
+    },
+    {
+      index: root + 2,
+      depth: 11,
+      parentIndex: root,
+      type: 'android.widget.FrameLayout',
+      identifier: 'com.android.systemui:id/mobile_combo',
+      label: 'T-Mobile, one bar.',
+      bundleId: ANDROID_SYSTEM_UI_BUNDLE_ID,
+      rect: { x: 900, y: 40, width: 60, height: 40 },
+    },
+    {
+      index: root + 3,
+      depth: 11,
+      parentIndex: root,
+      type: 'android.view.View',
+      label: 'Battery 100 percent.',
+      bundleId: ANDROID_SYSTEM_UI_BUNDLE_ID,
+      rect: { x: 1200, y: 40, width: 60, height: 40 },
+    },
+  ];
+}
+
+function androidImeNodes(startIndex: number) {
+  const root = startIndex;
+  return [
+    {
+      index: root,
+      depth: 0,
+      type: 'android.widget.FrameLayout',
+      bundleId: ANDROID_IME_BUNDLE_ID,
+      rect: { x: 0, y: 159, width: 1344, height: 2833 },
+      hittable: true,
+    },
+    {
+      index: root + 1,
+      depth: 8,
+      parentIndex: root,
+      type: 'android.speech.SpeechRecognizer.VoiceDictationButton',
+      label: 'Use voice typing',
+      identifier: 'com.google.android.inputmethod.latin:id/0_resource_name_obfuscated',
+      bundleId: ANDROID_IME_BUNDLE_ID,
+      rect: { x: 20, y: 2600, width: 100, height: 100 },
+      hittable: true,
+    },
+    {
+      index: root + 2,
+      depth: 8,
+      parentIndex: root,
+      type: 'android.widget.FrameLayout',
+      label: 'Delete',
+      bundleId: ANDROID_IME_BUNDLE_ID,
+      rect: { x: 1100, y: 2350, width: 130, height: 130 },
+      hittable: true,
+    },
+    {
+      index: root + 3,
+      depth: 8,
+      parentIndex: root,
+      type: 'android.widget.FrameLayout',
+      label: 'Done',
+      bundleId: ANDROID_IME_BUNDLE_ID,
+      rect: { x: 1100, y: 2600, width: 130, height: 130 },
+      hittable: true,
+    },
+    {
+      index: root + 4,
+      depth: 8,
+      parentIndex: root,
+      type: 'android.widget.FrameLayout',
+      label: 'Show emoji keyboard',
+      bundleId: ANDROID_IME_BUNDLE_ID,
+      rect: { x: 20, y: 2850, width: 100, height: 100 },
+      hittable: true,
+    },
+    {
+      index: root + 5,
+      depth: 8,
+      parentIndex: root,
+      type: 'android.widget.FrameLayout',
+      label: 'Open more stylus options',
+      bundleId: ANDROID_IME_BUNDLE_ID,
+      rect: { x: 150, y: 2850, width: 100, height: 100 },
+      hittable: true,
+    },
+    // Key grid: same collapse rule applies, so no per-key noise either.
+    ...Array.from({ length: 10 }, (_, key) => ({
+      index: root + 6 + key,
+      depth: 11,
+      parentIndex: root,
+      type: 'android.inputmethodservice.Keyboard$Key',
+      label: String.fromCharCode(97 + key),
+      bundleId: ANDROID_IME_BUNDLE_ID,
+      rect: { x: key * 130, y: 2100, width: 120, height: 130 },
+      hittable: true,
+    })),
+  ];
+}
+
+function androidAppNodes() {
+  return [
+    {
+      index: 0,
+      depth: 5,
+      type: 'android.widget.EditText',
+      label: 'Hello world 3',
+      bundleId: ANDROID_APP_BUNDLE_ID,
+      rect: { x: 60, y: 400, width: 1200, height: 100 },
+      hittable: true,
+      focused: true,
+    },
+    {
+      index: 1,
+      depth: 5,
+      type: 'android.widget.Button',
+      label: 'Discard and go back',
+      bundleId: ANDROID_APP_BUNDLE_ID,
+      rect: { x: 60, y: 550, width: 400, height: 100 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      depth: 5,
+      type: 'android.widget.Button',
+      label: 'Push Article',
+      bundleId: ANDROID_APP_BUNDLE_ID,
+      rect: { x: 60, y: 700, width: 400, height: 100 },
+      hittable: true,
+    },
+  ];
+}
+
+test('Android status bar and IME chrome never spend the settled diff budget (app-scoped, #1178)', async () => {
+  // The status bar clock ticks and the keyboard is summoned between captures
+  // — exactly the noise the July 2026 Android settle benchmark flagged. With
+  // an app-scoped session, the status bar disappears entirely (both sides)
+  // and the IME collapses to its one container line.
+  const before = makeSnapshotState([...androidAppNodes(), ...androidStatusBarNodes(10, '12:23')]);
+  const settledTree = makeSnapshotState([
+    ...androidAppNodes(),
+    ...androidStatusBarNodes(10, '12:24'),
+    ...androidImeNodes(30),
+  ]);
+  let captures = 0;
+  const device = createSettleDevice({
+    stored: before,
+    appBundleId: ANDROID_APP_BUNDLE_ID,
+    captureSnapshot: () => {
+      captures += 1;
+      return { snapshot: captures === 1 ? before : settledTree };
+    },
+  });
+
+  const result = await device.interactions.press(selector('label="Discard and go back"'), {
+    session: 'default',
+    settle: {},
+  });
+
+  const diff = result.settle?.diff;
+  assert.ok(diff);
+  const texts = diff.lines.map((line) => line.text).join('\n');
+  // Status bar churn (clock tick, signal/battery text) never appears.
+  assert.ok(!/12:2[34]|T-Mobile|Battery/.test(texts));
+  // IME toolbar buttons and the per-key grid never appear.
+  assert.ok(!/Delete|Done|voice typing|emoji keyboard|stylus/i.test(texts));
+  assert.ok(!diff.lines.some((line) => /^@e\S+ \[group\] "[a-j]"$/.test(line.text)));
+  // Only the IME container line is added; nothing else changed.
+  assert.equal(diff.summary.additions, 1);
+  assert.equal(diff.summary.removals, 0);
+});
+
+test('Android IME-only settle changes do not suppress the settle tail, and chrome never populates it (#1178)', async () => {
+  // Mirrors the iOS "keyboard-only changes... do not suppress" case above:
+  // the only tree change is the keyboard summoning (plus unrelated status
+  // bar churn), so the tail must still surface the real screen buttons —
+  // never the IME toolbar or status bar nodes that used to flood it.
+  const before = makeSnapshotState([...androidAppNodes(), ...androidStatusBarNodes(10, '12:23')]);
+  const settledTree = makeSnapshotState([
+    ...androidAppNodes(),
+    ...androidStatusBarNodes(10, '12:24'),
+    ...androidImeNodes(30),
+  ]);
+  let captures = 0;
+  const device = createSettleDevice({
+    stored: before,
+    appBundleId: ANDROID_APP_BUNDLE_ID,
+    captureSnapshot: () => {
+      captures += 1;
+      return { snapshot: captures === 1 ? before : settledTree };
+    },
+  });
+
+  const result = await device.interactions.press(selector('label="Discard and go back"'), {
+    session: 'default',
+    settle: {},
+  });
+
+  const settle = result.settle;
+  assert.ok(settle);
+  assert.equal(settle.diff?.summary.additions, 1);
+  assert.ok(settle.tail, 'keyboard-only additions must not suppress the tail');
+  assert.deepEqual(
+    settle.tail?.map((entry) => entry.label),
+    ['Hello world 3', 'Discard and go back', 'Push Article'],
+  );
+});
+
+test('an Android IME-looking root hosting app-owned content is never collapsed as chrome (#1178)', async () => {
+  // Per-node classification: the app-owned "Send" under an IME root survives;
+  // the sibling "q" key is dropped for its own foreign package, not by
+  // subtree collapse. Indexes start above androidAppNodes()'s 0-2.
+  const mixedRoot = [
+    {
+      index: 10,
+      depth: 0,
+      type: 'android.widget.FrameLayout',
+      bundleId: ANDROID_IME_BUNDLE_ID,
+      rect: { x: 0, y: 159, width: 1344, height: 2833 },
+      hittable: true,
+    },
+    {
+      index: 11,
+      depth: 1,
+      parentIndex: 10,
+      type: 'android.widget.Button',
+      label: 'Send',
+      bundleId: ANDROID_APP_BUNDLE_ID,
+      rect: { x: 20, y: 200, width: 100, height: 60 },
+      hittable: true,
+    },
+    {
+      index: 12,
+      depth: 1,
+      parentIndex: 10,
+      type: 'android.inputmethodservice.Keyboard$Key',
+      label: 'q',
+      bundleId: ANDROID_IME_BUNDLE_ID,
+      rect: { x: 5, y: 590, width: 39, height: 54 },
+      hittable: true,
+    },
+  ];
+  const before = makeSnapshotState([...androidAppNodes()]);
+  const settledTree = makeSnapshotState([...androidAppNodes(), ...mixedRoot]);
+  let captures = 0;
+  const device = createSettleDevice({
+    stored: before,
+    appBundleId: ANDROID_APP_BUNDLE_ID,
+    captureSnapshot: () => {
+      captures += 1;
+      return { snapshot: captures === 1 ? before : settledTree };
+    },
+  });
+
+  const result = await device.interactions.press(selector('label="Discard and go back"'), {
+    session: 'default',
+    settle: {},
+  });
+
+  const diff = result.settle?.diff;
+  assert.ok(diff);
+  const texts = diff.lines.map((line) => line.text).join('\n');
+  // The app-owned button always survives.
+  assert.match(texts, /Send/);
+  // The foreign "q" key is still dropped by the independent app-scope rule
+  // (it is simply foreign content, never app-owned) — just not because the
+  // whole root got collapsed as chrome, which would have taken "Send" with it.
+  assert.ok(!diff.lines.some((line) => /"q"/.test(line.text)));
+});
+
+test('a real capture with a cross-window parentIndex artifact never loses app content to IME collapse (#1178)', () => {
+  // Real `snapshot -i --json` capture (RN playground, emulator, Gboard up):
+  // interactive-only pruning reparented the app's "Tab View, back" (index 6)
+  // onto IME toolbar button index 5 — a subtree walk from the IME root would
+  // hide the whole screen (indexes 6-13); per-node classification must not.
+  const settledNodes = makeSnapshotState([
+    {
+      index: 0,
+      depth: 6,
+      type: 'android.widget.FrameLayout',
+      bundleId: ANDROID_IME_BUNDLE_ID,
+      rect: { x: 24, y: 1152, width: 168, height: 792 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 8,
+      parentIndex: 0,
+      type: 'android.speech.SpeechRecognizer.VoiceDictationButton',
+      label: 'Use voice typing',
+      identifier: 'com.google.android.inputmethod.latin:id/0_resource_name_obfuscated',
+      bundleId: ANDROID_IME_BUNDLE_ID,
+      rect: { x: 36, y: 1164, width: 144, height: 144 },
+      hittable: true,
+    },
+    {
+      index: 2,
+      depth: 9,
+      parentIndex: 0,
+      type: 'android.widget.FrameLayout',
+      label: 'Delete',
+      bundleId: ANDROID_IME_BUNDLE_ID,
+      rect: { x: 36, y: 1320, width: 144, height: 144 },
+      hittable: true,
+    },
+    {
+      index: 3,
+      depth: 9,
+      parentIndex: 0,
+      type: 'android.widget.FrameLayout',
+      label: 'Done',
+      bundleId: ANDROID_IME_BUNDLE_ID,
+      rect: { x: 1164, y: 1320, width: 144, height: 144 },
+      hittable: true,
+    },
+    {
+      index: 4,
+      depth: 9,
+      parentIndex: 0,
+      type: 'android.widget.FrameLayout',
+      label: 'Show emoji keyboard',
+      bundleId: ANDROID_IME_BUNDLE_ID,
+      rect: { x: 36, y: 1476, width: 144, height: 144 },
+      hittable: true,
+    },
+    {
+      // The last IME toolbar button — the real capture's app content chains
+      // off THIS node's index (5), not off the IME root (0).
+      index: 5,
+      depth: 9,
+      parentIndex: 0,
+      type: 'android.widget.FrameLayout',
+      label: 'Open more stylus options',
+      bundleId: ANDROID_IME_BUNDLE_ID,
+      rect: { x: 1164, y: 1476, width: 144, height: 144 },
+      hittable: true,
+    },
+    {
+      index: 6,
+      depth: 2,
+      parentIndex: 5,
+      type: 'android.widget.Button',
+      label: 'Tab View, back',
+      bundleId: ANDROID_APP_BUNDLE_ID,
+      rect: { x: 36, y: 108, width: 108, height: 108 },
+      hittable: true,
+    },
+    {
+      index: 7,
+      depth: 3,
+      parentIndex: 6,
+      type: 'android.widget.TextView',
+      label: 'arrow_back',
+      bundleId: ANDROID_APP_BUNDLE_ID,
+      rect: { x: 60, y: 132, width: 60, height: 60 },
+    },
+    {
+      index: 8,
+      depth: 2,
+      parentIndex: 5,
+      type: 'android.widget.ScrollView',
+      bundleId: ANDROID_APP_BUNDLE_ID,
+      rect: { x: 0, y: 216, width: 1344, height: 2600 },
+      hittable: true,
+    },
+    {
+      index: 9,
+      depth: 3,
+      parentIndex: 8,
+      type: 'android.widget.EditText',
+      label: 'hello from the fixed settle',
+      bundleId: ANDROID_APP_BUNDLE_ID,
+      rect: { x: 60, y: 400, width: 1200, height: 100 },
+      hittable: true,
+      focused: true,
+    },
+    {
+      index: 10,
+      depth: 3,
+      parentIndex: 8,
+      type: 'android.widget.Button',
+      label: 'Discard and go back',
+      bundleId: ANDROID_APP_BUNDLE_ID,
+      rect: { x: 60, y: 550, width: 400, height: 100 },
+      hittable: true,
+    },
+    {
+      index: 11,
+      depth: 4,
+      parentIndex: 10,
+      type: 'android.widget.TextView',
+      label: 'Discard and go back',
+      bundleId: ANDROID_APP_BUNDLE_ID,
+      rect: { x: 80, y: 570, width: 360, height: 60 },
+    },
+    {
+      index: 12,
+      depth: 3,
+      parentIndex: 8,
+      type: 'android.widget.Button',
+      label: 'Push Article',
+      bundleId: ANDROID_APP_BUNDLE_ID,
+      rect: { x: 60, y: 700, width: 400, height: 100 },
+      hittable: true,
+    },
+    {
+      index: 13,
+      depth: 4,
+      parentIndex: 12,
+      type: 'android.widget.TextView',
+      label: 'Push Article',
+      bundleId: ANDROID_APP_BUNDLE_ID,
+      rect: { x: 80, y: 720, width: 360, height: 60 },
+    },
+  ]).nodes;
+
+  // Every app-content line survives whether or not the session even knows
+  // its own appBundleId — the per-node IME rule alone is enough here, since
+  // none of these nodes are foreign-but-not-IME.
+  for (const appBundleId of [undefined, ANDROID_APP_BUNDLE_ID]) {
+    const result = buildSettleTailEntries(settledNodes, new Set(), appBundleId);
+    assert.deepEqual(
+      result.tail?.map((entry) => entry.label),
+      [
+        'Tab View, back',
+        'arrow_back',
+        undefined, // ScrollView: no label
+        'hello from the fixed settle',
+        'Discard and go back',
+        'Discard and go back',
+        'Push Article',
+        'Push Article',
+      ],
+    );
+  }
+});
+
 test('added lines win diff-budget slots over removals under truncation', async () => {
   // 120 removals precede the additions positionally; the fresh-ref additions
   // must still survive the 80-line cap.
@@ -1070,4 +1541,78 @@ test('buildSettleTailEntries drops the keyboard container and its chrome descend
   const result = buildSettleTailEntries(settledNodes, new Set());
 
   assert.deepEqual(result.tail, [{ ref: 'e1', role: 'button', label: 'Send' }]);
+});
+
+test('buildSettleTailEntries drops Android IME chrome and foreign-app nodes given appBundleId (#1178)', () => {
+  const settledNodes = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'android.widget.Button',
+      label: 'Send',
+      bundleId: 'org.reactnavigation.playground',
+      rect: { x: 10, y: 20, width: 100, height: 40 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 0,
+      type: 'android.widget.TextView',
+      identifier: 'com.android.systemui:id/clock',
+      label: '12:23',
+      bundleId: 'com.android.systemui',
+    },
+    {
+      index: 2,
+      depth: 0,
+      type: 'android.widget.FrameLayout',
+      bundleId: 'com.google.android.inputmethod.latin',
+      hittable: true,
+    },
+    {
+      index: 3,
+      depth: 1,
+      parentIndex: 2,
+      type: 'android.widget.FrameLayout',
+      label: 'Delete',
+      bundleId: 'com.google.android.inputmethod.latin',
+      hittable: true,
+    },
+  ]).nodes;
+
+  const result = buildSettleTailEntries(settledNodes, new Set(), 'org.reactnavigation.playground');
+
+  assert.deepEqual(result.tail, [{ ref: 'e1', role: 'button', label: 'Send' }]);
+});
+
+test('buildSettleTailEntries without appBundleId leaves Android nodes unfiltered (no-op scope)', () => {
+  const settledNodes = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'android.widget.Button',
+      label: 'Send',
+      bundleId: 'org.reactnavigation.playground',
+      rect: { x: 10, y: 20, width: 100, height: 40 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 0,
+      type: 'android.widget.TextView',
+      identifier: 'com.android.systemui:id/clock',
+      label: '12:23',
+      bundleId: 'com.android.systemui',
+      rect: { x: 40, y: 40, width: 80, height: 40 },
+    },
+  ]).nodes;
+
+  // No session appBundleId (e.g. session not tracking an open app): the app
+  // scope rule stays a no-op rather than guessing which package is "the app".
+  const result = buildSettleTailEntries(settledNodes, new Set());
+
+  assert.deepEqual(
+    result.tail?.map((entry) => entry.ref),
+    ['e1', 'e2'],
+  );
 });
