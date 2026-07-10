@@ -205,7 +205,7 @@ export function parseTargetAnnotationV1Payload(jsonText: string): TargetAnnotati
   }
   const raw = parsed as Record<string, unknown>;
 
-  const role = parseRequiredRoleField(raw.role);
+  const role = parseRequiredRoleField(raw.role, 'role');
   const id = parseOptionalIdentifierField(raw.id, 'id');
   const label = parseOptionalLabelField(raw.label, 'label');
   const ancestry = parseAncestryField(raw.ancestry);
@@ -228,12 +228,24 @@ export function parseTargetAnnotationV1Payload(jsonText: string): TargetAnnotati
   };
 }
 
-function parseRequiredRoleField(value: unknown): string {
-  if (value === undefined) return '';
-  if (typeof value !== 'string') {
-    throw new AppError('INVALID_ARGS', 'target-v1 "role" must be a string.');
+/**
+ * `role` keys are always PRESENT in writer output — the writer emits `role`
+ * unconditionally at the top level, in every ancestry entry, and in
+ * `scrollRegion` (possibly as the empty string for a typeless node, which
+ * decision 3 explicitly allows). A MISSING role key can therefore only come
+ * from a hand-edited/adversarial annotation and is rejected: once step-4
+ * enforcement consumes this evidence, an implicitly-empty role in
+ * `matchesLocalIdentity` could match anonymous wrapper nodes and produce a
+ * false verified/rebind.
+ */
+function parseRequiredRoleField(value: unknown, field: string): string {
+  if (value === undefined) {
+    throw new AppError('INVALID_ARGS', `target-v1 "${field}" is required.`);
   }
-  return boundField(normalizeRoleField(value), 'role');
+  if (typeof value !== 'string') {
+    throw new AppError('INVALID_ARGS', `target-v1 "${field}" must be a string.`);
+  }
+  return boundField(normalizeRoleField(value), field);
 }
 
 function parseOptionalIdentifierField(value: unknown, field: 'id'): string | undefined {
@@ -283,7 +295,7 @@ function parseAncestryEntry(entry: unknown, index: number): TargetAncestryEntry 
     throw new AppError('INVALID_ARGS', `target-v1 "ancestry[${index}]" must be an object.`);
   }
   const record = entry as Record<string, unknown>;
-  const role = parseRequiredRoleField(record.role);
+  const role = parseRequiredRoleField(record.role, `ancestry[${index}].role`);
   const label = parseOptionalLabelField(record.label, `ancestry[${index}].label`);
   return { role, ...(label !== undefined ? { label } : {}) };
 }
@@ -302,7 +314,7 @@ function parseScrollRegionField(value: unknown): TargetScrollRegion | undefined 
     throw new AppError('INVALID_ARGS', 'target-v1 "scrollRegion" must be an object.');
   }
   const record = value as Record<string, unknown>;
-  const role = parseRequiredRoleField(record.role);
+  const role = parseRequiredRoleField(record.role, 'scrollRegion.role');
   const id = parseOptionalIdentifierField(record.id, 'id');
   const label = parseOptionalLabelField(record.label, 'scrollRegion.label');
   return {

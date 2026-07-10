@@ -322,6 +322,51 @@ test('parser rejects a malformed rect', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Role presence: the writer emits `role` unconditionally (top level, every
+// ancestry entry, scrollRegion) — possibly as the empty string for a
+// typeless node, which stays accepted. A MISSING role key can only come from
+// a hand-edited/adversarial annotation and must be rejected, or step-4
+// enforcement could match anonymous wrapper nodes through an implicit
+// empty-role identity.
+// ---------------------------------------------------------------------------
+
+test('parser rejects a missing top-level role', () => {
+  assertInvalidArgs(
+    () => parseTargetAnnotationV1Payload(JSON.stringify({ verification: 'verified' })),
+    /"role" is required/,
+  );
+});
+
+test('parser rejects a missing role in an ancestry entry and in scrollRegion', () => {
+  assertInvalidArgs(
+    () =>
+      parseTargetAnnotationV1Payload(
+        JSON.stringify({
+          role: 'button',
+          ancestry: [{ label: 'Editor' }],
+          verification: 'verified',
+        }),
+      ),
+    /"ancestry\[0\]\.role" is required/,
+  );
+  assertInvalidArgs(
+    () =>
+      parseTargetAnnotationV1Payload(
+        JSON.stringify({ role: 'button', scrollRegion: { id: 'list' }, verification: 'verified' }),
+      ),
+    /"scrollRegion\.role" is required/,
+  );
+});
+
+test('parser accepts an explicit empty-string role (writer-legal for typeless nodes)', () => {
+  const parsed = parseTargetAnnotationV1Payload(
+    JSON.stringify({ role: '', ancestry: [{ role: '' }], verification: 'verified' }),
+  );
+  assert.equal(parsed.role, '');
+  assert.deepEqual(parsed.ancestry, [{ role: '' }]);
+});
+
+// ---------------------------------------------------------------------------
 // Classification core (decision 3 "Replay-time verification" paths 2-6):
 // this is the exact function the writer's record-time self-check calls, and
 // what a future replay-enforcement step will reuse — so duplicate/unverifiable
