@@ -1787,6 +1787,7 @@ test('printHumanError renders a compact divergence report unconditionally (not g
 
   assert.match(output, /Divergence at step 2 \(\/tmp\/flow\.ad:5\)/);
   assert.match(output, /Screen: 1 actionable ref\(s\) captured \(refsGeneration 3\)/);
+  assert.match(output, /@e5 \[button\] "Save"/);
   assert.match(output, /Suggestions:/);
   assert.match(output, /\[id\] "Save" id="save"/);
   // Not gated behind --debug: showDetails defaults to false/undefined here.
@@ -1800,7 +1801,11 @@ test('printHumanError shows an unavailable screen reason and omitted suggestions
       step: { index: 1, source: { path: '/tmp/flow.ad', line: 1 } },
       action: 'click "Save"',
       cause: { code: 'COMMAND_FAILED', message: 'not hittable' },
-      screen: { state: 'unavailable', reason: 'capture-failed' },
+      screen: {
+        state: 'unavailable',
+        reason: 'capture-failed',
+        hint: 'take a snapshot to observe the result.',
+      },
       suggestions: [],
       suggestionCount: 2,
       resume: { allowed: false, reason: 'resume not yet supported' },
@@ -1809,6 +1814,6 @@ test('printHumanError shows an unavailable screen reason and omitted suggestions
 
   const output = captureStderr(() => printHumanError(err));
 
-  assert.match(output, /Screen: unavailable \(capture-failed\)/);
+  assert.match(output, /Screen: unavailable \(capture-failed\)\. take a snapshot/);
   assert.match(output, /Suggestions: 2 available \(omitted at this response level/);
 });

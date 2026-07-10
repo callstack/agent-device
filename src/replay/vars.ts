@@ -200,3 +200,20 @@ function resolveStringValue(
   }
   return value;
 }
+
+/**
+ * Values of every non-builtin scope variable — the expanded variables ADR
+ * 0012 forbids serializing into a divergence report (file env directives,
+ * `-e` CLI entries, `AD_VAR_*` shell env, and runtime `outputEnv` merges).
+ * Builtins (reserved `AD_*` namespace) are runtime-trusted labels, not
+ * user-supplied values. Longest values first so overlapping values scrub
+ * deterministically.
+ */
+export function collectReplayScrubbableVarValues(
+  scope: ReplayVarScope,
+): Array<{ name: string; value: string }> {
+  return Object.entries(scope.values)
+    .filter(([key, value]) => !isReservedNamespaceKey(key) && value.length > 0)
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => b.value.length - a.value.length);
+}

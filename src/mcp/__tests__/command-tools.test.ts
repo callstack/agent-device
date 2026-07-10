@@ -768,6 +768,8 @@ test('MCP tool error is a ref-issuing result: isError, structuredContent, and pi
   assert.match(text, /Error \(REPLAY_DIVERGENCE\)/);
   assert.match(text, /Divergence at step 2 \(\/tmp\/flow\.ad:2\)/);
   assert.match(text, /Screen: 1 actionable ref\(s\) captured/);
+  // The ref entries themselves ride in the text so a text-only agent can act.
+  assert.match(text, /@e5 \[button\] "Save"/);
   assert.match(text, /Suggestions:/);
   assert.match(text, /\[id\] "Save" id="save"/);
 

@@ -533,3 +533,49 @@ test('a capture-failed screen hint redacts a secret in the capture error', async
   expect(divergence.screen.hint).not.toContain('sk-live-abc123def456');
   expect(divergence.screen.hint).toContain('[REDACTED]');
 });
+
+// --- Expanded replay variables are never serialized (ADR 0012) ---
+
+test('an expanded ${VAR} value echoed by a selector error never reaches the public divergence', async () => {
+  const sentinel = 'ExpandedVarSecret-98765-do-not-leak';
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-var-leak-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  const filePath = writeReplayFile(root, ['press label="${SECRET}"']);
+  mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { replayEnv: [`SECRET=${sentinel}`] } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      if (req.command === 'press') {
+        // A real selector miss echoes the RESOLVED (expanded) selector.
+        return {
+          ok: false,
+          error: {
+            code: 'COMMAND_FAILED',
+            message: `Selector did not match: ${req.positionals?.[0] ?? ''}`,
+            hint: `Run find "${sentinel}" for contains matching.`,
+          },
+        };
+      }
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  // The expanded value appears nowhere in the whole public error.
+  expect(JSON.stringify(response.error)).not.toContain(sentinel);
+  // The scrub is a marker replacement, not a drop: the caller still sees
+  // WHICH variable the selector interpolated.
+  const divergence = response.error.details?.divergence as {
+    cause: { message: string; hint?: string };
+  };
+  expect(divergence.cause.message).toContain('<var:SECRET>');
+  expect(divergence.cause.hint).toContain('<var:SECRET>');
+  expect(response.error.message).toContain('<var:SECRET>');
+});

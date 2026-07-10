@@ -143,6 +143,30 @@ export function sanitizeReplayDivergenceField(
   return truncateUtf8Field(redactDiagnosticData(value), limit);
 }
 
+export type ReplayVarScrubEntry = { name: string; value: string };
+
+/**
+ * Categorical expanded-variable exclusion (ADR 0012): every occurrence of a
+ * replay-scope value is replaced with a `<var:NAME>` marker, whatever the
+ * value looks like — this is not shape-based secret redaction.
+ */
+export function scrubReplayVarValues(value: string, entries: ReplayVarScrubEntry[]): string {
+  let output = value;
+  for (const entry of entries) {
+    if (!entry.value) continue;
+    output = output.split(entry.value).join(`<var:${entry.name}>`);
+  }
+  return output;
+}
+
+/** Per-report field sanitizer: variable scrub, then redact, then truncate. */
+export function createReplayDivergenceSanitizer(
+  scrubVars: ReplayVarScrubEntry[],
+): (value: string, limit?: number) => string {
+  return (value, limit) =>
+    sanitizeReplayDivergenceField(scrubReplayVarValues(value, scrubVars), limit);
+}
+
 function boundScreenRefs(screen: ReplayDivergenceScreen, limit: number): ReplayDivergenceScreen {
   if (screen.state !== 'available' || screen.refs.length <= limit) return screen;
   return { ...screen, refs: screen.refs.slice(0, limit), truncated: true };
@@ -262,17 +286,40 @@ function divergenceStepLine(step: unknown): string[] {
   return [`Divergence at step ${record.index}${location}`];
 }
 
+// Bound on ref lines in the TEXT report (matches the digest ref cap); the
+// full list rides in the structured payload.
+const TEXT_REPORT_REF_LINE_LIMIT = 8;
+
 function divergenceScreenLine(screen: unknown): string[] {
   const record = screen as Record<string, unknown> | undefined;
   if (record?.state === 'available' && Array.isArray(record.refs)) {
-    return [
-      `Screen: ${record.refs.length} actionable ref(s) captured (refsGeneration ${record.refsGeneration}).`,
-    ];
+    return availableScreenLines(record.refs, record.refsGeneration);
   }
   if (record?.state === 'unavailable') {
-    return [`Screen: unavailable (${String(record.reason ?? 'unknown')}).`];
+    return [unavailableScreenLine(record)];
   }
   return [];
+}
+
+function availableScreenLines(refs: unknown[], refsGeneration: unknown): string[] {
+  const shown = refs.slice(0, TEXT_REPORT_REF_LINE_LIMIT).map(divergenceScreenRefLine);
+  const remaining = refs.length - shown.length;
+  return [
+    `Screen: ${refs.length} actionable ref(s) captured (refsGeneration ${refsGeneration}).`,
+    ...shown,
+    ...(remaining > 0 ? [`  ... ${remaining} more`] : []),
+  ];
+}
+
+function unavailableScreenLine(record: Record<string, unknown>): string {
+  const hint = typeof record.hint === 'string' && record.hint.length > 0 ? ` ${record.hint}` : '';
+  return `Screen: unavailable (${String(record.reason ?? 'unknown')}).${hint}`;
+}
+
+function divergenceScreenRefLine(entry: unknown): string {
+  const ref = entry as Record<string, unknown>;
+  const label = typeof ref.label === 'string' ? ` "${ref.label}"` : '';
+  return `  @${String(ref.ref)} [${String(ref.role)}]${label}`;
 }
 
 function divergenceSuggestionLines(suggestions: unknown, suggestionCount: unknown): string[] {

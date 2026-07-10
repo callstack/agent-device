@@ -23,13 +23,16 @@ import {
   REPLAY_DIVERGENCE_RESUME_NOT_SUPPORTED,
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
   boundReplayDivergence,
-  sanitizeReplayDivergenceField,
+  createReplayDivergenceSanitizer,
   type ReplayDivergence,
   type ReplayDivergenceScreen,
   type ReplayDivergenceScreenRef,
   type ReplayDivergenceSuggestion,
   type ReplayDivergenceSuggestionBasis,
+  type ReplayVarScrubEntry,
 } from '../../replay/divergence.ts';
+
+type DivergenceFieldSanitizer = (value: string, limit?: number) => string;
 
 /**
  * ADR 0012 migration step 2: builds the `details.divergence` report for a
@@ -49,6 +52,8 @@ export async function buildReplayFailureDivergence(params: {
   sessionStore: SessionStore;
   logPath: string;
   responseLevel: ResponseLevel | undefined;
+  /** Replay-scope values scrubbed from every divergence string (ADR 0012: expanded variables are never serialized). */
+  scrubVars?: ReplayVarScrubEntry[];
 }): Promise<ReplayDivergence> {
   const {
     error,
@@ -61,12 +66,14 @@ export async function buildReplayFailureDivergence(params: {
     sessionStore,
     logPath,
     responseLevel,
+    scrubVars = [],
   } = params;
+  const sanitize = createReplayDivergenceSanitizer(scrubVars);
 
   const cause = {
     code: error.code,
-    message: sanitizeReplayDivergenceField(error.message),
-    ...(error.hint ? { hint: sanitizeReplayDivergenceField(error.hint) } : {}),
+    message: sanitize(error.message),
+    ...(error.hint ? { hint: sanitize(error.hint) } : {}),
   };
 
   const observation = session
@@ -77,10 +84,15 @@ export async function buildReplayFailureDivergence(params: {
         hint: 'The session closed before a post-failure screen could be captured.',
       } satisfies DivergenceObservation);
 
-  const screen = buildDivergenceScreen(observation);
+  const screen = buildDivergenceScreen(observation, sanitize);
   const suggestions =
     observation.state === 'available' && session
-      ? collectReplayDivergenceSuggestions({ action, session, nodes: observation.nodes })
+      ? collectReplayDivergenceSuggestions({
+          action,
+          session,
+          nodes: observation.nodes,
+          sanitize,
+        })
       : [];
 
   const divergence: ReplayDivergence = {
@@ -88,9 +100,9 @@ export async function buildReplayFailureDivergence(params: {
     kind: 'action-failure',
     step: {
       index: index + 1,
-      source: { path: sanitizeReplayDivergenceField(sourcePath), line: sourceLine },
+      source: { path: sanitize(sourcePath), line: sourceLine },
     },
-    action: sanitizeReplayDivergenceField(formatDivergenceActionLabel(action)),
+    action: sanitize(formatDivergenceActionLabel(action)),
     cause,
     screen,
     suggestions: suggestions.slice(0, REPLAY_DIVERGENCE_SUGGESTION_LIMIT),
@@ -177,17 +189,20 @@ function divergenceCaptureInteractiveOnly(action: SessionAction): boolean {
   return resolveSuggestionMatchingConfig(action).requiresRect;
 }
 
-function buildDivergenceScreen(observation: DivergenceObservation): ReplayDivergenceScreen {
+function buildDivergenceScreen(
+  observation: DivergenceObservation,
+  sanitize: DivergenceFieldSanitizer,
+): ReplayDivergenceScreen {
   if (observation.state === 'unavailable') {
     // The capture-failed hint interpolates the capture error message; sanitize
     // every unavailable string field so no interpolated content escapes raw.
     return {
       state: 'unavailable',
-      reason: sanitizeReplayDivergenceField(observation.reason),
-      hint: sanitizeReplayDivergenceField(observation.hint),
+      reason: sanitize(observation.reason),
+      hint: sanitize(observation.hint),
     };
   }
-  const { refs, truncated } = buildReplayDivergenceScreenRefs(observation.nodes);
+  const { refs, truncated } = buildReplayDivergenceScreenRefs(observation.nodes, sanitize);
   return {
     state: 'available',
     refsGeneration: observation.refsGeneration,
@@ -200,7 +215,10 @@ function buildDivergenceScreen(observation: DivergenceObservation): ReplayDiverg
 // by boundReplayDivergence/applyReplayDivergenceLevelCaps.
 const SCREEN_REF_CAPTURE_LIMIT = 20;
 
-function buildReplayDivergenceScreenRefs(nodes: SnapshotNode[]): {
+function buildReplayDivergenceScreenRefs(
+  nodes: SnapshotNode[],
+  sanitize: DivergenceFieldSanitizer,
+): {
   refs: ReplayDivergenceScreenRef[];
   truncated: boolean;
 } {
@@ -210,8 +228,8 @@ function buildReplayDivergenceScreenRefs(nodes: SnapshotNode[]): {
     const label = displayLabel(node, role);
     return {
       ref: node.ref!,
-      role: sanitizeReplayDivergenceField(role),
-      ...(label ? { label: sanitizeReplayDivergenceField(label) } : {}),
+      role: sanitize(role),
+      ...(label ? { label: sanitize(label) } : {}),
     };
   });
   return { refs, truncated: candidates.length > refs.length };
@@ -244,13 +262,14 @@ function collectReplayDivergenceSuggestions(params: {
   action: SessionAction;
   session: SessionState;
   nodes: SnapshotNode[];
+  sanitize: DivergenceFieldSanitizer;
 }): ReplayDivergenceSuggestion[] {
-  const { action, session, nodes } = params;
+  const { action, session, nodes, sanitize } = params;
   if (!isSuggestionEligibleCommand(action.command)) return [];
   const candidates = collectReplaySelectorCandidates(action);
   if (candidates.length === 0) return [];
   const matching = resolveSuggestionMatchingConfig(action);
-  return rankSuggestionCandidates({ candidates, nodes, session, action, matching });
+  return rankSuggestionCandidates({ candidates, nodes, session, action, matching, sanitize });
 }
 
 function isSuggestionEligibleCommand(command: string): boolean {
@@ -282,15 +301,23 @@ function rankSuggestionCandidates(params: {
   session: SessionState;
   action: SessionAction;
   matching: SuggestionMatchingConfig;
+  sanitize: DivergenceFieldSanitizer;
 }): ReplayDivergenceSuggestion[] {
-  const { candidates, nodes, session, action, matching } = params;
+  const { candidates, nodes, session, action, matching, sanitize } = params;
   // Dedupe by node (its unique tree index), keeping the STRONGEST match basis
   // per the ADR: a node reachable through several recorded selector terms
   // appears once, tagged with its strongest basis — not whichever candidate
   // happened to resolve it first.
   const byNode = new Map<number, RankedSuggestion>();
   for (const candidate of candidates) {
-    const entry = resolveSuggestionCandidate({ candidate, nodes, session, action, matching });
+    const entry = resolveSuggestionCandidate({
+      candidate,
+      nodes,
+      session,
+      action,
+      matching,
+      sanitize,
+    });
     if (!entry) continue;
     const existing = byNode.get(entry.nodeIndex);
     if (!existing || entry.basisRank < existing.basisRank) byNode.set(entry.nodeIndex, entry);
@@ -306,8 +333,9 @@ function resolveSuggestionCandidate(params: {
   session: SessionState;
   action: SessionAction;
   matching: SuggestionMatchingConfig;
+  sanitize: DivergenceFieldSanitizer;
 }): RankedSuggestion | undefined {
-  const { candidate, nodes, session, action, matching } = params;
+  const { candidate, nodes, session, action, matching, sanitize } = params;
   const chain = tryParseSelectorChain(candidate);
   if (!chain) return undefined;
   const resolved = resolveSelectorChain(nodes, chain, {
@@ -327,11 +355,11 @@ function resolveSuggestionCandidate(params: {
   const label = displayLabel(resolved.node, role);
   return {
     suggestion: {
-      selector: sanitizeReplayDivergenceField(selectorChain.join(' || ')),
+      selector: sanitize(selectorChain.join(' || ')),
       basis,
       ...(resolved.node.ref ? { ref: resolved.node.ref } : {}),
-      role: sanitizeReplayDivergenceField(role),
-      ...(label ? { label: sanitizeReplayDivergenceField(label) } : {}),
+      role: sanitize(role),
+      ...(label ? { label: sanitize(label) } : {}),
     },
     basisRank: BASIS_RANK[basis],
     nodeIndex: resolved.node.index,

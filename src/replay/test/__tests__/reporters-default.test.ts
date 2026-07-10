@@ -136,6 +136,7 @@ test('default replay test reporter surfaces the divergence repair report on a fa
   // The test text surface must carry the same repair data as --json.
   assert.match(out, /Divergence at step 2 \(\/tmp\/flow\.ad:2\)/);
   assert.match(out, /Screen: 1 actionable ref\(s\) captured \(refsGeneration 4\)/);
+  assert.match(out, /@e5 \[button\] "Save"/);
   assert.match(out, /Suggestions:/);
   assert.match(out, /\[id\] "Save" id="save"/);
 });

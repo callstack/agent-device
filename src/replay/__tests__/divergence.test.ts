@@ -226,3 +226,78 @@ test('sanitizeReplayDivergenceField redacts sensitive content even when no trunc
   assert.ok(!sanitized.includes('abc123def'));
   assert.ok(sanitized.includes('[REDACTED]'));
 });
+
+// --- Text report carries the repair data (bounded refs + unavailable hint) ---
+
+test('formatReplayDivergenceReport lists a bounded ref/role/label subset for an available screen', async () => {
+  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const report = formatReplayDivergenceReport({
+    divergence: {
+      version: 1,
+      kind: 'action-failure',
+      step: { index: 5, source: { path: '/tmp/flow.ad', line: 6 } },
+      action: 'press "Pop to top"',
+      cause: { code: 'COMMAND_FAILED', message: 'Selector did not match' },
+      screen: {
+        state: 'available',
+        refsGeneration: 42,
+        refs: Array.from({ length: 12 }, (_, i) => ({
+          ref: `e${i + 1}`,
+          role: 'button',
+          label: `Button ${i + 1}`,
+        })),
+      },
+      suggestions: [],
+      suggestionCount: 0,
+      resume: { allowed: false, reason: 'resume not yet supported' },
+    },
+  });
+  assert.ok(report);
+  // A text-only caller can act without a follow-up snapshot: ref lines are listed.
+  assert.match(report!, /Screen: 12 actionable ref\(s\) captured \(refsGeneration 42\)/);
+  assert.match(report!, /^ {2}@e1 \[button\] "Button 1"$/m);
+  assert.match(report!, /^ {2}@e8 \[button\] "Button 8"$/m);
+  // Bounded to 8 lines, remainder summarized.
+  assert.doesNotMatch(report!, /@e9 /);
+  assert.match(report!, /^ {2}\.\.\. 4 more$/m);
+});
+
+test('formatReplayDivergenceReport carries the unavailable-screen hint', async () => {
+  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const report = formatReplayDivergenceReport({
+    divergence: {
+      version: 1,
+      kind: 'action-failure',
+      step: { index: 1, source: { path: '/tmp/flow.ad', line: 1 } },
+      action: 'click "Save"',
+      cause: { code: 'COMMAND_FAILED', message: 'not hittable' },
+      screen: {
+        state: 'unavailable',
+        reason: 'sparse-snapshot',
+        hint: 'run snapshot -i to observe the current screen.',
+      },
+      suggestions: [],
+      suggestionCount: 0,
+      resume: { allowed: false, reason: 'resume not yet supported' },
+    },
+  });
+  assert.ok(report);
+  assert.match(report!, /Screen: unavailable \(sparse-snapshot\)\. run snapshot -i/);
+});
+
+test('scrubReplayVarValues replaces every occurrence with a named marker, longest value first', async () => {
+  const { scrubReplayVarValues } = await import('../divergence.ts');
+  const entries = [
+    { name: 'LONG', value: 'abc-def' },
+    { name: 'SHORT', value: 'abc' },
+  ].sort((a, b) => b.value.length - a.value.length);
+  assert.equal(
+    scrubReplayVarValues('x abc-def y abc z abc-def', entries),
+    'x <var:LONG> y <var:SHORT> z <var:LONG>',
+  );
+  // Not shape-based: plain, non-secret-looking values are scrubbed too.
+  assert.equal(
+    scrubReplayVarValues('value=3000 done', [{ name: 'T', value: '3000' }]),
+    'value=<var:T> done',
+  );
+});

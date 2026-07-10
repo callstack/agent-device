@@ -19,10 +19,12 @@ import { invokeReplayAction } from './session-replay-action-runtime.ts';
 import { tryParseSelectorChain } from '../selectors.ts';
 import {
   buildReplayVarScope,
+  collectReplayScrubbableVarValues,
   collectReplayShellEnv,
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
   readReplayShellEnvSource,
+  type ReplayVarScope,
 } from '../../replay/vars.ts';
 import {
   summarizeSnapshotTimingSamples,
@@ -30,6 +32,7 @@ import {
   type SnapshotTimingSample,
 } from '../../snapshot-diagnostics.ts';
 import { buildReplayFailureDivergence } from './session-replay-divergence.ts';
+import { scrubReplayVarValues, type ReplayVarScrubEntry } from '../../replay/divergence.ts';
 
 // fallow-ignore-next-line complexity
 export async function runReplayScriptFile(params: {
@@ -98,6 +101,22 @@ export async function runReplayScriptFile(params: {
     const shouldUpdate = req.flags?.replayUpdate === true;
     const actionTracePath = tracePath ?? sessionStore.get(sessionName)?.trace?.outPath;
     const snapshotDiagnosticSamples: SnapshotTimingSample[] = [];
+    const failStep = (failedResponse: DaemonResponse, failedAction: SessionAction, index: number) =>
+      withReplayFailureDiagnostics({
+        response: failedResponse,
+        action: failedAction,
+        index,
+        replayPath: resolved,
+        sourcePath: actionSourcePaths?.[index] ?? resolved,
+        sourceLine: actionLines[index] ?? 1,
+        artifactPaths: [...artifactPaths],
+        snapshotDiagnosticSamples,
+        scope,
+        req,
+        sessionName,
+        sessionStore,
+        logPath,
+      });
     let healed = 0;
     for (let index = 0; index < actions.length; index += 1) {
       const action = actions[index];
@@ -126,20 +145,7 @@ export async function runReplayScriptFile(params: {
       }
       collectReplayActionArtifactPaths(response).forEach((entry) => artifactPaths.add(entry));
       if (!shouldUpdate) {
-        return await withReplayFailureDiagnostics({
-          response,
-          action,
-          index,
-          replayPath: resolved,
-          sourcePath: actionSourcePaths?.[index] ?? resolved,
-          sourceLine: actionLines[index] ?? 1,
-          artifactPaths: [...artifactPaths],
-          snapshotDiagnosticSamples,
-          req,
-          sessionName,
-          sessionStore,
-          logPath,
-        });
+        return await failStep(response, action, index);
       }
 
       const nextAction = await healReplayAction({
@@ -149,20 +155,7 @@ export async function runReplayScriptFile(params: {
         sessionStore,
       });
       if (!nextAction) {
-        return await withReplayFailureDiagnostics({
-          response,
-          action,
-          index,
-          replayPath: resolved,
-          sourcePath: actionSourcePaths?.[index] ?? resolved,
-          sourceLine: actionLines[index] ?? 1,
-          artifactPaths: [...artifactPaths],
-          snapshotDiagnosticSamples,
-          req,
-          sessionName,
-          sessionStore,
-          logPath,
-        });
+        return await failStep(response, action, index);
       }
 
       actions[index] = nextAction;
@@ -184,20 +177,7 @@ export async function runReplayScriptFile(params: {
       );
       if (!response.ok) {
         collectReplayActionArtifactPaths(response).forEach((entry) => artifactPaths.add(entry));
-        return await withReplayFailureDiagnostics({
-          response,
-          action: nextAction,
-          index,
-          replayPath: resolved,
-          sourcePath: actionSourcePaths?.[index] ?? resolved,
-          sourceLine: actionLines[index] ?? 1,
-          artifactPaths: [...artifactPaths],
-          snapshotDiagnosticSamples,
-          req,
-          sessionName,
-          sessionStore,
-          logPath,
-        });
+        return await failStep(response, nextAction, index);
       }
       collectReplayActionArtifactPaths(response).forEach((entry) => artifactPaths.add(entry));
       healed += 1;
@@ -355,6 +335,7 @@ async function withReplayFailureDiagnostics(params: {
   sourceLine: number;
   artifactPaths: string[];
   snapshotDiagnosticSamples: SnapshotTimingSample[];
+  scope: ReplayVarScope;
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
@@ -381,6 +362,7 @@ async function withReplayFailureContext(params: {
   sourceLine: number;
   artifactPaths?: string[];
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
+  scope: ReplayVarScope;
   req: DaemonRequest;
   sessionName: string;
   sessionStore: SessionStore;
@@ -395,6 +377,7 @@ async function withReplayFailureContext(params: {
     sourceLine,
     artifactPaths = [],
     snapshotDiagnostics,
+    scope,
     req,
     sessionName,
     sessionStore,
@@ -404,6 +387,8 @@ async function withReplayFailureContext(params: {
   // The failing action's own source (attached by withReplayFailureSource,
   // deepest failure wins) beats the top-level wrapper's source.
   const failureSource = readReplayFailureSource(response.error.details?.replaySource);
+  // Computed at failure time so runtime outputEnv merges are included.
+  const scrubVars = collectReplayScrubbableVarValues(scope);
   const cause = hoistCauseDiagnosticMeta(response.error);
   const divergence = await buildReplayFailureDivergence({
     error: cause,
@@ -416,6 +401,7 @@ async function withReplayFailureContext(params: {
     sessionStore,
     logPath,
     responseLevel: req.meta?.responseLevel,
+    scrubVars,
   });
   return buildReplayDivergenceFailureResponse({
     error: cause,
@@ -425,6 +411,7 @@ async function withReplayFailureContext(params: {
     artifactPaths,
     snapshotDiagnostics,
     divergence,
+    scrubVars,
   });
 }
 
@@ -477,15 +464,29 @@ function buildReplayDivergenceFailureResponse(params: {
   artifactPaths: string[];
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
   divergence: unknown;
+  scrubVars: ReplayVarScrubEntry[];
 }): DaemonResponse {
-  const { error, action, step, replayPath, artifactPaths, snapshotDiagnostics, divergence } =
-    params;
+  const {
+    error,
+    action,
+    step,
+    replayPath,
+    artifactPaths,
+    snapshotDiagnostics,
+    divergence,
+    scrubVars,
+  } = params;
   return {
     ok: false,
     error: {
       code: 'REPLAY_DIVERGENCE',
-      message: `Replay failed at step ${step} (${formatDivergenceActionLabel(action)}): ${error.message}`,
-      hint: error.hint,
+      // The cause message can echo an expanded selector; the top-level
+      // message gets the same categorical variable scrub as the report.
+      message: scrubReplayVarValues(
+        `Replay failed at step ${step} (${formatDivergenceActionLabel(action)}): ${error.message}`,
+        scrubVars,
+      ),
+      hint: error.hint === undefined ? undefined : scrubReplayVarValues(error.hint, scrubVars),
       diagnosticId: error.diagnosticId,
       logPath: error.logPath,
       details: {
