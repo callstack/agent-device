@@ -1,0 +1,47 @@
+import { describe, expect, test } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import { runCmdSync } from '../../src/utils/exec.ts';
+import { COMMAND_OWNER_FILES } from '../../src/core/command-descriptor/owner-files.ts';
+import { getDaemonRouteOwnerFiles } from '../../src/daemon/route-owner-files.ts';
+
+const repoRoot = path.resolve(import.meta.dirname, '../..');
+const distPath = path.join(repoRoot, 'dist/src');
+
+function collectJsFiles(dir: string): string[] {
+  const entries = fs.readdirSync(dir, { recursive: true, encoding: 'utf8' });
+  return entries.filter((name) => name.endsWith('.js')).map((name) => path.join(dir, name));
+}
+
+describe('owner-file path literals', () => {
+  test('do not leak into production bundles after a clean build', { timeout: 30_000 }, () => {
+    fs.rmSync(path.join(repoRoot, 'dist'), { recursive: true, force: true });
+
+    const build = runCmdSync(
+      'node',
+      [
+        '--experimental-strip-types',
+        'node_modules/tsdown/dist/run.mjs',
+        '--config-loader',
+        'native',
+      ],
+      { cwd: repoRoot },
+    );
+    expect(build.exitCode, build.stderr).toBe(0);
+
+    const jsFiles = collectJsFiles(distPath);
+    const bundle = jsFiles.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
+
+    const ownerPaths = [
+      ...Object.values(COMMAND_OWNER_FILES).flat(),
+      ...Object.values(getDaemonRouteOwnerFiles()),
+    ];
+
+    for (const ownerPath of ownerPaths) {
+      expect(
+        bundle.includes(ownerPath),
+        `owner-file path ${ownerPath} leaked into production bundle`,
+      ).toBe(false);
+    }
+  });
+});
