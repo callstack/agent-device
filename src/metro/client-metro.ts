@@ -20,12 +20,11 @@ import {
 } from '../utils/project-runtime.ts';
 import { buildBundleUrl, normalizeBaseUrl } from '../utils/url.ts';
 import {
-  resolveRuntimeTransportHints,
-  type ResolvedRuntimeTransport,
-} from '../utils/runtime-transport.ts';
+  EXPO_VIRTUAL_ENTRY_BUNDLE_PATH,
+  parsePort,
+  resolveMetroReloadEndpoints,
+} from './metro-reload-endpoints.ts';
 
-const DEFAULT_METRO_HOST = 'localhost';
-const DEFAULT_METRO_PORT = 8081;
 const DEV_SERVER_STATUS_READY_TEXT = 'packager-status:running';
 const METRO_TERM_TIMEOUT_MS = 1_000;
 const METRO_KILL_TIMEOUT_MS = 1_000;
@@ -122,11 +121,18 @@ export type ReloadMetroOptions = {
   timeoutMs?: number | string;
 };
 
+/**
+ * `transport` says which channel delivered the reload: `http` for the classic GET /reload route,
+ * `message-socket` for the /message websocket broadcast used when the server has no HTTP reload
+ * route (Expo). `status`/`body` always describe the HTTP probe; on the websocket path `reloadUrl`
+ * is the ws(s) message-socket URL.
+ */
 export type ReloadMetroResult = {
   reloaded: true;
   reloadUrl: string;
   status: number;
   body: string;
+  transport: 'http' | 'message-socket';
 };
 
 type ProxyBridgeRequestOptions = {
@@ -262,20 +268,6 @@ function parseTimeout(
   return Math.max(parsed, minimum);
 }
 
-function parsePort(value: number | string | undefined, fallback: number): number {
-  if (value === undefined || value === null || value === '') {
-    return fallback;
-  }
-  const parsed = Number.parseInt(String(value), 10);
-  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
-    throw new AppError('INVALID_ARGS', `Invalid Metro port: ${String(value)}. Use 1-65535.`);
-  }
-  return parsed;
-}
-
-// Expo apps load JS through this virtual entry; index.bundle fails on Expo dev servers.
-const EXPO_VIRTUAL_ENTRY_BUNDLE_PATH = '.expo/.virtual-metro-entry.bundle';
-
 function metroBundleEntryPath(kind: ResolvedMetroKind): string {
   return kind === 'expo' ? EXPO_VIRTUAL_ENTRY_BUNDLE_PATH : 'index.bundle';
 }
@@ -376,65 +368,6 @@ async function isMetroReady(statusUrl: string, timeoutMs: number): Promise<boole
   } catch {
     return false;
   }
-}
-
-function buildReloadUrl(transport: ResolvedRuntimeTransport, pathName: string): string {
-  const url = new URL(`${transport.scheme}://localhost`);
-  url.hostname = transport.host;
-  url.port = String(transport.port);
-  url.pathname = pathName;
-  return url.toString();
-}
-
-function resolveMetroReloadPath(bundleUrl: string | undefined): string {
-  const value = normalizeOptionalString(bundleUrl);
-  if (!value) return '/reload';
-  const url = new URL(value);
-  const bundlePath = url.pathname.replace(/\/+$/, '');
-  if (!bundlePath.endsWith('/index.bundle')) return '/reload';
-  return `${bundlePath.slice(0, -'/index.bundle'.length)}/reload`;
-}
-
-function resolveReloadMetroHost(
-  input: ReloadMetroOptions,
-  hasExplicitBundleUrl: boolean,
-  hasBundleUrl: boolean,
-): string | undefined {
-  return (
-    normalizeOptionalString(input.metroHost) ??
-    (hasExplicitBundleUrl ? undefined : normalizeOptionalString(input.runtime?.metroHost)) ??
-    (hasBundleUrl ? undefined : DEFAULT_METRO_HOST)
-  );
-}
-
-function resolveReloadMetroPort(
-  input: ReloadMetroOptions,
-  hasExplicitBundleUrl: boolean,
-  hasBundleUrl: boolean,
-): number | undefined {
-  if (input.metroPort !== undefined) {
-    return parsePort(input.metroPort, DEFAULT_METRO_PORT);
-  }
-  if (hasExplicitBundleUrl) {
-    return undefined;
-  }
-  return input.runtime?.metroPort ?? (hasBundleUrl ? undefined : DEFAULT_METRO_PORT);
-}
-
-export function resolveMetroReloadUrl(input: ReloadMetroOptions): string {
-  const explicitBundleUrl = normalizeOptionalString(input.bundleUrl);
-  const bundleUrl = explicitBundleUrl ?? input.runtime?.bundleUrl;
-  const hasExplicitBundleUrl = Boolean(explicitBundleUrl);
-  const hasBundleUrl = Boolean(normalizeOptionalString(bundleUrl));
-  const transport = resolveRuntimeTransportHints({
-    metroHost: resolveReloadMetroHost(input, hasExplicitBundleUrl, hasBundleUrl),
-    metroPort: resolveReloadMetroPort(input, hasExplicitBundleUrl, hasBundleUrl),
-    bundleUrl,
-  });
-  if (!transport) {
-    throw new AppError('INVALID_ARGS', 'Unable to resolve Metro host and port for reload.');
-  }
-  return buildReloadUrl(transport, resolveMetroReloadPath(bundleUrl));
 }
 
 function buildMetroCommand(
@@ -1099,26 +1032,86 @@ export async function prepareMetroRuntime(
   return result;
 }
 
+// An HTML document on a 2xx means the server has no HTTP reload route and answered with the app
+// page fallback (Expo does this), so a 200 there must not be reported as a successful reload.
+function looksLikeHtmlDocumentBody(body: string): boolean {
+  const head = body.trimStart().slice(0, 15).toLowerCase();
+  return head.startsWith('<!doctype') || head.startsWith('<html');
+}
+
+// {"version":2,"method":"reload"} on the /message websocket is the broadcast the dev-server CLIs
+// send for the `r` key; servers without an HTTP /reload route (Expo) only support this channel.
+async function broadcastReloadOverMessageSocket(
+  messageSocketUrl: string,
+  timeoutMs: number,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const socket = new WebSocket(messageSocketUrl);
+    const fail = (message: string): void => {
+      clearTimeout(timer);
+      try {
+        socket.close();
+      } catch {
+        // Socket may already be closed.
+      }
+      reject(new AppError('COMMAND_FAILED', message));
+    };
+    const timer = setTimeout(() => {
+      fail(`Timed out broadcasting reload to ${messageSocketUrl} after ${timeoutMs}ms`);
+    }, timeoutMs);
+    socket.addEventListener('open', () => {
+      socket.send(JSON.stringify({ version: 2, method: 'reload' }));
+      const settle = (): void => {
+        if (socket.bufferedAmount === 0) {
+          clearTimeout(timer);
+          socket.close();
+          resolve();
+          return;
+        }
+        setTimeout(settle, 20);
+      };
+      settle();
+    });
+    socket.addEventListener('error', () => {
+      fail(`Failed to reach the dev server message socket at ${messageSocketUrl}`);
+    });
+  });
+}
+
 export async function reloadMetro(input: ReloadMetroOptions = {}): Promise<ReloadMetroResult> {
   const timeoutMs = parseTimeout(input.timeoutMs, 10_000, 1_000);
-  const reloadUrl = resolveMetroReloadUrl(input);
+  const { reloadUrl, messageSocketUrl } = resolveMetroReloadEndpoints(input);
   const response = await fetchText(reloadUrl, timeoutMs);
-  if (!response.ok) {
+  if (response.ok && !looksLikeHtmlDocumentBody(response.body)) {
+    return {
+      reloaded: true,
+      reloadUrl,
+      status: response.status,
+      body: response.body,
+      transport: 'http',
+    };
+  }
+  try {
+    await broadcastReloadOverMessageSocket(messageSocketUrl, timeoutMs);
+  } catch (error) {
     throw new AppError(
       'COMMAND_FAILED',
       `React Native dev server reload failed (${response.status}).`,
       {
         reloadUrl,
         status: response.status,
-        body: response.body,
+        body: response.body.slice(0, 500),
+        messageSocketUrl,
         hint: 'Verify Metro or Re.Pack is running and the target React Native app is connected to this dev server instance.',
       },
+      error instanceof Error ? error : undefined,
     );
   }
   return {
     reloaded: true,
-    reloadUrl,
+    reloadUrl: messageSocketUrl,
     status: response.status,
-    body: response.body,
+    body: '',
+    transport: 'message-socket',
   };
 }

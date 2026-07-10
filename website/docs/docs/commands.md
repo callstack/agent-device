@@ -752,7 +752,7 @@ agent-device open "React Navigation Example" --platform ios --device "iPhone 17 
 ```
 
 - Use different simulators and sessions for each worktree. One simulator cannot run two copies of the same bundle id at the same time.
-- On iOS simulators, `open` writes React Native's per-simulator debug server settings before launching, so `rn-a` can use port `8081` while `rn-b` uses port `8082`.
+- On iOS simulators, `open` writes React Native's per-simulator debug server settings before launching, so `rn-a` can use port `8081` while `rn-b` uses port `8082`. `open`'s `--metro-host`/`--metro-port` also bind each session's dev server, so a later flagless `metro reload --session rn-a` reloads the port `8081` server and `--session rn-b` reloads `8082` — no need to repeat the flags.
 - This covers JavaScript and Metro-resolved workspace changes. Rebuild/reinstall the app when native code, native dependencies, bundle identifiers, entitlements, or generated native project files change.
 - Close every manually opened session when done:
 
@@ -769,10 +769,12 @@ agent-device metro reload --metro-host localhost --metro-port 8081
 agent-device metro reload --bundle-url "http://localhost:8081/index.bundle?platform=ios"
 ```
 
-- `metro reload` calls Metro's `/reload` endpoint, the same mechanism used by pressing `r` in the Metro terminal.
+- `metro reload` triggers a dev-server reload, the same mechanism used by pressing `r` in the Metro terminal.
 - Use it for React Native dev builds that are already connected to Metro when JS changes should be loaded without restarting the native app process.
-- If an active remote connection has Metro runtime hints, `metro reload` uses those saved hints. Otherwise it defaults to `http://localhost:8081/reload`.
-- Pass `--metro-host`, `--metro-port`, or `--bundle-url` when you need to target a specific Metro instance.
+- A flagless `metro reload --session <s>` resolves against the dev server that session last bound — via `metro prepare` or `open`'s `--metro-host`/`--metro-port`/`--bundle-url` hint flags — so it never silently reloads a different project's server on the default port. It falls back to `http://localhost:8081/reload` only when the session never bound a dev server. The binding is cleared when the session closes, and a fresh `open` without hint flags also clears any leftover binding from a previous same-name session.
+- The reload URL keeps the bound bundle URL's mount prefix instead of collapsing to the host root (`http://host/tenant-42/index.bundle` → `http://host/tenant-42/reload`); the Expo virtual entry (`.expo/.virtual-metro-entry.bundle`) is an entry-module path, not a mount, so it maps to the server-root endpoints.
+- When the dev server has no HTTP `/reload` route and answers with the app page instead (Expo does this), `metro reload` broadcasts `{"version":2,"method":"reload"}` over the server's `/message` websocket — the channel the dev-server CLIs use for the `r` key — instead of reporting the app-page response as a successful reload. The result's `transport` field says which channel delivered the reload.
+- Pass `--metro-host`, `--metro-port`, or `--bundle-url` when you need to target a specific Metro instance for one call; explicit flags override the session binding.
 - Fall back to `open <app> --relaunch` when the app is not connected to Metro, reload fails, or the native process itself must restart.
 
 ## Media and logs

@@ -348,6 +348,7 @@ test('metro reload forwards host, port, bundle URL, and timeout to client.metro.
         reloadUrl: 'http://127.0.0.1:9090/reload',
         status: 200,
         body: 'OK',
+        transport: 'http',
       };
     },
   });
@@ -1227,6 +1228,7 @@ function createStubClient(params: {
           reloadUrl: 'http://127.0.0.1:8081/reload',
           status: 200,
           body: 'OK',
+          transport: 'http' as const,
         })),
     },
     capture: {

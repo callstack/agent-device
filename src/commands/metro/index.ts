@@ -79,7 +79,10 @@ const metroCliSchema = {
     "this session last bound via metro prepare or open's metro hint flags (falling back to " +
     'localhost:8081 only when the session never bound one), so it never silently reloads a ' +
     "different project's server on the default port; pass an explicit flag to override the " +
-    'session hint for one call. The binding is cleared when the session closes, and a fresh ' +
+    'session hint for one call. The reload URL keeps the bound bundle URL mount prefix instead ' +
+    'of collapsing to the host root, and when the server has no HTTP /reload route (Expo) the ' +
+    'reload is broadcast over its /message websocket instead of trusting the app-page fallback. ' +
+    'The binding is cleared when the session closes, and a fresh ' +
     'open without hint flags also clears any leftover binding from a previous same-name session. ' +
     '--kind expo (detected or forced) requests the virtual-entry bundle URL ' +
     '(.expo/.virtual-metro-entry.bundle) instead of index.bundle, since index.bundle 404s/500s ' +
