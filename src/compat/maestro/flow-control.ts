@@ -1,4 +1,4 @@
-import type { SessionAction } from '../../daemon/types.ts';
+import type { ReplayControlActionSource, SessionAction } from '../../daemon/types.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { maestroSelector } from './interactions.ts';
 import {
@@ -49,6 +49,28 @@ function attachRunFlowProvenance(flow: MaestroReplayFlow): SessionAction[] {
       line: flow.actionLines[index] ?? 1,
     },
   }));
+}
+
+/**
+ * The control-flow counterpart of `convertRootCommands`'s top-level strip
+ * (ADR 0012 migration step 2): a `runFlow` include nested under `retry:` or a
+ * runtime `runFlow.when:` never flows through `pushConvertedRootActions`, so
+ * without this its actions would carry the transient `replaySource` field
+ * into dispatch AND the runtime would never consult it — reproducing exactly
+ * the wrapper-line provenance bug the top-level fix closed. Strips
+ * `replaySource` off every nested action and returns it as the parallel
+ * `actionSources` array the runtime block invoker reads per nested step.
+ */
+function stripNestedActionSources(actions: SessionAction[]): {
+  actions: SessionAction[];
+  actionSources?: (ReplayControlActionSource | undefined)[];
+} {
+  if (!actions.some((entry) => entry.replaySource !== undefined)) return { actions };
+  const actionSources = actions.map((entry) => entry.replaySource);
+  return {
+    actions: actions.map(({ replaySource: _replaySource, ...rest }) => rest),
+    actionSources,
+  };
 }
 
 export function convertRunFlow(
@@ -126,12 +148,15 @@ export function convertRetry(
   }
   const maxRetries = readRetryMaxRetries(value.maxRetries, context);
   const commands = normalizeCommandList(value.commands);
-  const actions = convertCommandList(commands, config, context, deps);
+  const { actions, actionSources } = stripNestedActionSources(
+    convertCommandList(commands, config, context, deps),
+  );
   return [
     replayControlAction('retry', [String(maxRetries)], {
       kind: 'retry',
       maxRetries,
       actions,
+      ...(actionSources ? { actionSources } : {}),
     }),
   ];
 }
@@ -446,12 +471,14 @@ function wrapRunFlowCondition(
   }
   const mode = visibleSelector ? 'visible' : 'notVisible';
   const selector = visibleSelector ?? notVisibleSelector ?? '';
+  const stripped = stripNestedActionSources(actions);
   return [
     replayControlAction('runFlow.when', [mode, selector], {
       kind: 'maestroRunFlowWhen',
       mode,
       selector,
-      actions,
+      actions: stripped.actions,
+      ...(stripped.actionSources ? { actionSources: stripped.actionSources } : {}),
     }),
   ];
 }

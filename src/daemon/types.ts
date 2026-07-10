@@ -370,17 +370,30 @@ export type SessionState = {
   appLogFailure?: AppLogFailure;
 };
 
+/**
+ * Per-nested-action source provenance for control-flow wrappers (ADR 0012
+ * migration step 2): parallel to `actions`, `undefined` at an index means
+ * "the file the wrapping control action itself came from". Populated at
+ * parse time by stripping the transient `SessionAction.replaySource` field
+ * off nested actions (a `runFlow` include inside `retry:`/`runFlow.when:`
+ * stamps it), so the runtime block invoker can report the failing NESTED
+ * step's real file+line instead of the wrapper's.
+ */
+export type ReplayControlActionSource = { path: string; line: number };
+
 export type SessionReplayControl =
   | {
       kind: 'maestroRunFlowWhen';
       mode: 'visible' | 'notVisible';
       selector: string;
       actions: SessionAction[];
+      actionSources?: (ReplayControlActionSource | undefined)[];
     }
   | {
       kind: 'retry';
       maxRetries: number;
       actions: SessionAction[];
+      actionSources?: (ReplayControlActionSource | undefined)[];
     };
 
 export type SessionAction = {
@@ -408,11 +421,14 @@ export type SessionAction = {
   /**
    * Maestro-parse-only provenance (ADR 0012 migration step 2): set transiently
    * on an action produced by inlining a `runFlow` include, carrying the
-   * include file's resolved path and its own line number. The Maestro parser
-   * (`src/compat/maestro/replay-flow.ts`) reads this back into the returned
-   * `actionSourcePaths`/`actionLines` arrays and strips the field before the
-   * action leaves the parse pipeline — it never reaches dispatch, session
-   * history, or `.ad` rewriting.
+   * include file's resolved path and its own line number. Stripped before an
+   * action leaves the parse pipeline at exactly two places: top-level actions
+   * in `convertRootCommands` (read back into the returned
+   * `actionSourcePaths`/`actionLines` arrays), and actions nested under a
+   * control-flow wrapper (`retry:`/runtime `runFlow.when:`) in
+   * `stripNestedActionSources` (moved into the wrapper's
+   * `replayControl.actionSources`, consulted by the runtime block invoker).
+   * It therefore never reaches dispatch, session history, or `.ad` rewriting.
    */
   replaySource?: { path: string; line: number };
 };

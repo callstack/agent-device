@@ -26,11 +26,20 @@ export async function invokeReplayAction(params: {
   filePath: string;
   line: number;
   step: number;
+  /**
+   * Resolved source file for THIS action when it differs from `filePath`
+   * (ADR 0012 migration step 2): a Maestro `runFlow` include's actions carry
+   * the include's path. Threaded into nested control-flow invocations and
+   * attached to a failing response (deepest failure wins) so the divergence
+   * report names the actual failing file+line.
+   */
+  sourcePath?: string;
   tracePath?: string;
   invoke: DaemonInvokeFn;
 }): Promise<DaemonResponse> {
-  const { req, sessionName, action, scope, filePath, line, step, tracePath, invoke } = params;
-  const resolved = resolveReplayAction(action, scope, { file: filePath, line });
+  const { req, sessionName, action, scope, filePath, line, step, sourcePath, tracePath, invoke } =
+    params;
+  const resolved = resolveReplayAction(action, scope, { file: sourcePath ?? filePath, line });
   const invokeNestedReplayAction: ReplayActionInvoker = (nested) =>
     invokeReplayAction({
       req,
@@ -40,6 +49,9 @@ export async function invokeReplayAction(params: {
       filePath,
       line: nested.line,
       step: nested.step,
+      // A nested action without its own recorded source belongs to the same
+      // file as its wrapper (e.g. a plain tapOn inside retry:).
+      sourcePath: nested.sourcePath ?? sourcePath,
       tracePath,
       invoke,
     });
@@ -48,6 +60,7 @@ export async function invokeReplayAction(params: {
     type: 'replay_action_start',
     ts: new Date(startedAt).toISOString(),
     replayPath: filePath,
+    ...(sourcePath ? { sourcePath } : {}),
     line,
     step,
     command: resolved.command,
@@ -70,6 +83,7 @@ export async function invokeReplayAction(params: {
     type: 'replay_action_stop',
     ts: new Date(finishedAt).toISOString(),
     replayPath: filePath,
+    ...(sourcePath ? { sourcePath } : {}),
     line,
     step,
     command: resolved.command,
@@ -78,7 +92,30 @@ export async function invokeReplayAction(params: {
     resultTiming: response.ok ? readResponseTiming(response.data) : undefined,
     errorCode: response.ok ? undefined : response.error.code,
   });
-  return response;
+  return withReplayFailureSource(response, sourcePath ?? filePath, line);
+}
+
+/**
+ * Attaches the failing action's resolved source to the error so the
+ * top-level failure context (`withReplayFailureContext`) can report the
+ * NESTED step's provenance when the failure happened inside a control-flow
+ * wrapper. Deepest failure wins: an outer wrapper's invocation never
+ * overwrites a source an inner invocation already attached.
+ */
+function withReplayFailureSource(
+  response: DaemonResponse,
+  path: string,
+  line: number,
+): DaemonResponse {
+  if (response.ok) return response;
+  if (response.error.details?.replaySource !== undefined) return response;
+  return {
+    ok: false,
+    error: {
+      ...response.error,
+      details: { ...(response.error.details ?? {}), replaySource: { path, line } },
+    },
+  };
 }
 
 async function invokeResolvedReplayAction(params: {
@@ -146,6 +183,7 @@ async function invokeReplayControl(params: {
     case 'retry':
       return await invokeReplayRetryBlock({
         actions: control.actions,
+        actionSources: control.actionSources,
         maxRetries: control.maxRetries,
         line,
         step,

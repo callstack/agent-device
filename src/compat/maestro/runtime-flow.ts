@@ -126,6 +126,7 @@ async function invokeMaestroRunFlowWhenSteps(params: {
 }): Promise<DaemonResponse> {
   const response = await invokeReplayActionBlock({
     actions: params.control.actions,
+    actionSources: params.control.actionSources,
     line: params.line,
     step: params.step,
     invokeReplayAction: params.invokeReplayAction,
