@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { AppError } from '../../kernel/errors.ts';
 import {
   isIosFamily,
   isMacOs,
@@ -9,6 +10,7 @@ import {
   type DeviceKind,
   type DeviceTarget,
 } from '../../kernel/device.ts';
+import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import {
   ANDROID_EMULATOR,
   ANDROID_TV_DEVICE,
@@ -160,4 +162,59 @@ test('buildPerfResponseData routes the support gate through the perf facet', asy
       `routed support for ${device.id}`,
     );
   }
+});
+
+// Shipped-path routing proof for the sampling body (issue #1188). The support-gate test
+// above never reaches sampler selection — it uses no `appBundleId`, so execution returns
+// through `applyMissingAppPerfMetrics` before `resolvePerfMetricsSampler`. WITH an app
+// bundle, execution clears that guard and hits the facet-owned sampler selection. The
+// Android sampler is the ONLY arm that threads `options.androidAdb`, so a scripted adb
+// executor is invoked exactly when the Android sampler was selected AND run through the
+// shipped code path. Breaking the facet lookup (Android returning a non-`android` tag, or
+// the resolver yielding no sampler) skips the Android sampler and fails this test — so the
+// suite now covers the dispatch line itself, not only registry parity.
+const SAMPLED_ADB_REASON = 'scripted adb unavailable';
+function makeThrowingAdb(): { adb: AndroidAdbExecutor; calls: () => number } {
+  let calls = 0;
+  const adb: AndroidAdbExecutor = async () => {
+    calls += 1;
+    throw new AppError('COMMAND_FAILED', SAMPLED_ADB_REASON);
+  };
+  return { adb, calls: () => calls };
+}
+
+test('buildPerfResponseData dispatches the Android sampler selected by the facet', async () => {
+  for (const device of SAMPLE_DEVICES.filter((d) => d.platform === 'android')) {
+    const { adb, calls } = makeThrowingAdb();
+    const session = makeSession(`perf-routed-${device.id}`, {
+      device,
+      appBundleId: 'com.example.app',
+    });
+    const data = await buildPerfResponseData(session, { androidAdb: adb });
+
+    assert.ok(calls() > 0, `Android sampler reached through the shipped path for ${device.id}`);
+    for (const metric of ['memory', 'cpu', 'fps'] as const) {
+      const entry = data.metrics[metric] as { available?: boolean; reason?: string };
+      assert.equal(
+        entry.available,
+        false,
+        `${metric} was sampled (not the base response) for ${device.id}`,
+      );
+      assert.equal(
+        entry.reason,
+        SAMPLED_ADB_REASON,
+        `${metric} carries the sampler failure for ${device.id}`,
+      );
+    }
+  }
+});
+
+// The missing-app guard precedes sampler selection, so without an `appBundleId` the facet
+// sampler is never consulted and the scripted adb stays untouched.
+test('buildPerfResponseData consults the sampler only past the missing-app guard', async () => {
+  const { adb, calls } = makeThrowingAdb();
+  await buildPerfResponseData(makeSession('perf-no-bundle', { device: ANDROID_EMULATOR }), {
+    androidAdb: adb,
+  });
+  assert.equal(calls(), 0, 'sampler not consulted without an app bundle');
 });
