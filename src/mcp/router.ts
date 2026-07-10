@@ -1,7 +1,8 @@
 import { listCommandTools, commandToolExecutor, type ToolResult } from './command-tools.ts';
 import { readVersion } from '../utils/version.ts';
 import type { JsonRpcId, JsonRpcRequestEnvelope } from '../kernel/contracts.ts';
-import { AppError, normalizeError } from '../kernel/errors.ts';
+import { AppError } from '../kernel/errors.ts';
+import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
 
 const MCP_SERVER_NAME = 'agent-device';
 const SUPPORTED_PROTOCOL_VERSION = '2025-11-25';
@@ -61,20 +62,16 @@ async function callTool(params: unknown): Promise<ToolResult> {
   const record = asRecord(params);
   const name = stringField(record, 'name');
   try {
+    // The executor's own catch (command-tools.ts) handles command-level
+    // failures (including ADR 0012 replay divergence: it builds
+    // structuredContent and pins the error-path screen refs before
+    // returning). This catch is the fallback for failures OUTSIDE a resolved
+    // command call — unknown tool name, malformed params — which never reach
+    // the executor's try/catch at all.
     return await commandToolExecutor.execute(name, record.arguments);
   } catch (error) {
-    return textToolResult(formatToolError(error), true);
+    return textToolResult(formatToolErrorText(normalizeToolError(error)), true);
   }
-}
-
-// Keep the full error contract (code + hint) visible to MCP agents; a bare
-// message string strips exactly the guidance the hint system exists to give.
-function formatToolError(error: unknown): string {
-  const normalized = normalizeError(error);
-  const lines = [`Error (${normalized.code}): ${normalized.message}`];
-  if (normalized.hint) lines.push(`Hint: ${normalized.hint}`);
-  if (normalized.supportedOn) lines.push(`Supported on: ${normalized.supportedOn}`);
-  return lines.join('\n');
 }
 
 function supportedProtocolVersion(_params: unknown): string {

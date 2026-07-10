@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import type { AgentDeviceClient } from '../../client/client-types.ts';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
 import { COMMAND_OUTPUT_SCHEMAS } from '../command-output-schemas.ts';
+import { AppError } from '../../kernel/errors.ts';
 
 test('MCP command tool executor hides client creation behind an execution adapter', async () => {
   const client = {} as AgentDeviceClient;
@@ -713,4 +714,80 @@ test('MCP renders tool text from the unpinned input so the model never sees suff
   const result = await executor.execute('press', { target: { kind: 'ref', ref: '@e2' } });
 
   assert.doesNotMatch(result.content[0]?.text ?? '', /~s9/);
+});
+
+// --- ADR 0012 migration step 2: replay divergence is a ref-issuing error ---
+
+function replayDivergenceError(): AppError {
+  return new AppError('REPLAY_DIVERGENCE', 'Replay failed at step 2 (click "Save"): not hittable', {
+    step: 2,
+    action: 'click',
+    divergence: {
+      version: 1,
+      kind: 'action-failure',
+      step: { index: 2, source: { path: '/tmp/flow.ad', line: 2 } },
+      action: 'click "Save"',
+      cause: { code: 'COMMAND_FAILED', message: 'not hittable' },
+      screen: {
+        state: 'available',
+        refsGeneration: 12,
+        refs: [{ ref: 'e5', role: 'button', label: 'Save' }],
+      },
+      suggestions: [],
+      suggestionCount: 0,
+      resume: { allowed: false, reason: 'resume not yet supported' },
+    },
+  });
+}
+
+test('MCP tool error is a ref-issuing result: isError, structuredContent, and pinned screen refs', async () => {
+  const runCalls: Array<{ name: string; input: unknown }> = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      runCalls.push({ name, input });
+      if (name === 'replay') throw replayDivergenceError();
+      return {};
+    },
+  });
+
+  const result = await executor.execute('replay', { positionals: ['/tmp/flow.ad'] });
+
+  assert.equal(result.isError, true);
+  const structured = result.structuredContent as {
+    code: string;
+    details?: { divergence?: { screen?: { refs?: Array<{ ref: string }> } } };
+  };
+  assert.equal(structured.code, 'REPLAY_DIVERGENCE');
+  assert.equal(structured.details?.divergence?.screen?.refs?.[0]?.ref, 'e5');
+  assert.match(result.content[0]?.text ?? '', /Error \(REPLAY_DIVERGENCE\)/);
+
+  // The error-path screen ref is pinned exactly like a successful ref-issuing
+  // response — the caller's next command against @e5 forwards the generation.
+  await executor.execute('press', { target: { kind: 'ref', ref: '@e5' } });
+  assert.deepEqual(runCalls[1]?.input, { target: { kind: 'ref', ref: '@e5~s12' } });
+});
+
+test('MCP tool error without a divergence never touches existing pins (merge-only)', async () => {
+  const runCalls: Array<{ name: string; input: unknown }> = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      runCalls.push({ name, input });
+      if (name === 'snapshot') {
+        return { nodes: [{ ref: 'e2' }], truncated: false, refsGeneration: 7 };
+      }
+      if (name === 'get') throw new AppError('INVALID_ARGS', 'bad selector');
+      return {};
+    },
+  });
+
+  await executor.execute('snapshot', {});
+  const errorResult = await executor.execute('get', {
+    target: { kind: 'selector', selector: '???' },
+  });
+  assert.equal(errorResult.isError, true);
+
+  await executor.execute('press', { target: { kind: 'ref', ref: '@e2' } });
+  assert.deepEqual(runCalls[2]?.input, { target: { kind: 'ref', ref: '@e2~s7' } });
 });
