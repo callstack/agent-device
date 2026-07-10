@@ -24,7 +24,7 @@ import {
 } from '../../__tests__/test-utils/index.ts';
 import { getPlugin } from '../../core/platform-plugin/plugin.ts';
 import { registerBuiltinPlatformPlugins } from '../../core/interactors/register-builtins.ts';
-import { buildPerfResponseData } from '../handlers/session-perf.ts';
+import { buildPerfResponseData, type PerfMetricsSamplerTag } from '../handlers/session-perf.ts';
 import { PERF_UNAVAILABLE_REASON } from '../handlers/session-startup-metrics.ts';
 
 // Phase 3 step b.3 (issue #974) parity gate for the daemon perf facet. The
@@ -167,12 +167,9 @@ test('buildPerfResponseData routes the support gate through the perf facet', asy
 // Shipped-path routing proof for the sampling body (issue #1188). The support-gate test
 // above never reaches sampler selection — it uses no `appBundleId`, so execution returns
 // through `applyMissingAppPerfMetrics` before `resolvePerfMetricsSampler`. WITH an app
-// bundle, execution clears that guard and hits the facet-owned sampler selection. The
-// Android sampler is the ONLY arm that threads `options.androidAdb`, so a scripted adb
-// executor is invoked exactly when the Android sampler was selected AND run through the
-// shipped code path. Breaking the facet lookup (Android returning a non-`android` tag, or
-// the resolver yielding no sampler) skips the Android sampler and fails this test — so the
-// suite now covers the dispatch line itself, not only registry parity.
+// bundle, execution clears that guard and hits the sampler selection. The Android sampler
+// is the ONLY arm that threads `options.androidAdb`, so a scripted adb executor is invoked
+// exactly when the Android sampler was selected AND run through the shipped code path.
 const SAMPLED_ADB_REASON = 'scripted adb unavailable';
 function makeThrowingAdb(): { adb: AndroidAdbExecutor; calls: () => number } {
   let calls = 0;
@@ -206,6 +203,37 @@ test('buildPerfResponseData dispatches the Android sampler selected by the facet
         `${metric} carries the sampler failure for ${device.id}`,
       );
     }
+  }
+});
+
+// Facet-vs-platform proof (re-review, issue #1188): the test above cannot distinguish the
+// facet lookup from the deleted `device.platform === 'android'` branch, because on a real
+// Android device both select the same Android sampler with the same options. Here the
+// device is an Apple simulator but its plugin's `metricsSamplerTag` is overridden to
+// `'android'`, so ONLY a facet-driven selection routes it to the Android sampler (the
+// scripted adb fires). The former platform branch keyed on `device.platform`, so restoring
+// it keeps the Apple device on the Apple sampler and this assertion fails — pinning the
+// shipped selection to `metricsSamplerTag`, not the device platform.
+test('buildPerfResponseData selects the sampler by the facet tag, not the device platform', async () => {
+  const perf = getPlugin('apple').perf;
+  assert.ok(perf, 'apple plugin exposes the perf facet');
+  const mutablePerf = perf as { metricsSamplerTag: (device: DeviceInfo) => PerfMetricsSamplerTag };
+  const originalTag = mutablePerf.metricsSamplerTag;
+  mutablePerf.metricsSamplerTag = () => 'android';
+  try {
+    const { adb, calls } = makeThrowingAdb();
+    const session = makeSession('perf-facet-tag', {
+      device: IOS_SIMULATOR,
+      appBundleId: 'com.example.app',
+    });
+    const data = await buildPerfResponseData(session, { androidAdb: adb });
+
+    assert.ok(calls() > 0, 'facet tag routed the Apple device to the Android sampler');
+    const cpu = data.metrics.cpu as { available?: boolean; reason?: string };
+    assert.equal(cpu.available, false, 'cpu was sampled through the facet-selected sampler');
+    assert.equal(cpu.reason, SAMPLED_ADB_REASON, 'cpu carries the scripted adb failure');
+  } finally {
+    mutablePerf.metricsSamplerTag = originalTag;
   }
 });
 
