@@ -19,6 +19,7 @@ import {
 } from '../../runtime-types.ts';
 import type { RepeatedInput } from '../../command-input.ts';
 import {
+  EXACT_REF_RESOLUTION,
   type InteractionTarget,
   preflightNativeRefInteraction,
   resolveInteractionTarget,
@@ -242,6 +243,7 @@ async function maybeTapRefTarget(
   return {
     kind: 'ref',
     target: { kind: 'ref', ref: options.target.ref },
+    resolution: EXACT_REF_RESOLUTION,
     ...preflight,
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
   };
@@ -269,6 +271,7 @@ async function maybeFillRefTarget(
     kind: 'ref',
     target: { kind: 'ref', ref: options.target.ref },
     text: options.text,
+    resolution: EXACT_REF_RESOLUTION,
     ...preflight,
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
   };

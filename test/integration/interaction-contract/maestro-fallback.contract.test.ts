@@ -48,6 +48,13 @@ test(scenario('responseConstruction'), async () => {
       assert.equal(data.maestroNonHittableCoordinateFallbackAllowed, true);
       assert.equal(data.maestroNonHittableCoordinateFallbackUsed, true);
       assert.equal(data.maestroFallbackReason, 'non-hittable-coordinate');
+      // ADR 0012 decision 2: resolutionDisclosure is `inapplicable` on this
+      // path — Maestro owns matching and the fallback is coordinate
+      // execution, so no `resolution` field is attached, not even the
+      // direct-iOS not-observed marker. Not registered in the coverage
+      // manifest: the coverage gate rejects claims against inapplicable
+      // cells.
+      assert.equal(data.resolution, undefined);
     },
   );
 });

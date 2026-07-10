@@ -12,4 +12,6 @@ export const RUNTIME_REF_COVERAGE = definePathCoverage('runtime-ref', {
   settleObservation:
     'runtime-ref settleObservation: press @ref --settle diffs the settled tree against the stored baseline',
   errorTaxonomy: 'runtime-ref errorTaxonomy: unknown ref fails with the stale-ref hint',
+  resolutionDisclosure:
+    'runtime-ref resolutionDisclosure: an @ref discloses the exact ref-provenance shape',
 });

@@ -91,11 +91,76 @@ function interactionResponseDataSchema(extra: InteractionExtra = {}): JsonSchema
       warning: stringSchema(),
       message: stringSchema(),
       evidence: interactionEvidenceSchema,
+      resolution: resolutionDisclosureSchema,
       ...extraProperties,
     },
     ['targetKind', ...extraRequired],
   );
 }
+
+// ResolutionDiagnosticEntry (src/contracts/interaction.ts) — a disambiguation
+// winner or losing alternative. Never a snapshot ref.
+const resolutionDiagnosticEntrySchema: JsonSchema = objectSchema(
+  {
+    diagnosticRef: stringSchema(
+      'Opaque non-@ diagnostic token. Never a snapshot ref: not issued via refsGeneration and cannot be pinned or reused as an @ref target. UTF-8 truncated to 256 bytes.',
+    ),
+    role: stringSchema('UTF-8 truncated to 256 bytes.'),
+    label: stringSchema('UTF-8 truncated to 256 bytes.'),
+  },
+  ['diagnosticRef'],
+);
+
+/**
+ * ResolutionDisclosure (src/contracts/interaction.ts) — ADR 0012 decision 2:
+ * additive, honest pre-action disclosure of how the acting path resolved its
+ * target. Absent entirely when resolutionDisclosure is `inapplicable` for the
+ * path (coordinate, maestro-non-hittable-fallback). Never itself ref-issuing:
+ * `winnerDiagnostic`/`alternatives` carry no `refsGeneration` and are never
+ * MCP-pinned.
+ */
+const resolutionDisclosureSchema: JsonSchema = {
+  type: 'object',
+  description:
+    'Pre-action disclosure of how the acting path resolved its target. Absent when resolutionDisclosure is inapplicable for the path.',
+  oneOf: [
+    objectSchema(
+      {
+        source: constSchema('runtime'),
+        phase: constSchema('pre-action'),
+        kind: constSchema('unique'),
+      },
+      ['source', 'phase', 'kind'],
+    ),
+    objectSchema(
+      {
+        source: constSchema('runtime'),
+        phase: constSchema('pre-action'),
+        kind: constSchema('disambiguated'),
+        matchCount: numberSchema('Total matches resolveSelectorChain found before disambiguation.'),
+        winnerDiagnostic: resolutionDiagnosticEntrySchema,
+        tiebreak: enumSchema(
+          ['visible', 'deepest', 'smallest-area'],
+          'The comparison that decided the winner.',
+        ),
+        alternatives: {
+          type: 'array',
+          description: 'At most 5 losing candidates, document order. The winner is never included.',
+          items: resolutionDiagnosticEntrySchema,
+        },
+      },
+      ['source', 'phase', 'kind', 'matchCount', 'winnerDiagnostic', 'tiebreak', 'alternatives'],
+    ),
+    objectSchema(
+      { source: constSchema('ref'), phase: constSchema('pre-action'), kind: constSchema('exact') },
+      ['source', 'phase', 'kind'],
+    ),
+    objectSchema({ source: constSchema('direct-ios'), kind: constSchema('not-observed') }, [
+      'source',
+      'kind',
+    ]),
+  ],
+};
 
 // InteractionEvidence (src/contracts/interaction.ts) — opt-in `--verify` cheap
 // post-condition evidence (#1047).

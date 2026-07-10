@@ -103,3 +103,17 @@ test(scenario('responseConstruction'), async () => {
     assert.equal(data.selector, undefined);
   });
 });
+
+// ADR 0012 decision 2: resolutionDisclosure is `inapplicable` on this path —
+// no element was resolved, so no `resolution` field is attached at all (not
+// even a "not-observed" marker; that marker exists ONLY for the direct-iOS
+// path, which DID attempt an element resolution). Not registered in the
+// coverage manifest: the coverage gate rejects claims against inapplicable
+// cells.
+test('coordinate resolutionDisclosure: inapplicable — no resolution field is attached', async () => {
+  await withIosContractDaemon([runnerTapEntry({ x: 100, y: 200 })], async (daemon) => {
+    const press = await daemon.callCommand('press', ['100', '200']);
+    const data = assertRpcOk(press);
+    assert.equal(data.resolution, undefined);
+  });
+});

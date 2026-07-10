@@ -9,18 +9,26 @@ import {
   resolveSelectorChain,
   selectorFailureHint,
   STALE_REF_HINT,
+  type SelectorResolution,
 } from '../../../daemon/selectors.ts';
 import { buildSelectorChainForNode } from '../../../utils/selector-build.ts';
-import { findNodeByLabel, resolveRefLabel } from '../../../snapshot/snapshot-processing.ts';
+import {
+  findNodeByLabel,
+  normalizeType,
+  resolveRefLabel,
+} from '../../../snapshot/snapshot-processing.ts';
 import {
   isNodeVisibleOnScreen,
   resolveEffectiveViewportRect,
 } from '../../../snapshot/mobile-snapshot-semantics.ts';
 import { containsPoint, resolveViewportRect } from '../../../utils/rect-visibility.ts';
 import { isSnapshotNodeInteractionBlocked } from '../../../snapshot/snapshot-occlusion.ts';
+import { truncateUtf8 } from '../../../utils/truncate-utf8.ts';
 import type {
   InteractionTarget,
   PointTarget,
+  ResolutionDiagnosticEntry,
+  ResolutionDisclosure,
   ResolvedInteractionTarget,
 } from '../../../contracts/interaction.ts';
 import { now, toBackendContext } from '../../runtime-common.ts';
@@ -154,7 +162,13 @@ async function resolveRefInteractionTarget(
     kind: 'ref',
     point,
     target: { kind: 'ref', ref: `@${resolved.ref}` },
-    ...describeResolvedInteractionNode(runtime, node, capture.snapshot.nodes, params.action),
+    ...describeResolvedInteractionNode(
+      runtime,
+      node,
+      capture.snapshot.nodes,
+      params.action,
+      EXACT_REF_RESOLUTION,
+    ),
   };
 }
 
@@ -218,7 +232,75 @@ async function resolveSelectorInteractionTarget(
     kind: 'selector',
     point,
     target: { kind: 'selector', selector: resolved.selector.raw },
-    ...describeResolvedInteractionNode(runtime, node, capture.snapshot.nodes, params.action),
+    ...describeResolvedInteractionNode(
+      runtime,
+      node,
+      capture.snapshot.nodes,
+      params.action,
+      buildSelectorResolutionDisclosure(resolved, capture.snapshot.nodes),
+    ),
+  };
+}
+
+/**
+ * ADR 0012 decision 2: every optional string on a pre-action diagnostic entry
+ * is UTF-8 truncated to this bound; `alternatives` is capped to this many
+ * losing candidates (the winner is never included).
+ */
+const RESOLUTION_DIAGNOSTIC_STRING_BYTE_CAP = 256;
+const MAX_RESOLUTION_ALTERNATIVES = 5;
+
+/**
+ * ADR 0012 decision 2: an `@ref` names exactly one node by construction — the
+ * runtime-ref path (via `describeResolvedInteractionNode`) and the native-ref
+ * fast path (`interactions.ts`) both attach this same constant.
+ */
+export const EXACT_REF_RESOLUTION: ResolutionDisclosure = {
+  source: 'ref',
+  phase: 'pre-action',
+  kind: 'exact',
+};
+
+const UNIQUE_RUNTIME_RESOLUTION: ResolutionDisclosure = {
+  source: 'runtime',
+  phase: 'pre-action',
+  kind: 'unique',
+};
+
+// The disambiguation winner IS `resolved.node` (resolveSelectorChain's own
+// pick, never re-derived here) — only diagnostic disclosure is added, per ADR
+// 0012 decision 2: "discloses the existing heuristic without changing
+// resolveSelectorChain or its winner."
+function buildSelectorResolutionDisclosure(
+  resolved: SelectorResolution,
+  nodes: SnapshotState['nodes'],
+): ResolutionDisclosure {
+  if (!resolved.disambiguation) return UNIQUE_RUNTIME_RESOLUTION;
+  return {
+    source: 'runtime',
+    phase: 'pre-action',
+    kind: 'disambiguated',
+    matchCount: resolved.disambiguation.matchCount,
+    winnerDiagnostic: buildResolutionDiagnosticEntry(resolved.node, nodes),
+    tiebreak: resolved.disambiguation.tiebreak,
+    alternatives: resolved.disambiguation.alternatives
+      .slice(0, MAX_RESOLUTION_ALTERNATIVES)
+      .map((node) => buildResolutionDiagnosticEntry(node, nodes)),
+  };
+}
+
+function buildResolutionDiagnosticEntry(
+  node: SnapshotNode,
+  nodes: SnapshotState['nodes'],
+): ResolutionDiagnosticEntry {
+  const role = normalizeType(node.type ?? '');
+  const label = resolveRefLabel(node, nodes);
+  return {
+    diagnosticRef: `diag-${node.ref}`,
+    ...(role ? { role: truncateUtf8(role, RESOLUTION_DIAGNOSTIC_STRING_BYTE_CAP) } : {}),
+    ...(label !== undefined
+      ? { label: truncateUtf8(label, RESOLUTION_DIAGNOSTIC_STRING_BYTE_CAP) }
+      : {}),
   };
 }
 
@@ -229,6 +311,7 @@ function describeResolvedInteractionNode(
   node: SnapshotNode,
   nodes: SnapshotState['nodes'],
   action: InteractionAction,
+  resolution: ResolutionDisclosure,
 ): {
   node: SnapshotNode;
   selectorChain: string[];
@@ -236,6 +319,7 @@ function describeResolvedInteractionNode(
   targetHittable?: boolean;
   hint?: string;
   preActionNodes: SnapshotState['nodes'];
+  resolution: ResolutionDisclosure;
 } {
   return {
     node,
@@ -245,6 +329,7 @@ function describeResolvedInteractionNode(
     refLabel: resolveRefLabel(node, nodes),
     ...describeNonHittableTarget(node, action),
     preActionNodes: nodes,
+    resolution,
   };
 }
 

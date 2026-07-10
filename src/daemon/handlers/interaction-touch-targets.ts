@@ -188,6 +188,7 @@ export function interactionResultExtra(
       hint: result.hint,
       evidence,
       settle,
+      resolution: result.resolution,
     };
   }
   if (result.kind === 'selector') {
@@ -199,6 +200,7 @@ export function interactionResultExtra(
       hint: result.hint,
       evidence,
       settle,
+      resolution: result.resolution,
     };
   }
   return { evidence, settle };

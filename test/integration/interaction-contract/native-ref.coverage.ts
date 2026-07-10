@@ -16,4 +16,6 @@ export const NATIVE_REF_COVERAGE = definePathCoverage('native-ref', {
   // reason, hint), which is the shared taxonomy on this path.
   errorTaxonomy:
     'native-ref offscreen: preflight refuses an off-screen ref before the backend call',
+  resolutionDisclosure:
+    'native-ref resolutionDisclosure: fast-path result discloses the exact ref-provenance shape',
 });

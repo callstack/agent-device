@@ -116,6 +116,53 @@ test('resolveSelectorChain disambiguates to deeper/smaller matching node when en
   assert.ok(resolved);
   assert.equal(resolved.node.ref, 'e2');
   assert.equal(resolved.matches, 2);
+  // ADR 0012 decision 2: the comparator records which criterion decided —
+  // here depth (e2 is deeper than e1).
+  assert.equal(resolved.disambiguation?.tiebreak, 'deepest');
+  assert.equal(resolved.disambiguation?.matchCount, 2);
+  assert.deepEqual(
+    resolved.disambiguation?.alternatives.map((node) => node.ref),
+    ['e1'],
+  );
+});
+
+test('resolveSelectorChain disambiguation records the smallest-area tiebreak when depths tie', () => {
+  const sameDepthNodes: SnapshotState['nodes'] = [
+    {
+      ref: 'e1',
+      index: 0,
+      type: 'Other',
+      label: 'Press me',
+      rect: { x: 0, y: 0, width: 300, height: 300 },
+      depth: 2,
+      enabled: true,
+      hittable: true,
+    },
+    {
+      ref: 'e2',
+      index: 1,
+      type: 'Other',
+      label: 'Press me',
+      rect: { x: 10, y: 10, width: 20, height: 20 },
+      depth: 2,
+      enabled: true,
+      hittable: true,
+    },
+  ];
+  const chain = parseSelectorChain('label="Press me"');
+  const resolved = resolveSelectorChain(sameDepthNodes, chain, {
+    platform: 'ios',
+    requireRect: true,
+    requireUnique: true,
+    disambiguateAmbiguous: true,
+  });
+  assert.ok(resolved);
+  assert.equal(resolved.node.ref, 'e2');
+  assert.equal(resolved.disambiguation?.tiebreak, 'smallest-area');
+  assert.deepEqual(
+    resolved.disambiguation?.alternatives.map((node) => node.ref),
+    ['e1'],
+  );
 });
 
 test('resolveSelectorChain disambiguation prefers on-screen candidates over off-screen ones', () => {
@@ -165,6 +212,14 @@ test('resolveSelectorChain disambiguation prefers on-screen candidates over off-
   assert.ok(resolved);
   assert.equal(resolved.node.ref, 'e2');
   assert.equal(resolved.matches, 2);
+  // ADR 0012 decision 2: visibility decided this one, not depth/area — e3 is
+  // both deeper and smaller than e2, so a depth/area-only comparator would
+  // have picked the wrong node.
+  assert.equal(resolved.disambiguation?.tiebreak, 'visible');
+  assert.deepEqual(
+    resolved.disambiguation?.alternatives.map((node) => node.ref),
+    ['e3'],
+  );
 });
 
 test('resolveSelectorChain disambiguation treats items inside an off-screen scroll container as off-screen', () => {

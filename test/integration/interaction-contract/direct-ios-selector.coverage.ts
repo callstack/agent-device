@@ -15,4 +15,6 @@ export const DIRECT_IOS_SELECTOR_COVERAGE = definePathCoverage('direct-ios-selec
     'direct-ios-selector verifyEvidence: --verify disables the direct path and returns runtime evidence',
   settleObservation:
     'direct-ios-selector settleObservation: --settle disables the direct path and returns the runtime settled diff',
+  resolutionDisclosure:
+    'direct-ios-selector resolutionDisclosure: the XCTest fast path discloses the explicit not-observed shape',
 });

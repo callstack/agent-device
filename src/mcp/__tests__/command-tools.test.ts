@@ -613,6 +613,72 @@ test('MCP leaves pins untouched for plain (non-settle) interaction responses', a
   assert.deepEqual(runCalls[2]?.input, { session: 'demo', target: { kind: 'ref', ref: '@e2~s7' } });
 });
 
+// --- ADR 0012 decision 2: resolution diagnostics are never ref-issued/pinned ---
+
+test('MCP never pins resolution.winnerDiagnostic/alternatives — they are pre-action diagnostics, not refs', async () => {
+  const runCalls: Array<{ name: string; input: unknown }> = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      runCalls.push({ name, input });
+      if (name === 'snapshot') {
+        return { nodes: [{ ref: 'e2' }, { ref: 'e3' }], truncated: false, refsGeneration: 7 };
+      }
+      // A disambiguated press: no refsGeneration/settle anywhere on this
+      // payload — the resolution field must not be read as ref-issuing.
+      return {
+        ref: 'e2',
+        resolution: {
+          source: 'runtime',
+          phase: 'pre-action',
+          kind: 'disambiguated',
+          matchCount: 2,
+          winnerDiagnostic: { diagnosticRef: 'diag-e2', role: 'button', label: 'Profile' },
+          tiebreak: 'visible',
+          alternatives: [{ diagnosticRef: 'diag-e3', role: 'button', label: 'Profile' }],
+        },
+      };
+    },
+  });
+
+  await executor.execute('snapshot', { session: 'demo' });
+  await executor.execute('press', { session: 'demo', target: { kind: 'ref', ref: '@e2' } });
+  // e3 was issued by the snapshot (generation 7) but NEVER by the press
+  // response's `resolution` field — if pinning mistakenly read
+  // diagnosticRef/alternatives as issued refs, this would forward pinned;
+  // it must still forward at the snapshot's own generation.
+  await executor.execute('press', { session: 'demo', target: { kind: 'ref', ref: '@e3' } });
+
+  assert.deepEqual(runCalls[1]?.input, { session: 'demo', target: { kind: 'ref', ref: '@e2~s7' } });
+  assert.deepEqual(runCalls[2]?.input, { session: 'demo', target: { kind: 'ref', ref: '@e3~s7' } });
+});
+
+test('MCP never resolves a resolution diagnosticRef as a usable @ref — a fresh snapshot is required', async () => {
+  const runCalls: Array<{ name: string; input: unknown }> = [];
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name, input) => {
+      runCalls.push({ name, input });
+      return {};
+    },
+  });
+
+  // A caller that ignores the "opaque, non-@ token" contract and tries to
+  // act on a losing alternative directly: the input passes through
+  // unpinned/unmodified — pinning has no history for it (it was never
+  // issued), it is not stripped or special-cased, and it is left for the
+  // daemon's ordinary ref lookup to reject as any other unknown ref would be.
+  await executor.execute('press', {
+    session: 'demo',
+    target: { kind: 'ref', ref: '@diag-e3' },
+  });
+
+  assert.deepEqual(runCalls[0]?.input, {
+    session: 'demo',
+    target: { kind: 'ref', ref: '@diag-e3' },
+  });
+});
+
 test('MCP passes never-issued refs through unpinned (coarse floor, never guess)', async () => {
   const runCalls: Array<{ name: string; input: unknown }> = [];
   const executor = createPinningExecutor(runCalls);

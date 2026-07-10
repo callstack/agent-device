@@ -140,6 +140,34 @@ function selectorReadView(data: DaemonResponseData, level: ResponseLevel): Daemo
 }
 
 /**
+ * Token-cheap settle + resolution digest for interaction commands. Applies
+ * two independent, CONSERVATIVE transforms and returns the data UNCHANGED at
+ * every level but `digest`, so plain interaction responses stay
+ * byte-identical elsewhere.
+ */
+function interactionDigestView(data: DaemonResponseData, level: ResponseLevel): DaemonResponseData {
+  if (level !== 'digest') return data;
+  return applySettleDigest(applyResolutionDigest(data));
+}
+
+/**
+ * ADR 0012 decision 2: only acts on a `resolution.kind === 'disambiguated'`
+ * payload and otherwise returns the data UNCHANGED. Drops the bounded
+ * `alternatives` list — the verbose per-candidate detail — while keeping
+ * `matchCount`/`tiebreak`/`winnerDiagnostic`, matching the settle digest's
+ * philosophy: the digest answer is the verdict and counts; the candidate list
+ * is the default-level payload.
+ */
+function applyResolutionDigest(data: DaemonResponseData): DaemonResponseData {
+  const resolution = data.resolution;
+  if (!resolution || typeof resolution !== 'object' || Array.isArray(resolution)) return data;
+  const record = resolution as Record<string, unknown>;
+  if (record.kind !== 'disambiguated') return data;
+  const { alternatives: _alternatives, ...rest } = record;
+  return { ...data, resolution: rest };
+}
+
+/**
  * Token-cheap settle digest for interaction commands (#1101). CONSERVATIVE:
  * only acts on a result that carries a `settle.diff` payload (the `--settle`
  * opt-in) and otherwise returns the data UNCHANGED, so plain interaction
@@ -148,11 +176,9 @@ function selectorReadView(data: DaemonResponseData, level: ResponseLevel): Daemo
  * and drops the diff line texts — the changed-count summary is the digest
  * answer; the lines are the default-level payload. The unchanged-interactive
  * `tail` (when present) is capped to the same DIGEST_REF_LIMIT as the other
- * ref lists here. `full` returns today's shape unchanged (nothing richer is
- * computed yet).
+ * ref lists here.
  */
-function interactionSettleView(data: DaemonResponseData, level: ResponseLevel): DaemonResponseData {
-  if (level !== 'digest') return data;
+function applySettleDigest(data: DaemonResponseData): DaemonResponseData {
   const settle = data.settle;
   if (!settle || typeof settle !== 'object' || Array.isArray(settle)) return data;
   const { diff, tail, ...rest } = settle as Record<string, unknown>;
@@ -204,8 +230,8 @@ export const RESPONSE_VIEWS: Record<string, ResponseView> = {
   screenshot: screenshotView,
   find: selectorReadView,
   get: selectorReadView,
-  press: interactionSettleView,
-  click: interactionSettleView,
-  fill: interactionSettleView,
-  longpress: interactionSettleView,
+  press: interactionDigestView,
+  click: interactionDigestView,
+  fill: interactionDigestView,
+  longpress: interactionDigestView,
 };

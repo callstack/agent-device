@@ -73,6 +73,17 @@ test(scenario('responseConstruction'), async () => {
   });
 });
 
+test(scenario('resolutionDisclosure'), async () => {
+  await withIosContractDaemon([runnerTapEntry({ x: 150, y: 200 })], async (daemon) => {
+    const click = await daemon.callCommand('click', ['label=Continue']);
+    const data = assertRpcOk(click);
+
+    // No daemon tree exists on this path: the disclosure never fabricates a
+    // match count or candidates.
+    assert.deepEqual(data.resolution, { source: 'direct-ios', kind: 'not-observed' });
+  });
+});
+
 test('recorded simple iOS selector click and fill use runtime resolution and persist target-v1 evidence', async () => {
   await withIosContractDaemon(
     [

@@ -163,3 +163,14 @@ test(scenario('responseConstruction'), async () => {
     },
   );
 });
+
+test(scenario('resolutionDisclosure'), async () => {
+  const device = createContractDevice(continueButtonSnapshot(), {
+    tap: async () => ({ ok: true }),
+  });
+
+  const result = await device.interactions.click(ref('@e1'), { session: 'default' });
+
+  assert.equal(result.kind, 'ref');
+  assert.deepEqual(result.resolution, { source: 'ref', phase: 'pre-action', kind: 'exact' });
+});

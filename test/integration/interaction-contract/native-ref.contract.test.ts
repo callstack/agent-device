@@ -192,3 +192,13 @@ test(scenario('responseConstruction'), async () => {
     assert.equal('targetEvidence' in payload, false);
   }
 });
+
+test(scenario('resolutionDisclosure'), async () => {
+  const calls: string[] = [];
+  const device = createNativeRefDevice(continueButtonSnapshot(), calls);
+
+  const result = await device.interactions.click(ref('@e1'), { session: 'default' });
+
+  assert.equal(result.kind, 'ref');
+  assert.deepEqual(result.resolution, { source: 'ref', phase: 'pre-action', kind: 'exact' });
+});

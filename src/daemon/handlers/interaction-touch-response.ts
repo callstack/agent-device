@@ -3,9 +3,11 @@ import type {
   FillCommandResult,
   LongPressCommandResult,
   PressCommandResult,
+  ResolutionDisclosure,
   SettleObservation,
 } from '../../contracts/interaction.ts';
 import type { RecordedTargetCapture } from '../session-target-evidence.ts';
+import { MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE } from '../../core/interactor-types.ts';
 import { successText } from '../../utils/success-text.ts';
 import { interactionResultExtra } from './interaction-touch-targets.ts';
 
@@ -77,8 +79,10 @@ export function buildInteractionResponseData(params: {
 }): InteractionResponsePayloads {
   const { source, referenceFrame, extra } = params;
   if (source.kind === 'runner-payload') {
+    const resolution = directIosResolutionDisclosure(source.data);
     const commonExtra = {
       targetKind: source.targetKind,
+      ...(resolution ? { resolution } : {}),
       ...(extra ?? {}),
     };
     const result = buildTouchPayload({
@@ -137,6 +141,22 @@ function recordedTargetCapture(
   const node = 'node' in result ? result.node : undefined;
   const preActionNodes = 'preActionNodes' in result ? result.preActionNodes : undefined;
   return node && preActionNodes ? { recordedTarget: { node, preActionNodes } } : {};
+}
+
+/**
+ * ADR 0012 decision 2: the direct iOS XCTest fast path has no daemon tree and
+ * cannot truthfully report a match count or candidates, so it discloses only
+ * the explicit `not-observed` provenance marker — UNLESS the runner actually
+ * used the maestro-non-hittable-fallback coordinate tap (a distinct dispatch
+ * path in the ADR 0011 registry whose whole point is bypassing element
+ * semantics), in which case `resolutionDisclosure` is inapplicable and no
+ * field is attached at all.
+ */
+function directIosResolutionDisclosure(
+  data: Record<string, unknown> | undefined,
+): ResolutionDisclosure | undefined {
+  if (data?.message === MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE) return undefined;
+  return { source: 'direct-ios', kind: 'not-observed' };
 }
 
 // Attaches refsGeneration inside the settle payload when the response is

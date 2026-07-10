@@ -18,4 +18,9 @@ export const RUNTIME_SELECTOR_COVERAGE = definePathCoverage('runtime-selector', 
     'runtime-selector settleObservation: press --settle returns the settled diff with fresh refs',
   errorTaxonomy:
     'runtime-selector errorTaxonomy: no-match failure carries the shared code and hint',
+  resolutionDisclosure: [
+    'runtime-selector resolutionDisclosure: a unique match discloses the unique runtime shape',
+    'runtime-selector resolutionDisclosure: an ambiguous match discloses matchCount, winnerDiagnostic, and the deciding tiebreak',
+    'runtime-selector resolutionDisclosure: alternatives are capped at 5 losing candidates and never include the winner',
+  ],
 });

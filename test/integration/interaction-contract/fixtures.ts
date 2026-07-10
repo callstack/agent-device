@@ -196,6 +196,22 @@ export function settledWelcomeSnapshot(): SnapshotState {
   ]);
 }
 
+// Seven identically labeled, on-screen "Item" rows at increasing depth: the
+// deepest (last) row wins disambiguation, leaving 6 losing candidates so the
+// ADR 0012 decision 2 five-alternative cap actually has something to cap.
+export function manyMatchingItemRowsSnapshot(): SnapshotState {
+  return makeSnapshotState(
+    Array.from({ length: 7 }, (_, i) => ({
+      index: i,
+      depth: i + 1,
+      type: 'Button',
+      label: 'Item',
+      rect: { x: 0, y: i * 40, width: 100, height: 40 },
+      hittable: true,
+    })),
+  );
+}
+
 // Viewport-only tree for coordinate scenarios.
 export function viewportOnlySnapshot(): SnapshotState {
   return makeSnapshotState([

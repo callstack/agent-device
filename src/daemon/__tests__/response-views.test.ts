@@ -355,3 +355,65 @@ test('settle default and full return today’s shape unchanged (same reference)'
   expect(RESPONSE_VIEWS.press!(SETTLE_DATA, 'default')).toBe(SETTLE_DATA);
   expect(RESPONSE_VIEWS.press!(SETTLE_DATA, 'full')).toBe(SETTLE_DATA);
 });
+
+// --- ADR 0012 decision 2: resolution digest view ---
+
+test('resolution digest drops alternatives but keeps matchCount/tiebreak/winnerDiagnostic', () => {
+  const data: DaemonResponseData = {
+    ref: 'e2',
+    resolution: {
+      source: 'runtime',
+      phase: 'pre-action',
+      kind: 'disambiguated',
+      matchCount: 3,
+      winnerDiagnostic: { diagnosticRef: 'diag-e2', role: 'button', label: 'Profile' },
+      tiebreak: 'visible',
+      alternatives: [{ diagnosticRef: 'diag-e3' }, { diagnosticRef: 'diag-e4' }],
+    },
+  };
+  const digest = RESPONSE_VIEWS.press!(data, 'digest');
+  expect(digest.resolution).toEqual({
+    source: 'runtime',
+    phase: 'pre-action',
+    kind: 'disambiguated',
+    matchCount: 3,
+    winnerDiagnostic: { diagnosticRef: 'diag-e2', role: 'button', label: 'Profile' },
+    tiebreak: 'visible',
+  });
+});
+
+test('resolution digest leaves unique/exact/not-observed shapes unchanged (no alternatives to drop)', () => {
+  const unique: DaemonResponseData = {
+    resolution: { source: 'runtime', phase: 'pre-action', kind: 'unique' },
+  };
+  expect(RESPONSE_VIEWS.press!(unique, 'digest')).toBe(unique);
+
+  const exact: DaemonResponseData = {
+    resolution: { source: 'ref', phase: 'pre-action', kind: 'exact' },
+  };
+  expect(RESPONSE_VIEWS.press!(exact, 'digest')).toBe(exact);
+
+  const notObserved: DaemonResponseData = {
+    resolution: { source: 'direct-ios', kind: 'not-observed' },
+  };
+  expect(RESPONSE_VIEWS.press!(notObserved, 'digest')).toBe(notObserved);
+});
+
+test('resolution digest and settle digest compose independently', () => {
+  const data: DaemonResponseData = {
+    ref: 'e2',
+    resolution: {
+      source: 'runtime',
+      phase: 'pre-action',
+      kind: 'disambiguated',
+      matchCount: 2,
+      winnerDiagnostic: { diagnosticRef: 'diag-e2' },
+      tiebreak: 'deepest',
+      alternatives: [{ diagnosticRef: 'diag-e3' }],
+    },
+    settle: SETTLE_DATA.settle,
+  };
+  const digest = RESPONSE_VIEWS.press!(data, 'digest');
+  expect((digest.resolution as { alternatives?: unknown[] }).alternatives).toBeUndefined();
+  expect((digest.settle as { diff?: { lines?: unknown[] } }).diff?.lines).toBeUndefined();
+});
