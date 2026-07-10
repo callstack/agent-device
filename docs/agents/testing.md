@@ -8,20 +8,22 @@ advisory**: existing GitHub CI stays authoritative and required, and this only
 narrows the *local* feedback loop.
 
 ```sh
-pnpm check:affected --base origin/main          # human-readable plan
-pnpm check:affected --base origin/main --json    # stable machine-readable plan
-pnpm check:affected --base origin/main --run      # also run the local checks
+pnpm check:affected --base origin/main --run     # default agent loop: plan + run
+pnpm check:affected --base origin/main           # human-readable plan only
+pnpm check:affected --base origin/main --json    # machine-readable plan only
 ```
 
 The selection is derived from repository sources of truth rather than a
 hand-maintained path map:
 
-- **Test ownership** comes from the Vitest project `include`/`exclude` globs in
-  `vitest.config.ts`. A changed test file selects the project that owns it;
-  TypeScript support modules inherit the most-specific literal include root;
-  and a changed production `src/**` file selects the unit suite that mirrors
-  it. Root `test/integration/*.ts` support modules follow the Node integration
-  lane.
+- **Affected Vitest tests** are delegated to `vitest related --run`, using
+  Vitest's own project configuration and static module graph. The selector
+  passes its complete changed-file set instead of reproducing Vitest globs or
+  import ownership. Dynamic-import relationships remain outside Vitest's
+  analysis; GitHub's authoritative full suites still cover that boundary.
+- **Non-Vitest suites** retain explicit ownership. Root
+  `test/integration/*.ts` files use the Node integration lane, SkillGym owns its
+  harness and skill guidance, and platform/build tools keep their native gates.
 - **Always-on gates** (`lint`, `typecheck`, `layering`, `fallow`, `format`) fire
   for their input categories and are never silently skipped. Platform source
   also selects the provider-integration and coverage gates required by the

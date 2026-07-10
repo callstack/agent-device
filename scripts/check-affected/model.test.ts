@@ -4,40 +4,11 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { assertCatalogComplete, CHECK_CATALOG, resolveCommand } from './checks.ts';
-import {
-  ALL_CHECKS,
-  globToRegExp,
-  selectChecks,
-  type CheckId,
-  type SelectInput,
-  type VitestProject,
-} from './model.ts';
-
-// Mirrors the real vitest.config.ts projects so tests exercise the same
-// include/exclude ownership the runner loads at runtime.
-const VITEST_PROJECTS: VitestProject[] = [
-  {
-    name: 'unit-core',
-    include: ['src/**/*.test.ts', 'scripts/__tests__/help-conformance-bench.test.ts'],
-    exclude: [
-      'src/platforms/android/__tests__/{app-lifecycle-install,app-lifecycle-open,device-input-state,input-actions,notifications,settings}.test.ts',
-    ],
-  },
-  {
-    name: 'android-adb',
-    include: [
-      'src/platforms/android/__tests__/{app-lifecycle-install,app-lifecycle-open,device-input-state,input-actions,notifications,settings}.test.ts',
-    ],
-  },
-  { name: 'provider-integration', include: ['test/integration/provider-scenarios/**/*.test.ts'] },
-  { name: 'interaction-contract', include: ['test/integration/interaction-contract/**/*.test.ts'] },
-  { name: 'output-economy', include: ['test/output-economy/**/*.test.ts'] },
-];
+import { ALL_CHECKS, selectChecks, type CheckId, type SelectInput } from './model.ts';
 
 function plan(changedFiles: string[], extra: Partial<SelectInput> = {}) {
   return selectChecks({
     changedFiles,
-    vitestProjects: VITEST_PROJECTS,
     packageEntryFiles: ['src/index.ts', 'src/selectors.ts'],
     ...extra,
   });
@@ -47,20 +18,7 @@ function ids(changedFiles: string[]): CheckId[] {
   return plan(changedFiles).checks;
 }
 
-test('glob matcher handles **, *, ?, and brace groups like the vitest config', () => {
-  assert.ok(globToRegExp('src/**/*.test.ts').test('src/a/b/c.test.ts'));
-  assert.ok(globToRegExp('src/**/*.test.ts').test('src/a.test.ts'));
-  assert.ok(!globToRegExp('src/**/*.test.ts').test('src/a.ts'));
-  assert.ok(globToRegExp('test/output-economy/**/*.test.ts').test('test/output-economy/x.test.ts'));
-  assert.ok(
-    globToRegExp('src/platforms/android/__tests__/{notifications,settings}.test.ts').test(
-      'src/platforms/android/__tests__/settings.test.ts',
-    ),
-  );
-  assert.ok(!globToRegExp('a/*.ts').test('a/b/c.ts'));
-});
-
-test('production source change selects gates + build + unit, with reasons', () => {
+test('production source selects static/build gates and delegates tests to Vitest', () => {
   const result = plan(['src/daemon/selectors.ts']);
   assert.equal(result.failOpen, false);
   for (const id of [
@@ -70,7 +28,7 @@ test('production source change selects gates + build + unit, with reasons', () =
     'layering',
     'fallow',
     'build',
-    'unit',
+    'vitest-related',
   ] as const) {
     assert.ok(result.checks.includes(id), `expected ${id}`);
   }
@@ -85,44 +43,35 @@ test('platform source additionally selects provider-integration', () => {
   const result = ids(['src/platforms/apple/core/apps.ts']);
   assert.ok(result.includes('provider-integration'));
   assert.ok(result.includes('coverage'));
-  assert.ok(result.includes('unit'));
+  assert.ok(result.includes('vitest-related'));
 });
 
-test('unit test file selects only the unit suite (+ gates), not integration projects', () => {
+test('unit test files delegate affected-test discovery to Vitest', () => {
   const result = ids(['src/daemon/selectors.test.ts']);
-  assert.ok(result.includes('unit'));
+  assert.ok(result.includes('vitest-related'));
+  assert.ok(!result.includes('unit'));
   assert.ok(!result.includes('provider-integration'));
-  assert.ok(!result.includes('output-economy'));
 });
 
-test('vitest project ownership routes each integration test to its project', () => {
-  assert.ok(
-    ids(['test/integration/provider-scenarios/foo.test.ts']).includes('provider-integration'),
-  );
-  assert.ok(
-    ids(['test/integration/interaction-contract/bar.test.ts']).includes('interaction-contract'),
-  );
-  assert.ok(ids(['test/output-economy/baz.test.ts']).includes('output-economy'));
-});
-
-test('support modules inherit the most-specific Vitest project include root', () => {
-  assert.ok(
-    ids(['test/integration/provider-scenarios/fixtures.ts']).includes('provider-integration'),
-  );
-  assert.ok(
-    ids(['test/integration/interaction-contract/fixtures.ts']).includes('interaction-contract'),
-  );
-  assert.ok(ids(['test/output-economy/fixtures.ts']).includes('output-economy'));
-  assert.ok(ids(['src/__tests__/test-utils/session.ts']).includes('unit'));
+test('Vitest owns project and support-module relationships through one check', () => {
+  for (const file of [
+    'test/integration/provider-scenarios/foo.test.ts',
+    'test/integration/provider-scenarios/fixtures.ts',
+    'test/integration/interaction-contract/fixtures.ts',
+    'test/output-economy/fixtures.ts',
+    'src/__tests__/test-utils/session.ts',
+  ]) {
+    assert.ok(ids([file]).includes('vitest-related'), `expected Vitest ownership for ${file}`);
+  }
 });
 
 test('root node-integration support modules select the node integration suite', () => {
   assert.ok(ids(['test/integration/test-helpers.ts']).includes('integration-node'));
 });
 
-test('android-adb stub test routes to the unit suite via its own project', () => {
+test('android-adb stub test delegates project ownership to Vitest', () => {
   const result = ids(['src/platforms/android/__tests__/notifications.test.ts']);
-  assert.ok(result.includes('unit'));
+  assert.ok(result.includes('vitest-related'));
 });
 
 test('Swift runner change selects the swift-runner build', () => {
@@ -216,7 +165,6 @@ test('every catalog command resolves against package scripts', () => {
     build: 'x',
     'check:unit': 'x',
     'test:coverage': 'x',
-    'test:output-economy': 'x',
     'test:integration:provider': 'x',
     'test:integration:node': 'x',
     'test:integration:progress:check': 'x',
@@ -257,14 +205,27 @@ test('unit and coverage checks preserve the Testing Matrix aggregates', () => {
   ]);
 });
 
+test('vitest-related delegates changed paths to Vitest instead of modeling projects', () => {
+  const related = CHECK_CATALOG.find((entry) => entry.id === 'vitest-related')!;
+  assert.deepEqual(resolveCommand(related, {}, 'origin/main', ['src/a.ts', 'test/fixture.ts']), [
+    'pnpm',
+    'exec',
+    'vitest',
+    'related',
+    '--run',
+    '--passWithNoTests',
+    'src/a.ts',
+    'test/fixture.ts',
+  ]);
+});
+
 // Guards the catalog against reality, not fixtures: the self-test above uses a
-// hand-built scripts/projects map, so this resolves every catalog entry against
-// the real package.json and checks vitest-project names against the real
-// vitest.config.ts. A renamed/removed script or project fails here instead of
+// hand-built scripts map, so this resolves every catalog entry against the real
+// package.json. A renamed/removed script fails here instead of
 // leaving `pnpm check:affected` broken on the exact command the docs advertise.
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-test('catalog resolves against the real package.json + vitest.config.ts', () => {
+test('catalog resolves against the real package.json', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
     scripts?: Record<string, string>;
   };
@@ -274,16 +235,6 @@ test('catalog resolves against the real package.json + vitest.config.ts', () => 
       () => resolveCommand(spec, scripts, 'origin/main'),
       `catalog entry "${spec.id}" must resolve against the real package.json`,
     );
-  }
-
-  const vitestConfig = fs.readFileSync(path.join(repoRoot, 'vitest.config.ts'), 'utf8');
-  for (const spec of CHECK_CATALOG) {
-    if (spec.kind.type === 'vitest-project') {
-      assert.ok(
-        vitestConfig.includes(`name: '${spec.kind.project}'`),
-        `vitest project "${spec.kind.project}" must exist in vitest.config.ts`,
-      );
-    }
   }
 });
 

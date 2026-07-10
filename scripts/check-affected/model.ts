@@ -4,10 +4,9 @@
 // stable, machine-readable reasoning. It is intentionally source-of-truth
 // derived rather than a hand-maintained path-to-check registry (issue #1181):
 //
-//   - test ownership comes from the Vitest project include/exclude globs
-//     (passed in from vitest.config.ts) — a changed test file selects the
-//     project that owns it, and a changed production source file selects the
-//     unit suite that mirrors it (AGENTS.md: test topology mirrors src 1:1);
+//   - Vitest owns affected-test discovery through its native `related`
+//     command and static module graph; this model only decides when that
+//     existing tool applies;
 //   - the lint/typecheck/layering/fallow gates are always-on for their input
 //     categories, so they are never silently skipped (issue constraint);
 //   - a small explicit build-ownership layer covers Swift, Android helpers,
@@ -31,11 +30,10 @@ export type CheckId =
   | 'fallow'
   | 'mcp-metadata'
   | 'build'
+  | 'vitest-related'
   | 'unit'
   | 'coverage'
-  | 'output-economy'
   | 'provider-integration'
-  | 'interaction-contract'
   | 'integration-node'
   | 'integration-progress'
   | 'swift-runner'
@@ -54,11 +52,10 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'fallow',
   'mcp-metadata',
   'build',
+  'vitest-related',
   'unit',
   'coverage',
-  'output-economy',
   'provider-integration',
-  'interaction-contract',
   'integration-node',
   'integration-progress',
   'swift-runner',
@@ -67,12 +64,6 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'web-smoke',
   'skillgym',
 ];
-
-export type VitestProject = {
-  name: string;
-  include: readonly string[];
-  exclude?: readonly string[];
-};
 
 export type SelectionReason = {
   check: CheckId;
@@ -97,57 +88,9 @@ export type CheckPlan = {
 
 export type SelectInput = {
   changedFiles: readonly string[];
-  vitestProjects: readonly VitestProject[];
   // Public package entry source files, derived from package.json `exports`.
   packageEntryFiles?: readonly string[];
 };
-
-// --- Minimal glob matcher (supports the subset Vitest configs use) ----------
-// Handles `**`, `*`, `?`, and non-nested `{a,b,c}` brace groups.
-export function globToRegExp(glob: string): RegExp {
-  let out = '^';
-  for (let i = 0; i < glob.length; i++) {
-    const char = glob[i]!;
-    if (char === '*') {
-      if (glob[i + 1] === '*') {
-        i++;
-        if (glob[i + 1] === '/') {
-          i++;
-          out += '(?:[^/]+/)*';
-        } else {
-          out += '.*';
-        }
-      } else {
-        out += '[^/]*';
-      }
-    } else if (char === '?') {
-      out += '[^/]';
-    } else if (char === '{') {
-      const end = glob.indexOf('}', i);
-      const body = glob.slice(i + 1, end);
-      out += `(?:${body.split(',').map(escapeRegExp).join('|')})`;
-      i = end;
-    } else {
-      out += escapeRegExp(char);
-    }
-  }
-  return new RegExp(`${out}$`);
-}
-
-function escapeRegExp(text: string): string {
-  return text.replace(/[.+^${}()|[\]\\]/g, '\\$&');
-}
-
-function matchesAny(file: string, globs: readonly string[]): boolean {
-  return globs.some((glob) => globToRegExp(glob).test(file));
-}
-
-function literalGlobRoot(glob: string): string {
-  const firstPatternCharacter = glob.search(/[*?{]/);
-  const literalPrefix = firstPatternCharacter === -1 ? glob : glob.slice(0, firstPatternCharacter);
-  const lastSlash = literalPrefix.lastIndexOf('/');
-  return lastSlash === -1 ? '' : literalPrefix.slice(0, lastSlash + 1);
-}
 
 // --- Path classification helpers -------------------------------------------
 const ROOT_TOOLING = new Set([
@@ -191,22 +134,6 @@ function isTestPath(file: string): boolean {
   return /\.test\.ts$/.test(file) || /(?:^|\/)__tests__\//.test(file);
 }
 
-function vitestCheckId(project: string): CheckId | null {
-  switch (project) {
-    case 'unit-core':
-    case 'android-adb':
-      return 'unit';
-    case 'provider-integration':
-      return 'provider-integration';
-    case 'interaction-contract':
-      return 'interaction-contract';
-    case 'output-economy':
-      return 'output-economy';
-    default:
-      return null;
-  }
-}
-
 // --- Ownership rules --------------------------------------------------------
 // Each rule inspects one changed file and returns the reasons it contributes.
 // Splitting the selection into small, independent rules keeps every function
@@ -245,7 +172,6 @@ const srcProdGate: OwnershipRule = ({ file, isSrcProd }) => {
   const selections = [
     reason('layering', file, 'gate:layering', 'layering guard reads production src/ modules'),
     reason('build', file, 'src-prod', 'production source is compiled by the build'),
-    reason('unit', file, 'src-prod', 'unit suite mirrors production source 1:1'),
   ];
   if (file.startsWith('src/platforms/')) {
     selections.push(
@@ -266,51 +192,31 @@ const srcProdGate: OwnershipRule = ({ file, isSrcProd }) => {
   return selections;
 };
 
-const vitestOwnership: OwnershipRule = ({ file, isTs, isSrcProd }, input) => {
-  const selections: SelectionReason[] = [];
-  const directOwners = input.vitestProjects.filter((project) => {
-    const excluded = project.exclude ? matchesAny(file, project.exclude) : false;
-    return !excluded && matchesAny(file, project.include);
-  });
-  const supportOwners =
-    isTs && !isSrcProd
-      ? input.vitestProjects
-          .flatMap((project) =>
-            project.include.map((glob) => ({ project, root: literalGlobRoot(glob) })),
-          )
-          .filter(({ root }) => root.length > 0 && file.startsWith(root))
-      : [];
-  const longestSupportRoot = Math.max(0, ...supportOwners.map(({ root }) => root.length));
-  const owners =
-    directOwners.length > 0
-      ? directOwners
-      : supportOwners
-          .filter(({ root }) => root.length === longestSupportRoot)
-          .map(({ project }) => project);
+function isNodeIntegrationPath(file: string): boolean {
+  return (
+    file.startsWith('test/integration/') &&
+    !file.slice('test/integration/'.length).includes('/') &&
+    file.endsWith('.ts')
+  );
+}
 
-  for (const project of owners) {
-    const check = vitestCheckId(project.name);
-    if (check) {
-      selections.push(
+const vitestRelatedOwnership: OwnershipRule = ({ file, isTs, underSrc, underTest }) =>
+  isTs &&
+  (underSrc || underTest) &&
+  !isNodeIntegrationPath(file) &&
+  !file.startsWith('test/skillgym/')
+    ? [
         reason(
-          check,
+          'vitest-related',
           file,
-          `vitest:${project.name}`,
-          directOwners.length > 0
-            ? `owned by the ${project.name} Vitest project`
-            : `support module under the ${project.name} Vitest project's include root`,
+          'vitest:related',
+          'Vitest resolves affected tests through its static module graph',
         ),
-      );
-    }
-  }
-  return selections;
-};
+      ]
+    : [];
 
 const nodeIntegrationOwnership: OwnershipRule = ({ file }) =>
-  matchesAny(file, ['test/integration/*.test.ts']) ||
-  (file.startsWith('test/integration/') &&
-    !file.slice('test/integration/'.length).includes('/') &&
-    file.endsWith('.ts'))
+  isNodeIntegrationPath(file)
     ? [reason('integration-node', file, 'node-integration', 'node --test integration smoke')]
     : [];
 
@@ -377,7 +283,7 @@ const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   formatGate,
   staticTsGates,
   srcProdGate,
-  vitestOwnership,
+  vitestRelatedOwnership,
   nodeIntegrationOwnership,
   skillgymOwnership,
   buildOwnership,

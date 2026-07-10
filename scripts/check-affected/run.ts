@@ -17,7 +17,7 @@ import {
   resolveCommand,
   type CheckSpec,
 } from './checks.ts';
-import { ALL_CHECKS, selectChecks, type CheckPlan, type VitestProject } from './model.ts';
+import { ALL_CHECKS, selectChecks, type CheckPlan } from './model.ts';
 
 type Args = { base: string; head: string; json: boolean; run: boolean };
 
@@ -76,16 +76,6 @@ export function readChangedFiles(base: string, head: string, cwd: string = repoR
     }
   }
   return [...files].sort();
-}
-
-async function loadVitestProjects(): Promise<VitestProject[]> {
-  const module = (await import(pathToFileURL(path.join(repoRoot, 'vitest.config.ts')).href)) as {
-    default: { test?: { projects?: Array<{ test?: VitestProject }> } };
-  };
-  const projects = module.default.test?.projects ?? [];
-  return projects
-    .map((project) => project.test)
-    .filter((project): project is VitestProject => Boolean(project?.name && project.include));
 }
 
 type PackageJson = {
@@ -192,7 +182,7 @@ export async function runChecks(
   plan: CheckPlan,
   pkg: PackageJson,
   args: Args,
-  options: { cwd?: string; execute?: CommandExecutor } = {},
+  options: { cwd?: string; execute?: CommandExecutor; changedFiles?: readonly string[] } = {},
 ): Promise<number> {
   const cwd = options.cwd ?? repoRoot;
   const execute = options.execute ?? streamingExecutor;
@@ -204,7 +194,7 @@ export async function runChecks(
     );
   }
   for (const spec of runnable) {
-    const command = resolveCommand(spec, pkg.scripts, args.base);
+    const command = resolveCommand(spec, pkg.scripts, args.base, options.changedFiles);
     process.stdout.write(`\n[run] ${spec.id}: ${command.join(' ')}\n`);
     const exitCode = await execute(command, cwd);
     if (exitCode !== 0) {
@@ -223,18 +213,16 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
   // Validate every catalog command resolves before selecting, so a broken
   // catalog fails loudly rather than silently dropping a gate.
   for (const spec of CHECK_CATALOG) resolveCommand(spec, pkg.scripts, args.base);
-  const vitestProjects = await loadVitestProjects();
   const changedFiles = readChangedFiles(args.base, args.head);
   const plan = selectChecks({
     changedFiles,
-    vitestProjects,
     packageEntryFiles: packageEntryFiles(pkg),
   });
 
   if (args.json) printPlanJson(plan, args);
   else printPlanHuman(plan, args);
 
-  if (args.run) return await runChecks(plan, pkg, args);
+  if (args.run) return await runChecks(plan, pkg, args, { changedFiles });
   return 0;
 }
 

@@ -1,15 +1,15 @@
 // Catalog for the check-affected selector: how each derived CheckId maps to a
 // runnable command and the authoritative GitHub CI job(s) it mirrors.
 //
-// Commands are resolved from real package.json scripts (or a plain Vitest
-// project invocation) so this file stays a thin projection over existing
+// Commands are resolved from real package.json scripts or Vitest's native
+// affected-test command, so this stays a thin projection over existing
 // aggregate checks rather than a second source of truth for how to run them.
 
 import { ALL_CHECKS, type CheckId } from './model.ts';
 
 export type CheckKind =
   | { readonly type: 'script'; readonly script: string }
-  | { readonly type: 'vitest-project'; readonly project: string };
+  | { readonly type: 'vitest-related' };
 
 export type CheckSpec = {
   readonly id: CheckId;
@@ -72,6 +72,13 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     localRunnable: true,
   },
   {
+    id: 'vitest-related',
+    label: 'Tests related by Vitest module graph',
+    kind: { type: 'vitest-related' },
+    ciJobs: ['Coverage'],
+    localRunnable: true,
+  },
+  {
     id: 'unit',
     label: 'Unit + smoke suite',
     kind: { type: 'script', script: 'check:unit' },
@@ -86,24 +93,10 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
     localRunnable: true,
   },
   {
-    id: 'output-economy',
-    label: 'Output-economy suite',
-    kind: { type: 'script', script: 'test:output-economy' },
-    ciJobs: ['Coverage'],
-    localRunnable: true,
-  },
-  {
     id: 'provider-integration',
     label: 'Provider-backed integration suite',
     kind: { type: 'script', script: 'test:integration:provider' },
     ciJobs: ['Integration Tests', 'Coverage'],
-    localRunnable: true,
-  },
-  {
-    id: 'interaction-contract',
-    label: 'Interaction-contract suite',
-    kind: { type: 'vitest-project', project: 'interaction-contract' },
-    ciJobs: ['Coverage'],
     localRunnable: true,
   },
   {
@@ -173,9 +166,10 @@ export function resolveCommand(
   spec: CheckSpec,
   scripts: Readonly<Record<string, string>>,
   base: string,
+  changedFiles: readonly string[] = [],
 ): string[] {
-  if (spec.kind.type === 'vitest-project') {
-    return ['pnpm', 'exec', 'vitest', 'run', '--project', spec.kind.project];
+  if (spec.kind.type === 'vitest-related') {
+    return ['pnpm', 'exec', 'vitest', 'related', '--run', '--passWithNoTests', ...changedFiles];
   }
   const { script } = spec.kind;
   if (!(script in scripts)) {

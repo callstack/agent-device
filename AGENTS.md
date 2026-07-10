@@ -202,7 +202,7 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
 - Do not duplicate session/store/device helpers when a shared helper already exists; if a helper is missing, add it near the concept it serves and export it through the barrel.
 
 ## Testing Matrix
-- Derive the local check set with `pnpm check:affected --base origin/main` (`--json` for a machine-readable plan). It is a fail-open advisory that mirrors this matrix from repository sources of truth; GitHub CI stays authoritative. See `docs/agents/testing.md`.
+- For code changes, run `pnpm check:affected --base origin/main --run` by default (`--json` for a machine-readable plan without execution). It delegates affected Vitest selection to `vitest related` and derives the remaining gates from repository sources of truth; GitHub CI stays authoritative. See `docs/agents/testing.md`.
 - Docs/skills only: no tests required unless a more specific rule below applies.
 - CLI help/guidance changes in `src/cli/parser/cli-help.ts`, `src/utils/cli-command-overrides.ts`, or `src/utils/command-schema.ts`: run `pnpm exec vitest run src/cli/parser/__tests__ src/utils/__tests__/command-schema-guards.test.ts`.
 - SkillGym prompt/assertion changes: run `pnpm test:skillgym:case <case-id>`; the script builds local CLI help first. For broad validation, use `pnpm test:skillgym`; append `-- --tag fixture-smoke` or `-- --tag skill-guidance` when validating one suite group.

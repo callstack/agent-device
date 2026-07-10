@@ -72,9 +72,9 @@ test('readChangedFiles unions staged and unstaged so a net diff cannot hide a fi
     fs.rmSync(path.join(dir, 'config.ts'));
 
     assert.deepEqual(
-      runCmdSync('git', ['diff', '--name-only', 'HEAD'], { cwd: dir }).stdout.split('\n').filter(
-        Boolean,
-      ),
+      runCmdSync('git', ['diff', '--name-only', 'HEAD'], { cwd: dir })
+        .stdout.split('\n')
+        .filter(Boolean),
       [],
       'sanity: the net `git diff HEAD` really does hide config.ts',
     );
@@ -97,7 +97,6 @@ const ALL_SCRIPTS: Record<string, string> = {
   build: 'x',
   'check:unit': 'x',
   'test:coverage': 'x',
-  'test:output-economy': 'x',
   'test:integration:provider': 'x',
   'test:integration:node': 'x',
   'test:integration:progress:check': 'x',
@@ -114,7 +113,6 @@ test('runChecks runs local checks in order and stops on the first failure', asyn
   };
   const plan = selectChecks({
     changedFiles: ['src/daemon/selectors.ts'],
-    vitestProjects: [],
     packageEntryFiles: [],
   });
   const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, { execute, cwd: '.' });
@@ -123,6 +121,26 @@ test('runChecks runs local checks in order and stops on the first failure', asyn
   assert.deepEqual(
     executed.map((command) => command[command.length - 1]),
     ['format:check', 'lint'],
+  );
+});
+
+test('runChecks passes the selector change set to Vitest related', async () => {
+  const executed: string[][] = [];
+  const execute: CommandExecutor = async (command) => {
+    executed.push(command);
+    return 0;
+  };
+  const changedFiles = ['src/daemon/selectors.ts', 'src/daemon/selectors.test.ts'];
+  const plan = selectChecks({ changedFiles, packageEntryFiles: [] });
+  const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, {
+    execute,
+    cwd: '.',
+    changedFiles,
+  });
+  assert.equal(code, 0);
+  assert.deepEqual(
+    executed.find((command) => command.includes('related')),
+    ['pnpm', 'exec', 'vitest', 'related', '--run', '--passWithNoTests', ...changedFiles],
   );
 });
 
@@ -135,7 +153,6 @@ test('runChecks skips GitHub-authoritative checks and passes when locals succeed
   // A fail-open plan selects every check, including the non-local build lanes.
   const plan = selectChecks({
     changedFiles: ['unknown/path.xyz'],
-    vitestProjects: [],
     packageEntryFiles: [],
   });
   assert.equal(plan.failOpen, true);
@@ -143,6 +160,9 @@ test('runChecks skips GitHub-authoritative checks and passes when locals succeed
   assert.equal(code, 0);
   const ran = executed.map((command) => command[command.length - 1]);
   for (const skipped of ['build:xcuitest', 'build:android-snapshot-helper', 'test:smoke:web']) {
-    assert.ok(!ran.includes(skipped), `${skipped} is GitHub-authoritative and must not run locally`);
+    assert.ok(
+      !ran.includes(skipped),
+      `${skipped} is GitHub-authoritative and must not run locally`,
+    );
   }
 });
