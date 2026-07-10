@@ -64,9 +64,14 @@ graph against its `--production` graph (which excludes test files); an export al
 and dead in the second has no production call site. New findings fail CI against the checked-in
 `scripts/test-only-exports-baseline.json`. Fix a finding by wiring the export into a real call
 site, deleting it, or — if it is an intentional test seam — adding `// test-seam: <reason>`
-directly above the export, which removes it from the check. Run
-`pnpm check:test-only-exports:baseline` to regenerate the baseline after fixing or intentionally
-accepting findings.
+directly above the export. The annotation is the only acceptance path, and it lives in the
+reviewed source diff. The baseline is shrink-only: after removing an offender, run
+`pnpm check:test-only-exports:baseline` to shrink it; the command refuses to add entries, so
+growing the baseline takes a deliberate manual edit and should be rare (expected only when the
+check itself is migrated). Known limitation: production usage reached only via dynamic property
+access (`obj[name]`) is invisible to fallow's import graph — the same blind spot as fallow's own
+dead-code check — so such exports need a `// test-seam:` annotation or a `.fallowrc.json`
+`ignoreExports` entry (like the daemon route handlers loaded through `typeof import()`).
 
 Optional device selectors for tests:
 

@@ -50,6 +50,11 @@
     "line": 47
   },
   {
+    "path": "src/commands/index.ts",
+    "export": "selector",
+    "line": 47
+  },
+  {
     "path": "src/core/command-descriptor/registry.ts",
     "export": "listCapabilityCheckedCommandNames",
     "line": 1109
