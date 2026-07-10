@@ -48,8 +48,28 @@ test(scenario('responseConstruction'), async () => {
       assert.equal(data.maestroNonHittableCoordinateFallbackAllowed, true);
       assert.equal(data.maestroNonHittableCoordinateFallbackUsed, true);
       assert.equal(data.maestroFallbackReason, 'non-hittable-coordinate');
-      // Inapplicable resolutionDisclosure cell (ADR 0012): no resolution field.
+      // Fallback actually TAKEN: the inapplicable maestro cell, no resolution field.
       assert.equal(data.resolution, undefined);
+    },
+  );
+});
+
+// Permission is not usage: with the fallback allowed but the runner hitting
+// the element normally ("tapped"), the dispatch is the direct-ios path and
+// must disclose not-observed, not classify as the maestro-fallback cell.
+test('maestro-non-hittable-fallback resolutionDisclosure: allowed-but-not-taken discloses direct-ios not-observed', async () => {
+  await withIosContractDaemon(
+    [runnerTapEntry({ x: 50, y: 60, message: 'tapped' })],
+    async (daemon, transcript) => {
+      const click = await daemon.callCommand('click', ['label=Pin'], MAESTRO_FLAGS);
+      const data = assertRpcOk(click);
+
+      const tapRequest = transcript.calls[0]?.request as Record<string, unknown> | undefined;
+      assert.equal(tapRequest?.allowNonHittableCoordinateFallback, true);
+
+      assert.equal(data.maestroNonHittableCoordinateFallbackAllowed, true);
+      assert.equal(data.maestroNonHittableCoordinateFallbackUsed, false);
+      assert.deepEqual(data.resolution, { source: 'direct-ios', kind: 'not-observed' });
     },
   );
 });

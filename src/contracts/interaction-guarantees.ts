@@ -418,7 +418,8 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       },
       resolutionDisclosure: {
         kind: 'inapplicable',
-        reason: 'Maestro owns matching; the fallback is coordinate execution.',
+        reason:
+          'Maestro owns matching; the fallback is coordinate execution. Cell membership is usage-based: only a dispatch whose runner actually executed the coordinate fallback is this path — allowed-but-not-taken is the direct path and discloses not-observed.',
       },
     },
   },

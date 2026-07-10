@@ -195,6 +195,14 @@ fresh `snapshot`/`find`. A post-action `--settle` diff remains a separate, actio
 fresh pinned refs. In contrast, a target-binding divergence sends no action; its fresh report snapshot is
 an actionable issuer as defined in decision 4.
 
+The ref paths disclose ref provenance. A lookup that resolves the `@ref` itself is
+`{ source: "ref", phase: "pre-action", kind: "exact" }`. When the runtime-ref path recovers a stale or
+unusable `@ref` through its recorded trailing label (`tryResolveRefNode`'s `fallbackLabel` — a first-match
+label lookup, the replay recovery documented in Context), the response instead carries
+`{ source: "ref", phase: "pre-action", kind: "label-fallback" }`: label recovery is not exact ref
+provenance and must never claim it. The native-ref fast path always discloses `exact` — it dispatches the
+ref handle itself and never forwards the fallback label to the backend.
+
 The accepted direct-iOS selector fast path has no daemon tree and the XCTest response cannot truthfully
 provide a match count, candidate refs, or a runtime tiebreak. It remains enabled for ordinary simple
 `press`/`fill`, but its canonical response instead carries
@@ -204,15 +212,20 @@ runtime resolution. Recording likewise disables it for any action for which targ
 required by decision 3.
 
 ADR 0011's matrix must add a `resolutionDisclosure` guarantee with all six honest cells: `runtime-selector`
-enforces the complete pre-action diagnostic shape; `runtime-ref` and `native-ref` enforce
-`{ source: "ref", phase: "pre-action", kind: "exact" }`; `direct-ios-selector` enforces only the explicit
+enforces the complete pre-action diagnostic shape; `runtime-ref` enforces the ref-provenance shapes
+(`exact`, or `label-fallback` for trailing-label recovery) and `native-ref` enforces `exact`;
+`direct-ios-selector` enforces only the explicit
 `{ source: "direct-ios", kind: "not-observed" }` shape; `coordinate` is inapplicable because no element
 was resolved; and `maestro-non-hittable-fallback` is inapplicable because Maestro owns matching and the
-fallback is coordinate execution. The four enforced cells use the shared response builder. Its existing
+fallback is coordinate execution. Membership in the maestro cell is decided by the EXECUTED dispatch, not
+the permission flag: a press that was allowed to fall back but hit its element normally is the direct-iOS
+path and discloses `not-observed`; only a response whose runner actually executed the coordinate fallback
+is the inapplicable maestro cell. The four enforced cells use the shared response builder. Its existing
 direct-path `disambiguation` and `responseIdentity` waivers remain, and the exact waived-cell test must
 continue to list them. Layer-3 coverage must claim every enforced/delegated cell: runtime
 ambiguity/tiebreak/cap plus non-actionable diagnostics after mutation, exact-ref provenance for runtime
-and native refs, and a direct-iOS no-snapshot `not-observed` case. No selection-parity table is claimed or
+and native refs, the runtime-ref `label-fallback` recovery case, and a direct-iOS no-snapshot
+`not-observed` case. No selection-parity table is claimed or
 added for the direct path: such a table would falsely imply XCTest selection has runtime parity. A future
 runner-side diagnostic design must replace the two waivers, add a Swift/TypeScript parity fixture, and add
 the corresponding provider contract cases in the same change.
@@ -450,8 +463,10 @@ Successful text replay prints one line with replayed count and wall time; `--jso
 Implementation is not accepted on benchmark evidence alone. Required automated coverage is:
 
 - matrix and provider contracts for all six `resolutionDisclosure` cells: runtime ambiguity/tiebreak and
-  the five-alternative limit, runtime/native exact-ref provenance, direct-iOS `not-observed`, coordinate
-  and Maestro inapplicability, and the retained direct-path waiver list;
+  the five-alternative limit, runtime/native exact-ref provenance plus the runtime-ref `label-fallback`
+  recovery disclosure, direct-iOS `not-observed`, coordinate inapplicability, Maestro inapplicability on
+  both sides of the permission (fallback taken, and allowed-but-not-taken disclosing `not-observed`), and
+  the retained direct-path waiver list;
 - an interaction mutation contract proving pre-action resolution diagnostics are not ref-issued or
   MCP-pinned, a fresh snapshot is required before using an alternative, and a no-action target-binding
   divergence can issue and pin its fresh report refs;

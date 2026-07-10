@@ -38,8 +38,8 @@ export type InteractionResponseSource =
       data: Record<string, unknown>;
       publicData?: Record<string, unknown>;
       point: { x: number; y: number };
-      /** Maestro owns matching on fallback dispatches: resolutionDisclosure is inapplicable there (ADR 0012). */
-      maestroFallback?: boolean;
+      /** The runner actually EXECUTED the non-hittable coordinate fallback (never the mere permission) — that dispatch is the maestro path, whose resolutionDisclosure is inapplicable (ADR 0012). */
+      maestroFallbackUsed?: boolean;
     };
 
 // ADR 0012 decision 2: the XCTest fast path has no daemon tree, so it can only
@@ -89,7 +89,7 @@ export function buildInteractionResponseData(params: {
   if (source.kind === 'runner-payload') {
     const commonExtra = {
       targetKind: source.targetKind,
-      ...(source.maestroFallback ? {} : { resolution: DIRECT_IOS_NOT_OBSERVED_RESOLUTION }),
+      ...(source.maestroFallbackUsed ? {} : { resolution: DIRECT_IOS_NOT_OBSERVED_RESOLUTION }),
       ...(extra ?? {}),
     };
     const result = buildTouchPayload({

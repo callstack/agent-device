@@ -401,6 +401,7 @@ async function dispatchDirectIosSelectorInteraction(params: {
       flags: handlerParams.req.flags,
       data,
     });
+    const fallbackDetails = directIosSelectorFallbackDetails(selector, data);
     const { result, responseData } = buildInteractionResponseData({
       source: {
         kind: 'runner-payload',
@@ -408,12 +409,12 @@ async function dispatchDirectIosSelectorInteraction(params: {
         data,
         publicData,
         point,
-        maestroFallback: selector.allowNonHittableCoordinateFallback === true,
+        maestroFallbackUsed: fallbackDetails.maestroNonHittableCoordinateFallbackUsed === true,
       },
       referenceFrame: readReferenceFrameFromDirectSelectorTapResult(data),
       extra: {
         ...extra,
-        ...directIosSelectorFallbackDetails(selector, data),
+        ...fallbackDetails,
       },
     });
     return finalizeTouchInteraction({
