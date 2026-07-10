@@ -3,6 +3,7 @@ import { test } from 'vitest';
 import type { BackendSnapshotOptions } from '../../../backend.ts';
 import { ref, selector } from '../../index.ts';
 import { resolveActionableTouchResolution } from '../../../core/interaction-targeting.ts';
+import { tryResolveRefNode } from './resolution.ts';
 import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
 import type { Point } from '../../../kernel/snapshot.ts';
 import {
@@ -440,4 +441,22 @@ test('runtime ref interactions refresh the snapshot when a stored ref has no usa
   assert.deepEqual(calls, [{ x: 60, y: 40 }]);
   assert.equal(result.kind, 'ref');
   assert.equal(result.node?.rect?.width, 100);
+});
+
+test('tryResolveRefNode discloses exact for a resolved ref and label-fallback for label recovery', () => {
+  const nodes = selectorSnapshot().nodes;
+
+  const exact = tryResolveRefNode(nodes, '@e1', { fallbackLabel: '' });
+  assert.equal(exact?.node.label, 'Continue');
+  assert.deepEqual(exact?.resolution, { source: 'ref', phase: 'pre-action', kind: 'exact' });
+
+  const recovered = tryResolveRefNode(nodes, '@e9', { fallbackLabel: 'Continue' });
+  assert.equal(recovered?.node.label, 'Continue');
+  assert.deepEqual(recovered?.resolution, {
+    source: 'ref',
+    phase: 'pre-action',
+    kind: 'label-fallback',
+  });
+
+  assert.equal(tryResolveRefNode(nodes, '@e9', { fallbackLabel: '' }), null);
 });

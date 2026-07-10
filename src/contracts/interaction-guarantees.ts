@@ -199,19 +199,19 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
     guarantees: {
       ...RUNTIME_TREE_SHARED_GUARANTEES,
       disambiguation: {
-        kind: 'inapplicable',
-        reason: 'Refs identify exactly one node by construction.',
+        kind: 'waived',
+        reason:
+          'Intentional: a resolved @ref names exactly one node, but the replay trailing-label recovery resolves a stale @ref by FIRST label match without the visible/deepest/smallest ranking; that outcome is disclosed per-response as resolutionDisclosure label-fallback rather than silently claiming exactness.',
       },
       errorTaxonomy: {
         kind: 'runtime',
         via: 'src/daemon/selectors-resolve.ts#STALE_REF_HINT',
       },
-      // ADR 0012 decision 2: a successful @ref lookup is exact. The replay
-      // trailing-label recovery is explicitly disclosed as label-fallback,
-      // rather than claiming exact ref provenance.
+      // ADR 0012 decision 2: tryResolveRefNode produces both outcomes — exact
+      // for a resolved @ref, label-fallback for trailing-label recovery.
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'src/commands/interaction/runtime/resolution.ts#EXACT_REF_RESOLUTION',
+        via: 'src/commands/interaction/runtime/resolution.ts#tryResolveRefNode',
       },
     },
   },

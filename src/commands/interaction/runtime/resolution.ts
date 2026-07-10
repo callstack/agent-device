@@ -490,7 +490,8 @@ async function resolveSnapshotForRef(
   return { ...capture, resolved: refreshed };
 }
 
-function tryResolveRefNode(
+/** The runtime-ref resolver: `exact` for a resolved `@ref`, `label-fallback` for trailing-label recovery. */
+export function tryResolveRefNode(
   nodes: SnapshotState['nodes'],
   refInput: string,
   options: {
