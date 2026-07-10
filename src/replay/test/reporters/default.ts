@@ -6,6 +6,7 @@ import {
 } from '../progress.ts';
 import { formatDurationSeconds } from '../../../utils/duration-format.ts';
 import { colorize, supportsColor } from '../../../utils/output.ts';
+import { formatReplayDivergenceReport } from '../../divergence.ts';
 import type {
   ReplayTestReporter,
   ReplayTestReporterContext,
@@ -201,8 +202,23 @@ function renderReplayFailureBody(
   for (const line of replayFailureConsoleLines(result)) {
     context.stdout.write(`${indent}${line}\n`);
   }
+  renderReplayFailureDivergence(result, context, indent);
   if (!context.debug) return;
   for (const line of replayTestFailureStepLines(result)) {
+    context.stdout.write(`${indent}${line}\n`);
+  }
+}
+
+// ADR 0012: the `test` text surface carries the divergence repair data
+// (screen refs / suggestions), same as the --json suite payload.
+function renderReplayFailureDivergence(
+  result: FailedReplayTestResult,
+  context: ReplayTestReporterContext,
+  indent: string,
+): void {
+  const divergence = formatReplayDivergenceReport(result.error?.details);
+  if (!divergence) return;
+  for (const line of divergence.split('\n')) {
     context.stdout.write(`${indent}${line}\n`);
   }
 }

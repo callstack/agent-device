@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
+import { buildReplayFailureDivergence } from '../session-replay-divergence.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
@@ -390,4 +391,133 @@ test('divergence cause and action strings pass through the central redactor at c
   const cause = divergence.cause as { message: string };
   expect(cause.message).not.toContain('sk-live-abc123def456');
   expect(cause.message).toContain('api_key=[REDACTED]');
+});
+
+// --- Blocker 1: fill text must NEVER appear in the divergence output ---
+
+test('a fill divergence never serializes the typed text at any response level', async () => {
+  const sentinel = 'SuperSecretPassword-do-not-leak-12345';
+  for (const level of ['digest', 'default', 'full'] as const) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-fill-leak-'));
+    const sessionStore = new SessionStore(path.join(root, 'sessions'));
+    const sessionName = 'default';
+    sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+    const filePath = writeReplayFile(root, [`fill 'label="Email"' ${JSON.stringify(sentinel)}`]);
+    // Selector miss forces the divergence on the fill step; the failure
+    // message is a realistic selector error, not an echo of the typed text.
+    mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
+
+    const response = await runReplayScriptFile({
+      req: baseReq({ positionals: [filePath], meta: { responseLevel: level } }),
+      sessionName,
+      logPath: path.join(root, 'daemon.log'),
+      sessionStore,
+      invoke: async (req) => {
+        if (req.command === 'fill') {
+          return {
+            ok: false,
+            error: { code: 'COMMAND_FAILED', message: 'Selector did not match: label="Email"' },
+          };
+        }
+        return { ok: true, data: {} };
+      },
+    });
+
+    expect(response.ok).toBe(false);
+    if (response.ok) return;
+    const serializedDivergence = JSON.stringify(response.error.details?.divergence);
+    expect(serializedDivergence).not.toContain(sentinel);
+    // The whole error details (flat positionals included) must not leak it either.
+    expect(JSON.stringify(response.error.details)).not.toContain(sentinel);
+    expect(response.error.message).not.toContain(sentinel);
+    // The action label still names the field, with the text categorically hidden.
+    const divergence = response.error.details?.divergence as { action: string };
+    expect(divergence.action).toContain('<text>');
+    expect(divergence.action).toContain('Email');
+  }
+});
+
+// --- Blocker 3b: suggestion dedupe keeps the STRONGEST basis per node ---
+
+test('a divergence dedupes suggestions by node and tags the strongest basis', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-suggest-dedupe-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+
+  // A recorded click whose selectorChain lists a label-basis term FIRST and an
+  // id-basis term SECOND, both resolving to the same node. The suggestion must
+  // appear once, tagged with the stronger `id` basis (not the first-seen label).
+  mockDispatchCommand.mockResolvedValue({
+    nodes: [
+      {
+        index: 0,
+        depth: 0,
+        type: 'Button',
+        label: 'Save',
+        identifier: 'save',
+        rect: { x: 0, y: 0, width: 100, height: 44 },
+        hittable: true,
+      },
+    ],
+    truncated: false,
+    backend: 'xctest',
+  });
+
+  const divergence = await buildReplayFailureDivergence({
+    error: { code: 'COMMAND_FAILED', message: 'not hittable' },
+    action: {
+      ts: 0,
+      command: 'click',
+      positionals: ['label="Save"'],
+      flags: {},
+      result: { selectorChain: ['label="Save"', 'id="save"'] },
+    },
+    index: 0,
+    sourcePath: path.join(root, 'flow.ad'),
+    sourceLine: 1,
+    session: sessionStore.get(sessionName),
+    sessionName,
+    sessionStore,
+    logPath: path.join(root, 'daemon.log'),
+    responseLevel: 'default',
+  });
+
+  expect(divergence.suggestionCount).toBe(1);
+  expect(divergence.suggestions).toHaveLength(1);
+  expect(divergence.suggestions[0]?.ref).toBe('e1');
+  expect(divergence.suggestions[0]?.basis).toBe('id');
+});
+
+// --- Blocker 3a: capture-error screen hint is sanitized ---
+
+test('a capture-failed screen hint redacts a secret in the capture error', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-screen-redact-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  const filePath = writeReplayFile(root, ['click "Save"']);
+  // The post-failure snapshot capture throws with a secret-bearing message.
+  mockDispatchCommand.mockRejectedValue(new Error('snapshot failed: api_key=sk-live-abc123def456'));
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => ({
+      ok: false,
+      error: { code: 'COMMAND_FAILED', message: 'Selector did not match' },
+    }),
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  const divergence = response.error.details?.divergence as {
+    screen: { state: string; reason?: string; hint?: string };
+  };
+  expect(divergence.screen.state).toBe('unavailable');
+  expect(divergence.screen.reason).toBe('capture-failed');
+  expect(divergence.screen.hint).not.toContain('sk-live-abc123def456');
+  expect(divergence.screen.hint).toContain('[REDACTED]');
 });

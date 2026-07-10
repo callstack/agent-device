@@ -159,7 +159,7 @@ function readAppTargetLabel(result: Record<string, unknown>): string | undefined
   );
 }
 
-function buildDisplayPositionals(action: SessionAction): string[] | undefined {
+export function buildDisplayPositionals(action: SessionAction): string[] | undefined {
   if (action.positionals.length === 0) return undefined;
   if (action.command === PUBLIC_COMMANDS.type) {
     return [hiddenValueFromLength('text', readActionTextLength(action))];

@@ -230,3 +230,79 @@ function buildMinimalReplayDivergence(capped: ReplayDivergence): ReplayDivergenc
     resume: capped.resume,
   };
 }
+
+// Compact human-readable divergence report for text surfaces (CLI, MCP text,
+// `test` failures). Repair data (step location, screen availability, ranked
+// suggestions, overflow pointer) that the --json/structuredContent paths
+// carry must not be dropped on a text path. Reads the loose `details` bag so
+// every surface (which holds an error `details` record) can share it.
+export function formatReplayDivergenceReport(
+  details: Record<string, unknown> | undefined,
+): string | null {
+  const divergence = details?.divergence;
+  if (!divergence || typeof divergence !== 'object') return null;
+  const record = divergence as Record<string, unknown>;
+  const lines = [
+    ...divergenceStepLine(record.step),
+    ...divergenceScreenLine(record.screen),
+    ...divergenceSuggestionLines(record.suggestions, record.suggestionCount),
+    ...divergenceOverflowLine(record.overflow, record.artifactUnavailable),
+  ];
+  return lines.length > 0 ? lines.join('\n') : null;
+}
+
+function divergenceStepLine(step: unknown): string[] {
+  const record = step as Record<string, unknown> | undefined;
+  if (typeof record?.index !== 'number') return [];
+  const source = record.source as Record<string, unknown> | undefined;
+  const location =
+    typeof source?.path === 'string' && typeof source.line === 'number'
+      ? ` (${source.path}:${source.line})`
+      : '';
+  return [`Divergence at step ${record.index}${location}`];
+}
+
+function divergenceScreenLine(screen: unknown): string[] {
+  const record = screen as Record<string, unknown> | undefined;
+  if (record?.state === 'available' && Array.isArray(record.refs)) {
+    return [
+      `Screen: ${record.refs.length} actionable ref(s) captured (refsGeneration ${record.refsGeneration}).`,
+    ];
+  }
+  if (record?.state === 'unavailable') {
+    return [`Screen: unavailable (${String(record.reason ?? 'unknown')}).`];
+  }
+  return [];
+}
+
+function divergenceSuggestionLines(suggestions: unknown, suggestionCount: unknown): string[] {
+  if (Array.isArray(suggestions) && suggestions.length > 0) {
+    return ['Suggestions:', ...suggestions.slice(0, 5).map(divergenceSuggestionLine)];
+  }
+  if (typeof suggestionCount === 'number' && suggestionCount > 0) {
+    return [
+      `Suggestions: ${suggestionCount} available (omitted at this response level; rerun with --json for the full report).`,
+    ];
+  }
+  return [];
+}
+
+function divergenceSuggestionLine(entry: unknown): string {
+  const suggestion = entry as Record<string, unknown>;
+  const label = typeof suggestion.label === 'string' ? ` "${suggestion.label}"` : '';
+  return `  - [${String(suggestion.basis)}]${label} ${String(suggestion.selector)}`;
+}
+
+function divergenceOverflowLine(overflow: unknown, artifactUnavailable: unknown): string[] {
+  if (overflow && typeof overflow === 'object') {
+    return [
+      `Full report written to ${String((overflow as Record<string, unknown>).artifactPath)}.`,
+    ];
+  }
+  if (artifactUnavailable === true) {
+    return [
+      'Full report exceeded the response budget and the overflow artifact could not be written.',
+    ];
+  }
+  return [];
+}

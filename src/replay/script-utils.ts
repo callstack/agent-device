@@ -75,9 +75,44 @@ function isBareScriptToken(value: string): boolean {
   return BARE_SCRIPT_TOKEN_RE.test(value);
 }
 
-export function formatScriptActionSummary(action: SessionAction): string {
-  const values = (action.positionals ?? []).map((value) => formatScriptArg(value));
-  return [action.command, ...values].join(' ');
+const TYPED_TEXT_COMMANDS = new Set(['fill', 'type']);
+
+/**
+ * Action summary safe for the divergence report / user-facing failure text.
+ * For typing commands the typed value is categorically dropped and replaced
+ * with a `<text>` marker — fill text is never serialized (ADR 0012), not
+ * merely redacted-if-secret-shaped. The target (selector / @ref / point)
+ * still shows so the caller can see WHICH field failed.
+ */
+export function formatDivergenceActionLabel(action: SessionAction): string {
+  if (!TYPED_TEXT_COMMANDS.has(action.command)) {
+    const values = (action.positionals ?? []).map((value) => formatScriptArg(value));
+    return [action.command, ...values].join(' ');
+  }
+  const targetTokens = divergenceTypingTargetTokens(action);
+  const targetLabel = targetTokens.map((value) => formatScriptArg(value)).join(' ');
+  return [action.command, targetLabel, '<text>'].filter((part) => part.length > 0).join(' ');
+}
+
+/**
+ * The identifying (non-text) positional tokens of a typing action:
+ * `@ref`, a two-token point (`x y`), or a single selector. Everything after
+ * is the typed value and is excluded.
+ */
+function divergenceTypingTargetTokens(action: SessionAction): string[] {
+  if (action.command === 'type') return [];
+  const positionals = action.positionals ?? [];
+  const first = positionals[0];
+  if (first === undefined) return [];
+  if (first.startsWith('@')) return [first];
+  if (
+    positionals.length >= 3 &&
+    NUMERIC_ARG_RE.test(first) &&
+    NUMERIC_ARG_RE.test(positionals[1] ?? '')
+  ) {
+    return [first, positionals[1]!];
+  }
+  return [first];
 }
 
 // fallow-ignore-next-line complexity

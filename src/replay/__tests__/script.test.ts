@@ -485,3 +485,38 @@ test('session-recorded actions without target evidence never gain a fabricated a
   const script = fs.readFileSync(replayPath, 'utf8');
   assert.equal(/agent-device:target-v1/.test(script), false);
 });
+
+test('formatDivergenceActionLabel categorically drops fill/type text but keeps the target', async () => {
+  const { formatDivergenceActionLabel } = await import('../script-utils.ts');
+  const mk = (command: string, positionals: string[]): SessionAction => ({
+    ts: 0,
+    command,
+    positionals,
+    flags: {},
+  });
+  const secret = 'hunter2-secret';
+  // fill selector text (selector token is script-quoted, text dropped)
+  assert.equal(
+    formatDivergenceActionLabel(mk('fill', ['label="Email"', secret])),
+    'fill "label=\\"Email\\"" <text>',
+  );
+  // fill @ref text
+  assert.equal(formatDivergenceActionLabel(mk('fill', ['@e5', secret])), 'fill @e5 <text>');
+  // fill point text
+  assert.equal(formatDivergenceActionLabel(mk('fill', ['10', '20', secret])), 'fill 10 20 <text>');
+  // type text (no target)
+  assert.equal(formatDivergenceActionLabel(mk('type', [secret])), 'type <text>');
+  // none of these leak the secret
+  for (const label of [
+    formatDivergenceActionLabel(mk('fill', ['label="Email"', secret])),
+    formatDivergenceActionLabel(mk('fill', ['@e5', secret])),
+    formatDivergenceActionLabel(mk('type', [secret, 'more', secret])),
+  ]) {
+    assert.equal(label.includes(secret), false);
+  }
+  // non-typing commands are unchanged (full summary, script-quoted).
+  assert.equal(
+    formatDivergenceActionLabel(mk('click', ['label="Save"'])),
+    'click "label=\\"Save\\""',
+  );
+});

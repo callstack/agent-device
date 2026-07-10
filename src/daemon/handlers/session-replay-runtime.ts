@@ -12,7 +12,8 @@ import {
 import { SessionStore } from '../session-store.ts';
 import { type ReplayScriptMetadata, writeReplayScript } from '../../replay/script.ts';
 import { healReplayAction } from './session-replay-heal.ts';
-import { formatScriptActionSummary } from '../../replay/script-utils.ts';
+import { formatDivergenceActionLabel } from '../../replay/script-utils.ts';
+import { buildDisplayPositionals } from '../session-event-action.ts';
 import { errorResponse } from './response.ts';
 import { invokeReplayAction } from './session-replay-action-runtime.ts';
 import { tryParseSelectorChain } from '../selectors.ts';
@@ -443,7 +444,7 @@ function buildReplayDivergenceFailureResponse(params: {
     ok: false,
     error: {
       code: 'REPLAY_DIVERGENCE',
-      message: `Replay failed at step ${step} (${formatScriptActionSummary(action)}): ${error.message}`,
+      message: `Replay failed at step ${step} (${formatDivergenceActionLabel(action)}): ${error.message}`,
       hint: error.hint,
       diagnosticId: error.diagnosticId,
       logPath: error.logPath,
@@ -452,7 +453,9 @@ function buildReplayDivergenceFailureResponse(params: {
         replayPath,
         step,
         action: action.command,
-        positionals: action.positionals ?? [],
+        // Categorical text hiding (`<text:N chars>`), never raw fill/type/
+        // payload text — the same event-log sanitizer.
+        positionals: buildDisplayPositionals(action) ?? [],
         artifactPaths,
         ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
         divergence,

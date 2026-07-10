@@ -16,7 +16,7 @@ import {
   type Selector,
 } from '../selectors.ts';
 import { collectReplaySelectorCandidates } from './session-replay-heal.ts';
-import { formatScriptActionSummary, isTouchTargetCommand } from '../../replay/script-utils.ts';
+import { formatDivergenceActionLabel, isTouchTargetCommand } from '../../replay/script-utils.ts';
 import { SessionStore } from '../session-store.ts';
 import type { SessionAction, SessionState } from '../types.ts';
 import {
@@ -90,7 +90,7 @@ export async function buildReplayFailureDivergence(params: {
       index: index + 1,
       source: { path: sanitizeReplayDivergenceField(sourcePath), line: sourceLine },
     },
-    action: sanitizeReplayDivergenceField(formatScriptActionSummary(action)),
+    action: sanitizeReplayDivergenceField(formatDivergenceActionLabel(action)),
     cause,
     screen,
     suggestions: suggestions.slice(0, REPLAY_DIVERGENCE_SUGGESTION_LIMIT),
@@ -178,7 +178,15 @@ function divergenceCaptureInteractiveOnly(action: SessionAction): boolean {
 }
 
 function buildDivergenceScreen(observation: DivergenceObservation): ReplayDivergenceScreen {
-  if (observation.state === 'unavailable') return observation;
+  if (observation.state === 'unavailable') {
+    // The capture-failed hint interpolates the capture error message; sanitize
+    // every unavailable string field so no interpolated content escapes raw.
+    return {
+      state: 'unavailable',
+      reason: sanitizeReplayDivergenceField(observation.reason),
+      hint: sanitizeReplayDivergenceField(observation.hint),
+    };
+  }
   const { refs, truncated } = buildReplayDivergenceScreenRefs(observation.nodes);
   return {
     state: 'available',
@@ -276,18 +284,20 @@ function rankSuggestionCandidates(params: {
   matching: SuggestionMatchingConfig;
 }): ReplayDivergenceSuggestion[] {
   const { candidates, nodes, session, action, matching } = params;
-  const ranked: RankedSuggestion[] = [];
-  const seenNodes = new Set<string>();
+  // Dedupe by node (its unique tree index), keeping the STRONGEST match basis
+  // per the ADR: a node reachable through several recorded selector terms
+  // appears once, tagged with its strongest basis — not whichever candidate
+  // happened to resolve it first.
+  const byNode = new Map<number, RankedSuggestion>();
   for (const candidate of candidates) {
     const entry = resolveSuggestionCandidate({ candidate, nodes, session, action, matching });
     if (!entry) continue;
-    const nodeKey = entry.suggestion.ref ?? `idx:${entry.nodeIndex}`;
-    if (seenNodes.has(nodeKey)) continue;
-    seenNodes.add(nodeKey);
-    ranked.push(entry);
+    const existing = byNode.get(entry.nodeIndex);
+    if (!existing || entry.basisRank < existing.basisRank) byNode.set(entry.nodeIndex, entry);
   }
-  ranked.sort((a, b) => a.basisRank - b.basisRank || a.nodeIndex - b.nodeIndex);
-  return ranked.map((entry) => entry.suggestion);
+  return [...byNode.values()]
+    .sort((a, b) => a.basisRank - b.basisRank || a.nodeIndex - b.nodeIndex)
+    .map((entry) => entry.suggestion);
 }
 
 function resolveSuggestionCandidate(params: {

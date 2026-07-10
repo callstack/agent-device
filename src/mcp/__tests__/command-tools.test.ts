@@ -733,8 +733,10 @@ function replayDivergenceError(): AppError {
         refsGeneration: 12,
         refs: [{ ref: 'e5', role: 'button', label: 'Save' }],
       },
-      suggestions: [],
-      suggestionCount: 0,
+      suggestions: [
+        { selector: 'id="save"', basis: 'id', ref: 'e5', role: 'button', label: 'Save' },
+      ],
+      suggestionCount: 1,
       resume: { allowed: false, reason: 'resume not yet supported' },
     },
   });
@@ -760,7 +762,14 @@ test('MCP tool error is a ref-issuing result: isError, structuredContent, and pi
   };
   assert.equal(structured.code, 'REPLAY_DIVERGENCE');
   assert.equal(structured.details?.divergence?.screen?.refs?.[0]?.ref, 'e5');
-  assert.match(result.content[0]?.text ?? '', /Error \(REPLAY_DIVERGENCE\)/);
+  // The MCP TEXT path must carry the same repair data as structuredContent —
+  // no text-only divergence that loses the screen refs / suggestions.
+  const text = result.content[0]?.text ?? '';
+  assert.match(text, /Error \(REPLAY_DIVERGENCE\)/);
+  assert.match(text, /Divergence at step 2 \(\/tmp\/flow\.ad:2\)/);
+  assert.match(text, /Screen: 1 actionable ref\(s\) captured/);
+  assert.match(text, /Suggestions:/);
+  assert.match(text, /\[id\] "Save" id="save"/);
 
   // The error-path screen ref is pinned exactly like a successful ref-issuing
   // response — the caller's next command against @e5 forwards the generation.
