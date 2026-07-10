@@ -1,7 +1,9 @@
 import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
 import { interactionCliOutputFormatters } from '../../src/commands/interaction/output.ts';
+import type { AgentDeviceClient } from '../../src/client/client-types.ts';
 import { RESPONSE_VIEWS } from '../../src/daemon/response-views.ts';
 import { normalizeError } from '../../src/kernel/errors.ts';
+import { createCommandToolExecutor } from '../../src/mcp/command-tools.ts';
 import type { EconomySample } from './economy-metrics.ts';
 import {
   ACTIONABLE_ERROR,
@@ -19,7 +21,7 @@ function interactionText(result: typeof SETTLE_ADDED_REF_RESULT): string {
   return interactionCliOutputFormatters.press({ input: {}, result }).text ?? '';
 }
 
-export function renderOutputFixtures() {
+export async function renderOutputFixtures() {
   const snapshot = snapshotCliOutput({
     result: SNAPSHOT_RESULT,
   });
@@ -31,6 +33,10 @@ export function renderOutputFixtures() {
   const screenshotDigest = RESPONSE_VIEWS.screenshot!(SCREENSHOT_RESULT, 'digest');
   const error = normalizeError(ACTIONABLE_ERROR);
   const errorPolicyNormalized = normalizeError(POLICY_NORMALIZED_ERROR);
+  const mcpSnapshot = await createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async () => SNAPSHOT_DAEMON_RESULT,
+  }).execute('snapshot', {});
 
   return {
     snapshot,
@@ -42,6 +48,7 @@ export function renderOutputFixtures() {
     screenshotDigest,
     error,
     errorPolicyNormalized,
+    mcpSnapshot,
     samples: {
       'snapshot.default.text': { text: snapshot.text ?? '' },
       'snapshot.default.json': { data: snapshot.jsonData },
@@ -58,6 +65,7 @@ export function renderOutputFixtures() {
       'screenshot.digest.json': { data: screenshotDigest },
       'error.normalized.json': { data: error },
       'error.policy-normalized.json': { data: errorPolicyNormalized },
+      'mcp.snapshot.default.json': { data: mcpSnapshot },
     } satisfies Record<string, EconomySample>,
   };
 }

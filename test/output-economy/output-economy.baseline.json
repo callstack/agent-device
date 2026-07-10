@@ -103,5 +103,12 @@
     "refs": 0,
     "hints": 1,
     "shape": "$.code:string|$.details.reason:string|$.details:object|$.hint:string|$.message:string|$.retriable:boolean|$:object"
+  },
+  "mcp.snapshot.default.json": {
+    "bytes": 1173,
+    "lines": 1,
+    "refs": 4,
+    "hints": 0,
+    "shape": "$.content:array|$.content[].text:string|$.content[].type:string|$.content[]:object|$.isError:boolean|$.structuredContent.identifiers.session:string|$.structuredContent.identifiers:object|$.structuredContent.nodes:array|$.structuredContent.nodes[].depth:number|$.structuredContent.nodes[].enabled:boolean|$.structuredContent.nodes[].hittable:boolean|$.structuredContent.nodes[].identifier:string|$.structuredContent.nodes[].index:number|$.structuredContent.nodes[].label:string|$.structuredContent.nodes[].parentIndex:number|$.structuredContent.nodes[].rect.height:number|$.structuredContent.nodes[].rect.width:number|$.structuredContent.nodes[].rect.x:number|$.structuredContent.nodes[].rect.y:number|$.structuredContent.nodes[].rect:object|$.structuredContent.nodes[].ref:string|$.structuredContent.nodes[].role:string|$.structuredContent.nodes[].type:string|$.structuredContent.nodes[].value:string|$.structuredContent.nodes[]:object|$.structuredContent.refsGeneration:number|$.structuredContent.truncated:boolean|$.structuredContent.visibility.partial:boolean|$.structuredContent.visibility.reasons:array|$.structuredContent.visibility.totalNodeCount:number|$.structuredContent.visibility.visibleNodeCount:number|$.structuredContent.visibility:object|$.structuredContent:object|$:object"
   }
 }
