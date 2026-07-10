@@ -13,7 +13,7 @@
 | [0009 Apple Platform Consolidation](0009-apple-platform-consolidation.md) | Apple platform family, apple/appleOs axes, the apple-leak guard |
 | [0010 Error system conventions](0010-error-system.md) | error codes, hints, normalizeError, typed error signals |
 | [0011 Interaction Guarantee Contract](0011-interaction-guarantee-contract.md) | interaction dispatch paths, fast paths, guards, the guarantee matrix, parity tables |
-| [0012 Interactive Replay](0012-interactive-replay.md) | replay healing/`--update`, selector disambiguation disclosure, `.ad` recorded identity, `replay --from` and the divergence report |
+| [0012 Interactive Replay](0012-interactive-replay.md) | replay healing/`--update`, resolution disclosure, `.ad` target-binding evidence, divergence wire/error handling, and replay-only `--from` semantics |
 
 ADRs record *why*; the registries and gates they describe are the living source of truth — when
 prose and a registry disagree, the registry wins and the ADR needs a follow-up.
