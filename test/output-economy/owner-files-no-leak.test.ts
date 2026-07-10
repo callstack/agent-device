@@ -13,8 +13,8 @@ function collectJsFiles(dir: string): string[] {
   return entries.filter((name) => name.endsWith('.js')).map((name) => path.join(dir, name));
 }
 
-describe('owner-file path literals', () => {
-  test('do not leak into production bundles after a clean build', { timeout: 30_000 }, () => {
+describe('owner-file metadata', () => {
+  test('does not leak into production bundles after a clean build', { timeout: 30_000 }, () => {
     fs.rmSync(path.join(repoRoot, 'dist'), { recursive: true, force: true });
 
     const build = runCmdSync(
@@ -32,15 +32,16 @@ describe('owner-file path literals', () => {
     const jsFiles = collectJsFiles(distPath);
     const bundle = jsFiles.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
 
-    const ownerPaths = [
+    const forbiddenMetadata = [
+      'ownerFiles',
       ...Object.values(COMMAND_OWNER_FILES).flat(),
       ...Object.values(getDaemonRouteOwnerFiles()),
     ];
 
-    for (const ownerPath of ownerPaths) {
+    for (const value of forbiddenMetadata) {
       expect(
-        bundle.includes(ownerPath),
-        `owner-file path ${ownerPath} leaked into production bundle`,
+        bundle.includes(value),
+        `owner-file metadata ${value} leaked into production bundle`,
       ).toBe(false);
     }
   });

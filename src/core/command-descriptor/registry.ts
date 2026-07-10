@@ -1074,9 +1074,16 @@ const CLI_COMMAND_NAMES = new Set<string>(
  * union below a precise set of command-name literals rather than `string`.
  */
 export const commandDescriptors = RAW_COMMAND_DESCRIPTORS.map((descriptor) => {
-  const { ownerFiles: _, ...rest } = descriptor;
+  if (!ownerFilesEnabled) {
+    return {
+      ...descriptor,
+      mcpExposed: resolveMcpExposure(descriptor),
+    };
+  }
+
+  const { ownerFiles: _, ...runtimeDescriptor } = descriptor;
   return {
-    ...rest,
+    ...runtimeDescriptor,
     mcpExposed: resolveMcpExposure(descriptor),
   };
 }) satisfies readonly CommandDescriptor[];

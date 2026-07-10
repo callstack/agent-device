@@ -9,6 +9,7 @@ const ownerPaths = new Set([
   ...Object.values(COMMAND_OWNER_FILES).flat(),
   ...Object.values(getDaemonRouteOwnerFiles()),
 ]);
+const forbiddenMetadata = new Set(['ownerFiles', ...ownerPaths]);
 
 const bundleFiles = walkFiles(distRoot).filter((file) => file.endsWith('.js'));
 if (bundleFiles.length === 0) {
@@ -17,18 +18,18 @@ if (bundleFiles.length === 0) {
 
 const leaks = bundleFiles.flatMap((file) => {
   const content = fs.readFileSync(file, 'utf8');
-  return [...ownerPaths]
-    .filter((ownerPath) => content.includes(ownerPath))
-    .map((ownerPath) => ({ file: path.relative(repoRoot, file), ownerPath }));
+  return [...forbiddenMetadata]
+    .filter((value) => content.includes(value))
+    .map((value) => ({ file: path.relative(repoRoot, file), value }));
 });
 
 if (leaks.length > 0) {
-  const details = leaks.map(({ file, ownerPath }) => `- ${ownerPath} in ${file}`).join('\n');
+  const details = leaks.map(({ file, value }) => `- ${value} in ${file}`).join('\n');
   throw new Error(`Owner-file navigation metadata leaked into production bundles:\n${details}`);
 }
 
 process.stdout.write(
-  `Verified ${ownerPaths.size} owner-file paths are absent from ${bundleFiles.length} production bundles.\n`,
+  `Verified the ownerFiles key and ${ownerPaths.size} owner-file paths are absent from ${bundleFiles.length} production bundles.\n`,
 );
 
 function walkFiles(root: string): string[] {
