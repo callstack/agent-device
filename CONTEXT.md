@@ -106,9 +106,6 @@ The refactor is substantively done; these follow-ups are intentionally deferred,
 - Phase 2c — narrow the ~15 remaining `Record`-typed client methods in
   `src/client/client-types.ts` to their existing typed contracts (a semver-relevant public-API
   narrowing; not yet done).
-- b.3 perf sampling body — all four `PlatformPlugin` daemon facets now route through the plugin
-  (`appLog`, the `perf` support gate, `recording`, and `providers`; the last two via #1007). Only
-  the `perf` sampling body (`buildPerfResponseData`) still branches in the daemon.
 - Strict DAG back-edge inversion — the layering lint prevents target-spine back-edge growth, but
   the full zero-back-edge DAG (e.g. `commands` → `cli`/`client`) is not done.
 - Legacy alias drops — ~175 LOC of legacy aliases/barrels remain, gated to the next major.

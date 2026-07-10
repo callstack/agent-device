@@ -81,6 +81,29 @@ type BuildPerfMemoryResponseOptions = BuildPerfResponseOptions & {
 
 const RELATED_PERF_ACTION_LIMIT = 12;
 
+/**
+ * The daemon-owned `perf metrics` sampler discriminant. A PLATFORM-NEUTRAL string tag
+ * naming which family owns a device's `perf metrics` sampler; the daemon maps it back to
+ * the concrete sampler via {@link PERF_METRICS_SAMPLERS_BY_TAG}. The
+ * {@link PlatformPlugin.perf} facet returns this tag (type-only in the plugin, exactly
+ * like {@link RecordingBackendTag} for recording), so core/platforms never carry the
+ * daemon-owned sampling composition. Only families that expose perf metrics carry the tag
+ * (Apple + Android); it is consulted solely after the support gate admits the platform.
+ */
+export type PerfMetricsSamplerTag = 'apple' | 'android';
+
+type SampledPerfMetrics = {
+  memory: SettledMetricResult;
+  cpu: SettledMetricResult;
+  fps: SettledMetricResult;
+};
+
+type PerfMetricsSampler = (
+  session: SessionState,
+  appBundleId: string,
+  options: BuildPerfResponseOptions,
+) => Promise<SampledPerfMetrics>;
+
 function readStartupPerfSamples(actions: SessionAction[]): StartupPerfSample[] {
   const samples: StartupPerfSample[] = [];
   for (const action of actions) {
@@ -129,13 +152,23 @@ export async function buildPerfResponseData(
     return response;
   }
 
-  if (session.device.platform === 'android') {
-    await applyAndroidPerfMetrics(response, session, session.appBundleId, options);
-    return response;
-  }
-
-  await applyApplePerfMetrics(response, session, session.appBundleId);
+  const sampler = resolvePerfMetricsSampler(session.device);
+  if (!sampler) return response;
+  const results = await sampler(session, session.appBundleId, options);
+  applySampledPerfMetrics(response, session, results);
   return response;
+}
+
+// Routes the former `device.platform === 'android'` sampling branch through the
+// PlatformPlugin perf facet (issue #1188): Apple/Android carry `perf.metricsSamplerTag`,
+// and the daemon maps the neutral tag back to its own sampler. `buildPerfResponseData`
+// consults this only after `supportsPlatformPerfMetrics` admits the platform, so the
+// facet (hence the tag) is always present; the `undefined` fallthrough preserves the
+// former base response for the unreachable unsupported case. The daemon perf routing
+// parity test pins the tag to a verbatim copy of the former branch.
+function resolvePerfMetricsSampler(device: SessionState['device']): PerfMetricsSampler | undefined {
+  const tag = tryGetPlugin(device.platform)?.perf?.metricsSamplerTag(device);
+  return tag ? PERF_METRICS_SAMPLERS_BY_TAG[tag] : undefined;
 }
 
 export async function buildPerfFramesResponseData(
@@ -276,33 +309,10 @@ function applyMissingAppPerfMetrics(response: PerfResponseData, session: Session
   response.metrics.cpu = { available: false, reason };
 }
 
-async function applyAndroidPerfMetrics(
-  response: PerfResponseData,
-  session: SessionState,
-  appBundleId: string,
-  options: BuildPerfResponseOptions,
-): Promise<void> {
-  const results = await sampleAndroidPerfResults(session, appBundleId, options);
-  applySampledPerfMetrics(response, session, results);
-}
-
-async function applyApplePerfMetrics(
-  response: PerfResponseData,
-  session: SessionState,
-  appBundleId: string,
-): Promise<void> {
-  const results = await sampleApplePerfResultsForSession(session, appBundleId);
-  applySampledPerfMetrics(response, session, results);
-}
-
 function applySampledPerfMetrics(
   response: PerfResponseData,
   session: SessionState,
-  results: {
-    memory: SettledMetricResult;
-    cpu: SettledMetricResult;
-    fps: SettledMetricResult;
-  },
+  results: SampledPerfMetrics,
 ): void {
   response.metrics.memory = buildMetricResult(results.memory);
   response.metrics.cpu = buildMetricResult(results.cpu);
@@ -419,11 +429,7 @@ async function sampleAndroidPerfResults(
   session: SessionState,
   appBundleId: string,
   options: BuildPerfResponseOptions,
-): Promise<{
-  memory: SettledMetricResult;
-  cpu: SettledMetricResult;
-  fps: SettledMetricResult;
-}> {
+): Promise<SampledPerfMetrics> {
   const androidPerfOptions = { adb: options.androidAdb };
   const [memory, cpu, fps] = await Promise.allSettled([
     sampleAndroidMemoryPerf(session.device, appBundleId, androidPerfOptions),
@@ -436,11 +442,7 @@ async function sampleAndroidPerfResults(
 async function sampleApplePerfResultsForSession(
   session: SessionState,
   appBundleId: string,
-): Promise<{
-  memory: SettledMetricResult;
-  cpu: SettledMetricResult;
-  fps: SettledMetricResult;
-}> {
+): Promise<SampledPerfMetrics> {
   const fps = await settleMetric(sampleAppleFramePerf(session.device, appBundleId));
   const processSample = await settleMetric(sampleApplePerfMetrics(session.device, appBundleId));
   if (processSample.status === 'fulfilled') {
@@ -460,6 +462,17 @@ async function sampleApplePerfResultsForSession(
     fps,
   };
 }
+
+// Maps the neutral {@link PerfMetricsSamplerTag} the plugin facet returns back to the
+// daemon-owned `perf metrics` sampler. Exhaustive over the tag union (a compile error if
+// a tag is added without a sampler), so `resolvePerfMetricsSampler` is a pure data lookup
+// with no platform branch of its own. The Apple sampler ignores the trailing options bag
+// (only Android threads a request-scoped adb executor), so its narrower arity is
+// assignable to {@link PerfMetricsSampler}.
+const PERF_METRICS_SAMPLERS_BY_TAG: Record<PerfMetricsSamplerTag, PerfMetricsSampler> = {
+  android: sampleAndroidPerfResults,
+  apple: sampleApplePerfResultsForSession,
+};
 
 async function buildMemorySampleMetric(
   session: SessionState,

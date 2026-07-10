@@ -40,6 +40,14 @@ function supportsPlatformPerfMetricsByHand(device: DeviceInfo): boolean {
   return device.platform === 'android' || isIosFamily(device) || isMacOs(device);
 }
 
+// --- INDEPENDENT verbatim copy of the former `buildPerfResponseData` sampling branch ---
+// The old body dispatched `session.device.platform === 'android'` -> the Android sampler,
+// else -> the Apple sampler, and was reached ONLY after the support gate above admitted
+// the platform. So the sampler selection is defined only for supported devices.
+function perfMetricsSamplerTagByHand(device: DeviceInfo): 'apple' | 'android' {
+  return device.platform === 'android' ? 'android' : 'apple';
+}
+
 // --- the exhaustive synthetic device matrix (every platform x kind x target) ---
 const DEVICE_KINDS_ALL: DeviceKind[] = ['simulator', 'emulator', 'device'];
 const DEVICE_TARGETS_ALL: (DeviceTarget | undefined)[] = [undefined, ...DEVICE_TARGETS];
@@ -96,6 +104,30 @@ test('only families with perf metrics carry the perf facet', () => {
   // lookup preserves that fallthrough (asserted below).
   assert.equal(getPlugin('linux').perf, undefined, 'linux plugin has no perf');
   assert.equal(getPlugin('web').perf, undefined, 'web plugin has no perf');
+});
+
+test('perf.metricsSamplerTag facet is byte-identical to the former sampling branch', () => {
+  // The sampler selection is only reached on SUPPORTED devices, so compare there; the
+  // unsupported families carry no facet (hence no tag), asserted separately below.
+  for (const device of SAMPLE_DEVICES.filter((d) => supportsPlatformPerfMetricsByHand(d))) {
+    assert.equal(
+      getPlugin(device.platform).perf?.metricsSamplerTag(device),
+      perfMetricsSamplerTagByHand(device),
+      `metricsSamplerTag for ${device.id}`,
+    );
+  }
+});
+
+test('the factless families expose no metricsSamplerTag', () => {
+  for (const device of SAMPLE_DEVICES.filter(
+    (d) => d.platform === 'linux' || d.platform === 'web',
+  )) {
+    assert.equal(
+      getPlugin(device.platform).perf?.metricsSamplerTag,
+      undefined,
+      `no sampler tag for ${device.id}`,
+    );
+  }
 });
 
 test('the factless families fall through to the historical `false` default', () => {

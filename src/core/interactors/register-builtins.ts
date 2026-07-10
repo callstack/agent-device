@@ -37,8 +37,10 @@ const androidPlugin = {
   // Wraps the Android arm of `resolveLogBackend`: every Android device -> 'android'.
   appLog: { resolveBackend: () => 'android' },
   // Wraps the Android arm of `supportsPlatformPerfMetrics`: every Android device
-  // reports perf-metrics support.
-  perf: { supportsMetrics: () => true },
+  // reports perf-metrics support. `metricsSamplerTag` wraps the Android arm of the
+  // former `buildPerfResponseData` sampling branch: every supported Android device
+  // routes to the Android `perf metrics` sampler.
+  perf: { supportsMetrics: () => true, metricsSamplerTag: () => 'android' },
   // Wraps the Android arm of `resolveRecordingBackendForDevice`: every Android device
   // resolves to the android recording backend.
   recording: { resolveBackendTag: () => 'android' },

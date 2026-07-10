@@ -2,6 +2,7 @@ import { AppError } from '../../kernel/errors.ts';
 import type { DeviceInfo, Platform, PlatformSelector } from '../../kernel/device.ts';
 import type { LogBackend } from '../../daemon/network-log.ts';
 import type { RecordingBackendTag } from '../../daemon/handlers/record-trace-recording-backends.ts';
+import type { PerfMetricsSamplerTag } from '../../daemon/handlers/session-perf.ts';
 import type { PlatformGatedProviderResolverKey } from '../../daemon/request-platform-providers.ts';
 import type { Interactor, RunnerContext } from '../interactor-types.ts';
 import type { DeviceInventoryRequest } from '../platform-inventory.ts';
@@ -28,16 +29,18 @@ import type { CapabilityBucket } from '../platform-descriptor/types.ts';
  * {@link PlatformPlugin.appLog} carries the neutral {@link LogBackend} resolver
  * (wraps `resolveLogBackend`, pinned by the daemon app-log routing parity test);
  * {@link PlatformPlugin.perf} carries the neutral perf-metrics support predicate
- * (wraps `supportsPlatformPerfMetrics`, pinned by the daemon perf routing parity
- * test); {@link PlatformPlugin.recording} carries the neutral
+ * (wraps `supportsPlatformPerfMetrics`) plus the neutral {@link PerfMetricsSamplerTag}
+ * resolver (wraps the per-platform metrics-sampling branch formerly open-coded in
+ * `buildPerfResponseData`), both pinned by the daemon perf routing parity test;
+ * {@link PlatformPlugin.recording} carries the neutral
  * {@link RecordingBackendTag} resolver (wraps the per-platform branch of
  * `resolveRecordingBackendForDevice`, pinned by the recording routing parity test);
  * {@link PlatformPlugin.providers} carries the per-family platform-gated request
  * provider resolver list (replaces the hand `device.platform === …` gate in
  * `request-platform-providers.ts`, pinned by the providers routing parity test). The
- * rest of the `perf` facet (the sampling body `buildPerfResponseData` and the
- * Android-only native-collector gate) stays on its daemon branch as the source of
- * truth until it clears the same gate. See
+ * remaining perf work (the `perf memory`/`perf frames` bodies and the Android-only
+ * native-collector gate) stays on its daemon branch as the source of truth until it
+ * clears the same gate. See
  * docs/adr/0009-apple-platform-consolidation.md (tracked in issue #974).
  */
 export type PlatformPlugin = {
@@ -93,12 +96,22 @@ export type PlatformPlugin = {
    * families that expose perf metrics (Apple + Android); left `undefined` for
    * linux/web, where the hand predicate returned `false` — the daemon lookup
    * preserves that fallthrough, and the daemon perf routing parity test pins the
-   * equivalence. Only the support gate is routed today; the perf sampling body
-   * (`buildPerfResponseData`) and the Android-only native-collector gate stay on
-   * their daemon branch until each clears the same gate.
+   * equivalence.
+   *
+   * `metricsSamplerTag` returns the neutral {@link PerfMetricsSamplerTag} naming which
+   * `perf metrics` sampler a device's family owns (`'apple'` / `'android'`), replacing
+   * the `device.platform === 'android'` sampling branch formerly open-coded in
+   * `buildPerfResponseData`. The daemon still OWNS the samplers and maps the tag back to
+   * them (`PERF_METRICS_SAMPLERS_BY_TAG`), so core/platforms never carry the daemon-owned
+   * sampling composition — exactly like {@link recording}'s tag. It is only ever consulted
+   * after `supportsMetrics` gates the platform in, so it is present on the SAME families
+   * (Apple + Android) and the parity test pins both to a verbatim copy of the former
+   * branch. The `perf memory`/`perf frames` bodies and the Android-only native-collector
+   * gate stay on their daemon branch until each clears the same gate.
    */
   readonly perf?: {
     supportsMetrics(device: DeviceInfo): boolean;
+    metricsSamplerTag(device: DeviceInfo): PerfMetricsSamplerTag;
   };
   /**
    * The daemon recording facet (issue #974). `resolveBackendTag` wraps the

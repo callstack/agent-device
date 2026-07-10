@@ -156,8 +156,10 @@ export const applePlugin = {
       isMacOs(device) ? 'macos' : device.kind === 'device' ? 'ios-device' : 'ios-simulator',
   },
   // Wraps the Apple arm of `supportsPlatformPerfMetrics`: every Apple device
-  // (ios/macos, any kind/target) reports perf-metrics support.
-  perf: { supportsMetrics: () => true },
+  // (ios/macos, any kind/target) reports perf-metrics support. `metricsSamplerTag`
+  // wraps the else-arm of the former `buildPerfResponseData` sampling branch: every
+  // supported Apple device routes to the Apple `perf metrics` sampler.
+  perf: { supportsMetrics: () => true, metricsSamplerTag: () => 'apple' },
   // Wraps the Apple arm of `resolveRecordingBackendForDevice` verbatim: macOS ->
   // 'macos'; an iOS `device` -> 'ios-device'; every other iOS kind (simulator, incl.
   // tvOS/iPadOS/visionOS) -> 'ios-simulator'. Mirrors the appLog resolveBackend shape.
