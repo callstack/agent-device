@@ -4,6 +4,7 @@ import {
   applyReplayDivergenceLevelCaps,
   boundReplayDivergence,
   measureReplayDivergenceBytes,
+  sanitizeReplayDivergenceField,
   REPLAY_DIVERGENCE_DEFAULT_REF_LIMIT,
   REPLAY_DIVERGENCE_DIGEST_REF_LIMIT,
   REPLAY_DIVERGENCE_LEVEL_BYTE_LIMITS,
@@ -197,4 +198,31 @@ test('resume is always allowed:false with a clear reason and carries no planDige
   const divergence = buildDivergence();
   assert.deepEqual(divergence.resume, { allowed: false, reason: 'resume not yet supported' });
   assert.ok(!('planDigest' in divergence.resume));
+});
+
+// --- ADR 0012: redact BEFORE truncation ("All rendered strings ... pass
+// through the central diagnostics redactor before truncation") ---
+
+test('sanitizeReplayDivergenceField redacts a secret that straddles the truncation boundary', () => {
+  // The secret assignment starts before byte 256 and its value crosses the
+  // cut. Truncate-first could split the token so the redactor's pattern no
+  // longer sees the full assignment; redact-first replaces the value before
+  // any bytes are dropped, so no fragment of the secret can survive.
+  // 200 prefix bytes put the assignment's VALUE across the raw 256-byte
+  // boundary (the secret spans bytes ~211-262): truncate-first would cut
+  // mid-secret and leave an unredactable fragment behind; redact-first
+  // replaces the value before any bytes are dropped.
+  const secret = 'hunter2-super-secret-value-abcdef123456-ghijkl-7890';
+  const value = `${'x'.repeat(200)} password=${secret} ${'y'.repeat(200)}`;
+  const sanitized = sanitizeReplayDivergenceField(value);
+  assert.ok(Buffer.byteLength(sanitized, 'utf8') <= 256);
+  assert.ok(!sanitized.includes('hunter2'));
+  assert.ok(!sanitized.includes(secret.slice(0, 8)));
+  assert.ok(sanitized.includes('password=[REDACTED]'));
+});
+
+test('sanitizeReplayDivergenceField redacts sensitive content even when no truncation is needed', () => {
+  const sanitized = sanitizeReplayDivergenceField('open failed: bearer abc123def token leaked');
+  assert.ok(!sanitized.includes('abc123def'));
+  assert.ok(sanitized.includes('[REDACTED]'));
 });

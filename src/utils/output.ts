@@ -119,10 +119,14 @@ function formatDivergenceSuggestionLine(entry: unknown): string {
 
 function formatDivergenceOverflowLine(overflow: unknown, artifactUnavailable: unknown): string[] {
   if (overflow && typeof overflow === 'object') {
-    return [`Full report written to ${String((overflow as Record<string, unknown>).artifactPath)}.`];
+    return [
+      `Full report written to ${String((overflow as Record<string, unknown>).artifactPath)}.`,
+    ];
   }
   if (artifactUnavailable === true) {
-    return ['Full report exceeded the response budget and the overflow artifact could not be written.'];
+    return [
+      'Full report exceeded the response budget and the overflow artifact could not be written.',
+    ];
   }
   return [];
 }

@@ -1,4 +1,5 @@
 import type { ResponseLevel } from '../kernel/contracts.ts';
+import { redactDiagnosticData } from '../kernel/redaction.ts';
 
 /**
  * ADR 0012 migration step 2: structured replay divergence report.
@@ -141,6 +142,22 @@ export function truncateUtf8Field(
   return `${bytes.subarray(0, sliceEnd).toString('utf8')}${marker}`;
 }
 
+/**
+ * The sanctioned field sanitizer for divergence report strings, in the
+ * ADR-specified order: central diagnostics redactor FIRST, byte-accurate
+ * truncation (with marker) second. Truncating first could split a secret
+ * across the cut so the redactor's patterns no longer match the surviving
+ * fragment — redact-then-truncate makes the ordering guarantee structural
+ * rather than relying on the redactor's incidental robustness to partial
+ * tokens.
+ */
+export function sanitizeReplayDivergenceField(
+  value: string,
+  limit = REPLAY_DIVERGENCE_FIELD_BYTE_LIMIT,
+): string {
+  return truncateUtf8Field(redactDiagnosticData(value), limit);
+}
+
 function boundScreenRefs(screen: ReplayDivergenceScreen, limit: number): ReplayDivergenceScreen {
   if (screen.state !== 'available' || screen.refs.length <= limit) return screen;
   return { ...screen, refs: screen.refs.slice(0, limit), truncated: true };
@@ -212,15 +229,15 @@ function buildMinimalReplayDivergence(capped: ReplayDivergence): ReplayDivergenc
     step: {
       index: capped.step.index,
       source: {
-        path: truncateUtf8Field(capped.step.source.path),
+        path: sanitizeReplayDivergenceField(capped.step.source.path),
         line: capped.step.source.line,
       },
     },
-    action: truncateUtf8Field(capped.action),
+    action: sanitizeReplayDivergenceField(capped.action),
     cause: {
       code: capped.cause.code,
-      message: truncateUtf8Field(capped.cause.message),
-      ...(capped.cause.hint ? { hint: truncateUtf8Field(capped.cause.hint) } : {}),
+      message: sanitizeReplayDivergenceField(capped.cause.message),
+      ...(capped.cause.hint ? { hint: sanitizeReplayDivergenceField(capped.cause.hint) } : {}),
     },
     screen: {
       state: 'unavailable',
