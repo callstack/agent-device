@@ -71,6 +71,7 @@ export default defineConfig({
   tsconfig: 'tsconfig.lib.json',
   define: {
     __AGENT_DEVICE_VERSION__: JSON.stringify(packageJson.version),
+    __OWNER_FILES__: 'false',
   },
   shims: true,
   hash: false,
@@ -84,6 +85,9 @@ export default defineConfig({
   },
   outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
   minify: true,
+  treeshake: {
+    propertyReadSideEffects: false,
+  },
   dts: {
     tsgo: {
       path: getTypeScript7ExePath(),
