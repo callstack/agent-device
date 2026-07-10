@@ -250,7 +250,7 @@ const STRUCTURAL_TAIL_ROLES = new Set(['application', 'window']);
  * was stricter than `snapshot -i`'s own bar and silently dropped exactly the
  * buttons the tail exists to surface (#1167 post-merge benchmark). Structural
  * application/window chrome, any keyboard container/chrome subtree (iOS), and
- * Android IME/persistent-system chrome (#1178) are excluded on top of that
+ * Android IME/persistent-system chrome (#1198) are excluded on top of that
  * bar: never a next actionable target either way.
  */
 export function buildSettleTailEntries(
@@ -356,21 +356,36 @@ function collectSubtreeIndexes(
   return indexes;
 }
 
-// Persistent Android system chrome that is never settle-relevant: exactly the
-// status/navigation-bar package whose clock/signal/battery churn motivated
-// #1178. Deliberately minimal — every OTHER foreign package (system dialogs
-// like `android`'s resolver/share sheet, permission prompts, the package
-// installer) is an overlay the agent must see and act on, so it is KEPT.
-const ANDROID_PERSISTENT_SYSTEM_CHROME_PACKAGES = new Set(['com.android.systemui']);
+// SystemUI hosts BOTH persistent chrome and actionable overlays (volume
+// panel, media/output pickers), so chrome is never a package-level fact.
+// Within `com.android.systemui`, only window-runs carrying a status-bar or
+// navigation-bar marker resource-id drop; every other systemui surface is
+// kept. Marker set live-verified on the emulator: the status-bar window
+// carries `status_bar*` ids throughout while the VolumeDialog window carries
+// only `volume_dialog*` ids (`input_method_nav*` bars are IME-owned and
+// handled by the IME tier).
+const ANDROID_SYSTEM_CHROME_PACKAGE = 'com.android.systemui';
+const ANDROID_SYSTEM_CHROME_MARKER_PREFIXES = [
+  'com.android.systemui:id/status_bar',
+  'com.android.systemui:id/navigation_bar',
+];
+
+function hasAndroidSystemChromeMarker(node: SnapshotNode): boolean {
+  const identifier = node.identifier ?? '';
+  return ANDROID_SYSTEM_CHROME_MARKER_PREFIXES.some((prefix) => identifier.startsWith(prefix));
+}
 
 /**
- * Android settle chrome (#1178): IME-owned nodes collapse to one surviving
- * line per contiguous run, persistent system chrome (status bar) drops from
- * both diff sides, and every other foreign package is kept in full so system
- * dialogs stay actionable. Constraint: classification is strictly per-node by
+ * Android settle chrome (#1198): IME-owned nodes collapse to one surviving
+ * line per contiguous run; systemui status/nav-bar window-runs drop from both
+ * diff sides; every other foreign node — system dialogs (package `android`),
+ * permission prompts, AND actionable systemui overlays like the volume panel
+ * — is kept in full. Constraint: package membership is strictly per-node by
  * the node's own `bundleId` — parentIndex chains can cross windows on Android
- * (enforced by the settle.test.ts cross-window regression test). Inert on
- * iOS/macOS: those nodes never set `bundleId`.
+ * (enforced by the settle.test.ts cross-window regression test); run grouping
+ * only ever walks parent chains BETWEEN same-package nodes, so it cannot
+ * swallow another package's node. Inert on iOS/macOS: those nodes never set
+ * `bundleId`.
  */
 function collectAndroidSettleChrome(
   nodes: SnapshotNode[],
@@ -390,19 +405,12 @@ function collectAndroidSettleChrome(
   // appBundleId is the session's pre-action value (not refreshed inside the
   // settle loop); it is only a never-drop-the-app-under-test guard here, so
   // staleness cannot hide a foreign dialog.
-  const systemChromeIndexes = new Set(
-    nodes
-      .filter(
-        (node) =>
-          node.bundleId !== undefined &&
-          ANDROID_PERSISTENT_SYSTEM_CHROME_PACKAGES.has(node.bundleId) &&
-          node.bundleId !== appBundleId &&
-          !imeIndexes.has(node.index),
-      )
-      .map((node) => node.index),
-  );
+  const systemChromeIndexes =
+    appBundleId === ANDROID_SYSTEM_CHROME_PACKAGE
+      ? new Set<number>()
+      : collectAndroidSystemChromeRunIndexes(nodes, byIndex, imeIndexes);
   // The one surviving container line per IME run; the rest of the run and all
-  // persistent system chrome never spend diff/tail budget.
+  // status/nav-bar chrome never spend diff/tail budget.
   const strippedIndexes = new Set(
     [...imeIndexes].filter((index) => !imeContainerIndexes.has(index)),
   );
@@ -416,6 +424,50 @@ function collectAndroidSettleChrome(
   );
   if (strippedIndexes.size === 0 && refs.size === 0) return EMPTY_KEYBOARD_CHROME;
   return { strippedIndexes, refs };
+}
+
+/**
+ * Systemui window-runs (contiguous same-package parent chains) that contain a
+ * status/nav-bar marker anywhere in the run. The whole marked run drops —
+ * unmarked wrappers above `status_bar_container` churn with the bar itself —
+ * while unmarked runs (volume panel, media pickers) are kept whole.
+ */
+function collectAndroidSystemChromeRunIndexes(
+  nodes: SnapshotNode[],
+  byIndex: Map<number, SnapshotNode>,
+  imeIndexes: ReadonlySet<number>,
+): Set<number> {
+  const systemUiIndexes = new Set(
+    nodes
+      .filter(
+        (node) => node.bundleId === ANDROID_SYSTEM_CHROME_PACKAGE && !imeIndexes.has(node.index),
+      )
+      .map((node) => node.index),
+  );
+  if (systemUiIndexes.size === 0) return new Set();
+  // Union-find-lite: each systemui node resolves to its run root (the nearest
+  // ancestor chain member whose parent is absent or not systemui).
+  const runRootByIndex = new Map<number, number>();
+  const resolveRunRoot = (index: number): number => {
+    const cached = runRootByIndex.get(index);
+    if (cached !== undefined) return cached;
+    const parentIndex = byIndex.get(index)?.parentIndex;
+    const root =
+      parentIndex !== undefined && systemUiIndexes.has(parentIndex)
+        ? resolveRunRoot(parentIndex)
+        : index;
+    runRootByIndex.set(index, root);
+    return root;
+  };
+  const markedRunRoots = new Set(
+    [...systemUiIndexes]
+      .filter((index) => {
+        const node = byIndex.get(index);
+        return node !== undefined && hasAndroidSystemChromeMarker(node);
+      })
+      .map((index) => resolveRunRoot(index)),
+  );
+  return new Set([...systemUiIndexes].filter((index) => markedRunRoots.has(resolveRunRoot(index))));
 }
 
 /** iOS keyboard-window chrome unioned with Android IME/system chrome. */
@@ -555,7 +607,7 @@ function resolveSettleHint(
 // Sparse-quality captures are not stored (mirroring captureSelectorSnapshot)
 // and therefore issue no refs. The fetched session is returned alongside
 // `stored` so the caller can read `appBundleId` for settle-chrome scoping
-// (#1178) without a second `sessions.get` round trip.
+// (#1198) without a second `sessions.get` round trip.
 async function storeSettledSnapshot(
   runtime: AgentDeviceRuntime,
   options: CommandContext,

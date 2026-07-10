@@ -687,7 +687,7 @@ test('a keyboard window hosting an app composer field is never window-classified
   assert.ok(!diff.lines.some((line) => /\[key\]|shift/.test(line.text)));
 });
 
-// #1178: Android settle-diff scope. Shapes below are trimmed from a real
+// #1198: Android settle-diff scope. Shapes below are trimmed from a real
 // `snapshot --raw --json` capture against the react-navigation playground on
 // an Android emulator (July 2026, stock-UIAutomator fallback path) — status
 // bar and IME each render as their own whole top-level root, one node per
@@ -707,9 +707,20 @@ function androidStatusBarNodes(startIndex: number, clockLabel = '12:23') {
       rect: { x: 0, y: 0, width: 1344, height: 159 },
     },
     {
+      // The marker every real status-bar capture carries; the window-run
+      // drops as a whole because this member matches the status_bar* prefix.
       index: root + 1,
-      depth: 10,
+      depth: 1,
       parentIndex: root,
+      type: 'android.widget.FrameLayout',
+      identifier: 'com.android.systemui:id/status_bar_container',
+      bundleId: ANDROID_SYSTEM_UI_BUNDLE_ID,
+      rect: { x: 0, y: 0, width: 1344, height: 159 },
+    },
+    {
+      index: root + 2,
+      depth: 10,
+      parentIndex: root + 1,
       type: 'android.widget.TextView',
       identifier: 'com.android.systemui:id/clock',
       label: clockLabel,
@@ -717,9 +728,9 @@ function androidStatusBarNodes(startIndex: number, clockLabel = '12:23') {
       rect: { x: 40, y: 40, width: 80, height: 40 },
     },
     {
-      index: root + 2,
+      index: root + 3,
       depth: 11,
-      parentIndex: root,
+      parentIndex: root + 1,
       type: 'android.widget.FrameLayout',
       identifier: 'com.android.systemui:id/mobile_combo',
       label: 'T-Mobile, one bar.',
@@ -727,13 +738,72 @@ function androidStatusBarNodes(startIndex: number, clockLabel = '12:23') {
       rect: { x: 900, y: 40, width: 60, height: 40 },
     },
     {
-      index: root + 3,
+      index: root + 4,
       depth: 11,
-      parentIndex: root,
+      parentIndex: root + 1,
       type: 'android.view.View',
       label: 'Battery 100 percent.',
       bundleId: ANDROID_SYSTEM_UI_BUNDLE_ID,
       rect: { x: 1200, y: 40, width: 60, height: 40 },
+    },
+  ];
+}
+
+// Real systemui VolumeDialog window captured live alongside the status bar
+// (volume keyevent held open + `snapshot --raw --json`, android-helper
+// multi-window backend): same package as the status bar but only
+// volume_dialog* ids — no status/nav-bar marker in the run, so it must
+// survive with actionable refs.
+function androidVolumeDialogNodes(startIndex: number) {
+  const root = startIndex;
+  return [
+    {
+      index: root,
+      depth: 0,
+      type: 'android.widget.FrameLayout',
+      bundleId: ANDROID_SYSTEM_UI_BUNDLE_ID,
+      rect: { x: 816, y: 159, width: 528, height: 2833 },
+    },
+    {
+      index: root + 1,
+      depth: 2,
+      parentIndex: root,
+      type: 'android.widget.FrameLayout',
+      identifier: 'com.android.systemui:id/volume_dialog',
+      bundleId: ANDROID_SYSTEM_UI_BUNDLE_ID,
+      rect: { x: 1100, y: 1000, width: 220, height: 1100 },
+    },
+    {
+      index: root + 2,
+      depth: 3,
+      parentIndex: root + 1,
+      type: 'android.widget.ImageButton',
+      identifier: 'com.android.systemui:id/volume_dialog_settings',
+      label: 'Sound settings',
+      bundleId: ANDROID_SYSTEM_UI_BUNDLE_ID,
+      rect: { x: 1140, y: 1950, width: 140, height: 140 },
+      hittable: true,
+    },
+    {
+      index: root + 3,
+      depth: 3,
+      parentIndex: root + 1,
+      type: 'android.widget.SeekBar',
+      identifier: 'com.android.systemui:id/volume_dialog_slider',
+      label: 'Media',
+      bundleId: ANDROID_SYSTEM_UI_BUNDLE_ID,
+      rect: { x: 1140, y: 1100, width: 140, height: 800 },
+      hittable: true,
+    },
+    {
+      index: root + 4,
+      depth: 3,
+      parentIndex: root + 1,
+      type: 'android.widget.ImageButton',
+      label: 'Ring, tap to change ringer mode',
+      bundleId: ANDROID_SYSTEM_UI_BUNDLE_ID,
+      rect: { x: 1140, y: 950, width: 140, height: 140 },
+      hittable: true,
     },
   ];
 }
@@ -847,7 +917,7 @@ function androidAppNodes() {
   ];
 }
 
-test('Android status bar and IME chrome never spend the settled diff budget (#1178)', async () => {
+test('Android status bar and IME chrome never spend the settled diff budget (#1198)', async () => {
   // The status bar clock ticks and the keyboard is summoned between captures
   // — exactly the noise the July 2026 Android settle benchmark flagged. The
   // systemui status bar disappears entirely (both sides) and the IME
@@ -886,7 +956,7 @@ test('Android status bar and IME chrome never spend the settled diff budget (#11
   assert.equal(diff.summary.removals, 0);
 });
 
-test('Android IME-only settle changes do not suppress the settle tail, and chrome never populates it (#1178)', async () => {
+test('Android IME-only settle changes do not suppress the settle tail, and chrome never populates it (#1198)', async () => {
   // Mirrors the iOS "keyboard-only changes... do not suppress" case above:
   // the only tree change is the keyboard summoning (plus unrelated status
   // bar churn), so the tail must still surface the real screen buttons —
@@ -922,7 +992,7 @@ test('Android IME-only settle changes do not suppress the settle tail, and chrom
   );
 });
 
-test('an Android IME-looking root hosting app-owned content is never collapsed as chrome (#1178)', async () => {
+test('an Android IME-looking root hosting app-owned content is never collapsed as chrome (#1198)', async () => {
   // Per-node classification: the app-owned "Send" under an IME root survives;
   // the sibling "q" key is dropped for its own foreign package, not by
   // subtree collapse. Indexes start above androidAppNodes()'s 0-2.
@@ -984,7 +1054,7 @@ test('an Android IME-looking root hosting app-owned content is never collapsed a
   assert.ok(!diff.lines.some((line) => /"q"/.test(line.text)));
 });
 
-test('a real capture with a cross-window parentIndex artifact never loses app content to IME collapse (#1178)', () => {
+test('a real capture with a cross-window parentIndex artifact never loses app content to IME collapse (#1198)', () => {
   // Real `snapshot -i --json` capture (RN playground, emulator, Gboard up):
   // interactive-only pruning reparented the app's "Tab View, back" (index 6)
   // onto IME toolbar button index 5 — a subtree walk from the IME root would
@@ -1153,7 +1223,7 @@ test('a real capture with a cross-window parentIndex artifact never loses app co
 
 // Real Android Sharesheet (`am start -a android.intent.action.SEND`,
 // ResolverActivity) captured live via `snapshot --raw --json` on the same
-// emulator/session as the other #1178 fixtures: 41 nodes, every one owned by
+// emulator/session as the other #1198 fixtures: 41 nodes, every one owned by
 // package `android` — the shape shared by permission prompts, the package
 // installer, and chooser/resolver sheets. Indexes offset by +100 to stay
 // clear of androidAppNodes().
@@ -1527,7 +1597,7 @@ function androidSharesheetNodes() {
   ];
 }
 
-test('a system dialog (real Sharesheet capture) stays fully visible in the settled diff (#1178)', async () => {
+test('a system dialog (real Sharesheet capture) stays fully visible in the settled diff (#1198)', async () => {
   // PR #1200 review blocker: the initial fix dropped EVERY foreign package,
   // so a blocking system dialog appearing mid-action produced an empty diff
   // and a tail pointing at now-covered app buttons. Keep-unknown-foreign is
@@ -1628,7 +1698,7 @@ function androidSharesheetInteractiveNodes() {
   ];
 }
 
-test("a system dialog's buttons are settle-tail candidates, never chrome (#1178)", () => {
+test("a system dialog's buttons are settle-tail candidates, never chrome (#1198)", () => {
   const settledNodes = makeSnapshotState([
     ...androidAppNodes(),
     ...androidSharesheetInteractiveNodes(),
@@ -2033,7 +2103,7 @@ test('buildSettleTailEntries drops the keyboard container and its chrome descend
   assert.deepEqual(result.tail, [{ ref: 'e1', role: 'button', label: 'Send' }]);
 });
 
-test('buildSettleTailEntries drops Android IME chrome and persistent system chrome (#1178)', () => {
+test('buildSettleTailEntries drops Android IME chrome and status-bar chrome (#1198)', () => {
   const settledNodes = makeSnapshotState([
     {
       index: 0,
@@ -2045,24 +2115,33 @@ test('buildSettleTailEntries drops Android IME chrome and persistent system chro
       hittable: true,
     },
     {
+      // Status-bar marker: this systemui run drops whole.
       index: 1,
       depth: 0,
+      type: 'android.widget.FrameLayout',
+      identifier: 'com.android.systemui:id/status_bar',
+      bundleId: 'com.android.systemui',
+    },
+    {
+      index: 2,
+      depth: 1,
+      parentIndex: 1,
       type: 'android.widget.TextView',
       identifier: 'com.android.systemui:id/clock',
       label: '12:23',
       bundleId: 'com.android.systemui',
     },
     {
-      index: 2,
+      index: 3,
       depth: 0,
       type: 'android.widget.FrameLayout',
       bundleId: 'com.google.android.inputmethod.latin',
       hittable: true,
     },
     {
-      index: 3,
+      index: 4,
       depth: 1,
-      parentIndex: 2,
+      parentIndex: 3,
       type: 'android.widget.FrameLayout',
       label: 'Delete',
       bundleId: 'com.google.android.inputmethod.latin',
@@ -2075,10 +2154,10 @@ test('buildSettleTailEntries drops Android IME chrome and persistent system chro
   assert.deepEqual(result.tail, [{ ref: 'e1', role: 'button', label: 'Send' }]);
 });
 
-test('buildSettleTailEntries keeps unknown-foreign packages and drops only systemui, with or without appBundleId (#1178)', () => {
+test('buildSettleTailEntries keeps unknown-foreign packages and drops only marked systemui chrome, with or without appBundleId (#1198)', () => {
   // Keep-unknown-foreign default: a system dialog's buttons (package
-  // `android`) stay tail candidates; only the persistent status-bar package
-  // is dropped, and that does not depend on knowing the session's app.
+  // `android`) stay tail candidates; only the marked status/nav-bar
+  // window-run drops, and that does not depend on knowing the session's app.
   const settledNodes = makeSnapshotState([
     {
       index: 0,
@@ -2092,6 +2171,15 @@ test('buildSettleTailEntries keeps unknown-foreign packages and drops only syste
     {
       index: 1,
       depth: 0,
+      type: 'android.widget.FrameLayout',
+      identifier: 'com.android.systemui:id/status_bar_container',
+      bundleId: 'com.android.systemui',
+      rect: { x: 0, y: 0, width: 1344, height: 159 },
+    },
+    {
+      index: 2,
+      depth: 1,
+      parentIndex: 1,
       type: 'android.widget.TextView',
       identifier: 'com.android.systemui:id/clock',
       label: '12:23',
@@ -2099,7 +2187,7 @@ test('buildSettleTailEntries keeps unknown-foreign packages and drops only syste
       rect: { x: 40, y: 40, width: 80, height: 40 },
     },
     {
-      index: 2,
+      index: 3,
       depth: 0,
       type: 'android.widget.Button',
       label: 'Just once',
@@ -2117,4 +2205,53 @@ test('buildSettleTailEntries keeps unknown-foreign packages and drops only syste
       ['Send', 'Just once'],
     );
   }
+});
+
+test('a systemui volume dialog survives the settled diff and tail while the status bar drops (#1198)', async () => {
+  // PR #1200 second review round: systemui is not all chrome — it hosts
+  // actionable overlays (volume panel, media pickers). Only window-runs
+  // carrying a status/nav-bar marker drop; the VolumeDialog run (real
+  // capture, same package, volume_dialog* ids only) must stay actionable.
+  const before = makeSnapshotState([...androidAppNodes(), ...androidStatusBarNodes(10, '12:23')]);
+  const settledTree = makeSnapshotState([
+    ...androidAppNodes(),
+    ...androidStatusBarNodes(10, '12:24'),
+    ...androidVolumeDialogNodes(30),
+  ]);
+  let captures = 0;
+  const device = createSettleDevice({
+    stored: before,
+    appBundleId: ANDROID_APP_BUNDLE_ID,
+    captureSnapshot: () => {
+      captures += 1;
+      return { snapshot: captures === 1 ? before : settledTree };
+    },
+  });
+
+  const result = await device.interactions.press(selector('label="Discard and go back"'), {
+    session: 'default',
+    settle: {},
+  });
+
+  const diff = result.settle?.diff;
+  assert.ok(diff);
+  const added = diff.lines.filter((line) => line.kind === 'added');
+  const texts = added.map((line) => line.text).join('\n');
+  // The volume dialog registers as change, with actionable refs.
+  assert.match(texts, /Sound settings/);
+  assert.match(texts, /Media/);
+  assert.ok(
+    added.some((line) => /Sound settings/.test(line.text) && line.ref),
+    'volume dialog controls must carry refs',
+  );
+  // Status-bar churn (clock tick) still never appears.
+  assert.ok(!/12:2[34]/.test(diff.lines.map((line) => line.text).join('\n')));
+
+  // Tail-candidate check on the same shape: dialog controls are candidates,
+  // status-bar nodes are not.
+  const labels = (
+    buildSettleTailEntries(settledTree.nodes, new Set(), ANDROID_APP_BUNDLE_ID).tail ?? []
+  ).map((entry) => entry.label);
+  assert.ok(labels.includes('Sound settings'), `tail must list dialog controls, got: ${labels}`);
+  assert.ok(!labels.includes('12:24'), 'status bar must stay excluded');
 });
