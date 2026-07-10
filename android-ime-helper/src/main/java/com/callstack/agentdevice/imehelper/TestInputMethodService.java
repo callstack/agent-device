@@ -67,6 +67,8 @@ public class TestInputMethodService extends InputMethodService {
     // but require REQUIRED_SENDER_PERMISSION of every sender. On API 33+ the receiver must also be
     // flagged exported to accept out-of-app broadcasts; the permission is the actual trust gate.
     if (Build.VERSION.SDK_INT >= 33) {
+      // exported: shell cannot deliver explicit broadcasts to non-exported components on API 36+;
+      // do not switch to RECEIVER_NOT_EXPORTED — WRITE_SECURE_SETTINGS is what keeps other apps out.
       registerReceiver(
           receiver, filter, REQUIRED_SENDER_PERMISSION, null, Context.RECEIVER_EXPORTED);
     } else {
