@@ -224,8 +224,10 @@ different comparison roles:
 - **Identity** (compared exactly): `id` when recorded, else `role` plus normalized `label`, plus the
   leaf-anchored `ancestry` prefix. `role` is `normalizeType(node.type ?? "")`, exactly the normalized
   type used by `buildSelectorChainForNode`; it is never the raw optional `node.role`.
-- **Disambiguation signals** (consulted only when several current nodes share the identity): `sibling`,
-  then `viewportOrder` + `scrollRegion` — normalized, relative signals, never absolute pixels.
+- **Disambiguation signals** (consulted only when several current nodes share the identity): `sibling`
+  (a genuine same-parent child index), then `viewportOrder` scoped to the recorded `scrollRegion`
+  partition — normalized, relative signals, never absolute pixels, with document order as the final
+  deterministic tie-break for every ordering.
 - **Diagnostics** (never compared): optional `rect`, carried only so divergence reports can show where
   the recorded target was.
 
@@ -259,19 +261,33 @@ roles are equal, and — when `R[i]` carries a label — the labels are equal (a
 unconstrained). `|O| < |R|` is a mismatch. An inserted or removed wrapper ancestor therefore changes
 identity by design: structure is part of identity.
 
-**Record-time write.**
+**Record-time write.** Both positional signals are defined over candidate domains that record and
+replay compute identically — never one domain at record time and another at replay. **Document order**
+— a node's pre-order tree-traversal index — is the canonical total order of this contract: every
+enumeration, ordering tie, and candidate listing below resolves by document order, so every comparison
+is total and deterministic.
 
 1. Resolve the action's winner and compute its identity tuple from the record-time tree.
 2. Compute the record-time identity set: all nodes sharing the winner's local identity with a matching
    leaf-anchored ancestry prefix.
-3. `sibling` is the winner's zero-based ordinal within that set in tree (document) order.
-   `viewportOrder` is the winner's zero-based ordinal within that set ordered by rect center,
-   top-to-bottom then left-to-right; members without rects sort last, in tree order. `scrollRegion` is
-   the local identity (`role` + `id`/`label`) of the winner's nearest scrollable ancestor, omitted when
-   none exists.
-4. Run the replay-time verification algorithm below against the record-time tree itself. If it isolates
+3. `sibling` is the winner's zero-based index among its **parent's children** in the tree — a genuine
+   same-parent structural ordinal, independent of scroll regions and cheap to read off the
+   accessibility tree. The parent is already captured as `ancestry[0]` in the leaf-anchored chain, so
+   no additional field is recorded; record and replay compute this ordinal identically by definition.
+4. Partition the identity set by **scroll region**: the partition key is the local identity (`role` +
+   `id`/`label`) of a member's nearest scrollable ancestor, or *none* when it has no scrollable
+   ancestor. `scrollRegion` is the winner's partition key (omitted when *none*). `viewportOrder` is the
+   winner's zero-based ordinal **within its own partition** — not the whole identity set — ordered by
+   rect center top-to-bottom then left-to-right, with equal centers resolved by document order and
+   rect-less members last, in document order. The partition is the ordinal's domain on both sides, so
+   recorded and replayed `viewportOrder` always refer to the same candidate domain.
+5. Run the replay-time verification algorithm below against the record-time tree itself. If it isolates
    exactly the winner, write `verification: "verified"`; otherwise write `verification: "unverifiable"`.
-   An unverifiable annotation makes the step an `identity-unverifiable` divergence at replay, before
+   Because both ordinals are computed from the winner over deterministic total orders, this self-check
+   succeeds by construction whenever the capture supplies the needed structural data; `unverifiable` at
+   record time therefore marks a capture anomaly — a signal that could not be computed (e.g. missing
+   parent linkage) — and the branch is kept as a fail-closed safety valve, not an expected path. An
+   unverifiable annotation makes the step an `identity-unverifiable` divergence at replay, before
    acting — the evidence declares its own limits at record time instead of permitting a silent best
    guess later.
 
@@ -305,14 +321,23 @@ in the report's `targetBinding`. Identity verification applies only when `matchC
    the only path that sends the action.
 5. `|I| == 1` and W is a different node → **identity-mismatch** divergence: a unique-but-wrong rebind or
    a changed ambiguity winner, caught even when resolution was unique.
-6. `|I| > 1` → apply the disambiguation signals in order: (i) order I in tree order; if the recorded
-   `sibling` ordinal is in range, the evidence denotes that member — compare with W as in paths 4/5.
-   (ii) Otherwise filter I to members whose nearest scrollable ancestor matches the recorded
-   `scrollRegion` local identity (no filter when none was recorded), order by rect center top-to-bottom
-   then left-to-right (rect-less members last, in tree order); if the recorded `viewportOrder` ordinal is
-   in range of the filtered set, the evidence denotes that member — compare with W as in paths 4/5.
+6. `|I| > 1` → apply the disambiguation signals in order, each over the SAME candidate domain record
+   time used: (i) **sibling** — the members of I whose zero-based index among their own parent's
+   children equals the recorded `sibling`. Exactly one qualifying member: the evidence denotes it —
+   compare with W as in paths 4/5. Zero or several qualifying members (the same child index can recur
+   under different parents): the signal does not isolate; fall through. (ii) **region-scoped
+   viewportOrder** — restrict I to the partition whose scroll-region key equals the recorded
+   `scrollRegion` (the *none* partition when none was recorded). An empty partition means the recorded
+   scroll region no longer exists: `viewportOrder` is **unavailable** and is never compared across
+   regions; fall through. Otherwise order the partition by rect center top-to-bottom then
+   left-to-right (equal centers by document order; rect-less members last, in document order); if the
+   recorded `viewportOrder` ordinal is in range, the evidence denotes that member — compare with W as
+   in paths 4/5; out of range falls through.
    If neither signal isolates a member, the step is an **identity-unverifiable** divergence with up to
-   **5** candidates listed — never a silent pick. That refusal is the point of this ADR.
+   **5** candidates listed in document order — never a silent pick. Document order makes every ordering
+   above total, so a residual tie would require two nodes at identical positions in an identical tree —
+   impossible under pre-order indexing — and even that residual case is identity-unverifiable, not a
+   pick. That refusal is the point of this ADR.
 
 A field present in the recording but absent on the compared node is a mismatch; `rect` is never compared.
 An old unannotated action remains executable without this check. All three divergence classes are
@@ -403,8 +428,11 @@ Implementation is not accepted on benchmark evidence alone. Required automated c
   malformed annotations, and mismatch-before-action behavior;
 - replay runtime tests covering all six verification paths of decision 3 — recorded-unverifiable,
   selector-miss (`matchCount == 0`), empty identity set, verified, unique-but-wrong rebind, and
-  post-signal tie (including out-of-range `sibling`/`viewportOrder` ordinals and `scrollRegion`
-  filtering) — plus divergence-report tests for
+  post-signal fall-through — including same-parent `sibling` semantics with the same child index
+  recurring under different parents, region-partitioned `viewportOrder` domains proven identical at
+  record and replay, a recorded scroll region that no longer exists (unavailable, never compared
+  cross-region), out-of-range ordinals, and document-order determinism for equal rect centers and
+  rect-less members — plus divergence-report tests for
   compact/default/full field and byte ceilings, redaction, overflow artifacts and artifact-write failure,
   available versus sparse/capture-failed screen forms, and preservation of the original cause;
 - replay resume tests for plan-digest emission and mismatch rejection after script/include/expansion
