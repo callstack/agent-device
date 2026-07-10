@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { assertCatalogComplete, CHECK_CATALOG, resolveCommand } from './checks.ts';
 import {
   ALL_CHECKS,
@@ -139,6 +142,13 @@ test('unknown path fails open to the full check set', () => {
   assert.equal(result.failOpenReasons[0]?.rule, 'unknown-path');
 });
 
+test('a non-.ts fixture under an owned root fails open (format alone is not ownership)', () => {
+  const result = plan(['test/integration/provider-scenarios/fixtures/device.json']);
+  assert.equal(result.failOpen, true);
+  assert.deepEqual(result.checks, [...ALL_CHECKS]);
+  assert.equal(result.failOpenReasons[0]?.rule, 'ambiguous-path');
+});
+
 test('workflow/tooling and selector-owning changes fail open', () => {
   assert.equal(plan(['.github/workflows/ci.yml']).failOpenReasons[0]?.rule, 'workflow-tooling');
   assert.equal(plan(['package.json']).failOpenReasons[0]?.rule, 'workflow-tooling');
@@ -202,4 +212,34 @@ test('every catalog command resolves against package scripts', () => {
 test('a missing package script makes command resolution throw', () => {
   const spec = CHECK_CATALOG.find((entry) => entry.id === 'lint')!;
   assert.throws(() => resolveCommand(spec, {}, 'origin/main'), /does not exist/);
+});
+
+// Guards the catalog against reality, not fixtures: the self-test above uses a
+// hand-built scripts/projects map, so this resolves every catalog entry against
+// the real package.json and checks vitest-project names against the real
+// vitest.config.ts. A renamed/removed script or project fails here instead of
+// leaving `pnpm check:affected` broken on the exact command the docs advertise.
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+test('catalog resolves against the real package.json + vitest.config.ts', () => {
+  const pkg = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8')) as {
+    scripts?: Record<string, string>;
+  };
+  const scripts = pkg.scripts ?? {};
+  for (const spec of CHECK_CATALOG) {
+    assert.doesNotThrow(
+      () => resolveCommand(spec, scripts, 'origin/main'),
+      `catalog entry "${spec.id}" must resolve against the real package.json`,
+    );
+  }
+
+  const vitestConfig = fs.readFileSync(path.join(repoRoot, 'vitest.config.ts'), 'utf8');
+  for (const spec of CHECK_CATALOG) {
+    if (spec.kind.type === 'vitest-project') {
+      assert.ok(
+        vitestConfig.includes(`name: '${spec.kind.project}'`),
+        `vitest project "${spec.kind.project}" must exist in vitest.config.ts`,
+      );
+    }
+  }
 });

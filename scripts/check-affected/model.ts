@@ -14,10 +14,11 @@
 //     the macOS helper, MCP metadata, and the public package surface — the
 //     only paths whose owning build the sources of truth cannot derive.
 //
-// Anything the model cannot confidently classify (unknown, ambiguous,
-// workflow/tooling, or the selector's own sources) fails open to the full
-// check set. Existing GitHub CI remains authoritative; this only optimizes
-// local/agent feedback.
+// Anything the model cannot confidently classify fails open to the full check
+// set: unknown paths, workflow/tooling, the selector's own sources, and
+// ambiguous files under an owned root that only resolve to `format` (e.g. a
+// non-.ts fixture whose owning suite cannot be derived). Existing GitHub CI
+// remains authoritative; this only optimizes local/agent feedback.
 
 export type CheckId =
   | 'format'
@@ -77,7 +78,7 @@ export type SelectionReason = {
 
 export type FailOpenReason = {
   path: string;
-  rule: 'workflow-tooling' | 'selector-owning' | 'unknown-path';
+  rule: 'workflow-tooling' | 'selector-owning' | 'unknown-path' | 'ambiguous-path';
   detail: string;
 };
 
@@ -374,6 +375,18 @@ export function selectChecks(input: SelectInput): CheckPlan {
         path: file,
         rule: 'unknown-path',
         detail: 'path has no derivable owner; run the full set to stay safe',
+      });
+      continue;
+    }
+    // `format` is an always-on gate, not evidence of test/build ownership. A
+    // file we can only route to formatting (e.g. a non-.ts fixture under
+    // test/) has no derivable suite owner, so treat it as ambiguous and fail
+    // open rather than silently narrowing to just `format`.
+    if (!selections.some((selection) => selection.check !== 'format')) {
+      failOpenReasons.push({
+        path: file,
+        rule: 'ambiguous-path',
+        detail: 'only formatting is derivable; no test/build owner, so run the full set',
       });
       continue;
     }
