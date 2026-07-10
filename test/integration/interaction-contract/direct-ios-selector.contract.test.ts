@@ -97,7 +97,10 @@ test('recorded simple iOS selector click and fill use runtime resolution and per
       const actions = daemon
         .session()
         ?.actions.filter((action) => action.command === 'click' || action.command === 'fill');
-      assert.deepEqual(actions?.map((action) => action.command), ['click', 'fill']);
+      assert.deepEqual(
+        actions?.map((action) => action.command),
+        ['click', 'fill'],
+      );
       const targetIdentities = actions?.map((action) => {
         const evidence = action.targetEvidence as Record<string, unknown> | undefined;
         return {
