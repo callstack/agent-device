@@ -56,19 +56,23 @@ function gitLines(args: string[], cwd: string): string[] {
 // Collect every changed file a local plan must account for. The committed diff
 // (base..head via merge-base) is the baseline; `--no-renames` keeps BOTH sides
 // of a rename so a moved file cannot look docs-only by its destination alone.
-// In local mode (head === HEAD) we also fold in working-tree changes (staged +
-// unstaged) and untracked files, which the committed diff never sees — ignoring
-// uncommitted edits would be an unsafe narrowing of the local feedback loop.
+// In local mode (head === HEAD) we also fold in working-tree changes and
+// untracked files, which the committed diff never sees — ignoring uncommitted
+// edits would be an unsafe narrowing of the local feedback loop. The staged
+// (`--cached`) and unstaged diffs are collected separately and unioned: a
+// single `git diff HEAD` nets index against working tree, so a staged add and
+// an unstaged delete of the same file would cancel and hide it.
 export function readChangedFiles(base: string, head: string, cwd: string = repoRoot): string[] {
   const files = new Set<string>(
     gitLines(['diff', '--name-only', '--no-renames', '--merge-base', base, head], cwd),
   );
   if (head === 'HEAD') {
-    for (const file of gitLines(['diff', '--name-only', '--no-renames', 'HEAD'], cwd)) {
-      files.add(file);
-    }
-    for (const file of gitLines(['ls-files', '--others', '--exclude-standard'], cwd)) {
-      files.add(file);
+    for (const args of [
+      ['diff', '--name-only', '--no-renames', '--cached'], // staged vs HEAD
+      ['diff', '--name-only', '--no-renames'], // unstaged (working tree vs index)
+      ['ls-files', '--others', '--exclude-standard'], // untracked
+    ]) {
+      for (const file of gitLines(args, cwd)) files.add(file);
     }
   }
   return [...files].sort();

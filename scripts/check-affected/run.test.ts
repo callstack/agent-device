@@ -56,6 +56,37 @@ test('readChangedFiles surfaces committed, staged, unstaged, untracked, and both
   }
 });
 
+test('readChangedFiles unions staged and unstaged so a net diff cannot hide a file', () => {
+  const dir = makeRepo();
+  try {
+    fs.writeFileSync(path.join(dir, 'seed.ts'), 'export const s = 0;\n');
+    git(dir, 'add', '-A');
+    git(dir, 'commit', '-q', '-m', 'base');
+    const base = runCmdSync('git', ['rev-parse', 'HEAD'], { cwd: dir }).stdout.trim();
+
+    // Stage a new file, then delete it in the working tree. `git diff HEAD`
+    // nets to nothing (absent in HEAD and in the working tree), so a net
+    // comparison would drop config.ts entirely.
+    fs.writeFileSync(path.join(dir, 'config.ts'), 'export const c = 1;\n');
+    git(dir, 'add', 'config.ts');
+    fs.rmSync(path.join(dir, 'config.ts'));
+
+    assert.deepEqual(
+      runCmdSync('git', ['diff', '--name-only', 'HEAD'], { cwd: dir }).stdout.split('\n').filter(
+        Boolean,
+      ),
+      [],
+      'sanity: the net `git diff HEAD` really does hide config.ts',
+    );
+    assert.ok(
+      readChangedFiles(base, 'HEAD', dir).includes('config.ts'),
+      'staged add + unstaged delete must still surface config.ts',
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 const ALL_SCRIPTS: Record<string, string> = {
   'format:check': 'x',
   lint: 'x',
