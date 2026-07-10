@@ -8,7 +8,6 @@ export type {
   DebugSymbolsResult,
 } from '../contracts/debug-symbols.ts';
 import type { PlatformSelector } from './device.ts';
-import { PLATFORM_SELECTORS } from './device.ts';
 
 export type SessionRuntimeHints = {
   platform?: 'ios' | 'android';
@@ -265,14 +264,6 @@ function expectString(input: unknown, path: string): string {
   return input;
 }
 
-function expectNonEmptyString(input: unknown, path: string): string {
-  const value = expectString(input, path).trim();
-  if (!value) {
-    fail(path, 'Expected a non-empty string');
-  }
-  return value;
-}
-
 function expectInteger(input: unknown, path: string): number {
   if (!Number.isInteger(input)) {
     fail(path, 'Expected an integer');
@@ -307,50 +298,6 @@ function optionalStringArray(
   return items.map((item, index) => expectString(item, `${path}.${key}[${String(index)}]`));
 }
 
-function optionalDeviceKey(
-  record: Record<string, unknown>,
-  key: string,
-  path: string,
-): string | undefined {
-  const value = optionalString(record, key, path);
-  if (value === undefined) return undefined;
-  const trimmed = value.trim();
-  if (!trimmed || value.length > 256 || !/^[\x20-\x7E]+$/.test(value)) {
-    fail(`${path}.${key}`, 'Expected 1-256 printable characters');
-  }
-  return value;
-}
-
-function optionalIdentifier(
-  record: Record<string, unknown>,
-  key: string,
-  path: string,
-  maxLength: number,
-): string | undefined {
-  const value = optionalString(record, key, path);
-  if (value === undefined) return undefined;
-  if (value.length < 1 || value.length > maxLength || !/^[a-zA-Z0-9._-]+$/.test(value)) {
-    fail(
-      `${path}.${key}`,
-      `Expected 1-${String(maxLength)} chars: letters, numbers, dot, underscore, hyphen`,
-    );
-  }
-  return value;
-}
-
-function optionalBoolean(
-  record: Record<string, unknown>,
-  key: string,
-  path: string,
-): boolean | undefined {
-  const value = record[key];
-  if (value === undefined) return undefined;
-  if (typeof value !== 'boolean') {
-    fail(`${path}.${key}`, 'Expected a boolean');
-  }
-  return value;
-}
-
 function optionalInteger(
   record: Record<string, unknown>,
   key: string,
@@ -383,73 +330,6 @@ function optionalEnum<T extends string>(
   return value as T;
 }
 
-function expectStringRecord(input: unknown, path: string): Record<string, string> {
-  const record = expectObject(input, path);
-  const result: Record<string, string> = {};
-  for (const [key, value] of Object.entries(record)) {
-    result[key] = expectString(value, `${path}.${key}`);
-  }
-  return result;
-}
-
-function parseGitHubActionsArtifactInstallSource(
-  record: Record<string, unknown>,
-  path: string,
-): DaemonInstallSource {
-  const owner = expectNonEmptyString(record.owner, `${path}.owner`);
-  const repo = expectNonEmptyString(record.repo, `${path}.repo`);
-  const hasArtifactId = record.artifactId !== undefined;
-  const hasRunId = record.runId !== undefined;
-  const hasArtifactName = record.artifactName !== undefined;
-  if (hasArtifactId && (hasRunId || hasArtifactName)) {
-    fail(`${path}`, 'Expected either artifactId or artifactName, not both');
-  }
-  if (!hasArtifactId && hasRunId && !hasArtifactName) {
-    fail(`${path}`, 'Expected artifactName when runId is specified');
-  }
-  if (!hasArtifactId && !hasArtifactName) {
-    fail(`${path}`, 'Expected artifactId or artifactName');
-  }
-  if (hasArtifactId) {
-    return {
-      kind: 'github-actions-artifact',
-      owner,
-      repo,
-      artifactId: expectInteger(record.artifactId, `${path}.artifactId`),
-    };
-  }
-  return {
-    kind: 'github-actions-artifact',
-    owner,
-    repo,
-    ...(hasRunId ? { runId: expectInteger(record.runId, `${path}.runId`) } : {}),
-    artifactName: expectNonEmptyString(record.artifactName, `${path}.artifactName`),
-  };
-}
-
-function parseDaemonInstallSource(input: unknown, path: string): DaemonInstallSource {
-  const record = expectObject(input, path);
-  const kind = expectString(record.kind, `${path}.kind`);
-  if (kind === 'url') {
-    const url = expectString(record.url, `${path}.url`);
-    const headers =
-      record.headers === undefined
-        ? undefined
-        : expectStringRecord(record.headers, `${path}.headers`);
-    return headers ? { kind, url, headers } : { kind, url };
-  }
-  if (kind === 'path') {
-    return {
-      kind,
-      path: expectString(record.path, `${path}.path`),
-    };
-  }
-  if (kind === 'github-actions-artifact') {
-    return parseGitHubActionsArtifactInstallSource(record, path);
-  }
-  fail(`${path}.kind`, 'Expected "url", "path", or "github-actions-artifact"');
-}
-
 export const daemonRuntimeSchema = schema<SessionRuntimeHints>((input, path) => {
   const record = expectObject(input, path);
   return {
@@ -458,141 +338,6 @@ export const daemonRuntimeSchema = schema<SessionRuntimeHints>((input, path) => 
     metroPort: optionalInteger(record, 'metroPort', path),
     bundleUrl: optionalString(record, 'bundleUrl', path),
     launchUrl: optionalString(record, 'launchUrl', path),
-  };
-});
-
-export const daemonCommandRequestSchema = schema<DaemonRequest>((input, path) => {
-  const record = expectObject(input, path);
-  const rawPositionals = expectArray(record.positionals, `${path}.positionals`);
-  const meta = optionalObject(record, 'meta', path);
-  return {
-    token: optionalString(record, 'token', path),
-    session: optionalString(record, 'session', path),
-    command: expectString(record.command, `${path}.command`),
-    positionals: rawPositionals.map((value, index) =>
-      expectString(value, `${path}.positionals[${String(index)}]`),
-    ),
-    flags: optionalObject(record, 'flags', path),
-    runtime: record.runtime === undefined ? undefined : daemonRuntimeSchema.parse(record.runtime),
-    meta:
-      meta === undefined
-        ? undefined
-        : {
-            requestId: optionalString(meta, 'requestId', `${path}.meta`),
-            debug: optionalBoolean(meta, 'debug', `${path}.meta`),
-            includeCost: optionalBoolean(meta, 'includeCost', `${path}.meta`),
-            responseLevel: optionalEnum(meta, 'responseLevel', RESPONSE_LEVELS, `${path}.meta`),
-            cwd: optionalString(meta, 'cwd', `${path}.meta`),
-            sessionExplicit: optionalBoolean(meta, 'sessionExplicit', `${path}.meta`),
-            tenantId: optionalString(meta, 'tenantId', `${path}.meta`),
-            runId: optionalString(meta, 'runId', `${path}.meta`),
-            leaseId: optionalString(meta, 'leaseId', `${path}.meta`),
-            leaseTtlMs: optionalInteger(meta, 'leaseTtlMs', `${path}.meta`),
-            leaseBackend: optionalEnum(meta, 'leaseBackend', LEASE_BACKENDS, `${path}.meta`),
-            leaseProvider: optionalIdentifier(meta, 'leaseProvider', `${path}.meta`, 64),
-            deviceKey: optionalDeviceKey(meta, 'deviceKey', `${path}.meta`),
-            clientId: optionalIdentifier(meta, 'clientId', `${path}.meta`, 128),
-            sessionIsolation: optionalEnum(
-              meta,
-              'sessionIsolation',
-              SESSION_ISOLATION_MODES,
-              `${path}.meta`,
-            ),
-            uploadedArtifactId: optionalString(meta, 'uploadedArtifactId', `${path}.meta`),
-            clientArtifactPaths:
-              meta.clientArtifactPaths === undefined
-                ? undefined
-                : expectStringRecord(meta.clientArtifactPaths, `${path}.meta.clientArtifactPaths`),
-            installSource:
-              meta.installSource === undefined
-                ? undefined
-                : parseDaemonInstallSource(meta.installSource, `${path}.meta.installSource`),
-            retainMaterializedPaths: optionalBoolean(
-              meta,
-              'retainMaterializedPaths',
-              `${path}.meta`,
-            ),
-            materializedPathRetentionMs: optionalInteger(
-              meta,
-              'materializedPathRetentionMs',
-              `${path}.meta`,
-            ),
-            materializationId: optionalString(meta, 'materializationId', `${path}.meta`),
-            lockPolicy: optionalEnum(meta, 'lockPolicy', DAEMON_LOCK_POLICIES, `${path}.meta`),
-            lockPlatform: optionalEnum(meta, 'lockPlatform', PLATFORM_SELECTORS, `${path}.meta`),
-          },
-  };
-});
-
-function parseLeaseCommon(
-  input: unknown,
-  path: string,
-): {
-  record: Record<string, unknown>;
-  leaseId?: string;
-  ttlMs?: number;
-} {
-  const record = expectObject(input, path);
-  return {
-    record,
-    leaseId: optionalString(record, 'leaseId', path),
-    ttlMs: optionalInteger(record, 'ttlMs', path),
-  };
-}
-
-function parseLeaseScope(
-  record: Record<string, unknown>,
-  path: string,
-): {
-  token?: string;
-  session?: string;
-  tenantId?: string;
-  tenant?: string;
-  runId?: string;
-  leaseProvider?: string;
-  deviceKey?: string;
-  clientId?: string;
-} {
-  return {
-    token: optionalString(record, 'token', path),
-    session: optionalString(record, 'session', path),
-    tenantId: optionalString(record, 'tenantId', path),
-    tenant: optionalString(record, 'tenant', path),
-    runId: optionalString(record, 'runId', path),
-    leaseProvider: optionalIdentifier(record, 'leaseProvider', path, 64),
-    deviceKey: optionalDeviceKey(record, 'deviceKey', path),
-    clientId: optionalIdentifier(record, 'clientId', path, 128),
-  };
-}
-
-export const leaseAllocateSchema = schema<LeaseAllocatePayload>((input, path) => {
-  const record = expectObject(input, path);
-  return {
-    ...parseLeaseScope(record, path),
-    ttlMs: optionalInteger(record, 'ttlMs', path),
-    backend: optionalEnum(record, 'backend', LEASE_BACKENDS, path),
-  };
-});
-
-export const leaseHeartbeatSchema = schema<LeaseHeartbeatPayload>((input, path) => {
-  const parsed = parseLeaseCommon(input, path);
-  return {
-    ...parseLeaseScope(parsed.record, path),
-    leaseId: parsed.leaseId,
-    ttlMs: parsed.ttlMs,
-    backend: optionalEnum(parsed.record, 'backend', LEASE_BACKENDS, path),
-  };
-});
-
-export const leaseReleaseSchema = schema<LeaseReleasePayload>((input, path) => {
-  const record = expectObject(input, path);
-  if (record.ttlMs !== undefined) {
-    fail(`${path}.ttlMs`, 'Unexpected field');
-  }
-  return {
-    ...parseLeaseScope(record, path),
-    leaseId: optionalString(record, 'leaseId', path),
-    backend: optionalEnum(record, 'backend', LEASE_BACKENDS, path),
   };
 });
 

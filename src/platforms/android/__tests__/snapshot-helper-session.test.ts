@@ -7,7 +7,7 @@ import {
   captureAndroidSnapshotWithHelperSession,
   resetAndroidSnapshotHelperSessions,
   resolveAndroidSnapshotHelperSessionRequestTimeoutMs,
-} from '../snapshot-helper.ts';
+} from '../snapshot-helper-session.ts';
 import type { AndroidAdbExecutor, AndroidAdbProcess, AndroidAdbProvider } from '../adb-executor.ts';
 
 beforeEach(async () => {

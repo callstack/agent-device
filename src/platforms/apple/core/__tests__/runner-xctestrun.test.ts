@@ -7,16 +7,15 @@ import { pathToFileURL } from 'node:url';
 
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import { withCommandExecutorOverride } from '../../../../utils/exec.ts';
+import { findXctestrun, scoreXctestrunCandidate } from '../runner/runner-artifact.ts';
+import { resolveXcodebuildSimulatorDeviceSetPath } from '../runner/runner-device-set.ts';
 import {
   acquireXcodebuildSimulatorSetRedirect,
   ensureXctestrunArtifact,
-  findXctestrun,
   markRunnerXctestrunArtifactBadForRun,
   prepareXctestrunWithEnv,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
-  resolveXcodebuildSimulatorDeviceSetPath,
-  scoreXctestrunCandidate,
 } from '../runner/runner-xctestrun.ts';
 
 const iosSimulator: DeviceInfo = {

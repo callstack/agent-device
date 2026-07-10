@@ -15,8 +15,6 @@ import { buildSimctlArgs } from './simctl.ts';
 import { markSimulatorBooted } from './simulator.ts';
 import { resolveAppleToolProvider, runXcrun } from './tool-provider.ts';
 
-export { createLocalAppleToolProvider, withAppleToolProvider } from './tool-provider.ts';
-
 const IOS_DEVICECTL_LIST_TIMEOUT_MS = 8_000;
 const APPLE_PRODUCT_TYPE_PATTERN = /^(iphone|ipad|ipod|appletv|realitydevice)/i;
 const APPLE_IPAD_PATTERN = /ipad/i;

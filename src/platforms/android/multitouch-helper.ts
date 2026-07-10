@@ -548,6 +548,7 @@ export async function ensureAndroidMultiTouchHelper(options: {
 
 const installedMultiTouchHelpers = new Set<string>();
 
+// Tests reset the process-global install memo so cases do not share helper state.
 export function resetAndroidMultiTouchHelperInstallCache(): void {
   installedMultiTouchHelpers.clear();
 }

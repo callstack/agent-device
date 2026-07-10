@@ -64,18 +64,6 @@ export type ExternalXctestRunnerOptions = {
   iosXctestEnvDir?: string;
 };
 
-export async function ensureXctestrun(
-  device: DeviceInfo,
-  options: {
-    verbose?: boolean;
-    logPath?: string;
-    traceLogPath?: string;
-    buildTimeoutMs?: number;
-  } & ExternalXctestRunnerOptions,
-): Promise<string> {
-  return (await ensureXctestrunArtifact(device, options)).xctestrunPath;
-}
-
 export async function ensureXctestrunArtifact(
   device: DeviceInfo,
   options: {
@@ -262,7 +250,7 @@ async function buildXctestrunArtifact(params: {
   }
   await repairMacOsRunnerProductsIfNeeded(device, builtProductPaths, built);
   // Release/dev script builds patch the synthesized XCTest runner app in scripts/.
-  // This covers direct local xcodebuilds triggered by ensureXctestrun on cache miss.
+  // This covers direct local xcodebuilds triggered by ensureXctestrunArtifact on cache miss.
   await applyXctestRunnerAppIcon(builtProductPaths);
   writeRunnerCacheMetadataForArtifacts(derived, expectedCacheMetadata, built, builtProductPaths);
   emitRunnerXctestrunDecision('build', 'built_new', {

@@ -98,7 +98,7 @@ export function buildRunnerRecycleBudgetExhaustedError(
   );
 }
 
-/** Test-only: clears all recycle accounting. */
+// Test isolation requires clearing process-global recycle accounting between cases.
 export function resetRunnerRecycleLedgerForTests(): void {
   ledger.clear();
 }

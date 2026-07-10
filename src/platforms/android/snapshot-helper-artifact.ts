@@ -1,8 +1,5 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
-import fsp from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 import { AppError } from '../../kernel/errors.ts';
 import {
   readAndroidHelperManifestInteger,
@@ -14,11 +11,7 @@ import {
   ANDROID_SNAPSHOT_HELPER_PROTOCOL,
   type AndroidSnapshotHelperArtifact,
   type AndroidSnapshotHelperManifest,
-  type AndroidSnapshotHelperPreparedArtifact,
 } from './snapshot-helper-types.ts';
-
-const ANDROID_SNAPSHOT_HELPER_MAX_MANIFEST_BYTES = 64 * 1024;
-const ANDROID_SNAPSHOT_HELPER_MAX_APK_BYTES = 20 * 1024 * 1024;
 
 export type AndroidSnapshotHelperInstallOptions = {
   replace?: boolean;
@@ -49,75 +42,6 @@ export async function verifyAndroidSnapshotHelperArtifact(
       actualSha256: actual,
     });
   }
-}
-
-export async function prepareAndroidSnapshotHelperArtifactFromManifestUrl(options: {
-  manifestUrl: string;
-  cacheDir?: string;
-  fetch?: typeof fetch;
-}): Promise<AndroidSnapshotHelperPreparedArtifact> {
-  const fetchImpl = options.fetch ?? fetch;
-  const manifestResponse = await fetchImpl(options.manifestUrl);
-  if (!manifestResponse.ok) {
-    throw new AppError('COMMAND_FAILED', 'Failed to download Android snapshot helper manifest', {
-      manifestUrl: options.manifestUrl,
-      status: manifestResponse.status,
-      statusText: manifestResponse.statusText,
-    });
-  }
-  const manifest = parseAndroidSnapshotHelperManifest(
-    JSON.parse(
-      (
-        await readResponseBodyWithLimit(
-          manifestResponse,
-          ANDROID_SNAPSHOT_HELPER_MAX_MANIFEST_BYTES,
-          'Android snapshot helper manifest',
-        )
-      ).toString('utf8'),
-    ),
-  );
-  if (!manifest.apkUrl) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Android snapshot helper manifest does not include apkUrl',
-      {
-        manifestUrl: options.manifestUrl,
-      },
-    );
-  }
-
-  const cacheDir =
-    options.cacheDir ??
-    path.join(os.tmpdir(), `agent-device-android-snapshot-helper-${manifest.version}`);
-  const ownsCacheDir = !options.cacheDir;
-  await fsp.mkdir(cacheDir, { recursive: true });
-  const apkName =
-    manifest.assetName ?? `agent-device-android-snapshot-helper-${manifest.version}.apk`;
-  const apkPath = path.join(cacheDir, apkName);
-  const apkResponse = await fetchImpl(manifest.apkUrl);
-  if (!apkResponse.ok) {
-    throw new AppError('COMMAND_FAILED', 'Failed to download Android snapshot helper APK', {
-      apkUrl: manifest.apkUrl,
-      status: apkResponse.status,
-      statusText: apkResponse.statusText,
-    });
-  }
-  await fsp.writeFile(
-    apkPath,
-    await readResponseBodyWithLimit(
-      apkResponse,
-      ANDROID_SNAPSHOT_HELPER_MAX_APK_BYTES,
-      'Android snapshot helper APK',
-    ),
-  );
-  const artifact = { apkPath, manifest };
-  await verifyAndroidSnapshotHelperArtifact(artifact);
-  return {
-    ...artifact,
-    cleanup: async () => {
-      await fsp.rm(ownsCacheDir ? cacheDir : apkPath, { recursive: ownsCacheDir, force: true });
-    },
-  };
 }
 
 export function parseAndroidSnapshotHelperManifest(value: unknown): AndroidSnapshotHelperManifest {
@@ -170,55 +94,6 @@ export function readAndroidSnapshotHelperInstallOptions(
 ): AndroidSnapshotHelperInstallOptions {
   const installArgs = readAndroidSnapshotHelperManifestInstallArgs(manifest.installArgs);
   return installOptionsFromSnapshotHelperInstallArgs(installArgs);
-}
-
-async function readResponseBodyWithLimit(
-  response: Response,
-  maxBytes: number,
-  label: string,
-): Promise<Buffer> {
-  const contentLength = response.headers.get('content-length');
-  if (contentLength !== null) {
-    const parsedLength = Number(contentLength);
-    if (Number.isFinite(parsedLength) && parsedLength > maxBytes) {
-      throw new AppError('COMMAND_FAILED', `${label} download exceeds size limit`, {
-        contentLength: parsedLength,
-        maxBytes,
-      });
-    }
-  }
-
-  if (!response.body) {
-    const body = Buffer.from(await response.arrayBuffer());
-    if (body.length > maxBytes) {
-      throw new AppError('COMMAND_FAILED', `${label} download exceeds size limit`, {
-        contentLength: body.length,
-        maxBytes,
-      });
-    }
-    return body;
-  }
-
-  const reader = response.body.getReader();
-  const chunks: Buffer[] = [];
-  let total = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > maxBytes) {
-        throw new AppError('COMMAND_FAILED', `${label} download exceeds size limit`, {
-          contentLength: total,
-          maxBytes,
-        });
-      }
-      chunks.push(Buffer.from(value));
-    }
-  } finally {
-    reader.releaseLock();
-  }
-  return Buffer.concat(chunks, total);
 }
 
 function readAndroidSnapshotHelperManifestInstallArgs(value: unknown): string[] {

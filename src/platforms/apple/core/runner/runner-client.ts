@@ -23,13 +23,7 @@ import {
   type PrepareIosRunnerResult,
 } from './runner-lifecycle.ts';
 import { RUNNER_COMMAND_TIMEOUT_MS } from './runner-transport.ts';
-export {
-  isRetryableRunnerError,
-  resolveRunnerEarlyExitHint,
-  resolveRunnerBuildFailureHint,
-  shouldRetryRunnerConnectError,
-  type RunnerCommand,
-} from './runner-contract.ts';
+export type { RunnerCommand } from './runner-contract.ts';
 export type { PrepareIosRunnerOptions, PrepareIosRunnerResult } from './runner-lifecycle.ts';
 
 // --- Runner command execution ---
@@ -174,13 +168,7 @@ const LOCAL_APPLE_RUNNER_RUNTIME = createLocalAppleRunnerProvider(executeRunnerC
 });
 
 export {
-  resolveRunnerDestination,
-  resolveRunnerBuildDestination,
-  resolveRunnerMaxConcurrentDestinationsFlag,
   resolveRunnerAppBundleId,
-  resolveRunnerSigningBuildSettings,
-  resolveRunnerBundleBuildSettings,
-  assertSafeDerivedCleanup,
   hasCachedAppleRunnerArtifact,
   IOS_RUNNER_CONTAINER_BUNDLE_IDS,
 } from './runner-xctestrun.ts';

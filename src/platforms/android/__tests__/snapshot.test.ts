@@ -24,12 +24,9 @@ import { flushDiagnosticsToSessionFile, withDiagnosticsScope } from '../../../ut
 import { AppError } from '../../../kernel/errors.ts';
 import { runCmd } from '../../../utils/exec.ts';
 import { sleep } from '../adb.ts';
-import {
-  resetAndroidSnapshotHelperSessions,
-  resetAndroidSnapshotHelperInstallCache,
-  type AndroidAdbExecutor,
-  type AndroidSnapshotHelperManifest,
-} from '../snapshot-helper.ts';
+import { resetAndroidSnapshotHelperInstallCache } from '../snapshot-helper-install.ts';
+import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session.ts';
+import { type AndroidAdbExecutor, type AndroidSnapshotHelperManifest } from '../snapshot-helper.ts';
 import {
   withAndroidAdbProvider,
   type AndroidAdbProcess,

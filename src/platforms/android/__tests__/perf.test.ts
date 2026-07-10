@@ -4,10 +4,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'vitest';
 import type { AndroidAdbExecutor } from '../adb-executor.ts';
+import { parseAndroidFramePerfSample } from '../perf-frame-parser.ts';
 import {
   captureAndroidHeapSnapshot,
   cleanupAndroidNativePerfSession,
-  parseAndroidFramePerfSample,
   parseAndroidMemInfoSample,
   startAndroidPerfettoTrace,
   startAndroidSimpleperfProfile,

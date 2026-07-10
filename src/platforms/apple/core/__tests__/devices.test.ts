@@ -3,15 +3,14 @@ import { beforeEach, test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
 import {
-  createLocalAppleToolProvider,
   isAppleProductType,
   isAppleTvProductType,
   isSupportedAppleDevicectlDevice,
   listAppleDevices,
   parseXctracePhysicalAppleDevices,
   resolveAppleTargetFromDevicectlDevice,
-  withAppleToolProvider,
 } from '../devices.ts';
+import { createLocalAppleToolProvider, withAppleToolProvider } from '../tool-provider.ts';
 import type { ExecResult } from '../../../../utils/exec.ts';
 
 const toolCalls: Array<[string, string[]]> = [];

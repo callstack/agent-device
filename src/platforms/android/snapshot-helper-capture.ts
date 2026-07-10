@@ -1,12 +1,10 @@
 import { AppError } from '../../kernel/errors.ts';
 import { execFailureDetails } from '../../utils/exec.ts';
-import type { SnapshotOptions } from '../../kernel/snapshot.ts';
 import {
   parseInstrumentationRecords,
   readInstrumentationResultBoolean,
   readInstrumentationResultNumber,
 } from './instrumentation-helper.ts';
-import { parseUiHierarchy } from './ui-hierarchy.ts';
 import {
   ANDROID_SNAPSHOT_HELPER_COMMAND_OVERHEAD_MS,
   ANDROID_SNAPSHOT_HELPER_OUTPUT_FORMAT,
@@ -19,7 +17,6 @@ import type {
   AndroidSnapshotHelperCaptureOptions,
   AndroidSnapshotHelperMetadata,
   AndroidSnapshotHelperOutput,
-  AndroidSnapshotHelperParsedSnapshot,
 } from './snapshot-helper-types.ts';
 
 type AndroidSnapshotHelperChunk = {
@@ -267,20 +264,6 @@ export function parseAndroidSnapshotHelperOutput(output: string): AndroidSnapsho
   return {
     xml,
     metadata: { ...readHelperMetadata(finalResult), transport: 'instrumentation' },
-  };
-}
-
-export function parseAndroidSnapshotHelperXml(
-  xml: string,
-  metadata: AndroidSnapshotHelperMetadata = {
-    outputFormat: ANDROID_SNAPSHOT_HELPER_OUTPUT_FORMAT,
-  },
-  options: SnapshotOptions = {},
-  maxNodes?: number,
-): AndroidSnapshotHelperParsedSnapshot {
-  return {
-    ...parseUiHierarchy(xml, maxNodes, options),
-    metadata,
   };
 }
 

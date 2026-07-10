@@ -41,32 +41,40 @@ import {
 } from '../../../../utils/diagnostics.ts';
 import { AppError } from '../../../../kernel/errors.ts';
 import { isReadOnlyRunnerCommand } from '../runner/runner-command-traits.ts';
-import { withRunnerCommandId, type RunnerCommand } from '../runner/runner-contract.ts';
 import {
-  assertSafeDerivedCleanup,
   isRetryableRunnerError,
   resolveRunnerBuildFailureHint,
   resolveRunnerEarlyExitHint,
+  shouldRetryRunnerConnectError,
+  withRunnerCommandId,
+  type RunnerCommand,
+} from '../runner/runner-contract.ts';
+import {
   resolveRunnerBuildDestination,
-  resolveRunnerBundleBuildSettings,
   resolveRunnerDestination,
+} from '../apple-runner-platform.ts';
+import {
+  resolveRunnerBundleBuildSettings,
   resolveRunnerMaxConcurrentDestinationsFlag,
   resolveRunnerSigningBuildSettings,
-  shouldRetryRunnerConnectError,
-} from '../runner/runner-client.ts';
+  resolveRunnerPerformanceBuildSettings,
+  resolveRunnerSandboxBuildArgs,
+} from '../runner/runner-cache-metadata.ts';
 import {
   acquireRunnerXctestrunCacheLock,
+  assertSafeDerivedCleanup,
+  resolveRunnerCacheMetadataPath,
+  shouldDeleteRunnerDerivedRootEntry,
+  writeRunnerCacheMetadata,
+} from '../runner/runner-cache.ts';
+import {
   ensureXctestrunArtifact,
-  ensureXctestrun,
+  xctestrunReferencesProjectRoot,
+} from '../runner/runner-artifact.ts';
+import {
   markRunnerXctestrunArtifactBadForRun,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
-  resolveRunnerCacheMetadataPath,
-  resolveRunnerPerformanceBuildSettings,
-  resolveRunnerSandboxBuildArgs,
-  shouldDeleteRunnerDerivedRootEntry,
-  writeRunnerCacheMetadata,
-  xctestrunReferencesProjectRoot,
 } from '../runner/runner-xctestrun.ts';
 import { parseRunnerResponse } from '../runner/runner-session.ts';
 
@@ -1084,7 +1092,7 @@ test('acquireRunnerXctestrunCacheLock serializes cache access across acquirers',
   assert.equal(secondAcquired, true);
 });
 
-test('ensureXctestrun reuses matching manifest artifacts from another project root', async () => {
+test('ensureXctestrunArtifact reuses matching manifest artifacts from another project root', async () => {
   const tmpDir = await makeTmpDir();
   const derivedPath = path.join(tmpDir, 'custom-derived');
   const productPath = path.join(derivedPath, 'Runner.app');
@@ -1102,14 +1110,14 @@ test('ensureXctestrun reuses matching manifest artifacts from another project ro
   });
   withRunnerDerivedPathEnv(derivedPath);
 
-  const result = await ensureXctestrun(macOsDevice, {});
+  const result = (await ensureXctestrunArtifact(macOsDevice, {})).xctestrunPath;
 
   assert.equal(result, xctestrunPath);
   assert.equal(mockRunCmdStreaming.mock.calls.length, 0);
   assert.deepEqual(mockRepairMacOsRunnerProductsIfNeeded.mock.calls[0]?.[1], [productPath]);
 });
 
-test('ensureXctestrun rebuilds foreign artifacts when metadata does not match', async () => {
+test('ensureXctestrunArtifact rebuilds foreign artifacts when metadata does not match', async () => {
   const projectRoot = repoRoot;
   const tmpDir = await makeProjectTmpDir();
   const derivedPath = path.join(tmpDir, 'custom-derived');
@@ -1145,14 +1153,14 @@ test('ensureXctestrun rebuilds foreign artifacts when metadata does not match', 
     });
   });
 
-  const result = await ensureXctestrun(macOsDevice, {});
+  const result = (await ensureXctestrunArtifact(macOsDevice, {})).xctestrunPath;
 
   assert.equal(result, rebuiltXctestrunPath);
   assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
   assert.equal(fs.existsSync(foreignXctestrunPath), false);
 });
 
-test('ensureXctestrun ignores manifest artifacts outside the cache root', async () => {
+test('ensureXctestrunArtifact ignores manifest artifacts outside the cache root', async () => {
   const projectRoot = repoRoot;
   const tmpDir = await makeProjectTmpDir();
   const derivedPath = path.join(tmpDir, 'custom-derived');
@@ -1182,13 +1190,13 @@ test('ensureXctestrun ignores manifest artifacts outside the cache root', async 
     });
   });
 
-  const result = await ensureXctestrun(macOsDevice, {});
+  const result = (await ensureXctestrunArtifact(macOsDevice, {})).xctestrunPath;
 
   assert.equal(result, rebuiltXctestrunPath);
   assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
 });
 
-test('ensureXctestrun rebuilds after cached macOS runner repair failure', async () => {
+test('ensureXctestrunArtifact rebuilds after cached macOS runner repair failure', async () => {
   // Cached runner artifacts can look reusable until ad-hoc repair fails; ensure we clean once,
   // rebuild, and return the repaired rebuilt xctestrun instead of looping on stale cache state.
   const projectRoot = repoRoot;
@@ -1228,7 +1236,7 @@ test('ensureXctestrun rebuilds after cached macOS runner repair failure', async 
     });
   });
 
-  const result = await ensureXctestrun(macOsDevice, {});
+  const result = (await ensureXctestrunArtifact(macOsDevice, {})).xctestrunPath;
 
   assert.equal(result, rebuiltXctestrunPath);
   assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
@@ -1236,7 +1244,7 @@ test('ensureXctestrun rebuilds after cached macOS runner repair failure', async 
   assert.deepEqual(repairedPaths, [existingXctestrunPath, rebuiltXctestrunPath]);
 });
 
-test('ensureXctestrun prefers validated cache manifest over recursive scan', async () => {
+test('ensureXctestrunArtifact prefers validated cache manifest over recursive scan', async () => {
   const tmpDir = await makeTmpDir();
   const derivedPath = path.join(tmpDir, 'custom-derived');
   const manifestProductPath = path.join(derivedPath, 'ManifestRunner.app');
@@ -1268,14 +1276,14 @@ test('ensureXctestrun prefers validated cache manifest over recursive scan', asy
   });
   withRunnerDerivedPathEnv(derivedPath);
 
-  const result = await ensureXctestrun(macOsDevice, {});
+  const result = (await ensureXctestrunArtifact(macOsDevice, {})).xctestrunPath;
 
   assert.equal(result, manifestXctestrunPath);
   assert.equal(mockRunCmdStreaming.mock.calls.length, 0);
   assert.deepEqual(mockRepairMacOsRunnerProductsIfNeeded.mock.calls[0]?.[1], [manifestProductPath]);
 });
 
-test('ensureXctestrun falls back to scan when cache manifest is stale', async () => {
+test('ensureXctestrunArtifact falls back to scan when cache manifest is stale', async () => {
   const tmpDir = await makeTmpDir();
   const derivedPath = path.join(tmpDir, 'custom-derived');
   const manifestProductPath = path.join(derivedPath, 'ManifestRunner.app');
@@ -1312,14 +1320,14 @@ test('ensureXctestrun falls back to scan when cache manifest is stale', async ()
   );
   withRunnerDerivedPathEnv(derivedPath);
 
-  const result = await ensureXctestrun(macOsDevice, {});
+  const result = (await ensureXctestrunArtifact(macOsDevice, {})).xctestrunPath;
 
   assert.equal(result, newerXctestrunPath);
   assert.equal(mockRunCmdStreaming.mock.calls.length, 0);
   assert.deepEqual(mockRepairMacOsRunnerProductsIfNeeded.mock.calls[0]?.[1], [newerProductPath]);
 });
 
-test('ensureXctestrun rebuilds cached runner when Swift build flags mismatch', async () => {
+test('ensureXctestrunArtifact rebuilds cached runner when Swift build flags mismatch', async () => {
   const projectRoot = repoRoot;
   const { derivedPath, existingXctestrunPath } = await makeCachedRunnerXctestrun();
   const metadataPath = resolveRunnerCacheMetadataPath(derivedPath);
@@ -1346,7 +1354,7 @@ test('ensureXctestrun rebuilds cached runner when Swift build flags mismatch', a
     });
   });
 
-  const result = await ensureXctestrun(macOsDevice, {});
+  const result = (await ensureXctestrunArtifact(macOsDevice, {})).xctestrunPath;
 
   assert.equal(result, rebuiltXctestrunPath);
   assert.equal(mockRunCmdStreaming.mock.calls.length, 1);
@@ -1478,14 +1486,14 @@ test('ensureXctestrunArtifact stress-recovers after a bad restored artifact', as
   assert.equal(mockRunCmdStreaming.mock.calls[0]?.[2]?.timeoutMs, 300_000);
 });
 
-test('ensureXctestrun rethrows unexpected cached macOS runner repair errors', async () => {
+test('ensureXctestrunArtifact rethrows unexpected cached macOS runner repair errors', async () => {
   const { derivedPath, existingXctestrunPath } = await makeCachedRunnerXctestrun();
 
   withRunnerDerivedPathEnv(derivedPath);
 
   mockRepairMacOsRunnerProductsIfNeeded.mockRejectedValue(new Error('permission denied'));
 
-  await assert.rejects(ensureXctestrun(macOsDevice, {}), /permission denied/);
+  await assert.rejects(ensureXctestrunArtifact(macOsDevice, {}), /permission denied/);
   assert.equal(mockRunCmdStreaming.mock.calls.length, 0);
   assert.equal(fs.existsSync(existingXctestrunPath), true);
 });

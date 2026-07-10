@@ -13,6 +13,8 @@ import { emitRequestProgress } from '../../../../daemon/request-progress.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../../../utils/diagnostics.ts';
 import { buildSimctlArgsForDevice } from '../simctl.ts';
 import { runAppleToolCommand, runXcrun } from '../tool-provider.ts';
+import { resolveRunnerDestination } from '../apple-runner-platform.ts';
+import { resolveRunnerMaxConcurrentDestinationsFlag } from './runner-cache-metadata.ts';
 import {
   waitForRunner,
   sendRunnerCommandOnce,
@@ -28,8 +30,6 @@ import {
   prepareXctestrunWithEnv,
   resolveExpectedRunnerCacheMetadata,
   resolveRunnerDerivedPath,
-  resolveRunnerDestination,
-  resolveRunnerMaxConcurrentDestinationsFlag,
 } from './runner-xctestrun.ts';
 import { withRunnerCommandId, type RunnerCommand } from './runner-contract.ts';
 import {

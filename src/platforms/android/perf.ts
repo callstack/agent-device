@@ -14,7 +14,6 @@ import { roundPercent } from '../perf-utils.ts';
 export {
   ANDROID_FRAME_SAMPLE_DESCRIPTION,
   ANDROID_FRAME_SAMPLE_METHOD,
-  parseAndroidFramePerfSample,
   resetAndroidFramePerfStats,
   sampleAndroidFramePerf,
   type AndroidFrameDropWindow,

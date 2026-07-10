@@ -7,11 +7,7 @@ import {
   createAppResolutionCache,
   type AppResolutionCacheScope,
 } from '../../app-resolution-cache.ts';
-import {
-  IOS_DEVICECTL_DEFAULT_HINT,
-  listIosDeviceApps,
-  resolveIosDevicectlHint,
-} from './devicectl.ts';
+import { listIosDeviceApps } from './devicectl.ts';
 import type { IosAppInfo } from './app-info.ts';
 import { filterAppleAppsByBundlePrefix } from './app-filter.ts';
 import { listMacApps, resolveMacOsApp } from '../os/macos/apps.ts';
@@ -226,8 +222,4 @@ async function readIosSimulatorAppUrlSchemes(infoPlistPath: string): Promise<Set
   } catch {
     return new Set();
   }
-}
-
-export function maybeResolveIosDevicectlHint(stdout: string, stderr: string): string {
-  return resolveIosDevicectlHint(stdout, stderr) ?? IOS_DEVICECTL_DEFAULT_HINT;
 }

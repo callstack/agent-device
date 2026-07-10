@@ -503,5 +503,3 @@ async function readIosSimulatorMainScreenScale(device: DeviceInfo): Promise<numb
   iosSimulatorMainScreenScaleCache.set(device.id, scale);
   return scale;
 }
-
-export { prepareSimulatorStatusBarForScreenshot } from './screenshot-status-bar.ts';

@@ -55,12 +55,6 @@ export type ScrollGesturePlan = {
   pixels: number;
 };
 
-export type SwipeGestureOptions = ScrollGestureOptions;
-
-export type SwipeGesturePlan = Omit<ScrollGesturePlan, 'direction'> & {
-  direction: ScrollDirection;
-};
-
 export type SwipePresetGesturePlan = {
   preset: SwipePreset;
   x1: number;
@@ -126,17 +120,6 @@ export function assertScrollGestureInput(options: { amount?: number; pixels?: nu
   if (options.pixels !== undefined) {
     normalizeRequestedPixels(options.pixels);
   }
-}
-
-export function buildSwipeGesturePlan(options: SwipeGestureOptions): SwipeGesturePlan {
-  const scrollPlan = buildScrollGesturePlan({
-    ...options,
-    direction: scrollDirectionForFingerSwipe(options.direction),
-  });
-  return {
-    ...scrollPlan,
-    direction: options.direction,
-  };
 }
 
 export function buildSwipePresetGesturePlan(
@@ -228,19 +211,6 @@ function clampGesturePoint(
 
 export function parseScrollDirection(direction: string): ScrollDirection {
   return SCROLL_DIRECTION_ENUM.parse(direction);
-}
-
-function scrollDirectionForFingerSwipe(direction: ScrollDirection): ScrollDirection {
-  switch (direction) {
-    case 'up':
-      return 'down';
-    case 'down':
-      return 'up';
-    case 'left':
-      return 'right';
-    case 'right':
-      return 'left';
-  }
 }
 
 function inferViewportRect(nodes: Array<Pick<SnapshotNode, 'type' | 'rect'>>): Rect | undefined {

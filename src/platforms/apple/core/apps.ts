@@ -1,8 +1,4 @@
-export {
-  screenshotIos,
-  shouldFallbackToRunnerForIosScreenshot,
-  shouldRetryIosSimulatorScreenshot,
-} from './screenshot.ts';
+export { screenshotIos } from './screenshot.ts';
 export {
   listIosApps,
   resolveIosApp,

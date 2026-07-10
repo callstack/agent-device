@@ -1,6 +1,4 @@
-import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from './adb-executor.ts';
-import type { AndroidSnapshotAnalysis } from './ui-hierarchy.ts';
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
 
 export type AndroidSnapshotHelperTransport = 'instrumentation' | 'persistent-session';
@@ -45,10 +43,6 @@ export type AndroidSnapshotHelperManifest = {
 export type AndroidSnapshotHelperArtifact = {
   apkPath: string;
   manifest: AndroidSnapshotHelperManifest;
-};
-
-export type AndroidSnapshotHelperPreparedArtifact = AndroidSnapshotHelperArtifact & {
-  cleanup?: () => Promise<void>;
 };
 
 export type AndroidSnapshotHelperInstallPolicy = 'missing-or-outdated' | 'always' | 'never';
@@ -99,13 +93,6 @@ export type AndroidSnapshotHelperMetadata = {
 
 export type AndroidSnapshotHelperOutput = {
   xml: string;
-  metadata: AndroidSnapshotHelperMetadata;
-};
-
-export type AndroidSnapshotHelperParsedSnapshot = {
-  nodes: RawSnapshotNode[];
-  truncated?: boolean;
-  analysis: AndroidSnapshotAnalysis;
   metadata: AndroidSnapshotHelperMetadata;
 };
 

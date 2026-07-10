@@ -6,17 +6,21 @@ import path from 'node:path';
 import { beforeEach, test } from 'vitest';
 import {
   captureAndroidSnapshotWithHelper,
+  parseAndroidSnapshotHelperOutput,
+} from '../snapshot-helper-capture.ts';
+import {
   ensureAndroidSnapshotHelper,
   forgetAndroidSnapshotHelperInstall,
-  parseAndroidSnapshotHelperManifest,
-  parseAndroidSnapshotHelperOutput,
-  parseAndroidSnapshotHelperXml,
-  prepareAndroidSnapshotHelperArtifactFromManifestUrl,
   resetAndroidSnapshotHelperInstallCache,
+} from '../snapshot-helper-install.ts';
+import {
+  parseAndroidSnapshotHelperManifest,
   verifyAndroidSnapshotHelperArtifact,
-  type AndroidAdbExecutor,
-  type AndroidSnapshotHelperManifest,
-} from '../snapshot-helper.ts';
+} from '../snapshot-helper-artifact.ts';
+import type {
+  AndroidAdbExecutor,
+  AndroidSnapshotHelperManifest,
+} from '../snapshot-helper-types.ts';
 import type { AndroidAdbProvider } from '../adb-executor.ts';
 
 const manifest: AndroidSnapshotHelperManifest = {
@@ -103,26 +107,6 @@ test('parseAndroidSnapshotHelperOutput decodes UTF-8 across byte chunk boundarie
   const parsed = parseAndroidSnapshotHelperOutput(output);
 
   assert.equal(parsed.xml, xml);
-});
-
-test('parseAndroidSnapshotHelperXml returns shaped nodes from captured helper output', () => {
-  const parsed = parseAndroidSnapshotHelperXml(
-    '<hierarchy><node text="Continue" class="android.widget.Button" bounds="[1,2][21,42]" clickable="true" /><node text="Keyboard suggestion" class="android.widget.TextView" bounds="[1,44][121,84]" /></hierarchy>',
-    {
-      outputFormat: 'uiautomator-xml',
-      captureMode: 'interactive-windows',
-      windowCount: 2,
-      nodeCount: 2,
-    },
-  );
-
-  assert.equal(parsed.nodes[0]?.label, 'Continue');
-  assert.equal(parsed.nodes[0]?.hittable, true);
-  assert.deepEqual(parsed.nodes[0]?.rect, { x: 1, y: 2, width: 20, height: 40 });
-  assert.equal(parsed.nodes[1]?.label, 'Keyboard suggestion');
-  assert.equal(parsed.metadata.captureMode, 'interactive-windows');
-  assert.equal(parsed.metadata.windowCount, 2);
-  assert.equal(parsed.metadata.nodeCount, 2);
 });
 
 test('parseAndroidSnapshotHelperOutput rejects incomplete chunks', () => {
@@ -760,64 +744,6 @@ test('captureAndroidSnapshotWithHelper reads helper output file when instrumenta
   ]);
 });
 
-test('prepareAndroidSnapshotHelperArtifactFromManifestUrl downloads and verifies APK', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'snapshot-helper-download-'));
-  const apk = Buffer.from('downloaded-helper');
-  const manifestUrl = 'https://example.test/helper.manifest.json';
-  const apkUrl = 'https://example.test/helper.apk';
-  const fetch = createArtifactFetch({ manifestUrl, apkUrl, apk });
-
-  const artifact = await prepareAndroidSnapshotHelperArtifactFromManifestUrl({
-    manifestUrl,
-    cacheDir: tmpDir,
-    fetch,
-  });
-
-  assert.deepEqual(fetch.fetched, [manifestUrl, apkUrl]);
-  assert.equal(await fs.readFile(artifact.apkPath, 'utf8'), 'downloaded-helper');
-  assert.equal(artifact.manifest.sha256, sha256Buffer(apk));
-  await artifact.cleanup?.();
-});
-
-test('prepareAndroidSnapshotHelperArtifactFromManifestUrl removes owned cache directory on cleanup', async () => {
-  const apk = Buffer.from('downloaded-helper');
-  const manifestUrl = 'https://example.test/helper.manifest.json';
-  const apkUrl = 'https://example.test/helper.apk';
-  const fetch = createArtifactFetch({ manifestUrl, apkUrl, apk });
-
-  const artifact = await prepareAndroidSnapshotHelperArtifactFromManifestUrl({
-    manifestUrl,
-    fetch,
-  });
-  const cacheDir = path.dirname(artifact.apkPath);
-
-  await artifact.cleanup?.();
-
-  await assert.rejects(() => fs.access(cacheDir), { code: 'ENOENT' });
-});
-
-test('prepareAndroidSnapshotHelperArtifactFromManifestUrl rejects oversized APK downloads', async () => {
-  const manifestUrl = 'https://example.test/helper.manifest.json';
-  const apkUrl = 'https://example.test/helper.apk';
-  const fetch = createArtifactFetch({
-    manifestUrl,
-    apkUrl,
-    apk: Buffer.from('small'),
-    apkResponse: new Response('small', {
-      headers: { 'content-length': String(20 * 1024 * 1024 + 1) },
-    }),
-  });
-
-  await assert.rejects(
-    () =>
-      prepareAndroidSnapshotHelperArtifactFromManifestUrl({
-        manifestUrl,
-        fetch,
-      }),
-    { message: 'Android snapshot helper APK download exceeds size limit' },
-  );
-});
-
 test('parseAndroidSnapshotHelperManifest validates manifest shape', () => {
   assert.throws(() => parseAndroidSnapshotHelperManifest({ ...manifest, outputFormat: 'json' }), {
     message: 'Android snapshot helper manifest outputFormat must be "uiautomator-xml".',
@@ -878,33 +804,6 @@ function resultRecord(values: Record<string, string>): string {
     'INSTRUMENTATION_RESULT: helperApiVersion=1',
     ...Object.entries(values).map(([key, value]) => `INSTRUMENTATION_RESULT: ${key}=${value}`),
   ].join('\n');
-}
-
-function createArtifactFetch(options: {
-  manifestUrl: string;
-  apkUrl: string;
-  apk: Buffer;
-  apkResponse?: Response;
-}): typeof fetch & { fetched: string[] } {
-  const fetched: string[] = [];
-  const fetchImpl = async (url: string | URL | Request) => {
-    fetched.push(String(url));
-    if (String(url) === options.manifestUrl) {
-      return new Response(
-        JSON.stringify({
-          ...manifest,
-          assetName: 'helper.apk',
-          apkUrl: options.apkUrl,
-          sha256: sha256Buffer(options.apk),
-        }),
-      );
-    }
-    if (String(url) === options.apkUrl) {
-      return options.apkResponse ?? new Response(new Uint8Array(options.apk));
-    }
-    return new Response('not found', { status: 404 });
-  };
-  return Object.assign(fetchImpl, { fetched }) as typeof fetch & { fetched: string[] };
 }
 
 function sha256Text(value: string): string {

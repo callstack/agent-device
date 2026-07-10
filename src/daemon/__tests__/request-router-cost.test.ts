@@ -21,7 +21,7 @@ import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { daemonCommandRequestSchema } from '../../kernel/contracts.ts';
+import { commandRpcParamsSchema } from '../../kernel/contracts.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);
 
@@ -204,15 +204,15 @@ test('(d) error path: a failing request with includeCost:true produces NO cost',
   }
 });
 
-test('(e) boundary survival: meta.includeCost survives daemonCommandRequestSchema parsing', () => {
-  const parsed = daemonCommandRequestSchema.parse({
+test('(e) boundary survival: meta.includeCost survives commandRpcParamsSchema parsing', () => {
+  const parsed = commandRpcParamsSchema.parse({
     command: 'home',
     positionals: [],
     meta: { includeCost: true },
   });
   expect(parsed.meta?.includeCost).toBe(true);
 
-  const parsedOff = daemonCommandRequestSchema.parse({
+  const parsedOff = commandRpcParamsSchema.parse({
     command: 'home',
     positionals: [],
     meta: {},

@@ -4,7 +4,6 @@ import { AppError } from '../../kernel/errors.ts';
 import {
   assertScrollGestureInput,
   buildScrollGesturePlan,
-  buildSwipeGesturePlan,
   clampGestureCoordinate,
   pointFromPercentInFrame,
 } from '../scroll-gesture.ts';
@@ -178,27 +177,6 @@ test('assertScrollGestureInput rejects non-positive or non-finite pixels', () =>
         /pixels must be a positive integer/i.test(error.message),
     );
   }
-});
-
-test('buildSwipeGesturePlan maps finger direction through the shared scroll planner', () => {
-  const plan = buildSwipeGesturePlan({
-    direction: 'left',
-    amount: 0.6,
-    referenceWidth: 400,
-    referenceHeight: 800,
-  });
-
-  assert.deepEqual(plan, {
-    direction: 'left',
-    x1: 320,
-    y1: 400,
-    x2: 80,
-    y2: 400,
-    referenceWidth: 400,
-    referenceHeight: 800,
-    amount: 0.6,
-    pixels: 240,
-  });
 });
 
 test('pointFromPercentInFrame preserves authored percentages within valid pixel bounds', () => {

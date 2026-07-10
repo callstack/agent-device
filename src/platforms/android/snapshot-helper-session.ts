@@ -137,6 +137,7 @@ export function getAndroidSnapshotHelperSessionDeviceKey(
   return `${device.platform}:${device.id}`;
 }
 
+// This pure seam verifies timeout budgets without making unit tests wait for real time.
 export function resolveAndroidSnapshotHelperSessionRequestTimeoutMs(params: {
   timeoutMs: number;
   commandTimeoutMs: number;
@@ -147,6 +148,7 @@ export function resolveAndroidSnapshotHelperSessionRequestTimeoutMs(params: {
   );
 }
 
+// Tests stop persistent helper processes so cases cannot leak sessions into each other.
 export async function resetAndroidSnapshotHelperSessions(): Promise<void> {
   await Promise.all(
     [...sessions.keys()].map((deviceKey) => stopAndroidSnapshotHelperSession(deviceKey)),

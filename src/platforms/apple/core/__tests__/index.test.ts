@@ -58,8 +58,6 @@ import {
   resolveIosSimulatorDeepLinkBundleId,
   screenshotIos,
   setIosSetting,
-  shouldFallbackToRunnerForIosScreenshot,
-  shouldRetryIosSimulatorScreenshot,
 } from '../apps.ts';
 import { withMockedMacOsHelper } from './macos-helper-test-utils.ts';
 import { quitMacOsApp, resolveMacOsHelperPackageRootFrom } from '../../os/macos/helper.ts';
@@ -67,13 +65,14 @@ import {
   captureSimulatorScreenshotWithFallback,
   captureSimulatorScreenshotWithRetry,
   captureScreenshotViaRunner,
-  prepareSimulatorStatusBarForScreenshot,
   resolveSimulatorRunnerScreenshotCandidatePaths,
+  shouldFallbackToRunnerForIosScreenshot,
+  shouldRetryIosSimulatorScreenshot,
 } from '../screenshot.ts';
 import { ensureBootedSimulator, openIosSimulatorApp } from '../simulator.ts';
 import {
   invalidateSimulatorStatusBarOverrideCache,
-  prepareSimulatorStatusBarForScreenshot as prepareStatusBarForScreenshot,
+  prepareSimulatorStatusBarForScreenshot,
 } from '../screenshot-status-bar.ts';
 import { runAppleRunnerCommand } from '../runner/runner-client.ts';
 import { iosRunnerOverrides } from '../../interactions.ts';
@@ -165,7 +164,7 @@ function simulatorStateSequence(...states: string[]): () => MockRunCmdResult {
   let index = 0;
   return () => simulatorListDevicesResult(states[index++] ?? states.at(-1) ?? 'Booted');
 }
-const mockPrepareStatusBarForScreenshot = vi.mocked(prepareStatusBarForScreenshot);
+const mockPrepareStatusBarForScreenshot = vi.mocked(prepareSimulatorStatusBarForScreenshot);
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -788,7 +787,7 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after retry ex
       appBundleId: 'com.example.app',
       deps: {
         ensureBooted: ensureBootedSimulator,
-        prepareStatusBarForScreenshot: prepareStatusBarForScreenshot,
+        prepareStatusBarForScreenshot: prepareSimulatorStatusBarForScreenshot,
         captureWithRetry: captureSimulatorScreenshotWithRetry,
         normalizeDensity: async () => {},
         captureWithRunner: captureScreenshotViaRunner,
@@ -833,7 +832,7 @@ test('captureSimulatorScreenshotWithFallback falls back to runner after simctl s
       appBundleId: 'com.example.app',
       deps: {
         ensureBooted: ensureBootedSimulator,
-        prepareStatusBarForScreenshot: prepareStatusBarForScreenshot,
+        prepareStatusBarForScreenshot: prepareSimulatorStatusBarForScreenshot,
         captureWithRetry: captureSimulatorScreenshotWithRetry,
         normalizeDensity: async () => {},
         captureWithRunner: captureScreenshotViaRunner,
@@ -1020,7 +1019,7 @@ test('captureSimulatorScreenshotWithFallback emits fallback diagnostic before us
           appBundleId: 'com.example.app',
           deps: {
             ensureBooted: ensureBootedSimulator,
-            prepareStatusBarForScreenshot: prepareStatusBarForScreenshot,
+            prepareStatusBarForScreenshot: prepareSimulatorStatusBarForScreenshot,
             captureWithRetry: captureSimulatorScreenshotWithRetry,
             normalizeDensity: async () => {},
             captureWithRunner: captureScreenshotViaRunner,

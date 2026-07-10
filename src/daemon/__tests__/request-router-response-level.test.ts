@@ -36,7 +36,7 @@ import { createRequestHandler } from '../request-router.ts';
 import type { DaemonRequest, SessionState } from '../types.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
-import { daemonCommandRequestSchema } from '../../kernel/contracts.ts';
+import { commandRpcParamsSchema } from '../../kernel/contracts.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);
 
@@ -136,15 +136,15 @@ test('(e) digest on a command with no registered view is byte-identical to defau
   if (digest.ok) expect(digest.data).toEqual(REPRESENTATIVE_PAYLOAD);
 });
 
-test('(f) boundary survival: meta.responseLevel survives daemonCommandRequestSchema parsing', () => {
-  const parsed = daemonCommandRequestSchema.parse({
+test('(f) boundary survival: meta.responseLevel survives commandRpcParamsSchema parsing', () => {
+  const parsed = commandRpcParamsSchema.parse({
     command: 'snapshot',
     positionals: [],
     meta: { responseLevel: 'digest' },
   });
   expect(parsed.meta?.responseLevel).toBe('digest');
 
-  const parsedOff = daemonCommandRequestSchema.parse({
+  const parsedOff = commandRpcParamsSchema.parse({
     command: 'snapshot',
     positionals: [],
     meta: {},
