@@ -5,11 +5,11 @@
 // the locally-runnable checks. Fails open to the full set on anything it cannot
 // classify. Existing GitHub CI stays authoritative.
 
-import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { parseArgs as parseNodeArgs } from 'node:util';
+import { runCmdStreaming, runCmdSync } from '../../src/utils/exec.ts';
 import {
   assertCatalogComplete,
   CHECK_CATALOG,
@@ -21,9 +21,7 @@ import { ALL_CHECKS, selectChecks, type CheckPlan, type VitestProject } from './
 
 type Args = { base: string; head: string; json: boolean; run: boolean };
 
-const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
-  encoding: 'utf8',
-}).trim();
+const repoRoot = runCmdSync('git', ['rev-parse', '--show-toplevel']).stdout.trim();
 
 const USAGE = 'Usage: pnpm check:affected [--base <ref>] [--head <ref>] [--json] [--run]\n';
 
@@ -52,11 +50,10 @@ function parseArgs(argv: readonly string[]): Args {
 }
 
 function readChangedFiles(base: string, head: string): string[] {
-  const out = execFileSync('git', ['diff', '--name-only', '--merge-base', base, head], {
+  const { stdout } = runCmdSync('git', ['diff', '--name-only', '--merge-base', base, head], {
     cwd: repoRoot,
-    encoding: 'utf8',
   });
-  return out.split('\n').filter(Boolean);
+  return stdout.split('\n').filter(Boolean);
 }
 
 async function loadVitestProjects(): Promise<VitestProject[]> {
@@ -154,7 +151,7 @@ function printPlanHuman(plan: CheckPlan, args: Args): void {
   }
 }
 
-function runChecks(plan: CheckPlan, pkg: PackageJson, args: Args): number {
+async function runChecks(plan: CheckPlan, pkg: PackageJson, args: Args): Promise<number> {
   const runnable = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => spec.localRunnable);
   const skipped = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => !spec.localRunnable);
   for (const spec of skipped) {
@@ -165,9 +162,13 @@ function runChecks(plan: CheckPlan, pkg: PackageJson, args: Args): number {
   for (const spec of runnable) {
     const command = resolveCommand(spec, pkg.scripts, args.base);
     process.stdout.write(`\n[run] ${spec.id}: ${command.join(' ')}\n`);
-    try {
-      execFileSync(command[0]!, command.slice(1), { cwd: repoRoot, stdio: 'inherit' });
-    } catch {
+    const result = await runCmdStreaming(command[0]!, command.slice(1), {
+      cwd: repoRoot,
+      allowFailure: true,
+      onStdoutChunk: (chunk) => void process.stdout.write(chunk),
+      onStderrChunk: (chunk) => void process.stderr.write(chunk),
+    });
+    if (result.exitCode !== 0) {
       process.stderr.write(`\ncheck:affected: ${spec.id} failed.\n`);
       return 1;
     }
@@ -194,7 +195,7 @@ async function main(argv = process.argv.slice(2)): Promise<number> {
   if (args.json) printPlanJson(plan, args);
   else printPlanHuman(plan, args);
 
-  if (args.run) return runChecks(plan, pkg, args);
+  if (args.run) return await runChecks(plan, pkg, args);
   return 0;
 }
 
