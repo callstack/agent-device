@@ -30,6 +30,7 @@ const CONTRACT_DEVICE_ID = PROVIDER_SCENARIO_IOS_SIMULATOR.id;
 export async function withIosContractDaemon(
   entries: readonly ProviderScenarioProviderEntry[],
   run: (daemon: ProviderScenarioHarness, transcript: ProviderScenarioTranscript) => Promise<void>,
+  options: { saveScript?: boolean | string } = {},
 ): Promise<void> {
   const transcript = createProviderTranscript(entries);
   const appleRunnerProvider = createAppleRunnerProviderFromTranscript(transcript, 'ios.runner');
@@ -50,6 +51,7 @@ export async function withIosContractDaemon(
       const open = await daemon.callCommand('open', [CONTRACT_APP], {
         platform: 'ios',
         udid: CONTRACT_DEVICE_ID,
+        ...(options.saveScript !== undefined ? { saveScript: options.saveScript } : {}),
       });
       assertRpcOk(open);
       await run(daemon, transcript);

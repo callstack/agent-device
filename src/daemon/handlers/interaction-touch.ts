@@ -314,6 +314,7 @@ function readDirectIosSelectorTapTarget(params: {
   const { session, commandLabel, target, flags } = params;
   if (commandLabel !== 'click') return null;
   if (target.kind !== 'selector') return null;
+  if (session.recordSession) return null;
   if (hasNonDefaultClickOptions(flags)) return null;
   if (commandSupportsVerifyEvidence(commandLabel) && flags?.verify === true) return null;
   if (commandSupportsSettleObservation(commandLabel) && flags?.settle === true) return null;
@@ -634,6 +635,7 @@ function readDirectIosSelectorFillTarget(params: {
 }): DirectIosSelectorTarget | null {
   const { session, target, flags } = params;
   if (target.kind !== 'selector') return null;
+  if (session.recordSession) return null;
   if (commandSupportsVerifyEvidence('fill') && flags?.verify === true) return null;
   if (commandSupportsSettleObservation('fill') && flags?.settle === true) return null;
   return readDirectSelectorWithMaestroFallback(session, target.selector, flags);

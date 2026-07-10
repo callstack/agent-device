@@ -110,6 +110,21 @@ test('computeTargetEvidence: scrollRegion is the nearest scrollable ancestor loc
   assert.equal(evidence.verification, 'verified');
 });
 
+test('computeTargetEvidence: a stable scroll-region ID takes precedence over a changed label', () => {
+  const recordedNodes = scrollableListFixture();
+  recordedNodes[1]!.label = 'Inbox';
+  const recorded = computeTargetEvidence({ node: recordedNodes[2]!, nodes: recordedNodes });
+
+  const currentNodes = scrollableListFixture();
+  currentNodes[1]!.label = 'Messages';
+  const current = computeTargetEvidence({ node: currentNodes[2]!, nodes: currentNodes });
+
+  assert.ok(recorded);
+  assert.ok(current);
+  assert.deepEqual(recorded.scrollRegion, { role: 'scrollview', id: 'editor-scroll' });
+  assert.deepEqual(current.scrollRegion, recorded.scrollRegion);
+});
+
 // ---------------------------------------------------------------------------
 // Duplicate identity resolved by sibling / viewportOrder, still verified
 // (decision 3's self-check succeeds by construction whenever the capture

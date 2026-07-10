@@ -203,8 +203,11 @@ function computeScrollRegionKey(
   const identity = boundedLocalIdentity(container);
   return {
     role: identity.role,
-    ...(identity.id !== undefined ? { id: identity.id } : {}),
-    ...(identity.label !== undefined ? { label: identity.label } : {}),
+    ...(identity.id !== undefined
+      ? { id: identity.id }
+      : identity.label !== undefined
+        ? { label: identity.label }
+        : {}),
   };
 }
 
@@ -214,7 +217,7 @@ function scrollRegionKeysEqual(
 ): boolean {
   if (!a && !b) return true;
   if (!a || !b) return false;
-  return a.role === b.role && a.id === b.id && a.label === b.label;
+  return matchesLocalIdentity(a, b);
 }
 
 function boundedRect(node: SnapshotNode): TargetAnnotationV1['rect'] {

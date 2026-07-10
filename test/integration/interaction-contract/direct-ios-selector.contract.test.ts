@@ -16,6 +16,7 @@ import {
   runnerSnapshotEntry,
   runnerTapEntry,
   runnerTapErrorEntry,
+  runnerTypeEntry,
   withIosContractDaemon,
 } from './daemon-harness.ts';
 
@@ -27,6 +28,30 @@ import {
 
 const scenario = (guarantee: InteractionGuarantee): string =>
   scenarioName(DIRECT_IOS_SELECTOR_COVERAGE, guarantee);
+
+const RECORDING_TARGET_NODES = [
+  { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 390, height: 844 } },
+  {
+    index: 1,
+    parentIndex: 0,
+    type: 'Button',
+    identifier: 'continue',
+    label: 'Continue',
+    rect: { x: 40, y: 160, width: 120, height: 44 },
+    enabled: true,
+    hittable: true,
+  },
+  {
+    index: 2,
+    parentIndex: 0,
+    type: 'TextField',
+    identifier: 'email',
+    label: 'Email',
+    rect: { x: 40, y: 240, width: 280, height: 44 },
+    enabled: true,
+    hittable: true,
+  },
+] as const;
 
 test(scenario('responseConstruction'), async () => {
   await withIosContractDaemon([runnerTapEntry({ x: 150, y: 200 })], async (daemon, transcript) => {
@@ -46,6 +71,49 @@ test(scenario('responseConstruction'), async () => {
     assert.equal(data.selector, 'label=Continue');
     assert.match(String(data.message), /Tapped label=Continue/);
   });
+});
+
+test('recorded simple iOS selector click and fill use runtime resolution and persist target-v1 evidence', async () => {
+  await withIosContractDaemon(
+    [
+      runnerSnapshotEntry(RECORDING_TARGET_NODES),
+      runnerTapEntry({ x: 100, y: 182 }),
+      runnerSnapshotEntry(RECORDING_TARGET_NODES),
+      runnerTypeEntry({ x: 180, y: 262 }),
+    ],
+    async (daemon, transcript) => {
+      assertRpcOk(await daemon.callCommand('click', ['id=continue']));
+      assertRpcOk(await daemon.callCommand('fill', ['id=email', 'ada@example.com']));
+
+      assert.equal(transcript.calls[0]?.command, 'ios.runner.snapshot');
+      assert.equal(transcript.calls[1]?.command, 'ios.runner.tap');
+      assert.equal(transcript.calls[2]?.command, 'ios.runner.snapshot');
+      assert.equal(transcript.calls[3]?.command, 'ios.runner.type');
+      for (const call of [transcript.calls[1], transcript.calls[3]]) {
+        const request = call?.request as Record<string, unknown> | undefined;
+        assert.equal(request?.selectorKey, undefined);
+      }
+
+      const actions = daemon
+        .session()
+        ?.actions.filter((action) => action.command === 'click' || action.command === 'fill');
+      assert.deepEqual(actions?.map((action) => action.command), ['click', 'fill']);
+      const targetIdentities = actions?.map((action) => {
+        const evidence = action.targetEvidence as Record<string, unknown> | undefined;
+        return {
+          id: evidence?.id,
+          role: evidence?.role,
+          label: evidence?.label,
+          verification: evidence?.verification,
+        };
+      });
+      assert.deepEqual(targetIdentities, [
+        { id: 'continue', role: 'button', label: 'Continue', verification: 'verified' },
+        { id: 'email', role: 'textfield', label: 'Email', verification: 'verified' },
+      ]);
+    },
+    { saveScript: true },
+  );
 });
 
 test(scenario('offscreen'), async () => {
