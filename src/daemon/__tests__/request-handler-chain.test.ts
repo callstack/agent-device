@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import { test } from 'vitest';
 import { INTERNAL_COMMANDS } from '../../command-catalog.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { getDaemonRouteOwnerFiles, runRequestHandlerChain } from '../request-handler-chain.ts';
+import { runRequestHandlerChain } from '../request-handler-chain.ts';
+import { getDaemonRouteOwnerFiles } from '../route-owner-files.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { makeIosSession } from '../../__tests__/test-utils/index.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
@@ -36,28 +37,24 @@ function makeChainParams(req: DaemonRequest) {
 test('route owner files match the production module loaders', () => {
   const source = fs.readFileSync(new URL('../request-handler-chain.ts', import.meta.url), 'utf8');
   const definitions = [
-    ...source.matchAll(
-      /(\w+): defineDaemonRoute\(\{\s+ownerFile: '([^']+)',\s+load: \(\) => import\('([^']+)'\),/g,
-    ),
+    ...source.matchAll(/(\w+): defineDaemonRoute\(\{\s+load: \(\) => import\('([^']+)'\),/g),
   ];
   const ownerFiles = getDaemonRouteOwnerFiles();
   const genericModulePath = /import \* as genericRequestHandlerModule from '([^']+)'/.exec(
     source,
   )?.[1];
-  const genericOwnerFile =
-    /generic: defineDaemonRoute\(\{\s+ownerFile: '([^']+)',\s+load: async \(\) => genericRequestHandlerModule,/.exec(
+  const genericRouteMatches =
+    /generic: defineDaemonRoute\(\{\s+load: async \(\) => genericRequestHandlerModule,/.test(
       source,
-    )?.[1];
+    );
 
   assert.equal(definitions.length + 1, Object.keys(ownerFiles).length);
-  for (const [, route, ownerFile, modulePath] of definitions) {
-    assert.ok(route && ownerFile && modulePath);
-    assert.equal(ownerFile, `src/daemon/${modulePath.slice(2)}`);
-    assert.equal(ownerFiles[route as keyof typeof ownerFiles], ownerFile);
+  for (const [, route, modulePath] of definitions) {
+    assert.ok(route && modulePath);
+    assert.equal(ownerFiles[route as keyof typeof ownerFiles], `src/daemon/${modulePath.slice(2)}`);
   }
-  assert.ok(genericModulePath && genericOwnerFile);
-  assert.equal(genericOwnerFile, `src/daemon/${genericModulePath.slice(2)}`);
-  assert.equal(ownerFiles.generic, genericOwnerFile);
+  assert.ok(genericModulePath && genericRouteMatches);
+  assert.equal(ownerFiles.generic, `src/daemon/${genericModulePath.slice(2)}`);
 });
 
 test('request handler chain routes trace commands to the record-trace family', async () => {

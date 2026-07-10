@@ -30,42 +30,34 @@ type RequestHandlerChainParams = {
 
 const DAEMON_ROUTE_HANDLERS = {
   lease: defineDaemonRoute({
-    ownerFile: 'src/daemon/handlers/lease.ts',
     load: () => import('./handlers/lease.ts'),
     run: runLeaseHandler,
   }),
   session: defineDaemonRoute({
-    ownerFile: 'src/daemon/handlers/session.ts',
     load: () => import('./handlers/session.ts'),
     run: runSessionHandler,
   }),
   snapshot: defineDaemonRoute({
-    ownerFile: 'src/daemon/handlers/snapshot.ts',
     load: () => import('./handlers/snapshot.ts'),
     run: runSnapshotHandler,
   }),
   reactNative: defineDaemonRoute({
-    ownerFile: 'src/daemon/handlers/react-native.ts',
     load: () => import('./handlers/react-native.ts'),
     run: runReactNativeHandler,
   }),
   recordTrace: defineDaemonRoute({
-    ownerFile: 'src/daemon/handlers/record-trace.ts',
     load: () => import('./handlers/record-trace.ts'),
     run: runRecordTraceHandler,
   }),
   find: defineDaemonRoute({
-    ownerFile: 'src/daemon/handlers/find.ts',
     load: () => import('./handlers/find.ts'),
     run: runFindHandler,
   }),
   interaction: defineDaemonRoute({
-    ownerFile: 'src/daemon/handlers/interaction.ts',
     load: () => import('./handlers/interaction.ts'),
     run: runInteractionHandler,
   }),
   generic: defineDaemonRoute({
-    ownerFile: 'src/daemon/request-generic-dispatch.ts',
     load: async () => genericRequestHandlerModule,
     run: async () => null,
   }),
@@ -78,12 +70,6 @@ export async function runRequestHandlerChain(
 ): Promise<DaemonResponse | null> {
   const route = getDaemonCommandRoute(params.req.command);
   return await DAEMON_ROUTE_HANDLERS[route].run(params);
-}
-
-export function getDaemonRouteOwnerFiles(): Record<DaemonCommandRoute, string> {
-  const routes = Object.keys(DAEMON_ROUTE_HANDLERS) as DaemonCommandRoute[];
-  const entries = routes.map((route) => [route, DAEMON_ROUTE_HANDLERS[route].ownerFile] as const);
-  return Object.fromEntries(entries) as Record<DaemonCommandRoute, string>;
 }
 
 export async function loadGenericRequestHandlerModule(): Promise<
@@ -215,13 +201,11 @@ async function runInteractionHandler(
 }
 
 function defineDaemonRoute<TModule>(definition: {
-  ownerFile: string;
   load: () => Promise<TModule>;
   run: (module: TModule, params: RequestHandlerChainParams) => Promise<DaemonResponse | null>;
 }) {
   const loadModule = lazyImport(definition.load);
   return {
-    ownerFile: definition.ownerFile,
     loadModule,
     run: async (params: RequestHandlerChainParams) =>
       await definition.run(await loadModule(), params),

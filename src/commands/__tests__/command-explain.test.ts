@@ -4,7 +4,7 @@ import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { commandDescriptors } from '../../core/command-descriptor/registry.ts';
 import { ownerFilesForCommand } from '../../core/command-descriptor/owner-files.ts';
-import { getDaemonRouteOwnerFiles } from '../../daemon/request-handler-chain.ts';
+import { getDaemonRouteOwnerFiles } from '../../daemon/route-owner-files.ts';
 import {
   explainCommand as explainCommandFromMetadata,
   formatCommandExplanation,
