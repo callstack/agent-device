@@ -39,7 +39,8 @@ PREVIOUS_IME="$(adb shell settings get secure default_input_method)"
 adb shell ime enable "$SERVICE"
 adb shell ime set "$SERVICE"
 
-# Focus a text field, then inject Unicode-safe text via base64 extras.
+# Focus a text field, then inject Unicode-safe text via base64 extras. adb shell holds
+# WRITE_SECURE_SETTINGS, which the receiver requires; a third-party app cannot.
 TEXT_B64="$(printf '%s' '你好世界' | base64)"
 adb shell am broadcast -p "$PACKAGE" \
   -a com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64 \
@@ -54,10 +55,16 @@ adb shell ime set "$PREVIOUS_IME"
 
 ## Broadcast actions
 
-All actions are dynamically registered (`RECEIVER_EXPORTED` on API 33+, matching the receiver fix
-ADBKeyBoard itself needed and doesn't reliably have). Every extra is treated as untrusted input:
-bounded length, defensive base64 decoding, and the whole handler is wrapped so a malformed
-broadcast can never crash the IME process and strand a field without an active input method.
+The receiver is registered in the running IME process (so `getCurrentInputConnection()` is live)
+but requires the **`android.permission.WRITE_SECURE_SETTINGS`** sender permission. adb shell
+(uid 2000) holds that signature|privileged permission, but a co-installed third-party app cannot
+be granted it, so it cannot deliver broadcasts to the receiver — the text-injection surface is
+closed to other apps while the IME is active. (An earlier design used a manifest receiver with
+`android:exported="false"` + explicit-component targeting, but on API 36 adb shell cannot deliver
+to a non-exported component, which broke the CLI path; the permission gate is what actually works.)
+Every extra is still treated as untrusted input: bounded length, defensive base64 decoding, and the
+whole handler is wrapped so a malformed broadcast can never crash the IME process and strand a
+field without an active input method.
 
 - `ACTION_INPUT_TEXT_B64` (`--es text <base64 utf-8>`) -- commit decoded text at the cursor.
 - `ACTION_INPUT_TEXT` (`--es text <string>`) -- commit text directly (subject to `adb shell`'s own

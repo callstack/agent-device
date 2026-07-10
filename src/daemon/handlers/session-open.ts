@@ -119,10 +119,12 @@ function contextForRuntimeLaunchUrl(
   return context;
 }
 
-// Default-on for emulators, opt-in via --test-ime on real devices.
+// Default-on for emulators, opt-in via --test-ime on real devices; --no-test-ime forces off.
 function shouldActivateAndroidTestIme(device: DeviceInfo, req: DaemonRequest): boolean {
   if (device.platform !== 'android') return false;
-  return device.kind === 'emulator' || req.flags?.testIme === true;
+  const flag = req.flags?.testIme;
+  if (flag !== undefined) return flag;
+  return device.kind === 'emulator';
 }
 
 async function maybeActivateAndroidTestImeForOpen(

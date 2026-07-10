@@ -13,12 +13,14 @@ import {
 } from '../ime-helper.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from '../adb-executor.ts';
 
+const PACKAGE = 'com.callstack.agentdevice.imehelper';
+
 const manifest = {
   name: 'android-ime-helper' as const,
   version: '0.19.2',
   assetName: 'helper.apk',
   sha256: 'a'.repeat(64),
-  packageName: 'com.callstack.agentdevice.imehelper',
+  packageName: PACKAGE,
   versionCode: 19002,
   serviceComponent: 'com.callstack.agentdevice.imehelper/.TestInputMethodService',
   broadcastProtocol: 'android-ime-helper-v1' as const,
@@ -28,26 +30,21 @@ beforeEach(() => {
   resetAndroidImeHelperInstallCache();
 });
 
-test('sendAndroidImeHelperText base64-encodes UTF-8 text and targets the package', async () => {
+test('sendAndroidImeHelperText package-scopes the broadcast and base64-encodes UTF-8', async () => {
   let capturedArgs: string[] | undefined;
   await sendAndroidImeHelperText(
     async (args) => {
       capturedArgs = args;
       return { exitCode: 0, stdout: '', stderr: '' };
     },
-    manifest.packageName,
+    PACKAGE,
     '你好世界 😀',
   );
 
   assert.ok(capturedArgs);
-  assert.deepEqual(capturedArgs.slice(0, 6), [
-    'shell',
-    'am',
-    'broadcast',
-    '-p',
-    manifest.packageName,
-    '-a',
-  ]);
+  // Package-scoped delivery to the in-process receiver; the app-side WRITE_SECURE_SETTINGS
+  // permission gate (asserted in ime-helper-security.test.ts) is the trust boundary.
+  assert.deepEqual(capturedArgs.slice(0, 6), ['shell', 'am', 'broadcast', '-p', PACKAGE, '-a']);
   assert.equal(capturedArgs[6], 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64');
   const textIndex = capturedArgs.indexOf('text');
   assert.ok(textIndex > 0);
@@ -61,9 +58,10 @@ test('clearAndroidImeHelperText broadcasts ACTION_CLEAR_TEXT without a text extr
   await clearAndroidImeHelperText(async (args) => {
     capturedArgs = args;
     return { exitCode: 0, stdout: '', stderr: '' };
-  }, manifest.packageName);
+  }, PACKAGE);
 
   assert.ok(capturedArgs);
+  assert.deepEqual(capturedArgs.slice(0, 5), ['shell', 'am', 'broadcast', '-p', PACKAGE]);
   assert.ok(capturedArgs.includes('com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT'));
   assert.ok(!capturedArgs.includes('text'));
 });
@@ -73,9 +71,10 @@ test('sendAndroidImeHelperEnter broadcasts ACTION_ENTER', async () => {
   await sendAndroidImeHelperEnter(async (args) => {
     capturedArgs = args;
     return { exitCode: 0, stdout: '', stderr: '' };
-  }, manifest.packageName);
+  }, PACKAGE);
 
   assert.ok(capturedArgs);
+  assert.deepEqual(capturedArgs.slice(0, 5), ['shell', 'am', 'broadcast', '-p', PACKAGE]);
   assert.ok(capturedArgs.includes('com.callstack.agentdevice.imehelper.ACTION_ENTER'));
 });
 
@@ -83,7 +82,7 @@ test('a failed broadcast raises COMMAND_FAILED', async () => {
   await assert.rejects(
     sendAndroidImeHelperText(
       async () => ({ exitCode: 1, stdout: '', stderr: 'broadcast failed' }),
-      manifest.packageName,
+      PACKAGE,
       'hi',
     ),
     /COMMAND_FAILED|Android IME helper broadcast failed/,

@@ -116,6 +116,9 @@ export function getAndroidImeHelperDeviceKey(device: DeviceInfo): string {
 }
 
 // --- Broadcast text-entry channel -----------------------------------------------------------
+// The IME's receiver requires the WRITE_SECURE_SETTINGS sender permission, which adb shell holds
+// but a co-installed third-party app cannot — that permission gate (not the transport) is the
+// trust boundary. Broadcasts are package-scoped (`-p`) to the in-process dynamic receiver.
 
 export async function sendAndroidImeHelperText(
   adb: AndroidAdbExecutor,

@@ -1,5 +1,30 @@
-import { afterEach, test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
+
+const PACKAGE = 'com.callstack.agentdevice.imehelper';
+
+// Inject a fixture artifact so the tests never read android-ime-helper/dist from disk (which a
+// fresh checkout that hasn't packaged the helper won't have — CI's Coverage job included).
+vi.mock('../ime-helper.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../ime-helper.ts')>();
+  return {
+    ...actual,
+    resolveAndroidImeHelperArtifact: vi.fn(async () => ({
+      apkPath: '/fixture/helper.apk',
+      manifest: {
+        name: 'android-ime-helper' as const,
+        version: '0.0.0',
+        assetName: 'helper.apk',
+        sha256: 'a'.repeat(64),
+        packageName: PACKAGE,
+        versionCode: 1,
+        serviceComponent: 'com.callstack.agentdevice.imehelper/.TestInputMethodService',
+        broadcastProtocol: 'android-ime-helper-v1' as const,
+      },
+    })),
+  };
+});
+
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
 import { fillAndroid, typeAndroid } from '../input-actions.ts';
 import { withAndroidAdbProvider, type AndroidAdbExecutor } from '../adb-executor.ts';
@@ -7,8 +32,6 @@ import {
   resetAndroidTestImeActivationCacheForTests,
   setAndroidTestImeActiveForTests,
 } from '../ime-lifecycle.ts';
-
-const HELPER_PACKAGE = 'com.callstack.agentdevice.imehelper';
 
 afterEach(() => {
   resetAndroidTestImeActivationCacheForTests();
@@ -33,7 +56,7 @@ test('typeAndroid routes non-ASCII text through the test IME broadcast channel w
 
   const broadcastCalls = calls.filter((args) => args[0] === 'shell' && args[1] === 'am');
   assert.ok(broadcastCalls.length > 0, 'expected at least one am broadcast call');
-  assert.ok(broadcastCalls.every((args) => args[4] === HELPER_PACKAGE));
+  assert.ok(broadcastCalls.every((args) => args[3] === '-p' && args[4] === PACKAGE));
   assert.ok(
     broadcastCalls.some((args) =>
       args.includes('com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64'),

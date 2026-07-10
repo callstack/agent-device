@@ -701,6 +701,15 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
       'open: activate the headless Android test IME for deterministic Unicode text entry (default on for emulators; opt-in on real devices)',
   },
   {
+    key: 'testIme',
+    names: ['--no-test-ime'],
+    type: 'boolean',
+    setValue: false,
+    usageLabel: '--no-test-ime',
+    usageDescription:
+      'open: keep the real Android keyboard even on emulators (opt out of the headless test IME)',
+  },
+  {
     key: 'androidDeviceAllowlist',
     names: ['--android-device-allowlist'],
     type: 'string',

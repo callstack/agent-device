@@ -19,6 +19,24 @@ test('parseArgs recognizes command-specific flag combinations', async () => {
       },
     },
     {
+      label: 'open --test-ime forces the Android test IME on',
+      argv: ['open', 'settings', '--platform', 'android', '--test-ime'],
+      strictFlags: true,
+      assertParsed: (parsed) => {
+        assert.equal(parsed.command, 'open');
+        assert.equal(parsed.flags.testIme, true);
+      },
+    },
+    {
+      label: 'open --no-test-ime forces the Android test IME off',
+      argv: ['open', 'settings', '--platform', 'android', '--no-test-ime'],
+      strictFlags: true,
+      assertParsed: (parsed) => {
+        assert.equal(parsed.command, 'open');
+        assert.equal(parsed.flags.testIme, false);
+      },
+    },
+    {
       label: 'open --platform ios --target tv',
       argv: ['open', 'Settings', '--platform', 'ios', '--target', 'tv'],
       strictFlags: true,

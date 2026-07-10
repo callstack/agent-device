@@ -1,5 +1,31 @@
 import assert from 'node:assert/strict';
-import { beforeEach, test } from 'vitest';
+import { beforeEach, test, vi } from 'vitest';
+
+const HELPER_SERVICE = 'com.callstack.agentdevice.imehelper/.TestInputMethodService';
+const SETTINGS_KEY = 'agent_device_ime_helper_previous_ime';
+
+// activateAndroidTestIme reads the bundled artifact for the service component; inject a fixture so
+// the suite passes on a fresh checkout that hasn't packaged android-ime-helper/dist (CI Coverage).
+vi.mock('../ime-helper.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../ime-helper.ts')>();
+  return {
+    ...actual,
+    resolveAndroidImeHelperArtifact: vi.fn(async () => ({
+      apkPath: '/fixture/helper.apk',
+      manifest: {
+        name: 'android-ime-helper' as const,
+        version: '0.0.0',
+        assetName: 'helper.apk',
+        sha256: 'a'.repeat(64),
+        packageName: 'com.callstack.agentdevice.imehelper',
+        versionCode: 1,
+        serviceComponent: HELPER_SERVICE,
+        broadcastProtocol: 'android-ime-helper-v1' as const,
+      },
+    })),
+  };
+});
+
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
 import { withAndroidAdbProvider, type AndroidAdbExecutor } from '../adb-executor.ts';
 import { resetAndroidImeHelperInstallCache } from '../ime-helper.ts';
@@ -10,9 +36,6 @@ import {
   restoreOrphanedAndroidTestImeOnDaemonStartup,
   resetAndroidTestImeActivationCacheForTests,
 } from '../ime-lifecycle.ts';
-
-const HELPER_SERVICE = 'com.callstack.agentdevice.imehelper/.TestInputMethodService';
-const SETTINGS_KEY = 'agent_device_ime_helper_previous_ime';
 
 beforeEach(() => {
   resetAndroidImeHelperInstallCache();

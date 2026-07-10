@@ -318,7 +318,7 @@ function summarizeProviderScenarioFlagExclusions() {
     {
       name: 'platform boot fallback without provider seam',
       owner: 'handler and Android platform unit tests',
-      keys: ['headless'],
+      keys: ['headless', 'testIme'],
     },
     {
       name: 'Apple simulator screenshot rendering options',

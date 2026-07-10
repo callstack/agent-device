@@ -1,5 +1,32 @@
 import assert from 'node:assert/strict';
-import { afterEach, test } from 'vitest';
+import { afterEach, test, vi } from 'vitest';
+
+const HELPER_SERVICE = 'com.callstack.agentdevice.imehelper/.TestInputMethodService';
+const NORMAL_IME = 'com.google.android.inputmethod.latin/.LatinIME';
+
+// probeAndroidTestIme reads the helper's service component from the bundled artifact; inject a
+// fixture so the orphan-detection checks pass on a fresh checkout that hasn't packaged
+// android-ime-helper/dist (CI's Coverage job runs no packaging step).
+vi.mock('../../../platforms/android/ime-helper.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../platforms/android/ime-helper.ts')>();
+  return {
+    ...actual,
+    resolveAndroidImeHelperArtifact: vi.fn(async () => ({
+      apkPath: '/fixture/helper.apk',
+      manifest: {
+        name: 'android-ime-helper' as const,
+        version: '0.0.0',
+        assetName: 'helper.apk',
+        sha256: 'a'.repeat(64),
+        packageName: 'com.callstack.agentdevice.imehelper',
+        versionCode: 1,
+        serviceComponent: HELPER_SERVICE,
+        broadcastProtocol: 'android-ime-helper-v1' as const,
+      },
+    })),
+  };
+});
+
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
 import { appendAndroidChecks } from '../session-doctor-android.ts';
 import {
@@ -8,9 +35,6 @@ import {
 } from '../../../platforms/android/ime-lifecycle.ts';
 import type { AndroidAdbExecutor } from '../../../platforms/android/adb-executor.ts';
 import type { DoctorCheck } from '../session-doctor-types.ts';
-
-const HELPER_SERVICE = 'com.callstack.agentdevice.imehelper/.TestInputMethodService';
-const NORMAL_IME = 'com.google.android.inputmethod.latin/.LatinIME';
 
 afterEach(() => {
   resetAndroidTestImeActivationCacheForTests();

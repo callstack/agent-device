@@ -1,5 +1,6 @@
 package com.callstack.agentdevice.imehelper;
 
+import android.Manifest;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -14,8 +15,9 @@ import android.view.inputmethod.InputConnection;
 import java.nio.charset.StandardCharsets;
 
 /**
- * Minimal headless test IME for agent-device: renders no input view, injects text over a
- * base64-encoded broadcast channel. Treats every broadcast extra as untrusted input.
+ * Minimal headless test IME for agent-device: renders no input view, injects text over a broadcast
+ * channel gated by a broadcastPermission only adb shell / privileged callers hold. Treats every
+ * broadcast extra as untrusted input.
  */
 public class TestInputMethodService extends InputMethodService {
   private static final String TAG = "AgentDeviceTestIME";
@@ -31,6 +33,10 @@ public class TestInputMethodService extends InputMethodService {
       "com.callstack.agentdevice.imehelper.ACTION_ENTER";
   public static final String EXTRA_TEXT = "text";
   public static final String EXTRA_PROTOCOL = "protocol";
+
+  // Senders must hold this to reach the receiver. adb shell (uid 2000) holds it — a co-installed
+  // third-party app cannot be granted a signature|privileged permission, so it cannot inject text.
+  private static final String REQUIRED_SENDER_PERMISSION = Manifest.permission.WRITE_SECURE_SETTINGS;
 
   // Upper bound on a single broadcast payload.
   private static final int MAX_TEXT_LENGTH = 32_000;
@@ -57,12 +63,16 @@ public class TestInputMethodService extends InputMethodService {
     filter.addAction(ACTION_INPUT_TEXT_B64);
     filter.addAction(ACTION_CLEAR_TEXT);
     filter.addAction(ACTION_ENTER);
+    // Register the receiver in the running IME process (so getCurrentInputConnection() is live)
+    // but require REQUIRED_SENDER_PERMISSION of every sender. On API 33+ the receiver must also be
+    // flagged exported to accept out-of-app broadcasts; the permission is the actual trust gate.
     if (Build.VERSION.SDK_INT >= 33) {
-      registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED);
+      registerReceiver(
+          receiver, filter, REQUIRED_SENDER_PERMISSION, null, Context.RECEIVER_EXPORTED);
     } else {
-      registerReceiver(receiver, filter);
+      registerReceiver(receiver, filter, REQUIRED_SENDER_PERMISSION, null);
     }
-    Log.i(TAG, "onCreate: receiver registered");
+    Log.i(TAG, "onCreate: permission-gated receiver registered");
   }
 
   @Override
