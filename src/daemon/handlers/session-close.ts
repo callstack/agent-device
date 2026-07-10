@@ -78,7 +78,7 @@ export async function handleCloseCommand(params: {
     await stopSessionApplePerfCapture(session);
     await stopSessionAndroidNativePerfCapture(session);
     await stopSessionAndroidSnapshotHelper(session);
-    await restoreSessionAndroidIme(session);
+    await restoreSessionAndroidIme(session, sessionStore.resolveDaemonStateDir());
     if (shouldDispatchPlatformClose(req, session)) {
       if (shouldStopAppleRunnerBeforeTargetedClose(session)) {
         await stopAppleRunnerForClose(session);

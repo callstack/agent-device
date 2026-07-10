@@ -60,9 +60,12 @@ export async function stopSessionAndroidSnapshotHelper(session: SessionState): P
   await stopAndroidSnapshotHelperSessionForDevice(session.device);
 }
 
-export async function restoreSessionAndroidIme(session: SessionState): Promise<void> {
+export async function restoreSessionAndroidIme(
+  session: SessionState,
+  stateDir?: string,
+): Promise<void> {
   if (session.device.platform !== 'android') return;
-  await restoreAndroidTestIme(session.device).catch((error) => {
+  await restoreAndroidTestIme(session.device, { stateDir }).catch((error) => {
     emitDiagnostic({
       level: 'warn',
       phase: 'android_test_ime_restore_failed',
@@ -77,13 +80,14 @@ export async function restoreSessionAndroidIme(session: SessionState): Promise<v
 export async function teardownSessionResources(
   session: SessionState,
   sessionName: string,
+  stateDir?: string,
 ): Promise<void> {
   await stopSessionAppLog(session);
   await stopSessionAudioProbe(session, 'session-teardown');
   await stopSessionApplePerfCapture(session);
   await stopSessionAndroidNativePerfCapture(session);
   await stopSessionAndroidSnapshotHelper(session);
-  await restoreSessionAndroidIme(session);
+  await restoreSessionAndroidIme(session, stateDir);
   if (isApplePlatform(session.device.platform)) {
     await stopAppleRunnerForClose(session);
   }

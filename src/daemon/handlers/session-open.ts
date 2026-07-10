@@ -31,10 +31,7 @@ import { STARTUP_SAMPLE_METHOD, type StartupPerfSample } from './session-startup
 import { buildNextOpenSession, buildOpenResult } from './session-open-surface.ts';
 import { markAndroidSnapshotFreshness } from '../android-snapshot-freshness.ts';
 import { resetAndroidFramePerfStats } from '../../platforms/android/perf.ts';
-import {
-  activateAndroidTestIme,
-  markAndroidTestImeStartupRecovery,
-} from '../../platforms/android/ime-lifecycle.ts';
+import { activateAndroidTestIme } from '../../platforms/android/ime-lifecycle.ts';
 import { withKeyedLock } from '../../utils/keyed-lock.ts';
 import { emitDiagnostic, getDiagnosticsMeta } from '../../utils/diagnostics.ts';
 import { inferAndroidPackageAfterOpen } from './session-open-target.ts';
@@ -137,13 +134,9 @@ async function maybeActivateAndroidTestImeForOpen(
 ): Promise<void> {
   if (!shouldActivateAndroidTestIme(device, req)) return;
   try {
-    const result = await activateAndroidTestIme(device);
-    if (result.activated || result.alreadyActive) {
-      // Record that this state dir now owns a switched IME, so daemon-startup recovery (and only
-      // then) will scan adb after a crash. Written after activation so a crash cannot leave the
-      // helper active without the marker that triggers recovery.
-      await markAndroidTestImeStartupRecovery(stateDir);
-    }
+    // activate writes the device-scoped recovery marker itself, before the IME switch, so there is
+    // no post-switch/pre-marker crash window.
+    await activateAndroidTestIme(device, { stateDir });
   } catch (error) {
     // Never block open on a helper install failure; fall open to the existing text-entry path.
     emitDiagnostic({

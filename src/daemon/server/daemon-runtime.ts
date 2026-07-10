@@ -136,7 +136,7 @@ export async function startDaemonRuntime(
   };
 
   const teardownDaemonSession = async (session: SessionState): Promise<void> => {
-    const teardown = teardownSessionResources(session, session.name).catch((error) => {
+    const teardown = teardownSessionResources(session, session.name, baseDir).catch((error) => {
       stderr.write(
         `Daemon session teardown error (${session.name}): ${
           error instanceof Error ? error.message : String(error)
