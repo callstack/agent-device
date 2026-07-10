@@ -1,18 +1,12 @@
 import { describe, expect, test } from 'vitest';
 import type { CliFlags } from '../../cli/parser/cli-flags.ts';
-import {
-  alertCliReader,
-  alertDaemonWriter,
-  diffCliReader,
-  screenshotCliReader,
-  screenshotDaemonWriter,
-  settingsCliReader,
-  settingsDaemonWriter,
-  snapshotCliReader,
-  waitCliReader,
-  waitDaemonWriter,
-} from './index.ts';
+import { alertCliReader, alertDaemonWriter } from './alert.ts';
+import { diffCliReader } from './diff.ts';
 import { snapshotCliOutput } from './output.ts';
+import { screenshotCliReader, screenshotDaemonWriter } from './screenshot.ts';
+import { settingsCliReader, settingsDaemonWriter } from './settings.ts';
+import { snapshotCliReader } from './snapshot.ts';
+import { waitCliReader, waitDaemonWriter } from './wait.ts';
 
 function flags(overrides: Partial<CliFlags> = {}): CliFlags {
   return overrides as CliFlags;

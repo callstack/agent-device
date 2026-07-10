@@ -4,11 +4,8 @@ import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '../../kernel/errors.ts';
-import {
-  applyRuntimeHintsToApp,
-  clearRuntimeHintsFromApp,
-  resolveRuntimeTransportHints,
-} from '../runtime-hints.ts';
+import { applyRuntimeHintsToApp, clearRuntimeHintsFromApp } from '../runtime-hints.ts';
+import { resolveRuntimeTransportHints } from '../../utils/runtime-transport.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 
 async function withMockedAdb(

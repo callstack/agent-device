@@ -15,7 +15,6 @@ import {
 } from '../../kernel/snapshot.ts';
 import { annotateCoveredSnapshotNodes } from '../../snapshot/snapshot-occlusion.ts';
 import { normalizeSnapshotTree } from '../../snapshot/snapshot-tree.ts';
-export { buildSnapshotVisibility } from '../../snapshot/snapshot-visibility.ts';
 import { isAndroidInputMethodSnapshotNode } from '../../snapshot/android-input-method-overlays.ts';
 import type { SessionState } from '../types.ts';
 import {

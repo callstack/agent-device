@@ -3,4 +3,4 @@ export type {
   RemoteConfigProfileOptions,
   ResolvedRemoteConfigProfile,
 } from './remote-config-schema.ts';
-export { resolveRemoteConfigPath, resolveRemoteConfigProfile } from './remote-config-core.ts';
+export { resolveRemoteConfigProfile } from './remote-config-core.ts';

@@ -32,8 +32,6 @@ import {
 import { resolveSelectorChain } from '../selectors.ts';
 import type { SelectorChain } from '../../utils/selectors-parse.ts';
 
-export { parseFindArgs } from '../../utils/finders.ts';
-
 type FindContext = {
   req: DaemonRequest;
   sessionName: string;

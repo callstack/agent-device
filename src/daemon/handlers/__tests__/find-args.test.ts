@@ -1,6 +1,5 @@
 import { expect, test } from 'vitest';
-import { parseFindArgs } from '../find.ts';
-import { parseFindSelectorExpression } from '../../../utils/finders.ts';
+import { parseFindArgs, parseFindSelectorExpression } from '../../../utils/finders.ts';
 
 test('parseFindArgs defaults to click with any locator', () => {
   const parsed = parseFindArgs(['Login']);

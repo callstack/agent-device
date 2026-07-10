@@ -33,7 +33,7 @@ const DEFAULT_ANDROID_PREFS_XML = [
   '',
 ].join('\n');
 
-export { resolveRuntimeTransportHints, trimRuntimeValue } from '../utils/runtime-transport.ts';
+export { trimRuntimeValue } from '../utils/runtime-transport.ts';
 
 export function hasRuntimeTransportHints(runtime: SessionRuntimeHints | undefined): boolean {
   return resolveRuntimeTransportHints(runtime) !== undefined;

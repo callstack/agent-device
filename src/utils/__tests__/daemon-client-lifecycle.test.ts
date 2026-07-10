@@ -23,11 +23,8 @@ vi.mock('../timeouts.ts', async (importOriginal) => {
 });
 
 import { resolveDaemonPaths, type DaemonPaths } from '../../daemon/config.ts';
-import {
-  computeDaemonCodeSignature,
-  sendToDaemon,
-  type DaemonRequest,
-} from '../../daemon/client/daemon-client.ts';
+import { sendToDaemon, type DaemonRequest } from '../../daemon/client/daemon-client.ts';
+import { computeDaemonCodeSignature } from '../../daemon/code-signature.ts';
 import { sendRequest } from '../../daemon/client/daemon-client-transport.ts';
 import {
   closeLoopbackServer,

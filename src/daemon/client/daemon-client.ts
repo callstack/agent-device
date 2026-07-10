@@ -14,17 +14,6 @@ import {
 import { sendRequest } from './daemon-client-transport.ts';
 import { resolveDaemonRequestTimeoutMs } from './daemon-client-timeout.ts';
 
-export { computeDaemonCodeSignature } from '../code-signature.ts';
-export { downloadRemoteArtifact } from '../../remote/daemon-artifacts.ts';
-export {
-  cleanupFailedDaemonStartupMetadata,
-  resolveDaemonStartupHint,
-} from './daemon-client-metadata.ts';
-export { canConnectSocket } from './daemon-client-transport.ts';
-export {
-  resolveDaemonRequestTimeoutMs,
-  shouldResetDaemonAfterRequestTimeout,
-} from './daemon-client-timeout.ts';
 export type DaemonRequest = SharedDaemonRequest;
 export type DaemonResponse = SharedDaemonResponse;
 type DaemonTransportOptions = {

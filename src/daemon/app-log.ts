@@ -38,16 +38,7 @@ registerBuiltinPlatformPlugins();
 export type { AppLogResult } from './app-log-process.ts';
 export type { AppLogState } from './app-log-process.ts';
 export type { AppLogFailure } from './app-log-process.ts';
-export { APP_LOG_PID_FILENAME, cleanupStaleAppLogProcesses } from './app-log-process.ts';
-export {
-  assertAndroidPackageArgSafe,
-  readRecentAndroidLogcatForPackage,
-} from './app-log-android.ts';
-export {
-  buildAppleLogPredicate,
-  buildIosDeviceConsoleLaunchArgs,
-  buildIosSimulatorLogStreamArgs,
-} from './app-log-ios.ts';
+export { readRecentAndroidLogcatForPackage } from './app-log-android.ts';
 export { runAppLogDoctor, type AppLogDoctorResult } from './app-log-doctor.ts';
 
 export type SessionNetworkCapture = {

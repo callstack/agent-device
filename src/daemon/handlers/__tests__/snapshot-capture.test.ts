@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
-import { buildSnapshotState, buildSnapshotVisibility } from '../snapshot-capture.ts';
+import { buildSnapshotState } from '../snapshot-capture.ts';
+import { buildSnapshotVisibility } from '../../../snapshot/snapshot-visibility.ts';
 
 test('buildSnapshotState handles undefined nodes gracefully', () => {
   const state = buildSnapshotState({ nodes: undefined, truncated: undefined }, undefined);

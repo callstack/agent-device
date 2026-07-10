@@ -12,16 +12,18 @@ import {
   supportsLoopbackBind,
 } from '../../__tests__/test-utils/index.ts';
 import { runCmdBackground } from '../exec.ts';
+import { sendToDaemon } from '../../daemon/client/daemon-client.ts';
+import { computeDaemonCodeSignature } from '../../daemon/code-signature.ts';
+import { downloadRemoteArtifact } from '../../remote/daemon-artifacts.ts';
 import {
-  canConnectSocket,
   cleanupFailedDaemonStartupMetadata,
-  computeDaemonCodeSignature,
-  downloadRemoteArtifact,
-  resolveDaemonRequestTimeoutMs,
   resolveDaemonStartupHint,
-  sendToDaemon,
+} from '../../daemon/client/daemon-client-metadata.ts';
+import { canConnectSocket } from '../../daemon/client/daemon-client-transport.ts';
+import {
+  resolveDaemonRequestTimeoutMs,
   shouldResetDaemonAfterRequestTimeout,
-} from '../../daemon/client/daemon-client.ts';
+} from '../../daemon/client/daemon-client-timeout.ts';
 import { resolveDaemonPaths } from '../../daemon/config.ts';
 import type { RequestProgressEvent } from '../../daemon/request-progress.ts';
 import {
