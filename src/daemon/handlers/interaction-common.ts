@@ -13,8 +13,7 @@ import {
   stripInternalInteractionFlags,
 } from '../interaction-outcome-policy.ts';
 import { markPostGestureStabilization } from '../post-gesture-stabilization.ts';
-import { computeTargetEvidence } from '../session-target-evidence.ts';
-import type { RecordedTargetCapture } from './interaction-touch-response.ts';
+import { computeTargetEvidence, type RecordedTargetCapture } from '../session-target-evidence.ts';
 
 export type ContextFromFlags = (
   flags: CommandFlags | undefined,
@@ -61,9 +60,7 @@ export function finalizeTouchInteraction(params: {
   } = params;
   const actionFlags = stripInternalInteractionFlags(flags);
   const targetEvidence =
-    session.recordSession && recordedTarget
-      ? computeTargetEvidence({ node: recordedTarget.node, nodes: recordedTarget.preActionNodes })
-      : undefined;
+    session.recordSession && recordedTarget ? computeTargetEvidence(recordedTarget) : undefined;
   sessionStore.recordAction(session, {
     command,
     positionals,

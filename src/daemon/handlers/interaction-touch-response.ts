@@ -5,7 +5,7 @@ import type {
   PressCommandResult,
   SettleObservation,
 } from '../../contracts/interaction.ts';
-import type { SnapshotNode } from '../../kernel/snapshot.ts';
+import type { RecordedTargetCapture } from '../session-target-evidence.ts';
 import { successText } from '../../utils/success-text.ts';
 import { interactionResultExtra } from './interaction-touch-targets.ts';
 
@@ -38,12 +38,6 @@ export type InteractionResponseSource =
       publicData?: Record<string, unknown>;
       point: { x: number; y: number };
     };
-
-/** ADR 0012 decision 3: record-time input for `computeTargetEvidence`. */
-export type RecordedTargetCapture = {
-  node: SnapshotNode;
-  preActionNodes: SnapshotNode[];
-};
 
 export type InteractionResponsePayloads = {
   /** Recorded in session history and used for touch visualization. */

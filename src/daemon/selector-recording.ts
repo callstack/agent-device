@@ -1,5 +1,6 @@
 import type { DaemonRequest } from './types.ts';
 import { SessionStore } from './session-store.ts';
+import { computeTargetEvidence, type RecordedTargetCapture } from './session-target-evidence.ts';
 
 export function buildFindRecordResult(
   result: Record<string, unknown>,
@@ -86,14 +87,19 @@ export function recordIfSession(
   sessionName: string,
   req: DaemonRequest,
   result: Record<string, unknown>,
+  /** ADR 0012 decision 3: record-time input for the `target-v1` annotation. */
+  recordedTarget?: RecordedTargetCapture,
 ): void {
   const session = sessionStore.get(sessionName);
   if (!session) return;
+  const targetEvidence =
+    session.recordSession && recordedTarget ? computeTargetEvidence(recordedTarget) : undefined;
   sessionStore.recordAction(session, {
     command: req.command,
     positionals: req.positionals ?? [],
     flags: req.flags ?? {},
     result,
+    ...(targetEvidence ? { targetEvidence } : {}),
   });
 }
 

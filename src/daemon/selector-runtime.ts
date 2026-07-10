@@ -171,6 +171,10 @@ export async function dispatchGetViaRuntime(
       params.sessionName,
       req,
       buildGetRecordResult(result, sub),
+      {
+        node: result.node,
+        preActionNodes: result.preActionNodes,
+      },
     );
     const data = toDaemonGetData(result);
     return staleRefsWarning ? { ...data, warning: staleRefsWarning } : data;
@@ -296,6 +300,9 @@ async function dispatchDirectIosSelectorGet(
   selectorExpression: string,
 ): Promise<DaemonResponse | null> {
   const session = params.sessionStore.get(params.sessionName);
+  // ADR 0012 decision 3: recording requires the snapshot path so target
+  // evidence can be computed from the resolution tree.
+  if (session?.recordSession) return null;
   const selector = readSimpleIosSelectorTarget({ session, selectorExpression });
   if (!session || !selector) return null;
   // get text intentionally disambiguates label/text/value triplets from snapshots; the runner

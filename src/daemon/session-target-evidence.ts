@@ -32,15 +32,21 @@ import {
   type TargetVerification,
 } from '../replay/target-identity.ts';
 
-export function computeTargetEvidence(params: {
+/** ADR 0012 decision 3: the resolved winner and the tree it was resolved from. */
+export type RecordedTargetCapture = {
   node: SnapshotNode;
-  nodes: readonly SnapshotNode[];
-}): TargetAnnotationV1 | undefined {
-  const { node, nodes } = params;
+  preActionNodes: SnapshotNode[];
+};
+
+export function computeTargetEvidence(
+  capture: RecordedTargetCapture,
+): TargetAnnotationV1 | undefined {
+  const { node, preActionNodes: nodes } = capture;
   if (typeof node.index !== 'number') return undefined;
   const byIndex = buildIndexMap(nodes);
   const identity = boundedLocalIdentity(node);
-  const fullAncestry = buildAncestryChain(node, byIndex, TARGET_ANNOTATION_MAX_ANCESTRY);
+  const ancestryWalk = buildAncestryChain(node, byIndex, TARGET_ANNOTATION_MAX_ANCESTRY);
+  const fullAncestry = ancestryWalk.chain;
   const sibling = computeSiblingOrdinal(nodes, node);
   const scrollRegion = computeScrollRegionKey(node, byIndex);
   const rect = boundedRect(node);
@@ -80,7 +86,11 @@ export function computeTargetEvidence(params: {
       utf8ByteLength(serializeTargetAnnotationV1({ ...candidate, verification: 'unverifiable' })) <=
       TARGET_ANNOTATION_MAX_PAYLOAD_BYTES
     ) {
-      candidate.verification = runRecordTimeSelfCheck({ node, domain });
+      // A broken parent walk is a capture anomaly: fail closed instead of
+      // self-checking against structural signals that cannot be trusted.
+      candidate.verification = ancestryWalk.broken
+        ? 'unverifiable'
+        : runRecordTimeSelfCheck({ node, domain });
       return candidate;
     }
     if (ancestryLength === floor) {
@@ -123,26 +133,38 @@ function boundedLocalIdentity(node: SnapshotNode): LocalIdentity {
   };
 }
 
+type AncestryWalk = {
+  chain: TargetAncestryEntry[];
+  /**
+   * Decision 3 capture anomaly: a `parentIndex` that resolves to no node, or
+   * a parent cycle. A broken walk fails the annotation closed to
+   * `unverifiable` — the structural signals cannot be trusted.
+   */
+  broken: boolean;
+};
+
 /** Decision 3 "Ancestry": nearest K ancestors, leaf→root, {role,label?}. */
 function buildAncestryChain(
   node: SnapshotNode,
   byIndex: Map<number, SnapshotNode>,
   limit: number,
-): TargetAncestryEntry[] {
+): AncestryWalk {
   const chain: TargetAncestryEntry[] = [];
-  const visited = new Set<number>();
-  let current = typeof node.parentIndex === 'number' ? byIndex.get(node.parentIndex) : undefined;
-  while (current && !visited.has(current.index) && chain.length < limit) {
-    visited.add(current.index);
-    const identity = boundedLocalIdentity(current);
+  const visited = new Set<number>([node.index]);
+  let current = node;
+  while (chain.length < limit) {
+    if (typeof current.parentIndex !== 'number') return { chain, broken: false };
+    const parent = byIndex.get(current.parentIndex);
+    if (!parent || visited.has(parent.index)) return { chain, broken: true };
+    visited.add(parent.index);
+    const identity = boundedLocalIdentity(parent);
     chain.push({
       role: identity.role,
       ...(identity.label !== undefined ? { label: identity.label } : {}),
     });
-    current =
-      typeof current.parentIndex === 'number' ? byIndex.get(current.parentIndex) : undefined;
+    current = parent;
   }
-  return chain;
+  return { chain, broken: false };
 }
 
 /**
@@ -223,8 +245,9 @@ function computeDisambiguationDomain(params: {
   // leaf-anchored ancestry prefix.
   const identitySet = nodes.filter((candidate) => {
     if (!matchesLocalIdentity(boundedLocalIdentity(candidate), identity)) return false;
-    const observedAncestry = buildAncestryChain(candidate, byIndex, Math.max(ancestry.length, 1));
-    return matchesAncestryPrefix(observedAncestry, ancestry);
+    const observed = buildAncestryChain(candidate, byIndex, Math.max(ancestry.length, 1));
+    // A candidate with a broken parent walk cannot prove the prefix.
+    return !observed.broken && matchesAncestryPrefix(observed.chain, ancestry);
   });
 
   const siblingMatches = identitySet.filter(

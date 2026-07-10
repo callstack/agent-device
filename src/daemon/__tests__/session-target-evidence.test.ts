@@ -44,7 +44,7 @@ function toolbarFixture(): SnapshotNode[] {
 test('computeTargetEvidence: single unambiguous node is verified with the expected identity/ancestry/rect', () => {
   const nodes = toolbarFixture();
   const winner = findByLabel(nodes, 'Save');
-  const evidence = computeTargetEvidence({ node: winner, nodes });
+  const evidence = computeTargetEvidence({ node: winner, preActionNodes: nodes });
   assert.ok(evidence);
   assert.deepEqual(evidence, {
     id: 'save',
@@ -102,7 +102,7 @@ function scrollableListFixture(): SnapshotNode[] {
 test('computeTargetEvidence: scrollRegion is the nearest scrollable ancestor local identity, viewportOrder is top-to-bottom within it', () => {
   const nodes = scrollableListFixture();
   const winner = nodes[2]!; // rect y:100 -> should be last (index 2) in top-to-bottom order
-  const evidence = computeTargetEvidence({ node: winner, nodes });
+  const evidence = computeTargetEvidence({ node: winner, preActionNodes: nodes });
   assert.ok(evidence);
   assert.deepEqual(evidence.scrollRegion, { role: 'scrollview', id: 'editor-scroll' });
   // rows are at y=0,50,100 -> the y:100 row is ordinal 2 (0-based) top-to-bottom
@@ -113,11 +113,14 @@ test('computeTargetEvidence: scrollRegion is the nearest scrollable ancestor loc
 test('computeTargetEvidence: a stable scroll-region ID takes precedence over a changed label', () => {
   const recordedNodes = scrollableListFixture();
   recordedNodes[1]!.label = 'Inbox';
-  const recorded = computeTargetEvidence({ node: recordedNodes[2]!, nodes: recordedNodes });
+  const recorded = computeTargetEvidence({
+    node: recordedNodes[2]!,
+    preActionNodes: recordedNodes,
+  });
 
   const currentNodes = scrollableListFixture();
   currentNodes[1]!.label = 'Messages';
-  const current = computeTargetEvidence({ node: currentNodes[2]!, nodes: currentNodes });
+  const current = computeTargetEvidence({ node: currentNodes[2]!, preActionNodes: currentNodes });
 
   assert.ok(recorded);
   assert.ok(current);
@@ -154,7 +157,7 @@ test('computeTargetEvidence: duplicate identity across two parents is still veri
     },
   ]);
   const winner = nodes[4]!; // the second "Go back" button, under the second Row
-  const evidence = computeTargetEvidence({ node: winner, nodes });
+  const evidence = computeTargetEvidence({ node: winner, preActionNodes: nodes });
   assert.ok(evidence);
   assert.equal(evidence.id, undefined);
   assert.equal(evidence.role, 'button');
@@ -199,7 +202,7 @@ test('computeTargetEvidence: max-size labels across K=8 ancestors reduce ancestr
   const nodes = toSnapshotNodes(raw);
   const winner = nodes.at(-1)!;
 
-  const evidence = computeTargetEvidence({ node: winner, nodes });
+  const evidence = computeTargetEvidence({ node: winner, preActionNodes: nodes });
   assert.ok(evidence);
   assert.ok(evidence.ancestry.length <= TARGET_ANNOTATION_MAX_ANCESTRY);
   assert.ok(
@@ -228,7 +231,7 @@ test('computeTargetEvidence: a root node with no ancestors has empty ancestry an
       depth: 0,
     },
   ]);
-  const evidence = computeTargetEvidence({ node: nodes[0]!, nodes });
+  const evidence = computeTargetEvidence({ node: nodes[0]!, preActionNodes: nodes });
   assert.ok(evidence);
   assert.deepEqual(evidence.ancestry, []);
   assert.equal(evidence.verification, 'verified');
@@ -322,7 +325,7 @@ function bottomTabsRealCaptureFixture(): SnapshotNode[] {
 test('computeTargetEvidence: real-capture-shaped tree (undefined hittable, anonymous wrapper ancestor)', () => {
   const nodes = bottomTabsRealCaptureFixture();
   const winner = findByLabel(nodes, 'Article, unselected');
-  const evidence = computeTargetEvidence({ node: winner, nodes });
+  const evidence = computeTargetEvidence({ node: winner, preActionNodes: nodes });
   assert.ok(evidence);
   assert.equal(evidence.id, 'article');
   assert.equal(evidence.role, 'button');
@@ -358,7 +361,7 @@ test('computeTargetEvidence: a node with an over-cap id still matches itself and
       depth: 0,
     },
   ]);
-  const evidence = computeTargetEvidence({ node: nodes[0]!, nodes });
+  const evidence = computeTargetEvidence({ node: nodes[0]!, preActionNodes: nodes });
   assert.ok(evidence);
   assert.equal(evidence.id, overCapId.slice(0, TARGET_ANNOTATION_MAX_FIELD_BYTES));
   assert.equal(evidence.verification, 'verified');
@@ -403,7 +406,7 @@ test('computeTargetEvidence: reduction sizes against the worst-case verification
   let sawReducedAncestry = false;
   for (let tunable = 0; tunable <= TARGET_ANNOTATION_MAX_FIELD_BYTES; tunable += 1) {
     const nodes = buildChain(tunable);
-    const evidence = computeTargetEvidence({ node: nodes.at(-1)!, nodes });
+    const evidence = computeTargetEvidence({ node: nodes.at(-1)!, preActionNodes: nodes });
     assert.ok(evidence);
     if (evidence.ancestry.length === TARGET_ANNOTATION_MAX_ANCESTRY) sawFullAncestry = true;
     else sawReducedAncestry = true;
@@ -421,4 +424,45 @@ test('computeTargetEvidence: reduction sizes against the worst-case verification
   // have been exercised.
   assert.ok(sawFullAncestry, 'sweep never produced an unreduced payload — fixture too large');
   assert.ok(sawReducedAncestry, 'sweep never forced a reduction — fixture too small');
+});
+
+// ---------------------------------------------------------------------------
+// Broken parent linkage is a capture anomaly (decision 3): fail closed to
+// 'unverifiable', never 'verified' on structural data that cannot be trusted.
+// ---------------------------------------------------------------------------
+
+test('computeTargetEvidence: a dangling parentIndex records unverifiable, never verified', () => {
+  const nodes = toSnapshotNodes([
+    {
+      index: 0,
+      type: 'Button',
+      identifier: 'save',
+      label: 'Save',
+      rect: { x: 0, y: 0, width: 10, height: 10 },
+      depth: 1,
+      parentIndex: 42, // no node with index 42 exists
+    },
+  ]);
+  const evidence = computeTargetEvidence({ node: nodes[0]!, preActionNodes: nodes });
+  assert.ok(evidence);
+  assert.equal(evidence.verification, 'unverifiable');
+});
+
+test('computeTargetEvidence: a parent cycle records unverifiable, never verified', () => {
+  const nodes = toSnapshotNodes([
+    { index: 0, type: 'View', depth: 0, parentIndex: 1 },
+    { index: 1, type: 'View', depth: 1, parentIndex: 0 },
+    {
+      index: 2,
+      type: 'Button',
+      identifier: 'save',
+      label: 'Save',
+      rect: { x: 0, y: 0, width: 10, height: 10 },
+      depth: 2,
+      parentIndex: 1,
+    },
+  ]);
+  const evidence = computeTargetEvidence({ node: nodes[2]!, preActionNodes: nodes });
+  assert.ok(evidence);
+  assert.equal(evidence.verification, 'unverifiable');
 });

@@ -78,12 +78,16 @@ export type GetCommandResult =
       text: string;
       node: SnapshotNode;
       selectorChain?: string[];
+      /** ADR 0012 decision 3: the tree `node` was resolved from, for record-time evidence. */
+      preActionNodes: SnapshotNode[];
     }
   | {
       kind: 'attrs';
       target: ResolvedTarget;
       node: SnapshotNode;
       selectorChain?: string[];
+      /** ADR 0012 decision 3: the tree `node` was resolved from, for record-time evidence. */
+      preActionNodes: SnapshotNode[];
     };
 
 export type GetTextCommandOptions = CommandContext &
@@ -199,11 +203,12 @@ export const getCommand: RuntimeCommand<GetCommandOptions, GetCommandResult> = a
       action: 'get',
     });
     const target = { kind: 'ref' as const, ref: `@${resolved.ref}` };
+    const preActionNodes = capture.snapshot.nodes;
     if (options.property === 'attrs') {
-      return { kind: 'attrs', target, node: resolved.node, selectorChain };
+      return { kind: 'attrs', target, node: resolved.node, selectorChain, preActionNodes };
     }
     const text = await readText(runtime, capture, resolved.node);
-    return { kind: 'text', target, text, node: resolved.node, selectorChain };
+    return { kind: 'text', target, text, node: resolved.node, selectorChain, preActionNodes };
   }
 
   const resolved = await resolveSelectorNode(runtime, options, options.session ?? 'default', {
@@ -221,6 +226,7 @@ export const getCommand: RuntimeCommand<GetCommandOptions, GetCommandResult> = a
       target: { kind: 'selector', selector: resolved.selector },
       node: resolved.node,
       selectorChain,
+      preActionNodes: resolved.capture.snapshot.nodes,
     };
   }
 
@@ -231,6 +237,7 @@ export const getCommand: RuntimeCommand<GetCommandOptions, GetCommandResult> = a
     text,
     node: resolved.node,
     selectorChain,
+    preActionNodes: resolved.capture.snapshot.nodes,
   };
 };
 
