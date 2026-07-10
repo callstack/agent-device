@@ -5,6 +5,7 @@ import { runCmd } from '../../utils/exec.ts';
 import { resolveAndroidAdbExecutor, resolveAndroidAdbProvider } from './adb-executor.ts';
 import type { AndroidAdbExecutor } from './adb-executor.ts';
 import {
+  ANDROID_IME_HELPER_SERVICE_COMPONENT,
   ensureAndroidImeHelper,
   getAndroidImeHelperDeviceKey,
   resolveAndroidImeHelperArtifact,
@@ -62,7 +63,16 @@ export async function activateAndroidTestIme(
     };
   }
 
-  // Persist before switching, so a mid-crash still leaves a recoverable record.
+  // Mark active BEFORE switching. Startup orphan-recovery runs fire-and-forget and only touches a
+  // device once it reads currentIme === helper; because we add to the set strictly before the
+  // `ime set`, any recovery pass that could observe the helper active also observes this flag and
+  // skips the device, so it can never restore out from under a session we are opening.
+  const deviceKey = getAndroidImeHelperDeviceKey(device);
+  activeTestImeDevices.add(deviceKey);
+
+  // Persist before switching, so a mid-crash still leaves a recoverable record. Never persist the
+  // helper itself as the previous IME (the `alreadyActive` branch above returns before this),
+  // which keeps the recovery value trustworthy under concurrent activation.
   await writePersistedPreviousIme(adb, currentIme);
   await adb(['shell', 'ime', 'enable', manifest.serviceComponent], {
     allowFailure: true,
@@ -72,13 +82,18 @@ export async function activateAndroidTestIme(
     allowFailure: true,
     timeoutMs: 10_000,
   });
-  if (setResult.exitCode !== 0) {
-    // Switch never took effect; roll back the persisted record.
+  // Confirm the switch actually took effect by reading it back; do not trust the exit code alone.
+  const activeIme = await readAndroidDefaultInputMethod(adb);
+  if (activeIme !== manifest.serviceComponent) {
+    // Switch never took effect, so the helper is not the active IME and the recovery value is
+    // stale. Safe to clear here: this is the activating process, holding the device, so no
+    // concurrent session can have just written a value we would be dropping.
+    activeTestImeDevices.delete(deviceKey);
     await clearPersistedPreviousIme(adb).catch(() => {});
     emitDiagnostic({
       level: 'warn',
       phase: 'android_test_ime_activate_failed',
-      data: { device: device.id, stderr: setResult.stderr.trim() },
+      data: { device: device.id, activeIme, stderr: setResult.stderr.trim() },
     });
     return {
       activated: false,
@@ -88,7 +103,6 @@ export async function activateAndroidTestIme(
     };
   }
 
-  activeTestImeDevices.add(getAndroidImeHelperDeviceKey(device));
   emitDiagnostic({
     phase: 'android_test_ime_activated',
     data: { device: device.id, previousIme: currentIme },
@@ -105,6 +119,7 @@ export async function activateAndroidTestIme(
 export type AndroidTestImeRestoreResult = {
   restored: boolean;
   previousIme?: string;
+  reason?: 'no-record' | 'helper-not-active' | 'set-failed' | 'ok';
 };
 
 export async function restoreAndroidTestIme(
@@ -114,32 +129,66 @@ export async function restoreAndroidTestIme(
   // Skip devices this process never activated (orphans from another process are handled by
   // restoreOrphanedAndroidTestImeOnDaemonStartup and the doctor check).
   if (!activeTestImeDevices.has(deviceKey)) {
-    return { restored: false };
+    return { restored: false, reason: 'no-record' };
   }
+  // Drop the owned-flag first so restoreAndroidTestImeFor's "owned by a live session" guard does
+  // not skip this intentional close-time restore.
   activeTestImeDevices.delete(deviceKey);
   const adb = resolveAndroidAdbExecutor(device);
-  return await restoreAndroidTestImeFor(adb, device.id);
+  return await restoreAndroidTestImeFor(adb, device);
 }
 
+// Undo the helper switch on one device. Invariants the maintainer's review requires:
+//  - Never restore a device a live session in this process owns (the fire-and-forget startup race).
+//  - Only touch the IME when the helper is STILL the active input method. If the user (or a
+//    concurrent session) already switched away, leave their choice alone.
+//  - Only clear the persisted recovery value AFTER confirming the previous IME is actually
+//    restored (read-back). A failed `ime set` must keep the value so a later retry / startup
+//    recovery / doctor remediation can still recover from it — never strand the user on the helper.
 async function restoreAndroidTestImeFor(
   adb: AndroidAdbExecutor,
-  deviceLabel: string,
+  device: DeviceInfo,
 ): Promise<AndroidTestImeRestoreResult> {
+  const deviceLabel = device.id;
+  if (activeTestImeDevices.has(getAndroidImeHelperDeviceKey(device))) {
+    // A live session in this process activated (or is activating) the helper here; leave it be.
+    return { restored: false, reason: 'helper-not-active' };
+  }
   const previousIme = await readPersistedPreviousIme(adb);
   if (!previousIme) {
-    return { restored: false };
+    return { restored: false, reason: 'no-record' };
   }
-  try {
-    await adb(['shell', 'ime', 'set', previousIme], { allowFailure: true, timeoutMs: 10_000 });
-  } finally {
-    // Clear even on failure; the doctor check is the safety net for genuinely stuck state.
-    await clearPersistedPreviousIme(adb).catch(() => {});
+  const currentIme = await readAndroidDefaultInputMethod(adb);
+  if (currentIme !== ANDROID_IME_HELPER_SERVICE_COMPONENT) {
+    // Helper is not active — the user switched away, another process already restored, or the
+    // helper was never really set. Do not overwrite the current IME, and do not clear the record
+    // (clearing here could drop a value a concurrent activation just wrote).
+    emitDiagnostic({
+      level: 'debug',
+      phase: 'android_test_ime_restore_skipped',
+      data: { device: deviceLabel, currentIme, previousIme },
+    });
+    return { restored: false, previousIme, reason: 'helper-not-active' };
   }
+  await adb(['shell', 'ime', 'set', previousIme], { allowFailure: true, timeoutMs: 10_000 });
+  const afterIme = await readAndroidDefaultInputMethod(adb);
+  if (afterIme !== previousIme) {
+    // Restore did not take effect. Keep the persisted value so recovery can retry — clearing it
+    // now would permanently strand the user on the helper IME.
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'android_test_ime_restore_failed',
+      data: { device: deviceLabel, previousIme, afterIme },
+    });
+    return { restored: false, previousIme, reason: 'set-failed' };
+  }
+  // Confirmed back on the previous IME — now it is safe to drop the recovery value.
+  await clearPersistedPreviousIme(adb).catch(() => {});
   emitDiagnostic({
     phase: 'android_test_ime_restored',
     data: { device: deviceLabel, previousIme },
   });
-  return { restored: true, previousIme };
+  return { restored: true, previousIme, reason: 'ok' };
 }
 
 // Best-effort: restore any test IME left active by a crashed daemon run.
@@ -167,7 +216,7 @@ export async function restoreOrphanedAndroidTestImeOnDaemonStartup(params: {
     };
     try {
       const adb = resolveAndroidAdbExecutor(device);
-      const result = await restoreAndroidTestImeFor(adb, serial);
+      const result = await restoreAndroidTestImeFor(adb, device);
       if (result.restored) {
         emitDiagnostic({
           level: 'warn',

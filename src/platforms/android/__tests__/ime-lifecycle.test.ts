@@ -37,6 +37,8 @@ import {
   resetAndroidTestImeActivationCacheForTests,
 } from '../ime-lifecycle.ts';
 
+const LATIN_IME = 'com.google.android.inputmethod.latin/.LatinIME';
+
 beforeEach(() => {
   resetAndroidImeHelperInstallCache();
   resetAndroidTestImeActivationCacheForTests();
@@ -53,6 +55,9 @@ function fakeDeviceState(initialIme: string) {
   let defaultIme = initialIme;
   let previousImeRecord: string | undefined;
   let installed = false;
+  // `ime set <target>` for a blocked target reports success but does not change the active IME —
+  // simulates a device that refuses the switch (so the restore read-back mismatches).
+  const blockedImeSetTargets = new Set<string>();
 
   function handleShowVersionCode(): FakeAdbResult {
     return installed
@@ -61,7 +66,9 @@ function fakeDeviceState(initialIme: string) {
   }
 
   function handleImeSet(args: string[]): FakeAdbResult {
-    defaultIme = args[3] as string;
+    const target = args[3] as string;
+    if (blockedImeSetTargets.has(target)) return ok();
+    defaultIme = target;
     return ok();
   }
 
@@ -102,27 +109,32 @@ function fakeDeviceState(initialIme: string) {
     markInstalled: () => {
       installed = true;
     },
+    blockImeSetTo: (target: string) => blockedImeSetTargets.add(target),
+    unblockImeSetTo: (target: string) => blockedImeSetTargets.delete(target),
+    forceCurrentIme: (value: string) => {
+      defaultIme = value;
+    },
     getCurrentIme: () => defaultIme,
     getPreviousImeRecord: () => previousImeRecord,
   };
 }
 
 test('activateAndroidTestIme persists the previous IME before switching', async () => {
-  const state = fakeDeviceState('com.google.android.inputmethod.latin/.LatinIME');
+  const state = fakeDeviceState(LATIN_IME);
   state.markInstalled();
 
   await withAndroidAdbProvider(state.adb, { serial: ANDROID_EMULATOR.id }, async () => {
     const result = await activateAndroidTestIme(ANDROID_EMULATOR);
     assert.equal(result.activated, true);
-    assert.equal(result.previousIme, 'com.google.android.inputmethod.latin/.LatinIME');
+    assert.equal(result.previousIme, LATIN_IME);
     assert.equal(state.getCurrentIme(), HELPER_SERVICE);
-    assert.equal(state.getPreviousImeRecord(), 'com.google.android.inputmethod.latin/.LatinIME');
+    assert.equal(state.getPreviousImeRecord(), LATIN_IME);
     assert.equal(isAndroidTestImeActive(ANDROID_EMULATOR), true);
   });
 });
 
 test('restoreAndroidTestIme restores the persisted previous IME and clears the record', async () => {
-  const state = fakeDeviceState('com.google.android.inputmethod.latin/.LatinIME');
+  const state = fakeDeviceState(LATIN_IME);
   state.markInstalled();
 
   await withAndroidAdbProvider(state.adb, { serial: ANDROID_EMULATOR.id }, async () => {
@@ -131,15 +143,15 @@ test('restoreAndroidTestIme restores the persisted previous IME and clears the r
 
     const restoreResult = await restoreAndroidTestIme(ANDROID_EMULATOR);
     assert.equal(restoreResult.restored, true);
-    assert.equal(restoreResult.previousIme, 'com.google.android.inputmethod.latin/.LatinIME');
-    assert.equal(state.getCurrentIme(), 'com.google.android.inputmethod.latin/.LatinIME');
+    assert.equal(restoreResult.previousIme, LATIN_IME);
+    assert.equal(state.getCurrentIme(), LATIN_IME);
     assert.equal(state.getPreviousImeRecord(), undefined);
     assert.equal(isAndroidTestImeActive(ANDROID_EMULATOR), false);
   });
 });
 
 test('restoreAndroidTestIme is a no-op when nothing was ever activated', async () => {
-  const state = fakeDeviceState('com.google.android.inputmethod.latin/.LatinIME');
+  const state = fakeDeviceState(LATIN_IME);
 
   await withAndroidAdbProvider(state.adb, { serial: ANDROID_EMULATOR.id }, async () => {
     const result = await restoreAndroidTestIme(ANDROID_EMULATOR);
@@ -147,8 +159,80 @@ test('restoreAndroidTestIme is a no-op when nothing was ever activated', async (
   });
 });
 
+test('a failed restore keeps the persisted recovery value for a later retry', async () => {
+  const state = fakeDeviceState(LATIN_IME);
+  state.markInstalled();
+
+  await withAndroidAdbProvider(state.adb, { serial: ANDROID_EMULATOR.id }, async () => {
+    await activateAndroidTestIme(ANDROID_EMULATOR);
+    assert.equal(state.getCurrentIme(), HELPER_SERVICE);
+    // Device refuses to switch back to the previous IME.
+    state.blockImeSetTo(LATIN_IME);
+
+    const result = await restoreAndroidTestIme(ANDROID_EMULATOR);
+
+    assert.equal(result.restored, false);
+    assert.equal(result.reason, 'set-failed');
+    // Still stranded on the helper, and — critically — the recovery value survives so a later
+    // retry / startup recovery / doctor remediation can still un-strand the user.
+    assert.equal(state.getCurrentIme(), HELPER_SERVICE);
+    assert.equal(state.getPreviousImeRecord(), LATIN_IME);
+  });
+
+  // A subsequent recovery (device now accepts the switch) uses the surviving value and succeeds.
+  state.unblockImeSetTo(LATIN_IME);
+  state.forceCurrentIme(HELPER_SERVICE);
+  await withAndroidAdbProvider(state.adb, { serial: ANDROID_EMULATOR.id }, async () => {
+    await restoreOrphanedAndroidTestImeOnDaemonStartup({
+      listSerials: async () => [ANDROID_EMULATOR.id],
+    });
+    assert.equal(state.getCurrentIme(), LATIN_IME);
+    assert.equal(state.getPreviousImeRecord(), undefined);
+  });
+});
+
+test('startup recovery is a no-op when the current IME is no longer the helper', async () => {
+  const state = fakeDeviceState(LATIN_IME);
+  state.markInstalled();
+
+  await withAndroidAdbProvider(state.adb, { serial: ANDROID_EMULATOR.id }, async () => {
+    await activateAndroidTestIme(ANDROID_EMULATOR);
+    resetAndroidTestImeActivationCacheForTests(); // process "crashed"; record persists on device
+    // The user (or another tool) has since legitimately switched to a different IME.
+    const OTHER_IME = 'com.example.other/.OtherIme';
+    state.forceCurrentIme(OTHER_IME);
+
+    await restoreOrphanedAndroidTestImeOnDaemonStartup({
+      listSerials: async () => [ANDROID_EMULATOR.id],
+    });
+
+    // Startup recovery must NOT overwrite the user's current choice with the stale recorded value.
+    assert.equal(state.getCurrentIme(), OTHER_IME);
+    // And it must not clear the record either (a concurrent activation could have just written it).
+    assert.equal(state.getPreviousImeRecord(), LATIN_IME);
+  });
+});
+
+test('startup recovery skips a device a live session in this process still owns', async () => {
+  const state = fakeDeviceState(LATIN_IME);
+  state.markInstalled();
+
+  await withAndroidAdbProvider(state.adb, { serial: ANDROID_EMULATOR.id }, async () => {
+    await activateAndroidTestIme(ANDROID_EMULATOR);
+    assert.equal(isAndroidTestImeActive(ANDROID_EMULATOR), true);
+    // Fire-and-forget startup recovery races an open that just activated the helper here.
+    await restoreOrphanedAndroidTestImeOnDaemonStartup({
+      listSerials: async () => [ANDROID_EMULATOR.id],
+    });
+
+    // The live session keeps the helper active; recovery leaves it alone.
+    assert.equal(state.getCurrentIme(), HELPER_SERVICE);
+    assert.equal(state.getPreviousImeRecord(), LATIN_IME);
+  });
+});
+
 test('restoreOrphanedAndroidTestImeOnDaemonStartup restores a stuck IME left by a crashed daemon', async () => {
-  const state = fakeDeviceState('com.google.android.inputmethod.latin/.LatinIME');
+  const state = fakeDeviceState(LATIN_IME);
   state.markInstalled();
 
   await withAndroidAdbProvider(state.adb, { serial: ANDROID_EMULATOR.id }, async () => {
@@ -161,7 +245,7 @@ test('restoreOrphanedAndroidTestImeOnDaemonStartup restores a stuck IME left by 
       listSerials: async () => [ANDROID_EMULATOR.id],
     });
 
-    assert.equal(state.getCurrentIme(), 'com.google.android.inputmethod.latin/.LatinIME');
+    assert.equal(state.getCurrentIme(), LATIN_IME);
   });
 });
 

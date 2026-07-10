@@ -21,6 +21,10 @@ const ANDROID_IME_HELPER_NAME = 'android-ime-helper';
 const ANDROID_IME_HELPER_PACKAGE = 'com.callstack.agentdevice.imehelper';
 const ANDROID_IME_HELPER_SERVICE = 'com.callstack.agentdevice.imehelper/.TestInputMethodService';
 const ANDROID_IME_HELPER_PROTOCOL = 'android-ime-helper-v1';
+
+// Stable service-component id, matched literally by the manifest parser. Exported so the restore
+// lifecycle can compare the device's active IME without reading the packaged artifact from disk.
+export const ANDROID_IME_HELPER_SERVICE_COMPONENT = ANDROID_IME_HELPER_SERVICE;
 const ANDROID_IME_HELPER_INSTALL_TIMEOUT_MS = 30_000;
 const ANDROID_IME_HELPER_BROADCAST_TIMEOUT_MS = 10_000;
 
