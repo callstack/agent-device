@@ -32,6 +32,7 @@ export type CheckId =
   | 'mcp-metadata'
   | 'build'
   | 'unit'
+  | 'coverage'
   | 'output-economy'
   | 'provider-integration'
   | 'interaction-contract'
@@ -54,6 +55,7 @@ export const ALL_CHECKS: readonly CheckId[] = [
   'mcp-metadata',
   'build',
   'unit',
+  'coverage',
   'output-economy',
   'provider-integration',
   'interaction-contract',
@@ -140,6 +142,13 @@ function matchesAny(file: string, globs: readonly string[]): boolean {
   return globs.some((glob) => globToRegExp(glob).test(file));
 }
 
+function literalGlobRoot(glob: string): string {
+  const firstPatternCharacter = glob.search(/[*?{]/);
+  const literalPrefix = firstPatternCharacter === -1 ? glob : glob.slice(0, firstPatternCharacter);
+  const lastSlash = literalPrefix.lastIndexOf('/');
+  return lastSlash === -1 ? '' : literalPrefix.slice(0, lastSlash + 1);
+}
+
 // --- Path classification helpers -------------------------------------------
 const ROOT_TOOLING = new Set([
   'package.json',
@@ -155,7 +164,9 @@ const ROOT_TOOLING = new Set([
 ]);
 
 function isSelectorOwning(file: string): boolean {
-  return file.startsWith('scripts/check-affected/') && !file.endsWith('.md');
+  return (
+    file === 'AGENTS.md' || (file.startsWith('scripts/check-affected/') && !file.endsWith('.md'))
+  );
 }
 
 function isWorkflowTooling(file: string): boolean {
@@ -244,16 +255,40 @@ const srcProdGate: OwnershipRule = ({ file, isSrcProd }) => {
         'platform-src',
         'platform source shapes device/provider wire behavior',
       ),
+      reason(
+        'coverage',
+        file,
+        'platform-src',
+        'Testing Matrix requires coverage for platform/device-response changes',
+      ),
     );
   }
   return selections;
 };
 
-const vitestOwnership: OwnershipRule = ({ file }, input) => {
+const vitestOwnership: OwnershipRule = ({ file, isTs, isSrcProd }, input) => {
   const selections: SelectionReason[] = [];
-  for (const project of input.vitestProjects) {
+  const directOwners = input.vitestProjects.filter((project) => {
     const excluded = project.exclude ? matchesAny(file, project.exclude) : false;
-    if (excluded || !matchesAny(file, project.include)) continue;
+    return !excluded && matchesAny(file, project.include);
+  });
+  const supportOwners =
+    isTs && !isSrcProd
+      ? input.vitestProjects
+          .flatMap((project) =>
+            project.include.map((glob) => ({ project, root: literalGlobRoot(glob) })),
+          )
+          .filter(({ root }) => root.length > 0 && file.startsWith(root))
+      : [];
+  const longestSupportRoot = Math.max(0, ...supportOwners.map(({ root }) => root.length));
+  const owners =
+    directOwners.length > 0
+      ? directOwners
+      : supportOwners
+          .filter(({ root }) => root.length === longestSupportRoot)
+          .map(({ project }) => project);
+
+  for (const project of owners) {
     const check = vitestCheckId(project.name);
     if (check) {
       selections.push(
@@ -261,7 +296,9 @@ const vitestOwnership: OwnershipRule = ({ file }, input) => {
           check,
           file,
           `vitest:${project.name}`,
-          `owned by the ${project.name} Vitest project`,
+          directOwners.length > 0
+            ? `owned by the ${project.name} Vitest project`
+            : `support module under the ${project.name} Vitest project's include root`,
         ),
       );
     }
@@ -270,7 +307,10 @@ const vitestOwnership: OwnershipRule = ({ file }, input) => {
 };
 
 const nodeIntegrationOwnership: OwnershipRule = ({ file }) =>
-  matchesAny(file, ['test/integration/*.test.ts'])
+  matchesAny(file, ['test/integration/*.test.ts']) ||
+  (file.startsWith('test/integration/') &&
+    !file.slice('test/integration/'.length).includes('/') &&
+    file.endsWith('.ts'))
     ? [reason('integration-node', file, 'node-integration', 'node --test integration smoke')]
     : [];
 

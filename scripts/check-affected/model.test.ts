@@ -84,6 +84,7 @@ test('production source change selects gates + build + unit, with reasons', () =
 test('platform source additionally selects provider-integration', () => {
   const result = ids(['src/platforms/apple/core/apps.ts']);
   assert.ok(result.includes('provider-integration'));
+  assert.ok(result.includes('coverage'));
   assert.ok(result.includes('unit'));
 });
 
@@ -102,6 +103,21 @@ test('vitest project ownership routes each integration test to its project', () 
     ids(['test/integration/interaction-contract/bar.test.ts']).includes('interaction-contract'),
   );
   assert.ok(ids(['test/output-economy/baz.test.ts']).includes('output-economy'));
+});
+
+test('support modules inherit the most-specific Vitest project include root', () => {
+  assert.ok(
+    ids(['test/integration/provider-scenarios/fixtures.ts']).includes('provider-integration'),
+  );
+  assert.ok(
+    ids(['test/integration/interaction-contract/fixtures.ts']).includes('interaction-contract'),
+  );
+  assert.ok(ids(['test/output-economy/fixtures.ts']).includes('output-economy'));
+  assert.ok(ids(['src/__tests__/test-utils/session.ts']).includes('unit'));
+});
+
+test('root node-integration support modules select the node integration suite', () => {
+  assert.ok(ids(['test/integration/test-helpers.ts']).includes('integration-node'));
 });
 
 test('android-adb stub test routes to the unit suite via its own project', () => {
@@ -170,6 +186,7 @@ test('workflow/tooling and selector-owning changes fail open', () => {
     plan(['scripts/check-affected/model.ts']).failOpenReasons[0]?.rule,
     'selector-owning',
   );
+  assert.equal(plan(['AGENTS.md']).failOpenReasons[0]?.rule, 'selector-owning');
 });
 
 test('a fail-open path in a mixed changeset forces the full set', () => {
@@ -197,7 +214,8 @@ test('every catalog command resolves against package scripts', () => {
     'check:fallow': 'x',
     'check:mcp-metadata': 'x',
     build: 'x',
-    'test:unit': 'x',
+    'check:unit': 'x',
+    'test:coverage': 'x',
     'test:output-economy': 'x',
     'test:integration:provider': 'x',
     'test:integration:node': 'x',
@@ -225,6 +243,18 @@ test('every catalog command resolves against package scripts', () => {
 test('a missing package script makes command resolution throw', () => {
   const spec = CHECK_CATALOG.find((entry) => entry.id === 'lint')!;
   assert.throws(() => resolveCommand(spec, {}, 'origin/main'), /does not exist/);
+});
+
+test('unit and coverage checks preserve the Testing Matrix aggregates', () => {
+  const scripts = { 'check:unit': 'x', 'test:coverage': 'x' };
+  const unit = CHECK_CATALOG.find((entry) => entry.id === 'unit')!;
+  const coverage = CHECK_CATALOG.find((entry) => entry.id === 'coverage')!;
+  assert.deepEqual(resolveCommand(unit, scripts, 'origin/main'), ['pnpm', 'run', 'check:unit']);
+  assert.deepEqual(resolveCommand(coverage, scripts, 'origin/main'), [
+    'pnpm',
+    'run',
+    'test:coverage',
+  ]);
 });
 
 // Guards the catalog against reality, not fixtures: the self-test above uses a

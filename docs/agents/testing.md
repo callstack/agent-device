@@ -17,10 +17,15 @@ The selection is derived from repository sources of truth rather than a
 hand-maintained path map:
 
 - **Test ownership** comes from the Vitest project `include`/`exclude` globs in
-  `vitest.config.ts`. A changed test file selects the project that owns it; a
-  changed production `src/**` file selects the unit suite that mirrors it.
+  `vitest.config.ts`. A changed test file selects the project that owns it;
+  TypeScript support modules inherit the most-specific literal include root;
+  and a changed production `src/**` file selects the unit suite that mirrors
+  it. Root `test/integration/*.ts` support modules follow the Node integration
+  lane.
 - **Always-on gates** (`lint`, `typecheck`, `layering`, `fallow`, `format`) fire
-  for their input categories and are never silently skipped.
+  for their input categories and are never silently skipped. Platform source
+  also selects the provider-integration and coverage gates required by the
+  Testing Matrix.
 - **Commands** are resolved from real `package.json` scripts, so a renamed
   script fails loudly instead of dropping a gate.
 - A **small explicit build-ownership layer** covers the paths whose owning build
@@ -37,7 +42,8 @@ sides of a rename are classified (a moved file cannot look docs-only by its
 destination alone).
 
 Anything the selector cannot classify — unknown, ambiguous, workflow/tooling, or
-a change to the selector's own sources — **fails open to the full check set**.
+a change to the selector's own sources (including the `AGENTS.md` Testing
+Matrix) — **fails open to the full check set**.
 The plan documents the rule and changed path behind every selected check.
 
 Model and catalog live under `scripts/check-affected/`; the derivation is guarded

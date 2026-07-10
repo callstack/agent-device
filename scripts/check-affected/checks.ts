@@ -73,8 +73,15 @@ export const CHECK_CATALOG: readonly CheckSpec[] = [
   },
   {
     id: 'unit',
-    label: 'Unit suite',
-    kind: { type: 'script', script: 'test:unit' },
+    label: 'Unit + smoke suite',
+    kind: { type: 'script', script: 'check:unit' },
+    ciJobs: ['Coverage', 'Integration Tests'],
+    localRunnable: true,
+  },
+  {
+    id: 'coverage',
+    label: 'Coverage + provider integration suite',
+    kind: { type: 'script', script: 'test:coverage' },
     ciJobs: ['Coverage'],
     localRunnable: true,
   },
