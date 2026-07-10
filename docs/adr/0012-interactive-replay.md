@@ -86,6 +86,53 @@ reality diverged from the recording.
 - **(g) Issues #279/#297 are precedent for trimming heal rather than growing it** when the evidence
   says a heuristic isn't earning its complexity — see above.
 
+**Live hands-on evidence** (2026-07-10, driving replay by hand on the RN playground, iOS simulator,
+both `.ad` and Maestro paths) grounds the same conclusions from the caller's seat:
+
+- **Successful replay is silent in text mode.** Exit 0, zero output; `replayed: 5` appears only under
+  `--json`. Structurally: replay's success payload (`{ replayed, healed, session, artifactPaths }`,
+  `session-replay-runtime.ts:186-195`) has no `message` field, so the generic CLI success path prints
+  nothing (`writeGenericCliOutput` → `readCommandMessage` → `writeCommandOutput`,
+  `src/cli/commands/generic.ts:68-71`, `src/utils/success-text.ts:12-14`,
+  `src/cli/commands/shared.ts:4-15`). An agent pays a verification turn just to learn what happened.
+- **Failure output today is step + action + selector + a generic hint — no screen evidence.** The live
+  divergence hit was pure app state: the RN example app persists navigation state, so relaunch+deeplink
+  restored the Article screen and a perfectly correct selector legitimately missed. Heal can never fix
+  that class (the selector isn't wrong; reality is), while one line of screen evidence ("current
+  screen: Article") would have made the repair instant. The only recovery available was a full re-run —
+  no `--from` — and re-running earlier steps is precisely what makes state-restoring apps
+  nondeterministic across attempts.
+- **Maestro step indices are untraceable to source today.** Breaking `tapOn: Push Input` — the 4th
+  top-level YAML step — failed as "Replay failed at step 5 (`__maestroTapOn` ...)": the flow's
+  `runFlow file: ../launch.yml` include had expanded into the linear plan and shifted every subsequent
+  index, and no file or line appears anywhere in the failure. Code-verified: `--maestro` input flattens
+  at parse time (`parseReplayInput`, `src/compat/replay-input.ts:47-68`) — `runFlow file:` inlines the
+  included file's actions (`convertRunFlow`/`readRunFlowActions`,
+  `src/compat/maestro/flow-control.ts:40-41,123-124`, via `parseRunFlowFile`,
+  `src/compat/maestro/replay-flow.ts:267-280`), platform/`true` `when` conditions are evaluated at
+  parse time (`flow-control.ts:47-48`), and `repeat.times` expands deterministically
+  (`flow-control.ts:84-87`). Provenance is lost in two stages: every action converted from one root
+  command inherits that PARENT command's YAML line (`convertRootCommands`, `replay-flow.ts:76-83`),
+  and `parseRunFlowFile`'s callers keep only `.actions`, discarding the included file's own line table
+  and path entirely. Even for `.ad`, the tracked line never reaches the caller: `actionLines` flows
+  into the per-action ndjson trace (`appendReplayTraceEvent`,
+  `src/daemon/handlers/session-replay-action-runtime.ts:47-56`) but `withReplayFailureContext`
+  (`session-replay-runtime.ts:349-369`) puts only `replayPath` + `step` in the error details.
+- **The same failure class reports differently per format.** An `.ad` selector miss is
+  `COMMAND_FAILED` with the targeted hint "Run snapshot -i ... or use find ..."
+  (`selectorFailureHint`, `src/daemon/selectors-resolve.ts:84-97`, thrown at `resolution.ts:199-203`);
+  the equivalent Maestro miss is `ELEMENT_NOT_FOUND` constructed with no hint
+  (`src/compat/maestro/runtime-interactions.ts:644-652`), falling through to the generic default
+  "Retry with --debug and inspect diagnostics log for details." (`defaultHintForCode`,
+  `src/kernel/errors.ts:253-254`).
+- **Recordings contain zero verification steps.** The script writer strips every recorded `snapshot`
+  action (`buildOptimizedActions`, `src/daemon/session-script-writer.ts:69`: `if (action.command ===
+  'snapshot') continue;` — only synthetic ref-scoped snapshots are re-inserted, as resolution aids, not
+  observations), and the record-time flag allowlist (`SANITIZED_FLAG_KEYS`,
+  `src/daemon/session-action-recorder.ts:46-77`) carries neither `settle`/`settleQuietMs` nor `verify`,
+  so `--settle`/`--verify` are dropped from recorded steps. A recording therefore replays actions with
+  no outcome observation at all — exactly the gap decision 3's record-time identity evidence fills.
+
 A related, currently under-used precedent: recorded `@ref` steps already carry an optional identity
 hint in the `.ad` file. `appendRefLabel` (`src/daemon/session-script-writer.ts:235-240`) writes the
 node's label as a trailing token, parsed back into `action.result.refLabel`
@@ -138,9 +185,23 @@ mode or command. `--from` starts execution at step N and never re-runs steps `1.
 **(b)** On step failure — a hard failure OR a decision-3 identity divergence — the response, for ALL
 callers (no agent-only mode), becomes a structured divergence report:
 
-- step index and the `.ad` source line — both already tracked (`actionLines`/`index` in
-  `runReplayScriptFile`, `session-replay-runtime.ts:98-131`, and rendered into
-  `withReplayFailureContext`'s `details`, `session-replay-runtime.ts:340-369`);
+- **step provenance: step index AND the source file + line of the failing step.** For `.ad` this is
+  mostly plumbing: `actionLines` is already tracked per step (`runReplayScriptFile`,
+  `session-replay-runtime.ts:98-131`) and already reaches the ndjson trace, but
+  `withReplayFailureContext` (`session-replay-runtime.ts:349-369`) currently renders only
+  `replayPath` + `step` — the line must be added to the report. For Maestro this is a requirement on
+  the parse: as the live evidence shows, includes and conditionals flatten into the linear `actions[]`
+  at parse time, so a failing step's index is meaningless against the YAML the caller is editing.
+  The Maestro parse must carry per-step source positions (file + line) through `runFlow` inlining —
+  today `convertRootCommands` (`replay-flow.ts:76-83`) assigns the parent entry's line to every
+  expanded action and `parseRunFlowFile`'s callers (`flow-control.ts:41,124`) discard the included
+  file's path and line table. Without this, `--from` is unusable on Maestro flows. Index determinism
+  makes this sufficient: platform/`true` `when` blocks and includes flatten at parse time
+  (`flow-control.ts:47-48`), `repeat.times` expands deterministically (`flow-control.ts:84-87`), and
+  visible/notVisible `when` becomes a single runtime control step (`wrapRunFlowCondition`,
+  `flow-control.ts:411-430`), so step indices are stable per platform and `--from N` re-targets the
+  same step the report named. Optionally, a `replay --list-steps` dry-run prints the flattened plan
+  with per-step provenance so a caller can map indices to source before running anything;
 - the failing command and its error;
 - current screen evidence with actionable refs. Minted refs must be blessed into the session the same
   way settle refs are: `replay`/`test` are today in neither `REF_ISSUING_TOOLS` nor
@@ -162,6 +223,12 @@ help topic (`agent-device help ...`, alongside the existing disambiguation-polic
 get the same richer failure output as an interactive agent — they simply don't act on the suggestions,
 the same way they already ignore `hint` strings today.
 
+**(d)** The success path stops being silent for text callers: a successful replay prints a one-line
+summary (replayed N, wall time). Today text mode emits nothing on success (see the live evidence in
+Context — the success payload has no `message`, so the generic renderer prints zero bytes), which
+costs an agent a verification turn just to confirm the run happened. One line closes that for free;
+`--json` output is unchanged.
+
 ### 5. Validation
 
 Extend the settle benchmark (`~/.agent-device-bench/rnnav-matrix.py` pattern, external harness) with a
@@ -174,7 +241,8 @@ deliberately, measure agent turns to green through the `--from` loop.
 - `--from` resumability makes app-state **preconditions the caller's responsibility**. The daemon has
   no way to know the app is actually in the state step N expects; the divergence report hands over
   current screen evidence specifically so the caller can check that before resuming, but nothing
-  enforces it.
+  enforces it. The live nav-state-persistence divergence in Context is the canonical case: the app,
+  not the script, decides what screen a relaunch lands on.
 - **Non-idempotent scripts are exactly why `--from` must never re-run steps `1..N-1`**: a script that
   creates a record, navigates, then asserts on it would double-create on any re-run of its early steps.
   This is a hard constraint on the flag's semantics, not an implementation nicety.
@@ -227,7 +295,10 @@ Each step lands independently useful, in order:
    inert (captured but unchecked) until step 3.
 3. **`replay --from` + the structured divergence report** (decision 4) — the report is what `--from`
    resumes from, so they land together; wires in decision 3's comparison and decision 1's
-   retired-heal suggestions at the same time.
+   retired-heal suggestions at the same time. Step provenance (the `.ad` line in the report and
+   Maestro per-step source positions) is part of this step, not an optional follow-up — without it
+   `--from` is unusable on Maestro flows. The one-line success summary (decision 4d) can land any
+   time, independently.
 4. **`--update` retirement** (decision 1, the removal of its rewrite path) — lands once step 3's
    suggestions are a proven substitute, not before, so there is no gap where healing regresses with
    nothing in its place.
