@@ -405,4 +405,14 @@ export type SessionAction = {
    * Inert until migration step 4 adds enforcement.
    */
   targetEvidence?: TargetAnnotationV1;
+  /**
+   * Maestro-parse-only provenance (ADR 0012 migration step 2): set transiently
+   * on an action produced by inlining a `runFlow` include, carrying the
+   * include file's resolved path and its own line number. The Maestro parser
+   * (`src/compat/maestro/replay-flow.ts`) reads this back into the returned
+   * `actionSourcePaths`/`actionLines` arrays and strips the field before the
+   * action leaves the parse pipeline — it never reaches dispatch, session
+   * history, or `.ad` rewriting.
+   */
+  replaySource?: { path: string; line: number };
 };

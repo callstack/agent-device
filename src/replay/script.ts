@@ -40,6 +40,16 @@ export type ReplayScriptMetadata = {
 export type ParsedReplayScript = {
   actions: SessionAction[];
   actionLines: number[];
+  /**
+   * Per-action source file path (ADR 0012 migration step 2), parallel to
+   * `actionLines`. `undefined` at an index means "the top-level replay file
+   * path" — the common case for native `.ad` scripts (never set here) and for
+   * a Maestro action that came from the root file being parsed. A Maestro
+   * action inlined from a `runFlow` include carries that include's resolved
+   * path so a divergence report can point at the actual file+line that
+   * failed, not the including `runFlow:` line.
+   */
+  actionSourcePaths?: (string | undefined)[];
 };
 
 type PendingTargetAnnotation = { evidence: SessionAction['targetEvidence']; line: number };

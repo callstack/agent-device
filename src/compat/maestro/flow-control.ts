@@ -15,6 +15,7 @@ import type {
   MaestroCommandMapperDeps,
   MaestroFlowConfig,
   MaestroParseContext,
+  MaestroReplayFlow,
 } from './types.ts';
 
 // repeat.times is expanded at parse time for deterministic replay traces. Keep
@@ -30,6 +31,26 @@ type ConvertCommandList = (
   deps: MaestroCommandMapperDeps,
 ) => SessionAction[];
 
+/**
+ * Stamps every action of a parsed `runFlow` include with its own resolved
+ * source path + line (ADR 0012 migration step 2), riding transiently on
+ * `SessionAction.replaySource` until `convertRootCommands`
+ * (`replay-flow.ts`) reads it back into the flat `actionLines`/
+ * `actionSourcePaths` arrays and strips it. Without this, every action
+ * produced by inlining an include would silently inherit the including
+ * `runFlow:` command's own line — the exact provenance loss the ADR's audit
+ * evidence documents.
+ */
+function attachRunFlowProvenance(flow: MaestroReplayFlow): SessionAction[] {
+  return flow.actions.map((action, index) => ({
+    ...action,
+    replaySource: {
+      path: flow.actionSourcePaths?.[index] ?? '',
+      line: flow.actionLines[index] ?? 1,
+    },
+  }));
+}
+
 export function convertRunFlow(
   value: unknown,
   config: MaestroFlowConfig,
@@ -38,7 +59,9 @@ export function convertRunFlow(
   convertCommandList: ConvertCommandList,
 ): SessionAction[] {
   if (typeof value === 'string') {
-    return deps.parseRunFlowFile(resolveMaestroString(value, context), context).actions;
+    return attachRunFlowProvenance(
+      deps.parseRunFlowFile(resolveMaestroString(value, context), context),
+    );
   }
   if (!isPlainRecord(value)) {
     throw new AppError('INVALID_ARGS', 'runFlow expects a file path string or map.');
@@ -121,7 +144,9 @@ function readRunFlowActions(
   convertCommandList: ConvertCommandList,
 ): SessionAction[] {
   if (typeof value.file === 'string') {
-    return deps.parseRunFlowFile(resolveMaestroString(value.file, context), context).actions;
+    return attachRunFlowProvenance(
+      deps.parseRunFlowFile(resolveMaestroString(value.file, context), context),
+    );
   }
   if (Array.isArray(value.commands)) {
     return convertCommandList(normalizeCommandList(value.commands), config, context, deps);

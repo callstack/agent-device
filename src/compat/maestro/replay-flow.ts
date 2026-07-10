@@ -38,7 +38,7 @@ function parseMaestroReplayFlowInternal(
     env: { ...context.env, ...(config.env ?? {}), ...context.envOverrides },
   };
   const commandLines = findMaestroCommandLines(script);
-  const { actions, actionLines } = convertRootCommands({
+  const { actions, actionLines, actionSourcePaths } = convertRootCommands({
     config,
     commands,
     commandLines,
@@ -48,73 +48,120 @@ function parseMaestroReplayFlowInternal(
   return {
     actions,
     actionLines,
+    actionSourcePaths,
     metadata: {
       env: config.env,
     },
   };
 }
 
+type ConvertedFlowActions = {
+  actions: SessionAction[];
+  actionLines: number[];
+  actionSourcePaths: (string | undefined)[];
+};
+
 function convertRootCommands(params: {
   config: MaestroFlowConfig;
   commands: MaestroCommand[];
   commandLines: number[];
   context: MaestroParseContext;
-}): { actions: SessionAction[]; actionLines: number[] } {
+}): ConvertedFlowActions {
   const { config, commands, commandLines, context } = params;
   const allCommands = [
     ...(config.onFlowStart ?? []),
     ...commands,
     ...(config.onFlowComplete ?? []),
   ];
-  const allCommandLines = [
-    ...Array.from({ length: config.onFlowStart?.length ?? 0 }, () => 1),
-    ...commandLines,
-    ...Array.from({ length: config.onFlowComplete?.length ?? 0 }, () => commandLines.at(-1) ?? 1),
-  ];
+  const allCommandLines = buildRootCommandLines(config, commandLines);
+
   const actions: SessionAction[] = [];
   const actionLines: number[] = [];
+  const actionSourcePaths: (string | undefined)[] = [];
   for (const [index, command] of allCommands.entries()) {
     const line = allCommandLines[index] ?? index + 1;
     const converted = convertMaestroCommandWithLine(command, config, line, context, {
       parseRunFlowFile,
     });
-    actions.push(...converted);
-    converted.forEach(() => actionLines.push(line));
+    pushConvertedRootActions({ converted, line, actions, actionLines, actionSourcePaths });
   }
-  return optimizeInputTextActions(actions, actionLines);
+  return optimizeInputTextActions(actions, actionLines, actionSourcePaths);
+}
+
+/** `onFlowStart` commands report line 1; `onFlowComplete` commands report the script's last command line — both hooks live outside the numbered command list. */
+function buildRootCommandLines(config: MaestroFlowConfig, commandLines: number[]): number[] {
+  return [
+    ...Array.from({ length: config.onFlowStart?.length ?? 0 }, () => 1),
+    ...commandLines,
+    ...Array.from({ length: config.onFlowComplete?.length ?? 0 }, () => commandLines.at(-1) ?? 1),
+  ];
+}
+
+/**
+ * Appends one root command's converted actions to the flat accumulators. A
+ * `runFlow` include stamps its own provenance on each produced action (see
+ * `attachRunFlowProvenance` in flow-control.ts); every other command
+ * inherits this root command's own line, in the current (root) file.
+ */
+function pushConvertedRootActions(params: {
+  converted: SessionAction[];
+  line: number;
+  actions: SessionAction[];
+  actionLines: number[];
+  actionSourcePaths: (string | undefined)[];
+}): void {
+  const { converted, line, actions, actionLines, actionSourcePaths } = params;
+  for (const convertedAction of converted) {
+    const source = convertedAction.replaySource;
+    const { replaySource: _replaySource, ...cleanAction } = convertedAction;
+    actions.push(cleanAction);
+    actionLines.push(source?.line ?? line);
+    actionSourcePaths.push(source?.path);
+  }
 }
 
 function optimizeInputTextActions(
   actions: SessionAction[],
   actionLines: number[],
-): { actions: SessionAction[]; actionLines: number[] } {
+  actionSourcePaths: (string | undefined)[],
+): ConvertedFlowActions {
   const mergedActions: SessionAction[] = [];
   const mergedLines: number[] = [];
+  const mergedSourcePaths: (string | undefined)[] = [];
   for (let index = 0; index < actions.length; index += 1) {
     const action = actions[index]!;
-    const optimized = optimizeTypedAfterTap(actions, actionLines, index);
+    const optimized = optimizeTypedAfterTap(actions, actionLines, actionSourcePaths, index);
     if (optimized) {
       mergedActions.push(...optimized.actions);
       mergedLines.push(...optimized.actionLines);
+      mergedSourcePaths.push(...optimized.actionSourcePaths);
       index += optimized.consumed - 1;
       continue;
     }
     mergedActions.push(action);
     mergedLines.push(actionLines[index] ?? 1);
+    mergedSourcePaths.push(actionSourcePaths[index]);
   }
-  return { actions: mergedActions, actionLines: mergedLines };
+  return { actions: mergedActions, actionLines: mergedLines, actionSourcePaths: mergedSourcePaths };
 }
 
 function optimizeTypedAfterTap(
   actions: SessionAction[],
   actionLines: number[],
+  actionSourcePaths: (string | undefined)[],
   index: number,
-): { actions: SessionAction[]; actionLines: number[]; consumed: number } | null {
+): (ConvertedFlowActions & { consumed: number }) | null {
   const candidate = readTypedAfterTapCandidate(actions, actionLines, index);
   if (!candidate) return null;
   const { action, nextAction, pressEnterAction, tapSelector, typedAfterTap, line } = candidate;
+  const sourcePath = actionSourcePaths[index];
   if (!isLikelyTextEntrySelector(tapSelector)) {
-    return { actions: [clearMaestroNonHittableTap(action)], actionLines: [line], consumed: 1 };
+    return {
+      actions: [clearMaestroNonHittableTap(action)],
+      actionLines: [line],
+      actionSourcePaths: [sourcePath],
+      consumed: 1,
+    };
   }
   return {
     actions: [
@@ -132,6 +179,7 @@ function optimizeTypedAfterTap(
       pressEnterAction,
     ],
     actionLines: [line, line, actionLines[index + 2] ?? line],
+    actionSourcePaths: [sourcePath, sourcePath, actionSourcePaths[index + 2]],
     consumed: 3,
   };
 }
@@ -264,6 +312,14 @@ function normalizeConfig(value: unknown): MaestroFlowConfig {
   };
 }
 
+/**
+ * Parses a `runFlow`-included file, resolving its own per-action provenance
+ * before returning: any action whose `actionSourcePaths` entry is still
+ * `undefined` (i.e. it came directly from THIS file, not a deeper nested
+ * include) is stamped with `resolved` — this file's own path — so every
+ * entry the caller receives is a concrete, actionable path. Deeper nested
+ * includes keep the path a recursive call already stamped.
+ */
 function parseRunFlowFile(filePath: string, context: MaestroParseContext): MaestroReplayFlow {
   const resolved = resolveRunFlowPath(filePath, context);
   if (context.visitedPaths.has(resolved)) {
@@ -272,11 +328,17 @@ function parseRunFlowFile(filePath: string, context: MaestroParseContext): Maest
   const script = fs.readFileSync(resolved, 'utf8');
   const visitedPaths = new Set(context.visitedPaths);
   visitedPaths.add(resolved);
-  return parseMaestroReplayFlowInternal(script, {
+  const flow = parseMaestroReplayFlowInternal(script, {
     ...context,
     baseDir: path.dirname(resolved),
     visitedPaths,
   });
+  return {
+    ...flow,
+    actionSourcePaths: (flow.actionSourcePaths ?? flow.actions.map(() => undefined)).map(
+      (sourcePath) => sourcePath ?? resolved,
+    ),
+  };
 }
 
 function resolveRunFlowPath(filePath: string, context: MaestroParseContext): string {
