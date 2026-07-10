@@ -158,11 +158,21 @@ is strictly more valuable than the same proposal applied blind.
 ### 2. Disclose daemon-tree disambiguation and identify fast-path responses
 
 The daemon-tree selector path (`runtime-selector`) adds an additive `resolution` response field. A unique
-tree resolution is `{ source: "runtime", kind: "unique" }`; a heuristic resolution is
-`{ source: "runtime", kind: "disambiguated", matchCount, winnerRef, tiebreak, alternatives }`.
-`tiebreak` is one of `visible`, `deepest`, or `smallest-area`; `alternatives` contains actionable refs for
-at most **5** losing candidates. The selected ref is not included in `alternatives`. This discloses the
-existing heuristic without changing `resolveSelectorChain` or its winner.
+tree resolution is `{ source: "runtime", phase: "pre-action", kind: "unique" }`; a heuristic resolution
+is `{ source: "runtime", phase: "pre-action", kind: "disambiguated", matchCount, winnerDiagnostic,
+tiebreak, alternatives }`. `tiebreak` is one of `visible`, `deepest`, or `smallest-area`; `alternatives`
+contains at most **5** losing `diagnosticRef` entries. The selected diagnostic is not included in
+`alternatives`. `winnerDiagnostic` and each alternative are `{ diagnosticRef, role?, label? }`, where
+`diagnosticRef` is an opaque non-`@` diagnostic token; every optional string is capped at **256 UTF-8
+bytes** with a truncation marker. This discloses the existing heuristic without changing
+`resolveSelectorChain` or its winner.
+
+These are **pre-action diagnostics**, not issued refs. The selector-resolution snapshot can be invalid
+after a mutating press/fill, so neither `winnerDiagnostic` nor `alternatives` carries `refsGeneration`, is
+MCP-pinned, or may be reused as an `@ref` target. A caller that wants to act on an alternative must take a
+fresh `snapshot`/`find`. A post-action `--settle` diff remains a separate, actionable issuer and may carry
+fresh pinned refs. In contrast, a target-binding divergence sends no action; its fresh report snapshot is
+an actionable issuer as defined in decision 4.
 
 The accepted direct-iOS selector fast path has no daemon tree and the XCTest response cannot truthfully
 provide a match count, candidate refs, or a runtime tiebreak. It remains enabled for ordinary simple
@@ -172,15 +182,19 @@ identity claim. `--verify` and `--settle` continue to disable this fast path and
 runtime resolution. Recording likewise disables it for any action for which target-binding evidence is
 required by decision 3.
 
-ADR 0011's matrix must add a `resolutionDisclosure` guarantee. `runtime-selector` enforces the complete
-runtime shape through the shared response builder; `direct-ios-selector` enforces only the explicit
-`not-observed` shape through that builder. Its existing `disambiguation` and `responseIdentity` success
-path waivers remain, and the exact waived-cell test must continue to list them. Layer-3 coverage must add
-a runtime ambiguity/tiebreak/cap case and a direct-iOS no-snapshot case asserting `not-observed`. No
-selection-parity table is claimed or added for the direct path: such a table would falsely imply that
-XCTest selection has runtime parity. A future runner-side diagnostic design must replace the two waivers,
-add a Swift/TypeScript parity fixture, and add the corresponding provider contract cases in the same
-change.
+ADR 0011's matrix must add a `resolutionDisclosure` guarantee with all six honest cells: `runtime-selector`
+enforces the complete pre-action diagnostic shape; `runtime-ref` and `native-ref` enforce
+`{ source: "ref", phase: "pre-action", kind: "exact" }`; `direct-ios-selector` enforces only the explicit
+`{ source: "direct-ios", kind: "not-observed" }` shape; `coordinate` is inapplicable because no element
+was resolved; and `maestro-non-hittable-fallback` is inapplicable because Maestro owns matching and the
+fallback is coordinate execution. The four enforced cells use the shared response builder. Its existing
+direct-path `disambiguation` and `responseIdentity` waivers remain, and the exact waived-cell test must
+continue to list them. Layer-3 coverage must claim every enforced/delegated cell: runtime
+ambiguity/tiebreak/cap plus non-actionable diagnostics after mutation, exact-ref provenance for runtime
+and native refs, and a direct-iOS no-snapshot `not-observed` case. No selection-parity table is claimed or
+added for the direct path: such a table would falsely imply XCTest selection has runtime parity. A future
+runner-side diagnostic design must replace the two waivers, add a Swift/TypeScript parity fixture, and add
+the corresponding provider contract cases in the same change.
 
 ### 3. Versioned `.ad` target-binding evidence
 
@@ -188,18 +202,33 @@ Recording writes evidence for every action that resolves an element target. The 
 versioned comment immediately before the action it annotates:
 
 ```text
-# agent-device:target-v1 {"id":"save","role":"button","label":"Save","rect":{"x":12,"y":48,"width":80,"height":44}}
+# agent-device:target-v1 {"id":"save","role":"button","label":"Save","rect":{"x":12,"y":48,"width":80,"height":44},"ancestry":[{"role":"window"},{"role":"toolbar","id":"editor"}],"sibling":0,"verification":"verified"}
 click @e12 "Save"
 ```
 
 The prefix is ASCII and the payload is one JSON object encoded on one line. JSON supplies all quoting and
-escaping; writers must use canonical `JSON.stringify` field order `id`, `role`, `label`, `rect` and rect
-order `x`, `y`, `width`, `height`. `id`, `role`, and `label` are optional non-empty strings; `rect` is an
-optional object of four finite numbers. The writer normalizes strings to Unicode NFC, omits missing or
-empty fields, and emits no annotation when no field is available. A v1 parser accepts those fields in any
-JSON object order, ignores unknown fields, normalizes known strings to NFC, and rejects malformed v1
-annotations or invalid known field types with `INVALID_ARGS`. An unknown future `target-vN` comment is an
-ordinary comment to a v1 reader.
+escaping; writers must use canonical `JSON.stringify` field order `id`, `role`, `label`, `rect`,
+`ancestry`, `sibling`, `verification`, `matchCount` and rect order `x`, `y`, `width`, `height`. `id`,
+`role`, and `label` are optional non-empty strings; `rect` is an optional object of four finite numbers.
+`verification` is `"verified"` or `"unverifiable"`; `matchCount` is required only for the latter. `role` is
+`normalizeType(node.type ?? "")`, exactly the normalized type used by `buildSelectorChainForNode`; it is
+never the raw optional `node.role`. `ancestry` is up to eight root-to-parent entries of the same normalized
+`role` plus optional id/label, derived through `parentIndex`; `sibling` is the zero-based ordinal among
+siblings with the same local identity. The writer normalizes strings to Unicode NFC and omits missing or
+empty fields. A v1 payload is at most **4 KiB** UTF-8; each string field is at most **256 bytes** after
+normalization; `ancestry` has at most eight entries; and `matchCount`, when present, is a positive safe
+integer. The parser rejects a v1 annotation exceeding these bounds with `INVALID_ARGS`.
+
+The writer must test the tuple against the record-time tree. It writes `verification: "verified"` only
+when exactly one node matches id/role/label/rect/ancestry/sibling. If zero or multiple nodes match, it
+writes `verification: "unverifiable"` and `matchCount`; replay reports an
+`identity-unverifiable` target-binding divergence before acting. At replay, the observed tree must also
+produce exactly one tuple match. This closes the duplicate-label/identical-rect case even if the stronger
+structural context is itself duplicated: ambiguity is a visible divergence, never a silent binding.
+
+A v1 parser accepts known fields in any JSON object order, ignores unknown fields, normalizes known
+strings to NFC, and rejects malformed annotations or invalid known field types with `INVALID_ARGS`. An
+unknown future `target-vN` comment is an ordinary comment to a v1 reader.
 
 The annotation binds only to the next physical action line. A blank line or any intervening line leaves
 it unbound and is rejected as `INVALID_ARGS`; this prevents an edit from silently moving evidence to a
@@ -212,10 +241,11 @@ script preserves v1 annotations in canonical form; it must not silently discard 
 `.ad` format change, not merely per-line growth.
 
 At replay, every annotated resolved target is checked before its action is sent. A field present in the
-recording but absent in the observed node is a mismatch. `id` and `role` compare exactly after NFC;
-`label` compares after NFC plus trim and internal whitespace collapse; rects match when every coordinate
-and dimension differs by at most **8** recorded coordinate units. Every recorded field must match. An old
-unannotated action remains executable without this check. Any mismatch is a
+recording but absent in the observed node is a mismatch. `id` and normalized `role` compare exactly after
+NFC; `label` compares after NFC plus trim and internal whitespace collapse; rects match when every
+coordinate and dimension differs by at most **8** recorded coordinate units; ancestry and sibling compare
+exactly after their component normalization. Every recorded field must match. An old unannotated action
+remains executable without this check. Any mismatch is a
 **target-binding divergence**, reported before the device action, even when resolution was unique; this
 catches a unique-but-wrong rebind as well as a changed ambiguity winner. This is not general outcome
 verification: `--verify` remains post-action change evidence with a different contract.
@@ -225,17 +255,30 @@ verification: `--verify` remains post-action change evidence with a different co
 **Divergence is a structured error, not success data.** The daemon returns `ok:false` with code
 `REPLAY_DIVERGENCE` and a `details.divergence` object for both an action failure and a target-binding
 mismatch. The object has version `1` and contains `kind`, `step` (`index`, `source.path`, `source.line`),
-`action`, `cause`, `screen`, `suggestions`, and, for binding failures, `targetBinding`
+`action`, `cause`, `screen`, `suggestions`, `resume`, and, for binding failures, `targetBinding`
 (`recorded`, `observed`, `mismatches`). `step.index` is the 1-based executable-plan ordinal, not a source
 line. Its source location is diagnostic only. A Maestro parser must preserve the original file and line
 through includes so that source location is actionable.
 
-`screen` is a fresh, actionable snapshot digest with `refsGeneration`. It contains no raw tree. Existing
-response levels define its bounds: compact (`--level digest`) carries at most **8** refs and no selector
-suggestions; default carries at most **20** refs and at most **5** ranked suggestions; full carries the
-same hard caps with the full fields for those entries. The 20-ref and 5-candidate limits are absolute,
-including error payloads. The report declares truncation when either limit is reached. This keeps the
-failure path bounded while preserving enough current-screen evidence to act.
+`screen` is discriminated. `{ state: "available", refsGeneration, refs, truncated }` is a fresh,
+healthy snapshot digest and the only form that issues actionable refs. `{ state: "unavailable", reason,
+hint }` is returned when capture fails or is sparse; it has no refs or generation and must not fall back to
+the old session tree. Screen-capture failure never replaces or masks the original replay cause.
+
+Response levels bound the entire serialized UTF-8 `details.divergence` object, not merely its arrays:
+compact (`--level digest`) is at most **8 KiB**, default at most **24 KiB**, and full at most **64 KiB**.
+Compact carries at most **8** screen refs and no suggestions; default and full carry at most **20** screen
+refs and **5** ranked suggestions. These counts are absolute, including error payloads. Individual
+labels, ids, selectors, source paths, mismatch values, cause messages, and hints are UTF-8 truncated to
+**256 bytes**; an action summary has no positional array, and fill text, expanded variables, and arbitrary
+nested cause details are never serialized. All rendered strings and any overflow artifact pass through the
+central diagnostics redactor before truncation. The report sets truncation/redaction markers for every
+omission.
+
+When the bounded form would omit material, the daemon writes the same redacted, bounded-per-field detail
+to a session-scoped divergence artifact and returns its path plus `overflow: { omittedBytes, artifactPath
+}`. If that artifact cannot be written, it returns `artifactUnavailable: true` and preserves the original
+error. No raw snapshot tree or unredacted input is written to the artifact.
 
 The same daemon error is preserved end to end. The Node client rejects with `AppError` retaining
 `details.divergence`. CLI exits nonzero; text renders a compact report and JSON includes the complete
@@ -251,6 +294,14 @@ executable plan and must be in range. It is never a YAML line number, fractional
 repeat iteration label. Static includes, platform conditions, and fixed-count repeats expand before
 indexing, so repeated source lines are distinguished by their plan index.
 
+Every divergence includes `resume: { allowed, from, reason?, planDigest }`. `planDigest` is SHA-256 over
+the canonical fully expanded plan, including each action's command, normalized inputs, control shape,
+platform-conditioned expansion, and source provenance. A resume requires both `--from N` and
+`--plan-digest <planDigest>` from the report. The daemon rebuilds the current plan and rejects
+`INVALID_ARGS` before any action when its digest differs, so edits, include changes, or environment-driven
+expansion cannot silently retarget ordinal N. `allowed: false` explains why no resume is safe; its digest
+is still diagnostic, not an authorization to bypass preflight.
+
 Resume does not reconstruct execution state. For `N > 1`, preflight must reject with `INVALID_ARGS` when
 any skipped action can produce `outputEnv` values, or when the skipped range or resume target is inside
 runtime control flow (conditional, retry, or dynamic repeat). The only variables available after a resume
@@ -259,23 +310,32 @@ than invoking with an incomplete scope. The daemon also never infers app state: 
 app into the required state before resuming. This conservative rule is intentionally the first release
 scope; deterministic state reconstruction is deferred until it can be specified and tested separately.
 
-The loop is therefore: run, read the divergence, repair app or script state, then replay from the reported
-plan index (or the next index after completing the failed action manually). Help documents that protocol
-and its resume rejections. Successful text replay prints one line with replayed count and wall time;
-`--json` remains structured.
+The loop is therefore: run, read the divergence, repair app state, then replay with the reported plan
+digest and index (or the next index after completing the failed action manually). Editing a script requires
+a fresh full replay that produces a new digest. Help documents that protocol and its resume rejections.
+Successful text replay prints one line with replayed count and wall time; `--json` remains structured.
 
 ### 5. Mandatory validation
 
 Implementation is not accepted on benchmark evidence alone. Required automated coverage is:
 
-- matrix and provider contracts for runtime ambiguity disclosure, the five-alternative cap, direct-iOS
-  `not-observed` disclosure, and the retained direct-path waiver list;
+- matrix and provider contracts for all six `resolutionDisclosure` cells: runtime ambiguity/tiebreak and
+  the five-alternative limit, runtime/native exact-ref provenance, direct-iOS `not-observed`, coordinate
+  and Maestro inapplicability, and the retained direct-path waiver list;
+- an interaction mutation contract proving pre-action resolution diagnostics are not ref-issued or
+  MCP-pinned, a fresh snapshot is required before using an alternative, and a no-action target-binding
+  divergence can issue and pin its fresh report refs;
 - parser/writer unit cases for v1 identity round trips, old/new reader compatibility, escaping,
-  normalization, rect tolerance, malformed annotations, and mismatch-before-action behavior;
-- replay runtime tests for every annotated target, unique-but-wrong matches, compact/default/full caps,
-  `--from` indexing, variable-output and control-flow preflight rejection, and `test --from` rejection;
+  normalized-role source, ancestry/sibling structural context, duplicate/unverifiable record and replay
+  evidence, rect tolerance, malformed annotations, and mismatch-before-action behavior;
+- replay runtime tests for every annotated target, unique-but-wrong and duplicate-evidence divergences,
+  compact/default/full field and byte ceilings, redaction, overflow artifacts and artifact-write failure,
+  available versus sparse/capture-failed screen forms, and preservation of the original cause;
+- replay resume tests for plan-digest emission and mismatch rejection after script/include/expansion
+  changes, `resume.allowed` reasons, `--from` indexing, variable-output and control-flow rejection, and
+  `test --from` rejection;
 - daemon/client/CLI/MCP contracts proving the typed divergence survives failure, JSON and MCP structured
-  output retain it, and MCP pins its error-path refs; and
+  output retain it, MCP pins only actionable error-path refs, and no text-only path drops the report; and
 - `--update` retirement tests proving it never rewrites the source file and only returns bounded
   suggestions.
 
@@ -286,9 +346,10 @@ through the allowed `--from` loop.
 ## Consequences
 
 - `--from` makes app state the caller's responsibility, and only accepts a resume when the planner can
-  prove its variable and control-flow state is independent of skipped execution. The daemon has no way to
-  know that the app is actually in the state step N expects. The live nav-state-persistence divergence in
-  Context is the canonical case: the app, not the script, decides what screen a relaunch lands on.
+  prove its variable and control-flow state is independent of skipped execution **and** its plan digest
+  matches the reported plan. The daemon has no way to know that the app is actually in the state step N
+  expects. The live nav-state-persistence divergence in Context is the canonical case: the app, not the
+  script, decides what screen a relaunch lands on.
 - **Non-idempotent scripts are exactly why `--from` must never re-run steps `1..N-1`**: a script that
   creates a record, navigates, then asserts on it would double-create on any re-run of its early steps.
   This is a hard constraint on the flag's semantics, not an implementation nicety.
@@ -296,10 +357,12 @@ through the allowed `--from` loop.
   suggestions but never rewrites the script. A nightly run that once patched a selector now stays red.
   This is accepted because the audit found the mechanism rarely useful and a silent patch is a
   target-binding risk: selector agreement is not proof of the same target.
-- **Disclosure adds bounded bytes.** Runtime ambiguity responses carry at most five alternatives; direct
-  iOS responses pay only the explicit `not-observed` provenance marker.
+- **Disclosure adds bounded diagnostic bytes, not reusable targets.** Runtime ambiguity responses carry at
+  most five pre-action alternatives; direct iOS responses pay only the explicit `not-observed` provenance
+  marker. A fresh capture is the cost of acting on a diagnostic alternative.
 - **Recorded identity evidence is an additive `.ad` format change.** It adds one reserved JSON comment
-  before each supported recorded target action; scripts without the comment remain valid.
+  before each supported recorded target action; scripts without the comment remain valid. A duplicate that
+  survives structural evidence is intentionally a pre-action unverifiable divergence, not a best guess.
 - **The disambiguation heuristic itself (visible → deepest → smallest-area) is unchanged.** The
   rejected alternative was hard-reject: fail any non-unique match instead of picking one. That would
   break benign, common cases the heuristic exists for — react-navigation's Maestro suite alone has 185
@@ -329,13 +392,15 @@ through the allowed `--from` loop.
 
 Each step lands independently useful, in order:
 
-1. **Resolution disclosure** (decision 2) — update the matrix, exact waiver list, and provider contracts
-   together. It is additive to response data and does not claim direct-iOS selection parity.
-2. **`.ad` target annotations** (decision 3) — land parser/writer round trips and compatibility before
-   recording. Recording and pre-action target-binding verification then land together.
-3. **Structured divergence + `replay --from`** (decision 4) — land daemon, client, CLI, and MCP error
-   propagation together with plan provenance and conservative resume preflight. `test` does not expose
-   `--from`.
+1. **Resolution disclosure** (decision 2) — update all six matrix cells, the exact waiver list, and
+   provider mutation contracts together. It is additive to response data and does not claim direct-iOS
+   selection parity or issue pre-action refs.
+2. **`.ad` target annotations** (decision 3) — land bounded parser/writer round trips, compatibility,
+   structural uniqueness, and duplicate detection before recording. Recording and pre-action
+   target-binding verification then land together.
+3. **Structured divergence + `replay --from`** (decision 4) — land bounded/redacted error propagation,
+   actionable-or-unavailable screen semantics, error-path MCP pinning, plan digest validation, and
+   conservative resume preflight together. `test` does not expose `--from`.
 4. **`--update` retirement** (decision 1) — remove its write path only after divergence suggestions are
    available, with a no-write regression test.
 5. **Benchmark extension** (decision 5) follows the mandatory contracts and measures the economic claim.
