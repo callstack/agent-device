@@ -129,3 +129,40 @@ test('toAppErrorCode falls back when code is missing or empty', () => {
   assert.equal(toAppErrorCode(''), 'COMMAND_FAILED');
   assert.equal(toAppErrorCode(undefined, 'UNAUTHORIZED'), 'UNAUTHORIZED');
 });
+
+// --- ADR 0012 migration step 2: divergence survives daemon -> client -> CLI/MCP ---
+
+test('normalizeError preserves details.divergence verbatim through redaction/stripDiagnosticMeta', () => {
+  const divergence = {
+    version: 1 as const,
+    kind: 'action-failure' as const,
+    step: { index: 2, source: { path: '/tmp/flow.ad', line: 5 } },
+    action: 'click "Save"',
+    cause: { code: 'COMMAND_FAILED', message: 'not hittable' },
+    screen: {
+      state: 'available' as const,
+      refsGeneration: 3,
+      refs: [{ ref: 'e5', role: 'button', label: 'Save' }],
+    },
+    suggestions: [],
+    suggestionCount: 0,
+    resume: { allowed: false as const, reason: 'resume not yet supported' },
+  };
+  const err = new AppError('REPLAY_DIVERGENCE', 'Replay failed at step 2', {
+    step: 2,
+    action: 'click',
+    divergence,
+  });
+  const normalized = normalizeError(err);
+  assert.equal(normalized.code, 'REPLAY_DIVERGENCE');
+  // stripDiagnosticMeta only removes hint/diagnosticId/logPath/retriable/supportedOn.
+  assert.deepEqual(normalized.details?.divergence, divergence);
+  assert.equal(normalized.details?.step, 2);
+});
+
+test('daemon-originated REPLAY_DIVERGENCE gets a default hint pointing at the report', () => {
+  const normalized = normalizeError(
+    new AppError('REPLAY_DIVERGENCE', 'Replay failed at step 1', {}),
+  );
+  assert.match(normalized.hint ?? '', /details\.divergence/);
+});

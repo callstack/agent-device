@@ -2,9 +2,32 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { stripVTControlCharacters } from 'node:util';
-import { formatScreenshotDiffText, formatSnapshotDiffText, formatSnapshotText } from '../output.ts';
+import {
+  formatScreenshotDiffText,
+  formatSnapshotDiffText,
+  formatSnapshotText,
+  printHumanError,
+} from '../output.ts';
 import { formatRole, formatSnapshotLine } from '../../snapshot/snapshot-lines.ts';
 import { normalizedRect } from '../screenshot-geometry.ts';
+import { AppError } from '../../kernel/errors.ts';
+
+function captureStderr(run: () => void): string {
+  const original = process.stderr.write.bind(process.stderr);
+  let output = '';
+  (process.stderr as unknown as { write: typeof process.stderr.write }).write = ((
+    chunk: unknown,
+  ) => {
+    output += String(chunk);
+    return true;
+  }) as typeof process.stderr.write;
+  try {
+    run();
+  } finally {
+    process.stderr.write = original;
+  }
+  return output;
+}
 
 const DIFF_DATA = {
   mode: 'snapshot',
@@ -1731,4 +1754,61 @@ test('formatScreenshotDiffText does not show diff path when images match', () =>
   );
   assert.equal(text.includes('Diff image'), false);
   assert.equal(text.includes('diff.png'), false);
+});
+
+// --- ADR 0012 migration step 2: replay divergence compact text report ---
+
+test('printHumanError renders a compact divergence report unconditionally (not gated behind --debug)', () => {
+  const err = new AppError(
+    'REPLAY_DIVERGENCE',
+    'Replay failed at step 2 (click "Save"): not hittable',
+    {
+      divergence: {
+        version: 1,
+        kind: 'action-failure',
+        step: { index: 2, source: { path: '/tmp/flow.ad', line: 5 } },
+        action: 'click "Save"',
+        cause: { code: 'COMMAND_FAILED', message: 'not hittable' },
+        screen: {
+          state: 'available',
+          refsGeneration: 3,
+          refs: [{ ref: 'e5', role: 'button', label: 'Save' }],
+        },
+        suggestions: [
+          { selector: 'id="save"', basis: 'id', ref: 'e5', role: 'button', label: 'Save' },
+        ],
+        suggestionCount: 1,
+        resume: { allowed: false, reason: 'resume not yet supported' },
+      },
+    },
+  );
+
+  const output = captureStderr(() => printHumanError(err));
+
+  assert.match(output, /Divergence at step 2 \(\/tmp\/flow\.ad:5\)/);
+  assert.match(output, /Screen: 1 actionable ref\(s\) captured \(refsGeneration 3\)/);
+  assert.match(output, /Suggestions:/);
+  assert.match(output, /\[id\] "Save" id="save"/);
+  // Not gated behind --debug: showDetails defaults to false/undefined here.
+});
+
+test('printHumanError shows an unavailable screen reason and omitted suggestions hint', () => {
+  const err = new AppError('REPLAY_DIVERGENCE', 'Replay failed at step 1', {
+    divergence: {
+      version: 1,
+      kind: 'action-failure',
+      step: { index: 1, source: { path: '/tmp/flow.ad', line: 1 } },
+      action: 'click "Save"',
+      cause: { code: 'COMMAND_FAILED', message: 'not hittable' },
+      screen: { state: 'unavailable', reason: 'capture-failed' },
+      suggestions: [],
+      suggestionCount: 2,
+      resume: { allowed: false, reason: 'resume not yet supported' },
+    },
+  });
+
+  const output = captureStderr(() => printHumanError(err));
+
+  assert.match(output, /Screen: unavailable \(capture-failed\)/);
+  assert.match(output, /Suggestions: 2 available \(omitted at this response level/);
 });

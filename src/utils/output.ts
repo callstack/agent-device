@@ -46,9 +46,85 @@ export function printHumanError(
   if (normalized.logPath) {
     process.stderr.write(`Diagnostics Log: ${normalized.logPath}\n`);
   }
+  // ADR 0012 migration step 2: a replay divergence's compact text report is
+  // NOT gated behind --debug — text mode previously showed step+action+
+  // selector+a generic hint with no screen evidence; --debug's raw
+  // `normalized.details` JSON dump below stays available for the full object.
+  const divergenceText = formatReplayDivergenceText(normalized.details);
+  if (divergenceText) {
+    process.stderr.write(`${divergenceText}\n`);
+  }
   if (options.showDetails && normalized.details) {
     process.stderr.write(`${JSON.stringify(normalized.details, null, 2)}\n`);
   }
+}
+
+// ADR 0012 migration step 2: divergence compact text report. Split into one
+// line-builder per field so each stays a simple, low-complexity function —
+// `printHumanError` renders this unconditionally, not gated behind --debug.
+function formatReplayDivergenceText(details: Record<string, unknown> | undefined): string | null {
+  const divergence = details?.divergence;
+  if (!divergence || typeof divergence !== 'object') return null;
+  const record = divergence as Record<string, unknown>;
+  const lines: string[] = [
+    ...formatDivergenceStepLine(record.step),
+    ...formatDivergenceScreenLine(record.screen),
+    ...formatDivergenceSuggestionLines(record.suggestions, record.suggestionCount),
+    ...formatDivergenceOverflowLine(record.overflow, record.artifactUnavailable),
+  ];
+  return lines.length > 0 ? lines.join('\n') : null;
+}
+
+function formatDivergenceStepLine(step: unknown): string[] {
+  const record = step as Record<string, unknown> | undefined;
+  if (typeof record?.index !== 'number') return [];
+  const source = record.source as Record<string, unknown> | undefined;
+  const location =
+    typeof source?.path === 'string' && typeof source.line === 'number'
+      ? ` (${source.path}:${source.line})`
+      : '';
+  return [`Divergence at step ${record.index}${location}`];
+}
+
+function formatDivergenceScreenLine(screen: unknown): string[] {
+  const record = screen as Record<string, unknown> | undefined;
+  if (record?.state === 'available' && Array.isArray(record.refs)) {
+    return [
+      `Screen: ${record.refs.length} actionable ref(s) captured (refsGeneration ${record.refsGeneration}).`,
+    ];
+  }
+  if (record?.state === 'unavailable') {
+    return [`Screen: unavailable (${String(record.reason ?? 'unknown')}).`];
+  }
+  return [];
+}
+
+function formatDivergenceSuggestionLines(suggestions: unknown, suggestionCount: unknown): string[] {
+  if (Array.isArray(suggestions) && suggestions.length > 0) {
+    return ['Suggestions:', ...suggestions.slice(0, 5).map(formatDivergenceSuggestionLine)];
+  }
+  if (typeof suggestionCount === 'number' && suggestionCount > 0) {
+    return [
+      `Suggestions: ${suggestionCount} available (omitted at this response level; rerun with --json for the full report).`,
+    ];
+  }
+  return [];
+}
+
+function formatDivergenceSuggestionLine(entry: unknown): string {
+  const suggestion = entry as Record<string, unknown>;
+  const label = typeof suggestion.label === 'string' ? ` "${suggestion.label}"` : '';
+  return `  - [${String(suggestion.basis)}]${label} ${String(suggestion.selector)}`;
+}
+
+function formatDivergenceOverflowLine(overflow: unknown, artifactUnavailable: unknown): string[] {
+  if (overflow && typeof overflow === 'object') {
+    return [`Full report written to ${String((overflow as Record<string, unknown>).artifactPath)}.`];
+  }
+  if (artifactUnavailable === true) {
+    return ['Full report exceeded the response budget and the overflow artifact could not be written.'];
+  }
+  return [];
 }
 
 type SnapshotDiffLine = {
