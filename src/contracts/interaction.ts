@@ -65,8 +65,10 @@ export type ResolutionDiagnosticEntry = {
  *   `matchCount` matches via the existing visible/deepest/smallest-area
  *   heuristic; `alternatives` lists at most 5 losing candidates (the winner is
  *   never included).
- * - `ref`/`exact`: an `@ref` names exactly one node by construction
- *   (runtime-ref and native-ref paths).
+ * - `ref`/`exact`: an `@ref` names exactly one node by construction.
+ * - `ref`/`label-fallback`: a stale or unusable `@ref` was recovered with its
+ *   trailing replay label. This is first-match label lookup, never exact ref
+ *   provenance.
  * - `direct-ios`/`not-observed`: the direct iOS XCTest fast path has no
  *   daemon tree and cannot truthfully report a match count or candidates.
  */
@@ -82,6 +84,7 @@ export type ResolutionDisclosure =
       alternatives: ResolutionDiagnosticEntry[];
     }
   | { source: 'ref'; phase: 'pre-action'; kind: 'exact' }
+  | { source: 'ref'; phase: 'pre-action'; kind: 'label-fallback' }
   | { source: 'direct-ios'; kind: 'not-observed' };
 
 export type ResolvedInteractionTarget =

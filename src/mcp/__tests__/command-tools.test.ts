@@ -294,6 +294,36 @@ test('MCP newly typed outputSchemas advertise public contract keys', () => {
   );
 });
 
+test('MCP click outputSchema validates default and digest resolution disclosures', () => {
+  const click = listCommandTools().find((tool) => tool.name === 'click');
+  assert.ok(click?.outputSchema);
+  assert.equal(click.outputSchema, COMMAND_OUTPUT_SCHEMAS.click);
+
+  const resolutionSchema = click.outputSchema.properties?.resolution;
+  const disambiguated = resolutionSchema?.oneOf?.find(
+    (branch) =>
+      (branch.properties?.kind as { const?: unknown } | undefined)?.const === 'disambiguated',
+  );
+  assert.ok(disambiguated);
+
+  const digestResolution = {
+    source: 'runtime',
+    phase: 'pre-action',
+    kind: 'disambiguated',
+    matchCount: 2,
+    winnerDiagnostic: { diagnosticRef: 'diag-e2' },
+    tiebreak: 'deepest',
+  };
+  for (const required of disambiguated.required ?? []) {
+    assert.ok(
+      required in digestResolution,
+      `digest resolution is missing required key: ${required}`,
+    );
+  }
+  // The verbose default/full response still exposes the bounded candidate list.
+  assert.ok('alternatives' in (disambiguated.properties ?? {}));
+});
+
 test('MCP prepare outputSchema stays complete for the typed non-exposed command', () => {
   const prepareSchema = COMMAND_OUTPUT_SCHEMAS.prepare;
   assert.ok(prepareSchema.required?.includes('runner'));

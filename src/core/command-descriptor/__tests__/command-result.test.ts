@@ -33,6 +33,7 @@ type Equal<A, B> =
 
 test('seeded CommandResult entries resolve to their existing contract result types', () => {
   const press: Equal<CommandResult<'press'>, PressCommandResult> = true;
+  const click: Equal<CommandResult<'click'>, PressCommandResult> = true;
   const fill: Equal<CommandResult<'fill'>, FillCommandResult> = true;
   const longPress: Equal<CommandResult<'longpress'>, LongPressCommandResult> = true;
   const boot: Equal<CommandResult<'boot'>, BootCommandResult> = true;
@@ -55,6 +56,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
   > = true;
   expect([
     press,
+    click,
     fill,
     longPress,
     boot,
@@ -91,6 +93,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
     true,
     true,
     true,
+    true,
   ]);
 });
 
@@ -105,6 +108,7 @@ test('CommandResultMap is seeded only from already-existing contract result type
   const keys: Equal<
     keyof CommandResultMap,
     | 'press'
+    | 'click'
     | 'fill'
     | 'longpress'
     | 'boot'

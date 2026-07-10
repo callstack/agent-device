@@ -135,11 +135,6 @@ type DisambiguationState = {
   best: SnapshotNode | null;
   bestVisible: boolean;
   tie: boolean;
-  // ADR 0012 decision 2: the criterion that most recently distinguished the
-  // current best from a challenger, win or lose — a side channel only. It
-  // never feeds back into `best`/`tie`, so the winner selection this state
-  // machine already made is unchanged.
-  tiebreak: DisambiguationTiebreak | null;
 };
 
 function analyzeSelectorMatches(
@@ -159,7 +154,7 @@ function analyzeSelectorMatches(
   let count = 0;
   let firstNode: SnapshotNode | null = null;
   const candidates: SnapshotNode[] = [];
-  const state: DisambiguationState = { best: null, bestVisible: false, tie: false, tiebreak: null };
+  const state: DisambiguationState = { best: null, bestVisible: false, tie: false };
   // Lazily built: only ambiguous matches pay for viewport inference.
   let byIndex: Map<number, SnapshotNode> | undefined;
   const isVisible = (node: SnapshotNode): boolean => {
@@ -178,7 +173,7 @@ function analyzeSelectorMatches(
     count,
     firstNode,
     disambiguated: state.tie ? null : state.best,
-    tiebreak: state.tie ? null : state.tiebreak,
+    tiebreak: state.tie ? null : findDecidingTiebreak(candidates, state.best, isVisible),
     candidates,
   };
 }
@@ -204,12 +199,6 @@ function accumulateDisambiguationCandidate(
       state.best = node;
       state.bestVisible = true;
       state.tie = false;
-      state.tiebreak = 'visible';
-    } else {
-      // The current best already wins on visibility; record that fact only if
-      // no criterion has decided yet — a later, closer comparison (equal
-      // visibility, decided by depth/area) is the more specific explanation.
-      state.tiebreak ??= 'visible';
     }
     return;
   }
@@ -217,12 +206,44 @@ function accumulateDisambiguationCandidate(
   if (comparison.result > 0) {
     state.best = node;
     state.tie = false;
-    state.tiebreak = comparison.criterion;
   } else if (comparison.result === 0) {
     state.tie = true;
-  } else {
-    state.tiebreak ??= comparison.criterion;
   }
+}
+
+/**
+ * The resolution winner is deliberately still picked by the existing running
+ * comparator above. For disclosure, compare that winner with its best losing
+ * challenger rather than leaking the first document-order comparison that
+ * happened to set state. This is a side channel only.
+ */
+function findDecidingTiebreak(
+  candidates: readonly SnapshotNode[],
+  winner: SnapshotNode | null,
+  isVisible: (node: SnapshotNode) => boolean,
+): DisambiguationTiebreak | null {
+  if (!winner) return null;
+  let runnerUp: SnapshotNode | null = null;
+  for (const candidate of candidates) {
+    if (candidate === winner) continue;
+    if (!runnerUp || compareCandidatesWithVisibility(candidate, runnerUp, isVisible).result > 0) {
+      runnerUp = candidate;
+    }
+  }
+  return runnerUp ? compareCandidatesWithVisibility(winner, runnerUp, isVisible).criterion : null;
+}
+
+function compareCandidatesWithVisibility(
+  a: SnapshotNode,
+  b: SnapshotNode,
+  isVisible: (node: SnapshotNode) => boolean,
+): DisambiguationComparison {
+  const visibleA = isVisible(a);
+  const visibleB = isVisible(b);
+  if (visibleA !== visibleB) {
+    return { result: visibleA ? 1 : -1, criterion: 'visible' };
+  }
+  return compareDisambiguationCandidates(a, b);
 }
 
 function countSelectorMatchesOnly(

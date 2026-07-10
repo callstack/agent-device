@@ -117,7 +117,8 @@ const resolutionDiagnosticEntrySchema: JsonSchema = objectSchema(
  * target. Absent entirely when resolutionDisclosure is `inapplicable` for the
  * path (coordinate, maestro-non-hittable-fallback). Never itself ref-issuing:
  * `winnerDiagnostic`/`alternatives` carry no `refsGeneration` and are never
- * MCP-pinned.
+ * MCP-pinned. `alternatives` is present at the default/full response levels
+ * and deliberately omitted in the token-cheap digest view.
  */
 const resolutionDisclosureSchema: JsonSchema = {
   type: 'object',
@@ -145,14 +146,23 @@ const resolutionDisclosureSchema: JsonSchema = {
         ),
         alternatives: {
           type: 'array',
-          description: 'At most 5 losing candidates, document order. The winner is never included.',
+          description:
+            'At most 5 losing candidates, document order. Present at default/full response levels and omitted in digest. The winner is never included.',
           items: resolutionDiagnosticEntrySchema,
         },
       },
-      ['source', 'phase', 'kind', 'matchCount', 'winnerDiagnostic', 'tiebreak', 'alternatives'],
+      ['source', 'phase', 'kind', 'matchCount', 'winnerDiagnostic', 'tiebreak'],
     ),
     objectSchema(
       { source: constSchema('ref'), phase: constSchema('pre-action'), kind: constSchema('exact') },
+      ['source', 'phase', 'kind'],
+    ),
+    objectSchema(
+      {
+        source: constSchema('ref'),
+        phase: constSchema('pre-action'),
+        kind: constSchema('label-fallback'),
+      },
       ['source', 'phase', 'kind'],
     ),
     objectSchema({ source: constSchema('direct-ios'), kind: constSchema('not-observed') }, [
@@ -267,20 +277,23 @@ const targetShutdownResultSchema: JsonSchema = objectSchema(
   ['success', 'exitCode', 'stdout', 'stderr'],
 );
 
+const tapInteractionResponseDataSchema = interactionResponseDataSchema({
+  properties: {
+    evidence: interactionEvidenceSchema,
+    settle: settleObservationSchema,
+    button: enumSchema(['secondary', 'middle']),
+    count: numberSchema('Number of press/click repetitions.'),
+    intervalMs: numberSchema('Delay between repeated press/click actions.'),
+    holdMs: numberSchema('Hold duration for each action.'),
+    jitterPx: numberSchema('Randomization radius in pixels.'),
+    doubleTap: booleanSchema('Whether the command requested a double-tap action.'),
+  },
+});
+
 export const COMMAND_OUTPUT_SCHEMAS = {
   // buildInteractionResponseData public payloads for interaction commands.
-  press: interactionResponseDataSchema({
-    properties: {
-      evidence: interactionEvidenceSchema,
-      settle: settleObservationSchema,
-      button: enumSchema(['secondary', 'middle']),
-      count: numberSchema('Number of press/click repetitions.'),
-      intervalMs: numberSchema('Delay between repeated press/click actions.'),
-      holdMs: numberSchema('Hold duration for each action.'),
-      jitterPx: numberSchema('Randomization radius in pixels.'),
-      doubleTap: booleanSchema('Whether the command requested a double-tap action.'),
-    },
-  }),
+  press: tapInteractionResponseDataSchema,
+  click: tapInteractionResponseDataSchema,
   fill: interactionResponseDataSchema({
     properties: {
       text: stringSchema('Text submitted to the field.'),

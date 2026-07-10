@@ -358,7 +358,7 @@ test('settle default and full return today’s shape unchanged (same reference)'
 
 // --- ADR 0012 decision 2: resolution digest view ---
 
-test('resolution digest drops alternatives but keeps matchCount/tiebreak/winnerDiagnostic', () => {
+test('resolution digest drops default-level alternatives but keeps schema-required disambiguation fields', () => {
   const data: DaemonResponseData = {
     ref: 'e2',
     resolution: {
@@ -382,7 +382,7 @@ test('resolution digest drops alternatives but keeps matchCount/tiebreak/winnerD
   });
 });
 
-test('resolution digest leaves unique/exact/not-observed shapes unchanged (no alternatives to drop)', () => {
+test('resolution digest leaves unique/ref/not-observed shapes unchanged (no alternatives to drop)', () => {
   const unique: DaemonResponseData = {
     resolution: { source: 'runtime', phase: 'pre-action', kind: 'unique' },
   };
@@ -392,6 +392,11 @@ test('resolution digest leaves unique/exact/not-observed shapes unchanged (no al
     resolution: { source: 'ref', phase: 'pre-action', kind: 'exact' },
   };
   expect(RESPONSE_VIEWS.press!(exact, 'digest')).toBe(exact);
+
+  const labelFallback: DaemonResponseData = {
+    resolution: { source: 'ref', phase: 'pre-action', kind: 'label-fallback' },
+  };
+  expect(RESPONSE_VIEWS.press!(labelFallback, 'digest')).toBe(labelFallback);
 
   const notObserved: DaemonResponseData = {
     resolution: { source: 'direct-ios', kind: 'not-observed' },

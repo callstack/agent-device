@@ -167,7 +167,7 @@ async function resolveRefInteractionTarget(
       node,
       capture.snapshot.nodes,
       params.action,
-      EXACT_REF_RESOLUTION,
+      resolved.resolution,
     ),
   };
 }
@@ -251,14 +251,20 @@ const RESOLUTION_DIAGNOSTIC_STRING_BYTE_CAP = 256;
 const MAX_RESOLUTION_ALTERNATIVES = 5;
 
 /**
- * ADR 0012 decision 2: an `@ref` names exactly one node by construction — the
- * runtime-ref path (via `describeResolvedInteractionNode`) and the native-ref
- * fast path (`interactions.ts`) both attach this same constant.
+ * ADR 0012 decision 2: an `@ref` names exactly one node by construction when
+ * the ref lookup succeeds. The native-ref fast path (`interactions.ts`) always
+ * attaches this constant; runtime-ref can instead disclose label fallback.
  */
 export const EXACT_REF_RESOLUTION: ResolutionDisclosure = {
   source: 'ref',
   phase: 'pre-action',
   kind: 'exact',
+};
+
+const LABEL_FALLBACK_REF_RESOLUTION: ResolutionDisclosure = {
+  source: 'ref',
+  phase: 'pre-action',
+  kind: 'label-fallback',
 };
 
 const UNIQUE_RUNTIME_RESOLUTION: ResolutionDisclosure = {
@@ -467,7 +473,7 @@ async function resolveSnapshotForRef(
   runtime: AgentDeviceRuntime,
   options: CommandContext,
   target: Extract<InteractionTarget, { kind: 'ref' }>,
-): Promise<CapturedSnapshot & { resolved: { ref: string; node: SnapshotNode } }> {
+): Promise<CapturedSnapshot & { resolved: ResolvedRefNode }> {
   const sessionName = options.session ?? 'default';
   const session = await runtime.sessions.get(sessionName);
   if (!session) throw new AppError('SESSION_NOT_FOUND', 'No active session. Run open first.');
@@ -501,18 +507,26 @@ function tryResolveRefNode(
   options: {
     fallbackLabel: string;
   },
-): { ref: string; node: SnapshotNode } | null {
+): ResolvedRefNode | null {
   const ref = normalizeRef(refInput);
   if (!ref) throw new AppError('INVALID_ARGS', `Invalid ref: ${refInput}`);
   const refNode = findNodeByRef(nodes, ref);
-  if (isUsableResolvedNode(refNode)) return { ref, node: refNode };
+  if (isUsableResolvedNode(refNode)) {
+    return { ref, node: refNode, resolution: EXACT_REF_RESOLUTION };
+  }
   const fallbackNode =
     options.fallbackLabel.length > 0 ? findNodeByLabel(nodes, options.fallbackLabel) : null;
   if (isUsableResolvedNode(fallbackNode)) {
-    return { ref, node: fallbackNode };
+    return { ref, node: fallbackNode, resolution: LABEL_FALLBACK_REF_RESOLUTION };
   }
   return null;
 }
+
+type ResolvedRefNode = {
+  ref: string;
+  node: SnapshotNode;
+  resolution: ResolutionDisclosure;
+};
 
 function resolveNodeCenter(node: SnapshotNode, message: string): Point {
   const point = resolveRectCenter(node.rect);

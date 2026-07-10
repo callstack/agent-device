@@ -222,6 +222,67 @@ test('resolveSelectorChain disambiguation prefers on-screen candidates over off-
   );
 });
 
+test('resolveSelectorChain discloses the winner versus its closest challenger, not the first comparison', () => {
+  // e3 is the first losing candidate, so the previous side channel recorded
+  // `visible`. e4 is the strongest loser, though: it is also visible, making
+  // e2's extra depth the actual deciding criterion regardless of document order.
+  const nodes: SnapshotState['nodes'] = [
+    {
+      ref: 'e1',
+      index: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 400, height: 800 },
+      depth: 0,
+      enabled: true,
+      hittable: true,
+    },
+    {
+      ref: 'e2',
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Profile',
+      rect: { x: 20, y: 700, width: 200, height: 50 },
+      depth: 3,
+      enabled: true,
+      hittable: true,
+    },
+    {
+      ref: 'e3',
+      index: 2,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Profile',
+      rect: { x: -320, y: 240, width: 100, height: 20 },
+      depth: 8,
+      enabled: true,
+      hittable: false,
+    },
+    {
+      ref: 'e4',
+      index: 3,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Profile',
+      rect: { x: 20, y: 620, width: 200, height: 50 },
+      depth: 2,
+      enabled: true,
+      hittable: true,
+    },
+  ];
+
+  const resolved = resolveSelectorChain(nodes, parseSelectorChain('label="Profile"'), {
+    platform: 'ios',
+    requireRect: true,
+    requireUnique: true,
+    disambiguateAmbiguous: true,
+  });
+
+  assert.ok(resolved);
+  assert.equal(resolved.node.ref, 'e2');
+  assert.equal(resolved.disambiguation?.tiebreak, 'deepest');
+});
+
 test('resolveSelectorChain disambiguation treats items inside an off-screen scroll container as off-screen', () => {
   // The closed drawer carries its own ScrollView at negative x. Visibility
   // relative to that (off-screen) container is not enough — the drawer item

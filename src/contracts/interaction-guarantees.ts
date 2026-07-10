@@ -211,7 +211,9 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/daemon/selectors-resolve.ts#STALE_REF_HINT',
       },
-      // ADR 0012 decision 2: an @ref names exactly one node by construction.
+      // ADR 0012 decision 2: a successful @ref lookup is exact. The replay
+      // trailing-label recovery is explicitly disclosed as label-fallback,
+      // rather than claiming exact ref provenance.
       resolutionDisclosure: {
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/resolution.ts#EXACT_REF_RESOLUTION',

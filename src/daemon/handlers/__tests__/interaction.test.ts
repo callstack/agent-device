@@ -2637,6 +2637,11 @@ test('press @ref fallback label is used after refresh when ref bounds remain inv
   if (response?.ok) {
     expect(response.data?.x).toBe(140);
     expect(response.data?.y).toBe(220);
+    expect(response.data?.resolution).toEqual({
+      source: 'ref',
+      phase: 'pre-action',
+      kind: 'label-fallback',
+    });
   }
 });
 

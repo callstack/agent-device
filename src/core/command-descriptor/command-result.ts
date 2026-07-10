@@ -32,7 +32,7 @@ import type { TriggerAppEventCommandResult } from '../../contracts/app-events.ts
  *
  * Batches 1-2 wired `boot` / `shutdown` / `viewport` and the navigation/action
  * commands `home` / `back` / `rotate` / `app-switcher` alongside the seed
- * interaction trio. Batch 3 adds `clipboard` (a closed `read`/`write` union) and
+ * interaction quartet. Batch 3 adds `clipboard` (a closed `read`/`write` union) and
  * `appstate` (a closed `platform` union — Apple session state with the iOS-only
  * device locators, or Android package/activity). Batch 4 adds `keyboard` (a
  * closed flat shape). Batch 5 adds the compact daemon projections for `wait`,
@@ -41,6 +41,7 @@ import type { TriggerAppEventCommandResult } from '../../contracts/app-events.ts
  */
 export interface CommandResultMap {
   press: PressCommandResult;
+  click: PressCommandResult;
   fill: FillCommandResult;
   longpress: LongPressCommandResult;
   boot: BootCommandResult;
