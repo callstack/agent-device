@@ -447,7 +447,7 @@ test('invokeMaestroSwipeScreen keeps iOS horizontal percentage swipes away from 
   expect(swipes).toEqual([['60', '400', '340', '400', '300']]);
 });
 
-test('invokeMaestroSwipeScreen maps broad Android horizontal percentage swipes to the content lane', async () => {
+test('invokeMaestroSwipeScreen maps Android midpoint percentage swipes to the content lane', async () => {
   const swipes: string[][] = [];
   const response = await invokeMaestroSwipeScreen({
     baseReq: {
@@ -470,6 +470,31 @@ test('invokeMaestroSwipeScreen maps broad Android horizontal percentage swipes t
 
   expect(response.ok).toBe(true);
   expect(swipes).toEqual([['351', '390', '39', '390', '300']]);
+});
+
+test('invokeMaestroSwipeScreen preserves an explicit Android horizontal percentage lane', async () => {
+  const swipes: string[][] = [];
+  const response = await invokeMaestroSwipeScreen({
+    baseReq: {
+      token: 'test',
+      session: 'nested-pager',
+      flags: { platform: 'android' },
+    },
+    positionals: ['percent', '90', '30', '10', '30', '300'],
+    invoke: async (req: DaemonRequest): Promise<DaemonResponse> => {
+      if (req.command === 'snapshot') {
+        return { ok: true, data: fullScreenSnapshot(390, 600) };
+      }
+      if (req.command === 'swipe') {
+        swipes.push(req.positionals ?? []);
+        return { ok: true, data: {} };
+      }
+      return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
+    },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(swipes).toEqual([['351', '180', '39', '180', '300']]);
 });
 
 test('invokeMaestroTapPointPercent shares percentage point geometry without clamping', async () => {

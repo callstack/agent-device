@@ -397,7 +397,7 @@ function maestroHorizontalContentSwipeLanePercent(
   y2: number,
 ): number | undefined {
   if (platform !== 'android') return undefined;
-  if (y1 !== y2 || Math.abs(x2 - x1) < 30) return undefined;
+  if (y1 !== 50 || y2 !== 50 || Math.abs(x2 - x1) < 30) return undefined;
   return 65;
 }
 
