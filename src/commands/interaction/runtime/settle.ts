@@ -250,8 +250,8 @@ const STRUCTURAL_TAIL_ROLES = new Set(['application', 'window']);
  * was stricter than `snapshot -i`'s own bar and silently dropped exactly the
  * buttons the tail exists to surface (#1167 post-merge benchmark). Structural
  * application/window chrome, any keyboard container/chrome subtree (iOS), and
- * any Android IME/foreign-app chrome (`appBundleId`, #1178) are excluded on
- * top of that bar: never a next actionable target either way.
+ * Android IME/persistent-system chrome (#1178) are excluded on top of that
+ * bar: never a next actionable target either way.
  */
 export function buildSettleTailEntries(
   settledNodes: SnapshotNode[],
@@ -356,17 +356,21 @@ function collectSubtreeIndexes(
   return indexes;
 }
 
+// Persistent Android system chrome that is never settle-relevant: exactly the
+// status/navigation-bar package whose clock/signal/battery churn motivated
+// #1178. Deliberately minimal — every OTHER foreign package (system dialogs
+// like `android`'s resolver/share sheet, permission prompts, the package
+// installer) is an overlay the agent must see and act on, so it is KEPT.
+const ANDROID_PERSISTENT_SYSTEM_CHROME_PACKAGES = new Set(['com.android.systemui']);
+
 /**
- * Android settle-diff scope (#1178): each node's own `bundleId` decides its
- * fate — IME-owned nodes (`isAndroidInputMethodSnapshotNode`, same detector
- * as the #1157 occlusion guard) collapse to one surviving line per
- * contiguous run, and with an `appBundleId` every other foreign-package node
- * (status bar, another app) is dropped from both diff sides (#1163's scope
- * philosophy). Classification is strictly per-node, never a parentIndex
- * subtree walk: Android's interactive-only pruning can chain an app node's
- * `parentIndex` through another window's node (locked in by the settle.test.ts
- * cross-window regression test). Inert on iOS/macOS: those nodes never set
- * `bundleId`.
+ * Android settle chrome (#1178): IME-owned nodes collapse to one surviving
+ * line per contiguous run, persistent system chrome (status bar) drops from
+ * both diff sides, and every other foreign package is kept in full so system
+ * dialogs stay actionable. Constraint: classification is strictly per-node by
+ * the node's own `bundleId` — parentIndex chains can cross windows on Android
+ * (enforced by the settle.test.ts cross-window regression test). Inert on
+ * iOS/macOS: those nodes never set `bundleId`.
  */
 function collectAndroidSettleChrome(
   nodes: SnapshotNode[],
@@ -383,28 +387,30 @@ function collectAndroidSettleChrome(
       return !parent || !imeIndexes.has(parent.index);
     }),
   );
-  const foreignAppIndexes = appBundleId
-    ? new Set(
-        nodes
-          .filter(
-            (node) =>
-              node.bundleId !== undefined &&
-              node.bundleId !== appBundleId &&
-              !imeIndexes.has(node.index),
-          )
-          .map((node) => node.index),
+  // appBundleId is the session's pre-action value (not refreshed inside the
+  // settle loop); it is only a never-drop-the-app-under-test guard here, so
+  // staleness cannot hide a foreign dialog.
+  const systemChromeIndexes = new Set(
+    nodes
+      .filter(
+        (node) =>
+          node.bundleId !== undefined &&
+          ANDROID_PERSISTENT_SYSTEM_CHROME_PACKAGES.has(node.bundleId) &&
+          node.bundleId !== appBundleId &&
+          !imeIndexes.has(node.index),
       )
-    : new Set<number>();
-  // The one surviving container line per IME run; every other IME-owned node
-  // (same rule as foreign-app nodes) never spends diff/tail budget.
+      .map((node) => node.index),
+  );
+  // The one surviving container line per IME run; the rest of the run and all
+  // persistent system chrome never spend diff/tail budget.
   const strippedIndexes = new Set(
     [...imeIndexes].filter((index) => !imeContainerIndexes.has(index)),
   );
-  for (const index of foreignAppIndexes) strippedIndexes.add(index);
+  for (const index of systemChromeIndexes) strippedIndexes.add(index);
   const refs = new Set(
     nodes
       .filter(
-        (node) => node.ref && (imeIndexes.has(node.index) || foreignAppIndexes.has(node.index)),
+        (node) => node.ref && (imeIndexes.has(node.index) || systemChromeIndexes.has(node.index)),
       )
       .map((node) => node.ref),
   );
@@ -412,7 +418,7 @@ function collectAndroidSettleChrome(
   return { strippedIndexes, refs };
 }
 
-/** iOS keyboard-window chrome unioned with Android IME/foreign-app chrome. */
+/** iOS keyboard-window chrome unioned with Android IME/system chrome. */
 function collectSettleChrome(
   nodes: SnapshotNode[],
   appBundleId: string | undefined,

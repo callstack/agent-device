@@ -847,11 +847,11 @@ function androidAppNodes() {
   ];
 }
 
-test('Android status bar and IME chrome never spend the settled diff budget (app-scoped, #1178)', async () => {
+test('Android status bar and IME chrome never spend the settled diff budget (#1178)', async () => {
   // The status bar clock ticks and the keyboard is summoned between captures
-  // — exactly the noise the July 2026 Android settle benchmark flagged. With
-  // an app-scoped session, the status bar disappears entirely (both sides)
-  // and the IME collapses to its one container line.
+  // — exactly the noise the July 2026 Android settle benchmark flagged. The
+  // systemui status bar disappears entirely (both sides) and the IME
+  // collapses to its one container line.
   const before = makeSnapshotState([...androidAppNodes(), ...androidStatusBarNodes(10, '12:23')]);
   const settledTree = makeSnapshotState([
     ...androidAppNodes(),
@@ -1149,6 +1149,496 @@ test('a real capture with a cross-window parentIndex artifact never loses app co
       ],
     );
   }
+});
+
+// Real Android Sharesheet (`am start -a android.intent.action.SEND`,
+// ResolverActivity) captured live via `snapshot --raw --json` on the same
+// emulator/session as the other #1178 fixtures: 41 nodes, every one owned by
+// package `android` — the shape shared by permission prompts, the package
+// installer, and chooser/resolver sheets. Indexes offset by +100 to stay
+// clear of androidAppNodes().
+function androidSharesheetNodes() {
+  return [
+    {
+      index: 100,
+      depth: 0,
+      type: 'android.widget.FrameLayout',
+      bundleId: 'android',
+      rect: { x: 0, y: 0, width: 1344, height: 2992 },
+    },
+    {
+      index: 101,
+      depth: 1,
+      parentIndex: 100,
+      type: 'android.widget.LinearLayout',
+      bundleId: 'android',
+      rect: { x: 0, y: 0, width: 1344, height: 2992 },
+    },
+    {
+      index: 102,
+      depth: 2,
+      parentIndex: 101,
+      type: 'android.widget.FrameLayout',
+      identifier: 'android:id/content',
+      bundleId: 'android',
+      rect: { x: 0, y: 0, width: 1344, height: 2992 },
+    },
+    {
+      index: 103,
+      depth: 3,
+      parentIndex: 102,
+      type: 'android.widget.ScrollView',
+      identifier: 'android:id/contentPanel',
+      bundleId: 'android',
+      rect: { x: 0, y: 0, width: 1344, height: 2992 },
+    },
+    {
+      index: 104,
+      depth: 4,
+      parentIndex: 103,
+      type: 'android.widget.RelativeLayout',
+      identifier: 'android:id/title_container',
+      bundleId: 'android',
+      rect: { x: 0, y: 1937, width: 1344, height: 191 },
+    },
+    {
+      index: 105,
+      depth: 5,
+      parentIndex: 104,
+      type: 'android.widget.TextView',
+      label: 'Share',
+      identifier: 'android:id/title',
+      bundleId: 'android',
+      rect: { x: 72, y: 1991, width: 1200, height: 65 },
+    },
+    {
+      index: 106,
+      depth: 4,
+      parentIndex: 103,
+      type: 'android.view.View',
+      identifier: 'android:id/divider',
+      bundleId: 'android',
+      rect: { x: 0, y: 2128, width: 1344, height: 3 },
+    },
+    {
+      index: 107,
+      depth: 4,
+      parentIndex: 103,
+      type: 'android.widget.TabHost',
+      identifier: 'android:id/profile_tabhost',
+      bundleId: 'android',
+      rect: { x: 0, y: 2131, width: 1344, height: 861 },
+    },
+    {
+      index: 108,
+      depth: 5,
+      parentIndex: 107,
+      type: 'android.widget.LinearLayout',
+      bundleId: 'android',
+      rect: { x: 0, y: 2131, width: 1344, height: 861 },
+    },
+    {
+      index: 109,
+      depth: 6,
+      parentIndex: 108,
+      type: 'android.widget.FrameLayout',
+      identifier: 'android:id/tabcontent',
+      bundleId: 'android',
+      rect: { x: 0, y: 2131, width: 1344, height: 861 },
+    },
+    {
+      index: 110,
+      depth: 7,
+      parentIndex: 109,
+      type: 'com.android.internal.widget.ViewPager',
+      identifier: 'android:id/profile_pager',
+      bundleId: 'android',
+      rect: { x: 0, y: 2131, width: 1344, height: 861 },
+    },
+    {
+      index: 111,
+      depth: 8,
+      parentIndex: 110,
+      type: 'android.widget.RelativeLayout',
+      bundleId: 'android',
+      rect: { x: 0, y: 2131, width: 1344, height: 861 },
+    },
+    {
+      index: 112,
+      depth: 9,
+      parentIndex: 111,
+      type: 'android.widget.ListView',
+      identifier: 'android:id/resolver_list',
+      bundleId: 'android',
+      rect: { x: 0, y: 2131, width: 1344, height: 861 },
+    },
+    {
+      index: 113,
+      depth: 10,
+      parentIndex: 112,
+      type: 'android.widget.LinearLayout',
+      bundleId: 'android',
+      rect: { x: 0, y: 2131, width: 1344, height: 168 },
+    },
+    {
+      index: 114,
+      depth: 11,
+      parentIndex: 113,
+      type: 'android.widget.ImageView',
+      identifier: 'android:id/icon',
+      bundleId: 'android',
+      rect: { x: 24, y: 2167, width: 96, height: 96 },
+    },
+    {
+      index: 115,
+      depth: 11,
+      parentIndex: 113,
+      type: 'android.widget.LinearLayout',
+      bundleId: 'android',
+      rect: { x: 144, y: 2182, width: 326, height: 65 },
+    },
+    {
+      index: 116,
+      depth: 12,
+      parentIndex: 115,
+      type: 'android.widget.TextView',
+      label: 'Quick Share',
+      identifier: 'android:id/text1',
+      bundleId: 'android',
+      rect: { x: 144, y: 2182, width: 254, height: 65 },
+    },
+    {
+      index: 117,
+      depth: 10,
+      parentIndex: 112,
+      type: 'android.widget.LinearLayout',
+      bundleId: 'android',
+      rect: { x: 0, y: 2299, width: 1344, height: 168 },
+    },
+    {
+      index: 118,
+      depth: 11,
+      parentIndex: 117,
+      type: 'android.widget.ImageView',
+      identifier: 'android:id/icon',
+      bundleId: 'android',
+      rect: { x: 24, y: 2335, width: 96, height: 96 },
+    },
+    {
+      index: 119,
+      depth: 11,
+      parentIndex: 117,
+      type: 'android.widget.LinearLayout',
+      bundleId: 'android',
+      rect: { x: 144, y: 2350, width: 277, height: 65 },
+    },
+    {
+      index: 120,
+      depth: 12,
+      parentIndex: 119,
+      type: 'android.widget.TextView',
+      label: 'Bluetooth',
+      identifier: 'android:id/text1',
+      bundleId: 'android',
+      rect: { x: 144, y: 2350, width: 205, height: 65 },
+    },
+    {
+      index: 121,
+      depth: 10,
+      parentIndex: 112,
+      type: 'android.widget.LinearLayout',
+      bundleId: 'android',
+      rect: { x: 0, y: 2467, width: 1344, height: 168 },
+    },
+    {
+      index: 122,
+      depth: 11,
+      parentIndex: 121,
+      type: 'android.widget.ImageView',
+      identifier: 'android:id/icon',
+      bundleId: 'android',
+      rect: { x: 24, y: 2503, width: 96, height: 96 },
+    },
+    {
+      index: 123,
+      depth: 11,
+      parentIndex: 121,
+      type: 'android.widget.LinearLayout',
+      bundleId: 'android',
+      rect: { x: 144, y: 2490, width: 197, height: 122 },
+    },
+    {
+      index: 124,
+      depth: 12,
+      parentIndex: 123,
+      type: 'android.widget.TextView',
+      label: 'Gmail',
+      identifier: 'android:id/text1',
+      bundleId: 'android',
+      rect: { x: 144, y: 2490, width: 125, height: 65 },
+    },
+    {
+      index: 125,
+      depth: 12,
+      parentIndex: 123,
+      type: 'android.widget.TextView',
+      label: 'Chat',
+      identifier: 'android:id/text2',
+      bundleId: 'android',
+      rect: { x: 144, y: 2555, width: 87, height: 57 },
+    },
+    {
+      index: 126,
+      depth: 10,
+      parentIndex: 112,
+      type: 'android.widget.LinearLayout',
+      bundleId: 'android',
+      rect: { x: 0, y: 2635, width: 1344, height: 168 },
+    },
+    {
+      index: 127,
+      depth: 11,
+      parentIndex: 126,
+      type: 'android.widget.ImageView',
+      identifier: 'android:id/icon',
+      bundleId: 'android',
+      rect: { x: 24, y: 2671, width: 96, height: 96 },
+    },
+    {
+      index: 128,
+      depth: 11,
+      parentIndex: 126,
+      type: 'android.widget.LinearLayout',
+      bundleId: 'android',
+      rect: { x: 144, y: 2686, width: 239, height: 65 },
+    },
+    {
+      index: 129,
+      depth: 12,
+      parentIndex: 128,
+      type: 'android.widget.TextView',
+      label: 'Chrome',
+      identifier: 'android:id/text1',
+      bundleId: 'android',
+      rect: { x: 144, y: 2686, width: 167, height: 65 },
+    },
+    {
+      index: 130,
+      depth: 10,
+      parentIndex: 112,
+      type: 'android.widget.LinearLayout',
+      bundleId: 'android',
+      rect: { x: 0, y: 2803, width: 1344, height: 168 },
+    },
+    {
+      index: 131,
+      depth: 11,
+      parentIndex: 130,
+      type: 'android.widget.ImageView',
+      identifier: 'android:id/icon',
+      bundleId: 'android',
+      rect: { x: 24, y: 2839, width: 96, height: 96 },
+    },
+    {
+      index: 132,
+      depth: 11,
+      parentIndex: 130,
+      type: 'android.widget.LinearLayout',
+      bundleId: 'android',
+      rect: { x: 144, y: 2826, width: 399, height: 122 },
+    },
+    {
+      index: 133,
+      depth: 12,
+      parentIndex: 132,
+      type: 'android.widget.TextView',
+      label: 'Drive',
+      identifier: 'android:id/text1',
+      bundleId: 'android',
+      rect: { x: 144, y: 2826, width: 108, height: 65 },
+    },
+    {
+      index: 134,
+      depth: 12,
+      parentIndex: 132,
+      type: 'android.widget.TextView',
+      label: 'Copy to clipboard',
+      identifier: 'android:id/text2',
+      bundleId: 'android',
+      rect: { x: 144, y: 2891, width: 327, height: 57 },
+    },
+    {
+      index: 135,
+      depth: 10,
+      parentIndex: 112,
+      type: 'android.widget.LinearLayout',
+      bundleId: 'android',
+      rect: { x: 0, y: 2971, width: 1344, height: 21 },
+    },
+    {
+      index: 136,
+      depth: 4,
+      parentIndex: 103,
+      type: 'android.widget.LinearLayout',
+      identifier: 'android:id/button_bar_container',
+      bundleId: 'android',
+      rect: { x: 0, y: 2707, width: 1344, height: 285 },
+    },
+    {
+      index: 137,
+      depth: 5,
+      parentIndex: 136,
+      type: 'android.view.View',
+      identifier: 'android:id/resolver_button_bar_divider',
+      bundleId: 'android',
+      rect: { x: 0, y: 2707, width: 1344, height: 3 },
+    },
+    {
+      index: 138,
+      depth: 5,
+      parentIndex: 136,
+      type: 'android.widget.LinearLayout',
+      identifier: 'android:id/button_bar',
+      bundleId: 'android',
+      rect: { x: 0, y: 2710, width: 1344, height: 282 },
+    },
+    {
+      index: 139,
+      depth: 6,
+      parentIndex: 138,
+      type: 'android.widget.Button',
+      label: 'Just once',
+      identifier: 'android:id/button_once',
+      bundleId: 'android',
+      rect: { x: 829, y: 2734, width: 255, height: 162 },
+      hittable: true,
+    },
+    {
+      index: 140,
+      depth: 6,
+      parentIndex: 138,
+      type: 'android.widget.Button',
+      label: 'Always',
+      identifier: 'android:id/button_always',
+      bundleId: 'android',
+      rect: { x: 1084, y: 2734, width: 206, height: 162 },
+      hittable: true,
+    },
+  ];
+}
+
+test('a system dialog (real Sharesheet capture) stays fully visible in the settled diff (#1178)', async () => {
+  // PR #1200 review blocker: the initial fix dropped EVERY foreign package,
+  // so a blocking system dialog appearing mid-action produced an empty diff
+  // and a tail pointing at now-covered app buttons. Keep-unknown-foreign is
+  // the rule now: only IME + persistent system chrome are ever filtered.
+  const before = makeSnapshotState([...androidAppNodes()]);
+  const settledTree = makeSnapshotState([...androidAppNodes(), ...androidSharesheetNodes()]);
+  let captures = 0;
+  const device = createSettleDevice({
+    stored: before,
+    appBundleId: ANDROID_APP_BUNDLE_ID,
+    captureSnapshot: () => {
+      captures += 1;
+      return { snapshot: captures === 1 ? before : settledTree };
+    },
+  });
+
+  const result = await device.interactions.press(selector('label="Discard and go back"'), {
+    session: 'default',
+    settle: {},
+  });
+
+  const diff = result.settle?.diff;
+  assert.ok(diff);
+  // The dialog registers as change, not silence.
+  assert.ok(diff.summary.additions > 0, 'dialog additions must appear in the settled diff');
+  assert.equal(diff.summary.removals, 0);
+  const added = diff.lines.filter((line) => line.kind === 'added');
+  const texts = added.map((line) => line.text).join('\n');
+  assert.match(texts, /Just once/);
+  assert.match(texts, /Always/);
+  assert.match(texts, /"Share"/);
+  // The dialog's buttons arrive WITH actionable refs.
+  assert.ok(
+    added.some((line) => /Just once/.test(line.text) && line.ref),
+    'dialog buttons must carry refs',
+  );
+});
+
+// The same live Sharesheet through `snapshot -i --json` — the interactive-only
+// shape settled captures actually have (10 nodes; the raw fixture above would
+// exhaust the 20-entry tail cap on unlabeled containers alone).
+function androidSharesheetInteractiveNodes() {
+  return [
+    {
+      index: 100,
+      depth: 3,
+      type: 'android.widget.ScrollView',
+      bundleId: 'android',
+      rect: { x: 0, y: 0, width: 1344, height: 2992 },
+    },
+    {
+      index: 101,
+      depth: 12,
+      parentIndex: 100,
+      type: 'android.widget.TextView',
+      label: 'Quick Share',
+      bundleId: 'android',
+      rect: { x: 144, y: 2182, width: 254, height: 65 },
+    },
+    {
+      index: 102,
+      depth: 12,
+      parentIndex: 100,
+      type: 'android.widget.TextView',
+      label: 'Gmail',
+      bundleId: 'android',
+      rect: { x: 144, y: 2490, width: 125, height: 65 },
+    },
+    {
+      index: 103,
+      depth: 12,
+      parentIndex: 100,
+      type: 'android.widget.TextView',
+      label: 'Chrome',
+      bundleId: 'android',
+      rect: { x: 144, y: 2686, width: 167, height: 65 },
+    },
+    {
+      index: 104,
+      depth: 6,
+      parentIndex: 100,
+      type: 'android.widget.Button',
+      label: 'Just once',
+      bundleId: 'android',
+      rect: { x: 829, y: 2734, width: 255, height: 162 },
+      hittable: true,
+    },
+    {
+      index: 105,
+      depth: 6,
+      parentIndex: 100,
+      type: 'android.widget.Button',
+      label: 'Always',
+      bundleId: 'android',
+      rect: { x: 1084, y: 2734, width: 206, height: 162 },
+      hittable: true,
+    },
+  ];
+}
+
+test("a system dialog's buttons are settle-tail candidates, never chrome (#1178)", () => {
+  const settledNodes = makeSnapshotState([
+    ...androidAppNodes(),
+    ...androidSharesheetInteractiveNodes(),
+  ]).nodes;
+
+  const result = buildSettleTailEntries(settledNodes, new Set(), ANDROID_APP_BUNDLE_ID);
+
+  const labels = (result.tail ?? []).map((entry) => entry.label);
+  assert.ok(labels.includes('Just once'), `tail must list the dialog buttons, got: ${labels}`);
+  assert.ok(labels.includes('Always'), `tail must list the dialog buttons, got: ${labels}`);
 });
 
 test('added lines win diff-budget slots over removals under truncation', async () => {
@@ -1543,7 +2033,7 @@ test('buildSettleTailEntries drops the keyboard container and its chrome descend
   assert.deepEqual(result.tail, [{ ref: 'e1', role: 'button', label: 'Send' }]);
 });
 
-test('buildSettleTailEntries drops Android IME chrome and foreign-app nodes given appBundleId (#1178)', () => {
+test('buildSettleTailEntries drops Android IME chrome and persistent system chrome (#1178)', () => {
   const settledNodes = makeSnapshotState([
     {
       index: 0,
@@ -1585,7 +2075,10 @@ test('buildSettleTailEntries drops Android IME chrome and foreign-app nodes give
   assert.deepEqual(result.tail, [{ ref: 'e1', role: 'button', label: 'Send' }]);
 });
 
-test('buildSettleTailEntries without appBundleId leaves Android nodes unfiltered (no-op scope)', () => {
+test('buildSettleTailEntries keeps unknown-foreign packages and drops only systemui, with or without appBundleId (#1178)', () => {
+  // Keep-unknown-foreign default: a system dialog's buttons (package
+  // `android`) stay tail candidates; only the persistent status-bar package
+  // is dropped, and that does not depend on knowing the session's app.
   const settledNodes = makeSnapshotState([
     {
       index: 0,
@@ -1605,14 +2098,23 @@ test('buildSettleTailEntries without appBundleId leaves Android nodes unfiltered
       bundleId: 'com.android.systemui',
       rect: { x: 40, y: 40, width: 80, height: 40 },
     },
+    {
+      index: 2,
+      depth: 0,
+      type: 'android.widget.Button',
+      label: 'Just once',
+      identifier: 'android:id/button_once',
+      bundleId: 'android',
+      rect: { x: 829, y: 2734, width: 255, height: 162 },
+      hittable: true,
+    },
   ]).nodes;
 
-  // No session appBundleId (e.g. session not tracking an open app): the app
-  // scope rule stays a no-op rather than guessing which package is "the app".
-  const result = buildSettleTailEntries(settledNodes, new Set());
-
-  assert.deepEqual(
-    result.tail?.map((entry) => entry.ref),
-    ['e1', 'e2'],
-  );
+  for (const appBundleId of [undefined, 'org.reactnavigation.playground']) {
+    const result = buildSettleTailEntries(settledNodes, new Set(), appBundleId);
+    assert.deepEqual(
+      result.tail?.map((entry) => entry.label),
+      ['Send', 'Just once'],
+    );
+  }
 });
