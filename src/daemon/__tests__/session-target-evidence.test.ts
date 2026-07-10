@@ -319,3 +319,29 @@ test('computeTargetEvidence: real-capture-shaped tree (undefined hittable, anony
   const json = serializeTargetAnnotationV1(evidence);
   assert.deepEqual(parseTargetAnnotationV1Payload(json), evidence);
 });
+
+// ---------------------------------------------------------------------------
+// Self-consistency: a node whose own id/label exceeds the 256-byte field cap
+// must still match ITSELF during the identity-set scan. The recorded
+// identity is truncated (writer-parser invariant); comparing an untruncated
+// candidate against it would spuriously exclude the winner from its own
+// identity set and produce a false 'unverifiable'.
+// ---------------------------------------------------------------------------
+
+test('computeTargetEvidence: a node with an over-cap id still matches itself and is verified', () => {
+  const overCapId = 'save-'.repeat(100); // 500 bytes, well over the 256-byte field cap
+  const nodes = toSnapshotNodes([
+    {
+      index: 0,
+      type: 'Button',
+      identifier: overCapId,
+      label: 'Save',
+      rect: { x: 0, y: 0, width: 10, height: 10 },
+      depth: 0,
+    },
+  ]);
+  const evidence = computeTargetEvidence({ node: nodes[0]!, nodes });
+  assert.ok(evidence);
+  assert.equal(evidence.id, overCapId.slice(0, TARGET_ANNOTATION_MAX_FIELD_BYTES));
+  assert.equal(evidence.verification, 'verified');
+});

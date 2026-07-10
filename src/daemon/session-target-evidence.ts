@@ -235,7 +235,13 @@ function computeDisambiguationDomain(params: {
   // Step 2: all nodes sharing the winner's local identity with a matching
   // leaf-anchored ancestry prefix.
   const identitySet = nodes.filter((candidate) => {
-    if (!matchesLocalIdentity(computeLocalIdentity(candidate), identity)) return false;
+    // Compare through the SAME 256-byte bounding the recorded `identity` and
+    // ancestry entries already went through — otherwise a node whose own
+    // id/label exceeds the field cap would spuriously fail to match ITSELF
+    // (the recorded value is truncated; the raw candidate value is not),
+    // corrupting both this self-check and, if the replay-time matcher ever
+    // skipped the same bounding, a real node's identity check later.
+    if (!matchesLocalIdentity(boundedLocalIdentity(candidate), identity)) return false;
     const observedAncestry = buildAncestryChain(candidate, byIndex, Math.max(ancestry.length, 1));
     return matchesAncestryPrefix(observedAncestry, ancestry);
   });
