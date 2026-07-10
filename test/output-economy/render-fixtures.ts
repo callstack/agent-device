@@ -5,6 +5,7 @@ import { RESPONSE_VIEWS } from '../../src/daemon/response-views.ts';
 import { normalizeError } from '../../src/kernel/errors.ts';
 import { createCommandToolExecutor } from '../../src/mcp/command-tools.ts';
 import type { EconomySample } from './economy-metrics.ts';
+import { renderRoutineWorkflow } from './routine-workflow.ts';
 import {
   ACTIONABLE_ERROR,
   NOT_SETTLED_RESULT,
@@ -37,6 +38,7 @@ export async function renderOutputFixtures() {
     createClient: () => ({}) as AgentDeviceClient,
     runCommand: async () => SNAPSHOT_DAEMON_RESULT,
   }).execute('snapshot', {});
+  const workflow = await renderRoutineWorkflow();
 
   return {
     snapshot,
@@ -66,6 +68,7 @@ export async function renderOutputFixtures() {
       'error.normalized.json': { data: error },
       'error.policy-normalized.json': { data: errorPolicyNormalized },
       'mcp.snapshot.default.json': { data: mcpSnapshot },
+      ...workflow.samples,
     } satisfies Record<string, EconomySample>,
   };
 }

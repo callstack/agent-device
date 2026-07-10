@@ -110,5 +110,75 @@
     "refs": 4,
     "hints": 0,
     "shape": "$.content:array|$.content[].text:string|$.content[].type:string|$.content[]:object|$.isError:boolean|$.structuredContent.identifiers.session:string|$.structuredContent.identifiers:object|$.structuredContent.nodes:array|$.structuredContent.nodes[].depth:number|$.structuredContent.nodes[].enabled:boolean|$.structuredContent.nodes[].hittable:boolean|$.structuredContent.nodes[].identifier:string|$.structuredContent.nodes[].index:number|$.structuredContent.nodes[].label:string|$.structuredContent.nodes[].parentIndex:number|$.structuredContent.nodes[].rect.height:number|$.structuredContent.nodes[].rect.width:number|$.structuredContent.nodes[].rect.x:number|$.structuredContent.nodes[].rect.y:number|$.structuredContent.nodes[].rect:object|$.structuredContent.nodes[].ref:string|$.structuredContent.nodes[].role:string|$.structuredContent.nodes[].type:string|$.structuredContent.nodes[].value:string|$.structuredContent.nodes[]:object|$.structuredContent.refsGeneration:number|$.structuredContent.truncated:boolean|$.structuredContent.visibility.partial:boolean|$.structuredContent.visibility.reasons:array|$.structuredContent.visibility.totalNodeCount:number|$.structuredContent.visibility.visibleNodeCount:number|$.structuredContent.visibility:object|$.structuredContent:object|$:object"
+  },
+  "workflow.orient.cli.text": {
+    "bytes": 471,
+    "lines": 6,
+    "refs": 3,
+    "hints": 1,
+    "shape": "text"
+  },
+  "workflow.orient.mcp.json": {
+    "bytes": 1294,
+    "lines": 1,
+    "refs": 3,
+    "hints": 0,
+    "shape": "$.content:array|$.content[].text:string|$.content[].type:string|$.content[]:object|$.isError:boolean|$.structuredContent.identifiers.session:string|$.structuredContent.identifiers:object|$.structuredContent.nodes:array|$.structuredContent.nodes[].depth:number|$.structuredContent.nodes[].enabled:boolean|$.structuredContent.nodes[].hittable:boolean|$.structuredContent.nodes[].identifier:string|$.structuredContent.nodes[].index:number|$.structuredContent.nodes[].label:string|$.structuredContent.nodes[].parentIndex:number|$.structuredContent.nodes[].rect.height:number|$.structuredContent.nodes[].rect.width:number|$.structuredContent.nodes[].rect.x:number|$.structuredContent.nodes[].rect.y:number|$.structuredContent.nodes[].rect:object|$.structuredContent.nodes[].ref:string|$.structuredContent.nodes[].role:string|$.structuredContent.nodes[].type:string|$.structuredContent.nodes[].value:string|$.structuredContent.nodes[]:object|$.structuredContent.refsGeneration:number|$.structuredContent.truncated:boolean|$.structuredContent.visibility.partial:boolean|$.structuredContent.visibility.reasons:array|$.structuredContent.visibility.totalNodeCount:number|$.structuredContent.visibility.visibleNodeCount:number|$.structuredContent.visibility:object|$.structuredContent:object|$:object"
+  },
+  "workflow.recheck.cli.text": {
+    "bytes": 550,
+    "lines": 4,
+    "refs": 0,
+    "hints": 1,
+    "shape": "text"
+  },
+  "workflow.mutation-confirm.cli.text": {
+    "bytes": 153,
+    "lines": 5,
+    "refs": 3,
+    "hints": 0,
+    "shape": "text"
+  },
+  "workflow.mutation-confirm.mcp.json": {
+    "bytes": 431,
+    "lines": 1,
+    "refs": 3,
+    "hints": 0,
+    "shape": "$.message:string|$.ref:string|$.settle.captures:number|$.settle.diff.lines:array|$.settle.diff.lines[].kind:string|$.settle.diff.lines[].ref:string|$.settle.diff.lines[].text:string|$.settle.diff.lines[]:object|$.settle.diff.summary.additions:number|$.settle.diff.summary.removals:number|$.settle.diff.summary.unchanged:number|$.settle.diff.summary:object|$.settle.diff:object|$.settle.quietMs:number|$.settle.refsGeneration:number|$.settle.settled:boolean|$.settle.timeoutMs:number|$.settle.waitedMs:number|$.settle:object|$.x:number|$.y:number|$:object"
+  },
+  "workflow.mutation-tail.cli.text": {
+    "bytes": 161,
+    "lines": 6,
+    "refs": 3,
+    "hints": 0,
+    "shape": "text"
+  },
+  "workflow.read.cli.text": {
+    "bytes": 15,
+    "lines": 1,
+    "refs": 0,
+    "hints": 0,
+    "shape": "text"
+  },
+  "workflow.failure.cli.json": {
+    "bytes": 328,
+    "lines": 1,
+    "refs": 1,
+    "hints": 1,
+    "shape": "$.code:string|$.details.reason:string|$.details.ref:string|$.details.refsGeneration:number|$.details.session:string|$.details.timeoutMs:number|$.details:object|$.hint:string|$.message:string|$.retriable:boolean|$:object"
+  },
+  "workflow.failure.mcp.json": {
+    "bytes": 328,
+    "lines": 1,
+    "refs": 1,
+    "hints": 1,
+    "shape": "$.code:string|$.details.reason:string|$.details.ref:string|$.details.refsGeneration:number|$.details.session:string|$.details.timeoutMs:number|$.details:object|$.hint:string|$.message:string|$.retriable:boolean|$:object"
+  },
+  "workflow.retry.cli.text": {
+    "bytes": 131,
+    "lines": 5,
+    "refs": 2,
+    "hints": 0,
+    "shape": "text"
   }
 }

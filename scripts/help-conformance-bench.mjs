@@ -191,6 +191,39 @@ Old refs may be stale after this mutation, and no settled diff was printed, so t
       { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
     ],
   },
+  // The next-step decision measured by the routine-workflow oracle
+  // (test/output-economy/routine-workflow.ts): an actionable failure that
+  // preserved the session, the failing ref, its snapshot generation, a retry
+  // signal, and retry guidance should be recovered IN SESSION with a targeted
+  // retry — not by reopening the session or re-observing evidence the error
+  // already kept valid.
+  {
+    id: 'sample-output-recoverable-failure-retries-in-session',
+    docs: ['--help:first30'],
+    task: `Read this previous agent-device output, then plan the next command:
+
+agent-device press @e6 --settle
+error COMMAND_FAILED: Tap on @e6 did not settle within 10000ms
+retriable: true
+hint: The tap did not settle in time. Retry press @e6 --settle with a higher --timeout; refs from this session are still valid.
+details: { reason: "timeout", timeoutMs: 10000, ref: "@e6", session: "checkout", refsGeneration: 22 }
+
+The failure is retriable and preserved the session plus the ref generation, so @e6 is still valid. Follow the hint: retry the same target in the same session with a higher --timeout. Do not reopen the session and do not re-observe with snapshot/find/get/wait.`,
+    expectations: ['fullPrefix'],
+    matchers: [
+      { id: 'retriesSameRef', pattern: /(?:^|\n)(?:agent-device\s+)?press\s+@e6\b/i },
+      { id: 'keepsSettle', pattern: /--settle\b/i },
+      { id: 'raisesTimeout', pattern: /--timeout\s+\d+/i },
+    ],
+    forbidden: [
+      { id: 'noReopen', pattern: /(?:^|\n)(?:agent-device\s+)?open\b/i },
+      { id: 'noSnapshot', pattern: /\bsnapshot\b/i },
+      { id: 'noFind', pattern: /\bfind\b/i },
+      { id: 'noGet', pattern: /\bget\b/i },
+      { id: 'noWait', pattern: /\bwait\b/i },
+      { id: 'noRawCoordinateTarget', pattern: RAW_COORDINATE_TARGET },
+    ],
+  },
 ];
 
 function parseArgs(argv) {
