@@ -55,6 +55,11 @@ test('route owner files match the production module loaders', () => {
   }
   assert.ok(genericModulePath && genericRouteMatches);
   assert.equal(ownerFiles.generic, `src/daemon/${genericModulePath.slice(2)}`);
+
+  assert.ok(
+    !/ownerFile/.test(source),
+    'owner-file paths are tooling-only: keep them in route-owner-files.ts, not the production chain module',
+  );
 });
 
 test('request handler chain routes trace commands to the record-trace family', async () => {
