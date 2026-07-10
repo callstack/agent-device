@@ -1,5 +1,9 @@
 export type EconomySample = { text: string } | { data: unknown };
 
+// Rendered @ref token grammar (optionally generation-pinned, e.g. `@e12~s3`).
+// Shared so ref counting and the routine-workflow oracle agree on what a ref is.
+export const REF_TOKEN_PATTERN = /@e\d+(?:~s\d+)?/g;
+
 export type EconomyMetrics = {
   bytes: number;
   lines: number;
@@ -13,7 +17,7 @@ export function measureEconomySample(sample: EconomySample): EconomyMetrics {
     return {
       bytes: Buffer.byteLength(sample.text),
       lines: sample.text.length === 0 ? 0 : sample.text.split('\n').length,
-      refs: new Set(sample.text.match(/@e\d+(?:~s\d+)?/g) ?? []).size,
+      refs: new Set(sample.text.match(REF_TOKEN_PATTERN) ?? []).size,
       hints: (sample.text.match(/(?:^|\n)hint:/gi) ?? []).length,
       shape: 'text',
     };

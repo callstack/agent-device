@@ -9,7 +9,7 @@ import { attachRefs, type RawSnapshotNode } from '../../src/kernel/snapshot.ts';
 import { snapshotCliOutput } from '../../src/commands/capture/output.ts';
 import { interactionCliOutputFormatters } from '../../src/commands/interaction/output.ts';
 import { createCommandToolExecutor } from '../../src/mcp/command-tools.ts';
-import type { EconomySample } from './economy-metrics.ts';
+import { REF_TOKEN_PATTERN, type EconomySample } from './economy-metrics.ts';
 
 // A routine workflow-level oracle (#1180). PR #1174 pinned per-surface output
 // budgets; this pairs those bytes with the follow-up behavior they enable, so a
@@ -179,7 +179,10 @@ const RETRY_RESULT: CommandRequestResult = {
   },
 };
 
-export type WorkflowProjection = 'cli' | 'mcp';
+// 'cli'/'mcp' are rendered per-projection; 'shared' is the projection-invariant
+// structured payload both surfaces carry (the normalized error's recovery
+// fields are identical in the CLI --json body and the MCP structuredContent).
+export type WorkflowProjection = 'cli' | 'mcp' | 'shared';
 
 export type WorkflowStepKind = 'orient' | 'recheck' | 'mutation' | 'read' | 'failure' | 'retry';
 
@@ -271,10 +274,11 @@ export async function renderRoutineWorkflow(): Promise<{
       command: 'press @e3 --settle',
       kind: 'mutation',
       targetRef: '@e3',
-      samples: {
-        cli: { text: interactionText(SETTLE_CONFIRM_RESULT) },
-        mcp: { data: SETTLE_CONFIRM_RESULT },
-      },
+      // Only the rendered CLI settled-diff carries e4/e5. If that formatter
+      // stops emitting added refs, `read` and `mutation-tail` lose their
+      // targets and the fallback-observation count rises — so this step is a
+      // genuine formatter guard, not a scan of the raw fixture object.
+      samples: { cli: { text: interactionText(SETTLE_CONFIRM_RESULT) } },
     },
     {
       id: 'mutation-tail',
@@ -301,7 +305,7 @@ export async function renderRoutineWorkflow(): Promise<{
       command: 'press @e6 --settle',
       kind: 'failure',
       targetRef: '@e6',
-      samples: { cli: { data: error }, mcp: { data: error } },
+      samples: { shared: { data: error } },
     },
     {
       id: 'retry',
@@ -327,13 +331,9 @@ function workflowSamples(steps: WorkflowStep[]): Record<string, EconomySample> {
   return Object.fromEntries(entries);
 }
 
-const REF_PATTERN = /@?e\d+/g;
-
 function refsInSample(sample: EconomySample): string[] {
   const serialized = 'text' in sample ? sample.text : JSON.stringify(sample.data);
-  return (serialized.match(REF_PATTERN) ?? []).map((ref) =>
-    ref.startsWith('@') ? ref : `@${ref}`,
-  );
+  return serialized.match(REF_TOKEN_PATTERN) ?? [];
 }
 
 function measureRoutineWorkflow(

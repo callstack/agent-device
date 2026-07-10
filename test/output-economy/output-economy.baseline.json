@@ -139,13 +139,6 @@
     "hints": 0,
     "shape": "text"
   },
-  "workflow.mutation-confirm.mcp.json": {
-    "bytes": 431,
-    "lines": 1,
-    "refs": 3,
-    "hints": 0,
-    "shape": "$.message:string|$.ref:string|$.settle.captures:number|$.settle.diff.lines:array|$.settle.diff.lines[].kind:string|$.settle.diff.lines[].ref:string|$.settle.diff.lines[].text:string|$.settle.diff.lines[]:object|$.settle.diff.summary.additions:number|$.settle.diff.summary.removals:number|$.settle.diff.summary.unchanged:number|$.settle.diff.summary:object|$.settle.diff:object|$.settle.quietMs:number|$.settle.refsGeneration:number|$.settle.settled:boolean|$.settle.timeoutMs:number|$.settle.waitedMs:number|$.settle:object|$.x:number|$.y:number|$:object"
-  },
   "workflow.mutation-tail.cli.text": {
     "bytes": 161,
     "lines": 6,
@@ -160,14 +153,7 @@
     "hints": 0,
     "shape": "text"
   },
-  "workflow.failure.cli.json": {
-    "bytes": 328,
-    "lines": 1,
-    "refs": 1,
-    "hints": 1,
-    "shape": "$.code:string|$.details.reason:string|$.details.ref:string|$.details.refsGeneration:number|$.details.session:string|$.details.timeoutMs:number|$.details:object|$.hint:string|$.message:string|$.retriable:boolean|$:object"
-  },
-  "workflow.failure.mcp.json": {
+  "workflow.failure.shared.json": {
     "bytes": 328,
     "lines": 1,
     "refs": 1,
