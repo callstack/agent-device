@@ -70,7 +70,6 @@ field without an active input method.
 - `ACTION_INPUT_TEXT` (`--es text <string>`) -- commit text directly (subject to `adb shell`'s own
   tokenization; prefer the base64 variant for anything with spaces or non-ASCII).
 - `ACTION_CLEAR_TEXT` -- select-all and commit an empty string.
-- `ACTION_ENTER` -- `performEditorAction(IME_ACTION_DONE)`.
 
 An optional `--es protocol android-ime-helper-v1` extra is a defensive sanity check (not a
 security boundary): if present and it doesn't match, the broadcast is dropped and logged.

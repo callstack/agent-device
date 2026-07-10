@@ -9,7 +9,6 @@ import {
   resetAndroidImeHelperInstallCache,
   sendAndroidImeHelperText,
   clearAndroidImeHelperText,
-  sendAndroidImeHelperEnter,
 } from '../ime-helper.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from '../adb-executor.ts';
 
@@ -64,18 +63,6 @@ test('clearAndroidImeHelperText broadcasts ACTION_CLEAR_TEXT without a text extr
   assert.deepEqual(capturedArgs.slice(0, 5), ['shell', 'am', 'broadcast', '-p', PACKAGE]);
   assert.ok(capturedArgs.includes('com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT'));
   assert.ok(!capturedArgs.includes('text'));
-});
-
-test('sendAndroidImeHelperEnter broadcasts ACTION_ENTER', async () => {
-  let capturedArgs: string[] | undefined;
-  await sendAndroidImeHelperEnter(async (args) => {
-    capturedArgs = args;
-    return { exitCode: 0, stdout: '', stderr: '' };
-  }, PACKAGE);
-
-  assert.ok(capturedArgs);
-  assert.deepEqual(capturedArgs.slice(0, 5), ['shell', 'am', 'broadcast', '-p', PACKAGE]);
-  assert.ok(capturedArgs.includes('com.callstack.agentdevice.imehelper.ACTION_ENTER'));
 });
 
 test('a failed broadcast raises COMMAND_FAILED', async () => {

@@ -10,7 +10,6 @@ import android.os.Build;
 import android.util.Base64;
 import android.util.Log;
 import android.view.View;
-import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputConnection;
 import java.nio.charset.StandardCharsets;
 
@@ -29,8 +28,6 @@ public class TestInputMethodService extends InputMethodService {
       "com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64";
   public static final String ACTION_CLEAR_TEXT =
       "com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT";
-  public static final String ACTION_ENTER =
-      "com.callstack.agentdevice.imehelper.ACTION_ENTER";
   public static final String EXTRA_TEXT = "text";
   public static final String EXTRA_PROTOCOL = "protocol";
 
@@ -62,7 +59,6 @@ public class TestInputMethodService extends InputMethodService {
     filter.addAction(ACTION_INPUT_TEXT);
     filter.addAction(ACTION_INPUT_TEXT_B64);
     filter.addAction(ACTION_CLEAR_TEXT);
-    filter.addAction(ACTION_ENTER);
     // Register the receiver in the running IME process (so getCurrentInputConnection() is live)
     // but require REQUIRED_SENDER_PERMISSION of every sender. On API 33+ the receiver must also be
     // flagged exported to accept out-of-app broadcasts; the permission is the actual trust gate.
@@ -107,17 +103,13 @@ public class TestInputMethodService extends InputMethodService {
       commitValidatedText(ic, decodeBase64Text(intent.getStringExtra(EXTRA_TEXT)));
     } else if (ACTION_CLEAR_TEXT.equals(action)) {
       clearText(ic);
-    } else if (ACTION_ENTER.equals(action)) {
-      ic.performEditorAction(EditorInfo.IME_ACTION_DONE);
-      Log.i(TAG, "enter");
     }
   }
 
   private static boolean isKnownAction(String action) {
     return ACTION_INPUT_TEXT.equals(action)
         || ACTION_INPUT_TEXT_B64.equals(action)
-        || ACTION_CLEAR_TEXT.equals(action)
-        || ACTION_ENTER.equals(action);
+        || ACTION_CLEAR_TEXT.equals(action);
   }
 
   // Optional sanity check, not a security boundary; missing extra is accepted.

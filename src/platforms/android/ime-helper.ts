@@ -30,7 +30,6 @@ const ANDROID_IME_HELPER_BROADCAST_TIMEOUT_MS = 10_000;
 
 const ACTION_INPUT_TEXT_B64 = 'com.callstack.agentdevice.imehelper.ACTION_INPUT_TEXT_B64';
 const ACTION_CLEAR_TEXT = 'com.callstack.agentdevice.imehelper.ACTION_CLEAR_TEXT';
-const ACTION_ENTER = 'com.callstack.agentdevice.imehelper.ACTION_ENTER';
 
 export type AndroidImeHelperManifest = {
   name: 'android-ime-helper';
@@ -140,13 +139,6 @@ export async function clearAndroidImeHelperText(
   packageName: string,
 ): Promise<void> {
   await sendAndroidImeHelperBroadcast(adb, packageName, ACTION_CLEAR_TEXT, {});
-}
-
-export async function sendAndroidImeHelperEnter(
-  adb: AndroidAdbExecutor,
-  packageName: string,
-): Promise<void> {
-  await sendAndroidImeHelperBroadcast(adb, packageName, ACTION_ENTER, {});
 }
 
 async function sendAndroidImeHelperBroadcast(
