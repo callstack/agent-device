@@ -185,7 +185,7 @@ async function invokeSnapshotMaestroAssertVisible(
       selector: args.selector,
       timeoutMs: args.timeoutMs,
     });
-  const recoveryResponse = await recoverFromMobileVisibleMiss(params, args, lastSnapshot);
+  const recoveryResponse = await recoverFromAndroidVisibleMiss(params, args, lastSnapshot);
   if (recoveryResponse) return recoveryResponse;
   return withMaestroFailureSnapshotArtifacts(response, lastSnapshot, params.baseReq);
 }
@@ -200,18 +200,17 @@ async function invokeSingleSnapshotMaestroAssertVisible(
   if (sample.visible) return visibleAssertionResponse(sample.response, args.selector, startedAt);
   const failedSample = handleFailedVisibleSample(params.baseReq, args, sample, startedAt);
   if (failedSample.kind === 'return') return failedSample.response;
-  const recoveryResponse = await recoverFromMobileVisibleMiss(params, args, sample.snapshot);
+  const recoveryResponse = await recoverFromAndroidVisibleMiss(params, args, sample.snapshot);
   if (recoveryResponse) return recoveryResponse;
   return withMaestroFailureSnapshotArtifacts(fallbackResponse, sample.snapshot, params.baseReq);
 }
 
-async function recoverFromMobileVisibleMiss(
+async function recoverFromAndroidVisibleMiss(
   params: MaestroAssertionRuntimeParams,
   args: MaestroVisibilityAssertionArgs,
   snapshot: SnapshotState | undefined,
 ): Promise<DaemonResponse | null> {
-  const platform = params.baseReq.flags?.platform;
-  if (platform !== 'android' && platform !== 'ios') return null;
+  if (params.baseReq.flags?.platform !== 'android') return null;
 
   const recoverableInteraction = consumeMaestroRecoverableInteraction(params.scope);
   if (!recoverableInteraction) return null;
