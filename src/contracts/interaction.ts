@@ -31,7 +31,7 @@ export type ResolvedTarget =
       ref: string;
     };
 
-/** The comparison that decided a resolveSelectorChain ambiguity, recorded by the comparator itself (ADR 0012). */
+/** The decisive criterion separating a resolveSelectorChain winner from its strongest runner-up (ADR 0012). */
 export type DisambiguationTiebreak = 'visible' | 'deepest' | 'smallest-area';
 
 /**

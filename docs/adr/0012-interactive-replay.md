@@ -200,8 +200,10 @@ The ref paths disclose ref provenance. A lookup that resolves the `@ref` itself 
 unusable `@ref` through its recorded trailing label (`tryResolveRefNode`'s `fallbackLabel` — a first-match
 label lookup, the replay recovery documented in Context), the response instead carries
 `{ source: "ref", phase: "pre-action", kind: "label-fallback" }`: label recovery is not exact ref
-provenance and must never claim it. The native-ref fast path always discloses `exact` — it dispatches the
-ref handle itself and never forwards the fallback label to the backend.
+provenance and must never claim it. The native-ref fast path always discloses `exact` — the ref handle is
+the dispatched target, and although the recorded `fallbackLabel` is forwarded to the backend, any
+label-based recovery a backend might perform with it is not observable daemon-side, so `exact` describes
+the daemon's own resolution and no more specific claim is possible on this path.
 
 The accepted direct-iOS selector fast path has no daemon tree and the XCTest response cannot truthfully
 provide a match count, candidate refs, or a runtime tiebreak. It remains enabled for ordinary simple
