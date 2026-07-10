@@ -1,5 +1,8 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
+import { mkdtempSync } from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   createAgentDeviceClient,
   type AgentDeviceClient,
@@ -13,6 +16,9 @@ import { runCommand } from '../commands/command-surface.ts';
 import type { CommandResult } from '../core/command-descriptor/command-result.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData } from '../kernel/contracts.ts';
 import { AppError } from '../kernel/errors.ts';
+
+// Isolated so open/close metro-session-hint file writes never touch the real state dir.
+const TEST_STATE_DIR = mkdtempSync(path.join(os.tmpdir(), 'agent-device-client-test-'));
 
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -66,6 +72,7 @@ function createTransport(
   const calls: Array<Omit<DaemonRequest, 'token'>> = [];
   const config: AgentDeviceClientConfig = {
     session: 'qa',
+    stateDir: TEST_STATE_DIR,
     cwd: '/tmp/agent-device',
     debug: true,
     daemonBaseUrl: 'http://daemon.example.test',

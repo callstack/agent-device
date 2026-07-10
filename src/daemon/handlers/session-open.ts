@@ -353,6 +353,7 @@ async function completeOpenCommand(params: {
     device,
     runtime,
     runtimeHintCount: countConfiguredRuntimeHints,
+    sessionReused: existingSession !== undefined,
   });
   sessionStore.set(sessionName, nextSession);
   sessionStore.recordAction(nextSession, {

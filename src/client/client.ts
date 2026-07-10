@@ -1,6 +1,7 @@
 import { sendToDaemon } from '../daemon/client/daemon-client.ts';
 import { prepareMetroRuntime, reloadMetro } from '../metro/client-metro.ts';
 import {
+  clearMetroSessionHints,
   readMetroSessionHints,
   writeMetroSessionHints,
   type MetroSessionHints,
@@ -51,9 +52,14 @@ import type {
   Lease,
   MaterializationReleaseOptions,
   MetroPrepareOptions,
+  MetroPrepareResult,
 } from './client-types.ts';
 import type { CommandResult } from '../core/command-descriptor/command-result.ts';
-import { isNonDefaultResponseLevel, type ResponseLevel } from '../kernel/contracts.ts';
+import {
+  isNonDefaultResponseLevel,
+  type ResponseLevel,
+  type SessionRuntimeHints,
+} from '../kernel/contracts.ts';
 import { readSerializedSnapshotCaptureAnnotations } from '../snapshot-capture-annotations.ts';
 import { readSnapshotDiagnosticsSummary } from '../snapshot-diagnostics.ts';
 import type { CommandFlags } from '../core/dispatch-context.ts';
@@ -163,13 +169,18 @@ export function createAgentDeviceClient(
       },
       close: async (options = {}) => {
         const session = resolveRequestSession(options);
-        const data = await executeCommand<Record<string, unknown>>('close', options);
-        return {
-          session,
-          shutdown: normalizeTargetShutdownResult(data.shutdown),
-          provider: readObject(data.provider),
-          identifiers: { session },
-        };
+        try {
+          const data = await executeCommand<Record<string, unknown>>('close', options);
+          return {
+            session,
+            shutdown: normalizeTargetShutdownResult(data.shutdown),
+            provider: readObject(data.provider),
+            identifiers: { session },
+          };
+        } finally {
+          // Close is teardown intent: drop the dev-server binding even if the daemon call fails.
+          clearMetroSessionHintsQuietly(config, options);
+        }
       },
       artifacts: async (options = {}) =>
         await executeCommand<AgentArtifactsResult>('artifacts', options),
@@ -199,6 +210,12 @@ export function createAgentDeviceClient(
       open: async (options: AppOpenOptions) => {
         const session = resolveRequestSession(options);
         const data = await executeCommand<Record<string, unknown>>('open', options);
+        recordMetroSessionHintsAfterOpen({
+          config,
+          options,
+          runtime: mergeClientOptions(config, options).runtime,
+          sessionReused: data.sessionReused === true,
+        });
         const device = normalizeOpenDevice(data);
         const appBundleId = readOptionalString(data, 'appBundleId');
         const appId = appBundleId;
@@ -283,7 +300,7 @@ export function createAgentDeviceClient(
           runtimeFilePath: options.runtimeFilePath,
           logPath: options.logPath,
         });
-        persistMetroSessionHints(config, result.statusUrl);
+        persistMetroSessionHints(config, result);
         return result;
       },
       reload: async (options = {}) =>
@@ -445,23 +462,33 @@ function mergeClientOptions(
   return { ...config, ...options };
 }
 
-function metroSessionHintsStateDir(config: AgentDeviceClientConfig): string {
-  return resolveDaemonPaths(config.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR).baseDir;
+function metroSessionHintsScope(
+  config: AgentDeviceClientConfig,
+  options: InternalRequestOptions = {},
+): { stateDir: string; session: string } {
+  const merged = mergeClientOptions(config, options);
+  return {
+    stateDir: resolveDaemonPaths(merged.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR).baseDir,
+    session: resolveSessionName(merged.session),
+  };
 }
 
-// `metro prepare` and `metro reload` are local-only (they never round-trip through the daemon),
-// so session-scoped Metro coordinates can't live in the daemon's session store. Persisting them
-// to a small per-session file lets a plain `metro reload --session <s>` find the dev server a
-// prior `metro prepare --session <s>` bound, instead of silently defaulting to localhost:8081.
-function persistMetroSessionHints(config: AgentDeviceClientConfig, statusUrl: string): void {
+// The metro-sessions file is the session's dev-server binding; see MetroSessionHints.
+function persistMetroSessionHints(
+  config: AgentDeviceClientConfig,
+  result: Pick<MetroPrepareResult, 'statusUrl' | 'bridge' | 'iosRuntime' | 'androidRuntime'>,
+): void {
   try {
-    const url = new URL(statusUrl);
+    const url = new URL(result.statusUrl);
     const port = Number.parseInt(url.port, 10);
     if (!url.hostname || !Number.isInteger(port)) return;
+    // Bridge runtimes carry remote bundle URLs; persist local-flow bundle URLs only.
+    const bundleUrl = result.bridge
+      ? undefined
+      : (result.iosRuntime.bundleUrl ?? result.androidRuntime.bundleUrl);
     writeMetroSessionHints({
-      stateDir: metroSessionHintsStateDir(config),
-      session: resolveSessionName(config.session),
-      hints: { metroHost: url.hostname, metroPort: port },
+      ...metroSessionHintsScope(config),
+      hints: { metroHost: url.hostname, metroPort: port, bundleUrl },
     });
   } catch {
     // Session-hint persistence is best-effort; reload still works with explicit flags.
@@ -470,12 +497,54 @@ function persistMetroSessionHints(config: AgentDeviceClientConfig, statusUrl: st
 
 function resolveMetroSessionHints(config: AgentDeviceClientConfig): MetroSessionHints | undefined {
   try {
-    return readMetroSessionHints({
-      stateDir: metroSessionHintsStateDir(config),
-      session: resolveSessionName(config.session),
-    });
+    return readMetroSessionHints(metroSessionHintsScope(config));
   } catch {
     return undefined;
+  }
+}
+
+function metroHintsFromRuntime(
+  runtime: SessionRuntimeHints | undefined,
+): MetroSessionHints | undefined {
+  if (!runtime) return undefined;
+  const { metroHost, metroPort, bundleUrl } = runtime;
+  if (metroHost === undefined && metroPort === undefined && bundleUrl === undefined) {
+    return undefined;
+  }
+  return { metroHost, metroPort, bundleUrl };
+}
+
+// Hint flags rebind the session's dev server; a hintless open that created the session clears
+// any leftover binding from a previous same-name session.
+function recordMetroSessionHintsAfterOpen(params: {
+  config: AgentDeviceClientConfig;
+  options: InternalRequestOptions;
+  runtime: SessionRuntimeHints | undefined;
+  sessionReused: boolean;
+}): void {
+  try {
+    const scope = metroSessionHintsScope(params.config, params.options);
+    const hints = metroHintsFromRuntime(params.runtime);
+    if (hints) {
+      writeMetroSessionHints({ ...scope, hints });
+      return;
+    }
+    if (!params.sessionReused) {
+      clearMetroSessionHints(scope);
+    }
+  } catch {
+    // Session-hint sync is best-effort; reload still works with explicit flags.
+  }
+}
+
+function clearMetroSessionHintsQuietly(
+  config: AgentDeviceClientConfig,
+  options: InternalRequestOptions,
+): void {
+  try {
+    clearMetroSessionHints(metroSessionHintsScope(config, options));
+  } catch {
+    // Session-hint cleanup is best-effort; close must not fail on local file state.
   }
 }
 

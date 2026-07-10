@@ -25,6 +25,7 @@ export function buildOpenResult(params: {
   device?: DeviceInfo;
   runtime?: SessionRuntimeHints;
   runtimeHintCount: (runtime: SessionRuntimeHints) => number;
+  sessionReused: boolean;
 }): Record<string, unknown> {
   const {
     sessionName,
@@ -40,6 +41,7 @@ export function buildOpenResult(params: {
     device,
     runtime,
     runtimeHintCount,
+    sessionReused,
   } = params;
   const result: Record<string, unknown> = {
     session: sessionName,
@@ -48,6 +50,7 @@ export function buildOpenResult(params: {
     runnerLogPath,
     requestLogPath,
     eventLogPath,
+    sessionReused,
   };
   if (appName) result.appName = appName;
   if (appBundleId) result.appBundleId = appBundleId;

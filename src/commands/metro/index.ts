@@ -76,17 +76,19 @@ const metroCliSchema = {
   helpDescription:
     'Prepare a local React Native dev-server runtime or ask connected apps to reload. ' +
     'reload with no --metro-host/--metro-port/--bundle-url resolves against the dev server ' +
-    "the current session's last metro prepare bound (falling back to localhost:8081 only when " +
-    "this session never prepared one), so it never silently reloads a different project's " +
-    'server on the default port; pass an explicit flag to override the session hint for one call. ' +
+    "this session last bound via metro prepare or open's metro hint flags (falling back to " +
+    'localhost:8081 only when the session never bound one), so it never silently reloads a ' +
+    "different project's server on the default port; pass an explicit flag to override the " +
+    'session hint for one call. The binding is cleared when the session closes, and a fresh ' +
+    'open without hint flags also clears any leftover binding from a previous same-name session. ' +
     '--kind expo (detected or forced) requests the virtual-entry bundle URL ' +
     '(.expo/.virtual-metro-entry.bundle) instead of index.bundle, since index.bundle 404s/500s ' +
     'against Expo dev servers in monorepos. Dependency install auto-detects the package manager ' +
-    'from the nearest yarn.lock/pnpm-lock.yaml/bun.lockb/package-lock.json walking up from ' +
-    '--project-root, so Yarn/pnpm workspace monorepos with the lockfile at the repo root do not ' +
-    'wrongly fall back to npm install (which fails on workspace: dependency specifiers); if ' +
-    'install still fails, pass --no-install-deps when dependencies are already installed ' +
-    '(for example via a monorepo root install).',
+    'from the nearest yarn.lock/pnpm-lock.yaml/bun.lock/bun.lockb/package-lock.json walking up ' +
+    'from --project-root (bounded at the repo root), so Yarn/pnpm workspace monorepos with the ' +
+    'lockfile at the repo root do not wrongly fall back to npm install (which fails on ' +
+    'workspace: dependency specifiers); if install still fails, pass --no-install-deps when ' +
+    'dependencies are already installed (for example via a monorepo root install).',
   summary: 'Prepare Metro/Re.Pack reachability for React Native/Expo apps or trigger app reloads',
   positionalArgs: ['prepare|reload'],
   allowedFlags: [...METRO_RELOAD_FLAGS, ...METRO_PREPARE_FLAGS],

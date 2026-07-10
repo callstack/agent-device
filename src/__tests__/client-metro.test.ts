@@ -10,6 +10,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { prepareMetroRuntime, reloadMetro, resolveMetroReloadUrl } from '../metro/client-metro.ts';
 import { createAgentDeviceClient } from '../client/client.ts';
+import { readMetroSessionHints } from '../metro/metro-session-hints.ts';
+import { resolveDaemonPaths } from '../daemon/config.ts';
 import { AppError } from '../kernel/errors.ts';
 import { isProcessAlive, waitForProcessExit } from '../utils/host-process.ts';
 
@@ -421,6 +423,88 @@ test('prepareMetroRuntime install failure hints at --no-install-deps and the det
   rmSync(tempRoot, { recursive: true, force: true });
 });
 
+test('prepareMetroRuntime detects bun from the text bun.lock lockfile', async () => {
+  const tempRoot = path.join(os.tmpdir(), `agent-device-pm-bun-${randomUUID()}`);
+  const projectRoot = path.join(tempRoot, 'project');
+  const binDir = path.join(tempRoot, 'bin');
+
+  mkdirSync(projectRoot, { recursive: true });
+  mkdirSync(binDir, { recursive: true });
+  writeFileSync(path.join(projectRoot, 'bun.lock'), '');
+  writeFileSync(
+    path.join(projectRoot, 'package.json'),
+    JSON.stringify({
+      name: 'pm-bun-test',
+      private: true,
+      dependencies: { 'react-native': '0.0.0-test' },
+    }),
+  );
+  writeFailingPackageManager(binDir, 'bun');
+
+  await assert.rejects(
+    () =>
+      prepareMetroRuntime({
+        projectRoot,
+        publicBaseUrl: 'http://127.0.0.1:9',
+        installDependenciesIfNeeded: true,
+        env: {
+          ...process.env,
+          PATH: `${binDir}:${process.env.PATH || ''}`,
+        },
+      }),
+    (error) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.packageManager, 'bun');
+      return true;
+    },
+  );
+
+  rmSync(tempRoot, { recursive: true, force: true });
+});
+
+test('prepareMetroRuntime lockfile walk-up stops at the repo root instead of adopting an outside lockfile', async () => {
+  const tempRoot = path.join(os.tmpdir(), `agent-device-pm-bound-${randomUUID()}`);
+  const repoRoot = path.join(tempRoot, 'repo');
+  const projectRoot = path.join(repoRoot, 'example');
+  const binDir = path.join(tempRoot, 'bin');
+
+  mkdirSync(projectRoot, { recursive: true });
+  mkdirSync(path.join(repoRoot, '.git'), { recursive: true });
+  mkdirSync(binDir, { recursive: true });
+  // A lockfile ABOVE the repo root must not be adopted; detection falls back to npm.
+  writeFileSync(path.join(tempRoot, 'yarn.lock'), '');
+  writeFileSync(
+    path.join(projectRoot, 'package.json'),
+    JSON.stringify({
+      name: 'pm-bound-test',
+      private: true,
+      dependencies: { 'react-native': '0.0.0-test' },
+    }),
+  );
+  writeFakePackageManager(binDir, 'yarn', path.join(tempRoot, 'yarn-args.json'));
+  writeFailingPackageManager(binDir, 'npm');
+
+  await assert.rejects(
+    () =>
+      prepareMetroRuntime({
+        projectRoot,
+        publicBaseUrl: 'http://127.0.0.1:9',
+        installDependenciesIfNeeded: true,
+        env: {
+          ...process.env,
+          PATH: `${binDir}:${process.env.PATH || ''}`,
+        },
+      }),
+    (error) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.details?.packageManager, 'npm');
+      return true;
+    },
+  );
+
+  rmSync(tempRoot, { recursive: true, force: true });
+});
+
 test('prepareMetroRuntime rejects incomplete proxy configuration', async () => {
   await assert.rejects(
     () =>
@@ -603,15 +687,15 @@ test('metro reload targets the dev server bound by metro prepare in the same ses
   const client = createAgentDeviceClient(
     { session: 'metro-session-hints', stateDir, cwd: projectRoot },
     {
-      transport: async () => {
+      // Only session close may reach the daemon; metro prepare/reload must stay local.
+      transport: async (req) => {
+        if (req.command === 'close') return { ok: true, data: {} };
         throw new Error('metro prepare/reload must stay local and never call the daemon');
       },
     },
   );
 
-  // MetroPrepareOptions (the public client surface) doesn't expose `env`, so the fake `npx`
-  // has to be reachable through the real PATH for the duration of this test, matching the
-  // temporary-PATH pattern used elsewhere for exec-dependent tests.
+  // The public MetroPrepareOptions doesn't expose env, so the fake npx must be on the real PATH.
   const previousPath = process.env.PATH;
   process.env.PATH = `${binDir}${path.delimiter}${previousPath ?? ''}`;
 
@@ -626,11 +710,33 @@ test('metro reload targets the dev server bound by metro prepare in the same ses
     });
     pid = prepared.pid;
 
+    const storedHints = readMetroSessionHints({
+      stateDir: resolveDaemonPaths(stateDir).baseDir,
+      session: 'metro-session-hints',
+    });
+    assert.deepEqual(storedHints, {
+      metroHost: '127.0.0.1',
+      metroPort,
+      bundleUrl: `http://127.0.0.1:${metroPort}/index.bundle?platform=ios&dev=true&minify=false`,
+    });
+
     // No explicit --metro-host/--metro-port/--bundle-url: reload must resolve against the
     // dev server this session's `metro prepare` bound, not the Metro default (localhost:8081).
     const hintedReload = await client.metro.reload();
     assert.equal(hintedReload.reloadUrl, `http://127.0.0.1:${metroPort}/reload`);
     assert.equal(hintedReload.body, 'RELOADED');
+
+    // Regression (prepare -> close -> same-name session): close clears the binding, so a later
+    // flagless reload resolves to the Metro default instead of silently hitting the stale port.
+    await client.sessions.close();
+    assert.equal(
+      readMetroSessionHints({
+        stateDir: resolveDaemonPaths(stateDir).baseDir,
+        session: 'metro-session-hints',
+      }),
+      undefined,
+    );
+    assert.equal(resolveMetroReloadUrl({}), 'http://localhost:8081/reload');
   } finally {
     process.env.PATH = previousPath;
     await stopProcess(pid);

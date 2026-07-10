@@ -3,13 +3,15 @@ import path from 'node:path';
 import { safeSessionName } from '../daemon/session-paths.ts';
 
 /**
- * Local dev-server coordinates persisted by `metro prepare` for a CLI session so a later
- * `metro reload` in the same session targets the dev server `prepare` actually bound, instead
- * of silently falling back to the Metro default host/port and reloading an unrelated project.
+ * The session's local dev-server binding — the single store `metro reload` resolves against.
+ * Written by `metro prepare` and `open`'s metro hint flags; cleared on session close and on
+ * hintless fresh-session opens. The daemon's SessionRuntimeHints only drive device-native
+ * dev-server prefs.
  */
 export type MetroSessionHints = {
   metroHost?: string;
   metroPort?: number;
+  bundleUrl?: string;
 };
 
 function metroSessionHintsPath(stateDir: string, session: string): string {
@@ -50,6 +52,7 @@ export function readMetroSessionHints(options: {
   if (typeof record.metroPort === 'number' && Number.isInteger(record.metroPort)) {
     hints.metroPort = record.metroPort;
   }
+  if (typeof record.bundleUrl === 'string' && record.bundleUrl) hints.bundleUrl = record.bundleUrl;
   return Object.keys(hints).length > 0 ? hints : undefined;
 }
 

@@ -83,6 +83,7 @@ test('open returns and creates the session state directory', async () => {
   });
   if (response.ok) {
     expect(response.data?.session).toBe('session-a');
+    expect(response.data?.sessionReused).toBe(false);
     expect(response.data?.sessionStateDir).toEqual(expect.stringContaining('session-a'));
     expect(response.data?.runnerLogPath).toEqual(
       path.join(String(response.data?.sessionStateDir), 'runner.log'),

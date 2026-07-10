@@ -179,12 +179,12 @@ function readPackageJson(projectRoot: string): PackageJsonShape {
   return packageJson;
 }
 
-// Ordered by specificity; the first lockfile found while walking up from projectRoot wins. Yarn
-// workspace monorepos (e.g. Expo dev-client example apps) usually keep the lockfile at the repo
-// root, not inside the leaf project, so detection must not stop at projectRoot itself.
+// Nearest lockfile walking up from projectRoot wins (workspace monorepos keep it at the repo
+// root); the walk is bounded at the nearest .git entry.
 const LOCKFILE_PACKAGE_MANAGERS: ReadonlyArray<{ file: string; command: string }> = [
   { file: 'pnpm-lock.yaml', command: 'pnpm' },
   { file: 'yarn.lock', command: 'yarn' },
+  { file: 'bun.lock', command: 'bun' },
   { file: 'bun.lockb', command: 'bun' },
   { file: 'package-lock.json', command: 'npm' },
 ];
@@ -197,6 +197,8 @@ function findLockfilePackageManager(startDir: string): PackageManagerConfig | nu
         return { command, installArgs: ['install'] };
       }
     }
+    // .git may be a directory (regular clone) or a file (worktree); either marks the repo root.
+    if (fileExists(path.join(dir, '.git'))) return null;
     const parent = path.dirname(dir);
     if (parent === dir) return null;
     dir = parent;
@@ -271,9 +273,7 @@ function parsePort(value: number | string | undefined, fallback: number): number
   return parsed;
 }
 
-// Expo dev-client (and Expo Go) apps request their JS through the virtual entry module, not
-// index.bundle. index.bundle 500s on Expo monorepo projects ("Unable to resolve module ./index
-// from <monorepo root>") because Expo's Metro config points the real entry elsewhere.
+// Expo apps load JS through this virtual entry; index.bundle fails on Expo dev servers.
 const EXPO_VIRTUAL_ENTRY_BUNDLE_PATH = '.expo/.virtual-metro-entry.bundle';
 
 function metroBundleEntryPath(kind: ResolvedMetroKind): string {
@@ -477,11 +477,7 @@ function startMetroProcess(
   const logFd = fs.openSync(logPath, 'a');
   let pid = 0;
   try {
-    // cwd is always --project-root, verified live against an Expo dev-client monorepo (the
-    // spawned process's cwd matched projectRoot exactly). If Metro still resolves modules from
-    // the monorepo root instead of projectRoot, that's Expo's own workspace-root/watchFolders
-    // detection, not an agent-device cwd bug — see metroBundleEntryPath for the fix that
-    // actually matters for those apps (the virtual-entry bundle URL).
+    // cwd is --project-root; monorepo-root module resolution beyond that is Expo's own behavior.
     pid = runCmdDetached(metro.command, metro.installArgs, {
       cwd: projectRoot,
       env: env as NodeJS.ProcessEnv,

@@ -31,7 +31,11 @@ test('writeMetroSessionHints and readMetroSessionHints round-trip per session', 
     writeMetroSessionHints({
       stateDir,
       session: 'proj-a',
-      hints: { metroHost: '127.0.0.1', metroPort: 8082 },
+      hints: {
+        metroHost: '127.0.0.1',
+        metroPort: 8082,
+        bundleUrl: 'http://127.0.0.1:8082/.expo/.virtual-metro-entry.bundle?platform=ios',
+      },
     });
     writeMetroSessionHints({
       stateDir,
@@ -42,6 +46,7 @@ test('writeMetroSessionHints and readMetroSessionHints round-trip per session', 
     assert.deepEqual(readMetroSessionHints({ stateDir, session: 'proj-a' }), {
       metroHost: '127.0.0.1',
       metroPort: 8082,
+      bundleUrl: 'http://127.0.0.1:8082/.expo/.virtual-metro-entry.bundle?platform=ios',
     });
     assert.deepEqual(readMetroSessionHints({ stateDir, session: 'proj-b' }), {
       metroHost: '127.0.0.1',

@@ -98,6 +98,7 @@ test('open app and URL on existing iOS device session keeps app context', async 
 
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
+  expect(response?.ok && response.data?.sessionReused).toBe(true);
   const updated = sessionStore.get(sessionName);
   expect(updated?.appBundleId).toBe('com.apple.Preferences');
   expect(updated?.appName).toBe('Settings');
