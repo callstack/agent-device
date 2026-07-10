@@ -489,6 +489,8 @@ function buildReplayDivergenceFailureResponse(params: {
       hint: error.hint === undefined ? undefined : scrubReplayVarValues(error.hint, scrubVars),
       diagnosticId: error.diagnosticId,
       logPath: error.logPath,
+      ...(error.retriable !== undefined ? { retriable: error.retriable } : {}),
+      ...(error.supportedOn !== undefined ? { supportedOn: error.supportedOn } : {}),
       details: {
         ...pickSafeCauseDetails(error.details),
         replayPath,

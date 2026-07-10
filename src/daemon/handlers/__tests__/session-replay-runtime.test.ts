@@ -100,6 +100,39 @@ test('a failing replay step returns REPLAY_DIVERGENCE with cause preserved and c
   expect(divergence.resume).toEqual({ allowed: false, reason: 'resume not yet supported' });
 });
 
+test('a normalized nested failure preserves typed recovery signals on REPLAY_DIVERGENCE', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-recovery-signals-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  const filePath = writeReplayFile(root, ['click "Save"']);
+  mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    // This shape is already normalized: normalizeError lifted both signals
+    // out of details before the replay wrapper receives it.
+    invoke: async () => ({
+      ok: false,
+      error: {
+        code: 'DEVICE_IN_USE',
+        message: 'The device is temporarily leased.',
+        retriable: true,
+        supportedOn: 'ios',
+      },
+    }),
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('REPLAY_DIVERGENCE');
+  expect(response.error.retriable).toBe(true);
+  expect(response.error.supportedOn).toBe('ios');
+});
+
 test('a failing replay step captures an available screen digest with blessed refs', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-screen-'));
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
@@ -578,4 +611,35 @@ test('an expanded ${VAR} value echoed by a selector error never reaches the publ
   expect(divergence.cause.message).toContain('<var:SECRET>');
   expect(divergence.cause.hint).toContain('<var:SECRET>');
   expect(response.error.message).toContain('<var:SECRET>');
+});
+
+test('an expanded built-in AD_DEVICE_ID never reaches the public divergence', async () => {
+  const deviceId = 'BuiltInDeviceId-486b3d4c-8f92-4dc0-b5c6-unique';
+  const sessionName = 'static-session-context';
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-builtin-var-leak-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  const filePath = writeReplayFile(root, ['press label="${AD_DEVICE_ID}"']);
+  mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { serial: deviceId } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => ({
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        message: `Device ${req.positionals?.[0] ?? ''} failed in ${sessionName} context.`,
+      },
+    }),
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(JSON.stringify(response.error)).not.toContain(deviceId);
+  expect(response.error.message).toContain('<var:AD_DEVICE_ID>');
+  // AD_SESSION was not expanded, so matching static text remains readable.
+  expect(response.error.message).toContain(sessionName);
 });
