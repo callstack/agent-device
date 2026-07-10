@@ -56,22 +56,22 @@ intentionally accepting a finding.
 - `pnpm fallow:all` — full-tree summary, includes grandfathered legacy findings
 - `pnpm fallow:baseline` — regenerate baselines (only to intentionally accept a finding)
 
-Code quality (test-only exports): `pnpm check:test-only-exports` catches exports that only a
-test file imports — `fallow`'s default dead-code check treats a test import as a live consumer,
-so a function can be exported, unit-tested, and never actually called by production code without
-tripping it (this shipped in #1199's first revision). The check diffs fallow's default dead-code
-graph against its `--production` graph (which excludes test files); an export alive in the first
-and dead in the second has no production call site. New findings fail CI against the checked-in
-`scripts/test-only-exports-baseline.json`. Fix a finding by wiring the export into a real call
-site, deleting it, or — if it is an intentional test seam — adding `// test-seam: <reason>`
-directly above the export. The annotation is the only acceptance path, and it lives in the
-reviewed source diff. The baseline is shrink-only: after removing an offender, run
-`pnpm check:test-only-exports:baseline` to shrink it; the command refuses to add entries, so
-growing the baseline takes a deliberate manual edit and should be rare (expected only when the
-check itself is migrated). Known limitation: production usage reached only via dynamic property
-access (`obj[name]`) is invisible to fallow's import graph — the same blind spot as fallow's own
-dead-code check — so such exports need a `// test-seam:` annotation or a `.fallowrc.json`
-`ignoreExports` entry (like the daemon route handlers loaded through `typeof import()`).
+Code quality (production exports): `pnpm check:production-exports` runs Fallow's native
+production graph, which excludes test/story/dev files, and fails when a new export has no
+production consumer. This includes the test-only-export bug class that shipped in #1199's first
+revision, while also catching exports that are unreachable from every graph. Fallow's
+`ignoreExportsUsedInFile` option in the gate's inherited config keeps exports with a real
+same-file consumer out of this report without weakening the general Fallow audit. The checked-in
+native baseline lives at `fallow-baselines/production-unused-exports.json`.
+
+Fix a finding by wiring the export into production or removing the unnecessary export/code. For
+an intentional test seam, explain why in a source comment and put
+`// fallow-ignore-next-line unused-export` directly above the export. Run
+`pnpm check:production-exports:baseline` only for a deliberate reviewed baseline migration or to
+remove stale entries; additions accept new production-unreachable exports and should be rare.
+Production usage reached only through dynamic property access remains invisible to a static
+import graph, so register those exports in `.fallowrc.json` `ignoreExports` instead (as with the
+daemon route handlers loaded through `typeof import()`).
 
 Optional device selectors for tests:
 

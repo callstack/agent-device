@@ -1,0 +1,8 @@
+{
+  "$schema": "https://raw.githubusercontent.com/fallow-rs/fallow/main/schema.json",
+  "extends": ["./.fallowrc.json"],
+  "ignoreExportsUsedInFile": true,
+  "rules": {
+    "unused-exports": "warn"
+  }
+}

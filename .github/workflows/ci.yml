@@ -168,8 +168,8 @@ jobs:
           FALLOW_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: pnpm check:fallow --base "$FALLOW_BASE"
 
-      - name: Check for test-only exports
-        run: pnpm check:test-only-exports
+      - name: Check for production-unused exports
+        run: pnpm check:production-exports
 
   coverage:
     # Runs the full unit + provider-integration suites under coverage with
