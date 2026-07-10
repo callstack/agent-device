@@ -38,6 +38,8 @@ const COMMAND_ALIAS_SUGGESTIONS: Record<string, CommandAliasSuggestion> = {
   'get-text': { command: 'get', example: 'get text' },
   gettext: { command: 'get', example: 'get text' },
   get_text: { command: 'get', example: 'get text' },
+  'open-url': { command: 'open', example: 'open <url>' },
+  'close-session': { command: 'close', example: 'close' },
 };
 
 export function listCommandAliasSuggestionEntries(): Array<[string, CommandAliasSuggestion]> {

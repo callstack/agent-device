@@ -109,6 +109,26 @@ test('get-text, gettext, and get_text suggest get text', () => {
   }
 });
 
+test('open-url suggests open <url>', () => {
+  assert.throws(
+    () => parseArgs(['open-url', 'https://example.com']),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.message === 'Unknown command: open-url. Did you mean open <url>?',
+  );
+});
+
+test('close-session suggests close', () => {
+  assert.throws(
+    () => parseArgs(['close-session']),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'INVALID_ARGS' &&
+      error.message === 'Unknown command: close-session. Did you mean close?',
+  );
+});
+
 test('screencap and capture suggest screenshot', () => {
   for (const guess of ['screencap', 'capture']) {
     assert.throws(
