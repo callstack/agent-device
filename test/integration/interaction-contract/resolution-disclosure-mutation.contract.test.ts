@@ -4,13 +4,8 @@ import { ref, selector } from '../../../src/commands/index.ts';
 import { drawerWithVisibleTwinSnapshot } from './fixtures.ts';
 import { createContractDevice } from './runtime-harness.ts';
 
-// ADR 0012 decision 2 mutation contract (validation bullet 2): pre-action
-// resolution diagnostics are NOT refs. This suite proves the daemon-side half
-// of that contract — the MCP-layer half (never ref-issued/pinned) is proven
-// in src/mcp/__tests__/command-tools.test.ts. Together they cover: "an
-// interaction mutation contract proving pre-action resolution diagnostics are
-// not ref-issued or MCP-pinned, [and] a fresh snapshot is required before
-// using an alternative."
+// ADR 0012 mutation contract, daemon half: diagnosticRef tokens are not refs.
+// The MCP half (never ref-issued/pinned) lives in src/mcp/__tests__/command-tools.test.ts.
 
 test('resolution mutation contract: a diagnosticRef is not a resolvable @ref target', async () => {
   const device = createContractDevice(drawerWithVisibleTwinSnapshot(), {
@@ -31,10 +26,7 @@ test('resolution mutation contract: a diagnosticRef is not a resolvable @ref tar
     'the disambiguated resolution must carry a losing alternative',
   );
 
-  // A caller that mistakes the diagnostic entry for an actionable ref and
-  // acts on it directly (WITHOUT a fresh snapshot/find first) gets the
-  // ordinary unknown-ref refusal, not a silent success against a stale or
-  // unintended node.
+  // Acting on it without a fresh snapshot gets the ordinary unknown-ref refusal.
   await assert.rejects(
     () => device.interactions.press(ref(`@${alternativeDiagnosticRef}`), { session: 'default' }),
     (error: unknown) => {
@@ -63,9 +55,7 @@ test('resolution mutation contract: the winner diagnosticRef is also not a resol
   if (resolution?.kind !== 'disambiguated') return;
   const winnerDiagnosticRef = resolution.winnerDiagnostic.diagnosticRef;
 
-  // Even the WINNER's diagnostic token is a diagnostic, not a ref — the same
-  // click already tapped it through `result.point`; the diagnostic entry
-  // itself carries no separate authorization to re-target it later.
+  // The winner's token is equally non-actionable.
   await assert.rejects(
     () => device.interactions.press(ref(`@${winnerDiagnosticRef}`), { session: 'default' }),
     (error: unknown) => {

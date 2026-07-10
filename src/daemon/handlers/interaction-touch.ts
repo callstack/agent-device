@@ -402,7 +402,14 @@ async function dispatchDirectIosSelectorInteraction(params: {
       data,
     });
     const { result, responseData } = buildInteractionResponseData({
-      source: { kind: 'runner-payload', targetKind: 'selector', data, publicData, point },
+      source: {
+        kind: 'runner-payload',
+        targetKind: 'selector',
+        data,
+        publicData,
+        point,
+        maestroFallback: selector.allowNonHittableCoordinateFallback === true,
+      },
       referenceFrame: readReferenceFrameFromDirectSelectorTapResult(data),
       extra: {
         ...extra,

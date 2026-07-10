@@ -31,21 +31,14 @@ export type ResolvedTarget =
       ref: string;
     };
 
-/**
- * ADR 0012 decision 2: which comparison actually decided a resolveSelectorChain
- * ambiguity — visible-first, then deepest, then smallest-area. Recorded by the
- * comparator itself (src/daemon/selectors-resolve.ts) rather than re-derived
- * after the fact.
- */
+/** The comparison that decided a resolveSelectorChain ambiguity, recorded by the comparator itself (ADR 0012). */
 export type DisambiguationTiebreak = 'visible' | 'deepest' | 'smallest-area';
 
 /**
- * A single pre-action diagnostic entry (a disambiguation winner or a losing
- * alternative). `diagnosticRef` is an opaque, non-`@` token: it is NEVER a
- * snapshot ref, is never issued via `refsGeneration`, and cannot be pinned or
- * reused as an `@ref` target (attempting `@<diagnosticRef>` fails ref
- * resolution like any other unknown ref). `role`/`label` are best-effort and
- * UTF-8 truncated to 256 bytes.
+ * A disambiguation winner or losing alternative. `diagnosticRef` is an opaque,
+ * non-`@` token — never a snapshot ref, never issued via `refsGeneration`,
+ * never pinnable or usable as an `@ref` target. Strings are UTF-8 truncated
+ * to 256 bytes.
  */
 export type ResolutionDiagnosticEntry = {
   diagnosticRef: string;
@@ -54,23 +47,12 @@ export type ResolutionDiagnosticEntry = {
 };
 
 /**
- * ADR 0012 decision 2: additive, honest disclosure of how the acting path
- * resolved its target, attached to every press/click/fill/longpress response.
- * Pre-action only — never a substitute for `--verify`/`--settle` post-action
- * evidence, and never itself ref-issuing (see `ResolutionDiagnosticEntry`).
- *
- * - `runtime`/`unique`: the daemon-tree selector or ref path matched exactly
- *   one node.
- * - `runtime`/`disambiguated`: `resolveSelectorChain` picked among
- *   `matchCount` matches via the existing visible/deepest/smallest-area
- *   heuristic; `alternatives` lists at most 5 losing candidates (the winner is
- *   never included).
- * - `ref`/`exact`: an `@ref` names exactly one node by construction.
- * - `ref`/`label-fallback`: a stale or unusable `@ref` was recovered with its
- *   trailing replay label. This is first-match label lookup, never exact ref
- *   provenance.
- * - `direct-ios`/`not-observed`: the direct iOS XCTest fast path has no
- *   daemon tree and cannot truthfully report a match count or candidates.
+ * ADR 0012 decision 2: pre-action disclosure of how the acting path resolved
+ * its target, on every press/click/fill/longpress response. Never ref-issuing.
+ * `direct-ios`/`not-observed` = the XCTest fast path has no daemon tree to
+ * report from; `ref`/`label-fallback` = a stale `@ref` recovered via
+ * first-match label lookup, never exact ref provenance; `alternatives` holds
+ * at most 5 losing candidates, winner excluded.
  */
 export type ResolutionDisclosure =
   | { source: 'runtime'; phase: 'pre-action'; kind: 'unique' }

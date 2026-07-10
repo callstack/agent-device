@@ -242,19 +242,11 @@ async function resolveSelectorInteractionTarget(
   };
 }
 
-/**
- * ADR 0012 decision 2: every optional string on a pre-action diagnostic entry
- * is UTF-8 truncated to this bound; `alternatives` is capped to this many
- * losing candidates (the winner is never included).
- */
+// ADR 0012 decision 2 bounds: diagnostic strings and losing alternatives.
 const RESOLUTION_DIAGNOSTIC_STRING_BYTE_CAP = 256;
 const MAX_RESOLUTION_ALTERNATIVES = 5;
 
-/**
- * ADR 0012 decision 2: an `@ref` names exactly one node by construction when
- * the ref lookup succeeds. The native-ref fast path (`interactions.ts`) always
- * attaches this constant; runtime-ref can instead disclose label fallback.
- */
+/** A successful `@ref` lookup names exactly one node; label recovery discloses label-fallback instead. */
 export const EXACT_REF_RESOLUTION: ResolutionDisclosure = {
   source: 'ref',
   phase: 'pre-action',
@@ -273,10 +265,7 @@ const UNIQUE_RUNTIME_RESOLUTION: ResolutionDisclosure = {
   kind: 'unique',
 };
 
-// The disambiguation winner IS `resolved.node` (resolveSelectorChain's own
-// pick, never re-derived here) — only diagnostic disclosure is added, per ADR
-// 0012 decision 2: "discloses the existing heuristic without changing
-// resolveSelectorChain or its winner."
+// Disclosure only: the winner stays resolveSelectorChain's pick (ADR 0012).
 function buildSelectorResolutionDisclosure(
   resolved: SelectorResolution,
   nodes: SnapshotState['nodes'],

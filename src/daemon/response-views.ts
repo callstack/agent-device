@@ -139,25 +139,15 @@ function selectorReadView(data: DaemonResponseData, level: ResponseLevel): Daemo
   return { ...data, node: compactSelectorNode(node as SnapshotNode) };
 }
 
-/**
- * Token-cheap settle + resolution digest for interaction commands. Applies
- * two independent, CONSERVATIVE transforms and returns the data UNCHANGED at
- * every level but `digest`, so plain interaction responses stay
- * byte-identical elsewhere.
- */
+// Token-cheap interaction digest: settle + resolution transforms compose;
+// non-digest levels stay byte-identical.
 function interactionDigestView(data: DaemonResponseData, level: ResponseLevel): DaemonResponseData {
   if (level !== 'digest') return data;
   return applySettleDigest(applyResolutionDigest(data));
 }
 
-/**
- * ADR 0012 decision 2: only acts on a `resolution.kind === 'disambiguated'`
- * payload and otherwise returns the data UNCHANGED. Drops the bounded
- * `alternatives` list — the verbose per-candidate detail — while keeping
- * `matchCount`/`tiebreak`/`winnerDiagnostic`, matching the settle digest's
- * philosophy: the digest answer is the verdict and counts; the candidate list
- * is the default-level payload.
- */
+// Like the settle digest, the verdict fields are the digest answer and the
+// verbose list (`alternatives`) is the default-level payload (ADR 0012).
 function applyResolutionDigest(data: DaemonResponseData): DaemonResponseData {
   const resolution = data.resolution;
   if (!resolution || typeof resolution !== 'object' || Array.isArray(resolution)) return data;

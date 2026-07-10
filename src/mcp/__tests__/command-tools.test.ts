@@ -673,10 +673,8 @@ test('MCP never pins resolution.winnerDiagnostic/alternatives — they are pre-a
 
   await executor.execute('snapshot', { session: 'demo' });
   await executor.execute('press', { session: 'demo', target: { kind: 'ref', ref: '@e2' } });
-  // e3 was issued by the snapshot (generation 7) but NEVER by the press
-  // response's `resolution` field — if pinning mistakenly read
-  // diagnosticRef/alternatives as issued refs, this would forward pinned;
-  // it must still forward at the snapshot's own generation.
+  // e3 must stay pinned at the SNAPSHOT's generation, untouched by the press
+  // response's resolution diagnostics.
   await executor.execute('press', { session: 'demo', target: { kind: 'ref', ref: '@e3' } });
 
   assert.deepEqual(runCalls[1]?.input, { session: 'demo', target: { kind: 'ref', ref: '@e2~s7' } });
@@ -693,11 +691,7 @@ test('MCP never resolves a resolution diagnosticRef as a usable @ref — a fresh
     },
   });
 
-  // A caller that ignores the "opaque, non-@ token" contract and tries to
-  // act on a losing alternative directly: the input passes through
-  // unpinned/unmodified — pinning has no history for it (it was never
-  // issued), it is not stripped or special-cased, and it is left for the
-  // daemon's ordinary ref lookup to reject as any other unknown ref would be.
+  // Never issued, so it passes through unpinned for the daemon to reject.
   await executor.execute('press', {
     session: 'demo',
     target: { kind: 'ref', ref: '@diag-e3' },

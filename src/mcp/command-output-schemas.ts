@@ -111,15 +111,9 @@ const resolutionDiagnosticEntrySchema: JsonSchema = objectSchema(
   ['diagnosticRef'],
 );
 
-/**
- * ResolutionDisclosure (src/contracts/interaction.ts) — ADR 0012 decision 2:
- * additive, honest pre-action disclosure of how the acting path resolved its
- * target. Absent entirely when resolutionDisclosure is `inapplicable` for the
- * path (coordinate, maestro-non-hittable-fallback). Never itself ref-issuing:
- * `winnerDiagnostic`/`alternatives` carry no `refsGeneration` and are never
- * MCP-pinned. `alternatives` is present at the default/full response levels
- * and deliberately omitted in the token-cheap digest view.
- */
+// ResolutionDisclosure (src/contracts/interaction.ts) — never ref-issuing;
+// absent on paths where the guarantee is inapplicable (ADR 0012 decision 2).
+// `alternatives` rides default/full levels only; the digest view omits it.
 const resolutionDisclosureSchema: JsonSchema = {
   type: 'object',
   description:

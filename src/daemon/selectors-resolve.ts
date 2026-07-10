@@ -11,15 +11,11 @@ export type SelectorDiagnostics = {
   matches: number;
 };
 
-/**
- * ADR 0012 decision 2: surfaced only when `resolveSelectorChain` picked among
- * more than one match. `alternatives` are every OTHER matched node (document
- * order), unbounded here — callers building the pre-action disclosure cap it
- * at 5.
- */
+/** Present only when the heuristic picked among N>1 matches (ADR 0012). */
 export type SelectorDisambiguationDisclosure = {
   matchCount: number;
   tiebreak: DisambiguationTiebreak;
+  /** Every losing matched node, document order, uncapped (response layer caps). */
   alternatives: SnapshotNode[];
 };
 
@@ -147,8 +143,7 @@ function analyzeSelectorMatches(
   firstNode: SnapshotNode | null;
   disambiguated: SnapshotNode | null;
   tiebreak: DisambiguationTiebreak | null;
-  // ADR 0012 decision 2: every matched node (including the winner), document
-  // order — callers derive `alternatives` by excluding the winner.
+  /** Every matched node (winner included), document order. */
   candidates: SnapshotNode[];
 } {
   let count = 0;
@@ -211,12 +206,7 @@ function accumulateDisambiguationCandidate(
   }
 }
 
-/**
- * The resolution winner is deliberately still picked by the existing running
- * comparator above. For disclosure, compare that winner with its best losing
- * challenger rather than leaking the first document-order comparison that
- * happened to set state. This is a side channel only.
- */
+// Disclosure only (winner vs strongest challenger); never picks the winner.
 function findDecidingTiebreak(
   candidates: readonly SnapshotNode[],
   winner: SnapshotNode | null,

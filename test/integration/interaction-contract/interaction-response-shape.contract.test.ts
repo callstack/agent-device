@@ -42,9 +42,7 @@ const SELECTOR_KEYS = [
 
 const POINT_KEYS = ['message', 'targetKind', 'x', 'y'] as const;
 
-// ADR 0012 decision 2: the runtime-ref/runtime-selector paths always resolve
-// exactly one node in these fixtures (a single-match snapshot), so every
-// canonical-envelope test below sees the "exact"/"unique" resolution shape.
+// Single-match fixtures, so every envelope carries the exact/unique resolution shape (ADR 0012).
 const EXACT_REF_RESOLUTION = { source: 'ref', phase: 'pre-action', kind: 'exact' } as const;
 const UNIQUE_RUNTIME_RESOLUTION = {
   source: 'runtime',

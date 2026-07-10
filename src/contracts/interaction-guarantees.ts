@@ -61,12 +61,9 @@ export const INTERACTION_GUARANTEES = [
   // (rich selector diagnostics and hints) once direct runner paths close
   // codes earlier than full diagnostics.
   'errorTaxonomy',
-  // ADR 0012 decision 2: an additive `resolution` response field discloses how
-  // the acting path resolved its target — unique vs heuristically
-  // disambiguated (with match count/tiebreak/bounded alternatives) on the
-  // daemon tree, exact by construction on a ref, or explicitly not observed on
-  // the direct iOS fast path. Pre-action diagnostics only; never ref-issued or
-  // MCP-pinned (see src/contracts/interaction.ts#ResolutionDisclosure).
+  // The additive `resolution` response field (ADR 0012 decision 2):
+  // unique/disambiguated/exact/label-fallback/not-observed provenance,
+  // pre-action diagnostics only — never ref-issued or MCP-pinned.
   'resolutionDisclosure',
 ] as const;
 
@@ -188,10 +185,8 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/daemon/selectors-resolve.ts#formatSelectorFailure',
       },
-      // ADR 0012 decision 2: the full pre-action diagnostic shape — unique or
-      // disambiguated (matchCount/winnerDiagnostic/tiebreak/bounded
-      // alternatives) — discloses resolveSelectorChain's existing heuristic
-      // (same via as `disambiguation`) without changing it.
+      // Full pre-action diagnostic shape; same via as `disambiguation` — the
+      // disclosure reports what the heuristic did, never changes it.
       resolutionDisclosure: {
         kind: 'runtime',
         via: 'src/daemon/selectors-resolve.ts#resolveSelectorChain',
@@ -270,13 +265,8 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         to: 'runtime-selector',
         via: 'runner ELEMENT_NOT_FOUND/AMBIGUOUS_MATCH fall back to tree-based resolution (isDirectIosSelectorFallbackError delegateSemanticFailures; non-maestro dispatches only), which attaches the shared no-match diagnostics, ambiguous shape, and hints',
       },
-      // ADR 0012 decision 2: the XCTest fast path has no daemon tree and
-      // cannot truthfully report a match count or candidates, so it discloses
-      // only the explicit not-observed provenance marker — never a fabricated
-      // unique-match or identity claim. No selection-parity table is claimed:
-      // that would falsely imply XCTest selection has runtime parity. Via the
-      // shared response builder (same symbol as `responseConstruction`),
-      // where the marker is attached for the runner-payload source.
+      // No daemon tree, so only the not-observed marker — no counts or
+      // candidates, and no parity table (that would imply runtime parity).
       resolutionDisclosure: {
         kind: 'runtime',
         via: 'src/daemon/handlers/interaction-touch-response.ts#buildInteractionResponseData',
@@ -331,9 +321,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/daemon/selectors-resolve.ts#STALE_REF_HINT',
       },
-      // ADR 0012 decision 2: an @ref names exactly one node by construction,
-      // same as runtime-ref — the native fast path attaches the identical
-      // constant directly (src/commands/interaction/runtime/interactions.ts).
+      // An @ref names exactly one node by construction (same cell as runtime-ref).
       resolutionDisclosure: {
         kind: 'runtime',
         via: 'src/commands/interaction/runtime/resolution.ts#EXACT_REF_RESOLUTION',
@@ -378,9 +366,6 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         kind: 'runtime',
         via: 'src/kernel/errors.ts#normalizeError',
       },
-      // ADR 0012 decision 2: no element was resolved, so there is nothing to
-      // disclose. Distinct from the direct-iOS not-observed marker: coordinate
-      // dispatch never even attempts resolution.
       resolutionDisclosure: {
         kind: 'inapplicable',
         reason: 'Coordinates name a point; no element was resolved to disclose.',
@@ -431,9 +416,6 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
         reason: 'gap: shares the direct path error shapes, including their missing hints.',
         trackingIssue: GAPS_UMBRELLA_ISSUE,
       },
-      // ADR 0012 decision 2: Maestro owns matching on this path, and the
-      // fallback is coordinate execution — resolution semantics do not apply
-      // regardless of whether the runner actually used the coordinate tap.
       resolutionDisclosure: {
         kind: 'inapplicable',
         reason: 'Maestro owns matching; the fallback is coordinate execution.',
