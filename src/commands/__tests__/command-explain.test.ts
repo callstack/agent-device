@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, test } from 'vitest';
 import { commandDescriptors } from '../../core/command-descriptor/registry.ts';
+import { ownerFilesForCommand } from '../../core/command-descriptor/owner-files.ts';
 import { getDaemonRouteOwnerFiles } from '../../daemon/request-handler-chain.ts';
 import {
   explainCommand as explainCommandFromMetadata,
@@ -165,12 +166,21 @@ describe('explainCommand table-driven coverage', () => {
       const result = explainCommand(descriptor.name, { fileExists });
       expect(result.found).toBe(true);
       if (!result.found) continue;
-      for (const ownerFile of descriptor.ownerFiles) {
+      for (const ownerFile of ownerFilesForCommand(descriptor.name)) {
         expect(result.explanation.files).toContain(ownerFile);
       }
       for (const file of result.explanation.files) {
         expect(fileExists(file), `${descriptor.name} owner missing: ${file}`).toBe(true);
       }
+    }
+  });
+
+  test('owner-file claims stay tooling-only: production descriptors do not carry them', () => {
+    for (const descriptor of commandDescriptors) {
+      expect(
+        Object.hasOwn(descriptor, 'ownerFiles'),
+        `${descriptor.name} still exposes ownerFiles on the runtime descriptor`,
+      ).toBe(false);
     }
   });
 

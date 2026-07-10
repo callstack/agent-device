@@ -3,6 +3,7 @@ import { cliAliasesForCommand, normalizeCliCommandAlias } from '../cli-command-a
 import { buildCommandUsage } from '../utils/cli-usage.ts';
 import type { DaemonCommandRoute } from '../daemon/daemon-command-registry.ts';
 import { commandDescriptors, type Command } from '../core/command-descriptor/registry.ts';
+import { ownerFilesForCommand } from '../core/command-descriptor/owner-files.ts';
 import type { CommandCapability } from '../core/capabilities.ts';
 import type { CommandTimeoutPolicy } from '../core/command-descriptor/types.ts';
 import {
@@ -121,7 +122,7 @@ function buildCommandExplanation(
     ...(cliSchema ? { cli: describeCliSurface(descriptor.name, cliSchema) } : {}),
     files: commandFiles(
       descriptor.name,
-      descriptor.ownerFiles,
+      ownerFilesForCommand(descriptor.name),
       family?.name,
       'daemon' in descriptor ? descriptor.daemon?.route : undefined,
       Boolean('capability' in descriptor && descriptor.capability),
