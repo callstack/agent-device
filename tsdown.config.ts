@@ -85,9 +85,6 @@ export default defineConfig({
   },
   outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
   minify: true,
-  treeshake: {
-    propertyReadSideEffects: false,
-  },
   dts: {
     tsgo: {
       path: getTypeScript7ExePath(),

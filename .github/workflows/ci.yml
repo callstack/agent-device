@@ -150,6 +150,7 @@ jobs:
       - name: Build and pack CLI
         run: |
           pnpm build
+          pnpm check:bundle-owner-files
           mkdir -p .tmp/node-compat
           npm pack --ignore-scripts --pack-destination .tmp/node-compat
 
