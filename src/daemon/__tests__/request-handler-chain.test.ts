@@ -41,13 +41,23 @@ test('route owner files match the production module loaders', () => {
     ),
   ];
   const ownerFiles = getDaemonRouteOwnerFiles();
+  const genericModulePath = /import \* as genericRequestHandlerModule from '([^']+)'/.exec(
+    source,
+  )?.[1];
+  const genericOwnerFile =
+    /generic: defineDaemonRoute\(\{\s+ownerFile: '([^']+)',\s+load: async \(\) => genericRequestHandlerModule,/.exec(
+      source,
+    )?.[1];
 
-  assert.equal(definitions.length, Object.keys(ownerFiles).length);
+  assert.equal(definitions.length + 1, Object.keys(ownerFiles).length);
   for (const [, route, ownerFile, modulePath] of definitions) {
     assert.ok(route && ownerFile && modulePath);
     assert.equal(ownerFile, `src/daemon/${modulePath.slice(2)}`);
     assert.equal(ownerFiles[route as keyof typeof ownerFiles], ownerFile);
   }
+  assert.ok(genericModulePath && genericOwnerFile);
+  assert.equal(genericOwnerFile, `src/daemon/${genericModulePath.slice(2)}`);
+  assert.equal(ownerFiles.generic, genericOwnerFile);
 });
 
 test('request handler chain routes trace commands to the record-trace family', async () => {

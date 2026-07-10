@@ -3,6 +3,7 @@ import type { CloudArtifactProvider } from '../cloud-artifacts.ts';
 import type { AndroidAdbExecutor } from '../platforms/android/adb-executor.ts';
 import { AppError } from '../kernel/errors.ts';
 import { getDaemonCommandRoute } from './daemon-command-registry.ts';
+import * as genericRequestHandlerModule from './request-generic-dispatch.ts';
 import type { DaemonCommandContext } from './context.ts';
 import type { LeaseLifecycleProvider } from './handlers/lease.ts';
 import type { LeaseRegistry } from './lease-registry.ts';
@@ -65,7 +66,7 @@ const DAEMON_ROUTE_HANDLERS = {
   }),
   generic: defineDaemonRoute({
     ownerFile: 'src/daemon/request-generic-dispatch.ts',
-    load: () => import('./request-generic-dispatch.ts'),
+    load: async () => genericRequestHandlerModule,
     run: async () => null,
   }),
 } as const;
