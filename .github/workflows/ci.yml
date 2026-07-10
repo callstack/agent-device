@@ -117,6 +117,25 @@ jobs:
           node --experimental-strip-types --test scripts/layering/model.test.ts
           node --experimental-strip-types scripts/layering/check.ts --base "$LAYERING_BASE"
 
+  affected-selector:
+    name: Affected-check Selector
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - name: Setup toolchain
+        uses: ./.github/actions/setup-node-pnpm
+        with:
+          install-deps: false
+
+      # The selector is fail-open and advisory (GitHub CI stays authoritative),
+      # so the gate only guards the derivation model. Invoked directly with no
+      # deps, mirroring the layering guard.
+      - name: Check affected-selector model
+        run: node --experimental-strip-types --test scripts/check-affected/model.test.ts
+
   packaged-cli-node-22-12:
     name: Packaged CLI Node 22.12
     runs-on: ubuntu-latest

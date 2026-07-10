@@ -111,6 +111,8 @@
     "fallow:all": "fallow --summary",
     "fallow:baseline": "(fallow dead-code --save-baseline fallow-baselines/dead-code.json --summary || true) && (fallow health --save-baseline fallow-baselines/health.json --summary || true)",
     "check:fallow": "fallow audit",
+    "check:affected": "node --experimental-strip-types scripts/check-affected/run.ts",
+    "check:affected:test": "node --experimental-strip-types --test scripts/check-affected/model.test.ts",
     "check:layering": "node --experimental-strip-types --test scripts/layering/model.test.ts && node --experimental-strip-types scripts/layering/check.ts",
     "check:layering:baseline": "node --experimental-strip-types scripts/layering/check.ts --update-baseline",
     "check:quick": "pnpm lint && pnpm typecheck",
