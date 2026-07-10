@@ -80,9 +80,7 @@ export function normalizeRoleField(value: string): string {
 /** label fields: NFC, trim, collapse internal whitespace runs to one space. */
 export function normalizeLabelField(value: string | undefined): string | undefined {
   if (value === undefined) return undefined;
-  const collapsed = nfc(value)
-    .trim()
-    .replace(/\s+/g, ' ');
+  const collapsed = nfc(value).trim().replace(/\s+/g, ' ');
   return collapsed.length > 0 ? collapsed : undefined;
 }
 
@@ -413,12 +411,25 @@ export type TargetBindingClassificationInput = {
   viewportCandidateRef: string | undefined;
 };
 
+/**
+ * Decision 3 keeps two spec-distinct failure classes inside path 6, and the
+ * `reason` field preserves the distinction for migration step 4's divergence
+ * `kind` mapping:
+ *
+ * - a disambiguation signal ISOLATING exactly one member that differs from
+ *   the winner is "compare with W as in paths 4/5" — the same class as path
+ *   5's unique-but-wrong rebind, i.e. a future `identity-mismatch`
+ *   (`signal-isolated-wrong`);
+ * - neither signal isolating any member is the true fall-through — a future
+ *   `identity-unverifiable` with up to 5 candidates (`no-signal-isolation`).
+ */
 export type TargetBindingClassification =
   | { path: 2; outcome: 'unverifiable'; reason: 'selector-miss' }
   | { path: 3; outcome: 'unverifiable'; reason: 'identity-set-empty' }
   | { path: 4; outcome: 'verified' }
   | { path: 5; outcome: 'unverifiable'; reason: 'unique-but-wrong' }
-  | { path: 6; outcome: 'verified' | 'unverifiable' };
+  | { path: 6; outcome: 'verified' }
+  | { path: 6; outcome: 'unverifiable'; reason: 'signal-isolated-wrong' | 'no-signal-isolation' };
 
 /**
  * Decision 3 "Replay-time verification", paths 2-6. `matchCount == 0` (path
@@ -442,18 +453,22 @@ export function classifyTargetBindingMatch(
       : { path: 5, outcome: 'unverifiable', reason: 'unique-but-wrong' };
   }
   if (input.siblingMatchRefs.length === 1) {
+    // The sibling signal isolates exactly one member: the evidence denotes
+    // it — compare with the winner as in paths 4/5 (decision 3, path 6.i).
     return input.siblingMatchRefs[0] === input.winnerRef
       ? { path: 6, outcome: 'verified' }
-      : { path: 6, outcome: 'unverifiable' };
+      : { path: 6, outcome: 'unverifiable', reason: 'signal-isolated-wrong' };
   }
   if (
     input.regionMemberRefs !== undefined &&
     input.regionMemberRefs.length > 0 &&
     input.viewportCandidateRef !== undefined
   ) {
+    // Region-scoped viewportOrder denotes a member: compare as in paths 4/5
+    // (decision 3, path 6.ii).
     return input.viewportCandidateRef === input.winnerRef
       ? { path: 6, outcome: 'verified' }
-      : { path: 6, outcome: 'unverifiable' };
+      : { path: 6, outcome: 'unverifiable', reason: 'signal-isolated-wrong' };
   }
-  return { path: 6, outcome: 'unverifiable' };
+  return { path: 6, outcome: 'unverifiable', reason: 'no-signal-isolation' };
 }

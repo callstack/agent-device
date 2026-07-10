@@ -187,7 +187,10 @@ test('computeTargetEvidence: max-size labels across K=8 ancestors reduce ancestr
   const evidence = computeTargetEvidence({ node: winner, nodes });
   assert.ok(evidence);
   assert.ok(evidence.ancestry.length <= TARGET_ANNOTATION_MAX_ANCESTRY);
-  assert.ok(evidence.ancestry.length < TARGET_ANNOTATION_MAX_ANCESTRY, 'ancestry must have been reduced');
+  assert.ok(
+    evidence.ancestry.length < TARGET_ANNOTATION_MAX_ANCESTRY,
+    'ancestry must have been reduced',
+  );
   // Nearest-ancestor-first: the first (kept) entries are the leaf-side ones.
   assert.equal(evidence.ancestry[0]?.label, maxLabel);
 
@@ -344,4 +347,63 @@ test('computeTargetEvidence: a node with an over-cap id still matches itself and
   assert.ok(evidence);
   assert.equal(evidence.id, overCapId.slice(0, TARGET_ANNOTATION_MAX_FIELD_BYTES));
   assert.equal(evidence.verification, 'verified');
+});
+
+// ---------------------------------------------------------------------------
+// Worst-case verification sizing: "unverifiable" serializes 4 bytes longer
+// than "verified". The reduction loop must size each candidate against the
+// worst-case value so a fail-closed self-check downgrade can never push an
+// already-accepted payload over the 4 KiB cap. The window is only 4 bytes
+// wide, so sweep a tunable root-side label length across the boundary — some
+// length in the sweep necessarily lands inside the window, where a
+// placeholder-sized ("verified") check would accept a payload whose
+// downgraded form overflows.
+// ---------------------------------------------------------------------------
+
+test('computeTargetEvidence: reduction sizes against the worst-case verification value across the 4 KiB boundary', () => {
+  const maxField = 'x'.repeat(TARGET_ANNOTATION_MAX_FIELD_BYTES);
+
+  const buildChain = (tunableLabelLength: number): SnapshotNode[] => {
+    const raw: RawSnapshotNode[] = [];
+    // Root (index 0) .. leaf's parent (index 7): 8 ancestors total (K=8).
+    // Root-side entries are dropped first, so the tunable label sits at the
+    // root to sweep total payload size in 1-byte steps.
+    raw.push({ index: 0, type: 'Window', label: 'w'.repeat(tunableLabelLength), depth: 0 });
+    raw.push({ index: 1, type: 'View', label: 'v', depth: 1, parentIndex: 0 });
+    for (let depth = 2; depth < 8; depth += 1) {
+      raw.push({ index: depth, type: maxField, label: maxField, depth, parentIndex: depth - 1 });
+    }
+    raw.push({
+      index: 8,
+      type: maxField,
+      label: maxField,
+      rect: { x: 0, y: 0, width: 10, height: 10 },
+      depth: 8,
+      parentIndex: 7,
+    });
+    return toSnapshotNodes(raw);
+  };
+
+  let sawFullAncestry = false;
+  let sawReducedAncestry = false;
+  for (let tunable = 0; tunable <= TARGET_ANNOTATION_MAX_FIELD_BYTES; tunable += 1) {
+    const nodes = buildChain(tunable);
+    const evidence = computeTargetEvidence({ node: nodes.at(-1)!, nodes });
+    assert.ok(evidence);
+    if (evidence.ancestry.length === TARGET_ANNOTATION_MAX_ANCESTRY) sawFullAncestry = true;
+    else sawReducedAncestry = true;
+    // The emitted payload must fit even re-serialized with the longer
+    // verification value — the invariant the worst-case sizing guarantees.
+    const worstCase = serializeTargetAnnotationV1({ ...evidence, verification: 'unverifiable' });
+    assert.ok(
+      utf8ByteLength(worstCase) <= TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
+      `worst-case payload overflows at tunable label length ${tunable}`,
+    );
+    // And the parser accepts the writer's actual output, as always.
+    parseTargetAnnotationV1Payload(serializeTargetAnnotationV1(evidence));
+  }
+  // The sweep must actually cross the reduction boundary for the window to
+  // have been exercised.
+  assert.ok(sawFullAncestry, 'sweep never produced an unreduced payload — fixture too large');
+  assert.ok(sawReducedAncestry, 'sweep never forced a reduction — fixture too small');
 });

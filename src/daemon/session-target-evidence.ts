@@ -88,7 +88,17 @@ export function computeTargetEvidence(params: {
 
   for (let ancestryLength = fullAncestry.length; ancestryLength >= floor; ancestryLength -= 1) {
     const { candidate, domain } = buildCandidate(ancestryLength);
-    if (utf8ByteLength(serializeTargetAnnotationV1(candidate)) <= TARGET_ANNOTATION_MAX_PAYLOAD_BYTES) {
+    // Size against the WORST-CASE verification value ("unverifiable" is 4
+    // serialized bytes longer than "verified") so the payload provably fits
+    // no matter what the self-check below returns — otherwise a payload
+    // within 4 bytes of the cap could pass this check as "verified" and then
+    // overflow once a fail-closed self-check downgraded it, violating the
+    // writer-parser invariant exactly in the rare capture-anomaly case it
+    // exists for.
+    if (
+      utf8ByteLength(serializeTargetAnnotationV1({ ...candidate, verification: 'unverifiable' })) <=
+      TARGET_ANNOTATION_MAX_PAYLOAD_BYTES
+    ) {
       candidate.verification = runRecordTimeSelfCheck({ node, domain });
       return candidate;
     }
@@ -100,7 +110,9 @@ export function computeTargetEvidence(params: {
       // rect (never compared) as one last, spec-consistent reduction rather
       // than emit a payload the parser would reject.
       candidate.verification = 'unverifiable';
-      if (utf8ByteLength(serializeTargetAnnotationV1(candidate)) > TARGET_ANNOTATION_MAX_PAYLOAD_BYTES) {
+      if (
+        utf8ByteLength(serializeTargetAnnotationV1(candidate)) > TARGET_ANNOTATION_MAX_PAYLOAD_BYTES
+      ) {
         delete candidate.rect;
       }
       return candidate;
@@ -152,8 +164,12 @@ function buildAncestryChain(
   while (current && !visited.has(current.index) && chain.length < limit) {
     visited.add(current.index);
     const identity = boundedLocalIdentity(current);
-    chain.push({ role: identity.role, ...(identity.label !== undefined ? { label: identity.label } : {}) });
-    current = typeof current.parentIndex === 'number' ? byIndex.get(current.parentIndex) : undefined;
+    chain.push({
+      role: identity.role,
+      ...(identity.label !== undefined ? { label: identity.label } : {}),
+    });
+    current =
+      typeof current.parentIndex === 'number' ? byIndex.get(current.parentIndex) : undefined;
   }
   return chain;
 }

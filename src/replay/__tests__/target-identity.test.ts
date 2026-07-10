@@ -22,10 +22,7 @@ function baseEvidence(overrides: Partial<TargetAnnotationV1> = {}): TargetAnnota
     id: 'save',
     role: 'button',
     label: 'Save',
-    ancestry: [
-      { role: 'toolbar', label: 'Editor' },
-      { role: 'window' },
-    ],
+    ancestry: [{ role: 'toolbar', label: 'Editor' }, { role: 'window' }],
     sibling: 0,
     viewportOrder: 0,
     scrollRegion: { role: 'scrollview', id: 'editor-scroll' },
@@ -171,10 +168,7 @@ test('matchesAncestryPrefix accepts an observed chain that is a superset on the 
 });
 
 test('matchesAncestryPrefix rejects an inserted wrapper ancestor (structure is part of identity)', () => {
-  const recorded = [
-    { role: 'toolbar', label: 'Editor' },
-    { role: 'window' },
-  ];
+  const recorded = [{ role: 'toolbar', label: 'Editor' }, { role: 'window' }];
   // A new wrapper view inserted directly above the target shifts every entry
   // one level down — the leaf-anchored prefix no longer matches.
   const observedWithInsertedWrapper = [
@@ -205,10 +199,7 @@ test('matchesLocalIdentity: a recorded id never matches a node without that id',
 
 test('matchesLocalIdentity: with no recorded id, role+label must both match, absent-absent counts as equal', () => {
   assert.equal(matchesLocalIdentity({ role: 'button' }, { role: 'button' }), true);
-  assert.equal(
-    matchesLocalIdentity({ role: 'button', label: 'Save' }, { role: 'button' }),
-    false,
-  );
+  assert.equal(matchesLocalIdentity({ role: 'button', label: 'Save' }, { role: 'button' }), false);
 });
 
 // ---------------------------------------------------------------------------
@@ -249,7 +240,9 @@ test('parser rejects a payload exceeding the 4 KiB cap', () => {
 });
 
 test('parser rejects more than 8 ancestry entries', () => {
-  const ancestry = Array.from({ length: TARGET_ANNOTATION_MAX_ANCESTRY + 1 }, () => ({ role: 'view' }));
+  const ancestry = Array.from({ length: TARGET_ANNOTATION_MAX_ANCESTRY + 1 }, () => ({
+    role: 'view',
+  }));
   assertInvalidArgs(
     () =>
       parseTargetAnnotationV1Payload(
@@ -418,7 +411,7 @@ test('classifyTargetBindingMatch path 6: a scroll region that no longer exists f
     regionMemberRefs: undefined, // region unavailable
     viewportCandidateRef: undefined,
   });
-  assert.deepEqual(result, { path: 6, outcome: 'unverifiable' });
+  assert.deepEqual(result, { path: 6, outcome: 'unverifiable', reason: 'no-signal-isolation' });
 });
 
 test('classifyTargetBindingMatch path 6: an out-of-range recorded viewportOrder falls through to unverifiable', () => {
@@ -430,11 +423,16 @@ test('classifyTargetBindingMatch path 6: an out-of-range recorded viewportOrder 
     regionMemberRefs: ['e1', 'e2'],
     viewportCandidateRef: undefined, // ordinal was out of range
   });
-  assert.deepEqual(result, { path: 6, outcome: 'unverifiable' });
+  assert.deepEqual(result, { path: 6, outcome: 'unverifiable', reason: 'no-signal-isolation' });
 });
 
-test('classifyTargetBindingMatch path 6: viewportOrder resolves to a DIFFERENT node than the winner is unverifiable, never a silent pick', () => {
-  const result = classifyTargetBindingMatch({
+test('classifyTargetBindingMatch path 6: a signal isolating a DIFFERENT node than the winner is the paths-4/5 comparison class, not fall-through', () => {
+  // Decision 3 path 6.i/6.ii: when a signal denotes exactly one member,
+  // "compare with W as in paths 4/5" — an isolated-but-different member is
+  // the same class as path 5's unique-but-wrong rebind (a future
+  // identity-mismatch), distinct from true no-isolation fall-through (a
+  // future identity-unverifiable with candidates).
+  const viaViewportOrder = classifyTargetBindingMatch({
     winnerRef: 'e1',
     matchedRefs: ['e1', 'e2'],
     identitySetRefs: ['e1', 'e2'],
@@ -442,5 +440,23 @@ test('classifyTargetBindingMatch path 6: viewportOrder resolves to a DIFFERENT n
     regionMemberRefs: ['e1', 'e2'],
     viewportCandidateRef: 'e2',
   });
-  assert.deepEqual(result, { path: 6, outcome: 'unverifiable' });
+  assert.deepEqual(viaViewportOrder, {
+    path: 6,
+    outcome: 'unverifiable',
+    reason: 'signal-isolated-wrong',
+  });
+
+  const viaSibling = classifyTargetBindingMatch({
+    winnerRef: 'e1',
+    matchedRefs: ['e1', 'e2'],
+    identitySetRefs: ['e1', 'e2'],
+    siblingMatchRefs: ['e2'], // sibling isolates e2, not the winner
+    regionMemberRefs: ['e1', 'e2'],
+    viewportCandidateRef: 'e1',
+  });
+  assert.deepEqual(viaSibling, {
+    path: 6,
+    outcome: 'unverifiable',
+    reason: 'signal-isolated-wrong',
+  });
 });

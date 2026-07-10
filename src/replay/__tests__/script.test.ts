@@ -395,9 +395,11 @@ const SAVE_EVIDENCE_LINE =
   '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[{"role":"toolbar","label":"Editor"},{"role":"window"}],"sibling":0,"viewportOrder":0,"scrollRegion":{"role":"scrollview","id":"editor-scroll"},"verification":"verified"}';
 
 test('a target-v1 annotation immediately preceding an action line attaches to that action', () => {
-  const script = ['context platform=ios device=iPhone', SAVE_EVIDENCE_LINE, 'click @e12 "Save"'].join(
-    '\n',
-  );
+  const script = [
+    'context platform=ios device=iPhone',
+    SAVE_EVIDENCE_LINE,
+    'click @e12 "Save"',
+  ].join('\n');
   const { actions } = parseReplayScriptDetailed(script);
   assert.equal(actions.length, 1);
   assert.deepEqual(actions[0]?.targetEvidence, SAVE_EVIDENCE);
@@ -438,11 +440,7 @@ test('a malformed target-v1 payload is rejected as INVALID_ARGS, not silently dr
 });
 
 test('an unknown future target-vN comment is an ordinary comment: no binding requirement, no evidence attached', () => {
-  const script = [
-    '# agent-device:target-v2 {"whatever":true}',
-    '',
-    'click @e12 "Save"',
-  ].join('\n');
+  const script = ['# agent-device:target-v2 {"whatever":true}', '', 'click @e12 "Save"'].join('\n');
   const { actions } = parseReplayScriptDetailed(script);
   assert.equal(actions.length, 1);
   assert.equal(actions[0]?.targetEvidence, undefined);
