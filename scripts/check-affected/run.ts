@@ -49,11 +49,29 @@ function parseArgs(argv: readonly string[]): Args {
   };
 }
 
-function readChangedFiles(base: string, head: string): string[] {
-  const { stdout } = runCmdSync('git', ['diff', '--name-only', '--merge-base', base, head], {
-    cwd: repoRoot,
-  });
-  return stdout.split('\n').filter(Boolean);
+function gitLines(args: string[], cwd: string): string[] {
+  return runCmdSync('git', args, { cwd }).stdout.split('\n').filter(Boolean);
+}
+
+// Collect every changed file a local plan must account for. The committed diff
+// (base..head via merge-base) is the baseline; `--no-renames` keeps BOTH sides
+// of a rename so a moved file cannot look docs-only by its destination alone.
+// In local mode (head === HEAD) we also fold in working-tree changes (staged +
+// unstaged) and untracked files, which the committed diff never sees — ignoring
+// uncommitted edits would be an unsafe narrowing of the local feedback loop.
+export function readChangedFiles(base: string, head: string, cwd: string = repoRoot): string[] {
+  const files = new Set<string>(
+    gitLines(['diff', '--name-only', '--no-renames', '--merge-base', base, head], cwd),
+  );
+  if (head === 'HEAD') {
+    for (const file of gitLines(['diff', '--name-only', '--no-renames', 'HEAD'], cwd)) {
+      files.add(file);
+    }
+    for (const file of gitLines(['ls-files', '--others', '--exclude-standard'], cwd)) {
+      files.add(file);
+    }
+  }
+  return [...files].sort();
 }
 
 async function loadVitestProjects(): Promise<VitestProject[]> {
@@ -151,7 +169,29 @@ function printPlanHuman(plan: CheckPlan, args: Args): void {
   }
 }
 
-async function runChecks(plan: CheckPlan, pkg: PackageJson, args: Args): Promise<number> {
+// How a resolved command is executed. Injectable so the entrypoint's `--run`
+// propagation (order, skip of GitHub-authoritative checks, stop-on-failure) is
+// testable without spawning real processes.
+export type CommandExecutor = (command: string[], cwd: string) => Promise<number>;
+
+const streamingExecutor: CommandExecutor = async (command, cwd) => {
+  const result = await runCmdStreaming(command[0]!, command.slice(1), {
+    cwd,
+    allowFailure: true,
+    onStdoutChunk: (chunk) => void process.stdout.write(chunk),
+    onStderrChunk: (chunk) => void process.stderr.write(chunk),
+  });
+  return result.exitCode;
+};
+
+export async function runChecks(
+  plan: CheckPlan,
+  pkg: PackageJson,
+  args: Args,
+  options: { cwd?: string; execute?: CommandExecutor } = {},
+): Promise<number> {
+  const cwd = options.cwd ?? repoRoot;
+  const execute = options.execute ?? streamingExecutor;
   const runnable = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => spec.localRunnable);
   const skipped = plan.checks.map(getCheckSpec).filter((spec: CheckSpec) => !spec.localRunnable);
   for (const spec of skipped) {
@@ -162,13 +202,8 @@ async function runChecks(plan: CheckPlan, pkg: PackageJson, args: Args): Promise
   for (const spec of runnable) {
     const command = resolveCommand(spec, pkg.scripts, args.base);
     process.stdout.write(`\n[run] ${spec.id}: ${command.join(' ')}\n`);
-    const result = await runCmdStreaming(command[0]!, command.slice(1), {
-      cwd: repoRoot,
-      allowFailure: true,
-      onStdoutChunk: (chunk) => void process.stdout.write(chunk),
-      onStderrChunk: (chunk) => void process.stderr.write(chunk),
-    });
-    if (result.exitCode !== 0) {
+    const exitCode = await execute(command, cwd);
+    if (exitCode !== 0) {
       process.stderr.write(`\ncheck:affected: ${spec.id} failed.\n`);
       return 1;
     }

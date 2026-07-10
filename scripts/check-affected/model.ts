@@ -12,7 +12,10 @@
 //     categories, so they are never silently skipped (issue constraint);
 //   - a small explicit build-ownership layer covers Swift, Android helpers,
 //     the macOS helper, MCP metadata, and the public package surface — the
-//     only paths whose owning build the sources of truth cannot derive.
+//     only paths whose owning build the sources of truth cannot derive;
+//   - SkillGym owns skill guidance (`skills/`) and its harness
+//     (`test/skillgym/`): those changes select the SkillGym suite, and their
+//     Markdown is skill/harness input, not inert docs.
 //
 // Anything the model cannot confidently classify fails open to the full check
 // set: unknown paths, workflow/tooling, the selector's own sources, and
@@ -160,6 +163,10 @@ function isWorkflowTooling(file: string): boolean {
 }
 
 function isDocs(file: string): boolean {
+  // skills/ and the SkillGym harness are validated by the SkillGym suite (and
+  // formatting), not treated as inert docs — even their Markdown is skill
+  // guidance or harness input, so let them flow to ownership rules instead.
+  if (file.startsWith('skills/') || file.startsWith('test/skillgym/')) return false;
   return (
     file.startsWith('docs/') ||
     file.startsWith('website/') ||
@@ -267,6 +274,20 @@ const nodeIntegrationOwnership: OwnershipRule = ({ file }) =>
     ? [reason('integration-node', file, 'node-integration', 'node --test integration smoke')]
     : [];
 
+// SkillGym validates skill guidance (`skills/`) and owns its harness
+// (`test/skillgym/`); AGENTS.md routes skill-prompt/assertion changes here.
+const skillgymOwnership: OwnershipRule = ({ file, underSkills }) =>
+  underSkills || file.startsWith('test/skillgym/')
+    ? [
+        reason(
+          'skillgym',
+          file,
+          'own:skillgym',
+          'SkillGym suite validates skill guidance and its harness',
+        ),
+      ]
+    : [];
+
 const BUILD_OWNERSHIP: ReadonlyArray<{
   check: CheckId;
   rule: string;
@@ -318,6 +339,7 @@ const OWNERSHIP_RULES: readonly OwnershipRule[] = [
   srcProdGate,
   vitestOwnership,
   nodeIntegrationOwnership,
+  skillgymOwnership,
   buildOwnership,
 ];
 

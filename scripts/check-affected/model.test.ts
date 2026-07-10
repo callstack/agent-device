@@ -149,6 +149,19 @@ test('a non-.ts fixture under an owned root fails open (format alone is not owne
   assert.equal(result.failOpenReasons[0]?.rule, 'ambiguous-path');
 });
 
+test('skills guidance change selects format + skillgym, not docs-only', () => {
+  const result = plan(['skills/agent-device/SKILL.md']);
+  assert.equal(result.failOpen, false);
+  assert.equal(result.docsOnlyPaths.length, 0);
+  assert.ok(result.checks.includes('skillgym'), 'skills change must select the SkillGym suite');
+  assert.ok(result.checks.includes('format'), 'skills change must still run format');
+});
+
+test('SkillGym harness change selects the skillgym suite', () => {
+  const result = ids(['test/skillgym/suites/agent-device-smoke-suite.ts']);
+  assert.ok(result.includes('skillgym'));
+});
+
 test('workflow/tooling and selector-owning changes fail open', () => {
   assert.equal(plan(['.github/workflows/ci.yml']).failOpenReasons[0]?.rule, 'workflow-tooling');
   assert.equal(plan(['package.json']).failOpenReasons[0]?.rule, 'workflow-tooling');
@@ -242,4 +255,29 @@ test('catalog resolves against the real package.json + vitest.config.ts', () => 
       );
     }
   }
+});
+
+test('every catalog CI job maps to a real workflow job (no fabricated checks)', () => {
+  const workflowsDir = path.join(repoRoot, '.github', 'workflows');
+  const workflows = fs
+    .readdirSync(workflowsDir)
+    .filter((file) => file.endsWith('.yml') || file.endsWith('.yaml'))
+    .map((file) => fs.readFileSync(path.join(workflowsDir, file), 'utf8'))
+    .join('\n');
+  for (const spec of CHECK_CATALOG) {
+    for (const job of spec.ciJobs) {
+      // GitHub renders check names as "<workflow> / <job>"; match on the job.
+      const jobName = job.includes(' / ') ? job.slice(job.lastIndexOf(' / ') + 3) : job;
+      assert.ok(
+        workflows.includes(`name: ${jobName}`),
+        `catalog check "${spec.id}" references CI job "${job}", but no workflow defines "${jobName}"`,
+      );
+    }
+  }
+});
+
+test('skillgym is a local-only gate (locally runnable, claims no CI job)', () => {
+  const skillgym = CHECK_CATALOG.find((spec) => spec.id === 'skillgym')!;
+  assert.equal(skillgym.localRunnable, true);
+  assert.deepEqual([...skillgym.ciJobs], []);
 });

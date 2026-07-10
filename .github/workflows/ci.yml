@@ -134,7 +134,7 @@ jobs:
       # so the gate only guards the derivation model. Invoked directly with no
       # deps, mirroring the layering guard.
       - name: Check affected-selector model
-        run: node --experimental-strip-types --test scripts/check-affected/model.test.ts
+        run: node --experimental-strip-types --test scripts/check-affected/model.test.ts scripts/check-affected/run.test.ts
 
   packaged-cli-node-22-12:
     name: Packaged CLI Node 22.12

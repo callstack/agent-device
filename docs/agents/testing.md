@@ -26,6 +26,15 @@ hand-maintained path map:
 - A **small explicit build-ownership layer** covers the paths whose owning build
   cannot be derived: Swift runner, Android helpers, macOS helper, MCP metadata,
   and the public package surface (itself derived from `package.json` `exports`).
+- **SkillGym ownership** covers skill guidance (`skills/`) and the SkillGym
+  harness (`test/skillgym/`) — those changes select the (local-only) SkillGym
+  suite, and their Markdown is treated as skill/harness input, not inert docs.
+
+Changed-file discovery folds working-tree state into the local plan: in the
+default local mode (`--head HEAD`) it unions the committed `base..HEAD` diff with
+staged, unstaged, and untracked files, and disables rename detection so **both**
+sides of a rename are classified (a moved file cannot look docs-only by its
+destination alone).
 
 Anything the selector cannot classify — unknown, ambiguous, workflow/tooling, or
 a change to the selector's own sources — **fails open to the full check set**.
