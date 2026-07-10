@@ -6,8 +6,12 @@ export function normalizeBaseUrl(input: string): string {
   return end === input.length ? input : input.slice(0, end);
 }
 
-export function buildBundleUrl(baseUrl: string, platform: 'ios' | 'android'): string {
-  const url = new URL(`${normalizeBaseUrl(baseUrl)}/index.bundle`);
+export function buildBundleUrl(
+  baseUrl: string,
+  platform: 'ios' | 'android',
+  entryPath = 'index.bundle',
+): string {
+  const url = new URL(`${normalizeBaseUrl(baseUrl)}/${entryPath}`);
   url.searchParams.set('platform', platform);
   url.searchParams.set('dev', 'true');
   url.searchParams.set('minify', 'false');

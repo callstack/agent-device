@@ -9,7 +9,7 @@ import type {
   MetroBridgeRuntimePayload,
   MetroRuntimeHints,
 } from './metro-types.ts';
-import { AppError } from '../kernel/errors.ts';
+import { AppError, asAppError } from '../kernel/errors.ts';
 import { runCmdSync, runCmdDetached } from '../utils/exec.ts';
 import { resolveUserPath } from '../utils/path-resolution.ts';
 import { waitForProcessExit } from '../utils/host-process.ts';
@@ -179,14 +179,32 @@ function readPackageJson(projectRoot: string): PackageJsonShape {
   return packageJson;
 }
 
+// Ordered by specificity; the first lockfile found while walking up from projectRoot wins. Yarn
+// workspace monorepos (e.g. Expo dev-client example apps) usually keep the lockfile at the repo
+// root, not inside the leaf project, so detection must not stop at projectRoot itself.
+const LOCKFILE_PACKAGE_MANAGERS: ReadonlyArray<{ file: string; command: string }> = [
+  { file: 'pnpm-lock.yaml', command: 'pnpm' },
+  { file: 'yarn.lock', command: 'yarn' },
+  { file: 'bun.lockb', command: 'bun' },
+  { file: 'package-lock.json', command: 'npm' },
+];
+
+function findLockfilePackageManager(startDir: string): PackageManagerConfig | null {
+  let dir = startDir;
+  for (;;) {
+    for (const { file, command } of LOCKFILE_PACKAGE_MANAGERS) {
+      if (fileExists(path.join(dir, file))) {
+        return { command, installArgs: ['install'] };
+      }
+    }
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
 function detectPackageManager(projectRoot: string): PackageManagerConfig {
-  if (fileExists(path.join(projectRoot, 'pnpm-lock.yaml'))) {
-    return { command: 'pnpm', installArgs: ['install'] };
-  }
-  if (fileExists(path.join(projectRoot, 'yarn.lock'))) {
-    return { command: 'yarn', installArgs: ['install'] };
-  }
-  return { command: 'npm', installArgs: ['install'] };
+  return findLockfilePackageManager(projectRoot) ?? { command: 'npm', installArgs: ['install'] };
 }
 
 function detectMetroKind(
@@ -253,10 +271,23 @@ function parsePort(value: number | string | undefined, fallback: number): number
   return parsed;
 }
 
-function buildMetroRuntimeHints(baseUrl: string, platform: 'ios' | 'android'): MetroRuntimeHints {
+// Expo dev-client (and Expo Go) apps request their JS through the virtual entry module, not
+// index.bundle. index.bundle 500s on Expo monorepo projects ("Unable to resolve module ./index
+// from <monorepo root>") because Expo's Metro config points the real entry elsewhere.
+const EXPO_VIRTUAL_ENTRY_BUNDLE_PATH = '.expo/.virtual-metro-entry.bundle';
+
+function metroBundleEntryPath(kind: ResolvedMetroKind): string {
+  return kind === 'expo' ? EXPO_VIRTUAL_ENTRY_BUNDLE_PATH : 'index.bundle';
+}
+
+function buildMetroRuntimeHints(
+  baseUrl: string,
+  platform: 'ios' | 'android',
+  kind: ResolvedMetroKind,
+): MetroRuntimeHints {
   return {
     platform,
-    bundleUrl: buildBundleUrl(baseUrl, platform),
+    bundleUrl: buildBundleUrl(baseUrl, platform, metroBundleEntryPath(kind)),
   };
 }
 
@@ -282,11 +313,33 @@ function installDependenciesIfNeeded(
   }
 
   const packageManager = detectPackageManager(projectRoot);
-  runCmdSync(packageManager.command, packageManager.installArgs, {
-    cwd: projectRoot,
-    env: env as NodeJS.ProcessEnv,
-  });
+  try {
+    runCmdSync(packageManager.command, packageManager.installArgs, {
+      cwd: projectRoot,
+      env: env as NodeJS.ProcessEnv,
+    });
+  } catch (error) {
+    throw wrapDependencyInstallError(error, packageManager);
+  }
   return { installed: true, packageManager: packageManager.command };
+}
+
+function wrapDependencyInstallError(
+  error: unknown,
+  packageManager: PackageManagerConfig,
+): AppError {
+  const appErr = asAppError(error);
+  const hint =
+    `Dependency install failed using detected package manager "${packageManager.command}". ` +
+    'If dependencies are already installed (for example via a monorepo root install), pass ' +
+    '--no-install-deps to skip this step, or install manually with ' +
+    `"${packageManager.command} ${packageManager.installArgs.join(' ')}" from the project root.`;
+  return new AppError(
+    appErr.code,
+    appErr.message,
+    { ...(appErr.details ?? {}), hint, packageManager: packageManager.command },
+    appErr,
+  );
 }
 
 async function wait(ms: number): Promise<void> {
@@ -368,7 +421,7 @@ function resolveReloadMetroPort(
   return input.runtime?.metroPort ?? (hasBundleUrl ? undefined : DEFAULT_METRO_PORT);
 }
 
-function resolveMetroReloadUrl(input: ReloadMetroOptions): string {
+export function resolveMetroReloadUrl(input: ReloadMetroOptions): string {
   const explicitBundleUrl = normalizeOptionalString(input.bundleUrl);
   const bundleUrl = explicitBundleUrl ?? input.runtime?.bundleUrl;
   const hasExplicitBundleUrl = Boolean(explicitBundleUrl);
@@ -424,6 +477,11 @@ function startMetroProcess(
   const logFd = fs.openSync(logPath, 'a');
   let pid = 0;
   try {
+    // cwd is always --project-root, verified live against an Expo dev-client monorepo (the
+    // spawned process's cwd matched projectRoot exactly). If Metro still resolves modules from
+    // the monorepo root instead of projectRoot, that's Expo's own workspace-root/watchFolders
+    // detection, not an agent-device cwd bug — see metroBundleEntryPath for the fix that
+    // actually matters for those apps (the virtual-entry bundle URL).
     pid = runCmdDetached(metro.command, metro.installArgs, {
       cwd: projectRoot,
       env: env as NodeJS.ProcessEnv,
@@ -981,16 +1039,19 @@ async function configureProxyBridgeViaCompanion(
   }
 }
 
-function buildBaseRuntimeHints(publicBaseUrl: string): {
+function buildBaseRuntimeHints(
+  publicBaseUrl: string,
+  kind: ResolvedMetroKind,
+): {
   baseIosRuntime: MetroRuntimeHints;
   baseAndroidRuntime: MetroRuntimeHints;
 } {
   return {
     baseIosRuntime: publicBaseUrl
-      ? buildMetroRuntimeHints(publicBaseUrl, 'ios')
+      ? buildMetroRuntimeHints(publicBaseUrl, 'ios', kind)
       : { platform: 'ios' as const },
     baseAndroidRuntime: publicBaseUrl
-      ? buildMetroRuntimeHints(publicBaseUrl, 'android')
+      ? buildMetroRuntimeHints(publicBaseUrl, 'android', kind)
       : { platform: 'android' as const },
   };
 }
@@ -1014,7 +1075,10 @@ export async function prepareMetroRuntime(
     ? installDependenciesIfNeeded(settings.projectRoot, settings.env)
     : { installed: false as const };
   const processState = await ensureMetroProcessReady(settings);
-  const { baseIosRuntime, baseAndroidRuntime } = buildBaseRuntimeHints(settings.publicBaseUrl);
+  const { baseIosRuntime, baseAndroidRuntime } = buildBaseRuntimeHints(
+    settings.publicBaseUrl,
+    settings.kind,
+  );
   const bridge = await configureProxyBridgeForRuntime(input, settings);
 
   const iosRuntime = bridge?.iosRuntime ?? baseIosRuntime;

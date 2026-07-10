@@ -322,6 +322,26 @@ test('command usage keeps detailed descriptions', async () => {
   assert.match(help, /AGENT_DEVICE_METRO_BEARER_TOKEN/);
 });
 
+test('metro command usage documents session-hint reload priority, expo bundle kind, and PM detection', async () => {
+  const help = await usageForCommand('metro');
+  if (help === null) throw new Error('Expected metro help text');
+  assert.match(help, /resolves against the dev server/);
+  assert.match(help, /never silently reload[s]? a different project/);
+  assert.match(help, /\.expo\/\.virtual-metro-entry\.bundle/);
+  assert.match(help, /yarn\.lock\/pnpm-lock\.yaml\/bun\.lockb\/package-lock\.json/);
+  assert.match(help, /--no-install-deps/);
+});
+
+test('open command usage documents metro session-hint setter flags', async () => {
+  const help = await usageForCommand('open');
+  if (help === null) throw new Error('Expected open help text');
+  assert.match(help, /--metro-host <host>/);
+  assert.match(help, /--metro-port <port>/);
+  assert.match(help, /--bundle-url <url>/);
+  assert.match(help, /--launch-url <url>/);
+  assert.match(help, /before its first reload/);
+});
+
 test('command usage shows no command flags when unsupported', async () => {
   const help = await usageForCommand('appstate');
   if (help === null) throw new Error('Expected command help text');

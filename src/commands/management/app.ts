@@ -1,13 +1,15 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { AppCloseOptions } from '../../client/client-types.ts';
+import type { AppCloseOptions, AppOpenOptions } from '../../client/client-types.ts';
 import { DEFAULT_APPS_FILTER } from '../../contracts/app-inventory.ts';
 import { SESSION_SURFACES } from '../../core/session-surface.ts';
+import type { SessionRuntimeHints } from '../../kernel/contracts.ts';
 import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
 import { assertResolvedAppsFilter } from './app-inventory-contract.ts';
 import {
   booleanField,
   booleanSchema,
   enumField,
+  integerField,
   jsonSchemaField,
   stringArrayField,
   stringField,
@@ -40,6 +42,15 @@ const openCommandMetadata = defineFieldCommandMetadata(
     saveScript: jsonSchemaField<boolean | string>({ oneOf: [booleanSchema(), stringSchema()] }),
     deviceHub: booleanField('Use Xcode Device Hub when surfacing Apple simulators.'),
     noRecord: booleanField('Do not record this action.'),
+    metroHost: stringField(
+      'Session-scoped Metro/debug host hint applied to the opened app, so a fresh session has it before its first reload.',
+    ),
+    metroPort: integerField('Session-scoped Metro/debug port hint applied to the opened app.', {
+      min: 1,
+      max: 65535,
+    }),
+    bundleUrl: stringField('Session-scoped bundle URL hint applied to the opened app.'),
+    launchUrl: stringField('Session-scoped launch URL hint applied to the opened app.'),
   },
 );
 
@@ -58,8 +69,43 @@ const appsCommandDefinition = defineExecutableCommand(appsCommandMetadata, (clie
 );
 
 const openCommandDefinition = defineExecutableCommand(openCommandMetadata, (client, input) =>
-  client.apps.open(input),
+  client.apps.open(toAppOpenOptions(input)),
 );
+
+// `open` predates session creation, so a fresh session has nowhere else to record Metro hints
+// before its first reload. These flat flags are session-hint setters: they fold into the same
+// `runtime` object the daemon already accepts (and persists) for `open`, instead of requiring a
+// reload-first call just to seed hints.
+function toAppOpenOptions(
+  input: AppOpenOptions & {
+    metroHost?: string;
+    metroPort?: number;
+    bundleUrl?: string;
+    launchUrl?: string;
+  },
+): AppOpenOptions {
+  const { metroHost, metroPort, bundleUrl, launchUrl, ...rest } = input;
+  const runtime = buildOpenRuntimeHints({ metroHost, metroPort, bundleUrl, launchUrl });
+  return runtime ? { ...rest, runtime } : rest;
+}
+
+function buildOpenRuntimeHints(hints: {
+  metroHost?: string;
+  metroPort?: number;
+  bundleUrl?: string;
+  launchUrl?: string;
+}): SessionRuntimeHints | undefined {
+  const { metroHost, metroPort, bundleUrl, launchUrl } = hints;
+  if (
+    metroHost === undefined &&
+    metroPort === undefined &&
+    bundleUrl === undefined &&
+    launchUrl === undefined
+  ) {
+    return undefined;
+  }
+  return { metroHost, metroPort, bundleUrl, launchUrl };
+}
 
 const closeCommandDefinition = defineExecutableCommand(closeCommandMetadata, (client, input) =>
   input.app ? client.apps.close(input) : client.sessions.close(withoutApp(input)),
@@ -74,7 +120,7 @@ const appsCliSchema = {
 
 const openCliSchema = {
   helpDescription:
-    'Boot device/simulator; optionally launch app or deep link URL. Use --platform to bind URL/deep-link opens to the target platform. For iOS simulator initial stdout/stderr, put --launch-console <path> on this open command, for example agent-device open "Agent Device Tester" --platform ios --launch-console artifacts/launch-console.log. Expo Go/dev-client shells accept host + URL, for example agent-device open "Expo Go" exp://127.0.0.1:8081 --platform ios. macOS also supports --surface app|frontmost-app|desktop|menubar.',
+    'Boot device/simulator; optionally launch app or deep link URL. Use --platform to bind URL/deep-link opens to the target platform. For iOS simulator initial stdout/stderr, put --launch-console <path> on this open command, for example agent-device open "Agent Device Tester" --platform ios --launch-console artifacts/launch-console.log. Expo Go/dev-client shells accept host + URL, for example agent-device open "Expo Go" exp://127.0.0.1:8081 --platform ios. macOS also supports --surface app|frontmost-app|desktop|menubar. --metro-host/--metro-port/--bundle-url/--launch-url set this session\'s Metro/debug runtime hints as part of open itself, so a fresh session has them before its first reload instead of needing a throwaway reload-first call just to seed hints; a later plain reload in the same session reuses whichever of these were set.',
   summary: 'Open an app, deep link or URL, save replays',
   positionalArgs: ['appOrUrl?', 'url?'],
   allowedFlags: [
@@ -86,6 +132,10 @@ const openCliSchema = {
     'noRecord',
     'relaunch',
     'surface',
+    'metroHost',
+    'metroPort',
+    'bundleUrl',
+    'launchUrl',
   ],
 } as const satisfies CommandSchemaOverride;
 
@@ -111,6 +161,10 @@ const openCliReader: CliReader = (positionals, flags) => ({
   saveScript: flags.saveScript,
   deviceHub: flags.deviceHub,
   noRecord: flags.noRecord,
+  metroHost: flags.metroHost,
+  metroPort: flags.metroPort,
+  bundleUrl: flags.bundleUrl,
+  launchUrl: flags.launchUrl,
 });
 
 const closeCliReader: CliReader = (positionals, flags) => ({

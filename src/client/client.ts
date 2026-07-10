@@ -1,5 +1,10 @@
 import { sendToDaemon } from '../daemon/client/daemon-client.ts';
 import { prepareMetroRuntime, reloadMetro } from '../metro/client-metro.ts';
+import {
+  readMetroSessionHints,
+  writeMetroSessionHints,
+  type MetroSessionHints,
+} from '../metro/metro-session-hints.ts';
 import { resolveDaemonPaths } from '../daemon/config.ts';
 import { INTERNAL_COMMANDS } from '../command-catalog.ts';
 import {
@@ -257,8 +262,8 @@ export function createAgentDeviceClient(
       },
     },
     metro: {
-      prepare: async (options: MetroPrepareOptions) =>
-        await prepareMetroRuntime({
+      prepare: async (options: MetroPrepareOptions) => {
+        const result = await prepareMetroRuntime({
           projectRoot: options.projectRoot ?? config.cwd,
           kind: options.kind,
           publicBaseUrl: options.publicBaseUrl,
@@ -277,13 +282,16 @@ export function createAgentDeviceClient(
           installDependenciesIfNeeded: options.installDependenciesIfNeeded,
           runtimeFilePath: options.runtimeFilePath,
           logPath: options.logPath,
-        }),
+        });
+        persistMetroSessionHints(config, result.statusUrl);
+        return result;
+      },
       reload: async (options = {}) =>
         await reloadMetro({
           metroHost: options.metroHost,
           metroPort: options.metroPort,
           bundleUrl: options.bundleUrl,
-          runtime: config.runtime,
+          runtime: config.runtime ?? resolveMetroSessionHints(config),
           timeoutMs: options.timeoutMs,
         }),
     },
@@ -435,6 +443,40 @@ function mergeClientOptions(
   options: InternalRequestOptions,
 ): InternalRequestOptions {
   return { ...config, ...options };
+}
+
+function metroSessionHintsStateDir(config: AgentDeviceClientConfig): string {
+  return resolveDaemonPaths(config.stateDir ?? process.env.AGENT_DEVICE_STATE_DIR).baseDir;
+}
+
+// `metro prepare` and `metro reload` are local-only (they never round-trip through the daemon),
+// so session-scoped Metro coordinates can't live in the daemon's session store. Persisting them
+// to a small per-session file lets a plain `metro reload --session <s>` find the dev server a
+// prior `metro prepare --session <s>` bound, instead of silently defaulting to localhost:8081.
+function persistMetroSessionHints(config: AgentDeviceClientConfig, statusUrl: string): void {
+  try {
+    const url = new URL(statusUrl);
+    const port = Number.parseInt(url.port, 10);
+    if (!url.hostname || !Number.isInteger(port)) return;
+    writeMetroSessionHints({
+      stateDir: metroSessionHintsStateDir(config),
+      session: resolveSessionName(config.session),
+      hints: { metroHost: url.hostname, metroPort: port },
+    });
+  } catch {
+    // Session-hint persistence is best-effort; reload still works with explicit flags.
+  }
+}
+
+function resolveMetroSessionHints(config: AgentDeviceClientConfig): MetroSessionHints | undefined {
+  try {
+    return readMetroSessionHints({
+      stateDir: metroSessionHintsStateDir(config),
+      session: resolveSessionName(config.session),
+    });
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeLease(data: Record<string, unknown>): Lease {
