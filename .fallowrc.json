@@ -87,6 +87,34 @@
     {
       "file": "src/cloud-webdriver.ts",
       "exports": ["CLOUD_WEBDRIVER_PROVIDERS"]
+    },
+    {
+      "file": "src/daemon/handlers/lease.ts",
+      "exports": ["handleLeaseCommands"]
+    },
+    {
+      "file": "src/daemon/handlers/session.ts",
+      "exports": ["handleSessionCommands"]
+    },
+    {
+      "file": "src/daemon/handlers/snapshot.ts",
+      "exports": ["handleSnapshotCommands"]
+    },
+    {
+      "file": "src/daemon/handlers/react-native.ts",
+      "exports": ["handleReactNativeCommands"]
+    },
+    {
+      "file": "src/daemon/handlers/record-trace.ts",
+      "exports": ["handleRecordTraceCommands"]
+    },
+    {
+      "file": "src/daemon/handlers/find.ts",
+      "exports": ["handleFindCommands"]
+    },
+    {
+      "file": "src/daemon/handlers/interaction.ts",
+      "exports": ["handleInteractionCommands"]
     }
   ],
   "usedClassMembers": ["name", "listActiveLeases", "delete", "values", "elapsedMs", "isExpired"],

@@ -56,6 +56,18 @@ intentionally accepting a finding.
 - `pnpm fallow:all` — full-tree summary, includes grandfathered legacy findings
 - `pnpm fallow:baseline` — regenerate baselines (only to intentionally accept a finding)
 
+Code quality (test-only exports): `pnpm check:test-only-exports` catches exports that only a
+test file imports — `fallow`'s default dead-code check treats a test import as a live consumer,
+so a function can be exported, unit-tested, and never actually called by production code without
+tripping it (this shipped in #1199's first revision). The check diffs fallow's default dead-code
+graph against its `--production` graph (which excludes test files); an export alive in the first
+and dead in the second has no production call site. New findings fail CI against the checked-in
+`scripts/test-only-exports-baseline.json`. Fix a finding by wiring the export into a real call
+site, deleting it, or — if it is an intentional test seam — adding `// test-seam: <reason>`
+directly above the export, which removes it from the check. Run
+`pnpm check:test-only-exports:baseline` to regenerate the baseline after fixing or intentionally
+accepting findings.
+
 Optional device selectors for tests:
 
 - `ANDROID_DEVICE=Pixel_9_Pro_XL` or `ANDROID_SERIAL=emulator-5554`
