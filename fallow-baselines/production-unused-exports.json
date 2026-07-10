@@ -30,6 +30,7 @@
     "src/core/command-descriptor/registry.ts:listCommandResponseDataTransforms",
     "src/core/dispatch.ts:listRegisteredDispatchCommandNames",
     "src/core/platform-plugin/plugin.ts:registeredPlatforms",
+    "src/core/scroll-gesture.ts:buildSwipeGesturePlan",
     "src/daemon/app-log.ts:APP_LOG_PID_FILENAME",
     "src/daemon/app-log.ts:cleanupStaleAppLogProcesses",
     "src/daemon/app-log.ts:assertAndroidPackageArgSafe",
