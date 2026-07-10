@@ -21,6 +21,13 @@ NS_ASSUME_NONNULL_BEGIN
                                                    y2:(double)y2
                                             durationMs:(double)durationMs;
 
++ (NSString * _Nullable)synthesizeContinuousDragWithApplication:(id)application
+                                                             x:(double)x
+                                                             y:(double)y
+                                                            x2:(double)x2
+                                                            y2:(double)y2
+                                                     durationMs:(double)durationMs;
+
 + (NSString * _Nullable)synthesizeTapWithApplication:(id)application
                                                    x:(double)x
                                                    y:(double)y;

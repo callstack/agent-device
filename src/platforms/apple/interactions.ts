@@ -6,7 +6,7 @@ import {
   buildRunnerSequenceCommand,
   parseRunnerSequenceResult,
 } from './core/runner/runner-sequence.ts';
-import type { RunnerCommand } from './core/runner/runner-contract.ts';
+import type { RunnerCommand, SynthesizedDragSemantics } from './core/runner/runner-contract.ts';
 import { appleRemotePressCommand } from './os/tvos/remote.ts';
 import { runMacosDesktopScroll } from './os/macos/desktop-scroll.ts';
 import {
@@ -34,6 +34,7 @@ type IosDragCommandOptions = {
   defaultDurationMs: number;
   legacyDefaultDurationMs?: number;
   synthesized?: boolean;
+  dragSemantics: SynthesizedDragSemantics;
 };
 
 type IosRunnerOverrides = Pick<
@@ -113,6 +114,7 @@ export function iosRunnerOverrides(
           iosDragCommand(device, ctx, x1, y1, x2, y2, durationMs, {
             defaultDurationMs: IOS_SWIPE_DEFAULT_DURATION_MS,
             synthesized: shouldUseSynthesizedIosGesture(device),
+            dragSemantics: 'swipe',
           }),
           runnerOpts,
         );
@@ -124,6 +126,7 @@ export function iosRunnerOverrides(
             defaultDurationMs: 500,
             legacyDefaultDurationMs: 500,
             synthesized: shouldUseSynthesizedIosGesture(device),
+            dragSemantics: 'pan',
           }),
           runnerOpts,
         );
@@ -135,6 +138,7 @@ export function iosRunnerOverrides(
             defaultDurationMs: 16,
             legacyDefaultDurationMs: 16,
             synthesized: shouldUseSynthesizedIosGesture(device),
+            dragSemantics: 'fling',
           }),
           runnerOpts,
         );
@@ -292,7 +296,9 @@ function iosDragCommand(
     x2,
     y2,
     ...(normalizedDurationMs !== undefined ? { durationMs: normalizedDurationMs } : {}),
-    ...(options.synthesized === true ? { synthesized: true } : {}),
+    ...(options.synthesized === true
+      ? { synthesized: true, dragSemantics: options.dragSemantics }
+      : {}),
     appBundleId: ctx.appBundleId,
   };
 }

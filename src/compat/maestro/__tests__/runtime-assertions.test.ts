@@ -214,61 +214,64 @@ test('invokeMaestroAssertVisible falls back to one snapshot after native wait mi
   ]);
 });
 
-test('invokeMaestroAssertVisible re-resolves the previous Android tap when its target remains visible', async () => {
-  const scope = { values: {} };
-  const calls: Array<[string, string[] | undefined]> = [];
-  rememberMaestroRecoverableInteraction(scope, {
-    kind: 'tap',
-    selector: 'label="Go to Contacts" || text="Go to Contacts" || id="Go to Contacts"',
-    point: { x: 999, y: 999 },
-  });
+test.each(['android', 'ios'] as const)(
+  'invokeMaestroAssertVisible re-resolves the previous %s tap when its target remains visible',
+  async (platform) => {
+    const scope = { values: {} };
+    const calls: Array<[string, string[] | undefined]> = [];
+    rememberMaestroRecoverableInteraction(scope, {
+      kind: 'tap',
+      selector: 'label="Go to Contacts" || text="Go to Contacts" || id="Go to Contacts"',
+      point: { x: 999, y: 999 },
+    });
 
-  const response = await invokeMaestroAssertVisible({
-    baseReq: {
-      token: 't',
-      session: 's',
-      flags: { platform: 'android' },
-    },
-    scope,
-    positionals: ['label="Marissa Castillo" || text="Marissa Castillo" || id="Marissa Castillo"'],
-    invoke: async (req): Promise<DaemonResponse> => {
-      calls.push([req.command, req.positionals]);
-      if (req.command === 'wait') {
-        const waitCalls = calls.filter(([command]) => command === 'wait').length;
-        if (waitCalls === 2) return { ok: true, data: { matches: 1 } };
-        return {
-          ok: false,
-          error: { code: 'COMMAND_FAILED', message: 'wait timed out for text: Marissa Castillo' },
-        };
-      }
-      if (req.command === 'snapshot') {
-        return {
-          ok: true,
-          data: snapshot([
-            node('Go to Contacts', {
-              type: 'android.widget.Button',
-              identifier: 'go-to-contacts',
-            }),
-          ]),
-        };
-      }
-      if (req.command === 'click') return { ok: true, data: {} };
-      return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
-    },
-  });
+    const response = await invokeMaestroAssertVisible({
+      baseReq: {
+        token: 't',
+        session: 's',
+        flags: { platform },
+      },
+      scope,
+      positionals: ['label="Marissa Castillo" || text="Marissa Castillo" || id="Marissa Castillo"'],
+      invoke: async (req): Promise<DaemonResponse> => {
+        calls.push([req.command, req.positionals]);
+        if (req.command === 'wait') {
+          const waitCalls = calls.filter(([command]) => command === 'wait').length;
+          if (waitCalls === 2) return { ok: true, data: { matches: 1 } };
+          return {
+            ok: false,
+            error: { code: 'COMMAND_FAILED', message: 'wait timed out for text: Marissa Castillo' },
+          };
+        }
+        if (req.command === 'snapshot') {
+          return {
+            ok: true,
+            data: snapshot([
+              node('Go to Contacts', {
+                type: 'android.widget.Button',
+                identifier: 'go-to-contacts',
+              }),
+            ]),
+          };
+        }
+        if (req.command === 'click') return { ok: true, data: {} };
+        return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
+      },
+    });
 
-  assert.equal(response.ok, true);
-  assert.deepEqual(calls, [
-    ['wait', ['Marissa Castillo', '17000']],
-    ['snapshot', []],
-    ['click', ['80', '100']],
-    ['wait', ['Marissa Castillo', '5000']],
-  ]);
-  if (response.ok) {
-    assert.ok(response.data);
-    assert.equal(response.data.retryTap, true);
-  }
-});
+    assert.equal(response.ok, true);
+    assert.deepEqual(calls, [
+      ['wait', ['Marissa Castillo', '17000']],
+      ['snapshot', []],
+      ['click', ['80', '100']],
+      ['wait', ['Marissa Castillo', '5000']],
+    ]);
+    if (response.ok) {
+      assert.ok(response.data);
+      assert.equal(response.data.retryTap, true);
+    }
+  },
+);
 
 test('invokeMaestroAssertVisible retries previous Android text tap when point resolution misses', async () => {
   const scope = { values: {} };
@@ -351,18 +354,7 @@ test('invokeMaestroAssertVisible does not retry stale Android taps after swipes'
     positionals: ['direction', 'left', '300'],
     invoke: async (req): Promise<DaemonResponse> => {
       calls.push([req.command, req.positionals]);
-      if (req.command === 'snapshot') {
-        return {
-          ok: true,
-          data: snapshot([
-            node('Root', {
-              type: 'android.widget.FrameLayout',
-              rect: { x: 0, y: 0, width: 390, height: 844 },
-            }),
-          ]),
-        };
-      }
-      if (req.command === 'swipe') return { ok: true, data: {} };
+      if (req.command === 'gesture') return { ok: true, data: {} };
       return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
     },
   });
@@ -396,18 +388,17 @@ test('invokeMaestroAssertVisible does not retry stale Android taps after swipes'
           data: snapshot([node('Contacts'), node('Albums')]),
         };
       }
-      if (req.command === 'swipe') return { ok: true, data: {} };
+      if (req.command === 'gesture') return { ok: true, data: {} };
       return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
     },
   });
 
   assert.equal(response.ok, false);
   assert.deepEqual(calls, [
-    ['snapshot', []],
-    ['swipe', ['332', '549', '59', '549', '300']],
+    ['gesture', ['swipe', 'left', '300']],
     ['wait', ['What is Lorem Ipsum?', '2000']],
     ['snapshot', []],
-    ['swipe', ['332', '549', '59', '549', '300']],
+    ['gesture', ['swipe', 'left', '300']],
     ['wait', ['What is Lorem Ipsum?', '2000']],
     ['snapshot', []],
   ]);

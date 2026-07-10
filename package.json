@@ -95,7 +95,7 @@
     "build:android-multitouch-helper": "sh ./scripts/build-android-multitouch-helper.sh $(node -p \"require('./package.json').version\") .tmp/android-multitouch-helper",
     "package:android-multitouch-helper": "sh ./scripts/package-android-multitouch-helper.sh $(node -p \"require('./package.json').version\") .tmp/android-multitouch-helper",
     "package:android-multitouch-helper:npm": "rm -rf android-multitouch-helper/dist && sh ./scripts/package-android-multitouch-helper.sh $(node -p \"require('./package.json').version\") android-multitouch-helper/dist",
-    "build:android": "sh ./scripts/package-android-snapshot-helper.sh $(node -p \"require('./package.json').version\") v$(node -p \"require('./package.json').version\") android-snapshot-helper/dist && sh ./scripts/package-android-multitouch-helper.sh $(node -p \"require('./package.json').version\") android-multitouch-helper/dist",
+    "build:android": "pnpm package:android-snapshot-helper:npm && pnpm package:android-multitouch-helper:npm",
     "build:macos-helper": "swift build -c release --package-path macos-helper",
     "build:all": "pnpm build:node && pnpm build:xcuitest",
     "ad": "node bin/agent-device.mjs",

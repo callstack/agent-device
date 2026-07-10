@@ -185,7 +185,7 @@ async function invokeSnapshotMaestroAssertVisible(
       selector: args.selector,
       timeoutMs: args.timeoutMs,
     });
-  const recoveryResponse = await recoverFromAndroidVisibleMiss(params, args, lastSnapshot);
+  const recoveryResponse = await recoverFromMobileVisibleMiss(params, args, lastSnapshot);
   if (recoveryResponse) return recoveryResponse;
   return withMaestroFailureSnapshotArtifacts(response, lastSnapshot, params.baseReq);
 }
@@ -200,32 +200,28 @@ async function invokeSingleSnapshotMaestroAssertVisible(
   if (sample.visible) return visibleAssertionResponse(sample.response, args.selector, startedAt);
   const failedSample = handleFailedVisibleSample(params.baseReq, args, sample, startedAt);
   if (failedSample.kind === 'return') return failedSample.response;
-  const recoveryResponse = await recoverFromAndroidVisibleMiss(params, args, sample.snapshot);
+  const recoveryResponse = await recoverFromMobileVisibleMiss(params, args, sample.snapshot);
   if (recoveryResponse) return recoveryResponse;
   return withMaestroFailureSnapshotArtifacts(fallbackResponse, sample.snapshot, params.baseReq);
 }
 
-async function recoverFromAndroidVisibleMiss(
+async function recoverFromMobileVisibleMiss(
   params: MaestroAssertionRuntimeParams,
   args: MaestroVisibilityAssertionArgs,
   snapshot: SnapshotState | undefined,
 ): Promise<DaemonResponse | null> {
-  if (params.baseReq.flags?.platform !== 'android') return null;
+  const platform = params.baseReq.flags?.platform;
+  if (platform !== 'android' && platform !== 'ios') return null;
 
   const recoverableInteraction = consumeMaestroRecoverableInteraction(params.scope);
   if (!recoverableInteraction) return null;
   if (recoverableInteraction.kind === 'tap') {
-    return await retryRecentAndroidTapAfterVisibleMiss(
-      params,
-      args,
-      snapshot,
-      recoverableInteraction,
-    );
+    return await retryRecentTapAfterVisibleMiss(params, args, snapshot, recoverableInteraction);
   }
-  return await retryRecentAndroidSwipeAfterVisibleMiss(params, args, recoverableInteraction);
+  return await retryRecentSwipeAfterVisibleMiss(params, args, recoverableInteraction);
 }
 
-async function retryRecentAndroidTapAfterVisibleMiss(
+async function retryRecentTapAfterVisibleMiss(
   params: MaestroAssertionRuntimeParams,
   args: MaestroVisibilityAssertionArgs,
   snapshot: SnapshotState | undefined,
@@ -250,10 +246,10 @@ async function retryRecentAndroidTapAfterVisibleMiss(
 
   const clickResponse = await invokeRecentTapRetry(params, retryTarget.target);
   if (!clickResponse.ok) return null;
-  return await confirmVisibleAfterAndroidRecovery(params, args, 'retryTap');
+  return await confirmVisibleAfterRecovery(params, args, 'retryTap');
 }
 
-async function retryRecentAndroidSwipeAfterVisibleMiss(
+async function retryRecentSwipeAfterVisibleMiss(
   params: MaestroAssertionRuntimeParams,
   args: MaestroVisibilityAssertionArgs,
   recentSwipe: MaestroRecoverableSwipe,
@@ -263,6 +259,7 @@ async function retryRecentAndroidSwipeAfterVisibleMiss(
     phase: 'maestro_assert_visible_retry_swipe',
     data: {
       selector: args.selector,
+      swipeCommand: recentSwipe.command,
       swipePositionals: recentSwipe.positionals,
       timeoutMs: MAESTRO_ASSERTION_POLICY.assertVisibleRetryTimeoutMs,
     },
@@ -270,10 +267,10 @@ async function retryRecentAndroidSwipeAfterVisibleMiss(
 
   const swipeResponse = await invokeRecentSwipeRetry(params, recentSwipe);
   if (!swipeResponse.ok) return null;
-  return await confirmVisibleAfterAndroidRecovery(params, args, 'retrySwipe');
+  return await confirmVisibleAfterRecovery(params, args, 'retrySwipe');
 }
 
-async function confirmVisibleAfterAndroidRecovery(
+async function confirmVisibleAfterRecovery(
   params: MaestroAssertionRuntimeParams,
   args: MaestroVisibilityAssertionArgs,
   recoveryFlag: MaestroVisibleRecoveryFlag,
@@ -371,7 +368,7 @@ async function invokeRecentSwipeRetry(
 ): Promise<DaemonResponse> {
   return await params.invoke({
     ...params.baseReq,
-    command: 'swipe',
+    command: swipe.command,
     positionals: swipe.positionals,
   });
 }

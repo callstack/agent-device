@@ -1,9 +1,7 @@
 import { getSnapshotReferenceFrame } from '../../daemon/touch-reference-frame.ts';
 import type { DaemonInvokeFn, DaemonResponse } from '../../daemon/types.ts';
 import {
-  buildSwipeGesturePlan,
-  clampGesturePoint,
-  pointFromPercent,
+  pointFromPercentInFrame,
   type GestureReferenceFrame,
   type ScrollDirection,
 } from '../../core/scroll-gesture.ts';
@@ -141,7 +139,7 @@ export async function invokeMaestroTapPointPercent(params: {
     );
   }
 
-  const point = pointFromPercent(frame, xPercent, yPercent);
+  const point = pointFromPercentInFrame(frame, xPercent, yPercent);
   const response = await invokeMaestroClickPoint({ ...params, point });
   if (response.ok) clearMaestroRecoverableInteraction(params.scope);
   return response;
@@ -165,17 +163,30 @@ async function maybeInvokeMaestroDirectionalSwipePreset(params: {
   baseReq: ReplayBaseRequest;
   positionals: string[];
   invoke: MaestroRuntimeInvoke;
+  scope?: ReplayVarScope;
 }): Promise<DaemonResponse | undefined> {
   const [mode, direction, durationMs] = params.positionals;
   if (mode !== 'direction') return undefined;
-  const platform = readMaestroSelectorPlatform(params.baseReq.flags);
-  if (direction !== 'left' && direction !== 'right') return undefined;
-  if (platform === 'android') return undefined;
-  return await params.invoke({
+  if (!isMaestroSwipeDirection(direction)) {
+    return errorResponse(
+      'INVALID_ARGS',
+      'Maestro swipe direction must be UP, DOWN, LEFT, or RIGHT.',
+    );
+  }
+  const positionals = ['swipe', direction, ...(durationMs ? [durationMs] : [])];
+  const response = await params.invoke({
     ...params.baseReq,
     command: 'gesture',
-    positionals: ['swipe', direction, ...(durationMs ? [durationMs] : [])],
+    positionals,
   });
+  if (response.ok) {
+    rememberMaestroRecoverableInteraction(params.scope, {
+      kind: 'swipe',
+      command: 'gesture',
+      positionals,
+    });
+  }
+  return response;
 }
 
 export async function invokeMaestroTapOn(params: MaestroTapOnParams): Promise<DaemonResponse> {
@@ -242,6 +253,7 @@ async function invokeSwipeGesture(
   if (response.ok) {
     rememberMaestroRecoverableInteraction(params.scope, {
       kind: 'swipe',
+      command: 'swipe',
       positionals: responsePositionals,
     });
   }
@@ -264,19 +276,8 @@ async function resolveMaestroScreenSwipe(params: {
   }
 
   const [mode, ...args] = params.positionals;
-  if (mode === 'direction') {
-    return resolveDirectionalScreenSwipe(
-      args,
-      frame,
-      readMaestroSelectorPlatform(params.baseReq.flags),
-    );
-  }
   if (mode === 'percent') {
-    return resolvePercentScreenSwipe(
-      args,
-      frame,
-      readMaestroSelectorPlatform(params.baseReq.flags),
-    );
+    return resolvePercentScreenSwipe(args, frame);
   }
   return {
     ok: false,
@@ -295,78 +296,15 @@ async function captureFrameForMaestroScreenSwipe(params: {
   return getSnapshotReferenceFrame(snapshot);
 }
 
-function resolveDirectionalScreenSwipe(
-  args: string[],
-  frame: GestureReferenceFrame,
-  platform: string,
-): MaestroScreenSwipeResolution {
-  const [direction, durationMs] = args;
-  if (!direction) {
-    return {
-      ok: false,
-      response: errorResponse('INVALID_ARGS', 'Maestro direction swipe requires a direction.'),
-    };
-  }
-  switch (direction) {
-    case 'up':
-    case 'down':
-      return buildMaestroDirectionalScreenSwipe(direction, frame, durationMs);
-    case 'left':
-    case 'right':
-      return buildMaestroHorizontalDirectionalScreenSwipe(direction, frame, platform, durationMs);
-    default:
-      return {
-        ok: false,
-        response: errorResponse(
-          'INVALID_ARGS',
-          'Maestro swipe direction must be UP, DOWN, LEFT, or RIGHT.',
-        ),
-      };
-  }
-}
-
-function buildMaestroHorizontalDirectionalScreenSwipe(
-  direction: 'left' | 'right',
-  frame: GestureReferenceFrame,
-  platform: string,
-  durationMs: string | undefined,
-): MaestroScreenSwipeResolution {
-  const [startX, endX] = direction === 'left' ? [85, 15] : [15, 85];
-  const y = maestroHorizontalContentSwipeLanePercent(platform, startX, 50, endX, 50) ?? 50;
-  const marginPx = maestroPercentSwipeMarginPx(platform, frame, startX, y, endX, y);
-  return {
-    ok: true,
-    start: pointFromPercent(frame, startX, y, { marginPx }),
-    end: pointFromPercent(frame, endX, y, { marginPx }),
-    durationMs,
-  };
-}
-
-function buildMaestroDirectionalScreenSwipe(
-  direction: ScrollDirection,
-  frame: GestureReferenceFrame,
-  durationMs: string | undefined,
-): MaestroScreenSwipeResolution {
-  const plan = buildSwipeGesturePlan({
-    direction,
-    amount: 0.6,
-    referenceWidth: frame.referenceWidth,
-    referenceHeight: frame.referenceHeight,
-  });
-  const start = clampGesturePoint({ x: plan.x1, y: plan.y1 }, frame, 8);
-  const end = clampGesturePoint({ x: plan.x2, y: plan.y2 }, frame, 8);
-  return {
-    ok: true,
-    start,
-    end,
-    durationMs,
-  };
+function isMaestroSwipeDirection(direction: string | undefined): direction is ScrollDirection {
+  return (
+    direction === 'up' || direction === 'down' || direction === 'left' || direction === 'right'
+  );
 }
 
 function resolvePercentScreenSwipe(
   args: string[],
   frame: GestureReferenceFrame,
-  platform: string,
 ): MaestroScreenSwipeResolution {
   const [startX, startY, endX, endY, durationMs] = args;
   const values = [startX, startY, endX, endY].map(Number);
@@ -377,41 +315,12 @@ function resolvePercentScreenSwipe(
     };
   }
   const [x1, y1, x2, y2] = values as [number, number, number, number];
-  const horizontalLaneY = maestroHorizontalContentSwipeLanePercent(platform, x1, y1, x2, y2);
-  const [startLaneY, endLaneY] =
-    horizontalLaneY === undefined ? [y1, y2] : [horizontalLaneY, horizontalLaneY];
-  const marginPx = maestroPercentSwipeMarginPx(platform, frame, x1, startLaneY, x2, endLaneY);
   return {
     ok: true,
-    start: pointFromPercent(frame, x1, startLaneY, { marginPx }),
-    end: pointFromPercent(frame, x2, endLaneY, { marginPx }),
+    start: pointFromPercentInFrame(frame, x1, y1),
+    end: pointFromPercentInFrame(frame, x2, y2),
     durationMs,
   };
-}
-
-function maestroHorizontalContentSwipeLanePercent(
-  platform: string,
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-): number | undefined {
-  if (platform !== 'android') return undefined;
-  if (y1 !== 50 || y2 !== 50 || Math.abs(x2 - x1) < 30) return undefined;
-  return 65;
-}
-
-function maestroPercentSwipeMarginPx(
-  platform: string,
-  frame: GestureReferenceFrame,
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-): number {
-  if (platform !== 'ios') return 1;
-  if (y1 !== y2 || Math.abs(x2 - x1) < 30) return 1;
-  return Math.max(1, Math.round(frame.referenceWidth * 0.15));
 }
 
 async function probeMaestroScrollVisibility(

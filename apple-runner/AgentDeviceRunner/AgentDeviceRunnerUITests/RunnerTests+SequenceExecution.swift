@@ -234,6 +234,7 @@ extension RunnerTests {
           x2: dragPoints.x2,
           y2: dragPoints.y2,
           durationMs: durationMs,
+          semantics: step.dragSemantics,
           context: dragContext
         )
       }
@@ -511,10 +512,20 @@ extension RunnerTests {
     y: Double? = nil,
     x2: Double? = nil,
     y2: Double? = nil,
-    synthesized: Bool? = nil
+    synthesized: Bool? = nil,
+    dragSemantics: SynthesizedDragSemantics? = nil
   ) -> SequenceStep {
     SequenceStep(
-      kind: kind, x: x, y: y, x2: x2, y2: y2, durationMs: nil, pauseMs: nil, synthesized: synthesized)
+      kind: kind,
+      x: x,
+      y: y,
+      x2: x2,
+      y2: y2,
+      durationMs: nil,
+      pauseMs: nil,
+      synthesized: synthesized,
+      dragSemantics: dragSemantics
+    )
   }
 
   /// Validation runs before any executor call, so the INVALID_ARGS paths are exercised without

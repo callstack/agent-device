@@ -6,6 +6,7 @@ import {
   buildScrollGesturePlan,
   buildSwipeGesturePlan,
   clampGestureCoordinate,
+  pointFromPercentInFrame,
   pointFromPercent,
 } from '../scroll-gesture.ts';
 
@@ -206,6 +207,13 @@ test('pointFromPercent preserves unclamped percentages and clamps when a margin 
 
   assert.deepEqual(pointFromPercent(frame, 125, -10), { x: 500, y: -80 });
   assert.deepEqual(pointFromPercent(frame, 100, 0, { marginPx: 8 }), { x: 392, y: 8 });
+});
+
+test('pointFromPercentInFrame preserves authored percentages within valid pixel bounds', () => {
+  const frame = { referenceWidth: 400, referenceHeight: 800 };
+
+  assert.deepEqual(pointFromPercentInFrame(frame, 10, 30), { x: 40, y: 240 });
+  assert.deepEqual(pointFromPercentInFrame(frame, -10, 100), { x: 0, y: 799 });
 });
 
 test('clampGestureCoordinate rounds values and clamps them into the safe gesture band', () => {

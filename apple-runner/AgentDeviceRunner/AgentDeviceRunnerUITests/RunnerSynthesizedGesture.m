@@ -27,6 +27,13 @@ typedef struct {
   SEL liftSelector;
 } RunnerXCTestEventBridge;
 
+typedef id (*RunnerDragPointerPathFactory)(
+  const RunnerXCTestEventBridge *,
+  CGPoint,
+  CGPoint,
+  double
+);
+
 static NSString * _Nullable RunnerResolveXCTestEventBridge(
   id application,
   RunnerXCTestEventBridge *bridge
@@ -53,6 +60,24 @@ static id RunnerSwipePointerPath(
   CGPoint end,
   double durationMs
 );
+static id RunnerContinuousDragPointerPath(
+  const RunnerXCTestEventBridge *bridge,
+  CGPoint start,
+  CGPoint end,
+  double durationMs
+);
+static NSString * _Nullable RunnerTrySynthesizeDrag(
+  id application,
+  CGPoint start,
+  CGPoint end,
+  double durationMs,
+  NSString *recordName,
+  RunnerDragPointerPathFactory pathFactory
+);
+// XCTest's synthesized swipe convention moves to the endpoint in 100 ms, then holds there for
+// the requested duration. The fast movement is what distinguishes a swipe from a slow pan for
+// nested UIKit gesture recognizers.
+static const NSTimeInterval RunnerSwipeMovementDurationSeconds = 0.1;
 static id RunnerTapPointerPath(
   const RunnerXCTestEventBridge *bridge,
   CGPoint point
@@ -68,8 +93,6 @@ static CGPoint RunnerPointerPointAt(
   double t,
   double side
 );
-static CGPoint RunnerInterpolatedPoint(CGPoint start, CGPoint end, double t);
-static double RunnerSmoothStep(double t);
 
 @implementation RunnerSynthesizedGesture
 
@@ -106,12 +129,36 @@ static double RunnerSmoothStep(double t);
                                                    y2:(double)y2
                                             durationMs:(double)durationMs {
   @try {
-    return [self trySynthesizeSwipeWithApplication:application
-                                                x:x
-                                                y:y
-                                               x2:x2
-                                               y2:y2
-                                        durationMs:durationMs];
+    return RunnerTrySynthesizeDrag(
+      application,
+      CGPointMake(x, y),
+      CGPointMake(x2, y2),
+      durationMs,
+      @"agent-device-swipe",
+      RunnerSwipePointerPath
+    );
+  } @catch (NSException *exception) {
+    NSString *name = exception.name ?: @"NSException";
+    NSString *reason = exception.reason ?: @"private XCTest event synthesis failed";
+    return [NSString stringWithFormat:@"%@: %@", name, reason];
+  }
+}
+
++ (NSString * _Nullable)synthesizeContinuousDragWithApplication:(id)application
+                                                             x:(double)x
+                                                             y:(double)y
+                                                            x2:(double)x2
+                                                            y2:(double)y2
+                                                     durationMs:(double)durationMs {
+  @try {
+    return RunnerTrySynthesizeDrag(
+      application,
+      CGPointMake(x, y),
+      CGPointMake(x2, y2),
+      durationMs,
+      @"agent-device-continuous-drag",
+      RunnerContinuousDragPointerPath
+    );
   } @catch (NSException *exception) {
     NSString *name = exception.name ?: @"NSException";
     NSString *reason = exception.reason ?: @"private XCTest event synthesis failed";
@@ -203,12 +250,14 @@ static double RunnerSmoothStep(double t);
   return nil;
 }
 
-+ (NSString * _Nullable)trySynthesizeSwipeWithApplication:(id)application
-                                                       x:(double)x
-                                                       y:(double)y
-                                                      x2:(double)x2
-                                                      y2:(double)y2
-                                               durationMs:(double)durationMs {
+static NSString * _Nullable RunnerTrySynthesizeDrag(
+  id application,
+  CGPoint start,
+  CGPoint end,
+  double durationMs,
+  NSString *recordName,
+  RunnerDragPointerPathFactory pathFactory
+) {
   RunnerXCTestEventBridge bridge;
   NSString *missing = RunnerResolveXCTestEventBridge(application, &bridge);
   if (missing != nil) {
@@ -225,7 +274,7 @@ static double RunnerSmoothStep(double t);
   id record = ((RunnerMsgSendInitRecord)objc_msgSend)(
     [bridge.recordClass alloc],
     bridge.initRecordSelector,
-    @"agent-device-swipe",
+    recordName,
     interfaceOrientation
   );
   if (record == nil) {
@@ -233,7 +282,7 @@ static double RunnerSmoothStep(double t);
   }
   ((RunnerMsgSendSetInteger)objc_msgSend)(record, bridge.setTargetProcessIDSelector, targetProcessID);
 
-  id path = RunnerSwipePointerPath(&bridge, CGPointMake(x, y), CGPointMake(x2, y2), durationMs);
+  id path = pathFactory(&bridge, start, end, durationMs);
   if (path == nil) {
     return @"private XCTest event synthesis failed: could not create pointer path";
   }
@@ -421,13 +470,44 @@ static id RunnerSwipePointerPath(
     return nil;
   }
 
+  NSTimeInterval durationSeconds = durationMs / 1000.0;
+  ((RunnerMsgSendPathMove)objc_msgSend)(
+    path,
+    bridge->moveSelector,
+    end,
+    RunnerSwipeMovementDurationSeconds
+  );
+
+  ((RunnerMsgSendPathOffset)objc_msgSend)(
+    path,
+    bridge->liftSelector,
+    RunnerSwipeMovementDurationSeconds + durationSeconds
+  );
+  return path;
+}
+
+static id RunnerContinuousDragPointerPath(
+  const RunnerXCTestEventBridge *bridge,
+  CGPoint start,
+  CGPoint end,
+  double durationMs
+) {
+  id path =
+    ((RunnerMsgSendInitPath)objc_msgSend)([bridge->pathClass alloc], bridge->initPathSelector, start, 0.0);
+  if (path == nil) {
+    return nil;
+  }
+
   int frameCount = MAX(3, (int)(durationMs / 16.0));
   NSTimeInterval durationSeconds = durationMs / 1000.0;
   for (int index = 1; index <= frameCount; index += 1) {
     double t = (double)index / (double)frameCount;
-    CGPoint point = RunnerInterpolatedPoint(start, end, RunnerSmoothStep(t));
-    NSTimeInterval offset = durationSeconds * t;
-    ((RunnerMsgSendPathMove)objc_msgSend)(path, bridge->moveSelector, point, offset);
+    double easedT = t * t * (3.0 - 2.0 * t);
+    CGPoint point = CGPointMake(
+      start.x + (end.x - start.x) * easedT,
+      start.y + (end.y - start.y) * easedT
+    );
+    ((RunnerMsgSendPathMove)objc_msgSend)(path, bridge->moveSelector, point, durationSeconds * t);
   }
 
   ((RunnerMsgSendPathOffset)objc_msgSend)(path, bridge->liftSelector, durationSeconds);
@@ -469,17 +549,6 @@ static CGPoint RunnerPointerPointAt(
   double radius = startRadius + (endRadius - startRadius) * t;
   double angle = (-M_PI_2) + (degrees * M_PI / 180.0) * t;
   return CGPointMake(centerX + cos(angle) * radius * side, centerY + sin(angle) * radius * side);
-}
-
-static CGPoint RunnerInterpolatedPoint(CGPoint start, CGPoint end, double t) {
-  return CGPointMake(
-    start.x + (end.x - start.x) * t,
-    start.y + (end.y - start.y) * t
-  );
-}
-
-static double RunnerSmoothStep(double t) {
-  return t * t * (3.0 - 2.0 * t);
 }
 
 @end

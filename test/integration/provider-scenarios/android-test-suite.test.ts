@@ -69,7 +69,7 @@ test('Provider-backed integration Android replay test suite covers retries and f
   });
 });
 
-test('Provider-backed integration Android Maestro replay uses fresh selector snapshots and content-lane swipes', async () => {
+test('Provider-backed integration Android Maestro replay uses fresh snapshots and authored swipe points', async () => {
   let snapshots = 0;
   await withProviderScenarioResource(
     async () =>
@@ -120,7 +120,7 @@ test('Provider-backed integration Android Maestro replay uses fresh selector sna
       );
       assert.deepEqual(
         world.adbCalls.find((call) => call.slice(0, 3).join(' ') === 'shell input swipe'),
-        ['shell', 'input', 'swipe', '351', '390', '39', '390', '300'],
+        ['shell', 'input', 'swipe', '351', '300', '39', '300', '300'],
       );
       assertSnapshotCountInRange(snapshots, 2, 3);
     },

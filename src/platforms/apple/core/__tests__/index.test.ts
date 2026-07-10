@@ -214,6 +214,7 @@ test('iosRunnerOverrides maps iOS fling duration to synthesized drag', async () 
     y2: 200,
     durationMs: 16,
     synthesized: true,
+    dragSemantics: 'fling',
     appBundleId: 'com.example.App',
   });
 });
@@ -285,6 +286,7 @@ test('iosRunnerOverrides maps iOS swipe and pan durations to synthesized drag', 
     y2: 200,
     durationMs: 300,
     synthesized: true,
+    dragSemantics: 'swipe',
     appBundleId: 'com.example.App',
   });
   assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[1]?.[1], {
@@ -295,6 +297,7 @@ test('iosRunnerOverrides maps iOS swipe and pan durations to synthesized drag', 
     y2: 200,
     durationMs: 250,
     synthesized: true,
+    dragSemantics: 'swipe',
     appBundleId: 'com.example.App',
   });
   assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[2]?.[1], {
@@ -305,6 +308,7 @@ test('iosRunnerOverrides maps iOS swipe and pan durations to synthesized drag', 
     y2: 200,
     durationMs: 300,
     synthesized: true,
+    dragSemantics: 'pan',
     appBundleId: 'com.example.App',
   });
 });

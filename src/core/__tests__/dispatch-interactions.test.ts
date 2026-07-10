@@ -207,6 +207,7 @@ test('handleSwipeCommand fuses repeated swipes into sequence drag steps with pin
         y2: 450,
         durationMs: 120,
         synthesized: true,
+        dragSemantics: 'swipe',
         pauseMs: 50,
       },
       {
@@ -217,6 +218,7 @@ test('handleSwipeCommand fuses repeated swipes into sequence drag steps with pin
         y2: 650,
         durationMs: 120,
         synthesized: true,
+        dragSemantics: 'swipe',
       },
     ],
     appBundleId: 'com.example.App',

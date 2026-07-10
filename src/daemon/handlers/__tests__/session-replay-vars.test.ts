@@ -1765,12 +1765,12 @@ test('runReplayScriptFile resolves Maestro screen swipes from the snapshot frame
     [
       ['gesture', ['swipe', 'left', '300']],
       ['snapshot', []],
-      ['swipe', ['340', '400', '60', '400', '300']],
+      ['swipe', ['360', '400', '40', '400', '300']],
     ],
   );
 });
 
-test('runReplayScriptFile preserves Android Maestro horizontal screen swipe lanes', async () => {
+test('runReplayScriptFile delegates Android directional swipes and preserves percentage points', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-screen-swipe-android-midpoint-lane',
@@ -1811,9 +1811,9 @@ test('runReplayScriptFile preserves Android Maestro horizontal screen swipe lane
   assert.deepEqual(
     calls.map((call) => [call.command, call.positionals]),
     [
+      ['gesture', ['swipe', 'left', '300']],
       ['snapshot', []],
-      ['swipe', ['340', '520', '60', '520', '300']],
-      ['swipe', ['360', '520', '40', '520', '300']],
+      ['swipe', ['360', '400', '40', '400', '300']],
     ],
   );
 });

@@ -477,7 +477,7 @@ function buildSwipeSequenceSteps(params: {
       x2: reverse ? x1 : x2,
       y2: reverse ? y1 : y2,
       durationMs: effectiveDurationMs,
-      ...(synthesized ? { synthesized: true } : {}),
+      ...(synthesized ? { synthesized: true, dragSemantics: 'swipe' as const } : {}),
       ...(!isLast && pauseMs > 0 ? { pauseMs } : {}),
     };
   });
