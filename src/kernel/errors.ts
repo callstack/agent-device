@@ -13,6 +13,7 @@ export type KnownAppErrorCode =
   | 'SESSION_NOT_FOUND'
   | 'UNAUTHORIZED'
   | 'AMBIGUOUS_MATCH'
+  | 'REPLAY_DIVERGENCE'
   | 'UNKNOWN';
 
 // Intentionally widened with `(string & {})` so daemon-originated codes pass
@@ -242,6 +243,8 @@ export function defaultHintForCode(code: string): string | undefined {
       return 'Multiple candidates matched. Narrow the query or pass an exact identifier.';
     case 'DEVICE_IN_USE':
       return 'The device is busy with another agent-device request; retry once it frees up.';
+    case 'REPLAY_DIVERGENCE':
+      return 'Read details.divergence (screen/suggestions) for repair context, or rerun with --json for the full report.';
     case 'NOT_IMPLEMENTED':
       return 'This command is part of the planned API but is not implemented yet.';
     case 'COMMAND_FAILED':

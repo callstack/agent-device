@@ -1,4 +1,22 @@
-import { test } from 'vitest';
+import { test, vi } from 'vitest';
+
+// ADR 0012 migration step 2: every replay step failure now attempts a
+// post-failure screen digest capture + suggestion re-resolution, both via
+// dispatchCommand('snapshot', ...). None of this file's fixtures model a real
+// device runner, so without a mock those calls fall through to the real
+// (slow/hanging) runner dispatch path. Reject fast so failure-path tests keep
+// exercising `divergence.screen: unavailable` deterministically, exactly like
+// a real capture failure would.
+vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
+  return {
+    ...actual,
+    dispatchCommand: vi.fn(async () => {
+      throw new Error('no device runner available in this test');
+    }),
+  };
+});
+
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -2034,8 +2052,15 @@ test('runReplayScriptFile propagates Maestro runFlow.when runtime errors', async
 
   assert.equal(response.ok, false);
   if (!response.ok) {
-    assert.equal(response.error.code, 'UNKNOWN');
+    // ADR 0012 migration step 2: the wire-level code is now REPLAY_DIVERGENCE;
+    // the original code/message are preserved verbatim in divergence.cause.
+    assert.equal(response.error.code, 'REPLAY_DIVERGENCE');
     assert.match(response.error.message, /fetch failed/);
+    const divergence = response.error.details?.divergence as
+      | { cause: { code: string; message: string } }
+      | undefined;
+    assert.equal(divergence?.cause.code, 'UNKNOWN');
+    assert.match(divergence?.cause.message ?? '', /fetch failed/);
   }
 });
 

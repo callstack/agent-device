@@ -28,6 +28,7 @@ import {
   type SnapshotDiagnosticsSummary,
   type SnapshotTimingSample,
 } from '../../snapshot-diagnostics.ts';
+import { buildReplayFailureDivergence } from './session-replay-divergence.ts';
 
 // fallow-ignore-next-line complexity
 export async function runReplayScriptFile(params: {
@@ -44,6 +45,7 @@ export async function runReplayScriptFile(params: {
     return errorResponse('INVALID_ARGS', 'replay requires a path');
   }
 
+  const startedAt = Date.now();
   let resolved = '';
   const artifactPaths = new Set<string>();
   try {
@@ -65,6 +67,7 @@ export async function runReplayScriptFile(params: {
         : req;
     const actions = parsed.actions;
     const actionLines = parsed.actionLines;
+    const actionSourcePaths = parsed.actionSourcePaths;
     if (req.flags?.replayUpdate === true && parsed.updateUnsupportedMessage) {
       return errorResponse('INVALID_ARGS', parsed.updateUnsupportedMessage);
     }
@@ -121,14 +124,20 @@ export async function runReplayScriptFile(params: {
       }
       collectReplayActionArtifactPaths(response).forEach((entry) => artifactPaths.add(entry));
       if (!shouldUpdate) {
-        return withReplayFailureDiagnostics(
+        return await withReplayFailureDiagnostics({
           response,
           action,
           index,
-          resolved,
-          [...artifactPaths],
+          replayPath: resolved,
+          sourcePath: actionSourcePaths?.[index] ?? resolved,
+          sourceLine: actionLines[index] ?? 0,
+          artifactPaths: [...artifactPaths],
           snapshotDiagnosticSamples,
-        );
+          req,
+          sessionName,
+          sessionStore,
+          logPath,
+        });
       }
 
       const nextAction = await healReplayAction({
@@ -138,14 +147,20 @@ export async function runReplayScriptFile(params: {
         sessionStore,
       });
       if (!nextAction) {
-        return withReplayFailureDiagnostics(
+        return await withReplayFailureDiagnostics({
           response,
           action,
           index,
-          resolved,
-          [...artifactPaths],
+          replayPath: resolved,
+          sourcePath: actionSourcePaths?.[index] ?? resolved,
+          sourceLine: actionLines[index] ?? 0,
+          artifactPaths: [...artifactPaths],
           snapshotDiagnosticSamples,
-        );
+          req,
+          sessionName,
+          sessionStore,
+          logPath,
+        });
       }
 
       actions[index] = nextAction;
@@ -166,14 +181,20 @@ export async function runReplayScriptFile(params: {
       );
       if (!response.ok) {
         collectReplayActionArtifactPaths(response).forEach((entry) => artifactPaths.add(entry));
-        return withReplayFailureDiagnostics(
+        return await withReplayFailureDiagnostics({
           response,
-          nextAction,
+          action: nextAction,
           index,
-          resolved,
-          [...artifactPaths],
+          replayPath: resolved,
+          sourcePath: actionSourcePaths?.[index] ?? resolved,
+          sourceLine: actionLines[index] ?? 0,
+          artifactPaths: [...artifactPaths],
           snapshotDiagnosticSamples,
-        );
+          req,
+          sessionName,
+          sessionStore,
+          logPath,
+        });
       }
       collectReplayActionArtifactPaths(response).forEach((entry) => artifactPaths.add(entry));
       healed += 1;
@@ -183,6 +204,7 @@ export async function runReplayScriptFile(params: {
       writeReplayScript(resolved, actions, sessionStore.get(sessionName));
     }
     const snapshotDiagnosticsSummary = summarizeSnapshotTimingSamples(snapshotDiagnosticSamples);
+    const wallClockMs = Date.now() - startedAt;
     return {
       ok: true,
       data: {
@@ -191,6 +213,11 @@ export async function runReplayScriptFile(params: {
         session: sessionName,
         artifactPaths: [...artifactPaths],
         ...(snapshotDiagnosticsSummary ? { snapshotDiagnostics: snapshotDiagnosticsSummary } : {}),
+        // ADR 0012 migration step 2: text replay was previously silent on
+        // success (no `message` key at all — see readCommandMessage). One
+        // line with the step count and wall time closes that gap; --json is
+        // unchanged (message rides alongside the existing fields).
+        message: formatReplaySuccessMessage(actions.length, wallClockMs),
       },
     };
   } catch (err) {
@@ -319,38 +346,83 @@ function buildReplayMetadataFlags(
   };
 }
 
-function withReplayFailureDiagnostics(
-  response: DaemonResponse,
-  action: SessionAction,
-  index: number,
-  replayPath: string,
-  artifactPaths: string[],
-  snapshotDiagnosticSamples: SnapshotTimingSample[],
-): DaemonResponse {
-  return withReplayFailureContext(
+async function withReplayFailureDiagnostics(params: {
+  response: DaemonResponse;
+  action: SessionAction;
+  index: number;
+  replayPath: string;
+  sourcePath: string;
+  sourceLine: number;
+  artifactPaths: string[];
+  snapshotDiagnosticSamples: SnapshotTimingSample[];
+  req: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+  logPath: string;
+}): Promise<DaemonResponse> {
+  return await withReplayFailureContext({
+    ...params,
+    snapshotDiagnostics: summarizeSnapshotTimingSamples(params.snapshotDiagnosticSamples),
+  });
+}
+
+/**
+ * Every replay step failure goes through this single choke point (ADR 0012
+ * migration step 2): the daemon returns `ok:false` with code
+ * `REPLAY_DIVERGENCE` and a bounded `details.divergence` report, replacing
+ * the underlying failure's own code as the wire-level code (the original
+ * code/message/hint move into `divergence.cause`, preserved verbatim). The
+ * legacy flat detail fields (`replayPath`, `step`, `action`, `positionals`,
+ * `artifactPaths`, `snapshotDiagnostics`) are kept for existing consumers
+ * (e.g. `session-test-artifacts.ts`) — this is additive, not a breaking
+ * reshape.
+ */
+async function withReplayFailureContext(params: {
+  response: DaemonResponse;
+  action: SessionAction;
+  index: number;
+  replayPath: string;
+  sourcePath: string;
+  sourceLine: number;
+  artifactPaths?: string[];
+  snapshotDiagnostics?: SnapshotDiagnosticsSummary;
+  req: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+  logPath: string;
+}): Promise<DaemonResponse> {
+  const {
     response,
     action,
     index,
     replayPath,
-    artifactPaths,
-    summarizeSnapshotTimingSamples(snapshotDiagnosticSamples),
-  );
-}
-
-function withReplayFailureContext(
-  response: DaemonResponse,
-  action: SessionAction,
-  index: number,
-  replayPath: string,
-  artifactPaths: string[] = [],
-  snapshotDiagnostics?: SnapshotDiagnosticsSummary,
-): DaemonResponse {
+    sourcePath,
+    sourceLine,
+    artifactPaths = [],
+    snapshotDiagnostics,
+    req,
+    sessionName,
+    sessionStore,
+    logPath,
+  } = params;
   if (response.ok) return response;
   const step = index + 1;
+  const divergence = await buildReplayFailureDivergence({
+    error: response.error,
+    action,
+    index,
+    sourcePath,
+    sourceLine,
+    session: sessionStore.get(sessionName),
+    sessionName,
+    sessionStore,
+    logPath,
+    responseLevel: req.meta?.responseLevel,
+  });
   return {
     ok: false,
     error: {
-      code: response.error.code,
+      code: 'REPLAY_DIVERGENCE',
       message: `Replay failed at step ${step} (${formatScriptActionSummary(action)}): ${response.error.message}`,
       hint: response.error.hint,
       diagnosticId: response.error.diagnosticId,
@@ -363,9 +435,16 @@ function withReplayFailureContext(
         positionals: action.positionals ?? [],
         artifactPaths,
         ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
+        divergence,
       },
     },
   };
+}
+
+function formatReplaySuccessMessage(replayed: number, wallClockMs: number): string {
+  const seconds = (wallClockMs / 1000).toFixed(1);
+  const noun = replayed === 1 ? 'step' : 'steps';
+  return `Replayed ${replayed} ${noun} in ${seconds}s`;
 }
 
 // fallow-ignore-next-line complexity

@@ -36,7 +36,7 @@ function parseSelectorWaitPositionals(positionals: string[]): {
 }
 
 // fallow-ignore-next-line complexity
-function collectReplaySelectorCandidates(action: SessionAction): string[] {
+export function collectReplaySelectorCandidates(action: SessionAction): string[] {
   const result: string[] = [];
   const explicitChain =
     Array.isArray(action.result?.selectorChain) &&
@@ -200,7 +200,7 @@ function isFiniteNumberString(value: string | undefined): boolean {
   return Number.isFinite(Number(value));
 }
 
-async function captureSnapshotForReplay(
+export async function captureSnapshotForReplay(
   session: SessionState,
   action: SessionAction,
   logPath: string,
