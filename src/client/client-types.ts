@@ -274,6 +274,7 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
     relaunch?: boolean;
     saveScript?: boolean | string;
     deviceHub?: boolean;
+    testIme?: boolean;
     noRecord?: boolean;
     runtime?: SessionRuntimeHints;
   };
@@ -1014,6 +1015,7 @@ export type InternalRequestOptions = AgentDeviceClientConfig &
     shutdown?: boolean;
     saveScript?: boolean | string;
     deviceHub?: boolean;
+    testIme?: boolean;
     noRecord?: boolean;
     backMode?: BackMode;
     metroHost?: string;

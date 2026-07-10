@@ -31,6 +31,7 @@ import { STARTUP_SAMPLE_METHOD, type StartupPerfSample } from './session-startup
 import { buildNextOpenSession, buildOpenResult } from './session-open-surface.ts';
 import { markAndroidSnapshotFreshness } from '../android-snapshot-freshness.ts';
 import { resetAndroidFramePerfStats } from '../../platforms/android/perf.ts';
+import { activateAndroidTestIme } from '../../platforms/android/ime-lifecycle.ts';
 import { withKeyedLock } from '../../utils/keyed-lock.ts';
 import { emitDiagnostic, getDiagnosticsMeta } from '../../utils/diagnostics.ts';
 import { inferAndroidPackageAfterOpen } from './session-open-target.ts';
@@ -116,6 +117,32 @@ function contextForRuntimeLaunchUrl(
   delete context.launchConsole;
   delete context.launchArgs;
   return context;
+}
+
+// Default-on for emulators, opt-in via --test-ime on real devices.
+function shouldActivateAndroidTestIme(device: DeviceInfo, req: DaemonRequest): boolean {
+  if (device.platform !== 'android') return false;
+  return device.kind === 'emulator' || req.flags?.testIme === true;
+}
+
+async function maybeActivateAndroidTestImeForOpen(
+  device: DeviceInfo,
+  req: DaemonRequest,
+): Promise<void> {
+  if (!shouldActivateAndroidTestIme(device, req)) return;
+  try {
+    await activateAndroidTestIme(device);
+  } catch (error) {
+    // Never block open on a helper install failure; fall open to the existing text-entry path.
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'android_test_ime_activate_failed',
+      data: {
+        device: device.id,
+        error: error instanceof Error ? error.message : String(error),
+      },
+    });
+  }
 }
 
 function buildStartupPerfSample(
@@ -271,6 +298,7 @@ async function completeOpenCommand(params: {
     ...(collapseSimulatorRelaunch ? { terminateRunningApp: true } : {}),
   });
   timing.openDispatchDurationMs = Math.max(0, Date.now() - openStartedAtMs);
+  await maybeActivateAndroidTestImeForOpen(device, req);
   const launchUrlStartedAtMs = Date.now();
   await maybeApplySessionLaunchUrl({
     runtime,

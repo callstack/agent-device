@@ -25,6 +25,7 @@ import type { LeaseRegistry } from '../lease-registry.ts';
 import { releaseSessionLease } from '../lease-lifecycle.ts';
 import type { LeaseLifecycleProvider } from './lease.ts';
 import {
+  restoreSessionAndroidIme,
   stopAppleRunnerForClose,
   stopSessionAndroidNativePerfCapture,
   stopSessionAndroidSnapshotHelper,
@@ -77,6 +78,7 @@ export async function handleCloseCommand(params: {
     await stopSessionApplePerfCapture(session);
     await stopSessionAndroidNativePerfCapture(session);
     await stopSessionAndroidSnapshotHelper(session);
+    await restoreSessionAndroidIme(session);
     if (shouldDispatchPlatformClose(req, session)) {
       if (shouldStopAppleRunnerBeforeTargetedClose(session)) {
         await stopAppleRunnerForClose(session);

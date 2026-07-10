@@ -1,20 +1,13 @@
-import crypto from 'node:crypto';
-import fs from 'node:fs/promises';
-import path from 'node:path';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { execFailureDetails } from '../../utils/exec.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
-import { findProjectRoot, readVersion } from '../../utils/version.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import type { TransformGestureParams } from '../../core/scroll-gesture.ts';
 import {
-  androidAdbResultError,
-  installAndroidAdbPackage,
   resolveAndroidAdbExecutor,
   resolveAndroidAdbProvider,
   resolveAndroidTouchInjector,
   type AndroidAdbExecutor,
-  type AndroidAdbProvider,
   type AndroidTouchGestureRequest,
 } from './adb-executor.ts';
 import { getAndroidScreenSize, swipeAndroid } from './input-actions.ts';
@@ -22,8 +15,14 @@ import {
   parseInstrumentationRecords,
   readAndroidHelperManifestInteger,
   readAndroidHelperManifestLiteral,
+  readAndroidHelperManifestSha256,
+  readAndroidHelperManifestString,
   readInstrumentationResultNumber,
 } from './instrumentation-helper.ts';
+import {
+  makeEnsureAndroidHelperInstalled,
+  resolveAndroidHelperArtifact,
+} from './helper-package-install.ts';
 
 const ANDROID_MULTITOUCH_HELPER_NAME = 'android-multitouch-helper';
 const ANDROID_MULTITOUCH_HELPER_PACKAGE = 'com.callstack.agentdevice.multitouchhelper';
@@ -39,6 +38,9 @@ const ANDROID_MULTITOUCH_HELPER_ROTATE_FRAME_INTERVAL_MS = 16;
 const ANDROID_MULTITOUCH_HELPER_ROTATE_MAX_DURATION_MS = 2_400;
 const ANDROID_MULTITOUCH_HELPER_NO_FINAL_RESULT = 'ANDROID_MULTITOUCH_HELPER_NO_FINAL_RESULT';
 const ANDROID_MULTITOUCH_HELPER_REPORTED_FAILURE = 'ANDROID_MULTITOUCH_HELPER_REPORTED_FAILURE';
+const HELPER_LABEL = 'Android multi-touch helper';
+// readAndroidHelperManifestXxx already prepend "Android " to this label.
+const MANIFEST_HELPER_LABEL = 'multi-touch helper';
 
 type AndroidMultiTouchHelperManifest = {
   name: 'android-multitouch-helper';
@@ -444,27 +446,14 @@ function readHelperErrorMessage(finalResult: Record<string, string>): string {
 }
 
 async function resolveAndroidMultiTouchHelperArtifact(): Promise<AndroidMultiTouchHelperArtifact> {
-  const version = readVersion();
-  const helperDir = path.join(findProjectRoot(), 'android-multitouch-helper', 'dist');
-  const manifestPath = path.join(
-    helperDir,
-    `agent-device-android-multitouch-helper-${version}.manifest.json`,
-  );
-  try {
-    const manifest = parseAndroidMultiTouchHelperManifest(
-      JSON.parse(await fs.readFile(manifestPath, 'utf8')),
-    );
-    const apkPath = path.join(helperDir, manifest.assetName);
-    await fs.access(apkPath);
-    return { apkPath, manifest };
-  } catch (error) {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
+  return await resolveAndroidHelperArtifact({
+    helperDirName: 'android-multitouch-helper',
+    manifestFileName: (version) =>
+      `agent-device-android-multitouch-helper-${version}.manifest.json`,
+    parseManifest: parseAndroidMultiTouchHelperManifest,
+    unavailableMessage:
       'Android touch gestures require the bundled Android touch helper artifact, but it was not found or could not be read',
-      { manifestPath, error: normalizeError(error).message },
-      error,
-    );
-  }
+  });
 }
 
 function parseAndroidMultiTouchHelperManifest(value: unknown): AndroidMultiTouchHelperManifest {
@@ -473,157 +462,59 @@ function parseAndroidMultiTouchHelperManifest(value: unknown): AndroidMultiTouch
   }
   const record = value as Record<string, unknown>;
   return {
-    name: readLiteral(record.name, 'name', ANDROID_MULTITOUCH_HELPER_NAME),
-    version: readString(record.version, 'version'),
-    assetName: readString(record.assetName, 'assetName'),
-    sha256: readSha256(record.sha256),
-    packageName: readLiteral(record.packageName, 'packageName', ANDROID_MULTITOUCH_HELPER_PACKAGE),
-    versionCode: readNumber(record.versionCode, 'versionCode'),
-    instrumentationRunner: readLiteral(
+    name: readAndroidHelperManifestLiteral(
+      record.name,
+      'name',
+      ANDROID_MULTITOUCH_HELPER_NAME,
+      MANIFEST_HELPER_LABEL,
+    ),
+    version: readAndroidHelperManifestString(record.version, 'version', MANIFEST_HELPER_LABEL),
+    assetName: readAndroidHelperManifestString(
+      record.assetName,
+      'assetName',
+      MANIFEST_HELPER_LABEL,
+    ),
+    sha256: readAndroidHelperManifestSha256(record.sha256, MANIFEST_HELPER_LABEL),
+    packageName: readAndroidHelperManifestLiteral(
+      record.packageName,
+      'packageName',
+      ANDROID_MULTITOUCH_HELPER_PACKAGE,
+      MANIFEST_HELPER_LABEL,
+    ),
+    versionCode: readAndroidHelperManifestInteger(
+      record.versionCode,
+      'versionCode',
+      MANIFEST_HELPER_LABEL,
+    ),
+    instrumentationRunner: readAndroidHelperManifestLiteral(
       record.instrumentationRunner,
       'instrumentationRunner',
       ANDROID_MULTITOUCH_HELPER_RUNNER,
+      MANIFEST_HELPER_LABEL,
     ),
-    statusProtocol: readLiteral(
+    statusProtocol: readAndroidHelperManifestLiteral(
       record.statusProtocol,
       'statusProtocol',
       ANDROID_MULTITOUCH_HELPER_PROTOCOL,
+      MANIFEST_HELPER_LABEL,
     ),
-  };
-}
-
-export async function ensureAndroidMultiTouchHelper(options: {
-  adb: AndroidAdbExecutor;
-  adbProvider: AndroidAdbProvider;
-  artifact: AndroidMultiTouchHelperArtifact;
-  deviceKey: string;
-}): Promise<{
-  packageName: string;
-  versionCode: number;
-  installedVersionCode?: number;
-  installed: boolean;
-  reason: 'missing' | 'outdated' | 'current';
-}> {
-  const { adb, artifact } = options;
-  const packageName = artifact.manifest.packageName;
-  const versionCode = artifact.manifest.versionCode;
-  const cacheKey = `${options.deviceKey}\0${packageName}\0${versionCode}`;
-  if (installedMultiTouchHelpers.has(cacheKey)) {
-    return { packageName, versionCode, installed: false, reason: 'current' };
-  }
-  const installedVersionCode = await readInstalledVersionCode(adb, packageName);
-  if (installedVersionCode !== undefined && installedVersionCode >= versionCode) {
-    installedMultiTouchHelpers.add(cacheKey);
-    return {
-      packageName,
-      versionCode,
-      installedVersionCode,
-      installed: false,
-      reason: 'current',
-    };
-  }
-  await verifyAndroidMultiTouchHelperArtifact(artifact);
-  const result = await installAndroidAdbPackage(artifact.apkPath, {
-    provider: options.adbProvider,
-    replace: true,
-    allowTestPackages: true,
-    allowFailure: true,
-    timeoutMs: ANDROID_MULTITOUCH_HELPER_INSTALL_TIMEOUT_MS,
-  });
-  if (result.exitCode !== 0) {
-    throw androidAdbResultError('Failed to install Android multi-touch helper', result, {
-      packageName,
-      versionCode,
-    });
-  }
-  installedMultiTouchHelpers.add(cacheKey);
-  return {
-    packageName,
-    versionCode,
-    installedVersionCode,
-    installed: true,
-    reason: installedVersionCode === undefined ? 'missing' : 'outdated',
   };
 }
 
 const installedMultiTouchHelpers = new Set<string>();
+
+export const ensureAndroidMultiTouchHelper =
+  makeEnsureAndroidHelperInstalled<AndroidMultiTouchHelperArtifact>({
+    cache: installedMultiTouchHelpers,
+    installTimeoutMs: ANDROID_MULTITOUCH_HELPER_INSTALL_TIMEOUT_MS,
+    helperLabel: HELPER_LABEL,
+  });
 
 // Tests reset the process-global install memo so cases do not share helper state.
 export function resetAndroidMultiTouchHelperInstallCache(): void {
   installedMultiTouchHelpers.clear();
 }
 
-async function readInstalledVersionCode(
-  adb: AndroidAdbExecutor,
-  packageName: string,
-): Promise<number | undefined> {
-  const result = await adb(
-    ['shell', 'cmd', 'package', 'list', 'packages', '--show-versioncode', packageName],
-    {
-      allowFailure: true,
-      timeoutMs: 5_000,
-    },
-  );
-  if (result.exitCode !== 0) return undefined;
-  const match = new RegExp(
-    `package:${escapeRegExp(packageName)}(?:\\s|$).*versionCode:(\\d+)`,
-  ).exec(`${result.stdout}\n${result.stderr}`);
-  return match ? Number(match[1]) : undefined;
-}
-
-async function verifyAndroidMultiTouchHelperArtifact(
-  artifact: AndroidMultiTouchHelperArtifact,
-): Promise<void> {
-  const actual = await sha256File(artifact.apkPath);
-  if (actual !== artifact.manifest.sha256) {
-    throw new AppError('COMMAND_FAILED', 'Android multi-touch helper APK checksum mismatch', {
-      apkPath: artifact.apkPath,
-      expectedSha256: artifact.manifest.sha256,
-      actualSha256: actual,
-    });
-  }
-}
-
-async function sha256File(filePath: string): Promise<string> {
-  const hash = crypto.createHash('sha256');
-  hash.update(await fs.readFile(filePath));
-  return hash.digest('hex');
-}
-
 function getAndroidMultiTouchHelperDeviceKey(device: DeviceInfo): string {
   return `${device.platform}:${device.id}`;
-}
-
-function readString(value: unknown, field: string): string {
-  if (typeof value !== 'string' || value.length === 0) {
-    throw new AppError('INVALID_ARGS', `Android multi-touch helper manifest ${field} is required.`);
-  }
-  return value;
-}
-
-function readNumber(value: unknown, field: string): number {
-  return readAndroidHelperManifestInteger(value, field, 'multi-touch helper');
-}
-
-function readLiteral<const Value extends string>(
-  value: unknown,
-  field: string,
-  expected: Value,
-): Value {
-  return readAndroidHelperManifestLiteral(value, field, expected, 'multi-touch helper');
-}
-
-function readSha256(value: unknown): string {
-  const sha256 = readString(value, 'sha256').trim().toLowerCase();
-  if (sha256.length !== 64 || !/^[0-9a-f]+$/.test(sha256)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'Android multi-touch helper manifest sha256 must be a 64-character hex string.',
-    );
-  }
-  return sha256;
-}
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

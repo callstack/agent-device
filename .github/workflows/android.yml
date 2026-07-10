@@ -55,6 +55,7 @@ jobs:
         run: |
           pnpm package:android-snapshot-helper:npm
           pnpm package:android-multitouch-helper:npm
+          pnpm package:android-ime-helper:npm
 
       - name: Run Android smoke checks
         uses: reactivecircus/android-emulator-runner@b530d96654c385303d652368551fb075bc2f0b6b # v2.35.0

@@ -43,6 +43,11 @@ vi.mock('../session-open-target.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../session-open-target.ts')>();
   return { ...actual, resolveAndroidPackageForOpen: vi.fn(async () => undefined) };
 });
+vi.mock('../../../platforms/android/ime-lifecycle.ts', async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import('../../../platforms/android/ime-lifecycle.ts')>();
+  return { ...actual, activateAndroidTestIme: vi.fn(async () => ({ activated: false })) };
+});
 
 import { handleSessionCommands } from '../session.ts';
 import { dispatchCommand, resolveTargetDevice } from '../../../core/dispatch.ts';

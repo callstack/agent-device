@@ -71,6 +71,7 @@ export type CliFlags = CloudProviderProfileFields &
     iosXctestDerivedDataPath?: string;
     iosXctestEnvDir?: string;
     deviceHub?: boolean;
+    testIme?: boolean;
     androidDeviceAllowlist?: string;
     remote?: boolean;
     session?: string;
@@ -690,6 +691,14 @@ const FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     type: 'boolean',
     usageLabel: '--device-hub',
     usageDescription: 'open: use Xcode Device Hub when surfacing Apple simulators',
+  },
+  {
+    key: 'testIme',
+    names: ['--test-ime'],
+    type: 'boolean',
+    usageLabel: '--test-ime',
+    usageDescription:
+      'open: activate the headless Android test IME for deterministic Unicode text entry (default on for emulators; opt-in on real devices)',
   },
   {
     key: 'androidDeviceAllowlist',

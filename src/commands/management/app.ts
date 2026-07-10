@@ -41,6 +41,9 @@ const openCommandMetadata = defineFieldCommandMetadata(
     relaunch: booleanField('Force relaunch.'),
     saveScript: jsonSchemaField<boolean | string>({ oneOf: [booleanSchema(), stringSchema()] }),
     deviceHub: booleanField('Use Xcode Device Hub when surfacing Apple simulators.'),
+    testIme: booleanField(
+      'Activate the headless Android test IME for deterministic Unicode text entry (default on for emulators; opt-in on real devices).',
+    ),
     noRecord: booleanField('Do not record this action.'),
     metroHost: stringField('Session-scoped Metro/debug host hint applied to the opened app.'),
     metroPort: integerField('Session-scoped Metro/debug port hint applied to the opened app.', {
@@ -123,6 +126,7 @@ const openCliSchema = {
     'launchConsole',
     'launchArgs',
     'deviceHub',
+    'testIme',
     'saveScript',
     'noRecord',
     'relaunch',
@@ -155,6 +159,7 @@ const openCliReader: CliReader = (positionals, flags) => ({
   relaunch: flags.relaunch,
   saveScript: flags.saveScript,
   deviceHub: flags.deviceHub,
+  testIme: flags.testIme,
   noRecord: flags.noRecord,
   metroHost: flags.metroHost,
   metroPort: flags.metroPort,

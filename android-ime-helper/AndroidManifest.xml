@@ -1,0 +1,26 @@
+<manifest
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.callstack.agentdevice.imehelper">
+    <uses-sdk android:minSdkVersion="23" android:targetSdkVersion="36" />
+
+    <application
+        android:debuggable="false"
+        android:label="Agent Device Test IME"
+        android:testOnly="true"
+        android:theme="@android:style/Theme.NoDisplay">
+
+        <service
+            android:name=".TestInputMethodService"
+            android:label="Agent Device Test IME"
+            android:permission="android.permission.BIND_INPUT_METHOD"
+            android:exported="true"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="android.view.InputMethod" />
+            </intent-filter>
+            <meta-data
+                android:name="android.view.im"
+                android:resource="@xml/method" />
+        </service>
+    </application>
+</manifest>

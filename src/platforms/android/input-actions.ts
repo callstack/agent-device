@@ -5,7 +5,11 @@ import type { DeviceRotation } from '../../core/device-rotation.ts';
 import { buildScrollGesturePlan, type ScrollDirection } from '../../core/scroll-gesture.ts';
 import { toAndroidTvRemoteKeyevent, type TvRemoteButton } from '../../core/tv-remote.ts';
 import { runAndroidAdb, sleep } from './adb.ts';
-import { resolveAndroidTextInjector, type AndroidTextInputAction } from './adb-executor.ts';
+import {
+  resolveAndroidAdbExecutor,
+  resolveAndroidTextInjector,
+  type AndroidTextInputAction,
+} from './adb-executor.ts';
 import { getAndroidKeyboardState, type AndroidKeyboardState } from './device-input-state.ts';
 import {
   androidFillFailureDetails,
@@ -13,6 +17,12 @@ import {
   verifyAndroidFilledText,
   type AndroidFillVerification,
 } from './fill-verification.ts';
+import { isAndroidTestImeActive } from './ime-lifecycle.ts';
+import {
+  clearAndroidImeHelperText,
+  resolveAndroidImeHelperArtifact,
+  sendAndroidImeHelperText,
+} from './ime-helper.ts';
 
 export { readAndroidTextAtPoint } from './fill-verification.ts';
 
@@ -114,6 +124,10 @@ export async function typeAndroid(device: DeviceInfo, text: string, delayMs = 0)
     emitAndroidTextDiagnostic('type', 'provider-native', text);
     return;
   }
+  if (isAndroidTestImeActive(device)) {
+    await typeAndroidTestIme(device, text, delayMs);
+    return;
+  }
   assertAndroidShellTextSupported(text);
   await assertAndroidShellInputIsAppOwned(device, 'type');
   if (delayMs > 0 && Array.from(text).length > 1) {
@@ -144,6 +158,11 @@ export async function fillAndroid(
     await providerText({ action: 'fill', target: { x, y }, text, delayMs });
     emitAndroidTextDiagnostic('fill', 'provider-native', text);
     const verification = await verifyAndroidFilledText(device, x, y, text);
+    if (verification.ok) return;
+    throwAndroidFillFailure(text, verification);
+  }
+  if (isAndroidTestImeActive(device)) {
+    const verification = await fillAndroidTestIme(device, x, y, text);
     if (verification.ok) return;
     throwAndroidFillFailure(text, verification);
   }
@@ -199,6 +218,53 @@ export async function fillAndroid(
   }
 
   throwAndroidFillFailure(text, lastVerification);
+}
+
+async function typeAndroidTestIme(
+  device: DeviceInfo,
+  text: string,
+  delayMs: number,
+): Promise<void> {
+  const adb = resolveAndroidAdbExecutor(device);
+  const artifact = await resolveAndroidImeHelperArtifact();
+  const packageName = artifact.manifest.packageName;
+  const parts = text.split('\n');
+  for (const [partIndex, part] of parts.entries()) {
+    const chunks = delayMs > 0 ? chunkAndroidInputText(part, 1) : [part];
+    for (const [chunkIndex, chunk] of chunks.entries()) {
+      if (chunk) await sendAndroidImeHelperText(adb, packageName, chunk);
+      if (delayMs > 0 && (chunkIndex + 1 < chunks.length || partIndex + 1 < parts.length)) {
+        await sleep(delayMs);
+      }
+    }
+    if (partIndex + 1 < parts.length) {
+      await runAndroidAdb(device, ['shell', 'input', 'keyevent', 'ENTER']);
+    }
+  }
+  emitAndroidTextDiagnostic('type', 'test-ime', text);
+}
+
+async function fillAndroidTestIme(
+  device: DeviceInfo,
+  x: number,
+  y: number,
+  text: string,
+): Promise<AndroidFillVerification> {
+  const adb = resolveAndroidAdbExecutor(device);
+  const artifact = await resolveAndroidImeHelperArtifact();
+  const packageName = artifact.manifest.packageName;
+  let lastVerification: AndroidFillVerification | null = null;
+  // One retry covers the rare not-yet-bound InputConnection right after focus.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    await focusAndroid(device, x, y);
+    await clearAndroidImeHelperText(adb, packageName);
+    if (text) await sendAndroidImeHelperText(adb, packageName, text);
+    const verification = await verifyAndroidFilledText(device, x, y, text);
+    lastVerification = verification;
+    if (verification.ok) break;
+  }
+  emitAndroidTextDiagnostic('fill', 'test-ime', text);
+  return lastVerification as AndroidFillVerification;
 }
 
 function throwAndroidFillFailure(
@@ -375,7 +441,7 @@ function isAndroidInputTextUnsupported(error: unknown): boolean {
 function unsupportedAndroidShellTextError(text: string, cause?: unknown): AppError {
   return new AppError(
     'COMMAND_FAILED',
-    'Android text input requires provider-native text injection for non-ASCII/control characters; the current adb-shell fallback supports ASCII text only.',
+    'Android text input requires provider-native text injection or the bundled test IME helper for non-ASCII/control characters; the adb-shell fallback supports ASCII text only. On emulators the test IME activates automatically; on real devices pass `open --test-ime` to enable it (see `agent-device doctor` for the current IME state).',
     {
       backend: 'adb-shell',
       textLength: Array.from(text).length,
@@ -397,7 +463,7 @@ function chunkAndroidInputText(text: string, chunkSize: number): string[] {
 
 function emitAndroidTextDiagnostic(
   action: AndroidTextInputAction,
-  backend: 'provider-native' | 'adb-shell',
+  backend: 'provider-native' | 'adb-shell' | 'test-ime',
   text: string,
 ): void {
   emitDiagnostic({

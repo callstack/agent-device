@@ -1223,27 +1223,6 @@ Treat the recovery message as a warning, not a fatal error. Use the exposed Sear
     ],
   }),
   makeCase({
-    id: 'android-non-ascii-text-stays-in-fill',
-    contract: [
-      'Platform: Android',
-      'Current screen: Checkout form tab',
-      'Field selector: id="field-name"',
-      'Desired value: Café ☕ 🎉',
-      'Some Android system images fail with direct platform-shell text injection',
-      'agent-device fill owns the non-ASCII fallback; do not use clipboard or paste',
-    ],
-    task: 'Plan only the robust agent-device command to fill the field with the provided non-ASCII value.',
-    outputs: [plannedCommand('fill'), /id=(?:["']field-name["']|field-name)/i, /Café ☕ 🎉/i],
-    forbiddenOutputs: [
-      plannedCommand('adb'),
-      plannedCommand('clipboard'),
-      /shell input text/i,
-      /\bpaste\b/i,
-      /\bime\b/i,
-      /ADBKeyBoard/i,
-    ],
-  }),
-  makeCase({
     id: 'offscreen-target-scroll-resnapshot',
     contract: [
       'App name: Agent Device Tester',

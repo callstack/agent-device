@@ -256,7 +256,7 @@ Text entry:
   Use plain fill/type first for ordinary login and form fields. If an iOS debounced or search-as-you-type field actually drops characters, or must receive incremental updates, retry with --delay-ms before trying clipboard paste; --delay-ms intentionally paces character entry.
   iOS Allow Paste prompt cannot be exercised under XCUITest. To test paste-driven app behavior, prefill first with agent-device clipboard write "some text"; test the system prompt manually.
   Android Gboard handwriting/stylus UI can capture text in an IME-owned input instead of the app field. If fill reports that input was captured by the keyboard/IME, use the diagnostic targetInput/actualInput details, inspect keyboard status/get if needed, and switch or disable handwriting outside the command plan before retrying. Do not keep retrying fill/type against the same field while the IME owns focus.
-  Android text entry is owned by agent-device: provider-native text injection when available, then chunk-safe ASCII shell input. Do not switch to raw adb, clipboard, or paste as an agent fallback. If non-ASCII is unsupported in the current backend, report the tool/device gap.
+  Android text entry is owned by agent-device: provider-native text injection when available, else the bundled test IME helper (emulators activate it automatically; real devices need open --test-ime), else chunk-safe ASCII shell input. Do not switch to raw adb, clipboard, or paste as an agent fallback. If non-ASCII text still fails, report the tool/device gap.
 
 Session ordering:
   Stateful commands within one session must run serially. Do not run open/press/fill/type/scroll/back/alert/replay/batch/close commands in parallel against the same session.

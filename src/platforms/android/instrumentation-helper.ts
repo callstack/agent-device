@@ -132,3 +132,25 @@ export function readAndroidHelperManifestLiteral<const Value extends string>(
   }
   return expected;
 }
+
+export function readAndroidHelperManifestString(
+  value: unknown,
+  field: string,
+  helperLabel: string,
+): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new AppError('INVALID_ARGS', `Android ${helperLabel} manifest ${field} is required.`);
+  }
+  return value;
+}
+
+export function readAndroidHelperManifestSha256(value: unknown, helperLabel: string): string {
+  const sha256 = readAndroidHelperManifestString(value, 'sha256', helperLabel).trim().toLowerCase();
+  if (sha256.length !== 64 || !/^[0-9a-f]+$/.test(sha256)) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `Android ${helperLabel} manifest sha256 must be a 64-character hex string.`,
+    );
+  }
+  return sha256;
+}
