@@ -158,8 +158,20 @@ already travels in the `.ad` file.
 
 `--update`/`-u` stops silently rewriting `.ad` files. The two pieces of machinery it already has —
 `collectReplaySelectorCandidates` (recorded-chain/positional extraction) and the `resolveSelectorChain`
-re-resolution it drives — are repurposed to populate a ranked list of selector suggestions inside the
-divergence report (decision 4), not to act unattended. With an agent in the loop, adjudicating a heal
+re-resolution it drives — are repurposed to populate the ranked `suggestions` list inside the
+divergence report (decision 4), not to act unattended.
+
+**Ranking is a total order**: (1) candidates satisfying more identity components rank first — a
+recorded-id match outranks a role+label match, which outranks a label-only match; (2) among equals,
+candidates in the same `scrollRegion` as recorded rank before candidates in other regions; (3) document
+order is the final tie-break. Suggestions are deduplicated by node: a node reachable through several
+recorded selector terms appears once, tagged with its strongest match basis. The list is bounded by
+decision 4's suggestion cap. Response levels affect only report content, never file behavior: before
+retirement lands (migration step 6), `--update` keeps its legacy rewrite semantics regardless of level;
+after retirement, `--update` at any level performs no rewrite and returns the same bounded suggestions
+object, with `--level digest` omitting suggestion entries but carrying `suggestionCount` per decision 4.
+
+With an agent in the loop, adjudicating a heal
 proposal costs one cheap model turn — cheaper than discovering a silent wrong repair later — and the
 audit ((a) above) already found heal rarely able to act. A proposal an agent can accept, reject, or edit
 is strictly more valuable than the same proposal applied blind.
@@ -247,6 +259,16 @@ bytes** after normalization; the whole payload is at most **4 KiB**; `ancestry` 
 entries; `sibling` and `viewportOrder` are non-negative safe integers. The parser rejects a v1 annotation
 exceeding these bounds with `INVALID_ARGS`.
 
+**Writer-parser invariant.** The recorder must never emit a payload its own parser rejects. When a
+payload would exceed the 4 KiB ceiling after per-field truncation, the writer reduces it
+deterministically: drop `ancestry` entries one at a time from the **root side** — the same side ancestry
+truncation already drops from — until the payload fits. If it still overflows with only `ancestry[0]`
+(the parent) retained, the writer downgrades the annotation to `verification: "unverifiable"`
+(fail-closed) rather than writing an invalid or silently-lossy script; with the per-field 256-byte caps
+in force, a parent-only payload fits arithmetically, so the downgrade branch is a terminal guarantee,
+not an expected path. The record-time self-check (step 5 below) runs against the reduced tuple, so a
+`verified` claim is always honest for exactly what was written.
+
 **Local identity.** Two nodes share local identity when both carry `id` and the normalized ids are equal;
 or, when the recording carries no `id`, when their normalized roles are equal and their normalized labels
 are equal (label absent on both sides counts as equal; label present on exactly one side is a mismatch).
@@ -307,8 +329,13 @@ script preserves v1 annotations in canonical form; it must not silently discard 
 
 **Replay-time verification.** Every annotated resolved target is checked before its action is sent, by
 this exact classification. `matchCount` is the number of current nodes matching the **recorded selector**
-at replay time — the same match set resolution itself used — with range **0..N** and **always present**
-in the report's `targetBinding`. Identity verification applies only when `matchCount >= 1`.
+at replay time — the same match set resolution itself used — with range **0..N**. It is **required on
+every path that performs resolution (paths 2–6 below) and absent on path 1** — the key is omitted per
+the drop-empty-keys convention, never `null` — because path 1 fires before any resolution. No
+diagnostic-only count is computed there: a recorded-unverifiable annotation means there is no
+trustworthy recorded identity to resolve against, so a count would invite misreading and add capture
+cost on a path that by definition cannot verify. Identity verification applies only when
+`matchCount >= 1`.
 
 1. Recorded `verification` is `"unverifiable"` → **identity-unverifiable** divergence, before any
    resolution.
@@ -352,7 +379,11 @@ mismatch. The object has version `1` and contains `kind`, `step` (`index`, `sour
 `action`, `cause`, `screen`, `suggestions`, `resume`, and, for binding failures, `targetBinding`
 (`classification`, `matchCount`, `recorded`, `observed`, `mismatches`, `candidates`). `kind` is one of
 `action-failure`, `selector-miss`, `identity-mismatch`, or `identity-unverifiable` — the latter three are
-decision 3's target-binding classes, and `targetBinding.matchCount` is always present for them (0..N).
+decision 3's target-binding classes, and `targetBinding.classification` always equals the top-level
+`kind`. `targetBinding.matchCount` follows decision 3's presence rule exactly: present (0..N) for
+`selector-miss`, `identity-mismatch`, and an `identity-unverifiable` reached through resolution (path 6);
+absent — key omitted, never `null` — when `identity-unverifiable` arose from a recorded-unverifiable
+annotation (path 1), which fires before any resolution.
 `step.index` is the 1-based executable-plan ordinal, not a source
 line. Its source location is diagnostic only. A Maestro parser must preserve the original file and line
 through includes so that source location is actionable.
@@ -364,8 +395,10 @@ the old session tree. Screen-capture failure never replaces or masks the origina
 
 Response levels bound the entire serialized UTF-8 `details.divergence` object, not merely its arrays:
 compact (`--level digest`) is at most **8 KiB**, default at most **24 KiB**, and full at most **64 KiB**.
-Compact carries at most **8** screen refs and no suggestions; default and full carry at most **20** screen
-refs and **5** ranked suggestions. These counts are absolute, including error payloads. Individual
+Compact carries at most **8** screen refs and no suggestion entries — it carries `suggestionCount` (the
+number of suggestions available at default/full) so a caller knows whether a re-fetch at a higher level
+has material; default and full carry at most **20** screen refs and **5** suggestions ranked per
+decision 1's total order. These counts are absolute, including error payloads. Individual
 labels, ids, selectors, source paths, mismatch values, cause messages, and hints are UTF-8 truncated to
 **256 bytes**; an action summary has no positional array, and fill text, expanded variables, and arbitrary
 nested cause details are never serialized. All rendered strings and any overflow artifact pass through the
@@ -433,7 +466,8 @@ Implementation is not accepted on benchmark evidence alone. Required automated c
   record and replay, a recorded scroll region that no longer exists (unavailable, never compared
   cross-region), out-of-range ordinals, and document-order determinism for equal rect centers and
   rect-less members — plus divergence-report tests for
-  compact/default/full field and byte ceilings, redaction, overflow artifacts and artifact-write failure,
+  compact/default/full field and byte ceilings (including digest-level `suggestionCount` with entries
+  omitted), redaction, overflow artifacts and artifact-write failure,
   available versus sparse/capture-failed screen forms, and preservation of the original cause;
 - replay resume tests for plan-digest emission and mismatch rejection after script/include/expansion
   changes, `resume.allowed` reasons, `--from` indexing, variable-output and control-flow rejection, and
@@ -441,7 +475,7 @@ Implementation is not accepted on benchmark evidence alone. Required automated c
 - daemon/client/CLI/MCP contracts proving the typed divergence survives failure, JSON and MCP structured
   output retain it, MCP pins only actionable error-path refs, and no text-only path drops the report; and
 - `--update` retirement tests proving it never rewrites the source file and only returns bounded
-  suggestions.
+  suggestions ranked and deduplicated per decision 1's total order.
 
 Extend the settle benchmark (`~/.agent-device-bench/rnnav-matrix.py` pattern, external harness) with a
 replay arm only after these contracts pass: measure clean replay and one induced divergence repaired
@@ -494,17 +528,30 @@ through the allowed `--from` loop.
 
 ## Migration plan
 
-Each step lands independently useful, in order:
+Steps are ordered so every dependency lands before its consumer; each step is independently useful, and
+each states its dependencies explicitly.
 
-1. **Resolution disclosure** (decision 2) — update all six matrix cells, the exact waiver list, and
-   provider mutation contracts together. It is additive to response data and does not claim direct-iOS
-   selection parity or issue pre-action refs.
-2. **`.ad` target annotations** (decision 3) — land bounded parser/writer round trips, compatibility,
-   structural uniqueness, and duplicate detection before recording. Recording and pre-action
-   target-binding verification then land together.
-3. **Structured divergence + `replay --from`** (decision 4) — land bounded/redacted error propagation,
-   actionable-or-unavailable screen semantics, error-path MCP pinning, plan digest validation, and
-   conservative resume preflight together. `test` does not expose `--from`.
-4. **`--update` retirement** (decision 1) — remove its write path only after divergence suggestions are
-   available, with a no-write regression test.
-5. **Benchmark extension** (decision 5) follows the mandatory contracts and measures the economic claim.
+1. **Resolution disclosure** (decision 2) — no dependencies. Update all six matrix cells, the exact
+   waiver list, and provider mutation contracts together. Additive to response data; does not claim
+   direct-iOS selection parity or issue pre-action refs.
+2. **Structured divergence transport** (decision 4, report only) — no dependencies. `REPLAY_DIVERGENCE`
+   with `kind: "action-failure"` attaches to the EXISTING replay failure paths: step provenance (source
+   path + line preserved through Maestro includes), bounded/redacted payloads, actionable-or-unavailable
+   screen semantics, error-path MCP pinning, ranked suggestions (decision 1's candidate machinery,
+   read-only), and the one-line text success summary. Immediately useful on its own — this closes the
+   provenance/evidence gaps the live hands-on evidence documents — and introduces no verification
+   semantics.
+3. **`.ad` target annotations, inert** (decision 3, parser/writer only) — no dependencies. Bounded
+   parser/writer round trips, the writer-parser invariant with root-side reduction, old/new reader
+   compatibility, structural uniqueness, and duplicate detection. Recordings gain annotations; replay
+   parses and preserves them but does not yet enforce.
+4. **Target-binding verification** (decision 3, enforcement) — depends on 2 (reports through the
+   divergence transport, adding the `selector-miss`/`identity-mismatch`/`identity-unverifiable` kinds)
+   and on 3 (consumes the annotations).
+5. **`replay --from` + `--plan-digest` resume** (decision 4, resume) — depends on 2 only (the report
+   supplies `resume` and `planDigest`); may land before, with, or after 3/4. `test` does not expose
+   `--from`.
+6. **`--update` retirement** (decision 1) — depends on 2 (ranked suggestions must be available in the
+   report before the write path is removed), with a no-write regression test.
+7. **Benchmark extension** (decision 5) — follows the mandatory contracts; measures the economic claim
+   (clean replay plus one induced divergence repaired through the allowed `--from` loop).
