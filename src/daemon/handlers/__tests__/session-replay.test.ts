@@ -8,7 +8,7 @@ import { LeaseRegistry } from '../../lease-registry.ts';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/index.ts';
 import { buildNestedReplayFlags, handleSessionReplayCommands } from '../session-replay.ts';
-import { collectReplayActionArtifactPaths } from '../session-replay-runtime.ts';
+import { collectReplayActionArtifactPaths } from '../session-replay-runtime-artifacts.ts';
 
 const recordTraceMocks = vi.hoisted(() => ({
   handleRecordCommand: vi.fn(),

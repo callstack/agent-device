@@ -3,7 +3,8 @@ import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts'
 import { SessionStore } from '../session-store.ts';
 import { runReplayTestSuite } from './session-test.ts';
 import { handleCloseCommand } from './session-close.ts';
-import { collectReplayActionArtifactPaths, runReplayScriptFile } from './session-replay-runtime.ts';
+import { runReplayScriptFile } from './session-replay-runtime.ts';
+import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import { errorResponse } from './response.ts';
 import type { ReplayScriptMetadata } from '../../replay/script.ts';
 import { buildReplayTestShardFlags, type ReplayTestShardContext } from './session-test-sharding.ts';

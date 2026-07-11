@@ -13,12 +13,12 @@ import type { SessionAction } from '../daemon/types.ts';
  * even though its nested actions are never individually addressable by
  * `--from`.
  *
- * Deliberately excluded: recorded values that never affect what gets
- * executed or in what order — `targetEvidence` (decision 3 identity, inert
- * to the plan shape) and anything resolved at invocation time (variable
+ * Deliberately excluded: values resolved at invocation time. Variable
  * substitution happens in `resolveReplayAction`, after this digest is
  * computed over the still-unsubstituted `${VAR}` text, so `--env`/shell
- * values never change the digest).
+ * values never change the digest. Every parsed value consumed before or
+ * during action execution, including runtime hints and target evidence, is
+ * part of the canonical plan.
  */
 export type ReplayPlanDigestMetadata = {
   platform?: string;
@@ -61,7 +61,9 @@ function canonicalizeAction(
     command: action.command,
     positionals: action.positionals ?? [],
     flags: action.flags ?? {},
+    runtime: action.runtime ?? null,
     control: canonicalizeControl(action.replayControl),
+    targetEvidence: action.targetEvidence ?? null,
     source: { path: sourcePath, line },
   };
 }

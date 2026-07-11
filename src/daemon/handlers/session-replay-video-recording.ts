@@ -5,7 +5,7 @@ import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import { handleRecordCommand } from './record-trace-recording.ts';
 import { appendReplayTestTimingEvent } from './session-test-runtime.ts';
-import { collectReplayActionArtifactPaths } from './session-replay-runtime.ts';
+import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import {
   defaultRecordingPath,
   recordingExtensionForPlatform,

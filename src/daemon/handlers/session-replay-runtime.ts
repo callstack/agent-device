@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { type CommandFlags } from '../../core/dispatch.ts';
 import { parseReplayInput } from '../../compat/replay-input.ts';
 import { asAppError } from '../../kernel/errors.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
@@ -12,29 +11,26 @@ import {
 import { SessionStore } from '../session-store.ts';
 import { type ReplayScriptMetadata } from '../../replay/script.ts';
 import { computeReplayPlanDigest } from '../../replay/plan-digest.ts';
-import { evaluateReplayResumePreflight } from './session-replay-resume.ts';
-import { formatDivergenceActionLabel } from '../../replay/script-utils.ts';
-import { buildDisplayPositionals } from '../session-event-action.ts';
 import { errorResponse } from './response.ts';
 import { invokeReplayAction } from './session-replay-action-runtime.ts';
 import { tryParseSelectorChain } from '../../selectors/index.ts';
 import {
   buildReplayVarScope,
-  collectReplayScrubbableVarValues,
   collectReplayShellEnv,
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
   readReplayShellEnvSource,
   type ReplayVarScope,
 } from '../../replay/vars.ts';
-import {
-  summarizeSnapshotTimingSamples,
-  type SnapshotDiagnosticsSummary,
-  type SnapshotTimingSample,
-} from '../../snapshot-diagnostics.ts';
-import { buildReplayFailureDivergence } from './session-replay-divergence.ts';
-import { scrubReplayVarValues, type ReplayVarScrubEntry } from '../../replay/divergence.ts';
+import { summarizeSnapshotTimingSamples, type SnapshotTimingSample } from '../../snapshot-diagnostics.ts';
 import type { ReplayCommandResult } from '../../contracts/replay.ts';
+import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
+import { withReplayFailureDiagnostics } from './session-replay-runtime-failure.ts';
+import {
+  buildReplayMetadataFlags,
+  readEffectiveReplayPlanDigestMetadata,
+  resolveReplayEntryIndex,
+} from './session-replay-runtime-plan.ts';
 
 // fallow-ignore-next-line complexity
 export async function runReplayScriptFile(params: {
@@ -78,7 +74,7 @@ export async function runReplayScriptFile(params: {
       actions,
       actionLines,
       actionSourcePaths,
-      metadata: { platform: metadata.platform, target: metadata.target },
+      metadata: readEffectiveReplayPlanDigestMetadata(replayReq.flags),
     });
     // ADR 0012 decision 4 / migration step 5: resume preflight, entirely
     // before any device action. `test` never reaches here with either flag
@@ -272,257 +268,10 @@ function readSelectorDisplayValue(selector: string | undefined): string | undefi
   return first && values.every((value) => value === first) ? first : undefined;
 }
 
-function buildReplayMetadataFlags(
-  flags: CommandFlags | undefined,
-  metadata: ReplayScriptMetadata,
-): CommandFlags {
-  return {
-    ...(flags ?? {}),
-    ...(metadata.platform !== undefined && flags?.platform === undefined
-      ? { platform: metadata.platform }
-      : {}),
-    ...(metadata.target !== undefined && flags?.target === undefined
-      ? { target: metadata.target }
-      : {}),
-  };
-}
-
-async function withReplayFailureDiagnostics(params: {
-  response: DaemonResponse;
-  action: SessionAction;
-  index: number;
-  replayPath: string;
-  sourcePath: string;
-  sourceLine: number;
-  artifactPaths: string[];
-  snapshotDiagnosticSamples: SnapshotTimingSample[];
-  scope: ReplayVarScope;
-  req: DaemonRequest;
-  sessionName: string;
-  sessionStore: SessionStore;
-  logPath: string;
-  planActions: SessionAction[];
-  planDigest: string;
-}): Promise<DaemonResponse> {
-  return await withReplayFailureContext({
-    ...params,
-    snapshotDiagnostics: summarizeSnapshotTimingSamples(params.snapshotDiagnosticSamples),
-  });
-}
-
-/**
- * Single choke point for replay step failures (ADR 0012 migration step 2):
- * returns `REPLAY_DIVERGENCE` with a bounded `details.divergence` report;
- * the original code/message/hint move into `divergence.cause` verbatim, and
- * the pre-existing flat detail fields are kept for their consumers.
- */
-async function withReplayFailureContext(params: {
-  response: DaemonResponse;
-  action: SessionAction;
-  index: number;
-  replayPath: string;
-  sourcePath: string;
-  sourceLine: number;
-  artifactPaths?: string[];
-  snapshotDiagnostics?: SnapshotDiagnosticsSummary;
-  scope: ReplayVarScope;
-  req: DaemonRequest;
-  sessionName: string;
-  sessionStore: SessionStore;
-  logPath: string;
-  planActions: SessionAction[];
-  planDigest: string;
-}): Promise<DaemonResponse> {
-  const {
-    response,
-    action,
-    index,
-    replayPath,
-    sourcePath,
-    sourceLine,
-    artifactPaths = [],
-    snapshotDiagnostics,
-    scope,
-    req,
-    sessionName,
-    sessionStore,
-    logPath,
-    planActions,
-    planDigest,
-  } = params;
-  if (response.ok) return response;
-  // The failing action's own source (attached by withReplayFailureSource,
-  // deepest failure wins) beats the top-level wrapper's source.
-  const failureSource = readReplayFailureSource(response.error.details?.replaySource);
-  // Computed at failure time so runtime outputEnv merges are included.
-  const scrubVars = collectReplayScrubbableVarValues(scope);
-  const cause = hoistCauseDiagnosticMeta(response.error);
-  const divergence = await buildReplayFailureDivergence({
-    error: cause,
-    action,
-    index,
-    sourcePath: failureSource?.path ?? sourcePath,
-    sourceLine: failureSource?.line ?? sourceLine,
-    session: sessionStore.get(sessionName),
-    sessionName,
-    sessionStore,
-    logPath,
-    responseLevel: req.meta?.responseLevel,
-    scrubVars,
-    planActions,
-    planDigest,
-  });
-  return buildReplayDivergenceFailureResponse({
-    error: cause,
-    action,
-    step: index + 1,
-    replayPath,
-    artifactPaths,
-    snapshotDiagnostics,
-    divergence,
-    scrubVars,
-  });
-}
-
-type ReplayFailureCause = Extract<DaemonResponse, { ok: false }>['error'];
-
-// Throw sites may carry hint/diagnosticId/logPath inside details (the
-// documented AppErrorDetails meta keys, normally lifted by normalizeError);
-// the categorical cause-detail strip below would lose them, so hoist onto the
-// error fields first.
-function hoistCauseDiagnosticMeta(error: ReplayFailureCause): ReplayFailureCause {
-  return {
-    ...error,
-    hint: error.hint ?? readStringDetail(error.details, 'hint'),
-    diagnosticId: error.diagnosticId ?? readStringDetail(error.details, 'diagnosticId'),
-    logPath: error.logPath ?? readStringDetail(error.details, 'logPath'),
-  };
-}
-
-function readStringDetail(
-  details: Record<string, unknown> | undefined,
-  key: string,
-): string | undefined {
-  const value = details?.[key];
-  return typeof value === 'string' && value.length > 0 ? value : undefined;
-}
-
-// ADR 0012: arbitrary nested cause details are never serialized into the
-// public divergence error — value-bearing command details (fill
-// verification's `expected`/`actual`, selector diagnostics, process output)
-// are categorically dropped; only machine-dispatchable signals survive.
-const SAFE_CAUSE_DETAIL_KEYS = ['reason', 'retriable', 'supportedOn'] as const;
-
-function pickSafeCauseDetails(
-  details: Record<string, unknown> | undefined,
-): Record<string, unknown> {
-  if (!details) return {};
-  const safe: Record<string, unknown> = {};
-  for (const key of SAFE_CAUSE_DETAIL_KEYS) {
-    if (details[key] !== undefined) safe[key] = details[key];
-  }
-  return safe;
-}
-
-/** Pure wire shaping for the REPLAY_DIVERGENCE failure response. */
-function buildReplayDivergenceFailureResponse(params: {
-  error: Extract<DaemonResponse, { ok: false }>['error'];
-  action: SessionAction;
-  step: number;
-  replayPath: string;
-  artifactPaths: string[];
-  snapshotDiagnostics?: SnapshotDiagnosticsSummary;
-  divergence: unknown;
-  scrubVars: ReplayVarScrubEntry[];
-}): DaemonResponse {
-  const {
-    error,
-    action,
-    step,
-    replayPath,
-    artifactPaths,
-    snapshotDiagnostics,
-    divergence,
-    scrubVars,
-  } = params;
-  return {
-    ok: false,
-    error: {
-      code: 'REPLAY_DIVERGENCE',
-      // The cause message can echo an expanded selector; the top-level
-      // message gets the same categorical variable scrub as the report.
-      message: scrubReplayVarValues(
-        `Replay failed at step ${step} (${formatDivergenceActionLabel(action)}): ${error.message}`,
-        scrubVars,
-      ),
-      hint: error.hint === undefined ? undefined : scrubReplayVarValues(error.hint, scrubVars),
-      diagnosticId: error.diagnosticId,
-      logPath: error.logPath,
-      ...(error.retriable !== undefined ? { retriable: error.retriable } : {}),
-      ...(error.supportedOn !== undefined ? { supportedOn: error.supportedOn } : {}),
-      details: {
-        ...pickSafeCauseDetails(error.details),
-        replayPath,
-        step,
-        action: action.command,
-        // Categorical text hiding (`<text:N chars>`), never raw fill/type/
-        // payload text — the same event-log sanitizer.
-        positionals: buildDisplayPositionals(action) ?? [],
-        artifactPaths,
-        ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
-        divergence,
-      },
-    },
-  };
-}
-
-function readReplayFailureSource(value: unknown): { path?: string; line?: number } | undefined {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const record = value as Record<string, unknown>;
-  const path = typeof record.path === 'string' && record.path.length > 0 ? record.path : undefined;
-  const line = typeof record.line === 'number' ? record.line : undefined;
-  if (path === undefined && line === undefined) return undefined;
-  return { path, line };
-}
-
 function formatReplaySuccessMessage(replayed: number, wallClockMs: number): string {
   const seconds = (wallClockMs / 1000).toFixed(1);
   const noun = replayed === 1 ? 'step' : 'steps';
   return `Replayed ${replayed} ${noun} in ${seconds}s`;
-}
-
-// fallow-ignore-next-line complexity
-export function collectReplayActionArtifactPaths(response: DaemonResponse): string[] {
-  if (!response.ok) {
-    const paths = response.error.details?.artifactPaths;
-    return Array.isArray(paths)
-      ? [
-          ...new Set(
-            paths.filter(
-              (candidate): candidate is string =>
-                typeof candidate === 'string' && isReplayArtifactPath(candidate),
-            ),
-          ),
-        ]
-      : [];
-  }
-  if (!response.data) return [];
-  const candidates: string[] = [];
-  if (typeof response.data.path === 'string') candidates.push(response.data.path);
-  if (typeof response.data.outPath === 'string') candidates.push(response.data.outPath);
-  if (Array.isArray(response.data.artifacts)) {
-    for (const artifact of response.data.artifacts) {
-      if (!artifact || typeof artifact !== 'object') continue;
-      const artifactRecord = artifact as Record<string, unknown>;
-      const localPath =
-        typeof artifactRecord.localPath === 'string' ? artifactRecord.localPath : undefined;
-      const artifactPath =
-        typeof artifactRecord.path === 'string' ? artifactRecord.path : undefined;
-      if (localPath) candidates.push(localPath);
-      else if (artifactPath) candidates.push(artifactPath);
-    }
-  }
-  return [...new Set(candidates.filter((candidate) => isReplayArtifactPath(candidate)))];
 }
 
 function readSessionSnapshotSampleCount(sessionStore: SessionStore, sessionName: string): number {
@@ -535,66 +284,4 @@ function readSessionSnapshotSamplesSince(
   start: number,
 ): SnapshotTimingSample[] {
   return sessionStore.get(sessionName)?.snapshotDiagnostics?.samples.slice(start) ?? [];
-}
-
-function isReplayArtifactPath(candidate: string): boolean {
-  try {
-    return fs.statSync(candidate).isFile();
-  } catch {
-    return false;
-  }
-}
-
-type ReplayEntryIndexResult = { ok: true; value: number } | { ok: false; response: DaemonResponse };
-
-/**
- * ADR 0012 decision 4 / migration step 5: resolves `--from`/`--plan-digest`
- * into a 0-based loop entry index, entirely before any device action.
- * `--from` is 1-based and matches `resume.from`/the divergence `step.index`
- * from a prior run; digest mismatch and preflight rejections are
- * `INVALID_ARGS` so a stale or hand-edited resume never silently retargets.
- */
-function resolveReplayEntryIndex(
-  flags: CommandFlags | undefined,
-  actionCount: number,
-  planDigest: string,
-  actions: SessionAction[],
-): ReplayEntryIndexResult {
-  const from = flags?.replayFrom;
-  const digest = flags?.replayPlanDigest;
-  if (from === undefined && digest === undefined) return { ok: true, value: 0 };
-  if (from === undefined || digest === undefined) {
-    return invalidReplayEntryIndex(
-      'replay --from requires --plan-digest (and --plan-digest requires --from).',
-    );
-  }
-  const message = validateReplayResumeRequest({ from, digest, planDigest, actionCount, actions });
-  return message ? invalidReplayEntryIndex(message) : { ok: true, value: from - 1 };
-}
-
-function invalidReplayEntryIndex(message: string): ReplayEntryIndexResult {
-  return { ok: false, response: errorResponse('INVALID_ARGS', message) };
-}
-
-/** Assumes `from`/`digest` are both present; returns an error message, or undefined when resume is safe. */
-function validateReplayResumeRequest(params: {
-  from: number;
-  digest: string;
-  planDigest: string;
-  actionCount: number;
-  actions: SessionAction[];
-}): string | undefined {
-  const { from, digest, planDigest, actionCount, actions } = params;
-  if (!Number.isInteger(from) || from < 1 || from > actionCount) {
-    return `replay --from ${from} is out of range for a ${actionCount}-step plan.`;
-  }
-  if (digest !== planDigest) {
-    return (
-      'replay --plan-digest does not match the current plan digest; the script, its includes, or its ' +
-      'platform-conditioned expansion changed since the divergence report was generated. Run a fresh full ' +
-      'replay to get a new digest.'
-    );
-  }
-  const preflight = evaluateReplayResumePreflight({ from, actions });
-  return preflight.allowed ? undefined : `replay --from ${from} cannot resume: ${preflight.reason}`;
 }

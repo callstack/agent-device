@@ -108,22 +108,50 @@ test('computeReplayPlanDigest folds runtime control-flow shape (maestroRunFlowWh
   assert.notEqual(digestFor([base]), digestFor([changedSelector]));
 });
 
-test('computeReplayPlanDigest is unaffected by targetEvidence (identity evidence is inert to plan shape)', () => {
-  const withoutEvidence = digestFor([action()]);
-  const withEvidence = digestFor([
-    action({
-      targetEvidence: {
-        id: 'save',
-        role: 'button',
-        label: 'Save',
-        ancestry: [],
-        sibling: 0,
-        viewportOrder: 0,
-        verification: 'verified',
-      },
-    }),
-  ]);
-  assert.equal(withoutEvidence, withEvidence);
+test('computeReplayPlanDigest changes when an execution runtime hint changes', () => {
+  const runtime = {
+    platform: 'ios' as const,
+    metroHost: '127.0.0.1',
+    metroPort: 8081,
+    bundleUrl: 'http://localhost:8081/index.bundle',
+    launchUrl: 'agentdevice://home',
+  };
+  const original = digestFor([action({ runtime })]);
+
+  for (const [key, value] of Object.entries({
+    platform: 'android',
+    metroHost: '10.0.2.2',
+    metroPort: 8082,
+    bundleUrl: 'http://localhost:8082/index.bundle',
+    launchUrl: 'agentdevice://settings',
+  })) {
+    assert.notEqual(original, digestFor([action({ runtime: { ...runtime, [key]: value } })]));
+  }
+});
+
+test('computeReplayPlanDigest changes when target evidence consumed before action changes', () => {
+  const targetEvidence = {
+    id: 'save',
+    role: 'button',
+    label: 'Save',
+    ancestry: [],
+    sibling: 0,
+    viewportOrder: 0,
+    verification: 'verified' as const,
+  };
+  const original = digestFor([action({ targetEvidence })]);
+
+  for (const targetEvidenceChange of [
+    { label: 'Submit' },
+    { sibling: 1 },
+    { viewportOrder: 1 },
+    { verification: 'unverified' as const },
+  ]) {
+    assert.notEqual(
+      original,
+      digestFor([action({ targetEvidence: { ...targetEvidence, ...targetEvidenceChange } })]),
+    );
+  }
 });
 
 test('computeReplayPlanDigest never changes based on unsubstituted ${VAR} text (variable VALUES never affect the digest)', () => {
