@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { IOS_SIMULATOR, MACOS_DEVICE } from '../../../../__tests__/test-utils/index.ts';
+import {
+  IOS_SIMULATOR,
+  MACOS_DEVICE,
+  TVOS_SIMULATOR,
+} from '../../../../__tests__/test-utils/index.ts';
 import type { ExecResult } from '../../../../utils/exec.ts';
 import type { RunnerSession } from '../runner/runner-session-types.ts';
 
@@ -111,13 +115,16 @@ test('macOS runner abort force-kills only after both grace periods expire', asyn
   expect(runnerSignals(session)).toEqual(['SIGINT', 'SIGTERM', 'SIGKILL']);
 });
 
-test('non-macOS runner abort preserves immediate cancellation', async () => {
-  const session = makeRunnerSession(IOS_SIMULATOR, new Promise<ExecResult>(() => {}));
+test.each([IOS_SIMULATOR, TVOS_SIMULATOR])(
+  '$appleOs runner abort preserves immediate cancellation',
+  async (device) => {
+    const session = makeRunnerSession(device, new Promise<ExecResult>(() => {}));
 
-  await abortRunnerSessionsAndPrepProcesses([session]);
+    await abortRunnerSessionsAndPrepProcesses([session]);
 
-  expect(runnerSignals(session)).toEqual(['SIGINT', 'SIGTERM', 'SIGKILL']);
-});
+    expect(runnerSignals(session)).toEqual(['SIGINT', 'SIGTERM', 'SIGKILL']);
+  },
+);
 
 function makeRunnerSession(
   device: RunnerSession['device'],

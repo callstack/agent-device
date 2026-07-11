@@ -770,7 +770,7 @@ async function abortInFlightIosRunnerSessionsWhileDisconnected(
 
 function shouldAbortIosRunnerSessionsOnDisconnect(req: DaemonRequest): boolean {
   if (req.flags?.platform === 'android') return false;
-  if (req.flags?.platform === 'ios') return true;
+  if (req.flags?.platform === 'ios' || req.flags?.platform === 'macos') return true;
   return IOS_RUNNER_ABORT_REPLAY_COMMANDS.has(req.command);
 }
 
