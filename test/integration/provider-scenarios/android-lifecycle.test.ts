@@ -1144,6 +1144,36 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
   });
   assert.equal(replayEnv.replayed, 3);
 
+  // ADR 0012 step 5: replay resume. A full run diverges at step 2 (a
+  // selector matching nothing); the report's resume object carries the plan
+  // digest. Resuming at the next index after the failed step (the documented
+  // "completed the failed action manually" loop) skips steps 1-2 without
+  // executing them and replays only the tail.
+  const resumePath = path.join(tempRoot, 'settings-resume.ad');
+  fs.writeFileSync(
+    resumePath,
+    ['snapshot -i', 'press label="NoSuchControl"', 'get text @e3 Search', ''].join('\n'),
+  );
+  const divergenceError = await client.replay.run({ path: resumePath, ...selection }).then(
+    () => null,
+    (error: unknown) => error as { code?: string; details?: Record<string, unknown> },
+  );
+  assert.ok(divergenceError, 'expected the replay to diverge on the missing selector');
+  assert.equal(divergenceError.code, 'REPLAY_DIVERGENCE');
+  const divergenceReport = divergenceError.details?.divergence as {
+    resume: { allowed: boolean; from: number; planDigest: string };
+  };
+  assert.equal(divergenceReport.resume.allowed, true);
+  assert.equal(divergenceReport.resume.from, 2);
+  assert.match(divergenceReport.resume.planDigest, /^[0-9a-f]{64}$/);
+  const resumedReplay = await client.replay.run({
+    path: resumePath,
+    resumeFrom: divergenceReport.resume.from + 1,
+    resumePlanDigest: divergenceReport.resume.planDigest,
+    ...selection,
+  });
+  assert.equal(resumedReplay.replayed, 1);
+
   const screenshot = await client.capture.screenshot({
     path: screenshotPath,
     ...selection,
