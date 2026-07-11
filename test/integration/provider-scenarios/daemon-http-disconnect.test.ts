@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { afterEach, expect, test, vi } from 'vitest';
-import { emitRequestProgress } from '../../../src/daemon/request-progress.ts';
-import { getRequestSignal } from '../../../src/daemon/request-cancel.ts';
+import { emitRequestProgress } from '../../../src/request/progress.ts';
+import { getRequestSignal } from '../../../src/request/cancel.ts';
 import { createDaemonHttpServer } from '../../../src/daemon/server/http-server.ts';
 import type { DaemonResponse } from '../../../src/daemon/types.ts';
 import {
