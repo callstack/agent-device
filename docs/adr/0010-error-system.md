@@ -30,7 +30,7 @@ agent failures (selector/ref misses), and consumers that drop fields (MCP tool e
    default from `defaultHintForCode` would mislead; it is omitted where the default suffices —
    mass-adding boilerplate hints is worse than the default. Shared failure modes get shared hint
    constants next to the code that detects them (`selectorFailureHint`, `STALE_REF_HINT` in
-   `src/daemon/selectors-resolve.ts`; `resolveIosDevicectlHint`; `bootFailureHint`), not copy-pasted
+   `src/selectors/resolve.ts`; `resolveIosDevicectlHint`; `bootFailureHint`), not copy-pasted
    strings. Re-wraps preserve an existing hint rather than clobbering it.
 4. **Wrapping external tool failures.** Prefer `exec.ts` errors as-is. A hand-rolled wrap of an
    `allowFailure` result must carry `{ stdout, stderr, exitCode, processExitError: true }` so

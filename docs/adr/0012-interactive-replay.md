@@ -56,7 +56,7 @@ zero on the happy path and paying only where reality diverged from the recording
   live and replay alike. `resolveSelectorInteractionTarget` calls `resolveSelectorChain(..., {
   disambiguateAmbiguous: true })` on every press/click/fill (`resolution.ts:170-183`); when a selector
   matches N>1 nodes, `accumulateDisambiguationCandidate`/`compareDisambiguationCandidates`
-  (`src/daemon/selectors-resolve.ts:153-204`) silently pick a winner — visible candidates over
+  (`src/selectors/resolve.ts:181-285`) silently pick a winner — visible candidates over
   off-screen ones, then deepest node, then smallest on-screen area, only an exact tie failing.
   `describeResolvedInteractionNode` (`resolution.ts:227-249`), the response's entire identity payload,
   carries `node`/`selectorChain`/`refLabel`/`targetHittable`/`hint` — no match count, no signal a
@@ -129,7 +129,7 @@ both `.ad` and Maestro paths) grounds the same conclusions from the caller's sea
   (`session-replay-runtime.ts:349-369`) puts only `replayPath` + `step` in the error details.
 - **The same failure class reports differently per format.** An `.ad` selector miss is
   `COMMAND_FAILED` with the targeted hint "Run snapshot -i ... or use find ..."
-  (`selectorFailureHint`, `src/daemon/selectors-resolve.ts:84-97`, thrown at `resolution.ts:199-203`);
+  (`selectorFailureHint`, `src/selectors/resolve.ts:110-113`, thrown at `resolution.ts:213-217`);
   the equivalent Maestro miss is `ELEMENT_NOT_FOUND` constructed with no hint
   (`src/compat/maestro/runtime-interactions.ts:644-652`), falling through to the generic default
   "Retry with --debug and inspect diagnostics log for details." (`defaultHintForCode`,
