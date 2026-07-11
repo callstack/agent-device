@@ -29,6 +29,15 @@ describe('owner-file metadata', () => {
     );
     expect(build.exitCode, build.stderr).toBe(0);
 
+    expect(
+      fs.existsSync(path.join(distPath, 'sdk-selectors.js')),
+      'selector runtime should keep the stable sdk-selectors.js chunk',
+    ).toBe(true);
+    expect(
+      fs.existsSync(path.join(distPath, 'selectors2.js')),
+      'selector runtime should not fall back to an auto-numbered chunk',
+    ).toBe(false);
+
     const jsFiles = collectJsFiles(distPath);
     const bundle = jsFiles.map((file) => fs.readFileSync(file, 'utf8')).join('\n');
 

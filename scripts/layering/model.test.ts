@@ -103,6 +103,28 @@ test('back-edge counts follow the documented target spine and drift in either di
   );
 });
 
+test('neutral ownership zones reject value imports into higher layers', () => {
+  const edges = resolveImportEdges(
+    new Map([
+      ['src/contracts/result.ts', "import '../core/result.ts';"],
+      ['src/core/result.ts', 'export const result = true;'],
+      ['src/request/cancel.ts', "import '../commands/cancel.ts';"],
+      ['src/commands/cancel.ts', 'export const cancel = true;'],
+      ['src/selectors/parse.ts', "import '../client/client.ts';"],
+      ['src/client/client.ts', 'export const client = true;'],
+      ['src/cli-schema/schema.ts', "import '../cli/parser.ts';"],
+      ['src/cli/parser.ts', 'export const parser = true;'],
+    ]),
+  );
+
+  assert.deepEqual(collectBackEdges(edges), {
+    'cli-schema -> cli': ['src/cli-schema/schema.ts -> src/cli/parser.ts'],
+    'contracts -> core': ['src/contracts/result.ts -> src/core/result.ts'],
+    'request -> commands': ['src/request/cancel.ts -> src/commands/cancel.ts'],
+    'selectors -> client': ['src/selectors/parse.ts -> src/client/client.ts'],
+  });
+});
+
 test('exact back-edge identities reject same-count replacements', () => {
   const baseline = {
     'commands -> cli': ['src/commands/a.ts -> src/cli/a.ts'],

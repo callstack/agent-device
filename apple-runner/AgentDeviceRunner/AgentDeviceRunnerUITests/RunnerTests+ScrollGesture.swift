@@ -64,7 +64,7 @@ func runnerScrollGesturePlan(
 
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
 extension RunnerTests {
-  // Cross-language parity vectors mirroring src/core/__tests__/scroll-gesture.test.ts. Keep these
+  // Cross-language parity vectors mirroring src/contracts/scroll-gesture.test.ts. Keep these
   // in sync with the vitest vectors so the two buildScrollGesturePlan implementations cannot drift.
 
   func testRunnerScrollGesturePlanMapsRelativeAmount() throws {
