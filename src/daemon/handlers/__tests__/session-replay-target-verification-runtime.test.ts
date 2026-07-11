@@ -283,12 +283,12 @@ test('a verified annotated action carries the post-resolution guard on its dispa
   });
 
   expect(response.ok).toBe(true);
-  // The verified member's normalized identity rides the request so dispatch's
-  // own resolution can cross-check its winner pre-action.
+  // The verified member's normalized identity AND structural denotation ride
+  // the request so dispatch's own resolution can cross-check its winner
+  // pre-action — the structural part distinguishes a same-identity duplicate.
   expect(invoked[0]?.internal?.replayTargetGuard).toEqual({
-    id: 'save',
-    role: 'button',
-    label: 'Save',
+    identity: { id: 'save', role: 'button', label: 'Save' },
+    structural: { documentOrder: 0, sibling: 0 },
   });
 });
 
@@ -382,6 +382,63 @@ test('a dispatch-time guard mismatch converts to an identity-mismatch target-bin
   expect(resume.from).toBe(1);
   expect(typeof resume.planDigest).toBe('string');
   expect((resume.planDigest ?? '').length).toBeGreaterThan(0);
+});
+
+test('a same-identity guard mismatch surfaces the structural position difference in the divergence', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-target-guard-struct-'));
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, [SAVE_ANNOTATION, 'click id="save"']);
+
+  mockDispatchCommand.mockResolvedValue({
+    nodes: [
+      {
+        index: 0,
+        depth: 0,
+        type: 'Button',
+        identifier: 'save',
+        label: 'Save',
+        rect: { x: 10, y: 10, width: 40, height: 20 },
+      },
+    ],
+    truncated: false,
+    backend: 'xctest',
+  });
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    // Dispatch refused a DIFFERENT DUPLICATE with IDENTICAL local identity —
+    // the refusal is driven purely by the structural denotation.
+    invoke: async () => ({
+      ok: false,
+      error: {
+        code: 'COMMAND_FAILED',
+        message: 'click resolved to a different element than replay verification isolated',
+        details: {
+          reason: 'replay_target_guard_mismatch',
+          observed: { id: 'save', role: 'button', label: 'Save' },
+          expected: { id: 'save', role: 'button', label: 'Save' },
+          observedStructural: { documentOrder: 2, sibling: 1 },
+          expectedStructural: { documentOrder: 1, sibling: 0 },
+        },
+      },
+    }),
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  const divergence = response.error.details?.divergence as Record<string, unknown>;
+  expect(divergence.kind).toBe('identity-mismatch');
+  const targetBinding = divergence.targetBinding as Record<string, unknown>;
+  // Local identity is identical on both sides; the ONLY mismatch is structural.
+  expect(targetBinding.observed).toEqual({ id: 'save', role: 'button', label: 'Save' });
+  const mismatches = targetBinding.mismatches as string[];
+  expect(mismatches.some((entry) => entry.startsWith('position:'))).toBe(true);
+  expect(
+    mismatches.some((entry) => entry.includes('doc1/sibling0') && entry.includes('doc2/sibling1')),
+  ).toBe(true);
 });
 
 // NOTE: the "--update re-verifies a healed action" test was removed here —

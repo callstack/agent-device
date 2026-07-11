@@ -33,47 +33,66 @@ import type {
 } from '../../../contracts/interaction.ts';
 import { now, toBackendContext } from '../../runtime-common.ts';
 import { resolveActionableTouchResolution } from '../../../core/interaction-targeting.ts';
-import type { LocalIdentity } from '../../../replay/target-identity.ts';
 import {
   localIdentitiesEqual,
   readNodeLocalIdentity,
+  readNodeStructuralDenotation,
+  structuralDenotationsEqual,
   REPLAY_TARGET_GUARD_MISMATCH_REASON,
+  type ReplayTargetGuardDenotation,
 } from '../../../replay/target-identity-node.ts';
 
 export type { InteractionTarget, PointTarget, ResolvedInteractionTarget };
 
 /**
- * ADR 0012 migration step 4, post-resolution guard: the normalized local
- * identity of the element replay's pre-action verification isolated. Set
- * ONLY by the replay step loop (via `DaemonRequest.internal.replayTargetGuard`)
- * for annotated verified actions — never on live interactive commands.
- * Dispatch's own resolution runs guards verification does not replicate
- * (occlusion filtering, visibility-preferring disambiguation), so its winner
- * can differ from the verified member; this catches that split BEFORE the
- * device action instead of tapping a different element than was verified.
+ * ADR 0012 migration step 4, post-resolution guard: the LOCAL identity AND
+ * the STRUCTURAL denotation (pre-order document index + same-parent sibling
+ * ordinal) of the element replay's pre-action verification isolated. Set ONLY
+ * by the replay step loop (via `DaemonRequest.internal.replayTargetGuard`) for
+ * annotated verified actions — never on live interactive commands.
+ *
+ * Local identity alone is insufficient: ADR path 6 isolates ONE member among
+ * several nodes that share the same `{id, role, label}` using sibling /
+ * region-scoped viewportOrder. If verification isolates duplicate A but
+ * dispatch's occlusion/visibility filtering selects duplicate B with the same
+ * local identity, a local-identity-only guard would pass and tap the wrong
+ * element. The structural denotation is the discriminator that catches that
+ * split BEFORE the device action.
  */
-export type ExpectedResolvedTarget = LocalIdentity;
+export type ExpectedResolvedTarget = ReplayTargetGuardDenotation;
 
 /**
  * Compares the resolution winner (pre-promotion: hittable-ancestor promotion
- * deliberately retargets to the same element's actionable container and must
- * not trip the guard) against the verified identity; throws pre-action.
+ * deliberately retargets to the same LEAF's actionable container and must not
+ * trip the guard — duplicates are distinct leaves with distinct structural
+ * denotations, so comparing the leaf is exactly right) against the verified
+ * member's local identity AND structural denotation; throws pre-action when
+ * EITHER differs.
  */
 export function assertExpectedResolvedTarget(
   node: SnapshotNode,
+  nodes: SnapshotState['nodes'],
   expected: ExpectedResolvedTarget | undefined,
   action: string,
 ): void {
   if (!expected) return;
-  const observed = readNodeLocalIdentity(node);
-  if (localIdentitiesEqual(observed, expected)) return;
+  const observedIdentity = readNodeLocalIdentity(node);
+  const observedStructural = readNodeStructuralDenotation(node, nodes);
+  if (
+    localIdentitiesEqual(observedIdentity, expected.identity) &&
+    structuralDenotationsEqual(observedStructural, expected.structural)
+  ) {
+    return;
+  }
   throw new AppError(
     'COMMAND_FAILED',
     `${action} resolved to a different element than replay verification isolated; the action was not sent`,
     {
       reason: REPLAY_TARGET_GUARD_MISMATCH_REASON,
-      observed,
-      expected,
+      observed: observedIdentity,
+      observedStructural,
+      expected: expected.identity,
+      expectedStructural: expected.structural,
     },
   );
 }
@@ -193,7 +212,12 @@ async function resolveRefInteractionTarget(
 ): Promise<ResolvedInteractionTarget> {
   const capture = await resolveSnapshotForRef(runtime, options, target);
   const resolved = capture.resolved;
-  assertExpectedResolvedTarget(resolved.node, params.expectedResolvedTarget, params.action);
+  assertExpectedResolvedTarget(
+    resolved.node,
+    capture.snapshot.nodes,
+    params.expectedResolvedTarget,
+    params.action,
+  );
   const node = params.promoteToHittableAncestor
     ? resolveActionableNodeOrThrow(capture.snapshot.nodes, resolved.node, {
         action: params.action,
@@ -261,7 +285,12 @@ async function resolveSelectorInteractionTarget(
       { hint: selectorFailureHint(resolved?.diagnostics ?? []) },
     );
   }
-  assertExpectedResolvedTarget(resolved.node, params.expectedResolvedTarget, params.action);
+  assertExpectedResolvedTarget(
+    resolved.node,
+    capture.snapshot.nodes,
+    params.expectedResolvedTarget,
+    params.action,
+  );
   const node = params.promoteToHittableAncestor
     ? resolveActionableNodeOrThrow(capture.snapshot.nodes, resolved.node, {
         action: params.action,

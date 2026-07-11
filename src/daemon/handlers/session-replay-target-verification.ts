@@ -15,7 +15,11 @@ import {
   type ReplayDivergenceTargetCandidate,
   type ReplayDivergenceTargetIdentity,
 } from '../../replay/divergence.ts';
-import { REPLAY_TARGET_GUARD_MISMATCH_REASON } from '../../replay/target-identity-node.ts';
+import {
+  readNodeStructuralDenotation,
+  REPLAY_TARGET_GUARD_MISMATCH_REASON,
+  type ReplayTargetGuardDenotation,
+} from '../../replay/target-identity-node.ts';
 import type { DaemonResponse, SessionAction } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { boundedLocalIdentity } from '../session-target-evidence.ts';
@@ -47,7 +51,10 @@ import { extractReplayTargetToken, readRefLabel } from './session-replay-target-
  * the resulting identity-mismatch divergence satisfies decision 3's
  * matchCount presence rule.
  */
-export type ReplayVerifiedTargetGuard = { expected: LocalIdentity; matchCount: number };
+export type ReplayVerifiedTargetGuard = {
+  expected: ReplayTargetGuardDenotation;
+  matchCount: number;
+};
 
 export type ReplayTargetVerificationOutcome =
   | { verified: true; guard?: ReplayVerifiedTargetGuard }
@@ -290,7 +297,13 @@ export async function verifyReplayActionTarget(params: {
     return {
       verified: true,
       guard: {
-        expected: boundedLocalIdentity(classification.winnerNode),
+        // Carry BOTH the verified member's local identity AND its structural
+        // denotation (document order + sibling), so dispatch's guard refuses a
+        // different duplicate that shares the same {id, role, label}.
+        expected: {
+          identity: boundedLocalIdentity(classification.winnerNode),
+          structural: readNodeStructuralDenotation(classification.winnerNode, observation.nodes),
+        },
         matchCount: classification.matchCount,
       },
     };
@@ -369,9 +382,15 @@ export async function buildReplayTargetGuardMismatchResponse(params: {
 
   const scrubVars = collectReplayScrubbableVarValues(scope);
   const sanitize = createReplayDivergenceSanitizer(scrubVars);
-  const observed = failedResponse.ok
-    ? undefined
-    : readGuardMismatchObservedIdentity(failedResponse.error.details?.observed);
+  const details = failedResponse.ok ? undefined : failedResponse.error.details;
+  const observed = readGuardMismatchObservedIdentity(details?.observed);
+  // The guard fires even when local identity is identical (a same-identity
+  // duplicate resolved by structural position) — surface the structural
+  // difference so `mismatches` is never empty on a real divergence.
+  const structuralMismatch = describeStructuralMismatch(
+    details?.expectedStructural,
+    details?.observedStructural,
+  );
 
   const session = sessionStore.get(sessionName);
   const observation = session
@@ -403,7 +422,10 @@ export async function buildReplayTargetGuardMismatchResponse(params: {
       matchCount: guard.matchCount,
       observed,
       candidateNodes: [],
-      mismatches: observed ? identityFieldMismatches(recorded, observed) : [],
+      mismatches: [
+        ...(observed ? identityFieldMismatches(recorded, observed) : []),
+        ...(structuralMismatch ? [structuralMismatch] : []),
+      ],
       causeCode: 'IDENTITY_MISMATCH',
       causeMessage:
         'Dispatch resolution (with occlusion/visibility guards) resolved a different element than pre-action verification isolated; the action was not sent.',
@@ -421,6 +443,26 @@ function readGuardMismatchObservedIdentity(value: unknown): LocalIdentity | unde
     role: record.role,
     ...(typeof record.label === 'string' ? { label: record.label } : {}),
   };
+}
+
+/** A `position:` mismatch line from the guard's structural denotations, when both are present and differ. */
+function describeStructuralMismatch(expected: unknown, observed: unknown): string | undefined {
+  const e = readStructuralDenotation(expected);
+  const o = readStructuralDenotation(observed);
+  if (!e || !o) return undefined;
+  if (e.documentOrder === o.documentOrder && e.sibling === o.sibling) return undefined;
+  return `position: recorded=doc${e.documentOrder}/sibling${e.sibling} observed=doc${o.documentOrder}/sibling${o.sibling}`;
+}
+
+function readStructuralDenotation(
+  value: unknown,
+): { documentOrder: number; sibling: number } | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const record = value as Record<string, unknown>;
+  if (typeof record.documentOrder !== 'number' || typeof record.sibling !== 'number') {
+    return undefined;
+  }
+  return { documentOrder: record.documentOrder, sibling: record.sibling };
 }
 
 function identityFromAnnotation(recorded: TargetAnnotationV1): ReplayDivergenceTargetIdentity {

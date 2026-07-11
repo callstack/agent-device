@@ -17,7 +17,7 @@
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { resolveRectCenter } from '../utils/rect-center.ts';
 import { findNearestScrollableContainer } from './snapshot-presentation/tree.ts';
-import { readNodeLocalIdentity } from '../replay/target-identity-node.ts';
+import { readNodeLocalIdentity, siblingOrdinal } from '../replay/target-identity-node.ts';
 import {
   classifyTargetBindingMatch,
   matchesAncestryPrefix,
@@ -160,17 +160,12 @@ export function buildAncestryChain(
 /**
  * Decision 3 record-time write step 3: the winner's zero-based index among
  * its OWN parent's children, in document order. Root-level nodes (no parent)
- * are siblings of every other root-level node.
+ * are siblings of every other root-level node. Delegates to the shared
+ * `siblingOrdinal` so the record-time writer, the classifier, and the
+ * dispatch-side guard all compute this ordinal with one implementation.
  */
 export function computeSiblingOrdinal(nodes: readonly SnapshotNode[], node: SnapshotNode): number {
-  const parentIndex = node.parentIndex;
-  let ordinal = 0;
-  for (const candidate of nodes) {
-    if (candidate.parentIndex !== parentIndex) continue;
-    if (candidate.index === node.index) return ordinal;
-    ordinal += 1;
-  }
-  return 0;
+  return siblingOrdinal(nodes, node);
 }
 
 /** Decision 3 record-time write step 4: nearest scrollable ancestor's local identity, or `undefined` for *none*. */

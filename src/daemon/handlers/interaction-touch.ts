@@ -17,7 +17,7 @@ import type {
   PressCommandResult,
 } from '../../contracts/interaction.ts';
 import { asAppError, normalizeError } from '../../kernel/errors.ts';
-import type { LocalIdentity } from '../../replay/target-identity.ts';
+import type { ReplayTargetGuardDenotation } from '../../replay/target-identity-node.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';
 import { markSessionSnapshotRefsIssued, resolveRefStalenessWarning } from '../session-snapshot.ts';
@@ -230,7 +230,7 @@ async function runTargetedTouchInteraction(params: {
   clickButton: ReturnType<typeof resolveClickButton>;
   flags: CommandFlags | undefined;
   durationMs?: number;
-  expectedResolvedTarget?: LocalIdentity;
+  expectedResolvedTarget?: ReplayTargetGuardDenotation;
 }): Promise<TargetedTouchResult> {
   const { runtime, command, target, sessionName, requestId, flags, expectedResolvedTarget } =
     params;

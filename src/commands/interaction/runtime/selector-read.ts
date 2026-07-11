@@ -202,7 +202,12 @@ export const getCommand: RuntimeCommand<GetCommandOptions, GetCommandResult> = a
       invalidRefMessage: 'get text requires a ref like @e2',
       notFoundMessage: `Ref ${options.target.ref} not found`,
     });
-    assertExpectedResolvedTarget(resolved.node, options.expectedResolvedTarget, 'get');
+    assertExpectedResolvedTarget(
+      resolved.node,
+      capture.snapshot.nodes,
+      options.expectedResolvedTarget,
+      'get',
+    );
     const selectorChain = buildSelectorChainForNode(resolved.node, runtime.backend.platform, {
       action: 'get',
     });
@@ -219,7 +224,12 @@ export const getCommand: RuntimeCommand<GetCommandOptions, GetCommandResult> = a
     selector: options.target.selector,
     disambiguateAmbiguous: options.property === 'text',
   });
-  assertExpectedResolvedTarget(resolved.node, options.expectedResolvedTarget, 'get');
+  assertExpectedResolvedTarget(
+    resolved.node,
+    resolved.capture.snapshot.nodes,
+    options.expectedResolvedTarget,
+    'get',
+  );
 
   const selectorChain = buildSelectorChainForNode(resolved.node, runtime.backend.platform, {
     action: 'get',
