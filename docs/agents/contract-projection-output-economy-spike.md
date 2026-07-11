@@ -160,8 +160,10 @@ emulator, or attached device. A one-round `perf-nightly` dispatch on the PR bran
 unavailable because the GitHub integration could not create workflow-dispatch events. Historical
 Android nightly logs did expose a deterministic workflow defect: the emulator action executes each
 `script` line independently, so shell continuation backslashes reached `scripts/perf/run.ts` as a
-literal `\` argument. The invocation is now a single line; the next scheduled run after merge is
-the live validation point. Deterministic fixtures are not presented as live reliability evidence.
+literal `\` argument. The action now receives one folded shell script, so `set -e` governs the
+benchmark and no continuation tokens cross action boundaries. The next scheduled run after merge
+is the live validation point. Deterministic fixtures are not presented as live reliability
+evidence.
 
 The six-month churn × current-size refresh continues to identify bounded candidates rather than a
 split mandate:
