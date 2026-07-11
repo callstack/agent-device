@@ -11,6 +11,7 @@ import {
   type AndroidTouchGestureRequest,
 } from './adb-executor.ts';
 import { getAndroidScreenSize, swipeAndroid } from './input-actions.ts';
+import { stopAndroidSnapshotHelperSessionForDevice } from './snapshot-helper.ts';
 import {
   parseInstrumentationRecords,
   readAndroidHelperManifestInteger,
@@ -265,6 +266,7 @@ async function runAndroidMultiTouchHelperGestureForDevice(
     phase: 'android_multitouch_helper_install_decision',
     data: install,
   });
+  await stopAndroidSnapshotHelperSessionForDevice(device);
   const output = await withDiagnosticTimer(
     'android_multitouch_helper_gesture',
     async () =>

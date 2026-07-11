@@ -12,15 +12,16 @@ const PENDING_DIR = 'android-test-ime-pending';
 // the suite passes on a fresh checkout that hasn't packaged android-ime-helper/dist (CI Coverage).
 vi.mock('../ime-helper.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../ime-helper.ts')>();
+  const fixture = await import('./android-helper-artifact.fixtures.ts');
   return {
     ...actual,
     resolveAndroidImeHelperArtifact: vi.fn(async () => ({
-      apkPath: '/fixture/helper.apk',
+      apkPath: fixture.ANDROID_HELPER_FIXTURE_APK_PATH,
       manifest: {
         name: 'android-ime-helper' as const,
         version: '0.0.0',
         assetName: 'helper.apk',
-        sha256: 'a'.repeat(64),
+        sha256: fixture.ANDROID_HELPER_FIXTURE_APK_SHA256,
         packageName: 'com.callstack.agentdevice.imehelper',
         versionCode: 1,
         serviceComponent: HELPER_SERVICE,

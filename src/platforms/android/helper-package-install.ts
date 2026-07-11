@@ -1,11 +1,13 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { findProjectRoot, readVersion } from '../../utils/version.ts';
 import {
   androidAdbResultError,
   installAndroidAdbPackage,
+  pullAndroidAdbFile,
   type AndroidAdbExecutor,
   type AndroidAdbProvider,
 } from './adb-executor.ts';
@@ -16,9 +18,17 @@ export type AndroidHelperInstallDecision = {
   packageName: string;
   versionCode: number;
   installedVersionCode?: number;
+  installedSha256?: string;
   installed: boolean;
-  reason: 'missing' | 'outdated' | 'current';
+  reason: 'missing' | 'outdated' | 'mismatched' | 'unverifiable' | 'current';
 };
+
+export type InstalledAndroidHelperState = Pick<
+  AndroidHelperInstallDecision,
+  'installedVersionCode' | 'installedSha256' | 'reason'
+>;
+
+const ANDROID_HELPER_IDENTITY_TIMEOUT_MS = 10_000;
 
 async function ensureAndroidHelperPackageInstalled(options: {
   adb: AndroidAdbExecutor;
@@ -44,16 +54,35 @@ async function ensureAndroidHelperPackageInstalled(options: {
     installTimeoutMs,
     helperLabel,
   } = options;
-  const cacheKey = `${deviceKey}\0${packageName}\0${versionCode}`;
+  const cacheKey = `${deviceKey}\0${packageName}\0${versionCode}\0${sha256}`;
   if (cache.has(cacheKey)) {
-    return { packageName, versionCode, installed: false, reason: 'current' };
-  }
-  const installedVersionCode = await readInstalledAndroidPackageVersionCode(adb, packageName);
-  if (installedVersionCode !== undefined && installedVersionCode >= versionCode) {
-    cache.add(cacheKey);
-    return { packageName, versionCode, installedVersionCode, installed: false, reason: 'current' };
+    return {
+      packageName,
+      versionCode,
+      installedSha256: sha256,
+      installed: false,
+      reason: 'current',
+    };
   }
   await verifyAndroidHelperApkChecksum(apkPath, sha256, helperLabel);
+  const state = await inspectInstalledAndroidHelper({
+    adb,
+    adbProvider,
+    packageName,
+    versionCode,
+    sha256,
+  });
+
+  if (state.reason === 'current') {
+    cache.add(cacheKey);
+    return {
+      packageName,
+      versionCode,
+      ...state,
+      installed: false,
+    };
+  }
+
   const result = await installAndroidAdbPackage(apkPath, {
     provider: adbProvider,
     replace: true,
@@ -65,16 +94,41 @@ async function ensureAndroidHelperPackageInstalled(options: {
     throw androidAdbResultError(`Failed to install ${helperLabel}`, result, {
       packageName,
       versionCode,
+      reason: state.reason,
     });
   }
   cache.add(cacheKey);
   return {
     packageName,
     versionCode,
-    installedVersionCode,
+    ...state,
     installed: true,
-    reason: installedVersionCode === undefined ? 'missing' : 'outdated',
   };
+}
+
+export async function inspectInstalledAndroidHelper(options: {
+  adb: AndroidAdbExecutor;
+  adbProvider: AndroidAdbProvider;
+  packageName: string;
+  versionCode: number;
+  sha256: string;
+}): Promise<InstalledAndroidHelperState> {
+  const { adb, adbProvider, packageName, versionCode, sha256 } = options;
+  const installedVersionCode = await readInstalledAndroidPackageVersionCode(adb, packageName);
+  if (installedVersionCode === undefined) return { reason: 'missing' };
+  if (installedVersionCode < versionCode) return { installedVersionCode, reason: 'outdated' };
+  if (installedVersionCode > versionCode) return { installedVersionCode, reason: 'current' };
+
+  try {
+    const installedSha256 = await readInstalledAndroidPackageSha256(adb, adbProvider, packageName);
+    return {
+      installedVersionCode,
+      installedSha256,
+      reason: installedSha256 === sha256 ? 'current' : 'mismatched',
+    };
+  } catch {
+    return { installedVersionCode, reason: 'unverifiable' };
+  }
 }
 
 // Resolves an npm-bundled helper artifact: parses/validates its manifest, confirms the APK exists.
@@ -151,7 +205,48 @@ async function readInstalledAndroidPackageVersionCode(
   return match ? Number(match[1]) : undefined;
 }
 
-async function verifyAndroidHelperApkChecksum(
+async function readInstalledAndroidPackageSha256(
+  adb: AndroidAdbExecutor,
+  adbProvider: AndroidAdbProvider,
+  packageName: string,
+): Promise<string> {
+  const pathResult = await adb(['shell', 'pm', 'path', packageName], {
+    allowFailure: true,
+    timeoutMs: ANDROID_HELPER_IDENTITY_TIMEOUT_MS,
+  });
+  const remotePath = readBaseApkPath(`${pathResult.stdout}\n${pathResult.stderr}`);
+  if (pathResult.exitCode !== 0 || !remotePath) {
+    throw new AppError('COMMAND_FAILED', 'Could not resolve installed Android helper APK');
+  }
+
+  const tempDirectory = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-helper-'));
+  const localPath = path.join(tempDirectory, 'base.apk');
+  try {
+    const pull = await pullAndroidAdbFile(remotePath, localPath, {
+      provider: adbProvider,
+      allowFailure: true,
+      timeoutMs: ANDROID_HELPER_IDENTITY_TIMEOUT_MS,
+    });
+    if (pull.exitCode !== 0) {
+      throw androidAdbResultError('Could not read installed Android helper APK', pull, {
+        packageName,
+        remotePath,
+      });
+    }
+    return await sha256File(localPath);
+  } finally {
+    await fs.rm(tempDirectory, { recursive: true, force: true });
+  }
+}
+
+function readBaseApkPath(output: string): string | undefined {
+  return output
+    .split(/\r?\n/)
+    .map((line) => (line.startsWith('package:') ? line.slice('package:'.length).trim() : ''))
+    .find((candidate) => candidate.endsWith('/base.apk'));
+}
+
+export async function verifyAndroidHelperApkChecksum(
   apkPath: string,
   expectedSha256: string,
   helperLabel: string,

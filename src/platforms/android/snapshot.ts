@@ -294,6 +294,8 @@ async function installAndroidSnapshotHelper(
       packageName: install.packageName,
       versionCode: install.versionCode,
       installedVersionCode: install.installedVersionCode,
+      artifactSha256: artifact.manifest.sha256,
+      installedSha256: install.installedSha256,
       installed: install.installed,
       reason: install.reason,
     },

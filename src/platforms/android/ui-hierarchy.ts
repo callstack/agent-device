@@ -549,9 +549,22 @@ function pruneAndroidCoveredSubtrees(node: AndroidNode, state: AndroidTreePruneS
   const siblings = node.children;
   const coveringCandidates = siblings.filter((sibling) => canCoverSibling(sibling, state));
   if (coveringCandidates.length === 0) return;
-  node.children = siblings.filter(
-    (child) => !isCoveredByHigherDrawingOrderSibling(child, coveringCandidates),
+  node.children = siblings.filter((child) => shouldKeepAndroidSibling(child, coveringCandidates));
+}
+
+function shouldKeepAndroidSibling(
+  node: AndroidNode,
+  coveringCandidates: AndroidCoveringCandidate[],
+): boolean {
+  return (
+    isSemanticIdentifierMarker(node) ||
+    !isCoveredByHigherDrawingOrderSibling(node, coveringCandidates)
   );
+}
+
+function isSemanticIdentifierMarker(node: AndroidNode): boolean {
+  // RN can emit a screen-level testID as an empty sibling beside its rendered navigator.
+  return hasMeaningfulIdentifier(node) && !node.hittable && node.children.length === 0;
 }
 
 function isCoveredByHigherDrawingOrderSibling(
@@ -561,7 +574,6 @@ function isCoveredByHigherDrawingOrderSibling(
   if (node.visibleToUser === false || node.drawingOrder === undefined || !hasPositiveRect(node)) {
     return false;
   }
-
   for (const sibling of coveringCandidates) {
     if (sibling === node || sibling.drawingOrder <= node.drawingOrder) {
       continue;
@@ -571,6 +583,11 @@ function isCoveredByHigherDrawingOrderSibling(
     }
   }
   return false;
+}
+
+function hasMeaningfulIdentifier(node: AndroidNode): boolean {
+  const identifier = node.identifier?.trim() ?? '';
+  return Boolean(identifier && !isGenericAndroidId(identifier));
 }
 
 function canCoverSibling(

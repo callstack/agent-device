@@ -1,7 +1,8 @@
+import { readAndroidSnapshotHelperInstallOptions } from './snapshot-helper-artifact.ts';
 import {
-  readAndroidSnapshotHelperInstallOptions,
-  verifyAndroidSnapshotHelperArtifact,
-} from './snapshot-helper-artifact.ts';
+  inspectInstalledAndroidHelper,
+  verifyAndroidHelperApkChecksum,
+} from './helper-package-install.ts';
 import {
   androidAdbResultError,
   installAndroidAdbPackage,
@@ -22,9 +23,10 @@ export function forgetAndroidSnapshotHelperInstall(options: {
   packageName: string;
   versionCode: number;
 }): void {
-  forgetInstalledSnapshotHelper(
-    getInstallCacheKey(options.deviceKey, options.packageName, options.versionCode),
-  );
+  const prefix = `${options.deviceKey}\0${options.packageName}\0${options.versionCode}\0`;
+  for (const cacheKey of installedSnapshotHelpers.keys()) {
+    if (cacheKey.startsWith(prefix)) forgetInstalledSnapshotHelper(cacheKey);
+  }
 }
 
 // Tests reset the process-global install memo so cases do not share helper state.
@@ -36,8 +38,9 @@ function getInstallCacheKey(
   deviceKey: string | undefined,
   packageName: string,
   versionCode: number,
+  sha256: string,
 ): string | undefined {
-  return deviceKey ? `${deviceKey}\0${packageName}\0${versionCode}` : undefined;
+  return deviceKey ? `${deviceKey}\0${packageName}\0${versionCode}\0${sha256}` : undefined;
 }
 
 function rememberInstalledSnapshotHelper(
@@ -67,6 +70,7 @@ export async function ensureAndroidSnapshotHelper(options: {
   const installPolicy = options.installPolicy ?? 'missing-or-outdated';
   const packageName = artifact.manifest.packageName;
   const versionCode = artifact.manifest.versionCode;
+  const sha256 = artifact.manifest.sha256;
   if (installPolicy === 'never') {
     return {
       packageName,
@@ -75,7 +79,7 @@ export async function ensureAndroidSnapshotHelper(options: {
       reason: 'skipped',
     };
   }
-  const installCacheKey = getInstallCacheKey(options.deviceKey, packageName, versionCode);
+  const installCacheKey = getInstallCacheKey(options.deviceKey, packageName, versionCode, sha256);
   const cachedVersionCode = installCacheKey
     ? installedSnapshotHelpers.get(installCacheKey)
     : undefined;
@@ -84,12 +88,29 @@ export async function ensureAndroidSnapshotHelper(options: {
       packageName,
       versionCode,
       installedVersionCode: cachedVersionCode,
+      installedSha256: sha256,
       installed: false,
       reason: 'current',
     };
   }
-  const installedVersionCode = await readInstalledVersionCode(adb, packageName, options.timeoutMs);
-  const reason = getInstallReason(installPolicy, installedVersionCode, versionCode);
+  await verifyAndroidHelperApkChecksum(artifact.apkPath, sha256, 'Android snapshot helper');
+  const installedState =
+    installPolicy === 'always'
+      ? {
+          installedVersionCode: await readInstalledVersionCode(adb, packageName, options.timeoutMs),
+          reason: 'forced' as const,
+        }
+      : await inspectInstalledAndroidHelper({
+          adb,
+          adbProvider: normalizeAdbProvider(options.adbProvider, adb),
+          packageName,
+          versionCode,
+          sha256,
+        });
+  const { installedVersionCode } = installedState;
+  const installedSha256 =
+    'installedSha256' in installedState ? installedState.installedSha256 : undefined;
+  const reason = installedState.reason;
 
   if (reason === 'current') {
     if (installedVersionCode === undefined) {
@@ -100,12 +121,12 @@ export async function ensureAndroidSnapshotHelper(options: {
       packageName,
       versionCode,
       installedVersionCode,
+      installedSha256,
       installed: false,
       reason,
     };
   }
 
-  await verifyAndroidSnapshotHelperArtifact(artifact);
   const result = await installAndroidSnapshotHelper(
     adb,
     options.adbProvider ?? adb,
@@ -129,9 +150,18 @@ export async function ensureAndroidSnapshotHelper(options: {
     packageName,
     versionCode,
     installedVersionCode,
+    installedSha256,
     installed: true,
     reason,
   };
+}
+
+function normalizeAdbProvider(
+  provider: AndroidAdbProvider | AndroidAdbExecutor | undefined,
+  adb: AndroidAdbExecutor,
+): AndroidAdbProvider {
+  if (!provider) return { exec: adb };
+  return typeof provider === 'function' ? { exec: provider } : provider;
 }
 
 async function readInstalledVersionCode(
@@ -213,21 +243,4 @@ function parsePackageListVersionCode(output: string, packageName: string): numbe
 
 function isInstallUpdateIncompatible(result: { stdout: string; stderr: string }): boolean {
   return `${result.stdout}\n${result.stderr}`.includes('INSTALL_FAILED_UPDATE_INCOMPATIBLE');
-}
-
-function getInstallReason(
-  installPolicy: AndroidSnapshotHelperInstallPolicy,
-  installedVersionCode: number | undefined,
-  requiredVersionCode: number,
-): AndroidSnapshotHelperInstallResult['reason'] {
-  if (installPolicy === 'never') {
-    return 'skipped';
-  }
-  if (installPolicy === 'always') {
-    return 'forced';
-  }
-  if (installedVersionCode === undefined) {
-    return 'missing';
-  }
-  return installedVersionCode < requiredVersionCode ? 'outdated' : 'current';
 }

@@ -115,7 +115,7 @@ test('ensureAndroidImeHelper installs with semantic provider install options', a
   assert.deepEqual(installCalls, [{ apkPath, replace: true, allowTestPackages: true }]);
 });
 
-test('ensureAndroidImeHelper skips install when an equal-or-newer version is already present', async () => {
+test('ensureAndroidImeHelper skips install when a newer version is already present', async () => {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ime-helper-current-'));
   const apkPath = path.join(tmpDir, 'helper.apk');
   await fs.writeFile(apkPath, 'helper-apk');
@@ -123,7 +123,7 @@ test('ensureAndroidImeHelper skips install when an equal-or-newer version is alr
     if (args.includes('--show-versioncode')) {
       return {
         exitCode: 0,
-        stdout: `package:${manifest.packageName} versionCode:${manifest.versionCode}`,
+        stdout: `package:${manifest.packageName} versionCode:${manifest.versionCode + 1}`,
         stderr: '',
       };
     }
@@ -132,7 +132,7 @@ test('ensureAndroidImeHelper skips install when an equal-or-newer version is alr
   const adbProvider: AndroidAdbProvider = {
     exec: adb,
     install: async () => {
-      throw new Error('install should not be called when the version is current');
+      throw new Error('install should not be called when a newer version is present');
     },
   };
 

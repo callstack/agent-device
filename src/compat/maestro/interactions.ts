@@ -188,6 +188,15 @@ export function convertSwipe(value: unknown, context: MaestroParseContext): Sess
     throw new AppError('INVALID_ARGS', 'swipe expects a map.');
   }
   assertOnlyKeys(value, 'swipe', ['start', 'end', 'direction', 'duration', 'from', 'label']);
+  // Maestro classifies the command as coordinate-based when either endpoint key is present.
+  if (Object.hasOwn(value, 'start') || Object.hasOwn(value, 'end')) {
+    if (value.direction !== undefined) {
+      throw unsupportedMaestroSyntax(
+        'Maestro swipe cannot combine direction with start/end coordinates.',
+      );
+    }
+    return convertCoordinateSwipe(value);
+  }
   const from = value.from ?? (typeof value.label === 'string' ? value.label : undefined);
   if (from !== undefined) {
     return convertTargetedSwipe(value, from, context);
@@ -230,7 +239,7 @@ function readCoordinateSwipePoints(value: Record<string, unknown>): {
   if (typeof value.start === 'string' && typeof value.end === 'string') {
     return { start: parseMaestroPoint(value.start), end: parseMaestroPoint(value.end) };
   }
-  throw unsupportedMaestroSyntax('Only Maestro swipe start/end coordinates are supported.');
+  throw unsupportedMaestroSyntax('Maestro swipe requires both start and end coordinates.');
 }
 
 function readSwipeDurationMs(duration: unknown): string | undefined {

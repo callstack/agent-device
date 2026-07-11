@@ -275,6 +275,27 @@ test('parseUiHierarchy prunes lower drawing-order subtrees covered by a foregrou
   );
 });
 
+test('parseUiHierarchy keeps visible identifier-only markers beside covering content', () => {
+  const xml = `<hierarchy>
+  <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="0">
+    <node class="android.view.ViewGroup" resource-id="post-auth-screen" bounds="[0,120][390,844]" visible-to-user="true" drawing-order="1"/>
+    <node class="android.view.ViewGroup" bounds="[0,120][390,844]" visible-to-user="true" drawing-order="2">
+      <node class="android.widget.Button" text="Tab 1" bounds="[0,120][195,180]" clickable="true" enabled="true" visible-to-user="true" drawing-order="1"/>
+    </node>
+  </node>
+</hierarchy>`;
+
+  const result = parseUiHierarchy(xml, 800, { raw: true });
+  assert.equal(
+    result.nodes.some((node) => node.identifier === 'post-auth-screen'),
+    true,
+  );
+  assert.equal(
+    result.nodes.some((node) => node.label === 'Tab 1'),
+    true,
+  );
+});
+
 test('parseUiHierarchy keeps visible side-by-side drawer and content subtrees', () => {
   const xml = `<hierarchy>
   <node class="android.widget.FrameLayout" bounds="[0,0][390,844]" visible-to-user="true" drawing-order="0">

@@ -18,17 +18,10 @@ import {
   type AndroidAdbExecutor,
   type AndroidAdbProvider,
 } from '../adb-executor.ts';
-
-const manifest = {
-  name: 'android-multitouch-helper' as const,
-  version: '0.15.0',
-  assetName: 'helper.apk',
-  sha256: 'a'.repeat(64),
-  packageName: 'com.callstack.agentdevice.multitouchhelper',
-  versionCode: 15000,
-  instrumentationRunner: 'com.callstack.agentdevice.multitouchhelper/.MultiTouchInstrumentation',
-  statusProtocol: 'android-multitouch-helper-v1' as const,
-};
+import {
+  ANDROID_MULTITOUCH_HELPER_MANIFEST as manifest,
+  androidMultiTouchResultRecord as resultRecord,
+} from './multitouch-helper.fixtures.ts';
 
 beforeEach(() => {
   resetAndroidMultiTouchHelperInstallCache();
@@ -299,13 +292,6 @@ test('ensureAndroidMultiTouchHelper installs with semantic provider install opti
   assert.equal(result.reason, 'missing');
   assert.deepEqual(installCalls, [{ apkPath, replace: true, allowTestPackages: true }]);
 });
-
-function resultRecord(values: Record<string, string>): string {
-  return [
-    'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-multitouch-helper-v1',
-    ...Object.entries(values).map(([key, value]) => `INSTRUMENTATION_RESULT: ${key}=${value}`),
-  ].join('\n');
-}
 
 function sha256Text(text: string): string {
   return crypto.createHash('sha256').update(text).digest('hex');

@@ -1,5 +1,3 @@
-import crypto from 'node:crypto';
-import fs from 'node:fs';
 import { AppError } from '../../kernel/errors.ts';
 import {
   readAndroidHelperManifestInteger,
@@ -9,7 +7,6 @@ import {
   ANDROID_SNAPSHOT_HELPER_NAME,
   ANDROID_SNAPSHOT_HELPER_OUTPUT_FORMAT,
   ANDROID_SNAPSHOT_HELPER_PROTOCOL,
-  type AndroidSnapshotHelperArtifact,
   type AndroidSnapshotHelperManifest,
 } from './snapshot-helper-types.ts';
 
@@ -30,19 +27,6 @@ const ANDROID_SNAPSHOT_HELPER_INSTALL_FLAG_OPTIONS = {
 } as const satisfies Record<string, AndroidSnapshotHelperInstallOptionName>;
 
 type AndroidSnapshotHelperInstallFlag = keyof typeof ANDROID_SNAPSHOT_HELPER_INSTALL_FLAG_OPTIONS;
-
-export async function verifyAndroidSnapshotHelperArtifact(
-  artifact: AndroidSnapshotHelperArtifact,
-): Promise<void> {
-  const actual = await sha256File(artifact.apkPath);
-  if (actual !== artifact.manifest.sha256) {
-    throw new AppError('COMMAND_FAILED', 'Android snapshot helper APK checksum mismatch', {
-      apkPath: artifact.apkPath,
-      expectedSha256: artifact.manifest.sha256,
-      actualSha256: actual,
-    });
-  }
-}
 
 export function parseAndroidSnapshotHelperManifest(value: unknown): AndroidSnapshotHelperManifest {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -146,16 +130,6 @@ function readSha256(value: unknown): string {
     );
   }
   return sha256;
-}
-
-async function sha256File(filePath: string): Promise<string> {
-  return await new Promise((resolve, reject) => {
-    const hash = crypto.createHash('sha256');
-    const stream = fs.createReadStream(filePath);
-    stream.on('error', reject);
-    stream.on('data', (chunk) => hash.update(chunk));
-    stream.on('end', () => resolve(hash.digest('hex')));
-  });
 }
 
 function readString(value: unknown, field: string): string {

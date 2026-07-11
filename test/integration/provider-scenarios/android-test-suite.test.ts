@@ -149,7 +149,7 @@ test('Provider-backed integration Android Maestro replay test suite discovers YA
       );
       fs.writeFileSync(
         path.join(suiteRoot, '02-tap.yml'),
-        ['appId: com.android.settings', '---', '- tapOn: Search', ''].join('\n'),
+        ['appId: com.android.settings', '---', '- launchApp', '- tapOn: Search', ''].join('\n'),
       );
 
       const suite = await client.replay.test({
@@ -167,6 +167,11 @@ test('Provider-backed integration Android Maestro replay test suite discovers YA
       assert.deepEqual(
         world.adbCalls.find((call) => call.slice(0, 3).join(' ') === 'shell input tap'),
         ['shell', 'input', 'tap', '180', '330'],
+      );
+      assert.equal(
+        world.adbCalls.filter((call) => call.slice(0, 3).join(' ') === 'shell am force-stop')
+          .length,
+        2,
       );
       assertSnapshotCountInRange(snapshots, 2, 3);
     },

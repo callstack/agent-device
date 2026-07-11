@@ -16,9 +16,13 @@ export function convertLaunchApp(
   context: MaestroParseContext,
 ): SessionAction {
   if (value === null || value === undefined) {
-    return action('open', [resolveMaestroString(requireAppId(config, 'launchApp'), context)]);
+    return action('open', [resolveMaestroString(requireAppId(config, 'launchApp'), context)], {
+      relaunch: true,
+    });
   }
-  if (typeof value === 'string') return action('open', [resolveMaestroString(value, context)]);
+  if (typeof value === 'string') {
+    return action('open', [resolveMaestroString(value, context)], { relaunch: true });
+  }
   if (!isPlainRecord(value)) {
     throw new AppError('INVALID_ARGS', 'launchApp expects a string or map.');
   }
@@ -39,7 +43,7 @@ export function convertLaunchApp(
   );
   const launchArgs = readLaunchArgs(value, context);
   const shouldClearState = value.clearState === true;
-  const shouldRelaunch = !shouldClearState && (value.stopApp === true || launchArgs.length > 0);
+  const shouldRelaunch = !shouldClearState && value.stopApp !== false;
   return action('open', [appId], {
     ...(shouldRelaunch ? { relaunch: true } : {}),
     ...(shouldClearState ? { clearAppState: true } : {}),

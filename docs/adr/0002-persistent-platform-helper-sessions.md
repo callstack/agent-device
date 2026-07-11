@@ -51,6 +51,11 @@ part of that first step. The first reliable win is infrastructure reuse, not dat
 implementation keeps the existing one-shot instrumentation helper as the fallback for startup,
 socket, protocol, and request failures.
 
+Android permits only one reliable instrumentation-owned `UiAutomation` context per device. Before
+starting a different instrumentation helper, such as touch synthesis, the daemon must stop the
+persistent snapshot helper session and let the next snapshot restart it lazily. Helper reuse must
+never turn process ownership into cross-command interference.
+
 For iOS, keep the XCTest runner session as the reference implementation for lifecycle and
 invalidation behavior. Android does not need to copy iOS internals, but it should reuse the same
 daemon-side ideas: per-device session manager, readiness checks, structured protocol errors,
@@ -82,7 +87,7 @@ should show meaningful wall-clock improvement on a realistic app state, not just
 
 Session managers need more lifecycle tests than one-shot helpers: startup, ready protocol, reuse,
 timeout, malformed response, helper version mismatch, device disconnect, install invalidation,
-shutdown, and one-shot fallback.
+shutdown, exclusive instrumentation handoff, and one-shot fallback.
 
 Observability should report whether a command used a persistent session, started one, reused one,
 invalidated one, or fell back to one-shot. This keeps CI and user bug reports diagnosable when a

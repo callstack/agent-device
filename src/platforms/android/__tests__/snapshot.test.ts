@@ -32,6 +32,10 @@ import {
   type AndroidAdbProcess,
   type AndroidAdbProvider,
 } from '../adb-executor.ts';
+import {
+  ANDROID_HELPER_FIXTURE_APK_PATH,
+  ANDROID_HELPER_FIXTURE_APK_SHA256,
+} from './android-helper-artifact.fixtures.ts';
 
 const VALID_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+b9xkAAAAASUVORK5CYII=',
@@ -53,7 +57,7 @@ const helperManifest: AndroidSnapshotHelperManifest = {
   name: 'android-snapshot-helper',
   version: '0.13.3',
   apkUrl: null,
-  sha256: 'a'.repeat(64),
+  sha256: ANDROID_HELPER_FIXTURE_APK_SHA256,
   packageName: 'com.callstack.agentdevice.snapshothelper',
   versionCode: 13003,
   instrumentationRunner: 'com.callstack.agentdevice.snapshothelper/.SnapshotInstrumentation',
@@ -65,12 +69,12 @@ const helperManifest: AndroidSnapshotHelperManifest = {
 };
 
 const helperArtifact = {
-  apkPath: '/tmp/helper.apk',
+  apkPath: ANDROID_HELPER_FIXTURE_APK_PATH,
   manifest: helperManifest,
 };
 const installedHelperProbe = {
   exitCode: 0,
-  stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13003',
+  stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13004',
   stderr: '',
 };
 
@@ -514,7 +518,7 @@ test('snapshotAndroid uses injected helper artifact before stock uiautomator', a
     if (args.includes('--show-versioncode')) {
       return {
         exitCode: 0,
-        stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13003',
+        stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13004',
         stderr: '',
       };
     }
@@ -539,7 +543,7 @@ test('snapshotAndroid uses injected helper artifact before stock uiautomator', a
   assert.equal(result.androidSnapshot.installReason, 'current');
   assert.equal(result.androidSnapshot.captureMode, 'interactive-windows');
   assert.equal(result.androidSnapshot.windowCount, 1);
-  assert.deepEqual(timeouts, [30000, 30000]);
+  assert.deepEqual(timeouts, [5000, 30000]);
   assert.equal(mockRunCmd.mock.calls.length, 0);
 });
 
@@ -605,7 +609,7 @@ test('snapshotAndroid emits helper phase diagnostics', async () => {
     if (args.includes('--show-versioncode')) {
       return {
         exitCode: 0,
-        stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13003',
+        stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13004',
         stderr: '',
       };
     }
@@ -646,7 +650,7 @@ test('snapshotAndroid resolves helper adb through scoped provider', async () => 
       if (args.includes('--show-versioncode')) {
         return {
           exitCode: 0,
-          stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13003',
+          stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13004',
           stderr: '',
         };
       }
@@ -759,7 +763,7 @@ test('snapshotAndroid falls back to stock uiautomator when helper fails', async 
     if (args.includes('--show-versioncode')) {
       return {
         exitCode: 0,
-        stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13003',
+        stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13004',
         stderr: '',
       };
     }
@@ -967,7 +971,7 @@ test('snapshotAndroid emits fallback and stock capture diagnostics', async () =>
     if (args.includes('--show-versioncode')) {
       return {
         exitCode: 0,
-        stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13003',
+        stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13004',
         stderr: '',
       };
     }
@@ -1184,7 +1188,7 @@ test('snapshotAndroid preserves helper failure reason when stock fallback fails'
     if (args.includes('--show-versioncode')) {
       return {
         exitCode: 0,
-        stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13003',
+        stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13004',
         stderr: '',
       };
     }
@@ -1223,7 +1227,7 @@ test('snapshotAndroid re-probes helper install after helper capture failure', as
       versionProbeCount += 1;
       return {
         exitCode: 0,
-        stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13003',
+        stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13004',
         stderr: '',
       };
     }

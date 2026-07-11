@@ -6,6 +6,8 @@ export type AndroidSnapshotCaptureMode = 'interactive-windows' | 'active-window'
 export type AndroidSnapshotHelperInstallReason =
   | 'missing'
   | 'outdated'
+  | 'mismatched'
+  | 'unverifiable'
   | 'forced'
   | 'current'
   | 'skipped';
@@ -51,6 +53,7 @@ export type AndroidSnapshotHelperInstallResult = {
   packageName: string;
   versionCode: number;
   installedVersionCode?: number;
+  installedSha256?: string;
   installed: boolean;
   reason: AndroidSnapshotHelperInstallReason;
 };
