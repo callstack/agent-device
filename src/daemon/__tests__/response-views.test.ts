@@ -422,3 +422,115 @@ test('resolution digest and settle digest compose independently', () => {
   expect((digest.resolution as { alternatives?: unknown[] }).alternatives).toBeUndefined();
   expect((digest.settle as { diff?: { lines?: unknown[] } }).diff?.lines).toBeUndefined();
 });
+
+const networkView = RESPONSE_VIEWS.network;
+
+const NETWORK_DATA: DaemonResponseData = {
+  path: '/tmp/app.log',
+  exists: true,
+  active: true,
+  state: 'active',
+  backend: 'ios-simulator',
+  include: 'all',
+  scannedLines: 4000,
+  matchedLines: 2,
+  limits: { maxEntries: 25, maxPayloadChars: 2048, maxScanLines: 4000 },
+  entries: [
+    {
+      method: 'POST',
+      url: 'https://api.example.test/checkout/1',
+      status: 503,
+      timestamp: '2026-07-02T12:00:00.000Z',
+      durationMs: 120,
+      packetId: 'packet-1',
+      line: 3900,
+      metadata: { requestId: 'request-1' },
+      headers: 'authorization: <redacted>\ncontent-type: application/json',
+      requestHeaders: { authorization: '<redacted>' },
+      responseHeaders: { 'x-retry-after-ms': '500' },
+      requestBody: '{"cartId":"cart-1"}',
+      responseBody: '{"error":"service unavailable"}',
+      raw: 'network capture 1: {"error":"service unavailable"}',
+    },
+    {
+      method: 'GET',
+      url: 'https://api.example.test/checkout/2',
+      status: 200,
+      timestamp: '2026-07-02T12:00:01.000Z',
+      durationMs: 137,
+      packetId: 'packet-2',
+      line: 3901,
+      headers: 'content-type: application/json',
+      requestBody: '',
+      responseBody: 'ok',
+      raw: 'network capture 2: ok',
+    },
+  ],
+  notes: ['The first checkout request returned 503. Retry after the service recovery window.'],
+  warnings: ['Network capture omitted one malformed log line.'],
+  artifacts: [{ field: 'path', artifactType: 'app-log', artifactId: 'artifact-network-log' }],
+};
+
+test('network view is registered', () => {
+  expect(typeof networkView).toBe('function');
+});
+
+test('network digest keeps the whole dump + every entry identity, dropping only payload material', () => {
+  const digest = networkView!(NETWORK_DATA, 'digest');
+  // Top-level dump is preserved verbatim.
+  for (const key of [
+    'path',
+    'exists',
+    'active',
+    'state',
+    'backend',
+    'include',
+    'scannedLines',
+    'matchedLines',
+    'limits',
+    'notes',
+    'warnings',
+    'artifacts',
+  ] as const) {
+    expect(digest[key]).toEqual(NETWORK_DATA[key]);
+  }
+  const entries = digest.entries as Record<string, unknown>[];
+  // No entry is dropped or reordered.
+  expect(entries).toHaveLength(2);
+  // The failed request stays fully diagnosable.
+  expect(entries[0]).toEqual({
+    method: 'POST',
+    url: 'https://api.example.test/checkout/1',
+    status: 503,
+    timestamp: '2026-07-02T12:00:00.000Z',
+    durationMs: 120,
+    packetId: 'packet-1',
+    line: 3900,
+    metadata: { requestId: 'request-1' },
+  });
+  // Verbose payload material is gone from every entry.
+  for (const entry of entries) {
+    for (const dropped of [
+      'headers',
+      'requestHeaders',
+      'responseHeaders',
+      'requestBody',
+      'responseBody',
+      'raw',
+    ]) {
+      expect(dropped in entry).toBe(false);
+    }
+  }
+});
+
+test('network default and full return today’s shape unchanged (same reference)', () => {
+  expect(networkView!(NETWORK_DATA, 'default')).toBe(NETWORK_DATA);
+  expect(networkView!(NETWORK_DATA, 'full')).toBe(NETWORK_DATA);
+});
+
+test('network digest tolerates a missing/empty entries list', () => {
+  const empty: DaemonResponseData = { path: '/tmp/app.log', exists: false };
+  expect(networkView!(empty, 'digest')).toBe(empty);
+  const emptyList: DaemonResponseData = { path: '/tmp/app.log', entries: [] };
+  expect(networkView!(emptyList, 'digest')).toEqual({ path: '/tmp/app.log', entries: [] });
+});

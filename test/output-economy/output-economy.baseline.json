@@ -118,6 +118,13 @@
     "hints": 0,
     "shape": "$.active:boolean|$.backend:string|$.entries:array|$.entries[].durationMs:number|$.entries[].headers:string|$.entries[].line:number|$.entries[].method:string|$.entries[].packetId:string|$.entries[].raw:string|$.entries[].requestBody:string|$.entries[].requestHeaders.authorization:string|$.entries[].requestHeaders.content-type:string|$.entries[].requestHeaders.x-request-id:string|$.entries[].requestHeaders:object|$.entries[].responseBody:string|$.entries[].responseHeaders.content-type:string|$.entries[].responseHeaders.x-request-id:string|$.entries[].responseHeaders.x-retry-after-ms:string|$.entries[].responseHeaders:object|$.entries[].status:number|$.entries[].timestamp:string|$.entries[].url:string|$.entries[]:object|$.exists:boolean|$.include:string|$.limits.maxEntries:number|$.limits.maxPayloadChars:number|$.limits.maxScanLines:number|$.limits:object|$.matchedLines:number|$.notes:array|$.notes[]:string|$.path:string|$.scannedLines:number|$.state:string|$:object"
   },
+  "selection.network.digest.json": {
+    "bytes": 1665,
+    "lines": 1,
+    "refs": 0,
+    "hints": 0,
+    "shape": "$.active:boolean|$.backend:string|$.entries:array|$.entries[].durationMs:number|$.entries[].line:number|$.entries[].method:string|$.entries[].packetId:string|$.entries[].status:number|$.entries[].timestamp:string|$.entries[].url:string|$.entries[]:object|$.exists:boolean|$.include:string|$.limits.maxEntries:number|$.limits.maxPayloadChars:number|$.limits.maxScanLines:number|$.limits:object|$.matchedLines:number|$.notes:array|$.notes[]:string|$.path:string|$.scannedLines:number|$.state:string|$:object"
+  },
   "selection.events.default.json": {
     "bytes": 7686,
     "lines": 1,

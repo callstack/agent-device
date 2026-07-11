@@ -94,3 +94,33 @@ from those projections, `AgentDeviceCommandClient` derives the five navigation m
 
 Recommendation: #1185 should CONTINUE incrementally, one already-typed closed-contract family at a
 time, re-measuring declarations and bundle each step and stopping on any stop condition.
+
+## Digest expansion results (#1186)
+
+Added one conservative, opt-in `network` response view in `src/daemon/response-views.ts`
+(registered as `RESPONSE_VIEWS.network`). It acts ONLY at `responseLevel: 'digest'`; `default`
+and `full` return the same object reference, so the default wire shape stays byte-identical
+(Maestro `.ad` recompare safe) and live metrics remain informational.
+
+Transformation: the entire top-level dump (`path`, `exists`, `active`, `state`, `backend`,
+`include`, `scannedLines`, `matchedLines`, `limits`, `notes`, and any additive fields) is
+preserved, EVERY entry is preserved (none dropped, capped, or reordered), and only the verbose
+per-entry payload fields are removed: `headers`, `requestHeaders`, `responseHeaders`,
+`requestBody`, `responseBody`, `raw`. Each entry keeps its actionable identity — `method`, `url`,
+`status`, `timestamp`, `durationMs`, `packetId`, `line`, and any additive fields such as
+`metadata`.
+
+Measured on the deterministic `selection.network` fixture (`network ... --include all`, 8 entries):
+
+- Output bytes: 26,371 -> 1,665 (24,706 fewer / 93.7% reduction).
+- Entries preserved: 8 -> 8 (no follow-up refetch needed; identity intact).
+- Follow-up actionability: the failed POST keeps method/url/status/packetId/duration/timestamp and
+  the top-level recovery note, so the retry path is unchanged (no extra follow-up calls implied).
+- Fallback observations: 0 (routine-workflow oracle unchanged).
+- Retries: 1 (routine-workflow oracle unchanged).
+- Recovery/session fields: preserved (routine-workflow oracle unchanged).
+
+Defaults are unchanged; the digest is strictly opt-in via a non-default response level. Residual
+risk: the dropped-field set is intentionally specific to the known verbose network payload fields;
+if a backend introduces a new large per-entry field it would remain until added to the drop list
+(safe by default — unknown fields are preserved, never silently narrowed).

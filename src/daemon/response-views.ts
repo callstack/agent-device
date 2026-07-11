@@ -215,6 +215,47 @@ function readObjectRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
+// Verbose per-entry network payload fields a digest drops. Each is the raw HTTP
+// header/body material or the unparsed log line — the dominant token sink in a
+// `network ... --include all` dump. Every actionable identity field
+// (method/url/status/timestamp/durationMs/packetId/line and any additive field
+// such as `metadata`) is kept, so a failed request stays diagnosable.
+const NETWORK_DIGEST_DROPPED_ENTRY_FIELDS: readonly string[] = [
+  'headers',
+  'requestHeaders',
+  'responseHeaders',
+  'requestBody',
+  'responseBody',
+  'raw',
+];
+
+/**
+ * Token-cheap network digest (#1186). CONSERVATIVE and opt-in: it acts only at
+ * `digest` and otherwise returns the data UNCHANGED, so `default` (byte-identical
+ * wire shape) and `full` are never narrowed. It preserves the ENTIRE top-level
+ * dump — `path`, `exists`, `active`, `state`, `backend`, `include`,
+ * `scannedLines`, `matchedLines`, `limits`, `notes`, and any additive fields —
+ * and EVERY entry, dropping only the verbose per-entry payload material
+ * (headers/bodies/raw log line). Nothing is capped or reordered.
+ */
+function networkView(data: DaemonResponseData, level: ResponseLevel): DaemonResponseData {
+  if (level !== 'digest') return data;
+  const entries = data.entries;
+  if (!Array.isArray(entries)) return data;
+  return { ...data, entries: entries.map(compactNetworkEntry) };
+}
+
+function compactNetworkEntry(entry: unknown): unknown {
+  const record = readObjectRecord(entry);
+  if (!record) return entry;
+  const compact: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    if (NETWORK_DIGEST_DROPPED_ENTRY_FIELDS.includes(key)) continue;
+    compact[key] = value;
+  }
+  return compact;
+}
+
 export const RESPONSE_VIEWS: Record<string, ResponseView> = {
   snapshot: snapshotView,
   screenshot: screenshotView,
@@ -224,4 +265,5 @@ export const RESPONSE_VIEWS: Record<string, ResponseView> = {
   click: interactionDigestView,
   fill: interactionDigestView,
   longpress: interactionDigestView,
+  network: networkView,
 };

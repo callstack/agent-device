@@ -58,6 +58,9 @@ describe('deterministic output-economy baseline', () => {
     expect(actual['screenshot.digest.json']!.bytes).toBeLessThan(
       actual['screenshot.default.json']!.bytes,
     );
+    expect(actual['selection.network.digest.json']!.bytes).toBeLessThan(
+      actual['selection.network.default.json']!.bytes,
+    );
   });
 });
 
@@ -129,6 +132,43 @@ describe('actionability and reliability floors', () => {
       text: 'qa@example.com',
       warning: 'Recovered from a blocking system dialog',
     });
+  });
+
+  test('network digest preserves every entry identity, notes, and follow-up actionability', () => {
+    const digest = rendered.networkDigest;
+    const defaultEntries = (
+      rendered.samples['selection.network.default.json'] as { data: { entries: unknown[] } }
+    ).data.entries;
+    const digestEntries = digest.entries as Record<string, unknown>[];
+    // Opt-in digest drops NO entry — every observed request stays present.
+    expect(digestEntries).toHaveLength(defaultEntries.length);
+    // The failed request keeps the identity an agent needs to retry it.
+    expect(digestEntries[0]).toMatchObject({
+      method: 'POST',
+      url: 'https://api.example.test/checkout/1',
+      status: 503,
+      packetId: 'packet-1',
+      durationMs: 120,
+      timestamp: '2026-07-02T12:00:00.000Z',
+      line: 3900,
+    });
+    // Verbose payload material is the only thing removed.
+    for (const entry of digestEntries) {
+      for (const dropped of [
+        'headers',
+        'requestHeaders',
+        'responseHeaders',
+        'requestBody',
+        'responseBody',
+        'raw',
+      ]) {
+        expect(dropped in entry).toBe(false);
+      }
+    }
+    // Recovery guidance (top-level notes) survives, so the retry path is intact.
+    expect(digest.notes).toEqual([
+      'The first checkout request returned 503. Retry after the service recovery window.',
+    ]);
   });
 
   test('normalized failures keep stable identity, retryability, and next-step guidance', () => {
