@@ -1,4 +1,4 @@
-import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
+import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import {
@@ -16,7 +16,7 @@ import {
   requiredString,
 } from '../cli-grammar/common.ts';
 import type { CliReader, CommandInput, DaemonWriter } from '../cli-grammar/types.ts';
-import { REPLAY_FLAGS } from '../../cli/parser/cli-flags.ts';
+import { REPLAY_FLAGS } from '../cli-grammar/flag-groups.ts';
 
 const REPLAY_COMMAND_NAME = 'replay';
 const TEST_COMMAND_NAME = 'test';

@@ -2,7 +2,7 @@ import { runCmdStreaming } from '../../utils/exec.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { isRemoteBridgeBackend } from './remote-bridge.ts';
 import type { SessionRuntimeHints } from '../../kernel/contracts.ts';
-import type { CliFlags } from '../parser/cli-flags.ts';
+import type { CliFlags } from '../../commands/cli-grammar/flag-types.ts';
 
 const AGENT_CDP_VERSION = '1.6.1';
 export const AGENT_CDP_PACKAGE = `agent-cdp@${AGENT_CDP_VERSION}`;

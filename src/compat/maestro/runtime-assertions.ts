@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getSnapshotReferenceFrame } from '../../daemon/touch-reference-frame.ts';
-import { tryParseSelectorChain } from '../../daemon/selectors.ts';
+import { tryParseSelectorChain } from '../../selectors/index.ts';
 import type { DaemonResponse } from '../../daemon/types.ts';
 import type { DaemonFailureResponse } from '../../daemon/handlers/response.ts';
 import type { ReplayVarScope } from '../../replay/vars.ts';

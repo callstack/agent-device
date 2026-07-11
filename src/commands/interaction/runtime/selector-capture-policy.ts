@@ -1,5 +1,5 @@
-import type { IsPredicate } from '../../../utils/selector-is-predicates.ts';
-import type { SelectorChain } from '../../../utils/selectors-parse.ts';
+import type { IsPredicate } from '../../../selectors/predicates.ts';
+import type { SelectorChain } from '../../../selectors/parse.ts';
 
 export type SelectorCapturePolicyInput = {
   predicate?: IsPredicate;

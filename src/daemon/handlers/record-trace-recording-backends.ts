@@ -11,7 +11,7 @@ import {
 } from '../../recording/output-path.ts';
 import { resolveWebProvider } from '../../platforms/web/provider.ts';
 import { IOS_RUNNER_CONTAINER_BUNDLE_IDS } from '../../platforms/apple/core/runner/runner-client.ts';
-import { isWholeScreenRecordingScope } from '../../core/recording-scope.ts';
+import { isWholeScreenRecordingScope } from '../../contracts/recording-scope.ts';
 import { errorResponse } from './response.ts';
 import { startAndroidRecording, stopAndroidRecording } from './record-trace-android.ts';
 import { recoverMissingAndroidRecording } from './record-trace-android-recovery.ts';

@@ -19,6 +19,10 @@ import type { WaitCommandResult } from '../../contracts/wait.ts';
 import type { PrepareCommandResult } from '../../contracts/prepare.ts';
 import type { PushCommandResult } from '../../contracts/push.ts';
 import type { TriggerAppEventCommandResult } from '../../contracts/app-events.ts';
+import type { DoctorCommandResult } from '../../contracts/doctor.ts';
+import type { DiffSnapshotCommandResult } from '../../contracts/diff.ts';
+import type { RecordingCommandResult, TraceCommandResult } from '../../contracts/recording.ts';
+import type { ReplayCommandResult, ReplaySuiteResult } from '../../contracts/replay.ts';
 
 /**
  * The additive typed-result spine (ADR-0008, Phase 1 step 6).
@@ -59,6 +63,12 @@ export interface CommandResultMap {
   prepare: PrepareCommandResult;
   push: PushCommandResult;
   'trigger-app-event': TriggerAppEventCommandResult;
+  doctor: DoctorCommandResult;
+  diff: DiffSnapshotCommandResult;
+  replay: ReplayCommandResult;
+  test: ReplaySuiteResult;
+  record: RecordingCommandResult;
+  trace: TraceCommandResult;
 }
 
 /**

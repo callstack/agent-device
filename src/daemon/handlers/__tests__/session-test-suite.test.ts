@@ -22,13 +22,13 @@ import path from 'node:path';
 import { handleSessionCommands } from '../session.ts';
 import { SessionStore } from '../../session-store.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData } from '../../types.ts';
-import { type RequestProgressEvent, withRequestProgressSink } from '../../request-progress.ts';
+import { type RequestProgressEvent, withRequestProgressSink } from '../../../request/progress.ts';
 import {
   clearRequestCanceled,
   getRequestSignal,
   markRequestCanceled,
   registerRequestAbort,
-} from '../../request-cancel.ts';
+} from '../../../request/cancel.ts';
 import { withDeviceInventoryProvider } from '../../../core/dispatch-resolve.ts';
 import type { DeviceInfo } from '../../../kernel/device.ts';
 import { makeAndroidSession } from '../../../__tests__/test-utils/index.ts';

@@ -112,7 +112,7 @@ test('runChecks runs local checks in order and stops on the first failure', asyn
     return command.includes('lint') ? 1 : 0;
   };
   const plan = selectChecks({
-    changedFiles: ['src/daemon/selectors.ts'],
+    changedFiles: ['src/selectors/index.ts'],
     packageEntryFiles: [],
   });
   const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, { execute, cwd: '.' });
@@ -130,7 +130,7 @@ test('runChecks passes the selector change set to Vitest related', async () => {
     executed.push(command);
     return 0;
   };
-  const changedFiles = ['src/daemon/selectors.ts', 'src/daemon/selectors.test.ts'];
+  const changedFiles = ['src/selectors/index.ts', 'src/selectors/index.test.ts'];
   const plan = selectChecks({ changedFiles, packageEntryFiles: [] });
   const code = await runChecks(plan, { scripts: ALL_SCRIPTS }, ARGS, {
     execute,

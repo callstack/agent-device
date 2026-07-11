@@ -1,4 +1,5 @@
 import type { BackendSnapshotResult } from '../../../backend.ts';
+import type { DiffSnapshotCommandResult } from '../../../contracts/diff.ts';
 import type { SnapshotDiagnosticsSummary } from '../../../snapshot-diagnostics.ts';
 import type { AgentDeviceRuntime, CommandSessionRecord } from '../../../runtime-contract.ts';
 import {
@@ -13,7 +14,6 @@ import {
   buildSnapshotDiff,
   countSnapshotComparableLines,
 } from '../../../snapshot/snapshot-diff.ts';
-import type { SnapshotDiffLine, SnapshotDiffSummary } from '../../../snapshot/snapshot-diff.ts';
 import type {
   SnapshotNode,
   SnapshotState,
@@ -45,13 +45,7 @@ export type SnapshotCommandResult = {
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
 } & PublicSnapshotCaptureAnnotations;
 
-export type DiffSnapshotCommandResult = {
-  mode: 'snapshot';
-  baselineInitialized: boolean;
-  summary: SnapshotDiffSummary;
-  lines: SnapshotDiffLine[];
-  warnings?: string[];
-};
+export type { DiffSnapshotCommandResult } from '../../../contracts/diff.ts';
 
 type SnapshotCapture = {
   snapshot: SnapshotState;

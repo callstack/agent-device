@@ -1,8 +1,8 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { SettingsUpdateOptions } from '../../client/client-types.ts';
-import { SETTINGS_USAGE_OVERRIDE } from '../../core/settings-contract.ts';
-import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
-import type { CliFlags } from '../../cli/parser/cli-flags.ts';
+import { SETTINGS_USAGE_OVERRIDE } from '../../contracts/settings-contract.ts';
+import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
+import type { CliFlags } from '../cli-grammar/flag-types.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { readLocationCoordinate } from '../../utils/location-coordinates.ts';
 import { defineExecutableCommand } from '../command-contract.ts';

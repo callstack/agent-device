@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import type { CliFlags } from '../../cli/parser/cli-flags.ts';
+import type { CliFlags } from '../cli-grammar/flag-types.ts';
 import {
   audioCliReader,
   audioCommandDefinition,

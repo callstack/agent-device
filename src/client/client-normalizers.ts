@@ -1,15 +1,9 @@
-import type { CommandFlags } from '../core/dispatch.ts';
-import { screenshotFlagsFromOptions } from '../contracts/screenshot.ts';
 import type { DaemonRequest, SessionRuntimeHints } from '../daemon/types.ts';
 import { AppError, type NormalizedError } from '../kernel/errors.ts';
 import type { SnapshotNode } from '../kernel/snapshot.ts';
-import { buildAppIdentifiers, buildDeviceIdentifiers } from './client-shared.ts';
+import { buildAppIdentifiers, buildDeviceIdentifiers } from '../contracts/result-serialization.ts';
 import { isAppleOs, isApplePlatform, isPublicPlatform, type AppleOS } from '../kernel/device.ts';
-import {
-  leaseScopeFromOptions,
-  leaseScopeToCommandFlags,
-  leaseScopeToRequestMeta,
-} from '../core/lease-scope.ts';
+import { leaseScopeFromOptions, leaseScopeToRequestMeta } from '../core/lease-scope.ts';
 import type {
   AgentDeviceDevice,
   AgentDeviceSession,
@@ -273,104 +267,6 @@ function normalizeTargetShutdownError(value: unknown): NormalizedError | undefin
 export function readSnapshotNodes(value: unknown): SnapshotNode[] {
   // Snapshot nodes are produced by the daemon snapshot pipeline and treated as trusted here.
   return Array.isArray(value) ? (value as SnapshotNode[]) : [];
-}
-
-export function buildFlags(options: InternalRequestOptions): CommandFlags {
-  const leaseScope = leaseScopeFromOptions(options);
-  return stripUndefined({
-    stateDir: options.stateDir,
-    daemonBaseUrl: options.daemonBaseUrl,
-    daemonAuthToken: options.daemonAuthToken,
-    daemonTransport: options.daemonTransport,
-    daemonServerMode: options.daemonServerMode,
-    ...leaseScopeToCommandFlags(leaseScope),
-    provider: options.provider,
-    providerSessionId: options.providerSessionId,
-    providerApp: options.providerApp,
-    providerOsVersion: options.providerOsVersion,
-    providerProject: options.providerProject,
-    providerBuild: options.providerBuild,
-    providerSessionName: options.providerSessionName,
-    awsProjectArn: options.awsProjectArn,
-    awsDeviceArn: options.awsDeviceArn,
-    awsAppArn: options.awsAppArn,
-    awsRegion: options.awsRegion,
-    awsInteractionMode: options.awsInteractionMode,
-    sessionIsolation: options.sessionIsolation,
-    platform: options.platform,
-    target: options.target,
-    device: options.device,
-    udid: options.udid,
-    serial: options.serial,
-    iosSimulatorDeviceSet: options.iosSimulatorDeviceSet,
-    iosXctestrunFile: options.iosXctestrunFile,
-    iosXctestDerivedDataPath: options.iosXctestDerivedDataPath,
-    iosXctestEnvDir: options.iosXctestEnvDir,
-    androidDeviceAllowlist: options.androidDeviceAllowlist,
-    surface: options.surface,
-    activity: options.activity,
-    launchConsole: options.launchConsole,
-    launchArgs: options.launchArgs,
-    relaunch: options.relaunch,
-    shutdown: options.shutdown,
-    saveScript: options.saveScript,
-    deviceHub: options.deviceHub,
-    testIme: options.testIme,
-    noRecord: options.noRecord,
-    backMode: options.backMode,
-    metroHost: options.metroHost,
-    metroPort: options.metroPort,
-    bundleUrl: options.bundleUrl,
-    launchUrl: options.launchUrl,
-    snapshotInteractiveOnly: options.interactiveOnly,
-    snapshotDepth: options.depth,
-    snapshotScope: options.scope,
-    snapshotRaw: options.raw,
-    snapshotForceFull: options.forceFull,
-    ...screenshotFlagsFromOptions(options),
-    appsFilter: options.appsFilter,
-    kind: options.kind,
-    out: options.out,
-    count: options.count,
-    fps: options.fps,
-    screenshotMaxSize: options.maxSize,
-    quality: options.quality,
-    hideTouches: options.hideTouches,
-    recordingScope: options.recordingScope,
-    intervalMs: options.intervalMs,
-    delayMs: options.delayMs,
-    durationMs: options.durationMs,
-    holdMs: options.holdMs,
-    jitterPx: options.jitterPx,
-    pixels: options.pixels,
-    doubleTap: options.doubleTap,
-    verify: options.verify,
-    settle: options.settle,
-    settleQuietMs: options.settleQuietMs,
-    clickButton: options.clickButton,
-    pauseMs: options.pauseMs,
-    pattern: options.pattern,
-    headless: options.headless,
-    restart: options.restart,
-    replayUpdate: options.replayUpdate,
-    replayBackend: options.replayBackend,
-    replayEnv: options.replayEnv,
-    replayShellEnv: options.replayShellEnv,
-    failFast: options.failFast,
-    timeoutMs: options.timeoutMs,
-    retries: options.retries,
-    recordVideo: options.recordVideo,
-    artifactsDir: options.artifactsDir,
-    shardAll: options.shardAll,
-    shardSplit: options.shardSplit,
-    findFirst: options.findFirst,
-    findLast: options.findLast,
-    networkInclude: options.networkInclude,
-    batchOnError: options.batchOnError,
-    batchMaxSteps: options.batchMaxSteps,
-    batchSteps: options.batchSteps,
-    verbose: options.debug,
-  }) as CommandFlags;
 }
 
 export function buildMeta(options: InternalRequestOptions): DaemonRequest['meta'] {

@@ -1,8 +1,8 @@
 import type { RecordOptions } from '../../client/client-types.ts';
 import { RECORDING_EXPORT_QUALITIES } from '../../core/recording-export-quality.ts';
-import { RECORDING_SCOPE_VALUES } from '../../core/recording-scope.ts';
+import { RECORDING_SCOPE_VALUES } from '../../contracts/recording-scope.ts';
 import { AppError } from '../../kernel/errors.ts';
-import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
+import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import {

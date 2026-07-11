@@ -139,7 +139,7 @@ import {
 } from '../../../platforms/apple/core/apps.ts';
 import { runAppLogDoctor, startAppLog, stopAppLog } from '../../app-log.ts';
 import { defaultInstallOps, defaultReinstallOps } from '../session-deploy.ts';
-import { clearRequestCanceled, markRequestCanceled } from '../../request-cancel.ts';
+import { clearRequestCanceled, markRequestCanceled } from '../../../request/cancel.ts';
 
 export {
   fs,

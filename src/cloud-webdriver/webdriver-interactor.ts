@@ -4,13 +4,13 @@ import type {
   SnapshotOptions,
   SnapshotResult,
 } from '../core/interactor-types.ts';
-import type { BackMode } from '../core/back-mode.ts';
-import type { DeviceRotation } from '../core/device-rotation.ts';
-import type { ScrollDirection, TransformGestureParams } from '../core/scroll-gesture.ts';
-import type { TvRemoteButton } from '../core/tv-remote.ts';
+import type { BackMode } from '../contracts/back-mode.ts';
+import type { DeviceRotation } from '../contracts/device-rotation.ts';
+import type { ScrollDirection, TransformGestureParams } from '../contracts/scroll-gesture.ts';
+import type { TvRemoteButton } from '../contracts/tv-remote.ts';
 import type { SettingOptions } from '../platforms/permission-utils.ts';
 import { AppError } from '../kernel/errors.ts';
-import { buildScrollGesturePlan } from '../core/scroll-gesture.ts';
+import { buildScrollGesturePlan } from '../contracts/scroll-gesture.ts';
 import {
   capabilitySupported,
   unsupportedCapabilityMessage,

@@ -7,11 +7,17 @@ import {
   createAgentDeviceClient,
   type AgentDeviceClient,
   type AgentDeviceClientConfig,
+  type DiffSnapshotCommandResult,
+  type DoctorCommandResult,
   type PrepareCommandResult,
   type PushCommandResult,
+  type RecordingCommandResult,
+  type ReplayCommandResult,
+  type ReplaySuiteResult,
+  type TraceCommandResult,
   type TriggerAppEventCommandResult,
   type WaitCommandResult,
-} from '../client/client.ts';
+} from '../agent-device-client.ts';
 import { runCommand } from '../commands/command-surface.ts';
 import type { CommandResult } from '../core/command-descriptor/command-result.ts';
 import type { DaemonRequest, DaemonResponse, DaemonResponseData } from '../kernel/contracts.ts';
@@ -113,10 +119,46 @@ test('client exposes narrowed result types for closed daemon projections', async
     Awaited<ReturnType<AgentDeviceClient['command']['wait']>>,
     CommandResult<'wait'>
   > = true;
+  const doctorType: Equal<
+    Awaited<ReturnType<AgentDeviceClient['command']['doctor']>>,
+    DoctorCommandResult
+  > = true;
+  const diffType: Equal<
+    Awaited<ReturnType<AgentDeviceClient['capture']['diff']>>,
+    DiffSnapshotCommandResult
+  > = true;
+  const replayType: Equal<
+    Awaited<ReturnType<AgentDeviceClient['replay']['run']>>,
+    ReplayCommandResult
+  > = true;
+  const replayTestType: Equal<
+    Awaited<ReturnType<AgentDeviceClient['replay']['test']>>,
+    ReplaySuiteResult
+  > = true;
+  const recordType: Equal<
+    Awaited<ReturnType<AgentDeviceClient['recording']['record']>>,
+    RecordingCommandResult
+  > = true;
+  const traceType: Equal<
+    Awaited<ReturnType<AgentDeviceClient['recording']['trace']>>,
+    TraceCommandResult
+  > = true;
 
   assert.deepEqual(
-    [waitType, prepareType, pushType, triggerType, clientWaitType],
-    [true, true, true, true, true],
+    [
+      waitType,
+      prepareType,
+      pushType,
+      triggerType,
+      clientWaitType,
+      doctorType,
+      diffType,
+      replayType,
+      replayTestType,
+      recordType,
+      traceType,
+    ],
+    [true, true, true, true, true, true, true, true, true, true, true],
   );
   assert.deepEqual(waitResult, { waitedMs: 25, text: 'Ready' });
   assert.equal(prepareResult.timing.additiveParts.connectAfterBuildMs, 10);

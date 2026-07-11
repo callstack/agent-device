@@ -14,7 +14,7 @@ import {
   resolveSelectorChain,
   tryParseSelectorChain,
   type Selector,
-} from '../selectors.ts';
+} from '../../selectors/index.ts';
 import { collectReplaySelectorCandidates } from './session-replay-heal.ts';
 import { formatDivergenceActionLabel, isTouchTargetCommand } from '../../replay/script-utils.ts';
 import { SessionStore } from '../session-store.ts';

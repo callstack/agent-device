@@ -5,7 +5,7 @@ import {
 } from '../../client/client-react-devtools-companion.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { isRemoteBridgeBackend } from './remote-bridge.ts';
-import type { CliFlags } from '../parser/cli-flags.ts';
+import type { CliFlags } from '../../commands/cli-grammar/flag-types.ts';
 
 const AGENT_REACT_DEVTOOLS_VERSION = '0.4.0';
 export const AGENT_REACT_DEVTOOLS_PACKAGE = `agent-react-devtools@${AGENT_REACT_DEVTOOLS_VERSION}`;

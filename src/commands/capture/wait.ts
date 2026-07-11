@@ -1,9 +1,10 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { WaitCommandOptions } from '../../client/client-types.ts';
 import { parseWaitPositionals } from '../../core/wait-positionals.ts';
-import { SELECTOR_SNAPSHOT_FLAGS, type CliFlags } from '../../cli/parser/cli-flags.ts';
+import { SELECTOR_SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
+import { type CliFlags } from '../cli-grammar/flag-types.ts';
 import { AppError } from '../../kernel/errors.ts';
-import { tryParseSelectorChain } from '../../utils/selectors-parse.ts';
+import { tryParseSelectorChain } from '../../selectors/parse.ts';
 import {
   booleanField,
   enumField,

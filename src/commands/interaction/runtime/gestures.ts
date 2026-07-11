@@ -7,12 +7,12 @@ import {
   type GestureReferenceFrame,
   type ScrollDirection,
   type SwipePreset,
-} from '../../../core/scroll-gesture.ts';
+} from '../../../contracts/scroll-gesture.ts';
 import {
   assertExclusiveScrollDistanceInputs,
   honoredScrollDurationMs,
   normalizeScrollDurationMs,
-} from '../../../core/scroll-command.ts';
+} from '../../../contracts/scroll-command.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { requireIntInRange } from '../../../utils/validation.ts';
 import { successText } from '../../../utils/success-text.ts';

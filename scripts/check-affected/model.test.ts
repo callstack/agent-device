@@ -19,7 +19,7 @@ function ids(changedFiles: string[]): CheckId[] {
 }
 
 test('production source selects static/build gates and delegates tests to Vitest', () => {
-  const result = plan(['src/daemon/selectors.ts']);
+  const result = plan(['src/selectors/index.ts']);
   assert.equal(result.failOpen, false);
   for (const id of [
     'format',
@@ -139,7 +139,7 @@ test('workflow/tooling and selector-owning changes fail open', () => {
 });
 
 test('a fail-open path in a mixed changeset forces the full set', () => {
-  const result = plan(['src/daemon/selectors.ts', 'bin/agent-device.mjs']);
+  const result = plan(['src/selectors/index.ts', 'bin/agent-device.mjs']);
   assert.equal(result.failOpen, true);
   assert.deepEqual(result.checks, [...ALL_CHECKS]);
 });

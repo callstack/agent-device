@@ -2,9 +2,11 @@ import { registerPlatformPlugin, type PlatformPlugin } from '../platform-plugin/
 import { applePlugin } from '../../platforms/apple/plugin.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { isAudioProbeSupportedDevice } from '../../kernel/audio-probe-support.ts';
-import { WEB_DESKTOP_DEVICE } from '../platform-inventory.ts';
+import {
+  WEB_DESKTOP_DEVICE,
+  type DeviceInventoryRequest,
+} from '../../contracts/device-inventory.ts';
 import type { Platform, DeviceInfo } from '../../kernel/device.ts';
-import type { DeviceInventoryRequest } from '../platform-inventory.ts';
 
 // The builtin-plugin wiring lives at the interactor seam (src/core/interactors/) —
 // the one place R3 (see scripts/layering/check.ts) permits a STATIC value import of

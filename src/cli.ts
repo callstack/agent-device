@@ -12,7 +12,7 @@ import {
   createAgentDeviceClient,
   type AgentDeviceClientConfig,
   type AgentDeviceDaemonTransport,
-} from './client/client.ts';
+} from './agent-device-client.ts';
 import { materializeRemoteConnectionForCommand } from './cli/commands/connection-runtime.ts';
 import { tryRunClientBackedCommand } from './cli/commands/router.ts';
 import { runAgentCdpCommand } from './cli/commands/agent-cdp.ts';
@@ -35,7 +35,7 @@ import {
   type RemoteConnectionRequestMetadata,
 } from './remote/remote-connection-state.ts';
 import { resolveRemoteAuthForCli } from './cli/auth-session.ts';
-import type { CliFlags, FlagKey } from './cli/parser/cli-flags.ts';
+import type { CliFlags, FlagKey } from './commands/cli-grammar/flag-types.ts';
 import type { SessionRuntimeHints } from './kernel/contracts.ts';
 import { isKnownCliCommandName } from './command-catalog.ts';
 

@@ -1,9 +1,9 @@
-import type { CommandRequestResult } from '../../client/client.ts';
+import type { CommandRequestResult } from '../../agent-device-client.ts';
 import { runCliCommandWithOutput } from '../../commands/cli-runner.ts';
 import type { CommandName } from '../../commands/command-metadata.ts';
 import type { CliOutput } from '../../commands/command-contract.ts';
 import type { ReplaySuiteResult } from '../../daemon/types.ts';
-import type { CliFlags } from '../parser/cli-flags.ts';
+import type { CliFlags } from '../../commands/cli-grammar/flag-types.ts';
 import { readCommandMessage } from '../../utils/success-text.ts';
 import { isNonDefaultResponseLevel } from '../../kernel/contracts.ts';
 import { writeCommandOutput } from './shared.ts';

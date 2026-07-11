@@ -9,11 +9,11 @@ import {
   markRequestCanceled,
   registerRequestAbort,
   resolveRequestTrackingId,
-} from '../request-cancel.ts';
+} from '../../request/cancel.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import { consumeTextLines } from '../../utils/line-stream.ts';
 import { sleep } from '../../utils/timeouts.ts';
-import { withRequestProgressSink } from '../request-progress.ts';
+import { withRequestProgressSink } from '../../request/progress.ts';
 import {
   serializeDaemonProgressEnvelope,
   serializeDaemonResponseEnvelope,

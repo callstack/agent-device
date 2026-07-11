@@ -1,5 +1,5 @@
 import type { RemoteConfigMetroOptions } from '../../remote/remote-config-schema.ts';
-import type { CliFlags } from '../parser/cli-flags.ts';
+import type { CliFlags } from '../../commands/cli-grammar/flag-types.ts';
 
 export function readMetroProfileFields(flags: CliFlags): RemoteConfigMetroOptions {
   return {

@@ -9,7 +9,7 @@ import {
   runCmdBackground,
   type ExecBackgroundResult,
 } from '../../../../utils/exec.ts';
-import type { SessionSurface } from '../../../../core/session-surface.ts';
+import type { SessionSurface } from '../../../../contracts/session-surface.ts';
 import {
   hasScopedAppleToolProvider,
   resolveAppleToolProvider,

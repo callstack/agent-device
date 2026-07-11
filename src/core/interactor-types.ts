@@ -1,9 +1,9 @@
-import type { BackMode } from './back-mode.ts';
-import type { DeviceRotation } from './device-rotation.ts';
-import type { ScrollDirection, TransformGestureParams } from './scroll-gesture.ts';
-import type { TvRemoteButton } from './tv-remote.ts';
+import type { BackMode } from '../contracts/back-mode.ts';
+import type { DeviceRotation } from '../contracts/device-rotation.ts';
+import type { ScrollDirection, TransformGestureParams } from '../contracts/scroll-gesture.ts';
+import type { TvRemoteButton } from '../contracts/tv-remote.ts';
 import type { SettingOptions } from '../platforms/permission-utils.ts';
-import type { SessionSurface } from './session-surface.ts';
+import type { SessionSurface } from '../contracts/session-surface.ts';
 import type { BackendSnapshotResult } from '../backend.ts';
 import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
 import type {

@@ -1,4 +1,4 @@
-import { serializeSnapshotResult } from '../../client/client-shared.ts';
+import { serializeSnapshotResult } from '../../contracts/result-serialization.ts';
 import type { CaptureSnapshotResult } from '../../client/client-types.ts';
 import { dedupeInheritedSnapshotLabels } from '../../snapshot/snapshot-label-dedup.ts';
 import { formatSnapshotText } from '../../utils/output.ts';

@@ -1,6 +1,6 @@
 import type { FileOutputRef } from '../io.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../runtime-contract.ts';
-import type { SessionSurface } from '../core/session-surface.ts';
+import type { SessionSurface } from '../contracts/session-surface.ts';
 
 export type CommandResult = Record<string, unknown>;
 

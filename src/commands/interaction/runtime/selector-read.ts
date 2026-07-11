@@ -3,7 +3,7 @@ import {
   parseFindSelectorExpression,
   type FindAction,
   type FindLocator,
-} from '../../../utils/finders.ts';
+} from '../../../selectors/find.ts';
 import type { SnapshotNode } from '../../../kernel/snapshot.ts';
 import { findNodeByRef, normalizeRef } from '../../../kernel/snapshot.ts';
 import {
@@ -12,19 +12,19 @@ import {
 } from '../../../snapshot/snapshot-quality.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { AppError } from '../../../kernel/errors.ts';
-import { parseSelectorChain, type SelectorChain } from '../../../utils/selectors-parse.ts';
+import { parseSelectorChain, type SelectorChain } from '../../../selectors/parse.ts';
 import {
   findSelectorChainMatch,
   formatSelectorFailure,
   resolveSelectorChain,
   selectorFailureHint,
-} from '../../../daemon/selectors.ts';
-import { buildSelectorChainForNode } from '../../../utils/selector-build.ts';
+} from '../../../selectors/index.ts';
+import { buildSelectorChainForNode } from '../../../selectors/build.ts';
 import {
   evaluateIsPredicate,
   isSupportedPredicate,
   IS_PREDICATE_REQUIRED_MESSAGE,
-} from '../../../utils/selector-is-predicates.ts';
+} from '../../../selectors/predicates.ts';
 import type {
   ElementTarget,
   RefTarget,

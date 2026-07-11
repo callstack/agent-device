@@ -5,9 +5,9 @@ import {
 import {
   countDeviceInventoryByGroup,
   LOCAL_DEVICE_INVENTORY_PLATFORM_SELECTORS,
-  type DeviceInventoryRequest,
   type DeviceInventoryGroup,
-} from '../../core/platform-inventory.ts';
+  type DeviceInventoryRequest,
+} from '../../contracts/device-inventory.ts';
 import {
   matchesDeviceSelector,
   publicPlatformString,

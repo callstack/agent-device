@@ -1,4 +1,4 @@
-import type { RequestProgressEvent } from '../../../daemon/request-progress.ts';
+import type { RequestProgressEvent } from '../../../request/progress.ts';
 import type { ReplayTestReporterProgressEvent } from './types.ts';
 
 export function toReplayTestReporterProgressEvent(

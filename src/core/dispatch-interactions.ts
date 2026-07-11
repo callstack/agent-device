@@ -19,13 +19,13 @@ import {
   type SwipePattern,
   type SwipePreset,
   type TransformGestureParams,
-} from './scroll-gesture.ts';
+} from '../contracts/scroll-gesture.ts';
 import {
   assertExclusiveScrollDistanceInputs,
   honoredScrollDurationMs,
   normalizeScrollDurationMs,
   type ScrollCommandOptions,
-} from './scroll-command.ts';
+} from '../contracts/scroll-command.ts';
 import { isStringMember, parseStringMember } from '../utils/string-enum.ts';
 import {
   getClickButtonValidationError,

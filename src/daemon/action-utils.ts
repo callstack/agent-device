@@ -21,14 +21,3 @@ export function inferFillText(action: SessionAction): string {
   }
   return positionals.slice(1).join(' ').trim();
 }
-
-export function uniqueStrings(values: string[]): string[] {
-  const seen = new Set<string>();
-  const output: string[] = [];
-  for (const value of values) {
-    if (seen.has(value)) continue;
-    seen.add(value);
-    output.push(value);
-  }
-  return output;
-}

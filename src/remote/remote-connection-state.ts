@@ -4,7 +4,7 @@ import path from 'node:path';
 import { resolveRemoteConfigPath, resolveRemoteConfigProfile } from './remote-config-core.ts';
 import { AppError } from '../kernel/errors.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
-import type { CliFlags } from '../cli/parser/cli-flags.ts';
+import type { CliFlags } from '../commands/cli-grammar/flag-types.ts';
 import type { LeaseBackend, SessionRuntimeHints } from '../kernel/contracts.ts';
 import {
   leaseScopeFromOptions,

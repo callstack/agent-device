@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import type { RemoteConfigProfile } from '../../remote/remote-config-schema.ts';
 import { AppError } from '../../kernel/errors.ts';
-import type { CliFlags } from '../parser/cli-flags.ts';
+import type { CliFlags } from '../../commands/cli-grammar/flag-types.ts';
 import type { EnvMap } from '../../utils/env-map.ts';
 import { readMetroProfileFields } from './profile-fields.ts';
 import { persistAndResolveGeneratedProfile } from './generated-config.ts';

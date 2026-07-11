@@ -20,6 +20,10 @@ import type { WaitCommandResult } from '../../../contracts/wait.ts';
 import type { PrepareCommandResult } from '../../../contracts/prepare.ts';
 import type { PushCommandResult } from '../../../contracts/push.ts';
 import type { TriggerAppEventCommandResult } from '../../../contracts/app-events.ts';
+import type { DoctorCommandResult } from '../../../contracts/doctor.ts';
+import type { DiffSnapshotCommandResult } from '../../../contracts/diff.ts';
+import type { RecordingCommandResult, TraceCommandResult } from '../../../contracts/recording.ts';
+import type { ReplayCommandResult, ReplaySuiteResult } from '../../../contracts/replay.ts';
 import type { CommandResult, CommandResultMap } from '../command-result.ts';
 
 /**
@@ -54,6 +58,12 @@ test('seeded CommandResult entries resolve to their existing contract result typ
     CommandResult<'trigger-app-event'>,
     TriggerAppEventCommandResult
   > = true;
+  const doctor: Equal<CommandResult<'doctor'>, DoctorCommandResult> = true;
+  const diff: Equal<CommandResult<'diff'>, DiffSnapshotCommandResult> = true;
+  const replay: Equal<CommandResult<'replay'>, ReplayCommandResult> = true;
+  const replayTest: Equal<CommandResult<'test'>, ReplaySuiteResult> = true;
+  const record: Equal<CommandResult<'record'>, RecordingCommandResult> = true;
+  const trace: Equal<CommandResult<'trace'>, TraceCommandResult> = true;
   expect([
     press,
     click,
@@ -74,7 +84,19 @@ test('seeded CommandResult entries resolve to their existing contract result typ
     prepare,
     push,
     triggerAppEvent,
+    doctor,
+    diff,
+    replay,
+    replayTest,
+    record,
+    trace,
   ]).toEqual([
+    true,
+    true,
+    true,
+    true,
+    true,
+    true,
     true,
     true,
     true,
@@ -126,6 +148,12 @@ test('CommandResultMap is seeded only from already-existing contract result type
     | 'prepare'
     | 'push'
     | 'trigger-app-event'
+    | 'doctor'
+    | 'diff'
+    | 'replay'
+    | 'test'
+    | 'record'
+    | 'trace'
   > = true;
   expect(keys).toBe(true);
 });

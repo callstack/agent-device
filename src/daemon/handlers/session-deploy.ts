@@ -5,7 +5,7 @@ import { isIosFamily, type DeviceInfo } from '../../kernel/device.ts';
 import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { recordSessionAction } from './handler-utils.ts';
-import { resolveDeployResultTarget } from '../../client/client-shared.ts';
+import { resolveDeployResultTarget } from '../../contracts/result-serialization.ts';
 import { withSuccessText } from '../../utils/success-text.ts';
 import { requireSessionOrExplicitSelector, resolveCommandDevice } from './session-device-utils.ts';
 import { errorResponse, requireCommandSupported } from './response.ts';

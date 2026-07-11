@@ -1,6 +1,6 @@
 import { afterEach, expect, test, vi } from 'vitest';
 import type { DaemonResponse } from '../../types.ts';
-import { isRequestCanceled } from '../../request-cancel.ts';
+import { isRequestCanceled } from '../../../request/cancel.ts';
 import { runReplayTestAttempt } from '../session-test-runtime.ts';
 
 afterEach(() => {

@@ -5,7 +5,7 @@ import type {
   MetroReloadResult,
 } from '../../client/client-types.ts';
 import { AppError } from '../../kernel/errors.ts';
-import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
+import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import {
   booleanField,
   enumField,
@@ -19,7 +19,7 @@ import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/typ
 import { defineExecutableCommand } from '../command-contract.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import type { CliReader } from '../cli-grammar/types.ts';
-import { METRO_PREPARE_FLAGS, METRO_RELOAD_FLAGS } from '../../cli/parser/cli-flags.ts';
+import { METRO_PREPARE_FLAGS, METRO_RELOAD_FLAGS } from '../cli-grammar/flag-groups.ts';
 import { metroCliOutputFormatters } from './output.ts';
 import { readMetroPrepareKind } from './prepare-kind.ts';
 

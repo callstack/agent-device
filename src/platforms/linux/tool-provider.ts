@@ -9,7 +9,7 @@ import type {
   LinuxSnapshotSurface,
   LinuxTraversalOptions,
 } from './accessibility-types.ts';
-import type { ScrollDirection } from '../../core/scroll-gesture.ts';
+import type { ScrollDirection } from '../../contracts/scroll-gesture.ts';
 
 export type LinuxToolCommandExecutor = (
   cmd: string,

@@ -11,7 +11,7 @@ import {
 import { LINUX_DEVICE } from '../../__tests__/test-utils/device-fixtures.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
-import { clearRequestCanceled, markRequestCanceled } from '../request-cancel.ts';
+import { clearRequestCanceled, markRequestCanceled } from '../../request/cancel.ts';
 import {
   createRequestExecutionScope,
   prepareLockedRequestScope,

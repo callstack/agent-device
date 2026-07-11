@@ -5,7 +5,7 @@ import type { RecordingBackendTag } from '../../daemon/handlers/record-trace-rec
 import type { PerfMetricsSamplerTag } from '../../daemon/handlers/session-perf.ts';
 import type { PlatformGatedProviderResolverKey } from '../../daemon/request-platform-providers.ts';
 import type { Interactor, RunnerContext } from '../interactor-types.ts';
-import type { DeviceInventoryRequest } from '../platform-inventory.ts';
+import type { DeviceInventoryRequest } from '../../contracts/device-inventory.ts';
 import type { CapabilityBucket } from '../platform-descriptor/types.ts';
 
 /**

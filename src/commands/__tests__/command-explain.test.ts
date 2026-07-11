@@ -89,7 +89,7 @@ describe('explainCommand', () => {
         cli: { usage: 'web setup | web doctor' },
         files: expect.arrayContaining([
           'src/core/command-descriptor/registry.ts',
-          'src/utils/cli-command-overrides.ts',
+          'src/cli-schema/command-overrides.ts',
           'src/cli/commands/web.ts',
         ]),
       },

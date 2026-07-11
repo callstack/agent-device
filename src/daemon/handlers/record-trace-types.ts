@@ -9,7 +9,7 @@ import type {
 } from '../../recording/overlay.ts';
 import type { RecordingGestureEvent } from '../types.ts';
 import type { RecordingExportQuality } from '../../core/recording-export-quality.ts';
-import type { RecordingScope } from '../../core/recording-scope.ts';
+import type { RecordingScope } from '../../contracts/recording-scope.ts';
 
 export type RecordTraceDeps = {
   runCmd: typeof runCmd;

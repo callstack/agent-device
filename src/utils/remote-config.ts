@@ -1,4 +1,4 @@
-import type { CliFlags } from '../cli/parser/cli-flags.ts';
+import type { CliFlags } from '../commands/cli-grammar/flag-types.ts';
 import {
   REMOTE_CONFIG_FIELD_SPECS,
   type RemoteConfigProfile,

@@ -17,13 +17,13 @@ import type {
   TransformGestureOptions,
   TypeTextOptions,
 } from '../../client/client-types.ts';
-import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
+import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import {
   REPEATED_TOUCH_FLAGS,
   SELECTOR_SNAPSHOT_FLAGS,
   SETTLE_FLAGS,
-  type FlagKey,
-} from '../../cli/parser/cli-flags.ts';
+} from '../cli-grammar/flag-groups.ts';
+import { type FlagKey } from '../cli-grammar/flag-types.ts';
 import {
   commandSupportsSettleObservation,
   commandSupportsVerifyEvidence,

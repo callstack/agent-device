@@ -1,6 +1,9 @@
 import { isIosFamily, isMacOs, isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
-import { assertScrollGestureInput, type ScrollDirection } from '../../core/scroll-gesture.ts';
-import { normalizeScrollDurationMs, SCROLL_DURATION_MAX_MS } from '../../core/scroll-command.ts';
+import { assertScrollGestureInput, type ScrollDirection } from '../../contracts/scroll-gesture.ts';
+import {
+  normalizeScrollDurationMs,
+  SCROLL_DURATION_MAX_MS,
+} from '../../contracts/scroll-command.ts';
 import { runAppleRunnerCommand } from './core/runner/runner-client.ts';
 import {
   buildRunnerSequenceCommand,

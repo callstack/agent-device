@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { parseSelectorChain } from '../../../utils/selectors-parse.ts';
+import { parseSelectorChain } from '../../../selectors/parse.ts';
 import { deriveSelectorCapturePolicy } from './selector-capture-policy.ts';
 
 test('selector capture policy reads full snapshots for focused predicates', () => {

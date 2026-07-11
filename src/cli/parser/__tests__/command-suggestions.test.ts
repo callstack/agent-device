@@ -4,7 +4,7 @@ import { isKnownCliCommandName } from '../../../command-catalog.ts';
 import { keyboardCliReader } from '../../../commands/system/index.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { parseArgs } from '../args.ts';
-import type { CliFlags } from '../cli-flags.ts';
+import type { CliFlags } from '../../../commands/cli-grammar/flag-types.ts';
 import { listCommandAliasSuggestionEntries, suggestCommandFor } from '../command-suggestions.ts';
 
 // Guards against the curated alias map drifting to a command that no longer

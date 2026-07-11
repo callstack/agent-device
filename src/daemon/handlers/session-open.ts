@@ -1,8 +1,8 @@
 import { dispatchCommand, resolveTargetDevice } from '../../core/dispatch.ts';
-import { isDeepLinkTarget } from '../../core/open-target.ts';
-import type { SessionSurface } from '../../core/session-surface.ts';
+import { isDeepLinkTarget } from '../../contracts/open-target.ts';
+import type { SessionSurface } from '../../contracts/session-surface.ts';
 import { contextFromFlags } from '../context.ts';
-import { createRequestCanceledError, isRequestCanceled } from '../request-cancel.ts';
+import { createRequestCanceledError, isRequestCanceled } from '../../request/cancel.ts';
 import {
   prewarmIosRunnerSession,
   stopIosRunnerSession,

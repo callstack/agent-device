@@ -9,7 +9,7 @@ import { Deadline } from '../../../../utils/retry.ts';
 import { isIosFamily, isApplePlatform, type DeviceInfo } from '../../../../kernel/device.ts';
 import type { RunnerLogicalLeaseContext } from '../../../../core/runner-lease-context.ts';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
-import { emitRequestProgress } from '../../../../daemon/request-progress.ts';
+import { emitRequestProgress } from '../../../../request/progress.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../../../utils/diagnostics.ts';
 import { buildSimctlArgsForDevice } from '../simctl.ts';
 import { runAppleToolCommand, runXcrun } from '../tool-provider.ts';

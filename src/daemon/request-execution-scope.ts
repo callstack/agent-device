@@ -6,7 +6,7 @@ import {
   getDiagnosticsMeta,
   updateDiagnosticsScope,
 } from '../utils/diagnostics.ts';
-import { applyCommandDefaults } from '../utils/command-schema.ts';
+import { applyCommandDefaults } from '../cli-schema/command-schema.ts';
 import { normalizeError } from '../kernel/errors.ts';
 import type { DaemonCommandContext } from './context.ts';
 import { contextFromFlags as contextFromFlagsWithLog } from './context.ts';
@@ -23,7 +23,7 @@ import {
   resolveRequestExecutionLockKeys,
   type RequestExecutionLockKey,
 } from './request-binding.ts';
-import { throwIfRequestCanceled } from './request-cancel.ts';
+import { throwIfRequestCanceled } from '../request/cancel.ts';
 import { finalizeDaemonResponse } from './request-finalization.ts';
 import { refreshRecordingHealth } from './request-recording-health.ts';
 import {

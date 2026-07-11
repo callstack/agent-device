@@ -4,7 +4,7 @@ import {
 } from '../snapshot/mobile-snapshot-semantics.ts';
 import { AppError } from '../kernel/errors.ts';
 import { isScrollableNodeLike } from './scrollable.ts';
-import type { ScrollDirection } from '../core/scroll-gesture.ts';
+import type { ScrollDirection } from '../contracts/scroll-gesture.ts';
 import type {
   HiddenContentHint,
   Point,

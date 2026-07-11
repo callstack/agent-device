@@ -76,9 +76,10 @@ The perfect-shape refactor is complete and merged. Its end-state:
   traits, and platform dispatch command set are _derived_ by parity-tested projection. Command
   families still own surface metadata/CLI schema in `src/commands/**`, but descriptor/catalog
   coherence guards prevent surface names from drifting; system command facets now project their
-  simple Node client command methods. Public Node-client result narrowing remains a deferred typed
-  contract target ([#1153](https://github.com/callstack/agent-device/issues/1153)), separate from
-  the completed descriptor registry migration. One
+  simple Node client command methods. Closed public Node-client result contracts are narrowed
+  through `CommandResultMap`; action/backend-dependent methods remain explicitly broad until their
+  public response projections are reconciled. See
+  [Node client result types](docs/node-client-result-types.md). One
   `PlatformPlugin` per platform family (`src/core/platform-plugin/`) stops core/daemon from branching
   on platform, with the Apple plugin the first instance. See
   [ADR 0008](docs/adr/0008-command-descriptor-registry.md).
@@ -100,15 +101,13 @@ The perfect-shape refactor is complete and merged. Its end-state:
 - Agent-cost. Responses carry a cost block and MCP `outputSchema`, rendered through a leveled
   `ResponseView`.
 
-### Deferred / next-minor
+### Deferred
 
 The refactor is substantively done; these follow-ups are intentionally deferred, not lost:
 
-- Phase 2c — narrow the ~15 remaining `Record`-typed client methods in
-  `src/client/client-types.ts` to their existing typed contracts (a semver-relevant public-API
-  narrowing; not yet done).
-- Strict DAG back-edge inversion — the layering lint prevents target-spine back-edge growth, but
-  the full zero-back-edge DAG (e.g. `commands` → `cli`/`client`) is not done.
+- Dynamic Node-client results — interactions, observability, alert, React Native overlay, and
+  settings remain broad until their action/backend-specific payloads have accurate public
+  projections. See [Node client result types](docs/node-client-result-types.md).
 - Legacy alias drops — ~175 LOC of legacy aliases/barrels remain, gated to the next major.
 
 ## Selector Capture Reliability Contract

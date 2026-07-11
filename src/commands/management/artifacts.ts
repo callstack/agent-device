@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
+import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { stringField } from '../command-input.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { commonInputFromFlags, direct } from '../cli-grammar/common.ts';

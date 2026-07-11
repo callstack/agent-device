@@ -1,7 +1,7 @@
 import { ensureInputTool } from './linux-env.ts';
 import { resolveLinuxToolProvider, type LinuxPointerButton } from './tool-provider.ts';
 import { sleep } from '../../utils/timeouts.ts';
-import type { ScrollDirection } from '../../core/scroll-gesture.ts';
+import type { ScrollDirection } from '../../contracts/scroll-gesture.ts';
 
 // ── Low-level wrappers ─────────────────────────────────────────────────
 

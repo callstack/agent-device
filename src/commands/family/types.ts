@@ -1,5 +1,5 @@
 import type { AgentDeviceClient } from '../../client/client-types.ts';
-import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
+import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 import type { CommandMetadata, JsonSchema } from '../command-contract.ts';
 import type { CliOutputFormatter } from '../output-common.ts';

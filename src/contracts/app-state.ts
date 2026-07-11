@@ -1,4 +1,4 @@
-import type { SessionSurface } from '../core/session-surface.ts';
+import type { SessionSurface } from './session-surface.ts';
 
 /**
  * Closed result of the `appstate` command, grounded in the daemon handler's

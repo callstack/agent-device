@@ -3,15 +3,15 @@ import type { Point, SnapshotNode, SnapshotState } from '../../../kernel/snapsho
 import { findNodeByRef, normalizeRef } from '../../../kernel/snapshot.ts';
 import { resolveRectCenter } from '../../../utils/rect-center.ts';
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
-import { parseSelectorChain } from '../../../utils/selectors-parse.ts';
+import { parseSelectorChain } from '../../../selectors/parse.ts';
 import {
   formatSelectorFailure,
   resolveSelectorChain,
   selectorFailureHint,
   STALE_REF_HINT,
   type SelectorResolution,
-} from '../../../daemon/selectors.ts';
-import { buildSelectorChainForNode } from '../../../utils/selector-build.ts';
+} from '../../../selectors/index.ts';
+import { buildSelectorChainForNode } from '../../../selectors/build.ts';
 import {
   findNodeByLabel,
   normalizeType,

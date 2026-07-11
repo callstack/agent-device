@@ -8,11 +8,11 @@ import {
   getRequestSignal,
   markRequestCanceled,
   registerRequestAbort,
-} from '../request-cancel.ts';
+} from '../../request/cancel.ts';
 import {
   type ReplayTestActionProgressContext,
   withReplayTestActionProgress,
-} from '../request-progress.ts';
+} from '../../request/progress.ts';
 import type { DaemonResponse } from '../types.ts';
 import type { ReplayScriptMetadata } from '../../replay/script.ts';
 import type {

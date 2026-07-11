@@ -1,9 +1,9 @@
 import type { ElementSelectorKey } from '../../core/interactor-types.ts';
 import type { Rect, SnapshotNode, SnapshotState } from '../../kernel/snapshot.ts';
-import { parseSelectorChain } from '../../daemon/selectors.ts';
-import { matchesSelector } from '../../daemon/selectors-match.ts';
-import { evaluateIsPredicate } from '../../utils/selector-is-predicates.ts';
-import { normalizeText } from '../../utils/finders.ts';
+import { parseSelectorChain } from '../../selectors/index.ts';
+import { matchesSelector } from '../../selectors/match.ts';
+import { evaluateIsPredicate } from '../../selectors/predicates.ts';
+import { normalizeText } from '../../selectors/find.ts';
 import {
   buildSnapshotNodeByIndex,
   extractNodeText,
@@ -13,7 +13,7 @@ import {
 } from '../../snapshot/snapshot-processing.ts';
 import type { TouchReferenceFrame } from '../../daemon/touch-reference-frame.ts';
 import type { DaemonRequest } from '../../daemon/types.ts';
-import type { Selector, SelectorTerm } from '../../daemon/selectors-parse.ts';
+import type { Selector, SelectorTerm } from '../../selectors/arguments.ts';
 import {
   detectReactNativeOverlay,
   readReactNativeOverlayActionNodes,

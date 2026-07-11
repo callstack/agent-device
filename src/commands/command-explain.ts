@@ -1,6 +1,6 @@
 import { listCliCommandNames } from '../command-catalog.ts';
 import { cliAliasesForCommand, normalizeCliCommandAlias } from '../cli-command-aliases.ts';
-import { buildCommandUsage } from '../utils/cli-usage.ts';
+import { buildCommandUsage } from '../cli-schema/usage.ts';
 import type { DaemonCommandRoute } from '../daemon/daemon-command-registry.ts';
 import { commandDescriptors, type Command } from '../core/command-descriptor/registry.ts';
 import { ownerFilesForCommand } from '../core/command-descriptor/owner-files.ts';
@@ -13,7 +13,7 @@ import {
   type CommandSchema,
   type FlagDefinition,
   type FlagKey,
-} from '../utils/command-schema.ts';
+} from '../cli-schema/command-schema.ts';
 import { commandFamilies, type CommandFamilyMetadata } from './family/registry.ts';
 
 export type CommandFlagExplanation = {
@@ -329,7 +329,7 @@ function commandFiles(
       `src/commands/${family}/index.test.ts`,
     );
   } else if (cliCommandNames.has(command)) {
-    derived.push('src/utils/cli-command-overrides.ts');
+    derived.push('src/cli-schema/command-overrides.ts');
   }
   if (daemonRoute) derived.push(daemonRouteOwnerFiles[daemonRoute]);
   if (hasDispatch) derived.push('src/core/dispatch.ts');

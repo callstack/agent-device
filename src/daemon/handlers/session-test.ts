@@ -8,7 +8,7 @@ import type {
   ReplaySuiteTestResult,
 } from '../types.ts';
 import { resolveReplayTestArtifactsDir } from './session-test-artifacts.ts';
-import { emitRequestProgress } from '../request-progress.ts';
+import { emitRequestProgress } from '../../request/progress.ts';
 import {
   buildReplayTestInvocationId,
   discoverReplayTestEntries,
@@ -24,7 +24,7 @@ import {
   type ReplayTestShardContext,
   type ReplayTestShardPlan,
 } from './session-test-sharding.ts';
-import { isRequestCanceled } from '../request-cancel.ts';
+import { isRequestCanceled } from '../../request/cancel.ts';
 import { mergeSnapshotDiagnostics } from '../../snapshot-diagnostics.ts';
 
 type ReplayTestEntry = ReturnType<typeof discoverReplayTestEntries>[number];

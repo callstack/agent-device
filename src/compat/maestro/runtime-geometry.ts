@@ -1,4 +1,4 @@
-import { clampToRange } from '../../core/scroll-gesture.ts';
+import { clampToRange } from '../../contracts/scroll-gesture.ts';
 import { pointInsideRect } from '../../utils/rect-center.ts';
 import type { MaestroSnapshotTarget } from './runtime-targets.ts';
 

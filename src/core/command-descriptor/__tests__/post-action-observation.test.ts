@@ -2,7 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { PUBLIC_COMMANDS } from '../../../command-catalog.ts';
 import { findCommandMetadata } from '../../../commands/command-metadata.ts';
-import { getCliCommandSchema } from '../../../utils/command-schema.ts';
+import { getCliCommandSchema } from '../../../cli-schema/command-schema.ts';
 import {
   commandDescriptors,
   commandSupportsSettleObservation,

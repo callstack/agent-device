@@ -12,7 +12,7 @@ import {
 import { parseAbsolutePoint, parseMaestroPoint } from './points.ts';
 import { MAESTRO_RUNTIME_COMMAND } from './runtime-commands.ts';
 import type { MaestroParseContext } from './types.ts';
-import type { ScrollDirection } from '../../core/scroll-gesture.ts';
+import type { ScrollDirection } from '../../contracts/scroll-gesture.ts';
 
 export function convertTapOn(value: unknown, context: MaestroParseContext): SessionAction {
   if (typeof value === 'string') {

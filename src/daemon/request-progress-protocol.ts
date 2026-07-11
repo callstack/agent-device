@@ -1,5 +1,5 @@
 import type { DaemonRequest, DaemonResponse } from './types.ts';
-import type { RequestProgressEvent } from './request-progress.ts';
+import type { RequestProgressEvent } from '../request/progress.ts';
 
 export type DaemonProgressEnvelope = {
   type: 'progress';

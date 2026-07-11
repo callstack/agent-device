@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { PUBLIC_COMMANDS } from '../src/command-catalog.ts';
 import { listCommandMetadata } from '../src/commands/command-metadata.ts';
-import { getFlagDefinitions } from '../src/cli/parser/cli-flags.ts';
+import { getFlagDefinitions } from '../src/commands/cli-grammar/flag-registry.ts';
 
 const EMPTY_COVERAGE_METRIC = { pct: 0 };
 const EMPTY_STATEMENT_COVERAGE = { covered: 0, pct: 0, total: 0 };

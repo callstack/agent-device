@@ -6,7 +6,7 @@ import { AppError } from '../../../../kernel/errors.ts';
 import { runCmdStreaming, type ExecBackgroundResult } from '../../../../utils/exec.ts';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import { withKeyedLock } from '../../../../utils/keyed-lock.ts';
-import { emitRequestProgress } from '../../../../daemon/request-progress.ts';
+import { emitRequestProgress } from '../../../../request/progress.ts';
 import { findProjectRoot } from '../../../../utils/version.ts';
 import { resolveRunnerBuildFailureHint } from './runner-contract.ts';
 import { logChunk } from './runner-transport.ts';

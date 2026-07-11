@@ -5,7 +5,7 @@ import {
   isSelectorToken,
   SELECTOR_KEY_NAMES,
   splitSelectorFromArgs,
-} from '../utils/selectors-parse.ts';
+} from '../selectors/parse.ts';
 
 type PositionalInteractionTarget =
   | { x: number; y: number }

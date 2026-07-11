@@ -1,6 +1,6 @@
 import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
 import { captureAccessibilityTree, type SnapshotSurface } from './atspi-bridge.ts';
-import type { SessionSurface } from '../../core/session-surface.ts';
+import type { SessionSurface } from '../../contracts/session-surface.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 
 /**

@@ -1,6 +1,6 @@
 import type { SessionAction } from '../../daemon/types.ts';
-import { parseSelectorChain, type Selector } from '../../daemon/selectors.ts';
-import type { SelectorTerm } from '../../utils/selectors-parse.ts';
+import { parseSelectorChain, type Selector } from '../../selectors/index.ts';
+import type { SelectorTerm } from '../../selectors/parse.ts';
 import { AppError } from '../../kernel/errors.ts';
 import {
   parseReplayScriptDetailed,

@@ -72,6 +72,11 @@ Command identity, routing, capability, and request-policy traits are *derived* a
 - command names: `src/command-catalog.ts`; never re-create command string sets in handlers
 Keep `src/daemon.ts` a thin router and `src/daemon/request-router.ts` orchestration-only. New daemon handler-family commands update the daemon command registry; its tests guard the traits.
 
+Shared selector parsing, matching, resolution, and evaluation live in `src/selectors`; request
+cancellation/progress primitives live in `src/request`; cross-layer platform and command data
+contracts live in `src/contracts`. CLI grammar owns flag declarations under
+`src/commands/cli-grammar`, while cross-surface CLI schema composition lives in `src/cli-schema`.
+
 ## Toolchain Snapshot
 - Package manager: `pnpm` only. Do not add or restore `package-lock.json`.
 - Daemon state: packaged installs use `~/.agent-device`; source checkouts use worktree-scoped dirs under `~/.agent-device/dev/<basename-slug>-<hash>`. Use `pnpm daemon:state-dir` to inspect it, `--state-dir`/`AGENT_DEVICE_STATE_DIR` to override it, and `pnpm clean:daemon --prune-dev` to prune stale dev dirs. Daemons are isolated by worktree, but devices are not; target different devices/simulators for concurrent worktrees.
@@ -92,7 +97,9 @@ Keep `src/daemon.ts` a thin router and `src/daemon/request-router.ts` orchestrat
   - read `.oxlintrc.json` before treating lint output as source-level bugs
 - For files over 500 LOC, search for the relevant type/function/section first, then read a bounded range.
 - Do not run integration tests by default.
-- Keep long help prose in `src/cli/parser/cli-help.ts`, flag definitions in `src/cli/parser/cli-flags.ts`, and command-specific usage/flag metadata with the command family metadata that owns the command.
+- Keep long help prose in `src/cli/parser/cli-help.ts`, flag definitions in
+  `src/commands/cli-grammar/flag-definitions-*.ts`, and command-specific usage/flag metadata with
+  the command family metadata that owns the command.
 - If build/type errors mention declaration generation, inspect `tsconfig.lib.json` before reading platform code.
 - If lint failures appear after toolchain edits, check whether the rule is from `eslint/*`, `typescript/*`, `import/*`, or `node/*` in `.oxlintrc.json` before assuming source bugs.
 
@@ -105,7 +112,13 @@ Keep `src/daemon.ts` a thin router and `src/daemon/request-router.ts` orchestrat
 
 A new snapshot/command flag touches only the layers that need to understand it. Follow this checklist in order:
 
-1. `src/cli/parser/cli-flags.ts`: add to `CliFlags`, `FLAG_DEFINITIONS`, and the relevant exported flag group (e.g. `SNAPSHOT_FLAGS`). Then update the command family metadata/schema that exposes the flag; find the owner with `rg -n "<command>|supportedFlags|allowedFlags" src/commands src/cli/parser`. For schema-only CLI commands (`cdp`, `auth`, `connect`, `proxy`, `react-devtools`, `web`), the flag schema owner is `src/utils/cli-command-overrides.ts` (`SCHEMA_ONLY_CLI_COMMAND_SCHEMAS`).
+1. `src/contracts/cli-flags.ts`: add to `CliFlags`; add the definition to the matching
+   `src/commands/cli-grammar/flag-definitions-*.ts` owner and the relevant group in
+   `flag-groups.ts` (for example, `SNAPSHOT_FLAGS`). Then update the command family metadata/schema
+   that exposes the flag; find the owner with
+   `rg -n "<command>|supportedFlags|allowedFlags" src/commands src/cli-schema src/cli/parser`. For
+   schema-only CLI commands (`cdp`, `auth`, `connect`, `proxy`, `react-devtools`, `web`), the owner
+   is `src/cli-schema/command-overrides.ts` (`SCHEMA_ONLY_CLI_COMMAND_SCHEMAS`).
 2. `src/commands/cli-grammar/*`: read the CLI flag into command input when the CLI accepts it.
 3. `src/commands/command-projection.ts` and command-family projection helpers: write the input into the daemon request only if the flag affects daemon execution.
 4. `src/commands/*-command-contracts.ts`: add or update the command input schema only if the option should be available through Node.js or MCP as structured input.
@@ -140,8 +153,9 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
 - Apple-family target changes must keep `src/kernel/device.ts`, `src/core/capabilities.ts`, `src/core/dispatch-resolve.ts`, `src/platforms/apple/core/devices.ts`, and `src/platforms/apple/core/runner/runner-xctestrun.ts` in sync.
 - iOS simulator-set scoping is iOS-specific: do not let `iosSimulatorDeviceSet` hide the host macOS desktop target when `--platform macos` or `--target desktop` is requested.
 - If Swift runner code changes, run `pnpm build:xcuitest`.
-- Use `inferFillText` and `uniqueStrings` from `src/daemon/action-utils.ts`.
-- Use `evaluateIsPredicate` from `src/daemon/is-predicates.ts` for assertion logic.
+- Use `inferFillText` from `src/daemon/action-utils.ts` and `uniqueStrings` from
+  `src/kernel/collections.ts`.
+- Use `evaluateIsPredicate` from `src/selectors/predicates.ts` for assertion logic.
 
 ## Logs Contract
 - Logs backend/source of truth is `src/daemon/app-log.ts`.
@@ -190,10 +204,10 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
 ## Selector System Rules
 - Interaction commands (`click`, `fill`, `get`, `is`) and `wait` accept selectors and `@ref`.
 - Pipeline: **parse -> resolve -> act -> record selectorChain -> heal on replay**.
-- Keep selector parsing/matching in `src/daemon/selectors.ts`.
+- Keep selector parsing, matching, and resolution in `src/selectors/`.
 - Call `buildSelectorChainForNode` after resolving target nodes.
 - New element-targeting interactions must support selector + `@ref`, record `selectorChain`, and hook replay healing (`healReplayAction` in `session.ts` + selector helpers in `session-replay-heal.ts`).
-- New selector keys remain centralized in `selectors.ts`.
+- New selector keys remain centralized in `src/selectors/parse.ts`.
 - New `is` predicates belong in `evaluateIsPredicate`.
 - On macOS, snapshot rects are absolute in window space. Point-based runner interactions must translate through the interaction root frame; do not assume app-origin `(0,0)` coordinates.
 - Prefer selector or `@ref` interactions over raw x/y commands in tests and docs, especially on macOS where window position can vary across runs.
@@ -206,7 +220,8 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
 ## Testing Matrix
 - For code changes, run `pnpm check:affected --base origin/main --run` by default (`--json` for a machine-readable plan without execution). It delegates affected Vitest selection to `vitest related` and derives the remaining gates from repository sources of truth; GitHub CI stays authoritative. See `docs/agents/testing.md`.
 - Docs/skills only: no tests required unless a more specific rule below applies.
-- CLI help/guidance changes in `src/cli/parser/cli-help.ts`, `src/utils/cli-command-overrides.ts`, or `src/utils/command-schema.ts`: run `pnpm exec vitest run src/cli/parser/__tests__ src/utils/__tests__/command-schema-guards.test.ts`.
+- CLI help/guidance changes in `src/cli/parser/cli-help.ts` or `src/cli-schema/`: run
+  `pnpm exec vitest run src/cli/parser/__tests__ src/cli-schema/command-schema-guards.test.ts`.
 - SkillGym prompt/assertion changes: run `pnpm test:skillgym:case <case-id>`; the script builds local CLI help first. For broad validation, use `pnpm test:skillgym`; append `-- --tag fixture-smoke` or `-- --tag skill-guidance` when validating one suite group.
 - Non-TS, no behavior impact: no tests unless requested.
 - Keep tests behavioral; do not assert shapes or cases TypeScript already proves.
@@ -251,8 +266,13 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
 - Changing `tsconfig.lib.json`/build tooling without running `pnpm check:tooling`; declaration generation is stricter than a plain typecheck.
 
 ## Docs & Skills
-- Versioned CLI help is the agent-facing source of truth. Put workflow guidance/help topics in `src/cli/parser/cli-help.ts`, flags in `src/cli/parser/cli-flags.ts`, command-specific schema/help metadata with the owning command family, and assertions near the focused CLI parser/help tests.
-- Keep parser schema and help rendering separate: parser/help rendering lives in `src/cli/parser/`, while command schema metadata is derived from command metadata, command family declarations, and the schema-only merge path in `src/utils/cli-command-overrides.ts`.
+- Versioned CLI help is the agent-facing source of truth. Put workflow guidance/help topics in
+  `src/cli/parser/cli-help.ts`, shared flag contracts in `src/contracts/cli-flags.ts`, flag
+  definitions in `src/commands/cli-grammar/`, command-specific schema/help metadata with the owning
+  command family, and assertions near the focused CLI parser/help tests.
+- Keep parser schema and help rendering separate: parser/help rendering lives in `src/cli/parser/`,
+  while command schema metadata is derived from command metadata, command family declarations, and
+  the schema-only merge path in `src/cli-schema/command-overrides.ts`.
 - Before planning device automation commands, read `agent-device help workflow`; then read topic help such as `debugging`, `react-native`, `react-devtools`, `physical-device`, `macos`, or `dogfood` when relevant. This is required even when local agent skills are unavailable.
 - Skills are thin routers. Keep `skills/**/SKILL.md` focused on when to use the skill, version gating, which `agent-device help <topic>` page to read, and a short default loop. Do not duplicate full CLI manuals in skills.
 - For behavior/CLI surface changes, update help/metadata, README or `website/docs/**` when user-facing, and a SkillGym case in `test/skillgym/suites/agent-device-smoke-suite.ts` when command-planning guidance changes.
@@ -273,7 +293,11 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
 - Command identity and projection: search command descriptors and command contracts first with `rg -n "<command>|CommandDescriptor|defineCommand" src/core/command-descriptor src/command-catalog.ts src/commands`.
 - Daemon routing and policy: start with `src/daemon/daemon-command-registry.ts`, then trace to the named handler/request module with `rg -n "<command>|route|policy" src/daemon`.
 - Platform behavior and capabilities: start with `src/core/capabilities.ts` and the relevant platform under `src/platforms/`; use `rg`, not broad directory reads.
-- CLI help and command-planning guidance: start with `src/cli/parser/cli-help.ts` and `src/cli/parser/cli-flags.ts`; for command-specific schema, search `rg -n "helpDescription|summary|supportedFlags|allowedFlags" src/commands src/cli/parser src/utils/cli-command-overrides.ts`, and check `SCHEMA_ONLY_CLI_COMMAND_SCHEMAS` for schema-only CLI commands (`cdp`, `auth`, `connect`, `proxy`, `react-devtools`, `web`).
+- CLI help and command-planning guidance: start with `src/cli/parser/cli-help.ts` and
+  `src/commands/cli-grammar/`; for command-specific schema, search
+  `rg -n "helpDescription|summary|supportedFlags|allowedFlags" src/commands src/cli/parser src/cli-schema`,
+  and check `SCHEMA_ONLY_CLI_COMMAND_SCHEMAS` in `src/cli-schema/command-overrides.ts` for
+  schema-only CLI commands (`cdp`, `auth`, `connect`, `proxy`, `react-devtools`, `web`).
 
 ## Pull Requests
 - Before opening PR: ensure no conflict markers/unmerged paths.

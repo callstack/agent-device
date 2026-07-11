@@ -1,5 +1,5 @@
 import { AppError } from '../kernel/errors.ts';
-import type { CliFlags } from '../cli/parser/cli-flags.ts';
+import type { CliFlags } from '../commands/cli-grammar/flag-types.ts';
 import type { DaemonLockPolicy } from '../daemon/types.ts';
 
 export type BindingSettings = {

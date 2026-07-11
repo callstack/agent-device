@@ -8,8 +8,8 @@ import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { errorResponse, requireCommandSupported } from './handlers/response.ts';
 import { markSessionSnapshotRefsIssued, resolveRefStalenessWarning } from './session-snapshot.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from './handlers/snapshot-session.ts';
-import { parseFindArgs, type FindAction } from '../utils/finders.ts';
-import { splitIsSelectorArgs } from './selectors.ts';
+import { parseFindArgs, type FindAction } from '../selectors/find.ts';
+import { splitIsSelectorArgs } from '../selectors/index.ts';
 import { refSnapshotFlagGuardResponse } from './handlers/interaction-flags.ts';
 import { parseVersionedRefPositional } from './handlers/interaction-touch-targets.ts';
 import {
@@ -18,7 +18,7 @@ import {
   IS_PREDICATE_REQUIRED_MESSAGE,
   IS_PREDICATE_USAGE_HINT,
   type IsPredicate,
-} from '../utils/selector-is-predicates.ts';
+} from '../selectors/predicates.ts';
 import {
   describeAndroidEscapeSurface,
   detectAndroidEscapeSurface,

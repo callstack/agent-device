@@ -5,17 +5,16 @@ import type {
   DaemonResponse as PublicDaemonResponse,
   DaemonResponseData as PublicDaemonResponseData,
   DaemonInstallSource as PublicDaemonInstallSource,
-  DaemonError,
   LeaseBackend,
   SessionRuntimeHints as PublicSessionRuntimeHints,
 } from '../kernel/contracts.ts';
 export type { DaemonLockPolicy } from '../kernel/contracts.ts';
 import type { CommandFlags } from '../core/dispatch.ts';
-import type { GestureReferenceFrame, ScrollDirection } from '../core/scroll-gesture.ts';
+import type { GestureReferenceFrame, ScrollDirection } from '../contracts/scroll-gesture.ts';
 import type { LogBackend } from './network-log.ts';
-import type { SessionSurface } from '../core/session-surface.ts';
+import type { SessionSurface } from '../contracts/session-surface.ts';
 import type { RecordingExportQuality } from '../core/recording-export-quality.ts';
-import type { RecordingScope } from '../core/recording-scope.ts';
+import type { RecordingScope } from '../contracts/recording-scope.ts';
 import type { DeviceInfo, Platform, PlatformSelector } from '../kernel/device.ts';
 import type { ExecBackgroundResult, ExecResult } from '../utils/exec.ts';
 import type { SnapshotState } from '../kernel/snapshot.ts';
@@ -28,10 +27,16 @@ import type {
   AppleXctracePerfMode,
 } from '../platforms/apple/core/perf-xctrace.ts';
 import type { AudioProbeSource } from '../audio-probe-result.ts';
-import type {
-  SnapshotDiagnosticsState,
-  SnapshotDiagnosticsSummary,
-} from '../snapshot-diagnostics.ts';
+import type { SnapshotDiagnosticsState } from '../snapshot-diagnostics.ts';
+export type {
+  ReplaySuiteAttemptFailure,
+  ReplaySuiteResult,
+  ReplaySuiteTestFailed,
+  ReplaySuiteTestPassed,
+  ReplaySuiteTestResult,
+  ReplaySuiteTestSkipped,
+  ReplaySuiteTestSkipReason,
+} from '../contracts/replay.ts';
 
 export type DaemonInstallSource = PublicDaemonInstallSource;
 export type SessionRuntimeHints = PublicSessionRuntimeHints;
@@ -59,77 +64,6 @@ export type DaemonRequest = Omit<PublicDaemonRequest, 'token' | 'session' | 'fla
   flags?: CommandFlags;
   meta?: DaemonRequestMeta;
   internal?: DaemonRequestInternal;
-};
-
-export type ReplaySuiteTestSkipReason = 'skipped-by-filter';
-
-export type ReplaySuiteTestPassed = {
-  file: string;
-  title?: string;
-  session: string;
-  status: 'passed';
-  durationMs: number;
-  finalAttemptDurationMs?: number;
-  attempts: number;
-  artifactsDir?: string;
-  replayed: number;
-  healed: number;
-  warnings?: string[];
-  attemptFailures?: ReplaySuiteAttemptFailure[];
-  shardIndex?: number;
-  shardCount?: number;
-  deviceId?: string;
-  deviceName?: string;
-  snapshotDiagnostics?: SnapshotDiagnosticsSummary;
-};
-
-export type ReplaySuiteTestFailed = {
-  file: string;
-  title?: string;
-  session: string;
-  status: 'failed';
-  durationMs: number;
-  attempts: number;
-  artifactsDir?: string;
-  error: DaemonError;
-  shardIndex?: number;
-  shardCount?: number;
-  deviceId?: string;
-  deviceName?: string;
-  snapshotDiagnostics?: SnapshotDiagnosticsSummary;
-};
-
-export type ReplaySuiteTestSkipped = {
-  file: string;
-  title?: string;
-  status: 'skipped';
-  durationMs: 0;
-  reason: ReplaySuiteTestSkipReason;
-  message: string;
-};
-
-export type ReplaySuiteAttemptFailure = {
-  attempt: number;
-  message: string;
-  durationMs?: number;
-};
-
-export type ReplaySuiteTestResult =
-  | ReplaySuiteTestPassed
-  | ReplaySuiteTestFailed
-  | ReplaySuiteTestSkipped;
-
-export type ReplaySuiteResult = {
-  total: number;
-  executed: number;
-  passed: number;
-  failed: number;
-  skipped: number;
-  notRun: number;
-  durationMs: number;
-  failures: ReplaySuiteTestFailed[];
-  tests: ReplaySuiteTestResult[];
-  snapshotDiagnostics?: SnapshotDiagnosticsSummary;
 };
 
 export type DaemonResponse = PublicDaemonResponse;

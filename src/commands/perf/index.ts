@@ -1,6 +1,6 @@
 import type { PerfOptions } from '../../client/client-types.ts';
 import { AppError } from '../../kernel/errors.ts';
-import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
+import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { enumField, stringField } from '../command-input.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';

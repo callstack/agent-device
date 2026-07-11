@@ -1,6 +1,6 @@
-export type DoctorStatus = 'pass' | 'warn' | 'fail' | 'info';
+import type { DoctorKind } from '../../contracts/doctor.ts';
 
-export type DoctorKind = 'auto' | 'react-native' | 'expo' | 'repack';
+export type { DoctorCheck, DoctorKind, DoctorStatus } from '../../contracts/doctor.ts';
 
 export type DoctorOptions = {
   targetApp?: string;
@@ -9,13 +9,4 @@ export type DoctorOptions = {
   kind: DoctorKind;
   shouldProbeMetro: boolean;
   remote: boolean;
-};
-
-export type DoctorCheck = {
-  id: string;
-  status: DoctorStatus;
-  summary: string;
-  hint?: string;
-  command?: string;
-  evidence?: Record<string, unknown>;
 };

@@ -1,15 +1,15 @@
 import type { ClipboardCommandOptions } from '../../client/client-types.ts';
-import type { BackMode } from '../../core/back-mode.ts';
-import { BACK_MODES } from '../../core/back-mode.ts';
-import { parseDeviceRotation, DEVICE_ROTATIONS } from '../../core/device-rotation.ts';
+import type { BackMode } from '../../contracts/back-mode.ts';
+import { BACK_MODES } from '../../contracts/back-mode.ts';
+import { parseDeviceRotation, DEVICE_ROTATIONS } from '../../contracts/device-rotation.ts';
 import {
   parseTvRemoteButton,
   TV_REMOTE_BUTTON_USAGE,
   TV_REMOTE_BUTTONS,
   tvRemoteDurationMode,
-} from '../../core/tv-remote.ts';
+} from '../../contracts/tv-remote.ts';
 import { AppError } from '../../kernel/errors.ts';
-import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
+import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import {

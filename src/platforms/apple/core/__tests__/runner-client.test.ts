@@ -34,7 +34,7 @@ import type { DeviceInfo } from '../../../../kernel/device.ts';
 import {
   type RequestProgressEvent,
   withRequestProgressSink,
-} from '../../../../daemon/request-progress.ts';
+} from '../../../../request/progress.ts';
 import {
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,
@@ -190,7 +190,7 @@ const runnerProtocolCommandFixtures: Record<RunnerCommand['command'], RunnerComm
   shutdown: { command: 'shutdown' },
 };
 
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../../');
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../..');
 
 async function makeTmpDir(): Promise<string> {
   const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'agent-device-xctestrun-'));

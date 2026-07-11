@@ -1,5 +1,5 @@
-import type { ScrollDirection } from '../../core/scroll-gesture.ts';
-import type { SessionSurface } from '../../core/session-surface.ts';
+import type { ScrollDirection } from '../../contracts/scroll-gesture.ts';
+import type { SessionSurface } from '../../contracts/session-surface.ts';
 import { createScopedProvider } from '../../utils/scoped-provider.ts';
 import type { RawSnapshotNode } from '../../kernel/snapshot.ts';
 import type { BackendDumpNetworkOptions, BackendDumpNetworkResult } from '../../backend.ts';

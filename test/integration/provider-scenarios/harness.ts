@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createAgentDeviceClient } from '../../../src/client/client.ts';
+import { createAgentDeviceClient } from '../../../src/agent-device-client.ts';
 import type {
   AgentDeviceClient,
   AgentDeviceDaemonTransport,

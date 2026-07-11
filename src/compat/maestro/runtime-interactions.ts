@@ -4,7 +4,7 @@ import {
   pointFromPercentInFrame,
   type GestureReferenceFrame,
   type ScrollDirection,
-} from '../../core/scroll-gesture.ts';
+} from '../../contracts/scroll-gesture.ts';
 import type { ReplayVarScope } from '../../replay/vars.ts';
 import type { SnapshotState } from '../../kernel/snapshot.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';

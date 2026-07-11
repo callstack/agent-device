@@ -14,7 +14,7 @@ vi.mock('../../../core/dispatch.ts', () => ({
   resolveTargetDevice: vi.fn(),
 }));
 
-vi.mock('../../request-cancel.ts', () => ({
+vi.mock('../../../request/cancel.ts', () => ({
   getRequestSignal: vi.fn(() => undefined),
 }));
 

@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { emitRequestProgress } from '../request-progress.ts';
+import { emitRequestProgress } from '../../request/progress.ts';
 import type { DaemonResponse, ReplaySuiteTestFailed, ReplaySuiteTestResult } from '../types.ts';
 import {
   buildReplayTestArtifactSlug,
@@ -15,7 +15,7 @@ import { isReplayInfrastructureFailure } from './session-test-infrastructure.ts'
 import { runReplayTestAttempt } from './session-test-runtime.ts';
 import type { ReplayTestRuntimeDependencies } from './session-test-types.ts';
 import type { ReplayTestShardContext } from './session-test-sharding.ts';
-import { isRequestCanceled } from '../request-cancel.ts';
+import { isRequestCanceled } from '../../request/cancel.ts';
 import { readSnapshotDiagnosticsSummary } from '../../snapshot-diagnostics.ts';
 
 type ReplayTestCaseResult = Extract<ReplaySuiteTestResult, { status: 'passed' | 'failed' }>;

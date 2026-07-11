@@ -7,8 +7,9 @@ import {
   splitIsSelectorArgs,
   splitSelectorFromArgs,
   tryParseSelectorChain,
-} from '../selectors.ts';
-import { inferFillText, uniqueStrings } from '../action-utils.ts';
+} from '../../selectors/index.ts';
+import { uniqueStrings } from '../../kernel/collections.ts';
+import { inferFillText } from '../action-utils.ts';
 import type { SessionAction, SessionState } from '../types.ts';
 import { isTouchTargetCommand } from '../../replay/script-utils.ts';
 import { contextFromFlags } from '../context.ts';

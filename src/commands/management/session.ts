@@ -1,5 +1,5 @@
 import { AppError } from '../../kernel/errors.ts';
-import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
+import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { enumField } from '../command-input.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { commonInputFromFlags } from '../cli-grammar/common.ts';

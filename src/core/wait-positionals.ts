@@ -1,5 +1,5 @@
 import { parseTimeout } from '../utils/parse-timeout.ts';
-import { splitSelectorFromArgs, tryParseSelectorChain } from '../utils/selectors-parse.ts';
+import { splitSelectorFromArgs, tryParseSelectorChain } from '../selectors/parse.ts';
 
 export type WaitParsed =
   | { kind: 'sleep'; durationMs: number }

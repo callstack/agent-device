@@ -2,7 +2,7 @@ import type {
   DaemonRequest as SharedDaemonRequest,
   DaemonResponse as SharedDaemonResponse,
 } from '../types.ts';
-import type { RequestProgressSink } from '../request-progress.ts';
+import type { RequestProgressSink } from '../../request/progress.ts';
 import { createRequestId, emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { prepareRemoteRequestArtifacts } from '../../remote/daemon-artifacts.ts';

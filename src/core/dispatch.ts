@@ -4,12 +4,12 @@ import { AppError } from '../kernel/errors.ts';
 import { isIosFamily, type DeviceInfo } from '../kernel/device.ts';
 import { getInteractor } from './interactors.ts';
 import type { Interactor, RunnerContext } from './interactor-types.ts';
-import { isDeepLinkTarget } from './open-target.ts';
+import { isDeepLinkTarget } from '../contracts/open-target.ts';
 import { parseTriggerAppEventArgs, resolveAppEventUrl } from './app-events.ts';
 import {
   LAUNCH_CONSOLE_DIRECT_APP_ONLY_MESSAGE,
   LAUNCH_CONSOLE_IOS_SIMULATOR_ONLY_MESSAGE,
-} from './launch-console.ts';
+} from '../contracts/launch-console.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../utils/diagnostics.ts';
 import { readLocationCoordinate } from '../utils/location-coordinates.ts';
 import { successText, withSuccessText } from '../utils/success-text.ts';
@@ -34,8 +34,8 @@ import {
   handleTypeCommand,
 } from './dispatch-interactions.ts';
 import { readNotificationPayload } from './dispatch-payload.ts';
-import { parseDeviceRotation } from './device-rotation.ts';
-import { parseTvRemoteButton } from './tv-remote.ts';
+import { parseDeviceRotation } from '../contracts/device-rotation.ts';
+import { parseTvRemoteButton } from '../contracts/tv-remote.ts';
 import { readViewportDimension } from './viewport-dimension.ts';
 import type { DescriptorDispatchCommandName } from './command-descriptor/registry.ts';
 

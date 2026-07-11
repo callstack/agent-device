@@ -32,7 +32,7 @@ import {
   readRemoteConnectionState,
   writeRemoteConnectionState,
 } from '../remote/remote-connection-state.ts';
-import type { AgentDeviceClient } from '../client/client.ts';
+import type { AgentDeviceClient } from '../agent-device-client.ts';
 
 afterEach(() => {
   vi.clearAllMocks();

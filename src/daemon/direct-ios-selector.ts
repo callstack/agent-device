@@ -1,6 +1,6 @@
 import { isIosFamily } from '../kernel/device.ts';
 import type { SessionState } from './types.ts';
-import { tryParseSelectorChain } from './selectors.ts';
+import { tryParseSelectorChain } from '../selectors/index.ts';
 import { asAppError } from '../kernel/errors.ts';
 import type { ElementSelectorTapOptions } from '../core/interactor-types.ts';
 

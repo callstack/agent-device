@@ -5,7 +5,7 @@ import {
   parseFindArgs,
   parseFindSelectorExpression,
   type FindLocator,
-} from '../../utils/finders.ts';
+} from '../../selectors/find.ts';
 import { centerOfRect, type SnapshotState } from '../../kernel/snapshot.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
@@ -29,8 +29,8 @@ import {
   isSparseSnapshotQualityVerdict,
   type SnapshotQualityVerdict,
 } from '../../snapshot/snapshot-quality.ts';
-import { resolveSelectorChain } from '../selectors.ts';
-import type { SelectorChain } from '../../utils/selectors-parse.ts';
+import { resolveSelectorChain } from '../../selectors/index.ts';
+import type { SelectorChain } from '../../selectors/parse.ts';
 
 type FindContext = {
   req: DaemonRequest;

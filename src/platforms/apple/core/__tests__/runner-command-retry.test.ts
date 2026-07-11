@@ -1,7 +1,7 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import { IOS_SIMULATOR } from '../../../../__tests__/test-utils/index.ts';
-import { clearRequestCanceled, markRequestCanceled } from '../../../../daemon/request-cancel.ts';
+import { clearRequestCanceled, markRequestCanceled } from '../../../../request/cancel.ts';
 import { AppError } from '../../../../kernel/errors.ts';
 import { Deadline } from '../../../../utils/retry.ts';
 import type { RunnerSession } from '../runner/runner-session-types.ts';

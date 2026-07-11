@@ -7,13 +7,13 @@ import { execFailureDetails } from '../../../utils/exec.ts';
 import {
   LAUNCH_CONSOLE_DIRECT_APP_ONLY_MESSAGE,
   LAUNCH_CONSOLE_IOS_SIMULATOR_ONLY_MESSAGE,
-} from '../../../core/launch-console.ts';
+} from '../../../contracts/launch-console.ts';
 import { Deadline, retryWithPolicy } from '../../../utils/retry.ts';
 import {
   isDeepLinkTarget,
   isWebUrl,
   resolveIosDeviceDeepLinkBundleId,
-} from '../../../core/open-target.ts';
+} from '../../../contracts/open-target.ts';
 import { IOS_APP_LAUNCH_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from './config.ts';
 import { runIosDevicectl } from './devicectl.ts';
 import {

@@ -1,4 +1,4 @@
-import { emitRequestProgress } from '../request-progress.ts';
+import { emitRequestProgress } from '../../request/progress.ts';
 import { formatDoctorCheckDetailLines, formatDoctorCheckSummaryLine } from '../../doctor-output.ts';
 import type { DoctorCheck, DoctorStatus } from './session-doctor-types.ts';
 

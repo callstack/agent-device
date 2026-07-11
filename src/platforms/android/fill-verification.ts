@@ -10,7 +10,7 @@ import {
 } from '../fill-diagnostics.ts';
 import { sleep } from './adb.ts';
 import { getAndroidKeyboardState } from './device-input-state.ts';
-import { isAndroidInputMethodOwnedNode } from '../../core/android-input-ownership.ts';
+import { isAndroidInputMethodOwnedNode } from '../../contracts/android-input-ownership.ts';
 import { captureAndroidUiHierarchyXml } from './snapshot.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
 

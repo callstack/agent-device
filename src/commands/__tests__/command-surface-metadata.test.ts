@@ -5,7 +5,7 @@ import {
   listCommandResponseDataTransforms,
   listMcpExposedCommandNames,
 } from '../../core/command-descriptor/registry.ts';
-import { getSchemaOnlyCliCommandSchema } from '../../utils/cli-command-overrides.ts';
+import { getSchemaOnlyCliCommandSchema } from '../../cli-schema/command-overrides.ts';
 import {
   listCommandMetadata,
   listCommandMetadataNames,

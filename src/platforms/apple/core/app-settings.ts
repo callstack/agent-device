@@ -5,7 +5,7 @@ import { AppError } from '../../../kernel/errors.ts';
 import { requireLocationCoordinates } from '../../../utils/location-coordinates.ts';
 import { requireExecSuccess } from '../../../utils/exec.ts';
 import { resolveIosSimulatorDeviceSetPath } from '../../../utils/device-isolation.ts';
-import { getUnsupportedMacOsSettingMessage } from '../../../core/settings-contract.ts';
+import { getUnsupportedMacOsSettingMessage } from '../../../contracts/settings-contract.ts';
 import {
   parsePermissionAction,
   parsePermissionTarget,

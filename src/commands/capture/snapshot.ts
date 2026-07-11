@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { SNAPSHOT_FLAGS } from '../../cli/parser/cli-flags.ts';
+import { SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
 import { booleanField, integerField, stringField } from '../command-input.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { commonInputFromFlags, direct } from '../cli-grammar/common.ts';

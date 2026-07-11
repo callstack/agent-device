@@ -24,7 +24,7 @@ import {
   buildSelectorChainForNode,
   parseSelectorChain,
   resolveSelectorChain,
-} from '../../daemon/selectors.ts';
+} from '../../selectors/index.ts';
 import { attachRefs } from '../../kernel/snapshot.ts';
 import { installFakeManagedAgentBrowser } from './__tests__/test-utils.ts';
 

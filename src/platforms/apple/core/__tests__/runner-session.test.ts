@@ -8,7 +8,7 @@ import { IOS_DEVICE, IOS_SIMULATOR } from '../../../../__tests__/test-utils/inde
 import {
   type RequestProgressEvent,
   withRequestProgressSink,
-} from '../../../../daemon/request-progress.ts';
+} from '../../../../request/progress.ts';
 import { AppError } from '../../../../kernel/errors.ts';
 import {
   flushDiagnosticsToSessionFile,

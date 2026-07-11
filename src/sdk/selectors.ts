@@ -1,15 +1,11 @@
-export type { SelectorChain } from '../utils/selectors-parse.ts';
-export type { SelectorDiagnostics } from '../daemon/selectors.ts';
+export type { SelectorChain } from '../selectors/parse.ts';
+export type { SelectorDiagnostics } from '../selectors/index.ts';
 
-export {
-  isSelectorToken,
-  parseSelectorChain,
-  tryParseSelectorChain,
-} from '../utils/selectors-parse.ts';
+export { isSelectorToken, parseSelectorChain, tryParseSelectorChain } from '../selectors/parse.ts';
 export {
   findSelectorChainMatch,
   formatSelectorFailure,
   isNodeEditable,
   isNodeVisible,
   resolveSelectorChain,
-} from '../daemon/selectors.ts';
+} from '../selectors/index.ts';

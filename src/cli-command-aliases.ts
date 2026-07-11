@@ -1,4 +1,4 @@
-import type { CliFlags } from './cli/parser/cli-flags.ts';
+import type { CliFlags } from './commands/cli-grammar/flag-types.ts';
 
 type BooleanCliFlagKey = {
   [Key in keyof CliFlags]-?: Exclude<CliFlags[Key], undefined> extends boolean ? Key : never;

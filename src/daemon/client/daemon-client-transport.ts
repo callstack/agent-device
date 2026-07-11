@@ -17,7 +17,7 @@ import { handleRequestTimeout } from './daemon-client-timeout.ts';
 import { isRemoteDaemon, type DaemonInfo } from './daemon-client-metadata.ts';
 import { DAEMON_RPC_PROTOCOL_VERSION } from '../http-health.ts';
 import { readVersion } from '../../utils/version.ts';
-import type { RequestProgressSink } from '../request-progress.ts';
+import type { RequestProgressSink } from '../../request/progress.ts';
 
 type ResolvedDaemonTransport = 'socket' | 'http';
 type SendRequestOptions = {

@@ -3,10 +3,10 @@ import { AppError } from '../../kernel/errors.ts';
 import { isNonDefaultResponseLevel } from '../../kernel/contracts.ts';
 import { resolveUserPath } from '../../utils/path-resolution.ts';
 import type { AgentDeviceBackend } from '../../backend.ts';
-import type { AgentDeviceClient, CaptureScreenshotResult } from '../../client/client.ts';
+import type { AgentDeviceClient, CaptureScreenshotResult } from '../../agent-device-client.ts';
 import { runCliCommand } from '../../commands/cli-runner.ts';
 import { pickScreenshotResultData } from '../../utils/screenshot-result.ts';
-import type { CliFlags } from '../parser/cli-flags.ts';
+import type { CliFlags } from '../../commands/cli-grammar/flag-types.ts';
 import { writeCommandOutput } from './shared.ts';
 import type { ClientCommandHandler } from './router-types.ts';
 

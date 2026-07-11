@@ -6,7 +6,7 @@ import path from 'node:path';
 import { connectCommand } from '../cli/commands/connection.ts';
 import { resolveCloudAccessForConnect } from '../cli/auth-session.ts';
 import { readActiveConnectionState } from '../remote/remote-connection-state.ts';
-import type { AgentDeviceClient } from '../client/client.ts';
+import type { AgentDeviceClient } from '../agent-device-client.ts';
 
 afterEach(() => {
   vi.unstubAllEnvs();

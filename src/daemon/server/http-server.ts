@@ -17,11 +17,11 @@ import {
   markRequestCanceled,
   registerRequestAbort,
   resolveRequestTrackingId,
-} from '../request-cancel.ts';
+} from '../../request/cancel.ts';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { sleep } from '../../utils/timeouts.ts';
-import { type RequestProgressEvent, withRequestProgressSink } from '../request-progress.ts';
+import { type RequestProgressEvent, withRequestProgressSink } from '../../request/progress.ts';
 import {
   serializeDaemonProgressEnvelope,
   serializeDaemonRpcResponseEnvelope,

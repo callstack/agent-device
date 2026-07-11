@@ -1,6 +1,6 @@
-import type { BackMode } from '../core/back-mode.ts';
-import type { DeviceRotation } from '../core/device-rotation.ts';
-import type { TvRemoteButton } from '../core/tv-remote.ts';
+import type { BackMode } from './back-mode.ts';
+import type { DeviceRotation } from './device-rotation.ts';
+import type { TvRemoteButton } from './tv-remote.ts';
 
 /**
  * Closed results of the navigation/global action commands. Each mirrors the

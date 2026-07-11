@@ -1,5 +1,5 @@
-import type { CliFlags } from '../parser/cli-flags.ts';
-import type { AgentDeviceClient } from '../../client/client.ts';
+import type { CliFlags } from '../../commands/cli-grammar/flag-types.ts';
+import type { AgentDeviceClient } from '../../agent-device-client.ts';
 import type { CliCommandName } from '../../command-catalog.ts';
 import type { ReplayTestReporterRuntime } from '../../replay/test/reporting.ts';
 

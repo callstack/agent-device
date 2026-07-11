@@ -24,7 +24,7 @@ import {
   RECORDING_SCOPE_VALUES,
   type RecordingScope,
   isWholeScreenRecordingScope,
-} from '../../core/recording-scope.ts';
+} from '../../contracts/recording-scope.ts';
 import { resolveRecordingProvider } from '../recording-provider.ts';
 import { errorResponse, requireCommandSupported } from './response.ts';
 import { recordSessionAction } from './handler-utils.ts';
@@ -34,6 +34,7 @@ import {
   stopActiveRecording,
 } from './record-trace-recording-backends.ts';
 import type { RecordTraceDeps, RecordingBase } from './record-trace-types.ts';
+import type { RecordingCommandResult } from '../../contracts/recording.ts';
 import { hasExplicitSessionFlag, resolveImplicitSessionScope } from '../session-routing.ts';
 
 const IOS_DEVICE_RECORD_MIN_FPS = 1;
@@ -230,7 +231,7 @@ function persistStartedRecording(params: {
       recordOnlySession: recording.recordOnlySession,
       activeSessionApp: recording.activeSessionApp,
       showTouches: recording.showTouches,
-    },
+    } satisfies RecordingCommandResult,
   };
 }
 
@@ -480,7 +481,7 @@ function buildRecordStopResponse(
         index: chunk.index,
         path: deriveAndroidChunkClientPath(recording, chunk.index) ?? chunk.path,
       })),
-    },
+    } satisfies RecordingCommandResult,
   };
 }
 

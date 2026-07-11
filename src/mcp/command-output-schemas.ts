@@ -1,10 +1,10 @@
 import type { JsonSchema } from '../commands/command-contract.ts';
 import type { CommandResultMap } from '../core/command-descriptor/command-result.ts';
 import { booleanSchema, looseObjectSchema, stringSchema } from '../commands/command-input.ts';
-import { BACK_MODES } from '../core/back-mode.ts';
-import { DEVICE_ROTATIONS } from '../core/device-rotation.ts';
-import { SESSION_SURFACES } from '../core/session-surface.ts';
-import { TV_REMOTE_BUTTONS } from '../core/tv-remote.ts';
+import { BACK_MODES } from '../contracts/back-mode.ts';
+import { DEVICE_ROTATIONS } from '../contracts/device-rotation.ts';
+import { SESSION_SURFACES } from '../contracts/session-surface.ts';
+import { TV_REMOTE_BUTTONS } from '../contracts/tv-remote.ts';
 import { DEVICE_TARGETS, PLATFORMS } from '../kernel/device.ts';
 
 /**
@@ -58,6 +58,16 @@ function objectSchema(
 }
 
 const stringArraySchema: JsonSchema = { type: 'array', items: { type: 'string' } };
+const artifactSchema = objectSchema(
+  {
+    field: stringSchema(),
+    artifactType: stringSchema(),
+    path: stringSchema(),
+    localPath: stringSchema(),
+    fileName: stringSchema(),
+  },
+  ['field'],
+);
 
 type InteractionExtra = {
   properties?: Record<string, JsonSchema>;
@@ -518,4 +528,150 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     },
     ['platform', 'action'],
   ),
+
+  // src/contracts/doctor.ts
+  doctor: objectSchema(
+    {
+      status: enumSchema(['pass', 'warn', 'fail', 'info']),
+      summary: stringSchema(),
+      kind: enumSchema(['auto', 'react-native', 'expo', 'repack']),
+      platform: stringSchema(),
+      target: enumSchema(DEVICE_TARGETS),
+      targetApp: stringSchema(),
+      metro: objectSchema({ host: stringSchema(), port: numberSchema() }, ['host', 'port']),
+      checks: {
+        type: 'array',
+        items: objectSchema(
+          {
+            id: stringSchema(),
+            status: enumSchema(['pass', 'warn', 'fail', 'info']),
+            summary: stringSchema(),
+            hint: stringSchema(),
+            command: stringSchema(),
+            evidence: looseObjectSchema(),
+          },
+          ['id', 'status', 'summary'],
+        ),
+      },
+    },
+    ['status', 'summary', 'kind', 'checks'],
+  ),
+
+  // src/contracts/diff.ts — the public Node command accepts snapshot diffs.
+  diff: objectSchema(
+    {
+      mode: constSchema('snapshot'),
+      baselineInitialized: booleanSchema(),
+      summary: objectSchema(
+        {
+          additions: numberSchema(),
+          removals: numberSchema(),
+          unchanged: numberSchema(),
+        },
+        ['additions', 'removals', 'unchanged'],
+      ),
+      lines: {
+        type: 'array',
+        items: objectSchema(
+          {
+            kind: enumSchema(['added', 'removed']),
+            text: stringSchema(),
+            ref: stringSchema(),
+          },
+          ['kind', 'text'],
+        ),
+      },
+      warnings: stringArraySchema,
+    },
+    ['mode', 'baselineInitialized', 'summary', 'lines'],
+  ),
+
+  // src/contracts/replay.ts
+  replay: objectSchema(
+    {
+      replayed: numberSchema(),
+      healed: numberSchema(),
+      session: stringSchema(),
+      artifactPaths: stringArraySchema,
+      snapshotDiagnostics: looseObjectSchema(),
+      message: stringSchema(),
+    },
+    ['replayed', 'healed', 'session', 'artifactPaths', 'message'],
+  ),
+  test: objectSchema(
+    {
+      total: numberSchema(),
+      executed: numberSchema(),
+      passed: numberSchema(),
+      failed: numberSchema(),
+      skipped: numberSchema(),
+      notRun: numberSchema(),
+      durationMs: numberSchema(),
+      failures: { type: 'array', items: looseObjectSchema() },
+      tests: { type: 'array', items: looseObjectSchema() },
+      snapshotDiagnostics: looseObjectSchema(),
+    },
+    [
+      'total',
+      'executed',
+      'passed',
+      'failed',
+      'skipped',
+      'notRun',
+      'durationMs',
+      'failures',
+      'tests',
+    ],
+  ),
+
+  // src/contracts/recording.ts
+  record: {
+    type: 'object',
+    oneOf: [
+      objectSchema(
+        {
+          recording: constSchema('started'),
+          outPath: stringSchema(),
+          sessionStateDir: stringSchema(),
+          recordingBackend: stringSchema(),
+          recordingScope: stringSchema(),
+          recordOnlySession: booleanSchema(),
+          activeSessionApp: looseObjectSchema(),
+          showTouches: booleanSchema(),
+        },
+        ['recording', 'outPath', 'sessionStateDir', 'showTouches'],
+      ),
+      objectSchema(
+        {
+          recording: constSchema('stopped'),
+          outPath: stringSchema(),
+          telemetryPath: stringSchema(),
+          artifacts: { type: 'array', items: artifactSchema },
+          recordingBackend: stringSchema(),
+          recordingScope: stringSchema(),
+          recordOnlySession: booleanSchema(),
+          activeSessionApp: looseObjectSchema(),
+          durationMs: numberSchema(),
+          showTouches: booleanSchema(),
+          warning: stringSchema(),
+          overlayWarning: stringSchema(),
+          chunks: { type: 'array', items: looseObjectSchema() },
+        },
+        ['recording', 'outPath', 'artifacts', 'durationMs', 'showTouches'],
+      ),
+    ],
+  },
+  trace: {
+    type: 'object',
+    oneOf: [
+      objectSchema({ trace: constSchema('started'), outPath: stringSchema() }, [
+        'trace',
+        'outPath',
+      ]),
+      objectSchema({ trace: constSchema('stopped'), outPath: stringSchema() }, [
+        'trace',
+        'outPath',
+      ]),
+    ],
+  },
 } satisfies Record<keyof CommandResultMap, JsonSchema>;

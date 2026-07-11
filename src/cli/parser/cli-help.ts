@@ -7,8 +7,8 @@ import {
   type CommandSchema,
   type FlagDefinition,
   type FlagKey,
-} from '../../utils/command-schema.ts';
-import { buildCommandUsage } from '../../utils/cli-usage.ts';
+} from '../../cli-schema/command-schema.ts';
+import { buildCommandUsage } from '../../cli-schema/usage.ts';
 
 const AGENT_WORKFLOWS = [
   {

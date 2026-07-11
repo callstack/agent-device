@@ -1,5 +1,5 @@
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
-import { isAndroidInputMethodOwnedNode } from '../../core/android-input-ownership.ts';
+import { isAndroidInputMethodOwnedNode } from '../../contracts/android-input-ownership.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
 
 const ANDROID_WINDOW_TYPE_APPLICATION = 1;

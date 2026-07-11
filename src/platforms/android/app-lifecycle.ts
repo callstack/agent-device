@@ -6,7 +6,7 @@ import { AppError } from '../../kernel/errors.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import type { AppsFilter } from '../../contracts/app-inventory.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
-import { isDeepLinkTarget } from '../../core/open-target.ts';
+import { isDeepLinkTarget } from '../../contracts/open-target.ts';
 import { createAppResolutionCache, type AppResolutionCacheScope } from '../app-resolution-cache.ts';
 import { waitForAndroidBoot } from './devices.ts';
 import { runAndroidAdb } from './adb.ts';

@@ -10,7 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { prepareMetroRuntime, reloadMetro } from '../metro/client-metro.ts';
 import { resolveMetroReloadEndpoints } from '../metro/metro-reload-endpoints.ts';
-import { createAgentDeviceClient } from '../client/client.ts';
+import { createAgentDeviceClient } from '../agent-device-client.ts';
 import { readMetroSessionHints } from '../metro/metro-session-hints.ts';
 import { resolveDaemonPaths } from '../daemon/config.ts';
 import { AppError } from '../kernel/errors.ts';

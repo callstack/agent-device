@@ -2,7 +2,7 @@ import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { execFailureDetails } from '../../utils/exec.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
-import type { TransformGestureParams } from '../../core/scroll-gesture.ts';
+import type { TransformGestureParams } from '../../contracts/scroll-gesture.ts';
 import {
   resolveAndroidAdbExecutor,
   resolveAndroidAdbProvider,

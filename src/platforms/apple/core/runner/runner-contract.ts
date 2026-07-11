@@ -1,13 +1,10 @@
 import crypto from 'node:crypto';
 import { AppError } from '../../../../kernel/errors.ts';
 import type { ClickButton } from '../../../../core/click-button.ts';
-import type { DeviceRotation } from '../../../../core/device-rotation.ts';
-import type { ScrollDirection } from '../../../../core/scroll-gesture.ts';
+import type { DeviceRotation } from '../../../../contracts/device-rotation.ts';
+import type { ScrollDirection } from '../../../../contracts/scroll-gesture.ts';
 import type { ElementSelectorKey } from '../../../../core/interactor-types.ts';
-import {
-  createRequestCanceledError,
-  isRequestCanceled,
-} from '../../../../daemon/request-cancel.ts';
+import { createRequestCanceledError, isRequestCanceled } from '../../../../request/cancel.ts';
 import { bootFailureHint, classifyBootFailure } from '../../../boot-diagnostics.ts';
 import type { RunnerSession } from './runner-session-types.ts';
 

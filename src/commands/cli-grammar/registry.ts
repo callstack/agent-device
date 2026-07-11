@@ -1,4 +1,4 @@
-import type { CliFlags } from '../../cli/parser/cli-flags.ts';
+import type { CliFlags } from './flag-types.ts';
 import type { CommandName } from '../command-metadata.ts';
 import { listCommandFamilyCliReaders } from '../family/registry.ts';
 

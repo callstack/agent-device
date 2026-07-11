@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { expect, test } from 'vitest';
-import { getFlagDefinitions } from '../../../cli/parser/cli-flags.ts';
+import { getFlagDefinitions } from '../../../commands/cli-grammar/flag-registry.ts';
 import {
   MAESTRO_COMPAT_SUPPORTED_CAPABILITIES,
   MAESTRO_COMPAT_TRACKER_URL,

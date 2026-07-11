@@ -13,7 +13,7 @@ import { AppError } from '../../../kernel/errors.ts';
 import { execFailureDetails, requireExecSuccess, type ExecResult } from '../../../utils/exec.ts';
 import { splitNonEmptyTrimmedLines } from '../../../utils/parsing.ts';
 import { roundPercent } from '../../perf-utils.ts';
-import { uniqueStrings } from '../../../daemon/action-utils.ts';
+import { uniqueStrings } from '../../../kernel/collections.ts';
 import {
   IOS_DEVICECTL_DEFAULT_HINT,
   listIosDeviceApps,

@@ -8,8 +8,8 @@ import {
   type CliFlags,
   type FlagDefinition,
   type FlagKey,
-} from '../../utils/command-schema.ts';
-import { isFlagSupportedForCommand } from '../../utils/cli-option-schema.ts';
+} from '../../cli-schema/command-schema.ts';
+import { isFlagSupportedForCommand } from '../../cli-schema/option-schema.ts';
 import { isKnownCliCommandName } from '../../command-catalog.ts';
 import { cliCommandAlias, normalizeCliCommandAlias } from '../../cli-command-aliases.ts';
 import { formatUnknownFlagMessage, suggestCommandFor } from './command-suggestions.ts';

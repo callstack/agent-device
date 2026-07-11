@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import type { CliFlags } from '../../cli/parser/cli-flags.ts';
+import type { CliFlags } from '../cli-grammar/flag-types.ts';
 import { debugCliReader, debugCommandDefinition, debugCommandMetadata } from './index.ts';
 
 describe('debugging command interface', () => {

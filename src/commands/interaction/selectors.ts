@@ -1,12 +1,12 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { FindOptions, IsOptions } from '../../client/client-types.ts';
-import type { CliFlags } from '../../cli/parser/cli-flags.ts';
+import type { CliFlags } from '../cli-grammar/flag-types.ts';
 import { AppError } from '../../kernel/errors.ts';
 import {
   IS_PREDICATE_REQUIRED_MESSAGE,
   IS_PREDICATE_USAGE_HINT,
   normalizeIsPositionals,
-} from '../../utils/selector-is-predicates.ts';
+} from '../../selectors/predicates.ts';
 import {
   direct,
   optionalCliNumber,

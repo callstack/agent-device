@@ -2,7 +2,7 @@ import {
   isDeepLinkTarget,
   isWebUrl,
   resolveIosDeviceDeepLinkBundleId,
-} from '../../core/open-target.ts';
+} from '../../contracts/open-target.ts';
 import { isMacOs, isApplePlatform, type DeviceInfo } from '../../kernel/device.ts';
 
 async function resolveIosBundleIdForOpen(

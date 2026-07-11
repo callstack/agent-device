@@ -1,6 +1,6 @@
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import type { RunnerCallOptions, RunnerContext } from '../../../../core/interactor-types.ts';
-import type { ScrollDirection } from '../../../../core/scroll-gesture.ts';
+import type { ScrollDirection } from '../../../../contracts/scroll-gesture.ts';
 import type { RunnerCommand } from '../../core/runner/runner-contract.ts';
 import {
   normalizeAppleScrollResultWithResolvedFrame,

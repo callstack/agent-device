@@ -1,10 +1,12 @@
-import { appleOsCapabilities } from '../../core/platform-plugin/apple-os-capabilities.ts';
+import { appleOsCapabilities } from './capabilities.ts';
 import type { PlatformPlugin } from '../../core/platform-plugin/plugin.ts';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { isAudioProbeSupportedDevice } from '../../kernel/audio-probe-support.ts';
-import { shouldUseHostMacFastPath } from '../../core/platform-inventory.ts';
+import {
+  shouldUseHostMacFastPath,
+  type DeviceInventoryRequest,
+} from '../../contracts/device-inventory.ts';
 import { isMacOs, isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
-import type { DeviceInventoryRequest } from '../../core/platform-inventory.ts';
 import type { RunnerContext } from '../../core/interactor-types.ts';
 
 // ---------------------------------------------------------------------------

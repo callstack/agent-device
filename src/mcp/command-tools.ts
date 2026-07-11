@@ -357,7 +357,7 @@ async function createClient(
   config: AgentDeviceClientConfig,
 ): Promise<AgentDeviceClient> {
   if (deps.createClient) return await deps.createClient(config);
-  const { createAgentDeviceClient } = await import('../client/client.ts');
+  const { createAgentDeviceClient } = await import('../agent-device-client.ts');
   return createAgentDeviceClient(config);
 }
 

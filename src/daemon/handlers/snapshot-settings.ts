@@ -3,7 +3,7 @@ import {
   getUnsupportedMacOsSettingMessage,
   isMacOsSettingSupported,
   SETTINGS_INVALID_ARGS_MESSAGE,
-} from '../../core/settings-contract.ts';
+} from '../../contracts/settings-contract.ts';
 import { dispatchCommand } from '../../core/dispatch.ts';
 import { contextFromFlags } from '../context.ts';
 import { SessionStore } from '../session-store.ts';

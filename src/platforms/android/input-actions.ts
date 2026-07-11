@@ -1,9 +1,9 @@
 import { AppError } from '../../kernel/errors.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
-import type { DeviceRotation } from '../../core/device-rotation.ts';
-import { buildScrollGesturePlan, type ScrollDirection } from '../../core/scroll-gesture.ts';
-import { toAndroidTvRemoteKeyevent, type TvRemoteButton } from '../../core/tv-remote.ts';
+import type { DeviceRotation } from '../../contracts/device-rotation.ts';
+import { buildScrollGesturePlan, type ScrollDirection } from '../../contracts/scroll-gesture.ts';
+import { toAndroidTvRemoteKeyevent, type TvRemoteButton } from '../../contracts/tv-remote.ts';
 import { runAndroidAdb, sleep } from './adb.ts';
 import {
   resolveAndroidAdbExecutor,

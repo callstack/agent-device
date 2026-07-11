@@ -1,5 +1,5 @@
 import type { CommandFlags } from '../../core/dispatch.ts';
-import type { GestureReferenceFrame } from '../../core/scroll-gesture.ts';
+import type { GestureReferenceFrame } from '../../contracts/scroll-gesture.ts';
 import type { SnapshotNode } from '../../kernel/snapshot.ts';
 import { getAndroidScreenSize } from '../../platforms/android/input-actions.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';

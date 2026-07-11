@@ -71,7 +71,7 @@ const config: SkillgymConfig = {
   run: {
     // Relative to this config file; points SkillGym at the repository root.
     cwd: '../..',
-    outputDir: './.skillgym-results',
+    outputDir: '.skillgym-results',
     reporter: 'standard',
     schedule: 'parallel',
   },

@@ -1,7 +1,7 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { ViewportCommandOptions } from '../../client/client-types.ts';
 import { readViewportDimension } from '../../core/viewport-dimension.ts';
-import type { CommandSchemaOverride } from '../../utils/cli-command-schema-types.ts';
+import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { integerField, requiredField } from '../command-input.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import { commonInputFromFlags, direct } from '../cli-grammar/common.ts';

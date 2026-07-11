@@ -13,8 +13,9 @@ import {
   resolveAndroidSerialAllowlist,
   resolveIosSimulatorDeviceSetPath,
 } from '../utils/device-isolation.ts';
-import type { CliFlags } from '../cli/parser/cli-flags.ts';
-import { listLocalDeviceInventory, type DeviceInventoryRequest } from './platform-inventory.ts';
+import type { CliFlags } from '../contracts/cli-flags.ts';
+import type { DeviceInventoryRequest } from '../contracts/device-inventory.ts';
+import { listLocalDeviceInventory } from './platform-inventory.ts';
 export type ResolveDeviceFlags = Pick<
   CliFlags,
   | 'platform'

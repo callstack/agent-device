@@ -2,13 +2,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { AppError } from '../kernel/errors.ts';
 import { mergeDefinedFlags } from './merge-flags.ts';
-import { type CliFlags, type FlagKey } from '../cli/parser/cli-flags.ts';
+import { type CliFlags, type FlagKey } from '../commands/cli-grammar/flag-types.ts';
 import { expandUserHomePath, resolveUserPath } from './path-resolution.ts';
 import {
   getConfigurableOptionSpecs,
   getOptionSpec,
   parseOptionValueFromSource,
-} from './cli-option-schema.ts';
+} from '../cli-schema/option-schema.ts';
 import { parseInstallSourceConfig } from './install-source-config.ts';
 import type { EnvMap } from './env-map.ts';
 

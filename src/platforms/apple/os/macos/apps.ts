@@ -1,5 +1,5 @@
 import type { AppsFilter } from '../../../../contracts/app-inventory.ts';
-import { isDeepLinkTarget } from '../../../../core/open-target.ts';
+import { isDeepLinkTarget } from '../../../../contracts/open-target.ts';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import { AppError } from '../../../../kernel/errors.ts';
 import { parseAppearanceAction } from '../../../appearance.ts';

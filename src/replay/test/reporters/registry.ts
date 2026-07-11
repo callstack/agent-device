@@ -1,5 +1,5 @@
 import type { ReplaySuiteResult } from '../../../daemon/types.ts';
-import type { RequestProgressEvent } from '../../../daemon/request-progress.ts';
+import type { RequestProgressEvent } from '../../../request/progress.ts';
 import { createCustomReplayTestReporter } from './custom.ts';
 import { createDefaultReplayTestReporter } from './default.ts';
 import { getReplayTestExitCode } from './format.ts';

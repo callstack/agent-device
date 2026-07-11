@@ -11,7 +11,7 @@ import {
   buildScrollGesturePlan,
   type ScrollDirection,
   type SwipePattern,
-} from '../core/scroll-gesture.ts';
+} from '../contracts/scroll-gesture.ts';
 import {
   getSnapshotReferenceFrame,
   type TouchReferenceFrame as ReferenceFrame,

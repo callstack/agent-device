@@ -12,7 +12,7 @@ import type {
   AppOpenOptions,
   MetroPrepareOptions,
   MetroReloadOptions,
-} from '../client/client.ts';
+} from '../agent-device-client.ts';
 import type { SettingsUpdateOptions } from '../client/client-types.ts';
 import { AppError } from '../kernel/errors.ts';
 import { resolveCliOptions } from '../utils/cli-options.ts';

@@ -1,4 +1,4 @@
-import type { RequestProgressEvent } from '../../daemon/request-progress.ts';
+import type { RequestProgressEvent } from '../../request/progress.ts';
 import type { ReplaySuiteResult } from '../../daemon/types.ts';
 import {
   getReplayTestReporterExitCode,

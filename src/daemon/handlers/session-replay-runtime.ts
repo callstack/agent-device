@@ -8,7 +8,7 @@ import {
   emitRequestProgress,
   readReplayTestActionProgress,
   type ReplayTestProgressEvent,
-} from '../request-progress.ts';
+} from '../../request/progress.ts';
 import { SessionStore } from '../session-store.ts';
 import { type ReplayScriptMetadata, writeReplayScript } from '../../replay/script.ts';
 import { healReplayAction } from './session-replay-heal.ts';
@@ -16,7 +16,7 @@ import { formatDivergenceActionLabel } from '../../replay/script-utils.ts';
 import { buildDisplayPositionals } from '../session-event-action.ts';
 import { errorResponse } from './response.ts';
 import { invokeReplayAction } from './session-replay-action-runtime.ts';
-import { tryParseSelectorChain } from '../selectors.ts';
+import { tryParseSelectorChain } from '../../selectors/index.ts';
 import {
   buildReplayVarScope,
   collectReplayScrubbableVarValues,
@@ -33,6 +33,7 @@ import {
 } from '../../snapshot-diagnostics.ts';
 import { buildReplayFailureDivergence } from './session-replay-divergence.ts';
 import { scrubReplayVarValues, type ReplayVarScrubEntry } from '../../replay/divergence.ts';
+import type { ReplayCommandResult } from '../../contracts/replay.ts';
 
 // fallow-ignore-next-line complexity
 export async function runReplayScriptFile(params: {
@@ -198,7 +199,7 @@ export async function runReplayScriptFile(params: {
         ...(snapshotDiagnosticsSummary ? { snapshotDiagnostics: snapshotDiagnosticsSummary } : {}),
         // ADR 0012: one-line text success summary; --json shape is additive.
         message: formatReplaySuccessMessage(actions.length, wallClockMs),
-      },
+      } satisfies ReplayCommandResult,
     };
   } catch (err) {
     const appErr = asAppError(err);

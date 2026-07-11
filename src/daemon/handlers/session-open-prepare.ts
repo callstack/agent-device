@@ -1,4 +1,4 @@
-import { isDeepLinkTarget } from '../../core/open-target.ts';
+import { isDeepLinkTarget } from '../../contracts/open-target.ts';
 import { ensureDeviceReady } from '../device-ready.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import type { DaemonRequest, DaemonResponse, SessionRuntimeHints, SessionState } from '../types.ts';
@@ -21,7 +21,7 @@ import {
   resolveMacOsSurfaceAppState,
   resolveRequestedOpenSurface,
 } from './session-open-surface.ts';
-import type { SessionSurface } from '../../core/session-surface.ts';
+import type { SessionSurface } from '../../contracts/session-surface.ts';
 
 type OpenCommandDetails = {
   appBundleId?: string;

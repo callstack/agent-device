@@ -4,13 +4,13 @@ import type { JsonObject } from './contracts/json.ts';
 import type { Point, SnapshotNode, SnapshotOptions, SnapshotState } from './kernel/snapshot.ts';
 import type { NetworkIncludeMode } from './kernel/contracts.ts';
 import type { DeviceTarget, Platform, PlatformSelector, PublicPlatform } from './kernel/device.ts';
-import type { BackMode } from './core/back-mode.ts';
+import type { BackMode } from './contracts/back-mode.ts';
 import type { RepeatedInput } from './commands/command-input.ts';
 import type { ClickButton } from './core/click-button.ts';
-import type { DeviceRotation } from './core/device-rotation.ts';
-import type { ScrollDirection } from './core/scroll-gesture.ts';
-import type { SessionSurface } from './core/session-surface.ts';
-import type { TvRemoteButton } from './core/tv-remote.ts';
+import type { DeviceRotation } from './contracts/device-rotation.ts';
+import type { ScrollDirection } from './contracts/scroll-gesture.ts';
+import type { SessionSurface } from './contracts/session-surface.ts';
+import type { TvRemoteButton } from './contracts/tv-remote.ts';
 import type { RecordingExportQuality } from './core/recording-export-quality.ts';
 import type { SnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 import type {

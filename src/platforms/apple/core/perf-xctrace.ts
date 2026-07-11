@@ -17,7 +17,7 @@ import {
   type ExecBackgroundResult,
   type ExecResult,
 } from '../../../utils/exec.ts';
-import { uniqueStrings } from '../../../daemon/action-utils.ts';
+import { uniqueStrings } from '../../../kernel/collections.ts';
 import { findAllXmlNodes } from './perf-xml.ts';
 import {
   isRetryableIosDeviceTraceRecordFailure,

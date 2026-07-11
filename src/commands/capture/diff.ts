@@ -1,5 +1,5 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import { SNAPSHOT_FLAGS } from '../../cli/parser/cli-flags.ts';
+import { SNAPSHOT_FLAGS } from '../cli-grammar/flag-groups.ts';
 import { AppError } from '../../kernel/errors.ts';
 import {
   booleanField,

@@ -1,4 +1,4 @@
-import { parseSessionSurface, type SessionSurface } from '../../core/session-surface.ts';
+import { parseSessionSurface, type SessionSurface } from '../../contracts/session-surface.ts';
 import { resolveFrontmostMacOsApp } from '../../platforms/apple/os/macos/helper.ts';
 import {
   isIosFamily,

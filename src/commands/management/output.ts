@@ -5,7 +5,7 @@ import {
   serializeInstallFromSourceResult,
   serializeOpenResult,
   serializeSessionListEntry,
-} from '../../client/client-shared.ts';
+} from '../../contracts/result-serialization.ts';
 import type {
   AgentDeviceCapabilitiesResult,
   AgentDeviceDevice,

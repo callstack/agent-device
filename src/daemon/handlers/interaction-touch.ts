@@ -1,4 +1,4 @@
-import type { GestureReferenceFrame } from '../../core/scroll-gesture.ts';
+import type { GestureReferenceFrame } from '../../contracts/scroll-gesture.ts';
 import {
   transformInteractionResponseData,
   type InteractionResponseDataTransformCommand,

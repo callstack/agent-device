@@ -19,22 +19,22 @@ import type {
   PublicPlatform,
   PlatformSelector,
 } from '../kernel/device.ts';
-import type { BackMode } from '../core/back-mode.ts';
+import type { BackMode } from '../contracts/back-mode.ts';
 import type { ClickButton } from '../core/click-button.ts';
 import type { RecordingExportQuality } from '../core/recording-export-quality.ts';
-import type { RecordingScope } from '../core/recording-scope.ts';
-import type { DeviceRotation } from '../core/device-rotation.ts';
-import type { TvRemoteButton } from '../core/tv-remote.ts';
+import type { RecordingScope } from '../contracts/recording-scope.ts';
+import type { DeviceRotation } from '../contracts/device-rotation.ts';
+import type { TvRemoteButton } from '../contracts/tv-remote.ts';
 import type {
   ScrollDirection,
   SwipePattern,
   SwipePreset,
   TransformGestureParams,
-} from '../core/scroll-gesture.ts';
+} from '../contracts/scroll-gesture.ts';
 import type { ScrollInputDirection } from '../commands/interaction/runtime/gestures.ts';
 import type { LogAction } from '../contracts/logs.ts';
-import type { SessionSurface } from '../core/session-surface.ts';
-import type { FindLocator } from '../utils/finders.ts';
+import type { SessionSurface } from '../contracts/session-surface.ts';
+import type { FindLocator } from '../selectors/find.ts';
 import type { SnapshotNode, SnapshotUnchanged, SnapshotVisibility } from '../kernel/snapshot.ts';
 import type { ScreenshotResultData } from '../utils/screenshot-result.ts';
 import type {
@@ -60,7 +60,7 @@ import type {
 import type { CommandResult } from '../core/command-descriptor/command-result.ts';
 import type { AgentArtifactsResult, CloudProviderSessionResult } from '../cloud-artifacts.ts';
 
-export type { FindLocator } from '../utils/finders.ts';
+export type { FindLocator } from '../selectors/find.ts';
 export type { CompanionTunnelScope, MetroBridgeScope } from './client-companion-tunnel-contract.ts';
 export type { AppsFilter } from '../contracts/app-inventory.ts';
 export type { AlertAction, AlertInfo, AlertPlatform, AlertSource } from '../alert-contract.ts';
@@ -82,6 +82,19 @@ export type { WaitCommandResult } from '../contracts/wait.ts';
 export type { PrepareCommandResult } from '../contracts/prepare.ts';
 export type { PushCommandResult } from '../contracts/push.ts';
 export type { TriggerAppEventCommandResult } from '../contracts/app-events.ts';
+export type { DoctorCommandResult } from '../contracts/doctor.ts';
+export type { DiffSnapshotCommandResult } from '../contracts/diff.ts';
+export type {
+  RecordingCommandResult,
+  RecordingStartCommandResult,
+  RecordingStopCommandResult,
+  TraceCommandResult,
+} from '../contracts/recording.ts';
+export type {
+  ReplayCommandResult,
+  ReplaySuiteResult,
+  ReplaySuiteTestResult,
+} from '../contracts/replay.ts';
 export type { JsonObject, JsonPrimitive, JsonValue } from '../contracts/json.ts';
 
 export type AgentDeviceDaemonTransport = (
@@ -582,7 +595,7 @@ export type AgentDeviceCommandClient = {
   clipboard: (options: ClipboardCommandOptions) => Promise<CommandResult<'clipboard'>>;
   tvRemote: (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>;
   reactNative: (options: ReactNativeCommandOptions) => Promise<CommandRequestResult>;
-  doctor: (options?: DoctorCommandOptions) => Promise<CommandRequestResult>;
+  doctor: (options?: DoctorCommandOptions) => Promise<CommandResult<'doctor'>>;
   /**
    * JSON prepare results include timing.additiveParts for additive wall-clock phases.
    * Top-level buildMs/connectMs/healthCheckMs are diagnostics and may overlap.
@@ -1085,7 +1098,7 @@ export type AgentDeviceClient = {
   capture: {
     snapshot: (options?: CaptureSnapshotOptions) => Promise<CaptureSnapshotResult>;
     screenshot: (options?: CaptureScreenshotOptions) => Promise<CaptureScreenshotResult>;
-    diff: (options: CaptureDiffOptions) => Promise<CommandRequestResult>;
+    diff: (options: CaptureDiffOptions) => Promise<CommandResult<'diff'>>;
   };
   interactions: {
     click: (options: ClickOptions) => Promise<CommandRequestResult>;
@@ -1107,8 +1120,8 @@ export type AgentDeviceClient = {
     find: (options: FindOptions) => Promise<CommandRequestResult>;
   };
   replay: {
-    run: (options: ReplayRunOptions) => Promise<CommandRequestResult>;
-    test: (options: ReplayTestOptions) => Promise<CommandRequestResult>;
+    run: (options: ReplayRunOptions) => Promise<CommandResult<'replay'>>;
+    test: (options: ReplayTestOptions) => Promise<CommandResult<'test'>>;
   };
   batch: {
     run: (options: BatchRunOptions) => Promise<BatchRunResult>;
@@ -1124,8 +1137,8 @@ export type AgentDeviceClient = {
     symbols: (options: DebugSymbolsOptions) => Promise<DebugSymbolsResult>;
   };
   recording: {
-    record: (options: RecordOptions) => Promise<CommandRequestResult>;
-    trace: (options: TraceOptions) => Promise<CommandRequestResult>;
+    record: (options: RecordOptions) => Promise<CommandResult<'record'>>;
+    trace: (options: TraceOptions) => Promise<CommandResult<'trace'>>;
   };
   settings: {
     update: (options: SettingsUpdateOptions) => Promise<CommandRequestResult>;

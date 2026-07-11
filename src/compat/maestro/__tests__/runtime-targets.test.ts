@@ -1538,7 +1538,7 @@ test('resolveMaestroNodeFromSnapshot propagates selector parser errors uncaught'
     },
   ]);
 
-  // Exact parser wording is owned by src/daemon/selectors-parse.ts and pinned
+  // Exact parser wording is owned by src/selectors/arguments.ts and pinned
   // in src/daemon/__tests__/selectors.test.ts; here we only assert that the
   // parser error reaches the caller unchanged.
   assert.throws(

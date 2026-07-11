@@ -2,7 +2,7 @@ import path from 'node:path';
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
 import { isIosFamily, publicPlatformString, type DeviceInfo } from '../../kernel/device.ts';
-import { emitRequestProgress } from '../request-progress.ts';
+import { emitRequestProgress } from '../../request/progress.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { readVersion } from '../../utils/version.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
@@ -29,6 +29,7 @@ import {
 } from './session-doctor-output.ts';
 import { appendToolchainChecks } from './session-doctor-toolchain.ts';
 import type { DoctorCheck, DoctorOptions } from './session-doctor-types.ts';
+import type { DoctorCommandResult } from '../../contracts/doctor.ts';
 import {
   hasCachedAppleRunnerArtifact,
   prewarmAppleRunnerCache,
@@ -204,6 +205,6 @@ function doctorResponse(
           ? { host: options.metroHost, port: options.metroPort }
           : undefined,
       checks: sortChecks(checks),
-    },
+    } satisfies DoctorCommandResult,
   };
 }

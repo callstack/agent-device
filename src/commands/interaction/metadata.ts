@@ -27,16 +27,16 @@ import {
 } from '../command-input.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import { CLICK_BUTTONS } from '../../core/click-button.ts';
-import { SCROLL_DURATION_MAX_MS } from '../../core/scroll-command.ts';
+import { SCROLL_DURATION_MAX_MS } from '../../contracts/scroll-command.ts';
 import {
   SCROLL_DIRECTIONS,
   SWIPE_PATTERNS,
   SWIPE_PRESETS,
   type ScrollDirection,
   type SwipePreset,
-} from '../../core/scroll-gesture.ts';
+} from '../../contracts/scroll-gesture.ts';
 import { SCROLL_INPUT_DIRECTIONS } from './runtime/gestures.ts';
-import { FIND_LOCATORS } from '../../utils/finders.ts';
+import { FIND_LOCATORS } from '../../selectors/find.ts';
 import {
   commandSupportsSettleObservation,
   commandSupportsVerifyEvidence,

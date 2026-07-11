@@ -40,7 +40,7 @@ import { handleAudioCommand } from './session-audio.ts';
 import { handleNativePerfCommand as handleAppleNativePerfCommand } from './session-perf-xctrace.ts';
 import { NETWORK_INCLUDE_MODES, type NetworkIncludeMode } from '../../kernel/contracts.ts';
 import type { LogBackend } from '../network-log.ts';
-import { uniqueStrings } from '../action-utils.ts';
+import { uniqueStrings } from '../../kernel/collections.ts';
 import {
   LOG_ACTION_VALUES as LOG_ACTIONS,
   type LogAction as LogsAction,

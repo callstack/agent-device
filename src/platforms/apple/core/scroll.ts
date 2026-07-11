@@ -1,4 +1,4 @@
-import { buildScrollGesturePlan, type ScrollDirection } from '../../../core/scroll-gesture.ts';
+import { buildScrollGesturePlan, type ScrollDirection } from '../../../contracts/scroll-gesture.ts';
 
 export type NormalizedScrollOptions = {
   amount?: number;
