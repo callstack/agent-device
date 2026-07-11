@@ -112,15 +112,11 @@ jobs:
           profile: pixel_7
           target: google_apis_playstore
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -no-metrics
-          script: |
-            set -e
-            # Disable animations up front so accessibility dumps don't time out (the harness
-            # also runs `settings animations off`, this is belt-and-suspenders).
-            adb -s emulator-5554 shell settings put global window_animation_scale 0 || true
-            adb -s emulator-5554 shell settings put global transition_animation_scale 0 || true
-            adb -s emulator-5554 shell settings put global animator_duration_scale 0 || true
-            # The action executes each script line independently, so keep the benchmark invocation
-            # on one line rather than passing shell continuation backslashes as literal arguments.
+          script: >-
+            set -e;
+            adb -s emulator-5554 shell settings put global window_animation_scale 0 || true;
+            adb -s emulator-5554 shell settings put global transition_animation_scale 0 || true;
+            adb -s emulator-5554 shell settings put global animator_duration_scale 0 || true;
             node --experimental-strip-types scripts/perf/run.ts --platform android --serial emulator-5554 --n "$PERF_ROUNDS" --warmup 1 --out-dir "$GITHUB_WORKSPACE/perf-results"
 
       - name: Upload Android perf report
