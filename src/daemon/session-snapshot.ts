@@ -26,7 +26,6 @@ export const STALE_SNAPSHOT_REFS_WARNING =
  *   --verify evidence captures routed through the interaction runtime
  * - handlers/interaction-snapshot.ts — Android ref-freshness refreshes and
  *   recording reference-frame captures
- * - handlers/session-replay-heal.ts — replay heal re-captures
  * - request-generic-dispatch.ts — screenshot --overlay-refs capture (the
  *   overlay burns in at most a scored subset of refs, so it does NOT count as
  *   issuing the full ref set and stays conservative-stale)

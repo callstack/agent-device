@@ -14,7 +14,6 @@ test('parseReplayInput routes compat replay scripts through the selected parser'
     { replayBackend: 'maestro' },
   );
 
-  assert.match(parsed.updateUnsupportedMessage ?? '', /Convert to \.ad/);
   assert.deepEqual(
     parsed.actions.map((action) => [action.command, action.positionals]),
     [

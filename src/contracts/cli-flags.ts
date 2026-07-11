@@ -122,6 +122,8 @@ export type CliFlags = CloudProviderProfileFields &
     replayExportFormat?: 'maestro';
     replayEnv?: string[];
     replayShellEnv?: Record<string, string>;
+    replayFrom?: number;
+    replayPlanDigest?: string;
     failFast?: boolean;
     timeoutMs?: number;
     retries?: number;

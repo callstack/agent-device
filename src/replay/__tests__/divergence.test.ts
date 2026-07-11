@@ -8,7 +8,6 @@ import {
   REPLAY_DIVERGENCE_DEFAULT_REF_LIMIT,
   REPLAY_DIVERGENCE_DIGEST_REF_LIMIT,
   REPLAY_DIVERGENCE_LEVEL_BYTE_LIMITS,
-  REPLAY_DIVERGENCE_RESUME_NOT_SUPPORTED,
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
   truncateUtf8Field,
   type ReplayDivergence,
@@ -24,7 +23,7 @@ function buildDivergence(overrides: Partial<ReplayDivergence> = {}): ReplayDiver
     screen: { state: 'available', refsGeneration: 4, refs: [{ ref: 'e1', role: 'button' }] },
     suggestions: [],
     suggestionCount: 0,
-    resume: REPLAY_DIVERGENCE_RESUME_NOT_SUPPORTED,
+    resume: { allowed: true, from: 3, planDigest: 'deadbeef' },
     ...overrides,
   };
 }
@@ -194,10 +193,16 @@ test('boundReplayDivergence sets artifactUnavailable when the artifact write its
   assert.ok(divergence.cause.message.startsWith(bounded.cause.message.slice(0, 50)));
 });
 
-test('resume is always allowed:false with a clear reason and carries no planDigest key at this migration step', () => {
-  const divergence = buildDivergence();
-  assert.deepEqual(divergence.resume, { allowed: false, reason: 'resume not yet supported' });
-  assert.ok(!('planDigest' in divergence.resume));
+test('resume carries the from index and planDigest through unmodified', () => {
+  const divergence = buildDivergence({
+    resume: { allowed: false, from: 3, planDigest: 'deadbeef', reason: 'skips control flow' },
+  });
+  assert.deepEqual(divergence.resume, {
+    allowed: false,
+    from: 3,
+    planDigest: 'deadbeef',
+    reason: 'skips control flow',
+  });
 });
 
 // --- ADR 0012: redact BEFORE truncation ("All rendered strings ... pass
@@ -249,7 +254,7 @@ test('formatReplayDivergenceReport lists a bounded ref/role/label subset for an 
       },
       suggestions: [],
       suggestionCount: 0,
-      resume: { allowed: false, reason: 'resume not yet supported' },
+      resume: { allowed: true, from: 5, planDigest: 'deadbeef' },
     },
   });
   assert.ok(report);
@@ -278,7 +283,7 @@ test('formatReplayDivergenceReport carries the unavailable-screen hint', async (
       },
       suggestions: [],
       suggestionCount: 0,
-      resume: { allowed: false, reason: 'resume not yet supported' },
+      resume: { allowed: true, from: 5, planDigest: 'deadbeef' },
     },
   });
   assert.ok(report);

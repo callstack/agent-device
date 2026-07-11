@@ -11,7 +11,28 @@ export const WORKFLOW_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     names: ['--update', '-u'],
     type: 'boolean',
     usageLabel: '--update, -u',
-    usageDescription: 'Replay: update selectors and rewrite replay file in place',
+    usageDescription:
+      'Replay: retired as a rewrite (ADR 0012) — never edits the .ad file; every divergence already ' +
+      'carries ranked selector suggestions, --update or not',
+  },
+  {
+    key: 'replayFrom',
+    names: ['--from'],
+    type: 'int',
+    min: 1,
+    usageLabel: '--from <n>',
+    usageDescription:
+      'Replay: resume at 1-based plan step n, skipping 1..n-1 without executing them (requires ' +
+      "--plan-digest; see a divergence report's resume field). replay only, not test",
+  },
+  {
+    key: 'replayPlanDigest',
+    names: ['--plan-digest'],
+    type: 'string',
+    usageLabel: '--plan-digest <sha256>',
+    usageDescription:
+      'Replay: the plan digest a --from resume must match (from a prior divergence report); mismatch, ' +
+      'edits, or include/platform-expansion changes fail INVALID_ARGS before any action',
   },
   {
     key: 'replayMaestro',

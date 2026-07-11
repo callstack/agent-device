@@ -817,12 +817,26 @@ export type FindOptions =
 export type ReplayRunOptions = AgentDeviceRequestOverrides &
   AgentDeviceSelectionOptions & {
     path: string;
+    /**
+     * @deprecated ADR 0012 migration step 6: `--update` no longer rewrites
+     * the script. Accepted for backward compatibility; every divergence
+     * already carries ranked selector suggestions regardless of this flag.
+     */
     update?: boolean;
     /** @deprecated Use backend: 'maestro'. */
     maestro?: boolean;
     backend?: string;
     env?: string[];
     timeoutMs?: number;
+    /**
+     * ADR 0012 decision 4 / migration step 5: resume at this 1-based plan
+     * step, skipping `1..resumeFrom-1` without executing them. Requires
+     * `resumePlanDigest` from the divergence report that reported this
+     * step as the failure. `replay` only — `test` has no resume fields.
+     */
+    resumeFrom?: number;
+    /** The `resume.planDigest` from the divergence report `resumeFrom` came from. */
+    resumePlanDigest?: string;
   };
 
 export type ReplayTestOptions = AgentDeviceRequestOverrides &
@@ -1000,6 +1014,8 @@ type CommandExecutionOptions = Partial<ScreenshotRequestFlags> & {
   replayBackend?: string;
   replayEnv?: string[];
   replayShellEnv?: Record<string, string>;
+  replayFrom?: number;
+  replayPlanDigest?: string;
   failFast?: boolean;
   timeoutMs?: number;
   retries?: number;

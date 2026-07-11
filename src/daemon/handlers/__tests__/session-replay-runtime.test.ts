@@ -97,7 +97,11 @@ test('a failing replay step returns REPLAY_DIVERGENCE with cause preserved and c
 
   expect(divergence.suggestions).toEqual([]);
   expect(divergence.suggestionCount).toBe(0);
-  expect(divergence.resume).toEqual({ allowed: false, reason: 'resume not yet supported' });
+  const resume = divergence.resume as { allowed: boolean; from: number; planDigest: string };
+  // Step 1 ("open") is a plain action with no control flow and no outputEnv
+  // production, so resuming at the failed step (2) is safe.
+  expect(resume).toEqual({ allowed: true, from: 2, planDigest: expect.any(String) });
+  expect(resume.planDigest).toMatch(/^[0-9a-f]{64}$/);
 });
 
 test('a normalized nested failure preserves typed recovery signals on REPLAY_DIVERGENCE', async () => {
@@ -526,6 +530,16 @@ test('a divergence dedupes suggestions by node and tags the strongest basis', as
     sessionStore,
     logPath: path.join(root, 'daemon.log'),
     responseLevel: 'default',
+    planActions: [
+      {
+        ts: 0,
+        command: 'click',
+        positionals: ['label="Save"'],
+        flags: {},
+        result: { selectorChain: ['label="Save"', 'id="save"'] },
+      },
+    ],
+    planDigest: 'test-plan-digest',
   });
 
   expect(divergence.suggestionCount).toBe(1);
@@ -642,4 +656,395 @@ test('an expanded built-in AD_DEVICE_ID never reaches the public divergence', as
   expect(response.error.message).toContain('<var:AD_DEVICE_ID>');
   // AD_SESSION was not expanded, so matching static text remains readable.
   expect(response.error.message).toContain(sessionName);
+});
+
+// --- ADR 0012 decision 4 / migration step 5: replay resume (`--from` + `--plan-digest`) ---
+
+test('resume skips steps 1..from-1 without invoking them and executes only from the reported step', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-resume-skip-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const filePath = writeReplayFile(root, [
+    'open "Demo"',
+    'click label="Continue"',
+    'click label="Save"',
+  ]);
+
+  // First attempt: step 3 fails, capturing a real resume report.
+  const firstAttempt = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      if (req.command === 'click' && req.positionals?.[0] === 'label="Save"') {
+        return { ok: false, error: { code: 'COMMAND_FAILED', message: 'not hittable' } };
+      }
+      return { ok: true, data: {} };
+    },
+  });
+  expect(firstAttempt.ok).toBe(false);
+  if (firstAttempt.ok) return;
+  const divergence = firstAttempt.error.details?.divergence as {
+    resume: { allowed: boolean; from: number; planDigest: string };
+  };
+  expect(divergence.resume.allowed).toBe(true);
+  expect(divergence.resume.from).toBe(3);
+
+  // Second attempt: repair app state, resume at the reported step. Steps 1-2
+  // must never be invoked — the mock throws if they are.
+  const invokedCommands: string[] = [];
+  const resumedAttempt = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [filePath],
+      flags: { replayFrom: divergence.resume.from, replayPlanDigest: divergence.resume.planDigest },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invokedCommands.push(`${req.command} ${req.positionals?.[0] ?? ''}`.trim());
+      if (req.command === 'open' || req.positionals?.[0] === 'label="Continue"') {
+        throw new Error('resume must not re-invoke a skipped step');
+      }
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(resumedAttempt.ok).toBe(true);
+  if (!resumedAttempt.ok) return;
+  expect(invokedCommands).toEqual(['click label="Save"']);
+  const data = resumedAttempt.data as { replayed: number };
+  expect(data.replayed).toBe(1);
+});
+
+test('resume requires both --from and --plan-digest together', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-resume-pair-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
+
+  const fromOnly = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { replayFrom: 2 } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => {
+      throw new Error('must not execute before the flag-pair preflight');
+    },
+  });
+  expect(fromOnly.ok).toBe(false);
+  if (!fromOnly.ok) expect(fromOnly.error.code).toBe('INVALID_ARGS');
+
+  const digestOnly = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { replayPlanDigest: 'deadbeef' } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => {
+      throw new Error('must not execute before the flag-pair preflight');
+    },
+  });
+  expect(digestOnly.ok).toBe(false);
+  if (!digestOnly.ok) expect(digestOnly.error.code).toBe('INVALID_ARGS');
+});
+
+test('resume rejects an out-of-range --from before any action', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-resume-range-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
+
+  const response = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [filePath],
+      flags: { replayFrom: 99, replayPlanDigest: 'deadbeef' },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => {
+      throw new Error('must not execute an out-of-range resume');
+    },
+  });
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('INVALID_ARGS');
+  expect(response.error.message).toMatch(/out of range/);
+});
+
+test('resume rejects a stale --plan-digest after the script changed', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-resume-stale-digest-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
+
+  const firstAttempt = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      if (req.command === 'click') {
+        return { ok: false, error: { code: 'COMMAND_FAILED', message: 'not hittable' } };
+      }
+      return { ok: true, data: {} };
+    },
+  });
+  expect(firstAttempt.ok).toBe(false);
+  if (firstAttempt.ok) return;
+  const divergence = firstAttempt.error.details?.divergence as {
+    resume: { allowed: boolean; from: number; planDigest: string };
+  };
+
+  // Edit the script (an extra step) before resuming: the digest must no
+  // longer match.
+  fs.writeFileSync(filePath, 'open "Demo"\nclick "Extra"\nclick "Save"\n');
+
+  const resumedAttempt = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [filePath],
+      flags: { replayFrom: divergence.resume.from, replayPlanDigest: divergence.resume.planDigest },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => {
+      throw new Error('must not execute on a plan-digest mismatch');
+    },
+  });
+  expect(resumedAttempt.ok).toBe(false);
+  if (resumedAttempt.ok) return;
+  expect(resumedAttempt.error.code).toBe('INVALID_ARGS');
+  expect(resumedAttempt.error.message).toMatch(/plan digest/);
+});
+
+test('resume rejects resuming past a retry-wrapped step in the skipped range', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-resume-control-flow-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const mainPath = path.join(root, 'main.yaml');
+  fs.writeFileSync(
+    mainPath,
+    [
+      'appId: com.callstack.agentdevicelab',
+      '---',
+      '- retry:',
+      '    maxRetries: 1',
+      '    commands:',
+      '      - back',
+      '- back',
+      '',
+    ].join('\n'),
+  );
+
+  // `back` has no Maestro-specific runtime handling, so it reaches `invoke`
+  // directly — the retry block's nested `back` (1st call) succeeds; the
+  // top-level step-2 `back` (2nd call) fails.
+  let backCalls = 0;
+  const firstAttempt = await runReplayScriptFile({
+    req: baseReq({ positionals: [mainPath], flags: { replayBackend: 'maestro' } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      if (req.command !== 'back') return { ok: true, data: {} };
+      backCalls += 1;
+      if (backCalls === 1) return { ok: true, data: {} };
+      return { ok: false, error: { code: 'COMMAND_FAILED', message: 'back failed' } };
+    },
+  });
+  expect(firstAttempt.ok).toBe(false);
+  if (firstAttempt.ok) return;
+  const divergence = firstAttempt.error.details?.divergence as {
+    resume: { allowed: boolean; from: number; planDigest: string; reason?: string };
+  };
+  // Step 2 (tapOn: Save) is the reported failure; resuming there means
+  // skipping step 1, the retry block.
+  expect(divergence.resume.from).toBe(2);
+  expect(divergence.resume.allowed).toBe(false);
+  expect(divergence.resume.reason).toMatch(/control flow/);
+
+  const resumedAttempt = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [mainPath],
+      flags: {
+        replayBackend: 'maestro',
+        replayFrom: divergence.resume.from,
+        replayPlanDigest: divergence.resume.planDigest,
+      },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => {
+      throw new Error('must not execute a resume the preflight rejected');
+    },
+  });
+  expect(resumedAttempt.ok).toBe(false);
+  if (resumedAttempt.ok) return;
+  expect(resumedAttempt.error.code).toBe('INVALID_ARGS');
+  expect(resumedAttempt.error.message).toMatch(/control flow/);
+});
+
+// --- Migrated from the retired replay-heal.test.ts: general parse-time rejections ---
+
+test('replay rejects legacy JSON payload files', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-json-rejected-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const filePath = path.join(root, 'replay.json');
+  fs.writeFileSync(filePath, JSON.stringify({ optimizedActions: [] }, null, 2));
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => ({ ok: true, data: {} }),
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('INVALID_ARGS');
+  expect(response.error.message).toMatch(/\.ad script files/);
+});
+
+test('replay rejects malformed .ad lines with unclosed quotes', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-invalid-ad-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const filePath = writeReplayFile(root, ['click "id=\\"broken\\"']);
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => ({ ok: true, data: {} }),
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('INVALID_ARGS');
+  expect(response.error.message).toMatch(/Invalid replay script line/);
+});
+
+// --- ADR 0012 decision 1 / migration step 6: `--update` retirement ---
+
+test('--update never rewrites the .ad file, even when a re-resolvable suggestion exists', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-update-no-write-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  const filePath = writeReplayFile(root, ['click label="Save"']);
+  const before = fs.readFileSync(filePath, 'utf8');
+  const statBefore = fs.statSync(filePath);
+
+  // The recorded selector still structurally matches a fresh node — exactly
+  // the case the old heal-and-rewrite arm would have silently applied.
+  mockDispatchCommand.mockResolvedValue({
+    nodes: [
+      {
+        index: 0,
+        depth: 0,
+        type: 'Button',
+        label: 'Save',
+        rect: { x: 0, y: 0, width: 100, height: 44 },
+        hittable: true,
+      },
+    ],
+    truncated: false,
+    backend: 'xctest',
+  });
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { replayUpdate: true } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => ({
+      ok: false,
+      error: { code: 'COMMAND_FAILED', message: 'not hittable' },
+    }),
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  // The file on disk is byte-for-byte unchanged.
+  expect(fs.readFileSync(filePath, 'utf8')).toBe(before);
+  expect(fs.statSync(filePath).mtimeMs).toBe(statBefore.mtimeMs);
+  // The bounded suggestions the ADR mandates are still there — --update did
+  // not lose functionality, it lost the unattended rewrite.
+  const divergence = response.error.details?.divergence as {
+    suggestions: Array<{ selector: string; basis: string }>;
+  };
+  expect(divergence.suggestions.length).toBeGreaterThan(0);
+});
+
+test('a successful --update replay reports healed: 0 (heal is retired, not just quiet)', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-update-healed-zero-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const filePath = writeReplayFile(root, ['open "Demo"', 'click "Save"']);
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { replayUpdate: true } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => ({ ok: true, data: {} }),
+  });
+
+  expect(response.ok).toBe(true);
+  if (!response.ok) return;
+  const data = response.data as { healed: number };
+  expect(data.healed).toBe(0);
+});
+
+test('--update no longer refuses env directives (the guard existed only for rewrite safety)', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-update-env-ok-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const filePath = writeReplayFile(root, ['env NAME=World', 'open "Demo"']);
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { replayUpdate: true } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => ({ ok: true, data: {} }),
+  });
+
+  expect(response.ok).toBe(true);
+});
+
+test('--update no longer refuses ${VAR} interpolation (the guard existed only for rewrite safety)', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-update-interp-ok-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const filePath = writeReplayFile(root, ['click label="${NAME}"']);
+
+  const response = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [filePath],
+      flags: { replayUpdate: true, replayEnv: ['NAME=World'] },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => ({ ok: true, data: {} }),
+  });
+
+  expect(response.ok).toBe(true);
 });

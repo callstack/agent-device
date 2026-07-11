@@ -54,6 +54,11 @@ export type CommandInput = Omit<InternalRequestOptions, 'batchSteps' | 'target'>
     query?: string;
     retainPaths?: boolean;
     retentionMs?: number;
+    // ADR 0012 decision 4 / migration step 5: replay-only resume. Named
+    // `resumeFrom`/`resumePlanDigest` (not `from`/`planDigest`) — `from` is
+    // already a gesture `PointInput` on this shared flat type.
+    resumeFrom?: number;
+    resumePlanDigest?: string;
     scale?: number;
     selector?: string;
     source?: InternalRequestOptions['installSource'];

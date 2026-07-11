@@ -16,11 +16,11 @@ import {
   type Selector,
 } from '../../selectors/index.ts';
 import { collectReplaySelectorCandidates } from './session-replay-heal.ts';
+import { buildReplayDivergenceResume } from './session-replay-resume.ts';
 import { formatDivergenceActionLabel, isTouchTargetCommand } from '../../replay/script-utils.ts';
 import { SessionStore } from '../session-store.ts';
 import type { SessionAction, SessionState } from '../types.ts';
 import {
-  REPLAY_DIVERGENCE_RESUME_NOT_SUPPORTED,
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
   boundReplayDivergence,
   createReplayDivergenceSanitizer,
@@ -54,6 +54,10 @@ export async function buildReplayFailureDivergence(params: {
   responseLevel: ResponseLevel | undefined;
   /** Replay-scope values scrubbed from every divergence string (ADR 0012: expanded variables are never serialized). */
   scrubVars?: ReplayVarScrubEntry[];
+  /** ADR 0012 migration step 5: the full top-level plan, used to compute `resume.allowed`. */
+  planActions: SessionAction[];
+  /** SHA-256 digest of the canonical plan `planActions` came from (`computeReplayPlanDigest`). */
+  planDigest: string;
 }): Promise<ReplayDivergence> {
   const {
     error,
@@ -67,6 +71,8 @@ export async function buildReplayFailureDivergence(params: {
     logPath,
     responseLevel,
     scrubVars = [],
+    planActions,
+    planDigest,
   } = params;
   const sanitize = createReplayDivergenceSanitizer(scrubVars);
 
@@ -107,7 +113,11 @@ export async function buildReplayFailureDivergence(params: {
     screen,
     suggestions: suggestions.slice(0, REPLAY_DIVERGENCE_SUGGESTION_LIMIT),
     suggestionCount: suggestions.length,
-    resume: REPLAY_DIVERGENCE_RESUME_NOT_SUPPORTED,
+    resume: buildReplayDivergenceResume({
+      failedIndex: index + 1,
+      actions: planActions,
+      planDigest,
+    }),
   };
 
   return boundReplayDivergence({

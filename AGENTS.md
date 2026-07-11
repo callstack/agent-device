@@ -203,10 +203,10 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
 
 ## Selector System Rules
 - Interaction commands (`click`, `fill`, `get`, `is`) and `wait` accept selectors and `@ref`.
-- Pipeline: **parse -> resolve -> act -> record selectorChain -> heal on replay**.
+- Pipeline: **parse -> resolve -> act -> record selectorChain -> re-resolve as a divergence suggestion on replay failure**.
 - Keep selector parsing, matching, and resolution in `src/selectors/`.
 - Call `buildSelectorChainForNode` after resolving target nodes.
-- New element-targeting interactions must support selector + `@ref`, record `selectorChain`, and hook replay healing (`healReplayAction` in `session.ts` + selector helpers in `session-replay-heal.ts`).
+- New element-targeting interactions must support selector + `@ref` and record `selectorChain`, so `collectReplaySelectorCandidates` (`src/daemon/handlers/session-replay-heal.ts`) can surface it as a ranked suggestion in a replay divergence report (`session-replay-divergence.ts`). ADR 0012 retired `--update`'s silent rewrite-on-heal; there is no automated write path to hook into.
 - New selector keys remain centralized in `src/selectors/parse.ts`.
 - New `is` predicates belong in `evaluateIsPredicate`.
 - On macOS, snapshot rects are absolute in window space. Point-based runner interactions must translate through the interaction root frame; do not assume app-origin `(0,0)` coordinates.

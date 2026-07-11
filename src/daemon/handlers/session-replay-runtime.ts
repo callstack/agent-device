@@ -10,8 +10,9 @@ import {
   type ReplayTestProgressEvent,
 } from '../../request/progress.ts';
 import { SessionStore } from '../session-store.ts';
-import { type ReplayScriptMetadata, writeReplayScript } from '../../replay/script.ts';
-import { healReplayAction } from './session-replay-heal.ts';
+import { type ReplayScriptMetadata } from '../../replay/script.ts';
+import { computeReplayPlanDigest } from '../../replay/plan-digest.ts';
+import { evaluateReplayResumePreflight } from './session-replay-resume.ts';
 import { formatDivergenceActionLabel } from '../../replay/script-utils.ts';
 import { buildDisplayPositionals } from '../session-event-action.ts';
 import { errorResponse } from './response.ts';
@@ -73,21 +74,17 @@ export async function runReplayScriptFile(params: {
     const actions = parsed.actions;
     const actionLines = parsed.actionLines;
     const actionSourcePaths = parsed.actionSourcePaths;
-    if (req.flags?.replayUpdate === true && parsed.updateUnsupportedMessage) {
-      return errorResponse('INVALID_ARGS', parsed.updateUnsupportedMessage);
-    }
-    if (req.flags?.replayUpdate === true && metadata.env && Object.keys(metadata.env).length > 0) {
-      return errorResponse(
-        'INVALID_ARGS',
-        'replay -u does not yet preserve env directives. Temporarily remove the env lines, run replay -u, then restore them.',
-      );
-    }
-    if (req.flags?.replayUpdate === true && actionsContainInterpolation(actions)) {
-      return errorResponse(
-        'INVALID_ARGS',
-        'replay -u does not yet preserve ${VAR} substitutions. Resolve or inline the variables before running with -u.',
-      );
-    }
+    const planDigest = computeReplayPlanDigest({
+      actions,
+      actionLines,
+      actionSourcePaths,
+      metadata: { platform: metadata.platform, target: metadata.target },
+    });
+    // ADR 0012 decision 4 / migration step 5: resume preflight, entirely
+    // before any device action. `test` never reaches here with either flag
+    // set (rejected earlier, in handleSessionReplayCommands).
+    const entryIndex = resolveReplayEntryIndex(req.flags, actions.length, planDigest, actions);
+    if (!entryIndex.ok) return entryIndex.response;
     const scope = buildReplayVarScope({
       builtins: buildReplayBuiltinVars({
         req: replayReq,
@@ -99,7 +96,6 @@ export async function runReplayScriptFile(params: {
       shellEnv: collectReplayShellEnv(readReplayShellEnvSource(req.flags?.replayShellEnv)),
       cliEnv: parseReplayCliEnvEntries(readReplayCliEnvEntries(req.flags?.replayEnv)),
     });
-    const shouldUpdate = req.flags?.replayUpdate === true;
     const actionTracePath = tracePath ?? sessionStore.get(sessionName)?.trace?.outPath;
     const snapshotDiagnosticSamples: SnapshotTimingSample[] = [];
     const failStep = (failedResponse: DaemonResponse, failedAction: SessionAction, index: number) =>
@@ -117,15 +113,16 @@ export async function runReplayScriptFile(params: {
         sessionName,
         sessionStore,
         logPath,
+        planActions: actions,
+        planDigest,
       });
-    let healed = 0;
-    for (let index = 0; index < actions.length; index += 1) {
+    for (let index = entryIndex.value; index < actions.length; index += 1) {
       const action = actions[index];
       if (!action || action.command === 'replay') continue;
       emitReplayTestActionProgress(resolved, index, actions.length, action);
 
       const sampleStart = readSessionSnapshotSampleCount(sessionStore, sessionName);
-      let response = await invokeReplayAction({
+      const response = await invokeReplayAction({
         req: replayReq,
         sessionName,
         action,
@@ -140,65 +137,28 @@ export async function runReplayScriptFile(params: {
       snapshotDiagnosticSamples.push(
         ...readSessionSnapshotSamplesSince(sessionStore, sessionName, sampleStart),
       );
-      if (response.ok) {
-        collectReplayActionArtifactPaths(response).forEach((entry) => artifactPaths.add(entry));
-        continue;
-      }
       collectReplayActionArtifactPaths(response).forEach((entry) => artifactPaths.add(entry));
-      if (!shouldUpdate) {
-        return await failStep(response, action, index);
-      }
-
-      const nextAction = await healReplayAction({
-        action,
-        sessionName,
-        logPath,
-        sessionStore,
-      });
-      if (!nextAction) {
-        return await failStep(response, action, index);
-      }
-
-      actions[index] = nextAction;
-      const healedSampleStart = readSessionSnapshotSampleCount(sessionStore, sessionName);
-      response = await invokeReplayAction({
-        req: replayReq,
-        sessionName,
-        action: nextAction,
-        scope,
-        filePath: resolved,
-        line: actionLines[index] ?? 1,
-        sourcePath: actionSourcePaths?.[index],
-        step: index + 1,
-        tracePath: actionTracePath,
-        invoke,
-      });
-      snapshotDiagnosticSamples.push(
-        ...readSessionSnapshotSamplesSince(sessionStore, sessionName, healedSampleStart),
-      );
       if (!response.ok) {
-        collectReplayActionArtifactPaths(response).forEach((entry) => artifactPaths.add(entry));
-        return await failStep(response, nextAction, index);
+        return await failStep(response, action, index);
       }
-      collectReplayActionArtifactPaths(response).forEach((entry) => artifactPaths.add(entry));
-      healed += 1;
     }
 
-    if (shouldUpdate && healed > 0) {
-      writeReplayScript(resolved, actions, sessionStore.get(sessionName));
-    }
+    const replayedCount = actions.length - entryIndex.value;
     const snapshotDiagnosticsSummary = summarizeSnapshotTimingSamples(snapshotDiagnosticSamples);
     const wallClockMs = Date.now() - startedAt;
     return {
       ok: true,
       data: {
-        replayed: actions.length,
-        healed,
+        replayed: replayedCount,
+        // ADR 0012 migration step 6: `--update` retired as an actor; it never
+        // healed anything in this run, so the count is always 0. Kept on the
+        // wire shape for existing reporters/consumers (test summary, JUnit).
+        healed: 0,
         session: sessionName,
         artifactPaths: [...artifactPaths],
         ...(snapshotDiagnosticsSummary ? { snapshotDiagnostics: snapshotDiagnosticsSummary } : {}),
         // ADR 0012: one-line text success summary; --json shape is additive.
-        message: formatReplaySuccessMessage(actions.length, wallClockMs),
+        message: formatReplaySuccessMessage(replayedCount, wallClockMs),
       } satisfies ReplayCommandResult,
     };
   } catch (err) {
@@ -341,6 +301,8 @@ async function withReplayFailureDiagnostics(params: {
   sessionName: string;
   sessionStore: SessionStore;
   logPath: string;
+  planActions: SessionAction[];
+  planDigest: string;
 }): Promise<DaemonResponse> {
   return await withReplayFailureContext({
     ...params,
@@ -368,6 +330,8 @@ async function withReplayFailureContext(params: {
   sessionName: string;
   sessionStore: SessionStore;
   logPath: string;
+  planActions: SessionAction[];
+  planDigest: string;
 }): Promise<DaemonResponse> {
   const {
     response,
@@ -383,6 +347,8 @@ async function withReplayFailureContext(params: {
     sessionName,
     sessionStore,
     logPath,
+    planActions,
+    planDigest,
   } = params;
   if (response.ok) return response;
   // The failing action's own source (attached by withReplayFailureSource,
@@ -403,6 +369,8 @@ async function withReplayFailureContext(params: {
     logPath,
     responseLevel: req.meta?.responseLevel,
     scrubVars,
+    planActions,
+    planDigest,
   });
   return buildReplayDivergenceFailureResponse({
     error: cause,
@@ -577,21 +545,56 @@ function isReplayArtifactPath(candidate: string): boolean {
   }
 }
 
-// fallow-ignore-next-line complexity
-function actionsContainInterpolation(actions: SessionAction[]): boolean {
-  for (const action of actions) {
-    for (const positional of action.positionals ?? []) {
-      if (typeof positional === 'string' && positional.includes('${')) return true;
-    }
-    if (containsInterpolation(action.flags)) return true;
-    if (containsInterpolation(action.runtime)) return true;
+type ReplayEntryIndexResult = { ok: true; value: number } | { ok: false; response: DaemonResponse };
+
+/**
+ * ADR 0012 decision 4 / migration step 5: resolves `--from`/`--plan-digest`
+ * into a 0-based loop entry index, entirely before any device action.
+ * `--from` is 1-based and matches `resume.from`/the divergence `step.index`
+ * from a prior run; digest mismatch and preflight rejections are
+ * `INVALID_ARGS` so a stale or hand-edited resume never silently retargets.
+ */
+function resolveReplayEntryIndex(
+  flags: CommandFlags | undefined,
+  actionCount: number,
+  planDigest: string,
+  actions: SessionAction[],
+): ReplayEntryIndexResult {
+  const from = flags?.replayFrom;
+  const digest = flags?.replayPlanDigest;
+  if (from === undefined && digest === undefined) return { ok: true, value: 0 };
+  if (from === undefined || digest === undefined) {
+    return invalidReplayEntryIndex(
+      'replay --from requires --plan-digest (and --plan-digest requires --from).',
+    );
   }
-  return false;
+  const message = validateReplayResumeRequest({ from, digest, planDigest, actionCount, actions });
+  return message ? invalidReplayEntryIndex(message) : { ok: true, value: from - 1 };
 }
 
-function containsInterpolation(value: unknown): boolean {
-  if (typeof value === 'string') return value.includes('${');
-  if (Array.isArray(value)) return value.some(containsInterpolation);
-  if (value && typeof value === 'object') return Object.values(value).some(containsInterpolation);
-  return false;
+function invalidReplayEntryIndex(message: string): ReplayEntryIndexResult {
+  return { ok: false, response: errorResponse('INVALID_ARGS', message) };
+}
+
+/** Assumes `from`/`digest` are both present; returns an error message, or undefined when resume is safe. */
+function validateReplayResumeRequest(params: {
+  from: number;
+  digest: string;
+  planDigest: string;
+  actionCount: number;
+  actions: SessionAction[];
+}): string | undefined {
+  const { from, digest, planDigest, actionCount, actions } = params;
+  if (!Number.isInteger(from) || from < 1 || from > actionCount) {
+    return `replay --from ${from} is out of range for a ${actionCount}-step plan.`;
+  }
+  if (digest !== planDigest) {
+    return (
+      'replay --plan-digest does not match the current plan digest; the script, its includes, or its ' +
+      'platform-conditioned expansion changed since the divergence report was generated. Run a fresh full ' +
+      'replay to get a new digest.'
+    );
+  }
+  const preflight = evaluateReplayResumePreflight({ from, actions });
+  return preflight.allowed ? undefined : `replay --from ${from} cannot resume: ${preflight.reason}`;
 }

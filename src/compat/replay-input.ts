@@ -23,7 +23,6 @@ type ReplayCompatParser = {
 
 export type ParsedReplayInput = ParsedReplayScript & {
   metadata: ReplayScriptMetadata;
-  updateUnsupportedMessage?: string;
 };
 
 type ReplayInputParseOptions = {
@@ -41,9 +40,6 @@ const REPLAY_COMPAT_PARSERS: Record<string, ReplayCompatParser> = {
   },
 };
 
-const COMPAT_UPDATE_UNSUPPORTED_MESSAGE =
-  'replay -u is not supported for compat flow input. Convert to .ad first, then update that replay file.';
-
 export function parseReplayInput(
   script: string,
   flags: CommandFlags | undefined,
@@ -51,14 +47,11 @@ export function parseReplayInput(
 ): ParsedReplayInput {
   const compatParser = readReplayCompatParser(flags);
   if (compatParser) {
-    return {
-      ...compatParser.parse(script, {
-        ...options,
-        platform: flags?.platform,
-        env: readReplayCompatEnv(flags),
-      }),
-      updateUnsupportedMessage: COMPAT_UPDATE_UNSUPPORTED_MESSAGE,
-    };
+    return compatParser.parse(script, {
+      ...options,
+      platform: flags?.platform,
+      env: readReplayCompatEnv(flags),
+    });
   }
 
   return {

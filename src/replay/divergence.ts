@@ -64,11 +64,17 @@ export type ReplayDivergenceSuggestion = {
   label?: string;
 };
 
-/** Always `allowed: false` until migration step 5; `from`/`planDigest` keys absent until then. */
-export type ReplayDivergenceResume = {
-  allowed: false;
-  reason: string;
-};
+/**
+ * ADR 0012 decision 4 / migration step 5. `from` is the failed step's 1-based
+ * plan index and `planDigest` is the SHA-256 digest of the canonical fully
+ * expanded plan (`computeReplayPlanDigest`) that produced this report — both
+ * are always present. `allowed` is the preflight verdict for resuming AT
+ * `from` (`evaluateReplayResumePreflight`); `reason` is present only when
+ * `allowed` is `false`.
+ */
+export type ReplayDivergenceResume =
+  | { allowed: true; from: number; planDigest: string }
+  | { allowed: false; from: number; planDigest: string; reason: string };
 
 export type ReplayDivergenceOverflow = {
   omittedBytes: number;
@@ -88,11 +94,6 @@ export type ReplayDivergence = {
   resume: ReplayDivergenceResume;
   overflow?: ReplayDivergenceOverflow;
   artifactUnavailable?: true;
-};
-
-export const REPLAY_DIVERGENCE_RESUME_NOT_SUPPORTED: ReplayDivergenceResume = {
-  allowed: false,
-  reason: 'resume not yet supported',
 };
 
 type BoundedResponseLevel = 'digest' | 'default' | 'full';

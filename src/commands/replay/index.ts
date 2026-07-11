@@ -35,6 +35,13 @@ export const replayCommandMetadata = defineFieldCommandMetadata(
     backend: stringField(),
     maestro: booleanField(),
     env: stringArrayField(),
+    // ADR 0012 decision 4 / migration step 5: replay-only resume. Named
+    // `resumeFrom`/`resumePlanDigest` (not `from`/`planDigest`) because
+    // `from` already means a gesture's `PointInput` on `CommandInput`
+    // (shared flat type across every command). `test` deliberately has
+    // neither field — it must stay a full, deterministic suite run.
+    resumeFrom: integerField(),
+    resumePlanDigest: stringField(),
   },
 );
 
@@ -73,7 +80,15 @@ const replayCliSchema = {
   summary: replayCommandDescription,
   positionalArgs: ['path'],
   allowsExtraPositionals: true,
-  allowedFlags: ['replayMaestro', 'replayExportFormat', ...REPLAY_FLAGS, 'timeoutMs', 'out'],
+  allowedFlags: [
+    'replayMaestro',
+    'replayExportFormat',
+    ...REPLAY_FLAGS,
+    'replayFrom',
+    'replayPlanDigest',
+    'timeoutMs',
+    'out',
+  ],
 } as const satisfies CommandSchemaOverride;
 
 const testCliSchema = {
@@ -104,6 +119,8 @@ export const replayCliReader: CliReader = (positionals, flags) => ({
   update: flags.replayUpdate,
   backend: flags.replayMaestro ? 'maestro' : undefined,
   env: flags.replayEnv,
+  resumeFrom: flags.replayFrom,
+  resumePlanDigest: flags.replayPlanDigest,
 });
 
 export const testCliReader: CliReader = (positionals, flags) => ({
@@ -128,6 +145,8 @@ export const replayDaemonWriter: DaemonWriter = (input) =>
     replayBackend: readReplayBackend(input),
     replayEnv: input.env,
     replayShellEnv: collectReplayClientShellEnv(process.env),
+    replayFrom: input.resumeFrom,
+    replayPlanDigest: input.resumePlanDigest,
   });
 
 export const testDaemonWriter: DaemonWriter = (input) =>

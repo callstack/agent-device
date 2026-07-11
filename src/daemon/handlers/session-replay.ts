@@ -4,6 +4,7 @@ import { SessionStore } from '../session-store.ts';
 import { runReplayTestSuite } from './session-test.ts';
 import { handleCloseCommand } from './session-close.ts';
 import { collectReplayActionArtifactPaths, runReplayScriptFile } from './session-replay-runtime.ts';
+import { errorResponse } from './response.ts';
 import type { ReplayScriptMetadata } from '../../replay/script.ts';
 import { buildReplayTestShardFlags, type ReplayTestShardContext } from './session-test-sharding.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
@@ -69,6 +70,16 @@ export async function handleSessionReplayCommands(params: {
   }
 
   if (req.command === 'test') {
+    // ADR 0012 decision 4 / migration step 5: `--from` is replay-only. `test`
+    // shares replay execution (below, via a nested `command: 'replay'`
+    // request per matched file) but must remain a full, deterministic suite
+    // run, so this is the one place that still knows the ORIGINAL command.
+    if (req.flags?.replayFrom !== undefined || req.flags?.replayPlanDigest !== undefined) {
+      return errorResponse(
+        'INVALID_ARGS',
+        'test does not support --from/--plan-digest; resume is replay-only. Run the failing script directly with replay --from.',
+      );
+    }
     return await runReplayTestSuite({
       req,
       sessionName,

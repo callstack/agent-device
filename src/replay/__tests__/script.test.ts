@@ -1,36 +1,32 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { AppError } from '../../kernel/errors.ts';
 import {
   parseReplayScriptDetailed,
   readReplayScriptMetadata,
   REPLAY_METADATA_PLATFORMS,
-  writeReplayScript,
 } from '../script.ts';
+import { formatPortableActionLine, formatTargetAnnotationLines } from '../script-formatting.ts';
 import type { TargetAnnotationV1 } from '../target-identity.ts';
-import type { SessionAction, SessionState } from '../../daemon/types.ts';
+import type { SessionAction } from '../../daemon/types.ts';
 
-function makeSession(): SessionState {
-  return {
-    name: 'default',
-    device: {
-      platform: 'android',
-      id: 'emulator-5554',
-      name: 'Pixel',
-      kind: 'emulator',
-      booted: true,
-    },
-    createdAt: Date.now(),
-    actions: [],
-  };
+// `writeReplayScript` (the `--update` heal-and-rewrite serializer) was
+// deleted in ADR 0012 migration step 6 (`--update` retirement left it with
+// zero production consumers). These tests exercise the underlying
+// line-formatting primitives it used to call — still live, still shared with
+// the session recorder's own writer (`daemon/session-script-writer.ts`) —
+// directly, plus `parseReplayScriptDetailed` for round-trip proof.
+
+function formatReplayScriptForTest(actions: SessionAction[]): string {
+  const lines: string[] = [];
+  for (const action of actions) {
+    lines.push(...formatTargetAnnotationLines(action));
+    lines.push(formatPortableActionLine(action, { runtimeIncludeAllPositionals: true }));
+  }
+  return `${lines.join('\n')}\n`;
 }
 
-test('writeReplayScript preserves inline open runtime hints', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-script-open-'));
-  const replayPath = path.join(root, 'flow.ad');
+test('formatPortableActionLine preserves inline open runtime hints', () => {
   const actions: SessionAction[] = [
     {
       ts: Date.now(),
@@ -46,8 +42,7 @@ test('writeReplayScript preserves inline open runtime hints', () => {
     },
   ];
 
-  writeReplayScript(replayPath, actions, makeSession());
-  const script = fs.readFileSync(replayPath, 'utf8');
+  const script = formatReplayScriptForTest(actions);
 
   assert.match(
     script,
@@ -68,8 +63,6 @@ test('record replay script parses fps, max-size, quality, and hide-touches flags
 });
 
 test('screenshot replay script round-trips screenshot flags', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-script-screenshot-'));
-  const replayPath = path.join(root, 'flow.ad');
   const actions: SessionAction[] = [
     {
       ts: Date.now(),
@@ -84,8 +77,7 @@ test('screenshot replay script round-trips screenshot flags', () => {
     },
   ];
 
-  writeReplayScript(replayPath, actions, makeSession());
-  const script = fs.readFileSync(replayPath, 'utf8');
+  const script = formatReplayScriptForTest(actions);
   assert.match(
     script,
     /screenshot "\.\/page\.png" --pixel-density 2 --fullscreen --max-size 1024 --no-stabilize/,
@@ -123,8 +115,6 @@ test('snapshot replay script parses full refresh flags', () => {
 });
 
 test('snapshot replay script writes interactive refresh flags', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-script-snapshot-'));
-  const replayPath = path.join(root, 'flow.ad');
   const actions: SessionAction[] = [
     {
       ts: Date.now(),
@@ -138,8 +128,7 @@ test('snapshot replay script writes interactive refresh flags', () => {
     },
   ];
 
-  writeReplayScript(replayPath, actions, makeSession());
-  const script = fs.readFileSync(replayPath, 'utf8');
+  const script = formatReplayScriptForTest(actions);
 
   assert.match(script, /snapshot -i -d 2 -s @e1/);
 });
@@ -169,8 +158,6 @@ test('gesture replay script parses pan, fling, swipe, pinch, and rotate gesture 
 });
 
 test('type and fill replay scripts round-trip typing delay flags', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-script-typing-'));
-  const replayPath = path.join(root, 'flow.ad');
   const actions: SessionAction[] = [
     {
       ts: Date.now(),
@@ -186,8 +173,7 @@ test('type and fill replay scripts round-trip typing delay flags', () => {
     },
   ];
 
-  writeReplayScript(replayPath, actions, makeSession());
-  const script = fs.readFileSync(replayPath, 'utf8');
+  const script = formatReplayScriptForTest(actions);
   assert.match(script, /type "hello world" --delay-ms 75/);
   assert.match(script, /fill @e2 "search" --delay-ms 40/);
 
@@ -202,24 +188,21 @@ test('type replay script preserves literal delay flag tokens', () => {
   assert.equal(parsed[0]?.flags.delayMs, undefined);
 });
 
-test('writeReplayScript escapes device labels with quotes and backslashes', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-script-device-label-'));
-  const replayPath = path.join(root, 'flow.ad');
-  const session = makeSession();
-  session.device.name = 'Pixel "QA" \\ Lab';
-
-  writeReplayScript(replayPath, [], session);
-  const script = fs.readFileSync(replayPath, 'utf8');
-
-  assert.match(
-    script,
-    /context platform=android device="Pixel \\"QA\\" \\\\ Lab" kind=emulator theme=unknown/,
+test('formatScriptStringLiteral escapes device labels with quotes and backslashes for a context header', async () => {
+  const { formatScriptStringLiteral } = await import('../script-utils.ts');
+  // Same assembly the live session-script-writer uses
+  // (daemon/session-script-writer.ts's formatScript): `context platform=...
+  // device=<literal> kind=... theme=...`.
+  const header = `context platform=android device=${formatScriptStringLiteral('Pixel "QA" \\ Lab')} kind=emulator theme=unknown`;
+  assert.equal(
+    header,
+    'context platform=android device="Pixel \\"QA\\" \\\\ Lab" kind=emulator theme=unknown',
   );
+  // And it round-trips through the reader as ordinary context metadata.
+  assert.equal(readReplayScriptMetadata(`${header}\nopen "Demo"\n`).platform, 'android');
 });
 
-test('writeReplayScript preserves significant whitespace and empty string arguments', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-script-whitespace-'));
-  const replayPath = path.join(root, 'flow.ad');
+test('a rewritten script preserves significant whitespace and empty string arguments', () => {
   const actions: SessionAction[] = [
     {
       ts: Date.now(),
@@ -258,8 +241,7 @@ test('writeReplayScript preserves significant whitespace and empty string argume
     },
   ];
 
-  writeReplayScript(replayPath, actions, makeSession());
-  const script = fs.readFileSync(replayPath, 'utf8');
+  const script = formatReplayScriptForTest(actions);
 
   assert.match(script, /type "  leading\\ttrailing  "/);
   assert.match(script, /fill @e2 ""/);
@@ -451,9 +433,7 @@ test('old readers ignoring the comment execute the action unchanged: an action w
   assert.equal(actions[0]?.targetEvidence, undefined);
 });
 
-test('writeReplayScript (read-then-rewrite / heal path) preserves a v1 annotation in canonical form', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-script-target-v1-'));
-  const replayPath = path.join(root, 'flow.ad');
+test('a rewritten script preserves a v1 annotation in canonical form', () => {
   const actions: SessionAction[] = [
     {
       ts: Date.now(),
@@ -464,8 +444,7 @@ test('writeReplayScript (read-then-rewrite / heal path) preserves a v1 annotatio
     },
   ];
 
-  writeReplayScript(replayPath, actions, makeSession());
-  const script = fs.readFileSync(replayPath, 'utf8');
+  const script = formatReplayScriptForTest(actions);
   const lines = script.trim().split('\n');
   assert.equal(lines.at(-2), SAVE_EVIDENCE_LINE);
   assert.equal(lines.at(-1), 'click @e12');
@@ -476,13 +455,10 @@ test('writeReplayScript (read-then-rewrite / heal path) preserves a v1 annotatio
 });
 
 test('session-recorded actions without target evidence never gain a fabricated annotation on rewrite', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-script-target-v1-none-'));
-  const replayPath = path.join(root, 'flow.ad');
   const actions: SessionAction[] = [
     { ts: Date.now(), command: 'click', positionals: ['@e12'], flags: {} },
   ];
-  writeReplayScript(replayPath, actions, makeSession());
-  const script = fs.readFileSync(replayPath, 'utf8');
+  const script = formatReplayScriptForTest(actions);
   assert.equal(/agent-device:target-v1/.test(script), false);
 });
 

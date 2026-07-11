@@ -283,64 +283,67 @@ Quote `${VAR}` inside selector expressions so the whole expression is treated as
 
 ### Notes
 
-- `replay -u` does not yet preserve `env` directives or `${VAR}` tokens. Workaround: temporarily inline the literal values, run `-u`, re-parametrise.
 - Shell env (`AD_VAR_*`) is collected on the CLI/client side at request time, so the same values are seen whether the daemon runs locally or remotely.
 - No nested fallback. `${A:-${B}}` is not supported.
 - Unresolved `${VAR}` fails with a `file:line` reference. Typos are loud.
 
-## Update stale selectors in replay scripts
+## Replay divergence and resume
+
+A failing `replay`/`test` step returns a structured `REPLAY_DIVERGENCE` error instead of a bare failure. The report carries, bounded and redacted:
+
+- **`step`** — the 1-based plan index and its source file/line (through Maestro `runFlow` includes).
+- **`screen`** — a fresh post-failure snapshot digest with actionable refs, or `unavailable` with a reason/hint when capture failed or was sparse (never a stale tree).
+- **`suggestions`** — up to 5 ranked, re-resolved candidates for the failing selector (id match ranks above role+label, which ranks above label-only), each with a `basis` you can inspect before acting.
+- **`resume`** — whether and how to continue without re-running the script from the top.
+
+```jsonc
+{
+  "code": "REPLAY_DIVERGENCE",
+  "details": {
+    "divergence": {
+      "step": { "index": 4, "source": { "path": "flow.ad", "line": 6 } },
+      "screen": { "state": "available", "refsGeneration": 3, "refs": [ /* ... */ ] },
+      "suggestions": [{ "selector": "id=\"auth_continue\"", "basis": "id" }],
+      "resume": { "allowed": true, "from": 4, "planDigest": "…64 hex chars…" }
+    }
+  }
+}
+```
+
+Text output prints a compact summary of the same fields; `--json`/MCP carry the full object.
+
+### Resuming a failed replay
+
+`replay --from <n> --plan-digest <sha256>` resumes at plan step `n`, skipping `1..n-1` **without executing them**. Both flags come from a divergence report's `resume` field — `from` is the failed step, `planDigest` is the digest of the exact plan that produced it. The loop is:
+
+1. Run `replay ./flow.ad`. On failure, read `resume` from the divergence.
+2. **Repair app state yourself.** The daemon never infers or reconstructs app state — it only skips execution of the earlier steps.
+3. `replay ./flow.ad --from <resume.from> --plan-digest <resume.planDigest>`.
 
 ```bash
-agent-device replay -u ~/.agent-device/sessions/e2e-2026-02-09T12-00-00-000Z.ad --session e2e-run
+agent-device replay ./flow.ad
+# ... REPLAY_DIVERGENCE, resume: { allowed: true, from: 4, planDigest: "ab12...“ }
+# (repair app state on the device)
+agent-device replay ./flow.ad --from 4 --plan-digest ab12...
 ```
 
-When a replay step fails, update can:
+`resume.allowed` is `false`, with a `reason`, when resuming cannot be proven safe:
 
-- Take a fresh snapshot.
-- Resolve a stable replacement target.
-- Retry the step.
-- Rewrite the failing line in the same `.ad` file.
+- a skipped step can produce `outputEnv` values (a Maestro `runScript` step) a later step might consume;
+- the skipped range or the resume target itself is runtime control flow (a Maestro `retry:` or `runFlow.when:` block) — these execute dynamically and are never individually addressable by `--from`.
 
-Current update targets:
+Passing `--plan-digest` that no longer matches the current script — because you edited it, an include changed, or platform-conditioned expansion differs — fails `INVALID_ARGS` before any action; run a fresh full replay to get a new digest. `--from` is `replay`-only; `test` rejects it (a suite run must stay full and deterministic).
 
-- `click`
-- `fill`
-- `get`
-- `is`
-- `wait`
+## `--update`/`-u` (retired)
 
-## `replay -u` before/after examples
-
-Example 1: stale selector rewritten in place
-
-```sh
-# Before
-click "id=\"old_continue\" || label=\"Continue\""
-
-# After `replay -u`
-click "id=\"auth_continue\" || label=\"Continue\""
-```
-
-Example 2: stale ref-based action upgraded to selector form
-
-```sh
-# Before
-snapshot -i -s "Continue"
-click @e13 "Continue"
-
-# After `replay -u`
-snapshot -i -s "Continue"
-click "id=\"auth_continue\" || label=\"Continue\""
-```
-
-Use `replay -u` locally during maintenance, review the rewritten `.ad` lines, then commit the updated script.
+`--update`/`-u` no longer rewrites `.ad` files. Historically it retried a failing step against the recorded selector's candidate material and rewrote the line in place; the audit behind [ADR 0012](https://github.com/callstack/agent-device/blob/main/docs/adr/0012-interactive-replay.md) found that mechanism rarely able to act (it can only recover drift the original selector still matches, never a rename) and a silent rewrite is a target-binding risk on its own. The flag is kept, accepted, and is a complete no-op: every replay divergence already carries the same ranked `suggestions` the old heal path used to apply blind, whether or not `--update` is passed. Review a suggestion, then edit the `.ad` file yourself if it's right.
 
 ## Troubleshooting
 
 - Replay fails after UI/layout changes:
-  - Run `replay -u` locally and review the rewritten lines.
-- Updating cannot resolve a unique target:
-  - Re-record that flow (`--save-script`) from a fresh exploratory pass.
+  - Read the divergence report's `suggestions` and repair the selector by hand; there is no automated rewrite.
+- Repeated re-runs are slow or the app is stateful:
+  - Use `replay --from`/`--plan-digest` (above) to resume past a repaired step instead of re-running the whole script.
 - Replay file parse error:
   - Validate quoting in `.ad` lines (unclosed quotes are rejected).
 - Maestro compatibility flow fails on unsupported syntax:

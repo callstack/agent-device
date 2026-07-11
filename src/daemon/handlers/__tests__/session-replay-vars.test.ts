@@ -329,44 +329,39 @@ test('readReplayScriptMetadata rejects duplicate env key', () => {
   );
 });
 
-test('runReplayScriptFile rejects replay -u on scripts with env directives', async () => {
-  const { response } = await runReplayFixture({
+// ADR 0012 decision 1 / migration step 6: `--update` retirement removed the
+// env/interpolation/compat-flow refusal guards below — they existed only to
+// protect the now-deleted heal-and-rewrite path, which could not safely
+// round-trip `env`/`${VAR}` or serialize Maestro's in-memory flow controls
+// back to `.ad`. With no rewrite, `--update` no longer needs to refuse
+// anything; it runs exactly like a plain replay.
+
+test('--update no longer rejects scripts with env directives (the guard existed only for rewrite safety)', async () => {
+  const { response, calls } = await runReplayFixture({
     label: 'env-heal',
     script: 'context platform=android\nenv APP=settings\nopen ${APP}\n',
     flags: { replayUpdate: true },
   });
-  assert.equal(response.ok, false);
-  if (!response.ok) {
-    assert.equal(response.error.code, 'INVALID_ARGS');
-    assert.match(response.error.message, /replay -u does not yet preserve env directives/);
-  }
+  assert.equal(response.ok, true);
+  assert.deepEqual(calls[0]?.positionals, ['settings']);
 });
 
-test('runReplayScriptFile rejects replay -u for Maestro compat flow controls before serialization', async () => {
+test('--update no longer rejects Maestro compat flow controls (the guard existed only for rewrite safety)', async () => {
   const { response } = await runReplayFixture({
     label: 'maestro-replay-update-flow-control',
     script: [
       'appId: demo.app',
       '---',
-      '- runFlow:',
-      '    when:',
-      '      visible: Feed',
-      '    commands:',
-      '      - tapOn: Continue',
       '- retry:',
       '    maxRetries: 1',
       '    commands:',
-      '      - assertVisible: Feed',
+      '      - back',
       '',
     ].join('\n'),
     flags: { replayBackend: 'maestro', replayUpdate: true },
   });
 
-  assert.equal(response.ok, false);
-  if (!response.ok) {
-    assert.equal(response.error.code, 'INVALID_ARGS');
-    assert.match(response.error.message, /replay -u is not supported for compat flow input/);
-  }
+  assert.equal(response.ok, true);
 });
 
 test('resolveReplayAction produces dispatch-ready literals for a realistic fixture', () => {

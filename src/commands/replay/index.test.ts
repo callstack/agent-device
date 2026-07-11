@@ -131,3 +131,47 @@ describe('replay command interface', () => {
     expect(testRequest.options).not.toHaveProperty('reportJunit');
   });
 });
+
+describe('replay resume (ADR 0012 decision 4 / migration step 5)', () => {
+  test('reads --from/--plan-digest as resumeFrom/resumePlanDigest, replay only', () => {
+    expect(
+      replayCliReader(['./checkout.ad'], flags({ replayFrom: 3, replayPlanDigest: 'deadbeef' })),
+    ).toMatchObject({
+      path: './checkout.ad',
+      resumeFrom: 3,
+      resumePlanDigest: 'deadbeef',
+    });
+  });
+
+  test('test CLI reader never surfaces resume fields, even if the flags carry them', () => {
+    const input = testCliReader(
+      ['./suite.ad'],
+      flags({ replayFrom: 3, replayPlanDigest: 'deadbeef' } as never),
+    );
+    expect(input).not.toHaveProperty('resumeFrom');
+    expect(input).not.toHaveProperty('resumePlanDigest');
+  });
+
+  test('writes resumeFrom/resumePlanDigest onto the daemon request as replayFrom/replayPlanDigest', () => {
+    expect(
+      replayDaemonWriter({
+        path: './checkout.ad',
+        resumeFrom: 3,
+        resumePlanDigest: 'deadbeef',
+      }),
+    ).toMatchObject({
+      command: 'replay',
+      positionals: ['./checkout.ad'],
+      options: {
+        replayFrom: 3,
+        replayPlanDigest: 'deadbeef',
+      },
+    });
+  });
+
+  test('test daemon writer never emits replayFrom/replayPlanDigest', () => {
+    const request = testDaemonWriter({ paths: ['./suite.ad'] });
+    expect(request.options).not.toHaveProperty('replayFrom');
+    expect(request.options).not.toHaveProperty('replayPlanDigest');
+  });
+});

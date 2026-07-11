@@ -1,8 +1,5 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import {
   deviceFieldsFromPublicPlatform,
   isIosFamily,
@@ -24,8 +21,7 @@ import {
   VISIONOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
 } from '../../__tests__/test-utils/device-fixtures.ts';
-import { readReplayScriptMetadata, writeReplayScript } from '../../replay/script.ts';
-import type { SessionState } from '../../daemon/types.ts';
+import { readReplayScriptMetadata } from '../../replay/script.ts';
 
 // Parity gate for the ios/macos -> apple Platform collapse (issue #979, approach b).
 // Internal `DeviceInfo.platform` is `apple`; the daemon still ACCEPTS the legacy
@@ -113,24 +109,19 @@ test('predicates preserve the pre-collapse platform families', () => {
   assert.equal(isMobilePlatform(LINUX_DEVICE), false);
 });
 
-test('REPLAY: heal-write emits the leaf platform and round-trips through the reader', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'platform-collapse-parity-'));
+test('REPLAY: a context header built from publicPlatformString emits the leaf platform and round-trips through the reader', () => {
+  // Mirrors the live header assembly (daemon/session-script-writer.ts's
+  // formatScript: `context platform=${publicPlatformString(device)} ...`) —
+  // approach (b) writes the PUBLIC leaf platform (ios/macos), never the
+  // internal `apple`, so `.ad` scripts stay byte-compatible with checked-in
+  // fixtures and machine consumers.
   for (const device of [IOS_SIMULATOR, TVOS_SIMULATOR, MACOS_DEVICE, ANDROID_EMULATOR]) {
-    const session = {
-      name: 'parity',
-      device,
-      createdAt: 0,
-      actions: [],
-    } as unknown as SessionState;
-    const filePath = path.join(dir, `${device.id}.ad`);
-    writeReplayScript(filePath, [], session);
-    const written = fs.readFileSync(filePath, 'utf8');
     const leaf = publicPlatformString(device);
+    const written = `context platform=${leaf} device="parity"\nopen "Demo"\n`;
     assert.match(written, new RegExp(`context platform=${leaf}\\b`), device.name);
     // The reader accepts the emitted leaf and echoes it back unchanged.
     assert.equal(readReplayScriptMetadata(written).platform, leaf, device.name);
   }
   // The reader also accepts the collapsed `apple` selector directly.
   assert.equal(readReplayScriptMetadata('context platform=apple\nhome\n').platform, 'apple');
-  fs.rmSync(dir, { recursive: true, force: true });
 });

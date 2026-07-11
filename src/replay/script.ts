@@ -1,14 +1,11 @@
-import fs from 'node:fs';
 import { AppError } from '../kernel/errors.ts';
 import { recordingQualityInputToExportQuality } from '../core/recording-export-quality.ts';
 import { readScreenshotScriptFlag } from '../contracts/screenshot.ts';
 import type { DeviceTarget, PlatformSelector } from '../kernel/device.ts';
-import { PLATFORM_SELECTORS, publicPlatformString } from '../kernel/device.ts';
+import { PLATFORM_SELECTORS } from '../kernel/device.ts';
 import { parseReplayOpenFlags } from './open-script.ts';
-import { formatPortableActionLine, formatTargetAnnotationLines } from './script-formatting.ts';
-import type { SessionAction, SessionState } from '../daemon/types.ts';
+import type { SessionAction } from '../daemon/types.ts';
 import {
-  formatScriptStringLiteral,
   isClickLikeCommand,
   parseReplaySeriesFlags,
   parseReplayRuntimeFlags,
@@ -506,37 +503,4 @@ function readBareReplayToken(line: string, cursor: number): { value: string; nex
     end += 1;
   }
   return { value: line.slice(cursor, end), nextCursor: end };
-}
-
-export function writeReplayScript(
-  filePath: string,
-  actions: SessionAction[],
-  session?: SessionState,
-) {
-  const lines: string[] = [];
-  // Session can be missing if the replay session is closed/deleted between execution and update write.
-  // In that case we still persist healed actions and omit only the context header.
-  if (session) {
-    const kind = session.device.kind ? ` kind=${session.device.kind}` : '';
-    const target = session.device.target ? ` target=${session.device.target}` : '';
-    // approach (b): heal-write the PUBLIC leaf platform (ios/macos), never the
-    // internal `apple` — keeps healed `.ad` scripts byte-compatible with checked-in
-    // fixtures and machine consumers.
-    lines.push(
-      `context platform=${publicPlatformString(session.device)}${target} device=${formatScriptStringLiteral(session.device.name)}${kind} theme=unknown`,
-    );
-  }
-  for (const action of actions) {
-    // ADR 0012 decision 3: rewrites preserve v1 annotations in canonical form.
-    lines.push(...formatTargetAnnotationLines(action));
-    lines.push(formatReplayActionLine(action));
-  }
-  const serialized = `${lines.join('\n')}\n`;
-  const tmpPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
-  fs.writeFileSync(tmpPath, serialized);
-  fs.renameSync(tmpPath, filePath);
-}
-
-function formatReplayActionLine(action: SessionAction): string {
-  return formatPortableActionLine(action, { runtimeIncludeAllPositionals: true });
 }
