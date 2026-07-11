@@ -155,6 +155,14 @@ only. No scored small-model result is recorded here because authenticated `claud
 runners were unavailable; future scored runs remain informational actionability oracles, not CI
 gates.
 
+No new live-device result is recorded in this closeout. The local environment had no simulator,
+emulator, or attached device. A one-round `perf-nightly` dispatch on the PR branch was also
+unavailable because the GitHub integration could not create workflow-dispatch events. Historical
+Android nightly logs did expose a deterministic workflow defect: the emulator action executes each
+`script` line independently, so shell continuation backslashes reached `scripts/perf/run.ts` as a
+literal `\` argument. The invocation is now a single line; the next scheduled run after merge is
+the live validation point. Deterministic fixtures are not presented as live reliability evidence.
+
 The six-month churn × current-size refresh continues to identify bounded candidates rather than a
 split mandate:
 
