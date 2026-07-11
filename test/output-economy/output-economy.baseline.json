@@ -111,6 +111,34 @@
     "hints": 0,
     "shape": "$.content:array|$.content[].text:string|$.content[].type:string|$.content[]:object|$.isError:boolean|$.structuredContent.identifiers.session:string|$.structuredContent.identifiers:object|$.structuredContent.nodes:array|$.structuredContent.nodes[].depth:number|$.structuredContent.nodes[].enabled:boolean|$.structuredContent.nodes[].hittable:boolean|$.structuredContent.nodes[].identifier:string|$.structuredContent.nodes[].index:number|$.structuredContent.nodes[].label:string|$.structuredContent.nodes[].parentIndex:number|$.structuredContent.nodes[].rect.height:number|$.structuredContent.nodes[].rect.width:number|$.structuredContent.nodes[].rect.x:number|$.structuredContent.nodes[].rect.y:number|$.structuredContent.nodes[].rect:object|$.structuredContent.nodes[].ref:string|$.structuredContent.nodes[].role:string|$.structuredContent.nodes[].type:string|$.structuredContent.nodes[].value:string|$.structuredContent.nodes[]:object|$.structuredContent.refsGeneration:number|$.structuredContent.truncated:boolean|$.structuredContent.visibility.partial:boolean|$.structuredContent.visibility.reasons:array|$.structuredContent.visibility.totalNodeCount:number|$.structuredContent.visibility.visibleNodeCount:number|$.structuredContent.visibility:object|$.structuredContent:object|$:object"
   },
+  "selection.network.default.json": {
+    "bytes": 26371,
+    "lines": 1,
+    "refs": 0,
+    "hints": 0,
+    "shape": "$.active:boolean|$.backend:string|$.entries:array|$.entries[].durationMs:number|$.entries[].headers:string|$.entries[].line:number|$.entries[].method:string|$.entries[].packetId:string|$.entries[].raw:string|$.entries[].requestBody:string|$.entries[].requestHeaders.authorization:string|$.entries[].requestHeaders.content-type:string|$.entries[].requestHeaders.x-request-id:string|$.entries[].requestHeaders:object|$.entries[].responseBody:string|$.entries[].responseHeaders.content-type:string|$.entries[].responseHeaders.x-request-id:string|$.entries[].responseHeaders.x-retry-after-ms:string|$.entries[].responseHeaders:object|$.entries[].status:number|$.entries[].timestamp:string|$.entries[].url:string|$.entries[]:object|$.exists:boolean|$.include:string|$.limits.maxEntries:number|$.limits.maxPayloadChars:number|$.limits.maxScanLines:number|$.limits:object|$.matchedLines:number|$.notes:array|$.notes[]:string|$.path:string|$.scannedLines:number|$.state:string|$:object"
+  },
+  "selection.events.default.json": {
+    "bytes": 7686,
+    "lines": 1,
+    "refs": 0,
+    "hints": 0,
+    "shape": "$.cursor:string|$.events:array|$.events[].command:string|$.events[].details.durationMs:number|$.events[].details.effectiveSession:string|$.events[].details.publicSession:string|$.events[].details.requestLogPath:string|$.events[].details.runnerLogPath:string|$.events[].details:object|$.events[].kind:string|$.events[].requestId:string|$.events[].session:string|$.events[].status:string|$.events[].summary:string|$.events[].ts:string|$.events[].version:number|$.events[]:object|$.limit:number|$.nextCursor:string|$.path:string|$:object"
+  },
+  "selection.debug.default.json": {
+    "bytes": 4804,
+    "lines": 1,
+    "refs": 0,
+    "hints": 0,
+    "shape": "$.artifactPath:string|$.crash.appName:string|$.crash.bundleId:string|$.crash.crashedThread:number|$.crash.exceptionCodes:string|$.crash.exceptionType:string|$.crash.findings:array|$.crash.findings[]:string|$.crash.format:string|$.crash.incident:string|$.crash.terminationReason:string|$.crash.timestamp:string|$.crash.topFrames:array|$.crash.topFrames[].address:string|$.crash.topFrames[].image:string|$.crash.topFrames[].index:number|$.crash.topFrames[].symbol:string|$.crash.topFrames[]:object|$.crash.version:string|$.crash:object|$.kind:string|$.matchedImages:array|$.matchedImages[].arch:string|$.matchedImages[].binaryPath:string|$.matchedImages[].dsymPath:string|$.matchedImages[].name:string|$.matchedImages[].uuid:string|$.matchedImages[]:object|$.message:string|$.outPath:string|$.platform:string|$.skippedImages:number|$.symbolicatedFrames:number|$.warnings:array|$.warnings[]:string|$:object"
+  },
+  "selection.recording.default.json": {
+    "bytes": 3132,
+    "lines": 1,
+    "refs": 0,
+    "hints": 0,
+    "shape": "$.artifacts:array|$.artifacts[].artifactId:string|$.artifacts[].artifactType:string|$.artifacts[].field:string|$.artifacts[].fileName:string|$.artifacts[]:object|$.chunks:array|$.chunks[].index:number|$.chunks[].path:string|$.chunks[]:object|$.durationMs:number|$.outPath:string|$.overlayWarning:string|$.recording:string|$.recordingBackend:string|$.recordingScope:string|$.showTouches:boolean|$.telemetryPath:string|$.warning:string|$:object"
+  },
   "workflow.orient.cli.text": {
     "bytes": 154,
     "lines": 6,
