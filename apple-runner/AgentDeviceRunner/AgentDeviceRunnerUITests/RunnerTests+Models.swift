@@ -24,10 +24,8 @@ enum CommandType: String, Codable {
   case keyboardDismiss
   case keyboardReturn
   case alert
-  case pinch
   case sequence
-  case rotateGesture
-  case transformGesture
+  case gesture
   case recordStart
   case recordStop
   case status
@@ -80,7 +78,7 @@ extension CommandType {
     // .sequence is the fused multi-step gesture batch.
     case .tap, .longPress, .drag, .remotePress, .type, .swipe, .scroll, .desktopScroll,
          .back, .backInApp, .backSystem, .rotate, .appSwitcher,
-         .keyboardDismiss, .keyboardReturn, .pinch, .sequence, .rotateGesture, .transformGesture:
+         .keyboardDismiss, .keyboardReturn, .sequence, .gesture:
       return CommandTraits(isInteraction: true, readOnly: .never, isLifecycle: false)
 
     // Read-only reads: eligible for the session-invalidating retry.
@@ -157,9 +155,7 @@ struct Command: Codable {
   let steps: [SequenceStep]?
 }
 
-/// Canonical two-pointer plan produced by the portable TypeScript planner.
-/// Extra semantic fields remain on the wire for diagnostics; the native executor
-/// consumes the viewport and exact sampled pointer paths below.
+/// Canonical one- or two-pointer plan produced by the portable TypeScript planner.
 struct RunnerGesturePlan: Codable {
   let topology: String
   let intent: String

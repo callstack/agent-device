@@ -137,7 +137,7 @@ const longPressFields = {
 const swipeFields = {
   from: requiredField(pointField('Swipe start point.')),
   to: requiredField(pointField('Swipe end point.')),
-  durationMs: integerField('Swipe duration in milliseconds.', { min: 0 }),
+  durationMs: integerField('Deprecated: timed movement is a pan; omit for swipe.', { min: 0 }),
   count: integerField('Number of swipe repetitions.', { min: 1 }),
   pauseMs: integerField('Pause between repeated swipes.', { min: 0 }),
   pattern: enumField(SWIPE_PATTERNS),
@@ -199,8 +199,11 @@ const gestureFields = {
   distance: integerField('Fling distance.', { min: 0 }),
   scale: numberField('Pinch or transform scale.'),
   degrees: numberField('Rotation in degrees.'),
-  velocity: integerField('Rotate gesture velocity.', { min: 0 }),
-  durationMs: integerField('Gesture duration in milliseconds.', { min: 0 }),
+  velocity: integerField('Deprecated: rotation pacing is derived from degrees.', { min: 0 }),
+  durationMs: integerField(
+    'Pan/transform duration. Deprecated on swipe/fling; timed movement is a pan.',
+    { min: 0 },
+  ),
   pointerCount: integerField('Pan touch pointer count (1 or 2).', { min: 1, max: 2 }),
 };
 
@@ -208,6 +211,7 @@ export type ClickInput = InferCommandInput<typeof clickFields>;
 export type PressInput = InferCommandInput<typeof pressFields>;
 export type FillInput = InferCommandInput<typeof fillFields>;
 export type LongPressInput = InferCommandInput<typeof longPressFields>;
+export type SwipeInput = InferCommandInput<typeof swipeFields>;
 export type GetInput = InferCommandInput<typeof getFields>;
 
 export type PanInput = CommonCommandInput & PanGesturePayload;
@@ -263,6 +267,10 @@ export const interactionCommandMetadata = [
 export function readGestureInput(input: unknown): GestureInput {
   const record = readInputRecord(input);
   return { ...readCommonInput(record), ...readGesturePayload(record) } as GestureInput;
+}
+
+export function readSwipeInput(input: unknown): SwipeInput {
+  return readFieldInput(input, swipeFields);
 }
 
 function defineInteractionCommandMetadata<

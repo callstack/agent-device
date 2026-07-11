@@ -1,7 +1,7 @@
 import { AppError } from '../kernel/errors.ts';
+import type { PublicPlatform } from '../kernel/device.ts';
 import type { Point, Rect } from '../kernel/snapshot.ts';
-import type { ScrollDirection, SwipePreset } from './scroll-gesture.ts';
-import { buildSwipePresetGesturePlan } from './scroll-gesture.ts';
+import type { ScrollDirection } from './scroll-gesture.ts';
 import type {
   GesturePlan,
   GestureSemanticInput,
@@ -14,162 +14,78 @@ export * from './gesture-plan-types.ts';
 
 export const GESTURE_SAMPLE_INTERVAL_MS = 16;
 export const GESTURE_INITIAL_ANGLE_DEGREES = -90;
-// One eighth keeps a useful span on phone-sized viewports while staying close to the
-// Android helper's proven historical 160 px radius on a 1344 px-wide emulator.
-const GESTURE_PREFERRED_MAX_RADIUS_RATIO = 0.125;
-const GESTURE_MINIMUM_RELIABLE_RADIUS_PX = 24;
-const GESTURE_VIEWPORT_INSET_PX = 1;
 
-const DEFAULT_SWIPE_DURATION_MS = 300;
+const GESTURE_INITIAL_SPAN_RATIO = 0.25;
+const GESTURE_PINCH_INITIAL_SPAN_RATIO = 0.4;
+const GESTURE_HORIZONTAL_ANGLE_DEGREES = 0;
+const GESTURE_MINIMUM_RELIABLE_SPAN_PX = 48;
+const GESTURE_VIEWPORT_INSET_PX = 1;
 const DEFAULT_PAN_DURATION_MS = 500;
-const DEFAULT_FLING_DURATION_MS = 50;
+const FLING_DURATION_MS = 100;
 const DEFAULT_MULTI_TOUCH_DURATION_MS = 300;
 const MAX_ROTATION_DEGREES_PER_SAMPLE = 3;
 const MAX_ROTATION_DEFAULT_DURATION_MS = 2_400;
 
-export function buildGesturePlan(input: GestureSemanticInput, viewport?: Rect): GesturePlan {
-  switch (input.intent) {
-    case 'swipe':
-      return buildSwipePlan(input, viewport);
-    case 'pan':
-      return buildPanPlan(input, viewport);
-    case 'fling':
-      return buildFlingPlan(input);
-    case 'pinch':
-      return buildPinchPlan(input, viewport);
-    case 'rotate':
-      return buildRotatePlan(input, viewport);
-    case 'transform':
-      return buildTransformPlan(input, viewport);
-  }
-}
-
-function buildSwipePlan(
-  input: Extract<GestureSemanticInput, { intent: 'swipe' }>,
-  viewport: Rect | undefined,
-): SinglePointerGesturePlan {
-  if ('preset' in input) {
-    return buildSwipePresetPlan(input, requireViewport(viewport, 'gesture swipe'));
-  }
-  return buildSinglePointerPlan(
-    'swipe',
-    input.from,
-    input.to,
-    normalizeDuration(input.durationMs, DEFAULT_SWIPE_DURATION_MS, 'gesture swipe durationMs'),
-  );
-}
-
-function buildPanPlan(
-  input: Extract<GestureSemanticInput, { intent: 'pan' }>,
-  viewport: Rect | undefined,
+/** Plans one physical gesture. Public aliases must be normalized before this boundary. */
+export function buildGesturePlan(
+  input: GestureSemanticInput,
+  viewport: Rect,
+  platform?: PublicPlatform,
 ): GesturePlan {
-  const durationMs = normalizeDuration(
-    input.durationMs,
-    DEFAULT_PAN_DURATION_MS,
-    'gesture pan durationMs',
-  );
-  if (normalizePointerCount(input.pointerCount) === 1) {
-    return buildSinglePointerPlan(
-      'pan',
-      input.origin,
-      addPoints(input.origin, input.delta),
-      durationMs,
-    );
+  const frame = normalizeViewport(viewport);
+  switch (input.intent) {
+    case 'fling':
+      return buildFlingPlan(input, frame, platform);
+    case 'pan':
+      return buildPanPlan(input, frame, platform);
+    case 'pinch':
+      return buildTransformPlan(
+        {
+          intent: 'pinch',
+          origin: input.origin ?? centerOfViewport(frame),
+          delta: { x: 0, y: 0 },
+          scale: normalizeScale(input.scale, 'gesture pinch scale'),
+          rotationDegrees: 0,
+          durationMs: DEFAULT_MULTI_TOUCH_DURATION_MS,
+        },
+        frame,
+        platform,
+      );
+    case 'rotate': {
+      const rotationDegrees = finiteNumber(input.degrees, 'gesture rotate degrees');
+      return buildTransformPlan(
+        {
+          intent: 'rotate',
+          origin: input.origin ?? centerOfViewport(frame),
+          delta: { x: 0, y: 0 },
+          scale: 1,
+          rotationDegrees,
+          durationMs: defaultTransformDuration(rotationDegrees),
+        },
+        frame,
+        platform,
+      );
+    }
+    case 'transform': {
+      const rotationDegrees = finiteNumber(input.degrees, 'gesture transform degrees');
+      return buildTransformPlan(
+        {
+          intent: 'transform',
+          origin: input.origin,
+          delta: input.delta,
+          scale: normalizeScale(input.scale, 'gesture transform scale'),
+          rotationDegrees,
+          durationMs: normalizeDuration(
+            input.durationMs,
+            defaultTransformDuration(rotationDegrees),
+            'gesture transform durationMs',
+          ),
+        },
+        frame,
+        platform,
+      );
+    }
   }
-  return buildMultiTouchPlan(
-    {
-      intent: 'pan',
-      origin: input.origin,
-      delta: input.delta,
-      scale: 1,
-      rotationDegrees: 0,
-      durationMs,
-    },
-    requireViewport(viewport, 'two-finger pan'),
-  );
-}
-
-function buildFlingPlan(
-  input: Extract<GestureSemanticInput, { intent: 'fling' }>,
-): SinglePointerGesturePlan {
-  const start = requireFinitePoint(input.origin, 'gesture fling origin');
-  const distance = normalizePositiveNumber(input.distance ?? 180, 'gesture fling distance');
-  return buildSinglePointerPlan(
-    'fling',
-    start,
-    offsetPointByDirection(start, input.direction, distance),
-    normalizeDuration(input.durationMs, DEFAULT_FLING_DURATION_MS, 'gesture fling durationMs', {
-      max: 1_000,
-    }),
-  );
-}
-
-function buildPinchPlan(
-  input: Extract<GestureSemanticInput, { intent: 'pinch' }>,
-  viewport: Rect | undefined,
-): MultiTouchGesturePlan {
-  const frame = requireViewport(viewport, 'gesture pinch');
-  return buildMultiTouchPlan(
-    {
-      intent: 'pinch',
-      origin: input.origin ?? centerOfViewport(frame),
-      delta: { x: 0, y: 0 },
-      scale: normalizeScale(input.scale, 'gesture pinch scale'),
-      rotationDegrees: 0,
-      durationMs: DEFAULT_MULTI_TOUCH_DURATION_MS,
-    },
-    frame,
-  );
-}
-
-function buildRotatePlan(
-  input: Extract<GestureSemanticInput, { intent: 'rotate' }>,
-  viewport: Rect | undefined,
-): MultiTouchGesturePlan {
-  const frame = requireViewport(viewport, 'gesture rotate');
-  const degrees = normalizeFiniteNumber(input.degrees, 'gesture rotate degrees');
-  return buildMultiTouchPlan(
-    {
-      intent: 'rotate',
-      origin: input.origin ?? centerOfViewport(frame),
-      delta: { x: 0, y: 0 },
-      scale: 1,
-      rotationDegrees: degrees,
-      velocity: normalizeRotateVelocity(input.velocity, degrees),
-      durationMs: defaultMultiTouchDuration(degrees),
-    },
-    frame,
-  );
-}
-
-function normalizeRotateVelocity(value: number | undefined, degrees: number): number | undefined {
-  const velocity = normalizeFiniteNumber(value ?? 1, 'gesture rotate velocity');
-  if (velocity === 0) {
-    throw new AppError('INVALID_ARGS', 'gesture rotate velocity must be a non-zero number');
-  }
-  return Math.abs(velocity) * (degrees >= 0 ? 1 : -1);
-}
-
-function buildTransformPlan(
-  input: Extract<GestureSemanticInput, { intent: 'transform' }>,
-  viewport: Rect | undefined,
-): MultiTouchGesturePlan {
-  const degrees = normalizeFiniteNumber(input.degrees, 'gesture transform degrees');
-  return buildMultiTouchPlan(
-    {
-      intent: 'transform',
-      origin: input.origin,
-      delta: input.delta,
-      scale: normalizeScale(input.scale, 'gesture transform scale'),
-      rotationDegrees: degrees,
-      durationMs: normalizeDuration(
-        input.durationMs,
-        defaultMultiTouchDuration(degrees),
-        'gesture transform durationMs',
-      ),
-    },
-    requireViewport(viewport, 'gesture transform'),
-  );
 }
 
 export function singlePointerPlanEndpoints(plan: SinglePointerGesturePlan): {
@@ -184,19 +100,69 @@ export function singlePointerPlanEndpoints(plan: SinglePointerGesturePlan): {
   return { start, end };
 }
 
-function buildSwipePresetPlan(
-  input: Extract<GestureSemanticInput, { intent: 'swipe'; preset: SwipePreset }>,
+function buildFlingPlan(
+  input: Extract<GestureSemanticInput, { intent: 'fling' }>,
   viewport: Rect,
+  platform?: PublicPlatform,
 ): SinglePointerGesturePlan {
-  const relative = buildSwipePresetGesturePlan(input.preset, {
-    referenceWidth: viewport.width,
-    referenceHeight: viewport.height,
-  });
+  if ('from' in input) {
+    return buildSinglePointerPlan(
+      'fling',
+      input.from,
+      input.to,
+      FLING_DURATION_MS,
+      viewport,
+      platform,
+    );
+  }
+  const start = finitePoint(input.origin, 'gesture fling origin');
+  const distance = positiveNumber(input.distance ?? 180, 'gesture fling distance');
   return buildSinglePointerPlan(
-    'swipe',
-    { x: viewport.x + relative.x1, y: viewport.y + relative.y1 },
-    { x: viewport.x + relative.x2, y: viewport.y + relative.y2 },
-    normalizeDuration(input.durationMs, DEFAULT_SWIPE_DURATION_MS, 'gesture swipe durationMs'),
+    'fling',
+    start,
+    offsetPointByDirection(start, input.direction, distance),
+    FLING_DURATION_MS,
+    viewport,
+    platform,
+  );
+}
+
+function buildPanPlan(
+  input: Extract<GestureSemanticInput, { intent: 'pan' }>,
+  viewport: Rect,
+  platform?: PublicPlatform,
+): GesturePlan {
+  const durationMs = normalizeDuration(
+    input.durationMs,
+    DEFAULT_PAN_DURATION_MS,
+    'gesture pan durationMs',
+  );
+  if ((input.pointerCount ?? 1) === 1) {
+    const start = finitePoint(input.origin, 'gesture pan origin');
+    const delta = finitePoint(input.delta, 'gesture pan delta');
+    return buildSinglePointerPlan(
+      'pan',
+      start,
+      addPoints(start, delta),
+      durationMs,
+      viewport,
+      platform,
+    );
+  }
+  if (input.pointerCount !== 2) {
+    throw new AppError('INVALID_ARGS', 'gesture pan pointerCount must be 1 or 2');
+  }
+  return buildTransformPlan(
+    {
+      intent: 'pan',
+      origin: input.origin,
+      delta: input.delta,
+      scale: 1,
+      rotationDegrees: 0,
+      durationMs,
+    },
+    viewport,
+    platform,
   );
 }
 
@@ -205,122 +171,99 @@ function buildSinglePointerPlan(
   from: Point,
   to: Point,
   durationMs: number,
+  viewport: Rect,
+  platform?: PublicPlatform,
 ): SinglePointerGesturePlan {
-  const start = requireFinitePoint(from, `gesture ${intent} start`);
-  const end = requireFinitePoint(to, `gesture ${intent} end`);
+  const start = finitePoint(from, `gesture ${intent} start`);
+  const end = finitePoint(to, `gesture ${intent} end`);
+  const samples = sampleOffsets(durationMs, platform).map((offsetMs) => ({
+    offsetMs,
+    point: interpolatePoint(start, end, offsetMs / durationMs),
+  }));
+  assertSamplesInViewport(samples, viewport, { intent, pointerId: 0 });
   return {
     topology: 'single',
     intent,
     durationMs,
-    pointers: [
-      {
-        pointerId: 0,
-        samples: sampleOffsets(durationMs).map((offsetMs) => ({
-          offsetMs,
-          point: interpolatePoint(start, end, offsetMs / durationMs),
-        })),
-      },
-    ],
+    viewport,
+    pointers: [{ pointerId: 0, samples }],
   };
 }
 
-function buildMultiTouchPlan(
+function buildTransformPlan(
   motion: {
     intent: MultiTouchGesturePlan['intent'];
     origin: Point;
     delta: Point;
     scale: number;
     rotationDegrees: number;
-    velocity?: number;
     durationMs: number;
   },
   viewport: Rect,
+  platform?: PublicPlatform,
 ): MultiTouchGesturePlan {
-  const normalizedViewport = normalizeViewport(viewport);
-  const start = requireFinitePoint(motion.origin, `gesture ${motion.intent} origin`);
-  const delta = requireFinitePoint(motion.delta, `gesture ${motion.intent} delta`);
+  const start = finitePoint(motion.origin, `gesture ${motion.intent} origin`);
+  const delta = finitePoint(motion.delta, `gesture ${motion.intent} delta`);
   const end = addPoints(start, delta);
-  const maxScale = Math.max(1, motion.scale);
-  const shorterSide = Math.min(normalizedViewport.width, normalizedViewport.height);
-  const preferredInitialRadius = (shorterSide * GESTURE_PREFERRED_MAX_RADIUS_RATIO) / maxScale;
-  const availableInitialRadius =
-    minimumCentroidEdgeMargin(start, end, normalizedViewport) / maxScale;
-  const initialRadius = Math.min(preferredInitialRadius, availableInitialRadius);
-
-  if (initialRadius < GESTURE_MINIMUM_RELIABLE_RADIUS_PX) {
-    throw outOfBoundsError({
+  const maximumSpan =
+    Math.min(viewport.width, viewport.height) * initialSpanRatioForIntent(motion.intent);
+  const initialSpan = motion.scale > 1 ? maximumSpan / motion.scale : maximumSpan;
+  const finalSpan = initialSpan * motion.scale;
+  if (Math.min(initialSpan, finalSpan) < GESTURE_MINIMUM_RELIABLE_SPAN_PX) {
+    throw trajectoryOutOfBounds({
       intent: motion.intent,
-      viewport: normalizedViewport,
-      start,
-      end,
-      scale: motion.scale,
-      availableInitialSpan: Math.max(0, availableInitialRadius * 2),
+      viewport,
+      initialSpan,
+      finalSpan,
+      minimumReliableSpan: GESTURE_MINIMUM_RELIABLE_SPAN_PX,
     });
   }
+  const initialRadius = initialSpan / 2;
 
-  const offsets = sampleOffsets(motion.durationMs);
-  const buildTrajectory = (pointerId: 0 | 1, side: 1 | -1): PointerTrajectory => ({
-    pointerId,
-    samples: offsets.map((offsetMs) => {
-      const point = multiTouchPointAt({
-        intent: motion.intent,
+  const offsets = sampleOffsets(motion.durationMs, platform);
+  const trajectory = (pointerId: 0 | 1, side: 1 | -1): PointerTrajectory => {
+    const samples = offsets.map((offsetMs) => ({
+      offsetMs,
+      point: transformPointAt({
+        ...motion,
         start,
         end,
         initialRadius,
-        scale: motion.scale,
-        rotationDegrees: motion.rotationDegrees,
         offsetMs,
-        durationMs: motion.durationMs,
         side,
-      });
-      assertPointInViewport(point, normalizedViewport, {
-        intent: motion.intent,
-        pointerId,
-        offsetMs,
-        start,
-        end,
-        scale: motion.scale,
-      });
-      return { offsetMs, point };
-    }),
-  });
-  const trajectories: [PointerTrajectory, PointerTrajectory] = [
-    buildTrajectory(0, 1),
-    buildTrajectory(1, -1),
-  ];
+        platform,
+      }),
+    }));
+    assertSamplesInViewport(samples, viewport, { intent: motion.intent, pointerId });
+    return { pointerId, samples };
+  };
 
   return {
     topology: 'two',
     intent: motion.intent,
     durationMs: motion.durationMs,
-    viewport: normalizedViewport,
-    centroid: { start, end },
-    scale: motion.scale,
-    rotationDegrees: motion.rotationDegrees,
-    ...(motion.velocity !== undefined ? { velocity: motion.velocity } : {}),
-    initialSpan: initialRadius * 2,
-    initialAngleDegrees: GESTURE_INITIAL_ANGLE_DEGREES,
-    pointers: trajectories,
+    viewport,
+    pointers: [trajectory(0, 1), trajectory(1, -1)],
   };
 }
 
-function multiTouchPointAt(options: {
+function transformPointAt(options: {
   intent: MultiTouchGesturePlan['intent'];
   start: Point;
   end: Point;
   initialRadius: number;
   scale: number;
   rotationDegrees: number;
-  offsetMs: number;
   durationMs: number;
+  offsetMs: number;
   side: 1 | -1;
+  platform?: PublicPlatform;
 }): Point {
   const progress = options.offsetMs / options.durationMs;
-  const componentProgress = multiTouchComponentProgress(options, progress);
-  const centroid = interpolatePoint(options.start, options.end, componentProgress.translation);
-  const radius = options.initialRadius * (1 + (options.scale - 1) * componentProgress.scale);
+  const centroid = interpolatePoint(options.start, options.end, progress);
+  const radius = options.initialRadius * (1 + (options.scale - 1) * progress);
   const angle = degreesToRadians(
-    GESTURE_INITIAL_ANGLE_DEGREES + options.rotationDegrees * componentProgress.rotation,
+    initialAngleForIntent(options.intent, options.platform) + options.rotationDegrees * progress,
   );
   return {
     x: centroid.x + Math.cos(angle) * radius * options.side,
@@ -328,48 +271,80 @@ function multiTouchPointAt(options: {
   };
 }
 
-function multiTouchComponentProgress(
-  options: Pick<
-    Parameters<typeof multiTouchPointAt>[0],
-    'intent' | 'start' | 'end' | 'scale' | 'rotationDegrees'
-  >,
-  progress: number,
-): { translation: number; scale: number; rotation: number } {
-  if (options.intent !== 'transform') {
-    return { translation: progress, scale: progress, rotation: progress };
-  }
-  const active = {
-    translation: options.start.x !== options.end.x || options.start.y !== options.end.y,
-    scale: options.scale !== 1,
-    rotation: options.rotationDegrees !== 0,
-  };
-  const componentCount =
-    Number(active.translation) + Number(active.scale) + Number(active.rotation);
-  let componentIndex = 0;
-  const stagedProgress = (isActive: boolean): number => {
-    if (!isActive) return 0;
-    const start = componentIndex / componentCount;
-    componentIndex += 1;
-    const end = componentIndex / componentCount;
-    return Math.min(Math.max((progress - start) / (end - start), 0), 1);
-  };
-  return {
-    translation: stagedProgress(active.translation),
-    scale: stagedProgress(active.scale),
-    rotation: stagedProgress(active.rotation),
-  };
+function initialAngleForIntent(
+  intent: MultiTouchGesturePlan['intent'],
+  platform: PublicPlatform | undefined,
+): number {
+  return intent === 'pinch' && platform === 'android'
+    ? GESTURE_HORIZONTAL_ANGLE_DEGREES
+    : GESTURE_INITIAL_ANGLE_DEGREES;
 }
 
-function sampleOffsets(durationMs: number): number[] {
-  const offsets: number[] = [];
-  for (let offsetMs = 0; offsetMs < durationMs; offsetMs += GESTURE_SAMPLE_INTERVAL_MS) {
-    offsets.push(offsetMs);
-  }
-  offsets.push(durationMs);
-  return offsets;
+function initialSpanRatioForIntent(intent: MultiTouchGesturePlan['intent']): number {
+  return intent === 'pinch' ? GESTURE_PINCH_INITIAL_SPAN_RATIO : GESTURE_INITIAL_SPAN_RATIO;
 }
 
-function defaultMultiTouchDuration(rotationDegrees: number): number {
+function sampleOffsets(durationMs: number, platform?: PublicPlatform): number[] {
+  const rawFrameCount = durationMs / GESTURE_SAMPLE_INTERVAL_MS;
+  const frameCount = Math.max(
+    3,
+    platform === 'android' ? Math.round(rawFrameCount) : Math.floor(rawFrameCount),
+  );
+  return Array.from({ length: frameCount + 1 }, (_, index) =>
+    Math.round((durationMs * index) / frameCount),
+  );
+}
+
+function assertSamplesInViewport(
+  samples: readonly { offsetMs: number; point: Point }[],
+  viewport: Rect,
+  details: Record<string, unknown>,
+): void {
+  const maxX = viewport.x + viewport.width - GESTURE_VIEWPORT_INSET_PX;
+  const maxY = viewport.y + viewport.height - GESTURE_VIEWPORT_INSET_PX;
+  for (const sample of samples) {
+    const { x, y } = sample.point;
+    if (
+      x < viewport.x + GESTURE_VIEWPORT_INSET_PX ||
+      x > maxX ||
+      y < viewport.y + GESTURE_VIEWPORT_INSET_PX ||
+      y > maxY
+    ) {
+      throw trajectoryOutOfBounds({ ...details, viewport, sample });
+    }
+  }
+}
+
+function trajectoryOutOfBounds(details: Record<string, unknown>): AppError {
+  return new AppError('INVALID_ARGS', 'Gesture trajectory does not fit inside the viewport', {
+    ...details,
+    reason: 'GESTURE_TRAJECTORY_OUT_OF_BOUNDS',
+    hint: 'Move the gesture away from the edge or reduce its translation, scale, or rotation.',
+  });
+}
+
+function normalizeViewport(viewport: Rect): Rect {
+  const frame = {
+    x: finiteNumber(viewport.x, 'gesture viewport x'),
+    y: finiteNumber(viewport.y, 'gesture viewport y'),
+    width: finiteNumber(viewport.width, 'gesture viewport width'),
+    height: finiteNumber(viewport.height, 'gesture viewport height'),
+  };
+  if (frame.width <= 0 || frame.height <= 0) {
+    throw new AppError('INVALID_ARGS', 'gesture viewport width and height must be positive');
+  }
+  return frame;
+}
+
+function normalizeDuration(value: number | undefined, fallback: number, field: string): number {
+  const durationMs = value ?? fallback;
+  if (!Number.isInteger(durationMs) || durationMs < 16 || durationMs > 10_000) {
+    throw new AppError('INVALID_ARGS', `${field} must be an integer between 16 and 10000`);
+  }
+  return durationMs;
+}
+
+function defaultTransformDuration(rotationDegrees: number): number {
   const rotationDuration =
     Math.ceil(Math.abs(rotationDegrees) / MAX_ROTATION_DEGREES_PER_SAMPLE) *
     GESTURE_SAMPLE_INTERVAL_MS;
@@ -379,111 +354,14 @@ function defaultMultiTouchDuration(rotationDegrees: number): number {
   );
 }
 
-function normalizeDuration(
-  value: number | undefined,
-  fallback: number,
-  field: string,
-  bounds: { min?: number; max?: number } = {},
-): number {
-  const durationMs = value ?? fallback;
-  const min = bounds.min ?? 16;
-  const max = bounds.max ?? 10_000;
-  if (
-    !Number.isFinite(durationMs) ||
-    !Number.isInteger(durationMs) ||
-    durationMs < min ||
-    durationMs > max
-  ) {
-    throw new AppError('INVALID_ARGS', `${field} must be an integer between ${min} and ${max}`);
-  }
-  return durationMs;
-}
-
-function normalizeViewport(viewport: Rect): Rect {
-  const normalized = {
-    x: normalizeFiniteNumber(viewport.x, 'gesture viewport x'),
-    y: normalizeFiniteNumber(viewport.y, 'gesture viewport y'),
-    width: normalizeFiniteNumber(viewport.width, 'gesture viewport width'),
-    height: normalizeFiniteNumber(viewport.height, 'gesture viewport height'),
-  };
-  if (normalized.width <= 0 || normalized.height <= 0) {
-    throw new AppError('INVALID_ARGS', 'gesture viewport width and height must be positive');
-  }
-  return normalized;
-}
-
-function requireViewport(viewport: Rect | undefined, gesture: string): Rect {
-  if (!viewport) {
-    throw new AppError('COMMAND_FAILED', `Cannot infer viewport for ${gesture}`, {
-      hint: 'Open an app with a visible window, then retry the gesture.',
-      reason: 'GESTURE_VIEWPORT_UNAVAILABLE',
-    });
-  }
-  return normalizeViewport(viewport);
-}
-
-function centerOfViewport(viewport: Rect): Point {
+function finitePoint(point: Point, field: string): Point {
   return {
-    x: viewport.x + viewport.width / 2,
-    y: viewport.y + viewport.height / 2,
+    x: finiteNumber(point.x, `${field} x`),
+    y: finiteNumber(point.y, `${field} y`),
   };
 }
 
-function minimumCentroidEdgeMargin(start: Point, end: Point, viewport: Rect): number {
-  const maxX = viewport.x + viewport.width;
-  const maxY = viewport.y + viewport.height;
-  return (
-    Math.min(
-      start.x - viewport.x,
-      maxX - start.x,
-      start.y - viewport.y,
-      maxY - start.y,
-      end.x - viewport.x,
-      maxX - end.x,
-      end.y - viewport.y,
-      maxY - end.y,
-    ) - GESTURE_VIEWPORT_INSET_PX
-  );
-}
-
-function assertPointInViewport(
-  point: Point,
-  viewport: Rect,
-  details: Record<string, unknown>,
-): void {
-  const maxX = viewport.x + viewport.width;
-  const maxY = viewport.y + viewport.height;
-  if (
-    point.x >= viewport.x + GESTURE_VIEWPORT_INSET_PX &&
-    point.x <= maxX - GESTURE_VIEWPORT_INSET_PX &&
-    point.y >= viewport.y + GESTURE_VIEWPORT_INSET_PX &&
-    point.y <= maxY - GESTURE_VIEWPORT_INSET_PX
-  ) {
-    return;
-  }
-  throw outOfBoundsError({ ...details, point, viewport });
-}
-
-function outOfBoundsError(details: Record<string, unknown>): AppError {
-  return new AppError(
-    'INVALID_ARGS',
-    'Gesture trajectory does not fit inside the visible viewport',
-    {
-      ...details,
-      reason: 'GESTURE_TRAJECTORY_OUT_OF_BOUNDS',
-      hint: 'Move the gesture center away from the edge or reduce its translation, scale, or rotation.',
-    },
-  );
-}
-
-function requireFinitePoint(point: Point, field: string): Point {
-  return {
-    x: normalizeFiniteNumber(point.x, `${field} x`),
-    y: normalizeFiniteNumber(point.y, `${field} y`),
-  };
-}
-
-function normalizeFiniteNumber(value: number, field: string): number {
+function finiteNumber(value: number, field: string): number {
   if (!Number.isFinite(value)) {
     throw new AppError('INVALID_ARGS', `${field} must be a finite number`);
   }
@@ -491,23 +369,19 @@ function normalizeFiniteNumber(value: number, field: string): number {
 }
 
 function normalizeScale(value: number, field: string): number {
-  const scale = normalizeFiniteNumber(value, field);
+  const scale = finiteNumber(value, field);
   if (scale <= 0) throw new AppError('INVALID_ARGS', `${field} must be greater than 0`);
   return scale;
 }
 
-function normalizePositiveNumber(value: number, field: string): number {
-  const normalized = normalizeFiniteNumber(value, field);
-  if (normalized <= 0) throw new AppError('INVALID_ARGS', `${field} must be a positive number`);
-  return normalized;
+function positiveNumber(value: number, field: string): number {
+  const number = finiteNumber(value, field);
+  if (number <= 0) throw new AppError('INVALID_ARGS', `${field} must be a positive number`);
+  return number;
 }
 
-function normalizePointerCount(value: number | undefined): 1 | 2 {
-  const pointerCount = value ?? 1;
-  if (pointerCount !== 1 && pointerCount !== 2) {
-    throw new AppError('INVALID_ARGS', 'gesture pan pointerCount must be 1 or 2');
-  }
-  return pointerCount;
+function centerOfViewport(viewport: Rect): Point {
+  return { x: viewport.x + viewport.width / 2, y: viewport.y + viewport.height / 2 };
 }
 
 function addPoints(left: Point, right: Point): Point {

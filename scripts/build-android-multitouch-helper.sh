@@ -65,12 +65,13 @@ javac \
 
 javac \
   --release 11 \
-  -classpath "$CLASSES_DIR" \
+  -classpath "$ANDROID_JAR:$CLASSES_DIR" \
   -d "$TEST_CLASSES_DIR" \
   $(find "$HELPER_DIR/src/test/java" -name '*.java' | sort)
 
-java -classpath "$CLASSES_DIR:$TEST_CLASSES_DIR" \
-  com.callstack.agentdevice.multitouchhelper.TwoPointerGeometryTest
+java \
+  -classpath "$ANDROID_JAR:$CLASSES_DIR:$TEST_CLASSES_DIR" \
+  com.callstack.agentdevice.multitouchhelper.PointerEventScheduleTest
 
 "$BUILD_TOOLS_DIR/d8" \
   --min-api "$MIN_SDK" \

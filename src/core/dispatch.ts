@@ -24,7 +24,6 @@ import {
   handlePressCommand,
   handleReadCommand,
   handleScrollCommand,
-  handleSwipeCommand,
   handleTypeCommand,
 } from './dispatch-interactions.ts';
 import { readNotificationPayload } from './dispatch-payload.ts';
@@ -163,8 +162,6 @@ const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
   },
   press: ({ device, interactor, positionals, context }) =>
     handlePressCommand(device, interactor, positionals, context),
-  swipe: ({ device, interactor, positionals, context }) =>
-    handleSwipeCommand(device, interactor, positionals, context),
   longpress: ({ interactor, positionals }) => handleLongPressCommand(interactor, positionals),
   focus: ({ interactor, positionals }) => handleFocusCommand(interactor, positionals),
   type: ({ interactor, positionals, context }) =>

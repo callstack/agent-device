@@ -6,7 +6,8 @@ import type {
 } from '../core/interactor-types.ts';
 import type { BackMode } from '../contracts/back-mode.ts';
 import type { DeviceRotation } from '../contracts/device-rotation.ts';
-import type { ScrollDirection, TransformGestureParams } from '../contracts/scroll-gesture.ts';
+import type { ScrollDirection } from '../contracts/scroll-gesture.ts';
+import type { GesturePlan } from '../contracts/gesture-plan.ts';
 import type { TvRemoteButton } from '../contracts/tv-remote.ts';
 import type { SettingOptions } from '../platforms/permission-utils.ts';
 import { AppError } from '../kernel/errors.ts';
@@ -118,26 +119,6 @@ class WebDriverInteractor implements Interactor {
     return { backend: 'webdriver', x1, y1, x2, y2, durationMs };
   }
 
-  async pan(
-    x1: number,
-    y1: number,
-    x2: number,
-    y2: number,
-    durationMs?: number,
-  ): Promise<Record<string, unknown>> {
-    return await this.swipe(x1, y1, x2, y2, durationMs);
-  }
-
-  async fling(
-    x1: number,
-    y1: number,
-    x2: number,
-    y2: number,
-    durationMs = 150,
-  ): Promise<Record<string, unknown>> {
-    return await this.swipe(x1, y1, x2, y2, durationMs);
-  }
-
   async longPress(x: number, y: number, durationMs = 600): Promise<Record<string, unknown>> {
     this.requireSupport('longPress');
     await this.pointerGesture('longPress', [
@@ -202,8 +183,19 @@ class WebDriverInteractor implements Interactor {
     return { backend: 'webdriver', ...absolutePlan, distance: plan.pixels, durationMs };
   }
 
-  async pinch(_scale: number, _x?: number, _y?: number): Promise<Record<string, unknown> | void> {
-    this.unsupported('pinch');
+  async gestureViewport(): Promise<WebDriverWindowRect> {
+    return await this.scrollGestureFrame();
+  }
+
+  async performGesture(plan: GesturePlan): Promise<Record<string, unknown>> {
+    this.requireSupport(webDriverOperationForGesture(plan));
+    await this.client.performActions(
+      plan.pointers.map((pointer) =>
+        touchPointer(`gesture-pointer-${pointer.pointerId}`, pointerActions(pointer.samples)),
+      ),
+    );
+    await this.client.releaseActions().catch(() => undefined);
+    return { backend: 'webdriver-w3c-actions' };
   }
 
   async screenshot(outPath: string, _options?: ScreenshotOptions): Promise<void> {
@@ -232,21 +224,6 @@ class WebDriverInteractor implements Interactor {
   async rotate(orientation: DeviceRotation): Promise<void> {
     this.requireSupport('rotate');
     await this.client.executeScript('mobile: rotate', [{ orientation }]);
-  }
-
-  async rotateGesture(
-    _degrees: number,
-    _x?: number,
-    _y?: number,
-    _velocity?: number,
-  ): Promise<Record<string, unknown> | void> {
-    this.unsupported('rotateGesture');
-  }
-
-  async transformGesture(
-    _options: TransformGestureParams,
-  ): Promise<Record<string, unknown> | void> {
-    this.unsupported('transformGesture');
   }
 
   async appSwitcher(): Promise<void> {
@@ -309,5 +286,39 @@ class WebDriverInteractor implements Interactor {
         operation,
       },
     );
+  }
+}
+
+function pointerActions(samples: GesturePlan['pointers'][number]['samples']): W3CPointerAction[] {
+  const first = samples[0];
+  if (!first) throw new AppError('INVALID_ARGS', 'WebDriver gesture pointer requires samples');
+  const actions: W3CPointerAction[] = [
+    { type: 'pointerMove', duration: 0, x: first.point.x, y: first.point.y },
+    { type: 'pointerDown', button: 0 },
+  ];
+  for (let index = 1; index < samples.length; index += 1) {
+    const previous = samples[index - 1]!;
+    const sample = samples[index]!;
+    actions.push({
+      type: 'pointerMove',
+      duration: sample.offsetMs - previous.offsetMs,
+      x: sample.point.x,
+      y: sample.point.y,
+    });
+  }
+  actions.push({ type: 'pointerUp', button: 0 });
+  return actions;
+}
+
+function webDriverOperationForGesture(plan: GesturePlan): CloudWebDriverOperation {
+  if (plan.topology === 'single') return 'swipe';
+  switch (plan.intent) {
+    case 'pan':
+    case 'transform':
+      return 'transformGesture';
+    case 'pinch':
+      return 'pinch';
+    case 'rotate':
+      return 'rotateGesture';
   }
 }

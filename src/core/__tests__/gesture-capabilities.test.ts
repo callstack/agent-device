@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import type { GestureSemanticInput } from '../gesture-plan-types.ts';
-import { requireGestureSupported } from '../gesture-capabilities.ts';
+import type { GestureSemanticInput } from '../../contracts/gesture-plan-types.ts';
+import { requireGestureSupported } from '../capabilities.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 

@@ -61,6 +61,7 @@ Single-context repo. Read `CONTEXT.md` for domain language and testing/architect
   - prefer deep modules over mechanical splits: extract when it improves locality for a concept callers already need, not just to reduce line count.
 - Before finalizing a code change, do one tightening pass over touched and directly adjacent areas: drop obsolete code, redundant tests, stale helpers/fixtures, and needless duplication made unnecessary by the change.
 - Prefer existing helpers. Add a helper only when it reduces real repetition or clarifies domain behavior.
+- Prefer composition at platform boundaries: public aliases normalize into shared primitives, and providers contribute transport/device bindings instead of cloning interaction runtimes.
 - When adding new guidance, examples, schemas, or command metadata, decide whether it belongs in the command surface, CLI grammar, CLI help, MCP projection, or daemon runtime before editing.
 - Prefer updating existing domain vocabulary in `CONTEXT.md` when naming a new durable module concept. Do not coin parallel names in docs, tests, and code.
 

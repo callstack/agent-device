@@ -1,13 +1,18 @@
 import type { Point, Rect } from '../kernel/snapshot.ts';
-import type { ScrollDirection, SwipePreset } from './scroll-gesture.ts';
+import type { ScrollDirection } from './scroll-gesture.ts';
 
 export type GesturePointerCount = 1 | 2;
 
-export type GestureIntent = 'swipe' | 'pan' | 'fling' | 'pinch' | 'rotate' | 'transform';
+export type GestureIntent = 'fling' | 'pan' | 'pinch' | 'rotate' | 'transform';
 
 export type GestureSemanticInput =
-  | { intent: 'swipe'; preset: SwipePreset; durationMs?: number }
-  | { intent: 'swipe'; from: Point; to: Point; durationMs?: number }
+  | { intent: 'fling'; from: Point; to: Point }
+  | {
+      intent: 'fling';
+      direction: ScrollDirection;
+      origin: Point;
+      distance?: number;
+    }
   | {
       intent: 'pan';
       origin: Point;
@@ -15,15 +20,8 @@ export type GestureSemanticInput =
       pointerCount?: GesturePointerCount;
       durationMs?: number;
     }
-  | {
-      intent: 'fling';
-      direction: ScrollDirection;
-      origin: Point;
-      distance?: number;
-      durationMs?: number;
-    }
   | { intent: 'pinch'; origin?: Point; scale: number }
-  | { intent: 'rotate'; origin?: Point; degrees: number; velocity?: number }
+  | { intent: 'rotate'; origin?: Point; degrees: number }
   | {
       intent: 'transform';
       origin: Point;
@@ -42,8 +40,9 @@ export type PointerTrajectory = {
 
 export type SinglePointerGesturePlan = {
   topology: 'single';
-  intent: 'swipe' | 'pan' | 'fling';
+  intent: 'fling' | 'pan';
   durationMs: number;
+  viewport: Rect;
   pointers: readonly [PointerTrajectory];
 };
 
@@ -52,12 +51,6 @@ export type MultiTouchGesturePlan = {
   intent: 'pan' | 'pinch' | 'rotate' | 'transform';
   durationMs: number;
   viewport: Rect;
-  centroid: { start: Point; end: Point };
-  scale: number;
-  rotationDegrees: number;
-  velocity?: number;
-  initialSpan: number;
-  initialAngleDegrees: number;
   pointers: readonly [PointerTrajectory, PointerTrajectory];
 };
 

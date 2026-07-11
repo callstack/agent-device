@@ -57,9 +57,6 @@ const initialCounts: GestureCounts = {
 };
 const minScale = 0.5;
 const maxScale = 2;
-const panHandlerId = 1;
-const pinchHandlerId = 2;
-const rotationHandlerId = 3;
 
 export function GestureLab() {
   const colors = useAppColors();
@@ -187,15 +184,6 @@ export function GestureLab() {
     });
   }
 
-  const panGesture = Gesture.Pan()
-    .averageTouches(true)
-    .minPointers(2)
-    .maxPointers(2)
-    .minDistance(4)
-    .runOnJS(true)
-    .onStart(() => beginTransformGesture(panHandlerId))
-    .onUpdate((event) => handlePan(event.translationX, event.translationY))
-    .onFinalize(() => endTransformGesture(panHandlerId));
   const twoPointerPanGesture = Gesture.Pan()
     .averageTouches(true)
     .minPointers(2)
@@ -203,25 +191,6 @@ export function GestureLab() {
     .minDistance(4)
     .runOnJS(true)
     .onStart(handleTwoPointerPan);
-  const pinchGesture = Gesture.Pinch()
-    .runOnJS(true)
-    .onStart(() => beginTransformGesture(pinchHandlerId))
-    .onUpdate((event) => handlePinch(event.scale))
-    .onFinalize(() => endTransformGesture(pinchHandlerId));
-  const rotationGesture = Gesture.Rotation()
-    .runOnJS(true)
-    .onStart(() => beginTransformGesture(rotationHandlerId))
-    .onUpdate((event) => handleRotation(event.rotation))
-    .onFinalize(() => endTransformGesture(rotationHandlerId));
-  const flingGestures = [Directions.LEFT, Directions.RIGHT, Directions.UP, Directions.DOWN].map(
-    (direction) => Gesture.Fling().direction(direction).runOnJS(true).onStart(handleFling),
-  );
-  const composedGesture = Gesture.Simultaneous(
-    panGesture,
-    pinchGesture,
-    rotationGesture,
-    ...flingGestures,
-  );
   const legacyFlingRefs = [
     legacyFlingLeftRef,
     legacyFlingRightRef,
@@ -315,7 +284,9 @@ export function GestureLab() {
     >
       <View
         accessibilityLabel="Gesture test image"
-        onTouchEnd={Platform.OS === 'android' ? () => (androidTouchStartRef.current = undefined) : undefined}
+        onTouchEnd={
+          Platform.OS === 'android' ? () => (androidTouchStartRef.current = undefined) : undefined
+        }
         onTouchMove={Platform.OS === 'android' ? handleAndroidTouchMove : undefined}
         onTouchStart={Platform.OS === 'android' ? handleAndroidTouchStart : undefined}
         style={styles.target}
@@ -339,17 +310,7 @@ export function GestureLab() {
           ]}
           testID="gesture-target-image"
         />
-        {Platform.OS === 'android' ? (
-          androidTransformTarget
-        ) : (
-          <GestureDetector gesture={composedGesture}>
-            <View
-              accessibilityLabel="Transform gesture target"
-              style={styles.transformTarget}
-              testID="transform-gesture-target"
-            />
-          </GestureDetector>
-        )}
+        {androidTransformTarget}
         <GestureDetector gesture={twoPointerPanGesture}>
           <View
             accessibilityLabel="Exact two-pointer pan target"

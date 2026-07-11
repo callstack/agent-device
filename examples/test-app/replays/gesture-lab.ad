@@ -20,20 +20,16 @@ wait "fling 1" 5000
 gesture fling right 280 443 120
 wait "fling 2" 5000
 
-gesture fling up 280 443 80 80
-wait "fling 3" 5000
-
-gesture fling down 280 443 80 80
-wait "fling 4" 5000
-
 open "${APP_TARGET}" --relaunch --launch-url "${APP_URL}"
+wait "Gesture lab" 30000
 wait "gesture canary ready" 5000
 wait "pan changed no, pinch changed no, rotate changed no" 30000
 
-gesture pinch 1.25 280 443
+gesture pinch 1.5 280 443
 wait "pan changed no, pinch changed yes, rotate changed no" 5000
 
 open "${APP_TARGET}" --relaunch --launch-url "${APP_URL}"
+wait "Gesture lab" 30000
 wait "gesture canary ready" 5000
 wait "pan changed no, pinch changed no, rotate changed no" 30000
 
@@ -41,6 +37,7 @@ gesture rotate 35 280 443
 wait "pan changed no, pinch changed no, rotate changed yes" 5000
 
 open "${APP_TARGET}" --relaunch --launch-url "${APP_URL}"
+wait "Gesture lab" 30000
 wait "gesture canary ready" 5000
 wait "pan changed no, pinch changed no, rotate changed no" 30000
 

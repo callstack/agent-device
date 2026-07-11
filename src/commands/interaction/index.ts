@@ -107,7 +107,8 @@ const interactionCliSchemas = {
     allowedFlags: [...postActionObservationCliFlags('longpress'), ...SELECTOR_SNAPSHOT_FLAGS],
   },
   swipe: {
-    helpDescription: 'Swipe coordinates with optional repeat pattern',
+    helpDescription:
+      'Quick coordinate fling with optional repeat pattern. The historical duration positional is accepted as a deprecated alias to pan.',
     positionalArgs: ['x1', 'y1', 'x2', 'y2', 'durationMs?'],
     allowedFlags: ['count', 'pauseMs', 'pattern'],
   },
@@ -115,7 +116,7 @@ const interactionCliSchemas = {
     usageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform> ...',
     listUsageOverride: 'gesture <pan|fling|swipe|pinch|rotate|transform> ...',
     helpDescription:
-      'Run touch gestures: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance] [durationMs], swipe <left|right|left-edge|right-edge> [durationMs], pinch <scale> [x] [y], rotate <degrees> [x] [y] [velocity], or transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs]. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
+      'Run touch gestures: pan <x> <y> <dx> <dy> [durationMs], fling <up|down|left|right> <x> <y> [distance], swipe <left|right|left-edge|right-edge>, pinch <scale> [x] [y], rotate <degrees> [x] [y], or transform <x> <y> <dx> <dy> <scale> <degrees> [durationMs]. Historical swipe/fling duration and rotate velocity arguments remain deprecated compatibility aliases. For command plans, output only command lines. Android transform verification should use all app-observable effects, for example wait text "pan changed yes", wait text "pinch changed yes", and wait text "rotate changed yes", not exact transform values.',
     summary: 'Run pan, fling, swipe, pinch, rotate, or transform gestures',
     positionalArgs: ['pan|fling|swipe|pinch|rotate|transform', 'args?'],
     allowsExtraPositionals: true,

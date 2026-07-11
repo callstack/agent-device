@@ -327,8 +327,6 @@ export function createInteractionDevice(
       | 'focus'
       | 'longPress'
       | 'scroll'
-      | 'swipe'
-      | 'pinch'
       | 'performGesture'
     >
   > & {
@@ -358,9 +356,7 @@ export function createInteractionDevice(
         ? async (...args) => await overrides.longPress?.(...args)
         : undefined,
       scroll: overrides.scroll ? async (...args) => await overrides.scroll?.(...args) : undefined,
-      swipe: overrides.swipe ? async (...args) => await overrides.swipe?.(...args) : undefined,
-      pinch: overrides.pinch ? async (...args) => await overrides.pinch?.(...args) : undefined,
-      performGesture: createPerformGestureOverride(overrides),
+      performGesture: overrides.performGesture,
     } satisfies AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),
     sessions: createMemorySessionStore([
@@ -368,39 +364,6 @@ export function createInteractionDevice(
     ]),
     policy: localCommandPolicy(),
   });
-}
-
-function createPerformGestureOverride(
-  overrides: Pick<AgentDeviceBackend, 'performGesture' | 'swipe' | 'pinch'>,
-): AgentDeviceBackend['performGesture'] {
-  if (!overrides.performGesture && !overrides.swipe && !overrides.pinch) return undefined;
-  return async (context, plan) => {
-    if (overrides.performGesture) return await overrides.performGesture(context, plan);
-    if (plan.topology === 'single') {
-      return await performSingleGestureOverride(overrides.swipe, context, plan);
-    }
-    if (plan.intent === 'pinch' && overrides.pinch) {
-      return await overrides.pinch(context, {
-        scale: plan.scale,
-        center: plan.centroid.start,
-      });
-    }
-    return undefined;
-  };
-}
-
-async function performSingleGestureOverride(
-  swipe: AgentDeviceBackend['swipe'],
-  context: Parameters<NonNullable<AgentDeviceBackend['performGesture']>>[0],
-  plan: Extract<
-    Parameters<NonNullable<AgentDeviceBackend['performGesture']>>[1],
-    { topology: 'single' }
-  >,
-) {
-  const from = plan.pointers[0].samples[0]?.point;
-  const to = plan.pointers[0].samples.at(-1)?.point;
-  if (!swipe || !from || !to) return undefined;
-  return await swipe(context, from, to, { durationMs: plan.durationMs });
 }
 
 export async function clickRefE2(device: ReturnType<typeof createInteractionDevice>) {

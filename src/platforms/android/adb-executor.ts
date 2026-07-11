@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Readable, Writable } from 'node:stream';
 import type { DeviceInfo } from '../../kernel/device.ts';
-import type { GestureIntent, GesturePlan } from '../../contracts/gesture-plan.ts';
+import type { GesturePlan } from '../../contracts/gesture-plan.ts';
 import {
   coerceExecResult,
   execFailureDetails,
@@ -124,45 +124,7 @@ export type AndroidTextInjectionRequest = {
 
 export type AndroidTextInjector = (request: AndroidTextInjectionRequest) => Promise<void>;
 
-export type AndroidTouchGestureRequest = (
-  | {
-      kind: 'swipe';
-      x1: number;
-      y1: number;
-      x2: number;
-      y2: number;
-      durationMs?: number;
-    }
-  | {
-      kind: 'pinch';
-      x: number;
-      y: number;
-      scale: number;
-      durationMs?: number;
-    }
-  | {
-      kind: 'rotate';
-      x: number;
-      y: number;
-      degrees: number;
-      durationMs?: number;
-    }
-  | {
-      kind: 'transform';
-      x: number;
-      y: number;
-      dx: number;
-      dy: number;
-      scale: number;
-      degrees: number;
-      durationMs?: number;
-    }
-) & {
-  /** Semantic identity survives lowering even when pan uses the transform injector. */
-  intent?: GestureIntent;
-  /** Canonical portable trajectories. Native providers should execute these samples verbatim. */
-  plan?: GesturePlan;
-};
+export type AndroidTouchGestureRequest = GesturePlan;
 
 export type AndroidTouchInjector = (
   request: AndroidTouchGestureRequest,

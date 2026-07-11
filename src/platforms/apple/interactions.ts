@@ -5,17 +5,13 @@ import {
   SCROLL_DURATION_MAX_MS,
 } from '../../contracts/scroll-command.ts';
 import { AppError } from '../../kernel/errors.ts';
-import {
-  singlePointerPlanEndpoints,
-  type GesturePlan,
-  type MultiTouchGesturePlan,
-} from '../../contracts/gesture-plan.ts';
+import { singlePointerPlanEndpoints, type GesturePlan } from '../../contracts/gesture-plan.ts';
 import { runAppleRunnerCommand } from './core/runner/runner-client.ts';
 import {
   buildRunnerSequenceCommand,
   parseRunnerSequenceResult,
 } from './core/runner/runner-sequence.ts';
-import type { RunnerCommand, SynthesizedDragSemantics } from './core/runner/runner-contract.ts';
+import type { RunnerCommand } from './core/runner/runner-contract.ts';
 import { appleRemotePressCommand } from './os/tvos/remote.ts';
 import { runMacosDesktopScroll } from './os/macos/desktop-scroll.ts';
 import {
@@ -35,34 +31,17 @@ export type AppleBackRunnerCommand = 'backInApp' | 'backSystem';
 type RunAppleRunnerCommand = typeof runAppleRunnerCommand;
 type RunnerOpts = RunnerCallOptions;
 
-const IOS_SWIPE_DEFAULT_DURATION_MS = 250;
-const IOS_SWIPE_MIN_DURATION_MS = 16;
-const IOS_SWIPE_MAX_DURATION_MS = 10_000;
-
-type IosDragCommandOptions = {
-  defaultDurationMs: number;
-  legacyDefaultDurationMs?: number;
-  synthesized?: boolean;
-  dragSemantics: SynthesizedDragSemantics;
-};
-
 type IosRunnerOverrides = Pick<
   Interactor,
   | 'tap'
   | 'tapElementSelector'
   | 'doubleTap'
-  | 'swipe'
-  | 'pan'
-  | 'fling'
   | 'longPress'
   | 'focus'
   | 'type'
   | 'fillElementSelector'
   | 'fill'
   | 'scroll'
-  | 'pinch'
-  | 'rotateGesture'
-  | 'transformGesture'
   | 'performGesture'
 >;
 
@@ -117,41 +96,6 @@ export function iosRunnerOverrides(
         );
         parseRunnerSequenceResult(runnerResult);
         return runnerResult;
-      },
-      swipe: async (x1, y1, x2, y2, durationMs) => {
-        return await runAppleRunnerCommand(
-          device,
-          iosDragCommand(device, ctx, x1, y1, x2, y2, durationMs, {
-            defaultDurationMs: IOS_SWIPE_DEFAULT_DURATION_MS,
-            synthesized: shouldUseSynthesizedIosGesture(device),
-            dragSemantics: 'swipe',
-          }),
-          runnerOpts,
-        );
-      },
-      pan: async (x1, y1, x2, y2, durationMs) => {
-        return await runAppleRunnerCommand(
-          device,
-          iosDragCommand(device, ctx, x1, y1, x2, y2, durationMs, {
-            defaultDurationMs: 500,
-            legacyDefaultDurationMs: 500,
-            synthesized: shouldUseSynthesizedIosGesture(device),
-            dragSemantics: 'pan',
-          }),
-          runnerOpts,
-        );
-      },
-      fling: async (x1, y1, x2, y2, durationMs) => {
-        return await runAppleRunnerCommand(
-          device,
-          iosDragCommand(device, ctx, x1, y1, x2, y2, durationMs, {
-            defaultDurationMs: 16,
-            legacyDefaultDurationMs: 16,
-            synthesized: shouldUseSynthesizedIosGesture(device),
-            dragSemantics: 'fling',
-          }),
-          runnerOpts,
-        );
       },
       longPress: async (x, y, durationMs) => {
         return await runAppleRunnerCommand(
@@ -217,128 +161,55 @@ export function iosRunnerOverrides(
           options,
         );
       },
-      pinch: async (scale, x, y) => {
-        await runAppleRunnerCommand(
-          device,
-          {
-            command: 'pinch',
-            scale,
-            x,
-            y,
-            appBundleId: ctx.appBundleId,
-          },
-          runnerOpts,
-        );
-      },
-      rotateGesture: async (degrees, x, y, velocity) => {
-        await runAppleRunnerCommand(
-          device,
-          {
-            command: 'rotateGesture',
-            degrees,
-            x,
-            y,
-            velocity,
-            appBundleId: ctx.appBundleId,
-          },
-          runnerOpts,
-        );
-      },
-      transformGesture: async (options) => {
-        return await runAppleRunnerCommand(
-          device,
-          {
-            command: 'transformGesture',
-            x: options.x,
-            y: options.y,
-            dx: options.dx,
-            dy: options.dy,
-            scale: options.scale,
-            degrees: options.degrees,
-            durationMs: options.durationMs,
-            appBundleId: ctx.appBundleId,
-          },
-          runnerOpts,
-        );
-      },
       performGesture: async (plan) => await performGestureApple(device, ctx, runnerOpts, plan),
     },
   };
 }
 
-/**
- * Lowers a canonical portable plan into the existing semantic Apple runner commands.
- * Multi-touch commands carry exact pointer samples; single-touch commands retain their
- * shipped swipe-vs-continuous-drag executor semantics.
- */
+/** Executes the portable pointer plan without regenerating platform geometry. */
 export async function performGestureApple(
   device: DeviceInfo,
   ctx: RunnerContext,
   runnerOpts: RunnerOpts,
   plan: GesturePlan,
 ): Promise<Record<string, unknown>> {
-  if (plan.topology === 'single') {
-    const { start, end } = singlePointerPlanEndpoints(plan);
+  if (plan.topology === 'two') assertAppleMultiTouchPlanSupported(device);
+  if (plan.topology === 'single' && isMacOs(device)) {
+    const { start: first, end: last } = singlePointerPlanEndpoints(plan);
     return await runAppleRunnerCommand(
       device,
-      iosDragCommand(device, ctx, start.x, start.y, end.x, end.y, plan.durationMs, {
-        defaultDurationMs: plan.durationMs,
-        legacyDefaultDurationMs: plan.durationMs,
-        synthesized: shouldUseSynthesizedIosGesture(device),
-        dragSemantics: plan.intent,
-      }),
+      {
+        command: 'drag',
+        x: first.x,
+        y: first.y,
+        x2: last.x,
+        y2: last.y,
+        durationMs: plan.durationMs,
+        appBundleId: ctx.appBundleId,
+      },
       runnerOpts,
     );
   }
-
-  assertAppleMultiTouchPlanSupported(device);
+  if (plan.topology === 'single' && isTvOsDevice(device)) {
+    const { start: first, end: last } = singlePointerPlanEndpoints(plan);
+    return await runAppleRunnerCommand(
+      device,
+      { command: 'swipe', direction: dominantDirection(first, last), appBundleId: ctx.appBundleId },
+      runnerOpts,
+    );
+  }
   return await runAppleRunnerCommand(
     device,
-    runnerCommandForMultiTouchPlan(plan, ctx.appBundleId),
+    { command: 'gesture', gesturePlan: plan, appBundleId: ctx.appBundleId },
     runnerOpts,
   );
 }
 
-function runnerCommandForMultiTouchPlan(
-  plan: MultiTouchGesturePlan,
-  appBundleId: string | undefined,
-): RunnerCommand {
-  const { start, end } = plan.centroid;
-  switch (plan.intent) {
-    case 'pinch':
-      return {
-        command: 'pinch',
-        scale: plan.scale,
-        x: start.x,
-        y: start.y,
-        gesturePlan: plan,
-        appBundleId,
-      };
-    case 'rotate':
-      return {
-        command: 'rotateGesture',
-        degrees: plan.rotationDegrees,
-        x: start.x,
-        y: start.y,
-        velocity: plan.velocity,
-        gesturePlan: plan,
-        appBundleId,
-      };
-    case 'pan':
-    case 'transform':
-      return {
-        command: 'transformGesture',
-        x: start.x,
-        y: start.y,
-        dx: end.x - start.x,
-        dy: end.y - start.y,
-        scale: plan.scale,
-        degrees: plan.rotationDegrees,
-        durationMs: plan.durationMs,
-        gesturePlan: plan,
-        appBundleId,
-      };
-  }
+function dominantDirection(from: { x: number; y: number }, to: { x: number; y: number }) {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? ('right' as const) : ('left' as const);
+  return dy >= 0 ? ('down' as const) : ('up' as const);
 }
 
 function assertAppleMultiTouchPlanSupported(device: DeviceInfo): void {
@@ -386,43 +257,6 @@ function iosTapCommand(
 function shouldUseSynthesizedIosGesture(device: DeviceInfo): boolean {
   // Two-finger HID synthesis is for touch-input iOS only; the tvOS leaf has no touch.
   return isIosFamily(device) && !isTvOsDevice(device);
-}
-
-function iosDragCommand(
-  device: DeviceInfo,
-  ctx: RunnerContext,
-  x: number,
-  y: number,
-  x2: number,
-  y2: number,
-  durationMs: number | undefined,
-  options: IosDragCommandOptions,
-): RunnerCommand {
-  const normalizedDurationMs =
-    isIosFamily(device) && !isTvOsDevice(device)
-      ? iosGestureDurationMs(durationMs, options.defaultDurationMs)
-      : (durationMs ?? options.legacyDefaultDurationMs);
-  return {
-    command: 'drag',
-    x,
-    y,
-    x2,
-    y2,
-    ...(normalizedDurationMs !== undefined ? { durationMs: normalizedDurationMs } : {}),
-    ...(options.synthesized === true
-      ? { synthesized: true, dragSemantics: options.dragSemantics }
-      : {}),
-    appBundleId: ctx.appBundleId,
-  };
-}
-
-function iosGestureDurationMs(durationMs: number | undefined, defaultDurationMs: number): number {
-  if (durationMs === undefined) return defaultDurationMs;
-
-  return Math.min(
-    IOS_SWIPE_MAX_DURATION_MS,
-    Math.max(IOS_SWIPE_MIN_DURATION_MS, Math.round(durationMs)),
-  );
 }
 
 async function runAppleScroll(

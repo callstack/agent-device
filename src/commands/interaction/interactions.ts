@@ -117,7 +117,15 @@ export const interactionDaemonWriters = {
   longpress: direct(PUBLIC_COMMANDS.longPress, (input) =>
     longPressPositionals(input as LongPressOptions),
   ),
-  swipe: direct(PUBLIC_COMMANDS.swipe, swipePositionals),
+  swipe: (input) =>
+    request(PUBLIC_COMMANDS.swipe, swipePositionals(input), input, {
+      from: input.from,
+      to: input.to,
+      durationMs: input.durationMs,
+      count: input.count,
+      pauseMs: input.pauseMs,
+      pattern: input.pattern,
+    }),
   focus: direct(PUBLIC_COMMANDS.focus, (input) => [String(input.x), String(input.y)]),
   type: direct(PUBLIC_COMMANDS.type, (input) => typePositionals(input as TypeTextOptions)),
   fill: direct(PUBLIC_COMMANDS.fill, (input) => fillPositionals(input as FillOptions)),

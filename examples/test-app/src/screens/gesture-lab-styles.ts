@@ -19,14 +19,6 @@ export function createGestureLabStyles(colors: AppColors) {
       height: 160,
       width: 240,
     },
-    transformTarget: {
-      bottom: 0,
-      height: '100%',
-      position: 'absolute',
-      right: 0,
-      width: '50%',
-      zIndex: 1,
-    },
     androidTransformTarget: {
       bottom: 0,
       left: 0,

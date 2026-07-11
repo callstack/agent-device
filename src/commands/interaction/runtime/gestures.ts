@@ -31,6 +31,10 @@ import {
 } from '../../runtime-types.ts';
 import type { LongPressCommandResult } from '../../../contracts/interaction.ts';
 import {
+  normalizePublicSwipeMotion,
+  normalizePublicSwipePreset,
+} from '../../../contracts/gesture-normalization.ts';
+import {
   assertSupportedInteractionSurface,
   captureInteractionSnapshot,
   type ExpectedResolvedTarget,
@@ -114,14 +118,16 @@ export type SwipeOptions = {
 export type SwipeCommandOptions = CommandContext & SwipeOptions;
 
 export type SwipeCommandResult = {
-  kind: 'swipe';
+  kind: 'fling' | 'pan';
   from: Point;
   to: Point;
+  pointerCount: 1;
   direction?: GestureDirection;
   preset?: SwipePreset;
   distance?: number;
-  durationMs?: number;
+  durationMs: number;
   fromTarget?: ResolvedInteractionTarget | { kind: 'viewport' };
+  deprecations?: Array<{ rule: string; replacement: string }>;
 } & BackendResultEnvelope;
 
 export type PinchCommandOptions = CommandContext & {
@@ -274,20 +280,27 @@ export const swipeCommand: RuntimeCommand<SwipeCommandOptions, SwipeCommandResul
     options.durationMs === undefined
       ? undefined
       : requireIntInRange(options.durationMs, 'durationMs', 16, 10_000);
-  const gesture = await gestureCommand(runtime, {
-    ...options,
-    gesture: { intent: 'swipe', from: resolvedFrom.point, to: to.point, durationMs },
-  });
-  return {
-    kind: 'swipe',
+  const normalized = normalizePublicSwipeMotion({
     from: resolvedFrom.point,
     to: to.point,
+    durationMs,
+  });
+  const gesture = await gestureCommand(runtime, {
+    ...options,
+    gesture: normalized.gesture,
+  });
+  return {
+    kind: gesture.kind as 'fling' | 'pan',
+    from: resolvedFrom.point,
+    to: to.point,
+    pointerCount: 1,
     ...(to.direction ? { direction: to.direction } : {}),
     ...(to.distance !== undefined ? { distance: to.distance } : {}),
-    ...(durationMs !== undefined ? { durationMs } : {}),
+    durationMs: gesture.durationMs,
     ...(resolvedFrom.target ? { fromTarget: resolvedFrom.target } : {}),
+    ...(normalized.deprecations.length > 0 ? { deprecations: normalized.deprecations } : {}),
     ...(gesture.backendResult ? { backendResult: gesture.backendResult } : {}),
-    ...successText('Swiped'),
+    ...successText(gesture.message ?? (gesture.kind === 'fling' ? 'Flung' : 'Panned')),
   };
 };
 
@@ -298,12 +311,20 @@ async function runSwipePreset(
   assertSwipePresetOptions(options);
   const preset = parseSwipePreset(options.preset);
   const durationMs = normalizeOptionalGestureDuration(options.durationMs);
+  const normalized = normalizePublicSwipePreset({ preset, durationMs });
   const gesture = await gestureCommand(runtime, {
     ...options,
-    gesture: { intent: 'swipe', preset, durationMs },
+    gesture: normalized.gesture,
   });
   const { from, to } = requireGestureResultEndpoints(gesture);
-  return swipePresetResult({ from, to, preset, durationMs, gesture });
+  return swipePresetResult({
+    from,
+    to,
+    preset,
+    durationMs,
+    gesture,
+    deprecations: normalized.deprecations,
+  });
 }
 
 function assertSwipePresetOptions(options: SwipeCommandOptions): void {
@@ -333,17 +354,25 @@ function swipePresetResult(options: {
   to: Point;
   preset: SwipePreset;
   durationMs?: number;
-  gesture: { backendResult?: Record<string, unknown> };
+  gesture: {
+    kind: 'fling' | 'pan' | 'pinch' | 'rotate' | 'transform';
+    durationMs: number;
+    message?: string;
+    backendResult?: Record<string, unknown>;
+  };
+  deprecations: Array<{ rule: string; replacement: string }>;
 }): SwipeCommandResult {
   return {
-    kind: 'swipe',
+    kind: options.gesture.kind as 'fling' | 'pan',
     from: options.from,
     to: options.to,
+    pointerCount: 1,
     preset: options.preset,
-    ...(options.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
+    durationMs: options.gesture.durationMs,
     fromTarget: { kind: 'viewport' },
+    ...(options.deprecations.length > 0 ? { deprecations: options.deprecations } : {}),
     ...(options.gesture.backendResult ? { backendResult: options.gesture.backendResult } : {}),
-    ...successText(`Swiped ${options.preset}`),
+    ...successText(options.gesture.message ?? `Flung ${options.preset}`),
   };
 }
 

@@ -70,7 +70,7 @@ test('request handler chain routes trace commands to the record-trace family', a
 });
 
 test('request handler chain leaves generic commands for fallback dispatch', async () => {
-  for (const command of ['back', 'home', 'screenshot', 'scroll', 'swipe']) {
+  for (const command of ['back', 'home', 'screenshot', 'scroll']) {
     const response = await runRequestHandlerChain(makeChainParams(makeRequest(command)));
 
     assert.equal(response, null, `${command} should fall through to generic dispatch`);
@@ -82,6 +82,14 @@ test('request handler chain routes gesture through the interaction runtime', asy
 
   assert.equal(response?.ok, false);
   if (response?.ok !== false) throw new Error('Expected invalid gesture response');
+  assert.equal(response.error.code, 'INVALID_ARGS');
+});
+
+test('request handler chain routes swipe through the interaction runtime', async () => {
+  const response = await runRequestHandlerChain(makeChainParams(makeRequest('swipe')));
+
+  assert.equal(response?.ok, false);
+  if (response?.ok !== false) throw new Error('Expected invalid swipe response');
   assert.equal(response.error.code, 'INVALID_ARGS');
 });
 

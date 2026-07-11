@@ -8,7 +8,6 @@ import {
   backAndroid,
   fillAndroid,
   focusAndroid,
-  getAndroidScreenSize,
   homeAndroid,
   longPressAndroid,
   pressAndroid,
@@ -17,13 +16,7 @@ import {
   scrollAndroid,
   typeAndroid,
 } from '../../platforms/android/input-actions.ts';
-import {
-  pinchAndroid,
-  performGestureAndroid,
-  rotateGestureAndroid,
-  swipeGestureAndroid,
-  transformGestureAndroid,
-} from '../../platforms/android/multitouch-helper.ts';
+import { performGestureAndroid } from '../../platforms/android/multitouch-helper.ts';
 import {
   readAndroidClipboardText,
   writeAndroidClipboardText,
@@ -52,18 +45,11 @@ export function createAndroidInteractor(device: DeviceInfo): Interactor {
       await pressAndroid(device, x, y);
       await pressAndroid(device, x, y);
     },
-    swipe: (x1, y1, x2, y2, durationMs) =>
-      swipeGestureAndroid(device, { x1, y1, x2, y2, durationMs }),
-    pan: (x1, y1, x2, y2, durationMs) =>
-      swipeGestureAndroid(device, { x1, y1, x2, y2, durationMs }),
-    fling: (x1, y1, x2, y2, durationMs) =>
-      swipeGestureAndroid(device, { x1, y1, x2, y2, durationMs }),
     longPress: (x, y, durationMs) => longPressAndroid(device, x, y, durationMs),
     focus: (x, y) => focusAndroid(device, x, y),
     type: (text, delayMs) => typeAndroid(device, text, delayMs),
     fill: (x, y, text, delayMs) => fillAndroid(device, x, y, text, delayMs),
     scroll: (direction, options) => scrollAndroid(device, direction, options),
-    pinch: (scale, x, y) => pinchAndroid(device, { scale, x, y }),
     performGesture: (plan) => performGestureAndroid(device, plan),
     screenshot: (outPath, options) => screenshotAndroid(device, outPath, options),
     snapshot: async (options) => {
@@ -89,16 +75,9 @@ export function createAndroidInteractor(device: DeviceInfo): Interactor {
         ...snapshotCaptureAnnotationsFrom(result),
       };
     },
-    gestureViewport: async () => {
-      const size = await getAndroidScreenSize(device);
-      return { x: 0, y: 0, width: size.width, height: size.height };
-    },
     back: (_mode) => backAndroid(device),
     home: () => homeAndroid(device),
     rotate: (orientation) => rotateAndroid(device, orientation),
-    rotateGesture: (degrees, x, y, velocity) =>
-      rotateGestureAndroid(device, { degrees, x, y, velocity }),
-    transformGesture: (options) => transformGestureAndroid(device, options),
     appSwitcher: () => appSwitcherAndroid(device),
     tvRemote: (button, durationMs) => pressAndroidTvRemote(device, button, durationMs),
     readClipboard: () => readAndroidClipboardText(device),

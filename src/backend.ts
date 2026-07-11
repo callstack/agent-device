@@ -162,10 +162,6 @@ export type BackendLongPressOptions = {
   durationMs?: number;
 };
 
-export type BackendSwipeOptions = {
-  durationMs?: number;
-};
-
 export type BackendScrollTarget =
   | {
       kind: 'viewport';
@@ -180,11 +176,6 @@ export type BackendScrollOptions = {
   amount?: number;
   pixels?: number;
   durationMs?: number;
-};
-
-export type BackendPinchOptions = {
-  scale: number;
-  center?: Point;
 };
 
 export type BackendOpenTarget = {
@@ -482,20 +473,10 @@ export type AgentDeviceBackend = {
     point: Point,
     options?: BackendLongPressOptions,
   ): Promise<BackendActionResult>;
-  swipe?(
-    context: BackendCommandContext,
-    from: Point,
-    to: Point,
-    options?: BackendSwipeOptions,
-  ): Promise<BackendActionResult>;
   scroll?(
     context: BackendCommandContext,
     target: BackendScrollTarget,
     options: BackendScrollOptions,
-  ): Promise<BackendActionResult>;
-  pinch?(
-    context: BackendCommandContext,
-    options: BackendPinchOptions,
   ): Promise<BackendActionResult>;
   performGesture?(context: BackendCommandContext, plan: GesturePlan): Promise<BackendActionResult>;
   pressKey?(

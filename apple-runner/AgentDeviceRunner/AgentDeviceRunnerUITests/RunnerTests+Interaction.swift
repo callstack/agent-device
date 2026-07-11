@@ -1167,45 +1167,45 @@ extension RunnerTests {
   }
 
   func plannedGestureValidationError(_ plan: RunnerGesturePlan) -> String? {
-    guard plan.topology == "two" else {
-      return "planned multi-touch gesture requires topology two"
+    guard plan.topology == "single" || plan.topology == "two" else {
+      return "planned gesture topology must be single or two"
     }
-    guard plan.intent == "pan" || plan.intent == "pinch" || plan.intent == "rotate"
-      || plan.intent == "transform"
-    else {
-      return "planned multi-touch gesture has unsupported intent"
-    }
+    let supportedIntent = plan.topology == "single"
+      ? plan.intent == "fling" || plan.intent == "pan"
+      : plan.intent == "pan" || plan.intent == "pinch" || plan.intent == "rotate"
+        || plan.intent == "transform"
+    guard supportedIntent else { return "planned gesture has unsupported intent for its topology" }
     guard plan.durationMs.isFinite, plan.durationMs >= 16, plan.durationMs <= 10_000 else {
-      return "planned multi-touch durationMs must be between 16 and 10000"
+      return "planned gesture durationMs must be between 16 and 10000"
     }
     let viewport = plan.viewport
     guard viewport.x.isFinite, viewport.y.isFinite, viewport.width.isFinite,
       viewport.height.isFinite, viewport.width > 0, viewport.height > 0
     else {
-      return "planned multi-touch viewport must be finite and positive"
+      return "planned gesture viewport must be finite and positive"
     }
-    guard plan.pointers.count == 2,
-      plan.pointers[0].pointerId == 0,
-      plan.pointers[1].pointerId == 1
-    else {
-      return "planned multi-touch gesture requires ordered pointer ids 0 and 1"
+    let expectedPointerCount = plan.topology == "single" ? 1 : 2
+    guard plan.pointers.count == expectedPointerCount else {
+      return "planned gesture pointer count does not match topology"
+    }
+    for (index, pointer) in plan.pointers.enumerated() where pointer.pointerId != index {
+      return "planned gesture requires ordered pointer ids"
     }
     let firstSamples = plan.pointers[0].samples
-    let secondSamples = plan.pointers[1].samples
-    guard firstSamples.count >= 2, firstSamples.count == secondSamples.count else {
-      return "planned pointer paths require matching samples"
-    }
-    var previousOffset = -1.0
-    for index in firstSamples.indices {
-      let first = firstSamples[index]
-      let second = secondSamples[index]
-      guard first.offsetMs.isFinite, second.offsetMs.isFinite,
-        first.offsetMs == second.offsetMs,
-        first.offsetMs > previousOffset
-      else {
-        return "planned pointer sample offsets must match and strictly increase"
+    guard firstSamples.count >= 2 else { return "planned pointer paths require at least two samples" }
+    for pointer in plan.pointers {
+      guard pointer.samples.count == firstSamples.count else {
+        return "planned pointer paths require matching samples"
       }
-      for point in [first.point, second.point] {
+      var previousOffset = -1.0
+      for (index, sample) in pointer.samples.enumerated() {
+        guard sample.offsetMs.isFinite,
+          sample.offsetMs == firstSamples[index].offsetMs,
+          sample.offsetMs > previousOffset
+        else {
+          return "planned pointer sample offsets must match and strictly increase"
+        }
+        let point = sample.point
         guard point.x.isFinite, point.y.isFinite,
           point.x >= viewport.x,
           point.x <= viewport.x + viewport.width,
@@ -1214,63 +1214,57 @@ extension RunnerTests {
         else {
           return "planned pointer sample lies outside the viewport"
         }
+        previousOffset = sample.offsetMs
       }
-      previousOffset = first.offsetMs
+      guard pointer.samples.first?.offsetMs == 0,
+        pointer.samples.last?.offsetMs == plan.durationMs
+      else {
+        return "planned pointer paths must start at 0 and end at durationMs"
+      }
     }
-    guard firstSamples.first?.offsetMs == 0,
-      firstSamples.last?.offsetMs == plan.durationMs
-    else {
-      return "planned pointer paths must start at 0 and end at durationMs"
-    }
-    guard let firstStart = firstSamples.first?.point,
-      let secondStart = secondSamples.first?.point,
-      hypot(firstStart.x - secondStart.x, firstStart.y - secondStart.y) > 0
-    else {
-      return "planned pointer paths require a positive initial span"
+    if plan.topology == "two" {
+      guard let firstStart = firstSamples.first?.point,
+        let secondStart = plan.pointers[1].samples.first?.point,
+        hypot(firstStart.x - secondStart.x, firstStart.y - secondStart.y) > 0
+      else {
+        return "planned pointer paths require a positive initial span"
+      }
     }
     return nil
   }
 
-  func plannedMultiTouchGesture(
+  func plannedGesture(
     app: XCUIApplication,
     plan: RunnerGesturePlan
   ) -> RunnerInteractionOutcome {
 #if os(iOS)
-    let firstSamples = plan.pointers[0].samples
-    let secondSamples = plan.pointers[1].samples
-    let firstStart = firstSamples[0].point
-    let secondStart = secondSamples[0].point
-    let firstEnd = firstSamples[firstSamples.count - 1].point
-    let secondEnd = secondSamples[secondSamples.count - 1].point
-    let startX = (firstStart.x + secondStart.x) / 2
-    let startY = (firstStart.y + secondStart.y) / 2
-    let endX = (firstEnd.x + secondEnd.x) / 2
-    let endY = (firstEnd.y + secondEnd.y) / 2
-    let initialSpan = hypot(firstStart.x - secondStart.x, firstStart.y - secondStart.y)
-    let finalSpan = hypot(firstEnd.x - secondEnd.x, firstEnd.y - secondEnd.y)
-    let scale = finalSpan / initialSpan
-    var rotationRadians = 0.0
-    for index in 1..<firstSamples.count {
-      let previousX = firstSamples[index - 1].point.x - secondSamples[index - 1].point.x
-      let previousY = firstSamples[index - 1].point.y - secondSamples[index - 1].point.y
-      let currentX = firstSamples[index].point.x - secondSamples[index].point.x
-      let currentY = firstSamples[index].point.y - secondSamples[index].point.y
-      rotationRadians += atan2(
-        previousX * currentY - previousY * currentX,
-        previousX * currentX + previousY * currentY
+    let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
+    let frame = app.frame
+    let pointerSamples: [[[String: NSNumber]]] = plan.pointers.map { pointer in
+      pointer.samples.map { sample in
+        let point = nativeSynthesizedPoint(
+          orientedX: sample.point.x,
+          orientedY: sample.point.y,
+          in: frame,
+          interfaceOrientation: orientation
+        )
+        return [
+          "x": NSNumber(value: Double(point.x)),
+          "y": NSNumber(value: Double(point.y)),
+          "offsetMs": NSNumber(value: sample.offsetMs),
+        ]
+      }
+    }
+    if let message = RunnerSynthesizedGesture.synthesizeGesture(
+      withApplication: app,
+      pointerSamples: pointerSamples
+    ) {
+      return .unsupported(
+        message: message,
+        hint: "This gesture uses private XCTest event-synthesis APIs; rebuild the runner with a supported Xcode if this persists."
       )
     }
-    return transformGesture(
-      app: app,
-      x: startX,
-      y: startY,
-      dx: endX - startX,
-      dy: endY - startY,
-      scale: scale,
-      degrees: rotationRadians * 180 / .pi,
-      durationMs: plan.durationMs,
-      radius: initialSpan * max(scale, 1) / 2
-    )
+    return .performed
 #elseif os(tvOS)
     return .unsupported(
       message: "two-finger gestures are not supported on tvOS",
@@ -1287,126 +1281,6 @@ extension RunnerTests {
       hint: "macOS automation has no multi-touch input; run on an iOS simulator."
     )
 #endif
-  }
-
-  func pinch(app: XCUIApplication, scale: Double, x: Double?, y: Double?) -> RunnerInteractionOutcome {
-#if os(iOS)
-    // A coordinate tap+drag is a single-finger gesture: React Native reads it as a pan
-    // and the pinch scale never changes (#629). Drive the two-finger XCTest synthesis
-    // path (the same one transformGesture uses) with zero translation/rotation so RN's
-    // pinch recognizer actually fires.
-    let frame = interactionRoot(app: app).frame
-    let centerX = x ?? Double(frame.midX)
-    let centerY = y ?? Double(frame.midY)
-    return transformGesture(
-      app: app,
-      x: centerX,
-      y: centerY,
-      dx: 0,
-      dy: 0,
-      scale: scale,
-      degrees: 0,
-      durationMs: 300
-    )
-#elseif os(tvOS)
-    return .unsupported(
-      message: "pinch is not supported on tvOS",
-      hint: "tvOS has no touch input; pinch requires a touchscreen (run on iOS)."
-    )
-#else
-    return .unsupported(
-      message: "pinch is not supported on macOS",
-      hint: "macOS automation has no multi-touch input; pinch requires a touchscreen (run on iOS)."
-    )
-#endif
-  }
-
-  func rotateGesture(app: XCUIApplication, degrees: Double, x: Double?, y: Double?, velocity: Double) -> RunnerInteractionOutcome {
-#if os(iOS)
-    // Drive the two-finger XCTest synthesis path (the same one pinch/transformGesture use, #634)
-    // with zero translation/scale so React Native's rotation recognizer actually fires. The native
-    // XCUIElement.rotate(withVelocity:) injects a single synthetic rotation that RN's gesture
-    // handler does not read reliably — the same class of problem #629/#634 fixed for pinch.
-    // velocity is unused on iOS (synthesis speed is governed by durationMs); the wire contract
-    // keeps it for compatibility and direction is carried entirely by the sign of `degrees`.
-    let frame = interactionRoot(app: app).frame
-    let centerX = x ?? Double(frame.midX)
-    let centerY = y ?? Double(frame.midY)
-    return transformGesture(
-      app: app,
-      x: centerX,
-      y: centerY,
-      dx: 0,
-      dy: 0,
-      scale: 1,
-      degrees: degrees,
-      durationMs: 300
-    )
-#elseif os(tvOS)
-    return .unsupported(
-      message: "rotate-gesture is not supported on tvOS",
-      hint: "tvOS has no touch input; rotation gestures require a touchscreen (run on iOS)."
-    )
-#else
-    return .unsupported(
-      message: "rotate-gesture is not supported on macOS",
-      hint: "macOS automation has no multi-touch input; rotation gestures require a touchscreen (run on iOS)."
-    )
-#endif
-  }
-
-  func transformGesture(
-    app: XCUIApplication,
-    x: Double,
-    y: Double,
-    dx: Double,
-    dy: Double,
-    scale: Double,
-    degrees: Double,
-    durationMs: Double,
-    radius: Double? = nil
-  ) -> RunnerInteractionOutcome {
-#if os(iOS)
-    let target = interactionRoot(app: app)
-    let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    let point = nativeSynthesizedPoint(orientedX: x, orientedY: y, in: app.frame, interfaceOrientation: orientation)
-    let vector = nativeSynthesizedVector(orientedDx: dx, orientedDy: dy, interfaceOrientation: orientation)
-    if let message = RunnerSynthesizedGesture.synthesizeTransform(
-      withApplication: app,
-      x: Double(point.x),
-      y: Double(point.y),
-      dx: Double(vector.dx),
-      dy: Double(vector.dy),
-      scale: scale,
-      degrees: degrees,
-      radius: radius ?? transformGestureRadius(frame: target.frame, scale: scale),
-      durationMs: durationMs
-    ) {
-      return .unsupported(
-        message: message,
-        hint: "This gesture uses private XCTest event-synthesis APIs; rebuild the runner with a supported Xcode (these APIs can change across Xcode versions)."
-      )
-    }
-    return .performed
-#elseif os(tvOS)
-    return .unsupported(
-      message: "transformGesture is not supported on tvOS",
-      hint: "tvOS has no touch input; transform gestures require a touchscreen (run on iOS)."
-    )
-#else
-    return .unsupported(
-      message: "transformGesture is not supported on macOS",
-      hint: "macOS automation has no multi-touch input; transform gestures require a touchscreen (run on iOS)."
-    )
-#endif
-  }
-
-  private func transformGestureRadius(frame: CGRect, scale: Double) -> Double {
-    let shorterSide = Double(min(frame.width, frame.height))
-    let frameRadius = shorterSide * 0.20
-    let minimumEndRadius = shorterSide * 0.08
-    let scaleAdjustedRadius = scale < 1.0 ? max(frameRadius, minimumEndRadius / scale) : frameRadius
-    return min(max(scaleAdjustedRadius, 48.0), shorterSide * 0.35)
   }
 
   private func interactionRoot(app: XCUIApplication) -> XCUIElement {

@@ -3,7 +3,7 @@ import { AppError } from '../../../../kernel/errors.ts';
 import type { ClickButton } from '../../../../core/click-button.ts';
 import type { DeviceRotation } from '../../../../contracts/device-rotation.ts';
 import type { ScrollDirection } from '../../../../contracts/scroll-gesture.ts';
-import type { MultiTouchGesturePlan } from '../../../../contracts/gesture-plan.ts';
+import type { GesturePlan } from '../../../../contracts/gesture-plan.ts';
 import type { ElementSelectorKey } from '../../../../core/interactor-types.ts';
 import { createRequestCanceledError, isRequestCanceled } from '../../../../request/cancel.ts';
 import { bootFailureHint, classifyBootFailure } from '../../../boot-diagnostics.ts';
@@ -40,13 +40,11 @@ export type RunnerCommand = {
     | 'backSystem'
     | 'home'
     | 'rotate'
-    | 'rotateGesture'
-    | 'transformGesture'
+    | 'gesture'
     | 'appSwitcher'
     | 'keyboardDismiss'
     | 'keyboardReturn'
     | 'alert'
-    | 'pinch'
     | 'sequence'
     | 'recordStart'
     | 'recordStop'
@@ -69,18 +67,14 @@ export type RunnerCommand = {
   remoteButton?: 'select' | 'menu' | 'home' | 'up' | 'down' | 'left' | 'right';
   x2?: number;
   y2?: number;
-  dx?: number;
-  dy?: number;
   durationMs?: number;
   direction?: ScrollDirection;
   amount?: number;
   pixels?: number;
   orientation?: DeviceRotation;
-  scale?: number;
   degrees?: number;
-  velocity?: number;
-  /** Canonical two-pointer samples planned by the portable gesture runtime. */
-  gesturePlan?: MultiTouchGesturePlan;
+  /** Canonical pointer samples planned by the portable gesture runtime. */
+  gesturePlan?: GesturePlan;
   outPath?: string;
   fps?: number;
   maxSize?: number;

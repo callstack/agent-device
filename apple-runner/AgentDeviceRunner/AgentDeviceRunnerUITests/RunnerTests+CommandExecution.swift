@@ -58,7 +58,7 @@ extension RunnerTests {
 
   /// Runs a gesture action with uniform timing capture. Touch gestures pass `idleTimeout: true`
   /// (the default) to run inside the scroll idle-timeout + quiescence-skip wrapper; synthesis
-  /// gestures (pinch/rotate/transform) pass `false` because RunnerSynthesizedGesture governs its
+  /// pointer-plan gestures pass `false` because RunnerSynthesizedGesture governs their
   /// own timing. Returns the captured timing and the action's outcome.
   ///
   /// NOTE: a new SYNTHESIS gesture must pass `idleTimeout: false` — the default `true` would wrap
@@ -1470,135 +1470,29 @@ extension RunnerTests {
         return Response(ok: false, error: ErrorPayload(message: "alert not found"))
       }
       return handleAlert(alert, action: action)
-    case .pinch:
-      if let response = executePlannedMultiTouchGesture(
-        activeApp: activeApp,
-        plan: command.gesturePlan,
-        expectedIntent: "pinch",
-        message: "pinched"
-      ) {
-        return response
+    case .gesture:
+      guard let plan = command.gesturePlan else {
+        return Response(
+          ok: false,
+          error: ErrorPayload(code: "INVALID_ARGS", message: "gesture requires gesturePlan")
+        )
       }
-      guard let scale = command.scale, scale > 0 else {
-        return Response(ok: false, error: ErrorPayload(message: "pinch requires scale > 0"))
+      if let validationError = plannedGestureValidationError(plan) {
+        return Response(
+          ok: false,
+          error: ErrorPayload(code: "INVALID_ARGS", message: validationError)
+        )
       }
       let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
-        pinch(app: activeApp, scale: scale, x: command.x, y: command.y)
+        plannedGesture(app: activeApp, plan: plan)
       }
       if let response = unsupportedResponse(for: outcome) {
         return response
       }
-      return gestureResponse(message: "pinched", timing: timing)
+      return gestureResponse(message: plan.intent, timing: timing)
     case .sequence:
       return executeSequence(command: command, activeApp: activeApp)
-    case .rotateGesture:
-      if let response = executePlannedMultiTouchGesture(
-        activeApp: activeApp,
-        plan: command.gesturePlan,
-        expectedIntent: "rotate",
-        message: "rotatedGesture"
-      ) {
-        return response
-      }
-      guard let degrees = command.degrees, degrees.isFinite else {
-        return Response(ok: false, error: ErrorPayload(message: "rotateGesture requires degrees"))
-      }
-      let velocity = command.velocity ?? (degrees >= 0 ? 1.0 : -1.0)
-      guard velocity.isFinite && velocity != 0 else {
-        return Response(ok: false, error: ErrorPayload(message: "rotateGesture velocity must be non-zero"))
-      }
-      let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
-        rotateGesture(
-          app: activeApp,
-          degrees: degrees,
-          x: command.x,
-          y: command.y,
-          velocity: velocity
-        )
-      }
-      if let response = unsupportedResponse(for: outcome) {
-        return response
-      }
-      return gestureResponse(message: "rotatedGesture", timing: timing)
-    case .transformGesture:
-      if let response = executePlannedMultiTouchGesture(
-        activeApp: activeApp,
-        plan: command.gesturePlan,
-        expectedIntent: command.gesturePlan?.intent == "pan" ? "pan" : "transform",
-        message: "transformedGesture"
-      ) {
-        return response
-      }
-      guard
-        let x = command.x,
-        let y = command.y,
-        let dx = command.dx,
-        let dy = command.dy,
-        x.isFinite,
-        y.isFinite,
-        dx.isFinite,
-        dy.isFinite
-      else {
-        return Response(ok: false, error: ErrorPayload(message: "transformGesture requires finite x y dx dy"))
-      }
-      guard let scale = command.scale, scale.isFinite, scale > 0 else {
-        return Response(ok: false, error: ErrorPayload(message: "transformGesture requires scale > 0"))
-      }
-      guard let degrees = command.degrees, degrees.isFinite else {
-        return Response(ok: false, error: ErrorPayload(message: "transformGesture requires finite degrees"))
-      }
-      let durationMs = command.durationMs ?? 300
-      guard durationMs.isFinite && durationMs >= 16 else {
-        return Response(ok: false, error: ErrorPayload(message: "transformGesture durationMs must be >= 16"))
-      }
-      let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
-        transformGesture(
-          app: activeApp,
-          x: x,
-          y: y,
-          dx: dx,
-          dy: dy,
-          scale: scale,
-          degrees: degrees,
-          durationMs: durationMs
-        )
-      }
-      if let response = unsupportedResponse(for: outcome) {
-        return response
-      }
-      return gestureResponse(message: "transformedGesture", timing: timing)
     }
-  }
-
-  private func executePlannedMultiTouchGesture(
-    activeApp: XCUIApplication,
-    plan: RunnerGesturePlan?,
-    expectedIntent: String,
-    message: String
-  ) -> Response? {
-    guard let plan else { return nil }
-    guard plan.intent == expectedIntent else {
-      return Response(
-        ok: false,
-        error: ErrorPayload(
-          code: "INVALID_ARGS",
-          message: "planned gesture intent \(plan.intent) does not match \(expectedIntent)"
-        )
-      )
-    }
-    if let validationError = plannedGestureValidationError(plan) {
-      return Response(
-        ok: false,
-        error: ErrorPayload(code: "INVALID_ARGS", message: validationError)
-      )
-    }
-    let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
-      plannedMultiTouchGesture(app: activeApp, plan: plan)
-    }
-    if let response = unsupportedResponse(for: outcome) {
-      return response
-    }
-    return gestureResponse(message: message, timing: timing)
   }
 
   /// Shared drag execution for `.drag` and the fused `.scroll`. The iOS synthesized lane keeps

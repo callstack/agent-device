@@ -6,92 +6,98 @@ Accepted
 
 ## Context
 
-Gesture intent was represented repeatedly across the public command surface, daemon positional
-aliases, the `Interactor`, and platform adapters. The public `gesture` command expanded into an
-internal command name and positional strings, then platform dispatch parsed those strings again.
-The portable runtime owned swipe and pinch while the local daemon bypassed that runtime for pan,
-fling, rotate, and transform. This left two validation/response paths and made it easy for semantic
-aliases to drift.
+Gesture intent was previously interpreted at several private boundaries: command aliases produced
+positional strings, daemon dispatch reparsed them, the `Interactor` exposed parallel semantic
+methods, and each platform derived its own two-contact geometry. That duplicated validation,
+responses, and behavior behind the three public surfaces: CLI, Node.js, and MCP.
 
-Two-contact geometry also differed by platform. Android used a fixed radius and a horizontal pinch
-axis while Apple derived a radius from the active frame and started its transform path at -90
-degrees. Neither host-side path could prove the complete pointer trajectories stayed inside the
-viewport before injection.
+Two-contact geometry also differed by platform. Android used a fixed radius while Apple derived a
+radius from the app frame. Neither path validated every planned point against the active
+interaction viewport before injection.
 
-`scroll` is intentionally different: it owns viewport/edge traversal, content-state verification,
-and runner fallback policy. Folding it into touch-trajectory planning would erase those semantics.
+`scroll` remains separate because it owns viewport/edge traversal, content-state verification, and
+runner fallback policy rather than a single physical gesture.
 
 ## Decision
 
-Represent every coordinate gesture as a typed semantic input and normalize it through
-`src/core/gesture-plan.ts`. A plan separates contact topology from motion:
+Public gesture inputs normalize once in `src/contracts/gesture-normalization.ts`. This is the
+explicit compatibility boundary: convenience APIs and deprecated arguments become canonical
+semantic intent before entering the runtime. The private daemon wire is free to evolve with that
+model; compatibility is owed at CLI, Node.js, and MCP.
 
-- one contact: swipe, pan, or fling intent plus its trajectory and duration;
-- two contacts: pan, pinch, rotate, or transform intent plus centroid translation, scale, rotation,
-  duration, initial span, initial angle, and both complete pointer trajectories.
+The runtime plans canonical intent in `src/contracts/gesture-plan.ts`. Contact topology is separate
+from motion:
 
-Semantic intent remains present even when two aliases share the same physical synthesizer. Pinch
-always plans zero translation and zero rotation; rotate always plans zero translation and scale 1;
-two-finger pan always plans scale 1 and zero rotation; transform may combine all three components.
+- one contact: pan or fling with a complete pointer trajectory;
+- two contacts: pan, pinch, rotate, or transform with two complete, synchronized trajectories.
 
-The planner owns deterministic multi-touch geometry. It starts contacts at -90 degrees, prefers a
-maximum radius equal to one eighth of the viewport's shorter side (close to the proven Android helper's
-historical 160 px radius on a 1344 px-wide emulator), and reduces the unspecified internal span
-only as needed to fit the requested path. It never clamps individual points or changes requested
-translation, scale, or rotation. A plan whose reliable minimum span cannot fit fails before platform
-dispatch with `INVALID_ARGS`, reason `GESTURE_TRAJECTORY_OUT_OF_BOUNDS`, the viewport/path details,
-and a recovery hint. Span and initial angle remain internal because no established automation use
-case justifies public tuning.
+`swipe` is public sugar for a fixed-duration fling. Its historical optional duration remains a
+thin compatibility alias to pan and reports a deprecation. The same rule applies to the historical
+fling duration. Pinch fixes translation and rotation at zero; rotate fixes translation at zero and
+scale at one; two-finger pan fixes scale at one and rotation at zero; transform can apply all three
+components atomically. Intent remains on the plan even when aliases share an executor.
 
-Both native platforms consume the planned points while preserving their proven injection machinery:
+The planner owns deterministic multi-touch geometry. Contacts start at -90 degrees, except Android
+pinch starts horizontally because a vertical pinch is captured by common vertical app scroll
+containers before the pinch recognizer activates. The same explicit planning profile preserves the
+proven frame-count convention: Android rounds while Apple truncates the duration/16 ms frame count.
+These are planner inputs, not adapter-generated trajectories. The larger of pinch's initial and final spans is 40% of the
+viewport's shorter side, preserving the proven Apple pinch geometry; other two-contact intents use
+25% to keep translation and rotation trajectories compact. The other span follows from the requested scale, and both must
+satisfy a 48-point reliability floor. Combined transforms progress translation, scale, and rotation
+together inside one uninterrupted two-contact sequence so recognizers observe every intent without an
+adapter regenerating geometry. The planner does not clamp points, cache the viewport, or distort
+the requested components. Every injected sample must fit the freshly resolved active-app
+interaction viewport; otherwise the request fails before injection with
+`GESTURE_TRAJECTORY_OUT_OF_BOUNDS` and actionable details. Span and angle remain internal because
+no established automation use case justifies a public tuning surface.
 
-- Android keeps provider-native injection first and the bundled instrumentation helper second.
-  Providers receive the canonical paths. The local helper retains its proven semantic pinch and
-  rotate requests while deriving center, span, scale, rotation, and duration from the canonical
-  plan; Android's recognizers do not reliably activate for the otherwise equivalent sampled helper
-  streams. A
-  two-contact plan never broadens to `adb input swipe`; issue #690 separately owns the legacy
-  one-contact swipe fallback. Local planning resolves the viewport from display geometry without
-  starting accessibility capture. Before local helper injection, it stops the persistent snapshot
-  helper because Android permits only one instrumentation owner of `UiAutomation`; snapshots restart
-  that helper lazily after the gesture. Provider-native injection is unaffected.
-- Apple keeps the private XCTest two-pointer path executor. Unsupported Apple OS/device-kind
-  contracts remain capability-gated and return actionable errors.
+Platform adapters consume the canonical plan:
 
-Public two-finger pan is additive: `pointerCount?: 1 | 2` on the pan variant and Node convenience API,
-with CLI `--pointer-count 2`. Omission means one contact. The existing repetition `count` field is not
-reused.
+- Android sends the plan to provider-native touch injection when available, otherwise to the
+  bundled instrumentation helper. The helper injects the exact planned pointer samples. A
+  two-contact plan never falls back to `adb input swipe`; issue #690 separately owns removal of the
+  existing one-contact fallback. The snapshot helper is stopped before local gesture
+  instrumentation because Android permits only one instrumentation owner of `UiAutomation`.
+- iOS converts every planned point to native orientation and feeds the exact arrays to the existing
+  private XCTest event bridge. macOS lowers a one-contact plan to its drag executor and tvOS lowers
+  it to remote direction; multi-touch remains capability-gated to iOS simulators.
+- WebDriver lowers a supported plan to synchronized W3C pointer action sources. Multi-touch remains
+  capability-gated until a provider proves it.
 
-The daemon request wire gains an optional structured gesture input. This is additive under ADR 0006
-and removes the alias-to-positionals-to-reparse path while preserving the cross-process invoke seam
-from ADR 0008. Recording/replay keeps the public `gesture` identity and user-facing arguments.
+The `Interactor` and backend expose one compositional `performGesture(plan)` primitive instead of a
+method per semantic alias. The old scalar Apple and Android multi-touch executors and the
+public-command alias-to-positionals-to-reparse route are deleted. `.ad` keeps its established
+positional syntax through one named daemon-edge compatibility adapter; CLI, Node.js, and MCP send
+structured input. Providers should compose transport/device bindings with the shared platform
+adapter rather than reimplement the interaction runtime.
+
+Public two-finger pan is additive: `pointerCount?: 1 | 2` on pan and CLI
+`--pointer-count 2`; omission remains one contact. Responses share the canonical
+`kind`, `durationMs`, `pointerCount`, `from`, and `to` fields, followed by backend evidence.
+Recording/replay keeps its existing public command identity and session semantics.
 
 ADR 0011's element dispatch-path matrix remains unchanged: coordinate gestures do not resolve
-selectors or refs and therefore must not claim element-targeting guarantees. This ADR is the sibling
-contract for gesture planning and native execution.
+selectors or refs and therefore cannot claim element-targeting guarantees.
 
 ## Consequences
 
-- CLI, Node, MCP, daemon, portable runtime, and platform adapters share one semantic validation and
-  planning model.
-- One-finger pan remains the default; an explicit two-finger pan is discoverable without adding a
-  second public command.
-- Pinch, rotate, two-finger pan, and transform share geometry while remaining distinguishable to
-  providers, diagnostics, responses, and app recognizers.
-- Android's pinch contact axis becomes the shared -90-degree axis. This is a physical-path
-  normalization; pinch semantics remain unchanged and are protected by recognizer-level regression
-  coverage.
-- The planned trajectory payload is larger than scalar transform parameters, bounded by the gesture
-  duration and 16 ms cadence. In return, native executors stop independently inventing geometry and
-  bounds behavior.
+- CLI, Node.js, MCP, runtime, and platform adapters share one normalization and planning model.
+- Adding an ergonomic gesture alias does not add a platform implementation.
+- One-finger pan remains the default and explicit two-finger pan retains pan intent.
+- The active viewport is resolved for each gesture, so rotation, keyboard, and window changes do
+  not use stale geometry.
+- Pointer plans are larger than scalar requests but bounded by duration and the 16 ms sample
+  cadence; deleting duplicate scalar executors offsets the package cost.
 
 ## Alternatives Considered
 
-- Keep the positional aliases and only share helper math: rejected because validation, response, and
-  routing would still have two behavioral implementations.
-- Add a separate `two-finger-pan` command: rejected because contact count is a topology option on pan,
-  not a new motion intent.
-- Expose span/angle controls: rejected until a concrete automation case needs them; exposing geometry
-  policy now would freeze an unexplained public contract.
-- Consolidate scroll too: rejected because scroll's edge/content verification and fallback policy are
-  materially different.
+- Keep positional aliases and share only geometry math: rejected because validation, response, and
+  routing would still have two implementations.
+- Make platform gesture APIs the source of truth: rejected because their timing, geometry, and
+  recognizer behavior differ and cannot provide cross-platform semantics.
+- Make swipe a public synonym for pan: rejected because battle-tested gesture vocabulary treats a
+  fling/swipe as a quick directional throw and pan as deliberate timed translation.
+- Add `two-finger-pan`: rejected because pointer count is topology, not a new motion intent.
+- Expose span/angle controls: rejected until a concrete automation use case needs them.
+- Consolidate scroll: rejected because edge/content verification and fallback policy are distinct.

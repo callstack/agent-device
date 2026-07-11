@@ -145,11 +145,15 @@ test('parseArgs recognizes swipe positional + pattern flags', () => {
 });
 
 test('parseArgs recognizes gesture subcommand positionals', () => {
-  const pan = parseArgs(['gesture', 'pan', '200', '420', '0', '-80', '500'], {
-    strictFlags: true,
-  });
+  const pan = parseArgs(
+    ['gesture', 'pan', '200', '420', '0', '-80', '500', '--pointer-count', '2'],
+    {
+      strictFlags: true,
+    },
+  );
   assert.equal(pan.command, 'gesture');
   assert.deepEqual(pan.positionals, ['pan', '200', '420', '0', '-80', '500']);
+  assert.equal(pan.flags.pointerCount, 2);
 
   const fling = parseArgs(['gesture', 'fling', 'right', '200', '420', '180'], {
     strictFlags: true,

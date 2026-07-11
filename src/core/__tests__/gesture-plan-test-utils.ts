@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import type { Point, Rect } from '../../kernel/snapshot.ts';
-import { buildGesturePlan, type MultiTouchGesturePlan } from '../gesture-plan.ts';
+import { buildGesturePlan, type MultiTouchGesturePlan } from '../../contracts/gesture-plan.ts';
 
 export const PORTRAIT: Rect = { x: 0, y: 0, width: 390, height: 844 };
 export const LANDSCAPE: Rect = { x: 0, y: 0, width: 844, height: 390 };
@@ -17,6 +17,23 @@ export function finalSpan(plan: MultiTouchGesturePlan): number {
     requiredPoint(plan.pointers[0].samples.at(-1)?.point),
     requiredPoint(plan.pointers[1].samples.at(-1)?.point),
   );
+}
+
+export function initialSpan(plan: MultiTouchGesturePlan): number {
+  return distance(
+    requiredPoint(plan.pointers[0].samples[0]?.point),
+    requiredPoint(plan.pointers[1].samples[0]?.point),
+  );
+}
+
+export function centroid(plan: MultiTouchGesturePlan, index: number): Point {
+  const first = requiredPoint(
+    index === -1 ? plan.pointers[0].samples.at(-1)?.point : plan.pointers[0].samples[index]?.point,
+  );
+  const second = requiredPoint(
+    index === -1 ? plan.pointers[1].samples.at(-1)?.point : plan.pointers[1].samples[index]?.point,
+  );
+  return { x: (first.x + second.x) / 2, y: (first.y + second.y) / 2 };
 }
 
 export function rotationDelta(plan: MultiTouchGesturePlan): number {

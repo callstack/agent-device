@@ -15,12 +15,18 @@ wait "two-pointer pan activations 0" 5000
 gesture pan 350 1100 180 0 500 --pointer-count 2
 wait "two-pointer pan activations 1" 5000
 
+gesture fling left 850 1100 300
+wait "fling 1" 5000
+
+gesture fling right 750 1100 300
+wait "fling 2" 5000
+
 open "${APP_TARGET}" --relaunch --launch-url "${APP_URL}"
 react-native dismiss-overlay
 wait "gesture canary ready" 5000
 wait "pan changed no, pinch changed no, rotate changed no" 30000
 
-gesture pinch 1.25 1000 1100
+gesture pinch 1.5 750 1100
 wait "pan changed no, pinch changed yes, rotate changed no" 5000
 
 open "${APP_TARGET}" --relaunch --launch-url "${APP_URL}"
@@ -28,7 +34,7 @@ react-native dismiss-overlay
 wait "gesture canary ready" 5000
 wait "pan changed no, pinch changed no, rotate changed no" 30000
 
-gesture rotate 35 1000 1100
+gesture rotate 35 750 1100
 wait "pan changed no, pinch changed no, rotate changed yes" 5000
 
 open "${APP_TARGET}" --relaunch --launch-url "${APP_URL}"
@@ -36,7 +42,7 @@ react-native dismiss-overlay
 wait "gesture canary ready" 5000
 wait "pan changed no, pinch changed no, rotate changed no" 30000
 
-gesture transform 1000 1100 120 -120 1.35 30 300
+gesture transform 750 1100 60 0 1.75 30 600
 wait "pan changed yes, pinch changed yes, rotate changed yes" 5000
 
 close

@@ -11,7 +11,7 @@ vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOrigi
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
-import { handlePressCommand, handleSwipeCommand } from '../dispatch-interactions.ts';
+import { handlePressCommand } from '../dispatch-interactions.ts';
 import type { Interactor } from '../interactor-types.ts';
 import type { RunnerCommand } from '../../platforms/apple/core/runner/runner-contract.ts';
 import { AppError } from '../../kernel/errors.ts';
@@ -39,22 +39,16 @@ function makeUnusedInteractor(): Interactor {
     close: fail,
     tap: fail,
     doubleTap: fail,
-    swipe: fail,
-    pan: fail,
-    fling: fail,
     longPress: fail,
     focus: fail,
     type: fail,
     fill: fail,
     scroll: fail,
-    pinch: fail,
     screenshot: fail,
     snapshot: fail,
     back: fail,
     home: fail,
     rotate: fail,
-    rotateGesture: fail,
-    transformGesture: fail,
     appSwitcher: fail,
     tvRemote: fail,
     readClipboard: fail,
@@ -62,96 +56,6 @@ function makeUnusedInteractor(): Interactor {
     setSetting: fail,
   };
 }
-
-test('handleSwipeCommand preserves iOS swipe duration through dispatch', async () => {
-  const calls: unknown[][] = [];
-  const interactor = {
-    ...makeUnusedInteractor(),
-    swipe: async (...args: unknown[]) => {
-      calls.push(args);
-    },
-  };
-
-  const result = await handleSwipeCommand(
-    IOS_SIMULATOR,
-    interactor,
-    ['100', '200', '180', '200', '300'],
-    undefined,
-  );
-
-  assert.deepEqual(calls, [[100, 200, 180, 200, 300]]);
-  assert.deepEqual(result, {
-    x1: 100,
-    y1: 200,
-    x2: 180,
-    y2: 200,
-    durationMs: 300,
-    effectiveDurationMs: 300,
-    timingMode: 'direct',
-    count: 1,
-    pauseMs: 0,
-    pattern: 'one-way',
-    message: 'Swiped',
-  });
-});
-
-test('handleSwipeCommand fuses repeated swipes into sequence drag steps with ping-pong unrolled', async () => {
-  mockRunAppleRunnerCommand.mockResolvedValueOnce({
-    gestureStartUptimeMs: 100,
-    gestureEndUptimeMs: 720,
-    completedSteps: 2,
-    sequenceResults: [
-      { ok: true, kind: 'drag' },
-      { ok: true, kind: 'drag' },
-    ],
-  });
-  const interactor = makeUnusedInteractor();
-
-  const result = await handleSwipeCommand(
-    IOS_SIMULATOR,
-    interactor,
-    ['100', '650', '100', '450', '120'],
-    {
-      count: 2,
-      pauseMs: 50,
-      pattern: 'ping-pong',
-      appBundleId: 'com.example.App',
-    },
-  );
-
-  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
-    command: 'sequence',
-    steps: [
-      // Ping-pong is unrolled daemon-side: odd indices swap endpoints, replacing the
-      // runner-side pattern handling of the retired dragSeries command.
-      {
-        kind: 'drag',
-        x: 100,
-        y: 650,
-        x2: 100,
-        y2: 450,
-        durationMs: 120,
-        synthesized: true,
-        dragSemantics: 'swipe',
-        pauseMs: 50,
-      },
-      {
-        kind: 'drag',
-        x: 100,
-        y: 450,
-        x2: 100,
-        y2: 650,
-        durationMs: 120,
-        synthesized: true,
-        dragSemantics: 'swipe',
-      },
-    ],
-    appBundleId: 'com.example.App',
-  });
-  assert.equal(result.timingMode, 'runner-sequence');
-  assert.equal(result.completedSteps, 2);
-  assert.equal(result.message, 'Swiped 2 times (ping-pong)');
-});
 
 test('handlePressCommand fuses an iOS jitter series into one sequence runner request', async () => {
   mockRunAppleRunnerCommand.mockResolvedValueOnce({

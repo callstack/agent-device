@@ -1,6 +1,8 @@
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
-import { buildGesturePlan } from '../../../core/gesture-plan.ts';
-import type { GestureSemanticInput } from '../../../core/gesture-plan-types.ts';
+import type { GestureIntent, GestureSemanticInput } from '../../../contracts/gesture-plan-types.ts';
+import { buildGesturePlan } from '../../../contracts/gesture-plan.ts';
+import type { NormalizedGestureInput } from '../../../contracts/gesture-normalization.ts';
+import { buildSwipePresetGesturePlan } from '../../../contracts/scroll-gesture.ts';
 import type { Point, Rect } from '../../../kernel/snapshot.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { successText } from '../../../utils/success-text.ts';
@@ -14,20 +16,21 @@ import { assertSupportedInteractionSurface, captureInteractionSnapshot } from '.
 import { resolveVisibleSnapshotViewport } from './viewport.ts';
 
 export type GestureCommandOptions = CommandContext & {
-  gesture: GestureSemanticInput;
+  gesture: NormalizedGestureInput;
 };
 
 export type GestureCommandResult = {
-  kind: GestureSemanticInput['intent'];
+  kind: GestureIntent;
   durationMs: number;
-  from?: Point;
-  to?: Point;
+  pointerCount: 1 | 2;
+  from: Point;
+  to: Point;
 } & BackendResultEnvelope;
 
 export type PanCommandOptions = CommandContext &
   Omit<Extract<GestureSemanticInput, { intent: 'pan' }>, 'intent'>;
 export type FlingCommandOptions = CommandContext &
-  Omit<Extract<GestureSemanticInput, { intent: 'fling' }>, 'intent'>;
+  Omit<Extract<GestureSemanticInput, { intent: 'fling'; direction: unknown }>, 'intent'>;
 export type RotateGestureCommandOptions = CommandContext &
   Omit<Extract<GestureSemanticInput, { intent: 'rotate' }>, 'intent'>;
 export type TransformGestureCommandOptions = CommandContext &
@@ -41,28 +44,24 @@ export const gestureCommand: RuntimeCommand<GestureCommandOptions, GestureComman
     throw new AppError('UNSUPPORTED_OPERATION', 'gesture is not supported by this backend');
   }
   await assertSupportedInteractionSurface(runtime, options, options.gesture.intent);
-  const viewport = gestureNeedsViewport(options.gesture)
-    ? await captureGestureViewport(runtime, options)
-    : undefined;
-  const plan = buildGesturePlan(options.gesture, viewport);
+  const viewport = await captureGestureViewport(runtime, options);
+  const gesture = resolvePresetGesture(options.gesture, viewport);
+  const plan = buildGesturePlan(gesture, viewport, runtime.backend.platform);
   const backendResult = await runtime.backend.performGesture(
     toBackendContext(runtime, options),
     plan,
   );
   const formattedBackendResult = toBackendResult(backendResult);
-  const compactPath =
-    plan.topology === 'single'
-      ? {
-          from: plan.pointers[0].samples[0]?.point,
-          to: plan.pointers[0].samples.at(-1)?.point,
-        }
-      : {};
+  const from = centroidAt(plan.pointers, 0);
+  const to = centroidAt(plan.pointers, -1);
   return {
-    kind: options.gesture.intent,
+    kind: gesture.intent,
     durationMs: plan.durationMs,
-    ...compactPath,
+    pointerCount: plan.topology === 'single' ? 1 : 2,
+    from,
+    to,
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
-    ...successText(gestureMessage(options.gesture)),
+    ...successText(gestureMessage(gesture)),
   };
 };
 
@@ -88,12 +87,6 @@ export const transformGestureCommand: RuntimeCommand<
 > = async (runtime, options) =>
   await gestureCommand(runtime, { ...options, gesture: { ...options, intent: 'transform' } });
 
-function gestureNeedsViewport(input: GestureSemanticInput): boolean {
-  if (input.intent === 'swipe') return 'preset' in input;
-  if (input.intent === 'pan') return (input.pointerCount ?? 1) === 2;
-  return input.intent === 'pinch' || input.intent === 'rotate' || input.intent === 'transform';
-}
-
 async function captureGestureViewport(
   runtime: AgentDeviceRuntime,
   options: GestureCommandOptions,
@@ -106,14 +99,46 @@ async function captureGestureViewport(
   return resolveVisibleSnapshotViewport(capture.snapshot.nodes, 'gesture');
 }
 
+function resolvePresetGesture(input: NormalizedGestureInput, viewport: Rect): GestureSemanticInput {
+  if (!('preset' in input)) return input;
+  const relative = buildSwipePresetGesturePlan(input.preset, {
+    referenceWidth: viewport.width,
+    referenceHeight: viewport.height,
+  });
+  const from = { x: viewport.x + relative.x1, y: viewport.y + relative.y1 };
+  const to = { x: viewport.x + relative.x2, y: viewport.y + relative.y2 };
+  if (input.intent === 'fling') return { intent: 'fling', from, to };
+  return {
+    intent: 'pan',
+    origin: from,
+    delta: { x: to.x - from.x, y: to.y - from.y },
+    durationMs: input.durationMs,
+  };
+}
+
+function centroidAt(
+  pointers: readonly { samples: readonly { point: Point }[] }[],
+  index: 0 | -1,
+): Point {
+  const points = pointers.map((pointer) =>
+    index === 0 ? pointer.samples[0]?.point : pointer.samples.at(-1)?.point,
+  );
+  if (points.some((point) => point === undefined)) {
+    throw new AppError('COMMAND_FAILED', 'Gesture plan did not contain endpoint samples.');
+  }
+  const defined = points as Point[];
+  return {
+    x: defined.reduce((sum, point) => sum + point.x, 0) / defined.length,
+    y: defined.reduce((sum, point) => sum + point.y, 0) / defined.length,
+  };
+}
+
 function gestureMessage(input: GestureSemanticInput): string {
   switch (input.intent) {
-    case 'swipe':
-      return 'preset' in input ? `Swiped ${input.preset}` : 'Swiped';
     case 'pan':
       return `Panned (${input.origin.x}, ${input.origin.y}) by (${input.delta.x}, ${input.delta.y})`;
     case 'fling':
-      return `Flung ${input.direction}`;
+      return 'direction' in input ? `Flung ${input.direction}` : 'Flung';
     case 'pinch':
       return `Pinched to scale ${input.scale}`;
     case 'rotate':
