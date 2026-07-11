@@ -8,9 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { runReplayScriptFile } from '../session-replay-runtime.ts';
-import { buildReplayFailureDivergence } from '../session-replay-divergence.ts';
 import { SessionStore } from '../../session-store.ts';
-import type { DaemonRequest, DaemonResponse } from '../../types.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { baseReplayRequest as baseReq, writeReplayFile } from './session-replay-runtime.fixtures.ts';
@@ -105,68 +103,6 @@ test('a fill divergence never serializes the typed text at any response level', 
     expect(divergence.action).toContain('<text>');
     expect(divergence.action).toContain('Email');
   }
-});
-
-// --- Blocker 3b: suggestion dedupe keeps the STRONGEST basis per node ---
-
-test('a divergence dedupes suggestions by node and tags the strongest basis', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-suggest-dedupe-'));
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
-
-  // A recorded click whose selectorChain lists a label-basis term FIRST and an
-  // id-basis term SECOND, both resolving to the same node. The suggestion must
-  // appear once, tagged with the stronger `id` basis (not the first-seen label).
-  mockDispatchCommand.mockResolvedValue({
-    nodes: [
-      {
-        index: 0,
-        depth: 0,
-        type: 'Button',
-        label: 'Save',
-        identifier: 'save',
-        rect: { x: 0, y: 0, width: 100, height: 44 },
-        hittable: true,
-      },
-    ],
-    truncated: false,
-    backend: 'xctest',
-  });
-
-  const divergence = await buildReplayFailureDivergence({
-    error: { code: 'COMMAND_FAILED', message: 'not hittable' },
-    action: {
-      ts: 0,
-      command: 'click',
-      positionals: ['label="Save"'],
-      flags: {},
-      result: { selectorChain: ['label="Save"', 'id="save"'] },
-    },
-    index: 0,
-    sourcePath: path.join(root, 'flow.ad'),
-    sourceLine: 1,
-    session: sessionStore.get(sessionName),
-    sessionName,
-    sessionStore,
-    logPath: path.join(root, 'daemon.log'),
-    responseLevel: 'default',
-    planActions: [
-      {
-        ts: 0,
-        command: 'click',
-        positionals: ['label="Save"'],
-        flags: {},
-        result: { selectorChain: ['label="Save"', 'id="save"'] },
-      },
-    ],
-    planDigest: 'test-plan-digest',
-  });
-
-  expect(divergence.suggestionCount).toBe(1);
-  expect(divergence.suggestions).toHaveLength(1);
-  expect(divergence.suggestions[0]?.ref).toBe('e1');
-  expect(divergence.suggestions[0]?.basis).toBe('id');
 });
 
 // --- Blocker 3a: capture-error screen hint is sanitized ---

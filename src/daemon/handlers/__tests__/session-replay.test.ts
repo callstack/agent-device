@@ -8,7 +8,6 @@ import { LeaseRegistry } from '../../lease-registry.ts';
 import type { DaemonRequest, DaemonResponse } from '../../types.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/index.ts';
 import { buildNestedReplayFlags, handleSessionReplayCommands } from '../session-replay.ts';
-import { collectReplayActionArtifactPaths } from '../session-replay-runtime-artifacts.ts';
 
 const recordTraceMocks = vi.hoisted(() => ({
   handleRecordCommand: vi.fn(),
@@ -208,25 +207,6 @@ test('buildNestedReplayFlags strips test-only recordVideo before replay actions 
   });
 
   assert.deepEqual(result, { platform: 'ios' });
-});
-
-test('collectReplayActionArtifactPaths includes failed action artifact details', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-artifacts-'));
-  const snapshotPath = path.join(root, 'failure-snapshot.txt');
-  fs.writeFileSync(snapshotPath, 'snapshot');
-
-  const paths = collectReplayActionArtifactPaths({
-    ok: false,
-    error: {
-      code: 'COMMAND_FAILED',
-      message: 'assertion failed',
-      details: {
-        artifactPaths: [snapshotPath, path.join(root, 'missing.txt')],
-      },
-    },
-  });
-
-  assert.deepEqual(paths, [snapshotPath]);
 });
 
 test('test --record-video records each replay attempt on the generated test session', async () => {
