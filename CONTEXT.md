@@ -96,8 +96,7 @@ The perfect-shape refactor is complete and merged. Its end-state:
 - Folder DAG + layering lint. `kernel`/`remote`/`metro`/`client`/`snapshot`/`screenshot-diff`/
   `replay`/`cli-parser`/`daemon-client`+`server`/`sdk` are arranged as an import-direction DAG
   (imports point down toward the kernel sink), enforced in CI by `scripts/layering/check.ts`.
-  The gate rejects production value-import cycles and enforces the ranked target-spine's exact
-  back-edge identities as a down-only baseline in `scripts/layering/back-edge-baseline.json`.
+  The gate rejects production value-import cycles and every ranked target-spine back-edge.
 - Agent-cost. Responses carry a cost block and MCP `outputSchema`, rendered through a leveled
   `ResponseView`.
 

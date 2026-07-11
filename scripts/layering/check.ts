@@ -6,23 +6,19 @@
 //   client ◄ daemon/client     remote, metro ◄ daemon/client
 //   sdk = re-export barrels only
 //
-// The full zero-back-edge DAG remains a target. This gate enforces the three
-// completed-move rules, rejects all production value-import cycles, and
-// ratchets the ranked target-spine back-edges so existing debt can only shrink.
+// The target DAG is complete. This gate enforces the three move rules, rejects
+// all production value-import cycles, and rejects every ranked target-spine
+// back-edge.
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
-  backEdgePair,
   collectBackEdges,
-  compareBackEdgeBaseline,
-  findBaselineRaises,
   findValueImportCycles,
   resolveImportEdges,
   topFolder,
-  type BackEdgeBaseline,
   type ImportEdge,
   type ResolvedImportEdge,
 } from './model.ts';
@@ -44,7 +40,6 @@ type Violation = {
 const repoRoot = execFileSync('git', ['rev-parse', '--show-toplevel'], {
   encoding: 'utf8',
 }).trim();
-const baselinePath = path.join(repoRoot, 'scripts/layering/back-edge-baseline.json');
 
 export function listSourceFiles(): string[] {
   // `src/**/*.ts` only matches nested files; root-level `src/*.ts` (e.g.
@@ -144,131 +139,27 @@ function checkCycles(edges: readonly ResolvedImportEdge[]): Violation[] {
   }));
 }
 
-function readBaseline(): BackEdgeBaseline {
-  if (!fs.existsSync(baselinePath)) {
-    throw new Error(
-      `Missing ${path.relative(repoRoot, baselinePath)}. Run pnpm check:layering:baseline.`,
-    );
-  }
-  return JSON.parse(fs.readFileSync(baselinePath, 'utf8')) as BackEdgeBaseline;
-}
-
-function writeBaseline(actual: BackEdgeBaseline): void {
-  fs.writeFileSync(baselinePath, `${JSON.stringify(actual, null, 2)}\n`);
-  process.stdout.write(
-    `Layering guard: updated ${path.relative(repoRoot, baselinePath)} with current back-edge identities.\n`,
+function checkBackEdges(edges: readonly ResolvedImportEdge[]): Violation[] {
+  return Object.entries(collectBackEdges(edges)).flatMap(([pair, identities]) =>
+    identities.map((identity) => {
+      const representative = edges.find(
+        (edge) => `${edge.file} -> ${edge.target}` === identity,
+      )!;
+      return {
+        rule: 'R5 zero-back-edges',
+        file: representative.file,
+        line: representative.line,
+        message: `${pair} back-edge: ${identity}. Move the shared contract below both owners.`,
+      };
+    }),
   );
-}
-
-// The committed baseline is the ratchet ceiling. Resolve the merge-base commit
-// so the ceiling itself can be checked for monotonicity — a PR must not raise a
-// number it is simultaneously being measured against. `--base <ref>` (wired in
-// CI, mirroring the Fallow job) is authoritative; locally we fall back to the
-// merge-base with origin/main, and if neither resolves we skip the check rather
-// than fail an offline run.
-function resolveBaseRef(argv: readonly string[]): string | null {
-  const index = argv.indexOf('--base');
-  const explicit = index >= 0 ? argv[index + 1] : process.env.LAYERING_BASE;
-  if (explicit && explicit.length > 0) return explicit;
-  try {
-    return execFileSync('git', ['merge-base', 'HEAD', 'origin/main'], {
-      cwd: repoRoot,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim();
-  } catch {
-    return null;
-  }
-}
-
-function readBaselineAtRef(ref: string): BackEdgeBaseline | null {
-  try {
-    const contents = execFileSync(
-      'git',
-      ['show', `${ref}:scripts/layering/back-edge-baseline.json`],
-      { cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] },
-    );
-    return JSON.parse(contents) as BackEdgeBaseline;
-  } catch {
-    // The baseline did not exist at the base commit (first introduction), so
-    // there is no prior ceiling to enforce monotonicity against.
-    return null;
-  }
-}
-
-function deriveBaselineAtRef(ref: string, committed: BackEdgeBaseline): BackEdgeBaseline {
-  const files = execFileSync('git', ['ls-tree', '-r', '--name-only', ref, '--', 'src'], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  })
-    .split('\n')
-    .filter(isProductionSourceFile);
-  const sources = new Map(files.map((file) => [file, '']));
-  const committedSources = new Set(
-    Object.values(committed)
-      .flat()
-      .map((identity) => identity.split(' -> ')[0]!),
-  );
-  for (const file of committedSources) {
-    if (!sources.has(file)) continue;
-    sources.set(
-      file,
-      execFileSync('git', ['show', `${ref}:${file}`], {
-        cwd: repoRoot,
-        encoding: 'utf8',
-        stdio: ['ignore', 'pipe', 'ignore'],
-      }),
-    );
-  }
-  return collectBackEdges(resolveImportEdges(sources));
-}
-
-function checkBaselineMonotonic(argv: readonly string[]): Violation[] {
-  const committed = readBaseline();
-  const baseRef = resolveBaseRef(argv);
-  if (!baseRef) return [];
-  const base = readBaselineAtRef(baseRef) ?? deriveBaselineAtRef(baseRef, committed);
-  return findBaselineRaises(base, committed).map((raise) => ({
-    rule: 'R6 back-edge-ceiling',
-    file: path.relative(repoRoot, baselinePath),
-    line: 1,
-    message:
-      `${raise.pair} baseline added ${raise.added.join(', ')}. ` +
-      `Remove the new back-edge instead of adding it to the baseline.`,
-  }));
-}
-
-function checkBackEdgeRatchet(
-  edges: readonly ResolvedImportEdge[],
-  actual: BackEdgeBaseline,
-): Violation[] {
-  const baseline = readBaseline();
-  return compareBackEdgeBaseline(baseline, actual).map((drift) => {
-    const representative = edges.find((edge) => backEdgePair(edge) === drift.pair);
-    const details = [
-      drift.added.length > 0 ? `added ${drift.added.join(', ')}` : '',
-      drift.removed.length > 0 ? `removed ${drift.removed.join(', ')}` : '',
-    ]
-      .filter(Boolean)
-      .join('; ');
-    return {
-      rule: 'R5 back-edge-ratchet',
-      file: representative?.file ?? path.relative(repoRoot, baselinePath),
-      line: representative?.line ?? 1,
-      message:
-        `${drift.pair} changed: ${details}. ` +
-        (drift.added.length > 0
-          ? `Remove the new up-edge; existing debt may not be replaced or increased.`
-          : `Regenerate the baseline so the improvement becomes the new ceiling.`),
-    };
-  });
 }
 
 function report(files: readonly string[], violations: readonly Violation[]): number {
   if (violations.length === 0) {
     process.stdout.write(
       `Layering guard: OK — ${files.length} source files satisfy R1-R3, contain no ` +
-        `value-import cycles, and match the down-only back-edge baseline.\n`,
+        `value-import cycles, and contain no target-spine back-edges.\n`,
     );
     return 0;
   }
@@ -294,18 +185,14 @@ function report(files: readonly string[], violations: readonly Violation[]): num
   return 1;
 }
 
-export function main(argv = process.argv.slice(2)): number {
+export function main(): number {
   const sourceFiles = listSourceFiles();
   const edges = resolveImportEdges(readSources(sourceFiles));
-  const violations = [...checkLayeringRules(edges), ...checkCycles(edges)];
-  const actualBackEdges = collectBackEdges(edges);
-  if (argv.includes('--update-baseline')) {
-    if (violations.length > 0) return report(sourceFiles, violations);
-    writeBaseline(actualBackEdges);
-  } else {
-    violations.push(...checkBackEdgeRatchet(edges, actualBackEdges));
-    violations.push(...checkBaselineMonotonic(argv));
-  }
+  const violations = [
+    ...checkLayeringRules(edges),
+    ...checkCycles(edges),
+    ...checkBackEdges(edges),
+  ];
   return report(sourceFiles, violations);
 }
 

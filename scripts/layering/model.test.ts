@@ -2,9 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { listSourceFiles } from './check.ts';
 import {
-  compareBackEdgeBaseline,
   collectBackEdges,
-  findBaselineRaises,
   findValueImportCycles,
   parseImports,
   resolveImportEdges,
@@ -57,7 +55,7 @@ test('value cycles fail while type-only and dynamic cycles stay outside the grap
   assert.deepEqual(findValueImportCycles(nonValueCycle), []);
 });
 
-test('back-edge counts follow the documented target spine and drift in either direction', () => {
+test('back-edge identities follow the documented target spine', () => {
   const edges = resolveImportEdges(
     new Map([
       ['src/platforms/apple.ts', "import '../core/platform-plugin.ts';"],
@@ -72,35 +70,6 @@ test('back-edge counts follow the documented target spine and drift in either di
     'commands -> cli': ['src/commands/help.ts -> src/cli/parser.ts'],
     'platforms -> core': ['src/platforms/apple.ts -> src/core/platform-plugin.ts'],
   });
-  assert.deepEqual(
-    compareBackEdgeBaseline(
-      { 'commands -> cli': ['src/commands/help.ts -> src/cli/parser.ts'] },
-      actual,
-    ),
-    [
-      {
-        pair: 'platforms -> core',
-        added: ['src/platforms/apple.ts -> src/core/platform-plugin.ts'],
-        removed: [],
-      },
-    ],
-  );
-  assert.deepEqual(
-    compareBackEdgeBaseline(
-      {
-        ...actual,
-        'commands -> client': ['src/commands/help.ts -> src/client/client.ts'],
-      },
-      actual,
-    ),
-    [
-      {
-        pair: 'commands -> client',
-        added: [],
-        removed: ['src/commands/help.ts -> src/client/client.ts'],
-      },
-    ],
-  );
 });
 
 test('neutral ownership zones reject value imports into higher layers', () => {
@@ -123,61 +92,6 @@ test('neutral ownership zones reject value imports into higher layers', () => {
     'request -> commands': ['src/request/cancel.ts -> src/commands/cancel.ts'],
     'selectors -> client': ['src/selectors/parse.ts -> src/client/client.ts'],
   });
-});
-
-test('exact back-edge identities reject same-count replacements', () => {
-  const baseline = {
-    'commands -> cli': ['src/commands/a.ts -> src/cli/a.ts'],
-  };
-  const actual = {
-    'commands -> cli': ['src/commands/b.ts -> src/cli/b.ts'],
-  };
-  assert.deepEqual(compareBackEdgeBaseline(baseline, actual), [
-    {
-      pair: 'commands -> cli',
-      added: ['src/commands/b.ts -> src/cli/b.ts'],
-      removed: ['src/commands/a.ts -> src/cli/a.ts'],
-    },
-  ]);
-});
-
-test('findBaselineRaises rejects additions and replacements but permits removal', () => {
-  const base = {
-    'platforms -> core': ['src/platforms/a.ts -> src/core/a.ts'],
-    'commands -> cli': ['src/commands/a.ts -> src/cli/a.ts'],
-  };
-  assert.deepEqual(
-    findBaselineRaises(base, {
-      'platforms -> core': [
-        'src/platforms/a.ts -> src/core/a.ts',
-        'src/platforms/b.ts -> src/core/b.ts',
-      ],
-      'commands -> cli': ['src/commands/b.ts -> src/cli/b.ts'],
-      'commands -> client': ['src/commands/c.ts -> src/client/c.ts'],
-    }),
-    [
-      {
-        pair: 'commands -> cli',
-        added: ['src/commands/b.ts -> src/cli/b.ts'],
-      },
-      {
-        pair: 'commands -> client',
-        added: ['src/commands/c.ts -> src/client/c.ts'],
-      },
-      {
-        pair: 'platforms -> core',
-        added: ['src/platforms/b.ts -> src/core/b.ts'],
-      },
-    ],
-  );
-  assert.deepEqual(findBaselineRaises(base, base), []);
-  assert.deepEqual(
-    findBaselineRaises(base, {
-      'platforms -> core': [],
-      'commands -> cli': ['src/commands/a.ts -> src/cli/a.ts'],
-    }),
-    [],
-  );
 });
 
 test('listSourceFiles includes root-level src/*.ts production files', () => {

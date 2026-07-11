@@ -118,7 +118,6 @@
     "check:affected": "node --experimental-strip-types scripts/check-affected/run.ts",
     "check:affected:test": "node --experimental-strip-types --test scripts/check-affected/model.test.ts scripts/check-affected/run.test.ts",
     "check:layering": "node --experimental-strip-types --test scripts/layering/model.test.ts && node --experimental-strip-types scripts/layering/check.ts",
-    "check:layering:baseline": "node --experimental-strip-types scripts/layering/check.ts --update-baseline",
     "check:production-exports": "fallow dead-code --config fallow-production-exports.json --production --unused-exports --baseline fallow-baselines/production-unused-exports.json --fail-on-issues",
     "check:production-exports:baseline": "fallow dead-code --config fallow-production-exports.json --production --unused-exports --save-baseline fallow-baselines/production-unused-exports.json --summary",
     "check:bundle-owner-files": "node --experimental-strip-types scripts/check-bundle-owner-files.ts",

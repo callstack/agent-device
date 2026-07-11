@@ -95,27 +95,20 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          # Full history so the back-edge-ceiling ratchet can read the baseline
-          # at the merge-base and reject a same-PR raise. Mirrors the Fallow job.
-          fetch-depth: 0
 
       - name: Setup toolchain
         uses: ./.github/actions/setup-node-pnpm
         with:
           install-deps: false
 
-      - name: Check import-direction DAG and ratchets
+      - name: Check import-direction DAG
         # Generalizes the former inline commands/-import grep into a structured
         # import-direction lint over the resolved graph. See scripts/layering/check.ts
         # and CONTEXT.md (Architecture: folder DAG + layering lint). Invoked directly
         # (no deps needed) so the job stays fast and does not require a pnpm install.
-        # LAYERING_BASE pins the baseline-monotonicity comparison to the PR base.
-        env:
-          LAYERING_BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: |
           node --experimental-strip-types --test scripts/layering/model.test.ts
-          node --experimental-strip-types scripts/layering/check.ts --base "$LAYERING_BASE"
+          node --experimental-strip-types scripts/layering/check.ts
 
   affected-selector:
     name: Affected-check Selector

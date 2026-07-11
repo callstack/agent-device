@@ -141,7 +141,7 @@ This repo encodes invariants as self-declaring gates. The correct response to a 
 - every command declares a timeout policy on its descriptor: the timeout-policy completeness test
 - TS/Swift rule parity: golden tables under `contracts/fixtures/` consumed by vitest and the gated XCTest
 - cross-command apple-leak guard, folder DAG/import lint (including zero value-import cycles and
-  down-only exact target-spine back-edge identities), fallow (dead code, duplication, complexity)
+  zero target-spine back-edges), fallow (dead code, duplication, complexity)
 
 ## Hard Rules
 - Use process helpers from `src/utils/exec.ts` for TypeScript process execution: `runCmd`, `runCmdStreaming`, `runCmdSync`, `runCmdBackground`, and `runCmdDetached`. Do not import raw `spawn`/`spawnSync` outside `src/utils/exec.ts`; add or extend an exec helper instead. Plain `.mjs` packaging fixtures that cannot import TypeScript helpers should keep child-process usage local and prefer `execFile`/`execFileSync` over spawn.

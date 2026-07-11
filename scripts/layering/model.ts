@@ -14,13 +14,7 @@ export type ResolvedImportEdge = ImportEdge & {
   toZone: string;
 };
 
-export type BackEdgeBaseline = Record<string, string[]>;
-
-export type BackEdgeDrift = {
-  pair: string;
-  added: string[];
-  removed: string[];
-};
+export type BackEdgeMap = Record<string, string[]>;
 
 const TARGET_DAG_RANK = new Map([
   ['kernel', 0],
@@ -246,7 +240,7 @@ export function backEdgePair(edge: ResolvedImportEdge): string | null {
   return `${edge.fromZone} -> ${edge.toZone}`;
 }
 
-export function collectBackEdges(edges: readonly ResolvedImportEdge[]): BackEdgeBaseline {
+export function collectBackEdges(edges: readonly ResolvedImportEdge[]): BackEdgeMap {
   const identitiesByPair = new Map<string, Set<string>>();
   for (const edge of edges) {
     const pair = backEdgePair(edge);
@@ -260,35 +254,4 @@ export function collectBackEdges(edges: readonly ResolvedImportEdge[]): BackEdge
       .sort(([left], [right]) => left.localeCompare(right))
       .map(([pair, identities]) => [pair, [...identities].sort()]),
   );
-}
-
-export function compareBackEdgeBaseline(
-  baseline: BackEdgeBaseline,
-  actual: BackEdgeBaseline,
-): BackEdgeDrift[] {
-  const pairs = new Set([...Object.keys(baseline), ...Object.keys(actual)]);
-  return [...pairs].sort().flatMap((pair) => {
-    const baselineIdentities = new Set(baseline[pair] ?? []);
-    const actualIdentities = new Set(actual[pair] ?? []);
-    const added = [...actualIdentities].filter((identity) => !baselineIdentities.has(identity));
-    const removed = [...baselineIdentities].filter((identity) => !actualIdentities.has(identity));
-    return added.length === 0 && removed.length === 0 ? [] : [{ pair, added, removed }];
-  });
-}
-
-export type BaselineRaise = {
-  pair: string;
-  added: string[];
-};
-
-export function findBaselineRaises(
-  base: BackEdgeBaseline,
-  committed: BackEdgeBaseline,
-): BaselineRaise[] {
-  const pairs = new Set([...Object.keys(base), ...Object.keys(committed)]);
-  return [...pairs].sort().flatMap((pair) => {
-    const baseIdentities = new Set(base[pair] ?? []);
-    const added = (committed[pair] ?? []).filter((identity) => !baseIdentities.has(identity));
-    return added.length > 0 ? [{ pair, added }] : [];
-  });
 }
