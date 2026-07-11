@@ -1,15 +1,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { parseMaestroReplayFlow } from '../src/compat/maestro/replay-flow.ts';
-import type { SessionAction } from '../src/daemon/types.ts';
-import {
-  normalizeAgentSelector,
-  normalizeUpstreamSelector,
-} from './maestro-conformance-selectors.ts';
+import { parseMaestroProgram } from '../src/compat/maestro/program-ir-parser.ts';
+import type {
+  MaestroCommand,
+  MaestroProgram,
+  MaestroSelector,
+} from '../src/compat/maestro/program-ir.ts';
+import { normalizeUpstreamSelector } from './maestro-conformance-selectors.ts';
 import type {
   NormalizedAction,
   NormalizedCase,
   NormalizedFixture,
+  NormalizedSelector,
   NormalizedSource,
   RawCase,
   RawCommand,
@@ -41,20 +43,114 @@ export function normalizeUpstreamFixture(
 
 export function normalizeAgentCase(fixture: RawCase, fixtureDirectory: string): NormalizedCase {
   const flowPath = resolveFixturePath(fixtureDirectory, fixture.flow);
-  const parsed = parseMaestroReplayFlow(fs.readFileSync(flowPath, 'utf8'), {
-    sourcePath: flowPath,
-    platform: 'ios',
-  });
-
+  const program = parseMaestroProgram(fs.readFileSync(flowPath, 'utf8'), { sourcePath: flowPath });
   return {
     id: fixture.id,
     flow: fixture.flow,
-    expected: parsed.actions.map((action, index) => {
-      const line = parsed.actionLines[index] ?? index + 1;
-      const sourcePath = parsed.actionSourcePaths?.[index] ?? flowPath;
-      const source = normalizeSource({ path: sourcePath, line }, fixtureDirectory);
-      return normalizeAgentAction(action, source);
-    }),
+    expected: normalizeAgentProgram(program, fixtureDirectory),
+  };
+}
+
+function normalizeAgentProgram(
+  program: MaestroProgram,
+  fixtureDirectory: string,
+): NormalizedAction[] {
+  return [
+    ...(program.config.onFlowStart ?? []),
+    ...program.commands,
+    ...(program.config.onFlowComplete ?? []),
+  ].flatMap((command) => normalizeAgentCommand(command, program, fixtureDirectory));
+}
+
+function normalizeAgentCommand(
+  command: MaestroCommand,
+  program: MaestroProgram,
+  fixtureDirectory: string,
+): NormalizedAction[] {
+  const source = normalizeSource(command.source, fixtureDirectory);
+  switch (command.kind) {
+    case 'runFlow': {
+      if (command.include.kind === 'commands') {
+        return command.include.commands.flatMap((nested) =>
+          normalizeAgentCommand(nested, program, fixtureDirectory),
+        );
+      }
+      const parentPath = command.source.path ?? program.source.path;
+      if (!parentPath) throw new Error('File runFlow requires source path provenance.');
+      const includePath = path.resolve(path.dirname(parentPath), command.include.path);
+      const included = parseMaestroProgram(fs.readFileSync(includePath, 'utf8'), {
+        sourcePath: includePath,
+      });
+      return normalizeAgentProgram(included, fixtureDirectory);
+    }
+    case 'launchApp': {
+      const appId = command.appId ?? program.config.appId;
+      if (!appId) throw new Error('launchApp conformance fixture requires appId.');
+      return [{ kind: 'launchApp', appId, stopApp: command.stopApp !== false, source }];
+    }
+    case 'swipe':
+      return [normalizeAgentSwipe(command.gesture, source)];
+    case 'tapOn': {
+      if (command.target.space !== 'target') {
+        throw new Error('tapOn conformance fixtures require selector targets.');
+      }
+      return [
+        {
+          kind: 'tapOn',
+          selector: {
+            ...normalizeTypedSelector(command.target.selector),
+            ...(command.index === undefined ? {} : { index: command.index }),
+            ...(command.childOf === undefined
+              ? {}
+              : { childOf: normalizeTypedSelector(command.childOf) }),
+          },
+          source,
+        },
+      ];
+    }
+    case 'assertVisible':
+    case 'assertNotVisible':
+      return [
+        {
+          kind: command.kind,
+          selector: normalizeTypedSelector(command.target),
+          timeoutMs: 17_000,
+          source,
+        },
+      ];
+    default:
+      throw new Error(`Unsupported typed command in conformance fixture: ${command.kind}`);
+  }
+}
+
+function normalizeAgentSwipe(
+  gesture: Extract<MaestroCommand, { kind: 'swipe' }>['gesture'],
+  source: NormalizedSource,
+): NormalizedAction {
+  const durationMs = gesture.duration ?? DEFAULT_SWIPE_DURATION_MS;
+  if (gesture.kind === 'screen') {
+    return { kind: 'swipe', mode: 'direction', direction: gesture.direction, durationMs, source };
+  }
+  if (gesture.kind === 'target') {
+    throw new Error('Target-relative swipe is not part of the conformance fixture set.');
+  }
+  return {
+    kind: 'swipe',
+    mode: gesture.start.space === 'percent' ? 'relative' : 'absolute',
+    start: [gesture.start.x, gesture.start.y],
+    end: [gesture.end.x, gesture.end.y],
+    durationMs,
+    source,
+  };
+}
+
+function normalizeTypedSelector(selector: MaestroSelector): NormalizedSelector {
+  const text = selector.text ?? selector.label;
+  return {
+    ...(selector.id === undefined ? {} : { id: selector.id }),
+    ...(text === undefined ? {} : { text }),
+    ...(selector.enabled === undefined ? {} : { enabled: selector.enabled }),
+    ...(selector.selected === undefined ? {} : { selected: selector.selected }),
   };
 }
 
@@ -168,89 +264,6 @@ function normalizeUpstreamAssertion(
   throw new Error('AssertConditionCommand artifact must contain one condition.');
 }
 
-function normalizeAgentAction(action: SessionAction, source: NormalizedSource): NormalizedAction {
-  switch (action.command) {
-    case 'open':
-      if (action.positionals.length !== 1) {
-        throw new Error(`Unsupported open action shape: ${JSON.stringify(action.positionals)}`);
-      }
-      return {
-        kind: 'launchApp',
-        appId: action.positionals[0]!,
-        stopApp: action.flags.relaunch === true,
-        source,
-      };
-    case '__maestroSwipeScreen':
-      return normalizeAgentScreenSwipe(action, source);
-    case 'swipe':
-      return normalizeAgentAbsoluteSwipe(action, source);
-    case '__maestroTapOn':
-      return {
-        kind: 'tapOn',
-        selector: normalizeAgentSelector(action.positionals[0], action.positionals[1]),
-        source,
-      };
-    case '__maestroAssertVisible':
-      return {
-        kind: 'assertVisible',
-        selector: normalizeAgentSelector(action.positionals[0]),
-        timeoutMs: integerOrDefault(action.positionals[1], 17000),
-        source,
-      };
-    case '__maestroAssertNotVisible':
-      return {
-        kind: 'assertNotVisible',
-        selector: normalizeAgentSelector(action.positionals[0]),
-        timeoutMs: integerOrDefault(action.positionals[1], 17000),
-        source,
-      };
-    default:
-      throw new Error(`Unsupported agent-device action in conformance fixture: ${action.command}`);
-  }
-}
-
-function normalizeAgentScreenSwipe(
-  action: SessionAction,
-  source: NormalizedSource,
-): NormalizedAction {
-  const [mode, first, second, third, fourth, duration] = action.positionals;
-  const durationMs = integerOrDefault(duration, DEFAULT_SWIPE_DURATION_MS);
-  if (mode === 'direction' && first) {
-    return { kind: 'swipe', mode, direction: first, durationMs, source };
-  }
-  if (mode === 'percent' && first && second && third && fourth) {
-    return {
-      kind: 'swipe',
-      mode: 'relative',
-      start: [numberToken(first), numberToken(second)],
-      end: [numberToken(third), numberToken(fourth)],
-      durationMs,
-      source,
-    };
-  }
-  throw new Error(`Unsupported screen swipe action shape: ${JSON.stringify(action.positionals)}`);
-}
-
-function normalizeAgentAbsoluteSwipe(
-  action: SessionAction,
-  source: NormalizedSource,
-): NormalizedAction {
-  const [startX, startY, endX, endY, duration] = action.positionals;
-  if (!startX || !startY || !endX || !endY) {
-    throw new Error(
-      `Unsupported absolute swipe action shape: ${JSON.stringify(action.positionals)}`,
-    );
-  }
-  return {
-    kind: 'swipe',
-    mode: 'absolute',
-    start: [numberToken(startX), numberToken(startY)],
-    end: [numberToken(endX), numberToken(endY)],
-    durationMs: integerOrDefault(duration, DEFAULT_SWIPE_DURATION_MS),
-    source,
-  };
-}
-
 function optionalPoint(record: Record<string, unknown>, key: string): [number, number] | undefined {
   const value = record[key];
   if (value === undefined) return undefined;
@@ -281,10 +294,6 @@ function integerOrDefault(value: unknown, fallback: number): number {
   if (!Number.isInteger(number) || number < 0)
     throw new Error(`Expected non-negative integer, got ${value}`);
   return number;
-}
-
-function numberToken(value: string): number {
-  return numberValue(value, 'swipe coordinate');
 }
 
 function numberValue(value: unknown, name: string): number {
