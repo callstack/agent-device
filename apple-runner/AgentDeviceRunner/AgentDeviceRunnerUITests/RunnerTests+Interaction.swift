@@ -1239,7 +1239,14 @@ extension RunnerTests {
   ) -> RunnerInteractionOutcome {
 #if os(iOS)
     let orientation = Int(RunnerSynthesizedGesture.interfaceOrientation(forApplication: app))
-    let frame = app.frame
+    // The portable planner and validation use this exact viewport. Using app.frame here can
+    // diverge when XCTest unions transformed/off-screen descendants into the application frame.
+    let frame = CGRect(
+      x: plan.viewport.x,
+      y: plan.viewport.y,
+      width: plan.viewport.width,
+      height: plan.viewport.height
+    )
     let pointerSamples: [[[String: NSNumber]]] = plan.pointers.map { pointer in
       pointer.samples.map { sample in
         let point = nativeSynthesizedPoint(

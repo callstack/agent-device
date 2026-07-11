@@ -633,7 +633,7 @@ test('interactions.pan projects one- and two-finger requests through typed gestu
     [
       {
         command: 'gesture',
-        positionals: [],
+        positionals: ['pan', '100', '200', '40', '-20'],
         input: {
           kind: 'pan',
           origin: { x: 100, y: 200 },
@@ -642,7 +642,7 @@ test('interactions.pan projects one- and two-finger requests through typed gestu
       },
       {
         command: 'gesture',
-        positionals: [],
+        positionals: ['pan', '100', '200', '40', '-20', '600'],
         input: {
           kind: 'pan',
           origin: { x: 100, y: 200 },

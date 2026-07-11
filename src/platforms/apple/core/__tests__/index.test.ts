@@ -223,6 +223,21 @@ test('iosRunnerOverrides uses synthesized iOS coordinate taps', async () => {
   });
 });
 
+test('iosRunnerOverrides reads and validates the fresh gesture viewport', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValue({ x: 10, y: 20, x2: 300, y2: 500 });
+  const { overrides } = iosRunnerOverrides(IOS_TEST_SIMULATOR, {
+    appBundleId: 'com.example.App',
+  });
+  assert.ok(overrides.gestureViewport);
+  assert.deepEqual(await overrides.gestureViewport(), { x: 10, y: 20, width: 300, height: 500 });
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
+    command: 'gestureViewport',
+    appBundleId: 'com.example.App',
+  });
+  mockRunAppleRunnerCommand.mockResolvedValue({ x: 0, y: 0, x2: 0, y2: 500 });
+  await assert.rejects(() => overrides.gestureViewport!(), { code: 'COMMAND_FAILED' });
+});
+
 for (const [name, device] of [
   ['macOS', MACOS_TEST_DEVICE],
   ['tvOS', TVOS_TEST_SIMULATOR],

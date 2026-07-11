@@ -304,6 +304,13 @@ function assertSamplesInViewport(
   const maxY = viewport.y + viewport.height - GESTURE_VIEWPORT_INSET_PX;
   for (const sample of samples) {
     const { x, y } = sample.point;
+    if (!Number.isFinite(x) || !Number.isFinite(y)) {
+      throw new AppError('INVALID_ARGS', 'Gesture motion produces non-finite pointer coordinates', {
+        ...details,
+        reason: 'GESTURE_TRAJECTORY_NON_FINITE',
+        hint: 'Reduce the requested rotation, translation, or scale.',
+      });
+    }
     if (
       x < viewport.x + GESTURE_VIEWPORT_INSET_PX ||
       x > maxX ||

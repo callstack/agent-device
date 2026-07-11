@@ -7,7 +7,12 @@ import android.os.SystemClock;
 import android.util.Base64;
 import android.view.InputDevice;
 import android.view.MotionEvent;
+import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
+import android.graphics.Rect;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
+import java.util.concurrent.TimeoutException;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
@@ -33,6 +38,17 @@ public final class MultiTouchInstrumentation extends Instrumentation {
     result.putString("helperApiVersion", HELPER_API_VERSION);
     try {
       long startedAtMs = System.currentTimeMillis();
+      if ("viewport".equals(arguments.getString("mode", "gesture"))) {
+        Rect viewport = readActiveApplicationViewport();
+        result.putString("ok", "true");
+        result.putString("kind", "viewport");
+        result.putString("x", Integer.toString(viewport.left));
+        result.putString("y", Integer.toString(viewport.top));
+        result.putString("width", Integer.toString(viewport.width()));
+        result.putString("height", Integer.toString(viewport.height()));
+        finish(0, result);
+        return;
+      }
       GesturePlan plan = readPlan(arguments);
       int injectedEvents = injectPlan(plan);
       result.putString("ok", "true");
@@ -48,6 +64,43 @@ public final class MultiTouchInstrumentation extends Instrumentation {
           error.getMessage() == null ? error.getClass().getName() : error.getMessage());
       finish(1, result);
     }
+  }
+
+  @SuppressWarnings("deprecation")
+  private Rect readActiveApplicationViewport() {
+    UiAutomation automation = getUiAutomation();
+    try {
+      automation.waitForIdle(100, 2_000);
+    } catch (TimeoutException ignored) {
+      // Window/root state can still be usable when the app is animating continuously.
+    }
+    List<AccessibilityWindowInfo> windows = automation.getWindows();
+    AccessibilityWindowInfo fallback = null;
+    for (AccessibilityWindowInfo window : windows) {
+      if (window.getType() != AccessibilityWindowInfo.TYPE_APPLICATION) continue;
+      if (window.isActive() || window.isFocused()) {
+        Rect bounds = new Rect();
+        window.getBoundsInScreen(bounds);
+        if (!bounds.isEmpty()) return bounds;
+      }
+      if (fallback == null) fallback = window;
+    }
+    AccessibilityNodeInfo activeRoot = automation.getRootInActiveWindow();
+    if (activeRoot != null) {
+      try {
+        Rect bounds = new Rect();
+        activeRoot.getBoundsInScreen(bounds);
+        if (!bounds.isEmpty()) return bounds;
+      } finally {
+        activeRoot.recycle();
+      }
+    }
+    if (fallback != null) {
+      Rect bounds = new Rect();
+      fallback.getBoundsInScreen(bounds);
+      if (!bounds.isEmpty()) return bounds;
+    }
+    throw new IllegalStateException("Active application interaction viewport is unavailable");
   }
 
   private GesturePlan readPlan(Bundle arguments) throws Exception {

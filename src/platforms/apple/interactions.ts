@@ -43,6 +43,7 @@ type IosRunnerOverrides = Pick<
   | 'fill'
   | 'scroll'
   | 'performGesture'
+  | 'gestureViewport'
 >;
 
 export function resolveAppleBackRunnerCommand(mode?: BackMode): AppleBackRunnerCommand {
@@ -162,8 +163,38 @@ export function iosRunnerOverrides(
         );
       },
       performGesture: async (plan) => await performGestureApple(device, ctx, runnerOpts, plan),
+      gestureViewport: async () => {
+        const result = await runAppleRunnerCommand(
+          device,
+          { command: 'gestureViewport', appBundleId: ctx.appBundleId },
+          runnerOpts,
+        );
+        return readGestureViewport(result);
+      },
     },
   };
+}
+
+function readGestureViewport(result: Record<string, unknown>) {
+  const x = finiteNumber(result.x);
+  const y = finiteNumber(result.y);
+  const width = finiteNumber(result.x2);
+  const height = finiteNumber(result.y2);
+  if (
+    x === undefined ||
+    y === undefined ||
+    width === undefined ||
+    height === undefined ||
+    width <= 0 ||
+    height <= 0
+  ) {
+    throw new AppError('COMMAND_FAILED', 'Apple runner returned an invalid gesture viewport');
+  }
+  return { x, y, width, height };
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
 }
 
 /** Executes the portable pointer plan without regenerating platform geometry. */

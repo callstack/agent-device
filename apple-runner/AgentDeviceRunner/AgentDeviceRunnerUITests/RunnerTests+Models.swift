@@ -26,6 +26,7 @@ enum CommandType: String, Codable {
   case alert
   case sequence
   case gesture
+  case gestureViewport
   case recordStart
   case recordStop
   case status
@@ -82,7 +83,7 @@ extension CommandType {
       return CommandTraits(isInteraction: true, readOnly: .never, isLifecycle: false)
 
     // Read-only reads: eligible for the session-invalidating retry.
-    case .findText, .readText, .snapshot:
+    case .findText, .readText, .snapshot, .gestureViewport:
       return CommandTraits(isInteraction: false, readOnly: .always, isLifecycle: false)
 
     // Screenshot is both a read and a runner-lifecycle command (skips app-activation preflight).

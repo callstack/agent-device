@@ -167,6 +167,7 @@ const runnerProtocolCommandFixtures: Record<RunnerCommand['command'], RunnerComm
     ],
   },
   gesture: { command: 'gesture' },
+  gestureViewport: { command: 'gestureViewport' },
   recordStart: {
     command: 'recordStart',
     outPath: '/tmp/runner-recording.mp4',
@@ -325,6 +326,7 @@ test('runner protocol fixtures cover every runner command with JSON-safe samples
     'drag',
     'findText',
     'gesture',
+    'gestureViewport',
     'home',
     'keyboardDismiss',
     'keyboardReturn',

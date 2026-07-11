@@ -1,4 +1,5 @@
 import type { Point } from '../kernel/snapshot.ts';
+import { AppError } from '../kernel/errors.ts';
 import type { SwipePreset } from './scroll-gesture.ts';
 import { readGesturePayload, type GesturePayload } from './gesture-input.ts';
 import type { GestureSemanticInput } from './gesture-plan-types.ts';
@@ -75,6 +76,49 @@ export function gesturePayloadFromLegacyPositionals(
       });
     default:
       return readGesturePayload({ kind });
+  }
+}
+
+/** Serializes structured gesture input for protocol-v1 daemons and `.ad` recordings. */
+export function gesturePayloadToLegacyPositionals(input: GesturePayload): string[] {
+  switch (input.kind) {
+    case 'pan':
+      return compact([
+        input.kind,
+        input.origin.x,
+        input.origin.y,
+        input.delta.x,
+        input.delta.y,
+        input.durationMs,
+      ]);
+    case 'fling':
+      return compact([
+        input.kind,
+        input.direction,
+        input.origin.x,
+        input.origin.y,
+        input.distance,
+        input.durationMs,
+      ]);
+    case 'swipe':
+      return compact([input.kind, input.preset, input.durationMs]);
+    case 'pinch':
+      return compact([input.kind, input.scale, input.origin?.x, input.origin?.y]);
+    case 'rotate':
+      return input.origin
+        ? compact([input.kind, input.degrees, input.origin.x, input.origin.y, input.velocity])
+        : [input.kind, String(input.degrees)];
+    case 'transform':
+      return compact([
+        input.kind,
+        input.origin.x,
+        input.origin.y,
+        input.delta.x,
+        input.delta.y,
+        input.scale,
+        input.degrees,
+        input.durationMs,
+      ]);
   }
 }
 
@@ -205,5 +249,12 @@ function optionalPositionNumber(value: string | undefined): number | undefined {
 }
 
 function optionalOrigin(x: string | undefined, y: string | undefined): Point | undefined {
-  return x === undefined || y === undefined ? undefined : { x: Number(x), y: Number(y) };
+  if ((x === undefined) !== (y === undefined)) {
+    throw new AppError('INVALID_ARGS', 'gesture origin requires both x and y coordinates');
+  }
+  return x === undefined ? undefined : { x: Number(x), y: Number(y) };
+}
+
+function compact(values: Array<string | number | undefined>): string[] {
+  return values.filter((value): value is string | number => value !== undefined).map(String);
 }

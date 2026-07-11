@@ -8,7 +8,9 @@ import {
   performGestureAndroid,
   resetAndroidMultiTouchHelperInstallCache,
   runAndroidMultiTouchHelperGesture,
+  parseAndroidGestureViewportResult,
 } from '../multitouch-helper.ts';
+import { createAndroidInteractor } from '../../../core/interactors/android.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import {
   ANDROID_MULTITOUCH_HELPER_MANIFEST as manifest,
@@ -208,4 +210,40 @@ test('helper failures remain structured and actionable', async () => {
       }),
     { code: 'COMMAND_FAILED', message: 'injectInputEvent returned false' },
   );
+});
+
+test('gesture viewport result is typed and rejects invalid bounds', () => {
+  assert.deepEqual(
+    parseAndroidGestureViewportResult([
+      {
+        agentDeviceProtocol: 'android-multitouch-helper-v1',
+        ok: 'true',
+        x: '10',
+        y: '20',
+        width: '300',
+        height: '500',
+      },
+    ]),
+    { x: 10, y: 20, width: 300, height: 500 },
+  );
+  assert.throws(
+    () =>
+      parseAndroidGestureViewportResult([
+        {
+          agentDeviceProtocol: 'android-multitouch-helper-v1',
+          ok: 'true',
+          x: '0',
+          y: '0',
+          width: '0',
+          height: '500',
+        },
+      ]),
+    { code: 'COMMAND_FAILED' },
+  );
+  assert.throws(() => parseAndroidGestureViewportResult([]), { code: 'COMMAND_FAILED' });
+});
+
+test('production Android interactor exposes the native gesture viewport seam', () => {
+  const interactor = createAndroidInteractor(ANDROID_EMULATOR);
+  assert.equal(typeof interactor.gestureViewport, 'function');
 });

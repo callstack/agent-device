@@ -1,6 +1,7 @@
 import { readGesturePayload, type GesturePayload } from '../../contracts/gesture-input.ts';
 import {
   gesturePayloadFromLegacyPositionals,
+  gesturePayloadToLegacyPositionals,
   normalizePublicGesture,
   normalizePublicSwipeMotion,
 } from '../../contracts/gesture-normalization.ts';
@@ -66,7 +67,7 @@ export async function dispatchGestureViaRuntime(
       sessionStore: params.sessionStore,
       command: 'gesture',
       actionCommand: 'gesture',
-      positionals: gesturePositionals(input),
+      positionals: gesturePayloadToLegacyPositionals(input),
       flags: gestureReplayFlags(input, params.req.flags),
       result: responseData,
       responseData,
@@ -245,64 +246,4 @@ function gestureReplayFlags(
 ): InteractionHandlerParams['req']['flags'] {
   if (input.kind !== 'pan' || input.pointerCount === undefined) return flags;
   return { ...flags, pointerCount: input.pointerCount };
-}
-
-function gesturePositionals(input: GesturePayload): string[] {
-  switch (input.kind) {
-    case 'pan':
-      return panPositionals(input);
-    case 'fling':
-      return flingPositionals(input);
-    case 'swipe':
-      return compact([input.kind, input.preset, input.durationMs]);
-    case 'pinch':
-      return compact([input.kind, input.scale, input.origin?.x, input.origin?.y]);
-    case 'rotate':
-      return rotatePositionals(input);
-    case 'transform':
-      return transformPositionals(input);
-  }
-}
-
-function panPositionals(input: Extract<GesturePayload, { kind: 'pan' }>): string[] {
-  return compact([
-    input.kind,
-    input.origin.x,
-    input.origin.y,
-    input.delta.x,
-    input.delta.y,
-    input.durationMs,
-  ]);
-}
-
-function flingPositionals(input: Extract<GesturePayload, { kind: 'fling' }>): string[] {
-  return compact([
-    input.kind,
-    input.direction,
-    input.origin.x,
-    input.origin.y,
-    input.distance,
-    input.durationMs,
-  ]);
-}
-
-function rotatePositionals(input: Extract<GesturePayload, { kind: 'rotate' }>): string[] {
-  return compact([input.kind, input.degrees, input.origin?.x, input.origin?.y, input.velocity]);
-}
-
-function transformPositionals(input: Extract<GesturePayload, { kind: 'transform' }>): string[] {
-  return compact([
-    input.kind,
-    input.origin.x,
-    input.origin.y,
-    input.delta.x,
-    input.delta.y,
-    input.scale,
-    input.degrees,
-    input.durationMs,
-  ]);
-}
-
-function compact(values: Array<string | number | undefined>): string[] {
-  return values.filter((value): value is string | number => value !== undefined).map(String);
 }

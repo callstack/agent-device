@@ -11,7 +11,7 @@ public final class PointerEventScheduleTest {
         "DOWN:0:1:0",
         "MOVE:1:1:16",
         "MOVE:2:1:32",
-        "UP:2:1:40");
+        "UP:2:1:32");
     assertSteps(
         PointerEventSchedule.create(2, new long[] {0, 16, 32}),
         "DOWN:0:1:0",

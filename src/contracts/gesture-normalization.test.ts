@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
   gesturePayloadFromLegacyPositionals,
+  gesturePayloadToLegacyPositionals,
   normalizePublicGesture,
 } from './gesture-normalization.ts';
 
@@ -15,6 +16,37 @@ test('legacy CLI and .ad positionals normalize at one explicit compatibility sea
       durationMs: 500,
       pointerCount: 2,
     },
+  );
+});
+
+test('legacy gesture codec round-trips structured requests for protocol-v1 daemons', () => {
+  const payload = {
+    kind: 'transform' as const,
+    origin: { x: 10, y: 20 },
+    delta: { x: 30, y: -40 },
+    scale: 1.5,
+    degrees: -35,
+    durationMs: 600,
+  };
+  assert.deepEqual(
+    gesturePayloadFromLegacyPositionals(gesturePayloadToLegacyPositionals(payload)),
+    payload,
+  );
+});
+
+test('legacy pinch and rotate syntax rejects a partial origin', () => {
+  assert.throws(() => gesturePayloadFromLegacyPositionals(['pinch', '1.5', '100']), {
+    code: 'INVALID_ARGS',
+  });
+  assert.throws(() => gesturePayloadFromLegacyPositionals(['rotate', '35', '100']), {
+    code: 'INVALID_ARGS',
+  });
+});
+
+test('legacy rotate serialization omits behaviorless velocity when no origin can delimit it', () => {
+  assert.deepEqual(
+    gesturePayloadToLegacyPositionals({ kind: 'rotate', degrees: 35, velocity: 2 }),
+    ['rotate', '35'],
   );
 });
 

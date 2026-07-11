@@ -54,12 +54,9 @@ final class PointerEventSchedule {
       steps.add(
           new Step(Action.POINTER_UP, lastIndex, 2, sampleOffsetsMs[lastIndex]));
     }
-    steps.add(
-        new Step(
-            Action.UP,
-            lastIndex,
-            1,
-            sampleOffsetsMs[lastIndex] + POINTER_LIFT_DELAY_MS));
+    long finalUpOffset =
+        sampleOffsetsMs[lastIndex] + (pointerCount == 2 ? POINTER_LIFT_DELAY_MS : 0);
+    steps.add(new Step(Action.UP, lastIndex, 1, finalUpOffset));
     return steps;
   }
 }

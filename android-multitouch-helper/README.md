@@ -40,6 +40,11 @@ adb shell am instrument -w \
 The APK emits instrumentation result records using
 `agentDeviceProtocol=android-multitouch-helper-v1`.
 
+Before planning a gesture, the runtime invokes the same instrumentation with
+`-e mode viewport`. That read-only mode waits for `UiAutomation` window state and returns the
+active application window bounds, falling back to the active accessibility root when Android does
+not expose interactive-window metadata. It does not use or cache the physical display size.
+
 Successful results include:
 
 - `ok=true`
@@ -47,5 +52,7 @@ Successful results include:
 - `kind` (`swipe` for one planned pointer path or `transform` for two)
 - `injectedEvents`
 - `elapsedMs`
+
+Viewport results use `kind=viewport` plus `x`, `y`, `width`, and `height`.
 
 Failures return `ok=false`, `errorType`, and `message`.

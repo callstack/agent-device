@@ -16,7 +16,10 @@ import {
   scrollAndroid,
   typeAndroid,
 } from '../../platforms/android/input-actions.ts';
-import { performGestureAndroid } from '../../platforms/android/multitouch-helper.ts';
+import {
+  performGestureAndroid,
+  readAndroidGestureViewport,
+} from '../../platforms/android/multitouch-helper.ts';
 import {
   readAndroidClipboardText,
   writeAndroidClipboardText,
@@ -51,6 +54,7 @@ export function createAndroidInteractor(device: DeviceInfo): Interactor {
     fill: (x, y, text, delayMs) => fillAndroid(device, x, y, text, delayMs),
     scroll: (direction, options) => scrollAndroid(device, direction, options),
     performGesture: (plan) => performGestureAndroid(device, plan),
+    gestureViewport: () => readAndroidGestureViewport(device),
     screenshot: (outPath, options) => screenshotAndroid(device, outPath, options),
     snapshot: async (options) => {
       const result = await withDiagnosticTimer(

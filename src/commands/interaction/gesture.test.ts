@@ -25,7 +25,7 @@ describe('gesture command projection', () => {
     });
   });
 
-  test('writes typed gesture input without positional alias serialization', () => {
+  test('dual-writes typed input and protocol-v1 compatibility positionals', () => {
     const request = gestureDaemonWriters.gesture({
       kind: 'pan',
       origin: { x: 10, y: 20 },
@@ -34,7 +34,7 @@ describe('gesture command projection', () => {
       durationMs: 300,
     });
     expect(request.command).toBe('gesture');
-    expect(request.positionals).toEqual([]);
+    expect(request.positionals).toEqual(['pan', '10', '20', '5', '6', '300']);
     expect(request.input).toEqual({
       kind: 'pan',
       origin: { x: 10, y: 20 },

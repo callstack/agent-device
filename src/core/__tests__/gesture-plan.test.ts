@@ -44,6 +44,19 @@ describe('single-pointer plans', () => {
 });
 
 describe('two-pointer plans', () => {
+  test('rejects finite rotations that overflow generated coordinates', () => {
+    assert.throws(
+      () => buildGesturePlan({ intent: 'rotate', degrees: Number.MAX_VALUE }, PORTRAIT),
+      (error: unknown) =>
+        error instanceof Error &&
+        'code' in error &&
+        error.code === 'INVALID_ARGS' &&
+        error.message === 'Gesture motion produces non-finite pointer coordinates' &&
+        'details' in error &&
+        (error.details as { reason?: string }).reason === 'GESTURE_TRAJECTORY_NON_FINITE',
+    );
+  });
+
   test('two-finger pan moves in parallel with constant span and angle', () => {
     const plan = requireTwoPointerPlan(
       buildGesturePlan(

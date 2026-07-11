@@ -27,6 +27,7 @@ export const RUNNER_COMMAND_TRAIT_MANIFEST = {
   home: 'default',
   rotate: 'default',
   gesture: 'preflightSkippableTouchMutation',
+  gestureViewport: 'readOnly',
   appSwitcher: 'default',
   keyboardDismiss: 'default',
   keyboardReturn: 'default',

@@ -1,5 +1,6 @@
 import type { GesturePlan, PointerTrajectory } from '../../contracts/gesture-plan.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
+import type { Rect } from '../../kernel/snapshot.ts';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { execFailureDetails } from '../../utils/exec.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
@@ -93,6 +94,27 @@ async function runAndroidMultiTouchHelperGestureForDevice(
   device: DeviceInfo,
   plan: GesturePlan,
 ): Promise<Record<string, unknown>> {
+  const { adb, artifact, install } = await prepareAndroidMultiTouchHelper(device);
+  const output = await withDiagnosticTimer(
+    'android_multitouch_helper_gesture',
+    async () =>
+      await runAndroidMultiTouchHelperGesture({
+        adb,
+        request: normalizeAndroidMultiTouchHelperGestureRequest(plan),
+        packageName: artifact.manifest.packageName,
+        instrumentationRunner: artifact.manifest.instrumentationRunner,
+      }),
+    { packageName: artifact.manifest.packageName, version: artifact.manifest.version },
+  );
+  return {
+    backend: 'android-multitouch-helper',
+    helperVersion: artifact.manifest.version,
+    installReason: install.reason,
+    ...output,
+  };
+}
+
+async function prepareAndroidMultiTouchHelper(device: DeviceInfo) {
   const adb = resolveAndroidAdbExecutor(device);
   const artifact = await resolveAndroidMultiTouchHelperArtifact();
   const install = await withDiagnosticTimer(
@@ -114,23 +136,51 @@ async function runAndroidMultiTouchHelperGestureForDevice(
     data: install,
   });
   await stopAndroidSnapshotHelperSessionForDevice(device);
-  const output = await withDiagnosticTimer(
-    'android_multitouch_helper_gesture',
-    async () =>
-      await runAndroidMultiTouchHelperGesture({
-        adb,
-        request: normalizeAndroidMultiTouchHelperGestureRequest(plan),
-        packageName: artifact.manifest.packageName,
-        instrumentationRunner: artifact.manifest.instrumentationRunner,
-      }),
-    { packageName: artifact.manifest.packageName, version: artifact.manifest.version },
+  return { adb, artifact, install };
+}
+
+export async function readAndroidGestureViewport(device: DeviceInfo): Promise<Rect> {
+  const { adb, artifact } = await prepareAndroidMultiTouchHelper(device);
+  const result = await adb(
+    [
+      'shell',
+      'am',
+      'instrument',
+      '-w',
+      '-e',
+      'mode',
+      'viewport',
+      artifact.manifest.instrumentationRunner,
+    ],
+    { allowFailure: true, timeoutMs: HELPER_GESTURE_TIMEOUT_MS },
   );
-  return {
-    backend: 'android-multitouch-helper',
-    helperVersion: artifact.manifest.version,
-    installReason: install.reason,
-    ...output,
-  };
+  const records = parseInstrumentationRecords(`${result.stdout}\n${result.stderr}`);
+  if (result.exitCode !== 0)
+    throw new AppError('COMMAND_FAILED', 'Android gesture viewport is unavailable');
+  return parseAndroidGestureViewportResult(records.results);
+}
+
+export function parseAndroidGestureViewportResult(results: Array<Record<string, string>>): Rect {
+  const output = results.find((record) => record.agentDeviceProtocol === HELPER_PROTOCOL);
+  if (output?.ok !== 'true')
+    throw new AppError(
+      'COMMAND_FAILED',
+      output?.message || 'Android gesture viewport is unavailable',
+    );
+  const x = readInstrumentationResultNumber(output.x);
+  const y = readInstrumentationResultNumber(output.y);
+  const width = readInstrumentationResultNumber(output.width);
+  const height = readInstrumentationResultNumber(output.height);
+  if (
+    x === undefined ||
+    y === undefined ||
+    width === undefined ||
+    height === undefined ||
+    width <= 0 ||
+    height <= 0
+  )
+    throw new AppError('COMMAND_FAILED', 'Android helper returned an invalid gesture viewport');
+  return { x, y, width, height };
 }
 
 export function normalizeAndroidMultiTouchHelperGestureRequest(
