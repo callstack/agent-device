@@ -15,7 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import {
-  collectBackEdges,
+  backEdgePair,
   findValueImportCycles,
   resolveImportEdges,
   topFolder,
@@ -140,19 +140,21 @@ function checkCycles(edges: readonly ResolvedImportEdge[]): Violation[] {
 }
 
 function checkBackEdges(edges: readonly ResolvedImportEdge[]): Violation[] {
-  return Object.entries(collectBackEdges(edges)).flatMap(([pair, identities]) =>
-    identities.map((identity) => {
-      const representative = edges.find(
-        (edge) => `${edge.file} -> ${edge.target}` === identity,
-      )!;
-      return {
+  const seen = new Set<string>();
+  return edges.flatMap((edge) => {
+    const pair = backEdgePair(edge);
+    const identity = `${edge.file} -> ${edge.target}`;
+    if (!pair || seen.has(identity)) return [];
+    seen.add(identity);
+    return [
+      {
         rule: 'R5 zero-back-edges',
-        file: representative.file,
-        line: representative.line,
+        file: edge.file,
+        line: edge.line,
         message: `${pair} back-edge: ${identity}. Move the shared contract below both owners.`,
-      };
-    }),
-  );
+      },
+    ];
+  });
 }
 
 function report(files: readonly string[], violations: readonly Violation[]): number {
