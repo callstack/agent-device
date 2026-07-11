@@ -1,7 +1,3 @@
-import {
-  getSnapshotReferenceFrame,
-  type TouchReferenceFrame,
-} from '../../daemon/touch-reference-frame.ts';
 import type {
   DaemonInvokeFn,
   DaemonRequest,
@@ -21,7 +17,6 @@ export type MaestroRuntimeInvoke = DaemonInvokeFn;
 
 export type FailedDaemonResponse = DaemonFailureResponse;
 
-const maestroReferenceFrameCache = new WeakMap<ReplayVarScope, TouchReferenceFrame>();
 const maestroVisibleContextCache = new WeakMap<ReplayVarScope, { selector: string }>();
 const maestroRecoverableInteractionCache = new WeakMap<
   ReplayVarScope,
@@ -79,18 +74,11 @@ export async function captureMaestroSnapshot(params: {
       ...(useRawSnapshot ? { snapshotRaw: true } : {}),
     },
   });
-  if (response.ok && params.scope) rememberMaestroReferenceFrame(params.scope, response.data);
   return response;
 }
 
 export function readSnapshotState(data: DaemonResponseData | undefined): SnapshotState | undefined {
   return Array.isArray(data?.nodes) ? (data as SnapshotState) : undefined;
-}
-
-export function readCachedMaestroReferenceFrame(
-  scope: ReplayVarScope | undefined,
-): TouchReferenceFrame | undefined {
-  return scope ? maestroReferenceFrameCache.get(scope) : undefined;
 }
 
 export function rememberMaestroVisibleContext(
@@ -128,13 +116,4 @@ export function consumeMaestroRecoverableInteraction(
 
 export function clearMaestroRecoverableInteraction(scope: ReplayVarScope | undefined): void {
   if (scope) maestroRecoverableInteractionCache.delete(scope);
-}
-
-function rememberMaestroReferenceFrame(
-  scope: ReplayVarScope,
-  data: DaemonResponseData | undefined,
-): void {
-  const snapshot = readSnapshotState(data);
-  const frame = getSnapshotReferenceFrame(snapshot);
-  if (frame) maestroReferenceFrameCache.set(scope, frame);
 }
