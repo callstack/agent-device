@@ -137,7 +137,10 @@ export async function dispatchGetViaRuntime(
     const invalidRefFlagsResponse = refSnapshotFlagGuardResponse('get', req.flags);
     if (invalidRefFlagsResponse) return invalidRefFlagsResponse;
   }
-  if (target.target.kind === 'selector') {
+  // ADR 0012 step 4: a guarded replay dispatch must resolve through the
+  // snapshot path so the post-resolution identity guard runs.
+  const replayTargetGuard = req.internal?.replayTargetGuard;
+  if (target.target.kind === 'selector' && !replayTargetGuard) {
     const directResponse = await dispatchDirectIosSelectorGet(params, sub, target.target.selector);
     if (directResponse) return directResponse;
   }
@@ -165,6 +168,7 @@ export async function dispatchGetViaRuntime(
       requestId: req.meta?.requestId,
       property: sub,
       target: target.target,
+      expectedResolvedTarget: replayTargetGuard,
     });
     recordIfSession(
       params.sessionStore,

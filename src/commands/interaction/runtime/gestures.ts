@@ -36,6 +36,7 @@ import type { LongPressCommandResult } from '../../../contracts/interaction.ts';
 import {
   assertSupportedInteractionSurface,
   captureInteractionSnapshot,
+  type ExpectedResolvedTarget,
   type InteractionTarget,
   type ResolvedInteractionTarget,
   resolveInteractionTarget,
@@ -55,6 +56,8 @@ export type FocusCommandResult = ResolvedInteractionTarget & BackendResultEnvelo
 export type LongPressCommandOptions = CommandContext & {
   target: InteractionTarget;
   durationMs?: number;
+  /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
+  expectedResolvedTarget?: ExpectedResolvedTarget;
 } & SettlePostActionObservationOptions;
 
 export type { LongPressCommandResult };
@@ -166,6 +169,7 @@ export const longPressCommand: RuntimeCommand<
     requireInteractive: true,
     promoteToHittableAncestor: true,
     captureEvidenceBaseline: observation.needsPreActionBaseline,
+    expectedResolvedTarget: options.expectedResolvedTarget,
   });
   if (!runtime.backend.longPress) {
     throw new AppError('UNSUPPORTED_OPERATION', 'longPress is not supported by this backend');

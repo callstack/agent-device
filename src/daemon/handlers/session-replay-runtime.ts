@@ -33,6 +33,11 @@ import {
   readEffectiveReplayPlanDigestMetadata,
   resolveReplayEntryIndex,
 } from './session-replay-runtime-plan.ts';
+import {
+  buildReplayTargetGuardMismatchResponse,
+  isReplayTargetGuardMismatchResponse,
+  verifyReplayActionTarget,
+} from './session-replay-target-verification.ts';
 
 // fallow-ignore-next-line complexity
 export async function runReplayScriptFile(params: {
@@ -120,23 +125,74 @@ export async function runReplayScriptFile(params: {
       emitReplayTestActionProgress(resolved, index, actions.length, action);
 
       const sampleStart = readSessionSnapshotSampleCount(sessionStore, sessionName);
-      const response = await invokeReplayAction({
-        req: replayReq,
-        sessionName,
+      // ADR 0012 migration step 4: verify the recorded target BEFORE sending
+      // the device action. A non-verified outcome is a complete target-binding
+      // REPLAY_DIVERGENCE (built from its own pre-action capture); only a
+      // verified outcome dispatches, carrying the verified member's identity
+      // as a post-resolution guard so dispatch's own resolution (occlusion/
+      // visibility guards verification does not replicate) must land on the
+      // SAME element or refuse pre-action.
+      const verification = await verifyReplayActionTarget({
         action,
         scope,
-        filePath: resolved,
-        line: actionLines[index] ?? 1,
-        sourcePath: actionSourcePaths?.[index],
+        sourcePath: actionSourcePaths?.[index] ?? resolved,
+        sourceLine: actionLines[index] ?? 1,
+        replayPath: resolved,
         step: index + 1,
-        tracePath: actionTracePath,
-        invoke,
+        sessionName,
+        sessionStore,
+        logPath,
+        artifactPaths: [...artifactPaths],
+        responseLevel: req.meta?.responseLevel,
+        planActions: actions,
+        planDigest,
       });
+      const guard = verification.verified ? verification.guard : undefined;
+      const guardedReq = guard
+        ? { ...replayReq, internal: { ...replayReq.internal, replayTargetGuard: guard.expected } }
+        : replayReq;
+      let response = verification.verified
+        ? await invokeReplayAction({
+            req: guardedReq,
+            sessionName,
+            action,
+            scope,
+            filePath: resolved,
+            line: actionLines[index] ?? 1,
+            sourcePath: actionSourcePaths?.[index],
+            step: index + 1,
+            tracePath: actionTracePath,
+            invoke,
+          })
+        : verification.response;
+      if (guard && isReplayTargetGuardMismatchResponse(response)) {
+        response = await buildReplayTargetGuardMismatchResponse({
+          action,
+          scope,
+          guard,
+          failedResponse: response,
+          sourcePath: actionSourcePaths?.[index] ?? resolved,
+          sourceLine: actionLines[index] ?? 1,
+          replayPath: resolved,
+          step: index + 1,
+          sessionName,
+          sessionStore,
+          logPath,
+          artifactPaths: [...artifactPaths],
+          responseLevel: req.meta?.responseLevel,
+          planActions: actions,
+          planDigest,
+        });
+      }
       snapshotDiagnosticSamples.push(
         ...readSessionSnapshotSamplesSince(sessionStore, sessionName, sampleStart),
       );
       collectReplayActionArtifactPaths(response).forEach((entry) => artifactPaths.add(entry));
       if (!response.ok) {
+        // A complete target-binding divergence must pass through unchanged —
+        // failStep would rebuild it as a generic action-failure divergence
+        // (double-capture + lost kind/targetBinding).
+        if (isCompleteTargetBindingDivergenceResponse(response)) return response;
         return await failStep(response, action, index);
       }
     }
@@ -274,6 +330,19 @@ function formatReplaySuccessMessage(replayed: number, wallClockMs: number): stri
   const seconds = (wallClockMs / 1000).toFixed(1);
   const noun = replayed === 1 ? 'step' : 'steps';
   return `Replayed ${replayed} ${noun} in ${seconds}s`;
+}
+
+// ADR 0012 step 4: a target-binding divergence is already a complete, final
+// REPLAY_DIVERGENCE built from its own pre-action capture — distinguished from
+// an action-failure divergence by its non-`action-failure` kind.
+function isCompleteTargetBindingDivergenceResponse(response: DaemonResponse): boolean {
+  if (response.ok || response.error.code !== 'REPLAY_DIVERGENCE') return false;
+  const divergence = response.error.details?.divergence;
+  const kind =
+    divergence && typeof divergence === 'object'
+      ? (divergence as Record<string, unknown>).kind
+      : undefined;
+  return typeof kind === 'string' && kind !== 'action-failure';
 }
 
 function readSessionSnapshotSampleCount(sessionStore: SessionStore, sessionName: string): number {

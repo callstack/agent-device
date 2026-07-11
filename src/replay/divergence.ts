@@ -2,14 +2,57 @@ import type { ResponseLevel } from '../kernel/contracts.ts';
 import { redactDiagnosticData } from '../kernel/redaction.ts';
 
 /**
- * ADR 0012 migration step 2: structured replay divergence report.
+ * ADR 0012 migration steps 2 + 4: structured replay divergence report.
  *
- * `kind` is scoped to `'action-failure'` in this step — the target-binding
- * kinds (`selector-miss`/`identity-mismatch`/`identity-unverifiable`) are
- * decision 3/step 4 territory and are not produced here. `targetBinding` is
- * likewise out of scope (step 4).
+ * `kind` is `'action-failure'` for an ordinary failed step (step 2), or one
+ * of decision 3's three target-binding classes when pre-action verification
+ * (step 4, `session-replay-target-verification.ts`) blocks a resolved-target
+ * action before it is sent: `selector-miss` (the recorded selector/ref no
+ * longer matches anything), `identity-mismatch` (something matches, but not
+ * the recorded identity — or a unique/isolated identity-set member differs
+ * from the resolution winner), or `identity-unverifiable` (the recording
+ * itself carries no trustworthy identity, or several candidates share the
+ * recorded identity and neither disambiguation signal isolates one). A
+ * target-binding `kind` always carries `targetBinding` with
+ * `targetBinding.classification === kind`.
  */
-export type ReplayDivergenceKind = 'action-failure';
+export type ReplayDivergenceKind =
+  | 'action-failure'
+  | 'selector-miss'
+  | 'identity-mismatch'
+  | 'identity-unverifiable';
+
+export type ReplayDivergenceTargetBindingKind = Exclude<ReplayDivergenceKind, 'action-failure'>;
+
+/** The identity tier of a `target-v1` annotation (decision 3), as reported on the wire. */
+export type ReplayDivergenceTargetIdentity = {
+  id?: string;
+  role: string;
+  label?: string;
+};
+
+export type ReplayDivergenceTargetCandidate = {
+  ref?: string;
+  role: string;
+  label?: string;
+};
+
+/**
+ * ADR 0012 decision 4: the `targetBinding` object attached to a
+ * target-binding divergence. `matchCount` follows decision 3's conditional
+ * presence rule exactly — present (0..N) on every path that performs
+ * resolution, absent (key omitted, never `null`) only when
+ * `classification === 'identity-unverifiable'` was reached through path 1
+ * (a recorded-`unverifiable` annotation, before any resolution).
+ */
+export type ReplayDivergenceTargetBinding = {
+  classification: ReplayDivergenceTargetBindingKind;
+  matchCount?: number;
+  recorded: ReplayDivergenceTargetIdentity;
+  observed?: ReplayDivergenceTargetIdentity;
+  mismatches: string[];
+  candidates: ReplayDivergenceTargetCandidate[];
+};
 
 export type ReplayDivergenceStepSource = {
   path: string;
@@ -94,6 +137,8 @@ export type ReplayDivergence = {
   resume: ReplayDivergenceResume;
   overflow?: ReplayDivergenceOverflow;
   artifactUnavailable?: true;
+  /** Present iff `kind` is a target-binding kind; `targetBinding.classification === kind`. */
+  targetBinding?: ReplayDivergenceTargetBinding;
 };
 
 type BoundedResponseLevel = 'digest' | 'default' | 'full';
@@ -253,6 +298,10 @@ function buildMinimalReplayDivergence(capped: ReplayDivergence): ReplayDivergenc
     suggestions: [],
     suggestionCount: capped.suggestionCount,
     resume: capped.resume,
+    // targetBinding is the actual repair value of a target-binding
+    // divergence and is small relative to a full screen digest — keep it on
+    // the minimal fallback rather than dropping it with the screen/suggestions.
+    ...(capped.targetBinding ? { targetBinding: capped.targetBinding } : {}),
   };
 }
 
@@ -269,11 +318,41 @@ export function formatReplayDivergenceReport(
   const record = divergence as Record<string, unknown>;
   const lines = [
     ...divergenceStepLine(record.step),
+    ...divergenceTargetBindingLines(record.kind, record.targetBinding),
     ...divergenceScreenLine(record.screen),
     ...divergenceSuggestionLines(record.suggestions, record.suggestionCount),
     ...divergenceOverflowLine(record.overflow, record.artifactUnavailable),
   ];
   return lines.length > 0 ? lines.join('\n') : null;
+}
+
+function divergenceTargetBindingLines(kind: unknown, targetBinding: unknown): string[] {
+  if (typeof kind !== 'string' || kind === 'action-failure') return [];
+  const record = targetBinding as Record<string, unknown> | undefined;
+  if (!record) return [];
+  return [
+    divergenceTargetBindingHeaderLine(kind, record.matchCount),
+    ...divergenceTargetBindingMismatchLines(record.mismatches),
+    ...divergenceTargetBindingCandidateLines(record.candidates),
+  ];
+}
+
+function divergenceTargetBindingHeaderLine(kind: string, matchCount: unknown): string {
+  const suffix = typeof matchCount === 'number' ? ` (matchCount ${matchCount})` : '';
+  return `Target binding: ${kind}${suffix} — recorded target evidence did not verify.`;
+}
+
+function divergenceTargetBindingMismatchLines(mismatches: unknown): string[] {
+  if (!Array.isArray(mismatches) || mismatches.length === 0) return [];
+  return [`  mismatches: ${mismatches.slice(0, 5).join('; ')}`];
+}
+
+function divergenceTargetBindingCandidateLines(candidates: unknown): string[] {
+  if (!Array.isArray(candidates) || candidates.length === 0) return [];
+  return [
+    `  ${candidates.length} candidate(s) shared the recorded identity:`,
+    ...candidates.slice(0, 5).map((candidate) => `    ${divergenceScreenRefLine(candidate)}`),
+  ];
 }
 
 function divergenceStepLine(step: unknown): string[] {

@@ -6,24 +6,25 @@
  * against the tree the resolver already captured; it never captures, and
  * callers gate it on `session.recordSession`. Tree-agnostic spec pieces live
  * in `src/replay/target-identity.ts`, shared with the parser.
+ *
+ * The structural helpers below (identity/ancestry/sibling/scroll-region/
+ * viewport-order) are exported so migration step 4's replay-time enforcement
+ * (`session-replay-target-verification.ts`) computes every ordinal with the
+ * SAME functions the writer used — "record and replay compute this ordinal
+ * identically by definition" (decision 3, "Record-time write").
  */
 
 import type { SnapshotNode } from '../kernel/snapshot.ts';
 import { resolveRectCenter } from '../utils/rect-center.ts';
-import { normalizeType } from '../snapshot/snapshot-processing.ts';
 import { findNearestScrollableContainer } from './snapshot-presentation/tree.ts';
+import { readNodeLocalIdentity } from '../replay/target-identity-node.ts';
 import {
   classifyTargetBindingMatch,
   matchesAncestryPrefix,
   matchesLocalIdentity,
-  normalizeIdentifierField,
-  normalizeLabelField,
-  normalizeRoleField,
   serializeTargetAnnotationV1,
-  truncateToUtf8Bytes,
   utf8ByteLength,
   TARGET_ANNOTATION_MAX_ANCESTRY,
-  TARGET_ANNOTATION_MAX_FIELD_BYTES,
   TARGET_ANNOTATION_MAX_PAYLOAD_BYTES,
   type LocalIdentity,
   type TargetAncestryEntry,
@@ -113,27 +114,16 @@ export function computeTargetEvidence(
 // primitives, computed once per candidate node against the record-time tree.
 // ---------------------------------------------------------------------------
 
-function buildIndexMap(nodes: readonly SnapshotNode[]): Map<number, SnapshotNode> {
+export function buildIndexMap(nodes: readonly SnapshotNode[]): Map<number, SnapshotNode> {
   const map = new Map<number, SnapshotNode>();
   for (const node of nodes) map.set(node.index, node);
   return map;
 }
 
-/** The one identity reader: normalized AND field-capped, on every path. */
-function boundedLocalIdentity(node: SnapshotNode): LocalIdentity {
-  const role = normalizeRoleField(normalizeType(node.type ?? ''));
-  const id = normalizeIdentifierField(node.identifier);
-  const label = normalizeLabelField(node.label);
-  return {
-    ...(id !== undefined ? { id: truncateToUtf8Bytes(id, TARGET_ANNOTATION_MAX_FIELD_BYTES) } : {}),
-    role: truncateToUtf8Bytes(role, TARGET_ANNOTATION_MAX_FIELD_BYTES),
-    ...(label !== undefined
-      ? { label: truncateToUtf8Bytes(label, TARGET_ANNOTATION_MAX_FIELD_BYTES) }
-      : {}),
-  };
-}
+/** The one identity reader (normalized AND field-capped, on every path): shared with dispatch's post-resolution guard. */
+export const boundedLocalIdentity = readNodeLocalIdentity;
 
-type AncestryWalk = {
+export type AncestryWalk = {
   chain: TargetAncestryEntry[];
   /**
    * Decision 3 capture anomaly: a `parentIndex` that resolves to no node, or
@@ -144,7 +134,7 @@ type AncestryWalk = {
 };
 
 /** Decision 3 "Ancestry": nearest K ancestors, leaf→root, {role,label?}. */
-function buildAncestryChain(
+export function buildAncestryChain(
   node: SnapshotNode,
   byIndex: Map<number, SnapshotNode>,
   limit: number,
@@ -172,7 +162,7 @@ function buildAncestryChain(
  * its OWN parent's children, in document order. Root-level nodes (no parent)
  * are siblings of every other root-level node.
  */
-function computeSiblingOrdinal(nodes: readonly SnapshotNode[], node: SnapshotNode): number {
+export function computeSiblingOrdinal(nodes: readonly SnapshotNode[], node: SnapshotNode): number {
   const parentIndex = node.parentIndex;
   let ordinal = 0;
   for (const candidate of nodes) {
@@ -184,7 +174,7 @@ function computeSiblingOrdinal(nodes: readonly SnapshotNode[], node: SnapshotNod
 }
 
 /** Decision 3 record-time write step 4: nearest scrollable ancestor's local identity, or `undefined` for *none*. */
-function computeScrollRegionKey(
+export function computeScrollRegionKey(
   node: SnapshotNode,
   byIndex: Map<number, SnapshotNode>,
 ): TargetScrollRegion | undefined {
@@ -201,7 +191,7 @@ function computeScrollRegionKey(
   };
 }
 
-function scrollRegionKeysEqual(
+export function scrollRegionKeysEqual(
   a: TargetScrollRegion | undefined,
   b: TargetScrollRegion | undefined,
 ): boolean {
@@ -230,6 +220,28 @@ type DisambiguationDomain = {
   viewportOrder: number;
 };
 
+/**
+ * Decision 3 record-time write step 2 / replay-time verification's identity
+ * set I: candidates sharing the recorded local identity with a matching
+ * leaf-anchored ancestry prefix. Shared by the writer's self-check (over the
+ * full record-time tree) and replay-time verification (over the recorded
+ * selector/ref's matched-node domain) — "record and replay compute this
+ * ordinal identically by definition" applies to this filter too.
+ */
+export function filterIdentitySet(
+  candidates: readonly SnapshotNode[],
+  byIndex: Map<number, SnapshotNode>,
+  identity: LocalIdentity,
+  ancestry: readonly TargetAncestryEntry[],
+): SnapshotNode[] {
+  return candidates.filter((candidate) => {
+    if (!matchesLocalIdentity(boundedLocalIdentity(candidate), identity)) return false;
+    const observed = buildAncestryChain(candidate, byIndex, Math.max(ancestry.length, 1));
+    // A candidate with a broken parent walk cannot prove the prefix.
+    return !observed.broken && matchesAncestryPrefix(observed.chain, ancestry);
+  });
+}
+
 function computeDisambiguationDomain(params: {
   nodes: readonly SnapshotNode[];
   byIndex: Map<number, SnapshotNode>;
@@ -241,14 +253,7 @@ function computeDisambiguationDomain(params: {
 }): DisambiguationDomain {
   const { nodes, byIndex, node, identity, ancestry, sibling, scrollRegion } = params;
 
-  // Step 2: all nodes sharing the winner's local identity with a matching
-  // leaf-anchored ancestry prefix.
-  const identitySet = nodes.filter((candidate) => {
-    if (!matchesLocalIdentity(boundedLocalIdentity(candidate), identity)) return false;
-    const observed = buildAncestryChain(candidate, byIndex, Math.max(ancestry.length, 1));
-    // A candidate with a broken parent walk cannot prove the prefix.
-    return !observed.broken && matchesAncestryPrefix(observed.chain, ancestry);
-  });
+  const identitySet = filterIdentitySet(nodes, byIndex, identity, ancestry);
 
   const siblingMatches = identitySet.filter(
     (candidate) => computeSiblingOrdinal(nodes, candidate) === sibling,
@@ -271,7 +276,7 @@ function computeDisambiguationDomain(params: {
 }
 
 /** Decision 3: rect center top-to-bottom then left-to-right; ties by document order; rect-less last, in document order. */
-function orderByViewportPosition(members: readonly SnapshotNode[]): SnapshotNode[] {
+export function orderByViewportPosition(members: readonly SnapshotNode[]): SnapshotNode[] {
   return members
     .map((node, documentOrder) => ({ node, documentOrder, center: resolveRectCenter(node.rect) }))
     .sort((a, b) => {

@@ -32,7 +32,7 @@ import {
   type ReplayVarScrubEntry,
 } from '../../replay/divergence.ts';
 
-type DivergenceFieldSanitizer = (value: string, limit?: number) => string;
+export type DivergenceFieldSanitizer = (value: string, limit?: number) => string;
 
 /**
  * ADR 0012 migration step 2: builds the `details.divergence` report for a
@@ -120,6 +120,22 @@ export async function buildReplayFailureDivergence(params: {
     }),
   };
 
+  return boundReplayDivergenceForSession({ sessionStore, sessionName, divergence, responseLevel });
+}
+
+/**
+ * Shared response-level bounding + overflow-artifact wiring (`boundReplayDivergence`
+ * bound to this session's artifact directory). Exported so step 4's
+ * target-binding divergence goes through the exact same bounding/overflow
+ * behavior as an action-failure divergence.
+ */
+export function boundReplayDivergenceForSession(params: {
+  sessionStore: SessionStore;
+  sessionName: string;
+  divergence: ReplayDivergence;
+  responseLevel: ResponseLevel | undefined;
+}): ReplayDivergence {
+  const { sessionStore, sessionName, divergence, responseLevel } = params;
   return boundReplayDivergence({
     divergence,
     level: responseLevel,
@@ -128,7 +144,7 @@ export async function buildReplayFailureDivergence(params: {
   });
 }
 
-type DivergenceObservation =
+export type DivergenceObservation =
   | { state: 'available'; nodes: SnapshotNode[]; refsGeneration: number }
   | { state: 'unavailable'; reason: string; hint: string };
 
@@ -138,7 +154,7 @@ type DivergenceObservation =
  * Sparse captures do not write back (selector-capture reliability contract),
  * so a sparse verdict degrades the whole observation.
  */
-async function captureDivergenceObservation(params: {
+export async function captureDivergenceObservation(params: {
   session: SessionState;
   sessionName: string;
   sessionStore: SessionStore;
@@ -199,7 +215,7 @@ function divergenceCaptureInteractiveOnly(action: SessionAction): boolean {
   return resolveSuggestionMatchingConfig(action).requiresRect;
 }
 
-function buildDivergenceScreen(
+export function buildDivergenceScreen(
   observation: DivergenceObservation,
   sanitize: DivergenceFieldSanitizer,
 ): ReplayDivergenceScreen {
@@ -286,9 +302,9 @@ function isSuggestionEligibleCommand(command: string): boolean {
   return isTouchTargetCommand(command) || ['fill', 'get', 'is', 'wait'].includes(command);
 }
 
-type SuggestionMatchingConfig = { requiresRect: boolean; allowDisambiguation: boolean };
+export type SuggestionMatchingConfig = { requiresRect: boolean; allowDisambiguation: boolean };
 
-function resolveSuggestionMatchingConfig(action: SessionAction): SuggestionMatchingConfig {
+export function resolveSuggestionMatchingConfig(action: SessionAction): SuggestionMatchingConfig {
   const isTouch = isTouchTargetCommand(action.command);
   return {
     requiresRect: isTouch || action.command === 'fill',

@@ -32,6 +32,7 @@ import type {
   SelectorTarget,
 } from '../../../contracts/interaction.ts';
 import type { RuntimeCommand } from '../../runtime-types.ts';
+import { assertExpectedResolvedTarget, type ExpectedResolvedTarget } from './resolution.ts';
 import {
   type CapturedSnapshot,
   type SelectorSnapshotOptions,
@@ -69,6 +70,8 @@ export type GetCommandOptions = CommandContext &
   SelectorSnapshotOptions & {
     property: 'text' | 'attrs';
     target: ElementTarget;
+    /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
+    expectedResolvedTarget?: ExpectedResolvedTarget;
   };
 
 export type GetCommandResult =
@@ -199,6 +202,7 @@ export const getCommand: RuntimeCommand<GetCommandOptions, GetCommandResult> = a
       invalidRefMessage: 'get text requires a ref like @e2',
       notFoundMessage: `Ref ${options.target.ref} not found`,
     });
+    assertExpectedResolvedTarget(resolved.node, options.expectedResolvedTarget, 'get');
     const selectorChain = buildSelectorChainForNode(resolved.node, runtime.backend.platform, {
       action: 'get',
     });
@@ -215,6 +219,7 @@ export const getCommand: RuntimeCommand<GetCommandOptions, GetCommandResult> = a
     selector: options.target.selector,
     disambiguateAmbiguous: options.property === 'text',
   });
+  assertExpectedResolvedTarget(resolved.node, options.expectedResolvedTarget, 'get');
 
   const selectorChain = buildSelectorChainForNode(resolved.node, runtime.backend.platform, {
     action: 'get',

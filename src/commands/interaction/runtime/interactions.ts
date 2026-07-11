@@ -20,6 +20,7 @@ import {
 import type { RepeatedInput } from '../../command-input.ts';
 import {
   EXACT_REF_RESOLUTION,
+  type ExpectedResolvedTarget,
   type InteractionTarget,
   preflightNativeRefInteraction,
   resolveInteractionTarget,
@@ -58,6 +59,8 @@ export type PressCommandOptions = CommandContext &
   RepeatedInput & {
     target: InteractionTarget;
     button?: ClickButton;
+    /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
+    expectedResolvedTarget?: ExpectedResolvedTarget;
   } & PostActionObservationOptions;
 
 export type ClickCommandOptions = PressCommandOptions;
@@ -68,6 +71,8 @@ export type FillCommandOptions = CommandContext & {
   target: InteractionTarget;
   text: string;
   delayMs?: number;
+  /** ADR 0012 step 4: replay-only post-resolution guard; see resolution.ts. */
+  expectedResolvedTarget?: ExpectedResolvedTarget;
 } & PostActionObservationOptions;
 
 export type TypeTextCommandOptions = CommandContext & {
@@ -107,6 +112,7 @@ export const fillCommand: RuntimeCommand<FillCommandOptions, FillCommandResult> 
     requireInteractive: true,
     promoteToHittableAncestor: false,
     captureEvidenceBaseline: observation.needsPreActionBaseline,
+    expectedResolvedTarget: options.expectedResolvedTarget,
   });
   if (!runtime.backend.fill) {
     throw new AppError('UNSUPPORTED_OPERATION', 'fill is not supported by this backend');
@@ -187,6 +193,7 @@ async function tapCommand(
     requireInteractive: true,
     promoteToHittableAncestor: true,
     captureEvidenceBaseline: observation.needsPreActionBaseline,
+    expectedResolvedTarget: options.expectedResolvedTarget,
   });
   if (!runtime.backend.tap) {
     throw new AppError('UNSUPPORTED_OPERATION', 'tap is not supported by this backend');
@@ -229,6 +236,9 @@ async function maybeTapRefTarget(
     return null;
   }
   if (hasNonDefaultTapOptions(options)) return null;
+  // ADR 0012 step 4: a guarded replay action needs the runtime resolution
+  // path so the post-resolution identity guard actually runs.
+  if (options.expectedResolvedTarget) return null;
   // ADR 0011 native-ref preflight: the shared occlusion/offscreen guards run
   // against the stored session snapshot node before the backend call (a
   // backend fast path can silently "succeed", so errors must be raised here).
@@ -254,6 +264,8 @@ async function maybeFillRefTarget(
   options: FillCommandOptions,
 ): Promise<FillCommandResult | null> {
   if (options.target.kind !== 'ref' || !runtime.backend.fillTarget) return null;
+  // ADR 0012 step 4: guarded replay actions take the runtime path — see maybeTapRefTarget.
+  if (options.expectedResolvedTarget) return null;
   // ADR 0011 native-ref preflight — see maybeTapRefTarget.
   const preflight = await preflightNativeRefInteraction(runtime, options, options.target, 'fill');
   const backendResult = await runtime.backend.fillTarget(

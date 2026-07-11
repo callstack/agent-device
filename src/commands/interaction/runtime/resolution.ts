@@ -33,8 +33,50 @@ import type {
 } from '../../../contracts/interaction.ts';
 import { now, toBackendContext } from '../../runtime-common.ts';
 import { resolveActionableTouchResolution } from '../../../core/interaction-targeting.ts';
+import type { LocalIdentity } from '../../../replay/target-identity.ts';
+import {
+  localIdentitiesEqual,
+  readNodeLocalIdentity,
+  REPLAY_TARGET_GUARD_MISMATCH_REASON,
+} from '../../../replay/target-identity-node.ts';
 
 export type { InteractionTarget, PointTarget, ResolvedInteractionTarget };
+
+/**
+ * ADR 0012 migration step 4, post-resolution guard: the normalized local
+ * identity of the element replay's pre-action verification isolated. Set
+ * ONLY by the replay step loop (via `DaemonRequest.internal.replayTargetGuard`)
+ * for annotated verified actions — never on live interactive commands.
+ * Dispatch's own resolution runs guards verification does not replicate
+ * (occlusion filtering, visibility-preferring disambiguation), so its winner
+ * can differ from the verified member; this catches that split BEFORE the
+ * device action instead of tapping a different element than was verified.
+ */
+export type ExpectedResolvedTarget = LocalIdentity;
+
+/**
+ * Compares the resolution winner (pre-promotion: hittable-ancestor promotion
+ * deliberately retargets to the same element's actionable container and must
+ * not trip the guard) against the verified identity; throws pre-action.
+ */
+export function assertExpectedResolvedTarget(
+  node: SnapshotNode,
+  expected: ExpectedResolvedTarget | undefined,
+  action: string,
+): void {
+  if (!expected) return;
+  const observed = readNodeLocalIdentity(node);
+  if (localIdentitiesEqual(observed, expected)) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `${action} resolved to a different element than replay verification isolated; the action was not sent`,
+    {
+      reason: REPLAY_TARGET_GUARD_MISMATCH_REASON,
+      observed,
+      expected,
+    },
+  );
+}
 
 export type InteractionAction =
   | 'click'
@@ -63,6 +105,8 @@ type ResolveInteractionTargetParams = {
    * when the caller explicitly asked for verify evidence. Defaults to false.
    */
   captureEvidenceBaseline?: boolean;
+  /** ADR 0012 step 4 post-resolution guard; see `ExpectedResolvedTarget`. */
+  expectedResolvedTarget?: ExpectedResolvedTarget;
 };
 
 export async function resolveInteractionTarget(
@@ -149,6 +193,7 @@ async function resolveRefInteractionTarget(
 ): Promise<ResolvedInteractionTarget> {
   const capture = await resolveSnapshotForRef(runtime, options, target);
   const resolved = capture.resolved;
+  assertExpectedResolvedTarget(resolved.node, params.expectedResolvedTarget, params.action);
   const node = params.promoteToHittableAncestor
     ? resolveActionableNodeOrThrow(capture.snapshot.nodes, resolved.node, {
         action: params.action,
@@ -216,6 +261,7 @@ async function resolveSelectorInteractionTarget(
       { hint: selectorFailureHint(resolved?.diagnostics ?? []) },
     );
   }
+  assertExpectedResolvedTarget(resolved.node, params.expectedResolvedTarget, params.action);
   const node = params.promoteToHittableAncestor
     ? resolveActionableNodeOrThrow(capture.snapshot.nodes, resolved.node, {
         action: params.action,

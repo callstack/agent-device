@@ -17,6 +17,7 @@ import type {
   PressCommandResult,
 } from '../../contracts/interaction.ts';
 import { asAppError, normalizeError } from '../../kernel/errors.ts';
+import type { LocalIdentity } from '../../replay/target-identity.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';
 import { markSessionSnapshotRefsIssued, resolveRefStalenessWarning } from '../session-snapshot.ts';
@@ -153,12 +154,18 @@ async function dispatchTargetedTouchViaRuntime(
     if (invalidRefFlagsResponse) return invalidRefFlagsResponse;
     androidFreshnessBaseline = await refreshAndroidRefSnapshotIfFreshnessActive(params, session);
   }
-  const directSelector = readDirectIosSelectorTapTarget({
-    session,
-    commandLabel,
-    target: parsedTarget.target,
-    flags: req.flags,
-  });
+  // ADR 0012 step 4: a guarded replay dispatch must resolve through the
+  // runtime tree path so the post-resolution identity guard runs — the
+  // direct-iOS fast path has no daemon-tree node to check against.
+  const replayTargetGuard = req.internal?.replayTargetGuard;
+  const directSelector = replayTargetGuard
+    ? null
+    : readDirectIosSelectorTapTarget({
+        session,
+        commandLabel,
+        target: parsedTarget.target,
+        flags: req.flags,
+      });
   if (directSelector) {
     const directResponse = await dispatchDirectIosSelectorTap(params, session, directSelector);
     if (directResponse) return directResponse;
@@ -177,6 +184,7 @@ async function dispatchTargetedTouchViaRuntime(
         clickButton,
         flags: req.flags,
         durationMs,
+        expectedResolvedTarget: replayTargetGuard,
       }),
     afterRun: async (result) => {
       if (session.lease?.leaseProvider) return;
@@ -222,8 +230,10 @@ async function runTargetedTouchInteraction(params: {
   clickButton: ReturnType<typeof resolveClickButton>;
   flags: CommandFlags | undefined;
   durationMs?: number;
+  expectedResolvedTarget?: LocalIdentity;
 }): Promise<TargetedTouchResult> {
-  const { runtime, command, target, sessionName, requestId, flags } = params;
+  const { runtime, command, target, sessionName, requestId, flags, expectedResolvedTarget } =
+    params;
   const settle = readSettleRequest(flags);
   if (command === 'longpress') {
     return await runtime.interactions.longPress(target, {
@@ -231,6 +241,7 @@ async function runTargetedTouchInteraction(params: {
       requestId,
       durationMs: params.durationMs,
       settle,
+      expectedResolvedTarget,
     });
   }
 
@@ -245,6 +256,7 @@ async function runTargetedTouchInteraction(params: {
     doubleTap: flags?.doubleTap,
     verify: flags?.verify,
     settle,
+    expectedResolvedTarget,
   };
   return command === 'click'
     ? await runtime.interactions.click(target, options)
@@ -538,12 +550,17 @@ async function dispatchFillViaRuntime(
   );
   if (refPreamble.response) return refPreamble.response;
   const { staleRefsWarning } = refPreamble;
-  const directResponse = await maybeDispatchDirectIosSelectorFill(
-    params,
-    session,
-    parsedTarget.target,
-    parsedTarget.text,
-  );
+  // ADR 0012 step 4: guarded replay dispatches take the runtime tree path —
+  // see dispatchTargetedTouchViaRuntime.
+  const replayTargetGuard = req.internal?.replayTargetGuard;
+  const directResponse = replayTargetGuard
+    ? null
+    : await maybeDispatchDirectIosSelectorFill(
+        params,
+        session,
+        parsedTarget.target,
+        parsedTarget.text,
+      );
   if (directResponse) return directResponse;
 
   return await dispatchRuntimeInteraction(params, {
@@ -554,6 +571,7 @@ async function dispatchFillViaRuntime(
         delayMs: req.flags?.delayMs,
         verify: req.flags?.verify,
         settle: readSettleRequest(req.flags),
+        expectedResolvedTarget: replayTargetGuard,
       }),
     buildPayloads: (result) =>
       buildFillResponsePayloads({

@@ -1,5 +1,5 @@
 export type { Selector, SelectorChain } from './arguments.ts';
-export type { SelectorDiagnostics, SelectorResolution } from './resolve.ts';
+export type { SelectorDiagnostics, SelectorResolution, SelectorChainMatchList } from './resolve.ts';
 
 export {
   parseSelectorChain,
@@ -12,6 +12,7 @@ export { isNodeVisible, isNodeEditable } from './match.ts';
 
 export {
   resolveSelectorChain,
+  listSelectorChainMatches,
   findSelectorChainMatch,
   formatSelectorFailure,
   selectorFailureHint,

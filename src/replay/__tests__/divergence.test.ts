@@ -306,3 +306,163 @@ test('scrubReplayVarValues replaces every occurrence with a named marker, longes
     'value=<var:T> done',
   );
 });
+
+// --- ADR 0012 migration step 4: target-binding divergence wire shape ---
+
+test('a target-binding divergence kind carries targetBinding.classification equal to kind', () => {
+  for (const kind of ['selector-miss', 'identity-mismatch', 'identity-unverifiable'] as const) {
+    const divergence = buildDivergence({
+      kind,
+      targetBinding: {
+        classification: kind,
+        matchCount: kind === 'selector-miss' ? 0 : 1,
+        recorded: { role: 'button', label: 'Save' },
+        mismatches: [],
+        candidates: [],
+      },
+    });
+    assert.equal(divergence.targetBinding?.classification, divergence.kind);
+  }
+});
+
+test('matchCount presence rule: the key is entirely absent (never null) for recorded-unverifiable', () => {
+  const divergence = buildDivergence({
+    kind: 'identity-unverifiable',
+    targetBinding: {
+      classification: 'identity-unverifiable',
+      recorded: { role: 'button', label: 'Save' },
+      mismatches: [],
+      candidates: [],
+    },
+  });
+  const serialized = JSON.parse(JSON.stringify(divergence)) as Record<string, unknown>;
+  const targetBinding = serialized.targetBinding as Record<string, unknown>;
+  assert.equal('matchCount' in targetBinding, false);
+});
+
+test('matchCount presence rule: the key is present (0..N) on every path that performs resolution', () => {
+  for (const matchCount of [0, 1, 4]) {
+    const divergence = buildDivergence({
+      kind: matchCount === 0 ? 'selector-miss' : 'identity-mismatch',
+      targetBinding: {
+        classification: matchCount === 0 ? 'selector-miss' : 'identity-mismatch',
+        matchCount,
+        recorded: { role: 'button', label: 'Save' },
+        mismatches: [],
+        candidates: [],
+      },
+    });
+    assert.equal(divergence.targetBinding?.matchCount, matchCount);
+  }
+});
+
+test('a target-binding divergence carries a real computed resume object (not a stub)', () => {
+  // ADR 0012 step 5 (#1211) wiring: a target-binding divergence fires
+  // pre-action, so it resumes at the SAME failed step with a real digest —
+  // never the retired `{allowed:false, reason:'resume not yet supported'}` stub.
+  const divergence = buildDivergence({
+    kind: 'identity-mismatch',
+    resume: { allowed: true, from: 7, planDigest: 'abc123' },
+    targetBinding: {
+      classification: 'identity-mismatch',
+      matchCount: 1,
+      recorded: { id: 'save', role: 'button', label: 'Save' },
+      observed: { id: 'save-v2', role: 'button', label: 'Save' },
+      mismatches: [],
+      candidates: [],
+    },
+  });
+  assert.deepEqual(divergence.resume, { allowed: true, from: 7, planDigest: 'abc123' });
+  assert.notEqual((divergence.resume as { reason?: string }).reason, 'resume not yet supported');
+});
+
+test('boundReplayDivergence keeps targetBinding on the minimal overflow fallback (it is small repair data, not a bulk digest)', () => {
+  const divergence = buildDivergence({
+    kind: 'identity-unverifiable',
+    cause: { code: 'IDENTITY_UNVERIFIABLE', message: 'x'.repeat(20_000) },
+    targetBinding: {
+      classification: 'identity-unverifiable',
+      matchCount: 4,
+      recorded: { id: 'save', role: 'button', label: 'Save' },
+      mismatches: [],
+      candidates: [
+        { ref: 'e1', role: 'button', label: 'Row' },
+        { ref: 'e2', role: 'button', label: 'Row' },
+      ],
+    },
+    screen: {
+      state: 'available',
+      refsGeneration: 1,
+      refs: Array.from({ length: 20 }, (_, i) => ({
+        ref: `e${i}`,
+        role: 'button',
+        label: 'B'.repeat(200),
+      })),
+    },
+  });
+  const bounded = boundReplayDivergence({
+    divergence,
+    level: 'digest',
+    writeOverflowArtifact: () => ({ artifactPath: '/tmp/session/replay-divergence/1.json' }),
+  });
+  assert.ok(bounded.overflow); // confirms the minimal-fallback path actually ran
+  assert.deepEqual(bounded.targetBinding, divergence.targetBinding);
+});
+
+test('formatReplayDivergenceReport renders matchCount, mismatches, and candidates for a target-binding divergence', async () => {
+  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const report = formatReplayDivergenceReport({
+    divergence: {
+      version: 1,
+      kind: 'identity-mismatch',
+      step: { index: 2, source: { path: '/tmp/flow.ad', line: 3 } },
+      action: 'click id="save"',
+      cause: { code: 'IDENTITY_MISMATCH', message: 'wrong element' },
+      screen: { state: 'unavailable', reason: 'sparse-snapshot' },
+      suggestions: [],
+      suggestionCount: 0,
+      resume: { allowed: true, from: 2, planDigest: 'deadbeef' },
+      targetBinding: {
+        classification: 'identity-mismatch',
+        matchCount: 1,
+        recorded: { id: 'save', role: 'button', label: 'Save' },
+        observed: { id: 'save-v2', role: 'button', label: 'Save' },
+        mismatches: ['id: recorded=save observed=save-v2'],
+        candidates: [],
+      },
+    },
+  });
+  assert.ok(report);
+  assert.match(report!, /Target binding: identity-mismatch \(matchCount 1\)/);
+  assert.match(report!, /mismatches: id: recorded=save observed=save-v2/);
+});
+
+test('formatReplayDivergenceReport lists candidates for an identity-unverifiable target-binding divergence', async () => {
+  const { formatReplayDivergenceReport } = await import('../divergence.ts');
+  const report = formatReplayDivergenceReport({
+    divergence: {
+      version: 1,
+      kind: 'identity-unverifiable',
+      step: { index: 1, source: { path: '/tmp/flow.ad', line: 1 } },
+      action: 'click role=button label="Row"',
+      cause: { code: 'IDENTITY_UNVERIFIABLE', message: 'ambiguous' },
+      screen: { state: 'unavailable', reason: 'sparse-snapshot' },
+      suggestions: [],
+      suggestionCount: 0,
+      resume: { allowed: true, from: 1, planDigest: 'deadbeef' },
+      targetBinding: {
+        classification: 'identity-unverifiable',
+        matchCount: 2,
+        recorded: { role: 'button', label: 'Row' },
+        mismatches: [],
+        candidates: [
+          { ref: 'e1', role: 'button', label: 'Row' },
+          { ref: 'e2', role: 'button', label: 'Row' },
+        ],
+      },
+    },
+  });
+  assert.ok(report);
+  assert.match(report!, /2 candidate\(s\) shared the recorded identity/);
+  assert.match(report!, /@e1 \[button\] "Row"/);
+});

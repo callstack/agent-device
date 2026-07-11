@@ -18,7 +18,7 @@ import type { RecordingScope } from '../contracts/recording-scope.ts';
 import type { DeviceInfo, Platform, PlatformSelector } from '../kernel/device.ts';
 import type { ExecBackgroundResult, ExecResult } from '../utils/exec.ts';
 import type { SnapshotState } from '../kernel/snapshot.ts';
-import type { TargetAnnotationV1 } from '../replay/target-identity.ts';
+import type { LocalIdentity, TargetAnnotationV1 } from '../replay/target-identity.ts';
 import type { AppLogFailure, AppLogState } from './app-log-process.ts';
 import type { DeviceLease } from './lease-registry.ts';
 import type { AndroidNativePerfSession } from '../platforms/android/perf.ts';
@@ -56,6 +56,15 @@ export type DaemonOpenLifecycle = {
 type DaemonRequestInternal = {
   openLifecycle?: DaemonOpenLifecycle;
   admittedLease?: DeviceLease;
+  /**
+   * ADR 0012 step 4 post-resolution guard: the verified target member's
+   * normalized local identity, set ONLY by the replay step loop when
+   * dispatching an annotated action whose pre-action verification passed.
+   * Interaction handlers thread it into command options as
+   * `expectedResolvedTarget`; dispatch's own resolution refuses (pre-action)
+   * when its winner carries a different identity.
+   */
+  replayTargetGuard?: LocalIdentity;
 };
 
 export type DaemonRequest = Omit<PublicDaemonRequest, 'token' | 'session' | 'flags' | 'meta'> & {

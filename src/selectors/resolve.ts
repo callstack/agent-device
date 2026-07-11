@@ -73,6 +73,37 @@ export function resolveSelectorChain(
   return null;
 }
 
+export type SelectorChainMatchList = {
+  selector: Selector;
+  selectorIndex: number;
+  matchedNodes: SnapshotNode[];
+};
+
+/**
+ * ADR 0012 migration step 4: the raw matched-node list for whichever chain
+ * alternative `resolveSelectorChain` would pick (first alternative with any
+ * match, in order) — mirrors `analyzeSelectorMatches`'s alternate-selection
+ * exactly, decoupled from uniqueness/disambiguation, so a replay-time
+ * verifier can compute `matchCount` and the recorded-identity set over the
+ * SAME domain resolution itself used, independent of whether resolution
+ * could pick a unique winner.
+ */
+export function listSelectorChainMatches(
+  nodes: SnapshotState['nodes'],
+  chain: SelectorChain,
+  options: { platform: Platform | PublicPlatform; requireRect?: boolean },
+): SelectorChainMatchList | null {
+  const requireRect = options.requireRect ?? false;
+  for (const [i, selector] of chain.selectors.entries()) {
+    const matchedNodes = nodes.filter((node) => {
+      if (requireRect && !node.rect) return false;
+      return matchesSelector(node, selector, options.platform);
+    });
+    if (matchedNodes.length > 0) return { selector, selectorIndex: i, matchedNodes };
+  }
+  return null;
+}
+
 export function findSelectorChainMatch(
   nodes: SnapshotState['nodes'],
   chain: SelectorChain,
