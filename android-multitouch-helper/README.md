@@ -18,7 +18,17 @@ sh ./scripts/build-android-multitouch-helper.sh "$VERSION" .tmp/android-multitou
 ## Run
 
 ```sh
-PAYLOAD="$(printf '%s' '{"kind":"transform","x":672,"y":1500,"dx":80,"dy":-40,"scale":1.8,"degrees":35,"durationMs":700}' | base64)"
+PAYLOAD_JSON='{
+  "protocol":"android-multitouch-helper-v1",
+  "kind":"transform",
+  "intent":"transform",
+  "durationMs":32,
+  "pointers":[
+    {"pointerId":0,"samples":[{"offsetMs":0,"x":120,"y":180},{"offsetMs":16,"x":130,"y":175},{"offsetMs":32,"x":140,"y":170}]},
+    {"pointerId":1,"samples":[{"offsetMs":0,"x":120,"y":260},{"offsetMs":16,"x":135,"y":270},{"offsetMs":32,"x":150,"y":280}]}
+  ]
+}'
+PAYLOAD="$(printf '%s' "$PAYLOAD_JSON" | base64)"
 adb install -r -t ".tmp/android-multitouch-helper/agent-device-android-multitouch-helper-$VERSION.apk"
 adb shell am instrument -w \
   -e payloadBase64 "$PAYLOAD" \
@@ -34,7 +44,7 @@ Successful results include:
 
 - `ok=true`
 - `helperApiVersion=1`
-- `kind` (`swipe`, `pinch`, `rotate`, or `transform`)
+- `kind` (`swipe` for one planned pointer path or `transform` for two)
 - `injectedEvents`
 - `elapsedMs`
 
