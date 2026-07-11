@@ -1,6 +1,6 @@
 import { AppError } from '../../kernel/errors.ts';
 import type { MaestroCommand, MaestroProgram, MaestroRunFlowCondition } from './program-ir.ts';
-import { MaestroExecutionContext } from './engine-context.ts';
+import { createMaestroExecutionContext, type MaestroExecutionContext } from './engine-context.ts';
 import {
   observationConditions,
   readIncludedProgram,
@@ -33,7 +33,7 @@ export async function executeMaestroProgram(
 ): Promise<MaestroEngineResult> {
   const state: EngineState = {
     port,
-    context: new MaestroExecutionContext(program.config.env, options.env),
+    context: createMaestroExecutionContext(program.config.env, options.env),
     options,
     executed: 0,
     skipped: 0,

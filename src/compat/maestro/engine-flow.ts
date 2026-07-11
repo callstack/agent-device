@@ -5,7 +5,7 @@ import type {
   MaestroRunFlowCommand,
   MaestroRunFlowCondition,
 } from './program-ir.ts';
-import { MaestroExecutionContext } from './engine-context.ts';
+import type { MaestroExecutionContext } from './engine-context.ts';
 import type { MaestroEngineOptions, MaestroObservationCondition } from './engine-types.ts';
 
 export function resolveCommand<T extends MaestroCommand>(
