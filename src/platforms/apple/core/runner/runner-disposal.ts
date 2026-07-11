@@ -1,5 +1,5 @@
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
-import type { DeviceInfo } from '../../../../kernel/device.ts';
+import { isMacOs, type DeviceInfo } from '../../../../kernel/device.ts';
 import {
   isProcessAlive,
   isProcessGroupAlive,
@@ -22,6 +22,8 @@ export const RUNNER_INVALIDATE_WAIT_TIMEOUT_MS = 1_000;
 
 const RUNNER_STOP_WAIT_TIMEOUT_MS = 10_000;
 const RUNNER_SHUTDOWN_TIMEOUT_MS = 15_000;
+const MACOS_RUNNER_INTERRUPT_WAIT_TIMEOUT_MS = 5_000;
+const MACOS_RUNNER_TERM_WAIT_TIMEOUT_MS = 2_000;
 const RUNNER_STALE_XCODEBUILD_KILL_TIMEOUT_MS = 2_000;
 const RUNNER_SIMULATOR_TERMINATE_TIMEOUT_MS = 2_000;
 
@@ -35,15 +37,22 @@ export async function disposeRunnerSession(
   session: RunnerSession,
   options: { graceful?: boolean; waitTimeoutMs?: number } = {},
 ): Promise<void> {
+  let processExitHandled = false;
   if (options.graceful !== false) {
-    await shutdownRunnerSessionGracefully(session);
+    processExitHandled = await shutdownRunnerSessionGracefully(session);
+  } else if (isMacOs(session.device)) {
+    await interruptMacOsRunnerSessions([session]);
+    await cleanupRunnerSessionResources(session);
+    return;
   } else {
     await killRunnerProcessTree(session.child.pid, 'SIGTERM');
   }
 
-  await waitForRunnerProcessExit(session, options.waitTimeoutMs ?? RUNNER_STOP_WAIT_TIMEOUT_MS);
-  if (isRunnerProcessTreeAlive(session.child.pid)) {
-    await killRunnerProcessTree(session.child.pid, 'SIGKILL');
+  if (!processExitHandled) {
+    await waitForRunnerProcessExit(session, options.waitTimeoutMs ?? RUNNER_STOP_WAIT_TIMEOUT_MS);
+    if (isRunnerProcessTreeAlive(session.child.pid)) {
+      await killRunnerProcessTree(session.child.pid, 'SIGKILL');
+    }
   }
   await cleanupRunnerSessionResources(session);
 }
@@ -56,12 +65,15 @@ export async function abortRunnerSessionsAndPrepProcesses(
   activeSessions: readonly RunnerSession[],
 ): Promise<void> {
   const prepProcesses = Array.from(runnerPrepProcesses);
-  await signalRunnerSessions(activeSessions, 'SIGINT');
+  const macOsSessions = activeSessions.filter((session) => isMacOs(session.device));
+  const otherSessions = activeSessions.filter((session) => !isMacOs(session.device));
+  await signalRunnerSessions(otherSessions, 'SIGINT');
   await signalRunnerPrepProcesses(prepProcesses, 'SIGINT');
-  await signalRunnerSessions(activeSessions, 'SIGTERM');
+  await signalRunnerSessions(otherSessions, 'SIGTERM');
   await signalRunnerPrepProcesses(prepProcesses, 'SIGTERM');
-  await signalRunnerSessions(activeSessions, 'SIGKILL');
+  await signalRunnerSessions(otherSessions, 'SIGKILL');
   await signalRunnerPrepProcesses(prepProcesses, 'SIGKILL');
+  await interruptMacOsRunnerSessions(macOsSessions);
   await Promise.allSettled(
     activeSessions.map(async (session) => {
       await cleanupRunnerSessionResources(session);
@@ -83,7 +95,7 @@ export async function stopRunnerPrepProcesses(): Promise<void> {
   );
 }
 
-async function shutdownRunnerSessionGracefully(session: RunnerSession): Promise<void> {
+async function shutdownRunnerSessionGracefully(session: RunnerSession): Promise<boolean> {
   try {
     await waitForRunner(
       session.device,
@@ -94,21 +106,66 @@ async function shutdownRunnerSessionGracefully(session: RunnerSession): Promise<
       undefined,
       RUNNER_SHUTDOWN_TIMEOUT_MS,
     );
+    return false;
   } catch {
-    await killRunnerProcessTree(session.child.pid, 'SIGTERM');
+    if (isMacOs(session.device)) {
+      await interruptMacOsRunnerSessions([session]);
+      return true;
+    } else {
+      await killRunnerProcessTree(session.child.pid, 'SIGTERM');
+      return false;
+    }
   }
 }
 
 async function waitForRunnerProcessExit(
   session: RunnerSession,
   waitTimeoutMs: number,
-): Promise<void> {
+): Promise<boolean> {
+  let timeout: NodeJS.Timeout | undefined;
   try {
-    await Promise.race([
-      session.testPromise,
-      new Promise<void>((resolve) => setTimeout(resolve, waitTimeoutMs)),
+    const exited = await Promise.race([
+      session.testPromise.then(
+        () => true,
+        () => true,
+      ),
+      new Promise<boolean>((resolve) => {
+        timeout = setTimeout(() => resolve(false), waitTimeoutMs);
+      }),
     ]);
-  } catch {}
+    return exited || !isRunnerProcessTreeAlive(session.child.pid);
+  } finally {
+    if (timeout) clearTimeout(timeout);
+  }
+}
+
+async function interruptMacOsRunnerSessions(sessions: readonly RunnerSession[]): Promise<void> {
+  if (sessions.length === 0) return;
+
+  // CONSERVATIVE: XCTest disables the host screen saver while macOS UI automation runs and
+  // restores it during xcodebuild teardown. Give SIGINT time to complete that teardown before
+  // escalating; revisit only if XCTest exposes a separate public cleanup acknowledgement.
+  await signalRunnerSessions(sessions, 'SIGINT');
+  const afterInterrupt = await runnerSessionsStillAlive(
+    sessions,
+    MACOS_RUNNER_INTERRUPT_WAIT_TIMEOUT_MS,
+  );
+  await signalRunnerSessions(afterInterrupt, 'SIGTERM');
+  const afterTerm = await runnerSessionsStillAlive(
+    afterInterrupt,
+    MACOS_RUNNER_TERM_WAIT_TIMEOUT_MS,
+  );
+  await signalRunnerSessions(afterTerm, 'SIGKILL');
+}
+
+async function runnerSessionsStillAlive(
+  sessions: readonly RunnerSession[],
+  waitTimeoutMs: number,
+): Promise<RunnerSession[]> {
+  const exited = await Promise.all(
+    sessions.map(async (session) => await waitForRunnerProcessExit(session, waitTimeoutMs)),
+  );
+  return sessions.filter((_, index) => !exited[index]);
 }
 
 async function cleanupRunnerSessionResources(session: RunnerSession): Promise<void> {
