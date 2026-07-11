@@ -1,7 +1,11 @@
 import type { AgentDeviceClient } from '../../client/client-types.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
-import type { CommandMetadata, JsonSchema } from '../command-contract.ts';
+import type {
+  CommandMetadata,
+  ExecutableCommandProjection,
+  JsonSchema,
+} from '../command-contract.ts';
 import type { CliOutputFormatter } from '../output-common.ts';
 
 export type AnyCommandMetadata<Name extends string = string> = CommandMetadata<Name, unknown>;
@@ -11,6 +15,7 @@ export type AnyCommandDefinition<Name extends string = string> = {
   description: string;
   inputSchema: JsonSchema;
   invoke: (client: AgentDeviceClient, input: unknown) => Promise<unknown>;
+  projection?: ExecutableCommandProjection;
 };
 
 export type CommandFamilyFacet<TCommandName extends string = string> = {
@@ -47,6 +52,13 @@ type CommandFacetDefinitions<TCommands extends readonly CommandFacet[]> = {
 
 type CommandFacetName<TCommands extends readonly CommandFacet[]> = TCommands[number]['name'];
 
+export type ProjectedCommandOutputSchemas<TDefinitions extends readonly AnyCommandDefinition[]> = {
+  [TDefinition in Extract<
+    TDefinitions[number],
+    { projection: ExecutableCommandProjection }
+  > as TDefinition['name']]: JsonSchema;
+};
+
 export function defineCommandFacet<
   const TCommandName extends string,
   const TCommand extends CommandFacet<TCommandName>,
@@ -68,13 +80,9 @@ export function defineCommandFamilyFromFacets<
     if (command.cliSchema) {
       addRecordEntry(cliSchemas, 'CLI schema', command.name, command.cliSchema);
     }
-    if (command.clientMethod) {
-      addRecordEntry(
-        clientCommandMethods,
-        'client command method',
-        command.clientMethod,
-        command.name,
-      );
+    const clientMethod = command.definition.projection?.clientMethod ?? command.clientMethod;
+    if (clientMethod) {
+      addRecordEntry(clientCommandMethods, 'client command method', clientMethod, command.name);
     }
     addRecordEntry(cliReaders, 'CLI reader', command.name, command.cliReader);
     if (command.daemonWriter) {
@@ -113,6 +121,23 @@ export function defineCommandFamilyFromFacets<
     metadata: CommandFacetMetadata<TCommands>;
     definitions: CommandFacetDefinitions<TCommands>;
   };
+}
+
+export function projectCommandOutputSchemas<
+  const TDefinitions extends readonly AnyCommandDefinition[],
+>(definitions: TDefinitions): ProjectedCommandOutputSchemas<TDefinitions> {
+  const schemas: Record<string, JsonSchema> = {};
+  for (const definition of definitions) {
+    if (definition.projection) {
+      addRecordEntry(
+        schemas,
+        'command output schema',
+        definition.name,
+        definition.projection.outputSchema,
+      );
+    }
+  }
+  return schemas as ProjectedCommandOutputSchemas<TDefinitions>;
 }
 
 function addRecordEntry<TValue>(

@@ -1,4 +1,12 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, expectTypeOf, test } from 'vitest';
+import type {
+  AgentDeviceCommandClient,
+  AppSwitcherCommandOptions,
+  BackCommandOptions,
+  RotateCommandOptions,
+  TvRemoteCommandOptions,
+} from '../../client/client-types.ts';
+import type { CommandResult } from '../../core/command-descriptor/command-result.ts';
 import type { CliFlags } from '../cli-grammar/flag-types.ts';
 import {
   appStateCliReader,
@@ -34,6 +42,21 @@ function expectInvalidArgs(fn: () => unknown, messageFragment: string) {
 }
 
 describe('system command interface', () => {
+  test('navigation executable contracts project the public client signatures', () => {
+    expectTypeOf<AgentDeviceCommandClient['back']>().toEqualTypeOf<
+      (options?: BackCommandOptions) => Promise<CommandResult<'back'>>
+    >();
+    expectTypeOf<AgentDeviceCommandClient['rotate']>().toEqualTypeOf<
+      (options: RotateCommandOptions) => Promise<CommandResult<'rotate'>>
+    >();
+    expectTypeOf<AgentDeviceCommandClient['appSwitcher']>().toEqualTypeOf<
+      (options?: AppSwitcherCommandOptions) => Promise<CommandResult<'app-switcher'>>
+    >();
+    expectTypeOf<AgentDeviceCommandClient['tvRemote']>().toEqualTypeOf<
+      (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>
+    >();
+  });
+
   test('system command family projects Node client command methods', () => {
     expect(systemCommandFamily.clientCommandMethods).toEqual({
       appState: 'appstate',
@@ -44,6 +67,22 @@ describe('system command interface', () => {
       keyboard: 'keyboard',
       clipboard: 'clipboard',
       tvRemote: 'tv-remote',
+    });
+  });
+
+  test('navigation executable contracts own their MCP output schemas', () => {
+    expect(
+      Object.fromEntries(
+        systemCommandFamily.definitions.flatMap((definition) =>
+          'projection' in definition ? [[definition.name, definition.projection.clientMethod]] : [],
+        ),
+      ),
+    ).toEqual({
+      back: 'back',
+      home: 'home',
+      rotate: 'rotate',
+      'app-switcher': 'appSwitcher',
+      'tv-remote': 'tvRemote',
     });
   });
 

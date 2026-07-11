@@ -10,7 +10,11 @@ import {
 } from '../../contracts/tv-remote.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
-import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/types.ts';
+import {
+  defineCommandFacet,
+  defineCommandFamilyFromFacets,
+  projectCommandOutputSchemas,
+} from '../family/types.ts';
 import { defineExecutableCommand } from '../command-contract.ts';
 import {
   compactRecord,
@@ -28,6 +32,7 @@ import {
   requiredDaemonString,
 } from '../cli-grammar/common.ts';
 import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
+import { NAVIGATION_COMMAND_PROJECTIONS } from './navigation-projection.ts';
 import { systemCliOutputFormatters } from './output.ts';
 
 const APPSTATE_COMMAND_NAME = 'appstate';
@@ -118,21 +123,28 @@ const appStateCommandDefinition = defineExecutableCommand(
   (client, input) => client.command.appState(input),
 );
 
-const backCommandDefinition = defineExecutableCommand(backCommandMetadata, (client, input) =>
-  client.command.back(input),
+const backCommandDefinition = defineExecutableCommand(
+  backCommandMetadata,
+  (client, input) => client.command.back(input),
+  NAVIGATION_COMMAND_PROJECTIONS.back,
 );
 
-const homeCommandDefinition = defineExecutableCommand(homeCommandMetadata, (client, input) =>
-  client.command.home(input),
+const homeCommandDefinition = defineExecutableCommand(
+  homeCommandMetadata,
+  (client, input) => client.command.home(input),
+  NAVIGATION_COMMAND_PROJECTIONS.home,
 );
 
-const rotateCommandDefinition = defineExecutableCommand(rotateCommandMetadata, (client, input) =>
-  client.command.rotate(input),
+const rotateCommandDefinition = defineExecutableCommand(
+  rotateCommandMetadata,
+  (client, input) => client.command.rotate(input),
+  NAVIGATION_COMMAND_PROJECTIONS.rotate,
 );
 
 const appSwitcherCommandDefinition = defineExecutableCommand(
   appSwitcherCommandMetadata,
   (client, input) => client.command.appSwitcher(input),
+  NAVIGATION_COMMAND_PROJECTIONS['app-switcher'],
 );
 
 const keyboardCommandDefinition = defineExecutableCommand(
@@ -148,6 +160,7 @@ const clipboardCommandDefinition = defineExecutableCommand(
 const tvRemoteCommandDefinition = defineExecutableCommand(
   tvRemoteCommandMetadata,
   (client, input) => client.command.tvRemote(input),
+  NAVIGATION_COMMAND_PROJECTIONS['tv-remote'],
 );
 
 const appStateCliSchema = {
@@ -260,7 +273,6 @@ const backCommandFacet = defineCommandFacet({
   name: BACK_COMMAND_NAME,
   metadata: backCommandMetadata,
   definition: backCommandDefinition,
-  clientMethod: 'back',
   cliSchema: backCliSchema,
   cliReader: backCliReader,
   daemonWriter: backDaemonWriter,
@@ -271,7 +283,6 @@ const homeCommandFacet = defineCommandFacet({
   name: HOME_COMMAND_NAME,
   metadata: homeCommandMetadata,
   definition: homeCommandDefinition,
-  clientMethod: 'home',
   cliReader: homeCliReader,
   daemonWriter: homeDaemonWriter,
   cliOutputFormatter: systemCliOutputFormatters.home,
@@ -281,7 +292,6 @@ const rotateCommandFacet = defineCommandFacet({
   name: ROTATE_COMMAND_NAME,
   metadata: rotateCommandMetadata,
   definition: rotateCommandDefinition,
-  clientMethod: 'rotate',
   cliSchema: rotateCliSchema,
   cliReader: rotateCliReader,
   daemonWriter: rotateDaemonWriter,
@@ -292,7 +302,6 @@ const appSwitcherCommandFacet = defineCommandFacet({
   name: APP_SWITCHER_COMMAND_NAME,
   metadata: appSwitcherCommandMetadata,
   definition: appSwitcherCommandDefinition,
-  clientMethod: 'appSwitcher',
   cliReader: appSwitcherCliReader,
   daemonWriter: appSwitcherDaemonWriter,
   cliOutputFormatter: systemCliOutputFormatters['app-switcher'],
@@ -324,7 +333,6 @@ const tvRemoteCommandFacet = defineCommandFacet({
   name: TV_REMOTE_COMMAND_NAME,
   metadata: tvRemoteCommandMetadata,
   definition: tvRemoteCommandDefinition,
-  clientMethod: 'tvRemote',
   cliSchema: tvRemoteCliSchema,
   cliReader: tvRemoteCliReader,
   daemonWriter: tvRemoteDaemonWriter,
@@ -344,6 +352,10 @@ export const systemCommandFamily = defineCommandFamilyFromFacets({
     tvRemoteCommandFacet,
   ],
 });
+
+export const projectedSystemCommandOutputSchemas = projectCommandOutputSchemas(
+  systemCommandFamily.definitions,
+);
 
 function readBackMode(value: unknown): BackMode | undefined {
   return value === 'in-app' || value === 'system' ? value : undefined;

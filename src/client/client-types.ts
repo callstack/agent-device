@@ -23,8 +23,6 @@ import type { BackMode } from '../contracts/back-mode.ts';
 import type { ClickButton } from '../core/click-button.ts';
 import type { RecordingExportQuality } from '../core/recording-export-quality.ts';
 import type { RecordingScope } from '../contracts/recording-scope.ts';
-import type { DeviceRotation } from '../contracts/device-rotation.ts';
-import type { TvRemoteButton } from '../contracts/tv-remote.ts';
 import type {
   ScrollDirection,
   SwipePattern,
@@ -32,6 +30,10 @@ import type {
   TransformGestureParams,
 } from '../contracts/scroll-gesture.ts';
 import type { ScrollInputDirection } from '../commands/interaction/runtime/gestures.ts';
+import type {
+  NavigationCommandOptions,
+  ProjectedNavigationCommandClient,
+} from '../commands/system/navigation-projection.ts';
 import type { LogAction } from '../contracts/logs.ts';
 import type { SessionSurface } from '../contracts/session-surface.ts';
 import type { FindLocator } from '../selectors/find.ts';
@@ -534,17 +536,12 @@ export type AlertCommandResult = DaemonResponseData & {
 
 export type AppStateCommandOptions = DeviceCommandBaseOptions;
 
-export type BackCommandOptions = DeviceCommandBaseOptions & {
-  mode?: BackMode;
-};
+export type BackCommandOptions = DeviceCommandBaseOptions & NavigationCommandOptions<'back'>;
 
-type HomeCommandOptions = DeviceCommandBaseOptions;
+export type RotateCommandOptions = DeviceCommandBaseOptions & NavigationCommandOptions<'rotate'>;
 
-export type RotateCommandOptions = DeviceCommandBaseOptions & {
-  orientation: DeviceRotation;
-};
-
-export type AppSwitcherCommandOptions = DeviceCommandBaseOptions;
+export type AppSwitcherCommandOptions = DeviceCommandBaseOptions &
+  NavigationCommandOptions<'app-switcher'>;
 
 export type KeyboardCommandOptions = DeviceCommandBaseOptions & {
   action?: 'status' | 'dismiss' | 'enter' | 'return';
@@ -559,10 +556,8 @@ export type ClipboardCommandOptions =
       text: string;
     });
 
-export type TvRemoteCommandOptions = DeviceCommandBaseOptions & {
-  button: TvRemoteButton;
-  durationMs?: number;
-};
+export type TvRemoteCommandOptions = DeviceCommandBaseOptions &
+  NavigationCommandOptions<'tv-remote'>;
 
 export type ReactNativeCommandOptions = DeviceCommandBaseOptions & {
   action: 'dismiss-overlay';
@@ -583,17 +578,12 @@ export type ViewportCommandOptions = DeviceCommandBaseOptions & {
   height: number;
 };
 
-export type AgentDeviceCommandClient = {
+type NonNavigationCommandClient = {
   wait: (options: WaitCommandOptions) => Promise<CommandResult<'wait'>>;
   alert: (options?: AlertCommandOptions) => Promise<CommandRequestResult>;
   appState: (options?: AppStateCommandOptions) => Promise<CommandResult<'appstate'>>;
-  back: (options?: BackCommandOptions) => Promise<CommandResult<'back'>>;
-  home: (options?: HomeCommandOptions) => Promise<CommandResult<'home'>>;
-  rotate: (options: RotateCommandOptions) => Promise<CommandResult<'rotate'>>;
-  appSwitcher: (options?: AppSwitcherCommandOptions) => Promise<CommandResult<'app-switcher'>>;
   keyboard: (options?: KeyboardCommandOptions) => Promise<CommandResult<'keyboard'>>;
   clipboard: (options: ClipboardCommandOptions) => Promise<CommandResult<'clipboard'>>;
-  tvRemote: (options: TvRemoteCommandOptions) => Promise<CommandResult<'tv-remote'>>;
   reactNative: (options: ReactNativeCommandOptions) => Promise<CommandRequestResult>;
   doctor: (options?: DoctorCommandOptions) => Promise<CommandResult<'doctor'>>;
   /**
@@ -603,6 +593,9 @@ export type AgentDeviceCommandClient = {
   prepare: (options: PrepareCommandOptions) => Promise<CommandResult<'prepare'>>;
   viewport: (options: ViewportCommandOptions) => Promise<CommandResult<'viewport'>>;
 };
+
+export type AgentDeviceCommandClient = ProjectedNavigationCommandClient<DeviceCommandBaseOptions> &
+  NonNavigationCommandClient;
 
 type SelectorSnapshotCommandOptions = Pick<CaptureSnapshotOptions, 'depth' | 'scope' | 'raw'>;
 type FindSnapshotCommandOptions = Pick<CaptureSnapshotOptions, 'depth' | 'raw'>;

@@ -64,11 +64,10 @@ import { readSerializedSnapshotCaptureAnnotations } from './snapshot-capture-ann
 import { readSnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 import type { CommandFlags } from './core/dispatch-context.ts';
 import type { AgentArtifactsResult } from './cloud-artifacts.ts';
+import type { ProjectedNavigationCommandClient } from './commands/system/navigation-projection.ts';
 
-type ProjectedSystemCommandClient = Pick<
-  AgentDeviceCommandClient,
-  'appState' | 'back' | 'home' | 'rotate' | 'appSwitcher' | 'keyboard' | 'clipboard' | 'tvRemote'
->;
+type ProjectedSystemCommandClient = ProjectedNavigationCommandClient<InternalRequestOptions> &
+  Pick<AgentDeviceCommandClient, 'appState' | 'keyboard' | 'clipboard'>;
 
 export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},

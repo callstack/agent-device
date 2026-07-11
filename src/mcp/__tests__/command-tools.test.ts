@@ -4,6 +4,7 @@ import type { AgentDeviceClient } from '../../client/client-types.ts';
 import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts';
 import { COMMAND_OUTPUT_SCHEMAS } from '../command-output-schemas.ts';
 import { AppError } from '../../kernel/errors.ts';
+import { NAVIGATION_COMMAND_PROJECTIONS } from '../../commands/system/navigation-projection.ts';
 
 test('MCP command tool executor hides client creation behind an execution adapter', async () => {
   const client = {} as AgentDeviceClient;
@@ -275,6 +276,15 @@ test('MCP tv remote outputSchema advertises button values', () => {
     (tvRemote.outputSchema.properties?.button as { enum?: unknown[] } | undefined)?.enum,
     ['up', 'down', 'left', 'right', 'select', 'menu', 'home', 'back'],
   );
+});
+
+test('MCP navigation output schemas are projected from the canonical executable contracts', () => {
+  for (const [name, projection] of Object.entries(NAVIGATION_COMMAND_PROJECTIONS)) {
+    assert.equal(
+      COMMAND_OUTPUT_SCHEMAS[name as keyof typeof COMMAND_OUTPUT_SCHEMAS],
+      projection.outputSchema,
+    );
+  }
 });
 
 test('MCP newly typed outputSchemas advertise public contract keys', () => {

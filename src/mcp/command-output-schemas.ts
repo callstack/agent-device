@@ -1,15 +1,13 @@
 import type { JsonSchema } from '../commands/command-contract.ts';
+import { projectedSystemCommandOutputSchemas } from '../commands/system/index.ts';
 import type { CommandResultMap } from '../core/command-descriptor/command-result.ts';
 import { booleanSchema, looseObjectSchema, stringSchema } from '../commands/command-input.ts';
-import { BACK_MODES } from '../contracts/back-mode.ts';
-import { DEVICE_ROTATIONS } from '../contracts/device-rotation.ts';
 import { SESSION_SURFACES } from '../contracts/session-surface.ts';
-import { TV_REMOTE_BUTTONS } from '../contracts/tv-remote.ts';
 import { DEVICE_TARGETS, PLATFORMS } from '../kernel/device.ts';
 
 /**
- * Hand-authored registry of per-command MCP `outputSchema`s, keyed by the daemon
- * command NAME. It is type-tied to the typed-result spine `CommandResultMap`
+ * Registry of per-command MCP `outputSchema`s, keyed by the daemon command
+ * NAME. It is type-tied to the typed-result spine `CommandResultMap`
  * (src/core/command-descriptor/command-result.ts) via
  * `satisfies Record<keyof CommandResultMap, JsonSchema>`, so the one-for-one
  * invariant is compiler-enforced: a new `CommandResultMap` entry without a schema
@@ -19,8 +17,9 @@ import { DEVICE_TARGETS, PLATFORMS } from '../kernel/device.ts';
  * `outputSchema` key), exactly as `CommandResultMap` omits them rather than
  * inventing a shape.
  *
- * There is no type→JSON-Schema generator in this repo, so every schema below is
- * authored by hand from the matching contract type. Two invariants:
+ * There is no type→JSON-Schema generator in this repo. Schemas remain
+ * hand-authored from matching contract types; selected executable contracts can
+ * project their colocated schema into this map. Two invariants:
  *  - NEVER strict: no `additionalProperties: false` anywhere, so the additive
  *    `cost` object (opted in via `--cost` / `includeCost`) and any other additive
  *    fields ride into `structuredContent` and still validate.
@@ -331,36 +330,8 @@ export const COMMAND_OUTPUT_SCHEMAS = {
     ['width', 'height', 'message'],
   ),
 
-  // src/contracts/navigation.ts
-  home: objectSchema({ action: constSchema('home'), message: stringSchema() }, [
-    'action',
-    'message',
-  ]),
-  back: objectSchema(
-    { action: constSchema('back'), mode: enumSchema(BACK_MODES), message: stringSchema() },
-    ['action', 'mode', 'message'],
-  ),
-  rotate: objectSchema(
-    {
-      action: constSchema('rotate'),
-      orientation: enumSchema(DEVICE_ROTATIONS),
-      message: stringSchema(),
-    },
-    ['action', 'orientation', 'message'],
-  ),
-  'app-switcher': objectSchema({ action: constSchema('app-switcher'), message: stringSchema() }, [
-    'action',
-    'message',
-  ]),
-  'tv-remote': objectSchema(
-    {
-      action: constSchema('tv-remote'),
-      button: enumSchema(TV_REMOTE_BUTTONS),
-      durationMs: numberSchema(),
-      message: stringSchema(),
-    },
-    ['action', 'button', 'message'],
-  ),
+  // src/contracts/navigation.ts, projected from executable command contracts.
+  ...projectedSystemCommandOutputSchemas,
 
   // src/contracts/wait.ts — compact public daemon projection.
   wait: objectSchema(

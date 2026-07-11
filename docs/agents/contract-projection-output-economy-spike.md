@@ -75,3 +75,22 @@ failed request remains identifiable and actionable from the digest.
 
 The merge-base size baseline is 1,659,106 raw JS bytes, 529,658 gzip bytes, and 636,721 tarball
 bytes on Node 24.13.0.
+
+## Contract projection results (#1185)
+
+The five selected navigation commands now carry one colocated projection declaration each in
+`src/commands/system/navigation-projection.ts` (`NAVIGATION_COMMAND_PROJECTIONS`): client-method name, public option
+shape, closed result type, and MCP `outputSchema`. The family builder derives `clientCommandMethods`
+from those projections, `AgentDeviceCommandClient` derives the five navigation methods via
+`ProjectedNavigationCommandClient`, and `COMMAND_OUTPUT_SCHEMAS` spreads the projected schemas.
+
+- Declarations: 15 -> 5 (10 fewer). Removed the per-command facet `clientMethod`, the hand-written
+  client method signature, and the hand-authored MCP schema entry.
+- Behavior: CLI, daemon, client runtime, and MCP output schemas unchanged (unit/client/MCP tests pass).
+- Bundle: +773 B raw JS, +146 B gzip, +620 B tarball; no material chunk regression, no dependency change.
+- Runtime: CLI --version 20.3 ms / --help 39.5 ms median (20 runs); no cold-start regression.
+- Layering/Fallow: green; no new value back-edge (type-only import from client, value import only
+  from the already-command-importing MCP schema map).
+
+Recommendation: #1185 should CONTINUE incrementally, one already-typed closed-contract family at a
+time, re-measuring declarations and bundle each step and stopping on any stop condition.

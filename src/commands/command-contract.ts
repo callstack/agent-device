@@ -30,6 +30,11 @@ export type ExecutableCommandContract<Name extends string, Input, Result> = Comm
   invoke: (client: AgentDeviceClient, input: unknown) => Promise<Result>;
 };
 
+export type ExecutableCommandProjection<ClientMethod extends string = string> = {
+  clientMethod: ClientMethod;
+  outputSchema: JsonSchema;
+};
+
 export type CliOutput = {
   data: unknown;
   jsonData?: unknown;
@@ -46,10 +51,32 @@ export function defineCommandMetadata<Name extends string, Input>(
 export function defineExecutableCommand<Name extends string, Input, Result>(
   metadata: CommandMetadata<Name, Input>,
   run: (client: AgentDeviceClient, input: Input) => Promise<Result>,
-): ExecutableCommandContract<Name, Input, Result> {
+): ExecutableCommandContract<Name, Input, Result>;
+
+export function defineExecutableCommand<
+  Name extends string,
+  Input,
+  Result,
+  const ClientMethod extends string,
+>(
+  metadata: CommandMetadata<Name, Input>,
+  run: (client: AgentDeviceClient, input: Input) => Promise<Result>,
+  projection: ExecutableCommandProjection<ClientMethod>,
+): ExecutableCommandContract<Name, Input, Result> & {
+  projection: ExecutableCommandProjection<ClientMethod>;
+};
+
+export function defineExecutableCommand<Name extends string, Input, Result>(
+  metadata: CommandMetadata<Name, Input>,
+  run: (client: AgentDeviceClient, input: Input) => Promise<Result>,
+  projection?: ExecutableCommandProjection,
+): ExecutableCommandContract<Name, Input, Result> & {
+  projection?: ExecutableCommandProjection;
+} {
   return {
     ...metadata,
     run,
     invoke: async (client, input) => await run(client, metadata.readInput(input)),
+    ...(projection ? { projection } : {}),
   };
 }
