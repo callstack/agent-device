@@ -19,8 +19,8 @@ or hand-written, and executed step-by-step by `runReplayScriptFile`
 `emitReplayTestActionProgress`, `session-replay-runtime.ts:243-260`).
 
 Recovery is opt-in `--update`/`-u` healing (`replayUpdate` flag,
-`src/cli/parser/cli-flags.ts:1041-1047`). It only fires after a step has already returned a hard
-failure (`session-replay-runtime.ts:118-149`: `if (!shouldUpdate) return failure; ...
+`src/commands/cli-grammar/flag-definitions-workflow.ts`). It only fires after a step has already
+returned a hard failure (`session-replay-runtime.ts:118-149`: `if (!shouldUpdate) return failure; ...
 healReplayAction(...)`), and it only retries the SAME recorded selector material —
 `collectReplaySelectorCandidates` (`session-replay-heal.ts:39-81`) gathers the step's originally
 recorded `selectorChain`/positionals, then `resolveSelectorChain` re-resolves those exact candidate

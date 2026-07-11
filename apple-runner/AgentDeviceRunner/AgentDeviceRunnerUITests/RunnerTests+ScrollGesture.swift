@@ -1,10 +1,10 @@
 import XCTest
 
-// Swift port of buildScrollGesturePlan from src/core/scroll-gesture.ts.
+// Swift port of buildScrollGesturePlan from src/contracts/scroll-gesture.ts.
 //
 // This is a deliberate two-place invariant: the daemon keeps the TS implementation (for Android,
 // recording, and reported-pixels), and the runner places the gesture with this Swift copy. The
-// parity test vectors at the bottom of this file mirror src/core/__tests__/scroll-gesture.test.ts —
+// parity test vectors at the bottom of this file mirror src/contracts/scroll-gesture.test.ts —
 // if you change the math in either language, update the other and both vector sets.
 //
 // All inputs here are positive (reference dims, travel, center), so Swift's `.rounded()`

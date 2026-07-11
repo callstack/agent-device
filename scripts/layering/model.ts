@@ -24,9 +24,13 @@ export type BackEdgeDrift = {
 
 const TARGET_DAG_RANK = new Map([
   ['kernel', 0],
+  ['contracts', 1],
+  ['request', 1],
+  ['selectors', 1],
   ['platforms', 1],
   ['core', 2],
   ['commands', 3],
+  ['cli-schema', 3],
   ['client', 4],
   ['daemon-server', 4],
   ['daemon-client', 5],
