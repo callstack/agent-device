@@ -446,14 +446,13 @@ positionals/flags, its execution-affecting `runtime` hints, and its `target-v1` 
 (decision 3 — verification consumes it pre-action, so a changed annotation is execution-affecting); and
 "platform-conditioned expansion" binds the EFFECTIVE resolved `platform`/`target` the run invokes with (CLI
 flag over script metadata), never the raw script metadata, so a digest computed for one target is not
-reusable against another. Deliberately EXCLUDED are interpolated `${VAR}` VALUES: substitution happens
-after the digest is computed over the still-unsubstituted `${VAR}` text, so re-running the same script with
-different `--env`/`AD_VAR_*` values keeps the same digest and stays resumable — the plan is identical and
-only late-bound data differs, so supplying the right variable values on resume is the caller's
-responsibility, not a digest concern. A resume requires both `--from N` and
+reusable against another. Deliberately EXCLUDED are native `.ad` `${VAR}` VALUES: substitution happens
+after planning, so changing only late-bound values keeps the same digest. Maestro environment substitution
+instead happens during compatibility parsing and can change action inputs, includes, or control expansion,
+so it can change the digest. A resume requires both `--from N` and
 `--plan-digest <planDigest>` from the report. The daemon rebuilds the current plan and rejects
-`INVALID_ARGS` before any action when its digest differs, so edits, include changes, or environment-driven
-expansion cannot silently retarget ordinal N. `allowed: false` explains why no resume is safe; its digest
+`INVALID_ARGS` before any action when its digest differs, so edits or parse-time expansion cannot silently
+retarget ordinal N. `allowed: false` explains why no resume is safe; its digest
 is still diagnostic, not an authorization to bypass preflight.
 
 Resume does not reconstruct execution state. For `N > 1`, preflight must reject with `INVALID_ARGS` when

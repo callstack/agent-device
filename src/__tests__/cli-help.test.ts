@@ -76,6 +76,11 @@ test('help workflow prints agent workflow topic and skips daemon dispatch', asyn
   assert.match(result.stdout, /agent-device help workflow/);
   assert.match(result.stdout, /Core loop:/);
   assert.match(result.stdout, /Do not use CSS selectors/);
+  assert.match(result.stdout, /Native \.ad interpolation is late-bound after planning/);
+  assert.match(
+    result.stdout,
+    /Maestro environment substitution occurs during compatibility parsing/,
+  );
 });
 
 test('help workflow preserves known device workaround guidance', async () => {
