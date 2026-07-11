@@ -189,7 +189,7 @@ export const INTERACTION_DISPATCH_PATHS: Record<InteractionPathId, InteractionPa
       // disclosure reports what the heuristic did, never changes it.
       resolutionDisclosure: {
         kind: 'runtime',
-        via: 'src/daemon/selectors-resolve.ts#resolveSelectorChain',
+        via: 'src/selectors/resolve.ts#resolveSelectorChain',
       },
     },
   },
