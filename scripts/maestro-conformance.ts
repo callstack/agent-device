@@ -19,6 +19,12 @@ export const MAESTRO_CONFORMANCE_FIXTURE_DIRECTORY = path.resolve(
 );
 export const MAESTRO_CONFORMANCE_RAW_FIXTURE = 'upstream-maestro-2.5.1.json';
 export const MAESTRO_CONFORMANCE_NORMALIZED_FIXTURE = 'normalized-maestro-2.5.1.json';
+const PINNED_UPSTREAM = {
+  project: 'mobile-dev-inc/Maestro',
+  version: '2.5.1',
+  tag: 'v2.5.1',
+  commit: 'a4c7c95f5ba1884858f7e35efa6b8e0165db9448',
+} as const;
 
 export type ConformanceCheckResult = {
   upstream: UpstreamPin;
@@ -35,6 +41,7 @@ export function checkConformance(
   const normalized = readNormalizedFixture(
     path.join(fixtureDirectory, MAESTRO_CONFORMANCE_NORMALIZED_FIXTURE),
   );
+  assertPinnedUpstream(raw.upstream);
   compareJson(normalized.upstream, raw.upstream, 'normalized fixture upstream pin');
 
   const regenerated = normalizeUpstreamFixture(raw, fixtureDirectory);
@@ -52,6 +59,7 @@ export function regenerateConformance(
 ): NormalizedFixture {
   const fixtureDirectory = options.fixtureDirectory ?? MAESTRO_CONFORMANCE_FIXTURE_DIRECTORY;
   const raw = readRawFixture(path.join(fixtureDirectory, MAESTRO_CONFORMANCE_RAW_FIXTURE));
+  assertPinnedUpstream(raw.upstream);
   const normalized = normalizeUpstreamFixture(raw, fixtureDirectory);
   fs.writeFileSync(
     path.join(fixtureDirectory, MAESTRO_CONFORMANCE_NORMALIZED_FIXTURE),
@@ -174,12 +182,22 @@ function requiredString(value: unknown, name: string): string {
   return value;
 }
 
+function assertPinnedUpstream(upstream: UpstreamPin): void {
+  for (const key of ['project', 'version', 'tag', 'commit'] as const) {
+    if (upstream[key] !== PINNED_UPSTREAM[key]) {
+      throw new Error(
+        `Upstream fixture must pin ${key}=${PINNED_UPSTREAM[key]}; found ${upstream[key]}.`,
+      );
+    }
+  }
+}
+
 function compareJson(actual: unknown, expected: unknown, name: string): void {
   const actualJson = JSON.stringify(actual, null, 2);
   const expectedJson = JSON.stringify(expected, null, 2);
   if (actualJson === expectedJson) return;
   throw new Error(
-    `${name} mismatch. Run \\"node --experimental-strip-types scripts/maestro-conformance.ts --regenerate\\" only after reviewing the upstream capture.\nExpected:\n${expectedJson}\nActual:\n${actualJson}`,
+    `${name} mismatch. Run node --experimental-strip-types scripts/maestro-conformance.ts --regenerate only after reviewing the upstream capture.\nExpected:\n${expectedJson}\nActual:\n${actualJson}`,
   );
 }
 

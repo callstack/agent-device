@@ -1,0 +1,111 @@
+# ADR 0015: Direct Maestro Compatibility Engine
+
+## Status
+
+Accepted
+
+## Context
+
+Maestro YAML currently compiles into generic `SessionAction` strings. Commands whose semantics do not
+match native replay become private `__maestro*` names with positional payloads, then replay dispatch
+routes those strings through a second Maestro switch before recursively invoking ordinary daemon
+commands. Compatibility state is split between the replay variable scope and three `WeakMap` caches.
+
+This path grew a second selector resolver, several polling loops, action-after-assertion recovery, and
+gesture-coordinate adapters. The indirection makes successful responses hard to prove: a fast native
+wait may establish text existence while the compatibility assertion requires a visible Maestro target.
+It also hides authored coordinate space until runtime positional decoding.
+
+The current inbound implementation is about 5,000 production lines and 5,000 focused test lines.
+Android compatibility is materially faster than native Maestro in the pager and navigation suites;
+that advantage is a product constraint, not expendable migration headroom.
+
+ADR 0013 separately owns public gesture normalization, contact topology, trajectory planning, and
+native injection. Maestro's supported gesture surface is single-pointer swipe only.
+
+## Decision
+
+Parse supported Maestro YAML into a source-preserving typed program and execute it directly through a
+narrow compatibility runtime port. Do not lower the program through `SessionAction`, private command
+names, positional JSON, or recursive daemon command routing.
+
+The engine has five responsibilities:
+
+1. The parser validates the supported grammar and preserves source path and line on every command.
+2. The interpreter owns hooks, includes, environment scopes, conditions, repeat/retry, and ordered
+   command execution.
+3. The runtime port exposes typed app, input, observation, target, and single-pointer gesture
+   operations backed by the existing agent-device runtime and platform adapters.
+4. One explicit execution context owns variables and the current observation generation. A mutation
+   invalidates that generation; reads may reuse evidence only within the same generation.
+5. An observer adapts source-aware progress, traces, artifacts, and failures to the existing replay and
+   test result contracts.
+
+The engine does not implement platform input. Absolute swipes resolve without a viewport query.
+Percentage and preset swipes resolve against the cheapest fresh interaction viewport available.
+Target-relative swipes reuse the target-resolution observation. The resulting typed single-pointer
+motion enters ADR 0013 after public compatibility normalization. Maestro code cannot construct or
+execute two-pointer pan, pinch, rotate, transform, or physical pointer trajectories.
+
+Simple successful target queries return their match, visibility decision, frame, candidate count, and
+observation generation in one response. The engine must not capture a second hierarchy merely to
+verify evidence already returned by that query. Relational or ambiguous selectors may use a full-tree
+fallback. Raw hierarchies, screenshots, and complete candidate lists are failure/debug artifacts, not
+happy-path requirements.
+
+Upstream Maestro is a version-pinned development oracle, not a production dependency. Opt-in fixture
+generation and scheduled conformance runs compare syntax, normalized command intent, and app-observable
+outcomes. Normal unit CI consumes checked-in normalized fixtures and requires neither Java nor an
+installed Maestro CLI.
+
+## Performance Contract
+
+The migration cannot switch production routing until Android and iOS satisfy all of these on the pager
+and react-navigation corpora:
+
+- total wall time is no slower than the pre-migration compatibility engine;
+- successful simple target operations perform at most one provider query;
+- hierarchy capture count does not increase;
+- absolute coordinate swipes perform no viewport or accessibility capture;
+- percentage swipe conversion preserves authored endpoints exactly;
+- helper/runner startup remains amortized across a suite;
+- p50/p95 command latency, captures, retries, and transferred hierarchy bytes are reported separately;
+- failure-only diagnostics are excluded from happy-path latency comparisons.
+
+Android verification must prove the bundled helper backend and version. iOS verification must separate
+runner startup from warm command latency. Both platforms rerun the non-Maestro gesture canaries; their
+two-pointer plans, executor selection, and app-observable effects must remain unchanged.
+
+## Migration
+
+1. Add the typed program, runtime port, direct interpreter, and normalized upstream fixtures without
+   changing production routing.
+2. Differentially compare the old lowering path and direct engine at the typed operation boundary.
+3. Move lifecycle, input, screenshot, and keyboard commands.
+4. Move target queries and assertions, deleting unverified fast-path success and assertion-triggered
+   action replay.
+5. Move single-pointer swipes through ADR 0013's normalized input boundary.
+6. Move hooks, includes, conditions, repeat/retry, and trusted `runScript`.
+7. Switch `--maestro` atomically, then delete private Maestro commands, positional decoding, hidden
+   caches, and obsolete converter/runtime tests.
+
+The old and new engines may coexist only in tests during migration. Shipping two production engines or
+a runtime fallback between them is rejected because it doubles semantic and performance ownership.
+
+## Consequences
+
+- Maestro remains a supported subset with explicit failures; this refactor does not expand parity.
+- Source provenance and runtime values stay typed through execution.
+- Compatibility policy remains local while device behavior stays in shared runtimes and backends.
+- Cross-platform correctness may require richer provider query evidence, but not additional round trips.
+- ADR 0013 can be rewritten internally without changing Maestro as long as its normalized
+  single-pointer boundary and executor guarantees remain available.
+
+## Alternatives Considered
+
+- Embed upstream Orchestra: rejected because Java startup, package weight, driver ownership, and
+  platform coverage would erase performance and backend advantages.
+- Build a shared replay VM first: rejected until native `.ad` needs structured runtime control flow;
+  one caller does not justify a broader abstraction.
+- Keep compiling to typed `SessionAction` variants: rejected because it retains the replay trampoline
+  and prevents the compatibility engine from owning observation generations directly.

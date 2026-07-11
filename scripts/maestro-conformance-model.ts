@@ -14,7 +14,6 @@ import type {
   RawCase,
   RawCommand,
   RawFixture,
-  UpstreamPin,
   UpstreamSource,
 } from './maestro-conformance-types.ts';
 

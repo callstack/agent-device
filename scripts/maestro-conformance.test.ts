@@ -14,6 +14,7 @@ test('checked-in Maestro 2.5.1 fixtures match the agent-device model', () => {
   const result = checkConformance();
 
   assert.equal(result.upstream.version, '2.5.1');
+  assert.equal(result.upstream.commit, 'a4c7c95f5ba1884858f7e35efa6b8e0165db9448');
   assert.deepEqual(
     result.cases.map((entry) => entry.id),
     ['pager-percentage-swipe', 'launch-defaults', 'selectors', 'runflow-include-provenance'],
@@ -55,9 +56,9 @@ test('normalization covers percentage swipes, launch defaults, selectors, and in
         source: { path: 'selectors.yaml', line: 4 },
       },
       {
-      kind: 'tapOn',
-      selector: { text: 'Ready', enabled: false },
-      source: { path: 'selectors.yaml', line: 9 },
+        kind: 'tapOn',
+        selector: { text: 'Ready', enabled: false },
+        source: { path: 'selectors.yaml', line: 9 },
       },
     ],
   );
