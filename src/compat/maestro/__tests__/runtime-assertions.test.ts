@@ -98,7 +98,7 @@ test('invokeMaestroAssertVisible retries transient snapshot failures until a lat
   }
 });
 
-test('invokeMaestroAssertVisible uses native wait for short simple iOS assertions', async () => {
+test('invokeMaestroAssertVisible verifies native wait success on iOS with an exact snapshot', async () => {
   const calls: Array<[string, string[] | undefined]> = [];
   const response = await invokeMaestroAssertVisible({
     baseReq: {
@@ -112,12 +112,18 @@ test('invokeMaestroAssertVisible uses native wait for short simple iOS assertion
       if (req.command === 'wait') {
         return { ok: true, data: { matches: 1 } };
       }
+      if (req.command === 'snapshot') {
+        return { ok: true, data: snapshot([node('Ready')]) };
+      }
       return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
     },
   });
 
   assert.equal(response.ok, true);
-  assert.deepEqual(calls, [['wait', ['Ready', '1000']]]);
+  assert.deepEqual(calls, [
+    ['wait', ['Ready', '1000']],
+    ['snapshot', []],
+  ]);
 });
 
 test('invokeMaestroAssertVisible uses the Maestro default timeout when omitted', async () => {
@@ -134,12 +140,50 @@ test('invokeMaestroAssertVisible uses the Maestro default timeout when omitted',
       if (req.command === 'wait') {
         return { ok: true, data: { matches: 1 } };
       }
+      if (req.command === 'snapshot') {
+        return { ok: true, data: snapshot([node('Ready')]) };
+      }
       return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
     },
   });
 
   assert.equal(response.ok, true);
-  assert.deepEqual(calls, [['wait', ['Ready', '17000']]]);
+  assert.deepEqual(calls, [
+    ['wait', ['Ready', '17000']],
+    ['snapshot', []],
+  ]);
+});
+
+test('invokeMaestroAssertVisible does not trust an iOS native wait when the exact snapshot disagrees', async () => {
+  vi.useFakeTimers();
+
+  const calls: Array<[string, string[] | undefined]> = [];
+  const responsePromise = invokeMaestroAssertVisible({
+    baseReq: {
+      token: 't',
+      session: 's',
+      flags: { platform: 'ios' },
+    },
+    positionals: ['label="page number 0" || text="page number 0" || id="page number 0"', '1000'],
+    invoke: async (req): Promise<DaemonResponse> => {
+      calls.push([req.command, req.positionals]);
+      if (req.command === 'wait') return { ok: true, data: { matches: 1 } };
+      if (req.command === 'snapshot') {
+        return { ok: true, data: snapshot([node('PagerView Example')]) };
+      }
+      return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
+    },
+  });
+
+  await vi.advanceTimersByTimeAsync(6500);
+  const response = await responsePromise;
+
+  assert.equal(response.ok, false);
+  assert.deepEqual(calls.slice(0, 3), [
+    ['wait', ['page number 0', '1000']],
+    ['snapshot', []],
+    ['snapshot', []],
+  ]);
 });
 
 test('invokeMaestroAssertVisible verifies Android native wait success with exact snapshot matching', async () => {

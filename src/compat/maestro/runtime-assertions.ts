@@ -130,7 +130,7 @@ async function invokeNativeMaestroVisibleWaitWithSnapshotFallback(
 }
 
 function shouldVerifyNativeVisibleWait(baseReq: ReplayBaseRequest): boolean {
-  return baseReq.flags?.platform === 'android';
+  return baseReq.flags?.platform === 'android' || baseReq.flags?.platform === 'ios';
 }
 
 async function runNativeVisibleWait(
