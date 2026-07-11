@@ -18,6 +18,7 @@ import type {
   RawFixture,
   UpstreamSource,
 } from './maestro-conformance-types.ts';
+import { readOptionalString, readRequiredRecord } from './maestro-conformance-values.ts';
 
 const DEFAULT_SWIPE_DURATION_MS = 400;
 
@@ -69,20 +70,8 @@ function normalizeAgentCommand(
 ): NormalizedAction[] {
   const source = normalizeSource(command.source, fixtureDirectory);
   switch (command.kind) {
-    case 'runFlow': {
-      if (command.include.kind === 'commands') {
-        return command.include.commands.flatMap((nested) =>
-          normalizeAgentCommand(nested, program, fixtureDirectory),
-        );
-      }
-      const parentPath = command.source.path ?? program.source.path;
-      if (!parentPath) throw new Error('File runFlow requires source path provenance.');
-      const includePath = path.resolve(path.dirname(parentPath), command.include.path);
-      const included = parseMaestroProgram(fs.readFileSync(includePath, 'utf8'), {
-        sourcePath: includePath,
-      });
-      return normalizeAgentProgram(included, fixtureDirectory);
-    }
+    case 'runFlow':
+      return normalizeAgentRunFlow(command, program, fixtureDirectory);
     case 'launchApp': {
       const appId = command.appId ?? program.config.appId;
       if (!appId) throw new Error('launchApp conformance fixture requires appId.');
@@ -90,24 +79,8 @@ function normalizeAgentCommand(
     }
     case 'swipe':
       return [normalizeAgentSwipe(command.gesture, source)];
-    case 'tapOn': {
-      if (command.target.space !== 'target') {
-        throw new Error('tapOn conformance fixtures require selector targets.');
-      }
-      return [
-        {
-          kind: 'tapOn',
-          selector: {
-            ...normalizeTypedSelector(command.target.selector),
-            ...(command.index === undefined ? {} : { index: command.index }),
-            ...(command.childOf === undefined
-              ? {}
-              : { childOf: normalizeTypedSelector(command.childOf) }),
-          },
-          source,
-        },
-      ];
-    }
+    case 'tapOn':
+      return [normalizeAgentTap(command, source)];
     case 'assertVisible':
     case 'assertNotVisible':
       return [
@@ -121,6 +94,45 @@ function normalizeAgentCommand(
     default:
       throw new Error(`Unsupported typed command in conformance fixture: ${command.kind}`);
   }
+}
+
+function normalizeAgentRunFlow(
+  command: Extract<MaestroCommand, { kind: 'runFlow' }>,
+  program: MaestroProgram,
+  fixtureDirectory: string,
+): NormalizedAction[] {
+  if (command.include.kind === 'commands') {
+    return command.include.commands.flatMap((nested) =>
+      normalizeAgentCommand(nested, program, fixtureDirectory),
+    );
+  }
+  const parentPath = command.source.path ?? program.source.path;
+  if (!parentPath) throw new Error('File runFlow requires source path provenance.');
+  const includePath = path.resolve(path.dirname(parentPath), command.include.path);
+  const included = parseMaestroProgram(fs.readFileSync(includePath, 'utf8'), {
+    sourcePath: includePath,
+  });
+  return normalizeAgentProgram(included, fixtureDirectory);
+}
+
+function normalizeAgentTap(
+  command: Extract<MaestroCommand, { kind: 'tapOn' }>,
+  source: NormalizedSource,
+): NormalizedAction {
+  if (command.target.space !== 'target') {
+    throw new Error('tapOn conformance fixtures require selector targets.');
+  }
+  return {
+    kind: 'tapOn',
+    selector: {
+      ...normalizeTypedSelector(command.target.selector),
+      ...(command.index === undefined ? {} : { index: command.index }),
+      ...(command.childOf === undefined
+        ? {}
+        : { childOf: normalizeTypedSelector(command.childOf) }),
+    },
+    source,
+  };
 }
 
 function normalizeAgentSwipe(
@@ -196,8 +208,8 @@ function normalizeUpstreamCommand(
 
 function normalizeUpstreamSwipe(command: RawCommand, source: NormalizedSource): NormalizedAction {
   const durationMs = integerOrDefault(command.duration, DEFAULT_SWIPE_DURATION_MS);
-  const startRelative = optionalString(command, 'startRelative');
-  const endRelative = optionalString(command, 'endRelative');
+  const startRelative = readOptionalString(command, 'startRelative');
+  const endRelative = readOptionalString(command, 'endRelative');
   if (startRelative !== undefined || endRelative !== undefined) {
     if (startRelative === undefined || endRelative === undefined) {
       throw new Error('SwipeCommand artifact must include both relative endpoints.');
@@ -212,7 +224,7 @@ function normalizeUpstreamSwipe(command: RawCommand, source: NormalizedSource): 
     };
   }
 
-  const direction = optionalString(command, 'direction');
+  const direction = readOptionalString(command, 'direction');
   if (direction !== undefined) {
     return {
       kind: 'swipe',
@@ -302,15 +314,8 @@ function numberValue(value: unknown, name: string): number {
   return number;
 }
 
-function optionalString(record: Record<string, unknown>, key: string): string | undefined {
-  const value = record[key];
-  if (value === undefined || value === null) return undefined;
-  if (typeof value !== 'string') throw new Error(`${key} must be a string.`);
-  return value;
-}
-
 function requiredString(record: Record<string, unknown>, key: string): string {
-  const value = optionalString(record, key);
+  const value = readOptionalString(record, key);
   if (value === undefined || value.length === 0) throw new Error(`${key} is required.`);
   return value;
 }
@@ -320,10 +325,7 @@ function requiredRecord(record: Record<string, unknown>, key: string): Record<st
 }
 
 function requiredRecordValue(value: unknown, name: string): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new Error(`${name} must be an object.`);
-  }
-  return value as Record<string, unknown>;
+  return readRequiredRecord(value, name);
 }
 
 function resolveFixturePath(fixtureDirectory: string, relativePath: string): string {

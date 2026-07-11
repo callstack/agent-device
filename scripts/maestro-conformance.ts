@@ -12,6 +12,7 @@ import type {
   UpstreamPin,
   UpstreamSource,
 } from './maestro-conformance-types.ts';
+import { readRequiredRecord } from './maestro-conformance-values.ts';
 
 export const MAESTRO_CONFORMANCE_FIXTURE_DIRECTORY = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
@@ -166,10 +167,7 @@ function readJson(filePath: string): unknown {
 }
 
 function requiredRecord(value: unknown, name: string): Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
-    throw new Error(`${name} must be an object.`);
-  }
-  return value as Record<string, unknown>;
+  return readRequiredRecord(value, name);
 }
 
 function requiredArray(value: unknown, name: string): unknown[] {

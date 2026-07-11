@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'vitest';
 import { parseMaestroProgram } from '../program-ir-parser.ts';
+import type { MaestroCommand } from '../program-ir.ts';
 
 describe('parseMaestroProgram', () => {
   test('preserves config, hooks, conditions, nested blocks, and source lines', () => {
@@ -50,28 +51,25 @@ describe('parseMaestroProgram', () => {
       ['runFlow', 'retry'],
     );
 
-    const runFlow = program.commands[0];
-    if (runFlow?.kind !== 'runFlow') throw new Error('expected runFlow');
+    const runFlow = commandOfKind(program.commands[0], 'runFlow');
     assert.deepEqual(runFlow.source, { path: '/flows/checkout.yaml', line: 11 });
     assert.deepEqual(runFlow.when, {
       platform: 'ios',
       true: "${maestro.platform == 'ios'}",
     });
     assert.deepEqual(runFlow.env, { CHILD: 'nested' });
-    assert.deepEqual(runFlow.include.kind, 'commands');
-    if (runFlow.include.kind !== 'commands') throw new Error('expected inline commands');
+    assert.equal(runFlow.include.kind, 'commands');
+    const inline = runFlow.include as Extract<typeof runFlow.include, { kind: 'commands' }>;
     assert.deepEqual(
-      runFlow.include.commands.map((command) => command.source.line),
+      inline.commands.map((command) => command.source.line),
       [18, 20],
     );
-    const repeat = runFlow.include.commands[1];
-    if (repeat?.kind !== 'repeat') throw new Error('expected repeat');
+    const repeat = commandOfKind(inline.commands[1], 'repeat');
     assert.equal(repeat.times, '${COUNT}');
     assert.equal(repeat.commands[0]?.kind, 'assertVisible');
     assert.equal(repeat.commands[0]?.source.line, 23);
 
-    const retry = program.commands[1];
-    if (retry?.kind !== 'retry') throw new Error('expected retry');
+    const retry = commandOfKind(program.commands[1], 'retry');
     assert.equal(retry.maxRetries, 2);
     assert.equal(retry.commands[0]?.kind, 'pressKey');
     assert.equal(retry.commands[0]?.source.line, 27);
@@ -108,29 +106,32 @@ describe('parseMaestroProgram', () => {
       percentSwipe,
       targetSwipe,
     ] = program.commands;
-    if (percentTap?.kind !== 'tapOn') throw new Error('expected percentage tap');
-    if (targetTap?.kind !== 'tapOn') throw new Error('expected target tap');
-    if (absoluteDoubleTap?.kind !== 'doubleTapOn') throw new Error('expected absolute double tap');
-    if (targetLongPress?.kind !== 'longPressOn') throw new Error('expected target long press');
-    if (absoluteSwipe?.kind !== 'swipe') throw new Error('expected absolute swipe');
-    if (percentSwipe?.kind !== 'swipe') throw new Error('expected percentage swipe');
-    if (targetSwipe?.kind !== 'swipe') throw new Error('expected target swipe');
+    const percentTapCommand = commandOfKind(percentTap, 'tapOn');
+    const targetTapCommand = commandOfKind(targetTap, 'tapOn');
+    const absoluteDoubleTapCommand = commandOfKind(absoluteDoubleTap, 'doubleTapOn');
+    const targetLongPressCommand = commandOfKind(targetLongPress, 'longPressOn');
+    const absoluteSwipeCommand = commandOfKind(absoluteSwipe, 'swipe');
+    const percentSwipeCommand = commandOfKind(percentSwipe, 'swipe');
+    const targetSwipeCommand = commandOfKind(targetSwipe, 'swipe');
 
-    assert.deepEqual(percentTap.target, { space: 'percent', x: 20, y: 30 });
-    assert.deepEqual(targetTap.target, { space: 'target', selector: { id: 'submit' } });
-    assert.deepEqual(absoluteDoubleTap.target, { space: 'absolute', x: 100, y: 200 });
-    assert.deepEqual(targetLongPress.target, { space: 'target', selector: { id: 'hold' } });
-    assert.deepEqual(absoluteSwipe.gesture, {
+    assert.deepEqual(percentTapCommand.target, { space: 'percent', x: 20, y: 30 });
+    assert.deepEqual(targetTapCommand.target, { space: 'target', selector: { id: 'submit' } });
+    assert.deepEqual(absoluteDoubleTapCommand.target, { space: 'absolute', x: 100, y: 200 });
+    assert.deepEqual(targetLongPressCommand.target, {
+      space: 'target',
+      selector: { id: 'hold' },
+    });
+    assert.deepEqual(absoluteSwipeCommand.gesture, {
       kind: 'coordinates',
       start: { space: 'absolute', x: 100, y: 200 },
       end: { space: 'absolute', x: 300, y: 400 },
     });
-    assert.deepEqual(percentSwipe.gesture, {
+    assert.deepEqual(percentSwipeCommand.gesture, {
       kind: 'coordinates',
       start: { space: 'percent', x: 90, y: 50 },
       end: { space: 'percent', x: 10, y: 50 },
     });
-    assert.deepEqual(targetSwipe.gesture, {
+    assert.deepEqual(targetSwipeCommand.gesture, {
       kind: 'target',
       from: { id: 'handle' },
       direction: 'left',
@@ -147,8 +148,7 @@ describe('parseMaestroProgram', () => {
       { sourcePath: '/flows/main.yaml' },
     );
 
-    const include = program.commands[0];
-    if (include?.kind !== 'runFlow') throw new Error('expected runFlow');
+    const include = commandOfKind(program.commands[0], 'runFlow');
     assert.deepEqual(include.include, { kind: 'file', path: 'helpers/child.yaml' });
     assert.deepEqual(include.source, { path: '/flows/main.yaml', line: 3 });
     assert.deepEqual(program.commands[1]?.source, { path: '/flows/main.yaml', line: 4 });
@@ -205,12 +205,10 @@ describe('parseMaestroProgram', () => {
       source: { line: 16 },
       link: 'https://example.test',
     });
-    const wait = program.commands[4];
-    if (wait?.kind !== 'extendedWaitUntil') throw new Error('expected extended wait');
+    const wait = commandOfKind(program.commands[4], 'extendedWaitUntil');
     assert.deepEqual(wait.visible, { id: 'ready' });
     assert.equal(wait.timeout, 2500);
-    const scroll = program.commands[5];
-    if (scroll?.kind !== 'scrollUntilVisible') throw new Error('expected scroll wait');
+    const scroll = commandOfKind(program.commands[5], 'scrollUntilVisible');
     assert.equal(scroll.direction, 'down');
     assert.equal(scroll.timeout, 5000);
     assert.deepEqual(program.commands[6], {
@@ -249,3 +247,11 @@ describe('parseMaestroProgram', () => {
     );
   });
 });
+
+function commandOfKind<K extends MaestroCommand['kind']>(
+  command: MaestroCommand | undefined,
+  kind: K,
+): Extract<MaestroCommand, { kind: K }> {
+  assert.equal(command?.kind, kind);
+  return command as Extract<MaestroCommand, { kind: K }>;
+}

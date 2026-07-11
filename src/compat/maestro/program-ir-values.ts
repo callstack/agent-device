@@ -101,6 +101,14 @@ export function entryValue(
   return entries.find((entry) => entry.key === key)?.value;
 }
 
+export function readOptionalEntry<T>(
+  entries: readonly MaestroMapEntry[],
+  key: string,
+  read: (value: Node | null | undefined) => T,
+): T | undefined {
+  return hasEntry(entries, key) ? read(entryValue(entries, key)) : undefined;
+}
+
 export function isNullNode(node: Node | null | undefined): boolean {
   return node === null || (isScalar(node) && node.value === null);
 }

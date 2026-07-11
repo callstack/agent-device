@@ -16,6 +16,7 @@ import {
   readIntegerValue,
   readMapEntries,
   readOptionalString,
+  readOptionalEntry,
   readRequiredString,
   readScalarMap,
   readScalarValue,
@@ -162,7 +163,7 @@ export function parseMaestroRetryCommand(
   };
 }
 
-export function parseMaestroRunFlowCondition(
+function parseMaestroRunFlowCondition(
   node: Node | null | undefined,
   context: MaestroProgramParseContext,
 ): MaestroRunFlowCondition {
@@ -170,42 +171,29 @@ export function parseMaestroRunFlowCondition(
   assertOnlyKeys(entries, 'runFlow.when', ['platform', 'visible', 'notVisible', 'true'], context);
   if (entries.length === 0) invalidAt('Maestro runFlow.when cannot be empty.', node, context);
 
-  const platform = hasEntry(entries, 'platform')
-    ? parsePlatform(entryValue(entries, 'platform'), context)
-    : undefined;
-  const visible = hasEntry(entries, 'visible')
-    ? parseMaestroSelector(entryValue(entries, 'visible'), 'runFlow.when.visible', context)
-    : undefined;
-  const notVisible = hasEntry(entries, 'notVisible')
-    ? parseMaestroSelector(entryValue(entries, 'notVisible'), 'runFlow.when.notVisible', context)
-    : undefined;
-  const truth = hasEntry(entries, 'true')
-    ? readScalarValue(entryValue(entries, 'true'), 'runFlow.when.true', context)
-    : undefined;
-  if (
-    truth !== undefined &&
-    truth !== null &&
-    typeof truth !== 'boolean' &&
-    typeof truth !== 'string'
-  ) {
-    invalidAt(
-      'Maestro runFlow.when.true expects a boolean or expression string.',
-      entryValue(entries, 'true'),
-      context,
-    );
-  }
-  if (truth === null)
-    invalidAt(
-      'Maestro runFlow.when.true expects a boolean or expression string.',
-      entryValue(entries, 'true'),
-      context,
-    );
+  const platform = readOptionalEntry(entries, 'platform', (entry) => parsePlatform(entry, context));
+  const visible = readOptionalEntry(entries, 'visible', (entry) =>
+    parseMaestroSelector(entry, 'runFlow.when.visible', context),
+  );
+  const notVisible = readOptionalEntry(entries, 'notVisible', (entry) =>
+    parseMaestroSelector(entry, 'runFlow.when.notVisible', context),
+  );
+  const truth = readOptionalEntry(entries, 'true', (entry) => readConditionTruth(entry, context));
   return {
     ...(platform === undefined ? {} : { platform }),
     ...(visible === undefined ? {} : { visible }),
     ...(notVisible === undefined ? {} : { notVisible }),
     ...(truth === undefined ? {} : { true: truth as boolean | string }),
   };
+}
+
+function readConditionTruth(
+  node: Node | null | undefined,
+  context: MaestroProgramParseContext,
+): boolean | string {
+  const value = readScalarValue(node, 'runFlow.when.true', context);
+  if (typeof value === 'boolean' || typeof value === 'string') return value;
+  invalidAt('Maestro runFlow.when.true expects a boolean or expression string.', node, context);
 }
 
 function parsePlatform(

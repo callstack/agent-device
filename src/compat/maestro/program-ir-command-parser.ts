@@ -41,6 +41,7 @@ import {
   isNullNode,
   readMapEntries,
   readOptionalBoolean,
+  readOptionalEntry,
   readOptionalNonNegativeInteger,
   readOptionalNumber,
   readOptionalString,
@@ -61,7 +62,7 @@ export function parseMaestroCommandList(
   return readSequenceItems(node, name, context).map((item) => parseMaestroCommand(item, context));
 }
 
-export function parseMaestroCommand(
+function parseMaestroCommand(
   node: Node | null | undefined,
   context: MaestroProgramParseContext,
 ): MaestroCommand {
@@ -104,64 +105,52 @@ function parseScalarCommand(
   }
 }
 
+type CommandValueParser = (
+  value: Node | null,
+  commandNode: Node,
+  context: MaestroProgramParseContext,
+) => MaestroCommand;
+
+const COMMAND_VALUE_PARSERS: Readonly<Record<string, CommandValueParser>> = {
+  launchApp: parseLaunchApp,
+  tapOn: parseMaestroTapOnCommand,
+  doubleTapOn: parseMaestroDoubleTapOnCommand,
+  longPressOn: parseMaestroLongPressOnCommand,
+  inputText: parseInputText,
+  eraseText: parseEraseText,
+  pasteText: parsePasteText,
+  openLink: parseOpenLink,
+  assertVisible: (value, node, context) => parseAssertion('assertVisible', value, node, context),
+  assertNotVisible: (value, node, context) =>
+    parseAssertion('assertNotVisible', value, node, context),
+  extendedWaitUntil: parseExtendedWaitUntil,
+  takeScreenshot: parseTakeScreenshot,
+  scroll: parseScroll,
+  scrollUntilVisible: parseScrollUntilVisible,
+  swipe: parseMaestroSwipeCommand,
+  hideKeyboard: parseHideKeyboard,
+  pressKey: parsePressKey,
+  back: parseBack,
+  waitForAnimationToEnd: parseWaitForAnimationToEnd,
+  stopApp: parseStopApp,
+  runScript: parseMaestroRunScriptCommand,
+  runFlow: (value, node, context) =>
+    parseMaestroRunFlowCommand(value, node, context, parseMaestroCommandList),
+  repeat: (value, node, context) =>
+    parseMaestroRepeatCommand(value, node, context, parseMaestroCommandList),
+  retry: (value, node, context) =>
+    parseMaestroRetryCommand(value, node, context, parseMaestroCommandList),
+};
+
 function parseCommandValue(
   name: string,
   value: Node | null,
   commandNode: Node,
   context: MaestroProgramParseContext,
 ): MaestroCommand {
-  switch (name) {
-    case 'launchApp':
-      return parseLaunchApp(value, commandNode, context);
-    case 'tapOn':
-      return parseMaestroTapOnCommand(value, commandNode, context);
-    case 'doubleTapOn':
-      return parseMaestroDoubleTapOnCommand(value, commandNode, context);
-    case 'longPressOn':
-      return parseMaestroLongPressOnCommand(value, commandNode, context);
-    case 'inputText':
-      return parseInputText(value, commandNode, context);
-    case 'eraseText':
-      return parseEraseText(value, commandNode, context);
-    case 'pasteText':
-      return parsePasteText(value, commandNode, context);
-    case 'openLink':
-      return parseOpenLink(value, commandNode, context);
-    case 'assertVisible':
-      return parseAssertion('assertVisible', value, commandNode, context);
-    case 'assertNotVisible':
-      return parseAssertion('assertNotVisible', value, commandNode, context);
-    case 'extendedWaitUntil':
-      return parseExtendedWaitUntil(value, commandNode, context);
-    case 'takeScreenshot':
-      return parseTakeScreenshot(value, commandNode, context);
-    case 'scroll':
-      return parseScroll(value, commandNode, context);
-    case 'scrollUntilVisible':
-      return parseScrollUntilVisible(value, commandNode, context);
-    case 'swipe':
-      return parseMaestroSwipeCommand(value, commandNode, context);
-    case 'hideKeyboard':
-      return parseHideKeyboard(value, commandNode, context);
-    case 'pressKey':
-      return parsePressKey(value, commandNode, context);
-    case 'back':
-      return parseBack(value, commandNode, context);
-    case 'waitForAnimationToEnd':
-      return parseWaitForAnimationToEnd(value, commandNode, context);
-    case 'stopApp':
-      return parseStopApp(value, commandNode, context);
-    case 'runScript':
-      return parseMaestroRunScriptCommand(value, commandNode, context);
-    case 'runFlow':
-      return parseMaestroRunFlowCommand(value, commandNode, context, parseMaestroCommandList);
-    case 'repeat':
-      return parseMaestroRepeatCommand(value, commandNode, context, parseMaestroCommandList);
-    case 'retry':
-      return parseMaestroRetryCommand(value, commandNode, context, parseMaestroCommandList);
-    default:
-      invalidAt(`Maestro command "${name}" is not supported.`, commandNode, context);
-  }
+  const parser = COMMAND_VALUE_PARSERS[name];
+  if (!parser) invalidAt(`Maestro command "${name}" is not supported.`, commandNode, context);
+  return parser(value, commandNode, context);
 }
 
 function parseLaunchApp(
@@ -180,25 +169,21 @@ function parseLaunchApp(
     ['appId', 'stopApp', 'clearState', 'arguments', 'launchArguments'],
     context,
   );
-  const appId = hasEntry(entries, 'appId')
-    ? readOptionalString(entryValue(entries, 'appId'), 'launchApp.appId', context)
-    : undefined;
-  const stopApp = hasEntry(entries, 'stopApp')
-    ? readOptionalBoolean(entryValue(entries, 'stopApp'), 'launchApp.stopApp', context)
-    : undefined;
-  const clearState = hasEntry(entries, 'clearState')
-    ? readOptionalBoolean(entryValue(entries, 'clearState'), 'launchApp.clearState', context)
-    : undefined;
-  const args = hasEntry(entries, 'arguments')
-    ? parseLaunchArguments(entryValue(entries, 'arguments'), 'launchApp.arguments', context)
-    : undefined;
-  const launchArguments = hasEntry(entries, 'launchArguments')
-    ? parseLaunchArguments(
-        entryValue(entries, 'launchArguments'),
-        'launchApp.launchArguments',
-        context,
-      )
-    : undefined;
+  const appId = readOptionalEntry(entries, 'appId', (entry) =>
+    readOptionalString(entry, 'launchApp.appId', context),
+  );
+  const stopApp = readOptionalEntry(entries, 'stopApp', (entry) =>
+    readOptionalBoolean(entry, 'launchApp.stopApp', context),
+  );
+  const clearState = readOptionalEntry(entries, 'clearState', (entry) =>
+    readOptionalBoolean(entry, 'launchApp.clearState', context),
+  );
+  const args = readOptionalEntry(entries, 'arguments', (entry) =>
+    parseLaunchArguments(entry, 'launchApp.arguments', context),
+  );
+  const launchArguments = readOptionalEntry(entries, 'launchArguments', (entry) =>
+    parseLaunchArguments(entry, 'launchApp.launchArguments', context),
+  );
   return {
     kind: 'launchApp',
     source,

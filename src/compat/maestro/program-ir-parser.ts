@@ -8,11 +8,10 @@ import type {
 import { parseMaestroCommandList } from './program-ir-command-parser.ts';
 import {
   assertOnlyKeys,
-  entryValue,
-  hasEntry,
   invalidAt,
   readMapEntries,
   readOptionalString,
+  readOptionalEntry,
   readScalarMap,
   sourceAt,
   type MaestroProgramParseContext,
@@ -70,21 +69,19 @@ function parseProgramConfig(node: Node, context: MaestroProgramParseContext): Ma
     ['name', 'appId', 'env', 'onFlowStart', 'onFlowComplete'],
     context,
   );
-  const name = hasEntry(entries, 'name')
-    ? readOptionalString(entryValue(entries, 'name'), 'name', context)
-    : undefined;
-  const appId = hasEntry(entries, 'appId')
-    ? readOptionalString(entryValue(entries, 'appId'), 'appId', context)
-    : undefined;
-  const env = hasEntry(entries, 'env')
-    ? readScalarMap(entryValue(entries, 'env'), 'env', context)
-    : undefined;
-  const onFlowStart = hasEntry(entries, 'onFlowStart')
-    ? parseMaestroCommandList(entryValue(entries, 'onFlowStart'), 'onFlowStart', context)
-    : undefined;
-  const onFlowComplete = hasEntry(entries, 'onFlowComplete')
-    ? parseMaestroCommandList(entryValue(entries, 'onFlowComplete'), 'onFlowComplete', context)
-    : undefined;
+  const name = readOptionalEntry(entries, 'name', (entry) =>
+    readOptionalString(entry, 'name', context),
+  );
+  const appId = readOptionalEntry(entries, 'appId', (entry) =>
+    readOptionalString(entry, 'appId', context),
+  );
+  const env = readOptionalEntry(entries, 'env', (entry) => readScalarMap(entry, 'env', context));
+  const onFlowStart = readOptionalEntry(entries, 'onFlowStart', (entry) =>
+    parseMaestroCommandList(entry, 'onFlowStart', context),
+  );
+  const onFlowComplete = readOptionalEntry(entries, 'onFlowComplete', (entry) =>
+    parseMaestroCommandList(entry, 'onFlowComplete', context),
+  );
   return {
     ...(name === undefined ? {} : { name }),
     ...(appId === undefined ? {} : { appId }),

@@ -7,6 +7,7 @@ import type {
   MaestroLongPressOnCommand,
   MaestroSelector,
   MaestroSelectorMap,
+  MaestroSourceLocation,
   MaestroSwipeCommand,
   MaestroTapOnCommand,
 } from './program-ir.ts';
@@ -17,6 +18,7 @@ import {
   invalidAt,
   readMapEntries,
   readOptionalBoolean,
+  readOptionalEntry,
   readOptionalNonNegativeInteger,
   readOptionalNumber,
   readOptionalString,
@@ -28,6 +30,26 @@ import {
 } from './program-ir-values.ts';
 
 const SELECTOR_KEYS = ['id', 'text', 'label', 'enabled', 'selected'] as const;
+
+type SelectorFieldReader = (
+  selector: MaestroSelectorMap,
+  entry: MaestroMapEntry,
+  name: string,
+  context: MaestroProgramParseContext,
+) => void;
+
+const SELECTOR_FIELD_READERS: Readonly<Record<string, SelectorFieldReader>> = {
+  id: (selector, entry, name, context) =>
+    assignStringSelector(selector, 'id', entry, name, context),
+  text: (selector, entry, name, context) =>
+    assignStringSelector(selector, 'text', entry, name, context),
+  label: (selector, entry, name, context) =>
+    assignStringSelector(selector, 'label', entry, name, context),
+  enabled: (selector, entry, name, context) =>
+    assignBooleanSelector(selector, 'enabled', entry, name, context),
+  selected: (selector, entry, name, context) =>
+    assignBooleanSelector(selector, 'selected', entry, name, context),
+};
 
 export function parseMaestroSelector(
   node: Node | null | undefined,
@@ -75,15 +97,7 @@ export function parseMaestroTapOnCommand(
   const childOf = hasEntry(entries, 'childOf')
     ? parseMaestroSelector(entryValue(entries, 'childOf'), 'tapOn.childOf', context)
     : undefined;
-  const repeat = hasEntry(entries, 'repeat')
-    ? readRequiredPositiveInteger(entryValue(entries, 'repeat'), 'tapOn.repeat', context)
-    : undefined;
-  const delay = hasEntry(entries, 'delay')
-    ? readOptionalNonNegativeInteger(entryValue(entries, 'delay'), 'tapOn.delay', context)
-    : undefined;
-  const optional = hasEntry(entries, 'optional')
-    ? readOptionalBoolean(entryValue(entries, 'optional'), 'tapOn.optional', context)
-    : undefined;
+  const options = tapOptions(entries, context, false);
   const index = hasEntry(entries, 'index')
     ? readOptionalNonNegativeInteger(entryValue(entries, 'index'), 'tapOn.index', context)
     : undefined;
@@ -91,9 +105,7 @@ export function parseMaestroTapOnCommand(
     kind: 'tapOn',
     source,
     target: selectorTarget(parseSelectorEntries(selectorEntries, 'tapOn', context)),
-    ...(repeat === undefined ? {} : { repeat }),
-    ...(delay === undefined ? {} : { delay }),
-    ...(optional === undefined ? {} : { optional }),
+    ...options,
     ...(index === undefined ? {} : { index }),
     ...(childOf === undefined ? {} : { childOf }),
   };
@@ -198,63 +210,85 @@ export function parseMaestroSwipeCommand(
   const duration = hasEntry(entries, 'duration')
     ? readOptionalNumber(entryValue(entries, 'duration'), 'swipe.duration', context)
     : undefined;
-
   if (hasEntry(entries, 'start') || hasEntry(entries, 'end')) {
-    if (hasEntry(entries, 'direction')) {
-      invalidAt(
-        'Maestro swipe cannot combine direction with start/end coordinates.',
-        commandNode,
-        context,
-      );
-    }
-    if (!hasEntry(entries, 'start') || !hasEntry(entries, 'end')) {
-      invalidAt('Maestro swipe requires both start and end coordinates.', commandNode, context);
-    }
-    const start = parsePoint(entryValue(entries, 'start'), 'swipe.start', context);
-    const end = parsePoint(entryValue(entries, 'end'), 'swipe.end', context);
-    if (start.space !== end.space) {
-      invalidAt(
-        'Maestro swipe start/end must use the same coordinate space.',
-        commandNode,
-        context,
-      );
-    }
-    return {
-      kind: 'swipe',
-      source,
-      gesture: {
-        kind: 'coordinates',
-        start,
-        end,
-        ...(duration === undefined ? {} : { duration }),
-      },
-    };
+    return parseCoordinateSwipe(entries, source, duration, commandNode, context);
   }
-
-  const hasFrom = hasEntry(entries, 'from');
-  const hasLabel = hasEntry(entries, 'label');
   const direction = hasEntry(entries, 'direction')
     ? parseMaestroDirection(entryValue(entries, 'direction'), 'swipe.direction', context)
     : undefined;
-  if (hasFrom || hasLabel) {
-    const label = hasLabel
-      ? readOptionalString(entryValue(entries, 'label'), 'swipe.label', context)
-      : undefined;
-    const from = hasFrom
-      ? parseMaestroSelector(entryValue(entries, 'from'), 'swipe.from', context)
-      : { text: label ?? '' };
-    return {
-      kind: 'swipe',
-      source,
-      gesture: {
-        kind: 'target',
-        from,
-        ...(direction === undefined ? {} : { direction }),
-        ...(duration === undefined ? {} : { duration }),
-        ...(label === undefined ? {} : { label }),
-      },
-    };
+  if (hasEntry(entries, 'from') || hasEntry(entries, 'label')) {
+    return parseTargetSwipe(entries, source, direction, duration, context);
   }
+  return parseScreenSwipe(source, direction, duration, commandNode, context);
+}
+
+function parseCoordinateSwipe(
+  entries: readonly MaestroMapEntry[],
+  source: MaestroSourceLocation,
+  duration: number | undefined,
+  commandNode: Node,
+  context: MaestroProgramParseContext,
+): MaestroSwipeCommand {
+  if (hasEntry(entries, 'direction')) {
+    invalidAt(
+      'Maestro swipe cannot combine direction with start/end coordinates.',
+      commandNode,
+      context,
+    );
+  }
+  if (!hasEntry(entries, 'start') || !hasEntry(entries, 'end')) {
+    invalidAt('Maestro swipe requires both start and end coordinates.', commandNode, context);
+  }
+  const start = parsePoint(entryValue(entries, 'start'), 'swipe.start', context);
+  const end = parsePoint(entryValue(entries, 'end'), 'swipe.end', context);
+  if (start.space !== end.space) {
+    invalidAt('Maestro swipe start/end must use the same coordinate space.', commandNode, context);
+  }
+  return {
+    kind: 'swipe',
+    source,
+    gesture: {
+      kind: 'coordinates',
+      start,
+      end,
+      ...(duration === undefined ? {} : { duration }),
+    },
+  };
+}
+
+function parseTargetSwipe(
+  entries: readonly MaestroMapEntry[],
+  source: MaestroSourceLocation,
+  direction: MaestroDirection | undefined,
+  duration: number | undefined,
+  context: MaestroProgramParseContext,
+): MaestroSwipeCommand {
+  const label = hasEntry(entries, 'label')
+    ? readOptionalString(entryValue(entries, 'label'), 'swipe.label', context)
+    : undefined;
+  const from = hasEntry(entries, 'from')
+    ? parseMaestroSelector(entryValue(entries, 'from'), 'swipe.from', context)
+    : { text: label ?? '' };
+  return {
+    kind: 'swipe',
+    source,
+    gesture: {
+      kind: 'target',
+      from,
+      ...(direction === undefined ? {} : { direction }),
+      ...(duration === undefined ? {} : { duration }),
+      ...(label === undefined ? {} : { label }),
+    },
+  };
+}
+
+function parseScreenSwipe(
+  source: MaestroSourceLocation,
+  direction: MaestroDirection | undefined,
+  duration: number | undefined,
+  commandNode: Node,
+  context: MaestroProgramParseContext,
+): MaestroSwipeCommand {
   if (direction === undefined) {
     invalidAt(
       'Maestro swipe requires direction, target, or start/end coordinates.',
@@ -265,11 +299,7 @@ export function parseMaestroSwipeCommand(
   return {
     kind: 'swipe',
     source,
-    gesture: {
-      kind: 'screen',
-      direction,
-      ...(duration === undefined ? {} : { duration }),
-    },
+    gesture: { kind: 'screen', direction, ...(duration === undefined ? {} : { duration }) },
   };
 }
 
@@ -278,19 +308,20 @@ function tapOptions(
   context: MaestroProgramParseContext,
   includeLabel: boolean,
 ): Pick<MaestroTapOnCommand, 'repeat' | 'delay' | 'optional' | 'label'> {
-  const repeat = hasEntry(entries, 'repeat')
-    ? readRequiredPositiveInteger(entryValue(entries, 'repeat'), 'tapOn.repeat', context)
+  const repeat = readOptionalEntry(entries, 'repeat', (entry) =>
+    readRequiredPositiveInteger(entry, 'tapOn.repeat', context),
+  );
+  const delay = readOptionalEntry(entries, 'delay', (entry) =>
+    readOptionalNonNegativeInteger(entry, 'tapOn.delay', context),
+  );
+  const optional = readOptionalEntry(entries, 'optional', (entry) =>
+    readOptionalBoolean(entry, 'tapOn.optional', context),
+  );
+  const label = includeLabel
+    ? readOptionalEntry(entries, 'label', (entry) =>
+        readOptionalString(entry, 'tapOn.label', context),
+      )
     : undefined;
-  const delay = hasEntry(entries, 'delay')
-    ? readOptionalNonNegativeInteger(entryValue(entries, 'delay'), 'tapOn.delay', context)
-    : undefined;
-  const optional = hasEntry(entries, 'optional')
-    ? readOptionalBoolean(entryValue(entries, 'optional'), 'tapOn.optional', context)
-    : undefined;
-  const label =
-    includeLabel && hasEntry(entries, 'label')
-      ? readOptionalString(entryValue(entries, 'label'), 'tapOn.label', context)
-      : undefined;
   return {
     ...(repeat === undefined ? {} : { repeat }),
     ...(delay === undefined ? {} : { delay }),
@@ -307,39 +338,15 @@ function parseSelectorEntries(
   if (entries.length === 0) invalidAt(`Maestro ${name} selector is empty.`, undefined, context);
   const selector: MaestroSelectorMap = {};
   for (const entry of entries) {
-    switch (entry.key) {
-      case 'id': {
-        const value = readOptionalString(entry.value, `${name}.id`, context);
-        if (value !== undefined) selector.id = value;
-        break;
-      }
-      case 'text': {
-        const value = readOptionalString(entry.value, `${name}.text`, context);
-        if (value !== undefined) selector.text = value;
-        break;
-      }
-      case 'label': {
-        const value = readOptionalString(entry.value, `${name}.label`, context);
-        if (value !== undefined) selector.label = value;
-        break;
-      }
-      case 'enabled': {
-        const value = readOptionalBoolean(entry.value, `${name}.enabled`, context);
-        if (value !== undefined) selector.enabled = value;
-        break;
-      }
-      case 'selected': {
-        const value = readOptionalBoolean(entry.value, `${name}.selected`, context);
-        if (value !== undefined) selector.selected = value;
-        break;
-      }
-      default:
-        invalidAt(
-          `Maestro ${name} selector field "${entry.key}" is not supported.`,
-          entry.keyNode,
-          context,
-        );
+    const read = SELECTOR_FIELD_READERS[entry.key];
+    if (!read) {
+      invalidAt(
+        `Maestro ${name} selector field "${entry.key}" is not supported.`,
+        entry.keyNode,
+        context,
+      );
     }
+    read(selector, entry, name, context);
   }
   if (Object.keys(selector).length === 0) {
     invalidAt(
@@ -349,6 +356,28 @@ function parseSelectorEntries(
     );
   }
   return selector;
+}
+
+function assignStringSelector(
+  selector: MaestroSelectorMap,
+  key: 'id' | 'text' | 'label',
+  entry: MaestroMapEntry,
+  name: string,
+  context: MaestroProgramParseContext,
+): void {
+  const value = readOptionalString(entry.value, `${name}.${key}`, context);
+  if (value !== undefined) selector[key] = value;
+}
+
+function assignBooleanSelector(
+  selector: MaestroSelectorMap,
+  key: 'enabled' | 'selected',
+  entry: MaestroMapEntry,
+  name: string,
+  context: MaestroProgramParseContext,
+): void {
+  const value = readOptionalBoolean(entry.value, `${name}.${key}`, context);
+  if (value !== undefined) selector[key] = value;
 }
 
 function isSelectorKey(key: string): key is (typeof SELECTOR_KEYS)[number] {
