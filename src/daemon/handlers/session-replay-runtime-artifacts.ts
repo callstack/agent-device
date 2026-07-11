@@ -2,36 +2,48 @@ import fs from 'node:fs';
 import type { DaemonResponse } from '../types.ts';
 
 export function collectReplayActionArtifactPaths(response: DaemonResponse): string[] {
-  if (!response.ok) {
-    const paths = response.error.details?.artifactPaths;
-    return Array.isArray(paths)
-      ? [
-          ...new Set(
-            paths.filter(
-              (candidate): candidate is string =>
-                typeof candidate === 'string' && isReplayArtifactPath(candidate),
-            ),
-          ),
-        ]
-      : [];
-  }
-  if (!response.data) return [];
-  const candidates: string[] = [];
-  if (typeof response.data.path === 'string') candidates.push(response.data.path);
-  if (typeof response.data.outPath === 'string') candidates.push(response.data.outPath);
-  if (Array.isArray(response.data.artifacts)) {
-    for (const artifact of response.data.artifacts) {
-      if (!artifact || typeof artifact !== 'object') continue;
-      const artifactRecord = artifact as Record<string, unknown>;
-      const localPath =
-        typeof artifactRecord.localPath === 'string' ? artifactRecord.localPath : undefined;
-      const artifactPath =
-        typeof artifactRecord.path === 'string' ? artifactRecord.path : undefined;
-      if (localPath) candidates.push(localPath);
-      else if (artifactPath) candidates.push(artifactPath);
-    }
-  }
-  return [...new Set(candidates.filter((candidate) => isReplayArtifactPath(candidate)))];
+  const candidates = response.ok
+    ? collectSuccessfulArtifactCandidates(response.data)
+    : collectFailureArtifactCandidates(response.error.details?.artifactPaths);
+  return uniqueExistingArtifactPaths(candidates);
+}
+
+type ReplayResponseData = Extract<DaemonResponse, { ok: true }>['data'];
+
+function collectFailureArtifactCandidates(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter(isString) : [];
+}
+
+function collectSuccessfulArtifactCandidates(data: ReplayResponseData): string[] {
+  if (!data) return [];
+  return [
+    readString(data.path),
+    readString(data.outPath),
+    ...collectNestedArtifactCandidates(data.artifacts),
+  ].filter(isString);
+}
+
+function collectNestedArtifactCandidates(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(readNestedArtifactPath).filter(isString);
+}
+
+function readNestedArtifactPath(value: unknown): string | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
+  const artifact = value as Record<string, unknown>;
+  return readString(artifact.localPath) ?? readString(artifact.path);
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === 'string' ? value : undefined;
+}
+
+function isString(value: unknown): value is string {
+  return typeof value === 'string';
+}
+
+function uniqueExistingArtifactPaths(candidates: string[]): string[] {
+  return [...new Set(candidates.filter(isReplayArtifactPath))];
 }
 
 function isReplayArtifactPath(candidate: string): boolean {

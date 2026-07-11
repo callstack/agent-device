@@ -12,7 +12,10 @@ import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
-import { baseReplayRequest as baseReq, writeReplayFile } from './session-replay-runtime.fixtures.ts';
+import {
+  baseReplayRequest as baseReq,
+  writeReplayFile,
+} from './session-replay-runtime.fixtures.ts';
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
 
@@ -184,7 +187,9 @@ test('resume rejects a stale --plan-digest after the script changed', async () =
 });
 
 test('resume rejects a digest from a different effective platform or target before any action', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-resume-effective-target-'));
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-replay-resume-effective-target-'),
+  );
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName));

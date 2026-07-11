@@ -145,7 +145,7 @@ test('computeReplayPlanDigest changes when target evidence consumed before actio
     { label: 'Submit' },
     { sibling: 1 },
     { viewportOrder: 1 },
-    { verification: 'unverified' as const },
+    { verification: 'unverifiable' as const },
   ]) {
     assert.notEqual(
       original,

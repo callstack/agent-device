@@ -23,3 +23,29 @@ test('collectReplayActionArtifactPaths includes existing failed action artifacts
 
   assert.deepEqual(paths, [snapshotPath]);
 });
+
+test('collectReplayActionArtifactPaths collects top-level and nested successful artifacts', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-success-artifacts-'));
+  const pathValue = path.join(root, 'path.txt');
+  const outPath = path.join(root, 'out.txt');
+  const localPath = path.join(root, 'local.txt');
+  const nestedPath = path.join(root, 'nested.txt');
+  for (const artifactPath of [pathValue, outPath, localPath, nestedPath]) {
+    fs.writeFileSync(artifactPath, 'artifact');
+  }
+
+  const paths = collectReplayActionArtifactPaths({
+    ok: true,
+    data: {
+      path: pathValue,
+      outPath,
+      artifacts: [
+        { field: 'preferred', localPath, path: nestedPath },
+        { field: 'nested', path: nestedPath },
+        { field: 'missing', path: path.join(root, 'missing.txt') },
+      ],
+    },
+  });
+
+  assert.deepEqual(paths, [pathValue, outPath, localPath, nestedPath]);
+});

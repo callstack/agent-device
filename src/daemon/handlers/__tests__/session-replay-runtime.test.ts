@@ -12,7 +12,10 @@ import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
-import { baseReplayRequest as baseReq, writeReplayFile } from './session-replay-runtime.fixtures.ts';
+import {
+  baseReplayRequest as baseReq,
+  writeReplayFile,
+} from './session-replay-runtime.fixtures.ts';
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
 

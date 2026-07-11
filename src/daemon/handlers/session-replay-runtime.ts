@@ -20,9 +20,11 @@ import {
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
   readReplayShellEnvSource,
-  type ReplayVarScope,
 } from '../../replay/vars.ts';
-import { summarizeSnapshotTimingSamples, type SnapshotTimingSample } from '../../snapshot-diagnostics.ts';
+import {
+  summarizeSnapshotTimingSamples,
+  type SnapshotTimingSample,
+} from '../../snapshot-diagnostics.ts';
 import type { ReplayCommandResult } from '../../contracts/replay.ts';
 import { collectReplayActionArtifactPaths } from './session-replay-runtime-artifacts.ts';
 import { withReplayFailureDiagnostics } from './session-replay-runtime-failure.ts';
