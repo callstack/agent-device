@@ -14,6 +14,7 @@
 | [0010 Error system conventions](0010-error-system.md) | error codes, hints, normalizeError, typed error signals |
 | [0011 Interaction Guarantee Contract](0011-interaction-guarantee-contract.md) | interaction dispatch paths, fast paths, guards, the guarantee matrix, parity tables |
 | [0012 Interactive Replay](0012-interactive-replay.md) | replay healing/`--update`, diagnostic resolution disclosure, bounded `.ad` target-binding evidence, bounded divergence wire/error handling, plan-bound replay-only `--from` semantics, and agent-supervised re-record repair ("heal-by-doing") |
+| [0013 Unified Gesture Plans](0013-unified-gesture-plans.md) | gesture API/routing, contact topology, multi-touch geometry, native pointer injection, two-finger pan |
 
 ADRs record *why*; the registries and gates they describe are the living source of truth — when
 prose and a registry disagree, the registry wins and the ADR needs a follow-up.

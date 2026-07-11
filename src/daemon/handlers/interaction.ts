@@ -14,6 +14,7 @@ import {
   ensureAndroidBlockingSystemDialogReady,
   recoverAndroidBlockingSystemDialog,
 } from '../android-system-dialog.ts';
+import { dispatchGestureViaRuntime } from './interaction-gesture.ts';
 
 export async function handleInteractionCommands(
   params: InteractionHandlerParams,
@@ -28,6 +29,11 @@ export async function handleInteractionCommands(
   }
 
   switch (params.req.command) {
+    case PUBLIC_COMMANDS.gesture:
+      return await dispatchGestureViaRuntime({
+        ...params,
+        captureSnapshotForSession,
+      });
     case PUBLIC_COMMANDS.type:
       return await dispatchTypeViaRuntime({
         ...params,

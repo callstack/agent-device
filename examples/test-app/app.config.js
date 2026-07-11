@@ -5,6 +5,7 @@ module.exports = {
   expo: {
     name: 'Agent Device Tester',
     slug: 'agent-device-test-app',
+    scheme: 'agent-device-test-app',
     version: '1.0.0',
     orientation: 'default',
     userInterfaceStyle: 'automatic',

@@ -19,18 +19,12 @@ import { isKeyboardAction, type KeyboardAction } from '../utils/keyboard-actions
 import type { DispatchContext } from './dispatch-context.ts';
 import {
   handleFillCommand,
-  handleFlingCommand,
   handleFocusCommand,
   handleLongPressCommand,
-  handlePanCommand,
-  handlePinchCommand,
   handlePressCommand,
   handleReadCommand,
-  handleRotateGestureCommand,
   handleScrollCommand,
   handleSwipeCommand,
-  handleSwipePresetCommand,
-  handleTransformGestureCommand,
   handleTypeCommand,
 } from './dispatch-interactions.ts';
 import { readNotificationPayload } from './dispatch-payload.ts';
@@ -38,6 +32,8 @@ import { parseDeviceRotation } from '../contracts/device-rotation.ts';
 import { parseTvRemoteButton } from '../contracts/tv-remote.ts';
 import { readViewportDimension } from './viewport-dimension.ts';
 import type { DescriptorDispatchCommandName } from './command-descriptor/registry.ts';
+import type { GesturePlan } from '../contracts/gesture-plan-types.ts';
+import type { Rect } from '../kernel/snapshot.ts';
 
 export { resolveTargetDevice } from './dispatch-resolve.ts';
 export type { CommandFlags, DispatchContext } from './dispatch-context.ts';
@@ -90,6 +86,46 @@ export async function dispatchCommand(
   );
 }
 
+export async function dispatchGesturePlan(
+  device: DeviceInfo,
+  plan: GesturePlan,
+  context?: DispatchContext,
+): Promise<Record<string, unknown> | void> {
+  const interactor = await getInteractor(device, {
+    requestId: context?.requestId,
+    appBundleId: context?.appBundleId,
+    verbose: context?.verbose,
+    logPath: context?.logPath,
+    traceLogPath: context?.traceLogPath,
+    iosXctestrunFile: context?.iosXctestrunFile,
+    iosXctestDerivedDataPath: context?.iosXctestDerivedDataPath,
+    iosXctestEnvDir: context?.iosXctestEnvDir,
+    runnerLeaseContext: context?.runnerLeaseContext,
+  });
+  if (!interactor.performGesture) {
+    throw new AppError('UNSUPPORTED_OPERATION', 'Gesture execution is unavailable');
+  }
+  return await interactor.performGesture(plan);
+}
+
+export async function dispatchGestureViewport(
+  device: DeviceInfo,
+  context?: DispatchContext,
+): Promise<Rect | undefined> {
+  const interactor = await getInteractor(device, {
+    requestId: context?.requestId,
+    appBundleId: context?.appBundleId,
+    verbose: context?.verbose,
+    logPath: context?.logPath,
+    traceLogPath: context?.traceLogPath,
+    iosXctestrunFile: context?.iosXctestrunFile,
+    iosXctestDerivedDataPath: context?.iosXctestDerivedDataPath,
+    iosXctestEnvDir: context?.iosXctestEnvDir,
+    runnerLeaseContext: context?.runnerLeaseContext,
+  });
+  return await interactor.gestureViewport?.();
+}
+
 type DispatchCommand = DescriptorDispatchCommandName;
 
 type DispatchHandlerArgs = {
@@ -129,10 +165,6 @@ const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
     handlePressCommand(device, interactor, positionals, context),
   swipe: ({ device, interactor, positionals, context }) =>
     handleSwipeCommand(device, interactor, positionals, context),
-  'swipe-preset': ({ device, interactor, positionals, context }) =>
-    handleSwipePresetCommand(device, interactor, positionals, context),
-  pan: ({ interactor, positionals }) => handlePanCommand(interactor, positionals),
-  fling: ({ interactor, positionals }) => handleFlingCommand(interactor, positionals),
   longpress: ({ interactor, positionals }) => handleLongPressCommand(interactor, positionals),
   focus: ({ interactor, positionals }) => handleFocusCommand(interactor, positionals),
   type: ({ interactor, positionals, context }) =>
@@ -141,12 +173,6 @@ const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
     handleFillCommand(interactor, positionals, context),
   scroll: ({ interactor, positionals, context }) =>
     handleScrollCommand(interactor, positionals, context),
-  pinch: ({ device, interactor, positionals, context }) =>
-    handlePinchCommand(device, interactor, positionals, context),
-  'rotate-gesture': ({ device, interactor, positionals }) =>
-    handleRotateGestureCommand(device, interactor, positionals),
-  'transform-gesture': ({ device, interactor, positionals }) =>
-    handleTransformGestureCommand(device, interactor, positionals),
   'trigger-app-event': ({ device, interactor, positionals, context }) =>
     handleTriggerAppEventCommand(device, interactor, positionals, context),
   screenshot: ({ interactor, positionals, outPath, context }) =>

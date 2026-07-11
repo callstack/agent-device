@@ -8,6 +8,7 @@ import {
   backAndroid,
   fillAndroid,
   focusAndroid,
+  getAndroidScreenSize,
   homeAndroid,
   longPressAndroid,
   pressAndroid,
@@ -18,6 +19,7 @@ import {
 } from '../../platforms/android/input-actions.ts';
 import {
   pinchAndroid,
+  performGestureAndroid,
   rotateGestureAndroid,
   swipeGestureAndroid,
   transformGestureAndroid,
@@ -62,6 +64,7 @@ export function createAndroidInteractor(device: DeviceInfo): Interactor {
     fill: (x, y, text, delayMs) => fillAndroid(device, x, y, text, delayMs),
     scroll: (direction, options) => scrollAndroid(device, direction, options),
     pinch: (scale, x, y) => pinchAndroid(device, { scale, x, y }),
+    performGesture: (plan) => performGestureAndroid(device, plan),
     screenshot: (outPath, options) => screenshotAndroid(device, outPath, options),
     snapshot: async (options) => {
       const result = await withDiagnosticTimer(
@@ -85,6 +88,10 @@ export function createAndroidInteractor(device: DeviceInfo): Interactor {
         backend: 'android',
         ...snapshotCaptureAnnotationsFrom(result),
       };
+    },
+    gestureViewport: async () => {
+      const size = await getAndroidScreenSize(device);
+      return { x: 0, y: 0, width: size.width, height: size.height };
     },
     back: (_mode) => backAndroid(device),
     home: () => homeAndroid(device),

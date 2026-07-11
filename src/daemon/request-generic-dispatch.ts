@@ -1,5 +1,4 @@
 import { dispatchCommand, type CommandFlags } from '../core/dispatch.ts';
-import { GESTURE_SUBCOMMAND_ERROR } from '../command-catalog.ts';
 import { requireCommandSupported } from './handlers/response.ts';
 import { SessionStore } from './session-store.ts';
 import type { DaemonCommandContext } from './context.ts';
@@ -31,15 +30,6 @@ import {
   assertSupportedScreenshotPixelDensity,
   readScreenshotResultMetadata,
 } from '../utils/screenshot-density.ts';
-
-const GESTURE_PLATFORM_COMMANDS: Readonly<Record<string, string>> = {
-  pan: 'pan',
-  fling: 'fling',
-  swipe: 'swipe-preset',
-  pinch: 'pinch',
-  rotate: 'rotate-gesture',
-  transform: 'transform-gesture',
-};
 
 export async function dispatchGenericCommand(params: {
   req: DaemonRequest;
@@ -244,35 +234,10 @@ type DispatchCommandResolution =
   | { ok: false; message: string };
 
 function resolveDispatchCommand(req: DaemonRequest): DispatchCommandResolution {
-  if (
-    req.command === 'pan' ||
-    req.command === 'fling' ||
-    req.command === 'rotate-gesture' ||
-    req.command === 'transform-gesture'
-  ) {
-    return {
-      ok: false,
-      message:
-        'Use gesture pan, gesture fling, gesture swipe, gesture rotate, or gesture transform.',
-    };
-  }
-  if (req.command !== 'gesture') {
-    return {
-      ok: true,
-      platformCommand: req.command,
-      dispatchRequest: req,
-      recordedCommand: req.command,
-    };
-  }
-  const [subcommand, ...positionals] = req.positionals ?? [];
-  const platformCommand = subcommand ? GESTURE_PLATFORM_COMMANDS[subcommand] : undefined;
-  if (!platformCommand) {
-    return { ok: false, message: GESTURE_SUBCOMMAND_ERROR };
-  }
   return {
     ok: true,
-    platformCommand,
-    dispatchRequest: { ...req, command: platformCommand, positionals },
+    platformCommand: req.command,
+    dispatchRequest: req,
     recordedCommand: req.command,
   };
 }

@@ -24,6 +24,7 @@ const batchAllowedStepKeys = new Set<string>(BATCH_DAEMON_STEP_KEYS);
 export type DaemonBatchStep = {
   command: string;
   positionals?: string[];
+  input?: Record<string, unknown>;
   flags?: Record<string, unknown>;
   runtime?: DaemonRequest['runtime'];
 };
@@ -43,6 +44,7 @@ export type BatchInvoke = (req: BatchRequest) => Promise<DaemonResponse>;
 export type NormalizedBatchStep = {
   command: string;
   positionals: string[];
+  input?: Record<string, unknown>;
   flags: Record<string, unknown>;
   runtime?: DaemonRequest['runtime'];
 };
@@ -158,7 +160,7 @@ export function validateAndNormalizeBatchSteps(
       const fields = unknownKeys.map((key) => `"${key}"`).join(', ');
       throw new AppError(
         'INVALID_ARGS',
-        `Batch step ${index + 1} has unknown field(s): ${fields}. Allowed fields: command, positionals, flags, runtime.`,
+        `Batch step ${index + 1} has unknown field(s): ${fields}. Allowed fields: command, positionals, input, flags, runtime.`,
       );
     }
     const command = normalizeBatchCommandName(step.command);
@@ -179,9 +181,13 @@ export function validateAndNormalizeBatchSteps(
     if (step.flags !== undefined && !isRecord(step.flags)) {
       throw new AppError('INVALID_ARGS', `Batch step ${index + 1} flags must be an object.`);
     }
+    if (step.input !== undefined && !isRecord(step.input)) {
+      throw new AppError('INVALID_ARGS', `Batch step ${index + 1} input must be an object.`);
+    }
     normalized.push({
       command,
       positionals: positionals as string[],
+      input: step.input as Record<string, unknown> | undefined,
       flags: (step.flags ?? {}) as Record<string, unknown>,
       runtime: parseBatchStepRuntime(step.runtime, index + 1),
     });
@@ -269,6 +275,7 @@ async function runBatchStep(
     session: sessionName,
     command: step.command,
     positionals: step.positionals,
+    input: step.input,
     flags: stepFlags,
     runtime: step.runtime === undefined ? req.runtime : step.runtime,
     meta: batchStepMeta(req.meta, isFinalStep),

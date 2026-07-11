@@ -178,11 +178,16 @@ pnpm test-app:replay:android
 
 These run the `.ad` replay suite in `examples/test-app/replays`.
 
-`gesture-lab.ad` verifies `gesture pan`, `gesture fling`, `gesture pinch`, and
-`gesture rotate` against the gesture metrics rendered by the Home screen on iOS
-and Android. Android and iOS simulator sessions also support `gesture transform`
-for a combined pan/zoom/rotate gesture. On Android, treat combined transform
-assertions as qualitative because recognizers can report non-exact centroid,
+The iOS `gesture-lab.ad` and Android `gesture-lab-android.ad` replays verify
+`gesture pan`, `gesture fling`, `gesture pinch`, and `gesture rotate` against the
+gesture metrics rendered by the Home screen. They also prove that the default pan
+does not activate an exactly-two-pointer recognizer, while
+`gesture pan ... --pointer-count 2` does without changing pinch or rotation state.
+
+Each gesture replay relaunches the app before its combined `gesture transform`
+canary, verifies the clean pan/pinch/rotate state, then checks that one atomic
+two-pointer gesture changes all three semantic states. On Android, these checks
+are intentionally qualitative because recognizers can report non-exact centroid,
 scale, and rotation values for one simultaneous two-finger gesture.
 
 To target a specific iOS simulator or an installed Expo development build, run the

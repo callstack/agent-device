@@ -1,6 +1,7 @@
 #import "RunnerSynthesizedGesture.h"
 
 #import <CoreGraphics/CoreGraphics.h>
+#import <float.h>
 #import <math.h>
 #import <objc/message.h>
 
@@ -12,6 +13,12 @@ typedef void (*RunnerMsgSendPathOffset)(id, SEL, NSTimeInterval);
 typedef void (*RunnerMsgSendAddPath)(id, SEL, id);
 typedef void (*RunnerMsgSendSetInteger)(id, SEL, NSInteger);
 typedef BOOL (*RunnerMsgSendSynthesize)(id, SEL, NSError **);
+
+static double RunnerStagedComponentProgress(double progress, int index, int count) {
+  double start = (double)index / (double)MAX(count, 1);
+  double end = (double)(index + 1) / (double)MAX(count, 1);
+  return MIN(MAX((progress - start) / (end - start), 0.0), 1.0);
+}
 
 typedef struct {
   Class recordClass;
@@ -538,16 +545,30 @@ static CGPoint RunnerPointerPointAt(
   double t,
   double side
 ) {
-  double centerX = x + dx * t;
-  double centerY = y + dy * t;
+  BOOL translates = fabs(dx) > DBL_EPSILON || fabs(dy) > DBL_EPSILON;
+  BOOL scales = fabs(scale - 1.0) > DBL_EPSILON;
+  BOOL rotates = fabs(degrees) > DBL_EPSILON;
+  int componentCount = (translates ? 1 : 0) + (scales ? 1 : 0) + (rotates ? 1 : 0);
+  int componentIndex = 0;
+  double translationProgress = translates
+    ? RunnerStagedComponentProgress(t, componentIndex++, componentCount)
+    : 0.0;
+  double scaleProgress = scales
+    ? RunnerStagedComponentProgress(t, componentIndex++, componentCount)
+    : 0.0;
+  double rotationProgress = rotates
+    ? RunnerStagedComponentProgress(t, componentIndex++, componentCount)
+    : 0.0;
+  double centerX = x + dx * translationProgress;
+  double centerY = y + dy * translationProgress;
   double startRadius = baseRadius / MAX(scale, 1.0);
   double endRadius = baseRadius;
   if (scale < 1.0) {
     startRadius = baseRadius;
     endRadius = baseRadius * scale;
   }
-  double radius = startRadius + (endRadius - startRadius) * t;
-  double angle = (-M_PI_2) + (degrees * M_PI / 180.0) * t;
+  double radius = startRadius + (endRadius - startRadius) * scaleProgress;
+  double angle = (-M_PI_2) + (degrees * M_PI / 180.0) * rotationProgress;
   return CGPointMake(centerX + cos(angle) * radius * side, centerY + sin(angle) * radius * side);
 }
 

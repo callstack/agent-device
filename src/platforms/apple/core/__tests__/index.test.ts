@@ -75,7 +75,7 @@ import {
   prepareSimulatorStatusBarForScreenshot,
 } from '../screenshot-status-bar.ts';
 import { runAppleRunnerCommand } from '../runner/runner-client.ts';
-import { iosRunnerOverrides } from '../../interactions.ts';
+import { iosRunnerOverrides, performGestureApple } from '../../interactions.ts';
 import {
   IOS_DEVICE_INSTALL_TIMEOUT_MS,
   IOS_SIMULATOR_FOCUS_TIMEOUT_MS,
@@ -88,6 +88,7 @@ import { runCmd } from '../../../../utils/exec.ts';
 import { retryWithPolicy } from '../../../../utils/retry.ts';
 import { parseIosDeviceAppsPayload, parseIosDeviceProcessesPayload } from '../devicectl.ts';
 import { PNG } from '../../../../utils/png.ts';
+import type { GesturePlan } from '../../../../contracts/gesture-plan.ts';
 
 const IOS_TEST_DEVICE: DeviceInfo = {
   platform: 'apple',
@@ -310,6 +311,43 @@ test('iosRunnerOverrides maps iOS swipe and pan durations to synthesized drag', 
     dragSemantics: 'pan',
     appBundleId: 'com.example.App',
   });
+});
+
+test('performGestureApple sends exact two-pointer pan samples through transformGesture', async () => {
+  mockRunAppleRunnerCommand.mockResolvedValue({ transformed: true });
+  const plan = twoFingerPanPlan();
+
+  const result = await performGestureApple(
+    IOS_TEST_SIMULATOR,
+    { appBundleId: 'com.example.App' },
+    {},
+    plan,
+  );
+
+  assert.deepEqual(result, { transformed: true });
+  assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
+    command: 'transformGesture',
+    x: 100,
+    y: 100,
+    dx: 20,
+    dy: 10,
+    scale: 1,
+    degrees: 0,
+    durationMs: 32,
+    gesturePlan: plan,
+    appBundleId: 'com.example.App',
+  });
+});
+
+test('performGestureApple refuses two-pointer plans on physical iOS devices', async () => {
+  await assert.rejects(
+    () => performGestureApple(IOS_TEST_DEVICE, {}, {}, twoFingerPanPlan()),
+    (error: unknown) =>
+      error instanceof AppError &&
+      error.code === 'UNSUPPORTED_OPERATION' &&
+      /only on iOS simulators/i.test(error.message),
+  );
+  assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });
 
 for (const [name, device] of [
@@ -3409,3 +3447,35 @@ exit 1
     },
   );
 });
+
+function twoFingerPanPlan(): Extract<GesturePlan, { topology: 'two' }> {
+  return {
+    topology: 'two',
+    intent: 'pan',
+    durationMs: 32,
+    viewport: { x: 0, y: 0, width: 400, height: 800 },
+    centroid: { start: { x: 100, y: 100 }, end: { x: 120, y: 110 } },
+    scale: 1,
+    rotationDegrees: 0,
+    initialSpan: 40,
+    initialAngleDegrees: -90,
+    pointers: [
+      {
+        pointerId: 0,
+        samples: [
+          { offsetMs: 0, point: { x: 100, y: 80 } },
+          { offsetMs: 16, point: { x: 110, y: 85 } },
+          { offsetMs: 32, point: { x: 120, y: 90 } },
+        ],
+      },
+      {
+        pointerId: 1,
+        samples: [
+          { offsetMs: 0, point: { x: 100, y: 120 } },
+          { offsetMs: 16, point: { x: 110, y: 125 } },
+          { offsetMs: 32, point: { x: 120, y: 130 } },
+        ],
+      },
+    ],
+  };
+}

@@ -2,12 +2,14 @@ import type { BackMode } from '../contracts/back-mode.ts';
 import type { DeviceRotation } from '../contracts/device-rotation.ts';
 import type { ScrollDirection, TransformGestureParams } from '../contracts/scroll-gesture.ts';
 import type { TvRemoteButton } from '../contracts/tv-remote.ts';
+import type { GesturePlan } from '../contracts/gesture-plan-types.ts';
 import type { SettingOptions } from '../platforms/permission-utils.ts';
 import type { SessionSurface } from '../contracts/session-surface.ts';
 import type { BackendSnapshotResult } from '../backend.ts';
 import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
 import type {
   RawSnapshotNode,
+  Rect,
   SnapshotBackend,
   SnapshotOptions as BaseSnapshotOptions,
 } from '../kernel/snapshot.ts';
@@ -135,6 +137,7 @@ export type Interactor = {
   screenshot(outPath: string, options?: ScreenshotOptions): Promise<void>;
   setViewport?(width: number, height: number): Promise<Record<string, unknown> | void>;
   snapshot(options?: SnapshotOptions): Promise<SnapshotResult>;
+  gestureViewport?(): Promise<Rect>;
   back(mode?: BackMode): Promise<void>;
   home(): Promise<void>;
   rotate(orientation: DeviceRotation): Promise<void>;
@@ -145,6 +148,7 @@ export type Interactor = {
     velocity?: number,
   ): Promise<Record<string, unknown> | void>;
   transformGesture(options: TransformGestureParams): Promise<Record<string, unknown> | void>;
+  performGesture?(plan: GesturePlan): Promise<Record<string, unknown> | void>;
   appSwitcher(): Promise<void>;
   tvRemote(button: TvRemoteButton, durationMs?: number): Promise<void>;
   readClipboard(): Promise<string>;

@@ -1,10 +1,8 @@
 import { AppError } from '../../../kernel/errors.ts';
-import type { Point, Rect, SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
+import type { Point } from '../../../kernel/snapshot.ts';
 import { centerOfRect } from '../../../kernel/snapshot.ts';
 import {
-  buildSwipePresetGesturePlan,
   parseSwipePreset,
-  type GestureReferenceFrame,
   type ScrollDirection,
   type SwipePreset,
 } from '../../../contracts/scroll-gesture.ts';
@@ -16,7 +14,6 @@ import {
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import { requireIntInRange } from '../../../utils/validation.ts';
 import { successText } from '../../../utils/success-text.ts';
-import { isNodeVisibleInEffectiveViewport } from '../../../snapshot/mobile-snapshot-semantics.ts';
 import {
   captureScrollEdgeState,
   formatScrollEdgeMessage,
@@ -46,6 +43,8 @@ import {
   planPostActionObservation,
   type SettlePostActionObservationOptions,
 } from './post-action-observation.ts';
+import { gestureCommand } from './gesture-command.ts';
+import { resolveVisibleSnapshotViewport } from './viewport.ts';
 
 export type FocusCommandOptions = CommandContext & {
   target: InteractionTarget;
@@ -263,11 +262,11 @@ export const swipeCommand: RuntimeCommand<SwipeCommandOptions, SwipeCommandResul
   runtime,
   options,
 ): Promise<SwipeCommandResult> => {
-  if (!runtime.backend.swipe) {
+  if (!runtime.backend.performGesture) {
     throw new AppError('UNSUPPORTED_OPERATION', 'swipe is not supported by this backend');
   }
   if (options.preset) {
-    return await runSwipePreset(runtime, options, runtime.backend.swipe);
+    return await runSwipePreset(runtime, options);
   }
   const resolvedFrom = await resolveSwipeFrom(runtime, options);
   const to = resolveSwipeTo(resolvedFrom.point, options);
@@ -275,13 +274,10 @@ export const swipeCommand: RuntimeCommand<SwipeCommandOptions, SwipeCommandResul
     options.durationMs === undefined
       ? undefined
       : requireIntInRange(options.durationMs, 'durationMs', 16, 10_000);
-  const backendResult = await runtime.backend.swipe(
-    toBackendContext(runtime, options),
-    resolvedFrom.point,
-    to.point,
-    { durationMs },
-  );
-  const formattedBackendResult = toBackendResult(backendResult);
+  const gesture = await gestureCommand(runtime, {
+    ...options,
+    gesture: { intent: 'swipe', from: resolvedFrom.point, to: to.point, durationMs },
+  });
   return {
     kind: 'swipe',
     from: resolvedFrom.point,
@@ -290,7 +286,7 @@ export const swipeCommand: RuntimeCommand<SwipeCommandOptions, SwipeCommandResul
     ...(to.distance !== undefined ? { distance: to.distance } : {}),
     ...(durationMs !== undefined ? { durationMs } : {}),
     ...(resolvedFrom.target ? { fromTarget: resolvedFrom.target } : {}),
-    ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
+    ...(gesture.backendResult ? { backendResult: gesture.backendResult } : {}),
     ...successText('Swiped'),
   };
 };
@@ -298,38 +294,56 @@ export const swipeCommand: RuntimeCommand<SwipeCommandOptions, SwipeCommandResul
 async function runSwipePreset(
   runtime: AgentDeviceRuntime,
   options: SwipeCommandOptions,
-  swipeBackend: NonNullable<AgentDeviceRuntime['backend']['swipe']>,
 ): Promise<SwipeCommandResult> {
-  if (options.from || options.to || options.direction || options.distance !== undefined) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'gesture swipe preset cannot be combined with from, to, direction, or distance',
-    );
-  }
+  assertSwipePresetOptions(options);
   const preset = parseSwipePreset(options.preset);
-  await assertSupportedInteractionSurface(runtime, options, 'swipe');
-  const capture = await captureInteractionSnapshot(runtime, options, false);
-  const frame = resolveSnapshotReferenceFrame(capture.snapshot.nodes);
-  const plan = buildSwipePresetGesturePlan(preset, frame);
-  const durationMs =
-    options.durationMs === undefined
-      ? undefined
-      : requireIntInRange(options.durationMs, 'durationMs', 16, 10_000);
-  const from = { x: plan.x1, y: plan.y1 };
-  const to = { x: plan.x2, y: plan.y2 };
-  const backendResult = await swipeBackend(toBackendContext(runtime, options), from, to, {
-    durationMs,
+  const durationMs = normalizeOptionalGestureDuration(options.durationMs);
+  const gesture = await gestureCommand(runtime, {
+    ...options,
+    gesture: { intent: 'swipe', preset, durationMs },
   });
-  const formattedBackendResult = toBackendResult(backendResult);
+  const { from, to } = requireGestureResultEndpoints(gesture);
+  return swipePresetResult({ from, to, preset, durationMs, gesture });
+}
+
+function assertSwipePresetOptions(options: SwipeCommandOptions): void {
+  if (!options.from && !options.to && !options.direction && options.distance === undefined) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    'gesture swipe preset cannot be combined with from, to, direction, or distance',
+  );
+}
+
+function normalizeOptionalGestureDuration(value: number | undefined): number | undefined {
+  return value === undefined ? undefined : requireIntInRange(value, 'durationMs', 16, 10_000);
+}
+
+function requireGestureResultEndpoints(result: { from?: Point; to?: Point }): {
+  from: Point;
+  to: Point;
+} {
+  if (!result.from || !result.to) {
+    throw new AppError('COMMAND_FAILED', 'Swipe plan omitted endpoints');
+  }
+  return { from: result.from, to: result.to };
+}
+
+function swipePresetResult(options: {
+  from: Point;
+  to: Point;
+  preset: SwipePreset;
+  durationMs?: number;
+  gesture: { backendResult?: Record<string, unknown> };
+}): SwipeCommandResult {
   return {
     kind: 'swipe',
-    from,
-    to,
-    preset,
-    ...(durationMs !== undefined ? { durationMs } : {}),
+    from: options.from,
+    to: options.to,
+    preset: options.preset,
+    ...(options.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
     fromTarget: { kind: 'viewport' },
-    ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
-    ...successText(`Swiped ${preset}`),
+    ...(options.gesture.backendResult ? { backendResult: options.gesture.backendResult } : {}),
+    ...successText(`Swiped ${options.preset}`),
   };
 }
 
@@ -337,7 +351,7 @@ export const pinchCommand: RuntimeCommand<PinchCommandOptions, PinchCommandResul
   runtime,
   options,
 ): Promise<PinchCommandResult> => {
-  if (!runtime.backend.pinch) {
+  if (!runtime.backend.performGesture) {
     throw new AppError('UNSUPPORTED_OPERATION', 'pinch is not supported by this backend');
   }
   await assertSupportedInteractionSurface(runtime, options, 'pinch');
@@ -353,16 +367,19 @@ export const pinchCommand: RuntimeCommand<PinchCommandOptions, PinchCommandResul
         },
       )
     : undefined;
-  const backendResult = await runtime.backend.pinch(toBackendContext(runtime, options), {
-    scale,
-    ...(centerTarget ? { center: centerTarget.point } : {}),
+  const gesture = await gestureCommand(runtime, {
+    ...options,
+    gesture: {
+      intent: 'pinch',
+      scale,
+      ...(centerTarget?.point ? { origin: centerTarget.point } : {}),
+    },
   });
-  const formattedBackendResult = toBackendResult(backendResult);
   return {
     kind: 'pinch',
     scale,
     ...(centerTarget ? { center: centerTarget.point, centerTarget } : {}),
-    ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
+    ...(gesture.backendResult ? { backendResult: gesture.backendResult } : {}),
     ...successText(`Pinched to scale ${scale}`),
   };
 };
@@ -415,7 +432,7 @@ async function resolveSwipeFrom(
   }
   await assertSupportedInteractionSurface(runtime, options, 'swipe');
   const capture = await captureInteractionSnapshot(runtime, options, false);
-  const viewport = resolveSnapshotViewport(capture.snapshot.nodes);
+  const viewport = resolveVisibleSnapshotViewport(capture.snapshot.nodes, 'directional swipe');
   return {
     point: centerOfRect(viewport),
     target: { kind: 'viewport' },
@@ -544,38 +561,4 @@ function normalizeOptionalPositiveInteger(
     throw new AppError('INVALID_ARGS', `${field} must be a positive integer`);
   }
   return value;
-}
-
-function resolveSnapshotViewport(nodes: SnapshotState['nodes']): Rect {
-  const visibleRects = nodes
-    .filter((node) => isNodeVisibleInEffectiveViewport(node, nodes))
-    .map((node) => node.rect)
-    .filter(isUsableRect);
-  const rects =
-    visibleRects.length > 0 ? visibleRects : nodes.map((node) => node.rect).filter(isUsableRect);
-  if (rects.length === 0) {
-    throw new AppError('COMMAND_FAILED', 'Cannot infer viewport for directional swipe');
-  }
-  const minX = Math.min(...rects.map((rect) => rect.x));
-  const minY = Math.min(...rects.map((rect) => rect.y));
-  const maxX = Math.max(...rects.map((rect) => rect.x + rect.width));
-  const maxY = Math.max(...rects.map((rect) => rect.y + rect.height));
-  return {
-    x: minX,
-    y: minY,
-    width: maxX - minX,
-    height: maxY - minY,
-  };
-}
-
-function resolveSnapshotReferenceFrame(nodes: SnapshotState['nodes']): GestureReferenceFrame {
-  const viewport = resolveSnapshotViewport(nodes);
-  return {
-    referenceWidth: viewport.width,
-    referenceHeight: viewport.height,
-  };
-}
-
-function isUsableRect(rect: SnapshotNode['rect']): rect is NonNullable<SnapshotNode['rect']> {
-  return Boolean(rect && rect.width > 0 && rect.height > 0);
 }

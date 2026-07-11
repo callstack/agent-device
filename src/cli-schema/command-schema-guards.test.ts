@@ -17,7 +17,6 @@ import { getCliCommandSchema } from './command-schema.ts';
 test('every public capability command has a parser schema entry', () => {
   const schemaCommands = new Set<string>(listCliCommandNames());
   for (const command of listCapabilityCommands()) {
-    if (INTERNAL_GESTURE_CAPABILITY_COMMANDS.has(command)) continue;
     assert.equal(schemaCommands.has(command), true, `Missing schema for command: ${command}`);
   }
 });
@@ -58,21 +57,8 @@ test('cli.ts command dispatch checks are recognized by parser-level unknown-comm
 });
 
 test('schema capability mappings match capability source-of-truth', () => {
-  assert.deepEqual(
-    listCapabilityCheckedCommandNames(),
-    listCapabilityCommands().filter(
-      (command) => !INTERNAL_GESTURE_CAPABILITY_COMMANDS.has(command),
-    ),
-  );
+  assert.deepEqual(listCapabilityCheckedCommandNames(), listCapabilityCommands());
 });
-
-const INTERNAL_GESTURE_CAPABILITY_COMMANDS = new Set([
-  'pan',
-  'fling',
-  'pinch',
-  'rotate-gesture',
-  'transform-gesture',
-]);
 
 function collectCliDispatchCommandLiterals(): Set<string> {
   const cliPath = fileURLToPath(new URL('../cli.ts', import.meta.url));

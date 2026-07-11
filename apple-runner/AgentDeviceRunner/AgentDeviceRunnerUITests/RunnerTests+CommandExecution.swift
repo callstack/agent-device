@@ -1471,6 +1471,14 @@ extension RunnerTests {
       }
       return handleAlert(alert, action: action)
     case .pinch:
+      if let response = executePlannedMultiTouchGesture(
+        activeApp: activeApp,
+        plan: command.gesturePlan,
+        expectedIntent: "pinch",
+        message: "pinched"
+      ) {
+        return response
+      }
       guard let scale = command.scale, scale > 0 else {
         return Response(ok: false, error: ErrorPayload(message: "pinch requires scale > 0"))
       }
@@ -1484,6 +1492,14 @@ extension RunnerTests {
     case .sequence:
       return executeSequence(command: command, activeApp: activeApp)
     case .rotateGesture:
+      if let response = executePlannedMultiTouchGesture(
+        activeApp: activeApp,
+        plan: command.gesturePlan,
+        expectedIntent: "rotate",
+        message: "rotatedGesture"
+      ) {
+        return response
+      }
       guard let degrees = command.degrees, degrees.isFinite else {
         return Response(ok: false, error: ErrorPayload(message: "rotateGesture requires degrees"))
       }
@@ -1505,6 +1521,14 @@ extension RunnerTests {
       }
       return gestureResponse(message: "rotatedGesture", timing: timing)
     case .transformGesture:
+      if let response = executePlannedMultiTouchGesture(
+        activeApp: activeApp,
+        plan: command.gesturePlan,
+        expectedIntent: command.gesturePlan?.intent == "pan" ? "pan" : "transform",
+        message: "transformedGesture"
+      ) {
+        return response
+      }
       guard
         let x = command.x,
         let y = command.y,
@@ -1544,6 +1568,37 @@ extension RunnerTests {
       }
       return gestureResponse(message: "transformedGesture", timing: timing)
     }
+  }
+
+  private func executePlannedMultiTouchGesture(
+    activeApp: XCUIApplication,
+    plan: RunnerGesturePlan?,
+    expectedIntent: String,
+    message: String
+  ) -> Response? {
+    guard let plan else { return nil }
+    guard plan.intent == expectedIntent else {
+      return Response(
+        ok: false,
+        error: ErrorPayload(
+          code: "INVALID_ARGS",
+          message: "planned gesture intent \(plan.intent) does not match \(expectedIntent)"
+        )
+      )
+    }
+    if let validationError = plannedGestureValidationError(plan) {
+      return Response(
+        ok: false,
+        error: ErrorPayload(code: "INVALID_ARGS", message: validationError)
+      )
+    }
+    let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
+      plannedMultiTouchGesture(app: activeApp, plan: plan)
+    }
+    if let response = unsupportedResponse(for: outcome) {
+      return response
+    }
+    return gestureResponse(message: message, timing: timing)
   }
 
   /// Shared drag execution for `.drag` and the fused `.scroll`. The iOS synthesized lane keeps

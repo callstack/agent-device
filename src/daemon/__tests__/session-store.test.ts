@@ -490,6 +490,15 @@ test('writeSessionLog preserves interaction series flags for click/press/swipe',
     },
     result: {},
   });
+  fixture.store.recordAction(fixture.session, {
+    command: 'gesture',
+    positionals: ['pan', '195', '443', '48', '0', '500'],
+    flags: {
+      platform: 'ios',
+      pointerCount: 2,
+    },
+    result: {},
+  });
   recordClose(fixture.store, fixture.session);
 
   const script = writeScript(fixture);
@@ -498,6 +507,7 @@ test('writeSessionLog preserves interaction series flags for click/press/swipe',
     /press 201 545 --count 4 --interval-ms 8/,
     /swipe 10 20 30 40 --count 3 --pause-ms 12 --pattern ping-pong/,
     /fill @e5 "search" --delay-ms 40/,
+    /gesture "pan" 195 443 48 0 500 --pointer-count 2/,
   ]);
 });
 

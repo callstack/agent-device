@@ -62,6 +62,7 @@ function readBatchDaemonStep(
   return {
     command: prepared.command,
     positionals: prepared.positionals,
+    ...(prepared.input ? { input: prepared.input } : {}),
     flags: buildRequestFlags(prepared.options, prepared.metadataFlags),
     runtime: runtime ?? prepared.options.runtime,
   };

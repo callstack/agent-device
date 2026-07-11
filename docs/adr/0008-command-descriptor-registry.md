@@ -77,7 +77,7 @@ As of 2026-07, the descriptor registry is live for command identity (`PUBLIC_COM
 `INTERNAL_COMMANDS`, and local CLI names), daemon registry traits, capability matrix,
 structured-batch allowlist, daemon-client timeout policy, MCP exposure list,
 capability-checked CLI command list, post-action observation traits, and the platform dispatch
-command set (including dispatch-only aliases such as `read` and `swipe-preset`). Command-family
+command set (including the remaining dispatch-only alias `read`). Command-family
 surface metadata still lives under `src/commands/**`, where the CLI grammar and client-backed
 executors already live, but it is coherence-guarded against the descriptor CLI catalog so new
 surface names cannot drift from the descriptor root.

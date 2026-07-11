@@ -137,21 +137,9 @@ test('command family facets keep daemon writers as an explicit projection subset
   const metadataNames = new Set<string>(
     listCommandFamilyMetadata().map((metadata) => metadata.name),
   );
-  const projectionAliases = new Set([
-    'gesture-fling',
-    'gesture-pan',
-    'gesture-pinch',
-    'gesture-rotate',
-    'gesture-swipe',
-    'gesture-transform',
-  ]);
-
   assert.ok(writerNames.length > 0);
   for (const name of writerNames) {
-    assert.ok(
-      metadataNames.has(name) || projectionAliases.has(name),
-      `${name} daemon writer must belong to command metadata or projection aliases`,
-    );
+    assert.ok(metadataNames.has(name), `${name} daemon writer must belong to command metadata`);
   }
 });
 

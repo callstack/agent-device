@@ -128,19 +128,29 @@ test('Provider-backed integration iOS Settings flow uses scripted simctl and run
         {
           name: 'pinch current app',
           command: 'gesture',
-          positionals: ['pinch', '0.8', '196', '122'],
+          input: { kind: 'pinch', scale: 0.8, origin: { x: 196, y: 122 } },
           expectData: { scale: 0.8, x: 196, y: 122 },
         },
         {
           name: 'pan current app',
           command: 'gesture',
-          positionals: ['pan', '196', '122', '80', '0', '500'],
+          input: {
+            kind: 'pan',
+            origin: { x: 196, y: 122 },
+            delta: { x: 80, y: 0 },
+            durationMs: 500,
+          },
           expectData: { x: 196, y: 122, dx: 80, dy: 0, x2: 276, y2: 122, durationMs: 500 },
         },
         {
           name: 'fling current app',
           command: 'gesture',
-          positionals: ['fling', 'right', '196', '122', '180'],
+          input: {
+            kind: 'fling',
+            direction: 'right',
+            origin: { x: 196, y: 122 },
+            distance: 180,
+          },
           expectData: {
             direction: 'right',
             x: 196,
@@ -154,13 +164,20 @@ test('Provider-backed integration iOS Settings flow uses scripted simctl and run
         {
           name: 'rotate current app content',
           command: 'gesture',
-          positionals: ['rotate', '35', '196', '122'],
+          input: { kind: 'rotate', degrees: 35, origin: { x: 196, y: 122 } },
           expectData: { degrees: 35, x: 196, y: 122, velocity: 1 },
         },
         {
           name: 'transform current app content',
           command: 'gesture',
-          positionals: ['transform', '196', '122', '40', '-20', '1.5', '35', '700'],
+          input: {
+            kind: 'transform',
+            origin: { x: 196, y: 122 },
+            delta: { x: 40, y: -20 },
+            scale: 1.5,
+            degrees: 35,
+            durationMs: 700,
+          },
           expectData: {
             x: 196,
             y: 122,

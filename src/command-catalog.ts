@@ -14,10 +14,6 @@ export const SPECIAL_CLI_COMMANDS = {
   help: 'help',
 } as const;
 
-export const GESTURE_KINDS = ['pan', 'fling', 'swipe', 'pinch', 'rotate', 'transform'] as const;
-export type GestureKind = (typeof GESTURE_KINDS)[number];
-export const GESTURE_SUBCOMMAND_ERROR = `gesture requires one of: ${GESTURE_KINDS.join(', ')}`;
-
 export type PublicCommandName = DescriptorCommandNameForCatalogGroup<'public'>;
 export type InternalCommandName = DescriptorCommandNameForCatalogGroup<'internal'>;
 export type LocalCliCommandName = DescriptorCommandNameForCatalogGroup<'local-cli'>;

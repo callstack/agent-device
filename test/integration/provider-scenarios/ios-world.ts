@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { DeviceInventoryRequest } from '../../../src/core/dispatch-resolve.ts';
+import { buildGesturePlan } from '../../../src/contracts/gesture-plan.ts';
 import type { RawSnapshotNode } from '../../../src/kernel/snapshot.ts';
 import type { ProviderScenarioTranscript } from './transcript.ts';
 import {
@@ -25,6 +26,8 @@ type IosSettingsWorld = {
   appPath: string;
   close: () => Promise<void>;
 };
+
+const IOS_SETTINGS_VIEWPORT = { x: 0, y: 0, width: 393, height: 852 } as const;
 
 export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
   const { tempRoot, appPath } = createDemoIosApp('agent-device-provider-scenario-ios-deploy-');
@@ -52,6 +55,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       },
       result: { tapped: true },
     },
+    runnerSnapshot(),
     {
       command: 'ios.runner.pinch',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
@@ -61,6 +65,10 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
         scale: 0.8,
         x: 196,
         y: 122,
+        gesturePlan: buildGesturePlan(
+          { intent: 'pinch', origin: { x: 196, y: 122 }, scale: 0.8 },
+          IOS_SETTINGS_VIEWPORT,
+        ),
         appBundleId: 'com.apple.Preferences',
       },
       result: { pinched: true },
@@ -99,6 +107,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       },
       result: { flung: true },
     },
+    runnerSnapshot(),
     {
       command: 'ios.runner.rotateGesture',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
@@ -109,10 +118,15 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
         x: 196,
         y: 122,
         velocity: 1,
+        gesturePlan: buildGesturePlan(
+          { intent: 'rotate', origin: { x: 196, y: 122 }, degrees: 35, velocity: 1 },
+          IOS_SETTINGS_VIEWPORT,
+        ),
         appBundleId: 'com.apple.Preferences',
       },
       result: { rotated: true },
     },
+    runnerSnapshot(),
     {
       command: 'ios.runner.transformGesture',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
@@ -126,6 +140,17 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
         scale: 1.5,
         degrees: 35,
         durationMs: 700,
+        gesturePlan: buildGesturePlan(
+          {
+            intent: 'transform',
+            origin: { x: 196, y: 122 },
+            delta: { x: 40, y: -20 },
+            scale: 1.5,
+            degrees: 35,
+            durationMs: 700,
+          },
+          IOS_SETTINGS_VIEWPORT,
+        ),
         appBundleId: 'com.apple.Preferences',
       },
       result: { transformed: true },
@@ -366,6 +391,15 @@ function runnerSnapshot() {
           label: 'General',
           identifier: 'General',
           rect: { x: 16, y: 100, width: 360, height: 44 },
+          enabled: true,
+          hittable: true,
+        },
+        {
+          index: 1,
+          type: 'XCUIElementTypeApplication',
+          label: 'Settings',
+          identifier: 'com.apple.Preferences',
+          rect: IOS_SETTINGS_VIEWPORT,
           enabled: true,
           hittable: true,
         },

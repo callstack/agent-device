@@ -54,16 +54,6 @@ const supportsHostOrSimulatorSurface = (device: DeviceInfo): boolean => {
     : device.kind === 'simulator';
 };
 
-// `pinch`/`rotate-gesture`/`transform-gesture` (was `android || (ios && simulator &&
-// target !== 'tv')`). Apple: the OS multi-touch model AND a simulator (physical iOS
-// cannot synthesize). Off Apple: only `android`.
-const supportsSynthesisGesture = (device: DeviceInfo): boolean => {
-  const caps = appleOsCapabilities(device);
-  return caps
-    ? caps.multiTouchSynthesis && device.kind === 'simulator'
-    : device.platform === 'android';
-};
-
 // `tv-remote` is Android-TV or tvOS only. Off Apple this preserves the Android-TV
 // branch so the relocated Apple closure stays equivalent to the full original
 // supports predicate under the parity guard; the closure is only consulted for Apple
@@ -71,19 +61,6 @@ const supportsSynthesisGesture = (device: DeviceInfo): boolean => {
 const supportsTvRemote = (device: DeviceInfo): boolean => {
   if (device.platform === 'android') return device.target === 'tv';
   return isTvOsDevice(device);
-};
-
-const synthesisGestureUnsupportedHint = (device: DeviceInfo): string | undefined => {
-  const caps = appleOsCapabilities(device);
-  if (!caps) return undefined; // non-Apple: no multi-touch gate, no hint
-  // OS-level block (macOS: no multi-touch; tvOS: no touch) comes from the table.
-  if (caps.multiTouchUnsupportedHint) return caps.multiTouchUnsupportedHint;
-  // iOS family: multi-touch exists but synthesis is simulator-only — the remaining
-  // block is the kind-shaped physical-device case, kept device-shaped in the leaf
-  // rather than flattened into the table (do-not-flatten; see docs/adr/0009).
-  if (device.kind === 'device')
-    return 'Two-finger gesture synthesis is iOS-simulator only — not available on physical iOS devices.';
-  return undefined;
 };
 
 // Per-command support gates the Apple family applies by default, keyed exactly as in
@@ -108,9 +85,6 @@ const APPLE_SUPPORTS_BY_DEFAULT: Record<string, (device: DeviceInfo) => boolean>
   [PUBLIC_COMMANDS.settings]: (device) =>
     device.platform === 'android' || supportsHostOrSimulatorSurface(device),
   [PUBLIC_COMMANDS.audio]: isAudioProbeSupportedDevice,
-  pinch: supportsSynthesisGesture,
-  'rotate-gesture': supportsSynthesisGesture,
-  'transform-gesture': supportsSynthesisGesture,
 };
 
 const APPLE_UNSUPPORTED_HINT_BY_DEFAULT: Record<
@@ -127,9 +101,6 @@ const APPLE_UNSUPPORTED_HINT_BY_DEFAULT: Record<
         : isTvOsDevice(device)
           ? undefined
           : 'tv-remote is supported only on tvOS devices.',
-  pinch: synthesisGestureUnsupportedHint,
-  'rotate-gesture': synthesisGestureUnsupportedHint,
-  'transform-gesture': synthesisGestureUnsupportedHint,
 };
 
 // The Apple plugin WRAPS today's existing factories (its `createInteractor` in

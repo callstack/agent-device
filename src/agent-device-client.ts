@@ -53,6 +53,12 @@ import type {
   MaterializationReleaseOptions,
   MetroPrepareOptions,
   MetroPrepareResult,
+  PanOptions,
+  FlingOptions,
+  SwipeGestureOptions,
+  PinchOptions,
+  RotateGestureOptions,
+  TransformGestureOptions,
 } from './client/client-types.ts';
 import type { CommandResult } from './core/command-descriptor/command-result.ts';
 import {
@@ -65,6 +71,7 @@ import { readSnapshotDiagnosticsSummary } from './snapshot-diagnostics.ts';
 import type { CommandFlags } from './core/dispatch-context.ts';
 import type { AgentArtifactsResult } from './cloud-artifacts.ts';
 import type { ProjectedNavigationCommandClient } from './commands/system/navigation-projection.ts';
+import { AppError } from './kernel/errors.ts';
 
 type ProjectedSystemCommandClient = ProjectedNavigationCommandClient<InternalRequestOptions> &
   Pick<AgentDeviceCommandClient, 'appState' | 'keyboard' | 'clipboard'>;
@@ -86,12 +93,14 @@ export function createAgentDeviceClient(
     positionals: string[] = [],
     options: InternalRequestOptions = {},
     metadataFlags?: Partial<CommandFlags>,
+    input?: Record<string, unknown>,
   ): Promise<Record<string, unknown>> => {
     const merged = mergeClientOptions(config, options);
     const response = await transport({
       session: resolveSessionName(merged.session),
       command,
       positionals,
+      ...(input ? { input } : {}),
       flags: buildRequestFlags(merged, metadataFlags),
       runtime: merged.runtime,
       meta: buildMeta(merged),
@@ -118,6 +127,7 @@ export function createAgentDeviceClient(
       request.positionals,
       request.options,
       request.metadataFlags,
+      request.input,
     )) as T;
   };
 
@@ -352,16 +362,19 @@ export function createAgentDeviceClient(
       press: async (options) => await executeCommand('press', options),
       longPress: async (options) => await executeCommand('longpress', options),
       swipe: async (options) => await executeCommand('swipe', options),
-      pan: async (options) => await executeCommand('gesture-pan', options),
-      fling: async (options) => await executeCommand('gesture-fling', options),
-      swipeGesture: async (options) => await executeCommand('gesture-swipe', options),
+      pan: async (options) => await executeCommand('gesture', panGestureInput(options)),
+      fling: async (options) => await executeCommand('gesture', flingGestureInput(options)),
+      swipeGesture: async (options) =>
+        await executeCommand('gesture', swipePresetGestureInput(options)),
       focus: async (options) => await executeCommand('focus', options),
       type: async (options) => await executeCommand('type', options),
       fill: async (options) => await executeCommand('fill', options),
       scroll: async (options) => await executeCommand('scroll', options),
-      pinch: async (options) => await executeCommand('gesture-pinch', options),
-      rotateGesture: async (options) => await executeCommand('gesture-rotate', options),
-      transformGesture: async (options) => await executeCommand('gesture-transform', options),
+      pinch: async (options) => await executeCommand('gesture', pinchGestureInput(options)),
+      rotateGesture: async (options) =>
+        await executeCommand('gesture', rotateGestureInput(options)),
+      transformGesture: async (options) =>
+        await executeCommand('gesture', transformGestureInput(options)),
       get: async (options) => await executeCommand('get', options),
       is: async (options) => await executeCommand('is', options),
       find: async (options) => await executeCommand('find', options),
@@ -395,6 +408,65 @@ export function createAgentDeviceClient(
       update: async (options) => await executeCommand('settings', options),
     },
   };
+}
+
+function panGestureInput(options: PanOptions): InternalRequestOptions & Record<string, unknown> {
+  const { x, y, dx, dy, ...common } = options;
+  return { ...common, kind: 'pan', origin: { x, y }, delta: { x: dx, y: dy } };
+}
+
+function flingGestureInput(
+  options: FlingOptions,
+): InternalRequestOptions & Record<string, unknown> {
+  const { x, y, ...common } = options;
+  return { ...common, kind: 'fling', origin: { x, y } };
+}
+
+function swipePresetGestureInput(
+  options: SwipeGestureOptions,
+): InternalRequestOptions & Record<string, unknown> {
+  return { ...options, kind: 'swipe' };
+}
+
+function pinchGestureInput(
+  options: PinchOptions,
+): InternalRequestOptions & Record<string, unknown> {
+  const { x, y, ...common } = options;
+  assertCompleteGestureCenter(x, y, 'pinch');
+  return {
+    ...common,
+    kind: 'pinch',
+    ...(x === undefined && y === undefined ? {} : { origin: { x, y } }),
+  };
+}
+
+function rotateGestureInput(
+  options: RotateGestureOptions,
+): InternalRequestOptions & Record<string, unknown> {
+  const { x, y, ...common } = options;
+  assertCompleteGestureCenter(x, y, 'rotate');
+  return {
+    ...common,
+    kind: 'rotate',
+    ...(x === undefined && y === undefined ? {} : { origin: { x, y } }),
+  };
+}
+
+function transformGestureInput(
+  options: TransformGestureOptions,
+): InternalRequestOptions & Record<string, unknown> {
+  const { x, y, dx, dy, ...common } = options;
+  return { ...common, kind: 'transform', origin: { x, y }, delta: { x: dx, y: dy } };
+}
+
+function assertCompleteGestureCenter(
+  x: number | undefined,
+  y: number | undefined,
+  gesture: 'pinch' | 'rotate',
+): void {
+  if ((x === undefined) !== (y === undefined)) {
+    throw new AppError('INVALID_ARGS', `gesture ${gesture} center requires both x and y`);
+  }
 }
 
 function normalizeSnapshotResult(

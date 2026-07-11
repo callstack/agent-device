@@ -92,6 +92,30 @@ test('Provider-backed integration Android touch provider handles multi-touch ges
         ...world.selection,
       });
 
+      const oneFingerPan = await client.interactions.pan({
+        x: 195,
+        y: 320,
+        dx: 20,
+        dy: 0,
+        durationMs: 500,
+        ...world.selection,
+      });
+      assert.equal(oneFingerPan.pointerCount, undefined);
+      assert.equal(world.daemon.session()?.actions.at(-1)?.flags.pointerCount, undefined);
+
+      const twoFingerPan = await client.interactions.pan({
+        x: 195,
+        y: 320,
+        dx: 40,
+        dy: -20,
+        pointerCount: 2,
+        durationMs: 500,
+        ...world.selection,
+      });
+      assert.equal(twoFingerPan.pointerCount, 2);
+      assert.equal(twoFingerPan.backend, 'provider-native-touch');
+      assert.equal(world.daemon.session()?.actions.at(-1)?.flags.pointerCount, 2);
+
       const pinch = await client.interactions.pinch({
         scale: 2,
         x: 195,
@@ -124,24 +148,93 @@ test('Provider-backed integration Android touch provider handles multi-touch ges
       assert.equal(transform.degrees, 35);
       assert.equal(transform.backend, 'provider-native-touch');
 
-      assert.deepEqual(world.touchInjectionCalls, [
-        { kind: 'swipe', x1: 340, y1: 400, x2: 60, y2: 400, durationMs: 300 },
-        { kind: 'pinch', x: 195, y: 320, scale: 2, durationMs: undefined },
-        { kind: 'rotate', x: 195, y: 320, degrees: 145, durationMs: undefined },
+      const touchCalls = world.touchInjectionCalls.map(({ plan, ...request }) => ({
+        request,
+        plan:
+          plan === undefined
+            ? undefined
+            : {
+                topology: plan.topology,
+                intent: plan.intent,
+                pointerCount: plan.pointers.length,
+                durationMs: plan.durationMs,
+              },
+      }));
+      assert.deepEqual(touchCalls, [
         {
-          kind: 'transform',
-          x: 195,
-          y: 320,
-          dx: 40,
-          dy: -20,
-          scale: 1.5,
-          degrees: 35,
-          durationMs: 700,
+          request: { kind: 'swipe', x1: 340, y1: 400, x2: 60, y2: 400, durationMs: 300 },
+          plan: undefined,
+        },
+        {
+          request: {
+            kind: 'swipe',
+            x1: 195,
+            y1: 320,
+            x2: 215,
+            y2: 320,
+            durationMs: 500,
+            intent: 'pan',
+          },
+          plan: { topology: 'single', intent: 'pan', pointerCount: 1, durationMs: 500 },
+        },
+        {
+          request: {
+            kind: 'transform',
+            x: 195,
+            y: 320,
+            dx: 40,
+            dy: -20,
+            scale: 1,
+            degrees: 0,
+            intent: 'pan',
+            durationMs: 500,
+          },
+          plan: { topology: 'two', intent: 'pan', pointerCount: 2, durationMs: 500 },
+        },
+        {
+          request: {
+            kind: 'pinch',
+            x: 195,
+            y: 320,
+            scale: 2,
+            intent: 'pinch',
+            durationMs: 300,
+          },
+          plan: { topology: 'two', intent: 'pinch', pointerCount: 2, durationMs: 300 },
+        },
+        {
+          request: {
+            kind: 'rotate',
+            x: 195,
+            y: 320,
+            degrees: 145,
+            intent: 'rotate',
+            durationMs: 784,
+          },
+          plan: { topology: 'two', intent: 'rotate', pointerCount: 2, durationMs: 784 },
+        },
+        {
+          request: {
+            kind: 'transform',
+            x: 195,
+            y: 320,
+            dx: 40,
+            dy: -20,
+            scale: 1.5,
+            degrees: 35,
+            intent: 'transform',
+            durationMs: 700,
+          },
+          plan: { topology: 'two', intent: 'transform', pointerCount: 2, durationMs: 700 },
         },
       ]);
       assert.equal(
         world.adbCalls.some(
-          (call) => call[0] === 'shell' && call[1] === 'am' && call[2] === 'instrument',
+          (call) =>
+            call[0] === 'shell' &&
+            call[1] === 'am' &&
+            call[2] === 'instrument' &&
+            call.includes('com.callstack.agentdevice.multitouchhelper/.MultiTouchInstrumentation'),
         ),
         false,
         JSON.stringify(world.adbCalls),

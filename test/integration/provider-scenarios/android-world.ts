@@ -350,6 +350,9 @@ function androidForegroundWindowDump(foreground: string | null): string {
 }
 
 function androidMetricsAdbResult(key: string): AndroidAdbResult | undefined {
+  if (key === 'shell wm size') {
+    return { stdout: 'Physical size: 1080x1920\n', stderr: '', exitCode: 0 };
+  }
   if (key === 'shell dumpsys cpuinfo') {
     return {
       stdout: [

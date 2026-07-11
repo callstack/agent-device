@@ -8,6 +8,7 @@ import android.util.Base64;
 import android.view.InputDevice;
 import android.view.MotionEvent;
 import java.nio.charset.StandardCharsets;
+import org.json.JSONArray;
 import org.json.JSONObject;
 
 public final class MultiTouchInstrumentation extends Instrumentation {
@@ -72,13 +73,21 @@ public final class MultiTouchInstrumentation extends Instrumentation {
         && !"transform".equals(kind)) {
       throw new IllegalArgumentException("Unsupported kind: " + kind);
     }
-    int x = "swipe".equals(kind) ? payload.getInt("x1") : payload.getInt("x");
-    int y = "swipe".equals(kind) ? payload.getInt("y1") : payload.getInt("y");
+    boolean hasPlannedPointers = payload.has("pointers");
+    int x = hasPlannedPointers
+        ? 0
+        : ("swipe".equals(kind) ? payload.getInt("x1") : payload.getInt("x"));
+    int y = hasPlannedPointers
+        ? 0
+        : ("swipe".equals(kind) ? payload.getInt("y1") : payload.getInt("y"));
     int dx = payload.optInt("dx", 0);
     int dy = payload.optInt("dy", 0);
     int x2 = payload.optInt("x2", x + dx);
     int y2 = payload.optInt("y2", y + dy);
-    int durationMs = clamp(payload.optInt("durationMs", 300), MIN_DURATION_MS, MAX_DURATION_MS);
+    int requestedDurationMs = payload.optInt("durationMs", 300);
+    int durationMs = hasPlannedPointers
+        ? requireInRange(requestedDurationMs, MIN_DURATION_MS, MAX_DURATION_MS, "durationMs")
+        : clamp(requestedDurationMs, MIN_DURATION_MS, MAX_DURATION_MS);
     int radius = clamp(payload.optInt("radius", DEFAULT_RADIUS), MIN_RADIUS, MAX_RADIUS);
     double scale = payload.optDouble("scale", 1.0d);
     double degrees = payload.optDouble("degrees", 0.0d);
@@ -88,10 +97,17 @@ public final class MultiTouchInstrumentation extends Instrumentation {
     if (("rotate".equals(kind) || "transform".equals(kind)) && !isFinite(degrees)) {
       throw new IllegalArgumentException("Degrees must be finite");
     }
-    return new GestureSpec(kind, x, y, dx, dy, x2, y2, durationMs, scale, degrees, radius);
+    PlannedPointerPath[] plannedPointers = hasPlannedPointers
+        ? readPlannedPointers(payload.getJSONArray("pointers"), kind, durationMs)
+        : null;
+    return new GestureSpec(
+        kind, x, y, dx, dy, x2, y2, durationMs, scale, degrees, radius, plannedPointers);
   }
 
   private int injectGesture(GestureSpec spec) {
+    if (spec.plannedPointers != null) {
+      return injectPlannedGesture(spec);
+    }
     if ("swipe".equals(spec.kind)) {
       return injectSinglePointerGesture(spec);
     }
@@ -146,6 +162,115 @@ public final class MultiTouchInstrumentation extends Instrumentation {
           true);
       count += 1;
       activePointers = end.firstOnly();
+      injectScheduledEvent(
+          automation,
+          motionEvent(downTime, eventTime + 8, MotionEvent.ACTION_UP, activePointers),
+          true);
+      count += 1;
+      return count;
+    } catch (RuntimeException error) {
+      if (count > 0) {
+        injectCancel(automation, downTime, eventTime + 16, activePointers);
+      }
+      throw error;
+    }
+  }
+
+  private int injectPlannedGesture(GestureSpec spec) {
+    return spec.plannedPointers.length == 1
+        ? injectPlannedSinglePointerGesture(spec)
+        : injectPlannedTwoPointerGesture(spec);
+  }
+
+  private int injectPlannedSinglePointerGesture(GestureSpec spec) {
+    UiAutomation automation = getUiAutomation();
+    long downTime = SystemClock.uptimeMillis();
+    long eventTime = downTime;
+    PointerPair activePointer = plannedPointerPairAt(spec, 0);
+    int count = 0;
+
+    try {
+      injectScheduledEvent(
+          automation,
+          motionEvent(downTime, eventTime, MotionEvent.ACTION_DOWN, activePointer),
+          true);
+      count += 1;
+
+      int lastIndex = spec.plannedPointers[0].samples.length - 1;
+      for (int index = 1; index <= lastIndex; index += 1) {
+        activePointer = plannedPointerPairAt(spec, index);
+        eventTime = downTime + spec.plannedPointers[0].samples[index].offsetMs;
+        injectScheduledEvent(
+            automation,
+            motionEvent(downTime, eventTime, MotionEvent.ACTION_MOVE, activePointer),
+            false);
+        count += 1;
+      }
+
+      injectScheduledEvent(
+          automation,
+          motionEvent(downTime, eventTime, MotionEvent.ACTION_UP, activePointer),
+          true);
+      count += 1;
+      return count;
+    } catch (RuntimeException error) {
+      if (count > 0) {
+        injectCancel(automation, downTime, eventTime + 16, activePointer);
+      }
+      throw error;
+    }
+  }
+
+  private int injectPlannedTwoPointerGesture(GestureSpec spec) {
+    UiAutomation automation = getUiAutomation();
+    long downTime = SystemClock.uptimeMillis();
+    long eventTime = downTime;
+    PointerPair start = plannedPointerPairAt(spec, 0);
+    PointerPair activePointers = start.firstOnly();
+    int count = 0;
+
+    try {
+      injectScheduledEvent(
+          automation,
+          motionEvent(downTime, eventTime, MotionEvent.ACTION_DOWN, activePointers),
+          true);
+      count += 1;
+
+      long firstMoveOffset = spec.plannedPointers[0].samples[1].offsetMs;
+      long secondPointerOffset = Math.max(1, Math.min(8, firstMoveOffset - 1));
+      eventTime = downTime + secondPointerOffset;
+      injectScheduledEvent(
+          automation,
+          motionEvent(
+              downTime,
+              eventTime,
+              MotionEvent.ACTION_POINTER_DOWN | (1 << MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+              start),
+          true);
+      count += 1;
+      activePointers = start;
+
+      int lastIndex = spec.plannedPointers[0].samples.length - 1;
+      for (int index = 1; index <= lastIndex; index += 1) {
+        activePointers = plannedPointerPairAt(spec, index);
+        eventTime = downTime + spec.plannedPointers[0].samples[index].offsetMs;
+        injectScheduledEvent(
+            automation,
+            motionEvent(downTime, eventTime, MotionEvent.ACTION_MOVE, activePointers),
+            false);
+        count += 1;
+      }
+
+      injectScheduledEvent(
+          automation,
+          motionEvent(
+              downTime,
+              eventTime,
+              MotionEvent.ACTION_POINTER_UP | (1 << MotionEvent.ACTION_POINTER_INDEX_SHIFT),
+              activePointers),
+          true);
+      count += 1;
+      activePointers = activePointers.firstOnly();
       injectScheduledEvent(
           automation,
           motionEvent(downTime, eventTime + 8, MotionEvent.ACTION_UP, activePointers),
@@ -314,8 +439,87 @@ public final class MultiTouchInstrumentation extends Instrumentation {
         });
   }
 
+  private static PlannedPointerPath[] readPlannedPointers(
+      JSONArray pointers, String kind, int durationMs) throws Exception {
+    int expectedCount = "swipe".equals(kind) ? 1 : 2;
+    if (pointers.length() != expectedCount) {
+      throw new IllegalArgumentException(
+          "Planned " + kind + " gesture requires exactly " + expectedCount + " pointer paths");
+    }
+    PlannedPointerPath[] result = new PlannedPointerPath[expectedCount];
+    for (int pointerIndex = 0; pointerIndex < expectedCount; pointerIndex += 1) {
+      JSONObject pointer = pointers.getJSONObject(pointerIndex);
+      int pointerId = pointer.getInt("pointerId");
+      if (pointerId != pointerIndex) {
+        throw new IllegalArgumentException("Planned pointer ids must be ordered from 0");
+      }
+      JSONArray samples = pointer.getJSONArray("samples");
+      if (samples.length() < 2) {
+        throw new IllegalArgumentException("Planned pointer path requires at least two samples");
+      }
+      PlannedPointerSample[] parsedSamples = new PlannedPointerSample[samples.length()];
+      long previousOffsetMs = -1;
+      for (int sampleIndex = 0; sampleIndex < samples.length(); sampleIndex += 1) {
+        JSONObject sample = samples.getJSONObject(sampleIndex);
+        double rawOffsetMs = sample.getDouble("offsetMs");
+        double x = sample.getDouble("x");
+        double y = sample.getDouble("y");
+        if (!isFinite(rawOffsetMs) || rawOffsetMs != Math.rint(rawOffsetMs)) {
+          throw new IllegalArgumentException("Planned sample offsetMs must be a finite integer");
+        }
+        if (!isFinite(x) || !isFinite(y)) {
+          throw new IllegalArgumentException("Planned sample coordinates must be finite");
+        }
+        long offsetMs = (long) rawOffsetMs;
+        if (offsetMs <= previousOffsetMs) {
+          throw new IllegalArgumentException("Planned sample offsets must be strictly increasing");
+        }
+        parsedSamples[sampleIndex] = new PlannedPointerSample(offsetMs, (float) x, (float) y);
+        previousOffsetMs = offsetMs;
+      }
+      if (parsedSamples[0].offsetMs != 0
+          || parsedSamples[parsedSamples.length - 1].offsetMs != durationMs) {
+        throw new IllegalArgumentException(
+            "Planned pointer path must start at 0 and end at durationMs");
+      }
+      result[pointerIndex] = new PlannedPointerPath(pointerId, parsedSamples);
+    }
+    if (expectedCount == 2) {
+      PlannedPointerSample[] first = result[0].samples;
+      PlannedPointerSample[] second = result[1].samples;
+      if (first.length != second.length) {
+        throw new IllegalArgumentException("Planned pointer paths must have matching samples");
+      }
+      for (int index = 0; index < first.length; index += 1) {
+        if (first[index].offsetMs != second[index].offsetMs) {
+          throw new IllegalArgumentException("Planned pointer sample offsets must match");
+        }
+      }
+    }
+    return result;
+  }
+
+  private static PointerPair plannedPointerPairAt(GestureSpec spec, int sampleIndex) {
+    int pointerCount = spec.plannedPointers.length;
+    float[] x = new float[pointerCount];
+    float[] y = new float[pointerCount];
+    for (int pointerIndex = 0; pointerIndex < pointerCount; pointerIndex += 1) {
+      PlannedPointerSample sample = spec.plannedPointers[pointerIndex].samples[sampleIndex];
+      x[pointerIndex] = sample.x;
+      y[pointerIndex] = sample.y;
+    }
+    return new PointerPair(x, y);
+  }
+
   private static int clamp(int value, int min, int max) {
     return Math.min(Math.max(value, min), max);
+  }
+
+  private static int requireInRange(int value, int min, int max, String field) {
+    if (value < min || value > max) {
+      throw new IllegalArgumentException(field + " must be between " + min + " and " + max);
+    }
+    return value;
   }
 
   private static boolean isFinite(double value) {
@@ -334,6 +538,7 @@ public final class MultiTouchInstrumentation extends Instrumentation {
     final double scale;
     final double degrees;
     final int radius;
+    final PlannedPointerPath[] plannedPointers;
 
     GestureSpec(
         String kind,
@@ -346,7 +551,8 @@ public final class MultiTouchInstrumentation extends Instrumentation {
         int durationMs,
         double scale,
         double degrees,
-        int radius) {
+        int radius,
+        PlannedPointerPath[] plannedPointers) {
       this.kind = kind;
       this.x = x;
       this.y = y;
@@ -358,6 +564,29 @@ public final class MultiTouchInstrumentation extends Instrumentation {
       this.scale = scale;
       this.degrees = degrees;
       this.radius = radius;
+      this.plannedPointers = plannedPointers;
+    }
+  }
+
+  private static final class PlannedPointerPath {
+    final int pointerId;
+    final PlannedPointerSample[] samples;
+
+    PlannedPointerPath(int pointerId, PlannedPointerSample[] samples) {
+      this.pointerId = pointerId;
+      this.samples = samples;
+    }
+  }
+
+  private static final class PlannedPointerSample {
+    final long offsetMs;
+    final float x;
+    final float y;
+
+    PlannedPointerSample(long offsetMs, float x, float y) {
+      this.offsetMs = offsetMs;
+      this.x = x;
+      this.y = y;
     }
   }
 

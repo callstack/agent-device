@@ -1,144 +1,65 @@
 import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
-import type { FlingOptions, RotateGestureOptions } from '../../client/client-types.ts';
 import type { CliFlags } from '../cli-grammar/flag-types.ts';
 import { AppError } from '../../kernel/errors.ts';
-import {
-  commonInputFromFlags,
-  direct,
-  optionalCliNumber,
-  optionalNumber,
-  requiredDaemonString,
-} from '../cli-grammar/common.ts';
-import type { CliReader, DaemonWriter, CommandInput } from '../cli-grammar/types.ts';
+import { commonInputFromFlags, optionalCliNumber, request } from '../cli-grammar/common.ts';
+import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
+import { readGestureInput, type GestureInput } from './metadata.ts';
+import { compactRecord } from '../command-input.ts';
 
 export const gestureCliReaders = {
   gesture: gestureInputFromCli,
 } satisfies Record<string, CliReader>;
 
 export const gestureDaemonWriters = {
-  gesture: direct(PUBLIC_COMMANDS.gesture, gesturePositionals),
-  'gesture-pan': direct(PUBLIC_COMMANDS.gesture, panPositionals),
-  'gesture-fling': direct(PUBLIC_COMMANDS.gesture, (input) =>
-    flingPositionals(input as FlingOptions),
-  ),
-  'gesture-swipe': direct(PUBLIC_COMMANDS.gesture, swipePresetPositionals),
-  'gesture-pinch': direct(PUBLIC_COMMANDS.gesture, pinchPositionals),
-  'gesture-rotate': direct(PUBLIC_COMMANDS.gesture, (input) =>
-    rotateGesturePositionals(input as RotateGestureOptions),
-  ),
-  'gesture-transform': direct(PUBLIC_COMMANDS.gesture, transformPositionals),
+  gesture: (input) => {
+    const gesture = readGestureInput(input);
+    return request(PUBLIC_COMMANDS.gesture, [], input, gestureDaemonInput(gesture));
+  },
 } satisfies Record<string, DaemonWriter>;
 
-// fallow-ignore-next-line complexity
-function gesturePositionals(input: CommandInput): string[] {
+function gestureDaemonInput(input: GestureInput): Record<string, unknown> {
   switch (input.kind) {
     case 'pan':
-      return [
-        'pan',
-        String(input.origin?.x),
-        String(input.origin?.y),
-        String(input.delta?.x),
-        String(input.delta?.y),
-        ...optionalNumber(input.durationMs),
-      ];
+      return compactRecord({
+        kind: input.kind,
+        origin: input.origin,
+        delta: input.delta,
+        pointerCount: input.pointerCount,
+        durationMs: input.durationMs,
+      });
     case 'fling':
-      return [
-        'fling',
-        requiredDaemonString(input.direction, 'gesture fling requires direction'),
-        String(input.origin?.x),
-        String(input.origin?.y),
-        ...optionalNumber(input.distance),
-        ...optionalNumber(input.durationMs),
-      ];
+      return compactRecord({
+        kind: input.kind,
+        direction: input.direction,
+        origin: input.origin,
+        distance: input.distance,
+        durationMs: input.durationMs,
+      });
     case 'swipe':
-      return swipePresetPositionals(input);
+      return compactRecord({
+        kind: input.kind,
+        preset: input.preset,
+        durationMs: input.durationMs,
+      });
     case 'pinch':
-      return [
-        'pinch',
-        String(input.scale),
-        ...optionalNumber(input.origin?.x),
-        ...optionalNumber(input.origin?.y),
-      ];
+      return compactRecord({ kind: input.kind, scale: input.scale, origin: input.origin });
     case 'rotate':
-      return [
-        'rotate',
-        String(input.degrees),
-        ...optionalNumber(input.origin?.x),
-        ...optionalNumber(input.origin?.y),
-        ...optionalNumber(input.velocity),
-      ];
+      return compactRecord({
+        kind: input.kind,
+        degrees: input.degrees,
+        origin: input.origin,
+        velocity: input.velocity,
+      });
     case 'transform':
-      return [
-        'transform',
-        String(input.origin?.x),
-        String(input.origin?.y),
-        String(input.delta?.x),
-        String(input.delta?.y),
-        String(input.scale),
-        String(input.degrees),
-        ...optionalNumber(input.durationMs),
-      ];
-    default:
-      throw new AppError(
-        'INVALID_ARGS',
-        'gesture requires pan, fling, swipe, pinch, rotate, or transform',
-      );
+      return compactRecord({
+        kind: input.kind,
+        origin: input.origin,
+        delta: input.delta,
+        scale: input.scale,
+        degrees: input.degrees,
+        durationMs: input.durationMs,
+      });
   }
-}
-
-function swipePresetPositionals(input: CommandInput): string[] {
-  return [
-    'swipe',
-    requiredDaemonString(input.preset, 'gesture swipe requires preset'),
-    ...optionalNumber(input.durationMs),
-  ];
-}
-
-function panPositionals(input: CommandInput): string[] {
-  return [
-    'pan',
-    String(input.x),
-    String(input.y),
-    String(input.dx),
-    String(input.dy),
-    ...optionalNumber(input.durationMs),
-  ];
-}
-
-function flingPositionals(input: FlingOptions): string[] {
-  const distance = input.durationMs !== undefined ? (input.distance ?? 180) : input.distance;
-  return [
-    'fling',
-    input.direction,
-    String(input.x),
-    String(input.y),
-    ...optionalNumber(distance),
-    ...optionalNumber(input.durationMs),
-  ];
-}
-
-function pinchPositionals(input: CommandInput): string[] {
-  return ['pinch', String(input.scale), ...optionalNumber(input.x), ...optionalNumber(input.y)];
-}
-
-function rotateGesturePositionals(input: RotateGestureOptions): string[] {
-  assertCompleteCenter(input);
-  const center =
-    input.x === undefined || input.y === undefined ? [] : [String(input.x), String(input.y)];
-  return ['rotate', String(input.degrees), ...center, ...optionalNumber(input.velocity)];
-}
-
-function transformPositionals(input: CommandInput): string[] {
-  return [
-    'transform',
-    String(input.x),
-    String(input.y),
-    String(input.dx),
-    String(input.dy),
-    String(input.scale),
-    String(input.degrees),
-    ...optionalNumber(input.durationMs),
-  ];
 }
 
 // fallow-ignore-next-line complexity
@@ -153,6 +74,7 @@ function gestureInputFromCli(positionals: string[], flags: CliFlags): Record<str
         kind: subcommand,
         origin: { x: Number(args[0]), y: Number(args[1]) },
         delta: { x: Number(args[2]), y: Number(args[3]) },
+        pointerCount: flags.pointerCount,
         durationMs: optionalCliNumber(args[4]),
       };
     case 'fling':
@@ -207,14 +129,5 @@ function gestureInputFromCli(positionals: string[], flags: CliFlags): Record<str
         'INVALID_ARGS',
         'gesture requires pan, fling, swipe, pinch, rotate, or transform',
       );
-  }
-}
-
-function assertCompleteCenter(input: RotateGestureOptions): void {
-  if (
-    (input.x === undefined && input.y !== undefined) ||
-    (input.x !== undefined && input.y === undefined)
-  ) {
-    throw new AppError('INVALID_ARGS', 'gesture rotate center requires both x and y');
   }
 }

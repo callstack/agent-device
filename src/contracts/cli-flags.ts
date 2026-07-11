@@ -84,6 +84,7 @@ export type CliFlags = CloudProviderProfileFields &
     threshold?: string;
     appsFilter?: 'user-installed' | 'all';
     count?: number;
+    pointerCount?: number;
     fps?: number;
     quality?: RecordingExportQuality | string;
     hideTouches?: boolean;

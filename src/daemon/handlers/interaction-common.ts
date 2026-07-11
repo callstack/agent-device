@@ -34,6 +34,7 @@ export function finalizeTouchInteraction(params: {
   sessionStore: SessionStore;
   command: string;
   positionals: string[];
+  actionCommand?: string;
   retryPositionals?: string[];
   flags: CommandFlags | undefined;
   result: Record<string, unknown>;
@@ -49,6 +50,7 @@ export function finalizeTouchInteraction(params: {
     sessionStore,
     command,
     positionals,
+    actionCommand = command,
     retryPositionals,
     flags,
     result,
@@ -75,13 +77,17 @@ export function finalizeTouchInteraction(params: {
     flags,
     preSnapshot: session.snapshot,
   });
-  if (isNavigationSensitiveAction(command)) {
-    markAndroidSnapshotFreshness(session, command, androidFreshnessBaseline ?? session.snapshot);
+  if (isNavigationSensitiveAction(actionCommand)) {
+    markAndroidSnapshotFreshness(
+      session,
+      actionCommand,
+      androidFreshnessBaseline ?? session.snapshot,
+    );
   }
-  markPostGestureStabilization(session, command, retryPositionals ?? positionals, flags);
+  markPostGestureStabilization(session, actionCommand, retryPositionals ?? positionals, flags);
   recordTouchVisualizationEvent(
     session,
-    command,
+    actionCommand,
     positionals,
     result,
     (actionFlags ?? {}) as Record<string, unknown>,

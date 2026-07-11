@@ -119,6 +119,7 @@ const interactionCliSchemas = {
     summary: 'Run pan, fling, swipe, pinch, rotate, or transform gestures',
     positionalArgs: ['pan|fling|swipe|pinch|rotate|transform', 'args?'],
     allowsExtraPositionals: true,
+    allowedFlags: ['pointerCount'],
   },
   focus: {
     positionalArgs: ['x', 'y'],
@@ -145,9 +146,6 @@ const interactionCliSchemas = {
 
 type InteractionCommandMetadata = (typeof interactionCommandMetadata)[number];
 type InteractionCommandName = InteractionCommandMetadata['name'];
-const { gesture: _gestureDaemonWriter, ...gestureProjectionAliasDaemonWriters } =
-  gestureDaemonWriters;
-
 function postActionObservationCliFlags(command: InteractionCommandName): readonly FlagKey[] {
   const flags: FlagKey[] = [];
   if (commandSupportsVerifyEvidence(command)) flags.push('verify');
@@ -332,7 +330,6 @@ const gestureCommandFacet = defineCommandFacet({
   cliSchema: interactionCliSchemas.gesture,
   cliReader: gestureCliReaders.gesture,
   daemonWriter: gestureDaemonWriters.gesture,
-  extraDaemonWriters: gestureProjectionAliasDaemonWriters,
 });
 
 export const interactionCommandFamily = defineCommandFamilyFromFacets({
@@ -435,6 +432,7 @@ function toPanOptions(input: PanInput): PanOptions {
     y: input.origin.y,
     dx: input.delta.x,
     dy: input.delta.y,
+    pointerCount: input.pointerCount,
     durationMs: input.durationMs,
   };
 }

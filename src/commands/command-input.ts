@@ -12,6 +12,7 @@ import {
 } from '../kernel/device.ts';
 import type { JsonSchema } from './command-contract.ts';
 import { AppError } from '../kernel/errors.ts';
+import { readOptionalInteger as optionalInteger } from '../kernel/input-validation.ts';
 
 const INTERACTION_TARGET_KINDS = ['ref', 'selector', 'point'] as const;
 
@@ -354,7 +355,7 @@ function readElementTarget(record: Record<string, unknown>, key: string): Elemen
   return { kind, selector: requiredString(target, 'selector') };
 }
 
-export function readPoint(record: Record<string, unknown>, key: string): PointInput {
+function readPoint(record: Record<string, unknown>, key: string): PointInput {
   const point = readRecordField(record, key);
   return { x: requiredNumber(point, 'x'), y: requiredNumber(point, 'y') };
 }
@@ -376,7 +377,7 @@ function optionalString(record: Record<string, unknown>, key: string): string | 
   return value;
 }
 
-export function requiredNumber(record: Record<string, unknown>, key: string): number {
+function requiredNumber(record: Record<string, unknown>, key: string): number {
   const value = record[key];
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new AppError('INVALID_ARGS', `Expected ${key} to be a finite number.`);
@@ -393,26 +394,6 @@ function optionalNumberValue(record: Record<string, unknown>, key: string): numb
   return value;
 }
 
-export function optionalInteger(
-  record: Record<string, unknown>,
-  key: string,
-  options: { min?: number; max?: number } = {},
-): number | undefined {
-  const value = record[key];
-  if (value === undefined) return undefined;
-  if (!Number.isInteger(value)) {
-    throw new AppError('INVALID_ARGS', `Expected ${key} to be an integer.`);
-  }
-  const numberValue = value as number;
-  if (options.min !== undefined && numberValue < options.min) {
-    throw new AppError('INVALID_ARGS', `Expected ${key} to be at least ${options.min}.`);
-  }
-  if (options.max !== undefined && numberValue > options.max) {
-    throw new AppError('INVALID_ARGS', `Expected ${key} to be at most ${options.max}.`);
-  }
-  return numberValue;
-}
-
 function optionalBoolean(record: Record<string, unknown>, key: string): boolean | undefined {
   const value = record[key];
   if (value === undefined) return undefined;
@@ -422,7 +403,7 @@ function optionalBoolean(record: Record<string, unknown>, key: string): boolean 
   return value;
 }
 
-export function requiredEnum<const T extends readonly string[]>(
+function requiredEnum<const T extends readonly string[]>(
   record: Record<string, unknown>,
   key: string,
   values: T,

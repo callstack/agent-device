@@ -4,6 +4,13 @@ import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts'
 import type { DeviceInfo } from '../../kernel/device.ts';
 import type { TransformGestureParams } from '../../contracts/scroll-gesture.ts';
 import {
+  singlePointerPlanEndpoints,
+  type GestureIntent,
+  type GesturePlan,
+  type PointerTrajectory,
+  type SinglePointerGesturePlan,
+} from '../../contracts/gesture-plan.ts';
+import {
   resolveAndroidAdbExecutor,
   resolveAndroidAdbProvider,
   resolveAndroidTouchInjector,
@@ -92,8 +99,24 @@ type AndroidMultiTouchHelperGestureRequest =
       dy: number;
       scale: number;
       degrees: number;
+      radius: number;
       durationMs: number;
+    }
+  | {
+      kind: 'swipe' | 'pinch' | 'rotate' | 'transform';
+      intent: GestureIntent;
+      durationMs: number;
+      pointers: AndroidPlannedPointerTrajectory[];
     };
+
+type AndroidPlannedPointerTrajectory = {
+  pointerId: 0 | 1;
+  samples: Array<{
+    offsetMs: number;
+    x: number;
+    y: number;
+  }>;
+};
 
 export type AndroidPinchGestureOptions = {
   scale: number;
@@ -118,7 +141,68 @@ export type AndroidSwipeGestureOptions = {
   x2: number;
   y2: number;
   durationMs?: number;
+  intent?: GestureIntent;
+  plan?: SinglePointerGesturePlan;
 };
+
+/**
+ * Executes a canonical portable plan through the existing provider-first Android touch stack.
+ * A two-finger pan intentionally retains `intent: pan` while using the proven transform injector.
+ */
+export async function performGestureAndroid(
+  device: DeviceInfo,
+  plan: GesturePlan,
+): Promise<Record<string, unknown> | void> {
+  if (plan.topology === 'single') {
+    const { start, end } = singlePointerPlanEndpoints(plan);
+    return await swipeGestureAndroid(device, {
+      x1: start.x,
+      y1: start.y,
+      x2: end.x,
+      y2: end.y,
+      durationMs: plan.durationMs,
+      intent: plan.intent,
+      plan,
+    });
+  }
+
+  const { start, end } = plan.centroid;
+  const common = {
+    intent: plan.intent,
+    plan,
+    durationMs: plan.durationMs,
+  } as const;
+  switch (plan.intent) {
+    case 'pinch':
+      return await performAndroidTouchGesture(device, {
+        kind: 'pinch',
+        x: start.x,
+        y: start.y,
+        scale: plan.scale,
+        ...common,
+      });
+    case 'rotate':
+      return await performAndroidTouchGesture(device, {
+        kind: 'rotate',
+        x: start.x,
+        y: start.y,
+        degrees: plan.rotationDegrees,
+        ...common,
+      });
+    case 'pan':
+    case 'transform':
+      return await performAndroidTouchGesture(device, {
+        kind: 'transform',
+        x: start.x,
+        y: start.y,
+        dx: end.x - start.x,
+        dy: end.y - start.y,
+        scale: plan.scale,
+        degrees: plan.rotationDegrees,
+        ...common,
+      });
+  }
+}
 
 export async function swipeGestureAndroid(
   device: DeviceInfo,
@@ -245,6 +329,10 @@ async function runAndroidMultiTouchHelperGestureForDevice(
   device: DeviceInfo,
   request: AndroidTouchGestureRequest,
 ): Promise<Record<string, unknown>> {
+  // Both helpers own UiAutomation through instrumentation. Android cannot connect the
+  // touch helper while the persistent snapshot helper still owns that process-global seam.
+  // Release it here; the next snapshot lazily starts a fresh session on the same device.
+  await stopAndroidSnapshotHelperSessionForDevice(device);
   const adb = resolveAndroidAdbExecutor(device);
   const artifact = await resolveAndroidMultiTouchHelperArtifact();
   const adbProvider = resolveAndroidAdbProvider(device);
@@ -292,6 +380,9 @@ async function runAndroidMultiTouchHelperGestureForDevice(
 function normalizeHelperGestureRequest(
   request: AndroidTouchGestureRequest,
 ): AndroidMultiTouchHelperGestureRequest {
+  if (request.plan) {
+    return normalizePlannedHelperGestureRequest(request, request.plan);
+  }
   const durationMs = Math.round(resolveHelperGestureDurationMs(request));
   switch (request.kind) {
     case 'swipe':
@@ -330,9 +421,69 @@ function normalizeHelperGestureRequest(
         dy: Math.round(request.dy),
         scale: request.scale,
         degrees: request.degrees,
+        radius: ANDROID_MULTITOUCH_HELPER_DEFAULT_RADIUS,
         durationMs,
       };
   }
+}
+
+function normalizePlannedHelperGestureRequest(
+  request: AndroidTouchGestureRequest,
+  plan: GesturePlan,
+): AndroidMultiTouchHelperGestureRequest {
+  if (plan.topology === 'two' && request.kind === 'pinch') {
+    const initialRadius = plan.initialSpan / 2;
+    return {
+      kind: 'pinch',
+      x: Math.round(plan.centroid.start.x),
+      y: Math.round(plan.centroid.start.y),
+      scale: plan.scale,
+      radius: Math.round(initialRadius * Math.max(plan.scale, 1)),
+      durationMs: plan.durationMs,
+    };
+  }
+  if (plan.topology === 'two' && request.kind === 'rotate') {
+    return {
+      kind: 'rotate',
+      x: Math.round(plan.centroid.start.x),
+      y: Math.round(plan.centroid.start.y),
+      degrees: plan.rotationDegrees,
+      radius: Math.round(plan.initialSpan / 2),
+      durationMs: plan.durationMs,
+    };
+  }
+  if (plan.topology === 'two' && request.kind === 'transform') {
+    return {
+      kind: 'transform',
+      x: Math.round(plan.centroid.start.x),
+      y: Math.round(plan.centroid.start.y),
+      dx: Math.round(plan.centroid.end.x - plan.centroid.start.x),
+      dy: Math.round(plan.centroid.end.y - plan.centroid.start.y),
+      scale: plan.scale,
+      degrees: plan.rotationDegrees,
+      radius: Math.round(plan.initialSpan / 2),
+      durationMs: plan.durationMs,
+    };
+  }
+  return {
+    kind: request.kind,
+    intent: request.intent ?? plan.intent,
+    durationMs: plan.durationMs,
+    pointers: plan.pointers.map(toAndroidPlannedPointerTrajectory),
+  };
+}
+
+function toAndroidPlannedPointerTrajectory(
+  pointer: PointerTrajectory,
+): AndroidPlannedPointerTrajectory {
+  return {
+    pointerId: pointer.pointerId,
+    samples: pointer.samples.map((sample) => ({
+      offsetMs: sample.offsetMs,
+      x: sample.point.x,
+      y: sample.point.y,
+    })),
+  };
 }
 
 function resolveHelperGestureDurationMs(request: AndroidTouchGestureRequest): number {

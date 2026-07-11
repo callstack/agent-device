@@ -8,6 +8,7 @@ import type { WaitParsed } from '../../core/wait-positionals.ts';
 export type DaemonCommandRequest = {
   command: string;
   positionals: string[];
+  input?: Record<string, unknown>;
   options: InternalRequestOptions;
   metadataFlags?: Partial<CommandFlags>;
 };

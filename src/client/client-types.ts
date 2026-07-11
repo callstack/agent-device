@@ -34,6 +34,7 @@ import type {
   NavigationCommandOptions,
   ProjectedNavigationCommandClient,
 } from '../commands/system/navigation-projection.ts';
+import type { GesturePointerCount } from '../contracts/gesture-plan.ts';
 import type { LogAction } from '../contracts/logs.ts';
 import type { SessionSurface } from '../contracts/session-surface.ts';
 import type { FindLocator } from '../selectors/find.ts';
@@ -715,6 +716,7 @@ export type PanOptions = DeviceCommandBaseOptions & {
   y: number;
   dx: number;
   dy: number;
+  pointerCount?: GesturePointerCount;
   durationMs?: number;
 };
 

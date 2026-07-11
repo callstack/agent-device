@@ -31,6 +31,7 @@ export type ProviderScenarioHarness = {
     positionals?: string[],
     flags?: DaemonRequest['flags'],
     options?: {
+      input?: DaemonRequest['input'];
       meta?: DaemonRequest['meta'];
       runtime?: DaemonRequest['runtime'];
       session?: string;
@@ -68,6 +69,7 @@ export async function createProviderScenarioHarness(
       session: req.session ?? 'default',
       command: req.command,
       positionals: req.positionals,
+      input: req.input,
       flags: req.flags,
       runtime: req.runtime,
       meta: req.meta as DaemonRequest['meta'],
@@ -146,6 +148,7 @@ function commandRequest(
   positionals: string[] = [],
   flags: DaemonRequest['flags'] = {},
   options: {
+    input?: DaemonRequest['input'];
     meta?: DaemonRequest['meta'];
     runtime?: DaemonRequest['runtime'];
     session?: string;
@@ -156,6 +159,7 @@ function commandRequest(
     session: options.session ?? 'default',
     command,
     positionals,
+    input: options.input,
     flags,
     runtime: options.runtime,
     meta: options.meta,

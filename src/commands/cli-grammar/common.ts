@@ -25,8 +25,14 @@ export function request(
   command: string,
   positionals: string[],
   options: CommandInput,
+  input?: Record<string, unknown>,
 ): DaemonCommandRequest {
-  return { command, positionals, options: normalizeCommonRequestOptions(options) };
+  return {
+    command,
+    positionals,
+    ...(input ? { input } : {}),
+    options: normalizeCommonRequestOptions(options),
+  };
 }
 
 function normalizeCommonRequestOptions(options: CommandInput): InternalRequestOptions {

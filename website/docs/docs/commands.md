@@ -339,6 +339,7 @@ agent-device press 300 500 --count 6 --hold-ms 120 --interval-ms 30 --jitter-px 
 agent-device swipe 540 1500 540 500 120
 agent-device swipe 540 1500 540 500 120 --count 8 --pause-ms 30 --pattern ping-pong
 agent-device gesture pan 200 420 0 -80 500
+agent-device gesture pan 200 420 80 -40 700 --pointer-count 2
 agent-device gesture fling right 200 420 180
 agent-device longpress 300 500 800
 agent-device scroll down 0.5
@@ -359,10 +360,10 @@ Android text entry is owned by `agent-device`: provider-native injection when av
 `click --button middle` is reserved for future runner support and currently returns an explicit unsupported-operation error on macOS.
 `swipe` accepts an optional `durationMs` argument (default `250ms`, range `16..10000`).
 On iOS, swipe duration is clamped to a safe range (`16..60ms`) to avoid longpress side effects.
-`gesture pan` accepts `x y dx dy [durationMs]` for deliberate drags. Android preserves the requested travel duration; iOS uses XCTest drag primitives where this value is the pre-drag hold duration.
+`gesture pan` accepts `x y dx dy [durationMs]` for deliberate drags. It uses one pointer by default. Add `--pointer-count 2` for a parallel two-finger pan with constant contact span and angle; this shares the bounded two-contact synthesizer used by transform while retaining pan intent. Android preserves the requested travel duration; iOS uses XCTest drag primitives for one-pointer pan and private XCTest synthesis for two-pointer pan.
 `gesture fling` accepts `up|down|left|right x y [distance] [durationMs]` for fast directional throws.
 `gesture rotate` accepts `degrees [x] [y] [velocity]`; the degree sign controls direction and velocity controls speed.
-`gesture transform` accepts `x y dx dy scale degrees [durationMs]` for one combined pan/zoom/rotate gesture on Android and iOS simulators.
+`gesture transform` accepts `x y dx dy scale degrees [durationMs]` for one combined two-finger pan/zoom/rotate gesture on Android and iOS simulators. Pinch, rotate, two-finger pan, and transform use the same viewport-aware pointer planning; impossible paths fail before injection instead of clamping or distorting the requested motion.
 On iOS simulators it uses private XCTest synthesis for a continuous two-finger pan/scale/rotation path, so verify app-level metrics instead of assuming the requested values map exactly to recognizer output.
 On Android, `gesture transform` injects a geometric two-finger path. App recognizers may report non-exact pan, scale, and rotation values, so verify qualitative state such as `pan changed yes`, `pinch changed yes`, and `rotate changed yes` unless the app explicitly promises exact centroid metrics. If exact app-state values matter, prefer isolated `gesture pan`, `gesture pinch`, or `gesture rotate` commands.
 `scroll` accepts either a relative amount (`0.5` means roughly half of the viewport on that axis) or `--pixels <n>` for a fixed-distance gesture. Large distances are clamped to the usable drag band so the gesture stays reliable across Android, iOS, and macOS.
@@ -384,7 +385,7 @@ done
 `longpress` is supported on iOS and Android.
 `gesture pinch` is supported on Android and iOS simulator app sessions.
 `gesture rotate` is supported on Android and iOS simulator app sessions. Use `rotate` for device orientation. On iOS the optional `velocity` argument is ignored — rotation is synthesized over a fixed duration and direction is taken from the sign of `degrees`.
-`gesture transform` is supported on Android and iOS simulator app sessions.
+Two-finger `gesture pan` and `gesture transform` are supported on Android and iOS simulator app sessions. One-finger `gesture pan` keeps the broader platform support of ordinary coordinate drags.
 
 ## Find (semantic)
 

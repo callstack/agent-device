@@ -169,11 +169,10 @@ test('platform dispatch command list is built from descriptor dispatch facets', 
 
   assert.deepEqual(listRegisteredDispatchCommandNames(), dispatchCommands);
   assert.ok(dispatchCommands.includes('read'), 'read stays dispatch-only');
-  assert.ok(dispatchCommands.includes('swipe-preset'), 'swipe-preset stays dispatch-only');
   assert.equal(
     (dispatchCommands as readonly string[]).includes(PUBLIC_COMMANDS.gesture),
     false,
-    'gesture remains a daemon command that expands before platform dispatch',
+    'gesture executes through the typed runtime/backend seam',
   );
 });
 
@@ -224,12 +223,7 @@ const NON_BATCHABLE_COMMANDS = [
   PUBLIC_COMMANDS.batch,
   PUBLIC_COMMANDS.replay,
   PUBLIC_COMMANDS.prepare,
-  'pinch',
   'viewport',
-  'pan',
-  'fling',
-  'rotate-gesture',
-  'transform-gesture',
 ];
 
 test('structured-batch allowlist is built from descriptors', () => {

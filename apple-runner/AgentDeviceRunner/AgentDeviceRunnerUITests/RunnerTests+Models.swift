@@ -142,6 +142,7 @@ struct Command: Codable {
   let scale: Double?
   let degrees: Double?
   let velocity: Double?
+  let gesturePlan: RunnerGesturePlan?
   let outPath: String?
   let fps: Int?
   let maxSize: Int?
@@ -154,6 +155,39 @@ struct Command: Codable {
   /// Preserves the public gesture's timing semantics after it is lowered to runner `drag`.
   let dragSemantics: SynthesizedDragSemantics?
   let steps: [SequenceStep]?
+}
+
+/// Canonical two-pointer plan produced by the portable TypeScript planner.
+/// Extra semantic fields remain on the wire for diagnostics; the native executor
+/// consumes the viewport and exact sampled pointer paths below.
+struct RunnerGesturePlan: Codable {
+  let topology: String
+  let intent: String
+  let durationMs: Double
+  let viewport: RunnerGestureViewport
+  let pointers: [RunnerGesturePointer]
+}
+
+struct RunnerGestureViewport: Codable {
+  let x: Double
+  let y: Double
+  let width: Double
+  let height: Double
+}
+
+struct RunnerGesturePointer: Codable {
+  let pointerId: Int
+  let samples: [RunnerGestureSample]
+}
+
+struct RunnerGestureSample: Codable {
+  let offsetMs: Double
+  let point: RunnerGesturePoint
+}
+
+struct RunnerGesturePoint: Codable {
+  let x: Double
+  let y: Double
 }
 
 /// One allowlisted coordinate gesture step inside a fused `sequence` command.

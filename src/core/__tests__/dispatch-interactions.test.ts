@@ -11,14 +11,7 @@ vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOrigi
   return { ...actual, runAppleRunnerCommand: mockRunAppleRunnerCommand };
 });
 
-import {
-  handlePanCommand,
-  handlePressCommand,
-  handleRotateGestureCommand,
-  handleSwipeCommand,
-  handleSwipePresetCommand,
-  handleTransformGestureCommand,
-} from '../dispatch-interactions.ts';
+import { handlePressCommand, handleSwipeCommand } from '../dispatch-interactions.ts';
 import type { Interactor } from '../interactor-types.ts';
 import type { RunnerCommand } from '../../platforms/apple/core/runner/runner-contract.ts';
 import { AppError } from '../../kernel/errors.ts';
@@ -69,74 +62,6 @@ function makeUnusedInteractor(): Interactor {
     setSetting: fail,
   };
 }
-
-test('handleRotateGestureCommand defaults velocity sign to match degrees', async () => {
-  const calls: unknown[][] = [];
-  const interactor = {
-    ...makeUnusedInteractor(),
-    rotateGesture: async (...args: unknown[]) => {
-      calls.push(args);
-    },
-  };
-
-  const result = await handleRotateGestureCommand(IOS_SIMULATOR, interactor, [
-    '-215',
-    '200',
-    '420',
-  ]);
-
-  assert.deepEqual(calls, [[-215, 200, 420, -1]]);
-  assert.deepEqual(result, {
-    degrees: -215,
-    x: 200,
-    y: 420,
-    velocity: -1,
-    message: 'Rotated gesture -215 degrees',
-  });
-});
-
-test('handleSwipePresetCommand resolves Android in-page swipe to content lane', async () => {
-  const calls: unknown[][] = [];
-  const interactor = {
-    ...makeUnusedInteractor(),
-    snapshot: async () => ({
-      backend: 'android' as const,
-      nodes: [
-        {
-          index: 0,
-          type: 'application',
-          rect: { x: 0, y: 0, width: 400, height: 800 },
-        },
-      ],
-    }),
-    swipe: async (...args: unknown[]) => {
-      calls.push(args);
-    },
-  };
-
-  const result = await handleSwipePresetCommand(
-    ANDROID_EMULATOR,
-    interactor,
-    ['left', '300'],
-    undefined,
-  );
-
-  assert.deepEqual(calls, [[340, 400, 60, 400, 300]]);
-  assert.deepEqual(result, {
-    x1: 340,
-    y1: 400,
-    x2: 60,
-    y2: 400,
-    preset: 'left',
-    durationMs: 300,
-    effectiveDurationMs: 300,
-    timingMode: 'direct',
-    count: 1,
-    pauseMs: 0,
-    pattern: 'one-way',
-    message: 'Swiped left',
-  });
-});
 
 test('handleSwipeCommand preserves iOS swipe duration through dispatch', async () => {
   const calls: unknown[][] = [];
@@ -226,53 +151,6 @@ test('handleSwipeCommand fuses repeated swipes into sequence drag steps with pin
   assert.equal(result.timingMode, 'runner-sequence');
   assert.equal(result.completedSteps, 2);
   assert.equal(result.message, 'Swiped 2 times (ping-pong)');
-});
-
-test('handlePanCommand preserves interactor result metadata', async () => {
-  const calls: unknown[][] = [];
-  const interactor = {
-    ...makeUnusedInteractor(),
-    pan: async (...args: unknown[]) => {
-      calls.push(args);
-      return { backend: 'xctest' };
-    },
-  };
-
-  const result = await handlePanCommand(interactor, ['196', '122', '80', '0', '500']);
-
-  assert.deepEqual(calls, [[196, 122, 276, 122, 500]]);
-  assert.deepEqual(result, {
-    x: 196,
-    y: 122,
-    dx: 80,
-    dy: 0,
-    x2: 276,
-    y2: 122,
-    durationMs: 500,
-    backend: 'xctest',
-    message: 'Panned (196, 122) by (80, 0)',
-  });
-});
-
-test('handleRotateGestureCommand routes Android through the interactor', async () => {
-  const calls: unknown[][] = [];
-  const interactor = {
-    ...makeUnusedInteractor(),
-    rotateGesture: async (...args: unknown[]) => {
-      calls.push(args);
-      return { backend: 'android-multitouch-helper' };
-    },
-  };
-
-  const result = await handleRotateGestureCommand(ANDROID_EMULATOR, interactor, ['145']);
-
-  assert.deepEqual(calls, [[145, undefined, undefined, 1]]);
-  assert.deepEqual(result, {
-    degrees: 145,
-    velocity: 1,
-    backend: 'android-multitouch-helper',
-    message: 'Rotated gesture 145 degrees',
-  });
 });
 
 test('handlePressCommand fuses an iOS jitter series into one sequence runner request', async () => {
@@ -561,39 +439,4 @@ test('handlePressCommand on Android keeps the direct path even with hold', async
   assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
   assert.equal(longPresses.length, 3);
   assert.equal(result.pressed, true);
-});
-
-test('handleTransformGestureCommand routes iOS simulator through the interactor', async () => {
-  const calls: unknown[][] = [];
-  const interactor = {
-    ...makeUnusedInteractor(),
-    transformGesture: async (...args: unknown[]) => {
-      calls.push(args);
-      return { backend: 'xctest' };
-    },
-  };
-
-  const result = await handleTransformGestureCommand(IOS_SIMULATOR, interactor, [
-    '200',
-    '420',
-    '80',
-    '-40',
-    '2',
-    '35',
-  ]);
-
-  assert.deepEqual(calls, [
-    [{ x: 200, y: 420, dx: 80, dy: -40, scale: 2, degrees: 35, durationMs: undefined }],
-  ]);
-  assert.deepEqual(result, {
-    x: 200,
-    y: 420,
-    dx: 80,
-    dy: -40,
-    scale: 2,
-    degrees: 35,
-    durationMs: undefined,
-    backend: 'xctest',
-    message: 'Requested transform gesture by (80, -40), scale 2, rotate 35 degrees',
-  });
 });

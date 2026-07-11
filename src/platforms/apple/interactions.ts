@@ -4,6 +4,12 @@ import {
   normalizeScrollDurationMs,
   SCROLL_DURATION_MAX_MS,
 } from '../../contracts/scroll-command.ts';
+import { AppError } from '../../kernel/errors.ts';
+import {
+  singlePointerPlanEndpoints,
+  type GesturePlan,
+  type MultiTouchGesturePlan,
+} from '../../contracts/gesture-plan.ts';
 import { runAppleRunnerCommand } from './core/runner/runner-client.ts';
 import {
   buildRunnerSequenceCommand,
@@ -57,6 +63,7 @@ type IosRunnerOverrides = Pick<
   | 'pinch'
   | 'rotateGesture'
   | 'transformGesture'
+  | 'performGesture'
 >;
 
 export function resolveAppleBackRunnerCommand(mode?: BackMode): AppleBackRunnerCommand {
@@ -254,8 +261,111 @@ export function iosRunnerOverrides(
           runnerOpts,
         );
       },
+      performGesture: async (plan) => await performGestureApple(device, ctx, runnerOpts, plan),
     },
   };
+}
+
+/**
+ * Lowers a canonical portable plan into the existing semantic Apple runner commands.
+ * Multi-touch commands carry exact pointer samples; single-touch commands retain their
+ * shipped swipe-vs-continuous-drag executor semantics.
+ */
+export async function performGestureApple(
+  device: DeviceInfo,
+  ctx: RunnerContext,
+  runnerOpts: RunnerOpts,
+  plan: GesturePlan,
+): Promise<Record<string, unknown>> {
+  if (plan.topology === 'single') {
+    const { start, end } = singlePointerPlanEndpoints(plan);
+    return await runAppleRunnerCommand(
+      device,
+      iosDragCommand(device, ctx, start.x, start.y, end.x, end.y, plan.durationMs, {
+        defaultDurationMs: plan.durationMs,
+        legacyDefaultDurationMs: plan.durationMs,
+        synthesized: shouldUseSynthesizedIosGesture(device),
+        dragSemantics: plan.intent,
+      }),
+      runnerOpts,
+    );
+  }
+
+  assertAppleMultiTouchPlanSupported(device);
+  return await runAppleRunnerCommand(
+    device,
+    runnerCommandForMultiTouchPlan(plan, ctx.appBundleId),
+    runnerOpts,
+  );
+}
+
+function runnerCommandForMultiTouchPlan(
+  plan: MultiTouchGesturePlan,
+  appBundleId: string | undefined,
+): RunnerCommand {
+  const { start, end } = plan.centroid;
+  switch (plan.intent) {
+    case 'pinch':
+      return {
+        command: 'pinch',
+        scale: plan.scale,
+        x: start.x,
+        y: start.y,
+        gesturePlan: plan,
+        appBundleId,
+      };
+    case 'rotate':
+      return {
+        command: 'rotateGesture',
+        degrees: plan.rotationDegrees,
+        x: start.x,
+        y: start.y,
+        velocity: plan.velocity,
+        gesturePlan: plan,
+        appBundleId,
+      };
+    case 'pan':
+    case 'transform':
+      return {
+        command: 'transformGesture',
+        x: start.x,
+        y: start.y,
+        dx: end.x - start.x,
+        dy: end.y - start.y,
+        scale: plan.scale,
+        degrees: plan.rotationDegrees,
+        durationMs: plan.durationMs,
+        gesturePlan: plan,
+        appBundleId,
+      };
+  }
+}
+
+function assertAppleMultiTouchPlanSupported(device: DeviceInfo): void {
+  if (isTvOsDevice(device)) {
+    throw new AppError('UNSUPPORTED_OPERATION', 'Two-finger gestures are not supported on tvOS', {
+      hint: 'tvOS has no touch input; use remote-driven navigation.',
+    });
+  }
+  if (isMacOs(device)) {
+    throw new AppError('UNSUPPORTED_OPERATION', 'Two-finger gestures are not supported on macOS', {
+      hint: 'macOS automation has no multi-touch input; run on an iOS simulator.',
+    });
+  }
+  if (device.appleOs === 'visionos') {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      'Two-finger touch gestures are not supported on visionOS',
+      { hint: 'The current XCTest synthesizer supports iOS and iPadOS touch simulators only.' },
+    );
+  }
+  if (!isIosFamily(device) || device.kind !== 'simulator') {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      'Two-finger gesture synthesis is available only on iOS simulators',
+      { hint: 'Use an iOS simulator; physical iOS devices cannot use XCTest touch synthesis.' },
+    );
+  }
 }
 
 function iosTapCommand(

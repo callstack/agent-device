@@ -318,6 +318,7 @@ export function createInteractionDevice(
     Pick<
       AgentDeviceBackend,
       | 'captureSnapshot'
+      | 'resolveGestureViewport'
       | 'tap'
       | 'tapTarget'
       | 'fill'
@@ -328,6 +329,7 @@ export function createInteractionDevice(
       | 'scroll'
       | 'swipe'
       | 'pinch'
+      | 'performGesture'
     >
   > & {
     platform?: AgentDeviceBackend['platform'];
@@ -339,6 +341,9 @@ export function createInteractionDevice(
       platform: overrides.platform ?? 'ios',
       captureSnapshot: async (...args) =>
         overrides.captureSnapshot ? await overrides.captureSnapshot(...args) : { snapshot },
+      resolveGestureViewport: overrides.resolveGestureViewport
+        ? async (...args) => await overrides.resolveGestureViewport?.(...args)
+        : undefined,
       tap: async (...args) => await overrides.tap?.(...args),
       tapTarget: overrides.tapTarget
         ? async (...args) => await overrides.tapTarget?.(...args)
@@ -355,6 +360,7 @@ export function createInteractionDevice(
       scroll: overrides.scroll ? async (...args) => await overrides.scroll?.(...args) : undefined,
       swipe: overrides.swipe ? async (...args) => await overrides.swipe?.(...args) : undefined,
       pinch: overrides.pinch ? async (...args) => await overrides.pinch?.(...args) : undefined,
+      performGesture: createPerformGestureOverride(overrides),
     } satisfies AgentDeviceBackend,
     artifacts: createLocalArtifactAdapter(),
     sessions: createMemorySessionStore([
@@ -362,6 +368,39 @@ export function createInteractionDevice(
     ]),
     policy: localCommandPolicy(),
   });
+}
+
+function createPerformGestureOverride(
+  overrides: Pick<AgentDeviceBackend, 'performGesture' | 'swipe' | 'pinch'>,
+): AgentDeviceBackend['performGesture'] {
+  if (!overrides.performGesture && !overrides.swipe && !overrides.pinch) return undefined;
+  return async (context, plan) => {
+    if (overrides.performGesture) return await overrides.performGesture(context, plan);
+    if (plan.topology === 'single') {
+      return await performSingleGestureOverride(overrides.swipe, context, plan);
+    }
+    if (plan.intent === 'pinch' && overrides.pinch) {
+      return await overrides.pinch(context, {
+        scale: plan.scale,
+        center: plan.centroid.start,
+      });
+    }
+    return undefined;
+  };
+}
+
+async function performSingleGestureOverride(
+  swipe: AgentDeviceBackend['swipe'],
+  context: Parameters<NonNullable<AgentDeviceBackend['performGesture']>>[0],
+  plan: Extract<
+    Parameters<NonNullable<AgentDeviceBackend['performGesture']>>[1],
+    { topology: 'single' }
+  >,
+) {
+  const from = plan.pointers[0].samples[0]?.point;
+  const to = plan.pointers[0].samples.at(-1)?.point;
+  if (!swipe || !from || !to) return undefined;
+  return await swipe(context, from, to, { durationMs: plan.durationMs });
 }
 
 export async function clickRefE2(device: ReturnType<typeof createInteractionDevice>) {

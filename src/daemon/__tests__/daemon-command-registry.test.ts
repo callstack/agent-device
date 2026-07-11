@@ -97,7 +97,6 @@ test('daemon command registry preserves replay and recording traits', () => {
     PUBLIC_COMMANDS.is,
     PUBLIC_COMMANDS.keyboard,
     PUBLIC_COMMANDS.longPress,
-    'pinch',
     PUBLIC_COMMANDS.press,
     PUBLIC_COMMANDS.record,
     PUBLIC_COMMANDS.reactNative,
@@ -129,15 +128,10 @@ test('daemon command registry preserves Android modal and lock-policy traits', (
     PUBLIC_COMMANDS.home,
     PUBLIC_COMMANDS.keyboard,
     PUBLIC_COMMANDS.longPress,
-    'fling',
-    'pan',
-    'pinch',
     PUBLIC_COMMANDS.press,
     PUBLIC_COMMANDS.rotate,
-    'rotate-gesture',
     PUBLIC_COMMANDS.scroll,
     PUBLIC_COMMANDS.swipe,
-    'transform-gesture',
     PUBLIC_COMMANDS.type,
   ]) {
     assert.equal(shouldGuardAndroidBlockingDialog(command), true, `${command} Android guard`);

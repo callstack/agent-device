@@ -15,6 +15,7 @@ export type ProviderScenarioDefaults = {
 export type ProviderScenarioStep = {
   name: string;
   command: string;
+  input?: DaemonRequest['input'];
   positionals?: string[];
   flags?: DaemonRequest['flags'];
   meta?: DaemonRequest['meta'];
@@ -53,6 +54,7 @@ export async function runProviderScenario(
         ...step.flags,
       },
       {
+        input: step.input,
         meta: mergeRequestObject(defaults.meta, step.meta),
       },
     );

@@ -70,11 +70,19 @@ test('request handler chain routes trace commands to the record-trace family', a
 });
 
 test('request handler chain leaves generic commands for fallback dispatch', async () => {
-  for (const command of ['back', 'gesture', 'home', 'screenshot', 'scroll', 'swipe']) {
+  for (const command of ['back', 'home', 'screenshot', 'scroll', 'swipe']) {
     const response = await runRequestHandlerChain(makeChainParams(makeRequest(command)));
 
     assert.equal(response, null, `${command} should fall through to generic dispatch`);
   }
+});
+
+test('request handler chain routes gesture through the interaction runtime', async () => {
+  const response = await runRequestHandlerChain(makeChainParams(makeRequest('gesture')));
+
+  assert.equal(response?.ok, false);
+  if (response?.ok !== false) throw new Error('Expected invalid gesture response');
+  assert.equal(response.error.code, 'INVALID_ARGS');
 });
 
 test('request handler chain routes lease commands to the lease family', async () => {

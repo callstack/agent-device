@@ -104,6 +104,7 @@ export type DaemonRequest = {
   session?: string;
   command: string;
   positionals: string[];
+  input?: Record<string, unknown>;
   flags?: Record<string, unknown>;
   runtime?: SessionRuntimeHints;
   meta?: DaemonRequestMeta;
@@ -377,6 +378,7 @@ export const commandRpcParamsSchema = schema<CommandRpcParams>((input, path) => 
     session: optionalString(record, 'session', path),
     command: optionalString(record, 'command', path),
     positionals: optionalStringArray(record, 'positionals', path),
+    input: optionalObject(record, 'input', path),
     flags: optionalObject(record, 'flags', path),
     runtime: optionalObject(record, 'runtime', path) as SessionRuntimeHints | undefined,
     meta: optionalObject(record, 'meta', path) as DaemonRequestMeta | undefined,

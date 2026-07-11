@@ -136,7 +136,7 @@ test('snapshot replay script writes interactive refresh flags', () => {
 test('gesture replay script parses pan, fling, swipe, pinch, and rotate gesture commands', () => {
   const parsed = parseReplayScriptDetailed(
     [
-      'gesture pan 195 443 80 0',
+      'gesture pan 195 443 80 0 --pointer-count 2',
       'wait "pan changed yes" 5000',
       'gesture fling right 195 443 180',
       'gesture swipe right-edge 300',
@@ -151,6 +151,7 @@ test('gesture replay script parses pan, fling, swipe, pinch, and rotate gesture 
     ['gesture', 'wait', 'gesture', 'gesture', 'gesture', 'gesture'],
   );
   assert.deepEqual(parsed[0]?.positionals, ['pan', '195', '443', '80', '0']);
+  assert.equal(parsed[0]?.flags.pointerCount, 2);
   assert.deepEqual(parsed[2]?.positionals, ['fling', 'right', '195', '443', '180']);
   assert.deepEqual(parsed[3]?.positionals, ['swipe', 'right-edge', '300']);
   assert.deepEqual(parsed[4]?.positionals, ['pinch', '1.25', '195', '443']);

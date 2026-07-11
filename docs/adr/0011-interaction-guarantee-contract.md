@@ -266,6 +266,11 @@ dimensions as their only frame source; cheaper frame sources such as
 intentionally excluded because they can diverge from full-screen screenshot
 coordinates on affected simulators.
 
+Two-contact pan/pinch/rotate/transform planning is now owned by the typed
+gesture-plan contract in [ADR 0013](0013-unified-gesture-plans.md). It remains a
+sibling of this element-targeting matrix: coordinate gestures do not acquire
+selector/ref guarantees merely because their native executor uses XCTest.
+
 ## Migration plan
 
 Each step lands green and independently useful:

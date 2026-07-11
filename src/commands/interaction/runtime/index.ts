@@ -54,6 +54,19 @@ import {
   type WaitCommandResult,
   type WaitForTextCommandOptions,
 } from './selector-read.ts';
+import {
+  flingCommand,
+  gestureCommand,
+  panCommand,
+  rotateGestureCommand,
+  transformGestureCommand,
+  type FlingCommandOptions,
+  type GestureCommandOptions,
+  type GestureCommandResult,
+  type PanCommandOptions,
+  type RotateGestureCommandOptions,
+  type TransformGestureCommandOptions,
+} from './gesture-command.ts';
 
 export type SelectorCommands = {
   find: RuntimeCommand<FindReadCommandOptions, FindReadCommandResult>;
@@ -80,6 +93,11 @@ export type InteractionCommands = {
   swipe: RuntimeCommand<SwipeCommandOptions, SwipeCommandResult>;
   scroll: RuntimeCommand<ScrollCommandOptions, ScrollCommandResult>;
   pinch: RuntimeCommand<PinchCommandOptions, PinchCommandResult>;
+  gesture: RuntimeCommand<GestureCommandOptions, GestureCommandResult>;
+  pan: RuntimeCommand<PanCommandOptions, GestureCommandResult>;
+  fling: RuntimeCommand<FlingCommandOptions, GestureCommandResult>;
+  rotateGesture: RuntimeCommand<RotateGestureCommandOptions, GestureCommandResult>;
+  transformGesture: RuntimeCommand<TransformGestureCommandOptions, GestureCommandResult>;
 };
 
 export type BoundSelectorCommands = {
@@ -138,6 +156,11 @@ export type BoundInteractionCommands = {
   swipe: BoundRuntimeCommand<SwipeCommandOptions, SwipeCommandResult>;
   scroll: BoundRuntimeCommand<ScrollCommandOptions, ScrollCommandResult>;
   pinch: BoundRuntimeCommand<PinchCommandOptions, PinchCommandResult>;
+  gesture: BoundRuntimeCommand<GestureCommandOptions, GestureCommandResult>;
+  pan: BoundRuntimeCommand<PanCommandOptions, GestureCommandResult>;
+  fling: BoundRuntimeCommand<FlingCommandOptions, GestureCommandResult>;
+  rotateGesture: BoundRuntimeCommand<RotateGestureCommandOptions, GestureCommandResult>;
+  transformGesture: BoundRuntimeCommand<TransformGestureCommandOptions, GestureCommandResult>;
 };
 
 export const selectorCommands: SelectorCommands = {
@@ -162,6 +185,11 @@ export const interactionCommands: InteractionCommands = {
   swipe: swipeCommand,
   scroll: scrollCommand,
   pinch: pinchCommand,
+  gesture: gestureCommand,
+  pan: panCommand,
+  fling: flingCommand,
+  rotateGesture: rotateGestureCommand,
+  transformGesture: transformGestureCommand,
 };
 
 export function bindSelectorCommands(runtime: AgentDeviceRuntime): BoundSelectorCommands {
@@ -193,5 +221,19 @@ export function bindInteractionCommands(runtime: AgentDeviceRuntime): BoundInter
     swipe: (options) => interactionCommands.swipe(runtime, options),
     scroll: (options) => interactionCommands.scroll(runtime, options),
     pinch: (options) => interactionCommands.pinch(runtime, options),
+    gesture: (options) => interactionCommands.gesture(runtime, options),
+    pan: (options) => interactionCommands.pan(runtime, options),
+    fling: (options) => interactionCommands.fling(runtime, options),
+    rotateGesture: (options) => interactionCommands.rotateGesture(runtime, options),
+    transformGesture: (options) => interactionCommands.transformGesture(runtime, options),
   };
 }
+
+export type {
+  FlingCommandOptions,
+  GestureCommandOptions,
+  GestureCommandResult,
+  PanCommandOptions,
+  RotateGestureCommandOptions,
+  TransformGestureCommandOptions,
+} from './gesture-command.ts';

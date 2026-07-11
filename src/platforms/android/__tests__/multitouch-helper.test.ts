@@ -8,6 +8,7 @@ import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
 import {
   ensureAndroidMultiTouchHelper,
   parseAndroidMultiTouchHelperOutput,
+  performGestureAndroid,
   resetAndroidMultiTouchHelperInstallCache,
   rotateGestureAndroid,
   runAndroidMultiTouchHelperGesture,
@@ -22,6 +23,7 @@ import {
   ANDROID_MULTITOUCH_HELPER_MANIFEST as manifest,
   androidMultiTouchResultRecord as resultRecord,
 } from './multitouch-helper.fixtures.ts';
+import type { GesturePlan } from '../../../contracts/gesture-plan.ts';
 
 beforeEach(() => {
   resetAndroidMultiTouchHelperInstallCache();
@@ -119,6 +121,107 @@ test('runAndroidMultiTouchHelperGesture encodes one-finger swipe payloads', asyn
     y2: 400,
     durationMs: 300,
   });
+});
+
+test('runAndroidMultiTouchHelperGesture preserves exact planned pointer samples', async () => {
+  let capturedPayload: Record<string, unknown> | undefined;
+  await runAndroidMultiTouchHelperGesture({
+    adb: async (args) => {
+      capturedPayload = JSON.parse(Buffer.from(args[6]!, 'base64').toString('utf8'));
+      return {
+        exitCode: 0,
+        stdout: [resultRecord({ ok: 'true', kind: 'transform' }), 'INSTRUMENTATION_CODE: 0'].join(
+          '\n',
+        ),
+        stderr: '',
+      };
+    },
+    request: {
+      kind: 'transform',
+      intent: 'pan',
+      durationMs: 32,
+      pointers: [
+        {
+          pointerId: 0,
+          samples: [
+            { offsetMs: 0, x: 100.25, y: 80.5 },
+            { offsetMs: 16, x: 110.25, y: 85.5 },
+            { offsetMs: 32, x: 120.25, y: 90.5 },
+          ],
+        },
+        {
+          pointerId: 1,
+          samples: [
+            { offsetMs: 0, x: 100.25, y: 120.5 },
+            { offsetMs: 16, x: 110.25, y: 125.5 },
+            { offsetMs: 32, x: 120.25, y: 130.5 },
+          ],
+        },
+      ],
+    },
+    packageName: manifest.packageName,
+    instrumentationRunner: manifest.instrumentationRunner,
+  });
+
+  assert.deepEqual(capturedPayload, {
+    protocol: 'android-multitouch-helper-v1',
+    kind: 'transform',
+    intent: 'pan',
+    durationMs: 32,
+    pointers: [
+      {
+        pointerId: 0,
+        samples: [
+          { offsetMs: 0, x: 100.25, y: 80.5 },
+          { offsetMs: 16, x: 110.25, y: 85.5 },
+          { offsetMs: 32, x: 120.25, y: 90.5 },
+        ],
+      },
+      {
+        pointerId: 1,
+        samples: [
+          { offsetMs: 0, x: 100.25, y: 120.5 },
+          { offsetMs: 16, x: 110.25, y: 125.5 },
+          { offsetMs: 32, x: 120.25, y: 130.5 },
+        ],
+      },
+    ],
+  });
+});
+
+test('performGestureAndroid keeps two-finger pan intent on the provider transform path', async () => {
+  const touchCalls: unknown[] = [];
+  const plan = twoFingerPanPlan();
+
+  const result = await withAndroidAdbProvider(
+    {
+      exec: async () => {
+        throw new Error('adb should not run when provider touch injection is available');
+      },
+      touch: async (request) => {
+        touchCalls.push(request);
+        return { injected: true };
+      },
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => await performGestureAndroid(ANDROID_EMULATOR, plan),
+  );
+
+  assert.deepEqual(result, { backend: 'provider-native-touch', injected: true });
+  assert.deepEqual(touchCalls, [
+    {
+      kind: 'transform',
+      x: 100,
+      y: 100,
+      dx: 20,
+      dy: 10,
+      scale: 1,
+      degrees: 0,
+      durationMs: 32,
+      intent: 'pan',
+      plan,
+    },
+  ]);
 });
 
 test('parseAndroidMultiTouchHelperOutput distinguishes missing final results', () => {
@@ -295,4 +398,36 @@ test('ensureAndroidMultiTouchHelper installs with semantic provider install opti
 
 function sha256Text(text: string): string {
   return crypto.createHash('sha256').update(text).digest('hex');
+}
+
+function twoFingerPanPlan(): Extract<GesturePlan, { topology: 'two' }> {
+  return {
+    topology: 'two',
+    intent: 'pan',
+    durationMs: 32,
+    viewport: { x: 0, y: 0, width: 400, height: 800 },
+    centroid: { start: { x: 100, y: 100 }, end: { x: 120, y: 110 } },
+    scale: 1,
+    rotationDegrees: 0,
+    initialSpan: 40,
+    initialAngleDegrees: -90,
+    pointers: [
+      {
+        pointerId: 0,
+        samples: [
+          { offsetMs: 0, point: { x: 100, y: 80 } },
+          { offsetMs: 16, point: { x: 110, y: 85 } },
+          { offsetMs: 32, point: { x: 120, y: 90 } },
+        ],
+      },
+      {
+        pointerId: 1,
+        samples: [
+          { offsetMs: 0, point: { x: 100, y: 120 } },
+          { offsetMs: 16, point: { x: 110, y: 125 } },
+          { offsetMs: 32, point: { x: 120, y: 130 } },
+        ],
+      },
+    ],
+  };
 }

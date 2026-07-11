@@ -1166,6 +1166,129 @@ extension RunnerTests {
     }
   }
 
+  func plannedGestureValidationError(_ plan: RunnerGesturePlan) -> String? {
+    guard plan.topology == "two" else {
+      return "planned multi-touch gesture requires topology two"
+    }
+    guard plan.intent == "pan" || plan.intent == "pinch" || plan.intent == "rotate"
+      || plan.intent == "transform"
+    else {
+      return "planned multi-touch gesture has unsupported intent"
+    }
+    guard plan.durationMs.isFinite, plan.durationMs >= 16, plan.durationMs <= 10_000 else {
+      return "planned multi-touch durationMs must be between 16 and 10000"
+    }
+    let viewport = plan.viewport
+    guard viewport.x.isFinite, viewport.y.isFinite, viewport.width.isFinite,
+      viewport.height.isFinite, viewport.width > 0, viewport.height > 0
+    else {
+      return "planned multi-touch viewport must be finite and positive"
+    }
+    guard plan.pointers.count == 2,
+      plan.pointers[0].pointerId == 0,
+      plan.pointers[1].pointerId == 1
+    else {
+      return "planned multi-touch gesture requires ordered pointer ids 0 and 1"
+    }
+    let firstSamples = plan.pointers[0].samples
+    let secondSamples = plan.pointers[1].samples
+    guard firstSamples.count >= 2, firstSamples.count == secondSamples.count else {
+      return "planned pointer paths require matching samples"
+    }
+    var previousOffset = -1.0
+    for index in firstSamples.indices {
+      let first = firstSamples[index]
+      let second = secondSamples[index]
+      guard first.offsetMs.isFinite, second.offsetMs.isFinite,
+        first.offsetMs == second.offsetMs,
+        first.offsetMs > previousOffset
+      else {
+        return "planned pointer sample offsets must match and strictly increase"
+      }
+      for point in [first.point, second.point] {
+        guard point.x.isFinite, point.y.isFinite,
+          point.x >= viewport.x,
+          point.x <= viewport.x + viewport.width,
+          point.y >= viewport.y,
+          point.y <= viewport.y + viewport.height
+        else {
+          return "planned pointer sample lies outside the viewport"
+        }
+      }
+      previousOffset = first.offsetMs
+    }
+    guard firstSamples.first?.offsetMs == 0,
+      firstSamples.last?.offsetMs == plan.durationMs
+    else {
+      return "planned pointer paths must start at 0 and end at durationMs"
+    }
+    guard let firstStart = firstSamples.first?.point,
+      let secondStart = secondSamples.first?.point,
+      hypot(firstStart.x - secondStart.x, firstStart.y - secondStart.y) > 0
+    else {
+      return "planned pointer paths require a positive initial span"
+    }
+    return nil
+  }
+
+  func plannedMultiTouchGesture(
+    app: XCUIApplication,
+    plan: RunnerGesturePlan
+  ) -> RunnerInteractionOutcome {
+#if os(iOS)
+    let firstSamples = plan.pointers[0].samples
+    let secondSamples = plan.pointers[1].samples
+    let firstStart = firstSamples[0].point
+    let secondStart = secondSamples[0].point
+    let firstEnd = firstSamples[firstSamples.count - 1].point
+    let secondEnd = secondSamples[secondSamples.count - 1].point
+    let startX = (firstStart.x + secondStart.x) / 2
+    let startY = (firstStart.y + secondStart.y) / 2
+    let endX = (firstEnd.x + secondEnd.x) / 2
+    let endY = (firstEnd.y + secondEnd.y) / 2
+    let initialSpan = hypot(firstStart.x - secondStart.x, firstStart.y - secondStart.y)
+    let finalSpan = hypot(firstEnd.x - secondEnd.x, firstEnd.y - secondEnd.y)
+    let scale = finalSpan / initialSpan
+    var rotationRadians = 0.0
+    for index in 1..<firstSamples.count {
+      let previousX = firstSamples[index - 1].point.x - secondSamples[index - 1].point.x
+      let previousY = firstSamples[index - 1].point.y - secondSamples[index - 1].point.y
+      let currentX = firstSamples[index].point.x - secondSamples[index].point.x
+      let currentY = firstSamples[index].point.y - secondSamples[index].point.y
+      rotationRadians += atan2(
+        previousX * currentY - previousY * currentX,
+        previousX * currentX + previousY * currentY
+      )
+    }
+    return transformGesture(
+      app: app,
+      x: startX,
+      y: startY,
+      dx: endX - startX,
+      dy: endY - startY,
+      scale: scale,
+      degrees: rotationRadians * 180 / .pi,
+      durationMs: plan.durationMs,
+      radius: initialSpan * max(scale, 1) / 2
+    )
+#elseif os(tvOS)
+    return .unsupported(
+      message: "two-finger gestures are not supported on tvOS",
+      hint: "tvOS has no touch input; use remote-driven navigation."
+    )
+#elseif os(visionOS)
+    return .unsupported(
+      message: "two-finger touch gestures are not supported on visionOS",
+      hint: "The current XCTest synthesizer supports iOS and iPadOS touch simulators only."
+    )
+#else
+    return .unsupported(
+      message: "two-finger gestures are not supported on macOS",
+      hint: "macOS automation has no multi-touch input; run on an iOS simulator."
+    )
+#endif
+  }
+
   func pinch(app: XCUIApplication, scale: Double, x: Double?, y: Double?) -> RunnerInteractionOutcome {
 #if os(iOS)
     // A coordinate tap+drag is a single-finger gesture: React Native reads it as a pan
@@ -1240,7 +1363,8 @@ extension RunnerTests {
     dy: Double,
     scale: Double,
     degrees: Double,
-    durationMs: Double
+    durationMs: Double,
+    radius: Double? = nil
   ) -> RunnerInteractionOutcome {
 #if os(iOS)
     let target = interactionRoot(app: app)
@@ -1255,7 +1379,7 @@ extension RunnerTests {
       dy: Double(vector.dy),
       scale: scale,
       degrees: degrees,
-      radius: transformGestureRadius(frame: target.frame, scale: scale),
+      radius: radius ?? transformGestureRadius(frame: target.frame, scale: scale),
       durationMs: durationMs
     ) {
       return .unsupported(
@@ -1427,6 +1551,31 @@ extension RunnerTests {
       synthesizedScreenshotReferenceFrame(
         screenshotSize: { CGSize(width: CGFloat.infinity, height: 932) }
       )
+    )
+  }
+
+  func testPlannedMultiTouchGestureAcceptsMatchingInBoundsTrajectories() throws {
+    let plan = try JSONDecoder().decode(
+      RunnerGesturePlan.self,
+      from: Data(
+        #"{"topology":"two","intent":"pan","durationMs":32,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":80,"y":80}},{"offsetMs":16,"point":{"x":90,"y":85}},{"offsetMs":32,"point":{"x":100,"y":90}}]},{"pointerId":1,"samples":[{"offsetMs":0,"point":{"x":80,"y":120}},{"offsetMs":16,"point":{"x":90,"y":125}},{"offsetMs":32,"point":{"x":100,"y":130}}]}]}"#.utf8
+      )
+    )
+
+    XCTAssertNil(plannedGestureValidationError(plan))
+  }
+
+  func testPlannedMultiTouchGestureRejectsMismatchedOffsets() throws {
+    let plan = try JSONDecoder().decode(
+      RunnerGesturePlan.self,
+      from: Data(
+        #"{"topology":"two","intent":"transform","durationMs":32,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":80,"y":80}},{"offsetMs":32,"point":{"x":100,"y":90}}]},{"pointerId":1,"samples":[{"offsetMs":0,"point":{"x":80,"y":120}},{"offsetMs":31,"point":{"x":100,"y":130}}]}]}"#.utf8
+      )
+    )
+
+    XCTAssertEqual(
+      plannedGestureValidationError(plan),
+      "planned pointer sample offsets must match and strictly increase"
     )
   }
 

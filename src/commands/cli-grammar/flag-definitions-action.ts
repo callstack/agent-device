@@ -13,6 +13,15 @@ export const ACTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     usageDescription: 'Repeat count for press/swipe series',
   },
   {
+    key: 'pointerCount',
+    names: ['--pointer-count'],
+    type: 'int',
+    min: 1,
+    max: 2,
+    usageLabel: '--pointer-count <1|2>',
+    usageDescription: 'Gesture pan: number of touch pointers (default 1)',
+  },
+  {
     key: 'fps',
     names: ['--fps'],
     type: 'int',

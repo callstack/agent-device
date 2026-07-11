@@ -34,6 +34,9 @@ const SWIPE_NUMERIC_FLAG_MAP = new Map<string, 'count' | 'pauseMs'>([
   ['--count', 'count'],
   ['--pause-ms', 'pauseMs'],
 ]);
+const GESTURE_NUMERIC_FLAG_MAP = new Map<string, 'pointerCount'>([
+  ['--pointer-count', 'pointerCount'],
+]);
 
 const TYPING_NUMERIC_FLAG_MAP = new Map<string, 'delayMs'>([['--delay-ms', 'delayMs']]);
 
@@ -138,6 +141,12 @@ export function appendScriptSeriesFlags(
     if (typeof flags.pauseMs === 'number') parts.push('--pause-ms', String(flags.pauseMs));
     if (flags.pattern === 'one-way' || flags.pattern === 'ping-pong') {
       parts.push('--pattern', flags.pattern);
+    }
+    return;
+  }
+  if (action.command === 'gesture') {
+    if (typeof flags.pointerCount === 'number') {
+      parts.push('--pointer-count', String(flags.pointerCount));
     }
     return;
   }
@@ -255,9 +264,11 @@ export function parseReplaySeriesFlags(
     ? CLICK_LIKE_NUMERIC_FLAG_MAP
     : command === 'swipe'
       ? SWIPE_NUMERIC_FLAG_MAP
-      : isTypingCommand(command)
-        ? TYPING_NUMERIC_FLAG_MAP
-        : undefined;
+      : command === 'gesture'
+        ? GESTURE_NUMERIC_FLAG_MAP
+        : isTypingCommand(command)
+          ? TYPING_NUMERIC_FLAG_MAP
+          : undefined;
 
   for (let index = 0; index < args.length; index += 1) {
     const token = args[index]!;

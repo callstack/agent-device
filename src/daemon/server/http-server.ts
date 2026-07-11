@@ -168,6 +168,7 @@ function toDaemonRequest(params: CommandRpcParams, headers: IncomingHttpHeaders)
     session: params.session ?? 'default',
     command: params.command ?? '',
     positionals: params.positionals ?? [],
+    input: params.input,
     // flags/runtime/meta are validated as objects at the boundary; their full shape is
     // validated in the session open handler downstream.
     flags: params.flags as DaemonRequest['flags'],

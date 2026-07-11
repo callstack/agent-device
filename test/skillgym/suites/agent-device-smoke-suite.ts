@@ -2199,6 +2199,26 @@ Treat the recovery message as a warning, not a fatal error. Use the exposed Sear
       topLevelPlannedCommand('rotate'),
       topLevelPlannedCommand('rotate-gesture'),
       /--duration-ms/i,
+      /--pointer-count/i,
+    ],
+  }),
+  makeCase({
+    id: 'gesture-two-finger-pan',
+    contract: [
+      'Platform: Android',
+      'Current screen: map tilt canary',
+      'Target center is x=200 y=420',
+      'The recognizer requires exactly two fingers moving in parallel',
+      'Pan delta is dx=80 dy=-40 over 700ms',
+      'Do not add scale or rotation',
+    ],
+    task: 'Plan the direct agent-device gesture command for the two-finger pan.',
+    outputs: [plannedCommand('gesture pan'), /200\s+420\s+80\s+-40\s+700/i, /--pointer-count\s+2/i],
+    forbiddenOutputs: [
+      plannedCommand('gesture transform'),
+      plannedCommand('gesture pinch'),
+      plannedCommand('gesture rotate'),
+      /(?:^|\s)--count(?:\s|=)/i,
     ],
   }),
   makeCase({

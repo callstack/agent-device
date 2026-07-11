@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import { ref, selector } from '../../index.ts';
 import { AppError } from '../../../kernel/errors.ts';
+import { makeSnapshotState } from '../../../__tests__/test-utils/index.ts';
 import {
   createInteractionDevice,
   runtimeScrollSnapshot,
@@ -303,7 +304,7 @@ test('runtime swipe supports explicit and viewport-derived targets', async () =>
   assert.deepEqual(directional.to, { x: 35, y: 40 });
   assert.deepEqual(calls, [
     { from: { x: 60, y: 40 }, to: { x: 200, y: 40 }, durationMs: 300 },
-    { from: { x: 60, y: 40 }, to: { x: 35, y: 40 }, durationMs: undefined },
+    { from: { x: 60, y: 40 }, to: { x: 35, y: 40 }, durationMs: 300 },
   ]);
 });
 
@@ -437,7 +438,24 @@ test('runtime pinch is backend-gated and resolves optional center targets', asyn
     /pinch is not supported/,
   );
 
-  const device = createInteractionDevice(selectorSnapshot(), {
+  const pinchSnapshot = makeSnapshotState([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 300, height: 600 },
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Continue',
+      rect: { x: 10, y: 20, width: 100, height: 40 },
+      hittable: true,
+    },
+  ]);
+  const device = createInteractionDevice(pinchSnapshot, {
     pinch: async (_context, options) => {
       calls.push(options);
     },
@@ -445,11 +463,38 @@ test('runtime pinch is backend-gated and resolves optional center targets', asyn
 
   const result = await device.interactions.pinch({
     scale: 0.8,
-    center: ref('@e1'),
+    center: ref('@e2'),
     session: 'default',
   });
 
   assert.equal(result.kind, 'pinch');
   assert.deepEqual(result.center, { x: 60, y: 40 });
   assert.deepEqual(calls, [{ scale: 0.8, center: { x: 60, y: 40 } }]);
+});
+
+test('runtime multi-touch planning prefers backend viewport geometry without a snapshot capture', async () => {
+  let capturedPlan: unknown;
+  const device = createInteractionDevice(selectorSnapshot(), {
+    platform: 'android',
+    captureSnapshot: async () => {
+      throw new Error('gesture viewport must not capture Android accessibility state');
+    },
+    resolveGestureViewport: async () => ({ x: 0, y: 0, width: 300, height: 600 }),
+    performGesture: async (_context, plan) => {
+      capturedPlan = plan;
+    },
+  });
+
+  await device.interactions.pan({
+    origin: { x: 150, y: 300 },
+    delta: { x: 20, y: 0 },
+    pointerCount: 2,
+  });
+
+  assert.deepEqual(
+    capturedPlan && typeof capturedPlan === 'object' && 'viewport' in capturedPlan
+      ? capturedPlan.viewport
+      : undefined,
+    { x: 0, y: 0, width: 300, height: 600 },
+  );
 });

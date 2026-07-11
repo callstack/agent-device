@@ -1,4 +1,8 @@
-import { dispatchCommand } from '../../core/dispatch.ts';
+import {
+  dispatchCommand,
+  dispatchGesturePlan,
+  dispatchGestureViewport,
+} from '../../core/dispatch.ts';
 import { publicPlatformString } from '../../kernel/device.ts';
 import type {
   AgentDeviceBackend,
@@ -61,6 +65,11 @@ function createInteractionBackend(
         },
       ),
     }),
+    resolveGestureViewport: async () =>
+      await dispatchGestureViewport(
+        session.device,
+        params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
+      ),
     tap: async (_context, point): Promise<BackendActionResult> =>
       toBackendActionResult(
         await dispatchCommand(
@@ -108,6 +117,14 @@ function createInteractionBackend(
             ...(options?.durationMs === undefined ? [] : [String(options.durationMs)]),
           ],
           req.flags?.out,
+          params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
+        ),
+      ),
+    performGesture: async (_context, plan): Promise<BackendActionResult> =>
+      toBackendActionResult(
+        await dispatchGesturePlan(
+          session.device,
+          plan,
           params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
         ),
       ),

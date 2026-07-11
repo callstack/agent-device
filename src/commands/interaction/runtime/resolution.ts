@@ -105,7 +105,11 @@ export type InteractionAction =
   | 'longPress'
   | 'scroll'
   | 'swipe'
-  | 'pinch';
+  | 'pinch'
+  | 'pan'
+  | 'fling'
+  | 'rotate'
+  | 'transform';
 
 export type CapturedSnapshot = {
   snapshot: SnapshotState;

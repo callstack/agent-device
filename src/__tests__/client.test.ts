@@ -614,6 +614,47 @@ test('interactions.rotateGesture rejects partial centers on the client side', as
   assert.equal(setup.calls.length, 0);
 });
 
+test('interactions.pan projects one- and two-finger requests through typed gesture input', async () => {
+  const setup = createTransport(async () => ({ ok: true, data: { message: 'Panned' } }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  await client.interactions.pan({ x: 100, y: 200, dx: 40, dy: -20 });
+  await client.interactions.pan({
+    x: 100,
+    y: 200,
+    dx: 40,
+    dy: -20,
+    pointerCount: 2,
+    durationMs: 600,
+  });
+
+  assert.deepEqual(
+    setup.calls.map(({ command, positionals, input }) => ({ command, positionals, input })),
+    [
+      {
+        command: 'gesture',
+        positionals: [],
+        input: {
+          kind: 'pan',
+          origin: { x: 100, y: 200 },
+          delta: { x: 40, y: -20 },
+        },
+      },
+      {
+        command: 'gesture',
+        positionals: [],
+        input: {
+          kind: 'pan',
+          origin: { x: 100, y: 200 },
+          delta: { x: 40, y: -20 },
+          pointerCount: 2,
+          durationMs: 600,
+        },
+      },
+    ],
+  );
+});
+
 // fallow-ignore-next-line complexity
 test('replay.run serializes client-collected AD_VAR shell env into daemon request', async () => {
   const previousAppId = process.env.AD_VAR_APP_ID;

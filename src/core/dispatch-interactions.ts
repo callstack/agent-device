@@ -9,16 +9,11 @@ import {
 import { successText, withSuccessText } from '../utils/success-text.ts';
 import { findMistargetedTypeRefToken } from '../utils/type-target-warning.ts';
 import {
-  buildSwipePresetGesturePlan,
-  inferGestureReferenceFrame,
   parseScrollDirection,
-  parseSwipePreset,
-  SCROLL_DIRECTIONS,
   SWIPE_PATTERNS,
   type ScrollDirection,
   type SwipePattern,
   type SwipePreset,
-  type TransformGestureParams,
 } from '../contracts/scroll-gesture.ts';
 import {
   assertExclusiveScrollDistanceInputs,
@@ -26,7 +21,7 @@ import {
   normalizeScrollDurationMs,
   type ScrollCommandOptions,
 } from '../contracts/scroll-command.ts';
-import { isStringMember, parseStringMember } from '../utils/string-enum.ts';
+import { isStringMember } from '../utils/string-enum.ts';
 import {
   getClickButtonValidationError,
   resolveClickButton,
@@ -585,33 +580,6 @@ export async function handleSwipeCommand(
   });
 }
 
-export async function handleSwipePresetCommand(
-  device: DeviceInfo,
-  interactor: Interactor,
-  positionals: string[],
-  context: DispatchContext | undefined,
-): Promise<Record<string, unknown>> {
-  const preset = parseSwipePreset(positionals[0]);
-  const requestedDurationMs = positionals[1] ? Number(positionals[1]) : 300;
-  const snapshot = await interactor.snapshot({ appBundleId: context?.appBundleId });
-  const frame = inferGestureReferenceFrame(snapshot.nodes ?? []);
-  if (!frame) {
-    throw new AppError('COMMAND_FAILED', 'Cannot infer viewport for gesture swipe preset');
-  }
-  const plan = buildSwipePresetGesturePlan(preset, frame);
-  return await runSwipeCoordinates({
-    device,
-    interactor,
-    context,
-    x1: plan.x1,
-    y1: plan.y1,
-    x2: plan.x2,
-    y2: plan.y2,
-    requestedDurationMs,
-    preset,
-  });
-}
-
 // fallow-ignore-next-line complexity
 async function runSwipeCoordinates(params: {
   device: DeviceInfo;
@@ -689,66 +657,6 @@ async function runSwipeCoordinates(params: {
     },
     preset ? `Swiped ${preset}` : formatSwipeMessage(count, pattern),
   );
-}
-
-export async function handlePanCommand(
-  interactor: Interactor,
-  positionals: string[],
-): Promise<Record<string, unknown>> {
-  const x = Number(positionals[0]);
-  const y = Number(positionals[1]);
-  const dx = Number(positionals[2]);
-  const dy = Number(positionals[3]);
-  if ([x, y, dx, dy].some((value) => !Number.isFinite(value))) {
-    throw new AppError('INVALID_ARGS', 'gesture pan requires x y dx dy [durationMs]');
-  }
-  const requestedDurationMs = positionals[4] ? Number(positionals[4]) : 500;
-  const durationMs = requireIntInRange(requestedDurationMs, 'durationMs', 16, 10_000);
-  const x2 = x + dx;
-  const y2 = y + dy;
-  const interactionResult = await interactor.pan(x, y, x2, y2, durationMs);
-  return {
-    x,
-    y,
-    dx,
-    dy,
-    x2,
-    y2,
-    durationMs,
-    ...(interactionResult ?? {}),
-    ...successText(`Panned (${x}, ${y}) by (${dx}, ${dy})`),
-  };
-}
-
-export async function handleFlingCommand(
-  interactor: Interactor,
-  positionals: string[],
-): Promise<Record<string, unknown>> {
-  const direction = parseGestureDirection(positionals[0], 'fling direction');
-  const x = Number(positionals[1]);
-  const y = Number(positionals[2]);
-  if (![x, y].every(Number.isFinite)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'gesture fling requires direction x y [distance] [durationMs]',
-    );
-  }
-  const distanceInput = positionals[3] ? Number(positionals[3]) : 180;
-  const distance = requireFinitePositiveNumber(distanceInput, 'distance');
-  const requestedDurationMs = positionals[4] ? Number(positionals[4]) : 50;
-  const durationMs = requireIntInRange(requestedDurationMs, 'durationMs', 16, 1_000);
-  const { x2, y2 } = pointOffsetByDirection(x, y, direction, distance);
-  await interactor.fling(x, y, x2, y2, durationMs);
-  return {
-    direction,
-    x,
-    y,
-    x2,
-    y2,
-    distance,
-    durationMs,
-    ...successText(`Flung ${direction}`),
-  };
 }
 
 export async function handleScrollCommand(
@@ -871,182 +779,6 @@ function parseScrollTarget(input: string): {
   if (input === 'bottom') return { direction: 'down', edge: 'bottom' };
   if (input === 'top') return { direction: 'up', edge: 'top' };
   return { direction: parseScrollDirection(input) };
-}
-
-export async function handlePinchCommand(
-  device: DeviceInfo,
-  interactor: Interactor,
-  positionals: string[],
-  context: DispatchContext | undefined,
-): Promise<Record<string, unknown>> {
-  // Cross-platform TV-target gate (also rejects Android TV, which shares target: 'tv');
-  // NOT narrowed to the tvOS Apple-OS leaf (isTvOsDevice) so Android-TV behavior is unchanged.
-  if (device.target === 'tv') {
-    throw new AppError('UNSUPPORTED_OPERATION', 'gesture pinch is not supported on tvOS');
-  }
-  if (isMacOs(device) && context?.surface && context.surface !== 'app') {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      'gesture pinch is only supported in macOS app sessions. Re-open the target app without --surface desktop|menubar|frontmost-app first.',
-    );
-  }
-  const scale = Number(positionals[0]);
-  const x = positionals[1] ? Number(positionals[1]) : undefined;
-  const y = positionals[2] ? Number(positionals[2]) : undefined;
-  if (Number.isNaN(scale) || scale <= 0) {
-    throw new AppError('INVALID_ARGS', 'gesture pinch requires scale > 0');
-  }
-  const interactionResult = await interactor.pinch(scale, x, y);
-  return { scale, x, y, ...interactionResult, ...successText(`Pinched to scale ${scale}`) };
-}
-
-export async function handleRotateGestureCommand(
-  device: DeviceInfo,
-  interactor: Interactor,
-  positionals: string[],
-): Promise<Record<string, unknown>> {
-  // Cross-platform TV-target gate (also rejects Android TV) — see handlePinchCommand.
-  if (device.target === 'tv') {
-    throw new AppError('UNSUPPORTED_OPERATION', 'gesture rotate is not supported on tvOS');
-  }
-  if (isMacOs(device)) {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      'gesture rotate is not supported on macOS; XCTest rotation gestures are available only for iOS app sessions.',
-    );
-  }
-
-  const { degrees, x, y, velocity } = parseRotateGestureParams(positionals);
-
-  const interactionResult = await interactor.rotateGesture(degrees, x, y, velocity);
-  return {
-    degrees,
-    ...(x !== undefined && y !== undefined ? { x, y } : {}),
-    velocity,
-    ...interactionResult,
-    ...successText(`Rotated gesture ${degrees} degrees`),
-  };
-}
-
-export async function handleTransformGestureCommand(
-  device: DeviceInfo,
-  interactor: Interactor,
-  positionals: string[],
-): Promise<Record<string, unknown>> {
-  // Cross-platform TV-target gate (also rejects Android TV) — see handlePinchCommand.
-  if (device.target === 'tv') {
-    throw new AppError('UNSUPPORTED_OPERATION', 'gesture transform is not supported on tvOS');
-  }
-  const supportedIosSimulator = isIosFamily(device) && device.kind === 'simulator';
-  if (device.platform !== 'android' && !supportedIosSimulator) {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      'gesture transform is currently supported on Android and iOS simulators',
-    );
-  }
-
-  const params = parseTransformGestureParams(positionals);
-  const interactionResult = await interactor.transformGesture(params);
-  return {
-    ...params,
-    ...interactionResult,
-    ...successText(
-      `Requested transform gesture by (${params.dx}, ${params.dy}), scale ${params.scale}, rotate ${params.degrees} degrees`,
-    ),
-  };
-}
-
-type RotateGestureParams = {
-  degrees: number;
-  x?: number;
-  y?: number;
-  velocity: number;
-};
-
-function parseRotateGestureParams(positionals: string[]): RotateGestureParams {
-  const degrees = Number(positionals[0]);
-  if (!Number.isFinite(degrees)) {
-    throw new AppError('INVALID_ARGS', 'gesture rotate requires degrees [x] [y] [velocity]');
-  }
-
-  const center = parseOptionalGestureCenter(positionals[1], positionals[2]);
-  const velocity = Number(positionals[3] ?? (degrees >= 0 ? 1 : -1));
-  if (!Number.isFinite(velocity) || velocity === 0) {
-    throw new AppError('INVALID_ARGS', 'gesture rotate velocity must be a non-zero number');
-  }
-
-  return { degrees, ...center, velocity: Math.abs(velocity) * (degrees >= 0 ? 1 : -1) };
-}
-
-function parseTransformGestureParams(positionals: string[]): TransformGestureParams {
-  const x = Number(positionals[0]);
-  const y = Number(positionals[1]);
-  const dx = Number(positionals[2]);
-  const dy = Number(positionals[3]);
-  const scale = Number(positionals[4]);
-  const degrees = Number(positionals[5]);
-  if (![x, y, dx, dy, scale, degrees].every(Number.isFinite)) {
-    throw new AppError(
-      'INVALID_ARGS',
-      'gesture transform requires x y dx dy scale degrees [durationMs]',
-    );
-  }
-  if (scale <= 0) {
-    throw new AppError('INVALID_ARGS', 'gesture transform scale must be > 0');
-  }
-  const durationMs =
-    positionals[6] === undefined
-      ? undefined
-      : requireIntInRange(Number(positionals[6]), 'durationMs', 16, 10_000);
-  return { x, y, dx, dy, scale, degrees, durationMs };
-}
-
-function parseOptionalGestureCenter(
-  xInput: string | undefined,
-  yInput: string | undefined,
-): Pick<RotateGestureParams, 'x' | 'y'> {
-  if (xInput === undefined && yInput === undefined) return {};
-  if (xInput === undefined || yInput === undefined) {
-    throw new AppError('INVALID_ARGS', 'gesture rotate center requires both x and y');
-  }
-
-  const x = Number(xInput);
-  const y = Number(yInput);
-  if (!Number.isFinite(x) || !Number.isFinite(y)) {
-    throw new AppError('INVALID_ARGS', 'gesture rotate center requires finite x and y');
-  }
-  return { x, y };
-}
-
-function parseGestureDirection(input: string | undefined, field: string): ScrollDirection {
-  return parseStringMember(SCROLL_DIRECTIONS, input, {
-    message: `${field} must be up, down, left, or right`,
-  });
-}
-
-function requireFinitePositiveNumber(value: number, field: string): number {
-  if (!Number.isFinite(value) || value <= 0) {
-    throw new AppError('INVALID_ARGS', `${field} must be a positive number`);
-  }
-  return value;
-}
-
-function pointOffsetByDirection(
-  x: number,
-  y: number,
-  direction: ScrollDirection,
-  distance: number,
-): { x2: number; y2: number } {
-  switch (direction) {
-    case 'up':
-      return { x2: x, y2: y - distance };
-    case 'down':
-      return { x2: x, y2: y + distance };
-    case 'left':
-      return { x2: x - distance, y2: y };
-    case 'right':
-      return { x2: x + distance, y2: y };
-  }
 }
 
 export async function handleReadCommand(

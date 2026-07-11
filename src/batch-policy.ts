@@ -32,7 +32,13 @@ export const STRUCTURED_BATCH_COMMAND_NAMES: readonly StructuredBatchCommandName
 
 const BATCH_BLOCKED_COMMANDS: ReadonlySet<string> = new Set(['batch', 'replay']);
 
-export const BATCH_DAEMON_STEP_KEYS = ['command', 'positionals', 'flags', 'runtime'] as const;
+export const BATCH_DAEMON_STEP_KEYS = [
+  'command',
+  'positionals',
+  'input',
+  'flags',
+  'runtime',
+] as const;
 
 export const INHERITED_PARENT_FLAG_KEYS = [
   'platform',

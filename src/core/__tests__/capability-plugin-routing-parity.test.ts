@@ -106,10 +106,6 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
 const isNotMacOs = (device: DeviceInfo): boolean => !isMacOs(device);
 const isMacOsOrAppleSimulator = (device: DeviceInfo): boolean =>
   isMacOs(device) || device.kind === 'simulator';
-const isIosMobileSimulator = (device: DeviceInfo): boolean =>
-  isIosFamily(device) && device.kind === 'simulator' && device.target !== 'tv';
-const supportsSynthesisGesture = (device: DeviceInfo): boolean =>
-  device.platform === 'android' || isIosMobileSimulator(device);
 const supportsAndroidOrIosNonTv = (device: DeviceInfo): boolean =>
   device.platform === 'android' || (isIosFamily(device) && device.target !== 'tv');
 const supportsTvRemote = (device: DeviceInfo): boolean =>
@@ -121,16 +117,6 @@ const supportsHostAudioProbe = (device: DeviceInfo): boolean =>
     (isMacOs(device) ||
       (isIosFamily(device) && device.kind === 'simulator') ||
       (device.platform === 'android' && device.kind === 'emulator')));
-const synthesisGestureUnsupportedHint = (device: DeviceInfo): string | undefined => {
-  if (isMacOs(device))
-    return 'macOS automation has no multi-touch input — this gesture is supported on Android and the iOS simulator only.';
-  if (isIosFamily(device) && device.target === 'tv')
-    return 'tvOS has no touch input — this gesture is supported on Android and the iOS simulator only.';
-  if (isIosFamily(device) && device.kind === 'device')
-    return 'Two-finger gesture synthesis is iOS-simulator only — not available on physical iOS devices.';
-  return undefined;
-};
-
 // Which commands carry which supports()/unsupportedHint() closure today. The
 // end-to-end assertions cross-check this map against production: a command that
 // gains/loses a closure (or whose closure body changes) breaks parity.
@@ -154,9 +140,6 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   settings: (device) =>
     device.platform === 'android' || isMacOs(device) || device.kind === 'simulator',
   audio: supportsHostAudioProbe,
-  pinch: supportsSynthesisGesture,
-  'rotate-gesture': supportsSynthesisGesture,
-  'transform-gesture': supportsSynthesisGesture,
 };
 const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
   'tv-remote': (device) => {
@@ -170,9 +153,6 @@ const HINT_REF: Record<string, (device: DeviceInfo) => string | undefined> = {
     }
     return isMacOs(device) ? 'tv-remote is supported only on tvOS devices.' : undefined;
   },
-  pinch: synthesisGestureUnsupportedHint,
-  'rotate-gesture': synthesisGestureUnsupportedHint,
-  'transform-gesture': synthesisGestureUnsupportedHint,
 };
 
 // Independent reference for `isCommandSupportedOnDevice` over NON-WEB platforms,

@@ -42,10 +42,11 @@ export type AppleOsCapabilityProfile = {
    */
   readonly physicalDeviceSurfaces: boolean;
   /**
-   * `pinch` / `rotate-gesture` / `transform-gesture` — the two-finger multi-touch
-   * SYNTHESIS input model. `false` on tvOS (no touch) and macOS (no multi-touch). The
-   * reading closure further gates this to the simulator (physical iOS cannot synthesize),
-   * which is device-shaped nuance kept OUT of the table on purpose.
+   * The public `gesture` command's two-pointer pan, pinch, rotate, and transform arms —
+   * the multi-touch SYNTHESIS input model. `false` on tvOS (no touch), visionOS
+   * (spatial input), and macOS (no multi-touch). The reader further gates this to the
+   * simulator (physical iOS cannot synthesize), which is device-shaped nuance kept OUT
+   * of the table on purpose.
    */
   readonly multiTouchSynthesis: boolean;
   /**
@@ -56,12 +57,10 @@ export type AppleOsCapabilityProfile = {
   readonly multiTouchUnsupportedHint?: string;
 };
 
-// iOS / iPadOS / visionOS are capability-identical under today's behavior: all are
-// modeled as the touch iOS engine (`platform: 'ios'`, mobile target), so a stored
-// `appleOs: 'ipados' | 'visionos'` must read exactly what the legacy target-based
-// inference produced for an unlabeled iOS record. Sharing ONE frozen row keeps that
-// invariant a reference identity (asserted by the parity test) and mirrors the iOS
-// runner profile absorbing iPadOS.
+// iOS and iPadOS share the touchscreen XCTest synthesis implementation. visionOS is
+// intentionally separate below: its spatial-input runtime does not compile the iOS
+// two-touch executor, so advertising this capability would pass admission only to fail
+// inside the runner.
 const IOS_FAMILY_CAPABILITIES: AppleOsCapabilityProfile = {
   appAndDeviceLifecycle: true,
   keyboard: true,
@@ -73,7 +72,15 @@ const IOS_FAMILY_CAPABILITIES: AppleOsCapabilityProfile = {
 export const APPLE_OS_CAPABILITIES: Record<AppleOS, AppleOsCapabilityProfile> = {
   ios: IOS_FAMILY_CAPABILITIES,
   ipados: IOS_FAMILY_CAPABILITIES,
-  visionos: IOS_FAMILY_CAPABILITIES,
+  visionos: {
+    appAndDeviceLifecycle: true,
+    keyboard: true,
+    orientation: true,
+    physicalDeviceSurfaces: false,
+    multiTouchSynthesis: false,
+    multiTouchUnsupportedHint:
+      'visionOS uses spatial input and does not support two-finger touch synthesis.',
+  },
   // tvOS: focus-only (XCUIRemote), no touch — so no keyboard, orientation, or
   // multi-touch synthesis; but the app + device lifecycle (boot/install/home/
   // app-switcher) is supported like the rest of the mobile family.

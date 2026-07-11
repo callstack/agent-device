@@ -73,6 +73,7 @@ const SANITIZED_FLAG_KEYS = [
   'quality',
   'hideTouches',
   'count',
+  'pointerCount',
   'intervalMs',
   'delayMs',
   'holdMs',
