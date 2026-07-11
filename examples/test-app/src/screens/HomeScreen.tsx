@@ -50,8 +50,6 @@ export function HomeScreen(props: HomeScreenProps) {
         testID="home-title"
       />
 
-      <GestureLab />
-
       {props.noticeVisible ? (
         <SectionCard
           subtitle="Dismiss this to exercise nearby mutations and compact diff verification."
@@ -102,6 +100,8 @@ export function HomeScreen(props: HomeScreenProps) {
           />
         </View>
       </SectionCard>
+
+      <GestureLab />
 
       <SectionCard
         subtitle="Good for wait, get, and state assertions."
