@@ -1,0 +1,173 @@
+{
+  "schemaVersion": 1,
+  "upstream": {
+    "project": "mobile-dev-inc/Maestro",
+    "version": "2.5.1",
+    "tag": "v2.5.1",
+    "commit": "a4c7c95f5ba1884858f7e35efa6b8e0165db9448",
+    "sourceUrl": "https://github.com/mobile-dev-inc/Maestro/tree/v2.5.1",
+    "artifacts": [
+      {
+        "path": "maestro-orchestra/src/main/java/maestro/orchestra/yaml/YamlSwipe.kt",
+        "role": "YAML swipe classification and percentage endpoint parsing",
+        "sha256": "1ad0e1c8d80edabc1b5de9390bc64d29117c1d5eff2016faef9f8cf6b9d728e3"
+      },
+      {
+        "path": "maestro-orchestra/src/main/java/maestro/orchestra/yaml/YamlFluentCommand.kt",
+        "role": "YAML command to Maestro command-model conversion",
+        "sha256": "6ab05c3932040e20dffa0a683ce0eecb9241e0c9b7bcc0188b697c196797c01d"
+      },
+      {
+        "path": "maestro-orchestra/src/main/java/maestro/orchestra/yaml/YamlLaunchApp.kt",
+        "role": "launchApp scalar/map decoding",
+        "sha256": "2e656607e44acb51969afcafe6d75316cf2586f6e0614696f08cab3719f6b615"
+      },
+      {
+        "path": "maestro-orchestra/src/main/java/maestro/orchestra/yaml/YamlRunFlow.kt",
+        "role": "runFlow file/inline command shape",
+        "sha256": "a1c50cbd18fd329e9ca91751f324b1caf07aff33616cc4de7ddecaabd3fda66e"
+      },
+      {
+        "path": "maestro-orchestra/src/main/java/maestro/orchestra/yaml/YamlElementSelector.kt",
+        "role": "selector YAML fields",
+        "sha256": "907b0c8298d2cdc0a369937f1cc0f1787dfe195a82de6f8b2c46f28d0571446b"
+      },
+      {
+        "path": "maestro-orchestra-models/src/main/java/maestro/orchestra/Commands.kt",
+        "role": "LaunchAppCommand, SwipeCommand, and RunFlowCommand model defaults",
+        "sha256": "64c98d657b649e90e12c0246bfe18465bf2691233f11884ca975f955afbd3836"
+      },
+      {
+        "path": "maestro-orchestra-models/src/main/java/maestro/orchestra/ElementSelector.kt",
+        "role": "normalized selector model",
+        "sha256": "b8e97a99806d992cb02d9edc33f258af7404e33dad9e9ce4786bda86d81171a9"
+      }
+    ]
+  },
+  "cases": [
+    {
+      "id": "pager-percentage-swipe",
+      "flow": "pager-percentage-swipe.yaml",
+      "expected": [
+        {
+          "kind": "swipe",
+          "mode": "relative",
+          "start": [
+            90,
+            50
+          ],
+          "end": [
+            10,
+            50
+          ],
+          "durationMs": 400,
+          "source": {
+            "path": "pager-percentage-swipe.yaml",
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "launch-defaults",
+      "flow": "launch-defaults.yaml",
+      "expected": [
+        {
+          "kind": "launchApp",
+          "appId": "com.example.pager",
+          "stopApp": true,
+          "source": {
+            "path": "launch-defaults.yaml",
+            "line": 3
+          }
+        }
+      ]
+    },
+    {
+      "id": "selectors",
+      "flow": "selectors.yaml",
+      "expected": [
+        {
+          "kind": "tapOn",
+          "selector": {
+            "text": "Open details"
+          },
+          "source": {
+            "path": "selectors.yaml",
+            "line": 3
+          }
+        },
+        {
+          "kind": "tapOn",
+          "selector": {
+            "id": "pager-next",
+            "index": 1,
+            "childOf": {
+              "id": "pager"
+            }
+          },
+          "source": {
+            "path": "selectors.yaml",
+            "line": 4
+          }
+        },
+        {
+          "kind": "tapOn",
+          "selector": {
+            "text": "Ready",
+            "enabled": false
+          },
+          "source": {
+            "path": "selectors.yaml",
+            "line": 9
+          }
+        }
+      ]
+    },
+    {
+      "id": "runflow-include-provenance",
+      "flow": "runflow-main.yaml",
+      "expected": [
+        {
+          "kind": "tapOn",
+          "selector": {
+            "text": "Before"
+          },
+          "source": {
+            "path": "runflow-main.yaml",
+            "line": 3
+          }
+        },
+        {
+          "kind": "launchApp",
+          "appId": "com.example.include",
+          "stopApp": true,
+          "source": {
+            "path": "runflow-child.yaml",
+            "line": 3
+          }
+        },
+        {
+          "kind": "tapOn",
+          "selector": {
+            "id": "included-button"
+          },
+          "source": {
+            "path": "runflow-child.yaml",
+            "line": 4
+          }
+        },
+        {
+          "kind": "tapOn",
+          "selector": {
+            "text": "After"
+          },
+          "source": {
+            "path": "runflow-main.yaml",
+            "line": 6
+          }
+        }
+      ]
+    }
+  ]
+}

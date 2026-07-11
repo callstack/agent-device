@@ -1,0 +1,6 @@
+appId: com.example.include
+---
+- tapOn: Before
+- runFlow:
+    file: runflow-child.yaml
+- tapOn: After

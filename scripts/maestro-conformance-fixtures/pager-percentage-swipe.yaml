@@ -1,0 +1,7 @@
+appId: com.example.pager
+---
+- swipe:
+    from:
+      id: pager-view
+    start: 90%, 50%
+    end: 10%, 50%
