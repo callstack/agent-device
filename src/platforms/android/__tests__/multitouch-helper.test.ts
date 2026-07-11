@@ -7,6 +7,7 @@ import { beforeEach, test } from 'vitest';
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
 import {
   ensureAndroidMultiTouchHelper,
+  normalizeAndroidMultiTouchHelperGestureRequest,
   parseAndroidMultiTouchHelperOutput,
   performGestureAndroid,
   resetAndroidMultiTouchHelperInstallCache,
@@ -186,6 +187,32 @@ test('runAndroidMultiTouchHelperGesture preserves exact planned pointer samples'
         ],
       },
     ],
+  });
+});
+
+test('planned scale-up transform passes its final radius to the semantic helper', () => {
+  const request = normalizeAndroidMultiTouchHelperGestureRequest({
+    kind: 'transform',
+    x: 100,
+    y: 100,
+    dx: 20,
+    dy: 10,
+    scale: 2,
+    degrees: 35,
+    durationMs: 32,
+    plan: twoFingerTransformPlan(),
+  });
+
+  assert.deepEqual(request, {
+    kind: 'transform',
+    x: 100,
+    y: 100,
+    dx: 20,
+    dy: 10,
+    scale: 2,
+    degrees: 35,
+    radius: 40,
+    durationMs: 32,
   });
 });
 
@@ -429,5 +456,14 @@ function twoFingerPanPlan(): Extract<GesturePlan, { topology: 'two' }> {
         ],
       },
     ],
+  };
+}
+
+function twoFingerTransformPlan(): Extract<GesturePlan, { topology: 'two' }> {
+  return {
+    ...twoFingerPanPlan(),
+    intent: 'transform',
+    scale: 2,
+    rotationDegrees: 35,
   };
 }

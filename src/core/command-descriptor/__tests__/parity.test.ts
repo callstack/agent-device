@@ -47,7 +47,6 @@ const NO_CAPABILITY_PUBLIC_COMMANDS = new Set<string>([
   PUBLIC_COMMANDS.devices,
   PUBLIC_COMMANDS.doctor,
   PUBLIC_COMMANDS.events,
-  PUBLIC_COMMANDS.gesture,
   PUBLIC_COMMANDS.prepare,
   PUBLIC_COMMANDS.replay,
   PUBLIC_COMMANDS.test,
@@ -285,6 +284,7 @@ test('capability-checked command list is built from descriptor capabilities', ()
 
   assert.deepEqual(listCapabilityCheckedCommandNames(), expected);
   assert.ok(expectedNames.has(PUBLIC_COMMANDS.snapshot), 'snapshot remains capability-checked');
+  assert.ok(expectedNames.has(PUBLIC_COMMANDS.gesture), 'gesture remains capability-checked');
   assert.equal(
     expectedNames.has(PUBLIC_COMMANDS.capabilities),
     false,

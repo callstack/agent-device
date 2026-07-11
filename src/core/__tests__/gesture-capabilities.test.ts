@@ -80,7 +80,13 @@ test('TV, spatial, watch, desktop, Linux, and web gesture policy stays explicit'
   const web = device({ platform: 'web', kind: 'device', target: 'desktop' });
 
   assertSupported(oneFingerPan, androidTv);
-  assertUnsupported(twoFingerPan, androidTv, /tvOS/);
+  assertUnsupported(twoFingerPan, androidTv, /Android TV/);
+  assert.throws(
+    () => requireGestureSupported(twoFingerPan, androidTv),
+    (error: unknown) =>
+      error instanceof AppError &&
+      /Android TV has no touch input/.test(String(error.details?.hint)),
+  );
   assertUnsupported(twoFingerPan, tvOs, /tvOS/);
   assertUnsupported(twoFingerPan, visionOs, /visionOS/i);
   assertUnsupported(oneFingerPan, watchOs, /watchos/);

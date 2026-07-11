@@ -34,7 +34,16 @@ test('capabilities reports supported commands for the selected session device', 
     kind: 'emulator',
   });
   expect(response.data?.availableCommands).toEqual(
-    expect.arrayContaining(['open', 'screenshot', 'snapshot', 'press', 'fill', 'network', 'perf']),
+    expect.arrayContaining([
+      'open',
+      'screenshot',
+      'snapshot',
+      'press',
+      'fill',
+      'network',
+      'perf',
+      PUBLIC_COMMANDS.gesture,
+    ]),
   );
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.capabilities);
   expect(response.data?.availableCommands).not.toContain(PUBLIC_COMMANDS.devices);

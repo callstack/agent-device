@@ -409,9 +409,7 @@ public final class MultiTouchInstrumentation extends Instrumentation {
         endRadius = spec.radius * spec.scale;
       }
       double radius = startRadius + (endRadius - startRadius) * t;
-      return new PointerPair(
-          new float[] {(float) (spec.x - radius), (float) (spec.x + radius)},
-          new float[] {(float) spec.y, (float) spec.y});
+      return twoPointerPairAt(spec.x, spec.y, radius, 0.0d);
     }
     double centerX = spec.x;
     double centerY = spec.y;
@@ -427,16 +425,15 @@ public final class MultiTouchInstrumentation extends Instrumentation {
       }
       radius = startRadius + (endRadius - startRadius) * t;
     }
-    double angle = Math.toRadians(-90 + spec.degrees * t);
+    return twoPointerPairAt(centerX, centerY, radius, spec.degrees * t);
+  }
+
+  private static PointerPair twoPointerPairAt(
+      double centerX, double centerY, double radius, double rotationDegrees) {
+    float[][] coordinates = TwoPointerGeometry.pointsAt(
+        centerX, centerY, radius, rotationDegrees);
     return new PointerPair(
-        new float[] {
-          (float) (centerX + Math.cos(angle) * radius),
-          (float) (centerX - Math.cos(angle) * radius)
-        },
-        new float[] {
-          (float) (centerY + Math.sin(angle) * radius),
-          (float) (centerY - Math.sin(angle) * radius)
-        });
+        coordinates[0], coordinates[1]);
   }
 
   private static PlannedPointerPath[] readPlannedPointers(

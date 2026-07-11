@@ -360,7 +360,7 @@ async function runAndroidMultiTouchHelperGestureForDevice(
     async () =>
       await runAndroidMultiTouchHelperGesture({
         adb,
-        request: normalizeHelperGestureRequest(request),
+        request: normalizeAndroidMultiTouchHelperGestureRequest(request),
         packageName: artifact.manifest.packageName,
         instrumentationRunner: artifact.manifest.instrumentationRunner,
       }),
@@ -377,7 +377,7 @@ async function runAndroidMultiTouchHelperGestureForDevice(
   };
 }
 
-function normalizeHelperGestureRequest(
+export function normalizeAndroidMultiTouchHelperGestureRequest(
   request: AndroidTouchGestureRequest,
 ): AndroidMultiTouchHelperGestureRequest {
   if (request.plan) {
@@ -453,6 +453,7 @@ function normalizePlannedHelperGestureRequest(
     };
   }
   if (plan.topology === 'two' && request.kind === 'transform') {
+    const initialRadius = plan.initialSpan / 2;
     return {
       kind: 'transform',
       x: Math.round(plan.centroid.start.x),
@@ -461,7 +462,7 @@ function normalizePlannedHelperGestureRequest(
       dy: Math.round(plan.centroid.end.y - plan.centroid.start.y),
       scale: plan.scale,
       degrees: plan.rotationDegrees,
-      radius: Math.round(plan.initialSpan / 2),
+      radius: Math.round(initialRadius * Math.max(plan.scale, 1)),
       durationMs: plan.durationMs,
     };
   }

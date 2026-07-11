@@ -153,7 +153,7 @@ test('device capability matrix stays consistent across shared command groups', (
       ],
     },
     {
-      commands: ['swipe'],
+      commands: ['gesture', 'swipe'],
       checks: [
         { device: iosSimulator, expected: true, label: 'on iOS sim' },
         { device: iosDevice, expected: true, label: 'on iOS device' },
@@ -232,6 +232,7 @@ test('macOS supports the Apple runner interaction core but excludes mobile-only 
       'scroll',
       'snapshot',
       'swipe',
+      'gesture',
       'trigger-app-event',
       'type',
       'wait',
@@ -382,6 +383,7 @@ test('web supports only the initial browser interaction slice', () => {
       'boot',
       'clipboard',
       'diff',
+      'gesture',
       'home',
       'install',
       'install-from-source',

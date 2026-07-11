@@ -165,8 +165,8 @@ function requireMultiTouchGestureSupported(input: GestureSemanticInput, device: 
     if (device.target !== 'tv') return;
     throw unsupportedGesture(
       input,
-      `gesture ${input.intent} is not supported on tvOS`,
-      'tvOS has no touch input — this gesture is supported on Android and the iOS simulator only.',
+      `gesture ${input.intent} is not supported on Android TV`,
+      'Android TV has no touch input — this gesture is supported on Android phones, tablets, and the iOS simulator only.',
     );
   }
   if (device.platform !== 'apple') {
