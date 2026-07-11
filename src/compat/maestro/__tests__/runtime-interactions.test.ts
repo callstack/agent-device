@@ -7,7 +7,10 @@ import {
   invokeMaestroTapOn,
   invokeMaestroTapPointPercent,
 } from '../runtime-interactions.ts';
-import { consumeMaestroRecoverableInteraction } from '../runtime-support.ts';
+import {
+  captureMaestroSnapshot,
+  consumeMaestroRecoverableInteraction,
+} from '../runtime-support.ts';
 
 test('invokeMaestroTapOn resolves mutating taps from the current snapshot', async () => {
   const selector =
@@ -474,6 +477,43 @@ test('invokeMaestroSwipeScreen preserves Android midpoint percentage endpoints',
 
   expect(response.ok).toBe(true);
   expect(swipes).toEqual([['351', '300', '39', '300', '300']]);
+});
+
+test('invokeMaestroSwipeScreen refreshes a cached frame before resolving percentages', async () => {
+  const scope = { values: {} };
+  const swipes: string[][] = [];
+  let snapshots = 0;
+  const baseReq = {
+    token: 'test',
+    session: 'rotated-pager',
+    flags: { platform: 'android' as const },
+  };
+  const invoke = async (req: DaemonRequest): Promise<DaemonResponse> => {
+    if (req.command === 'snapshot') {
+      snapshots += 1;
+      return {
+        ok: true,
+        data: snapshots === 1 ? fullScreenSnapshot(400, 800) : fullScreenSnapshot(800, 400),
+      };
+    }
+    if (req.command === 'swipe') {
+      swipes.push(req.positionals ?? []);
+      return { ok: true, data: {} };
+    }
+    return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
+  };
+
+  await captureMaestroSnapshot({ baseReq, invoke, scope });
+  const response = await invokeMaestroSwipeScreen({
+    baseReq,
+    positionals: ['percent', '90', '50', '10', '50', '300'],
+    invoke,
+    scope,
+  });
+
+  expect(response.ok).toBe(true);
+  expect(snapshots).toBe(2);
+  expect(swipes).toEqual([['720', '200', '80', '200', '300']]);
 });
 
 test('invokeMaestroSwipeScreen preserves an explicit Android horizontal percentage lane', async () => {

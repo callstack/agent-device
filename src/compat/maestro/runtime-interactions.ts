@@ -16,7 +16,6 @@ import {
   clearMaestroRecoverableInteraction,
   clearMaestroVisibleContext,
   errorResponse,
-  readCachedMaestroReferenceFrame,
   readMaestroVisibleContext,
   readSnapshotState,
   rememberMaestroRecoverableInteraction,
@@ -266,8 +265,7 @@ async function resolveMaestroScreenSwipe(params: {
   invoke: MaestroRuntimeInvoke;
   scope?: ReplayVarScope;
 }): Promise<MaestroScreenSwipeResolution> {
-  const cachedFrame = readCachedMaestroReferenceFrame(params.scope);
-  const frame = cachedFrame ?? (await captureFrameForMaestroScreenSwipe(params));
+  const frame = await captureFrameForMaestroScreenSwipe(params);
   if (!frame) {
     return {
       ok: false,
