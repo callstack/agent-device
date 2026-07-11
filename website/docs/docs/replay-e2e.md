@@ -314,10 +314,17 @@ Text output prints a compact summary of the same fields; `--json`/MCP carry the 
 
 ### Resuming a failed replay
 
-`replay --from <n> --plan-digest <sha256>` resumes at plan step `n`, skipping `1..n-1` **without executing them**. Both flags come from a divergence report's `resume` field — `from` is the failed step, `planDigest` is the digest of the exact plan that produced it. The loop is:
+`replay --from <n> --plan-digest <sha256>` resumes **at** plan step `n`, not after it, skipping `1..n-1` without executing them. Both flags come from a divergence report's `resume` field — `from` is the failed step, `planDigest` is the digest of the exact unchanged plan that produced it.
+
+Choose one recovery workflow:
+
+1. **Change the replay script.** Review the suggestion, edit the selector or include, then run a fresh full `replay ./flow.ad`. The old digest is intentionally invalid after any plan edit; do not combine it with the edited script. A later divergence supplies a new digest.
+2. **Keep the replay plan unchanged.** Repair app/device state so the reported failed step can succeed when retried, then resume with the report's unchanged `from` and `planDigest`. If you manually complete the failed action itself, the reported `from` will execute it again; only do that when repeating the action is safe.
+
+The unchanged-plan resume loop is:
 
 1. Run `replay ./flow.ad`. On failure, read `resume` from the divergence.
-2. **Repair app state yourself.** The daemon never infers or reconstructs app state — it only skips execution of the earlier steps.
+2. Leave the script, includes, platform, and target unchanged. Repair app state yourself so the failed step can be retried safely. The daemon never infers or reconstructs app state — it only skips execution of the earlier steps.
 3. `replay ./flow.ad --from <resume.from> --plan-digest <resume.planDigest>`.
 
 ```bash
@@ -341,9 +348,9 @@ Passing `--plan-digest` that no longer matches the current script — because yo
 ## Troubleshooting
 
 - Replay fails after UI/layout changes:
-  - Read the divergence report's `suggestions` and repair the selector by hand; there is no automated rewrite.
-- Repeated re-runs are slow or the app is stateful:
-  - Use `replay --from`/`--plan-digest` (above) to resume past a repaired step instead of re-running the whole script.
+  - Read the divergence report's `suggestions` and repair the selector by hand; there is no automated rewrite. Because the edit changes the plan digest, run a fresh full replay instead of using the old resume flags.
+- Repeated re-runs are slow or the app is stateful, but the script is still correct:
+  - Leave the replay plan unchanged, repair app state so the reported failed step can be retried, then use its `--from`/`--plan-digest`. Resume starts at `--from`; it does not skip that step.
 - Replay file parse error:
   - Validate quoting in `.ad` lines (unclosed quotes are rejected).
 - Maestro compatibility flow fails on unsupported syntax:
