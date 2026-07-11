@@ -211,7 +211,6 @@ export type ClickInput = InferCommandInput<typeof clickFields>;
 export type PressInput = InferCommandInput<typeof pressFields>;
 export type FillInput = InferCommandInput<typeof fillFields>;
 export type LongPressInput = InferCommandInput<typeof longPressFields>;
-export type SwipeInput = InferCommandInput<typeof swipeFields>;
 export type GetInput = InferCommandInput<typeof getFields>;
 
 export type PanInput = CommonCommandInput & PanGesturePayload;
@@ -267,10 +266,6 @@ export const interactionCommandMetadata = [
 export function readGestureInput(input: unknown): GestureInput {
   const record = readInputRecord(input);
   return { ...readCommonInput(record), ...readGesturePayload(record) } as GestureInput;
-}
-
-export function readSwipeInput(input: unknown): SwipeInput {
-  return readFieldInput(input, swipeFields);
 }
 
 function defineInteractionCommandMetadata<

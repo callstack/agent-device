@@ -5,9 +5,10 @@ import {
   normalizePublicSwipeMotion,
 } from '../../contracts/gesture-normalization.ts';
 import { requireGestureSupported } from '../../core/capabilities.ts';
-import { normalizeError } from '../../kernel/errors.ts';
+import { AppError, normalizeError } from '../../kernel/errors.ts';
+import { readOptionalInteger } from '../../kernel/input-validation.ts';
+import type { Point } from '../../kernel/snapshot.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
-import { readSwipeInput, type SwipeInput } from '../../commands/interaction/metadata.ts';
 import { sleep } from '../../utils/timeouts.ts';
 import type { DaemonResponse } from '../types.ts';
 import { ensureAndroidBlockingSystemDialogReady } from '../android-system-dialog.ts';
@@ -152,6 +153,48 @@ function readDaemonSwipeInput(params: InteractionHandlerParams): SwipeInput {
   const structured = params.req.input;
   if (isStructuredSwipeInput(structured)) return readSwipeInput(structured);
   return readLegacySwipeInput(params);
+}
+
+type SwipeInput = {
+  from: Point;
+  to: Point;
+  durationMs?: number;
+  count?: number;
+  pauseMs?: number;
+  pattern?: 'one-way' | 'ping-pong';
+};
+
+function readSwipeInput(input: unknown): SwipeInput {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    throw new AppError('INVALID_ARGS', 'swipe requires structured object input');
+  }
+  const record = input as Record<string, unknown>;
+  const pattern = record.pattern;
+  if (pattern !== undefined && pattern !== 'one-way' && pattern !== 'ping-pong') {
+    throw new AppError('INVALID_ARGS', 'swipe pattern must be one-way or ping-pong');
+  }
+  return {
+    from: readSwipePoint(record.from, 'swipe from'),
+    to: readSwipePoint(record.to, 'swipe to'),
+    durationMs: readOptionalInteger(record, 'durationMs', { min: 0 }),
+    count: readOptionalInteger(record, 'count', { min: 1 }),
+    pauseMs: readOptionalInteger(record, 'pauseMs', { min: 0 }),
+    pattern,
+  };
+}
+
+function readSwipePoint(value: unknown, field: string): Point {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new AppError('INVALID_ARGS', `${field} must be a point`);
+  }
+  const point = value as Record<string, unknown>;
+  if (typeof point.x !== 'number' || !Number.isFinite(point.x)) {
+    throw new AppError('INVALID_ARGS', `${field} x must be finite`);
+  }
+  if (typeof point.y !== 'number' || !Number.isFinite(point.y)) {
+    throw new AppError('INVALID_ARGS', `${field} y must be finite`);
+  }
+  return { x: point.x, y: point.y };
 }
 
 function isStructuredSwipeInput(input: unknown): input is Record<string, unknown> {

@@ -482,7 +482,7 @@ test('runtime pinch is backend-gated and resolves optional center targets', asyn
       parentIndex: 0,
       type: 'Button',
       label: 'Continue',
-      rect: { x: 10, y: 20, width: 100, height: 40 },
+      rect: { x: 100, y: 280, width: 100, height: 40 },
       hittable: true,
     },
   ]);
@@ -497,12 +497,12 @@ test('runtime pinch is backend-gated and resolves optional center targets', asyn
   });
 
   assert.equal(result.kind, 'pinch');
-  assert.deepEqual(result.center, { x: 60, y: 40 });
+  assert.deepEqual(result.center, { x: 150, y: 300 });
   assert.deepEqual(calls, [
     {
       intent: 'pinch',
-      from: { x: 60, y: 40 },
-      to: { x: 60, y: 40 },
+      from: { x: 150, y: 300 },
+      to: { x: 150, y: 300 },
       durationMs: 300,
       pointerCount: 2,
     },
