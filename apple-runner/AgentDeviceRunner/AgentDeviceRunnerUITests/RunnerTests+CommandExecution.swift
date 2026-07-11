@@ -85,7 +85,8 @@ extension RunnerTests {
     message: String,
     timing: (gestureStartUptimeMs: Double, gestureEndUptimeMs: Double),
     frame: GestureFrame = .none,
-    fallback: GestureFallback? = nil
+    fallback: GestureFallback? = nil,
+    maestroNonHittableCoordinateFallbackUsed: Bool? = nil
   ) -> Response {
     let data: DataPayload
     switch frame {
@@ -96,7 +97,8 @@ extension RunnerTests {
         gestureEndUptimeMs: timing.gestureEndUptimeMs,
         gestureFallback: fallback?.strategy,
         gestureFallbackMessage: fallback?.message,
-        gestureFallbackHint: fallback?.hint
+        gestureFallbackHint: fallback?.hint,
+        maestroNonHittableCoordinateFallbackUsed: maestroNonHittableCoordinateFallbackUsed
       )
     case .touch(let f):
       data = DataPayload(
@@ -109,7 +111,8 @@ extension RunnerTests {
         referenceHeight: f?.referenceHeight,
         gestureFallback: fallback?.strategy,
         gestureFallbackMessage: fallback?.message,
-        gestureFallbackHint: fallback?.hint
+        gestureFallbackHint: fallback?.hint,
+        maestroNonHittableCoordinateFallbackUsed: maestroNonHittableCoordinateFallbackUsed
       )
     case .drag(let f):
       data = DataPayload(
@@ -149,6 +152,17 @@ extension RunnerTests {
       "Runner synthesized coordinate tap is unavailable"
     )
     XCTAssertEqual(response.data?.gestureFallbackHint, "Using XCTest coordinate tap fallback.")
+  }
+
+  func testGestureResponseIncludesMaestroNonHittableFallbackUsage() {
+    let response = gestureResponse(
+      message: "tapped via non-hittable coordinate fallback",
+      timing: (gestureStartUptimeMs: 1, gestureEndUptimeMs: 2),
+      frame: .touch(nil),
+      maestroNonHittableCoordinateFallbackUsed: true
+    )
+
+    XCTAssertEqual(response.data?.maestroNonHittableCoordinateFallbackUsed, true)
   }
 
   func testXCTestRecordedFailureResponseFailsMutatingSuccesses() throws {
@@ -1050,7 +1064,11 @@ extension RunnerTests {
           return gestureResponse(
             message: match.usedNonHittableFallback ? "tapped via non-hittable coordinate fallback" : "tapped",
             timing: timing,
-            frame: .touch(touchFrame)
+            frame: .touch(touchFrame),
+            maestroNonHittableCoordinateFallbackUsed:
+              command.allowNonHittableCoordinateFallback == true
+              ? match.usedNonHittableFallback
+              : nil
           )
         }
         return Response(ok: false, error: ErrorPayload(code: "ELEMENT_NOT_FOUND", message: "element not found"))
@@ -1845,6 +1863,7 @@ extension RunnerTests {
     let delaySeconds = Double(max(command.delayMs ?? 0, 0)) / 1000.0
     let textEntryMode = resolveTextEntryMode(command)
     let target: TextEntryTarget
+    var maestroNonHittableCoordinateFallbackUsed: Bool?
     let focusStartedAt = Date()
     if let selectorKey = command.selectorKey, let selectorValue = command.selectorValue {
       let match = findElement(
@@ -1861,6 +1880,9 @@ extension RunnerTests {
       }
       guard isTextEntryElement(element) else {
         return Response(ok: false, error: ErrorPayload(code: "INVALID_TARGET", message: "selector did not match a text input"))
+      }
+      if command.allowNonHittableCoordinateFallback == true {
+        maestroNonHittableCoordinateFallbackUsed = match.usedNonHittableFallback
       }
       target = focusTextInputForTextEntry(app: activeApp, element: element)
     } else {
@@ -1910,7 +1932,8 @@ extension RunnerTests {
         x: point.map { Double($0.x) },
         y: point.map { Double($0.y) },
         referenceWidth: frame.isEmpty ? nil : Double(frame.width),
-        referenceHeight: frame.isEmpty ? nil : Double(frame.height)
+        referenceHeight: frame.isEmpty ? nil : Double(frame.height),
+        maestroNonHittableCoordinateFallbackUsed: maestroNonHittableCoordinateFallbackUsed
       )
     )
   }

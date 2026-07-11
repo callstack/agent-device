@@ -189,10 +189,9 @@ async function handleDirectElementSelectorPress(
     throw new AppError('UNSUPPORTED_OPERATION', 'direct element selector tap is not supported');
   }
   const result = await interactor.tapElementSelector(selector);
-  // Keep the runner's non-hittable-fallback marker: the daemon reports
-  // maestroNonHittableCoordinateFallbackUsed from this message, so replacing
-  // it with the generic success text would silently hide fallback usage.
-  const usedNonHittableFallback = result?.message === MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE;
+  // Keep the fallback success text for backward compatibility, but read usage
+  // from the runner's structured result so fill and tap share the same signal.
+  const usedNonHittableFallback = result?.maestroNonHittableCoordinateFallbackUsed === true;
   return {
     selector: selector.raw,
     ...(result ?? {}),

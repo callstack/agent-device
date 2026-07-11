@@ -54,7 +54,6 @@ import {
   commandSupportsSettleObservation,
   commandSupportsVerifyEvidence,
 } from '../../core/command-descriptor/registry.ts';
-import { MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE } from '../../core/interactor-types.ts';
 import {
   isDirectIosSelectorFallbackError,
   readSimpleIosSelectorTarget,
@@ -483,7 +482,7 @@ function directIosSelectorFallbackDetails(
   data: Record<string, unknown>,
 ): Record<string, unknown> {
   if (!selector.allowNonHittableCoordinateFallback) return {};
-  const used = data.message === MAESTRO_NON_HITTABLE_FALLBACK_MESSAGE;
+  const used = data.maestroNonHittableCoordinateFallbackUsed === true;
   return {
     maestroNonHittableCoordinateFallbackAllowed: true,
     maestroNonHittableCoordinateFallbackUsed: used,

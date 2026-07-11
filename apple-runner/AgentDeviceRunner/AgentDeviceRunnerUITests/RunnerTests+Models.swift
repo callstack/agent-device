@@ -241,6 +241,7 @@ struct DataPayload: Codable {
   let gestureFallback: String?
   let gestureFallbackMessage: String?
   let gestureFallbackHint: String?
+  let maestroNonHittableCoordinateFallbackUsed: Bool?
   let runnerFatal: Bool?
   let runnerFatalReason: String?
   let completedSteps: Int?
@@ -279,6 +280,7 @@ struct DataPayload: Codable {
     gestureFallback: String? = nil,
     gestureFallbackMessage: String? = nil,
     gestureFallbackHint: String? = nil,
+    maestroNonHittableCoordinateFallbackUsed: Bool? = nil,
     runnerFatal: Bool? = nil,
     runnerFatalReason: String? = nil,
     completedSteps: Int? = nil,
@@ -316,6 +318,7 @@ struct DataPayload: Codable {
     self.gestureFallback = gestureFallback
     self.gestureFallbackMessage = gestureFallbackMessage
     self.gestureFallbackHint = gestureFallbackHint
+    self.maestroNonHittableCoordinateFallbackUsed = maestroNonHittableCoordinateFallbackUsed
     self.runnerFatal = runnerFatal
     self.runnerFatalReason = runnerFatalReason
     self.completedSteps = completedSteps
