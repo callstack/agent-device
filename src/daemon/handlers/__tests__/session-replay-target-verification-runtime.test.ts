@@ -197,6 +197,13 @@ test('an identity-mismatch divergence reports matchCount and an observed identit
   expect(targetBinding.observed).toEqual({ id: 'save-v2', role: 'button', label: 'Save' });
   expect(Array.isArray(targetBinding.mismatches)).toBe(true);
   expect((targetBinding.mismatches as string[]).length).toBeGreaterThan(0);
+  // Real computed resume (shared builder): pre-action divergence at step 1
+  // resumes AT the failed step with a concrete plan digest, never the stub.
+  const resume = divergence.resume as { allowed: boolean; from?: number; planDigest?: string };
+  expect(resume.allowed).toBe(true);
+  expect(resume.from).toBe(1);
+  expect(typeof resume.planDigest).toBe('string');
+  expect((resume.planDigest ?? '').length).toBeGreaterThan(0);
 });
 
 test('a recorded-unverifiable annotation is an identity-unverifiable divergence with matchCount omitted', async () => {
@@ -368,6 +375,13 @@ test('a dispatch-time guard mismatch converts to an identity-mismatch target-bin
   expect((targetBinding.mismatches as string[]).some((entry) => entry.includes('save-decoy'))).toBe(
     true,
   );
+  // The guard-mismatch path funnels through the same shared builder: it must
+  // also carry a real computed resume (from = the failed step), not the stub.
+  const resume = divergence.resume as { allowed: boolean; from?: number; planDigest?: string };
+  expect(resume.allowed).toBe(true);
+  expect(resume.from).toBe(1);
+  expect(typeof resume.planDigest).toBe('string');
+  expect((resume.planDigest ?? '').length).toBeGreaterThan(0);
 });
 
 // NOTE: the "--update re-verifies a healed action" test was removed here —
