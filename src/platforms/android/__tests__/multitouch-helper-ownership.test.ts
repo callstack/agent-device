@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test, vi } from 'vitest';
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
+import { buildGesturePlan } from '../../../contracts/gesture-plan.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import {
+  performGestureAndroid,
   resetAndroidMultiTouchHelperInstallCache,
-  swipeGestureAndroid,
 } from '../multitouch-helper.ts';
 import { stopAndroidSnapshotHelperSessionForDevice } from '../snapshot-helper.ts';
 import {
@@ -72,13 +73,20 @@ test('helper gesture releases persistent snapshot instrumentation before touch i
     },
     { serial: ANDROID_EMULATOR.id },
     async () =>
-      await swipeGestureAndroid(ANDROID_EMULATOR, {
-        x1: 340,
-        y1: 400,
-        x2: 60,
-        y2: 400,
-        durationMs: 300,
-      }),
+      await performGestureAndroid(
+        ANDROID_EMULATOR,
+        buildGesturePlan(
+          {
+            intent: 'pan',
+            pointerCount: 1,
+            origin: { x: 340, y: 400 },
+            delta: { x: -280, y: 0 },
+            durationMs: 300,
+          },
+          { x: 0, y: 0, width: 400, height: 800 },
+          'android',
+        ),
+      ),
   );
 
   assert.equal(result?.backend, 'android-multitouch-helper');

@@ -15,6 +15,44 @@ beforeEach(() => {
   resetAndroidMultiTouchHelperInstallCache();
 });
 
+test('helper install uses replace and test-package semantics', async () => {
+  const fixture = await makeInstallFixture('helper-apk');
+  const installCalls: unknown[] = [];
+  const adb: AndroidAdbExecutor = async (args) => {
+    if (args.includes('--show-versioncode')) {
+      return { exitCode: 1, stdout: '', stderr: 'not found' };
+    }
+    throw new Error(`unexpected adb call: ${args.join(' ')}`);
+  };
+  const provider: AndroidAdbProvider = {
+    exec: adb,
+    install: async (installedPath, options) => {
+      installCalls.push({ installedPath, options });
+      return { exitCode: 0, stdout: '', stderr: '' };
+    },
+  };
+
+  const result = await ensureAndroidMultiTouchHelper({
+    adb,
+    adbProvider: provider,
+    artifact: fixture.artifact,
+    deviceKey: 'android:emulator-5554',
+  });
+
+  assert.equal(result.reason, 'missing');
+  assert.deepEqual(installCalls, [
+    {
+      installedPath: fixture.artifact.apkPath,
+      options: {
+        replace: true,
+        allowTestPackages: true,
+        allowFailure: true,
+        timeoutMs: 30_000,
+      },
+    },
+  ]);
+});
+
 test('same-version helper is current only when installed APK bytes match', async () => {
   const fixture = await makeInstallFixture('current-helper');
   const { adb, provider, pulls, installs } = makeInstalledHelperDevice({

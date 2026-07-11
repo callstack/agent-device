@@ -1,29 +1,19 @@
 import assert from 'node:assert/strict';
-import crypto from 'node:crypto';
-import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { beforeEach, test } from 'vitest';
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
 import { buildGesturePlan } from '../../../contracts/gesture-plan.ts';
 import {
-  ensureAndroidMultiTouchHelper,
   normalizeAndroidMultiTouchHelperGestureRequest,
   parseAndroidMultiTouchHelperOutput,
   performGestureAndroid,
   resetAndroidMultiTouchHelperInstallCache,
   runAndroidMultiTouchHelperGesture,
 } from '../multitouch-helper.ts';
-import {
-  withAndroidAdbProvider,
-  type AndroidAdbExecutor,
-  type AndroidAdbProvider,
-} from '../adb-executor.ts';
+import { withAndroidAdbProvider } from '../adb-executor.ts';
 import {
   ANDROID_MULTITOUCH_HELPER_MANIFEST as manifest,
   androidMultiTouchResultRecord as resultRecord,
 } from './multitouch-helper.fixtures.ts';
-import type { GesturePlan } from '../../../contracts/gesture-plan.ts';
 
 const viewport = { x: 0, y: 0, width: 400, height: 800 };
 
@@ -219,45 +209,3 @@ test('helper failures remain structured and actionable', async () => {
     { code: 'COMMAND_FAILED', message: 'injectInputEvent returned false' },
   );
 });
-
-test('helper install uses replace and test-package semantics', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'multitouch-helper-install-'));
-  const apkPath = path.join(tmpDir, 'helper.apk');
-  await fs.writeFile(apkPath, 'helper-apk');
-  const installCalls: unknown[] = [];
-  const adb: AndroidAdbExecutor = async (args) => {
-    if (args.includes('--show-versioncode')) {
-      return { exitCode: 1, stdout: '', stderr: 'not found' };
-    }
-    throw new Error(`unexpected adb call: ${args.join(' ')}`);
-  };
-  const adbProvider: AndroidAdbProvider = {
-    exec: adb,
-    install: async (installedPath, options) => {
-      installCalls.push({ installedPath, options });
-      return { exitCode: 0, stdout: '', stderr: '' };
-    },
-  };
-  const result = await ensureAndroidMultiTouchHelper({
-    adb,
-    adbProvider,
-    artifact: { apkPath, manifest: { ...manifest, sha256: sha256Text('helper-apk') } },
-    deviceKey: 'android:emulator-5554',
-  });
-  assert.equal(result.reason, 'missing');
-  assert.deepEqual(installCalls, [
-    {
-      installedPath: apkPath,
-      options: {
-        replace: true,
-        allowTestPackages: true,
-        allowFailure: true,
-        timeoutMs: 30_000,
-      },
-    },
-  ]);
-});
-
-function sha256Text(text: string): string {
-  return crypto.createHash('sha256').update(text).digest('hex');
-}
