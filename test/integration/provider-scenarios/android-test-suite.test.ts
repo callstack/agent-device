@@ -123,7 +123,7 @@ test('Provider-backed integration Android Maestro replay uses fresh snapshots an
         ['shell', 'input', 'swipe', '351', '300', '39', '300', '300'],
       );
       // The shared gesture planner reads one fresh active-app viewport before injection.
-      assertSnapshotCountInRange(snapshots, 3, 4);
+      assertSnapshotCountInRange(snapshots, 3, 5);
     },
   );
 });

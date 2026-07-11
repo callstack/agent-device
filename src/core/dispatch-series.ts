@@ -14,10 +14,6 @@ const DETERMINISTIC_JITTER_PATTERN: ReadonlyArray<readonly [number, number]> = [
   [-1, -1],
 ];
 
-export function shouldUseIosDragSeries(device: DeviceInfo, count: number): boolean {
-  return isApplePlatform(device.platform) && count > 1;
-}
-
 /**
  * Whether a press series should fuse into one or more `sequence` runner requests. Every Apple
  * multi-press variant fuses — plain, double-tap, hold, and jitter series — so the budget chunker
