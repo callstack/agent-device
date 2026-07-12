@@ -125,6 +125,13 @@ async function handlePrepareHealthFailure(params: {
 }): Promise<PrepareAttemptResult> {
   const { device, session, command, options, signal, attempt, error } = params;
   const appErr = asAppError(error, 'COMMAND_FAILED');
+  if (isRequestCanceledError(appErr)) {
+    // The owning request was canceled mid-startup (client disconnect): stop the
+    // just-created session so a canceled prep never leaves a runner retained for
+    // reuse. Scoped to this request's device only.
+    await invalidateRunnerSessionBestEffort(session, 'prepare_runner_request_canceled');
+    throw error;
+  }
   if (attempt === 1 && shouldRecoverBadCachedRunnerArtifact(appErr, session)) {
     return {
       kind: 'prepared',

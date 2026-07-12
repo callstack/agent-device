@@ -10,6 +10,7 @@ import { isIosFamily, isApplePlatform, type DeviceInfo } from '../../../../kerne
 import type { RunnerLogicalLeaseContext } from '../../../../core/runner-lease-context.ts';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
 import { emitRequestProgress } from '../../../../request/progress.ts';
+import { getRequestSignal } from '../../../../request/cancel.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../../../utils/diagnostics.ts';
 import { buildSimctlArgsForDevice } from '../simctl.ts';
 import { runAppleToolCommand, runXcrun } from '../tool-provider.ts';
@@ -125,6 +126,11 @@ async function startRunnerSessionWithLease(
   options: RunnerSessionOptions,
 ): Promise<RunnerSession> {
   const startupTimings: Record<string, number> = {};
+  // The owning request's abort signal so a client disconnect kills the blocking
+  // xctestrun build and runner launch (killProcessTree via exec) instead of
+  // orphaning them. Request-scoped: only this request's device startup reacts,
+  // and a signal-less internal caller (shutdown) simply gets undefined.
+  const signal = getRequestSignal(options.requestId);
   const logicalLeaseContext = normalizeRunnerLogicalLeaseContext(
     options.runnerLeaseContext,
     device.id,
@@ -174,7 +180,7 @@ async function startRunnerSessionWithLease(
   const xctestrunArtifact = await measureRunnerStartupStep(
     startupTimings,
     'ensure_xctestrun',
-    async () => await ensureXctestrunArtifact(device, options),
+    async () => await ensureXctestrunArtifact(device, { ...options, signal }),
   );
   startupTimings.build_xctestrun = xctestrunArtifact.buildMs;
   const port = await measureRunnerStartupStep(
@@ -237,6 +243,7 @@ async function startRunnerSessionWithLease(
           allowFailure: true,
           env: { ...process.env, AGENT_DEVICE_RUNNER_PORT: String(port) },
           detached: true,
+          signal,
         }),
     ));
   } catch (error) {

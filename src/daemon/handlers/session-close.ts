@@ -86,6 +86,11 @@ export async function handleCloseCommand(params: {
       cleanupFailures.push({ step, error });
     }
   };
+  // The targeted platform close is the primary operation, not best-effort cleanup:
+  // its AppError (code/details/hint) is preserved and rethrown, and a failed close
+  // must not be recorded as `Closed`. Subsequent resource cleanup, lease release,
+  // and session deletion still run regardless.
+  let platformCloseError: unknown;
   try {
     await attemptCleanup('app_log', () => stopSessionAppLog(session));
     await attemptCleanup('audio_probe', async () => {
@@ -103,12 +108,14 @@ export async function handleCloseCommand(params: {
       if (shouldStopAppleRunnerBeforeTargetedClose(session)) {
         await attemptCleanup('apple_runner_pre_close', () => stopAppleRunnerForClose(session));
       }
-      await attemptCleanup('platform_close', async () => {
+      try {
         await dispatchCommand(session.device, 'close', req.positionals ?? [], req.flags?.out, {
           ...contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath),
         });
         await settleIosSimulator(session.device, IOS_SIMULATOR_POST_CLOSE_SETTLE_MS);
-      });
+      } catch (error) {
+        platformCloseError = error;
+      }
     }
     if (
       isApplePlatform(session.device.platform) &&
@@ -137,10 +144,12 @@ export async function handleCloseCommand(params: {
         appId: session.appBundleId,
       }).catch(() => {});
     }
-    recordSessionAction(sessionStore, session, req, 'close', {
-      session: session.name,
-      ...successText(`Closed: ${session.name}`),
-    });
+    if (!platformCloseError) {
+      recordSessionAction(sessionStore, session, req, 'close', {
+        session: session.name,
+        ...successText(`Closed: ${session.name}`),
+      });
+    }
     if (req.flags?.saveScript) {
       session.recordSession = true;
     }
@@ -162,6 +171,10 @@ export async function handleCloseCommand(params: {
     phase: 'session_close_cleanup_failed',
     failures: cleanupFailures,
   });
+  // The platform-close failure is the primary error: rethrow it with its original
+  // code/details/hint intact. The cleanup aggregate has already been emitted as a
+  // diagnostic above so per-resource failures stay visible.
+  if (platformCloseError) throw platformCloseError;
   if (cleanupAggregate) throw cleanupAggregate;
   const shutdownResult = await maybeShutdownSessionTarget({
     device: session.device,
