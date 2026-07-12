@@ -92,7 +92,9 @@ function assertDivergenceShape(response: Awaited<ReturnType<typeof runReplayScri
 }
 
 test('(a) an ANNOTATED press whose dispatch throws a selector-miss yields REPLAY_DIVERGENCE, not COMMAND_FAILED', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-dispatch-miss-annotated-'));
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-replay-dispatch-miss-annotated-'),
+  );
   const { sessionStore, sessionName } = setupSession(root);
   const evidence = recordArticleEvidence();
   const filePath = writeReplayFile(root, [
