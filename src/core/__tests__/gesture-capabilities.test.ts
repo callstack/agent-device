@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import type { GestureSemanticInput } from '../../contracts/gesture-plan-types.ts';
+import {
+  normalizePublicGesture,
+  normalizePublicSwipeMotion,
+  type NormalizedGestureInput,
+} from '../../contracts/gesture-normalization.ts';
 import { requireGestureSupported } from '../capabilities.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
@@ -26,12 +31,12 @@ const device = (fields: Partial<DeviceInfo>): DeviceInfo => ({
   ...fields,
 });
 
-function assertSupported(input: GestureSemanticInput, target: DeviceInfo): void {
+function assertSupported(input: NormalizedGestureInput, target: DeviceInfo): void {
   assert.doesNotThrow(() => requireGestureSupported(input, target));
 }
 
 function assertUnsupported(
-  input: GestureSemanticInput,
+  input: NormalizedGestureInput,
   target: DeviceInfo,
   expected: RegExp,
 ): void {
@@ -93,6 +98,11 @@ test('TV, spatial, watch, desktop, Linux, and web gesture policy stays explicit'
   assertSupported(oneFingerPan, macOs);
   assertUnsupported(twoFingerPan, macOs, /macOS/);
   assertSupported(oneFingerPan, linux);
+  assertSupported(
+    normalizePublicSwipeMotion({ from: { x: 10, y: 20 }, to: { x: 110, y: 20 } }).gesture,
+    linux,
+  );
+  assertSupported(normalizePublicGesture({ kind: 'swipe', preset: 'left' }).gesture, linux);
   assertUnsupported(fling, linux, /Linux/);
   assertUnsupported(twoFingerPan, linux, /linux/i);
   assertUnsupported(oneFingerPan, web, /web/);

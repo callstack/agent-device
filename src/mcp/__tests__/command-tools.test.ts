@@ -169,6 +169,21 @@ test('MCP gesture tool exposes and forwards two-finger pan topology', async () =
   ]);
 });
 
+test('MCP gesture compatibility metadata accepts numeric rotate velocity', () => {
+  const gesture = listCommandTools().find((tool) => tool.name === 'gesture');
+  assert.ok(gesture);
+  assert.deepEqual(gesture.inputSchema.properties?.velocity, {
+    type: 'number',
+    description: 'Deprecated: rotation pacing is derived from degrees; must be non-zero.',
+  });
+  assert.deepEqual(gesture.inputSchema.properties?.durationMs, {
+    type: 'integer',
+    description: 'Pan/transform duration. Deprecated on swipe/fling; timed movement is a pan.',
+    minimum: 16,
+    maximum: 10_000,
+  });
+});
+
 test('MCP swipe tool exposes bounded repetition inputs', () => {
   const swipe = listCommandTools().find((tool) => tool.name === 'swipe');
   assert.ok(swipe);

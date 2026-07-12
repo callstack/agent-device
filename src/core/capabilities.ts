@@ -151,7 +151,9 @@ export function requireGestureSupported(input: NormalizedGestureInput, device: D
   if (device.appleOs === 'visionos') {
     throw unsupportedGesture(input, gesturePlatformMessage(input, device));
   }
-  if (input.intent === 'fling' && device.platform === 'linux') {
+  // Linux can preserve public coordinate/preset swipe through its drag primitive, but cannot
+  // honor the velocity semantics authored by `gesture fling`.
+  if (input.intent === 'fling' && 'direction' in input && device.platform === 'linux') {
     throw unsupportedGesture(input, 'gesture fling is not supported on Linux');
   }
 }

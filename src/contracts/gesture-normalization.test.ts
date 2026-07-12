@@ -129,4 +129,10 @@ test('multi-touch aliases become constraints on transform motion', () => {
       { rule: 'rotate-velocity', replacement: 'Rotation pacing is derived from degrees.' },
     ],
   });
+  assert.deepEqual(normalizePublicGesture({ kind: 'rotate', degrees: -45, velocity: -1.5 }), {
+    gesture: { intent: 'rotate', origin: undefined, degrees: -45 },
+    deprecations: [
+      { rule: 'rotate-velocity', replacement: 'Rotation pacing is derived from degrees.' },
+    ],
+  });
 });

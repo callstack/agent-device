@@ -112,7 +112,7 @@ export function readGesturePayload(input: unknown): GesturePayload {
       kind,
       degrees: readNumber(record, 'degrees'),
       origin: readOptionalPoint(record, 'origin'),
-      velocity: readOptionalInteger(record, 'velocity', { min: 0 }),
+      velocity: readOptionalRotateVelocity(record),
     };
   }
   return {
@@ -123,6 +123,15 @@ export function readGesturePayload(input: unknown): GesturePayload {
     degrees: readNumber(record, 'degrees'),
     durationMs: readOptionalGestureDuration(record),
   };
+}
+
+function readOptionalRotateVelocity(record: Record<string, unknown>): number | undefined {
+  if (record.velocity === undefined) return undefined;
+  const velocity = readNumber(record, 'velocity');
+  if (velocity === 0) {
+    throw new AppError('INVALID_ARGS', 'Expected velocity to be a non-zero finite number.');
+  }
+  return velocity;
 }
 
 function readOptionalGestureDuration(record: Record<string, unknown>): number | undefined {

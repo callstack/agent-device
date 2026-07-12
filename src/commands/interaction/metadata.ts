@@ -204,10 +204,10 @@ const gestureFields = {
   distance: integerField('Fling distance.', { min: 0 }),
   scale: numberField('Pinch or transform scale.'),
   degrees: numberField('Rotation in degrees.'),
-  velocity: integerField('Deprecated: rotation pacing is derived from degrees.', { min: 0 }),
+  velocity: numberField('Deprecated: rotation pacing is derived from degrees; must be non-zero.'),
   durationMs: integerField(
     'Pan/transform duration. Deprecated on swipe/fling; timed movement is a pan.',
-    { min: 0 },
+    { min: 16, max: 10_000 },
   ),
   pointerCount: integerField('Pan touch pointer count (1 or 2).', { min: 1, max: 2 }),
 };

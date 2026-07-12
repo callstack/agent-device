@@ -133,6 +133,24 @@ extension RunnerTests {
     return Response(ok: true, data: data)
   }
 
+  /// Gesture plans already return canonical centroid endpoints from the portable runtime.
+  /// Keep runner timing/fallback diagnostics, but do not leak the coordinate-drag adapter's
+  /// visualization frame into only the fast-fling response shape.
+  private func canonicalPlannedGestureResponse(_ response: Response) -> Response {
+    guard response.ok, let data = response.data else { return response }
+    return Response(
+      ok: true,
+      data: DataPayload(
+        message: data.message,
+        gestureStartUptimeMs: data.gestureStartUptimeMs,
+        gestureEndUptimeMs: data.gestureEndUptimeMs,
+        gestureFallback: data.gestureFallback,
+        gestureFallbackMessage: data.gestureFallbackMessage,
+        gestureFallbackHint: data.gestureFallbackHint
+      )
+    )
+  }
+
 #if AGENT_DEVICE_RUNNER_UNIT_TESTS
   func testGestureResponseIncludesSynthesizedTapFallbackDiagnostics() {
     let response = gestureResponse(
@@ -163,6 +181,42 @@ extension RunnerTests {
     )
 
     XCTAssertEqual(response.data?.maestroNonHittableCoordinateFallbackUsed, true)
+  }
+
+  func testCanonicalPlannedGestureResponseOmitsDragFrameAndPreservesDiagnostics() {
+    let response = gestureResponse(
+      message: "fling",
+      timing: (gestureStartUptimeMs: 1, gestureEndUptimeMs: 2),
+      frame: .drag(
+        DragVisualizationFrame(
+          x: 160,
+          y: 150,
+          x2: 40,
+          y2: 150,
+          referenceWidth: 200,
+          referenceHeight: 300
+        )
+      ),
+      fallback: GestureFallback(
+        strategy: "xctest-coordinate-drag",
+        message: "Private synthesis unavailable",
+        hint: "Using XCTest coordinate fallback."
+      )
+    )
+
+    let canonical = canonicalPlannedGestureResponse(response)
+
+    XCTAssertEqual(canonical.data?.gestureStartUptimeMs, 1)
+    XCTAssertEqual(canonical.data?.gestureEndUptimeMs, 2)
+    XCTAssertEqual(canonical.data?.gestureFallback, "xctest-coordinate-drag")
+    XCTAssertEqual(canonical.data?.gestureFallbackMessage, "Private synthesis unavailable")
+    XCTAssertEqual(canonical.data?.gestureFallbackHint, "Using XCTest coordinate fallback.")
+    XCTAssertNil(canonical.data?.x)
+    XCTAssertNil(canonical.data?.y)
+    XCTAssertNil(canonical.data?.x2)
+    XCTAssertNil(canonical.data?.y2)
+    XCTAssertNil(canonical.data?.referenceWidth)
+    XCTAssertNil(canonical.data?.referenceHeight)
   }
 
   func testXCTestRecordedFailureResponseFailsMutatingSuccesses() throws {
@@ -1482,8 +1536,27 @@ extension RunnerTests {
           error: ErrorPayload(code: "INVALID_ARGS", message: validationError)
         )
       }
+      if plannedGestureExecution(for: plan) == .fastSwipe {
+        // Validation above guarantees a non-empty, single-pointer path for this execution kind.
+        let first = plan.pointers[0].samples.first!.point
+        let last = plan.pointers[0].samples.last!.point
+        return canonicalPlannedGestureResponse(
+          executeDragGesture(
+            activeApp: activeApp,
+            x: first.x,
+            y: first.y,
+            x2: last.x,
+            y2: last.y,
+            durationMs: plan.durationMs,
+            synthesized: true,
+            message: plan.intent,
+            synthesizedPolicyKind: .synthesizedDrag,
+            synthesizedProfile: .fastSwipe
+          )
+        )
+      }
       let (timing, outcome) = performGesture(activeApp, idleTimeout: false) {
-        plannedGesture(app: activeApp, plan: plan)
+        sampledPlannedGesture(app: activeApp, plan: plan)
       }
       if let response = unsupportedResponse(for: outcome) {
         return response
@@ -1513,7 +1586,8 @@ extension RunnerTests {
     synthesized: Bool,
     message: String,
     synthesizedContext: SynthesizedCoordinateContext? = nil,
-    synthesizedPolicyKind: SynthesizedGesturePolicyKind
+    synthesizedPolicyKind: SynthesizedGesturePolicyKind,
+    synthesizedProfile: SynthesizedDragProfile = .continuous
   ) -> Response {
     let commandName = dragCommandName(message: message)
     guard x.isFinite, y.isFinite, x2.isFinite, y2.isFinite else {
@@ -1531,7 +1605,8 @@ extension RunnerTests {
       durationMs: durationMs,
       message: message,
       context: synthesizedContext,
-      policyKind: synthesizedPolicyKind
+      policyKind: synthesizedPolicyKind,
+      profile: synthesizedProfile
     ) {
       return synthesizedResponse
     }
@@ -1555,6 +1630,7 @@ extension RunnerTests {
           x2: dragPoints.x2,
           y2: dragPoints.y2,
           durationMs: durationMs,
+          profile: synthesizedProfile,
           context: context
         )
       }
@@ -1596,7 +1672,8 @@ extension RunnerTests {
     durationMs: Double?,
     message: String,
     context: SynthesizedCoordinateContext?,
-    policyKind: SynthesizedGesturePolicyKind
+    policyKind: SynthesizedGesturePolicyKind,
+    profile: SynthesizedDragProfile
   ) -> Response? {
 #if os(iOS)
     let policy = synthesizedGesturePolicy(policyKind)
@@ -1648,6 +1725,7 @@ extension RunnerTests {
         x2: plan.points.x2,
         y2: plan.points.y2,
         durationMs: durationMs,
+        profile: profile,
         context: plan.context
       )
     }

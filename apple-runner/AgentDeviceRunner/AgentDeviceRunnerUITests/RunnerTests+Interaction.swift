@@ -13,6 +13,16 @@ private enum RunnerInterfaceOrientation {
 }
 
 extension RunnerTests {
+  enum PlannedGestureExecution: Equatable {
+    case fastSwipe
+    case sampled
+  }
+
+  enum SynthesizedDragProfile {
+    case continuous
+    case fastSwipe
+  }
+
   struct TouchVisualizationFrame {
     let x: Double
     let y: Double
@@ -775,6 +785,7 @@ extension RunnerTests {
     x2: Double,
     y2: Double,
     durationMs: Double,
+    profile: SynthesizedDragProfile = .continuous,
     context: SynthesizedCoordinateContext? = nil
   ) -> RunnerInteractionOutcome {
 #if os(iOS)
@@ -794,14 +805,26 @@ extension RunnerTests {
     let frame = context.referenceFrame
     let start = nativeSynthesizedPoint(orientedX: x, orientedY: y, in: frame, interfaceOrientation: orientation)
     let end = nativeSynthesizedPoint(orientedX: x2, orientedY: y2, in: frame, interfaceOrientation: orientation)
-    let message = RunnerSynthesizedGesture.synthesizeContinuousDrag(
-      withApplication: app,
-      x: Double(start.x),
-      y: Double(start.y),
-      x2: Double(end.x),
-      y2: Double(end.y),
-      durationMs: durationMs
-    )
+    let message = switch profile {
+    case .continuous:
+      RunnerSynthesizedGesture.synthesizeContinuousDrag(
+        withApplication: app,
+        x: Double(start.x),
+        y: Double(start.y),
+        x2: Double(end.x),
+        y2: Double(end.y),
+        durationMs: durationMs
+      )
+    case .fastSwipe:
+      RunnerSynthesizedGesture.synthesizeSwipe(
+        withApplication: app,
+        x: Double(start.x),
+        y: Double(start.y),
+        x2: Double(end.x),
+        y2: Double(end.y),
+        durationMs: durationMs
+      )
+    }
     if let message {
       return .unsupported(
         message: message,
@@ -1221,7 +1244,11 @@ extension RunnerTests {
     return nil
   }
 
-  func plannedGesture(
+  func plannedGestureExecution(for plan: RunnerGesturePlan) -> PlannedGestureExecution {
+    plan.topology == "single" && plan.intent == "fling" ? .fastSwipe : .sampled
+  }
+
+  func sampledPlannedGesture(
     app: XCUIApplication,
     plan: RunnerGesturePlan
   ) -> RunnerInteractionOutcome {
@@ -1446,6 +1473,28 @@ extension RunnerTests {
       plannedGestureValidationError(plan),
       "planned pointer sample offsets must match and strictly increase"
     )
+  }
+
+  func testSinglePointerFlingUsesFastSwipeExecution() throws {
+    let plan = try JSONDecoder().decode(
+      RunnerGesturePlan.self,
+      from: Data(
+        #"{"topology":"single","intent":"fling","durationMs":100,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":160,"y":150}},{"offsetMs":100,"point":{"x":40,"y":150}}]}]}"#.utf8
+      )
+    )
+
+    XCTAssertEqual(plannedGestureExecution(for: plan), .fastSwipe)
+  }
+
+  func testSinglePointerTimedPanUsesSampledExecution() throws {
+    let plan = try JSONDecoder().decode(
+      RunnerGesturePlan.self,
+      from: Data(
+        #"{"topology":"single","intent":"pan","durationMs":500,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":160,"y":150}},{"offsetMs":250,"point":{"x":100,"y":150}},{"offsetMs":500,"point":{"x":40,"y":150}}]}]}"#.utf8
+      )
+    )
+
+    XCTAssertEqual(plannedGestureExecution(for: plan), .sampled)
   }
 
   func testDesktopScrollWheelDeltasMapDirections() throws {
