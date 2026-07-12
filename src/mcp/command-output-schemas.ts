@@ -3,7 +3,7 @@ import { projectedSystemCommandOutputSchemas } from '../commands/system/index.ts
 import type { CommandResultMap } from '../core/command-descriptor/command-result.ts';
 import { booleanSchema, looseObjectSchema, stringSchema } from '../commands/command-input.ts';
 import { SESSION_SURFACES } from '../contracts/session-surface.ts';
-import { DEVICE_TARGETS, PLATFORMS } from '../kernel/device.ts';
+import { DEVICE_TARGETS, PUBLIC_PLATFORMS } from '../kernel/device.ts';
 
 /**
  * Registry of per-command MCP `outputSchema`s, keyed by the daemon command
@@ -260,7 +260,9 @@ const settleObservationSchema: JsonSchema = objectSchema(
 
 // boot / shutdown share the resolved-device header (src/contracts/device.ts).
 const deviceHeaderProperties: Record<string, JsonSchema> = {
-  platform: enumSchema(PLATFORMS),
+  // Public leaf vocabulary (ios | macos | android | linux | web): boot/shutdown
+  // emit publicPlatformString, never the internal `apple` platform.
+  platform: enumSchema(PUBLIC_PLATFORMS),
   target: enumSchema(DEVICE_TARGETS),
   device: stringSchema('Human-readable device name.'),
   id: stringSchema('Stable device id.'),
@@ -353,7 +355,8 @@ export const COMMAND_OUTPUT_SCHEMAS = {
   prepare: objectSchema(
     {
       action: constSchema('ios-runner'),
-      platform: enumSchema(PLATFORMS),
+      // PublicPlatform leaf, mirroring PrepareCommandResult (src/contracts/prepare.ts).
+      platform: enumSchema(PUBLIC_PLATFORMS),
       deviceId: stringSchema(),
       deviceName: stringSchema(),
       kind: enumSchema(DEVICE_KINDS),

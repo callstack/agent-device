@@ -5,6 +5,7 @@ import { createCommandToolExecutor, listCommandTools } from '../command-tools.ts
 import { COMMAND_OUTPUT_SCHEMAS } from '../command-output-schemas.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { NAVIGATION_COMMAND_PROJECTIONS } from '../../commands/system/navigation-projection.ts';
+import { validateAgainstSchema } from './output-schema-validator.ts';
 
 test('MCP command tool executor hides client creation behind an execution adapter', async () => {
   const client = {} as AgentDeviceClient;
@@ -377,6 +378,136 @@ test('MCP boot structuredContent is consistent with its advertised outputSchema'
 
   const result = await executor.execute('boot', {});
   assert.deepEqual(result.structuredContent, bootResult);
+});
+
+// --- #1219 public Apple platform parity in MCP output schemas ---
+// These validate representative structured content against the COMPLETE
+// advertised schema (enums/consts and nested required fields), not just the
+// presence of required keys, and pin the negative cases the required-only check
+// silently accepted.
+
+function bootResultFor(platform: 'ios' | 'macos') {
+  return {
+    platform,
+    target: platform === 'macos' ? 'desktop' : 'mobile',
+    device: platform === 'macos' ? 'My Mac' : 'iPhone 16',
+    id: 'UDID-123',
+    kind: platform === 'macos' ? 'device' : 'simulator',
+    booted: true,
+    // Additive Apple-OS discriminant rides alongside the leaf platform.
+    appleOs: platform,
+  } as const;
+}
+
+function shutdownResultFor(platform: 'ios' | 'macos') {
+  const { platform: leaf, target, device, id, kind, appleOs } = bootResultFor(platform);
+  return {
+    platform: leaf,
+    target,
+    device,
+    id,
+    kind,
+    appleOs,
+    shutdown: { success: true, exitCode: 0, stdout: '', stderr: '' },
+  };
+}
+
+function prepareResultFor(platform: 'ios' | 'macos') {
+  return {
+    action: 'ios-runner',
+    platform,
+    deviceId: 'UDID-123',
+    deviceName: 'iPhone 16',
+    kind: 'simulator',
+    durationMs: 1200,
+    runner: {},
+    connectMs: 100,
+    healthCheckMs: 50,
+    timing: {
+      totalMs: 1200,
+      additiveParts: { connectAfterBuildMs: 100, healthCheckMs: 50 },
+      containment: { healthCheckMs: [] },
+      note: 'ok',
+    },
+    message: 'prepared',
+  };
+}
+
+test('MCP boot/shutdown schemas advertise public Apple leaves, never internal apple', () => {
+  const platformEnum = COMMAND_OUTPUT_SCHEMAS.boot.properties?.platform?.enum;
+  assert.deepEqual(platformEnum, ['ios', 'macos', 'android', 'linux', 'web']);
+  assert.equal(platformEnum?.includes('apple'), false);
+  // shutdown shares the same resolved-device header.
+  assert.deepEqual(COMMAND_OUTPUT_SCHEMAS.shutdown.properties?.platform?.enum, platformEnum);
+});
+
+test('MCP valid ios/macos boot results satisfy the complete boot schema', () => {
+  for (const platform of ['ios', 'macos'] as const) {
+    assert.deepEqual(
+      validateAgainstSchema(bootResultFor(platform), COMMAND_OUTPUT_SCHEMAS.boot),
+      [],
+    );
+  }
+});
+
+test('MCP valid ios/macos shutdown results satisfy the complete shutdown schema', () => {
+  for (const platform of ['ios', 'macos'] as const) {
+    assert.deepEqual(
+      validateAgainstSchema(shutdownResultFor(platform), COMMAND_OUTPUT_SCHEMAS.shutdown),
+      [],
+    );
+  }
+});
+
+test('MCP boot schema rejects the internal apple platform and unknown enum values', () => {
+  // Internal identity must not be advertised on the public result field.
+  assert.notDeepEqual(
+    validateAgainstSchema(
+      { ...bootResultFor('ios'), platform: 'apple' },
+      COMMAND_OUTPUT_SCHEMAS.boot,
+    ),
+    [],
+  );
+  assert.notDeepEqual(
+    validateAgainstSchema(
+      { ...bootResultFor('ios'), platform: 'windows' },
+      COMMAND_OUTPUT_SCHEMAS.boot,
+    ),
+    [],
+  );
+  // The `booted` discriminant is a const true; a false value fails the schema.
+  assert.notDeepEqual(
+    validateAgainstSchema({ ...bootResultFor('ios'), booted: false }, COMMAND_OUTPUT_SCHEMAS.boot),
+    [],
+  );
+  // A missing nested-required shutdown field (stderr) fails validation.
+  assert.notDeepEqual(
+    validateAgainstSchema(
+      { ...shutdownResultFor('ios'), shutdown: { success: true, exitCode: 0, stdout: '' } },
+      COMMAND_OUTPUT_SCHEMAS.shutdown,
+    ),
+    [],
+  );
+});
+
+test('MCP prepare schema mirrors its PublicPlatform contract', () => {
+  const platformEnum = COMMAND_OUTPUT_SCHEMAS.prepare.properties?.platform?.enum;
+  assert.deepEqual(platformEnum, ['ios', 'macos', 'android', 'linux', 'web']);
+  assert.equal(platformEnum?.includes('apple'), false);
+
+  for (const platform of ['ios', 'macos'] as const) {
+    assert.deepEqual(
+      validateAgainstSchema(prepareResultFor(platform), COMMAND_OUTPUT_SCHEMAS.prepare),
+      [],
+    );
+  }
+  assert.notDeepEqual(
+    validateAgainstSchema(
+      { ...prepareResultFor('ios'), platform: 'apple' },
+      COMMAND_OUTPUT_SCHEMAS.prepare,
+    ),
+    [],
+  );
 });
 
 test('MCP session tool exposes state-dir resolution without a daemon round-trip', async () => {
