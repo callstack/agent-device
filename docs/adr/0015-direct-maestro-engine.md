@@ -6,17 +6,17 @@ Accepted
 
 ## Context
 
-Maestro YAML currently compiles into generic `SessionAction` strings. Commands whose semantics do not
+At decision time, Maestro YAML compiled into generic `SessionAction` strings. Commands whose semantics did not
 match native replay become private `__maestro*` names with positional payloads, then replay dispatch
 routes those strings through a second Maestro switch before recursively invoking ordinary daemon
 commands. Compatibility state is split between the replay variable scope and three `WeakMap` caches.
 
-This path grew a second selector resolver, several polling loops, action-after-assertion recovery, and
+That path grew a second selector resolver, several polling loops, action-after-assertion recovery, and
 gesture-coordinate adapters. The indirection makes successful responses hard to prove: a fast native
 wait may establish text existence while the compatibility assertion requires a visible Maestro target.
 It also hides authored coordinate space until runtime positional decoding.
 
-The current inbound implementation is about 5,000 production lines and 5,000 focused test lines.
+The inbound implementation was about 5,000 production lines and 5,000 focused test lines.
 Android compatibility is materially faster than native Maestro in the pager and navigation suites;
 that advantage is a product constraint, not expendable migration headroom.
 
@@ -77,6 +77,11 @@ runner startup from warm command latency. Both platforms rerun the non-Maestro g
 two-pointer plans, executor selection, and app-observable effects must remain unchanged.
 
 ## Migration
+
+Completed. Production Maestro YAML now uses the typed program, immutable replay plan, and direct
+runtime port exclusively. The `SessionAction` lowering path, private `__maestro*` commands,
+`replayControl`, hidden compatibility caches, positional decoders, and their fallback routing were
+deleted in the same change. Generic `.ad` replay remains independent.
 
 1. Add the typed program, runtime port, direct interpreter, and normalized upstream fixtures without
    changing production routing.

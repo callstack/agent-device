@@ -162,8 +162,9 @@ the observable freshness and failure semantics below before any runtime refactor
   write back, and empty `@ref`-scoped snapshot output must not replace the stored session snapshot.
 - Maestro target matching remains snapshot-based, fresh, and policy-rich. Native selector
   simplification must not erase Maestro regex/string selector behavior, visibility filtering,
-  ranking, fuzzy fallback, visible-context preference, Android duplicate handling, tab-strip
-  inference, or assertion/wait semantics.
+  ranking, visible-context preference, Android duplicate handling, tab-strip inference, or
+  assertion/wait semantics. Plain text is exact and regex-aware; do not add substring/fuzzy
+  recovery that changes authored selector meaning.
 
 Evidence: [ADR 0002](docs/adr/0002-persistent-platform-helper-sessions.md),
 [ADR 0004](docs/adr/0004-ios-snapshot-backend-strategy.md),
@@ -172,7 +173,7 @@ Evidence: [ADR 0002](docs/adr/0002-persistent-platform-helper-sessions.md),
 [`find.test.ts`](src/daemon/handlers/__tests__/find.test.ts),
 [`snapshot-handler.test.ts`](src/daemon/handlers/__tests__/snapshot-handler.test.ts),
 [`snapshot-scoped-refs.test.ts`](src/daemon/handlers/__tests__/snapshot-scoped-refs.test.ts),
-[`runtime-targets.test.ts`](src/compat/maestro/__tests__/runtime-targets.test.ts), and
+[`runtime-targets-typed.test.ts`](src/compat/maestro/__tests__/runtime-targets-typed.test.ts), and
 [`android-test-suite.test.ts`](test/integration/provider-scenarios/android-test-suite.test.ts).
 
 ## Testing Principles
