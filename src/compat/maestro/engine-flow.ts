@@ -16,6 +16,8 @@ import {
   type MaestroObservationCondition,
 } from './engine-types.ts';
 
+export const MAX_MAESTRO_REPEAT_EXPANSIONS = 1000;
+
 export function resolveCommand<T extends MaestroCommand>(
   command: T,
   context: MaestroExecutionContext,
@@ -37,6 +39,15 @@ export function readIterationCount(
     throw new AppError('INVALID_ARGS', `Maestro ${name} must resolve to a non-negative integer.`);
   }
   return resolved;
+}
+
+export function assertMaestroRepeatExpansionLimit(times: number): void {
+  if (times > MAX_MAESTRO_REPEAT_EXPANSIONS) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `repeat.times must be <= ${MAX_MAESTRO_REPEAT_EXPANSIONS} for deterministic replay expansion.`,
+    );
+  }
 }
 
 export function resolveMaestroTimingPolicy(

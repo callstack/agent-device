@@ -19,6 +19,7 @@ export async function observeMaestroCondition(
     condition: MaestroObservationCondition;
     timeoutMs: number;
     generation: number;
+    env: Readonly<Record<string, string>>;
     cachedObservation?: MaestroObservation;
     signal?: AbortSignal;
   },

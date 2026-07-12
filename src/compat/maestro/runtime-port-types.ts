@@ -16,6 +16,7 @@ import type {
 
 export type MaestroRuntimeOperationContext = {
   readonly appId?: string;
+  readonly env: Readonly<Record<string, string>>;
   readonly generation: number;
   readonly source?: MaestroSourceLocation;
   readonly cachedObservation?: MaestroObservation;

@@ -3,11 +3,15 @@ import type { MaestroCommand } from './program-ir.ts';
 import type { MaestroRuntimeOperationContext } from './runtime-port-types.ts';
 
 export function operationContext(
-  request: Pick<MaestroRuntimeRequest, 'appId' | 'generation' | 'cachedObservation' | 'signal'>,
+  request: Pick<
+    MaestroRuntimeRequest,
+    'appId' | 'env' | 'generation' | 'cachedObservation' | 'signal'
+  >,
   command?: Pick<MaestroCommand, 'source'>,
 ): MaestroRuntimeOperationContext {
   return {
     ...(request.appId === undefined ? {} : { appId: request.appId }),
+    env: request.env,
     generation: request.generation,
     ...(command ? { source: command.source } : {}),
     ...(request.cachedObservation ? { cachedObservation: request.cachedObservation } : {}),

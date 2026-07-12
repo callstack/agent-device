@@ -42,6 +42,7 @@ export type MaestroObservationCondition =
 
 export type MaestroRuntimeRequest = {
   command: MaestroRuntimeCommand;
+  env: Readonly<Record<string, string>>;
   appId?: string;
   generation: number;
   cachedObservation?: MaestroObservation;
@@ -61,6 +62,7 @@ export type MaestroRuntimePort = {
     condition: MaestroObservationCondition;
     timeoutMs: number;
     generation: number;
+    env: Readonly<Record<string, string>>;
     cachedObservation?: MaestroObservation;
     signal?: AbortSignal;
   }): Promise<MaestroObservation>;
@@ -84,6 +86,8 @@ export type MaestroEngineEvent = {
   command: MaestroCommand;
   source: MaestroSourceLocation;
   generation: number;
+  stepIndex: number;
+  stepTotal: number;
 };
 
 export type MaestroEngineObserver = {
@@ -93,8 +97,19 @@ export type MaestroEngineObserver = {
 };
 
 export type MaestroEngineOptions = {
-  env?: Record<string, string>;
+  /** Highest-precedence invocation values, normally CLI over shell. */
+  env?: Readonly<Record<string, string>>;
+  /** Lowest-precedence defaults, normally replay built-ins. */
+  defaults?: Readonly<Record<string, string | number | boolean>>;
+  /** Explicit alias for callers passing replay built-ins. */
+  builtins?: Readonly<Record<string, string>>;
   platform?: MaestroPlatform;
+  target?: string;
+  /** Internal zero-based plan offset. Prefer from/planDigest for resume callers. */
+  startIndex?: number;
+  /** One-based safe resume request and its plan digest. */
+  from?: number;
+  planDigest?: string;
   loadProgram?: (
     path: string,
     parentSource?: string,

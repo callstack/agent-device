@@ -237,6 +237,7 @@ describe('MaestroRuntimePort', () => {
     const result = await createMaestroRuntimePort(missingOperations).execute({
       command: command as Extract<typeof command, { kind: 'tapOn' }>,
       generation: 0,
+      env: {},
     });
 
     expect(result).toEqual({ mutated: false });
@@ -257,6 +258,7 @@ describe('MaestroRuntimePort', () => {
       createMaestroRuntimePort(failingOperations).execute({
         command: command as Extract<typeof command, { kind: 'tapOn' }>,
         generation: 0,
+        env: {},
       }),
     ).rejects.toBe(failure);
   });

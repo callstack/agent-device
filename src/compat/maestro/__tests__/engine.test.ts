@@ -31,6 +31,7 @@ describe('executeMaestroProgram', () => {
           duration: 100,
         },
       },
+      env: {},
       generation: 0,
     });
     expect(port.observe).not.toHaveBeenCalled();
