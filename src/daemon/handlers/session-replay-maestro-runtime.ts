@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { AppError, asAppError } from '../../kernel/errors.ts';
+import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { getRequestSignal } from '../../request/cancel.ts';
 import { emitRequestProgress, readReplayTestActionProgress } from '../../request/progress.ts';
 import {
@@ -22,29 +22,38 @@ import {
 } from '../../compat/maestro/replay-plan.ts';
 import type { MaestroEngineEvent } from '../../compat/maestro/engine-types.ts';
 import type { MaestroPlatform } from '../../compat/maestro/program-ir.ts';
+import type { MaestroReplayPlan } from '../../compat/maestro/replay-plan-types.ts';
+import type { DeviceInfo } from '../../kernel/device.ts';
 import type { ReplayCommandResult } from '../../contracts/replay.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
 import { SessionStore } from '../session-store.ts';
 import { errorResponse } from './response.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
+import {
+  buildTypedMaestroFailureResponse,
+  type MaestroFailedEngineEvent,
+} from './session-replay-maestro-failure.ts';
 
 export async function runTypedMaestroReplayFile(params: {
   req: DaemonRequest;
   sessionName: string;
+  logPath: string;
   sessionStore: SessionStore;
   invoke: DaemonInvokeFn;
 }): Promise<DaemonResponse> {
-  const { req, sessionName, sessionStore, invoke } = params;
+  const { req, sessionName, logPath, sessionStore, invoke } = params;
   const requestedPath = req.positionals?.[0];
   if (!requestedPath) return errorResponse('INVALID_ARGS', 'replay requires a path');
   const startedAt = Date.now();
-  let failedEvent: MaestroEngineEvent | undefined;
+  let failedEvent: MaestroFailedEngineEvent | undefined;
+  let plan: MaestroReplayPlan | undefined;
+  let snapshotStart = 0;
   try {
     const filePath = SessionStore.expandHome(requestedPath, req.meta?.cwd);
     const program = parseMaestroProgram(fs.readFileSync(filePath, 'utf8'), {
       sourcePath: filePath,
     });
-    const platform = resolveMaestroPlatform(req, sessionStore.get(sessionName)?.device.platform);
+    const platform = resolveMaestroPlatform(req, sessionStore.get(sessionName)?.device);
     const defaults = buildReplayBuiltinVars({
       req,
       sessionName,
@@ -57,7 +66,7 @@ export async function runTypedMaestroReplayFile(params: {
     };
     const signal = getRequestSignal(req.meta?.requestId);
     const loadProgram = createMaestroProgramLoader(path.dirname(filePath));
-    const plan = await compileMaestroReplayPlan(program, {
+    plan = await compileMaestroReplayPlan(program, {
       defaults,
       env,
       platform,
@@ -82,7 +91,7 @@ export async function runTypedMaestroReplayFile(params: {
         },
       },
     });
-    const snapshotStart = sessionStore.get(sessionName)?.snapshotDiagnostics?.samples.length ?? 0;
+    snapshotStart = sessionStore.get(sessionName)?.snapshotDiagnostics?.samples.length ?? 0;
     const result = await executeMaestroPlan(plan, port, {
       defaults,
       env,
@@ -115,9 +124,24 @@ export async function runTypedMaestroReplayFile(params: {
       } satisfies ReplayCommandResult,
     };
   } catch (error) {
-    const appError = asAppError(error);
-    return errorResponse(appError.code, appError.message, {
-      ...(appError.details ?? {}),
+    const normalizedError = normalizeError(error);
+    if (failedEvent && plan) {
+      const samples =
+        sessionStore.get(sessionName)?.snapshotDiagnostics?.samples.slice(snapshotStart) ?? [];
+      return await buildTypedMaestroFailureResponse({
+        error: normalizedError,
+        event: failedEvent,
+        plan,
+        replayPath: SessionStore.expandHome(requestedPath, req.meta?.cwd),
+        req,
+        sessionName,
+        sessionStore,
+        logPath,
+        snapshotDiagnostics: summarizeSnapshotTimingSamples(samples),
+      });
+    }
+    return errorResponse(normalizedError.code, normalizedError.message, {
+      ...(normalizedError.details ?? {}),
       ...(failedEvent
         ? {
             replaySource: failedEvent.source,
@@ -138,10 +162,12 @@ export function isTypedMaestroReplay(req: DaemonRequest, filePath: string): bool
 
 function resolveMaestroPlatform(
   req: DaemonRequest,
-  sessionPlatform: string | undefined,
+  sessionDevice: DeviceInfo | undefined,
 ): Extract<MaestroPlatform, 'android' | 'ios'> {
-  const platform = req.flags?.platform ?? sessionPlatform;
+  const platform = req.flags?.platform;
   if (platform === 'android' || platform === 'ios') return platform;
+  if (sessionDevice?.platform === 'android') return 'android';
+  if (sessionDevice?.platform === 'apple' && sessionDevice.appleOs === 'ios') return 'ios';
   throw new AppError(
     'INVALID_ARGS',
     'Maestro replay requires --platform android|ios or an active mobile session.',

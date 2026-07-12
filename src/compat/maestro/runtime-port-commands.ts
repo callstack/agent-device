@@ -18,6 +18,8 @@ import type {
 } from './runtime-port-types.ts';
 
 const DEFAULT_SCROLL_UNTIL_VISIBLE_TIMEOUT_MS = 5_000;
+const MAESTRO_INPUT_TARGET_TIMEOUT_MS = 30_000;
+const MAESTRO_OPTIONAL_INPUT_TARGET_TIMEOUT_MS = 3_000;
 
 export async function executeMaestroRuntimeCommand(
   request: MaestroRuntimeRequest,
@@ -52,7 +54,15 @@ export async function executeMaestroRuntimeCommand(
     case 'openLink':
       return await invokeMutation(operations.openLink, { link: command.link }, context, true);
     case 'tapOn': {
-      const query = { purpose: 'tap' as const, index: command.index, childOf: command.childOf };
+      const query = {
+        purpose: 'tap' as const,
+        timeoutMs:
+          command.optional === true
+            ? MAESTRO_OPTIONAL_INPUT_TARGET_TIMEOUT_MS
+            : MAESTRO_INPUT_TARGET_TIMEOUT_MS,
+        index: command.index,
+        childOf: command.childOf,
+      };
       const target =
         command.optional === true
           ? await resolveInputTarget(command.target, query, request, operations, true)
@@ -77,7 +87,7 @@ export async function executeMaestroRuntimeCommand(
     case 'doubleTapOn': {
       const target = await resolveInputTarget(
         command.target,
-        { purpose: 'doubleTap' },
+        { purpose: 'doubleTap', timeoutMs: MAESTRO_INPUT_TARGET_TIMEOUT_MS },
         request,
         operations,
       );
@@ -92,7 +102,7 @@ export async function executeMaestroRuntimeCommand(
     case 'longPressOn': {
       const target = await resolveInputTarget(
         command.target,
-        { purpose: 'longPress' },
+        { purpose: 'longPress', timeoutMs: MAESTRO_INPUT_TARGET_TIMEOUT_MS },
         request,
         operations,
       );
@@ -234,21 +244,21 @@ function resultWithArtifacts(
 
 function resolveInputTarget(
   authored: MaestroGestureTarget,
-  query: Pick<MaestroTargetQuery, 'purpose' | 'index' | 'childOf'>,
+  query: Pick<MaestroTargetQuery, 'purpose' | 'timeoutMs' | 'index' | 'childOf'>,
   request: MaestroRuntimeRequest,
   operations: MaestroRuntimeOperations,
   optional: true,
 ): Promise<MaestroInputTarget | undefined>;
 function resolveInputTarget(
   authored: MaestroGestureTarget,
-  query: Pick<MaestroTargetQuery, 'purpose' | 'index' | 'childOf'>,
+  query: Pick<MaestroTargetQuery, 'purpose' | 'timeoutMs' | 'index' | 'childOf'>,
   request: MaestroRuntimeRequest,
   operations: MaestroRuntimeOperations,
   optional?: false,
 ): Promise<MaestroInputTarget>;
 async function resolveInputTarget(
   authored: MaestroGestureTarget,
-  query: Pick<MaestroTargetQuery, 'purpose' | 'index' | 'childOf'>,
+  query: Pick<MaestroTargetQuery, 'purpose' | 'timeoutMs' | 'index' | 'childOf'>,
   request: MaestroRuntimeRequest,
   operations: MaestroRuntimeOperations,
   optional = false,

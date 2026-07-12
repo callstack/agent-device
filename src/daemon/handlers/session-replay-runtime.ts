@@ -157,7 +157,7 @@ export async function runReplayScriptFile(params: {
   try {
     resolved = SessionStore.expandHome(filePath, req.meta?.cwd);
     if (isTypedMaestroReplay(req, resolved)) {
-      return await runTypedMaestroReplayFile({ req, sessionName, sessionStore, invoke });
+      return await runTypedMaestroReplayFile({ req, sessionName, logPath, sessionStore, invoke });
     }
     const script = fs.readFileSync(resolved, 'utf8');
     const firstNonWhitespace = script.trimStart()[0];

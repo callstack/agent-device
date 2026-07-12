@@ -11,6 +11,7 @@ export function createMaestroExecutionContext(
   // Flow config and runFlow env values are stack-scoped; script output variables persist.
   let persistentValues = stringifyValues(defaults);
   const scopes: Record<string, string>[] = [];
+  const expandedNames = new Set<string>();
   let generation = 0;
   let observation: MaestroObservation | undefined;
 
@@ -23,6 +24,14 @@ export function createMaestroExecutionContext(
     },
     get observation(): MaestroObservation | undefined {
       return observation?.generation === generation ? observation : undefined;
+    },
+    get expandedVariables(): Readonly<Record<string, string>> {
+      const values = currentValues();
+      return Object.fromEntries(
+        [...expandedNames]
+          .filter((name) => Object.hasOwn(values, name))
+          .map((name) => [name, values[name]!] as const),
+      );
     },
     enter(scopedValues: Record<string, string | number | boolean> = {}): () => void {
       const resolved = resolveScopedValues(scopedValues);
@@ -54,7 +63,7 @@ export function createMaestroExecutionContext(
       observation = undefined;
     },
     resolve(value: string): string {
-      return resolveValue(value, currentValues());
+      return resolveValue(value, currentValues(), (name) => expandedNames.add(name));
     },
   };
 
@@ -68,9 +77,15 @@ export function createMaestroExecutionContext(
   function resolveScopedValues(
     scopedValues: Record<string, string | number | boolean>,
   ): Record<string, string> {
+    const rawValues = stringifyValues(scopedValues);
     const resolved: Record<string, string> = {};
-    for (const [key, value] of Object.entries(stringifyValues(scopedValues))) {
-      resolved[key] = resolveValue(value, { ...currentValues(), ...resolved, ...overrides });
+    for (const [key, value] of Object.entries(rawValues)) {
+      resolved[key] = resolveValue(value, {
+        ...currentValues(),
+        ...rawValues,
+        ...resolved,
+        ...overrides,
+      });
     }
     return resolved;
   }
@@ -82,8 +97,15 @@ function stringifyValues(
   return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, String(value)]));
 }
 
-function resolveValue(value: string, values: Readonly<Record<string, string>>): string {
-  return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_.]*)\}/g, (match, key: string) =>
-    Object.hasOwn(values, key) ? values[key]! : match,
-  );
+function resolveValue(
+  value: string,
+  values: Readonly<Record<string, string>>,
+  onExpanded?: (name: string) => void,
+  resolving = new Set<string>(),
+): string {
+  return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_.]*)\}/g, (match, key: string) => {
+    if (!Object.hasOwn(values, key) || resolving.has(key)) return match;
+    onExpanded?.(key);
+    return resolveValue(values[key]!, values, onExpanded, new Set([...resolving, key]));
+  });
 }

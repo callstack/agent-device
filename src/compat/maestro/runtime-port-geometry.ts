@@ -17,6 +17,8 @@ import type {
   MaestroTargetResolution,
 } from './runtime-port-types.ts';
 
+const MAESTRO_SWIPE_TARGET_TIMEOUT_MS = 0;
+
 export async function resolveMaestroSwipeOperation(
   authored: MaestroSwipeGesture,
   request: MaestroRuntimeRequest,
@@ -62,7 +64,7 @@ export async function resolveMaestroSwipeOperation(
 
   const target = await resolveMaestroTarget(
     authored.from,
-    { purpose: 'swipe' },
+    { purpose: 'swipe', timeoutMs: MAESTRO_SWIPE_TARGET_TIMEOUT_MS },
     request,
     operations,
   );

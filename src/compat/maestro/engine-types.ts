@@ -93,7 +93,14 @@ export type MaestroEngineEvent = {
 export type MaestroEngineObserver = {
   commandStarted?(event: MaestroEngineEvent): void;
   commandCompleted?(event: MaestroEngineEvent & { durationMs: number }): void;
-  commandFailed?(event: MaestroEngineEvent & { durationMs: number; error: unknown }): void;
+  commandFailed?(
+    event: MaestroEngineEvent & {
+      durationMs: number;
+      error: unknown;
+      artifactPaths: readonly string[];
+      expandedVariables: Readonly<Record<string, string>>;
+    },
+  ): void;
 };
 
 export type MaestroEngineOptions = {

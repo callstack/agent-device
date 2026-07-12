@@ -53,21 +53,21 @@ export async function observeMaestroCondition(
 
 export function resolveMaestroTarget(
   selector: MaestroSelector,
-  query: Pick<MaestroTargetQuery, 'purpose' | 'index' | 'childOf'>,
+  query: Pick<MaestroTargetQuery, 'purpose' | 'timeoutMs' | 'index' | 'childOf'>,
   request: MaestroRuntimeRequest,
   operations: MaestroRuntimeOperations,
   optional: true,
 ): Promise<MaestroTargetResolution | undefined>;
 export function resolveMaestroTarget(
   selector: MaestroSelector,
-  query: Pick<MaestroTargetQuery, 'purpose' | 'index' | 'childOf'>,
+  query: Pick<MaestroTargetQuery, 'purpose' | 'timeoutMs' | 'index' | 'childOf'>,
   request: MaestroRuntimeRequest,
   operations: MaestroRuntimeOperations,
   optional?: false,
 ): Promise<MaestroTargetResolution>;
 export async function resolveMaestroTarget(
   selector: MaestroSelector,
-  query: Pick<MaestroTargetQuery, 'purpose' | 'index' | 'childOf'>,
+  query: Pick<MaestroTargetQuery, 'purpose' | 'timeoutMs' | 'index' | 'childOf'>,
   request: MaestroRuntimeRequest,
   operations: MaestroRuntimeOperations,
   optional = false,

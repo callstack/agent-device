@@ -37,12 +37,50 @@ export function buildReplayDivergenceFailureResponse(params: {
     divergence,
     scrubVars,
   } = params;
+  return buildReplayDivergenceFailureResponseFromDescriptor({
+    error,
+    actionLabel: formatDivergenceActionLabel(action),
+    action: action.command,
+    positionals: buildDisplayPositionals(action) ?? [],
+    step,
+    replayPath,
+    artifactPaths,
+    snapshotDiagnostics,
+    divergence,
+    scrubVars,
+  });
+}
+
+export function buildReplayDivergenceFailureResponseFromDescriptor(params: {
+  error: ReplayFailureCause;
+  actionLabel: string;
+  action: string;
+  positionals: string[];
+  step: number;
+  replayPath: string;
+  artifactPaths: string[];
+  snapshotDiagnostics?: SnapshotDiagnosticsSummary;
+  divergence: unknown;
+  scrubVars: ReplayVarScrubEntry[];
+}): DaemonResponse {
+  const {
+    error,
+    actionLabel,
+    action,
+    positionals,
+    step,
+    replayPath,
+    artifactPaths,
+    snapshotDiagnostics,
+    divergence,
+    scrubVars,
+  } = params;
   return {
     ok: false,
     error: {
       code: 'REPLAY_DIVERGENCE',
       message: scrubReplayVarValues(
-        `Replay failed at step ${step} (${formatDivergenceActionLabel(action)}): ${error.message}`,
+        `Replay failed at step ${step} (${actionLabel}): ${error.message}`,
         scrubVars,
       ),
       hint: error.hint === undefined ? undefined : scrubReplayVarValues(error.hint, scrubVars),
@@ -54,8 +92,8 @@ export function buildReplayDivergenceFailureResponse(params: {
         ...pickSafeCauseDetails(error.details),
         replayPath,
         step,
-        action: action.command,
-        positionals: buildDisplayPositionals(action) ?? [],
+        action,
+        positionals,
         artifactPaths,
         ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
         divergence,

@@ -12,6 +12,7 @@ import type {
 } from './engine-types.ts';
 import type { MaestroRuntimeOperations } from './runtime-port-types.ts';
 import {
+  MAESTRO_OBSERVATION_POLL_MS,
   observeTypedMaestroCondition,
   resolveTypedMaestroPreferredContext,
   resolveTypedMaestroTarget,
@@ -51,23 +52,35 @@ export function createDaemonMaestroRuntimeOperations(
 
   const operations: MaestroRuntimeOperations = {
     resolveTarget: async (input, context) => {
-      const currentSnapshot = await snapshot(context);
-      const evidence = context.cachedObservation?.evidence;
-      const preferredContext =
-        evidence && evidence.visible
-          ? resolveTypedMaestroPreferredContext({
-              selector: evidence.selector,
-              snapshot: currentSnapshot,
-              platform,
-            })
-          : undefined;
-      return await resolveTypedMaestroTarget({
-        query: input,
-        context,
-        snapshot: currentSnapshot,
-        platform,
-        preferredContext,
-      });
+      const deadline = options.dependencies.now() + input.timeoutMs;
+      let lastMatch;
+      do {
+        const currentSnapshot = await snapshot(context);
+        const evidence = context.cachedObservation?.evidence;
+        const preferredContext =
+          evidence && evidence.visible
+            ? resolveTypedMaestroPreferredContext({
+                selector: evidence.selector,
+                snapshot: currentSnapshot,
+                platform,
+              })
+            : undefined;
+        lastMatch = await resolveTypedMaestroTarget({
+          query: input,
+          context,
+          snapshot: currentSnapshot,
+          platform,
+          preferredContext,
+        });
+        if (lastMatch.matched && lastMatch.visible && lastMatch.rect) return lastMatch;
+        const remaining = deadline - options.dependencies.now();
+        if (remaining <= 0) return lastMatch;
+        await options.dependencies.sleep(
+          Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
+          context.signal,
+        );
+      } while (options.dependencies.now() <= deadline);
+      return lastMatch;
     },
     observe: async (input, context) =>
       await observeTypedMaestroCondition({
@@ -160,6 +173,13 @@ export function createDaemonMaestroRuntimeOperations(
           await invoke('scroll', [input.direction]);
         },
       });
+      if (!match.matched || !match.visible) {
+        throw new AppError(
+          'COMMAND_FAILED',
+          'Maestro scrollUntilVisible target did not become visible.',
+          { selector: input.selector, timeoutMs: input.timeoutMs },
+        );
+      }
       return { observation: observationFromMatch(input.selector, match) };
     },
     pressKey: async (input) => {

@@ -48,6 +48,7 @@ export type MaestroTargetResolution = MaestroTargetMatch & {
 export type MaestroTargetQuery = {
   readonly selector: MaestroSelector;
   readonly purpose: 'tap' | 'doubleTap' | 'longPress' | 'swipe';
+  readonly timeoutMs: number;
   readonly index?: number;
   readonly childOf?: MaestroSelector;
 };

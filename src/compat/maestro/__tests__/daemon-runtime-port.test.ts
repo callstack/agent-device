@@ -123,3 +123,104 @@ test('keeps absent negative observations, script output, and artifacts typed', a
     }),
   ).resolves.toMatchObject({ artifactPaths: [path.join(root, 'shot.png')] });
 });
+
+test('waits for a delayed input target using fresh snapshots', async () => {
+  const requests: DaemonRequest[] = [];
+  let snapshots = 0;
+  const invoke: DaemonInvokeFn = async (request) => {
+    requests.push(request);
+    if (request.command !== 'snapshot') return { ok: true, data: {} };
+    snapshots += 1;
+    return {
+      ok: true,
+      data: {
+        createdAt: snapshots,
+        nodes: [
+          {
+            index: 0,
+            type: 'Application',
+            rect: { x: 0, y: 0, width: 402, height: 874 },
+          },
+          ...(snapshots < 3
+            ? []
+            : [
+                {
+                  index: 1,
+                  parentIndex: 0,
+                  type: 'Button',
+                  identifier: 'delayedButton',
+                  rect: { x: 20, y: 40, width: 120, height: 44 },
+                },
+              ]),
+        ],
+      },
+    };
+  };
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    invoke,
+    dependencies: makeDependencies(),
+    platform: 'android',
+  });
+
+  await expect(
+    port.execute({
+      command: {
+        kind: 'tapOn',
+        source: { line: 2 },
+        target: { space: 'target', selector: { id: 'delayedButton' } },
+      },
+      generation: 0,
+      env: {},
+    }),
+  ).resolves.toMatchObject({ mutated: true });
+  expect(requests.map((request) => request.command)).toEqual([
+    'snapshot',
+    'snapshot',
+    'snapshot',
+    'click',
+  ]);
+  expect(requests.at(-1)?.positionals).toEqual(['80', '62']);
+});
+
+test('fails scrollUntilVisible when the target stays absent', async () => {
+  const invoke: DaemonInvokeFn = async (request) =>
+    request.command === 'snapshot'
+      ? {
+          ok: true,
+          data: {
+            createdAt: 0,
+            nodes: [
+              {
+                index: 0,
+                type: 'Application',
+                rect: { x: 0, y: 0, width: 402, height: 874 },
+              },
+            ],
+          },
+        }
+      : { ok: true, data: {} };
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke,
+    dependencies: makeDependencies(),
+    platform: 'ios',
+  });
+
+  await expect(
+    port.execute({
+      command: {
+        kind: 'scrollUntilVisible',
+        source: { line: 2 },
+        element: { text: 'Discover' },
+        direction: 'up',
+        timeout: 500,
+      },
+      generation: 0,
+      env: {},
+    }),
+  ).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    message: 'Maestro scrollUntilVisible target did not become visible.',
+  });
+});
