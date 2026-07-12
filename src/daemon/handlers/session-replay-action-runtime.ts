@@ -13,6 +13,8 @@ import {
   invokeReplayRetryBlock,
   type ReplayActionBlockInvoker,
 } from '../../replay/control-flow-runtime.ts';
+import { asAppError } from '../../kernel/errors.ts';
+import { errorResponse } from './response.ts';
 
 type ReplayBaseRequest = Omit<DaemonRequest, 'command' | 'positionals'>;
 
@@ -60,16 +62,31 @@ export async function invokeReplayAction(params: {
     positionals: resolved.positionals ?? [],
   });
 
-  const response = await invokeResolvedReplayAction({
-    req,
-    sessionName,
-    resolved,
-    scope,
-    line,
-    step,
-    invoke,
-    invokeReplayAction: invokeNestedReplayAction,
-  });
+  // A raw dispatch failure (e.g. a selector-miss during press/click/fill/
+  // longpress) can THROW an AppError instead of resolving to `{ok:false}` —
+  // every caller reachable from here (the top-level replay loop, retry
+  // blocks, and nested Maestro runFlow invocations) only ever branches on
+  // `response.ok`, so this is the single place every replay action dispatch
+  // funnels through, regardless of nesting depth. Normalizing here means the
+  // top-level loop's existing `if (!response.ok)` divergence wrapping (and
+  // retry/control-flow's own `response.ok` checks) apply uniformly instead of
+  // the throw escaping unwrapped to the outer catch.
+  let response: DaemonResponse;
+  try {
+    response = await invokeResolvedReplayAction({
+      req,
+      sessionName,
+      resolved,
+      scope,
+      line,
+      step,
+      invoke,
+      invokeReplayAction: invokeNestedReplayAction,
+    });
+  } catch (dispatchErr) {
+    const appErr = asAppError(dispatchErr);
+    response = errorResponse(appErr.code, appErr.message, appErr.details);
+  }
 
   const finishedAt = Date.now();
   appendReplayTraceEvent(tracePath, {
