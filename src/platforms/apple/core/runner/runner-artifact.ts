@@ -6,6 +6,7 @@ import { AppError } from '../../../../kernel/errors.ts';
 import { runCmdStreaming, type ExecBackgroundResult } from '../../../../utils/exec.ts';
 import type { DeviceInfo } from '../../../../kernel/device.ts';
 import { withKeyedLock } from '../../../../utils/keyed-lock.ts';
+import { isRequestCanceledError } from '../../../../request/cancel.ts';
 import { emitRequestProgress } from '../../../../request/progress.ts';
 import { findProjectRoot } from '../../../../utils/version.ts';
 import { resolveRunnerBuildFailureHint } from './runner-contract.ts';
@@ -514,6 +515,7 @@ async function buildRunnerXctestrun(
       },
     );
   } catch (err) {
+    if (isRequestCanceledError(err)) throw err;
     const appErr = err instanceof AppError ? err : new AppError('COMMAND_FAILED', String(err));
     const hint = resolveRunnerBuildFailureHint(appErr);
     throw new AppError('COMMAND_FAILED', 'xcodebuild build-for-testing failed', {

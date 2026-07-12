@@ -35,6 +35,7 @@ import {
   type RequestProgressEvent,
   withRequestProgressSink,
 } from '../../../../request/progress.ts';
+import { createRequestCanceledError, isRequestCanceledError } from '../../../../request/cancel.ts';
 import {
   flushDiagnosticsToSessionFile,
   withDiagnosticsScope,
@@ -1234,13 +1235,14 @@ test('ensureXctestrunArtifact aborts only the disconnected request build and pre
   const canceledBuildStarted = deferred<void>();
   const survivorBuildStarted = deferred<void>();
   const releaseSurvivor = deferred<void>();
+  const cancellationError = createRequestCanceledError();
 
   mockRunCmdStreaming.mockImplementation(async (_cmd, args, options) => {
     const derived = args[args.indexOf('-derivedDataPath') + 1];
     if (options?.signal === canceledController.signal) {
       canceledBuildStarted.resolve();
       await waitForAbort(options.signal);
-      throw new AppError('COMMAND_FAILED', 'xcodebuild build-for-testing aborted');
+      throw cancellationError;
     }
     survivorBuildStarted.resolve();
     await releaseSurvivor.promise;
@@ -1261,7 +1263,11 @@ test('ensureXctestrunArtifact aborts only the disconnected request build and pre
   await Promise.all([canceledBuildStarted.promise, survivorBuildStarted.promise]);
 
   canceledController.abort();
-  await assert.rejects(canceledPromise, /aborted|failed/);
+  await assert.rejects(canceledPromise, (error: unknown) => {
+    assert.equal(error, cancellationError);
+    assert.ok(isRequestCanceledError(error));
+    return true;
+  });
   // The unrelated concurrent build's signal was never aborted.
   assert.equal(survivorController.signal.aborted, false);
 
