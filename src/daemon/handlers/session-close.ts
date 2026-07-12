@@ -89,7 +89,6 @@ async function runSessionCloseTeardown(params: {
     req,
     session,
     logPath,
-    attemptCleanup,
   });
   await stopOrRetainAppleRunnerAfterClose(req, session, attemptCleanup);
   await clearSessionRuntimeHints(session, sessionStore, sessionName);
@@ -132,12 +131,19 @@ async function dispatchTargetedPlatformClose(params: {
   req: DaemonRequest;
   session: SessionState;
   logPath: string;
-  attemptCleanup: CleanupRunner;
 }): Promise<unknown> {
-  const { req, session, logPath, attemptCleanup } = params;
+  const { req, session, logPath } = params;
   if (!shouldDispatchPlatformClose(req, session)) return undefined;
   if (shouldStopAppleRunnerBeforeTargetedClose(session)) {
-    await attemptCleanup('apple_runner_pre_close', () => stopAppleRunnerForClose(session));
+    // Non-simulator Apple targets must stop the runner before the platform close
+    // is dispatched (the runner owns the device connection). This is a required
+    // dependency, not best-effort cleanup: if it fails, skip the close dispatch
+    // and preserve the original failure. Later independent cleanup still runs.
+    try {
+      await stopAppleRunnerForClose(session);
+    } catch (error) {
+      return error;
+    }
   }
   try {
     await dispatchCommand(session.device, 'close', req.positionals ?? [], req.flags?.out, {

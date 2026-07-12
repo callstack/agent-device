@@ -888,3 +888,59 @@ test('targeted close preserves the platform-close AppError and still runs later 
   expect(mockStopIosRunnerSession).toHaveBeenCalledWith(session.device.id);
   expect(sessionStore.get(sessionName)).toBeUndefined();
 });
+
+test('targeted close skips platform dispatch and preserves the error when the required pre-close runner stop fails', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'targeted-close-preclose-failure-session';
+  // A physical Apple target (non-simulator) must stop its runner before the
+  // platform close is dispatched — the runner owns the device connection.
+  const session = {
+    ...makeSession(sessionName, {
+      platform: 'apple',
+      id: 'physical-device-close',
+      name: 'My iPhone',
+      kind: 'device',
+      booted: true,
+    }),
+    appBundleId: 'com.example.app',
+  } as unknown as SessionState;
+  sessionStore.set(sessionName, session);
+
+  const preCloseError = new AppError('RUNNER_UNAVAILABLE', 'runner stop failed', {
+    reason: 'runner_stop_failed',
+    hint: 'Retry once the runner is reachable.',
+  });
+  mockStopIosRunnerSession.mockRejectedValue(preCloseError);
+
+  await expect(
+    handleSessionCommands({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'close',
+        positionals: ['com.example.app'],
+        flags: {},
+      },
+      sessionName,
+      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      sessionStore,
+      invoke: noopInvoke,
+    }),
+  ).rejects.toBe(preCloseError);
+
+  // The platform close must not be dispatched after a required pre-close stop fails.
+  expect(mockDispatchCommand).not.toHaveBeenCalled();
+  // The original failure code/details/hint are preserved, not collapsed into a
+  // generic cleanup aggregate.
+  expect(preCloseError.code).toBe('RUNNER_UNAVAILABLE');
+  expect(preCloseError.details).toMatchObject({
+    reason: 'runner_stop_failed',
+    hint: 'Retry once the runner is reachable.',
+  });
+  // A skipped close is not recorded as `Closed`.
+  expect(session.actions.some((action) => action.command === 'close')).toBe(false);
+  // Later independent cleanup still ran (runner stop re-attempted), and the
+  // session was still deleted.
+  expect(mockStopIosRunnerSession.mock.calls.length).toBeGreaterThan(1);
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+});
