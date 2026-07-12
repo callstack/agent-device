@@ -309,13 +309,13 @@ test('divergence screen never masks the original cause when the session already 
   expect(screen.reason).toBe('no-session');
 });
 
-// --- Control-flow-wrapped include provenance (reviewer probe scenario) ---
+// --- Typed Maestro include provenance ---
 //
 // The RN suite's own launch include is retry-wrapped, so the single most
 // common real failure site (a launch wait timeout inside the include) must
 // report the INCLUDE's file+line, not the wrapping `retry:`/`runFlow.when:`
-// line in the root flow. Regression for the leak where replayControl.actions
-// kept the transient replaySource field but the runtime never consulted it.
+// line in the root flow. These tests exercise the public typed Maestro replay
+// path and its source-aware failure reporting.
 
 function writeMaestroInclude(root: string): string {
   const childPath = path.join(root, 'child.yaml');

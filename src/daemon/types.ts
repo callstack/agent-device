@@ -493,35 +493,11 @@ export type SessionState = {
   appLogFailure?: AppLogFailure;
 };
 
-/**
- * Per-nested-action source provenance for control-flow wrappers, parallel to
- * `actions`; `undefined` at an index means "the wrapping control action's own
- * file". The runtime block invoker reads it so a failure inside a wrapped
- * `runFlow` include reports the include's file+line, not the wrapper's.
- */
-export type ReplayControlActionSource = { path: string; line: number };
-
-export type SessionReplayControl =
-  | {
-      kind: 'maestroRunFlowWhen';
-      mode: 'visible' | 'notVisible';
-      selector: string;
-      actions: SessionAction[];
-      actionSources?: (ReplayControlActionSource | undefined)[];
-    }
-  | {
-      kind: 'retry';
-      maxRetries: number;
-      actions: SessionAction[];
-      actionSources?: (ReplayControlActionSource | undefined)[];
-    };
-
 export type SessionAction = {
   ts: number;
   command: string;
   positionals: string[];
   runtime?: SessionRuntimeHints;
-  replayControl?: SessionReplayControl;
   flags: Partial<CommandFlags> & {
     snapshotInteractiveOnly?: boolean;
     snapshotDepth?: number;

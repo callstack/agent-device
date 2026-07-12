@@ -72,42 +72,6 @@ test('computeReplayPlanDigest changes when platform-conditioned metadata changes
   assert.notEqual(ios, android);
 });
 
-test('computeReplayPlanDigest folds runtime control-flow shape (retry) into the digest', () => {
-  const retryOne: SessionAction = action({
-    command: 'back',
-    positionals: [],
-    replayControl: { kind: 'retry', maxRetries: 1, actions: [action({ command: 'back' })] },
-  });
-  const retryTwo: SessionAction = {
-    ...retryOne,
-    replayControl: { kind: 'retry', maxRetries: 2, actions: [action({ command: 'back' })] },
-  };
-  assert.notEqual(digestFor([retryOne]), digestFor([retryTwo]));
-});
-
-test('computeReplayPlanDigest folds runtime control-flow shape (maestroRunFlowWhen) into the digest', () => {
-  const base: SessionAction = action({
-    command: 'back',
-    positionals: [],
-    replayControl: {
-      kind: 'maestroRunFlowWhen',
-      mode: 'visible',
-      selector: 'label="Continue"',
-      actions: [action({ command: 'back' })],
-    },
-  });
-  const changedSelector: SessionAction = {
-    ...base,
-    replayControl: {
-      kind: 'maestroRunFlowWhen',
-      mode: 'visible',
-      selector: 'label="Skip"',
-      actions: [action({ command: 'back' })],
-    },
-  };
-  assert.notEqual(digestFor([base]), digestFor([changedSelector]));
-});
-
 test('computeReplayPlanDigest changes when an execution runtime hint changes', () => {
   const runtime = {
     platform: 'ios' as const,
