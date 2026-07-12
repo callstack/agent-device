@@ -8,9 +8,6 @@ export const SWIPE_PRESETS = ['left', 'right', 'left-edge', 'right-edge'] as con
 export type SwipePreset = (typeof SWIPE_PRESETS)[number];
 export const SWIPE_PATTERNS = ['one-way', 'ping-pong'] as const;
 export type SwipePattern = (typeof SWIPE_PATTERNS)[number];
-const SWIPE_PRESET_ENUM = defineStringEnum(SWIPE_PRESETS, {
-  message: 'gesture swipe requires left, right, left-edge, or right-edge',
-});
 const SCROLL_DIRECTION_ENUM = defineStringEnum(SCROLL_DIRECTIONS, {
   message: (direction) => `Unknown direction: ${direction}`,
 });
@@ -157,10 +154,6 @@ export function buildSwipePresetGesturePlan(
     referenceWidth: frame.referenceWidth,
     referenceHeight: frame.referenceHeight,
   };
-}
-
-export function parseSwipePreset(input: string | undefined): SwipePreset {
-  return SWIPE_PRESET_ENUM.parse(input);
 }
 
 export function inferGestureReferenceFrame(
