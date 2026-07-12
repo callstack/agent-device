@@ -277,6 +277,14 @@ export type SessionState = {
    * leak into the healed script.
    */
   saveScriptBoundary?: number;
+  /**
+   * ADR 0012 decision 6: set when `saveScriptPath` was DEFAULTED to the
+   * `<original-stem>.healed.ad` sibling (no explicit `--save-script=<out>`).
+   * The writer refuses to clobber an existing default healed script, so a
+   * second repair against the same original never destroys an unreviewed
+   * prior `.healed.ad` diff.
+   */
+  saveScriptDefaultedHealedPath?: boolean;
   actions: SessionAction[];
   recording?:
     | (SessionRecordingBase & {

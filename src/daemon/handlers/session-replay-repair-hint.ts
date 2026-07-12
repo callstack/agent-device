@@ -23,7 +23,11 @@
 
 import type { SnapshotNode } from '../../kernel/snapshot.ts';
 import type { ReplayDivergenceKind, ReplayRepairHint } from '../../replay/divergence.ts';
-import { matchesAncestryPrefix, type TargetAnnotationV1 } from '../../replay/target-identity.ts';
+import {
+  matchesAncestryPrefix,
+  type TargetAnnotationV1,
+  type TargetScrollRegion,
+} from '../../replay/target-identity.ts';
 import {
   buildAncestryChain,
   buildIndexMap,
@@ -55,33 +59,63 @@ export function computeReplayRepairHint(params: {
 /**
  * Genuine ancestor-containment, not a flat identity-string match: "the
  * recorded container still exists" means it still genuinely CONTAINS a
- * child in the current tree, walked via `parentIndex` the same way decision
- * 3's identity-set filter does — not merely that a node sharing its
- * role/label happens to appear somewhere in the capture. A container whose
- * only child was the very element that renamed still counts as present (the
- * renamed sibling is that child); a container reduced to zero children, or
- * gone entirely, does not.
+ * descendant carrying the recorded leaf-anchored `ancestry` chain, walked via
+ * `parentIndex` the same way decision 3's identity-set filter does — not
+ * merely that a node sharing a container's role/label appears somewhere in
+ * the capture. A container whose only child was the very element that renamed
+ * still counts as present (the renamed sibling is that child); a container
+ * reduced to zero matching descendants, or gone entirely, does not.
  *
- * When the recording carries neither a scroll region nor any ancestor (a
- * root-level target), there is no structural relationship left to test, so
- * presence falls back to "the capture has any content at all."
+ * The `scrollRegion` signal is only trusted when it is IDENTIFIED (carries an
+ * id or a label). An UNIDENTIFIED region — RN's default `ScrollView`/
+ * `FlatList` with no testID — matches "any anonymous scrollview exists,"
+ * which is true on nearly every screen and would falsely route an unrelated
+ * screen to `record-and-heal` (the exact mis-binding decision 1 retired
+ * silent `--update` to prevent). So an identified region must ALSO satisfy
+ * the recorded `ancestry` containment (AND); an unidentified or absent region
+ * falls back to the `ancestry` test alone.
  */
 function isRecordedContainerPresent(recorded: TargetAnnotationV1, nodes: SnapshotNode[]): boolean {
   const byIndex = buildIndexMap(nodes);
-  if (recorded.scrollRegion) {
-    const region = recorded.scrollRegion;
-    // Some node's OWN nearest scrollable ancestor (walked via parentIndex)
-    // resolves to the recorded region: the region still contains something.
-    return nodes.some((node) =>
-      scrollRegionKeysEqual(computeScrollRegionKey(node, byIndex), region),
-    );
+  const ancestryPresent = isRecordedAncestryPresent(recorded.ancestry, byIndex, nodes);
+  const region = recorded.scrollRegion;
+  if (region && isIdentifiedScrollRegion(region)) {
+    return ancestryPresent && isScrollRegionPresent(region, byIndex, nodes);
   }
-  const container = recorded.ancestry[0];
-  if (!container) return nodes.length > 0;
-  // Some node's OWN immediate parent (a 1-entry ancestry walk) matches the
-  // recorded container: the container still has at least one child.
+  return ancestryPresent;
+}
+
+function isIdentifiedScrollRegion(region: TargetScrollRegion): boolean {
+  return region.id !== undefined || region.label !== undefined;
+}
+
+function isScrollRegionPresent(
+  region: TargetScrollRegion,
+  byIndex: Map<number, SnapshotNode>,
+  nodes: SnapshotNode[],
+): boolean {
+  // Some node's OWN nearest scrollable ancestor (walked via parentIndex)
+  // resolves to the recorded region: the identified region still contains a
+  // descendant.
+  return nodes.some((node) => scrollRegionKeysEqual(computeScrollRegionKey(node, byIndex), region));
+}
+
+/**
+ * Some node's OWN leaf-anchored ancestry chain still matches the recorded
+ * target's full `ancestry` prefix — walking the WHOLE recorded chain, not
+ * just the immediate parent, so an unrelated screen that happens to reuse the
+ * parent role/label (shared app chrome) does not read as containment. A
+ * recording with no ancestry at all (a root-level target) has no structural
+ * relationship to test, so presence degenerates to "the capture has content."
+ */
+function isRecordedAncestryPresent(
+  ancestry: TargetAnnotationV1['ancestry'],
+  byIndex: Map<number, SnapshotNode>,
+  nodes: SnapshotNode[],
+): boolean {
+  if (ancestry.length === 0) return nodes.length > 0;
   return nodes.some((node) => {
-    const observed = buildAncestryChain(node, byIndex, 1);
-    return !observed.broken && matchesAncestryPrefix(observed.chain, [container]);
+    const observed = buildAncestryChain(node, byIndex, ancestry.length);
+    return !observed.broken && matchesAncestryPrefix(observed.chain, ancestry);
   });
 }

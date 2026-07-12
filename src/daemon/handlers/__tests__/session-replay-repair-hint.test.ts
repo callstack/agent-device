@@ -85,16 +85,44 @@ test('selector-miss + recorded container entirely absent (different screen) -> s
   assert.equal(hint, 'state-repair');
 });
 
-// --- selector-miss: genuine containment, via scrollRegion (preferred over ancestry) ---
+// --- scrollRegion: an IDENTIFIED region is trusted (AND ancestry); an
+// UNIDENTIFIED region is NOT a standalone presence signal (P0 false positive). ---
 
-test('selector-miss + scrollRegion still contains a descendant -> record-and-heal', () => {
-  const evidence = saveButtonEvidence({
-    ancestry: [{ role: 'cell' }],
+// A recorded target inside an identified list: parent is a cell, whose parent
+// is the identified scrollview; the scrollRegion carries the list's id.
+function listRowEvidence(overrides: Partial<TargetAnnotationV1> = {}): TargetAnnotationV1 {
+  return saveButtonEvidence({
+    ancestry: [{ role: 'cell' }, { role: 'scrollview' }],
     scrollRegion: { role: 'scrollview', id: 'editor-scroll' },
+    ...overrides,
   });
-  const nodes = toSnapshotNodes([
+}
+
+// The same list, still present, with the leaf renamed (its structural
+// location — cell inside the identified scrollview — is unchanged).
+function listRowCapture(): SnapshotNode[] {
+  return toSnapshotNodes([
     { index: 0, type: 'scrollview', identifier: 'editor-scroll' },
-    { index: 1, type: 'cell', label: 'Row 1 (renamed)', parentIndex: 0 },
+    { index: 1, type: 'cell', label: 'Row', parentIndex: 0 },
+    { index: 2, type: 'button', label: 'Save Draft', parentIndex: 1 },
+  ]);
+}
+
+test('selector-miss + IDENTIFIED scrollRegion present AND ancestry present -> record-and-heal', () => {
+  const hint = computeReplayRepairHint({
+    kind: 'selector-miss',
+    targetEvidence: listRowEvidence(),
+    capture: AVAILABLE(listRowCapture()),
+  });
+  assert.equal(hint, 'record-and-heal');
+});
+
+test('selector-miss + LABEL-identified scrollRegion present AND ancestry present -> record-and-heal', () => {
+  const evidence = listRowEvidence({ scrollRegion: { role: 'scrollview', label: 'Editor list' } });
+  const nodes = toSnapshotNodes([
+    { index: 0, type: 'scrollview', label: 'Editor list' },
+    { index: 1, type: 'cell', label: 'Row', parentIndex: 0 },
+    { index: 2, type: 'button', label: 'Save Draft', parentIndex: 1 },
   ]);
   const hint = computeReplayRepairHint({
     kind: 'selector-miss',
@@ -104,11 +132,36 @@ test('selector-miss + scrollRegion still contains a descendant -> record-and-hea
   assert.equal(hint, 'record-and-heal');
 });
 
-test('selector-miss + scrollRegion node exists but is empty -> state-repair', () => {
-  const evidence = saveButtonEvidence({
-    scrollRegion: { role: 'scrollview', id: 'editor-scroll' },
+test('selector-miss + IDENTIFIED scrollRegion absent (ancestry present but wrong list) -> state-repair', () => {
+  // The recorded cell/scrollview structure exists, but the scrollview carries
+  // a DIFFERENT id — the AND fails on the region, so this is not the same list.
+  const nodes = toSnapshotNodes([
+    { index: 0, type: 'scrollview', identifier: 'other-scroll' },
+    { index: 1, type: 'cell', label: 'Row', parentIndex: 0 },
+    { index: 2, type: 'button', label: 'Save Draft', parentIndex: 1 },
+  ]);
+  const hint = computeReplayRepairHint({
+    kind: 'selector-miss',
+    targetEvidence: listRowEvidence(),
+    capture: AVAILABLE(nodes),
   });
-  const nodes = toSnapshotNodes([{ index: 0, type: 'scrollview', identifier: 'editor-scroll' }]);
+  assert.equal(hint, 'state-repair');
+});
+
+// P0: an UNIDENTIFIED scrollRegion (RN's default ScrollView/FlatList with no
+// testID) must NOT read as present just because some anonymous scrollview
+// exists — the pre-fix scrollRegion-only shortcut healed against the wrong
+// screen. It falls back to the ancestry containment test.
+test('selector-miss + UNIDENTIFIED scrollRegion on an UNRELATED screen -> state-repair (not record-and-heal)', () => {
+  const evidence = listRowEvidence({
+    scrollRegion: { role: 'scrollview' }, // no id AND no label
+  });
+  // A totally different screen whose only coincidence is an anonymous
+  // scrollview; nothing carries the recorded cell/scrollview ancestry.
+  const nodes = toSnapshotNodes([
+    { index: 0, type: 'scrollview' },
+    { index: 1, type: 'button', label: 'Continue', parentIndex: 0 },
+  ]);
   const hint = computeReplayRepairHint({
     kind: 'selector-miss',
     targetEvidence: evidence,
@@ -117,11 +170,44 @@ test('selector-miss + scrollRegion node exists but is empty -> state-repair', ()
   assert.equal(hint, 'state-repair');
 });
 
-test('selector-miss + scrollRegion entirely absent -> state-repair', () => {
-  const evidence = saveButtonEvidence({
-    scrollRegion: { role: 'scrollview', id: 'editor-scroll' },
+test('action-failure + UNIDENTIFIED scrollRegion on an UNRELATED screen -> manual (not record-and-heal)', () => {
+  const evidence = listRowEvidence({ scrollRegion: { role: 'scrollview' } });
+  const nodes = toSnapshotNodes([
+    { index: 0, type: 'scrollview' },
+    { index: 1, type: 'button', label: 'Continue', parentIndex: 0 },
+  ]);
+  const hint = computeReplayRepairHint({
+    kind: 'action-failure',
+    targetEvidence: evidence,
+    capture: AVAILABLE(nodes),
   });
-  const nodes = toSnapshotNodes([{ index: 0, type: 'window', label: 'Onboarding' }]);
+  assert.equal(hint, 'manual');
+});
+
+test('selector-miss + UNIDENTIFIED scrollRegion but ancestry still present -> record-and-heal', () => {
+  // The unidentified region is ignored, but the recorded ancestry chain is
+  // genuinely still contained, so heal-by-doing is safe.
+  const evidence = listRowEvidence({ scrollRegion: { role: 'scrollview' } });
+  const hint = computeReplayRepairHint({
+    kind: 'selector-miss',
+    targetEvidence: evidence,
+    capture: AVAILABLE(listRowCapture()),
+  });
+  assert.equal(hint, 'record-and-heal');
+});
+
+test('selector-miss + full recorded ancestry chain absent (only the parent role coincides) -> state-repair', () => {
+  // A screen that reuses the immediate-parent role (toolbar) as shared chrome
+  // but NOT the deeper recorded chain — walking the whole chain, not just
+  // ancestry[0], correctly reports absent.
+  const evidence = saveButtonEvidence({
+    ancestry: [{ role: 'toolbar', label: 'Editor' }, { role: 'navbar' }],
+  });
+  const nodes = toSnapshotNodes([
+    { index: 0, type: 'window' },
+    { index: 1, type: 'toolbar', label: 'Editor', parentIndex: 0 },
+    { index: 2, type: 'button', label: 'Save Draft', parentIndex: 1 },
+  ]);
   const hint = computeReplayRepairHint({
     kind: 'selector-miss',
     targetEvidence: evidence,

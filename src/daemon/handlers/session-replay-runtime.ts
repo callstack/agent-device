@@ -15,12 +15,14 @@ import { computeReplayPlanDigest } from '../../replay/plan-digest.ts';
 import { errorResponse } from './response.ts';
 import { invokeReplayAction } from './session-replay-action-runtime.ts';
 import { tryParseSelectorChain } from '../../selectors/index.ts';
+import type { ResponseLevel } from '../../kernel/contracts.ts';
 import {
   buildReplayVarScope,
   collectReplayShellEnv,
   parseReplayCliEnvEntries,
   readReplayCliEnvEntries,
   readReplayShellEnvSource,
+  type ReplayVarScope,
 } from '../../replay/vars.ts';
 import {
   summarizeSnapshotTimingSamples,
@@ -39,6 +41,95 @@ import {
   isReplayTargetGuardMismatchResponse,
   verifyReplayActionTarget,
 } from './session-replay-target-verification.ts';
+
+/** Per-run invariants for a single replay step (ADR 0012 step 4 verify + dispatch + guard). */
+type ReplayStepContext = {
+  scope: ReplayVarScope;
+  replayReq: DaemonRequest;
+  sessionName: string;
+  sessionStore: SessionStore;
+  logPath: string;
+  resolved: string;
+  actions: SessionAction[];
+  actionLines: number[];
+  actionSourcePaths: (string | undefined)[] | undefined;
+  planDigest: string;
+  actionTracePath: string | undefined;
+  responseLevel: ResponseLevel | undefined;
+  invoke: DaemonInvokeFn;
+};
+
+/**
+ * ADR 0012 migration step 4: verify the recorded target BEFORE sending the
+ * device action. A non-verified outcome is a complete target-binding
+ * REPLAY_DIVERGENCE (built from its own pre-action capture); only a verified
+ * outcome dispatches, carrying the verified member's identity as a
+ * post-resolution guard so dispatch's own resolution (occlusion/visibility
+ * guards verification does not replicate) must land on the SAME element or
+ * refuse pre-action.
+ */
+async function resolveReplayStepResponse(
+  ctx: ReplayStepContext,
+  action: SessionAction,
+  index: number,
+  artifactPaths: string[],
+): Promise<DaemonResponse> {
+  const sourcePath = ctx.actionSourcePaths?.[index] ?? ctx.resolved;
+  const sourceLine = ctx.actionLines[index] ?? 1;
+  const verification = await verifyReplayActionTarget({
+    action,
+    scope: ctx.scope,
+    sourcePath,
+    sourceLine,
+    replayPath: ctx.resolved,
+    step: index + 1,
+    sessionName: ctx.sessionName,
+    sessionStore: ctx.sessionStore,
+    logPath: ctx.logPath,
+    artifactPaths,
+    responseLevel: ctx.responseLevel,
+    planActions: ctx.actions,
+    planDigest: ctx.planDigest,
+  });
+  if (!verification.verified) return verification.response;
+  const guard = verification.guard;
+  const guardedReq = guard
+    ? {
+        ...ctx.replayReq,
+        internal: { ...ctx.replayReq.internal, replayTargetGuard: guard.expected },
+      }
+    : ctx.replayReq;
+  const response = await invokeReplayAction({
+    req: guardedReq,
+    sessionName: ctx.sessionName,
+    action,
+    scope: ctx.scope,
+    filePath: ctx.resolved,
+    line: sourceLine,
+    sourcePath: ctx.actionSourcePaths?.[index],
+    step: index + 1,
+    tracePath: ctx.actionTracePath,
+    invoke: ctx.invoke,
+  });
+  if (!guard || !isReplayTargetGuardMismatchResponse(response)) return response;
+  return await buildReplayTargetGuardMismatchResponse({
+    action,
+    scope: ctx.scope,
+    guard,
+    failedResponse: response,
+    sourcePath,
+    sourceLine,
+    replayPath: ctx.resolved,
+    step: index + 1,
+    sessionName: ctx.sessionName,
+    sessionStore: ctx.sessionStore,
+    logPath: ctx.logPath,
+    artifactPaths,
+    responseLevel: ctx.responseLevel,
+    planActions: ctx.actions,
+    planDigest: ctx.planDigest,
+  });
+}
 
 // fallow-ignore-next-line complexity
 export async function runReplayScriptFile(params: {
@@ -102,16 +193,26 @@ export async function runReplayScriptFile(params: {
     });
     const actionTracePath = tracePath ?? sessionStore.get(sessionName)?.trace?.outPath;
     const snapshotDiagnosticSamples: SnapshotTimingSample[] = [];
-    // ADR 0012 decision 6, R1/R6: `--save-script` arms the repair loop before
-    // step 1 and records the boundary watermark — the action count BEFORE
-    // this invocation's own actions land — captured now so it reflects a
-    // reused session's prior actions, or 0 for a session step 1 has not yet
-    // created. A `--from` continuation never carries `--save-script`, so it
-    // neither re-arms nor resets the boundary the arming invocation set.
+    // ADR 0012 decision 6, R1/R2/R6: `--save-script` arms the repair loop
+    // before step 1. R2 preflight rejects a fresh full replay --save-script on
+    // an already-armed session (it would duplicate the recorded prefix); the
+    // returned armer stamps the boundary watermark on the session that
+    // actually accumulates this run's actions, robust to step-1 `open`
+    // replacing the session.
     const saveScript = req.flags?.saveScript;
-    const saveScriptBoundary = saveScript
-      ? (sessionStore.get(sessionName)?.actions.length ?? 0)
-      : 0;
+    const saveScriptPreflight = preflightReplaySaveScript({
+      saveScript,
+      entryIndex: entryIndex.value,
+      sessionStore,
+      sessionName,
+    });
+    if (saveScriptPreflight) return saveScriptPreflight;
+    const armReplaySaveScriptStep = createReplaySaveScriptArmer({
+      saveScript,
+      sessionStore,
+      sessionName,
+      sourcePath: resolved,
+    });
     const failStep = (failedResponse: DaemonResponse, failedAction: SessionAction, index: number) =>
       withReplayFailureDiagnostics({
         response: failedResponse,
@@ -130,80 +231,30 @@ export async function runReplayScriptFile(params: {
         planActions: actions,
         planDigest,
       });
+    const stepContext: ReplayStepContext = {
+      scope,
+      replayReq,
+      sessionName,
+      sessionStore,
+      logPath,
+      resolved,
+      actions,
+      actionLines,
+      actionSourcePaths,
+      planDigest,
+      actionTracePath,
+      responseLevel: req.meta?.responseLevel,
+      invoke,
+    };
     for (let index = entryIndex.value; index < actions.length; index += 1) {
       const action = actions[index];
       if (!action || action.command === 'replay') continue;
-      if (saveScript) {
-        armReplaySaveScript({
-          sessionStore,
-          sessionName,
-          saveScript,
-          boundary: saveScriptBoundary,
-          sourcePath: resolved,
-        });
-      }
+      armReplaySaveScriptStep();
       emitReplayTestActionProgress(resolved, index, actions.length, action);
-
       const sampleStart = readSessionSnapshotSampleCount(sessionStore, sessionName);
-      // ADR 0012 migration step 4: verify the recorded target BEFORE sending
-      // the device action. A non-verified outcome is a complete target-binding
-      // REPLAY_DIVERGENCE (built from its own pre-action capture); only a
-      // verified outcome dispatches, carrying the verified member's identity
-      // as a post-resolution guard so dispatch's own resolution (occlusion/
-      // visibility guards verification does not replicate) must land on the
-      // SAME element or refuse pre-action.
-      const verification = await verifyReplayActionTarget({
-        action,
-        scope,
-        sourcePath: actionSourcePaths?.[index] ?? resolved,
-        sourceLine: actionLines[index] ?? 1,
-        replayPath: resolved,
-        step: index + 1,
-        sessionName,
-        sessionStore,
-        logPath,
-        artifactPaths: [...artifactPaths],
-        responseLevel: req.meta?.responseLevel,
-        planActions: actions,
-        planDigest,
-      });
-      const guard = verification.verified ? verification.guard : undefined;
-      const guardedReq = guard
-        ? { ...replayReq, internal: { ...replayReq.internal, replayTargetGuard: guard.expected } }
-        : replayReq;
-      let response = verification.verified
-        ? await invokeReplayAction({
-            req: guardedReq,
-            sessionName,
-            action,
-            scope,
-            filePath: resolved,
-            line: actionLines[index] ?? 1,
-            sourcePath: actionSourcePaths?.[index],
-            step: index + 1,
-            tracePath: actionTracePath,
-            invoke,
-          })
-        : verification.response;
-      if (guard && isReplayTargetGuardMismatchResponse(response)) {
-        response = await buildReplayTargetGuardMismatchResponse({
-          action,
-          scope,
-          guard,
-          failedResponse: response,
-          sourcePath: actionSourcePaths?.[index] ?? resolved,
-          sourceLine: actionLines[index] ?? 1,
-          replayPath: resolved,
-          step: index + 1,
-          sessionName,
-          sessionStore,
-          logPath,
-          artifactPaths: [...artifactPaths],
-          responseLevel: req.meta?.responseLevel,
-          planActions: actions,
-          planDigest,
-        });
-      }
+      const response = await resolveReplayStepResponse(stepContext, action, index, [
+        ...artifactPaths,
+      ]);
       snapshotDiagnosticSamples.push(
         ...readSessionSnapshotSamplesSince(sessionStore, sessionName, sampleStart),
       );
@@ -347,20 +398,66 @@ function readSelectorDisplayValue(selector: string | undefined): string | undefi
 }
 
 /**
- * ADR 0012 decision 6, R1/R6: arms recording on the CURRENT session object
- * (no-op until step 1 creates it, for a session that does not exist yet) and
- * records the repair-run boundary watermark once. An explicit `<out>` always
- * wins; absent one, the healed script defaults to the `<original-stem>.healed.ad`
- * sibling (R6) rather than the session's own timestamped default.
+ * ADR 0012 decision 6, R2: reject a fresh FULL `replay --save-script` on a
+ * session that already carries a repair-run boundary — a full re-run
+ * re-appends the already-recorded prefix (`session-action-recorder.ts` pushes
+ * unconditionally), duplicating it in the healed slice. A `--from` resume
+ * (`entryIndex > 0`) legitimately continues the same armed run and is allowed.
  */
-function armReplaySaveScript(params: {
+function preflightReplaySaveScript(params: {
+  saveScript: boolean | string | undefined;
+  entryIndex: number;
+  sessionStore: SessionStore;
+  sessionName: string;
+}): DaemonResponse | undefined {
+  const { saveScript, entryIndex, sessionStore, sessionName } = params;
+  if (!saveScript || entryIndex > 0) return undefined;
+  if (sessionStore.get(sessionName)?.saveScriptBoundary === undefined) return undefined;
+  return errorResponse(
+    'INVALID_ARGS',
+    'This session already has a --save-script repair run recorded; a fresh full replay --save-script would duplicate the recorded prefix. Continue the repair with replay --from <n> --plan-digest <sha256> instead.',
+  );
+}
+
+/**
+ * ADR 0012 decision 6, R1/R6: returns a per-step armer that sets
+ * `recordSession` and stamps the repair-run boundary watermark ONCE. Absent
+ * `--save-script` it is a no-op, so replay is byte-identical to today.
+ */
+function createReplaySaveScriptArmer(params: {
+  saveScript: boolean | string | undefined;
+  sessionStore: SessionStore;
+  sessionName: string;
+  sourcePath: string;
+}): () => void {
+  const { saveScript, sessionStore, sessionName, sourcePath } = params;
+  if (!saveScript) return () => {};
+  let firstArm = true;
+  return () => {
+    armReplaySaveScriptStep({ sessionStore, sessionName, saveScript, sourcePath, firstArm });
+    firstArm = false;
+  };
+}
+
+/**
+ * Arms recording on the CURRENT session (a no-op until step 1 creates it) and
+ * records the boundary watermark once. `firstArm` captures the pre-run action
+ * count on the pre-loop session, so a reused session's earlier actions stay
+ * excluded. A LATER arm reaching an unset boundary means step-1 `open`
+ * REPLACED the session with a fresh `actions: []`
+ * (`session-open-surface.ts:113-123`), so the replaced session is entirely
+ * this run's — its boundary is 0, keeping the healed `open` in the slice
+ * instead of amputating it. An explicit `<out>` always wins; absent one, the
+ * healed script defaults to the `<original-stem>.healed.ad` sibling (R6).
+ */
+function armReplaySaveScriptStep(params: {
   sessionStore: SessionStore;
   sessionName: string;
   saveScript: boolean | string;
-  boundary: number;
   sourcePath: string;
+  firstArm: boolean;
 }): void {
-  const { sessionStore, sessionName, saveScript, boundary, sourcePath } = params;
+  const { sessionStore, sessionName, saveScript, sourcePath, firstArm } = params;
   const session = sessionStore.get(sessionName);
   if (!session) return;
   session.recordSession = true;
@@ -368,8 +465,11 @@ function armReplaySaveScript(params: {
     session.saveScriptPath = expandSessionPath(saveScript);
   } else if (session.saveScriptPath === undefined) {
     session.saveScriptPath = healedScriptSiblingPath(sourcePath);
+    session.saveScriptDefaultedHealedPath = true;
   }
-  if (session.saveScriptBoundary === undefined) session.saveScriptBoundary = boundary;
+  if (session.saveScriptBoundary === undefined) {
+    session.saveScriptBoundary = firstArm ? session.actions.length : 0;
+  }
   sessionStore.set(sessionName, session);
 }
 

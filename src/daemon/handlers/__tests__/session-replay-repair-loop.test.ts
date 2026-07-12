@@ -1,13 +1,13 @@
 /**
  * ADR 0012 decision 6: `replay --save-script` arming (R1), the repair-run
- * boundary watermark (R6, sticky across `--from` legs), `--from` ordering
- * with no prefix duplication (R2), the opt-in guarantee, and the
- * never-record-a-failed-step invariant the whole mechanism depends on.
+ * boundary watermark (R6, sticky across `--from` legs, no amputation when
+ * step-1 `open` replaces the session), `--from` ordering with no prefix
+ * duplication (R2, including the fresh-full-replay rejection), the opt-in
+ * guarantee, and the never-record-a-failed-step invariant.
  *
- * `invoke` is mocked, matching every other `session-replay-runtime*.test.ts`
- * file's convention — but here the mock ACTUALLY calls `sessionStore.recordAction`
- * (the same method the real command handlers call), so `session.actions`
- * accumulates for real instead of staying empty.
+ * The mock `invoke` ACTUALLY records via `sessionStore.recordAction` (the same
+ * call the real handlers make), through `makeRecordingReplayInvoke`, so
+ * `session.actions` accumulates for real instead of staying empty.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
 
@@ -23,19 +23,19 @@ import { runReplayScriptFile } from '../session-replay-runtime.ts';
 import { SessionStore } from '../../session-store.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
-import type { DaemonRequest, DaemonResponse } from '../../types.ts';
-import type { TargetAnnotationV1 } from '../../../replay/target-identity.ts';
+import type { DaemonRequest } from '../../types.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
 } from './session-replay-runtime.fixtures.ts';
+import { freshEvidence, makeRecordingReplayInvoke } from './session-replay-repair.fixtures.ts';
 
 const mockDispatchCommand = vi.mocked(dispatchCommand);
 
 beforeEach(() => {
   mockDispatchCommand.mockReset();
-  // Matches every step's recorded identity (id="save") — the target-binding
-  // verification a couple of these scripts' annotated steps trigger.
+  // Matches every annotated step's recorded identity (id="save") — the
+  // target-binding verification a couple of these scripts trigger.
   mockDispatchCommand.mockResolvedValue({
     nodes: [
       {
@@ -52,26 +52,21 @@ beforeEach(() => {
   });
 });
 
-function freshEvidence(id: string, label: string): TargetAnnotationV1 {
-  return {
-    id,
-    role: 'button',
-    label,
-    ancestry: [],
-    sibling: 0,
-    viewportOrder: 0,
-    verification: 'verified',
-  };
-}
-
 const SAVE_ANNOTATION =
   '# agent-device:target-v1 {"id":"save","role":"button","label":"Recorded Original","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}';
 
-test('R1/R2/R6: prefix steps get fresh evidence, corrective + resumed steps land in order, boundary stays sticky across a redundant --save-script leg', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-repair-loop-'));
+function setup(prefix: string, sessionOverrides = {}) {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  sessionStore.set(sessionName, makeIosSession(sessionName, sessionOverrides));
+  return { root, sessionStore, sessionName, logPath: path.join(root, 'daemon.log') };
+}
+
+test('R1/R2/R6: prefix steps get fresh evidence, corrective + resumed steps land in order, boundary stays sticky across a --from --save-script leg', async () => {
+  const { root, sessionStore, sessionName, logPath } = setup('agent-device-replay-repair-loop-', {
+    appBundleId: 'com.example.app',
+  });
   const filePath = writeReplayFile(root, [
     'open "Demo" --relaunch',
     SAVE_ANNOTATION,
@@ -81,47 +76,21 @@ test('R1/R2/R6: prefix steps get fresh evidence, corrective + resumed steps land
   ]);
 
   let clickCalls = 0;
-  const invoke = async (req: DaemonRequest): Promise<DaemonResponse> => {
-    const session = sessionStore.get(sessionName)!;
-    if (req.command === 'open') {
-      sessionStore.recordAction(session, {
-        command: 'open',
-        positionals: req.positionals ?? [],
-        flags: req.flags ?? {},
-        runtime: req.runtime,
-        result: {},
-      });
-      return { ok: true, data: {} };
-    }
-    if (req.command === 'click' && req.positionals?.[0] === 'id="delete"') {
-      // Simulates the real handler: a dispatch failure never reaches the
-      // recording call (interaction-common.ts's finalizeTouchInteraction is
-      // only reached on the success path) — nothing is recorded here.
-      return { ok: false, error: { code: 'COMMAND_FAILED', message: 'not hittable' } };
-    }
-    if (req.command === 'click') {
-      clickCalls += 1;
-      const targetEvidence = session.recordSession
-        ? freshEvidence('save', `FRESH-${clickCalls}`)
-        : undefined;
-      sessionStore.recordAction(session, {
-        command: 'click',
-        positionals: req.positionals ?? [],
-        flags: req.flags ?? {},
-        result: {},
-        ...(targetEvidence ? { targetEvidence } : {}),
-      });
-      return { ok: true, data: {} };
-    }
-    return { ok: true, data: {} };
-  };
+  const invoke = makeRecordingReplayInvoke({
+    sessionStore,
+    sessionName,
+    // "click id=delete" diverges (action-failure) and must never be recorded.
+    failSteps: new Set(['click id="delete"']),
+    evidence: (req) =>
+      req.command === 'click' ? freshEvidence('save', `FRESH-${++clickCalls}`) : undefined,
+  });
 
   // --- Leg 1: arms recording, records open + the verified prefix step, then
-  // diverges (action-failure) at "click id=delete" — never recorded. ---
+  // diverges at "click id=delete" — never recorded. ---
   const leg1 = await runReplayScriptFile({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
-    logPath: path.join(root, 'daemon.log'),
+    logPath,
     sessionStore,
     invoke,
   });
@@ -140,8 +109,7 @@ test('R1/R2/R6: prefix steps get fresh evidence, corrective + resumed steps land
   expect(divergence.resume.allowed).toBe(true);
   expect(divergence.resume.from).toBe(3);
 
-  // --- Agent performs the corrective action live (ordinary interactive
-  // command, outside replay) — lands next in session.actions. ---
+  // --- Agent performs the corrective action live (recorded). ---
   sessionStore.recordAction(session, {
     command: 'press',
     positionals: ['@e9'],
@@ -151,19 +119,15 @@ test('R1/R2/R6: prefix steps get fresh evidence, corrective + resumed steps land
   });
   expect(session.actions.map((a) => a.command)).toEqual(['open', 'click', 'press']);
 
-  // --- Leg 2: resumes at step 4, redundantly passing --save-script again —
-  // must NOT re-stamp the boundary or duplicate the already-recorded prefix. ---
+  // --- Leg 2: a --from resume that redundantly passes --save-script — allowed
+  // (it is a resume, not a full replay), and must NOT re-stamp the boundary. ---
   const leg2 = await runReplayScriptFile({
     req: baseReq({
       positionals: [filePath],
-      flags: {
-        saveScript: true,
-        replayFrom: 4,
-        replayPlanDigest: divergence.resume.planDigest,
-      },
+      flags: { saveScript: true, replayFrom: 4, replayPlanDigest: divergence.resume.planDigest },
     }),
     sessionName,
-    logPath: path.join(root, 'daemon.log'),
+    logPath,
     sessionStore,
     invoke,
   });
@@ -177,36 +141,135 @@ test('R1/R2/R6: prefix steps get fresh evidence, corrective + resumed steps land
     '@e9',
     'id="confirm"',
   ]);
+  expect(session.actions.slice(session.saveScriptBoundary ?? 0)).toHaveLength(4);
+});
 
-  // The healed slice (boundary 0) spans the WHOLE repair run across both legs.
-  const healedSlice = session.actions.slice(session.saveScriptBoundary ?? 0);
-  expect(healedSlice).toHaveLength(4);
+test('R2: a fresh FULL replay --save-script on an already-armed session is rejected with INVALID_ARGS', async () => {
+  const { root, sessionStore, sessionName, logPath } = setup('agent-device-replay-repair-r2-');
+  const filePath = writeReplayFile(root, ['open "Demo"', 'click id="save"']);
+  const invoke = makeRecordingReplayInvoke({ sessionStore, sessionName });
+
+  // First run arms the session (sets saveScriptBoundary).
+  const first = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke,
+  });
+  expect(first.ok).toBe(true);
+  expect(sessionStore.get(sessionName)!.saveScriptBoundary).toBe(0);
+
+  // A SECOND full (non---from) replay --save-script would re-append the prefix.
+  const spy: DaemonRequest[] = [];
+  const second = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke: makeRecordingReplayInvoke({ sessionStore, sessionName, spy }),
+  });
+  expect(second.ok).toBe(false);
+  if (second.ok) return;
+  expect(second.error.code).toBe('INVALID_ARGS');
+  expect(second.error.message).toMatch(/already has a --save-script repair run/);
+  // Rejected before any action ran — no duplicate prefix appended.
+  expect(spy).toHaveLength(0);
+});
+
+test('R6 no amputation: a pre-populated session whose step-1 open REPLACES the session healed-slices exactly this run', async () => {
+  // Pre-seed with 2 prior, unrelated actions.
+  const { root, sessionStore, sessionName, logPath } = setup(
+    'agent-device-replay-repair-amputate-',
+    {
+      actions: [
+        { ts: 1, command: 'wait', positionals: ['10'], flags: {} },
+        { ts: 2, command: 'wait', positionals: ['20'], flags: {} },
+      ],
+    },
+  );
+  const filePath = writeReplayFile(root, [
+    'open "Demo" --relaunch',
+    'click id="a"',
+    'click id="b"',
+  ]);
+
+  // open REPLACES the session with a fresh `actions: []` one (the real
+  // new-session branch, session-open-surface.ts) — the case the old pre-loop
+  // boundary=N would amputate (slice(2) drops the healed open + first click).
+  const invoke = makeRecordingReplayInvoke({
+    sessionStore,
+    sessionName,
+    openReplacesSession: true,
+    evidence: (req) => (req.command === 'click' ? freshEvidence('x', 'X') : undefined),
+  });
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke,
+  });
+  expect(response.ok).toBe(true);
+
+  const session = sessionStore.get(sessionName)!;
+  // The healed slice is EXACTLY this run (open + both clicks) — the open is not
+  // amputated, and the prior waits (on the discarded session) never leak in.
+  const healed = session.actions.slice(session.saveScriptBoundary ?? 0);
+  expect(healed.map((a) => a.command)).toEqual(['open', 'click', 'click']);
+  expect(healed[0]?.positionals[0]).toBe('Demo');
+  expect(session.actions.some((a) => a.command === 'wait')).toBe(false);
+});
+
+test('R6 preserved session: prior actions are excluded from the healed slice', async () => {
+  // open PRESERVES the session (existing-session branch keeps actions), so the
+  // boundary must be N to exclude the 2 prior actions.
+  const { root, sessionStore, sessionName, logPath } = setup(
+    'agent-device-replay-repair-preserve-',
+    {
+      actions: [
+        { ts: 1, command: 'wait', positionals: ['10'], flags: {} },
+        { ts: 2, command: 'wait', positionals: ['20'], flags: {} },
+      ],
+    },
+  );
+  const filePath = writeReplayFile(root, ['open "Demo"', 'click id="a"']);
+  const invoke = makeRecordingReplayInvoke({
+    sessionStore,
+    sessionName,
+    evidence: (req) => (req.command === 'click' ? freshEvidence('a', 'A') : undefined),
+  });
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke,
+  });
+  expect(response.ok).toBe(true);
+
+  const session = sessionStore.get(sessionName)!;
+  expect(session.saveScriptBoundary).toBe(2);
+  expect(session.actions.map((a) => a.command)).toEqual(['wait', 'wait', 'open', 'click']);
+  const healed = session.actions.slice(session.saveScriptBoundary ?? 0);
+  expect(healed.map((a) => a.command)).toEqual(['open', 'click']);
 });
 
 test('opt-in: without --save-script, replay neither arms recording nor records evidence', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-repair-optin-'));
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const { root, sessionStore, sessionName, logPath } = setup('agent-device-replay-repair-optin-');
   const filePath = writeReplayFile(root, ['open "Demo"', 'click id="save"']);
-
-  const invoke = async (req: DaemonRequest): Promise<DaemonResponse> => {
-    const session = sessionStore.get(sessionName)!;
-    const targetEvidence = session.recordSession ? freshEvidence('save', 'Save') : undefined;
-    sessionStore.recordAction(session, {
-      command: req.command,
-      positionals: req.positionals ?? [],
-      flags: req.flags ?? {},
-      result: {},
-      ...(targetEvidence ? { targetEvidence } : {}),
-    });
-    return { ok: true, data: {} };
-  };
+  const invoke = makeRecordingReplayInvoke({
+    sessionStore,
+    sessionName,
+    evidence: () => freshEvidence('save', 'Save'),
+  });
 
   const response = await runReplayScriptFile({
     req: baseReq({ positionals: [filePath] }),
     sessionName,
-    logPath: path.join(root, 'daemon.log'),
+    logPath,
     sessionStore,
     invoke,
   });
@@ -224,52 +287,36 @@ test('opt-in: without --save-script, replay neither arms recording nor records e
   expect(session.actions.every((a) => a.targetEvidence === undefined)).toBe(true);
 });
 
-test('a thrown dispatch failure never lands a partial action in session.actions', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-repair-thrown-'));
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+test('a thrown/failed dispatch never lands a partial action in session.actions', async () => {
+  const { root, sessionStore, sessionName, logPath } = setup('agent-device-replay-repair-thrown-');
   const filePath = writeReplayFile(root, ['open "Demo"', 'click id="save"']);
-
-  const invoke = async (req: DaemonRequest): Promise<DaemonResponse> => {
-    const session = sessionStore.get(sessionName)!;
-    if (req.command === 'click') {
-      // The real interaction handler's catch converts a thrown selector-miss
-      // into `{ ok: false }` WITHOUT ever calling finalizeTouchInteraction —
-      // nothing gets recorded on this path.
-      return { ok: false, error: { code: 'COMMAND_FAILED', message: 'no such element' } };
-    }
-    sessionStore.recordAction(session, {
-      command: req.command,
-      positionals: req.positionals ?? [],
-      flags: req.flags ?? {},
-      result: {},
-    });
-    return { ok: true, data: {} };
-  };
+  const invoke = makeRecordingReplayInvoke({
+    sessionStore,
+    sessionName,
+    failSteps: new Set(['click']),
+  });
 
   const response = await runReplayScriptFile({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
     sessionName,
-    logPath: path.join(root, 'daemon.log'),
+    logPath,
     sessionStore,
     invoke,
   });
 
   expect(response.ok).toBe(false);
-  const session = sessionStore.get(sessionName)!;
-  expect(session.actions.map((a) => a.command)).toEqual(['open']);
+  expect(sessionStore.get(sessionName)!.actions.map((a) => a.command)).toEqual(['open']);
 });
 
-test('a --no-record state-fix action never enters session.actions', async () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-repair-norecord-'));
-  const sessionStore = new SessionStore(path.join(root, 'sessions'));
-  const sessionName = 'default';
-  const session = makeIosSession(sessionName, { recordSession: true, saveScriptBoundary: 0 });
-  sessionStore.set(sessionName, session);
+test('a --no-record state-fix action never enters session.actions', () => {
+  const { sessionStore, sessionName } = setup('agent-device-replay-repair-norecord-', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+  });
+  const session = sessionStore.get(sessionName)!;
 
-  // Agent fixes app state with --no-record, then performs the real
-  // corrective action (recorded).
+  // Agent fixes app state with --no-record, then performs the real corrective
+  // action (recorded).
   sessionStore.recordAction(session, {
     command: 'press',
     positionals: ['100', '200'],
@@ -285,40 +332,20 @@ test('a --no-record state-fix action never enters session.actions', async () => 
   });
 
   expect(session.actions).toHaveLength(1);
-  expect(session.actions[0]?.command).toBe('press');
   expect(session.actions[0]?.positionals).toEqual(['@e9']);
 });
 
-test('R1 bootstrap: a session created by step 1 (open) still arms in time for step 2 to get fresh evidence', async () => {
+test('R1 bootstrap: a session created by step 1 (open) arms in time for step 2 to get fresh evidence', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-repair-bootstrap-'));
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   // No pre-existing session — `open` (step 1) creates it.
   const filePath = writeReplayFile(root, ['open "Demo"', 'click id="save"']);
-
-  const invoke = async (req: DaemonRequest): Promise<DaemonResponse> => {
-    if (req.command === 'open') {
-      sessionStore.set(sessionName, makeIosSession(sessionName));
-      const session = sessionStore.get(sessionName)!;
-      sessionStore.recordAction(session, {
-        command: 'open',
-        positionals: req.positionals ?? [],
-        flags: req.flags ?? {},
-        result: {},
-      });
-      return { ok: true, data: {} };
-    }
-    const session = sessionStore.get(sessionName)!;
-    const targetEvidence = session.recordSession ? freshEvidence('save', 'Save') : undefined;
-    sessionStore.recordAction(session, {
-      command: req.command,
-      positionals: req.positionals ?? [],
-      flags: req.flags ?? {},
-      result: {},
-      ...(targetEvidence ? { targetEvidence } : {}),
-    });
-    return { ok: true, data: {} };
-  };
+  const invoke = makeRecordingReplayInvoke({
+    sessionStore,
+    sessionName,
+    evidence: (req) => (req.command === 'click' ? freshEvidence('save', 'Save') : undefined),
+  });
 
   const response = await runReplayScriptFile({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),

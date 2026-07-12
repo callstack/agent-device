@@ -332,3 +332,36 @@ test('test rejects --plan-digest alone with INVALID_ARGS before running the suit
   if (response.ok) return;
   assert.equal(response.error.code, 'INVALID_ARGS');
 });
+
+// --- ADR 0012 decision 6: `--save-script` is replay-only ---
+
+test('test rejects --save-script with INVALID_ARGS before running the suite', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-test-savescript-rejected-'));
+  const replayPath = path.join(root, 'flow.ad');
+  fs.writeFileSync(replayPath, 'open "Demo"\nclick "Continue"\n');
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+
+  const response = await handleSessionReplayCommands({
+    req: {
+      token: 'token',
+      session: 'default',
+      command: 'test',
+      positionals: [replayPath],
+      flags: { saveScript: true },
+      meta: { cwd: root },
+    },
+    sessionName: 'default',
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    leaseRegistry: new LeaseRegistry(),
+    invoke: async () => {
+      throw new Error('test must not start executing when --save-script is rejected');
+    },
+  });
+
+  if (!response) throw new Error('Expected response');
+  assert.equal(response.ok, false);
+  if (response.ok) return;
+  assert.equal(response.error.code, 'INVALID_ARGS');
+  assert.match(response.error.message, /--save-script/);
+});

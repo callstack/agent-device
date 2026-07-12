@@ -33,6 +33,7 @@ export class SessionScriptWriter {
     try {
       if (!session.recordSession) return { written: false };
       scriptPath = this.resolveScriptPath(session);
+      assertNoDefaultedHealedClobber(session, scriptPath);
       const scriptDir = path.dirname(scriptPath);
       if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
       const script = formatSessionScript(session);
@@ -114,6 +115,25 @@ function assertNoUnresolvedRefFallback(action: SessionAction): void {
   throw new AppError(
     'COMMAND_FAILED',
     `Cannot write recorded step "${action.command} ${refPositional}" to a script: it never resolved to a selector, so the ref would not resolve in a fresh replay session.`,
+  );
+}
+
+/**
+ * ADR 0012 decision 6 (P2): the default `<original-stem>.healed.ad` sibling
+ * path is deterministic, so a second repair against the same original would
+ * silently clobber an unreviewed prior healed script — undercutting the
+ * ADR's "a human reviews the diff and promotes it." Refuse loudly (fail-loud
+ * per R4's philosophy) unless the caller passes an explicit
+ * `--save-script=<path>` (which clears the defaulted flag). Only guards the
+ * DEFAULT healed path; an explicit `<out>` may overwrite as the caller
+ * directed.
+ */
+function assertNoDefaultedHealedClobber(session: SessionState, scriptPath: string): void {
+  if (!session.saveScriptDefaultedHealedPath) return;
+  if (!fs.existsSync(scriptPath)) return;
+  throw new AppError(
+    'COMMAND_FAILED',
+    `A prior healed script already exists at ${scriptPath}; pass replay --save-script=<path> to write elsewhere, or remove/rename it first, so an unreviewed healed script is never clobbered.`,
   );
 }
 

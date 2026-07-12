@@ -81,6 +81,16 @@ export async function handleSessionReplayCommands(params: {
         'test does not support --from/--plan-digest; resume is replay-only. Run the failing script directly with replay --from.',
       );
     }
+    // ADR 0012 decision 6: `--save-script` (the agent-supervised repair loop)
+    // is replay-only for the same reason — `buildNestedReplayFlags` would fan
+    // it into every per-file nested replay, arming recording across a whole
+    // suite run. Repair a single failing script with `replay --save-script`.
+    if (req.flags?.saveScript !== undefined) {
+      return errorResponse(
+        'INVALID_ARGS',
+        'test does not support --save-script; the agent-supervised repair loop is replay-only. Repair the failing script directly with replay --save-script.',
+      );
+    }
     return await runReplayTestSuite({
       req,
       sessionName,

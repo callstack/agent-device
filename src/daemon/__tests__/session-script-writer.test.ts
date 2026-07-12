@@ -171,3 +171,49 @@ test('an ordinary (non-repair-armed) recording keeps the existing bare-ref fallb
   expect(parsed.actions.map((a) => a.command)).toEqual(['snapshot', 'click']);
   expect(parsed.actions[1]?.positionals[0]).toBe('@e12');
 });
+
+// --- ADR 0012 decision 6 (P2): the default `.healed.ad` sibling is never
+// silently clobbered — a human must review each healed diff before promoting. ---
+
+test('write() refuses to clobber an existing DEFAULT .healed.ad (no explicit --save-script=<path>)', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-clobber-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const healedPath = path.join(root, 'flows', 'login.healed.ad');
+  fs.mkdirSync(path.dirname(healedPath), { recursive: true });
+  // A prior, unreviewed healed script already sits at the default sibling path.
+  fs.writeFileSync(healedPath, 'context platform=ios device="x"\nclick id="old"\n');
+  const before = fs.readFileSync(healedPath, 'utf8');
+
+  const session = makeIosSession('default', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+    saveScriptPath: healedPath,
+    saveScriptDefaultedHealedPath: true,
+    actions: [action({ command: 'click', positionals: ['id="new"'] })],
+  });
+
+  expect(() => writer.write(session)).toThrow(/already exists/);
+  // Fail loud — the prior unreviewed diff is untouched.
+  expect(fs.readFileSync(healedPath, 'utf8')).toBe(before);
+});
+
+test('write() DOES overwrite when the caller passed an explicit --save-script=<path> (not defaulted)', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-explicit-out-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const outPath = path.join(root, 'flows', 'explicit.ad');
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, 'context platform=ios device="x"\nclick id="old"\n');
+
+  const session = makeIosSession('default', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+    saveScriptPath: outPath,
+    // No saveScriptDefaultedHealedPath: the caller directed this path explicitly.
+    actions: [action({ command: 'click', positionals: ['id="new"'] })],
+  });
+
+  const result = writer.write(session);
+  expect(result.written).toBe(true);
+  const parsed = parseReplayScriptDetailed(fs.readFileSync(outPath, 'utf8'));
+  expect(parsed.actions.map((a) => a.positionals[0])).toEqual(['id="new"']);
+});
