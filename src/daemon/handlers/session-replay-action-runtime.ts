@@ -13,8 +13,7 @@ import {
   invokeReplayRetryBlock,
   type ReplayActionBlockInvoker,
 } from '../../replay/control-flow-runtime.ts';
-import { asAppError } from '../../kernel/errors.ts';
-import { errorResponse } from './response.ts';
+import { AppError, normalizeError } from '../../kernel/errors.ts';
 
 type ReplayBaseRequest = Omit<DaemonRequest, 'command' | 'positionals'>;
 
@@ -84,8 +83,14 @@ export async function invokeReplayAction(params: {
       invokeReplayAction: invokeNestedReplayAction,
     });
   } catch (dispatchErr) {
-    const appErr = asAppError(dispatchErr);
-    response = errorResponse(appErr.code, appErr.message, appErr.details);
+    // Only an expected AppError dispatch failure (e.g. a selector-miss) gets
+    // normalized into a `{ok:false}` response so the loop's `if
+    // (!response.ok)` divergence wrapping applies. A plain TypeError/
+    // ReferenceError or other programmer bug must propagate to the outer
+    // internal-error path rather than being coerced into a repairable
+    // REPLAY_DIVERGENCE that would mask a crash.
+    if (!(dispatchErr instanceof AppError)) throw dispatchErr;
+    response = { ok: false, error: normalizeError(dispatchErr) };
   }
 
   const finishedAt = Date.now();

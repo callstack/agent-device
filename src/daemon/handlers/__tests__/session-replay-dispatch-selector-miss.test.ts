@@ -204,3 +204,77 @@ test('(c) a fill selector-miss thrown at dispatch yields REPLAY_DIVERGENCE, not 
   // The fill text itself must never leak into the divergence.
   expect(JSON.stringify(divergence)).not.toContain('someone@example.com');
 });
+
+test('(d) a thrown NON-AppError at dispatch propagates as an internal error, not REPLAY_DIVERGENCE', async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-replay-dispatch-miss-nonapperror-'),
+  );
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, ['click label="Renamed Button"']);
+
+  mockDispatchCommand.mockResolvedValue({
+    nodes: bottomTabsRealCaptureFixture(),
+    truncated: false,
+    backend: 'xctest',
+  });
+
+  const invoked: string[] = [];
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req.command);
+      // A programmer bug (unrelated to selector resolution), not an expected
+      // dispatch failure — must NOT be coerced into a repairable divergence.
+      throw new TypeError('boom');
+    },
+  });
+
+  expect(invoked).toEqual(['click']);
+  expect(response.ok).toBe(false);
+  if (response.ok) throw new Error('expected failure response');
+  expect(response.error.code).not.toBe('REPLAY_DIVERGENCE');
+  expect(response.error.code).toBe('UNKNOWN');
+  expect(response.error.message).toContain('boom');
+});
+
+test('(e) a thrown AppError with retriable/supportedOn preserves them at the top level of the divergence response', async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-replay-dispatch-miss-retriable-'),
+  );
+  const { sessionStore, sessionName } = setupSession(root);
+  const filePath = writeReplayFile(root, ['click label="Renamed Button"']);
+
+  mockDispatchCommand.mockResolvedValue({
+    nodes: bottomTabsRealCaptureFixture(),
+    truncated: false,
+    backend: 'xctest',
+  });
+
+  const invoked: string[] = [];
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      invoked.push(req.command);
+      throw new AppError('COMMAND_FAILED', 'device busy mid-gesture', {
+        retriable: true,
+        supportedOn: 'ios',
+      });
+    },
+  });
+
+  expect(invoked).toEqual(['click']);
+  const { divergence } = assertDivergenceShape(response);
+  expect(divergence.kind).toBe('action-failure');
+  expect(response.ok).toBe(false);
+  if (response.ok) throw new Error('expected failure response');
+  // Normalized via normalizeError: hoisted onto the top-level error, not
+  // buried in divergence.cause (which only carries code/message/hint).
+  expect(response.error.retriable).toBe(true);
+  expect(response.error.supportedOn).toBe('ios');
+});
