@@ -1,5 +1,23 @@
 import XCTest
 
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS && os(iOS)
+import ObjectiveC.runtime
+
+private final class RunnerSynthesizedSwipeFailureStub: NSObject {
+  @objc(synthesizeSwipeWithApplication:x:y:x2:y2:durationMs:)
+  class func synthesizeSwipe(
+    application: XCUIApplication,
+    x: Double,
+    y: Double,
+    x2: Double,
+    y2: Double,
+    durationMs: Double
+  ) -> String? {
+    "forced private synthesis failure"
+  }
+}
+#endif
+
 extension RunnerTests {
   // MARK: - Main Thread Dispatch
 
@@ -219,6 +237,53 @@ extension RunnerTests {
     XCTAssertNil(canonical.data?.referenceHeight)
   }
 
+#if os(iOS)
+  func testSinglePointerFlingFallsBackToXCTestCoordinateDragWhenPrivateSynthesisFails() throws {
+    let selector = NSSelectorFromString(
+      "synthesizeSwipeWithApplication:x:y:x2:y2:durationMs:"
+    )
+    guard
+      let synthesizedSwipeMethod = class_getClassMethod(RunnerSynthesizedGesture.self, selector),
+      let failureStubMethod = class_getClassMethod(RunnerSynthesizedSwipeFailureStub.self, selector)
+    else {
+      XCTFail("unable to install synthesized swipe failure stub")
+      return
+    }
+    let originalImplementation = method_getImplementation(synthesizedSwipeMethod)
+    method_setImplementation(
+      synthesizedSwipeMethod,
+      method_getImplementation(failureStubMethod)
+    )
+    app.launch()
+    runnerAccessibilityHealth = .healthy
+    defer {
+      method_setImplementation(synthesizedSwipeMethod, originalImplementation)
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let command = try runnerCommandFixture(
+      """
+      {"command":"gesture","commandId":"gesture-fling-fallback","gesturePlan":{"topology":"single","intent":"fling","durationMs":100,"viewport":{"x":0,"y":0,"width":200,"height":300},"pointers":[{"pointerId":0,"samples":[{"offsetMs":0,"point":{"x":160,"y":150}},{"offsetMs":100,"point":{"x":40,"y":150}}]}]}}
+      """
+    )
+
+    let response = try executeOnMainPrepared(command: command, activeApp: app)
+
+    XCTAssertTrue(response.ok)
+    XCTAssertEqual(response.data?.message, "fling")
+    XCTAssertEqual(response.data?.gestureFallback, "xctest-coordinate-drag")
+    XCTAssertEqual(response.data?.gestureFallbackMessage, "forced private synthesis failure")
+    XCTAssertEqual(
+      response.data?.gestureFallbackHint,
+      "Private XCTest event synthesis is required for AX-free coordinate drag on iOS; update Xcode if this persists."
+    )
+    XCTAssertNil(response.data?.x)
+    XCTAssertNil(response.data?.y)
+    XCTAssertNil(response.data?.x2)
+    XCTAssertNil(response.data?.y2)
+  }
+#endif
+
   func testXCTestRecordedFailureResponseFailsMutatingSuccesses() throws {
     let command = try runnerCommandFixture(#"{"command":"tap","commandId":"tap-1"}"#)
     let response = Response(ok: true, data: DataPayload(message: "tapped"))
@@ -248,6 +313,28 @@ extension RunnerTests {
       )
     )
     XCTAssertNil(xctestRecordedFailureResponse(command: tapCommand, response: runnerFatalResponse))
+  }
+
+  func testMissingBundleCommandInvalidatesCompleteCachedTargetState() throws {
+    app.launch()
+    currentApp = app
+    currentBundleId = "com.example.stale-target"
+    currentAppProcessIdentifier = 42
+    snapshotXCTestPenaltyWarmupExemptionPending = true
+    defer {
+      invalidateCachedTarget(reason: "unit_test_cleanup")
+      app.terminate()
+    }
+    let command = try runnerCommandFixture(
+      #"{"command":"snapshot","commandId":"snapshot-without-bundle"}"#
+    )
+
+    _ = prepareActiveCommandContext(command: command)
+
+    XCTAssertNil(currentApp)
+    XCTAssertNil(currentBundleId)
+    XCTAssertNil(currentAppProcessIdentifier)
+    XCTAssertFalse(snapshotXCTestPenaltyWarmupExemptionPending)
   }
 
   func testSkipAppActivationPreflightOnlyIncludesCoordinateOnlySynthesizedTaps() throws {
@@ -1004,8 +1091,7 @@ extension RunnerTests {
         }
       } else {
         // Do not reuse stale bundle targets when the caller does not explicitly request one.
-        currentApp = nil
-        currentBundleId = nil
+        invalidateCachedTarget(reason: "missing_app_bundle")
       }
 
       activeApp = currentApp ?? app

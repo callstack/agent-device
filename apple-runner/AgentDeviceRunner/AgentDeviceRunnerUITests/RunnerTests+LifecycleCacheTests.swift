@@ -37,4 +37,18 @@ extension RunnerTests {
 
     XCTAssertFalse(isSnapshotXCTestChannelPenalized(bundleId: "com.example.app"))
   }
+
+  func testCachedTargetInvalidationClearsProcessBoundState() {
+    currentApp = app
+    currentBundleId = "com.example.app"
+    currentAppProcessIdentifier = 42
+    snapshotXCTestPenaltyWarmupExemptionPending = true
+
+    invalidateCachedTarget(reason: "unit_test")
+
+    XCTAssertNil(currentApp)
+    XCTAssertNil(currentBundleId)
+    XCTAssertNil(currentAppProcessIdentifier)
+    XCTAssertFalse(snapshotXCTestPenaltyWarmupExemptionPending)
+  }
 }
