@@ -15,7 +15,7 @@ function tap(x: number, y: number): RunnerSequenceStep {
 }
 
 test('SEQUENCEABLE_RUNNER_STEP_KINDS is the documented allowlist', () => {
-  assert.deepEqual([...SEQUENCEABLE_RUNNER_STEP_KINDS], ['tap', 'doubleTap', 'longPress', 'drag']);
+  assert.deepEqual([...SEQUENCEABLE_RUNNER_STEP_KINDS], ['tap', 'doubleTap', 'longPress']);
 });
 
 test('validateRunnerSequenceSteps accepts doubleTap steps with finite coords', () => {
@@ -82,19 +82,6 @@ test('validateRunnerSequenceSteps requires finite x/y on every step', () => {
   );
 });
 
-test('validateRunnerSequenceSteps requires x2/y2 for drag steps', () => {
-  assert.throws(
-    () => validateRunnerSequenceSteps([tap(1, 2), { kind: 'drag', x: 3, y: 4 }]),
-    (error: unknown) => {
-      assert.ok(error instanceof AppError);
-      assert.equal(error.code, 'INVALID_ARGS');
-      assert.match(error.message, /step 1/);
-      assert.match(error.message, /drag/);
-      return true;
-    },
-  );
-});
-
 test('validateRunnerSequenceSteps accepts a low durationMs (runner clamps the floor)', () => {
   // `press --hold-ms 5` is legal CLI input (holdMs min 0); the runner clamps durationMs up to 16,
   // so the validator must not reject a below-floor duration here.
@@ -150,18 +137,18 @@ test('parseRunnerSequenceResult maps failedStepIndex to a deterministic AppError
           { ok: true, kind: 'tap' },
           {
             ok: false,
-            kind: 'drag',
+            kind: 'longPress',
             errorCode: 'UNSUPPORTED_OPERATION',
-            errorMessage: 'drag unsupported here',
+            errorMessage: 'long press unsupported here',
           },
         ],
       }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'UNSUPPORTED_OPERATION');
-      assert.equal(error.message, 'drag unsupported here');
+      assert.equal(error.message, 'long press unsupported here');
       assert.equal(error.details?.failedStepIndex, 2);
-      assert.equal(error.details?.failedStepKind, 'drag');
+      assert.equal(error.details?.failedStepKind, 'longPress');
       assert.equal(error.details?.completedSteps, 2);
       assert.ok(Array.isArray(error.details?.sequenceResults));
       return true;

@@ -4,14 +4,23 @@ import path from 'node:path';
 
 vi.mock('../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../core/dispatch.ts')>();
-  return { ...actual, dispatchCommand: vi.fn(async () => ({})) };
+  return {
+    ...actual,
+    dispatchCommand: vi.fn(async () => ({})),
+    dispatchGesturePlan: vi.fn(async () => ({})),
+    dispatchGestureViewport: vi.fn(async () => ({ x: 0, y: 0, width: 390, height: 844 })),
+  };
 });
 
 vi.mock('../../platforms/apple/core/runner/runner-client.ts', () => ({
   getRunnerSessionSnapshot: vi.fn(),
 }));
 
-import { dispatchCommand } from '../../core/dispatch.ts';
+import {
+  dispatchCommand,
+  dispatchGesturePlan,
+  dispatchGestureViewport,
+} from '../../core/dispatch.ts';
 import { getRunnerSessionSnapshot } from '../../platforms/apple/core/runner/runner-client.ts';
 import { createRequestHandler } from '../request-router.ts';
 import type { SessionState } from '../types.ts';
@@ -19,11 +28,17 @@ import { LeaseRegistry } from '../lease-registry.ts';
 import { makeSessionStore } from '../../__tests__/test-utils/store-factory.ts';
 
 const mockDispatch = vi.mocked(dispatchCommand);
+const mockDispatchGesturePlan = vi.mocked(dispatchGesturePlan);
+const mockDispatchGestureViewport = vi.mocked(dispatchGestureViewport);
 const mockGetRunnerSessionSnapshot = vi.mocked(getRunnerSessionSnapshot);
 
 beforeEach(() => {
   mockDispatch.mockReset();
   mockDispatch.mockResolvedValue({});
+  mockDispatchGesturePlan.mockReset();
+  mockDispatchGesturePlan.mockResolvedValue({});
+  mockDispatchGestureViewport.mockReset();
+  mockDispatchGestureViewport.mockResolvedValue({ x: 0, y: 0, width: 390, height: 844 });
   mockGetRunnerSessionSnapshot.mockReset();
 });
 
@@ -80,7 +95,7 @@ test('router blocks non-record commands when recording was invalidated', async (
   expect(mockDispatch).not.toHaveBeenCalled();
 });
 
-test('router allows iOS simulator gestures during overlay recording after runner restart', async () => {
+test('router allows canonical iOS simulator gestures during overlay recording after runner restart', async () => {
   const sessionStore = makeSessionStore('agent-device-router-recording-health-');
   const session: SessionState = {
     name: 'default',
@@ -111,14 +126,6 @@ test('router allows iOS simulator gestures during overlay recording after runner
     alive: true,
     sessionId: 'runner-after',
   });
-  mockDispatch.mockResolvedValue({
-    action: 'pinch',
-    scale: 1.2,
-    x: 100,
-    y: 200,
-    durationMs: 280,
-  });
-
   const handler = createRequestHandler({
     logPath: path.join(os.tmpdir(), 'daemon.log'),
     token: 'test-token',
@@ -130,14 +137,16 @@ test('router allows iOS simulator gestures during overlay recording after runner
   const response = await handler({
     token: 'test-token',
     session: 'default',
-    command: 'pinch',
-    positionals: ['1.2', '100', '200'],
+    command: 'gesture',
+    positionals: [],
+    input: { kind: 'pinch', scale: 1.2, origin: { x: 100, y: 200 } },
     meta: { requestId: 'req-simulator-runner-restart' },
   });
 
   expect(response.ok).toBe(true);
   expect(mockGetRunnerSessionSnapshot).not.toHaveBeenCalled();
-  expect(mockDispatch).toHaveBeenCalled();
+  expect(mockDispatchGestureViewport).toHaveBeenCalledOnce();
+  expect(mockDispatchGesturePlan).toHaveBeenCalledOnce();
   const recording = sessionStore.get('default')?.recording;
   expect(recording?.invalidatedReason).toBeUndefined();
   expect(recording?.gestureEvents).toHaveLength(1);

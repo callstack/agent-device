@@ -14,6 +14,10 @@ import {
   type ReplayActionBlockInvoker,
 } from '../../replay/control-flow-runtime.ts';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
+import {
+  gesturePayloadFromPositionals,
+  swipePayloadFromPositionals,
+} from '../../contracts/gesture-normalization.ts';
 
 type ReplayBaseRequest = Omit<DaemonRequest, 'command' | 'positionals'>;
 
@@ -169,16 +173,40 @@ async function invokeResolvedReplayAction(params: {
       invoke,
       invokeReplayAction,
     })) ??
-    (await invoke({
-      ...baseReq,
-      command: resolved.command,
-      positionals: resolved.positionals ?? [],
-    }));
+    (await invoke(buildReplayInteractionRequest(baseReq, resolved)));
   if (response.ok) {
     const outputEnv = readReplayOutputEnv(response.data);
     if (outputEnv) mergeReplayVarScopeValues(scope, outputEnv);
   }
   return response;
+}
+
+function buildReplayInteractionRequest(
+  baseReq: ReplayBaseRequest,
+  action: SessionAction,
+): DaemonRequest {
+  const positionals = action.positionals ?? [];
+  if (action.command === 'gesture') {
+    return {
+      ...baseReq,
+      command: action.command,
+      positionals: [],
+      input: gesturePayloadFromPositionals(positionals, baseReq.flags?.pointerCount),
+    };
+  }
+  if (action.command === 'swipe') {
+    return {
+      ...baseReq,
+      command: action.command,
+      positionals: [],
+      input: swipePayloadFromPositionals(positionals, {
+        count: baseReq.flags?.count,
+        pauseMs: baseReq.flags?.pauseMs,
+        pattern: baseReq.flags?.pattern,
+      }),
+    };
+  }
+  return { ...baseReq, command: action.command, positionals };
 }
 
 async function invokeReplayControl(params: {

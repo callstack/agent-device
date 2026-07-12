@@ -27,15 +27,6 @@ export type GestureCommandResult = {
   to: Point;
 } & BackendResultEnvelope;
 
-export type PanCommandOptions = CommandContext &
-  Omit<Extract<GestureSemanticInput, { intent: 'pan' }>, 'intent'>;
-export type FlingCommandOptions = CommandContext &
-  Omit<Extract<GestureSemanticInput, { intent: 'fling'; direction: unknown }>, 'intent'>;
-export type RotateGestureCommandOptions = CommandContext &
-  Omit<Extract<GestureSemanticInput, { intent: 'rotate' }>, 'intent'>;
-export type TransformGestureCommandOptions = CommandContext &
-  Omit<Extract<GestureSemanticInput, { intent: 'transform' }>, 'intent'>;
-
 export const gestureCommand: RuntimeCommand<GestureCommandOptions, GestureCommandResult> = async (
   runtime,
   options,
@@ -64,28 +55,6 @@ export const gestureCommand: RuntimeCommand<GestureCommandOptions, GestureComman
     ...successText(gestureMessage(gesture)),
   };
 };
-
-export const panCommand: RuntimeCommand<PanCommandOptions, GestureCommandResult> = async (
-  runtime,
-  options,
-) => await gestureCommand(runtime, { ...options, gesture: { ...options, intent: 'pan' } });
-
-export const flingCommand: RuntimeCommand<FlingCommandOptions, GestureCommandResult> = async (
-  runtime,
-  options,
-) => await gestureCommand(runtime, { ...options, gesture: { ...options, intent: 'fling' } });
-
-export const rotateGestureCommand: RuntimeCommand<
-  RotateGestureCommandOptions,
-  GestureCommandResult
-> = async (runtime, options) =>
-  await gestureCommand(runtime, { ...options, gesture: { ...options, intent: 'rotate' } });
-
-export const transformGestureCommand: RuntimeCommand<
-  TransformGestureCommandOptions,
-  GestureCommandResult
-> = async (runtime, options) =>
-  await gestureCommand(runtime, { ...options, gesture: { ...options, intent: 'transform' } });
 
 async function captureGestureViewport(
   runtime: AgentDeviceRuntime,

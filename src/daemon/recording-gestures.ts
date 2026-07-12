@@ -16,10 +16,11 @@ import {
   getSnapshotReferenceFrame,
   type TouchReferenceFrame as ReferenceFrame,
 } from './touch-reference-frame.ts';
+import { buildCanonicalGestureEvents, buildSwipeTravelEvent } from './recording-gesture-events.ts';
+import { readRecordingNumber } from './recording-values.ts';
 
 const DEFAULT_TAP_GAP_MS = 90;
 const DEFAULT_SWIPE_DURATION_MS = 250;
-const DEFAULT_PINCH_DURATION_MS = 280;
 const DEFAULT_SCROLL_REFERENCE_FRAME: ReferenceFrame = {
   referenceWidth: 1000,
   referenceHeight: 1000,
@@ -39,28 +40,28 @@ export function recordTouchVisualizationEvent(
 
   const merged = { ...fallback, ...(result ?? {}) };
   const reportedDurationMs =
-    readNumber(merged.effectiveDurationMs) ?? readNumber(merged.durationMs);
+    readRecordingNumber(merged.effectiveDurationMs) ?? readRecordingNumber(merged.durationMs);
   const timingSource = {
     recordingStartedAt: recording.startedAt,
     gestureClockOriginAtMs: recording.gestureClockOriginAtMs,
     gestureClockOriginUptimeMs: recording.gestureClockOriginUptimeMs,
     runnerStartedAtUptimeMs:
       recording.platform === 'ios-device-runner' ? recording.runnerStartedAtUptimeMs : undefined,
-    gestureStartUptimeMs: readNumber(merged.gestureStartUptimeMs),
-    gestureEndUptimeMs: readNumber(merged.gestureEndUptimeMs),
+    gestureStartUptimeMs: readRecordingNumber(merged.gestureStartUptimeMs),
+    gestureEndUptimeMs: readRecordingNumber(merged.gestureEndUptimeMs),
     fallbackStartedAtMs: startedAtMs,
     fallbackFinishedAtMs: finishedAtMs,
   };
   const gestureDurationMs = resolveGestureDurationMs({
-    gestureStartUptimeMs: readNumber(merged.gestureStartUptimeMs),
-    gestureEndUptimeMs: readNumber(merged.gestureEndUptimeMs),
+    gestureStartUptimeMs: readRecordingNumber(merged.gestureStartUptimeMs),
+    gestureEndUptimeMs: readRecordingNumber(merged.gestureEndUptimeMs),
     reportedDurationMs,
     fallbackStartedAtMs: startedAtMs,
     fallbackFinishedAtMs: finishedAtMs,
   });
   const tMs =
     isIosFamily(session.device) &&
-    readNumber(merged.gestureStartUptimeMs) === undefined &&
+    readRecordingNumber(merged.gestureStartUptimeMs) === undefined &&
     shouldAnchorTapVisualizationNearCompletion(command, merged)
       ? resolveTapVisualizationOffsetMs({ ...timingSource, gestureDurationMs })
       : resolveGestureOffsetMs(timingSource);
@@ -104,12 +105,12 @@ export function augmentScrollVisualizationResult(
   const contentDirection = readDirection(merged.direction) ?? readDirection(positionals[0]);
   if (!contentDirection) return result;
 
-  const amountValue = readNumber(merged.amount) ?? readNumber(positionals[1]);
-  const pixelValue = readNumber(merged.pixels);
-  const durationMs = readNumber(merged.durationMs) ?? DEFAULT_SWIPE_DURATION_MS;
+  const amountValue = readRecordingNumber(merged.amount) ?? readRecordingNumber(positionals[1]);
+  const pixelValue = readRecordingNumber(merged.pixels);
+  const durationMs = readRecordingNumber(merged.durationMs) ?? DEFAULT_SWIPE_DURATION_MS;
   const explicitTravel = readTravelCoordinates(merged, []);
-  const explicitReferenceWidth = readNumber(merged.referenceWidth);
-  const explicitReferenceHeight = readNumber(merged.referenceHeight);
+  const explicitReferenceWidth = readRecordingNumber(merged.referenceWidth);
+  const explicitReferenceHeight = readRecordingNumber(merged.referenceHeight);
   const fallbackReferenceFrame =
     explicitReferenceWidth !== undefined &&
     explicitReferenceWidth > 0 &&
@@ -198,10 +199,8 @@ const gestureEventBuilders: Record<string, GestureEventBuilder> = {
     buildFocusEvents(positionals, result, tMs, referenceFrame),
   longpress: buildLongPressEvents,
   scroll: buildScrollEvents,
-  pan: buildSwipeEvents,
-  fling: buildSwipeEvents,
+  gesture: buildCanonicalGestureEvents,
   swipe: buildSwipeEvents,
-  pinch: buildPinchEvents,
 };
 
 function shouldAnchorTapVisualizationNearCompletion(
@@ -214,9 +213,9 @@ function shouldAnchorTapVisualizationNearCompletion(
     case 'focus':
       return true;
     case 'press': {
-      const count = clampInt(readNumber(result.count), 1) ?? 1;
+      const count = clampInt(readRecordingNumber(result.count), 1) ?? 1;
       const doubleTap = result.doubleTap === true;
-      const holdMs = clampInt(readNumber(result.holdMs), 1);
+      const holdMs = clampInt(readRecordingNumber(result.holdMs), 1);
       return count === 1 && !doubleTap && holdMs === undefined;
     }
     case 'react-native':
@@ -236,10 +235,10 @@ function buildPressEvents(
   if (!coordinates) return [];
   const { x, y } = coordinates;
 
-  const count = clampInt(readNumber(result.count), 1) ?? 1;
-  const intervalMs = clampInt(readNumber(result.intervalMs), 0) ?? 0;
+  const count = clampInt(readRecordingNumber(result.count), 1) ?? 1;
+  const intervalMs = clampInt(readRecordingNumber(result.intervalMs), 0) ?? 0;
   const doubleTap = result.doubleTap === true;
-  const holdMs = clampInt(readNumber(result.holdMs), 1);
+  const holdMs = clampInt(readRecordingNumber(result.holdMs), 1);
   const events: RecordingGestureEvent[] = [];
 
   for (let index = 0; index < count; index += 1) {
@@ -280,7 +279,7 @@ function buildLongPressEvents(
   const { x, y } = coordinates;
   const durationMs = resolveDurationMs(
     gestureDurationMs,
-    [readNumber(result.durationMs), readNumber(positionals[2])],
+    [readRecordingNumber(result.durationMs), readRecordingNumber(positionals[2])],
     800,
   );
   return [makeLongPressEvent(tMs, x, y, durationMs, referenceFrame)];
@@ -300,14 +299,14 @@ function buildSwipeEvents(
   const durationMs = resolveDurationMs(
     gestureDurationMs,
     [
-      readNumber(result.effectiveDurationMs),
-      readNumber(result.durationMs),
-      readNumber(positionals[4]),
+      readRecordingNumber(result.effectiveDurationMs),
+      readRecordingNumber(result.durationMs),
+      readRecordingNumber(positionals[4]),
     ],
     DEFAULT_SWIPE_DURATION_MS,
   );
-  const count = clampInt(readNumber(result.count), 1) ?? 1;
-  const pauseMs = clampInt(readNumber(result.pauseMs), 0) ?? 0;
+  const count = clampInt(readRecordingNumber(result.count), 1) ?? 1;
+  const pauseMs = clampInt(readRecordingNumber(result.pauseMs), 0) ?? 0;
   const pattern = result.pattern === 'ping-pong' ? 'ping-pong' : 'one-way';
   return Array.from({ length: count }, (_, index) => {
     const { startX, startY, endX, endY } = resolveSwipePathForIndex(index, pattern, x1, y1, x2, y2);
@@ -330,32 +329,6 @@ function resolveSwipePathForIndex(
     : { startX: x1, startY: y1, endX: x2, endY: y2 };
 }
 
-function buildSwipeTravelEvent(
-  tMs: number,
-  x: number,
-  y: number,
-  x2: number,
-  y2: number,
-  durationMs: number,
-  referenceFrame?: ReferenceFrame,
-): RecordingGestureEvent {
-  const kind = classifySwipeKind(x, y, x2, y2, referenceFrame);
-  if (kind === 'back-swipe') {
-    return {
-      kind,
-      tMs,
-      x,
-      y,
-      x2,
-      y2,
-      ...referenceFrame,
-      durationMs,
-      edge: resolveBackSwipeEdge(x, x2, referenceFrame),
-    };
-  }
-  return { kind, tMs, x, y, x2, y2, ...referenceFrame, durationMs };
-}
-
 function buildScrollEvents(
   positionals: string[],
   result: Record<string, unknown>,
@@ -372,8 +345,8 @@ function buildScrollEvents(
   const { x1, y1, x2, y2 } = coordinates;
 
   const durationMs = resolveDurationMs(gestureDurationMs, [], DEFAULT_SWIPE_DURATION_MS);
-  const amount = readNumber(result.amount) ?? readNumber(positionals[1]);
-  const pixels = readNumber(result.pixels);
+  const amount = readRecordingNumber(result.amount) ?? readRecordingNumber(positionals[1]);
+  const pixels = readRecordingNumber(result.pixels);
   return [
     {
       kind: 'scroll',
@@ -387,30 +360,6 @@ function buildScrollEvents(
       contentDirection,
       ...(amount !== undefined ? { amount } : {}),
       ...(pixels !== undefined ? { pixels } : {}),
-    },
-  ];
-}
-
-function buildPinchEvents(
-  positionals: string[],
-  result: Record<string, unknown>,
-  tMs: number,
-  gestureDurationMs: number,
-  referenceFrame?: ReferenceFrame,
-): RecordingGestureEvent[] {
-  const coordinates = readCoordinates(result, positionals, 1);
-  const scale = readNumber(result.scale) ?? readNumber(positionals[0]);
-  if (!coordinates || scale === undefined || scale <= 0) return [];
-  const { x, y } = coordinates;
-  return [
-    {
-      kind: 'pinch',
-      tMs,
-      x,
-      y,
-      ...referenceFrame,
-      scale,
-      durationMs: resolveDurationMs(gestureDurationMs, [], DEFAULT_PINCH_DURATION_MS),
     },
   ];
 }
@@ -434,43 +383,12 @@ function makeLongPressEvent(
   return { kind: 'longpress', tMs, x, y, ...referenceFrame, durationMs };
 }
 
-function classifySwipeKind(
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-  referenceFrame?: ReferenceFrame,
-): 'swipe' | 'back-swipe' {
-  if (!referenceFrame) return 'swipe';
-  const horizontalDistance = Math.abs(x2 - x1);
-  const verticalDistance = Math.abs(y2 - y1);
-  if (horizontalDistance <= verticalDistance * 1.25) return 'swipe';
-
-  const edgeInset = referenceFrame.referenceWidth * 0.08;
-  if (x1 <= edgeInset && x2 > x1) return 'back-swipe';
-  if (x1 >= referenceFrame.referenceWidth - edgeInset && x2 < x1) return 'back-swipe';
-  return 'swipe';
-}
-
-function resolveBackSwipeEdge(
-  startX: number,
-  endX: number,
-  referenceFrame?: ReferenceFrame,
-): 'left' | 'right' {
-  if (referenceFrame) {
-    const edgeInset = referenceFrame.referenceWidth * 0.08;
-    if (startX <= edgeInset) return 'left';
-    if (startX >= referenceFrame.referenceWidth - edgeInset) return 'right';
-  }
-  return endX >= startX ? 'left' : 'right';
-}
-
 function resolveEventReferenceFrame(
   snapshot: SnapshotState | undefined,
   result: Record<string, unknown>,
 ): ReferenceFrame | undefined {
-  const referenceWidth = readNumber(result.referenceWidth);
-  const referenceHeight = readNumber(result.referenceHeight);
+  const referenceWidth = readRecordingNumber(result.referenceWidth);
+  const referenceHeight = readRecordingNumber(result.referenceHeight);
   if (
     referenceWidth !== undefined &&
     referenceWidth > 0 &&
@@ -497,13 +415,6 @@ function readDirection(value: unknown): ScrollDirection | undefined {
   }
 }
 
-function readNumber(value: unknown): number | undefined {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value !== 'string' || value.trim().length === 0) return undefined;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : undefined;
-}
-
 function clampInt(value: number | undefined, min: number): number | undefined {
   if (value === undefined) return undefined;
   const normalized = Math.floor(value);
@@ -515,8 +426,8 @@ function readCoordinates(
   positionals: string[],
   positionalOffset = 0,
 ): { x: number; y: number } | undefined {
-  const x = readNumber(result.x) ?? readNumber(positionals[positionalOffset]);
-  const y = readNumber(result.y) ?? readNumber(positionals[positionalOffset + 1]);
+  const x = readRecordingNumber(result.x) ?? readRecordingNumber(positionals[positionalOffset]);
+  const y = readRecordingNumber(result.y) ?? readRecordingNumber(positionals[positionalOffset + 1]);
   if (x === undefined || y === undefined) {
     return undefined;
   }
@@ -538,7 +449,7 @@ function readTravelCoordinates(
 }
 
 function readFirstNumber(...values: unknown[]): number | undefined {
-  return values.map(readNumber).find((value) => value !== undefined);
+  return values.map(readRecordingNumber).find((value) => value !== undefined);
 }
 
 function resolveDurationMs(

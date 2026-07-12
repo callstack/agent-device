@@ -194,6 +194,92 @@ test('swipe visualization prefers native gesture duration when available', () =>
   assert.equal(event.durationMs, 780);
 });
 
+test('canonical gesture results record pan, fling, and pinch visualization telemetry', () => {
+  const session = makeSession();
+
+  recordTouchVisualizationEvent(
+    session,
+    'gesture',
+    ['pan', '40', '100', '120', '-20', '360'],
+    {
+      kind: 'pan',
+      from: { x: 40, y: 100 },
+      to: { x: 160, y: 80 },
+      durationMs: 360,
+      pointerCount: 1,
+    },
+    {},
+    1_500,
+    1_860,
+  );
+  recordTouchVisualizationEvent(
+    session,
+    'gesture',
+    ['fling', 'left', '260', '400', '180'],
+    {
+      kind: 'fling',
+      from: { x: 260, y: 400 },
+      to: { x: 80, y: 400 },
+      durationMs: 180,
+      pointerCount: 1,
+    },
+    {},
+    1_900,
+    2_080,
+  );
+  recordTouchVisualizationEvent(
+    session,
+    'gesture',
+    ['pinch', '1.5', '201', '437'],
+    {
+      kind: 'pinch',
+      from: { x: 201, y: 437 },
+      to: { x: 201, y: 437 },
+      scale: 1.5,
+      durationMs: 280,
+      pointerCount: 2,
+    },
+    {},
+    2_100,
+    2_380,
+  );
+
+  assert.deepEqual(session.recording?.gestureEvents, [
+    {
+      kind: 'swipe',
+      tMs: 500,
+      x: 40,
+      y: 100,
+      x2: 160,
+      y2: 80,
+      referenceWidth: 402,
+      referenceHeight: 874,
+      durationMs: 360,
+    },
+    {
+      kind: 'swipe',
+      tMs: 900,
+      x: 260,
+      y: 400,
+      x2: 80,
+      y2: 400,
+      referenceWidth: 402,
+      referenceHeight: 874,
+      durationMs: 180,
+    },
+    {
+      kind: 'pinch',
+      tMs: 1_100,
+      x: 201,
+      y: 437,
+      referenceWidth: 402,
+      referenceHeight: 874,
+      scale: 1.5,
+      durationMs: 280,
+    },
+  ]);
+});
+
 test('telemetry is still captured when touch overlays are hidden', () => {
   const session = makeSession();
   if (session.recording) {

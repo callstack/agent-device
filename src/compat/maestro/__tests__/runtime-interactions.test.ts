@@ -248,7 +248,7 @@ test('invokeMaestroTapOn clicks explicit React Native overlay controls directly'
 
 test('invokeMaestroSwipeScreen delegates directional swipes to core gestures', async () => {
   const scope = { values: {} };
-  const gestures: string[][] = [];
+  const gestures: Array<DaemonRequest['input']> = [];
   const response = await invokeMaestroSwipeScreen({
     baseReq: {
       token: 'test',
@@ -259,7 +259,7 @@ test('invokeMaestroSwipeScreen delegates directional swipes to core gestures', a
     positionals: ['direction', 'left', '300'],
     invoke: async (req: DaemonRequest): Promise<DaemonResponse> => {
       if (req.command === 'gesture') {
-        gestures.push(req.positionals ?? []);
+        gestures.push(req.input);
         return { ok: true, data: {} };
       }
       return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
@@ -267,16 +267,16 @@ test('invokeMaestroSwipeScreen delegates directional swipes to core gestures', a
   });
 
   expect(response.ok).toBe(true);
-  expect(gestures).toEqual([['swipe', 'left', '300']]);
+  expect(gestures).toEqual([{ kind: 'swipe', preset: 'left', durationMs: 300 }]);
   expect(consumeMaestroRecoverableInteraction(scope)).toEqual({
     kind: 'swipe',
     command: 'gesture',
-    positionals: ['swipe', 'left', '300'],
+    input: { kind: 'swipe', preset: 'left', durationMs: 300 },
   });
 });
 
 test('invokeMaestroSwipeScreen delegates mirrored Android directional swipes to core gestures', async () => {
-  const gestures: string[][] = [];
+  const gestures: Array<DaemonRequest['input']> = [];
   const response = await invokeMaestroSwipeScreen({
     baseReq: {
       token: 'test',
@@ -286,7 +286,7 @@ test('invokeMaestroSwipeScreen delegates mirrored Android directional swipes to 
     positionals: ['direction', 'right', '300'],
     invoke: async (req: DaemonRequest): Promise<DaemonResponse> => {
       if (req.command === 'gesture') {
-        gestures.push(req.positionals ?? []);
+        gestures.push(req.input);
         return { ok: true, data: {} };
       }
       return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
@@ -294,12 +294,12 @@ test('invokeMaestroSwipeScreen delegates mirrored Android directional swipes to 
   });
 
   expect(response.ok).toBe(true);
-  expect(gestures).toEqual([['swipe', 'right', '300']]);
+  expect(gestures).toEqual([{ kind: 'swipe', preset: 'right', durationMs: 300 }]);
 });
 
 test('invokeMaestroSwipeScreen delegates Android vertical down swipes to core gestures', async () => {
   const scope = { values: {} };
-  const gestures: string[][] = [];
+  const gestures: Array<DaemonRequest['input']> = [];
   const response = await invokeMaestroSwipeScreen({
     baseReq: {
       token: 'test',
@@ -310,7 +310,7 @@ test('invokeMaestroSwipeScreen delegates Android vertical down swipes to core ge
     positionals: ['direction', 'down', '100'],
     invoke: async (req: DaemonRequest): Promise<DaemonResponse> => {
       if (req.command === 'gesture') {
-        gestures.push(req.positionals ?? []);
+        gestures.push(req.input);
         return { ok: true, data: {} };
       }
       return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
@@ -318,16 +318,16 @@ test('invokeMaestroSwipeScreen delegates Android vertical down swipes to core ge
   });
 
   expect(response.ok).toBe(true);
-  expect(gestures).toEqual([['swipe', 'down', '100']]);
+  expect(gestures).toEqual([{ kind: 'swipe', preset: 'down', durationMs: 100 }]);
   expect(consumeMaestroRecoverableInteraction(scope)).toEqual({
     kind: 'swipe',
     command: 'gesture',
-    positionals: ['swipe', 'down', '100'],
+    input: { kind: 'swipe', preset: 'down', durationMs: 100 },
   });
 });
 
 test('invokeMaestroSwipeScreen delegates Android vertical up swipes to core gestures', async () => {
-  const gestures: string[][] = [];
+  const gestures: Array<DaemonRequest['input']> = [];
   const response = await invokeMaestroSwipeScreen({
     baseReq: {
       token: 'test',
@@ -337,7 +337,7 @@ test('invokeMaestroSwipeScreen delegates Android vertical up swipes to core gest
     positionals: ['direction', 'up'],
     invoke: async (req: DaemonRequest): Promise<DaemonResponse> => {
       if (req.command === 'gesture') {
-        gestures.push(req.positionals ?? []);
+        gestures.push(req.input);
         return { ok: true, data: {} };
       }
       return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
@@ -345,12 +345,12 @@ test('invokeMaestroSwipeScreen delegates Android vertical up swipes to core gest
   });
 
   expect(response.ok).toBe(true);
-  expect(gestures).toEqual([['swipe', 'up']]);
+  expect(gestures).toEqual([{ kind: 'swipe', preset: 'up' }]);
 });
 
 test('invokeMaestroSwipeOn resolves visible non-interactive text from a regular snapshot', async () => {
   const snapshotFlags: Array<DaemonRequest['flags']> = [];
-  const swipes: string[][] = [];
+  const swipes: Array<DaemonRequest['input']> = [];
   const swipeFlags: Array<DaemonRequest['flags']> = [];
   const response = await invokeMaestroSwipeOn({
     baseReq: {
@@ -385,7 +385,7 @@ test('invokeMaestroSwipeOn resolves visible non-interactive text from a regular 
         };
       }
       if (req.command === 'swipe') {
-        swipes.push(req.positionals ?? []);
+        swipes.push(req.input);
         swipeFlags.push(req.flags);
         return { ok: true, data: {} };
       }
@@ -397,12 +397,12 @@ test('invokeMaestroSwipeOn resolves visible non-interactive text from a regular 
   expect(snapshotFlags).toHaveLength(1);
   expect(snapshotFlags[0]?.snapshotInteractiveOnly).toBeUndefined();
   expect(snapshotFlags[0]?.snapshotRaw).toBe(true);
-  expect(swipes).toEqual([['200', '250', '8', '250', '300']]);
+  expect(swipes).toEqual([{ from: { x: 200, y: 250 }, to: { x: 8, y: 250 }, durationMs: 300 }]);
   expect(swipeFlags[0]?.postGestureStabilization).toBe(true);
 });
 
 test('invokeMaestroSwipeScreen preserves vertical percentage endpoints', async () => {
-  const swipes: string[][] = [];
+  const swipes: Array<DaemonRequest['input']> = [];
   const swipeFlags: Array<DaemonRequest['flags']> = [];
   const response = await invokeMaestroSwipeScreen({
     baseReq: {
@@ -416,7 +416,7 @@ test('invokeMaestroSwipeScreen preserves vertical percentage endpoints', async (
         return { ok: true, data: fullScreenSnapshot(400, 800) };
       }
       if (req.command === 'swipe') {
-        swipes.push(req.positionals ?? []);
+        swipes.push(req.input);
         swipeFlags.push(req.flags);
         return { ok: true, data: {} };
       }
@@ -425,12 +425,12 @@ test('invokeMaestroSwipeScreen preserves vertical percentage endpoints', async (
   });
 
   expect(response.ok).toBe(true);
-  expect(swipes).toEqual([['200', '600', '200', '280', '300']]);
+  expect(swipes).toEqual([{ from: { x: 200, y: 600 }, to: { x: 200, y: 280 }, durationMs: 300 }]);
   expect(swipeFlags[0]?.postGestureStabilization).toBeUndefined();
 });
 
 test('invokeMaestroSwipeScreen preserves iOS horizontal percentage endpoints', async () => {
-  const swipes: string[][] = [];
+  const swipes: Array<DaemonRequest['input']> = [];
   const response = await invokeMaestroSwipeScreen({
     baseReq: {
       token: 'test',
@@ -443,7 +443,7 @@ test('invokeMaestroSwipeScreen preserves iOS horizontal percentage endpoints', a
         return { ok: true, data: fullScreenSnapshot(400, 800) };
       }
       if (req.command === 'swipe') {
-        swipes.push(req.positionals ?? []);
+        swipes.push(req.input);
         return { ok: true, data: {} };
       }
       return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
@@ -451,11 +451,11 @@ test('invokeMaestroSwipeScreen preserves iOS horizontal percentage endpoints', a
   });
 
   expect(response.ok).toBe(true);
-  expect(swipes).toEqual([['40', '400', '360', '400', '300']]);
+  expect(swipes).toEqual([{ from: { x: 40, y: 400 }, to: { x: 360, y: 400 }, durationMs: 300 }]);
 });
 
 test('invokeMaestroSwipeScreen preserves Android midpoint percentage endpoints', async () => {
-  const swipes: string[][] = [];
+  const swipes: Array<DaemonRequest['input']> = [];
   const response = await invokeMaestroSwipeScreen({
     baseReq: {
       token: 'test',
@@ -468,7 +468,7 @@ test('invokeMaestroSwipeScreen preserves Android midpoint percentage endpoints',
         return { ok: true, data: fullScreenSnapshot(390, 600) };
       }
       if (req.command === 'swipe') {
-        swipes.push(req.positionals ?? []);
+        swipes.push(req.input);
         return { ok: true, data: {} };
       }
       return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
@@ -476,12 +476,12 @@ test('invokeMaestroSwipeScreen preserves Android midpoint percentage endpoints',
   });
 
   expect(response.ok).toBe(true);
-  expect(swipes).toEqual([['351', '300', '39', '300', '300']]);
+  expect(swipes).toEqual([{ from: { x: 351, y: 300 }, to: { x: 39, y: 300 }, durationMs: 300 }]);
 });
 
 test('invokeMaestroSwipeScreen refreshes a cached frame before resolving percentages', async () => {
   const scope = { values: {} };
-  const swipes: string[][] = [];
+  const swipes: Array<DaemonRequest['input']> = [];
   let snapshots = 0;
   const baseReq = {
     token: 'test',
@@ -497,7 +497,7 @@ test('invokeMaestroSwipeScreen refreshes a cached frame before resolving percent
       };
     }
     if (req.command === 'swipe') {
-      swipes.push(req.positionals ?? []);
+      swipes.push(req.input);
       return { ok: true, data: {} };
     }
     return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
@@ -513,11 +513,11 @@ test('invokeMaestroSwipeScreen refreshes a cached frame before resolving percent
 
   expect(response.ok).toBe(true);
   expect(snapshots).toBe(2);
-  expect(swipes).toEqual([['720', '200', '80', '200', '300']]);
+  expect(swipes).toEqual([{ from: { x: 720, y: 200 }, to: { x: 80, y: 200 }, durationMs: 300 }]);
 });
 
 test('invokeMaestroSwipeScreen preserves an explicit Android horizontal percentage lane', async () => {
-  const swipes: string[][] = [];
+  const swipes: Array<DaemonRequest['input']> = [];
   const response = await invokeMaestroSwipeScreen({
     baseReq: {
       token: 'test',
@@ -530,7 +530,7 @@ test('invokeMaestroSwipeScreen preserves an explicit Android horizontal percenta
         return { ok: true, data: fullScreenSnapshot(390, 600) };
       }
       if (req.command === 'swipe') {
-        swipes.push(req.positionals ?? []);
+        swipes.push(req.input);
         return { ok: true, data: {} };
       }
       return { ok: false, error: { code: 'UNEXPECTED_COMMAND', message: req.command } };
@@ -538,7 +538,7 @@ test('invokeMaestroSwipeScreen preserves an explicit Android horizontal percenta
   });
 
   expect(response.ok).toBe(true);
-  expect(swipes).toEqual([['351', '180', '39', '180', '300']]);
+  expect(swipes).toEqual([{ from: { x: 351, y: 180 }, to: { x: 39, y: 180 }, durationMs: 300 }]);
 });
 
 test('invokeMaestroTapPointPercent bounds percentage points to valid frame pixels', async () => {

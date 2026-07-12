@@ -1,25 +1,41 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
-  gesturePayloadFromLegacyPositionals,
-  gesturePayloadToLegacyPositionals,
+  gesturePayloadFromPositionals,
+  gesturePayloadToPositionals,
   normalizePublicGesture,
+  swipePayloadFromPositionals,
 } from './gesture-normalization.ts';
 
-test('legacy CLI and .ad positionals normalize at one explicit compatibility seam', () => {
+test('CLI and .ad positionals normalize at one explicit syntax seam', () => {
+  assert.deepEqual(gesturePayloadFromPositionals(['pan', '10', '20', '30', '-40', '500'], 2), {
+    kind: 'pan',
+    origin: { x: 10, y: 20 },
+    delta: { x: 30, y: -40 },
+    durationMs: 500,
+    pointerCount: 2,
+  });
+});
+
+test('CLI and .ad coordinate swipes normalize at one explicit syntax seam', () => {
   assert.deepEqual(
-    gesturePayloadFromLegacyPositionals(['pan', '10', '20', '30', '-40', '500'], 2),
+    swipePayloadFromPositionals(['10', '20', '30', '40', '300'], {
+      count: 2,
+      pauseMs: 5,
+      pattern: 'ping-pong',
+    }),
     {
-      kind: 'pan',
-      origin: { x: 10, y: 20 },
-      delta: { x: 30, y: -40 },
-      durationMs: 500,
-      pointerCount: 2,
+      from: { x: 10, y: 20 },
+      to: { x: 30, y: 40 },
+      durationMs: 300,
+      count: 2,
+      pauseMs: 5,
+      pattern: 'ping-pong',
     },
   );
 });
 
-test('legacy gesture codec round-trips structured requests for protocol-v1 daemons', () => {
+test('gesture recording codec round-trips structured requests', () => {
   const payload = {
     kind: 'transform' as const,
     origin: { x: 10, y: 20 },
@@ -28,26 +44,43 @@ test('legacy gesture codec round-trips structured requests for protocol-v1 daemo
     degrees: -35,
     durationMs: 600,
   };
-  assert.deepEqual(
-    gesturePayloadFromLegacyPositionals(gesturePayloadToLegacyPositionals(payload)),
-    payload,
-  );
+  assert.deepEqual(gesturePayloadFromPositionals(gesturePayloadToPositionals(payload)), payload);
 });
 
-test('legacy pinch and rotate syntax rejects a partial origin', () => {
-  assert.throws(() => gesturePayloadFromLegacyPositionals(['pinch', '1.5', '100']), {
+test('gesture recording codec preserves timed fling duration when distance is omitted', () => {
+  const payload = {
+    kind: 'fling' as const,
+    direction: 'left' as const,
+    origin: { x: 10, y: 20 },
+    durationMs: 600,
+  };
+  const positionals = gesturePayloadToPositionals(payload);
+  assert.deepEqual(positionals, ['fling', 'left', '10', '20', '180', '600']);
+  assert.deepEqual(normalizePublicGesture(gesturePayloadFromPositionals(positionals)), {
+    gesture: {
+      intent: 'pan',
+      origin: { x: 10, y: 20 },
+      delta: { x: -180, y: 0 },
+      durationMs: 600,
+    },
+    deprecations: [{ rule: 'fling-duration', replacement: 'Use gesture pan for timed movement.' }],
+  });
+});
+
+test('pinch and rotate syntax rejects a partial origin', () => {
+  assert.throws(() => gesturePayloadFromPositionals(['pinch', '1.5', '100']), {
     code: 'INVALID_ARGS',
   });
-  assert.throws(() => gesturePayloadFromLegacyPositionals(['rotate', '35', '100']), {
+  assert.throws(() => gesturePayloadFromPositionals(['rotate', '35', '100']), {
     code: 'INVALID_ARGS',
   });
 });
 
-test('legacy rotate serialization omits behaviorless velocity when no origin can delimit it', () => {
-  assert.deepEqual(
-    gesturePayloadToLegacyPositionals({ kind: 'rotate', degrees: 35, velocity: 2 }),
-    ['rotate', '35'],
-  );
+test('rotate serialization omits behaviorless velocity when no origin can delimit it', () => {
+  assert.deepEqual(gesturePayloadToPositionals({ kind: 'rotate', degrees: 35, velocity: 2 }), [
+    'rotate',
+    '35',
+  ]);
 });
 
 test('swipe is fling sugar unless legacy duration requests a pan', () => {

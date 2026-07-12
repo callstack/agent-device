@@ -31,27 +31,16 @@ import {
   type PostActionObservationOptions,
 } from './post-action-observation.ts';
 
-export {
-  focusCommand,
-  longPressCommand,
-  pinchCommand,
-  scrollCommand,
-  swipeCommand,
-} from './gestures.ts';
+export { focusCommand, longPressCommand, scrollCommand } from './gestures.ts';
 export type {
   FocusCommandOptions,
   FocusCommandResult,
   GestureDirection,
   LongPressCommandOptions,
   LongPressCommandResult,
-  PinchCommandOptions,
-  PinchCommandResult,
   ScrollCommandOptions,
   ScrollCommandResult,
   ScrollTarget,
-  SwipeCommandOptions,
-  SwipeCommandResult,
-  SwipeOptions,
 } from './gestures.ts';
 export type { InteractionTarget, PointTarget, ResolvedInteractionTarget } from './resolution.ts';
 

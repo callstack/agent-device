@@ -1,11 +1,6 @@
 import { AppError } from '../../../kernel/errors.ts';
 import type { Point } from '../../../kernel/snapshot.ts';
-import { centerOfRect } from '../../../kernel/snapshot.ts';
-import {
-  parseSwipePreset,
-  type ScrollDirection,
-  type SwipePreset,
-} from '../../../contracts/scroll-gesture.ts';
+import type { ScrollDirection } from '../../../contracts/scroll-gesture.ts';
 import {
   assertExclusiveScrollDistanceInputs,
   honoredScrollDurationMs,
@@ -31,12 +26,7 @@ import {
 } from '../../runtime-types.ts';
 import type { LongPressCommandResult } from '../../../contracts/interaction.ts';
 import {
-  normalizePublicSwipeMotion,
-  normalizePublicSwipePreset,
-} from '../../../contracts/gesture-normalization.ts';
-import {
   assertSupportedInteractionSurface,
-  captureInteractionSnapshot,
   type ExpectedResolvedTarget,
   type InteractionTarget,
   type ResolvedInteractionTarget,
@@ -47,8 +37,6 @@ import {
   planPostActionObservation,
   type SettlePostActionObservationOptions,
 } from './post-action-observation.ts';
-import { gestureCommand } from './gesture-command.ts';
-import { resolveVisibleSnapshotViewport } from './viewport.ts';
 
 export type FocusCommandOptions = CommandContext & {
   target: InteractionTarget;
@@ -105,42 +93,6 @@ export type ScrollCommandResult =
     >;
 
 type ResolvedScrollTarget = { kind: 'viewport' } | ResolvedInteractionTarget;
-
-export type SwipeOptions = {
-  from?: Point | InteractionTarget;
-  to?: Point;
-  direction?: GestureDirection;
-  preset?: SwipePreset;
-  distance?: number;
-  durationMs?: number;
-};
-
-export type SwipeCommandOptions = CommandContext & SwipeOptions;
-
-export type SwipeCommandResult = {
-  kind: 'fling' | 'pan';
-  from: Point;
-  to: Point;
-  pointerCount: 1;
-  direction?: GestureDirection;
-  preset?: SwipePreset;
-  distance?: number;
-  durationMs: number;
-  fromTarget?: ResolvedInteractionTarget | { kind: 'viewport' };
-  deprecations?: Array<{ rule: string; replacement: string }>;
-} & BackendResultEnvelope;
-
-export type PinchCommandOptions = CommandContext & {
-  scale: number;
-  center?: InteractionTarget;
-};
-
-export type PinchCommandResult = {
-  kind: 'pinch';
-  scale: number;
-  center?: Point;
-  centerTarget?: ResolvedInteractionTarget;
-} & BackendResultEnvelope;
 
 export const focusCommand: RuntimeCommand<FocusCommandOptions, FocusCommandResult> = async (
   runtime,
@@ -264,155 +216,6 @@ export const scrollCommand: RuntimeCommand<ScrollCommandOptions, ScrollCommandRe
   };
 };
 
-export const swipeCommand: RuntimeCommand<SwipeCommandOptions, SwipeCommandResult> = async (
-  runtime,
-  options,
-): Promise<SwipeCommandResult> => {
-  if (!runtime.backend.performGesture) {
-    throw new AppError('UNSUPPORTED_OPERATION', 'swipe is not supported by this backend');
-  }
-  if (options.preset) {
-    return await runSwipePreset(runtime, options);
-  }
-  const resolvedFrom = await resolveSwipeFrom(runtime, options);
-  const to = resolveSwipeTo(resolvedFrom.point, options);
-  const durationMs =
-    options.durationMs === undefined
-      ? undefined
-      : requireIntInRange(options.durationMs, 'durationMs', 16, 10_000);
-  const normalized = normalizePublicSwipeMotion({
-    from: resolvedFrom.point,
-    to: to.point,
-    durationMs,
-  });
-  const gesture = await gestureCommand(runtime, {
-    ...options,
-    gesture: normalized.gesture,
-  });
-  return {
-    kind: gesture.kind as 'fling' | 'pan',
-    from: resolvedFrom.point,
-    to: to.point,
-    pointerCount: 1,
-    ...(to.direction ? { direction: to.direction } : {}),
-    ...(to.distance !== undefined ? { distance: to.distance } : {}),
-    durationMs: gesture.durationMs,
-    ...(resolvedFrom.target ? { fromTarget: resolvedFrom.target } : {}),
-    ...(normalized.deprecations.length > 0 ? { deprecations: normalized.deprecations } : {}),
-    ...(gesture.backendResult ? { backendResult: gesture.backendResult } : {}),
-    ...successText(gesture.message ?? (gesture.kind === 'fling' ? 'Flung' : 'Panned')),
-  };
-};
-
-async function runSwipePreset(
-  runtime: AgentDeviceRuntime,
-  options: SwipeCommandOptions,
-): Promise<SwipeCommandResult> {
-  assertSwipePresetOptions(options);
-  const preset = parseSwipePreset(options.preset);
-  const durationMs = normalizeOptionalGestureDuration(options.durationMs);
-  const normalized = normalizePublicSwipePreset({ preset, durationMs });
-  const gesture = await gestureCommand(runtime, {
-    ...options,
-    gesture: normalized.gesture,
-  });
-  const { from, to } = requireGestureResultEndpoints(gesture);
-  return swipePresetResult({
-    from,
-    to,
-    preset,
-    durationMs,
-    gesture,
-    deprecations: normalized.deprecations,
-  });
-}
-
-function assertSwipePresetOptions(options: SwipeCommandOptions): void {
-  if (!options.from && !options.to && !options.direction && options.distance === undefined) return;
-  throw new AppError(
-    'INVALID_ARGS',
-    'gesture swipe preset cannot be combined with from, to, direction, or distance',
-  );
-}
-
-function normalizeOptionalGestureDuration(value: number | undefined): number | undefined {
-  return value === undefined ? undefined : requireIntInRange(value, 'durationMs', 16, 10_000);
-}
-
-function requireGestureResultEndpoints(result: { from?: Point; to?: Point }): {
-  from: Point;
-  to: Point;
-} {
-  if (!result.from || !result.to) {
-    throw new AppError('COMMAND_FAILED', 'Swipe plan omitted endpoints');
-  }
-  return { from: result.from, to: result.to };
-}
-
-function swipePresetResult(options: {
-  from: Point;
-  to: Point;
-  preset: SwipePreset;
-  durationMs?: number;
-  gesture: {
-    kind: 'fling' | 'pan' | 'pinch' | 'rotate' | 'transform';
-    durationMs: number;
-    message?: string;
-    backendResult?: Record<string, unknown>;
-  };
-  deprecations: Array<{ rule: string; replacement: string }>;
-}): SwipeCommandResult {
-  return {
-    kind: options.gesture.kind as 'fling' | 'pan',
-    from: options.from,
-    to: options.to,
-    pointerCount: 1,
-    preset: options.preset,
-    durationMs: options.gesture.durationMs,
-    fromTarget: { kind: 'viewport' },
-    ...(options.deprecations.length > 0 ? { deprecations: options.deprecations } : {}),
-    ...(options.gesture.backendResult ? { backendResult: options.gesture.backendResult } : {}),
-    ...successText(options.gesture.message ?? `Flung ${options.preset}`),
-  };
-}
-
-export const pinchCommand: RuntimeCommand<PinchCommandOptions, PinchCommandResult> = async (
-  runtime,
-  options,
-): Promise<PinchCommandResult> => {
-  if (!runtime.backend.performGesture) {
-    throw new AppError('UNSUPPORTED_OPERATION', 'pinch is not supported by this backend');
-  }
-  await assertSupportedInteractionSurface(runtime, options, 'pinch');
-  const scale = normalizePositiveNumber(options.scale, 'pinch scale');
-  const centerTarget = options.center
-    ? await resolveInteractionTarget(
-        runtime,
-        { ...options, target: options.center },
-        {
-          action: 'pinch',
-          requireInteractive: false,
-          promoteToHittableAncestor: false,
-        },
-      )
-    : undefined;
-  const gesture = await gestureCommand(runtime, {
-    ...options,
-    gesture: {
-      intent: 'pinch',
-      scale,
-      ...(centerTarget?.point ? { origin: centerTarget.point } : {}),
-    },
-  });
-  return {
-    kind: 'pinch',
-    scale,
-    ...(centerTarget ? { center: centerTarget.point, centerTarget } : {}),
-    ...(gesture.backendResult ? { backendResult: gesture.backendResult } : {}),
-    ...successText(`Pinched to scale ${scale}`),
-  };
-};
-
 async function resolveScrollTarget(
   runtime: AgentDeviceRuntime,
   options: ScrollCommandOptions,
@@ -431,60 +234,6 @@ async function resolveScrollTarget(
       promoteToHittableAncestor: false,
     },
   );
-}
-
-async function resolveSwipeFrom(
-  runtime: AgentDeviceRuntime,
-  options: SwipeCommandOptions,
-): Promise<{
-  point: Point;
-  target?: ResolvedInteractionTarget | { kind: 'viewport' };
-}> {
-  if (options.from) {
-    if (isPointLike(options.from)) {
-      await assertSupportedInteractionSurface(runtime, options, 'swipe');
-      return { point: requirePoint(options.from, 'from') };
-    }
-    const target = await resolveInteractionTarget(
-      runtime,
-      { ...options, target: options.from },
-      {
-        action: 'swipe',
-        requireInteractive: false,
-        promoteToHittableAncestor: false,
-      },
-    );
-    return { point: requireResolvedPoint(target), target };
-  }
-  if (!options.direction) {
-    throw new AppError('INVALID_ARGS', 'swipe requires from+to or a direction');
-  }
-  await assertSupportedInteractionSurface(runtime, options, 'swipe');
-  const capture = await captureInteractionSnapshot(runtime, options, false);
-  const viewport = resolveVisibleSnapshotViewport(capture.snapshot.nodes, 'directional swipe');
-  return {
-    point: centerOfRect(viewport),
-    target: { kind: 'viewport' },
-  };
-}
-
-function resolveSwipeTo(
-  from: Point,
-  options: SwipeCommandOptions,
-): { point: Point; direction?: GestureDirection; distance?: number } {
-  if (options.to) return { point: requirePoint(options.to, 'to') };
-  const direction = requireDirection(options.direction, 'swipe direction');
-  const distance = normalizePositiveNumber(options.distance ?? 200, 'swipe distance');
-  switch (direction) {
-    case 'up':
-      return { point: { x: from.x, y: from.y - distance }, direction, distance };
-    case 'down':
-      return { point: { x: from.x, y: from.y + distance }, direction, distance };
-    case 'left':
-      return { point: { x: from.x - distance, y: from.y }, direction, distance };
-    case 'right':
-      return { point: { x: from.x + distance, y: from.y }, direction, distance };
-  }
 }
 
 function resolveScrollDirection(direction: ScrollInputDirection): {
@@ -552,19 +301,6 @@ function requireDirection(
     default:
       throw new AppError('INVALID_ARGS', `${field} must be up, down, left, or right`);
   }
-}
-
-function requirePoint(point: Point, field: string): Point {
-  const x = Number(point.x);
-  const y = Number(point.y);
-  if (!Number.isFinite(x) || !Number.isFinite(y)) {
-    throw new AppError('INVALID_ARGS', `${field} point requires finite x and y`);
-  }
-  return { x, y };
-}
-
-function isPointLike(value: Point | InteractionTarget): value is Point {
-  return 'x' in value && 'y' in value;
 }
 
 function normalizeOptionalPositiveNumber(

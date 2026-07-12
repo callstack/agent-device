@@ -383,7 +383,7 @@ extension RunnerTests {
                          gestureStartUptimeMs: 100, gestureEndUptimeMs: 120),
       SequenceStepResult(ok: true, kind: "tap", errorCode: nil, errorMessage: nil,
                          gestureStartUptimeMs: 130, gestureEndUptimeMs: 150),
-      SequenceStepResult(ok: false, kind: "drag", errorCode: "UNSUPPORTED_OPERATION",
+      SequenceStepResult(ok: false, kind: "longPress", errorCode: "UNSUPPORTED_OPERATION",
                          errorMessage: longError, gestureStartUptimeMs: 160, gestureEndUptimeMs: 180),
     ]
 

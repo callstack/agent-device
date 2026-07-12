@@ -21,9 +21,18 @@ export type NormalizedPublicGesture = {
   deprecations: GestureDeprecation[];
 };
 
-/** The explicit compatibility parser for legacy CLI/.ad gesture positionals. */
+export type SwipePayload = {
+  from: Point;
+  to: Point;
+  durationMs?: number;
+  count?: number;
+  pauseMs?: number;
+  pattern?: 'one-way' | 'ping-pong';
+};
+
+/** The explicit parser for the public CLI and `.ad` gesture syntax. */
 // fallow-ignore-next-line complexity
-export function gesturePayloadFromLegacyPositionals(
+export function gesturePayloadFromPositionals(
   positionals: string[],
   pointerCount?: number,
 ): GesturePayload {
@@ -79,8 +88,8 @@ export function gesturePayloadFromLegacyPositionals(
   }
 }
 
-/** Serializes structured gesture input for protocol-v1 daemons and `.ad` recordings. */
-export function gesturePayloadToLegacyPositionals(input: GesturePayload): string[] {
+/** Serializes structured gesture input for `.ad` recordings. */
+export function gesturePayloadToPositionals(input: GesturePayload): string[] {
   switch (input.kind) {
     case 'pan':
       return compact([
@@ -97,7 +106,7 @@ export function gesturePayloadToLegacyPositionals(input: GesturePayload): string
         input.direction,
         input.origin.x,
         input.origin.y,
-        input.distance,
+        input.durationMs === undefined ? input.distance : (input.distance ?? 180),
         input.durationMs,
       ]);
     case 'swipe':
@@ -120,6 +129,21 @@ export function gesturePayloadToLegacyPositionals(input: GesturePayload): string
         input.durationMs,
       ]);
   }
+}
+
+/** Parses the public CLI and `.ad` coordinate-swipe syntax. */
+export function swipePayloadFromPositionals(
+  positionals: string[],
+  options: Omit<SwipePayload, 'from' | 'to' | 'durationMs'> = {},
+): SwipePayload {
+  return {
+    from: { x: Number(positionals[0]), y: Number(positionals[1]) },
+    to: { x: Number(positionals[2]), y: Number(positionals[3]) },
+    ...(positionals[4] === undefined ? {} : { durationMs: Number(positionals[4]) }),
+    ...(options.count === undefined ? {} : { count: options.count }),
+    ...(options.pauseMs === undefined ? {} : { pauseMs: options.pauseMs }),
+    ...(options.pattern === undefined ? {} : { pattern: options.pattern }),
+  };
 }
 
 /** The only public/deprecated gesture interpretation point. */
@@ -222,13 +246,6 @@ export function normalizePublicSwipeMotion(input: {
     },
     deprecations: [{ rule: 'swipe-duration', replacement: 'Use gesture pan for timed movement.' }],
   };
-}
-
-export function normalizePublicSwipePreset(input: {
-  preset: SwipePreset;
-  durationMs?: number;
-}): NormalizedPublicGesture {
-  return normalizePublicGesture({ kind: 'swipe', ...input });
 }
 
 function directionDelta(direction: 'up' | 'down' | 'left' | 'right', distance: number): Point {

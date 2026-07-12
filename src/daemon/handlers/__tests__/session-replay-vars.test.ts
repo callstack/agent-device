@@ -42,6 +42,7 @@ const LOC = { file: 'test.ad', line: 1 };
 type CapturedInvocation = {
   command: string;
   positionals?: string[];
+  input?: Record<string, unknown>;
   flags?: CommandFlags;
 };
 
@@ -65,7 +66,12 @@ async function runReplayFixture(params: {
   fs.writeFileSync(scriptPath, params.script);
   const calls: CapturedInvocation[] = [];
   const invoke = async (req: DaemonRequest): Promise<DaemonResponse> => {
-    calls.push({ command: req.command, positionals: req.positionals, flags: req.flags });
+    calls.push({
+      command: req.command,
+      positionals: req.positionals,
+      input: req.input,
+      flags: req.flags,
+    });
     if (params.invoke) return await params.invoke(req);
     return { ok: true, data: {} };
   };
@@ -473,6 +479,52 @@ test('runReplayScriptFile dispatches resolved literals with file env overridden 
       assert.equal(pos.includes('${'), false, `unresolved interpolation leaked: ${pos}`);
     }
   }
+});
+
+test('.ad replay normalizes resolved gesture and swipe syntax into structured daemon input', async () => {
+  const { response, calls } = await runReplayFixture({
+    label: 'structured-gesture-input',
+    script: [
+      'env X=10',
+      'gesture pan ${X} 20 30 40 500 --pointer-count 2',
+      'swipe ${X} 20 30 40 300 --count 2 --pause-ms 5 --pattern ping-pong',
+      '',
+    ].join('\n'),
+  });
+
+  assert.equal(response.ok, true);
+  assert.deepEqual(
+    calls.map((call) => ({
+      command: call.command,
+      positionals: call.positionals,
+      input: call.input,
+    })),
+    [
+      {
+        command: 'gesture',
+        positionals: [],
+        input: {
+          kind: 'pan',
+          origin: { x: 10, y: 20 },
+          delta: { x: 30, y: 40 },
+          pointerCount: 2,
+          durationMs: 500,
+        },
+      },
+      {
+        command: 'swipe',
+        positionals: [],
+        input: {
+          from: { x: 10, y: 20 },
+          to: { x: 30, y: 40 },
+          durationMs: 300,
+          count: 2,
+          pauseMs: 5,
+          pattern: 'ping-pong',
+        },
+      },
+    ],
+  );
 });
 
 test('runReplayScriptFile reports snapshot diagnostics from per-action session samples', async () => {
@@ -1655,7 +1707,12 @@ test('runReplayScriptFile resolves Maestro swipe.label from a labeled element re
     ].join('\n'),
     flags: { replayBackend: 'maestro' },
     invoke: async (req) => {
-      calls.push({ command: req.command, positionals: req.positionals, flags: req.flags });
+      calls.push({
+        command: req.command,
+        positionals: req.positionals,
+        input: req.input,
+        flags: req.flags,
+      });
       if (req.command === 'snapshot') {
         return {
           ok: true,
@@ -1676,10 +1733,10 @@ test('runReplayScriptFile resolves Maestro swipe.label from a labeled element re
 
   assert.equal(response.ok, true);
   assert.deepEqual(
-    calls.map((call) => [call.command, call.positionals]),
+    calls.map((call) => [call.command, call.input]),
     [
-      ['snapshot', []],
-      ['swipe', ['110', '250', '110', '8', '400']],
+      ['snapshot', undefined],
+      ['swipe', { from: { x: 110, y: 250 }, to: { x: 110, y: 8 }, durationMs: 400 }],
     ],
   );
 });
@@ -1699,7 +1756,12 @@ test('runReplayScriptFile keeps Maestro swipe.label anchored to the matched labe
     ].join('\n'),
     flags: { replayBackend: 'maestro', platform: 'ios' },
     invoke: async (req) => {
-      calls.push({ command: req.command, positionals: req.positionals, flags: req.flags });
+      calls.push({
+        command: req.command,
+        positionals: req.positionals,
+        input: req.input,
+        flags: req.flags,
+      });
       if (req.command === 'snapshot') {
         return {
           ok: true,
@@ -1729,10 +1791,10 @@ test('runReplayScriptFile keeps Maestro swipe.label anchored to the matched labe
 
   assert.equal(response.ok, true);
   assert.deepEqual(
-    calls.map((call) => [call.command, call.positionals]),
+    calls.map((call) => [call.command, call.input]),
     [
-      ['snapshot', []],
-      ['swipe', ['100', '124', '100', '8', '400']],
+      ['snapshot', undefined],
+      ['swipe', { from: { x: 100, y: 124 }, to: { x: 100, y: 8 }, durationMs: 400 }],
     ],
   );
 });
@@ -1755,7 +1817,12 @@ test('runReplayScriptFile resolves Maestro screen swipes from the snapshot frame
     ].join('\n'),
     flags: { replayBackend: 'maestro' },
     invoke: async (req) => {
-      calls.push({ command: req.command, positionals: req.positionals, flags: req.flags });
+      calls.push({
+        command: req.command,
+        positionals: req.positionals,
+        input: req.input,
+        flags: req.flags,
+      });
       if (req.command === 'snapshot') {
         return {
           ok: true,
@@ -1776,11 +1843,11 @@ test('runReplayScriptFile resolves Maestro screen swipes from the snapshot frame
 
   assert.equal(response.ok, true);
   assert.deepEqual(
-    calls.map((call) => [call.command, call.positionals]),
+    calls.map((call) => [call.command, call.input]),
     [
-      ['gesture', ['swipe', 'left', '300']],
-      ['snapshot', []],
-      ['swipe', ['360', '400', '40', '400', '300']],
+      ['gesture', { kind: 'swipe', preset: 'left', durationMs: 300 }],
+      ['snapshot', undefined],
+      ['swipe', { from: { x: 360, y: 400 }, to: { x: 40, y: 400 }, durationMs: 300 }],
     ],
   );
 });
@@ -1803,7 +1870,12 @@ test('runReplayScriptFile delegates Android directional swipes and preserves per
     ].join('\n'),
     flags: { replayBackend: 'maestro', platform: 'android' },
     invoke: async (req) => {
-      calls.push({ command: req.command, positionals: req.positionals, flags: req.flags });
+      calls.push({
+        command: req.command,
+        positionals: req.positionals,
+        input: req.input,
+        flags: req.flags,
+      });
       if (req.command === 'snapshot') {
         return {
           ok: true,
@@ -1824,11 +1896,11 @@ test('runReplayScriptFile delegates Android directional swipes and preserves per
 
   assert.equal(response.ok, true);
   assert.deepEqual(
-    calls.map((call) => [call.command, call.positionals]),
+    calls.map((call) => [call.command, call.input]),
     [
-      ['gesture', ['swipe', 'left', '300']],
-      ['snapshot', []],
-      ['swipe', ['360', '400', '40', '400', '300']],
+      ['gesture', { kind: 'swipe', preset: 'left', durationMs: 300 }],
+      ['snapshot', undefined],
+      ['swipe', { from: { x: 360, y: 400 }, to: { x: 40, y: 400 }, durationMs: 300 }],
     ],
   );
 });

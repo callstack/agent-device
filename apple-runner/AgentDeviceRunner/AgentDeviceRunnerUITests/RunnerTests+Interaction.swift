@@ -775,7 +775,6 @@ extension RunnerTests {
     x2: Double,
     y2: Double,
     durationMs: Double,
-    semantics: SynthesizedDragSemantics?,
     context: SynthesizedCoordinateContext? = nil
   ) -> RunnerInteractionOutcome {
 #if os(iOS)
@@ -795,25 +794,14 @@ extension RunnerTests {
     let frame = context.referenceFrame
     let start = nativeSynthesizedPoint(orientedX: x, orientedY: y, in: frame, interfaceOrientation: orientation)
     let end = nativeSynthesizedPoint(orientedX: x2, orientedY: y2, in: frame, interfaceOrientation: orientation)
-    let message = if semantics == .swipe {
-      RunnerSynthesizedGesture.synthesizeSwipe(
-        withApplication: app,
-        x: Double(start.x),
-        y: Double(start.y),
-        x2: Double(end.x),
-        y2: Double(end.y),
-        durationMs: durationMs
-      )
-    } else {
-      RunnerSynthesizedGesture.synthesizeContinuousDrag(
-        withApplication: app,
-        x: Double(start.x),
-        y: Double(start.y),
-        x2: Double(end.x),
-        y2: Double(end.y),
-        durationMs: durationMs
-      )
-    }
+    let message = RunnerSynthesizedGesture.synthesizeContinuousDrag(
+      withApplication: app,
+      x: Double(start.x),
+      y: Double(start.y),
+      x2: Double(end.x),
+      y2: Double(end.y),
+      durationMs: durationMs
+    )
     if let message {
       return .unsupported(
         message: message,

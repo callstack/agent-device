@@ -34,12 +34,6 @@ enum CommandType: String, Codable {
   case shutdown
 }
 
-enum SynthesizedDragSemantics: String, Codable {
-  case swipe
-  case pan
-  case fling
-}
-
 /// Runner command traits — see CONTEXT.md ("Runner command traits").
 ///
 /// Single source of truth for how the runner classifies a command across three
@@ -131,16 +125,11 @@ struct Command: Codable {
   let remoteButton: String?
   let x2: Double?
   let y2: Double?
-  let dx: Double?
-  let dy: Double?
   let durationMs: Double?
   let direction: String?
   let amount: Double?
   let pixels: Double?
   let orientation: String?
-  let scale: Double?
-  let degrees: Double?
-  let velocity: Double?
   let gesturePlan: RunnerGesturePlan?
   let outPath: String?
   let fps: Int?
@@ -151,8 +140,6 @@ struct Command: Codable {
   let raw: Bool?
   let fullscreen: Bool?
   let synthesized: Bool?
-  /// Preserves the public gesture's timing semantics after it is lowered to runner `drag`.
-  let dragSemantics: SynthesizedDragSemantics?
   let steps: [SequenceStep]?
 }
 
@@ -194,15 +181,11 @@ struct SequenceStep: Codable {
   let kind: String
   let x: Double?
   let y: Double?
-  let x2: Double?
-  let y2: Double?
   let durationMs: Double?
   let pauseMs: Double?
-  /// For `tap`/`drag` steps on iOS non-tv: use the synthesized HID fast path instead of the
+  /// For `tap` steps on iOS non-tv: use the synthesized HID fast path instead of the
   /// drag-based XCUICoordinate path, matching the individual command behavior.
   let synthesized: Bool?
-  /// Preserves one-shot swipe timing when repeated swipes are fused into a sequence.
-  let dragSemantics: SynthesizedDragSemantics?
 }
 
 /// Per-step result for a `sequence` response. `ok:false` carries the failing step's

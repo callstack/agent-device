@@ -103,7 +103,7 @@ func synthesizedGesturePolicy(_ kind: SynthesizedGesturePolicyKind) -> Synthesiz
 
 func sequenceHasSynthesizedCoordinateStep(_ steps: [SequenceStep]) -> Bool {
   steps.contains { step in
-    step.synthesized == true && (step.kind == "tap" || step.kind == "drag")
+    step.synthesized == true && step.kind == "tap"
   }
 }
 

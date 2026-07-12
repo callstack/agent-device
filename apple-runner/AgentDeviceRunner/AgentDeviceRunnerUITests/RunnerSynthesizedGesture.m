@@ -40,12 +40,6 @@ static NSString * _Nullable RunnerResolveXCTestEventBridge(
 static NSString * _Nullable RunnerRequireClass(Class cls, NSString *className);
 static NSString * _Nullable RunnerRequireSelector(Class cls, SEL selector, NSString *selectorName);
 static NSString * _Nullable RunnerRequireApplicationSelector(id application, SEL selector, NSString *selectorName);
-static id RunnerSwipePointerPath(
-  const RunnerXCTestEventBridge *bridge,
-  CGPoint start,
-  CGPoint end,
-  double durationMs
-);
 static id RunnerContinuousDragPointerPath(
   const RunnerXCTestEventBridge *bridge,
   CGPoint start,
@@ -60,38 +54,12 @@ static NSString * _Nullable RunnerTrySynthesizeDrag(
   NSString *recordName,
   RunnerDragPointerPathFactory pathFactory
 );
-// XCTest's synthesized swipe convention moves to the endpoint in 100 ms, then holds there for
-// the requested duration. The fast movement is what distinguishes a swipe from a slow pan for
-// nested UIKit gesture recognizers.
-static const NSTimeInterval RunnerSwipeMovementDurationSeconds = 0.1;
 static id RunnerTapPointerPath(
   const RunnerXCTestEventBridge *bridge,
   CGPoint point
 );
 
 @implementation RunnerSynthesizedGesture
-
-+ (NSString * _Nullable)synthesizeSwipeWithApplication:(id)application
-                                                    x:(double)x
-                                                    y:(double)y
-                                                   x2:(double)x2
-                                                   y2:(double)y2
-                                            durationMs:(double)durationMs {
-  @try {
-    return RunnerTrySynthesizeDrag(
-      application,
-      CGPointMake(x, y),
-      CGPointMake(x2, y2),
-      durationMs,
-      @"agent-device-swipe",
-      RunnerSwipePointerPath
-    );
-  } @catch (NSException *exception) {
-    NSString *name = exception.name ?: @"NSException";
-    NSString *reason = exception.reason ?: @"private XCTest event synthesis failed";
-    return [NSString stringWithFormat:@"%@: %@", name, reason];
-  }
-}
 
 + (NSString * _Nullable)synthesizeContinuousDragWithApplication:(id)application
                                                              x:(double)x
@@ -383,34 +351,6 @@ static NSString * _Nullable RunnerRequireApplicationSelector(
   return nil;
 }
 
-
-static id RunnerSwipePointerPath(
-  const RunnerXCTestEventBridge *bridge,
-  CGPoint start,
-  CGPoint end,
-  double durationMs
-) {
-  id path =
-    ((RunnerMsgSendInitPath)objc_msgSend)([bridge->pathClass alloc], bridge->initPathSelector, start, 0.0);
-  if (path == nil) {
-    return nil;
-  }
-
-  NSTimeInterval durationSeconds = durationMs / 1000.0;
-  ((RunnerMsgSendPathMove)objc_msgSend)(
-    path,
-    bridge->moveSelector,
-    end,
-    RunnerSwipeMovementDurationSeconds
-  );
-
-  ((RunnerMsgSendPathOffset)objc_msgSend)(
-    path,
-    bridge->liftSelector,
-    RunnerSwipeMovementDurationSeconds + durationSeconds
-  );
-  return path;
-}
 
 static id RunnerContinuousDragPointerPath(
   const RunnerXCTestEventBridge *bridge,

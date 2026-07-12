@@ -1,9 +1,9 @@
 import { readGesturePayload, type GesturePayload } from '../../contracts/gesture-input.ts';
 import {
-  gesturePayloadFromLegacyPositionals,
-  gesturePayloadToLegacyPositionals,
+  gesturePayloadToPositionals,
   normalizePublicGesture,
   normalizePublicSwipeMotion,
+  type SwipePayload,
 } from '../../contracts/gesture-normalization.ts';
 import { requireGestureSupported } from '../../core/capabilities.ts';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
@@ -28,7 +28,7 @@ export async function dispatchGestureViaRuntime(
   if (!session) return noActiveSessionError();
   const startedAt = Date.now();
   try {
-    const input = readDaemonGestureInput(params);
+    const input = readGesturePayload(params.req.input);
     const normalized = normalizePublicGesture(input);
     requireGestureSupported(normalized.gesture, session.device);
     const providerDevice = isActiveProviderDevice(session.device);
@@ -67,9 +67,12 @@ export async function dispatchGestureViaRuntime(
       sessionStore: params.sessionStore,
       command: 'gesture',
       actionCommand: 'gesture',
-      positionals: gesturePayloadToLegacyPositionals(input),
+      positionals: gesturePayloadToPositionals(input),
       flags: gestureReplayFlags(input, params.req.flags),
-      result: responseData,
+      result: {
+        ...responseData,
+        ...(input.kind === 'pinch' ? { scale: input.scale } : {}),
+      },
       responseData,
       actionStartedAt: startedAt,
       actionFinishedAt: Date.now(),
@@ -77,15 +80,6 @@ export async function dispatchGestureViaRuntime(
   } catch (error) {
     return { ok: false, error: normalizeError(error) };
   }
-}
-
-/** `.ad` actions retain positional syntax; all public command clients send structured input. */
-function readDaemonGestureInput(params: InteractionHandlerParams): GesturePayload {
-  if (params.req.input !== undefined) return readGesturePayload(params.req.input);
-  return gesturePayloadFromLegacyPositionals(
-    params.req.positionals ?? [],
-    params.req.flags?.pointerCount,
-  );
 }
 
 export async function dispatchSwipeViaRuntime(
@@ -97,7 +91,7 @@ export async function dispatchSwipeViaRuntime(
   if (!session) return noActiveSessionError();
   const startedAt = Date.now();
   try {
-    const input = readDaemonSwipeInput(params);
+    const input = readSwipeInput(params.req.input);
     requireGestureSupported(normalizePublicSwipeMotion(input).gesture, session.device);
     const count = input.count ?? 1;
     const pauseMs = input.pauseMs ?? 0;
@@ -138,7 +132,7 @@ export async function dispatchSwipeViaRuntime(
       sessionStore: params.sessionStore,
       command: 'swipe',
       actionCommand: 'swipe',
-      positionals: params.req.positionals ?? [],
+      positionals: swipeReplayPositionals(input),
       flags: params.req.flags,
       result: responseData,
       responseData,
@@ -150,22 +144,7 @@ export async function dispatchSwipeViaRuntime(
   }
 }
 
-function readDaemonSwipeInput(params: InteractionHandlerParams): SwipeInput {
-  const structured = params.req.input;
-  if (isStructuredSwipeInput(structured)) return readSwipeInput(structured);
-  return readLegacySwipeInput(params);
-}
-
-type SwipeInput = {
-  from: Point;
-  to: Point;
-  durationMs?: number;
-  count?: number;
-  pauseMs?: number;
-  pattern?: 'one-way' | 'ping-pong';
-};
-
-function readSwipeInput(input: unknown): SwipeInput {
+function readSwipeInput(input: unknown): SwipePayload {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw new AppError('INVALID_ARGS', 'swipe requires structured object input');
   }
@@ -198,46 +177,50 @@ function readSwipePoint(value: unknown, field: string): Point {
   return { x: point.x, y: point.y };
 }
 
-function isStructuredSwipeInput(input: unknown): input is Record<string, unknown> {
-  if (!input || typeof input !== 'object' || Array.isArray(input)) return false;
-  return 'from' in input && 'to' in input;
-}
-
-function readLegacySwipeInput(params: InteractionHandlerParams): SwipeInput {
-  const [x1, y1, x2, y2, durationMs] = params.req.positionals ?? [];
-  const duration = durationMs === undefined ? {} : { durationMs: Number(durationMs) };
-  return readSwipeInput({
-    from: { x: Number(x1), y: Number(y1) },
-    to: { x: Number(x2), y: Number(y2) },
-    ...duration,
-    count: params.req.flags?.count,
-    pauseMs: params.req.flags?.pauseMs,
-    pattern: params.req.flags?.pattern,
-  });
+function swipeReplayPositionals(input: SwipePayload): string[] {
+  return [
+    String(input.from.x),
+    String(input.from.y),
+    String(input.to.x),
+    String(input.to.y),
+    ...(input.durationMs === undefined ? [] : [String(input.durationMs)]),
+  ];
 }
 
 async function runSwipeRepetitions(
   runtime: ReturnType<typeof createInteractionRuntime>,
   params: InteractionHandlerParams,
-  input: SwipeInput,
+  input: SwipePayload,
   count: number,
   pauseMs: number,
   pattern: 'one-way' | 'ping-pong',
 ) {
-  let result: Awaited<ReturnType<typeof runtime.interactions.swipe>> | undefined;
+  let result: Awaited<ReturnType<typeof runtime.interactions.gesture>> | undefined;
+  const deprecations = normalizePublicSwipeMotion(input).deprecations;
   for (let index = 0; index < count; index += 1) {
-    const reverse = pattern === 'ping-pong' && index % 2 === 1;
-    result = await runtime.interactions.swipe({
+    const normalized = normalizePublicSwipeMotion(swipeMotionAtIndex(input, pattern, index));
+    result = await runtime.interactions.gesture({
       session: params.sessionName,
       requestId: params.req.meta?.requestId,
-      from: reverse ? input.to : input.from,
-      to: reverse ? input.from : input.to,
-      durationMs: input.durationMs,
+      gesture: normalized.gesture,
     });
     if (pauseMs > 0 && index + 1 < count) await sleep(pauseMs);
   }
   if (!result) throw new Error('Swipe orchestration did not execute a gesture.');
-  return result;
+  return {
+    ...result,
+    ...(deprecations.length > 0 ? { deprecations } : {}),
+  };
+}
+
+function swipeMotionAtIndex(
+  input: SwipePayload,
+  pattern: 'one-way' | 'ping-pong',
+  index: number,
+): SwipePayload {
+  const reverse = pattern === 'ping-pong' && index % 2 === 1;
+  if (!reverse) return input;
+  return { ...input, from: input.to, to: input.from };
 }
 
 function gestureReplayFlags(

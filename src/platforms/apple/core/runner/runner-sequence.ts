@@ -1,7 +1,7 @@
 import { AppError, toAppErrorCode } from '../../../../kernel/errors.ts';
 import type { RunnerCommand, RunnerSequenceStep } from './runner-contract.ts';
 
-export const SEQUENCEABLE_RUNNER_STEP_KINDS = ['tap', 'doubleTap', 'longPress', 'drag'] as const;
+export const SEQUENCEABLE_RUNNER_STEP_KINDS = ['tap', 'doubleTap', 'longPress'] as const;
 export type SequenceableRunnerStepKind = (typeof SEQUENCEABLE_RUNNER_STEP_KINDS)[number];
 
 /**
@@ -87,9 +87,6 @@ function validateRunnerSequenceStep(step: RunnerSequenceStep, index: number): vo
       step.kind,
       `sequence step ${index} (${step.kind}) requires finite x and y`,
     );
-  }
-  if (step.kind === 'drag' && (!Number.isFinite(step.x2) || !Number.isFinite(step.y2))) {
-    throw invalidStep(index, step.kind, `sequence step ${index} (drag) requires finite x2 and y2`);
   }
   if (step.durationMs !== undefined) {
     assertInRange(

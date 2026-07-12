@@ -163,7 +163,7 @@ const runnerProtocolCommandFixtures: Record<RunnerCommand['command'], RunnerComm
     steps: [
       { kind: 'tap', x: 120, y: 240 },
       { kind: 'longPress', x: 120, y: 240, durationMs: 300 },
-      { kind: 'drag', x: 10, y: 600, x2: 10, y2: 200, durationMs: 250, pauseMs: 50 },
+      { kind: 'doubleTap', x: 10, y: 600, pauseMs: 50 },
     ],
   },
   gesture: { command: 'gesture' },

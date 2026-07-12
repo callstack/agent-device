@@ -945,7 +945,7 @@ test('sequence surfaces a lifecycle failure without replaying', async () => {
     .mockResolvedValueOnce({
       lifecycleState: 'failed',
       lifecycleErrorCode: 'UNSUPPORTED_OPERATION',
-      lifecycleErrorMessage: 'sequence step 1 (drag) failed',
+      lifecycleErrorMessage: 'sequence step 1 (longPress) failed',
     });
 
   await assert.rejects(
@@ -954,13 +954,13 @@ test('sequence surfaces a lifecycle failure without replaying', async () => {
         command: 'sequence',
         steps: [
           { kind: 'tap', x: 1, y: 2 },
-          { kind: 'drag', x: 3, y: 4, x2: 5, y2: 6 },
+          { kind: 'longPress', x: 3, y: 4 },
         ],
       }),
     (error: unknown) => {
       assert.ok(error instanceof AppError);
       assert.equal(error.code, 'UNSUPPORTED_OPERATION');
-      assert.equal(error.message, 'sequence step 1 (drag) failed');
+      assert.equal(error.message, 'sequence step 1 (longPress) failed');
       return true;
     },
   );

@@ -392,10 +392,10 @@ test('invokeMaestroAssertVisible does not retry stale Android taps after swipes'
 
   assert.equal(response.ok, false);
   assert.deepEqual(calls, [
-    ['gesture', ['swipe', 'left', '300']],
+    ['gesture', []],
     ['wait', ['What is Lorem Ipsum?', '2000']],
     ['snapshot', []],
-    ['gesture', ['swipe', 'left', '300']],
+    ['gesture', []],
     ['wait', ['What is Lorem Ipsum?', '2000']],
     ['snapshot', []],
   ]);
@@ -407,7 +407,7 @@ test('invokeMaestroAssertVisible does not replay a previous iOS swipe after an A
   rememberMaestroRecoverableInteraction(scope, {
     kind: 'swipe',
     command: 'gesture',
-    positionals: ['swipe', 'left', '300'],
+    input: { kind: 'swipe', preset: 'left', durationMs: 300 },
   });
 
   const response = await invokeMaestroAssertVisible({

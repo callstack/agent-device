@@ -259,7 +259,7 @@ async function retryRecentSwipeAfterVisibleMiss(
     data: {
       selector: args.selector,
       swipeCommand: recentSwipe.command,
-      swipePositionals: recentSwipe.positionals,
+      swipeInput: recentSwipe.input,
       timeoutMs: MAESTRO_ASSERTION_POLICY.assertVisibleRetryTimeoutMs,
     },
   });
@@ -368,7 +368,8 @@ async function invokeRecentSwipeRetry(
   return await params.invoke({
     ...params.baseReq,
     command: swipe.command,
-    positionals: swipe.positionals,
+    positionals: [],
+    input: swipe.input,
   });
 }
 

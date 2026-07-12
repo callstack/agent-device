@@ -264,7 +264,7 @@ extension RunnerTests {
       """
       {"command":"sequence","commandId":"seq-1","steps":[
         {"kind":"tap","x":10,"y":20,"synthesized":true},
-        {"kind":"drag","x":10,"y":200,"x2":10,"y2":100,"synthesized":true}
+        {"kind":"longPress","x":10,"y":200,"durationMs":300}
       ]}
       """
     )
@@ -1150,7 +1150,6 @@ extension RunnerTests {
         durationMs: command.durationMs,
         synthesized: command.synthesized == true,
         message: "dragged",
-        dragSemantics: command.dragSemantics,
         synthesizedPolicyKind: .synthesizedDrag
       )
     case .scroll:
@@ -1513,7 +1512,6 @@ extension RunnerTests {
     durationMs: Double?,
     synthesized: Bool,
     message: String,
-    dragSemantics: SynthesizedDragSemantics? = nil,
     synthesizedContext: SynthesizedCoordinateContext? = nil,
     synthesizedPolicyKind: SynthesizedGesturePolicyKind
   ) -> Response {
@@ -1532,7 +1530,6 @@ extension RunnerTests {
       y2: y2,
       durationMs: durationMs,
       message: message,
-      dragSemantics: dragSemantics,
       context: synthesizedContext,
       policyKind: synthesizedPolicyKind
     ) {
@@ -1558,7 +1555,6 @@ extension RunnerTests {
           x2: dragPoints.x2,
           y2: dragPoints.y2,
           durationMs: durationMs,
-          semantics: dragSemantics,
           context: context
         )
       }
@@ -1599,7 +1595,6 @@ extension RunnerTests {
     y2: Double,
     durationMs: Double?,
     message: String,
-    dragSemantics: SynthesizedDragSemantics?,
     context: SynthesizedCoordinateContext?,
     policyKind: SynthesizedGesturePolicyKind
   ) -> Response? {
@@ -1653,7 +1648,6 @@ extension RunnerTests {
         x2: plan.points.x2,
         y2: plan.points.y2,
         durationMs: durationMs,
-        semantics: dragSemantics,
         context: plan.context
       )
     }

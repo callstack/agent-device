@@ -42,7 +42,7 @@ export type MaestroRecoverableTap = {
 
 export type MaestroRecoverableSwipe = {
   command: 'gesture' | 'swipe';
-  positionals: string[];
+  input: Record<string, unknown>;
 };
 
 export function errorResponse(

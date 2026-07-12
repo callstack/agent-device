@@ -11,6 +11,7 @@ import {
   readInteractionTargetFromPositionals,
 } from '../../core/interaction-positionals.ts';
 import { AppError } from '../../kernel/errors.ts';
+import { swipePayloadFromPositionals } from '../../contracts/gesture-normalization.ts';
 import type { ScrollInputDirection } from './runtime/gestures.ts';
 import {
   commonInputFromFlags,
@@ -29,7 +30,7 @@ import {
   settleInputFromFlags,
   targetInputFromClientTarget,
 } from '../cli-grammar/common.ts';
-import type { CliReader, DaemonWriter, CommandInput } from '../cli-grammar/types.ts';
+import type { CliReader, DaemonWriter } from '../cli-grammar/types.ts';
 
 export const interactionCliReaders = {
   click: (positionals, flags) => ({
@@ -61,12 +62,11 @@ export const interactionCliReaders = {
   },
   swipe: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
-    from: { x: Number(positionals[0]), y: Number(positionals[1]) },
-    to: { x: Number(positionals[2]), y: Number(positionals[3]) },
-    durationMs: optionalCliNumber(positionals[4]),
-    count: flags.count,
-    pauseMs: flags.pauseMs,
-    pattern: flags.pattern,
+    ...swipePayloadFromPositionals(positionals, {
+      count: flags.count,
+      pauseMs: flags.pauseMs,
+      pattern: flags.pattern,
+    }),
   }),
   focus: (positionals, flags) => ({
     ...commonInputFromFlags(flags),
@@ -118,7 +118,7 @@ export const interactionDaemonWriters = {
     longPressPositionals(input as LongPressOptions),
   ),
   swipe: (input) =>
-    request(PUBLIC_COMMANDS.swipe, swipePositionals(input), input, {
+    request(PUBLIC_COMMANDS.swipe, [], input, {
       from: input.from,
       to: input.to,
       durationMs: input.durationMs,
@@ -159,16 +159,6 @@ function typePositionals(input: TypeTextOptions): string[] {
 
 function fillPositionals(input: FillOptions): string[] {
   return [...interactionTargetPositionals(input), input.text];
-}
-
-function swipePositionals(input: CommandInput): string[] {
-  return [
-    String(input.from?.x),
-    String(input.from?.y),
-    String(input.to?.x),
-    String(input.to?.y),
-    ...optionalNumber(input.durationMs),
-  ];
 }
 
 function readScrollDirection(value: string | undefined): ScrollInputDirection {
