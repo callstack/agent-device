@@ -2,6 +2,7 @@ import { AppError } from '../kernel/errors.ts';
 import type { PublicPlatform } from '../kernel/device.ts';
 import type { Point, Rect } from '../kernel/snapshot.ts';
 import type { ScrollDirection } from './scroll-gesture.ts';
+import { GESTURE_DURATION_MAX_MS, GESTURE_DURATION_MIN_MS } from './gesture-plan-types.ts';
 import type {
   GesturePlan,
   GestureSemanticInput,
@@ -345,8 +346,15 @@ function normalizeViewport(viewport: Rect): Rect {
 
 function normalizeDuration(value: number | undefined, fallback: number, field: string): number {
   const durationMs = value ?? fallback;
-  if (!Number.isInteger(durationMs) || durationMs < 16 || durationMs > 10_000) {
-    throw new AppError('INVALID_ARGS', `${field} must be an integer between 16 and 10000`);
+  if (
+    !Number.isInteger(durationMs) ||
+    durationMs < GESTURE_DURATION_MIN_MS ||
+    durationMs > GESTURE_DURATION_MAX_MS
+  ) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `${field} must be an integer between ${GESTURE_DURATION_MIN_MS} and ${GESTURE_DURATION_MAX_MS}`,
+    );
   }
   return durationMs;
 }

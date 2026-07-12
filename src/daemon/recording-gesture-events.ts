@@ -14,7 +14,9 @@ export function buildCanonicalGestureEvents(
 ): RecordingGestureEvent[] {
   switch (result.kind) {
     case 'pan':
-    case 'fling': {
+    case 'fling':
+    case 'rotate':
+    case 'transform': {
       const from = readPoint(result.from);
       const to = readPoint(result.to);
       if (!from || !to) return [];

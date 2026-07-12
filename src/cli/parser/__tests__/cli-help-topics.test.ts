@@ -228,6 +228,8 @@ test('usageForCommand resolves workflow help topic', async () => {
   assert.match(help, /prefer isolated gesture pan --pointer-count 2, gesture pinch/);
   assert.match(help, /gesture pan is one finger by default/);
   assert.match(help, /--pointer-count 2 for a parallel two-finger pan/);
+  assert.match(help, /falls back to the visible snapshot union/);
+  assert.match(help, /tvOS coordinate pan and fling preserve only the dominant direction/);
   assert.match(help, /longpress accepts coordinates, @refs, or selectors/);
   assert.match(help, /use help react-native for Metro\/Re\.Pack Fast Refresh/);
   assert.match(help, /iOS Allow Paste prompt cannot be exercised under XCUITest/);

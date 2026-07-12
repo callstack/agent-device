@@ -280,6 +280,74 @@ test('canonical gesture results record pan, fling, and pinch visualization telem
   ]);
 });
 
+test('canonical rotate records centroid visualization telemetry', () => {
+  const session = makeSession();
+
+  recordTouchVisualizationEvent(
+    session,
+    'gesture',
+    ['rotate', '35', '201', '437'],
+    {
+      kind: 'rotate',
+      from: { x: 201, y: 437 },
+      to: { x: 201, y: 437 },
+      durationMs: 300,
+      pointerCount: 2,
+    },
+    {},
+    1_500,
+    1_800,
+  );
+
+  assert.deepEqual(session.recording?.gestureEvents, [
+    {
+      kind: 'swipe',
+      tMs: 500,
+      x: 201,
+      y: 437,
+      x2: 201,
+      y2: 437,
+      referenceWidth: 402,
+      referenceHeight: 874,
+      durationMs: 300,
+    },
+  ]);
+});
+
+test('canonical transform records centroid travel visualization telemetry', () => {
+  const session = makeSession();
+
+  recordTouchVisualizationEvent(
+    session,
+    'gesture',
+    ['transform', '201', '437', '40', '-30', '1.4', '25', '600'],
+    {
+      kind: 'transform',
+      from: { x: 201, y: 437 },
+      to: { x: 241, y: 407 },
+      durationMs: 600,
+      pointerCount: 2,
+    },
+    {},
+    1_500,
+    2_100,
+  );
+
+  assert.deepEqual(session.recording?.gestureEvents, [
+    {
+      kind: 'swipe',
+      tMs: 500,
+      x: 201,
+      y: 437,
+      x2: 241,
+      y2: 407,
+      referenceWidth: 402,
+      referenceHeight: 874,
+      durationMs: 600,
+    },
+  ]);
+});
+
 test('telemetry is still captured when touch overlays are hidden', () => {
   const session = makeSession();
   if (session.recording) {

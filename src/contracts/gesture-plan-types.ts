@@ -3,6 +3,9 @@ import type { ScrollDirection } from './scroll-gesture.ts';
 
 export type GesturePointerCount = 1 | 2;
 
+export const GESTURE_DURATION_MIN_MS = 16;
+export const GESTURE_DURATION_MAX_MS = 10_000;
+
 export type GestureIntent = 'fling' | 'pan' | 'pinch' | 'rotate' | 'transform';
 
 export type GestureSemanticInput =

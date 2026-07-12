@@ -7,7 +7,11 @@ import {
   type ScrollDirection,
   type SwipePreset,
 } from './scroll-gesture.ts';
-import type { GesturePointerCount } from './gesture-plan-types.ts';
+import {
+  GESTURE_DURATION_MAX_MS,
+  GESTURE_DURATION_MIN_MS,
+  type GesturePointerCount,
+} from './gesture-plan-types.ts';
 
 export const GESTURE_KINDS = ['pan', 'fling', 'swipe', 'pinch', 'rotate', 'transform'] as const;
 
@@ -74,7 +78,7 @@ export function readGesturePayload(input: unknown): GesturePayload {
       pointerCount: readOptionalInteger(record, 'pointerCount', { min: 1, max: 2 }) as
         | GesturePointerCount
         | undefined,
-      durationMs: readOptionalInteger(record, 'durationMs', { min: 0 }),
+      durationMs: readOptionalGestureDuration(record),
     };
   }
   if (record.pointerCount !== undefined) {
@@ -86,14 +90,14 @@ export function readGesturePayload(input: unknown): GesturePayload {
       direction: readEnum(record, 'direction', SCROLL_DIRECTIONS),
       origin: readPoint(record, 'origin'),
       distance: readOptionalInteger(record, 'distance', { min: 0 }),
-      durationMs: readOptionalInteger(record, 'durationMs', { min: 0 }),
+      durationMs: readOptionalGestureDuration(record),
     };
   }
   if (kind === 'swipe') {
     return {
       kind,
       preset: readEnum(record, 'preset', SWIPE_PRESETS),
-      durationMs: readOptionalInteger(record, 'durationMs', { min: 0 }),
+      durationMs: readOptionalGestureDuration(record),
     };
   }
   if (kind === 'pinch') {
@@ -117,8 +121,20 @@ export function readGesturePayload(input: unknown): GesturePayload {
     delta: readPoint(record, 'delta'),
     scale: readNumber(record, 'scale'),
     degrees: readNumber(record, 'degrees'),
-    durationMs: readOptionalInteger(record, 'durationMs', { min: 0 }),
+    durationMs: readOptionalGestureDuration(record),
   };
+}
+
+function readOptionalGestureDuration(record: Record<string, unknown>): number | undefined {
+  const durationMs = readOptionalInteger(record, 'durationMs');
+  if (durationMs === undefined) return undefined;
+  if (durationMs < GESTURE_DURATION_MIN_MS || durationMs > GESTURE_DURATION_MAX_MS) {
+    throw new AppError(
+      'INVALID_ARGS',
+      `Expected durationMs to be an integer between ${GESTURE_DURATION_MIN_MS} and ${GESTURE_DURATION_MAX_MS}.`,
+    );
+  }
+  return durationMs;
 }
 
 function readRecord(input: unknown): Record<string, unknown> {

@@ -306,6 +306,8 @@ Navigation and gestures:
     agent-device wait text "pinch changed yes" 3000 --platform android
     agent-device wait text "rotate changed yes" 3000 --platform android
   If Android needs exact app-state values, prefer isolated gesture pan --pointer-count 2, gesture pinch, or gesture rotate commands over one combined transform.
+  Gesture planning prefers the active-app frame. A backend without a gesture viewport resolver falls back to the visible snapshot union, which can be less accurate near edges.
+  tvOS coordinate pan and fling preserve only the dominant direction as a remote swipe; authored endpoints and duration are not preserved.
   macOS context menus are secondary clicks, not long presses:
     agent-device click @e66 --button secondary --platform macos
     agent-device snapshot -i --platform macos
