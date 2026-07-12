@@ -5,7 +5,7 @@ import { isApplePlatform, type PlatformSelector } from '../../kernel/device.ts';
 import { resolveRequestTrackingId } from '../../request/cancel.ts';
 import { SessionStore } from '../session-store.ts';
 import { readReplayScriptMetadata, type ReplayScriptMetadata } from '../../replay/script.ts';
-import { readMaestroFlowName } from '../../compat/maestro/replay-flow.ts';
+import { parseMaestroProgram } from '../../compat/maestro/program-ir-parser.ts';
 
 const GLOB_PATTERN_CHARS = /[*?[\]{}]/;
 
@@ -288,7 +288,7 @@ function readReplayTestTitle(
   replayBackend: string | undefined,
 ): string | undefined {
   return isMaestroReplayBackend(replayBackend) && path.extname(filePath) !== '.ad'
-    ? readMaestroFlowName(script)
+    ? parseMaestroProgram(script, { sourcePath: filePath }).config.name
     : undefined;
 }
 
