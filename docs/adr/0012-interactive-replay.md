@@ -6,12 +6,17 @@ Accepted (2026-07-10). Migration steps 1-6 have shipped; steps 7 (benchmark exte
 (agent-supervised re-record repair) remain. See [Migration progress](#migration-progress) for the
 per-step landing record.
 
-## Context
+## Context (historical baseline)
 
-Replay today is deterministic. `.ad` scripts are plain text — one action per line, `#` comments, a
-`context platform=... device=... theme=...` header (`src/replay/script.ts`) — recorded via
-`open --save-script` (`src/daemon/session-action-recorder.ts`, `src/daemon/session-script-writer.ts`)
-or hand-written, and executed step-by-step by `runReplayScriptFile`
+This section records the repository state audited on 2026-07-10, before migration steps 1-6 shipped.
+Its present-tense observations are historical evidence; [Migration progress](#migration-progress) is
+the authoritative record of current behavior.
+
+At acceptance, replay was deterministic. `.ad` scripts were plain text — one action per line, `#`
+comments, and a `context platform=... device=... theme=...` header (`src/replay/script.ts`) — recorded
+via `open --save-script` (`src/daemon/session-action-recorder.ts`,
+`src/daemon/session-script-writer.ts`) or hand-written, and executed step-by-step by
+`runReplayScriptFile`
 (`src/daemon/handlers/session-replay-runtime.ts`) under the daemon's `replay`/`test` commands
 (`src/daemon/handlers/session-replay.ts`). Recorded touch/fill/get targets are selector chains with
 `||` alternates (`buildSelectorChainForNode(...).join(' || ')`,
@@ -20,7 +25,7 @@ or hand-written, and executed step-by-step by `runReplayScriptFile`
 (`src/compat/maestro/`); progress is step-indexed (`stepIndex`/`stepTotal` in
 `emitReplayTestActionProgress`, `session-replay-runtime.ts:243-260`).
 
-Recovery is opt-in `--update`/`-u` healing (`replayUpdate` flag,
+Recovery was opt-in `--update`/`-u` healing (`replayUpdate` flag,
 `src/commands/cli-grammar/flag-definitions-workflow.ts`). It only fires after a step has already
 returned a hard failure (`session-replay-runtime.ts:118-149`: `if (!shouldUpdate) return failure; ...
 healReplayAction(...)`), and it only retries the SAME recorded selector material —
@@ -69,14 +74,14 @@ zero on the happy path and paying only where reality diverged from the recording
   ... then smallest on-screen area") but never disclosed per response — an agent that hasn't read the
   help topic, or whose target moved between recording and replay, gets no signal a heuristic rather than
   an exact match chose its target.
-- **(c) No target-binding verification exists anywhere in this path.** `--verify`
+- **(c) No target-binding verification existed in this path at acceptance.** `--verify`
   (`captureEvidenceBaseline`, `resolution.ts:45-58,104-134`; the `verifyEvidence` guarantee cell in ADR
   0011's registry) attaches a pre/post-action node diff so the caller can see SOMETHING changed — it
   says nothing about whether the CORRECT node was the one tapped. A wrong-but-plausible pick (the
   sibling "Prevent Remove" button) produces a real, visible diff and is still the wrong action.
-- **(d) Heal auditability is a bare count.** A successful `--update` run returns
+- **(d) Heal auditability was a bare count.** A successful `--update` run returned
   `{ replayed, healed, ... }` (`session-replay-runtime.ts:186-195`) — `healed` is a number, nothing
-  else — and rewrites the `.ad` file in place via `writeReplayScript`
+  else — and rewrote the `.ad` file in place via `writeReplayScript`
   (`session-replay-runtime.ts:182-184`, `src/replay/script.ts:459-484`) with no diff shown anywhere in
   the response.
 - **(e) This silent-pick default is in real tension with this repo's general posture toward ambiguity.**
