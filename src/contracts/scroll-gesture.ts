@@ -65,6 +65,16 @@ export type SwipePresetGesturePlan = {
   referenceHeight: number;
 };
 
+export type InPageSwipeGesturePlan = {
+  direction: ScrollDirection;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  referenceWidth: number;
+  referenceHeight: number;
+};
+
 const DEFAULT_SCROLL_AMOUNT = 0.6;
 const DEFAULT_EDGE_PADDING_FRACTION = 0.05;
 // Edge presets stay close to the system gesture boundary without emitting edge coordinates.
@@ -126,25 +136,26 @@ export function buildSwipePresetGesturePlan(
   preset: SwipePreset,
   frame: GestureReferenceFrame,
 ): SwipePresetGesturePlan {
-  // Mid-screen keeps in-page swipes on visible content; lower lanes can land in blank pager space.
-  const horizontalLanePercent = 50;
-  const inPageStartPercent = 85;
-  const inPageEndPercent = 15;
-  const [startPercent, endPercent, yPercent] =
-    preset === 'left'
-      ? [inPageStartPercent, inPageEndPercent, horizontalLanePercent]
-      : preset === 'right'
-        ? [inPageEndPercent, inPageStartPercent, horizontalLanePercent]
-        : preset === 'left-edge'
-          ? [99, 15, 50]
-          : [1, 85, 50];
+  if (preset === 'left' || preset === 'right') {
+    const plan = buildInPageSwipeGesturePlan(preset, frame);
+    return {
+      preset,
+      x1: plan.x1,
+      y1: plan.y1,
+      x2: plan.x2,
+      y2: plan.y2,
+      referenceWidth: plan.referenceWidth,
+      referenceHeight: plan.referenceHeight,
+    };
+  }
+  const [startPercent, endPercent] = preset === 'left-edge' ? [99, 15] : [1, 85];
   const start = clampGesturePoint(
-    pointFromPercent(frame, startPercent, yPercent),
+    pointFromPercent(frame, startPercent, 50),
     frame,
     SWIPE_PRESET_EDGE_MARGIN_PX,
   );
   const end = clampGesturePoint(
-    pointFromPercent(frame, endPercent, yPercent),
+    pointFromPercent(frame, endPercent, 50),
     frame,
     SWIPE_PRESET_EDGE_MARGIN_PX,
   );
@@ -170,6 +181,48 @@ export function gestureDirectionDelta(direction: ScrollDirection, distance: numb
     case 'right':
       return { x: distance, y: 0 };
   }
+}
+
+/** Plans a centered, edge-inset finger motion that remains inside app content. */
+export function buildInPageSwipeGesturePlan(
+  direction: ScrollDirection,
+  frame: GestureReferenceFrame,
+): InPageSwipeGesturePlan {
+  // These insets avoid system-edge gestures while retaining enough travel for pagers.
+  const startPercent = 85;
+  const endPercent = 15;
+  const centerPercent = 50;
+  const forward = direction === 'left' || direction === 'up';
+  const startAxisPercent = forward ? startPercent : endPercent;
+  const endAxisPercent = forward ? endPercent : startPercent;
+  const vertical = direction === 'up' || direction === 'down';
+  const start = clampGesturePoint(
+    pointFromPercent(
+      frame,
+      vertical ? centerPercent : startAxisPercent,
+      vertical ? startAxisPercent : centerPercent,
+    ),
+    frame,
+    SWIPE_PRESET_EDGE_MARGIN_PX,
+  );
+  const end = clampGesturePoint(
+    pointFromPercent(
+      frame,
+      vertical ? centerPercent : endAxisPercent,
+      vertical ? endAxisPercent : centerPercent,
+    ),
+    frame,
+    SWIPE_PRESET_EDGE_MARGIN_PX,
+  );
+  return {
+    direction,
+    x1: start.x,
+    y1: start.y,
+    x2: end.x,
+    y2: end.y,
+    referenceWidth: frame.referenceWidth,
+    referenceHeight: frame.referenceHeight,
+  };
 }
 
 export function inferGestureReferenceFrame(

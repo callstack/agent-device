@@ -3,10 +3,32 @@ import assert from 'node:assert/strict';
 import { AppError } from '../kernel/errors.ts';
 import {
   assertScrollGestureInput,
+  buildInPageSwipeGesturePlan,
   buildScrollGesturePlan,
   clampGestureCoordinate,
   pointFromPercentInFrame,
 } from './scroll-gesture.ts';
+
+test('buildInPageSwipeGesturePlan applies one inset lane policy in every direction', () => {
+  const frame = { referenceWidth: 400, referenceHeight: 800 };
+
+  assert.deepEqual(buildInPageSwipeGesturePlan('left', frame), {
+    direction: 'left',
+    x1: 340,
+    y1: 400,
+    x2: 60,
+    y2: 400,
+    ...frame,
+  });
+  assert.deepEqual(buildInPageSwipeGesturePlan('down', frame), {
+    direction: 'down',
+    x1: 200,
+    y1: 120,
+    x2: 200,
+    y2: 680,
+    ...frame,
+  });
+});
 
 // The buildScrollGesturePlan vectors below are the canonical cross-language parity vectors,
 // mirrored by RunnerTests+ScrollGesture.swift (runnerScrollGesturePlan). If you change the scroll
