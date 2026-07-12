@@ -71,13 +71,10 @@ export async function resolveMaestroTarget(
   operations: MaestroRuntimeOperations,
   optional = false,
 ): Promise<MaestroTargetResolution | undefined> {
-  const cached = readCachedTarget(request.cachedObservation, selector, request.generation, query);
-  const match =
-    cached ??
-    (await operations.resolveTarget(
-      { selector, ...query },
-      operationContext(request, request.command),
-    ));
+  const match = await operations.resolveTarget(
+    { selector, ...query },
+    operationContext(request, request.command),
+  );
   const validated = validateTargetMatch(match, request.generation);
   if (!validated.matched || !validated.visible || !validated.rect) {
     if (optional) return undefined;
@@ -111,44 +108,11 @@ export function observationForTarget(target: MaestroTargetResolution): MaestroOb
   };
 }
 
-function readCachedTarget(
-  observation: MaestroObservation | undefined,
-  selector: MaestroSelector,
-  generation: number,
-  query: Pick<MaestroTargetQuery, 'purpose' | 'index' | 'childOf'>,
-): MaestroTargetMatch | undefined {
-  if (query.index !== undefined || query.childOf !== undefined) return undefined;
-  if (!observation || observation.generation !== generation) return undefined;
-  const evidence = observation.evidence;
-  if (!evidence) return undefined;
-  if (!selectorsEqual(evidence.selector, selector) || !observation.matched || !evidence.visible) {
-    return undefined;
-  }
-  return {
-    generation,
-    matched: observation.matched,
-    visible: evidence.visible,
-    candidateCount: evidence.candidateCount,
-    ...(evidence.frame ? { rect: evidence.frame } : {}),
-    ...(evidence.ref ? { ref: evidence.ref } : {}),
-  };
-}
-
 function isRect(value: unknown): value is { x: number; y: number; width: number; height: number } {
   if (!value || typeof value !== 'object') return false;
   const rect = value as Record<string, unknown>;
   return ['x', 'y', 'width', 'height'].every(
     (key) => typeof rect[key] === 'number' && Number.isFinite(rect[key]),
-  );
-}
-
-function selectorsEqual(left: MaestroSelector, right: MaestroSelector): boolean {
-  return (
-    left.text === right.text &&
-    left.id === right.id &&
-    left.label === right.label &&
-    left.enabled === right.enabled &&
-    left.selected === right.selected
   );
 }
 

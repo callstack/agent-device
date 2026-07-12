@@ -122,6 +122,15 @@ describe('MaestroRuntimePort', () => {
 
   test('keeps selector evidence and target geometry in the current generation', async () => {
     const resolved: Record<string, MaestroTargetMatch> = {
+      ready: {
+        generation: 0,
+        matched: true,
+        visible: true,
+        candidateCount: 1,
+        rect: { x: 24, y: 44, width: 120, height: 48 },
+        viewport: { x: 0, y: 0, width: 402, height: 874 },
+        ref: 'e5',
+      },
       pager: {
         generation: 1,
         matched: true,
@@ -182,14 +191,14 @@ describe('MaestroRuntimePort', () => {
     const result = await executeMaestroProgram(program, createMaestroRuntimePort(operations));
 
     expect(result.generation).toBe(2);
-    expect(resolveTarget).toHaveBeenCalledOnce();
+    expect(resolveTarget).toHaveBeenCalledTimes(2);
     expect(tapOn).toHaveBeenCalledWith(
       expect.objectContaining({
         target: expect.objectContaining({
-          point: { x: 80, y: 64 },
+          point: { x: 84, y: 68 },
           resolution: expect.objectContaining({
-            ref: 'e4',
-            rect: { x: 20, y: 40, width: 120, height: 48 },
+            ref: 'e5',
+            rect: { x: 24, y: 44, width: 120, height: 48 },
           }),
         }),
       }),
