@@ -1,8 +1,11 @@
 // Import-direction lint — enforces the folder DAG established by the Phase-5
 // folder moves (see CONTEXT.md, "Architecture: folder DAG + layering lint").
 //
-// Ranked target spine (imports point DOWN, toward the kernel sink; `A ◄ B` = B imports A):
-//   kernel ◄ platforms ◄ core ◄ commands ◄ { client, daemon-server } ◄ daemon-client ◄ cli
+// Ranked target spine, as rank groups lowest (kernel sink) to highest. `A ◄ B` means B may not
+// be outranked by A (the back-edge order the gate rejects), NOT that every displayed import exists:
+//   kernel ◄ { contracts, request, selectors, platforms } ◄ core ◄ { commands, cli-schema }
+//         ◄ { client, daemon-server } ◄ daemon-client ◄ cli
+// (authoritative ranks: `TARGET_DAG_RANK` in model.ts)
 //
 // This gate enforces three things, with two different scopes:
 //   - GLOBALLY, across every production source file: the R1-R3 move rules and

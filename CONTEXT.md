@@ -96,9 +96,11 @@ The perfect-shape refactor is complete and merged. Its end-state:
 - Folder DAG + layering lint. `scripts/layering/check.ts` enforces two different scopes in CI.
   GLOBALLY, across every production source file, it enforces the R1-R3 move rules
   (kernel-sink, commands-floor, platforms-seam) and rejects all production static value-import
-  cycles. Separately, it ranks an explicit target spine —
-  `kernel ◄ platforms ◄ core ◄ commands ◄ { client, daemon-server } ◄ daemon-client ◄ cli` — and
-  rejects every back-edge within it. Root entrypoints and peripheral zones (`mcp`, `compat`,
+  cycles. Separately, it ranks an explicit target spine — as rank groups, lowest (kernel sink) to
+  highest, where `A ◄ B` means B may not be outranked by A (the back-edge order the gate rejects), NOT
+  that every displayed import exists:
+  `kernel ◄ { contracts, request, selectors, platforms } ◄ core ◄ { commands, cli-schema } ◄ { client, daemon-server } ◄ daemon-client ◄ cli` —
+  and rejects every back-edge within it. Root entrypoints and peripheral zones (`mcp`, `compat`,
   `remote`, `metro`, `replay`, `recording`, `snapshot`, `screenshot-diff`, `cloud-webdriver`,
   `sdk`, `utils`) are deliberately unranked (`UNRANKED_ZONES` in `scripts/layering/model.ts`):
   they still obey R1-R4, but the gate asserts no total back-edge order over them. It is not a
