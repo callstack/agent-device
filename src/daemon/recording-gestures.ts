@@ -311,7 +311,9 @@ function buildSwipeEvents(
   return Array.from({ length: count }, (_, index) => {
     const { startX, startY, endX, endY } = resolveSwipePathForIndex(index, pattern, x1, y1, x2, y2);
     const startTime = tMs + index * (durationMs + pauseMs);
-    return buildSwipeTravelEvent(startTime, startX, startY, endX, endY, durationMs, referenceFrame);
+    return buildSwipeTravelEvent(startTime, startX, startY, endX, endY, durationMs, {
+      referenceFrame,
+    });
   });
 }
 

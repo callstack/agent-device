@@ -314,17 +314,17 @@ test('canonical rotate records centroid visualization telemetry', () => {
   ]);
 });
 
-test('canonical transform records centroid travel visualization telemetry', () => {
+test('canonical multi-touch travel does not acquire one-finger back-swipe semantics', () => {
   const session = makeSession();
 
   recordTouchVisualizationEvent(
     session,
     'gesture',
-    ['transform', '201', '437', '40', '-30', '1.4', '25', '600'],
+    ['transform', '10', '437', '170', '0', '1.4', '25', '600'],
     {
       kind: 'transform',
-      from: { x: 201, y: 437 },
-      to: { x: 241, y: 407 },
+      from: { x: 10, y: 437 },
+      to: { x: 180, y: 437 },
       durationMs: 600,
       pointerCount: 2,
     },
@@ -332,18 +332,44 @@ test('canonical transform records centroid travel visualization telemetry', () =
     1_500,
     2_100,
   );
+  recordTouchVisualizationEvent(
+    session,
+    'gesture',
+    ['pan', '392', '437', '-170', '0', '400'],
+    {
+      kind: 'pan',
+      from: { x: 392, y: 437 },
+      to: { x: 222, y: 437 },
+      durationMs: 400,
+      pointerCount: 2,
+    },
+    {},
+    2_200,
+    2_600,
+  );
 
   assert.deepEqual(session.recording?.gestureEvents, [
     {
       kind: 'swipe',
       tMs: 500,
-      x: 201,
+      x: 10,
       y: 437,
-      x2: 241,
-      y2: 407,
+      x2: 180,
+      y2: 437,
       referenceWidth: 402,
       referenceHeight: 874,
       durationMs: 600,
+    },
+    {
+      kind: 'swipe',
+      tMs: 1_200,
+      x: 392,
+      y: 437,
+      x2: 222,
+      y2: 437,
+      referenceWidth: 402,
+      referenceHeight: 874,
+      durationMs: 400,
     },
   ]);
 });

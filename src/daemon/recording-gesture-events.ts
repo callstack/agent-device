@@ -5,6 +5,11 @@ import { readRecordingNumber } from './recording-values.ts';
 const DEFAULT_GESTURE_TRAVEL_DURATION_MS = 250;
 const DEFAULT_PINCH_DURATION_MS = 280;
 
+type SwipeTravelEventOptions = {
+  referenceFrame?: ReferenceFrame;
+  classifyBackSwipe?: boolean;
+};
+
 export function buildCanonicalGestureEvents(
   positionals: string[],
   result: Record<string, unknown>,
@@ -20,6 +25,9 @@ export function buildCanonicalGestureEvents(
       const from = readPoint(result.from);
       const to = readPoint(result.to);
       if (!from || !to) return [];
+      const allowBackSwipeClassification =
+        (result.kind === 'pan' || result.kind === 'fling') &&
+        readRecordingNumber(result.pointerCount) !== 2;
       return [
         buildSwipeTravelEvent(
           tMs,
@@ -32,7 +40,10 @@ export function buildCanonicalGestureEvents(
             result.durationMs,
             DEFAULT_GESTURE_TRAVEL_DURATION_MS,
           ),
-          referenceFrame,
+          {
+            referenceFrame,
+            classifyBackSwipe: allowBackSwipeClassification,
+          },
         ),
       ];
     }
@@ -68,9 +79,10 @@ export function buildSwipeTravelEvent(
   x2: number,
   y2: number,
   durationMs: number,
-  referenceFrame?: ReferenceFrame,
+  options: SwipeTravelEventOptions = {},
 ): RecordingGestureEvent {
-  const kind = classifySwipeKind(x, y, x2, y2, referenceFrame);
+  const { referenceFrame, classifyBackSwipe = true } = options;
+  const kind = classifyBackSwipe ? classifySwipeKind(x, y, x2, y2, referenceFrame) : 'swipe';
   if (kind === 'back-swipe') {
     return {
       kind,
