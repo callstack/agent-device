@@ -8,6 +8,7 @@ import {
   listenHttpServer,
   listenNetServer,
 } from '../../../src/daemon/server/transport.ts';
+import { getRequestSignal } from '../../../src/request/cancel.ts';
 import {
   closeLoopbackServer,
   skipWhenLoopbackUnavailable,
@@ -73,6 +74,95 @@ test('Provider-backed integration daemon socket transport frames requests and no
     await closeLoopbackServer(server);
   }
 });
+
+// A socket client that vanishes mid-request must cancel that connection's
+// in-flight request via its request-scoped signal — never through a global
+// Apple-runner abort, and never touching another connection's request.
+test('socket disconnect cancels only the disconnected connection in-flight request', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t)) return;
+
+  const disconnectedRequestId = 'req-socket-disconnected';
+  const survivorRequestId = 'req-socket-survivor';
+  let markDisconnectedStarted: () => void = () => {};
+  const disconnectedStarted = new Promise<void>((resolve) => {
+    markDisconnectedStarted = resolve;
+  });
+  let markSurvivorStarted: () => void = () => {};
+  const survivorStarted = new Promise<void>((resolve) => {
+    markSurvivorStarted = resolve;
+  });
+  let releaseSurvivor: () => void = () => {};
+  const survivorReleased = new Promise<void>((resolve) => {
+    releaseSurvivor = resolve;
+  });
+  let resolveDisconnectedDone: () => void = () => {};
+  const disconnectedDone = new Promise<void>((resolve) => {
+    resolveDisconnectedDone = resolve;
+  });
+  let survivorSignalAbortedDuringPeerTeardown = false;
+
+  const server = createSocketServer(async (req: DaemonRequest): Promise<DaemonResponse> => {
+    if (req.meta?.requestId === disconnectedRequestId) {
+      const signal = getRequestSignal(disconnectedRequestId);
+      assert.ok(signal, 'the disconnected request should have a registered signal');
+      markDisconnectedStarted();
+      await waitForAbort(signal);
+      survivorSignalAbortedDuringPeerTeardown =
+        getRequestSignal(survivorRequestId)?.aborted ?? false;
+      resolveDisconnectedDone();
+      releaseSurvivor();
+      return { ok: true, data: {} };
+    }
+    markSurvivorStarted();
+    await survivorReleased;
+    return { ok: true, data: { survived: true } };
+  });
+
+  try {
+    const port = await listenNetServer(server);
+    const survivorClient = await connectSocket(port);
+    survivorClient.write(
+      `${JSON.stringify({
+        token: 'provider-scenario-token',
+        session: 'survivor',
+        command: 'session_list',
+        positionals: [],
+        meta: { requestId: survivorRequestId },
+      })}\n`,
+    );
+    await survivorStarted;
+
+    const disconnectedClient = await connectSocket(port);
+    disconnectedClient.write(
+      `${JSON.stringify({
+        token: 'provider-scenario-token',
+        session: 'disconnected',
+        command: 'session_list',
+        positionals: [],
+        meta: { requestId: disconnectedRequestId },
+      })}\n`,
+    );
+    await disconnectedStarted;
+    disconnectedClient.destroy();
+
+    await disconnectedDone;
+    assert.equal(
+      survivorSignalAbortedDuringPeerTeardown,
+      false,
+      'a peer socket disconnect must not cancel another connection request',
+    );
+    survivorClient.destroy();
+  } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
+async function waitForAbort(signal: AbortSignal): Promise<void> {
+  if (signal.aborted) return;
+  await new Promise<void>((resolve) => {
+    signal.addEventListener('abort', () => resolve(), { once: true });
+  });
+}
 
 async function connectSocket(port: number): Promise<net.Socket> {
   return await new Promise((resolve, reject) => {

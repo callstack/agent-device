@@ -25,6 +25,7 @@ import type { LeaseRegistry } from '../lease-registry.ts';
 import { releaseSessionLease } from '../lease-lifecycle.ts';
 import type { LeaseLifecycleProvider } from './lease.ts';
 import {
+  reportSessionCleanupFailures,
   restoreSessionAndroidIme,
   stopAppleRunnerForClose,
   stopSessionAndroidNativePerfCapture,
@@ -32,6 +33,7 @@ import {
   stopSessionAppLog,
   stopSessionApplePerfCapture,
   stopSessionAudioProbe,
+  type SessionCleanupFailure,
 } from '../session-teardown.ts';
 
 async function maybeShutdownSessionTarget(params: {
@@ -72,21 +74,41 @@ export async function handleCloseCommand(params: {
     return await closeWithoutSession(req, logPath);
   }
   let providerData: Record<string, unknown> | undefined;
+  // Resource teardown is failure-isolated: a rejected step is collected instead of
+  // short-circuiting the rest, so every subsequent resource (and the runner stop)
+  // is still attempted. Lease release and session deletion below run regardless,
+  // and any collected failures are surfaced as an aggregate after cleanup.
+  const cleanupFailures: SessionCleanupFailure[] = [];
+  const attemptCleanup = async (step: string, run: () => Promise<void>): Promise<void> => {
+    try {
+      await run();
+    } catch (error) {
+      cleanupFailures.push({ step, error });
+    }
+  };
   try {
-    await stopSessionAppLog(session);
-    await stopSessionAudioProbe(session, 'session-close');
-    await stopSessionApplePerfCapture(session);
-    await stopSessionAndroidNativePerfCapture(session);
-    await stopSessionAndroidSnapshotHelper(session);
-    await restoreSessionAndroidIme(session, sessionStore.resolveDaemonStateDir());
+    await attemptCleanup('app_log', () => stopSessionAppLog(session));
+    await attemptCleanup('audio_probe', async () => {
+      await stopSessionAudioProbe(session, 'session-close');
+    });
+    await attemptCleanup('apple_perf', () => stopSessionApplePerfCapture(session));
+    await attemptCleanup('android_native_perf', () => stopSessionAndroidNativePerfCapture(session));
+    await attemptCleanup('android_snapshot_helper', () =>
+      stopSessionAndroidSnapshotHelper(session),
+    );
+    await attemptCleanup('android_ime', () =>
+      restoreSessionAndroidIme(session, sessionStore.resolveDaemonStateDir()),
+    );
     if (shouldDispatchPlatformClose(req, session)) {
       if (shouldStopAppleRunnerBeforeTargetedClose(session)) {
-        await stopAppleRunnerForClose(session);
+        await attemptCleanup('apple_runner_pre_close', () => stopAppleRunnerForClose(session));
       }
-      await dispatchCommand(session.device, 'close', req.positionals ?? [], req.flags?.out, {
-        ...contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath),
+      await attemptCleanup('platform_close', async () => {
+        await dispatchCommand(session.device, 'close', req.positionals ?? [], req.flags?.out, {
+          ...contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath),
+        });
+        await settleIosSimulator(session.device, IOS_SIMULATOR_POST_CLOSE_SETTLE_MS);
       });
-      await settleIosSimulator(session.device, IOS_SIMULATOR_POST_CLOSE_SETTLE_MS);
     }
     if (
       isApplePlatform(session.device.platform) &&
@@ -94,7 +116,7 @@ export async function handleCloseCommand(params: {
     ) {
       // The targeted close path stops before dispatch to avoid runner/app races.
       // Stop again here for idempotent cleanup, and keep cleanup-sensitive closes explicit.
-      await stopAppleRunnerForClose(session);
+      await attemptCleanup('apple_runner', () => stopAppleRunnerForClose(session));
     } else if (isApplePlatform(session.device.platform)) {
       emitDiagnostic({
         level: 'debug',
@@ -123,7 +145,9 @@ export async function handleCloseCommand(params: {
       session.recordSession = true;
     }
     sessionStore.writeSessionLog(session);
-    await cleanupRetainedMaterializedPathsForSession(sessionName).catch(() => {});
+    await attemptCleanup('materialized_paths', () =>
+      cleanupRetainedMaterializedPathsForSession(sessionName),
+    );
   } finally {
     // Always drop the local session, even if provider-side release fails:
     // a failed close must not strand device ownership until inactivity expiry.
@@ -133,6 +157,12 @@ export async function handleCloseCommand(params: {
       sessionStore.delete(sessionName);
     }
   }
+  const cleanupAggregate = reportSessionCleanupFailures({
+    sessionName,
+    phase: 'session_close_cleanup_failed',
+    failures: cleanupFailures,
+  });
+  if (cleanupAggregate) throw cleanupAggregate;
   const shutdownResult = await maybeShutdownSessionTarget({
     device: session.device,
     shutdownRequested: req.flags?.shutdown,

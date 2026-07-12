@@ -730,3 +730,106 @@ test('close --shutdown returns success and failure payload when shutdownSimulato
     expect(shutdown?.error?.message).toBe('simctl shutdown failed');
   }
 });
+
+test('daemon session teardown attempts every resource after an earlier cleanup rejects', async () => {
+  const sessionName = 'android-teardown-isolation-session';
+  const activeCapture = {
+    type: 'trace',
+    kind: 'perfetto',
+    packageName: 'com.example.app',
+    appPid: '1234',
+    profilerPid: '5678',
+    remotePath: '/data/misc/perfetto-traces/app.perfetto-trace',
+    outPath: '/tmp/app.perfetto-trace',
+    startedAt: Date.now(),
+    state: 'running',
+  };
+  const session = {
+    ...makeSession(sessionName, {
+      platform: 'android',
+      id: 'emulator-5554',
+      name: 'Pixel',
+      kind: 'emulator',
+      booted: true,
+    }),
+    appBundleId: 'com.example.app',
+    nativePerf: {
+      android: activeCapture,
+    },
+  } as unknown as SessionState;
+
+  // The native-perf cleanup runs before the snapshot-helper cleanup.
+  mockCleanupAndroidNativePerfSession.mockRejectedValueOnce(
+    new AppError('COMMAND_FAILED', 'perfetto stop failed'),
+  );
+
+  await expect(teardownSessionResources(session, sessionName)).rejects.toMatchObject({
+    code: 'COMMAND_FAILED',
+    details: expect.objectContaining({
+      reason: 'session_cleanup_incomplete',
+      failedSteps: ['android_native_perf'],
+    }),
+  });
+
+  // The later resource still runs despite the earlier rejection.
+  expect(mockStopAndroidSnapshotHelperSessionForDevice).toHaveBeenCalledWith(session.device);
+});
+
+test('close still runs later cleanup and deletes the session after an earlier cleanup rejects', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-close-isolation-session';
+  const activeCapture = {
+    type: 'trace',
+    kind: 'perfetto',
+    packageName: 'com.example.app',
+    appPid: '1234',
+    profilerPid: '5678',
+    remotePath: '/data/misc/perfetto-traces/app.perfetto-trace',
+    outPath: '/tmp/app.perfetto-trace',
+    startedAt: Date.now(),
+    state: 'running',
+  };
+  const session = {
+    ...makeSession(sessionName, {
+      platform: 'android',
+      id: 'emulator-5554',
+      name: 'Pixel',
+      kind: 'emulator',
+      booted: true,
+    }),
+    appBundleId: 'com.example.app',
+    nativePerf: {
+      android: activeCapture,
+    },
+  } as unknown as SessionState;
+  sessionStore.set(sessionName, session);
+
+  mockCleanupAndroidNativePerfSession.mockRejectedValueOnce(
+    new AppError('COMMAND_FAILED', 'perfetto stop failed'),
+  );
+
+  await expect(
+    handleSessionCommands({
+      req: {
+        token: 't',
+        session: sessionName,
+        command: 'close',
+        positionals: [],
+        flags: {},
+      },
+      sessionName,
+      logPath: path.join(os.tmpdir(), 'daemon.log'),
+      sessionStore,
+      invoke: noopInvoke,
+    }),
+  ).rejects.toMatchObject({
+    details: expect.objectContaining({
+      reason: 'session_cleanup_incomplete',
+      failedSteps: ['android_native_perf'],
+    }),
+  });
+
+  // A later cleanup step still ran, and the session was still deleted.
+  expect(mockStopAndroidSnapshotHelperSessionForDevice).toHaveBeenCalledWith(session.device);
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+});

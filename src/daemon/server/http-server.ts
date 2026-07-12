@@ -13,14 +13,12 @@ import type { DaemonInstallSource, DaemonInvokeFn, DaemonRequest } from '../type
 import { normalizeTenantId } from '../config.ts';
 import {
   clearRequestCanceled,
-  isRequestCanceled,
   markRequestCanceled,
   registerRequestAbort,
   resolveRequestTrackingId,
 } from '../../request/cancel.ts';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { sleep } from '../../utils/timeouts.ts';
 import { type RequestProgressEvent, withRequestProgressSink } from '../../request/progress.ts';
 import {
   serializeDaemonProgressEnvelope,
@@ -71,9 +69,6 @@ type HttpAuthDecision =
   | { ok: false; statusCode: number; response: JsonRpcResponse };
 
 const MAX_HTTP_RPC_BODY_BYTES = 1024 * 1024;
-const CLIENT_DISCONNECT_ABORT_POLL_INTERVAL_MS = 200;
-const CLIENT_DISCONNECT_ABORT_MAX_WINDOW_MS = 15_000;
-const IOS_RUNNER_ABORT_REPLAY_COMMANDS = new Set(['replay', 'test']);
 const COMMAND_RPC_METHODS = new Set(['agent_device.command', 'agent-device.command']);
 const INSTALL_FROM_SOURCE_RPC_METHODS = new Set([
   'agent_device.install_from_source',
@@ -655,8 +650,14 @@ export async function createDaemonHttpServer(options: {
           };
         }
 
-        const abortIosRunnerOnDisconnect = shouldAbortIosRunnerSessionsOnDisconnect(daemonRequest);
         let canceledInFlight = false;
+        // Request-scoped cancellation: mark this request canceled whenever its client
+        // vanishes before the response finishes, regardless of whether headers were
+        // already sent. `markRequestCanceled` aborts only this request's AbortSignal,
+        // so in-flight runner work owned by the request is canceled without touching
+        // other requests, other devices, or non-Apple work. The guard below keys off
+        // the response's own completion state, so a normal end is never misclassified
+        // as a disconnect.
         const markCanceledIfResponseIncomplete = () => {
           if (handlerCompleted || res.writableFinished || canceledInFlight) return;
           canceledInFlight = true;
@@ -666,18 +667,14 @@ export async function createDaemonHttpServer(options: {
             phase: 'request_client_disconnected',
             data: {
               requestId: requestIdForCleanup,
-              abortIosRunnerSessions: abortIosRunnerOnDisconnect,
             },
           });
-          if (abortIosRunnerOnDisconnect) {
-            void abortInFlightIosRunnerSessionsWhileDisconnected(requestIdForCleanup);
-          }
         };
         req.on('aborted', markCanceledIfResponseIncomplete);
-        res.on('close', () => {
-          if (res.headersSent) markCanceledIfResponseIncomplete();
-        });
-        if (req.aborted || (res.destroyed && res.headersSent)) {
+        // `res` close fires for both pre-header and post-header disconnects; the
+        // completion guard distinguishes a real disconnect from a finished response.
+        res.on('close', markCanceledIfResponseIncomplete);
+        if (req.aborted || res.destroyed) {
           markCanceledIfResponseIncomplete();
         }
 
@@ -743,35 +740,6 @@ export async function createDaemonHttpServer(options: {
       }
     });
   });
-}
-
-async function abortInFlightIosRunnerSessionsWhileDisconnected(
-  requestId: string | undefined,
-): Promise<void> {
-  try {
-    const deadline = Date.now() + CLIENT_DISCONNECT_ABORT_MAX_WINDOW_MS;
-    while (isRequestCanceled(requestId) && Date.now() < deadline) {
-      const { abortAllIosRunnerSessions } =
-        await import('../../platforms/apple/core/runner/runner-client.ts');
-      await abortAllIosRunnerSessions();
-      if (!isRequestCanceled(requestId)) break;
-      await sleep(CLIENT_DISCONNECT_ABORT_POLL_INTERVAL_MS);
-    }
-  } catch (error) {
-    emitDiagnostic({
-      level: 'error',
-      phase: 'request_client_disconnect_abort_failed',
-      data: {
-        message: error instanceof Error ? error.message : String(error),
-      },
-    });
-  }
-}
-
-function shouldAbortIosRunnerSessionsOnDisconnect(req: DaemonRequest): boolean {
-  if (req.flags?.platform === 'android') return false;
-  if (req.flags?.platform === 'ios' || req.flags?.platform === 'macos') return true;
-  return IOS_RUNNER_ABORT_REPLAY_COMMANDS.has(req.command);
 }
 
 async function authorizeAuxiliaryHttpRequest(params: {

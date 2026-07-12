@@ -1,3 +1,4 @@
+import { AppError } from '../kernel/errors.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { isMacOs, isApplePlatform } from '../kernel/device.ts';
 import { runMacOsAlertAction } from '../platforms/apple/os/macos/helper.ts';
@@ -77,19 +78,90 @@ export async function restoreSessionAndroidIme(
   });
 }
 
+type SessionCleanupStep = { step: string; run: () => Promise<void> };
+export type SessionCleanupFailure = { step: string; error: unknown };
+
+// Run every cleanup step, isolating failures so one rejected resource never
+// skips the resources scheduled after it. Callers own lease/session deletion and
+// decide how to surface the returned failures.
+async function runIsolatedSessionCleanup(
+  steps: readonly SessionCleanupStep[],
+): Promise<SessionCleanupFailure[]> {
+  const failures: SessionCleanupFailure[] = [];
+  for (const { step, run } of steps) {
+    try {
+      await run();
+    } catch (error) {
+      failures.push({ step, error });
+    }
+  }
+  return failures;
+}
+
+// Emit an aggregate diagnostic for failed cleanup steps and build a single
+// actionable error. Returns undefined when nothing failed so the happy path is
+// untouched.
+export function reportSessionCleanupFailures(params: {
+  sessionName: string;
+  phase: string;
+  failures: readonly SessionCleanupFailure[];
+}): AppError | undefined {
+  if (params.failures.length === 0) return undefined;
+  const failedSteps = params.failures.map(({ step }) => step);
+  const stepMessages = params.failures.map(
+    ({ step, error }) => `${step}: ${error instanceof Error ? error.message : String(error)}`,
+  );
+  emitDiagnostic({
+    level: 'error',
+    phase: params.phase,
+    data: {
+      session: params.sessionName,
+      failedSteps,
+      errors: stepMessages,
+    },
+  });
+  return new AppError(
+    'COMMAND_FAILED',
+    `Session cleanup left ${params.failures.length} resource(s) unreleased: ${stepMessages.join('; ')}`,
+    {
+      reason: 'session_cleanup_incomplete',
+      session: params.sessionName,
+      failedSteps,
+      hint: 'Some session resources failed to release; inspect the session log for per-resource diagnostics. The session was still deleted, so retrying is safe.',
+    },
+  );
+}
+
 export async function teardownSessionResources(
   session: SessionState,
   sessionName: string,
   stateDir?: string,
 ): Promise<void> {
-  await stopSessionAppLog(session);
-  await stopSessionAudioProbe(session, 'session-teardown');
-  await stopSessionApplePerfCapture(session);
-  await stopSessionAndroidNativePerfCapture(session);
-  await stopSessionAndroidSnapshotHelper(session);
-  await restoreSessionAndroidIme(session, stateDir);
+  const steps: SessionCleanupStep[] = [
+    { step: 'app_log', run: () => stopSessionAppLog(session) },
+    {
+      step: 'audio_probe',
+      run: async () => {
+        await stopSessionAudioProbe(session, 'session-teardown');
+      },
+    },
+    { step: 'apple_perf', run: () => stopSessionApplePerfCapture(session) },
+    { step: 'android_native_perf', run: () => stopSessionAndroidNativePerfCapture(session) },
+    { step: 'android_snapshot_helper', run: () => stopSessionAndroidSnapshotHelper(session) },
+    { step: 'android_ime', run: () => restoreSessionAndroidIme(session, stateDir) },
+  ];
   if (isApplePlatform(session.device.platform)) {
-    await stopAppleRunnerForClose(session);
+    steps.push({ step: 'apple_runner', run: () => stopAppleRunnerForClose(session) });
   }
-  await cleanupRetainedMaterializedPathsForSession(sessionName).catch(() => {});
+  steps.push({
+    step: 'materialized_paths',
+    run: () => cleanupRetainedMaterializedPathsForSession(sessionName),
+  });
+  const failures = await runIsolatedSessionCleanup(steps);
+  const aggregate = reportSessionCleanupFailures({
+    sessionName,
+    phase: 'session_teardown_cleanup_failed',
+    failures,
+  });
+  if (aggregate) throw aggregate;
 }

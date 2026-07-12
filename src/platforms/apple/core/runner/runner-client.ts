@@ -178,6 +178,5 @@ export {
   getRunnerSessionSnapshot,
   scheduleIosRunnerIdleStop,
   stopIosRunnerSession,
-  abortAllIosRunnerSessions,
   stopAllIosRunnerSessions,
 } from './runner-session.ts';
