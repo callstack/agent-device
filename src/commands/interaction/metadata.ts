@@ -24,8 +24,10 @@ import { CLICK_BUTTONS } from '../../core/click-button.ts';
 import { SCROLL_DURATION_MAX_MS } from '../../contracts/scroll-command.ts';
 import {
   SCROLL_DIRECTIONS,
+  SWIPE_PAUSE_MAX_MS,
   SWIPE_PATTERNS,
   SWIPE_PRESETS,
+  SWIPE_REPETITION_MAX,
 } from '../../contracts/scroll-gesture.ts';
 import { SCROLL_INPUT_DIRECTIONS } from './runtime/gestures.ts';
 import { FIND_LOCATORS } from '../../selectors/find.ts';
@@ -137,9 +139,12 @@ const longPressFields = {
 const swipeFields = {
   from: requiredField(pointField('Swipe start point.')),
   to: requiredField(pointField('Swipe end point.')),
-  durationMs: integerField('Deprecated: timed movement is a pan; omit for swipe.', { min: 0 }),
-  count: integerField('Number of swipe repetitions.', { min: 1 }),
-  pauseMs: integerField('Pause between repeated swipes.', { min: 0 }),
+  durationMs: integerField('Deprecated: timed movement is a pan; omit for swipe.', {
+    min: 16,
+    max: 10_000,
+  }),
+  count: integerField('Number of swipe repetitions.', { min: 1, max: SWIPE_REPETITION_MAX }),
+  pauseMs: integerField('Pause between repeated swipes.', { min: 0, max: SWIPE_PAUSE_MAX_MS }),
   pattern: enumField(SWIPE_PATTERNS),
 };
 

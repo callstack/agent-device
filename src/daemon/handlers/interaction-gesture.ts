@@ -6,6 +6,12 @@ import {
   type SwipePayload,
 } from '../../contracts/gesture-normalization.ts';
 import { requireGestureSupported } from '../../core/capabilities.ts';
+import { GESTURE_FLING_DURATION_MS } from '../../contracts/gesture-plan.ts';
+import {
+  SWIPE_PAUSE_MAX_MS,
+  SWIPE_REPETITION_MAX,
+  SWIPE_SERIES_MAX_SCHEDULED_DURATION_MS,
+} from '../../contracts/scroll-gesture.ts';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { readOptionalInteger } from '../../kernel/input-validation.ts';
 import type { Point } from '../../kernel/snapshot.ts';
@@ -153,14 +159,35 @@ function readSwipeInput(input: unknown): SwipePayload {
   if (pattern !== undefined && pattern !== 'one-way' && pattern !== 'ping-pong') {
     throw new AppError('INVALID_ARGS', 'swipe pattern must be one-way or ping-pong');
   }
-  return {
+  const payload: SwipePayload = {
     from: readSwipePoint(record.from, 'swipe from'),
     to: readSwipePoint(record.to, 'swipe to'),
-    durationMs: readOptionalInteger(record, 'durationMs', { min: 0 }),
-    count: readOptionalInteger(record, 'count', { min: 1 }),
-    pauseMs: readOptionalInteger(record, 'pauseMs', { min: 0 }),
+    durationMs: readOptionalInteger(record, 'durationMs', { min: 16, max: 10_000 }),
+    count: readOptionalInteger(record, 'count', { min: 1, max: SWIPE_REPETITION_MAX }),
+    pauseMs: readOptionalInteger(record, 'pauseMs', { min: 0, max: SWIPE_PAUSE_MAX_MS }),
     pattern,
   };
+  assertSwipeSeriesFitsRequest(payload);
+  return payload;
+}
+
+function assertSwipeSeriesFitsRequest(input: SwipePayload): void {
+  const count = input.count ?? 1;
+  const pauseMs = input.pauseMs ?? 0;
+  const gestureDurationMs = input.durationMs ?? GESTURE_FLING_DURATION_MS;
+  const scheduledDurationMs = count * gestureDurationMs + Math.max(0, count - 1) * pauseMs;
+  if (scheduledDurationMs <= SWIPE_SERIES_MAX_SCHEDULED_DURATION_MS) return;
+  throw new AppError(
+    'INVALID_ARGS',
+    `Swipe series must fit within ${SWIPE_SERIES_MAX_SCHEDULED_DURATION_MS}ms.`,
+    {
+      count,
+      pauseMs,
+      gestureDurationMs,
+      scheduledDurationMs,
+      hint: 'Reduce --count, --pause-ms, or the deprecated swipe duration.',
+    },
+  );
 }
 
 function readSwipePoint(value: unknown, field: string): Point {

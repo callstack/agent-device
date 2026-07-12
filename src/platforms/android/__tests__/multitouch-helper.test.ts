@@ -60,7 +60,6 @@ test('canonical plans lower to exact helper samples without semantic geometry', 
 
   assert.ok('pointers' in request);
   assert.equal(request.kind, 'transform');
-  assert.equal(request.intent, 'pan');
   assert.equal(request.durationMs, 32);
   assert.deepEqual(
     request.pointers,
@@ -85,7 +84,6 @@ test('single-pointer plans use the same exact helper protocol', () => {
   );
   const request = normalizeAndroidMultiTouchHelperGestureRequest(fling);
   assert.equal(request.kind, 'swipe');
-  assert.equal(request.intent, 'fling');
   assert.equal(request.pointers.length, 1);
   assert.equal(request.durationMs, 100);
 });
@@ -104,7 +102,6 @@ test('transform sends the planner-owned choreography without regenerating geomet
   );
   const request = normalizeAndroidMultiTouchHelperGestureRequest(plan);
   assert.equal(request.kind, 'transform');
-  assert.equal(request.intent, 'transform');
   assert.deepEqual(
     request.pointers,
     plan.pointers.map((pointer) => ({

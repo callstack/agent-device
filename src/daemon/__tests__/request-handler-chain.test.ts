@@ -93,6 +93,40 @@ test('request handler chain routes swipe through the interaction runtime', async
   assert.equal(response.error.code, 'INVALID_ARGS');
 });
 
+test('swipe rejects repetition inputs that can monopolize the request', async () => {
+  const cases = [
+    {
+      input: { count: 201 },
+      message: 'Expected count to be at most 200.',
+    },
+    {
+      input: { pauseMs: 10_001 },
+      message: 'Expected pauseMs to be at most 10000.',
+    },
+    {
+      input: { count: 7, durationMs: 10_000 },
+      message: 'Swipe series must fit within 60000ms.',
+    },
+  ];
+
+  for (const { input, message } of cases) {
+    const req = {
+      ...makeRequest('swipe'),
+      input: {
+        from: { x: 10, y: 20 },
+        to: { x: 110, y: 20 },
+        ...input,
+      },
+    };
+    const response = await runRequestHandlerChain(makeChainParams(req));
+
+    assert.equal(response?.ok, false);
+    if (response?.ok !== false) throw new Error('Expected invalid swipe response');
+    assert.equal(response.error.code, 'INVALID_ARGS');
+    assert.equal(response.error.message, message);
+  }
+});
+
 test('request handler chain routes lease commands to the lease family', async () => {
   const response = await runRequestHandlerChain({
     ...makeChainParams({

@@ -2113,6 +2113,7 @@ Treat the recovery message as a warning, not a fatal error. Use the exposed Sear
       'Need to advance and return across pages repeatedly',
       'Gesture should use a swipe series, not scroll',
       'Use one direct swipe command with --count and --pattern; do not use batch',
+      'Swipe series are bounded to 200 repetitions, 10000ms pauses, and 60000ms scheduled time',
     ],
     task: 'Plan one direct gesture command to swipe horizontally across the carousel eight times with a 30ms pause and ping-pong pattern.',
     outputs: [

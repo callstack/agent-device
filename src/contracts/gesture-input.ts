@@ -10,7 +10,6 @@ import {
 import type { GesturePointerCount } from './gesture-plan-types.ts';
 
 export const GESTURE_KINDS = ['pan', 'fling', 'swipe', 'pinch', 'rotate', 'transform'] as const;
-export type GestureKind = (typeof GESTURE_KINDS)[number];
 
 export type PanGesturePayload = {
   kind: 'pan';

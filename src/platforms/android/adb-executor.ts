@@ -125,10 +125,8 @@ export type AndroidTextInjectionRequest = {
 
 export type AndroidTextInjector = (request: AndroidTextInjectionRequest) => Promise<void>;
 
-export type AndroidTouchGestureRequest = GesturePlan;
-
 export type AndroidTouchInjector = (
-  request: AndroidTouchGestureRequest,
+  request: GesturePlan,
 ) => Promise<Record<string, unknown> | void>;
 
 export type AndroidGestureViewportProvider = () => Promise<Rect>;

@@ -6,6 +6,7 @@ import {
 } from '../../contracts/scroll-command.ts';
 import { AppError } from '../../kernel/errors.ts';
 import { singlePointerPlanEndpoints, type GesturePlan } from '../../contracts/gesture-plan.ts';
+import { assertAppleMultiTouchSupported } from '../../contracts/apple-multitouch-support.ts';
 import { runAppleRunnerCommand } from './core/runner/runner-client.ts';
 import {
   buildRunnerSequenceCommand,
@@ -204,7 +205,7 @@ export async function performGestureApple(
   runnerOpts: RunnerOpts,
   plan: GesturePlan,
 ): Promise<Record<string, unknown>> {
-  if (plan.topology === 'two') assertAppleMultiTouchPlanSupported(device);
+  if (plan.topology === 'two') assertAppleMultiTouchSupported(device, plan.intent);
   if (plan.topology === 'single' && isMacOs(device)) {
     const { start: first, end: last } = singlePointerPlanEndpoints(plan);
     return await runAppleRunnerCommand(
@@ -241,33 +242,6 @@ function dominantDirection(from: { x: number; y: number }, to: { x: number; y: n
   const dy = to.y - from.y;
   if (Math.abs(dx) >= Math.abs(dy)) return dx >= 0 ? ('right' as const) : ('left' as const);
   return dy >= 0 ? ('down' as const) : ('up' as const);
-}
-
-function assertAppleMultiTouchPlanSupported(device: DeviceInfo): void {
-  if (isTvOsDevice(device)) {
-    throw new AppError('UNSUPPORTED_OPERATION', 'Two-finger gestures are not supported on tvOS', {
-      hint: 'tvOS has no touch input; use remote-driven navigation.',
-    });
-  }
-  if (isMacOs(device)) {
-    throw new AppError('UNSUPPORTED_OPERATION', 'Two-finger gestures are not supported on macOS', {
-      hint: 'macOS automation has no multi-touch input; run on an iOS simulator.',
-    });
-  }
-  if (device.appleOs === 'visionos') {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      'Two-finger touch gestures are not supported on visionOS',
-      { hint: 'The current XCTest synthesizer supports iOS and iPadOS touch simulators only.' },
-    );
-  }
-  if (!isIosFamily(device) || device.kind !== 'simulator') {
-    throw new AppError(
-      'UNSUPPORTED_OPERATION',
-      'Two-finger gesture synthesis is available only on iOS simulators',
-      { hint: 'Use an iOS simulator; physical iOS devices cannot use XCTest touch synthesis.' },
-    );
-  }
 }
 
 function iosTapCommand(

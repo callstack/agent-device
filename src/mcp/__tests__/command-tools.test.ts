@@ -169,6 +169,23 @@ test('MCP gesture tool exposes and forwards two-finger pan topology', async () =
   ]);
 });
 
+test('MCP swipe tool exposes bounded repetition inputs', () => {
+  const swipe = listCommandTools().find((tool) => tool.name === 'swipe');
+  assert.ok(swipe);
+  assert.deepEqual(swipe.inputSchema.properties?.count, {
+    type: 'integer',
+    description: 'Number of swipe repetitions.',
+    minimum: 1,
+    maximum: 200,
+  });
+  assert.deepEqual(swipe.inputSchema.properties?.pauseMs, {
+    type: 'integer',
+    description: 'Pause between repeated swipes.',
+    minimum: 0,
+    maximum: 10_000,
+  });
+});
+
 test('MCP includeCost:true opts into agent-cost: sets client.cost, strips the arg, surfaces cost', async () => {
   const createdConfigs: unknown[] = [];
   const calls: unknown[] = [];

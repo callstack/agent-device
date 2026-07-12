@@ -61,16 +61,22 @@ Platform adapters consume the canonical plan:
   instrumentation because Android permits only one instrumentation owner of `UiAutomation`.
 - iOS converts every planned point to native orientation and feeds the exact arrays to the existing
   private XCTest event bridge. macOS lowers a one-contact plan to its drag executor and tvOS lowers
-  it to remote direction; multi-touch remains capability-gated to iOS simulators.
+  it to remote direction. Core admission and the Apple adapter both consume the same shared
+  multi-touch support policy; multi-touch remains capability-gated to iOS simulators.
 - WebDriver lowers a supported plan to synchronized W3C pointer action sources. Multi-touch remains
   capability-gated until a provider proves it.
 
 The `Interactor` and backend expose one compositional `performGesture(plan)` primitive instead of a
 method per semantic alias. The old scalar Apple and Android multi-touch executors and the
 public-command alias-to-positionals-to-reparse route are deleted. `.ad` keeps its established
-positional syntax through one named daemon-edge compatibility adapter; CLI, Node.js, and MCP send
+positional syntax through one named replay compatibility codec; CLI, Node.js, and MCP send
 structured input. Providers should compose transport/device bindings with the shared platform
 adapter rather than reimplement the interaction runtime.
+
+Repeated coordinate swipes are bounded at the public command contract and daemon trust boundary.
+Individual count and pause limits prevent pathological fields, while the combined planned gesture
+and pause schedule must fit within 60 seconds so valid fields cannot compose into an unbounded
+session lock.
 
 Public two-finger pan is additive: `pointerCount?: 1 | 2` on pan and CLI
 `--pointer-count 2`; omission remains one contact. Responses share the canonical

@@ -361,6 +361,8 @@ Android text entry is owned by `agent-device`: provider-native injection when av
 `swipe` is a quick, fixed-duration directional throw. Its historical optional `durationMs` remains
 accepted for compatibility but normalizes to a pan and reports a deprecation; use `gesture pan` for
 deliberate timed movement.
+Repeated coordinate swipes accept at most 200 repetitions and 10000ms pauses, and their combined
+gesture/pause schedule must fit within 60000ms.
 `gesture pan` accepts `x y dx dy [durationMs]` for deliberate drags. It uses one pointer by default. Add `--pointer-count 2` for a parallel two-finger pan with constant contact span and angle; this shares the bounded two-contact synthesizer used by transform while retaining pan intent. Android preserves the requested travel duration; iOS uses XCTest drag primitives for one-pointer pan and private XCTest synthesis for two-pointer pan.
 `gesture fling` accepts `up|down|left|right x y [distance]` for fast directional throws. Its
 historical duration is accepted as a deprecated alias to pan.

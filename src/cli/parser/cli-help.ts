@@ -287,7 +287,7 @@ Navigation and gestures:
   For raw coordinate gestures, run snapshot -i first and choose a point near the center of the intended app-owned target. Avoid screen edges, tab bars, navigation bars, and home indicators because those areas can trigger system or app navigation instead of the gesture under test.
   If app-owned back is ambiguous or has just misrouted, prefer a visible nav/back button ref, tab-bar ref, or deep link over repeated back/system back.
   App-owned action sheets, menus, and camera/scan screens are normal UI. After opening one, run snapshot -i or wait for the option, press by label/ref, handle visible permission sheets through UI or platform-supported native alerts, then wait for a concrete result before returning to chat/form state.
-  Keep count/pause/pattern on one swipe; flags are --count, --pause-ms, --pattern ping-pong.
+  Keep count/pause/pattern on one swipe; flags are --count, --pause-ms, --pattern ping-pong. Count is capped at 200, pause at 10000ms, and the combined swipe/pause schedule at 60000ms.
   For repeated iOS gesture smoke checks, use press <x> <y> --count <n> --jitter-px <n> for tap series and swipe <x1> <y1> <x2> <y2> --count <n> for drag series.
   longpress accepts coordinates, @refs, or selectors. Prefer @ref/selector from snapshot -i; use coordinates only as a fallback when accessibility refs miss the exact target. Duration and gesture scale/center are positional:
     agent-device longpress 300 500 800

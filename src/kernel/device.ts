@@ -132,6 +132,16 @@ export function isTvOsDevice(device: Pick<DeviceInfo, 'platform' | 'target'>): b
   return isApplePlatform(device.platform) && device.target === 'tv';
 }
 
+/** Resolve the stored Apple OS, preserving legacy target/leaf inference for old device records. */
+export function resolveDeviceAppleOs(
+  device: Pick<DeviceInfo, 'platform' | 'target' | 'appleOs'>,
+): AppleOS {
+  if (device.appleOs) return device.appleOs;
+  if ((device.platform as string) === 'macos') return 'macos';
+  if (isTvOsDevice(device)) return 'tvos';
+  return 'ios';
+}
+
 export function isPlatform(value: unknown): value is Platform {
   // Internal device-platform membership derived from the canonical PLATFORMS tuple.
   return (PLATFORMS as readonly unknown[]).includes(value);

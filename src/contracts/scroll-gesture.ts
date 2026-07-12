@@ -8,6 +8,9 @@ export const SWIPE_PRESETS = ['left', 'right', 'left-edge', 'right-edge'] as con
 export type SwipePreset = (typeof SWIPE_PRESETS)[number];
 export const SWIPE_PATTERNS = ['one-way', 'ping-pong'] as const;
 export type SwipePattern = (typeof SWIPE_PATTERNS)[number];
+export const SWIPE_REPETITION_MAX = 200;
+export const SWIPE_PAUSE_MAX_MS = 10_000;
+export const SWIPE_SERIES_MAX_SCHEDULED_DURATION_MS = 60_000;
 const SCROLL_DIRECTION_ENUM = defineStringEnum(SCROLL_DIRECTIONS, {
   message: (direction) => `Unknown direction: ${direction}`,
 });
@@ -27,7 +30,7 @@ export type GestureReferenceFrame = {
   referenceHeight: number;
 };
 
-export type GesturePoint = {
+type GesturePoint = {
   x: number;
   y: number;
 };

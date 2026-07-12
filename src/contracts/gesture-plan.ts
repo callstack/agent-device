@@ -21,7 +21,7 @@ const GESTURE_HORIZONTAL_ANGLE_DEGREES = 0;
 const GESTURE_MINIMUM_RELIABLE_SPAN_PX = 48;
 const GESTURE_VIEWPORT_INSET_PX = 1;
 const DEFAULT_PAN_DURATION_MS = 500;
-const FLING_DURATION_MS = 100;
+export const GESTURE_FLING_DURATION_MS = 100;
 const DEFAULT_MULTI_TOUCH_DURATION_MS = 300;
 const MAX_ROTATION_DEGREES_PER_SAMPLE = 3;
 const MAX_ROTATION_DEFAULT_DURATION_MS = 2_400;
@@ -110,7 +110,7 @@ function buildFlingPlan(
       'fling',
       input.from,
       input.to,
-      FLING_DURATION_MS,
+      GESTURE_FLING_DURATION_MS,
       viewport,
       platform,
     );
@@ -121,7 +121,7 @@ function buildFlingPlan(
     'fling',
     start,
     offsetPointByDirection(start, input.direction, distance),
-    FLING_DURATION_MS,
+    GESTURE_FLING_DURATION_MS,
     viewport,
     platform,
   );

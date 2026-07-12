@@ -60,7 +60,6 @@ type AndroidPlannedPointerTrajectory = {
 
 type AndroidMultiTouchHelperGestureRequest = {
   kind: 'swipe' | 'transform';
-  intent: GesturePlan['intent'];
   durationMs: number;
   pointers: AndroidPlannedPointerTrajectory[];
 };
@@ -198,7 +197,6 @@ export function normalizeAndroidMultiTouchHelperGestureRequest(
 ): AndroidMultiTouchHelperGestureRequest {
   return {
     kind: plan.topology === 'single' ? 'swipe' : 'transform',
-    intent: plan.intent,
     durationMs: plan.durationMs,
     pointers: plan.pointers.map(toAndroidPlannedPointerTrajectory),
   };

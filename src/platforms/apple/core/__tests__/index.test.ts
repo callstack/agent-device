@@ -89,6 +89,7 @@ import { retryWithPolicy } from '../../../../utils/retry.ts';
 import { parseIosDeviceAppsPayload, parseIosDeviceProcessesPayload } from '../devicectl.ts';
 import { PNG } from '../../../../utils/png.ts';
 import type { GesturePlan } from '../../../../contracts/gesture-plan.ts';
+import { requireGestureSupported } from '../../../../core/capabilities.ts';
 
 const IOS_TEST_DEVICE: DeviceInfo = {
   platform: 'apple',
@@ -279,13 +280,30 @@ test('performGestureApple sends exact two-pointer pan samples through gesture', 
   });
 });
 
-test('performGestureApple refuses two-pointer plans on physical iOS devices', async () => {
+test('Apple admission and execution share the same multi-touch refusal', async () => {
+  let admissionError: AppError | undefined;
+  try {
+    requireGestureSupported(
+      {
+        intent: 'pan',
+        origin: { x: 100, y: 200 },
+        delta: { x: 80, y: -40 },
+        pointerCount: 2,
+      },
+      IOS_TEST_DEVICE,
+    );
+  } catch (error) {
+    if (error instanceof AppError) admissionError = error;
+  }
+  assert.ok(admissionError);
+
   await assert.rejects(
     () => performGestureApple(IOS_TEST_DEVICE, {}, {}, twoFingerPanPlan()),
     (error: unknown) =>
       error instanceof AppError &&
       error.code === 'UNSUPPORTED_OPERATION' &&
-      /only on iOS simulators/i.test(error.message),
+      error.message === admissionError.message &&
+      error.details?.hint === admissionError.details?.hint,
   );
   assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 0);
 });

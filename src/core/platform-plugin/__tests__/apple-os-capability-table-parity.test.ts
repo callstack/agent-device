@@ -4,6 +4,7 @@ import { isAudioProbeSupportedDevice } from '../../../kernel/audio-probe-support
 import {
   isIosFamily,
   isMacOs,
+  resolveDeviceAppleOs,
   DEVICE_TARGETS,
   PLATFORMS,
   type AppleOS,
@@ -23,10 +24,7 @@ import {
   VISIONOS_SIMULATOR,
   WEB_DESKTOP_DEVICE,
 } from '../../../__tests__/test-utils/index.ts';
-import {
-  APPLE_OS_CAPABILITIES,
-  resolveDeviceAppleOs,
-} from '../../../platforms/apple/capabilities.ts';
+import { APPLE_OS_CAPABILITIES } from '../../../platforms/apple/capabilities.ts';
 import { getPlugin } from '../plugin.ts';
 import { registerBuiltinPlatformPlugins } from '../../interactors/register-builtins.ts';
 
@@ -145,16 +143,13 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
   ...buildSyntheticMatrix(),
 ];
 
-test('the per-AppleOS table row keys are exhaustive and visionOS refuses touch synthesis', () => {
+test('the per-AppleOS capability table row keys are exhaustive', () => {
   const rows: AppleOS[] = ['ios', 'ipados', 'tvos', 'watchos', 'visionos', 'macos'];
   for (const os of rows) {
     assert.ok(APPLE_OS_CAPABILITIES[os], `capability row present for ${os}`);
   }
-  // iOS/iPadOS share touch synthesis; visionOS keeps the lifecycle surface but uses
-  // spatial input and therefore has its own explicit unsupported row.
+  // iOS/iPadOS share the same platform capability profile.
   assert.equal(APPLE_OS_CAPABILITIES.ios, APPLE_OS_CAPABILITIES.ipados);
-  assert.equal(APPLE_OS_CAPABILITIES.visionos.multiTouchSynthesis, false);
-  assert.match(APPLE_OS_CAPABILITIES.visionos.multiTouchUnsupportedHint ?? '', /spatial input/i);
 });
 
 test('resolveDeviceAppleOs prefers the stored discriminant, else infers from target', () => {

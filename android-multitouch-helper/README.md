@@ -21,7 +21,6 @@ sh ./scripts/build-android-multitouch-helper.sh "$VERSION" .tmp/android-multitou
 PAYLOAD_JSON='{
   "protocol":"android-multitouch-helper-v1",
   "kind":"transform",
-  "intent":"transform",
   "durationMs":32,
   "pointers":[
     {"pointerId":0,"samples":[{"offsetMs":0,"x":120,"y":180},{"offsetMs":16,"x":130,"y":175},{"offsetMs":32,"x":140,"y":170}]},
