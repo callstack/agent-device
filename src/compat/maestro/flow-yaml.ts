@@ -1,4 +1,4 @@
-import { parseAllDocuments, stringify } from 'yaml';
+import { parseAllDocuments } from 'yaml';
 import { AppError } from '../../kernel/errors.ts';
 
 export function parseMaestroYamlDocuments(script: string): unknown[] {
@@ -12,8 +12,4 @@ export function parseMaestroYamlDocuments(script: string): unknown[] {
   return documents
     .map((document) => document.toJSON() as unknown)
     .filter((value) => value !== null);
-}
-
-export function stringifyMaestroYamlDocuments(documents: readonly unknown[]): string {
-  return `${documents.map((document) => stringify(document).trimEnd()).join('\n---\n')}\n`;
 }

@@ -7,9 +7,9 @@ import {
   readReplayScriptMetadata,
   type ReplayScriptMetadata,
 } from '../../replay/script.ts';
-import { stringifyMaestroYamlDocuments } from './flow-yaml.ts';
-import { formatMaestroPoint } from './points.ts';
-import type { MaestroCommand, MaestroFlowConfig } from './types.ts';
+import { formatMaestroPoint } from './export-points.ts';
+import type { MaestroExportCommand, MaestroExportConfig } from './export-types.ts';
+import { stringifyMaestroYamlDocuments } from './export-yaml.ts';
 
 export type MaestroExportWarning = {
   line: number;
@@ -22,8 +22,6 @@ export type MaestroExportResult = {
   warnings: MaestroExportWarning[];
 };
 
-type MaestroExportConfig = Pick<MaestroFlowConfig, 'appId' | 'env'>;
-
 type ExportContext = {
   config: MaestroExportConfig;
   warnings: MaestroExportWarning[];
@@ -31,8 +29,8 @@ type ExportContext = {
 };
 
 type ConvertedAction =
-  | { kind: 'commands'; commands: MaestroCommand[]; warnings?: string[] }
-  | { kind: 'config'; appId: string; commands: MaestroCommand[]; warnings?: string[] }
+  | { kind: 'commands'; commands: MaestroExportCommand[]; warnings?: string[] }
+  | { kind: 'config'; appId: string; commands: MaestroExportCommand[]; warnings?: string[] }
   | { kind: 'unsupported'; message: string };
 
 type ActionConverter = (action: SessionAction) => ConvertedAction;
@@ -67,7 +65,7 @@ function exportReplayActionsToMaestro(
     warnings: [],
     unsupported: [],
   };
-  const commands: MaestroCommand[] = [];
+  const commands: MaestroExportCommand[] = [];
 
   for (const [index, action] of actions.entries()) {
     const line = options.actionLines?.[index] ?? index + 1;
@@ -155,7 +153,7 @@ function convertOpenAction(action: SessionAction): ConvertedAction {
   return { kind: 'config', appId: first, commands: [launchApp] };
 }
 
-function buildLaunchAppCommand(action: SessionAction, appId: string): MaestroCommand {
+function buildLaunchAppCommand(action: SessionAction, appId: string): MaestroExportCommand {
   const options = buildLaunchAppOptions(action);
   return options ? { launchApp: { appId, ...options } } : 'launchApp';
 }
@@ -448,7 +446,7 @@ function readUnsupportedRepeatedTapOption(action: SessionAction): string | undef
   return undefined;
 }
 
-function withTapOptions(target: unknown, options: Record<string, unknown>): MaestroCommand {
+function withTapOptions(target: unknown, options: Record<string, unknown>): MaestroExportCommand {
   if (Object.keys(options).length === 0) return { tapOn: target };
   if (typeof target === 'string') return { tapOn: { text: target, ...options } };
   if (target && typeof target === 'object' && !Array.isArray(target)) {
@@ -503,7 +501,7 @@ function readTimeout(action: SessionAction, fallback: number): number {
   return candidate && isNumber(candidate) ? Number(candidate) : fallback;
 }
 
-function formatMaestroYaml(config: MaestroExportConfig, commands: MaestroCommand[]): string {
+function formatMaestroYaml(config: MaestroExportConfig, commands: MaestroExportCommand[]): string {
   const hasConfig = Object.keys(config).length > 0;
   const docs: unknown[] = hasConfig ? [config, commands] : [commands];
   return stringifyMaestroYamlDocuments(docs);

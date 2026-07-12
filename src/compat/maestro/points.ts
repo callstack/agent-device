@@ -12,10 +12,6 @@ export type MaestroPoint =
       y: number;
     };
 
-export function formatMaestroPoint(x: number | string, y: number | string): string {
-  return `${x},${y}`;
-}
-
 export function parseAbsolutePoint(value: string): { x: number; y: number } {
   const match = value.match(/^(\d+),(\d+)$/);
   if (!match) {

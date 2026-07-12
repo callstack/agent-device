@@ -1,7 +1,7 @@
 import { asAppError } from '../../kernel/errors.ts';
 import type { ReplayVarScope } from '../../replay/vars.ts';
 import type { DaemonInvokeFn, DaemonResponse } from '../../daemon/types.ts';
-import { executeRunScriptFile } from './run-script.ts';
+import { executeRunScriptFile } from './run-script-execution.ts';
 import { MAESTRO_RUNTIME_COMMAND } from './runtime-commands.ts';
 import {
   invokeMaestroAssertNotVisible,

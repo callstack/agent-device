@@ -1,12 +1,7 @@
 import assert from 'node:assert/strict';
 import { test, expect } from 'vitest';
 import { AppError } from '../../../kernel/errors.ts';
-import { formatMaestroPoint, parseAbsolutePoint, parseMaestroPoint } from '../points.ts';
-
-test('formatMaestroPoint serializes coordinate pairs', () => {
-  expect(formatMaestroPoint(100, 200)).toBe('100,200');
-  expect(formatMaestroPoint('50%', '75%')).toBe('50%,75%');
-});
+import { parseAbsolutePoint, parseMaestroPoint } from '../points.ts';
 
 test('parseMaestroPoint parses absolute pixel coordinates', () => {
   expect(parseMaestroPoint('100,200')).toEqual({ kind: 'absolute', x: 100, y: 200 });
