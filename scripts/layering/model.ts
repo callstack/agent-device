@@ -16,6 +16,13 @@ export type ResolvedImportEdge = ImportEdge & {
 
 export type BackEdgeMap = Record<string, string[]>;
 
+// The ranked target spine. Back-edge detection is defined ONLY between two ranked
+// zones: an edge whose source outranks its target (lower number imports higher) is a
+// spine back-edge. Zones NOT in this map are intentionally unranked (see
+// `UNRANKED_ZONES`); the gate does not rank them, so ranking their edges would claim a
+// back-edge guarantee the code does not make. Every production zone must be either
+// ranked here or listed as unranked — `unclassifiedZones` and `model.test.ts` guard
+// that no zone is silently unclassified.
 const TARGET_DAG_RANK = new Map([
   ['kernel', 0],
   ['contracts', 1],
@@ -30,6 +37,40 @@ const TARGET_DAG_RANK = new Map([
   ['daemon-client', 5],
   ['cli', 6],
 ]);
+
+export const RANKED_ZONES: ReadonlySet<string> = new Set(TARGET_DAG_RANK.keys());
+
+// Zones deliberately left OUT of the ranked spine. They are NOT unenforced: every file
+// in them is still subject to the global production value-import cycle rejection (R4)
+// and the R1-R3 move rules. They only opt out of spine back-edge ranking, for one of
+// two deliberate reasons:
+//   - root: `(root)` entrypoints (src/cli.ts, src/backend.ts, …) compose the spine from
+//     above rather than sitting inside it.
+//   - peripheral: satellite feature/adapter zones the spine does not depend on in a
+//     fixed rank order. Assigning them a rank would invent a back-edge direction the
+//     architecture does not commit to.
+export const UNRANKED_ZONES: ReadonlySet<string> = new Set([
+  '(root)',
+  'cloud-webdriver',
+  'compat',
+  'mcp',
+  'metro',
+  'recording',
+  'remote',
+  'replay',
+  'screenshot-diff',
+  'sdk',
+  'snapshot',
+  'utils',
+]);
+
+export type ZoneClassification = 'ranked' | 'unranked' | 'unclassified';
+
+export function classifyZone(zone: string): ZoneClassification {
+  if (RANKED_ZONES.has(zone)) return 'ranked';
+  if (UNRANKED_ZONES.has(zone)) return 'unranked';
+  return 'unclassified';
+}
 
 function scanDynamicImports(line: string, lineNo: number): ImportEdge[] {
   const edges: ImportEdge[] = [];
@@ -102,10 +143,23 @@ export function topFolder(file: string): string {
   return match ? match[1]! : '(root)';
 }
 
-function targetDagZone(file: string): string {
+export function targetDagZone(file: string): string {
   if (file.startsWith('src/daemon/client/')) return 'daemon-client';
   if (file.startsWith('src/daemon/')) return 'daemon-server';
   return topFolder(file);
+}
+
+// The set of zones every production file resolves into. A zone that is neither ranked
+// nor listed as intentionally unranked is an unclassified drift signal.
+export function collectZones(files: readonly string[]): Set<string> {
+  return new Set(files.map(targetDagZone));
+}
+
+// Zones present in `files` that are neither ranked nor intentionally unranked. A new
+// `src/<folder>/` must be classified deliberately; leaving it unclassified would let
+// its back-edges silently escape the ranked spine. Empty means the partition holds.
+export function unclassifiedZones(files: readonly string[]): string[] {
+  return [...collectZones(files)].filter((zone) => classifyZone(zone) === 'unclassified').sort();
 }
 
 function resolveTargetFile(

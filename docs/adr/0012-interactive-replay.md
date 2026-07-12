@@ -2,7 +2,9 @@
 
 ## Status
 
-Proposed (2026-07-10). Nothing in this ADR is implemented yet.
+Accepted (2026-07-10). Migration steps 1-6 have shipped; steps 7 (benchmark extension) and 8
+(agent-supervised re-record repair) remain. See [Migration progress](#migration-progress) for the
+per-step landing record.
 
 ## Context
 
@@ -774,3 +776,25 @@ each states its dependencies explicitly.
    boundary watermark on `replay` (R1/R6), the writer's post-watermark slice and bare-`@ref` fail-loud
    guard (R4/R6) — the healed-script emission otherwise reuses `close --save-script`'s existing
    `session.actions` serializer.
+
+## Migration progress
+
+Landing record for the plan above (main as of 2026-07-12). This section tracks progress only; it does
+not restate or amend the decisions.
+
+| Step | Decision | Status | Landed in |
+| --- | --- | --- | --- |
+| 1. Resolution disclosure | 2 | Shipped | #1193 |
+| 2. Structured divergence transport | 4 (report) | Shipped | #1197 |
+| 3. `.ad` target annotations, inert | 3 (parser/writer) | Shipped | #1196 |
+| 4. Target-binding verification | 3 (enforcement) | Shipped | #1209 |
+| 5. `replay --from` + `--plan-digest` resume | 4 (resume) | Shipped | #1211 |
+| 6. `--update` retirement | 1 | Shipped | #1211 |
+| 7. Benchmark extension | 5 | Deferred | — |
+| 8. Agent-supervised re-record repair | 6 | Accepted; implementation pending | #1226 (decision only) |
+
+Step 4 (#1209) added the `selector-miss`/`identity-mismatch`/`identity-unverifiable` divergence kinds
+and a post-resolution target guard that cross-checks the dispatched winner against the verified member.
+Issue #1221 ("Complete ADR 0012 replay target-binding verification") was closed as already implemented:
+its verification scope is covered by step 4. Step 7 remains deferred; #1226 accepted the step 8 design
+without implementing its runtime behavior.

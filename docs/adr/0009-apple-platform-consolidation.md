@@ -52,14 +52,17 @@ and snapshot fidelity is uneven (the deep-RN AX-server fallback is iOS-simulator
 
 This composes with ADR 0008 (the descriptor's capability facet) and ADR 0003.
 
-Implementation status as of 2026-06:
+Implementation status as of 2026-07:
 
-- Shipped: additive `appleOs` groundwork, the shared Apple engine under `src/platforms/apple/core`, macOS leaf
-  files under `src/platforms/apple/os/macos`, direct internal imports to the Apple modules, and visionOS
-  profile/build/discovery groundwork.
-- Deferred: the public `Platform` collapse from `ios`/`macos` to `apple`, a dedicated tvOS leaf, per-`AppleOS`
-  capability tables, and any watchOS unsupported sentinel. watchOS remains out of scope for the current
-  consolidation.
+- Shipped: additive `appleOs` groundwork; the shared Apple engine under `src/platforms/apple/core`; macOS
+  leaf files under `src/platforms/apple/os/macos`; a dedicated tvOS leaf under `src/platforms/apple/os/tvos`;
+  direct internal imports to the Apple modules; the per-`AppleOS` capability table
+  (`APPLE_OS_CAPABILITIES`, `src/platforms/apple/capabilities.ts`, parity-pinned against the pre-table
+  predicates); the watchOS **unsupported sentinel** (reserved in the `AppleOS` type and interactor-rejected —
+  XCUITest cannot drive watchOS UI — never produced by discovery); and visionOS profile/build/discovery
+  groundwork.
+- Deferred: the public `Platform` collapse from `ios`/`macos` to `apple` (the last, highest-diff step; the
+  public wire still emits `ios`/`macos` leaves via `PUBLIC_PLATFORMS`) and net-new visionOS spatial-input QA.
 
-This ADR owns the architectural decision; implementation progress for the remaining platform-plugin work is
-tracked in GitHub issues under the Phase 3 umbrella (#972).
+This ADR owns the architectural decision. The Phase 3 platform-plugin umbrella (#972) is closed; only the
+public `Platform` collapse above remains deferred.

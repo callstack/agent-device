@@ -271,7 +271,7 @@ const REQUEST_PLATFORM_PROVIDER_DESCRIPTORS = [
     },
     async appendWrapper(scopedProviders, wrappers) {
       if (!scopedProviders.appLog?.provider) return;
-      const { withAppLogProvider } = await import('./app-log.ts');
+      const { withAppLogProvider } = await import('./app-log-request-scope.ts');
       appendRequestProviderWrapper(wrappers, scopedProviders.appLog, withAppLogProvider);
     },
   },

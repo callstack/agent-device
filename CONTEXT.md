@@ -93,10 +93,17 @@ The perfect-shape refactor is complete and merged. Its end-state:
   `src/platforms/apple/os/<os>/`. The public wire stays non-breaking: `PUBLIC_PLATFORMS`
   (`src/kernel/device.ts`) still emits `ios`/`macos` leaf output. See
   [ADR 0009](docs/adr/0009-apple-platform-consolidation.md).
-- Folder DAG + layering lint. `kernel`/`remote`/`metro`/`client`/`snapshot`/`screenshot-diff`/
-  `replay`/`cli-parser`/`daemon-client`+`server`/`sdk` are arranged as an import-direction DAG
-  (imports point down toward the kernel sink), enforced in CI by `scripts/layering/check.ts`.
-  The gate rejects production value-import cycles and every ranked target-spine back-edge.
+- Folder DAG + layering lint. `scripts/layering/check.ts` enforces two different scopes in CI.
+  GLOBALLY, across every production source file, it enforces the R1-R3 move rules
+  (kernel-sink, commands-floor, platforms-seam) and rejects all production static value-import
+  cycles. Separately, it ranks an explicit target spine —
+  `kernel ◄ platforms ◄ core ◄ commands ◄ { cli, client, daemon-server } ◄ daemon-client` — and
+  rejects every back-edge within it. Root entrypoints and peripheral zones (`mcp`, `compat`,
+  `remote`, `metro`, `replay`, `recording`, `snapshot`, `screenshot-diff`, `cloud-webdriver`,
+  `sdk`, `utils`) are deliberately unranked (`UNRANKED_ZONES` in `scripts/layering/model.ts`):
+  they still obey R1-R4, but the gate asserts no total back-edge order over them. It is not a
+  claim that every folder is arranged in one DAG. `model.test.ts` guards that no new zone escapes
+  this classification silently.
 - Agent-cost. Responses carry a cost block and MCP `outputSchema`, rendered through a leveled
   `ResponseView`.
 

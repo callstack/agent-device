@@ -1,14 +1,19 @@
 // Import-direction lint — enforces the folder DAG established by the Phase-5
 // folder moves (see CONTEXT.md, "Architecture: folder DAG + layering lint").
 //
-// Target DAG (imports point DOWN, toward the kernel sink):
+// Ranked target spine (imports point DOWN, toward the kernel sink):
 //   kernel ◄ platforms ◄ core ◄ commands ◄ { cli, client, daemon/server }
-//   client ◄ daemon/client     remote, metro ◄ daemon/client
-//   sdk = re-export barrels only
+//   client ◄ daemon/client
 //
-// The target DAG is complete. This gate enforces the three move rules, rejects
-// all production value-import cycles, and rejects every ranked target-spine
-// back-edge.
+// This gate enforces three things, with two different scopes:
+//   - GLOBALLY, across every production source file: the R1-R3 move rules and
+//     rejection of all production static value-import cycles (R4).
+//   - Over the RANKED SPINE only: rejection of every spine back-edge (R5), i.e.
+//     an import whose source zone outranks its target zone.
+// Root and peripheral zones (see `UNRANKED_ZONES` in model.ts) are deliberately
+// NOT ranked: they still participate in R1-R4, but the gate makes no back-edge
+// claim about them. It is not a claim that every folder is arranged in one total
+// order — only the ranked spine is.
 
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
@@ -160,8 +165,9 @@ function checkBackEdges(edges: readonly ResolvedImportEdge[]): Violation[] {
 function report(files: readonly string[], violations: readonly Violation[]): number {
   if (violations.length === 0) {
     process.stdout.write(
-      `Layering guard: OK — ${files.length} source files satisfy R1-R3, contain no ` +
-        `value-import cycles, and contain no target-spine back-edges.\n`,
+      `Layering guard: OK — ${files.length} source files satisfy R1-R3 and contain no ` +
+        `value-import cycles (both checked globally); the ranked target spine contains no ` +
+        `back-edges (root/peripheral zones are intentionally unranked).\n`,
     );
     return 0;
   }

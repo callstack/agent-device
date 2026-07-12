@@ -20,7 +20,7 @@ Selected commands:
 
 These commands already have closed neutral results in `src/contracts/navigation.ts`, typed
 `CommandResultMap` entries, executable definitions, Node client methods, and MCP output schemas.
-They do not overlap the broad-return client methods being changed under #1183.
+They do not overlap the broad-return client methods narrowed under #1183 (since closed).
 
 The baseline has three independent command-to-surface declarations per selected command:
 
