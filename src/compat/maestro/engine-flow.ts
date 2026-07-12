@@ -1,4 +1,6 @@
+import path from 'node:path';
 import { AppError } from '../../kernel/errors.ts';
+import { createRequestCanceledError } from '../../request/cancel.ts';
 import type {
   MaestroCommand,
   MaestroProgram,
@@ -6,7 +8,13 @@ import type {
   MaestroRunFlowCondition,
 } from './program-ir.ts';
 import type { MaestroExecutionContext } from './engine-context.ts';
-import type { MaestroEngineOptions, MaestroObservationCondition } from './engine-types.ts';
+import { evaluateMaestroBooleanExpression } from './engine-expression.ts';
+import {
+  DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY,
+  type MaestroCompatibilityTimingPolicy,
+  type MaestroEngineOptions,
+  type MaestroObservationCondition,
+} from './engine-types.ts';
 
 export function resolveCommand<T extends MaestroCommand>(
   command: T,
@@ -31,6 +39,25 @@ export function readIterationCount(
   return resolved;
 }
 
+export function resolveMaestroTimingPolicy(
+  overrides: Partial<MaestroCompatibilityTimingPolicy> = {},
+): MaestroCompatibilityTimingPolicy {
+  const policy = { ...DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY, ...overrides };
+  for (const [name, value] of Object.entries(policy)) {
+    if (!Number.isInteger(value) || value < 0) {
+      throw new AppError(
+        'INVALID_ARGS',
+        `Maestro timing policy ${name} must be a non-negative integer.`,
+      );
+    }
+  }
+  return policy;
+}
+
+export function checkpointMaestroCancellation(signal: AbortSignal | undefined): void {
+  if (signal?.aborted) throw createRequestCanceledError();
+}
+
 export async function readIncludedProgram(
   command: MaestroRunFlowCommand,
   options: MaestroEngineOptions,
@@ -46,7 +73,56 @@ export async function readIncludedProgram(
   if (!options.loadProgram) {
     throw new AppError('INVALID_ARGS', 'Maestro file runFlow requires a program loader.');
   }
+  checkpointMaestroCancellation(options.signal);
+  if (options.signal) {
+    return await options.loadProgram(command.include.path, command.source.path, options.signal);
+  }
   return await options.loadProgram(command.include.path, command.source.path);
+}
+
+export function includePathKey(
+  command: MaestroRunFlowCommand,
+  parentSource: string | undefined,
+): string | undefined {
+  if (command.include.kind !== 'file') return undefined;
+  return path.resolve(
+    parentSource ? path.dirname(parentSource) : process.cwd(),
+    command.include.path,
+  );
+}
+
+export function sourcePathKey(source: string | undefined): string | undefined {
+  return source === undefined ? undefined : path.resolve(source);
+}
+
+export function assertIncludePathAvailable(
+  command: MaestroRunFlowCommand,
+  activePaths: ReadonlySet<string>,
+): string | undefined {
+  const requestedPath = includePathKey(command, command.source.path);
+  if (requestedPath && activePaths.has(requestedPath)) {
+    throw new AppError('INVALID_ARGS', `Maestro runFlow cycle detected at ${requestedPath}.`);
+  }
+  return requestedPath;
+}
+
+export function registerIncludedProgramPaths(
+  command: MaestroRunFlowCommand,
+  program: MaestroProgram,
+  requestedPath: string | undefined,
+  activePaths: Set<string>,
+): Set<string> {
+  const loadedPath =
+    command.include.kind === 'file' ? sourcePathKey(program.source.path) : undefined;
+  const includedPaths = new Set(
+    [requestedPath, loadedPath].filter((value): value is string => value !== undefined),
+  );
+  const repeatedPath = [...includedPaths].find((value) => activePaths.has(value));
+  if (repeatedPath) {
+    throw new AppError('INVALID_ARGS', `Maestro runFlow cycle detected at ${repeatedPath}.`);
+  }
+  includedPaths.forEach((value) => activePaths.add(value));
+  return includedPaths;
 }
 
 export function staticConditionMatches(
@@ -57,11 +133,7 @@ export function staticConditionMatches(
   if (condition.platform && condition.platform !== options.platform) return false;
   if (condition.true === undefined) return true;
   if (typeof condition.true === 'boolean') return condition.true;
-  const expression = context.resolve(condition.true).trim();
-  if (expression === 'true') return true;
-  if (expression === 'false') return false;
-  if (options.evaluateExpression) return options.evaluateExpression(expression, context.values);
-  throw new AppError('INVALID_ARGS', 'Maestro runFlow.when.true expression requires an evaluator.');
+  return evaluateMaestroBooleanExpression(condition.true, context, options.platform);
 }
 
 export function observationConditions(

@@ -255,6 +255,7 @@ export type MaestroCommand =
 export type MaestroProgramConfig = {
   name?: string;
   appId?: string;
+  tags?: string[];
   env?: Record<string, string | number | boolean>;
   onFlowStart?: MaestroCommand[];
   onFlowComplete?: MaestroCommand[];

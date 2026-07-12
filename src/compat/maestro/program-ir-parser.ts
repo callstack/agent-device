@@ -13,6 +13,7 @@ import {
   readOptionalString,
   readOptionalEntry,
   readScalarMap,
+  readStringSequence,
   sourceAt,
   type MaestroProgramParseContext,
 } from './program-ir-values.ts';
@@ -66,7 +67,7 @@ function parseProgramConfig(node: Node, context: MaestroProgramParseContext): Ma
   assertOnlyKeys(
     entries,
     'flow config',
-    ['name', 'appId', 'env', 'onFlowStart', 'onFlowComplete'],
+    ['name', 'appId', 'tags', 'env', 'onFlowStart', 'onFlowComplete'],
     context,
   );
   const name = readOptionalEntry(entries, 'name', (entry) =>
@@ -74,6 +75,9 @@ function parseProgramConfig(node: Node, context: MaestroProgramParseContext): Ma
   );
   const appId = readOptionalEntry(entries, 'appId', (entry) =>
     readOptionalString(entry, 'appId', context),
+  );
+  const tags = readOptionalEntry(entries, 'tags', (entry) =>
+    readStringSequence(entry, 'tags', context),
   );
   const env = readOptionalEntry(entries, 'env', (entry) => readScalarMap(entry, 'env', context));
   const onFlowStart = readOptionalEntry(entries, 'onFlowStart', (entry) =>
@@ -85,6 +89,7 @@ function parseProgramConfig(node: Node, context: MaestroProgramParseContext): Ma
   return {
     ...(name === undefined ? {} : { name }),
     ...(appId === undefined ? {} : { appId }),
+    ...(tags === undefined ? {} : { tags }),
     ...(env === undefined ? {} : { env }),
     ...(onFlowStart === undefined ? {} : { onFlowStart }),
     ...(onFlowComplete === undefined ? {} : { onFlowComplete }),

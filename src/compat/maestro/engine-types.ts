@@ -13,11 +13,27 @@ export type MaestroControlCommand = Extract<
 
 export type MaestroRuntimeCommand = Exclude<MaestroCommand, MaestroControlCommand>;
 
+export type MaestroObservationFrame = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+};
+
+export type MaestroObservationEvidence = {
+  kind: 'selector';
+  selector: MaestroSelector;
+  visible: boolean;
+  frame?: MaestroObservationFrame;
+  candidateCount: number;
+  ref?: string;
+};
+
 export type MaestroObservation = {
   generation: number;
   matched: boolean;
   candidateCount?: number;
-  evidence?: unknown;
+  evidence?: MaestroObservationEvidence;
 };
 
 export type MaestroObservationCondition =
@@ -29,6 +45,7 @@ export type MaestroRuntimeRequest = {
   appId?: string;
   generation: number;
   cachedObservation?: MaestroObservation;
+  signal?: AbortSignal;
 };
 
 export type MaestroRuntimeResult = {
@@ -45,8 +62,23 @@ export type MaestroRuntimePort = {
     timeoutMs: number;
     generation: number;
     cachedObservation?: MaestroObservation;
+    signal?: AbortSignal;
   }): Promise<MaestroObservation>;
 };
+
+export type MaestroCompatibilityTimingPolicy = {
+  assertVisibleTimeoutMs: number;
+  assertNotVisibleTimeoutMs: number;
+  extendedWaitUntilTimeoutMs: number;
+  runFlowConditionTimeoutMs: number;
+};
+
+export const DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY = {
+  assertVisibleTimeoutMs: 17_000,
+  assertNotVisibleTimeoutMs: 3_000,
+  extendedWaitUntilTimeoutMs: 10_000,
+  runFlowConditionTimeoutMs: 3_000,
+} as const satisfies MaestroCompatibilityTimingPolicy;
 
 export type MaestroEngineEvent = {
   command: MaestroCommand;
@@ -63,8 +95,13 @@ export type MaestroEngineObserver = {
 export type MaestroEngineOptions = {
   env?: Record<string, string>;
   platform?: MaestroPlatform;
-  loadProgram?: (path: string, parentSource?: string) => Promise<MaestroProgram>;
-  evaluateExpression?: (expression: string, env: Readonly<Record<string, string>>) => boolean;
+  loadProgram?: (
+    path: string,
+    parentSource?: string,
+    signal?: AbortSignal,
+  ) => Promise<MaestroProgram>;
+  timing?: Partial<MaestroCompatibilityTimingPolicy>;
+  signal?: AbortSignal;
   observer?: MaestroEngineObserver;
   now?: () => number;
 };

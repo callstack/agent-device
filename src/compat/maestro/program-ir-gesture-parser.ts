@@ -29,7 +29,9 @@ import {
   type MaestroProgramParseContext,
 } from './program-ir-values.ts';
 
-const SELECTOR_KEYS = ['id', 'text', 'label', 'enabled', 'selected'] as const;
+const BASE_SELECTOR_KEYS = ['id', 'text', 'enabled', 'selected'] as const;
+const TAP_SELECTOR_KEYS = [...BASE_SELECTOR_KEYS, 'label'] as const;
+type SelectorKey = keyof MaestroSelectorMap;
 
 type SelectorFieldReader = (
   selector: MaestroSelectorMap,
@@ -55,10 +57,11 @@ export function parseMaestroSelector(
   node: Node | null | undefined,
   name: string,
   context: MaestroProgramParseContext,
+  selectorKeys: readonly SelectorKey[] = BASE_SELECTOR_KEYS,
 ): MaestroSelector {
   if (isScalar(node)) return { text: readRequiredString(node, name, context) };
   const entries = readMapEntries(node, name, context);
-  assertOnlyKeys(entries, name, SELECTOR_KEYS, context);
+  assertOnlyKeys(entries, name, selectorKeys, context);
   return parseSelectorEntries(entries, name, context);
 }
 
@@ -72,7 +75,7 @@ export function parseMaestroTapOnCommand(
     return {
       kind: 'tapOn',
       source,
-      target: selectorTarget(parseMaestroSelector(value, 'tapOn', context)),
+      target: selectorTarget(parseMaestroSelector(value, 'tapOn', context, TAP_SELECTOR_KEYS)),
     };
   }
 
@@ -90,10 +93,10 @@ export function parseMaestroTapOnCommand(
   assertOnlyKeys(
     entries,
     'tapOn',
-    [...SELECTOR_KEYS, 'repeat', 'delay', 'optional', 'index', 'childOf'],
+    [...TAP_SELECTOR_KEYS, 'repeat', 'delay', 'optional', 'index', 'childOf'],
     context,
   );
-  const selectorEntries = entries.filter((entry) => isSelectorKey(entry.key));
+  const selectorEntries = entries.filter((entry) => isSelectorKey(entry.key, TAP_SELECTOR_KEYS));
   const childOf = hasEntry(entries, 'childOf')
     ? parseMaestroSelector(entryValue(entries, 'childOf'), 'tapOn.childOf', context)
     : undefined;
@@ -125,12 +128,12 @@ export function parseMaestroDoubleTapOnCommand(
     };
   }
   const entries = readMapEntries(value, 'doubleTapOn', context);
-  assertOnlyKeys(entries, 'doubleTapOn', ['point', ...SELECTOR_KEYS, 'delay'], context);
+  assertOnlyKeys(entries, 'doubleTapOn', ['point', ...BASE_SELECTOR_KEYS, 'delay'], context);
   const delay = hasEntry(entries, 'delay')
     ? readOptionalNonNegativeInteger(entryValue(entries, 'delay'), 'doubleTapOn.delay', context)
     : undefined;
   if (hasEntry(entries, 'point')) {
-    if (entries.some((entry) => isSelectorKey(entry.key))) {
+    if (entries.some((entry) => isSelectorKey(entry.key, BASE_SELECTOR_KEYS))) {
       invalidAt(
         'Maestro doubleTapOn.point cannot be combined with a selector.',
         commandNode,
@@ -149,7 +152,7 @@ export function parseMaestroDoubleTapOnCommand(
     source,
     target: selectorTarget(
       parseSelectorEntries(
-        entries.filter((entry) => isSelectorKey(entry.key)),
+        entries.filter((entry) => isSelectorKey(entry.key, BASE_SELECTOR_KEYS)),
         'doubleTapOn',
         context,
       ),
@@ -172,9 +175,9 @@ export function parseMaestroLongPressOnCommand(
     };
   }
   const entries = readMapEntries(value, 'longPressOn', context);
-  assertOnlyKeys(entries, 'longPressOn', ['point', ...SELECTOR_KEYS], context);
+  assertOnlyKeys(entries, 'longPressOn', ['point', ...BASE_SELECTOR_KEYS], context);
   if (hasEntry(entries, 'point')) {
-    if (entries.some((entry) => isSelectorKey(entry.key))) {
+    if (entries.some((entry) => isSelectorKey(entry.key, BASE_SELECTOR_KEYS))) {
       invalidAt(
         'Maestro longPressOn.point cannot be combined with a selector.',
         commandNode,
@@ -190,7 +193,13 @@ export function parseMaestroLongPressOnCommand(
   return {
     kind: 'longPressOn',
     source,
-    target: selectorTarget(parseSelectorEntries(entries, 'longPressOn', context)),
+    target: selectorTarget(
+      parseSelectorEntries(
+        entries.filter((entry) => isSelectorKey(entry.key, BASE_SELECTOR_KEYS)),
+        'longPressOn',
+        context,
+      ),
+    ),
   };
 }
 
@@ -380,8 +389,8 @@ function assignBooleanSelector(
   if (value !== undefined) selector[key] = value;
 }
 
-function isSelectorKey(key: string): key is (typeof SELECTOR_KEYS)[number] {
-  return (SELECTOR_KEYS as readonly string[]).includes(key);
+function isSelectorKey(key: string, selectorKeys: readonly SelectorKey[]): key is SelectorKey {
+  return selectorKeys.includes(key as SelectorKey);
 }
 
 function parsePoint(

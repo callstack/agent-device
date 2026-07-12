@@ -71,6 +71,16 @@ export function readSequenceItems(
   return node.items as Node[];
 }
 
+export function readStringSequence(
+  node: Node | null | undefined,
+  name: string,
+  context: MaestroProgramParseContext,
+): string[] {
+  return readSequenceItems(node, name, context).map((item, index) =>
+    readRequiredString(item, `${name}[${index}]`, context),
+  );
+}
+
 export function assertOnlyKeys(
   entries: readonly MaestroMapEntry[],
   name: string,

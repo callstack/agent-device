@@ -41,7 +41,16 @@ describe('executeMaestroProgram', () => {
     const observations: MaestroObservation[] = [];
     const port = makePort({
       observe: vi.fn(async ({ generation }) => {
-        const observation = { generation, matched: true, evidence: { generation } };
+        const observation = {
+          generation,
+          matched: true,
+          evidence: {
+            kind: 'selector' as const,
+            selector: { text: 'Ready' },
+            visible: true,
+            candidateCount: 1,
+          },
+        };
         observations.push(observation);
         return observation;
       }),
@@ -177,6 +186,143 @@ describe('executeMaestroProgram', () => {
     await expect(executeMaestroProgram(program, port)).rejects.toThrow(
       /observation generation 9.*\/flows\/stale\.yaml:line 2/i,
     );
+  });
+
+  test('uses injected timing and deterministic when.true grammar', async () => {
+    const controller = new AbortController();
+    const observe = vi.fn(
+      async ({ generation, condition }: Parameters<MaestroRuntimePort['observe']>[0]) => ({
+        generation,
+        matched: true,
+        evidence: {
+          kind: 'selector' as const,
+          selector: condition.selector,
+          visible: condition.kind === 'visible',
+          candidateCount: 1,
+        },
+      }),
+    );
+    const port = makePort({ observe });
+    const program = parseMaestroProgram(
+      [
+        '---',
+        '- assertVisible: Ready',
+        '- assertNotVisible: Gone',
+        '- extendedWaitUntil:',
+        '    visible: Done',
+        '- runFlow:',
+        '    when:',
+        '      true: "${maestro.platform == \'ios\' && (true || false)}"',
+        '      visible: Gate',
+        '    commands:',
+        '      - inputText: included',
+        '- runFlow:',
+        '    when:',
+        '      true: "${maestro.platform == \'android\'}"',
+        '    commands:',
+        '      - inputText: skipped',
+      ].join('\n'),
+    );
+
+    await executeMaestroProgram(program, port, {
+      platform: 'ios',
+      timing: {
+        assertVisibleTimeoutMs: 101,
+        assertNotVisibleTimeoutMs: 202,
+        extendedWaitUntilTimeoutMs: 303,
+        runFlowConditionTimeoutMs: 404,
+      },
+      signal: controller.signal,
+    });
+
+    expect(observe.mock.calls.map(([request]) => request.timeoutMs)).toEqual([101, 202, 303, 404]);
+    expect(observe.mock.calls[0]?.[0].signal).toBe(controller.signal);
+    expect(port.execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: expect.objectContaining({ kind: 'inputText', text: 'included' }),
+      }),
+    );
+    expect(port.execute).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: expect.objectContaining({ kind: 'inputText', text: 'skipped' }),
+      }),
+    );
+  });
+
+  test('preserves output variables across scopes while runtime env wins', async () => {
+    const seenTexts: string[] = [];
+    const child = parseMaestroProgram(
+      [
+        'env:',
+        '  CHILD_CONFIG: ${CHILD}',
+        '  OVERRIDE: child',
+        '---',
+        '- inputText: ${CHILD_CONFIG}',
+        '- inputText: ${OVERRIDE}',
+        '- runScript: child.js',
+      ].join('\n'),
+    );
+    const port = makePort({
+      execute: vi.fn(async (request) => {
+        if (request.command.kind === 'inputText') seenTexts.push(request.command.text);
+        if (request.command.kind === 'runScript') {
+          return { mutated: false, outputEnv: { OUTPUT: 'generated' } };
+        }
+        return { mutated: true };
+      }),
+    });
+    const program = parseMaestroProgram(
+      [
+        'env:',
+        '  BASE: parent',
+        '  OVERRIDE: flow',
+        '---',
+        '- runFlow:',
+        '    file: child.yaml',
+        '    env:',
+        '      CHILD: ${BASE}',
+        '- inputText: ${OUTPUT}',
+        '- inputText: ${OVERRIDE}',
+      ].join('\n'),
+    );
+
+    await executeMaestroProgram(program, port, {
+      env: { OVERRIDE: 'runtime' },
+      loadProgram: vi.fn(async () => child),
+    });
+
+    expect(seenTexts).toEqual(['parent', 'runtime', 'generated', 'runtime']);
+  });
+
+  test('rejects recursive file includes before loading the child', async () => {
+    const loadProgram = vi.fn();
+    const program = parseMaestroProgram('---\n- runFlow: ./main.yaml\n', {
+      sourcePath: '/flows/main.yaml',
+    });
+
+    await expect(executeMaestroProgram(program, makePort(), { loadProgram })).rejects.toThrow(
+      /runFlow cycle detected.*\/flows\/main\.yaml/i,
+    );
+    expect(loadProgram).not.toHaveBeenCalled();
+  });
+
+  test('forwards AbortSignal and stops at the next cancellation checkpoint', async () => {
+    const controller = new AbortController();
+    const execute = vi.fn(async (_request: MaestroRuntimeRequest) => {
+      controller.abort();
+      return { mutated: false };
+    });
+    const port = makePort({ execute });
+    const program = parseMaestroProgram('---\n- inputText: first\n- inputText: second\n');
+
+    await expect(
+      executeMaestroProgram(program, port, { signal: controller.signal }),
+    ).rejects.toMatchObject({
+      code: 'COMMAND_FAILED',
+      details: { reason: 'request_canceled' },
+    });
+    expect(port.execute).toHaveBeenCalledTimes(1);
+    expect(execute.mock.calls[0]?.[0].signal).toBe(controller.signal);
   });
 });
 

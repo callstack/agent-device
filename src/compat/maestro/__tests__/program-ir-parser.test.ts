@@ -75,6 +75,18 @@ describe('parseMaestroProgram', () => {
     assert.equal(retry.commands[0]?.source.line, 27);
   });
 
+  test('parses flow tags as typed metadata and validates each tag', () => {
+    const program = parseMaestroProgram(
+      ['name: Pager', 'tags: [smoke, pager]', '---', '- launchApp'].join('\n'),
+    );
+
+    assert.deepEqual(program.config.tags, ['smoke', 'pager']);
+    assert.throws(
+      () => parseMaestroProgram(['tags: [smoke, 7]', '---', '- launchApp'].join('\n')),
+      /tags\[1\].*expects a string.*line 1/i,
+    );
+  });
+
   test('keeps authored absolute, percentage, and target gesture spaces', () => {
     const program = parseMaestroProgram(`---
 - tapOn:
@@ -136,6 +148,21 @@ describe('parseMaestroProgram', () => {
       from: { id: 'handle' },
       direction: 'left',
     });
+  });
+
+  test('keeps selector-map keys aligned with the supported command subset', () => {
+    const program = parseMaestroProgram(['---', '- tapOn:', '    label: Save'].join('\n'));
+    const tap = commandOfKind(program.commands[0], 'tapOn');
+    assert.deepEqual(tap.target, { space: 'target', selector: { label: 'Save' } });
+
+    assert.throws(
+      () => parseMaestroProgram(['---', '- doubleTapOn:', '    label: Save'].join('\n')),
+      /doubleTapOn field "label" is not supported.*line 3/i,
+    );
+    assert.throws(
+      () => parseMaestroProgram(['---', '- assertVisible:', '    label: Save'].join('\n')),
+      /assertVisible field "label" is not supported.*line 3/i,
+    );
   });
 
   test('preserves an include boundary and the authored include path', () => {

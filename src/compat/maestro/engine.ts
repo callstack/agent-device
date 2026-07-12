@@ -2,15 +2,21 @@ import { AppError } from '../../kernel/errors.ts';
 import type { MaestroCommand, MaestroProgram, MaestroRunFlowCondition } from './program-ir.ts';
 import { createMaestroExecutionContext, type MaestroExecutionContext } from './engine-context.ts';
 import {
+  checkpointMaestroCancellation,
+  assertIncludePathAvailable,
   observationConditions,
   readIncludedProgram,
   readIterationCount,
+  registerIncludedProgramPaths,
+  resolveMaestroTimingPolicy,
   resolveCommand,
+  sourcePathKey,
   staticConditionMatches,
 } from './engine-flow.ts';
 import type {
   MaestroEngineOptions,
   MaestroEngineResult,
+  MaestroObservation,
   MaestroObservationCondition,
   MaestroRuntimeCommand,
   MaestroRuntimePort,
@@ -23,6 +29,8 @@ type EngineState = {
   executed: number;
   skipped: number;
   artifacts: Set<string>;
+  timing: ReturnType<typeof resolveMaestroTimingPolicy>;
+  activeIncludePaths: Set<string>;
   appId?: string;
 };
 
@@ -31,14 +39,17 @@ export async function executeMaestroProgram(
   port: MaestroRuntimePort,
   options: MaestroEngineOptions = {},
 ): Promise<MaestroEngineResult> {
+  checkpointMaestroCancellation(options.signal);
+  const rootPath = sourcePathKey(program.source.path);
   const state: EngineState = {
     port,
-    context: createMaestroExecutionContext(program.config.env, options.env),
+    context: createMaestroExecutionContext({}, options.env),
     options,
     executed: 0,
     skipped: 0,
     artifacts: new Set(),
-    ...(program.config.appId ? { appId: program.config.appId } : {}),
+    timing: resolveMaestroTimingPolicy(options.timing),
+    activeIncludePaths: new Set(rootPath === undefined ? [] : [rootPath]),
   };
   await executeProgram(program, state);
   return {
@@ -50,6 +61,7 @@ export async function executeMaestroProgram(
 }
 
 async function executeProgram(program: MaestroProgram, state: EngineState): Promise<void> {
+  checkpointMaestroCancellation(state.options.signal);
   const leave = state.context.enter(program.config.env);
   const previousAppId = state.appId;
   if (program.config.appId) state.appId = state.context.resolve(program.config.appId);
@@ -58,7 +70,9 @@ async function executeProgram(program: MaestroProgram, state: EngineState): Prom
     await executeCommands(program.commands, state);
   } finally {
     try {
-      await executeCommands(program.config.onFlowComplete ?? [], state);
+      if (!state.options.signal?.aborted) {
+        await executeCommands(program.config.onFlowComplete ?? [], state);
+      }
     } finally {
       state.appId = previousAppId;
       leave();
@@ -70,16 +84,21 @@ async function executeCommands(
   commands: readonly MaestroCommand[],
   state: EngineState,
 ): Promise<void> {
-  for (const command of commands) await executeObserved(command, state);
+  for (const command of commands) {
+    checkpointMaestroCancellation(state.options.signal);
+    await executeObserved(command, state);
+  }
 }
 
 async function executeObserved(command: MaestroCommand, state: EngineState): Promise<void> {
+  checkpointMaestroCancellation(state.options.signal);
   const now = state.options.now ?? Date.now;
   const startedAt = now();
   const generation = state.context.generation;
   state.options.observer?.commandStarted?.({ command, source: command.source, generation });
   try {
     await executeCommand(resolveCommand(command, state.context), state);
+    checkpointMaestroCancellation(state.options.signal);
     state.options.observer?.commandCompleted?.({
       command,
       source: command.source,
@@ -99,6 +118,7 @@ async function executeObserved(command: MaestroCommand, state: EngineState): Pro
 }
 
 async function executeCommand(command: MaestroCommand, state: EngineState): Promise<void> {
+  checkpointMaestroCancellation(state.options.signal);
   switch (command.kind) {
     case 'runFlow':
       await executeRunFlow(command, state);
@@ -107,6 +127,7 @@ async function executeCommand(command: MaestroCommand, state: EngineState): Prom
       const times = readIterationCount(command.times, 0, state.context, 'repeat.times');
       state.executed += 1;
       for (let iteration = 0; iteration < times; iteration += 1) {
+        checkpointMaestroCancellation(state.options.signal);
         await executeCommands(command.commands, state);
       }
       return;
@@ -118,16 +139,28 @@ async function executeCommand(command: MaestroCommand, state: EngineState): Prom
       return;
     }
     case 'assertVisible':
-      await requireObservation({ kind: 'visible', selector: command.target }, 17_000, state);
+      await requireObservation(
+        { kind: 'visible', selector: command.target },
+        state.timing.assertVisibleTimeoutMs,
+        state,
+      );
       state.executed += 1;
       return;
     case 'assertNotVisible':
-      await requireObservation({ kind: 'notVisible', selector: command.target }, 17_000, state);
+      await requireObservation(
+        { kind: 'notVisible', selector: command.target },
+        state.timing.assertNotVisibleTimeoutMs,
+        state,
+      );
       state.executed += 1;
       return;
     case 'extendedWaitUntil': {
       const condition = readExtendedWaitCondition(command);
-      await requireObservation(condition, command.timeout ?? 10_000, state);
+      await requireObservation(
+        condition,
+        command.timeout ?? state.timing.extendedWaitUntilTimeoutMs,
+        state,
+      );
       state.executed += 1;
       return;
     }
@@ -140,12 +173,16 @@ async function executeRuntimeCommand(
   command: MaestroRuntimeCommand,
   state: EngineState,
 ): Promise<void> {
-  const result = await state.port.execute({
+  checkpointMaestroCancellation(state.options.signal);
+  const request = {
     command,
     ...(state.appId ? { appId: state.appId } : {}),
     generation: state.context.generation,
     ...(state.context.observation ? { cachedObservation: state.context.observation } : {}),
-  });
+    ...(state.options.signal ? { signal: state.options.signal } : {}),
+  };
+  const result = await state.port.execute(request);
+  checkpointMaestroCancellation(state.options.signal);
   if (result.observation) state.context.recordObservation(result.observation);
   if (result.outputEnv) state.context.merge(result.outputEnv);
   result.artifactPaths?.forEach((entry) => state.artifacts.add(entry));
@@ -157,17 +194,27 @@ async function executeRunFlow(
   command: Extract<MaestroCommand, { kind: 'runFlow' }>,
   state: EngineState,
 ): Promise<void> {
+  checkpointMaestroCancellation(state.options.signal);
   if (command.when && !(await flowConditionMatches(command.when, state))) {
     state.skipped += 1;
     return;
   }
+  const requestedPath = assertIncludePathAvailable(command, state.activeIncludePaths);
   const program = await readIncludedProgram(command, state.options);
+  checkpointMaestroCancellation(state.options.signal);
+  const includedPaths = registerIncludedProgramPaths(
+    command,
+    program,
+    requestedPath,
+    state.activeIncludePaths,
+  );
   const leave = state.context.enter(command.env);
   state.executed += 1;
   try {
     await executeProgram(program, state);
   } finally {
     leave();
+    includedPaths.forEach((value) => state.activeIncludePaths.delete(value));
   }
 }
 
@@ -175,9 +222,12 @@ async function flowConditionMatches(
   condition: MaestroRunFlowCondition,
   state: EngineState,
 ): Promise<boolean> {
+  checkpointMaestroCancellation(state.options.signal);
   if (!staticConditionMatches(condition, state.context, state.options)) return false;
   for (const observation of observationConditions(condition)) {
-    if (!(await observe(observation, 7_000, state)).matched) return false;
+    checkpointMaestroCancellation(state.options.signal);
+    if (!(await observe(observation, state.timing.runFlowConditionTimeoutMs, state)).matched)
+      return false;
   }
   return true;
 }
@@ -187,6 +237,7 @@ async function requireObservation(
   timeoutMs: number,
   state: EngineState,
 ): Promise<void> {
+  checkpointMaestroCancellation(state.options.signal);
   if (!(await observe(condition, timeoutMs, state)).matched) {
     throw new AppError('COMMAND_FAILED', `Maestro ${condition.kind} condition did not match.`);
   }
@@ -196,13 +247,17 @@ async function observe(
   condition: MaestroObservationCondition,
   timeoutMs: number,
   state: EngineState,
-) {
-  const observation = await state.port.observe({
+): Promise<MaestroObservation> {
+  checkpointMaestroCancellation(state.options.signal);
+  const request = {
     condition,
     timeoutMs,
     generation: state.context.generation,
     ...(state.context.observation ? { cachedObservation: state.context.observation } : {}),
-  });
+    ...(state.options.signal ? { signal: state.options.signal } : {}),
+  };
+  const observation = await state.port.observe(request);
+  checkpointMaestroCancellation(state.options.signal);
   state.context.recordObservation(observation);
   return observation;
 }
@@ -214,10 +269,12 @@ async function executeRetry(
 ): Promise<void> {
   let failure: unknown;
   for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+    checkpointMaestroCancellation(state.options.signal);
     try {
       await executeCommands(commands, state);
       return;
     } catch (error) {
+      checkpointMaestroCancellation(state.options.signal);
       failure = error;
     }
   }
