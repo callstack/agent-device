@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test, expect } from 'vitest';
-import type { SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
+import type { SnapshotState } from '../../../kernel/snapshot.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import {
   extractMaestroVisibleTextQuery,
@@ -9,19 +9,10 @@ import {
   resolveMaestroNodeFromSnapshot,
   resolveVisibleMaestroNodeFromSnapshot,
 } from '../runtime-targets.ts';
+import { IOS_TAB_FRAME, makeSnapshot } from './runtime-target-fixtures.ts';
 
-const IOS_TAB_FRAME = { referenceWidth: 402, referenceHeight: 874 } as const;
-
-type SnapshotNodeFixture = Omit<SnapshotNode, 'ref'> & { ref?: string };
 type ResolveMaestroOptions = NonNullable<Parameters<typeof resolveMaestroNodeFromSnapshot>[5]>;
 type MaestroTapOptions = Parameters<typeof resolveMaestroNodeFromSnapshot>[2];
-
-function makeSnapshot(nodes: SnapshotNodeFixture[]): SnapshotState {
-  return {
-    createdAt: Date.now(),
-    nodes: nodes.map((node) => ({ ref: `e${node.index}`, ...node })),
-  };
-}
 
 function maestroTextSelector(text: string): string {
   return `label="${text}" || text="${text}" || id="${text}"`;

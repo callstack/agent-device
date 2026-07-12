@@ -1,0 +1,245 @@
+import type { ElementSelectorKey } from '../../core/interactor-types.ts';
+import type { MaestroSelector } from './program-ir.ts';
+import type { SnapshotNode, SnapshotState } from '../../kernel/snapshot.ts';
+import { matchesSelector } from '../../selectors/match.ts';
+import { evaluateIsPredicate } from '../../selectors/predicates.ts';
+import { normalizeText } from '../../selectors/find.ts';
+import type { Selector, SelectorTerm } from '../../selectors/arguments.ts';
+import { extractNodeText } from '../../snapshot/snapshot-processing.ts';
+import {
+  detectReactNativeOverlay,
+  readReactNativeOverlayActionNodes,
+} from '../../core/react-native-overlay.ts';
+
+export type MaestroPlatform = 'ios' | 'android';
+
+export type MaestroSelectorMatchOptions = {
+  allowLeadingCompositeLabelMatch?: boolean;
+};
+
+export type MaestroResolvedSnapshotMatch = {
+  node: SnapshotNode;
+  rect: NonNullable<SnapshotNode['rect']>;
+  inheritedRect: boolean;
+};
+
+export type MaestroPreferredContext = {
+  node: SnapshotNode;
+  rect: NonNullable<SnapshotNode['rect']>;
+};
+
+export type ReactNativeOverlayFilterResult = {
+  matches: SnapshotNode[];
+  blockedByReactNativeOverlay: boolean;
+};
+
+/**
+ * Match the parsed legacy selector terms while retaining Maestro's regex
+ * extension for textual terms. The expression parser remains at the facade;
+ * this module only owns the semantics of one parsed selector.
+ */
+export function matchesMaestroSelector(
+  node: SnapshotNode,
+  selector: Selector,
+  platform: MaestroPlatform,
+  options: MaestroSelectorMatchOptions = {},
+): boolean {
+  if (matchesSelector(node, selector, platform)) return true;
+  return selector.terms.every((term) => matchesMaestroTerm(node, term, platform, options));
+}
+
+/**
+ * Match the source-preserving selector IR directly. In particular, this does
+ * not lower the selector to the legacy `key=value` expression grammar.
+ *
+ * Maestro's compatibility parser treats id as the strongest primary field,
+ * then text, then label. Text is the visible-text form used by scalar
+ * selectors, so it checks label, readable node text, and identifier values.
+ * Enabled and selected are independent state constraints.
+ */
+export function matchesMaestroTypedSelector(
+  node: SnapshotNode,
+  selector: MaestroSelector,
+  options: MaestroSelectorMatchOptions = {},
+): boolean {
+  const primary = readTypedPrimarySelector(selector);
+  if (primary) {
+    const matched =
+      primary.key === 'text'
+        ? matchesMaestroVisibleText(node, primary.value, options)
+        : textEqualsOrRegex(readMaestroTextTermValue(node, primary.key), primary.value, options);
+    if (!matched) return false;
+  } else if (selector.enabled === undefined && selector.selected === undefined) {
+    return false;
+  }
+
+  if (
+    selector.enabled !== undefined &&
+    Boolean(node.enabled !== false) !== selector.enabled
+  ) {
+    return false;
+  }
+  if (selector.selected !== undefined && Boolean(node.selected === true) !== selector.selected) {
+    return false;
+  }
+  return true;
+}
+
+/** Read the visible-text fallback query represented by the typed selector. */
+export function extractMaestroVisibleTextQueryFromSelector(
+  selector: MaestroSelector,
+): string | null {
+  if (selector.id !== undefined) return null;
+  const query = selector.text ?? selector.label;
+  return query ? query : null;
+}
+
+export function filterVisibleMaestroMatches(params: {
+  nodes: SnapshotState['nodes'];
+  matches: SnapshotNode[];
+  platform: MaestroPlatform;
+}): ReactNativeOverlayFilterResult {
+  const visibleMatches = params.matches.filter(
+    (node) =>
+      evaluateIsPredicate({
+        predicate: 'visible',
+        node,
+        nodes: params.nodes,
+        platform: params.platform,
+      }).pass,
+  );
+  const overlayFilter = filterReactNativeOverlayBlockedMatches(
+    params.nodes,
+    visibleMatches,
+    params.platform,
+  );
+  return {
+    matches: overlayFilter.matches,
+    blockedByReactNativeOverlay: overlayFilter.blockedByReactNativeOverlay,
+  };
+}
+
+export function filterReactNativeOverlayBlockedMatches(
+  nodes: SnapshotState['nodes'],
+  matches: SnapshotNode[],
+  platform: MaestroPlatform,
+): ReactNativeOverlayFilterResult {
+  const overlay = detectReactNativeOverlay(nodes);
+  if (!overlay.detected || !overlay.redBox) {
+    return { matches, blockedByReactNativeOverlay: false };
+  }
+
+  const overlayControls = readReactNativeOverlayActionNodes(overlay);
+  const visibleOverlayControls = overlayControls.filter(
+    (node) =>
+      evaluateIsPredicate({
+        predicate: 'visible',
+        node,
+        nodes,
+        platform,
+      }).pass,
+  );
+  if (visibleOverlayControls.length === 0) {
+    if (overlayControls.length === 0) {
+      return { matches: [], blockedByReactNativeOverlay: true };
+    }
+    return { matches, blockedByReactNativeOverlay: false };
+  }
+
+  const overlayNodeIndexes = new Set(visibleOverlayControls.map((node) => node.index));
+  const overlayMatches = matches.filter((node) => overlayNodeIndexes.has(node.index));
+  return {
+    matches: overlayMatches,
+    blockedByReactNativeOverlay: matches.length > 0 && overlayMatches.length === 0,
+  };
+}
+
+export function maestroVisibleTextMatchRank(node: SnapshotNode, query: string): number {
+  const values = [node.label, extractNodeText(node), node.identifier, node.value].filter(
+    (value): value is string => Boolean(value),
+  );
+  if (values.some((value) => value === query)) return 0;
+  if (values.some((value) => normalizeText(value) === normalizeText(query))) return 1;
+  if (values.some((value) => textEqualsOrRegex(value, query))) return 2;
+  return 3;
+}
+
+export function textEqualsOrRegex(
+  value: string | undefined,
+  query: string,
+  options: MaestroSelectorMatchOptions = {},
+): boolean {
+  const text = value ?? '';
+  const normalizedText = normalizeText(text);
+  const normalizedQuery = normalizeText(query);
+  if (normalizedText === normalizedQuery) return true;
+  if (
+    options.allowLeadingCompositeLabelMatch !== false &&
+    isLeadingCompositeLabelMatch(normalizedText, normalizedQuery)
+  ) {
+    return true;
+  }
+  if (!looksLikeMaestroRegex(query)) return false;
+  try {
+    return new RegExp(query).test(text);
+  } catch {
+    return false;
+  }
+}
+
+function matchesMaestroTerm(
+  node: SnapshotNode,
+  term: SelectorTerm,
+  platform: MaestroPlatform,
+  options: MaestroSelectorMatchOptions,
+): boolean {
+  if (typeof term.value !== 'string' || !isMaestroRegexTextKey(term.key)) {
+    return matchesSelector(node, { raw: term.key, terms: [term] }, platform);
+  }
+  const value = readMaestroTextTermValue(node, term.key);
+  return textEqualsOrRegex(value, term.value, options);
+}
+
+function readTypedPrimarySelector(
+  selector: MaestroSelector,
+): { key: 'id' | 'text' | 'label'; value: string } | null {
+  if (selector.id !== undefined) return { key: 'id', value: selector.id };
+  if (selector.text !== undefined) return { key: 'text', value: selector.text };
+  if (selector.label !== undefined) return { key: 'label', value: selector.label };
+  return null;
+}
+
+function matchesMaestroVisibleText(
+  node: SnapshotNode,
+  query: string,
+  options: MaestroSelectorMatchOptions,
+): boolean {
+  return [node.label, extractNodeText(node), node.identifier]
+    .filter((value): value is string => Boolean(value))
+    .some((value) => textEqualsOrRegex(value, query, options));
+}
+
+function isMaestroRegexTextKey(key: SelectorTerm['key']): key is ElementSelectorKey {
+  return key === 'id' || key === 'label' || key === 'text' || key === 'value';
+}
+
+function readMaestroTextTermValue(
+  node: SnapshotNode,
+  key: ElementSelectorKey,
+): string | undefined {
+  if (key === 'id') return node.identifier;
+  if (key === 'label') return node.label;
+  if (key === 'value') return node.value;
+  return extractNodeText(node);
+}
+
+function isLeadingCompositeLabelMatch(normalizedText: string, normalizedQuery: string): boolean {
+  if (!normalizedText || !normalizedQuery) return false;
+  if (!normalizedText.startsWith(normalizedQuery)) return false;
+  const next = normalizedText.at(normalizedQuery.length);
+  return next === ',' || next === ':' || next === ';';
+}
+
+function looksLikeMaestroRegex(query: string): boolean {
+  return /(?:\.\*|\.\+|\[[^\]]+\]|\([^)]*\)|\||\^|\$|\\[dDsSwWbB])/.test(query);
+}
