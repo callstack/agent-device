@@ -62,7 +62,8 @@ async function runReplayFixture(params: {
   for (const [name, contents] of Object.entries(params.files ?? {})) {
     fs.writeFileSync(path.join(root, name), contents);
   }
-  const scriptPath = path.join(root, 'flow.ad');
+  const isMaestro = params.flags?.replayBackend === 'maestro';
+  const scriptPath = path.join(root, isMaestro ? 'flow.yaml' : 'flow.ad');
   fs.writeFileSync(scriptPath, params.script);
   const calls: CapturedInvocation[] = [];
   const invoke = async (req: DaemonRequest): Promise<DaemonResponse> => {
@@ -81,7 +82,10 @@ async function runReplayFixture(params: {
       session: 's',
       command: 'replay',
       positionals: [scriptPath],
-      flags: params.flags ?? {},
+      flags: {
+        ...(params.flags ?? {}),
+        ...(isMaestro && params.flags?.platform === undefined ? { platform: 'ios' } : {}),
+      },
       meta: { cwd: root },
     },
     sessionName: 's',

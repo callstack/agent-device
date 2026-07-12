@@ -1,18 +1,8 @@
 import fs from 'node:fs';
 import type { CommandFlags } from '../../core/dispatch.ts';
-import {
-  mergeReplayVarScopeValues,
-  resolveReplayAction,
-  type ReplayVarScope,
-} from '../../replay/vars.ts';
+import { resolveReplayAction, type ReplayVarScope } from '../../replay/vars.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
 import { mergeParentFlags } from '../../core/batch.ts';
-import { invokeMaestroRuntimeCommand } from '../../compat/maestro/runtime.ts';
-import { invokeMaestroRunFlowWhenControl } from '../../compat/maestro/runtime-flow.ts';
-import {
-  invokeReplayRetryBlock,
-  type ReplayActionBlockInvoker,
-} from '../../replay/control-flow-runtime.ts';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import {
   gesturePayloadFromPositionals,
@@ -20,8 +10,6 @@ import {
 } from '../../contracts/gesture-normalization.ts';
 
 type ReplayBaseRequest = Omit<DaemonRequest, 'command' | 'positionals'>;
-
-type ReplayActionInvoker = ReplayActionBlockInvoker;
 
 export async function invokeReplayAction(params: {
   req: DaemonRequest;
@@ -39,20 +27,6 @@ export async function invokeReplayAction(params: {
   const { req, sessionName, action, scope, filePath, line, step, sourcePath, tracePath, invoke } =
     params;
   const resolved = resolveReplayAction(action, scope, { file: sourcePath ?? filePath, line });
-  const invokeNestedReplayAction: ReplayActionInvoker = (nested) =>
-    invokeReplayAction({
-      req,
-      sessionName,
-      action: nested.action,
-      scope,
-      filePath,
-      line: nested.line,
-      step: nested.step,
-      // No recorded source on a nested action = same file as its wrapper.
-      sourcePath: nested.sourcePath ?? sourcePath,
-      tracePath,
-      invoke,
-    });
   const startedAt = Date.now();
   appendReplayTraceEvent(tracePath, {
     type: 'replay_action_start',
@@ -66,14 +40,9 @@ export async function invokeReplayAction(params: {
   });
 
   // A raw dispatch failure (e.g. a selector-miss during press/click/fill/
-  // longpress) can THROW an AppError instead of resolving to `{ok:false}` —
-  // every caller reachable from here (the top-level replay loop, retry
-  // blocks, and nested Maestro runFlow invocations) only ever branches on
-  // `response.ok`, so this is the single place every replay action dispatch
-  // funnels through, regardless of nesting depth. Normalizing here means the
-  // top-level loop's existing `if (!response.ok)` divergence wrapping (and
-  // retry/control-flow's own `response.ok` checks) apply uniformly instead of
-  // the throw escaping unwrapped to the outer catch.
+  // longpress) can throw an AppError instead of resolving to `{ok:false}`.
+  // Normalize it at the generic replay dispatch boundary so the top-level
+  // loop's existing divergence wrapping applies uniformly.
   let response: DaemonResponse;
   try {
     response = await invokeResolvedReplayAction({
@@ -84,7 +53,6 @@ export async function invokeReplayAction(params: {
       line,
       step,
       invoke,
-      invokeReplayAction: invokeNestedReplayAction,
     });
   } catch (dispatchErr) {
     // Only an expected AppError dispatch failure (e.g. a selector-miss) gets
@@ -142,9 +110,8 @@ async function invokeResolvedReplayAction(params: {
   line: number;
   step: number;
   invoke: DaemonInvokeFn;
-  invokeReplayAction: ReplayActionInvoker;
 }): Promise<DaemonResponse> {
-  const { req, sessionName, resolved, scope, line, step, invoke, invokeReplayAction } = params;
+  const { req, sessionName, resolved, invoke } = params;
   const flags = buildReplayActionFlags(req.flags, resolved.flags);
   const baseReq: ReplayBaseRequest = {
     token: req.token,
@@ -154,31 +121,7 @@ async function invokeResolvedReplayAction(params: {
     meta: req.meta,
     internal: req.internal,
   };
-  const response =
-    (await invokeReplayControl({
-      control: resolved.replayControl,
-      baseReq,
-      line,
-      step,
-      invoke,
-      invokeReplayAction,
-    })) ??
-    (await invokeMaestroRuntimeCommand({
-      command: resolved.command,
-      baseReq,
-      positionals: resolved.positionals ?? [],
-      scope,
-      line,
-      step,
-      invoke,
-      invokeReplayAction,
-    })) ??
-    (await invoke(buildReplayInteractionRequest(baseReq, resolved)));
-  if (response.ok) {
-    const outputEnv = readReplayOutputEnv(response.data);
-    if (outputEnv) mergeReplayVarScopeValues(scope, outputEnv);
-  }
-  return response;
+  return await invoke(buildReplayInteractionRequest(baseReq, resolved));
 }
 
 function buildReplayInteractionRequest(
@@ -207,50 +150,6 @@ function buildReplayInteractionRequest(
     };
   }
   return { ...baseReq, command: action.command, positionals };
-}
-
-async function invokeReplayControl(params: {
-  control: SessionAction['replayControl'] | undefined;
-  baseReq: ReplayBaseRequest;
-  line: number;
-  step: number;
-  invoke: DaemonInvokeFn;
-  invokeReplayAction: ReplayActionInvoker;
-}): Promise<DaemonResponse | undefined> {
-  const { control, baseReq, line, step, invoke, invokeReplayAction } = params;
-  if (!control) return undefined;
-  switch (control.kind) {
-    case 'retry':
-      return await invokeReplayRetryBlock({
-        actions: control.actions,
-        actionSources: control.actionSources,
-        maxRetries: control.maxRetries,
-        line,
-        step,
-        invokeReplayAction,
-      });
-    case 'maestroRunFlowWhen':
-      return await invokeMaestroRunFlowWhenControl({
-        baseReq,
-        control,
-        line,
-        step,
-        invoke,
-        invokeReplayAction,
-      });
-  }
-  const _exhaustive: never = control;
-  return _exhaustive;
-}
-
-function readReplayOutputEnv(data: unknown): Record<string, string> | null {
-  if (!data || typeof data !== 'object') return null;
-  const raw = (data as { outputEnv?: unknown }).outputEnv;
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
-  const entries = Object.entries(raw).filter(
-    (entry): entry is [string, string] => typeof entry[1] === 'string',
-  );
-  return entries.length > 0 ? Object.fromEntries(entries) : null;
 }
 
 function readResponseTiming(data: unknown): Record<string, unknown> | undefined {

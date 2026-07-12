@@ -1,10 +1,7 @@
-import type { ElementSelectorKey } from '../../core/interactor-types.ts';
 import type { MaestroSelector } from './program-ir.ts';
 import type { SnapshotNode, SnapshotState } from '../../kernel/snapshot.ts';
-import { matchesSelector } from '../../selectors/match.ts';
 import { evaluateIsPredicate } from '../../selectors/predicates.ts';
 import { normalizeText } from '../../selectors/find.ts';
-import type { Selector, SelectorTerm } from '../../selectors/arguments.ts';
 import { extractNodeText } from '../../snapshot/snapshot-processing.ts';
 import {
   detectReactNativeOverlay,
@@ -34,21 +31,6 @@ export type ReactNativeOverlayFilterResult = {
 };
 
 /**
- * Match the parsed legacy selector terms while retaining Maestro's regex
- * extension for textual terms. The expression parser remains at the facade;
- * this module only owns the semantics of one parsed selector.
- */
-export function matchesMaestroSelector(
-  node: SnapshotNode,
-  selector: Selector,
-  platform: MaestroPlatform,
-  options: MaestroSelectorMatchOptions = {},
-): boolean {
-  if (matchesSelector(node, selector, platform)) return true;
-  return selector.terms.every((term) => matchesMaestroTerm(node, term, platform, options));
-}
-
-/**
  * Match the source-preserving selector IR directly. In particular, this does
  * not lower the selector to the legacy `key=value` expression grammar.
  *
@@ -73,10 +55,7 @@ export function matchesMaestroTypedSelector(
     return false;
   }
 
-  if (
-    selector.enabled !== undefined &&
-    Boolean(node.enabled !== false) !== selector.enabled
-  ) {
+  if (selector.enabled !== undefined && Boolean(node.enabled !== false) !== selector.enabled) {
     return false;
   }
   if (selector.selected !== undefined && Boolean(node.selected === true) !== selector.selected) {
@@ -187,19 +166,6 @@ export function textEqualsOrRegex(
   }
 }
 
-function matchesMaestroTerm(
-  node: SnapshotNode,
-  term: SelectorTerm,
-  platform: MaestroPlatform,
-  options: MaestroSelectorMatchOptions,
-): boolean {
-  if (typeof term.value !== 'string' || !isMaestroRegexTextKey(term.key)) {
-    return matchesSelector(node, { raw: term.key, terms: [term] }, platform);
-  }
-  const value = readMaestroTextTermValue(node, term.key);
-  return textEqualsOrRegex(value, term.value, options);
-}
-
 function readTypedPrimarySelector(
   selector: MaestroSelector,
 ): { key: 'id' | 'text' | 'label'; value: string } | null {
@@ -219,17 +185,12 @@ function matchesMaestroVisibleText(
     .some((value) => textEqualsOrRegex(value, query, options));
 }
 
-function isMaestroRegexTextKey(key: SelectorTerm['key']): key is ElementSelectorKey {
-  return key === 'id' || key === 'label' || key === 'text' || key === 'value';
-}
-
 function readMaestroTextTermValue(
   node: SnapshotNode,
-  key: ElementSelectorKey,
+  key: 'id' | 'label' | 'text',
 ): string | undefined {
   if (key === 'id') return node.identifier;
   if (key === 'label') return node.label;
-  if (key === 'value') return node.value;
   return extractNodeText(node);
 }
 

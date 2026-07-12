@@ -168,11 +168,7 @@ export async function runReplayScriptFile(params: {
       );
     }
 
-    const parseFlags =
-      req.flags?.replayBackend === 'maestro'
-        ? { ...req.flags, replayBackend: undefined }
-        : req.flags;
-    const parsed = parseReplayInput(script, parseFlags, { sourcePath: resolved });
+    const parsed = parseReplayInput(script, req.flags);
     const metadata = parsed.metadata;
     const replayReq =
       metadata.platform || metadata.target
