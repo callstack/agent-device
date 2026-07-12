@@ -209,4 +209,46 @@ describe('MaestroRuntimePort', () => {
     );
     expect(operations.resolveGestureViewport).not.toHaveBeenCalled();
   });
+
+  test('skips an absent optional tap without hiding resolver infrastructure failures', async () => {
+    const tapOn = vi.fn(async () => undefined);
+    const missingOperations = makeOperations({
+      resolveTarget: vi.fn(async ({ purpose }, context) => ({
+        generation: context.generation,
+        matched: false,
+        visible: false,
+        candidateCount: 0,
+        ...(purpose === 'tap' ? {} : { ref: 'unexpected' }),
+      })),
+      tapOn,
+    });
+    const command = parseMaestroProgram('---\n- tapOn:\n    text: Missing\n    optional: true\n')
+      .commands[0]!;
+
+    const result = await createMaestroRuntimePort(missingOperations).execute({
+      command: command as Extract<typeof command, { kind: 'tapOn' }>,
+      generation: 0,
+    });
+
+    expect(result).toEqual({ mutated: false });
+    expect(missingOperations.resolveTarget).toHaveBeenCalledWith(
+      expect.objectContaining({ purpose: 'tap', selector: { text: 'Missing' } }),
+      expect.any(Object),
+    );
+    expect(tapOn).not.toHaveBeenCalled();
+
+    const failure = new Error('snapshot transport failed');
+    const failingOperations = makeOperations({
+      resolveTarget: vi.fn(async () => {
+        throw failure;
+      }),
+      tapOn,
+    });
+    await expect(
+      createMaestroRuntimePort(failingOperations).execute({
+        command: command as Extract<typeof command, { kind: 'tapOn' }>,
+        generation: 0,
+      }),
+    ).rejects.toBe(failure);
+  });
 });

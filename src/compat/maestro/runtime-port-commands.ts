@@ -52,12 +52,12 @@ export async function executeMaestroRuntimeCommand(
     case 'openLink':
       return await invokeMutation(operations.openLink, { link: command.link }, context, true);
     case 'tapOn': {
-      const target = await resolveInputTarget(
-        command.target,
-        { index: command.index, childOf: command.childOf },
-        request,
-        operations,
-      );
+      const query = { purpose: 'tap' as const, index: command.index, childOf: command.childOf };
+      const target =
+        command.optional === true
+          ? await resolveInputTarget(command.target, query, request, operations, true)
+          : await resolveInputTarget(command.target, query, request, operations);
+      if (!target) return { mutated: false };
       return await invokeMutation(
         operations.tapOn,
         {
@@ -75,7 +75,12 @@ export async function executeMaestroRuntimeCommand(
       );
     }
     case 'doubleTapOn': {
-      const target = await resolveInputTarget(command.target, {}, request, operations);
+      const target = await resolveInputTarget(
+        command.target,
+        { purpose: 'doubleTap' },
+        request,
+        operations,
+      );
       return await invokeMutation(
         operations.doubleTapOn,
         { target, ...(command.delay === undefined ? {} : { delay: command.delay }) },
@@ -85,7 +90,12 @@ export async function executeMaestroRuntimeCommand(
       );
     }
     case 'longPressOn': {
-      const target = await resolveInputTarget(command.target, {}, request, operations);
+      const target = await resolveInputTarget(
+        command.target,
+        { purpose: 'longPress' },
+        request,
+        operations,
+      );
       return await invokeMutation(
         operations.longPressOn,
         { target },
@@ -222,14 +232,32 @@ function resultWithArtifacts(
   };
 }
 
-async function resolveInputTarget(
+function resolveInputTarget(
   authored: MaestroGestureTarget,
-  query: Pick<MaestroTargetQuery, 'index' | 'childOf'>,
+  query: Pick<MaestroTargetQuery, 'purpose' | 'index' | 'childOf'>,
   request: MaestroRuntimeRequest,
   operations: MaestroRuntimeOperations,
-): Promise<MaestroInputTarget> {
+  optional: true,
+): Promise<MaestroInputTarget | undefined>;
+function resolveInputTarget(
+  authored: MaestroGestureTarget,
+  query: Pick<MaestroTargetQuery, 'purpose' | 'index' | 'childOf'>,
+  request: MaestroRuntimeRequest,
+  operations: MaestroRuntimeOperations,
+  optional?: false,
+): Promise<MaestroInputTarget>;
+async function resolveInputTarget(
+  authored: MaestroGestureTarget,
+  query: Pick<MaestroTargetQuery, 'purpose' | 'index' | 'childOf'>,
+  request: MaestroRuntimeRequest,
+  operations: MaestroRuntimeOperations,
+  optional = false,
+): Promise<MaestroInputTarget | undefined> {
   if (authored.space === 'target') {
-    const resolution = await resolveMaestroTarget(authored.selector, query, request, operations);
+    const resolution = optional
+      ? await resolveMaestroTarget(authored.selector, query, request, operations, true)
+      : await resolveMaestroTarget(authored.selector, query, request, operations);
+    if (!resolution) return undefined;
     return {
       authored,
       point: pointInsideRect(resolution.rect),

@@ -50,12 +50,27 @@ export async function observeMaestroCondition(
   };
 }
 
-export async function resolveMaestroTarget(
+export function resolveMaestroTarget(
   selector: MaestroSelector,
-  query: Pick<MaestroTargetQuery, 'index' | 'childOf'>,
+  query: Pick<MaestroTargetQuery, 'purpose' | 'index' | 'childOf'>,
   request: MaestroRuntimeRequest,
   operations: MaestroRuntimeOperations,
-): Promise<MaestroTargetResolution> {
+  optional: true,
+): Promise<MaestroTargetResolution | undefined>;
+export function resolveMaestroTarget(
+  selector: MaestroSelector,
+  query: Pick<MaestroTargetQuery, 'purpose' | 'index' | 'childOf'>,
+  request: MaestroRuntimeRequest,
+  operations: MaestroRuntimeOperations,
+  optional?: false,
+): Promise<MaestroTargetResolution>;
+export async function resolveMaestroTarget(
+  selector: MaestroSelector,
+  query: Pick<MaestroTargetQuery, 'purpose' | 'index' | 'childOf'>,
+  request: MaestroRuntimeRequest,
+  operations: MaestroRuntimeOperations,
+  optional = false,
+): Promise<MaestroTargetResolution | undefined> {
   const cached = readCachedTarget(request.cachedObservation, selector, request.generation, query);
   const match =
     cached ??
@@ -65,6 +80,7 @@ export async function resolveMaestroTarget(
     ));
   const validated = validateTargetMatch(match, request.generation);
   if (!validated.matched || !validated.visible || !validated.rect) {
+    if (optional) return undefined;
     throw new AppError('COMMAND_FAILED', 'Maestro target did not resolve to a visible element.', {
       selector,
       candidateCount: validated.candidateCount,
@@ -99,7 +115,7 @@ function readCachedTarget(
   observation: MaestroObservation | undefined,
   selector: MaestroSelector,
   generation: number,
-  query: Pick<MaestroTargetQuery, 'index' | 'childOf'>,
+  query: Pick<MaestroTargetQuery, 'purpose' | 'index' | 'childOf'>,
 ): MaestroTargetMatch | undefined {
   if (query.index !== undefined || query.childOf !== undefined) return undefined;
   if (!observation || observation.generation !== generation) return undefined;

@@ -60,7 +60,12 @@ export async function resolveMaestroSwipeOperation(
     };
   }
 
-  const target = await resolveMaestroTarget(authored.from, {}, request, operations);
+  const target = await resolveMaestroTarget(
+    authored.from,
+    { purpose: 'swipe' },
+    request,
+    operations,
+  );
   const viewport =
     target.viewport ??
     (await operations.resolveGestureViewport(operationContext(request, request.command)));
