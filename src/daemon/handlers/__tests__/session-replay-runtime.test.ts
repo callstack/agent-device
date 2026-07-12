@@ -44,6 +44,52 @@ test('a successful replay prints one line with the step count and wall time', as
   expect(data.replayed).toBe(2);
   expect(data.message).toMatch(/^Replayed 2 steps in \d+\.\ds$/);
 });
+
+test('Maestro YAML uses the typed engine while .ad remains generic', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-typed-maestro-route-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const yamlPath = path.join(root, 'flow.yaml');
+  fs.writeFileSync(
+    yamlPath,
+    ['appId: com.example.app', '---', '- launchApp', '- inputText: typed'].join('\n'),
+  );
+  const commands: string[] = [];
+  const invoke = vi.fn(async (request) => {
+    commands.push(request.command);
+    return { ok: true as const, data: {} };
+  });
+
+  const yamlResponse = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [yamlPath],
+      flags: { replayBackend: 'maestro', platform: 'ios' },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+
+  expect(yamlResponse).toMatchObject({ ok: true, data: { replayed: 2 } });
+  expect(commands).toEqual(['open', 'type']);
+
+  commands.length = 0;
+  const adPath = writeReplayFile(root, ['open "Generic"']);
+  const adResponse = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [adPath],
+      flags: { replayBackend: 'maestro', platform: 'ios' },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+  expect(adResponse).toMatchObject({ ok: true, data: { replayed: 1 } });
+  expect(commands).toEqual(['open']);
+});
 test('replay rejects legacy JSON payload files', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-json-rejected-'));
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
