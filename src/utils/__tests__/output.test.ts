@@ -1779,6 +1779,9 @@ test('printHumanError renders a compact divergence report unconditionally (not g
         ],
         suggestionCount: 1,
         resume: { allowed: false, reason: 'resume not yet supported' },
+        // ADR 0012 decision 6: always present, and must survive every
+        // projection — this is the "daemon text summary" (CLI) projection.
+        repairHint: 'record-and-heal',
       },
     },
   );
@@ -1790,6 +1793,7 @@ test('printHumanError renders a compact divergence report unconditionally (not g
   assert.match(output, /@e5 \[button\] "Save"/);
   assert.match(output, /Suggestions:/);
   assert.match(output, /\[id\] "Save" id="save"/);
+  assert.match(output, /Repair hint: record-and-heal/);
   // Not gated behind --debug: showDetails defaults to false/undefined here.
 });
 

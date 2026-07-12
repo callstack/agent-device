@@ -18,6 +18,10 @@ import {
 import { collectReplaySelectorCandidates } from './session-replay-heal.ts';
 import { buildReplayDivergenceResume } from './session-replay-resume.ts';
 import { formatDivergenceActionLabel, isTouchTargetCommand } from '../../replay/script-utils.ts';
+import {
+  computeReplayRepairHint,
+  type ReplayRepairHintCapture,
+} from './session-replay-repair-hint.ts';
 import { SessionStore } from '../session-store.ts';
 import type { SessionAction, SessionState } from '../types.ts';
 import {
@@ -118,6 +122,14 @@ export async function buildReplayFailureDivergence(params: {
       actions: planActions,
       planDigest,
     }),
+    // ADR 0012 decision 6, R3: `action-failure`'s capture is the POST-response
+    // tree (this is the dispatch-thrown path) — the same one the container
+    // test needs.
+    repairHint: computeReplayRepairHint({
+      kind: 'action-failure',
+      targetEvidence: action.targetEvidence,
+      capture: toReplayRepairHintCapture(observation),
+    }),
   };
 
   return boundReplayDivergenceForSession({ sessionStore, sessionName, divergence, responseLevel });
@@ -147,6 +159,15 @@ export function boundReplayDivergenceForSession(params: {
 export type DivergenceObservation =
   | { state: 'available'; nodes: SnapshotNode[]; refsGeneration: number }
   | { state: 'unavailable'; reason: string; hint: string };
+
+/** Adapts a capture observation to the `repairHint` container-presence test's input shape. */
+export function toReplayRepairHintCapture(
+  observation: DivergenceObservation,
+): ReplayRepairHintCapture {
+  return observation.state === 'available'
+    ? { state: 'available', nodes: observation.nodes }
+    : { state: 'unavailable' };
+}
 
 /**
  * The single post-failure capture, blessed via the standard ref-issuing

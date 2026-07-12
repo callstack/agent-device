@@ -1,0 +1,173 @@
+import { test, expect } from 'vitest';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { SessionScriptWriter } from '../session-script-writer.ts';
+import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
+import { parseReplayScriptDetailed } from '../../replay/script.ts';
+import type { SessionAction } from '../types.ts';
+
+function action(overrides: Partial<SessionAction> = {}): SessionAction {
+  return { ts: Date.now(), command: 'click', positionals: [], flags: {}, ...overrides };
+}
+
+function writeAndParse(
+  writer: SessionScriptWriter,
+  session: Parameters<SessionScriptWriter['write']>[0],
+) {
+  const result = writer.write(session);
+  if (!result.written) throw new Error('expected the script to be written');
+  const script = fs.readFileSync(result.path, 'utf8');
+  return { script, parsed: parseReplayScriptDetailed(script) };
+}
+
+// --- ADR 0012 decision 6, R6: the healed script is sliced from the boundary watermark ---
+
+test('write() slices session.actions from saveScriptBoundary onward, excluding pre-watermark actions', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-boundary-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const session = makeIosSession('default', {
+    recordSession: true,
+    saveScriptBoundary: 2,
+    actions: [
+      action({ command: 'open', positionals: ['Demo'] }),
+      action({ command: 'click', positionals: ['label="Old"'] }),
+      action({ command: 'click', positionals: ['label="Kept 1"'] }),
+      action({ command: 'click', positionals: ['label="Kept 2"'] }),
+    ],
+  });
+
+  const { parsed } = writeAndParse(writer, session);
+  expect(parsed.actions.map((a) => a.command)).toEqual(['click', 'click']);
+  expect(parsed.actions.map((a) => a.positionals[0])).toEqual(['label="Kept 1"', 'label="Kept 2"']);
+});
+
+test('write() with no boundary set (ordinary open/close --save-script) serializes the full history, unchanged', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-no-boundary-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const session = makeIosSession('default', {
+    recordSession: true,
+    actions: [
+      action({ command: 'open', positionals: ['Demo'] }),
+      action({ command: 'click', positionals: ['label="Save"'] }),
+    ],
+  });
+
+  const { parsed } = writeAndParse(writer, session);
+  expect(parsed.actions.map((a) => a.command)).toEqual(['open', 'click']);
+  expect(parsed.actions[0]?.positionals).toEqual(['Demo']);
+  expect(parsed.actions[1]?.positionals).toEqual(['label="Save"']);
+});
+
+test('a boundary-sliced script still strips diagnostic snapshot actions', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-snapshot-strip-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const session = makeIosSession('default', {
+    recordSession: true,
+    saveScriptBoundary: 1,
+    actions: [
+      action({ command: 'open', positionals: ['Demo'] }),
+      action({ command: 'snapshot', positionals: [] }),
+      action({ command: 'click', positionals: ['label="Save"'] }),
+    ],
+  });
+
+  const { parsed } = writeAndParse(writer, session);
+  expect(parsed.actions.map((a) => a.command)).toEqual(['click']);
+});
+
+// --- ADR 0012 decision 6, R4: a REPAIR-ARMED session's writer fails loudly
+// on a bare `@ref` rather than emitting it. R4 scopes this to a session that
+// went through `replay --save-script` arming (`saveScriptBoundary` set) — an
+// ordinary `open`/`close --save-script` recording keeps its existing
+// best-effort refLabel/scoped-snapshot fallback unchanged (see the "ordinary
+// recording" test below).
+
+test('a recorded ref that resolved to a selectorChain writes a clean selector line, never the bare ref', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-resolved-ref-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const session = makeIosSession('default', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+    actions: [
+      action({
+        command: 'press',
+        positionals: ['@e7'],
+        result: { selectorChain: ['id="save-v2"'] },
+      }),
+    ],
+  });
+
+  const { parsed } = writeAndParse(writer, session);
+  expect(parsed.actions).toHaveLength(1);
+  expect(parsed.actions[0]?.command).toBe('press');
+  expect(parsed.actions[0]?.positionals).toEqual(['id="save-v2"']);
+});
+
+test('a recorded ref that never resolved to a selectorChain throws instead of emitting a bare @ref', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-bare-ref-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const session = makeIosSession('default', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+    actions: [action({ command: 'press', positionals: ['@e7'] })],
+  });
+
+  const scriptPath = path.join(root, 'sessions', 'default', 'expected-not-written.ad');
+  expect(() => writer.write(session)).toThrow(/never resolved to a selector/);
+  // Fail loud, not a swallowed { written: false } — no file was produced.
+  expect(fs.existsSync(scriptPath)).toBe(false);
+  expect(fs.readdirSync(path.join(root, 'sessions')).length).toBe(0);
+});
+
+test('a bare-@ref fill action also fails loud, not just click-like commands', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-bare-ref-fill-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const session = makeIosSession('default', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+    actions: [action({ command: 'fill', positionals: ['@e9', 'hello'] })],
+  });
+
+  expect(() => writer.write(session)).toThrow(/never resolved to a selector/);
+});
+
+test('a bare @ref later in the same session (after a resolved earlier action) still fails loud, writing nothing', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-partial-write-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const session = makeIosSession('default', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+    actions: [
+      action({ command: 'open', positionals: ['Demo'] }),
+      action({
+        command: 'click',
+        positionals: ['@e3'],
+        result: { selectorChain: ['id="save"'] },
+      }),
+      action({ command: 'click', positionals: ['@e9'] }),
+    ],
+  });
+
+  expect(() => writer.write(session)).toThrow(/never resolved to a selector/);
+  expect(fs.readdirSync(path.join(root, 'sessions')).length).toBe(0);
+});
+
+test('an ordinary (non-repair-armed) recording keeps the existing bare-ref fallback, never throws', () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-script-writer-ordinary-bare-ref-'),
+  );
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const session = makeIosSession('default', {
+    recordSession: true,
+    // No saveScriptBoundary: this session was armed by plain `open`/`close
+    // --save-script`, never by `replay --save-script` — R4 does not apply.
+    actions: [action({ command: 'click', positionals: ['@e12'], result: { refLabel: 'Save' } })],
+  });
+
+  const { parsed } = writeAndParse(writer, session);
+  // The existing scoped-snapshot + bare-ref + trailing-label fallback still
+  // applies unchanged: a scoped snapshot precedes the bare ref.
+  expect(parsed.actions.map((a) => a.command)).toEqual(['snapshot', 'click']);
+  expect(parsed.actions[1]?.positionals[0]).toBe('@e12');
+});

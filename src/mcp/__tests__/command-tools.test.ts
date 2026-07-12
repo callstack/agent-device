@@ -969,6 +969,9 @@ function replayDivergenceError(): AppError {
       ],
       suggestionCount: 1,
       resume: { allowed: false, reason: 'resume not yet supported' },
+      // ADR 0012 decision 6: always present, and must survive every
+      // projection — text, JSON, client AppError, and this MCP structuredContent.
+      repairHint: 'record-and-heal',
     },
   });
 }
@@ -989,10 +992,14 @@ test('MCP tool error is a ref-issuing result: isError, structuredContent, and pi
   assert.equal(result.isError, true);
   const structured = result.structuredContent as {
     code: string;
-    details?: { divergence?: { screen?: { refs?: Array<{ ref: string }> } } };
+    details?: {
+      divergence?: { screen?: { refs?: Array<{ ref: string }> }; repairHint?: string };
+    };
   };
   assert.equal(structured.code, 'REPLAY_DIVERGENCE');
   assert.equal(structured.details?.divergence?.screen?.refs?.[0]?.ref, 'e5');
+  // ADR 0012 decision 6: repairHint survives the structuredContent projection.
+  assert.equal(structured.details?.divergence?.repairHint, 'record-and-heal');
   // The MCP TEXT path must carry the same repair data as structuredContent —
   // no text-only divergence that loses the screen refs / suggestions.
   const text = result.content[0]?.text ?? '';
@@ -1003,6 +1010,8 @@ test('MCP tool error is a ref-issuing result: isError, structuredContent, and pi
   assert.match(text, /@e5 \[button\] "Save"/);
   assert.match(text, /Suggestions:/);
   assert.match(text, /\[id\] "Save" id="save"/);
+  // ADR 0012 decision 6: repairHint survives the MCP text projection too.
+  assert.match(text, /Repair hint: record-and-heal/);
 
   // The error-path screen ref is pinned exactly like a successful ref-issuing
   // response — the caller's next command against @e5 forwards the generation.

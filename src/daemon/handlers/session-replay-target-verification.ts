@@ -29,7 +29,12 @@ import {
   boundReplayDivergenceForSession,
   captureDivergenceObservation,
   resolveSuggestionMatchingConfig,
+  toReplayRepairHintCapture,
 } from './session-replay-divergence.ts';
+import {
+  computeReplayRepairHint,
+  type ReplayRepairHintCapture,
+} from './session-replay-repair-hint.ts';
 import { buildReplayDivergenceFailureResponse } from './session-replay-runtime-failure-response.ts';
 import { buildReplayDivergenceResume } from './session-replay-resume.ts';
 import {
@@ -87,6 +92,8 @@ type TargetBindingDivergenceBuilt = {
   causeMessage: string;
   causeHint?: string;
   screen: ReplayDivergence['screen'];
+  /** ADR 0012 decision 6, R3: the same capture `screen` was built from, for the `repairHint` container test. */
+  repairCapture: ReplayRepairHintCapture;
 };
 
 /** The one wire-shaping path for every target-binding divergence (pre-action and post-resolution guard). */
@@ -142,6 +149,11 @@ function buildTargetBindingDivergenceResponse(
       failedIndex: step,
       actions: planActions,
       planDigest,
+    }),
+    repairHint: computeReplayRepairHint({
+      kind: built.kind,
+      targetEvidence: recorded,
+      capture: built.repairCapture,
     }),
     targetBinding,
   };
@@ -254,6 +266,7 @@ export async function verifyReplayActionTarget(params: {
         causeMessage:
           'The recorded target evidence could not verify itself when it was captured (a structural capture anomaly), so replay cannot trust it before acting.',
         screen: buildDivergenceScreen(observation, sanitize),
+        repairCapture: toReplayRepairHintCapture(observation),
       }),
     };
   }
@@ -278,6 +291,7 @@ export async function verifyReplayActionTarget(params: {
         causeMessage: `Could not capture a fresh snapshot to verify the recorded target before acting (${observation.reason}).`,
         causeHint: observation.hint,
         screen: buildDivergenceScreen(observation, sanitize),
+        repairCapture: toReplayRepairHintCapture(observation),
       }),
     };
   }
@@ -322,6 +336,7 @@ export async function verifyReplayActionTarget(params: {
       causeCode: classification.causeCode,
       causeMessage: classification.causeMessage,
       screen: buildDivergenceScreen(observation, sanitize),
+      repairCapture: toReplayRepairHintCapture(observation),
     }),
   };
 }
@@ -430,6 +445,7 @@ export async function buildReplayTargetGuardMismatchResponse(params: {
       causeMessage:
         'Dispatch resolution (with occlusion/visibility guards) resolved a different element than pre-action verification isolated; the action was not sent.',
       screen: buildDivergenceScreen(observation, sanitize),
+      repairCapture: toReplayRepairHintCapture(observation),
     },
   );
 }

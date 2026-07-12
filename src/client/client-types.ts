@@ -830,6 +830,13 @@ export type ReplayRunOptions = AgentDeviceRequestOverrides &
     resumeFrom?: number;
     /** The `resume.planDigest` from the divergence report `resumeFrom` came from. */
     resumePlanDigest?: string;
+    /**
+     * ADR 0012 decision 6, R1/R6: arms agent-supervised re-record repair
+     * from this replay attempt onward. Optional string value is the healed
+     * `.ad`'s output path; absent one, it defaults to the `<path>` sibling
+     * `<stem>.healed.ad` when the repair ends with `close --save-script`.
+     */
+    saveScript?: boolean | string;
   };
 
 export type ReplayTestOptions = AgentDeviceRequestOverrides &

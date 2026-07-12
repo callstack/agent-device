@@ -124,6 +124,16 @@ export type ReplayDivergenceOverflow = {
   artifactPath: string;
 };
 
+/**
+ * ADR 0012 decision 6, R3: the daemon-computed repair routing hint. Always
+ * defined (never absent/null) — the mapping in
+ * `src/daemon/handlers/session-replay-repair-hint.ts` is total, defaulting
+ * to `manual` whenever no safer routing can be proven. A small fixed token,
+ * so it is carried at every response level (including `--level digest`) and
+ * every projection (text, JSON, client `AppError`, MCP `structuredContent`).
+ */
+export type ReplayRepairHint = 'record-and-heal' | 'state-repair' | 'caution' | 'manual';
+
 export type ReplayDivergence = {
   version: 1;
   kind: ReplayDivergenceKind;
@@ -135,6 +145,7 @@ export type ReplayDivergence = {
   /** Suggestions available at default/full, independent of how many are carried at this level. */
   suggestionCount: number;
   resume: ReplayDivergenceResume;
+  repairHint: ReplayRepairHint;
   overflow?: ReplayDivergenceOverflow;
   artifactUnavailable?: true;
   /** Present iff `kind` is a target-binding kind; `targetBinding.classification === kind`. */
@@ -298,6 +309,7 @@ function buildMinimalReplayDivergence(capped: ReplayDivergence): ReplayDivergenc
     suggestions: [],
     suggestionCount: capped.suggestionCount,
     resume: capped.resume,
+    repairHint: capped.repairHint,
     // targetBinding is the actual repair value of a target-binding
     // divergence and is small relative to a full screen digest — keep it on
     // the minimal fallback rather than dropping it with the screen/suggestions.
@@ -319,11 +331,33 @@ export function formatReplayDivergenceReport(
   const lines = [
     ...divergenceStepLine(record.step),
     ...divergenceTargetBindingLines(record.kind, record.targetBinding),
+    ...divergenceRepairHintLine(record.repairHint),
     ...divergenceScreenLine(record.screen),
     ...divergenceSuggestionLines(record.suggestions, record.suggestionCount),
     ...divergenceOverflowLine(record.overflow, record.artifactUnavailable),
   ];
   return lines.length > 0 ? lines.join('\n') : null;
+}
+
+/**
+ * ADR 0012 decision 6: the repair-routing hint rendered on every text
+ * surface (CLI, MCP text, `test` failures) — the same field that rides
+ * `structuredContent`/JSON, so a text-only caller still learns which repair
+ * sub-flow applies.
+ */
+const REPAIR_HINT_GUIDANCE: Record<string, string> = {
+  'record-and-heal':
+    'press the correct control via a blessed @ref from screen.refs (recorded), then replay --from <step+1>.',
+  'state-repair': 'fix app state with --no-record actions, then replay --from <step> to re-run it.',
+  caution:
+    'something already matches the recorded selector; a blind re-press may repeat the mistake.',
+  manual: 'no safe automated repair could be proven; inspect the screen and repair by hand.',
+};
+
+function divergenceRepairHintLine(repairHint: unknown): string[] {
+  if (typeof repairHint !== 'string') return [];
+  const guidance = REPAIR_HINT_GUIDANCE[repairHint];
+  return [`Repair hint: ${repairHint}${guidance ? ` — ${guidance}` : ''}`];
 }
 
 function divergenceTargetBindingLines(kind: unknown, targetBinding: unknown): string[] {

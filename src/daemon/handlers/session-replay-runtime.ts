@@ -9,6 +9,7 @@ import {
   type ReplayTestProgressEvent,
 } from '../../request/progress.ts';
 import { SessionStore } from '../session-store.ts';
+import { expandSessionPath } from '../session-paths.ts';
 import { type ReplayScriptMetadata } from '../../replay/script.ts';
 import { computeReplayPlanDigest } from '../../replay/plan-digest.ts';
 import { errorResponse } from './response.ts';
@@ -101,6 +102,16 @@ export async function runReplayScriptFile(params: {
     });
     const actionTracePath = tracePath ?? sessionStore.get(sessionName)?.trace?.outPath;
     const snapshotDiagnosticSamples: SnapshotTimingSample[] = [];
+    // ADR 0012 decision 6, R1/R6: `--save-script` arms the repair loop before
+    // step 1 and records the boundary watermark — the action count BEFORE
+    // this invocation's own actions land — captured now so it reflects a
+    // reused session's prior actions, or 0 for a session step 1 has not yet
+    // created. A `--from` continuation never carries `--save-script`, so it
+    // neither re-arms nor resets the boundary the arming invocation set.
+    const saveScript = req.flags?.saveScript;
+    const saveScriptBoundary = saveScript
+      ? (sessionStore.get(sessionName)?.actions.length ?? 0)
+      : 0;
     const failStep = (failedResponse: DaemonResponse, failedAction: SessionAction, index: number) =>
       withReplayFailureDiagnostics({
         response: failedResponse,
@@ -122,6 +133,15 @@ export async function runReplayScriptFile(params: {
     for (let index = entryIndex.value; index < actions.length; index += 1) {
       const action = actions[index];
       if (!action || action.command === 'replay') continue;
+      if (saveScript) {
+        armReplaySaveScript({
+          sessionStore,
+          sessionName,
+          saveScript,
+          boundary: saveScriptBoundary,
+          sourcePath: resolved,
+        });
+      }
       emitReplayTestActionProgress(resolved, index, actions.length, action);
 
       const sampleStart = readSessionSnapshotSampleCount(sessionStore, sessionName);
@@ -324,6 +344,40 @@ function readSelectorDisplayValue(selector: string | undefined): string | undefi
   if (values.length === 0) return undefined;
   const first = values[0];
   return first && values.every((value) => value === first) ? first : undefined;
+}
+
+/**
+ * ADR 0012 decision 6, R1/R6: arms recording on the CURRENT session object
+ * (no-op until step 1 creates it, for a session that does not exist yet) and
+ * records the repair-run boundary watermark once. An explicit `<out>` always
+ * wins; absent one, the healed script defaults to the `<original-stem>.healed.ad`
+ * sibling (R6) rather than the session's own timestamped default.
+ */
+function armReplaySaveScript(params: {
+  sessionStore: SessionStore;
+  sessionName: string;
+  saveScript: boolean | string;
+  boundary: number;
+  sourcePath: string;
+}): void {
+  const { sessionStore, sessionName, saveScript, boundary, sourcePath } = params;
+  const session = sessionStore.get(sessionName);
+  if (!session) return;
+  session.recordSession = true;
+  if (typeof saveScript === 'string') {
+    session.saveScriptPath = expandSessionPath(saveScript);
+  } else if (session.saveScriptPath === undefined) {
+    session.saveScriptPath = healedScriptSiblingPath(sourcePath);
+  }
+  if (session.saveScriptBoundary === undefined) session.saveScriptBoundary = boundary;
+  sessionStore.set(sessionName, session);
+}
+
+/** `flows/login.ad` -> `flows/login.healed.ad`, beside the original (R6). */
+function healedScriptSiblingPath(sourcePath: string): string {
+  const dir = path.dirname(sourcePath);
+  const base = path.basename(sourcePath, path.extname(sourcePath));
+  return path.join(dir, `${base}.healed.ad`);
 }
 
 function formatReplaySuccessMessage(replayed: number, wallClockMs: number): string {

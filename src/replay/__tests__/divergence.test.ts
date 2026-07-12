@@ -24,6 +24,7 @@ function buildDivergence(overrides: Partial<ReplayDivergence> = {}): ReplayDiver
     suggestions: [],
     suggestionCount: 0,
     resume: { allowed: true, from: 3, planDigest: 'deadbeef' },
+    repairHint: 'manual',
     ...overrides,
   };
 }
@@ -152,6 +153,9 @@ test('boundReplayDivergence writes an overflow artifact and returns a minimal fa
   assert.ok(measureReplayDivergenceBytes(bounded) <= REPLAY_DIVERGENCE_LEVEL_BYTE_LIMITS.digest);
   assert.deepEqual(bounded.suggestions, []);
   assert.equal(bounded.screen.state, 'unavailable');
+  // ADR 0012 decision 6: repairHint is a small fixed token that must survive
+  // the minimal overflow fallback, not just the happy path.
+  assert.equal(bounded.repairHint, divergence.repairHint);
   assert.ok(bounded.overflow);
   assert.equal(bounded.overflow?.artifactPath, '/tmp/session/replay-divergence/1.json');
   assert.ok((bounded.overflow?.omittedBytes ?? 0) > 0);

@@ -269,6 +269,14 @@ export type SessionState = {
   recordOnlySession?: boolean;
   recordSession?: boolean;
   saveScriptPath?: string;
+  /**
+   * ADR 0012 decision 6, R6: `session.actions.length` at the `replay
+   * --save-script` invocation that armed this session — the repair-run
+   * boundary. The healed `.ad` serializes only `session.actions` from this
+   * index onward, so a reused session's earlier, unrelated actions never
+   * leak into the healed script.
+   */
+  saveScriptBoundary?: number;
   actions: SessionAction[];
   recording?:
     | (SessionRecordingBase & {

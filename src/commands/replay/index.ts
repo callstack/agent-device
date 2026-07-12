@@ -3,10 +3,13 @@ import { defineCommandFacet, defineCommandFamilyFromFacets } from '../family/typ
 import { defineExecutableCommand } from '../command-contract.ts';
 import {
   booleanField,
+  booleanSchema,
   integerField,
+  jsonSchemaField,
   requiredField,
   stringArrayField,
   stringField,
+  stringSchema,
 } from '../command-input.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
 import {
@@ -42,6 +45,10 @@ export const replayCommandMetadata = defineFieldCommandMetadata(
     // neither field — it must stay a full, deterministic suite run.
     resumeFrom: integerField(),
     resumePlanDigest: stringField(),
+    // ADR 0012 decision 6, R1/R6: arms agent-supervised re-record repair
+    // from the first replay attempt; optional string value is the healed
+    // script's output path.
+    saveScript: jsonSchemaField<boolean | string>({ oneOf: [booleanSchema(), stringSchema()] }),
   },
 );
 
@@ -88,6 +95,7 @@ const replayCliSchema = {
     'replayPlanDigest',
     'timeoutMs',
     'out',
+    'saveScript',
   ],
 } as const satisfies CommandSchemaOverride;
 
@@ -121,6 +129,7 @@ export const replayCliReader: CliReader = (positionals, flags) => ({
   env: flags.replayEnv,
   resumeFrom: flags.replayFrom,
   resumePlanDigest: flags.replayPlanDigest,
+  saveScript: flags.saveScript,
 });
 
 export const testCliReader: CliReader = (positionals, flags) => ({
@@ -147,6 +156,7 @@ export const replayDaemonWriter: DaemonWriter = (input) =>
     replayShellEnv: collectReplayClientShellEnv(process.env),
     replayFrom: input.resumeFrom,
     replayPlanDigest: input.resumePlanDigest,
+    saveScript: input.saveScript,
   });
 
 export const testDaemonWriter: DaemonWriter = (input) =>

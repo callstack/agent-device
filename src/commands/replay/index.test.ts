@@ -175,3 +175,40 @@ describe('replay resume (ADR 0012 decision 4 / migration step 5)', () => {
     expect(request.options).not.toHaveProperty('replayPlanDigest');
   });
 });
+
+describe('replay --save-script arming (ADR 0012 decision 6, R1/R6)', () => {
+  test('reads --save-script as a boolean flag', () => {
+    expect(replayCliReader(['./checkout.ad'], flags({ saveScript: true }))).toMatchObject({
+      path: './checkout.ad',
+      saveScript: true,
+    });
+  });
+
+  test('reads --save-script=<out> as its output path string', () => {
+    expect(
+      replayCliReader(['./checkout.ad'], flags({ saveScript: './flows/checkout.healed.ad' })),
+    ).toMatchObject({
+      path: './checkout.ad',
+      saveScript: './flows/checkout.healed.ad',
+    });
+  });
+
+  test('writes saveScript onto the daemon request unchanged', () => {
+    expect(replayDaemonWriter({ path: './checkout.ad', saveScript: true })).toMatchObject({
+      command: 'replay',
+      positionals: ['./checkout.ad'],
+      options: { saveScript: true },
+    });
+    expect(replayDaemonWriter({ path: './checkout.ad', saveScript: './out.ad' })).toMatchObject({
+      command: 'replay',
+      positionals: ['./checkout.ad'],
+      options: { saveScript: './out.ad' },
+    });
+  });
+
+  test('test does not accept --save-script at all', () => {
+    expect(testCliReader(['./suite.ad'], flags({ saveScript: true } as never))).not.toHaveProperty(
+      'saveScript',
+    );
+  });
+});
