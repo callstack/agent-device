@@ -97,7 +97,7 @@ The perfect-shape refactor is complete and merged. Its end-state:
   GLOBALLY, across every production source file, it enforces the R1-R3 move rules
   (kernel-sink, commands-floor, platforms-seam) and rejects all production static value-import
   cycles. Separately, it ranks an explicit target spine —
-  `kernel ◄ platforms ◄ core ◄ commands ◄ { cli, client, daemon-server } ◄ daemon-client` — and
+  `kernel ◄ platforms ◄ core ◄ commands ◄ { client, daemon-server } ◄ daemon-client ◄ cli` — and
   rejects every back-edge within it. Root entrypoints and peripheral zones (`mcp`, `compat`,
   `remote`, `metro`, `replay`, `recording`, `snapshot`, `screenshot-diff`, `cloud-webdriver`,
   `sdk`, `utils`) are deliberately unranked (`UNRANKED_ZONES` in `scripts/layering/model.ts`):

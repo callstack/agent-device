@@ -1,9 +1,8 @@
 // Import-direction lint — enforces the folder DAG established by the Phase-5
 // folder moves (see CONTEXT.md, "Architecture: folder DAG + layering lint").
 //
-// Ranked target spine (imports point DOWN, toward the kernel sink):
-//   kernel ◄ platforms ◄ core ◄ commands ◄ { cli, client, daemon/server }
-//   client ◄ daemon/client
+// Ranked target spine (imports point DOWN, toward the kernel sink; `A ◄ B` = B imports A):
+//   kernel ◄ platforms ◄ core ◄ commands ◄ { client, daemon-server } ◄ daemon-client ◄ cli
 //
 // This gate enforces three things, with two different scopes:
 //   - GLOBALLY, across every production source file: the R1-R3 move rules and

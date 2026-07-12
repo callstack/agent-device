@@ -64,5 +64,6 @@ Implementation status as of 2026-07:
 - Deferred: the public `Platform` collapse from `ios`/`macos` to `apple` (the last, highest-diff step; the
   public wire still emits `ios`/`macos` leaves via `PUBLIC_PLATFORMS`) and net-new visionOS spatial-input QA.
 
-This ADR owns the architectural decision. The Phase 3 platform-plugin umbrella (#972) is closed; only the
-public `Platform` collapse above remains deferred.
+This ADR owns the architectural decision. The Phase 3 platform-plugin umbrella (#972) is closed; within
+this consolidation the public `Platform` collapse above is the last deferred step (net-new visionOS
+spatial-input QA is separate follow-up, outside the consolidation).
