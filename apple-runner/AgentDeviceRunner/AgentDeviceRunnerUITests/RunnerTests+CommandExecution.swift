@@ -999,6 +999,8 @@ extension RunnerTests {
       if let bundleId = requestedBundleId {
         if currentBundleId != bundleId || currentApp == nil {
           _ = activateTarget(bundleId: bundleId, reason: "bundle_changed")
+        } else {
+          refreshCachedTargetIfProcessChanged(bundleId: bundleId)
         }
       } else {
         // Do not reuse stale bundle targets when the caller does not explicitly request one.

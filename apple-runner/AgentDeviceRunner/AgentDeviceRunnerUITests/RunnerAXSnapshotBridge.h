@@ -9,6 +9,8 @@ NS_ASSUME_NONNULL_BEGIN
                                                     maxDepth:(NSInteger)maxDepth
                                                     maxNodes:(NSInteger)maxNodes;
 
++ (NSInteger)processIdentifierForApplication:(XCUIApplication *)application;
+
 @end
 
 NS_ASSUME_NONNULL_END

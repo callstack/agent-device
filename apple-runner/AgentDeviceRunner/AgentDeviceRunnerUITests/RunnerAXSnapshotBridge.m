@@ -164,6 +164,11 @@ typedef id (*RunnerAXSnapshotMsgSend)(id, SEL, id, id, id, NSError **);
   return send(target, selector);
 }
 
++ (NSInteger)processIdentifierForApplication:(XCUIApplication *)application
+{
+  return [self integerFrom:application selectorName:@"processID"];
+}
+
 + (id)accessibilityApplicationForApplication:(XCUIApplication *)application axClient:(id)axClient
 {
   NSInteger targetProcessID = [self integerFrom:application selectorName:@"processID"];

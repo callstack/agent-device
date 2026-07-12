@@ -38,6 +38,7 @@ final class RunnerTests: XCTestCase {
   lazy var springboard = XCUIApplication(bundleIdentifier: Self.springboardBundleId)
   var currentApp: XCUIApplication?
   var currentBundleId: String?
+  var currentAppProcessIdentifier: Int?
   let maxRequestBytes = 2 * 1024 * 1024
   let mainThreadExecutionTimeout: TimeInterval = 30
   let appExistenceTimeout: TimeInterval = 30
@@ -76,6 +77,7 @@ final class RunnerTests: XCTestCase {
   var snapshotXCTestChannelPenaltyBundleId: String?
   var snapshotXCTestChannelPenaltyUntil = Date.distantPast
   let snapshotXCTestChannelPenaltyDuration: TimeInterval = 120
+  var snapshotXCTestPenaltyWarmupExemptionPending = false
   // Bluesky-class screens can grind ~4-8s before an XCTest-backed snapshot tier fails; anything
   // past this threshold marks the screen hostile so the next capture uses non-XCTest recovery.
   let snapshotXCTestSlowCaptureThreshold: TimeInterval = 3

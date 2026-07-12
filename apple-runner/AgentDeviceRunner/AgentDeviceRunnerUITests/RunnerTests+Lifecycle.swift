@@ -85,6 +85,8 @@ extension RunnerTests {
     }
     currentApp = app
     currentBundleId = nil
+    currentAppProcessIdentifier = nil
+    snapshotXCTestPenaltyWarmupExemptionPending = false
   }
 
   func invalidateCachedTarget(reason: String) {
@@ -93,6 +95,42 @@ extension RunnerTests {
     }
     currentApp = nil
     currentBundleId = nil
+    currentAppProcessIdentifier = nil
+    snapshotXCTestPenaltyWarmupExemptionPending = false
+  }
+
+  func refreshCachedTargetIfProcessChanged(bundleId: String) {
+    guard currentBundleId == bundleId, currentApp != nil else { return }
+    let candidate = XCUIApplication(bundleIdentifier: bundleId)
+    let observedProcessIdentifier = Self.processIdentifier(of: candidate)
+    guard Self.shouldRefreshCachedTarget(
+      cachedProcessIdentifier: currentAppProcessIdentifier,
+      observedProcessIdentifier: observedProcessIdentifier
+    ) else { return }
+    NSLog(
+      "AGENT_DEVICE_RUNNER_TARGET_CACHE_REFRESH bundle=%@ previousPid=%d currentPid=%d",
+      bundleId,
+      currentAppProcessIdentifier ?? 0,
+      observedProcessIdentifier ?? 0
+    )
+    currentApp = candidate
+    currentAppProcessIdentifier = observedProcessIdentifier
+    clearSnapshotXCTestChannelPenalty(reason: "target_process_changed")
+    snapshotXCTestPenaltyWarmupExemptionPending = true
+    needsFirstInteractionDelay = true
+  }
+
+  static func processIdentifier(of target: XCUIApplication) -> Int? {
+    let value = RunnerAXSnapshotBridge.processIdentifier(for: target)
+    return value > 0 ? value : nil
+  }
+
+  static func shouldRefreshCachedTarget(
+    cachedProcessIdentifier: Int?,
+    observedProcessIdentifier: Int?
+  ) -> Bool {
+    guard let cachedProcessIdentifier, let observedProcessIdentifier else { return false }
+    return cachedProcessIdentifier != observedProcessIdentifier
   }
 
   func targetNeedsActivation(_ target: XCUIApplication) -> Bool {
@@ -141,6 +179,8 @@ extension RunnerTests {
     target.activate()
     currentApp = target
     currentBundleId = bundleId
+    currentAppProcessIdentifier = Self.processIdentifier(of: target)
+    snapshotXCTestPenaltyWarmupExemptionPending = false
     needsFirstInteractionDelay = true
     return target
   }

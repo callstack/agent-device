@@ -118,6 +118,17 @@ extension RunnerTests {
     )
   }
 
+  func clearSnapshotXCTestChannelPenalty(reason: String) {
+    snapshotXCTestChannelPenaltyLock.lock()
+    let hadActivePenalty = Date() < snapshotXCTestChannelPenaltyUntil
+    snapshotXCTestChannelPenaltyBundleId = nil
+    snapshotXCTestChannelPenaltyUntil = Date.distantPast
+    snapshotXCTestChannelPenaltyLock.unlock()
+    if hadActivePenalty {
+      NSLog("AGENT_DEVICE_RUNNER_SNAPSHOT_XCTEST_CHANNEL_PENALTY_CLEARED reason=%@", reason)
+    }
+  }
+
   func isSnapshotXCTestChannelPenalized(bundleId: String?) -> Bool {
     snapshotXCTestChannelPenaltyLock.lock()
     defer { snapshotXCTestChannelPenaltyLock.unlock() }
@@ -125,6 +136,12 @@ extension RunnerTests {
     // A penalty recorded without a bundle id applies to whatever target is current.
     guard let penalized = snapshotXCTestChannelPenaltyBundleId else { return true }
     return penalized == bundleId
+  }
+
+  func consumeSnapshotXCTestPenaltyWarmupExemption() -> Bool {
+    let pending = snapshotXCTestPenaltyWarmupExemptionPending
+    snapshotXCTestPenaltyWarmupExemptionPending = false
+    return pending
   }
 
   /// Pure plan-reorder rule: a penalized XCTest accessibility channel uses independent backends
@@ -174,6 +191,7 @@ extension RunnerTests {
     var firstFailure: (reason: String, code: String)?
     var axFailure: SnapshotCaptureFailure?
     let deadline = Date().addingTimeInterval(Self.snapshotPlanBudget)
+    let suppressXCTestPenalty = consumeSnapshotXCTestPenaltyWarmupExemption()
 
     // Reorder is iOS-only because hostile screens can make XCTest tree/query work grind while
     // the app remains visually responsive. Simulators can avoid that channel through private AX;
@@ -237,14 +255,30 @@ extension RunnerTests {
             treeCaptureSliceBudgetOverride: effective.treeCaptureSliceBudgetOverride
           )
         else {
-          recordSlowXCTestSnapshotBackendIfNeeded(kind, startedAt: backendStartedAt)
+          recordSlowXCTestSnapshotBackendIfNeeded(
+            kind,
+            startedAt: backendStartedAt,
+            penaltySuppressed: suppressXCTestPenalty
+          )
           continue
         }
         capture = result
-        recordSlowXCTestSnapshotBackendIfNeeded(kind, startedAt: backendStartedAt)
+        recordSlowXCTestSnapshotBackendIfNeeded(
+          kind,
+          startedAt: backendStartedAt,
+          penaltySuppressed: suppressXCTestPenalty
+        )
       } catch let failure as SnapshotCaptureFailure {
-        recordXCTestSnapshotBackendFailureIfNeeded(kind, failure: failure)
-        recordSlowXCTestSnapshotBackendIfNeeded(kind, startedAt: backendStartedAt)
+        recordXCTestSnapshotBackendFailureIfNeeded(
+          kind,
+          failure: failure,
+          penaltySuppressed: suppressXCTestPenalty
+        )
+        recordSlowXCTestSnapshotBackendIfNeeded(
+          kind,
+          startedAt: backendStartedAt,
+          penaltySuppressed: suppressXCTestPenalty
+        )
         if Self.isAxSnapshotFailure(failure) { axFailure = failure }
         if firstFailure == nil {
           firstFailure = (failure.message, Self.isAxSnapshotFailure(failure) ? "ax-rejected" : "capture-failed")
@@ -313,7 +347,12 @@ extension RunnerTests {
 
   /// Marks XCTest-backed snapshot tiers as penalized when one attempt ground past the slow-capture
   /// threshold — even a successful one: the next capture of this screen must not re-grind.
-  private func recordSlowXCTestSnapshotBackendIfNeeded(_ kind: SnapshotBackendKind, startedAt: Date) {
+  private func recordSlowXCTestSnapshotBackendIfNeeded(
+    _ kind: SnapshotBackendKind,
+    startedAt: Date,
+    penaltySuppressed: Bool
+  ) {
+    guard !penaltySuppressed else { return }
     guard kind.usesXCTestAccessibilityChannel else { return }
     let elapsed = Date().timeIntervalSince(startedAt)
     guard elapsed > snapshotXCTestSlowCaptureThreshold else { return }
@@ -325,8 +364,10 @@ extension RunnerTests {
 
   private func recordXCTestSnapshotBackendFailureIfNeeded(
     _ kind: SnapshotBackendKind,
-    failure: SnapshotCaptureFailure
+    failure: SnapshotCaptureFailure,
+    penaltySuppressed: Bool
   ) {
+    guard !penaltySuppressed else { return }
     guard kind.usesXCTestAccessibilityChannel, failure.code == Self.xCTestSnapshotTimeoutCode else { return }
     penalizeSnapshotXCTestChannel(
       bundleId: currentBundleId,
