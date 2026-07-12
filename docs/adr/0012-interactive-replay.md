@@ -391,8 +391,9 @@ target-binding divergences reported before the device action. This is not genera
 **Divergence is a structured error, not success data.** The daemon returns `ok:false` with code
 `REPLAY_DIVERGENCE` and a `details.divergence` object for both an action failure and a target-binding
 mismatch. The object has version `1` and contains `kind`, `step` (`index`, `source.path`, `source.line`),
-`action`, `cause`, `screen`, `suggestions`, `resume`, and, for binding failures, `targetBinding`
-(`classification`, `matchCount`, `recorded`, `observed`, `mismatches`, `candidates`). `kind` is one of
+`action`, `cause`, `screen`, `suggestions`, `resume`, `repairHint`, and, for binding failures,
+`targetBinding` (`classification`, `matchCount`, `recorded`, `observed`, `mismatches`, `candidates`).
+`kind` is one of
 `action-failure`, `selector-miss`, `identity-mismatch`, or `identity-unverifiable` — the latter three are
 decision 3's target-binding classes, and `targetBinding.classification` always equals the top-level
 `kind`. `targetBinding.matchCount` follows decision 3's presence rule exactly: present (0..N) for
@@ -402,6 +403,15 @@ annotation (path 1), which fires before any resolution.
 `step.index` is the 1-based executable-plan ordinal, not a source
 line. Its source location is diagnostic only. A Maestro parser must preserve the original file and line
 through includes so that source location is actionable.
+
+`repairHint` is a **single bounded enum value** — exactly one of `record-and-heal`, `state-repair`,
+`caution`, or `manual` (never a list; a fixed, closed set), present on every divergence. The daemon
+computes it (decision 6, R3) and it is always defined for every divergence — defaulting to `manual` when
+no safer routing can be proven — so a consuming caller never sees it absent or null. It is a small fixed
+token that costs no meaningful bytes, so it is carried at every response level, including compact
+(`--level digest`), and must survive all four projections intact — daemon text summary, JSON, Node
+client `AppError`, and MCP `structuredContent`. Decision 6 defines its computation and meaning; this
+contract only guarantees it is transported.
 
 `screen` is discriminated. `{ state: "available", refsGeneration, refs, truncated }` is a fresh,
 healthy snapshot digest and the only form that issues actionable refs. `{ state: "unavailable", reason,
@@ -498,14 +508,18 @@ Implementation is not accepted on benchmark evidence alone. Required automated c
   changes, `resume.allowed` reasons, `--from` indexing, variable-output and control-flow rejection, and
   `test --from` rejection;
 - daemon/client/CLI/MCP contracts proving the typed divergence survives failure, JSON and MCP structured
-  output retain it, MCP pins only actionable error-path refs, and no text-only path drops the report;
+  output retain it, MCP pins only actionable error-path refs, no text-only path drops the report, and the
+  `repairHint` enum is present and identical across all four projections (text, JSON, client `AppError`,
+  MCP `structuredContent`), including at compact `--level digest`;
 - `--update` retirement tests proving it never rewrites the source file and only returns bounded
   suggestions ranked and deduplicated per decision 1's total order; and
 - decision 6 acceptance tests: a healed sibling `.ad` replays end-to-end in a **fresh session** with
   every selector step annotated and no bare `@ref`; daemon-side `repairHint` computation for all four
   values (`record-and-heal`, `state-repair`, `caution`, `manual`) against the four divergence kinds
-  (`selector-miss`, `identity-mismatch`, `identity-unverifiable`, `action-failure`), including the
-  sparse-capture fail-safe to `manual`; `--no-record` state-fix actions excluded from the healed script
+  (`selector-miss`, `identity-mismatch`, `identity-unverifiable`, `action-failure`), proving the mapping
+  is total — including the no-`targetEvidence` fail-safe to `manual` (an unannotated `action-failure` per
+  PR #1223) and the sparse/unavailable-capture fail-safe to `manual`, and the post-response-capture
+  container test for `action-failure`; `--no-record` state-fix actions excluded from the healed script
   while the corrective selector-drift action is included; prefix steps re-annotated with fresh
   `target-v1` evidence when recording is armed from step 1 (R1); a `--from`-continuation test proving the
   already-recorded prefix is never duplicated by a second full replay on the same session (R2); a
@@ -589,10 +603,17 @@ works" and "healed scripts are always valid":
 - **R3 — a mechanical `repairHint` on the divergence payload gates the sub-flow; no LLM-only routing.**
   The `repairHint` enum is computed **daemon-side at divergence time, never by the agent**, from two
   inputs the daemon already holds: (i) the recorded `targetEvidence` — the daemon owns the parsed
-  `target-v1` `ancestry`/`scrollRegion` (decision 3) — and (ii) the divergence's own full pre-action
-  capture — the daemon owns the whole current tree, not the flat, 20-capped `screen.refs` shipped on the
-  wire. Only the resulting enum value crosses the wire, so "the wire omits `ancestry`" is moot: the
-  container-presence test runs where both inputs exist. The mapping covers all four divergence `kind`s:
+  `target-v1` `ancestry`/`scrollRegion` (decision 3), *when the diverged action carried an annotation* —
+  and (ii) the divergence's own screen capture — the daemon owns the whole current tree, not the flat,
+  20-capped `screen.refs` shipped on the wire. Only the resulting enum value crosses the wire, so "the
+  wire omits `ancestry`" is moot: the container-presence test runs where both inputs exist.
+  **Capture timing differs by kind, and the test uses whichever capture the kind already provides:** a
+  target-binding kind (`selector-miss`/`identity-mismatch`/`identity-unverifiable`) verifies before
+  dispatch, so its capture is the PRE-action tree; an ordinary `action-failure` (the dispatch-thrown
+  path, per PR #1223) captures its screen AFTER the failed response, so its capture is the POST-response
+  tree. The post-response tree is adequate for the only question the test asks — "does the recorded
+  container currently exist?" — so `action-failure` does not need a separately stored pre-action tree.
+  The mapping covers all four divergence `kind`s:
   - **selector-miss** (`matchCount: 0`): recorded container still present in the current capture →
     `record-and-heal` (selector drift); container absent or the screen differs → `state-repair`
     (app-state).
@@ -600,12 +621,16 @@ works" and "healed scripts are always valid":
     selector, so a blind re-press may repeat the mistake.
   - **identity-unverifiable** → `manual`: future replays block this step pre-action, so heal-by-doing is
     a poor fit.
-  - **action-failure** → the same container-presence test (a dispatch-thrown selector-miss now surfaces
-    here, per PR #1223): container present → `record-and-heal`, else `manual`.
+  - **action-failure** → the same container-presence test over its post-response capture: container
+    present → `record-and-heal`, else `manual`.
 
-  When the divergence capture is sparse or unavailable so the container-presence test cannot run,
-  `repairHint` is `manual` (fail-safe). This resolves the routing mechanically instead of leaving it to
-  agent judgment.
+  The mapping is **total**: every (`kind` × evidence-presence × capture-availability) triple resolves to a
+  defined enum, and any case that cannot be proven safe defaults to `manual`. Two fail-safes make it so.
+  First, when the diverged action carried **no recorded `targetEvidence`** — PR #1223 wraps unannotated
+  actions too, so this is reachable for `action-failure` and for any kind on a legacy/unannotated script —
+  there is no recorded container to test → `manual`. Second, when the divergence capture is sparse or
+  unavailable so the container-presence test cannot run → `manual`. This resolves the routing mechanically
+  instead of leaving it to agent judgment.
 - **R4 — corrective actions must materialize to selector form; the writer fails loudly on a bare `@ref`
   cross-session export.** A `press @e12` normally resolves a `selectorChain` at runtime
   (`src/daemon/handlers/interaction-touch-targets.ts`), which `buildOptimizedActions`
