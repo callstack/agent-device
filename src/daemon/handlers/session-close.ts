@@ -60,6 +60,134 @@ function shouldStopAppleRunnerBeforeTargetedClose(session: SessionState): boolea
   return isApplePlatform(session.device.platform) && !isIosSimulator(session.device);
 }
 
+// Runs the failure-isolated resource teardown and the targeted platform close.
+// Returns the preserved platform-close error (if any); best-effort cleanup
+// failures are pushed into `cleanupFailures`. Never throws for a cleanup step so
+// the caller's lease release and session deletion always run.
+async function runSessionCloseTeardown(params: {
+  req: DaemonRequest;
+  session: SessionState;
+  sessionName: string;
+  logPath: string;
+  sessionStore: SessionStore;
+  cleanupFailures: SessionCleanupFailure[];
+}): Promise<unknown> {
+  const { req, session, sessionName, logPath, sessionStore, cleanupFailures } = params;
+  const attemptCleanup = async (step: string, run: () => Promise<void>): Promise<void> => {
+    try {
+      await run();
+    } catch (error) {
+      cleanupFailures.push({ step, error });
+    }
+  };
+  await stopBestEffortSessionResources(session, sessionStore, attemptCleanup);
+  // The targeted platform close is the primary operation, not best-effort cleanup:
+  // its AppError (code/details/hint) is preserved and returned for the caller to
+  // rethrow, and a failed close must not be recorded as `Closed`. Subsequent
+  // resource cleanup still runs regardless.
+  const platformCloseError = await dispatchTargetedPlatformClose({
+    req,
+    session,
+    logPath,
+    attemptCleanup,
+  });
+  await stopOrRetainAppleRunnerAfterClose(req, session, attemptCleanup);
+  await clearSessionRuntimeHints(session, sessionStore, sessionName);
+  if (!platformCloseError) {
+    recordSessionAction(sessionStore, session, req, 'close', {
+      session: session.name,
+      ...successText(`Closed: ${session.name}`),
+    });
+  }
+  if (req.flags?.saveScript) {
+    session.recordSession = true;
+  }
+  sessionStore.writeSessionLog(session);
+  await attemptCleanup('materialized_paths', () =>
+    cleanupRetainedMaterializedPathsForSession(sessionName),
+  );
+  return platformCloseError;
+}
+
+type CleanupRunner = (step: string, run: () => Promise<void>) => Promise<void>;
+
+async function stopBestEffortSessionResources(
+  session: SessionState,
+  sessionStore: SessionStore,
+  attemptCleanup: CleanupRunner,
+): Promise<void> {
+  await attemptCleanup('app_log', () => stopSessionAppLog(session));
+  await attemptCleanup('audio_probe', async () => {
+    await stopSessionAudioProbe(session, 'session-close');
+  });
+  await attemptCleanup('apple_perf', () => stopSessionApplePerfCapture(session));
+  await attemptCleanup('android_native_perf', () => stopSessionAndroidNativePerfCapture(session));
+  await attemptCleanup('android_snapshot_helper', () => stopSessionAndroidSnapshotHelper(session));
+  await attemptCleanup('android_ime', () =>
+    restoreSessionAndroidIme(session, sessionStore.resolveDaemonStateDir()),
+  );
+}
+
+async function dispatchTargetedPlatformClose(params: {
+  req: DaemonRequest;
+  session: SessionState;
+  logPath: string;
+  attemptCleanup: CleanupRunner;
+}): Promise<unknown> {
+  const { req, session, logPath, attemptCleanup } = params;
+  if (!shouldDispatchPlatformClose(req, session)) return undefined;
+  if (shouldStopAppleRunnerBeforeTargetedClose(session)) {
+    await attemptCleanup('apple_runner_pre_close', () => stopAppleRunnerForClose(session));
+  }
+  try {
+    await dispatchCommand(session.device, 'close', req.positionals ?? [], req.flags?.out, {
+      ...contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath),
+    });
+    await settleIosSimulator(session.device, IOS_SIMULATOR_POST_CLOSE_SETTLE_MS);
+    return undefined;
+  } catch (error) {
+    return error;
+  }
+}
+
+async function clearSessionRuntimeHints(
+  session: SessionState,
+  sessionStore: SessionStore,
+  sessionName: string,
+): Promise<void> {
+  const runtime = sessionStore.getRuntimeHints(sessionName);
+  if (!hasRuntimeTransportHints(runtime) || !session.appBundleId) return;
+  await clearRuntimeHintsFromApp({
+    device: session.device,
+    appId: session.appBundleId,
+  }).catch(() => {});
+}
+
+async function stopOrRetainAppleRunnerAfterClose(
+  req: DaemonRequest,
+  session: SessionState,
+  attemptCleanup: CleanupRunner,
+): Promise<void> {
+  if (!isApplePlatform(session.device.platform)) return;
+  if (!shouldRetainAppleRunnerAfterClose(req, session)) {
+    // The targeted close path stops before dispatch to avoid runner/app races.
+    // Stop again here for idempotent cleanup, and keep cleanup-sensitive closes explicit.
+    await attemptCleanup('apple_runner', () => stopAppleRunnerForClose(session));
+    return;
+  }
+  emitDiagnostic({
+    level: 'debug',
+    phase: 'ios_runner_retained_after_close',
+    data: {
+      session: session.name,
+      deviceId: session.device.id,
+    },
+  });
+  // A retained runner holds the device's runner lease against every other
+  // daemon; bound that with an idle stop unless something reuses it first.
+  scheduleIosRunnerIdleStop(session.device.id);
+}
+
 export async function handleCloseCommand(params: {
   req: DaemonRequest;
   sessionName: string;
@@ -79,84 +207,16 @@ export async function handleCloseCommand(params: {
   // is still attempted. Lease release and session deletion below run regardless,
   // and any collected failures are surfaced as an aggregate after cleanup.
   const cleanupFailures: SessionCleanupFailure[] = [];
-  const attemptCleanup = async (step: string, run: () => Promise<void>): Promise<void> => {
-    try {
-      await run();
-    } catch (error) {
-      cleanupFailures.push({ step, error });
-    }
-  };
-  // The targeted platform close is the primary operation, not best-effort cleanup:
-  // its AppError (code/details/hint) is preserved and rethrown, and a failed close
-  // must not be recorded as `Closed`. Subsequent resource cleanup, lease release,
-  // and session deletion still run regardless.
   let platformCloseError: unknown;
   try {
-    await attemptCleanup('app_log', () => stopSessionAppLog(session));
-    await attemptCleanup('audio_probe', async () => {
-      await stopSessionAudioProbe(session, 'session-close');
+    platformCloseError = await runSessionCloseTeardown({
+      req,
+      session,
+      sessionName,
+      logPath,
+      sessionStore,
+      cleanupFailures,
     });
-    await attemptCleanup('apple_perf', () => stopSessionApplePerfCapture(session));
-    await attemptCleanup('android_native_perf', () => stopSessionAndroidNativePerfCapture(session));
-    await attemptCleanup('android_snapshot_helper', () =>
-      stopSessionAndroidSnapshotHelper(session),
-    );
-    await attemptCleanup('android_ime', () =>
-      restoreSessionAndroidIme(session, sessionStore.resolveDaemonStateDir()),
-    );
-    if (shouldDispatchPlatformClose(req, session)) {
-      if (shouldStopAppleRunnerBeforeTargetedClose(session)) {
-        await attemptCleanup('apple_runner_pre_close', () => stopAppleRunnerForClose(session));
-      }
-      try {
-        await dispatchCommand(session.device, 'close', req.positionals ?? [], req.flags?.out, {
-          ...contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath),
-        });
-        await settleIosSimulator(session.device, IOS_SIMULATOR_POST_CLOSE_SETTLE_MS);
-      } catch (error) {
-        platformCloseError = error;
-      }
-    }
-    if (
-      isApplePlatform(session.device.platform) &&
-      !shouldRetainAppleRunnerAfterClose(req, session)
-    ) {
-      // The targeted close path stops before dispatch to avoid runner/app races.
-      // Stop again here for idempotent cleanup, and keep cleanup-sensitive closes explicit.
-      await attemptCleanup('apple_runner', () => stopAppleRunnerForClose(session));
-    } else if (isApplePlatform(session.device.platform)) {
-      emitDiagnostic({
-        level: 'debug',
-        phase: 'ios_runner_retained_after_close',
-        data: {
-          session: session.name,
-          deviceId: session.device.id,
-        },
-      });
-      // A retained runner holds the device's runner lease against every other
-      // daemon; bound that with an idle stop unless something reuses it first.
-      scheduleIosRunnerIdleStop(session.device.id);
-    }
-    const runtime = sessionStore.getRuntimeHints(sessionName);
-    if (hasRuntimeTransportHints(runtime) && session.appBundleId) {
-      await clearRuntimeHintsFromApp({
-        device: session.device,
-        appId: session.appBundleId,
-      }).catch(() => {});
-    }
-    if (!platformCloseError) {
-      recordSessionAction(sessionStore, session, req, 'close', {
-        session: session.name,
-        ...successText(`Closed: ${session.name}`),
-      });
-    }
-    if (req.flags?.saveScript) {
-      session.recordSession = true;
-    }
-    sessionStore.writeSessionLog(session);
-    await attemptCleanup('materialized_paths', () =>
-      cleanupRetainedMaterializedPathsForSession(sessionName),
-    );
   } finally {
     // Always drop the local session, even if provider-side release fails:
     // a failed close must not strand device ownership until inactivity expiry.
