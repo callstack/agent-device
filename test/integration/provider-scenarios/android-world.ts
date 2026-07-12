@@ -32,6 +32,7 @@ type AndroidSettingsWorld = {
   ) => unknown
     ? TRequest[]
     : never;
+  gestureViewportCalls: number;
   inventoryRequests: DeviceInventoryRequest[];
   apkInstallCalls: Array<{ apkPath: string; replace?: boolean }>;
   bundleInstallCalls: Array<{ bundlePath: string; mode: string }>;
@@ -56,6 +57,7 @@ export async function createAndroidSettingsWorld(options?: {
   const adbCalls: string[][] = [];
   const textInjectionCalls: AndroidSettingsWorld['textInjectionCalls'] = [];
   const touchInjectionCalls: AndroidSettingsWorld['touchInjectionCalls'] = [];
+  let gestureViewportCalls = 0;
   const inventoryRequests: DeviceInventoryRequest[] = [];
   const apkInstallCalls: Array<{ apkPath: string; replace?: boolean }> = [];
   const bundleInstallCalls: Array<{ bundlePath: string; mode: string }> = [];
@@ -77,6 +79,10 @@ export async function createAndroidSettingsWorld(options?: {
     packageName: 'io.example.demo_manifest',
   });
   const adbProvider: AndroidAdbProvider = {
+    gestureViewport: async () => {
+      gestureViewportCalls += 1;
+      return { x: 0, y: 0, width: 390, height: 600 };
+    },
     exec: async (args) => {
       adbCalls.push([...args]);
       options?.onAdbExec?.([...args]);
@@ -156,6 +162,9 @@ export async function createAndroidSettingsWorld(options?: {
     adbCalls,
     textInjectionCalls,
     touchInjectionCalls,
+    get gestureViewportCalls() {
+      return gestureViewportCalls;
+    },
     inventoryRequests,
     apkInstallCalls,
     bundleInstallCalls,

@@ -7,6 +7,7 @@ import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts'
 import {
   resolveAndroidAdbExecutor,
   resolveAndroidAdbProvider,
+  resolveAndroidGestureViewportProvider,
   resolveAndroidTouchInjector,
   type AndroidAdbExecutor,
 } from './adb-executor.ts';
@@ -140,6 +141,8 @@ async function prepareAndroidMultiTouchHelper(device: DeviceInfo) {
 }
 
 export async function readAndroidGestureViewport(device: DeviceInfo): Promise<Rect> {
+  const providerViewport = resolveAndroidGestureViewportProvider(device);
+  if (providerViewport) return validateAndroidGestureViewport(await providerViewport());
   const { adb, artifact } = await prepareAndroidMultiTouchHelper(device);
   const result = await adb(
     [
@@ -171,16 +174,23 @@ export function parseAndroidGestureViewportResult(results: Array<Record<string, 
   const y = readInstrumentationResultNumber(output.y);
   const width = readInstrumentationResultNumber(output.width);
   const height = readInstrumentationResultNumber(output.height);
+  if (x === undefined || y === undefined || width === undefined || height === undefined) {
+    throw new AppError('COMMAND_FAILED', 'Android helper returned an invalid gesture viewport');
+  }
+  return validateAndroidGestureViewport({ x, y, width, height });
+}
+
+function validateAndroidGestureViewport(viewport: Rect): Rect {
   if (
-    x === undefined ||
-    y === undefined ||
-    width === undefined ||
-    height === undefined ||
-    width <= 0 ||
-    height <= 0
+    !Number.isFinite(viewport.x) ||
+    !Number.isFinite(viewport.y) ||
+    !Number.isFinite(viewport.width) ||
+    !Number.isFinite(viewport.height) ||
+    viewport.width <= 0 ||
+    viewport.height <= 0
   )
     throw new AppError('COMMAND_FAILED', 'Android helper returned an invalid gesture viewport');
-  return { x, y, width, height };
+  return viewport;
 }
 
 export function normalizeAndroidMultiTouchHelperGestureRequest(

@@ -6,6 +6,7 @@ import {
   normalizeAndroidMultiTouchHelperGestureRequest,
   parseAndroidMultiTouchHelperOutput,
   performGestureAndroid,
+  readAndroidGestureViewport,
   resetAndroidMultiTouchHelperInstallCache,
   runAndroidMultiTouchHelperGesture,
   parseAndroidGestureViewportResult,
@@ -241,6 +242,29 @@ test('gesture viewport result is typed and rejects invalid bounds', () => {
     { code: 'COMMAND_FAILED' },
   );
   assert.throws(() => parseAndroidGestureViewportResult([]), { code: 'COMMAND_FAILED' });
+});
+
+test('provider gesture viewport bypasses local helper transport and is validated', async () => {
+  let calls = 0;
+  await withAndroidAdbProvider(
+    {
+      exec: async () => {
+        throw new Error('adb must not run');
+      },
+      gestureViewport: async () => {
+        calls += 1;
+        return calls === 1 ? viewport : { ...viewport, width: 0 };
+      },
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      assert.deepEqual(await readAndroidGestureViewport(ANDROID_EMULATOR), viewport);
+      await assert.rejects(readAndroidGestureViewport(ANDROID_EMULATOR), {
+        code: 'COMMAND_FAILED',
+      });
+    },
+  );
+  assert.equal(calls, 2);
 });
 
 test('production Android interactor exposes the native gesture viewport seam', () => {

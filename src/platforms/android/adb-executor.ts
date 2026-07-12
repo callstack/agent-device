@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Readable, Writable } from 'node:stream';
 import type { DeviceInfo } from '../../kernel/device.ts';
+import type { Rect } from '../../kernel/snapshot.ts';
 import type { GesturePlan } from '../../contracts/gesture-plan.ts';
 import {
   coerceExecResult,
@@ -130,6 +131,8 @@ export type AndroidTouchInjector = (
   request: AndroidTouchGestureRequest,
 ) => Promise<Record<string, unknown> | void>;
 
+export type AndroidGestureViewportProvider = () => Promise<Rect>;
+
 export type AndroidAdbProvider = {
   /**
    * Fallback executor for device-scoped adb arguments. Providers may omit explicit
@@ -143,6 +146,7 @@ export type AndroidAdbProvider = {
   installBundle?: AndroidBundleInstaller;
   text?: AndroidTextInjector;
   touch?: AndroidTouchInjector;
+  gestureViewport?: AndroidGestureViewportProvider;
 };
 
 export type AndroidAdbProviderScopeOptions = {
@@ -474,6 +478,13 @@ export function resolveAndroidTextInjector(device: DeviceInfo): AndroidTextInjec
 export function resolveAndroidTouchInjector(device: DeviceInfo): AndroidTouchInjector | undefined {
   const scoped = androidAdbProviderScope.getStore();
   return scoped?.serial === device.id ? scoped.provider.touch : undefined;
+}
+
+export function resolveAndroidGestureViewportProvider(
+  device: DeviceInfo,
+): AndroidGestureViewportProvider | undefined {
+  const scoped = androidAdbProviderScope.getStore();
+  return scoped?.serial === device.id ? scoped.provider.gestureViewport : undefined;
 }
 
 export function createAndroidPortReverseManager(

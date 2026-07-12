@@ -164,6 +164,7 @@ test('Provider-backed integration Android touch provider handles multi-touch ges
         { topology: 'two', intent: 'rotate', pointerCount: 2, durationMs: 784 },
         { topology: 'two', intent: 'transform', pointerCount: 2, durationMs: 700 },
       ]);
+      assert.equal(world.gestureViewportCalls, 6);
       assert.equal(
         world.adbCalls.some(
           (call) =>

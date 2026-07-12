@@ -122,8 +122,8 @@ test('Provider-backed integration Android Maestro replay uses fresh snapshots an
         world.adbCalls.find((call) => call.slice(0, 3).join(' ') === 'shell input swipe'),
         ['shell', 'input', 'swipe', '351', '300', '39', '300', '300'],
       );
-      // Percentage resolution and the shared planner each read a fresh active-app viewport.
-      assertSnapshotCountInRange(snapshots, 4, 6);
+      // Percentage resolution snapshots remain fresh; gesture planning uses the provider viewport.
+      assertSnapshotCountInRange(snapshots, 3, 5);
     },
   );
 });

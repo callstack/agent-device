@@ -55,7 +55,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       result: { tapped: true },
     },
     runnerSnapshot(),
-    runnerSnapshot(),
+    runnerGestureViewport(),
     {
       command: 'ios.runner.gesture',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
@@ -70,6 +70,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       },
       result: { pinched: true },
     },
+    runnerGestureViewport(),
     {
       command: 'ios.runner.gesture',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
@@ -89,6 +90,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       },
       result: { dragged: true },
     },
+    runnerGestureViewport(),
     {
       command: 'ios.runner.gesture',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
@@ -103,7 +105,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       },
       result: { flung: true },
     },
-    runnerSnapshot(),
+    runnerGestureViewport(),
     {
       command: 'ios.runner.gesture',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
@@ -118,8 +120,7 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       },
       result: { rotated: true },
     },
-    runnerSnapshot(),
-    runnerSnapshot(),
+    runnerGestureViewport(),
     {
       command: 'ios.runner.gesture',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
@@ -141,7 +142,6 @@ export async function createIosSettingsWorld(): Promise<IosSettingsWorld> {
       },
       result: { transformed: true },
     },
-    runnerSnapshot(),
     {
       command: 'ios.runner.querySelector',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
@@ -392,6 +392,24 @@ function runnerSnapshot() {
         },
       ],
       truncated: false,
+    },
+  };
+}
+
+function runnerGestureViewport() {
+  return {
+    command: 'ios.runner.gestureViewport',
+    deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+    platform: 'apple' as const,
+    request: {
+      command: 'gestureViewport',
+      appBundleId: 'com.apple.Preferences',
+    },
+    result: {
+      x: IOS_SETTINGS_VIEWPORT.x,
+      y: IOS_SETTINGS_VIEWPORT.y,
+      x2: IOS_SETTINGS_VIEWPORT.width,
+      y2: IOS_SETTINGS_VIEWPORT.height,
     },
   };
 }
