@@ -501,7 +501,7 @@ Implementation is not accepted on benchmark evidence alone. Required automated c
   output retain it, MCP pins only actionable error-path refs, and no text-only path drops the report;
 - `--update` retirement tests proving it never rewrites the source file and only returns bounded
   suggestions ranked and deduplicated per decision 1's total order; and
-- decision 7 acceptance tests: a healed sibling `.ad` replays end-to-end in a **fresh session** with
+- decision 6 acceptance tests: a healed sibling `.ad` replays end-to-end in a **fresh session** with
   every selector step annotated and no bare `@ref`; `repairHint` computation for all four values
   (`record-and-heal`, `state-repair`, `caution`, `manual`) against the four divergence kinds; `--no-record`
   state-fix actions excluded from the healed script while the corrective selector-drift action is
@@ -513,7 +513,7 @@ Extend the settle benchmark (`~/.agent-device-bench/rnnav-matrix.py` pattern, ex
 replay arm only after these contracts pass: measure clean replay and one induced divergence repaired
 through the allowed `--from` loop.
 
-### 7. Agent-supervised re-record repair ("heal-by-doing")
+### 6. Agent-supervised re-record repair ("heal-by-doing")
 
 Decision 1 retired `--update`'s SILENT auto-rewrite because selector agreement is not proof of the same
 target. This decision is not a reversal of that: it adds an EXPLICIT, agent-driven repair path — the
@@ -546,11 +546,14 @@ computable. `formatSessionScript(session.actions)` (`src/daemon/session-script-w
 therefore the healed script: the path that actually worked. The only net-new code is flag-threading plus
 one writer entry point (see Migration plan).
 
-**The two repair sub-flows (agent judgment, protocol-taught).** The divergence report cannot
-mechanically distinguish "label renamed" from "app is on the wrong screen entirely" — both surface as a
-`selector-miss` with `matchCount: 0` (decision 3). The agent distinguishes them from `screen.refs`: is
-this the expected screen with one drifted control, or a different screen? The two sub-flows use
-different recording discipline:
+**The two repair sub-flows (routed by the mechanical `repairHint`).** A `selector-miss` with
+`matchCount: 0` (decision 3) is the same surface for "label renamed" and "app is on the wrong screen
+entirely", so the sub-flow is not left to the agent to guess. The CLI computes a `repairHint` on the
+divergence payload from `kind` plus whether the recorded `ancestry`/`scrollRegion` container still exists
+on the current screen (R3 below): container present → `record-and-heal` (selector drift), container
+absent or a different screen → `state-repair` (app-state). The agent follows the hint — and may override
+using `screen.refs` only when the hint is genuinely ambiguous — rather than routing blind. The two
+sub-flows use different recording discipline:
 
 1. **Selector drift** (expected screen, one control renamed or moved): the agent presses the correct
    control via a blessed `@ref` from `screen.refs` — recorded (no `--no-record`). This corrective
@@ -650,7 +653,7 @@ by construction. The healed `.ad` is written only when the repair ends (below) a
   (tab+header+row sharing a label) and disclosure is nearly free for those, while rejection would fail
   all of them to catch the rare "Prevent Remove"-style case decision 3 is built to catch structurally
   instead.
-- **Decision 7's residual risk is old risk, not new.** The agent can press the wrong visible ref — live
+- **Decision 6's residual risk is old risk, not new.** The agent can press the wrong visible ref — live
   interactive commands have no target-binding verification anywhere in this codebase today (see (c) in
   Context) — but that is ordinary agent-driven-interaction risk, not a new class this decision
   introduces. The retired-heal failure mode ("selector agreement is not proof of the same target") is
@@ -709,7 +712,7 @@ each states its dependencies explicitly.
    report before the write path is removed), with a no-write regression test.
 7. **Benchmark extension** (decision 5) — follows the mandatory contracts; measures the economic claim
    (clean replay plus one induced divergence repaired through the allowed `--from` loop).
-8. **Agent-supervised re-record repair** (decision 7) — depends on 2 and 5 (the repair loop is built
+8. **Agent-supervised re-record repair** (decision 6) — depends on 2 and 5 (the repair loop is built
    entirely on the existing divergence report and `--from`/`--plan-digest` resume machinery) and on 3/4
    (corrective actions record fresh `target-v1` evidence, so the healed script is self-consistent).
    Prerequisite: the selector-miss → `REPLAY_DIVERGENCE` defensive fix (PR #1223) — a thrown per-action
