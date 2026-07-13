@@ -281,7 +281,13 @@ extension RunnerTests {
       return try runMainThreadWork(
         command: nil,
         timeout: slice,
-        timeoutError: systemModalProbeTimeoutError(slice: slice),
+        timeoutError: {
+          SnapshotCaptureFailure(
+            code: Self.xCTestSnapshotTimeoutCode,
+            message: "the system-modal probe exceeded its \(slice)s time slice",
+            hint: "The capture plan recovers through non-XCTest snapshot tiers while the modal probe drains."
+          )
+        },
         onAbandoned: {
           self.retainAbandonedXCTestChannelWork()
           NSLog("AGENT_DEVICE_RUNNER_SYSTEM_MODAL_PROBE_TIMEOUT slice=%.1f", slice)
@@ -316,16 +322,6 @@ extension RunnerTests {
   ) -> TimeInterval {
     guard deadlineRemaining > 0 else { return 0 }
     return min(budget, deadlineRemaining)
-  }
-
-  private func systemModalProbeTimeoutError(slice: TimeInterval) -> () -> Error {
-    {
-      SnapshotCaptureFailure(
-        code: Self.xCTestSnapshotTimeoutCode,
-        message: "the system-modal probe exceeded its \(slice)s time slice",
-        hint: "The capture plan recovers through non-XCTest snapshot tiers while the modal probe drains."
-      )
-    }
   }
 
   func rawTreeSnapshotPayload(
@@ -557,6 +553,52 @@ extension RunnerTests {
     // Exactly/already exhausted deadline: skip the probe entirely (0), never a negative timeout.
     XCTAssertEqual(Self.systemModalProbeSlice(budget: 4, deadlineRemaining: 0), 0)
     XCTAssertEqual(Self.systemModalProbeSlice(budget: 4, deadlineRemaining: -5), 0)
+  }
+
+  func testDispatchRecoverySkipsBookkeepingWhileXCTestChannelOccupied() {
+    // The #1244 recovery shape: the modal probe abandoned an XCTest query that is still grinding on
+    // main, the capture recovered independently, and its response is ready. The recovery loop must
+    // return it without re-entering the main queue for recorded-failure/retry bookkeeping (that hop
+    // would block behind the abandoned query and re-stall the command), and a later command must
+    // still see the runner busy until the abandoned work drains. Removing the guard regresses this.
+    let command = try! JSONDecoder().decode(
+      Command.self,
+      from: Data(#"{"command":"snapshot","commandId":"recovery-guard"}"#.utf8)
+    )
+    let recovered = Response(ok: false, error: ErrorPayload(message: "target is not available"))
+
+    setAbandonedXCTestWork(1)
+    defer { setAbandonedXCTestWork(0) }
+    guard case .busy = currentMainThreadBusyState() else {
+      return XCTFail("expected RUNNER_BUSY while abandoned XCTest work is outstanding")
+    }
+
+    var occupiedCalls = 0
+    let occupied = try! executeDispatchedWithRecovery(command: command) {
+      occupiedCalls += 1
+      return recovered
+    }
+    XCTAssertEqual(occupiedCalls, 1, "recovered response must not retry behind abandoned XCTest work")
+    XCTAssertEqual(occupied.ok, false)
+
+    setAbandonedXCTestWork(0)
+    guard case .idle = currentMainThreadBusyState() else {
+      return XCTFail("runner should be idle once the abandoned work drained")
+    }
+    var drainedCalls = 0
+    _ = try! executeDispatchedWithRecovery(command: command) {
+      drainedCalls += 1
+      return recovered
+    }
+    XCTAssertEqual(drainedCalls, 2, "with the channel free the read-only retry runs once")
+  }
+
+  private func setAbandonedXCTestWork(_ count: Int) {
+    treeCaptureLock.lock(); abandonedTreeCaptureCount = count; treeCaptureLock.unlock()
+    mainThreadWorkLock.lock()
+    abandonedMainThreadWorkCount = count
+    abandonedMainThreadWorkSince = count > 0 ? Date(timeIntervalSinceNow: -1) : nil
+    mainThreadWorkLock.unlock()
   }
 #endif
 

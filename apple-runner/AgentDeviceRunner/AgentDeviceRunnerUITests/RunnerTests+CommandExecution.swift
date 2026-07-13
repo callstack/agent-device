@@ -836,6 +836,18 @@ extension RunnerTests {
   }
 
   private func executeSnapshotDispatched(command: Command) throws -> Response {
+    try executeDispatchedWithRecovery(command: command) {
+      try self.executeSnapshotDispatchedOnce(command: command)
+    }
+  }
+
+  /// The dispatched snapshot recovery loop: read-only retry + XCTest-recorded-failure invalidation,
+  /// matching what `executeOnMainSafely` gives the generic path. `perform` runs the capture and its
+  /// own bounded main-thread work.
+  func executeDispatchedWithRecovery(
+    command: Command,
+    perform: () throws -> Response
+  ) throws -> Response {
     var hasRetried = false
     while true {
       let failureCountBefore = try runMainThreadWork(
@@ -845,7 +857,16 @@ extension RunnerTests {
       ) {
         self.currentXCTestFailureCount()
       }
-      let response = try executeSnapshotDispatchedOnce(command: command)
+      let response = try perform()
+      // Recovered independently — re-entering main for bookkeeping would queue behind the still-
+      // abandoned XCTest query and re-stall the command (#1244), so skip it until that work drains.
+      if hasAbandonedTreeCapture() {
+        NSLog(
+          "AGENT_DEVICE_RUNNER_DISPATCH_RECOVERY_SKIPPED_XCTEST_OCCUPIED command=%@",
+          command.command.rawValue
+        )
+        return response
+      }
       let recordedFailureResponse = try runMainThreadWork(
         command: command,
         timeout: mainThreadExecutionTimeout,
