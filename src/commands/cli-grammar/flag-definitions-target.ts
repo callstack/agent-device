@@ -77,7 +77,8 @@ export const TARGET_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
     min: 1,
     max: 65535,
     usageLabel: '--metro-port <port>',
-    usageDescription: 'Session-scoped Metro/debug port hint',
+    usageDescription:
+      'Session-scoped Metro/debug port hint; on an emulator/simulator the host defaults to the loopback alias, physical devices still need --metro-host',
   },
   {
     key: 'metroProjectRoot',

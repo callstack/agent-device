@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '../../kernel/errors.ts';
 import { applyRuntimeHintsToApp, clearRuntimeHintsFromApp } from '../runtime-hints.ts';
+import { applyDeviceDefaultMetroHost } from '../handlers/session-runtime.ts';
 import { resolveRuntimeTransportHints } from '../../utils/runtime-transport.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 
@@ -295,6 +296,52 @@ test('applyRuntimeHintsToApp also writes the legacy ReactNativeDevPrefs.xml path
     assert.match(legacyPayload ?? '', /<string name="keep_legacy">legacy-value<\/string>/);
     assert.match(legacyPayload ?? '', /<string name="debug_http_host">10\.0\.0\.10:8082<\/string>/);
     assert.match(legacyPayload ?? '', /<boolean name="dev_server_https" value="true" \/>/);
+  });
+});
+
+test('port-only hint on an Android emulator defaults host to 10.0.2.2 and writes the dev-server pref', async () => {
+  await withMockedAdb(async ({ device, readWrittenPrefsFile }) => {
+    const packageName = 'com.example.demo';
+    const runtime = applyDeviceDefaultMetroHost({ platform: 'android', metroPort: 8084 }, device);
+    assert.equal(runtime?.metroHost, '10.0.2.2');
+
+    await applyRuntimeHintsToApp({ device, appId: packageName, runtime });
+
+    const defaultPayload = await readWrittenPrefsFile(defaultPrefsPath(packageName));
+    assert.ok(defaultPayload, 'expected a write to the default RN preferences file');
+    assert.match(defaultPayload ?? '', /<string name="debug_http_host">10\.0\.2\.2:8084<\/string>/);
+  });
+});
+
+test('port-only hint on a physical Android device stays ambiguous and writes nothing', async () => {
+  await withMockedAdb(async ({ device, argsLogPath, readWrittenPrefsFile }) => {
+    const physicalDevice: DeviceInfo = { ...device, id: 'R5CN30', kind: 'device' };
+    const runtime = applyDeviceDefaultMetroHost(
+      { platform: 'android', metroPort: 8084 },
+      physicalDevice,
+    );
+    assert.equal(runtime?.metroHost, undefined);
+
+    await applyRuntimeHintsToApp({ device: physicalDevice, appId: 'com.example.demo', runtime });
+
+    const loggedArgs = await fs.readFile(argsLogPath, 'utf8').catch(() => '');
+    assert.doesNotMatch(loggedArgs, /tee/);
+    assert.equal(await readWrittenPrefsFile(defaultPrefsPath('com.example.demo')), undefined);
+  });
+});
+
+test('port-only hint on an iOS simulator defaults host to 127.0.0.1', async () => {
+  await withMockedXcrun(async ({ device, argsLogPath }) => {
+    const runtime = applyDeviceDefaultMetroHost({ platform: 'ios', metroPort: 8084 }, device);
+    assert.equal(runtime?.metroHost, '127.0.0.1');
+
+    await applyRuntimeHintsToApp({ device, appId: 'com.example.demo', runtime });
+
+    const loggedArgs = await fs.readFile(argsLogPath, 'utf8');
+    assert.match(
+      loggedArgs,
+      /simctl spawn sim-1 defaults write com\.example\.demo RCT_jsLocation -string 127\.0\.0\.1:8084/,
+    );
   });
 });
 

@@ -8,7 +8,12 @@ import {
   hasRuntimeTransportHints,
   trimRuntimeValue,
 } from '../runtime-hints.ts';
+import { isAndroidEmulator, isIosSimulator } from '../device-targets.ts';
 import { errorResponse, type DaemonFailureResponse } from './response.ts';
+
+// Loopback aliases an emulator/simulator app uses to reach the dev server on the host machine.
+const ANDROID_EMULATOR_LOOPBACK_HOST = '10.0.2.2';
+const IOS_SIMULATOR_LOOPBACK_HOST = '127.0.0.1';
 
 const RUNTIME_HINT_FIELD_NAMES = [
   'platform',
@@ -112,6 +117,28 @@ export function mergeRuntimeHints(
   };
 }
 
+function defaultMetroHostForDevice(device: DeviceInfo): string | undefined {
+  if (isAndroidEmulator(device)) return ANDROID_EMULATOR_LOOPBACK_HOST;
+  if (isIosSimulator(device)) return IOS_SIMULATOR_LOOPBACK_HOST;
+  return undefined;
+}
+
+// A port-only hint (`--metro-port` without `--metro-host`) otherwise writes no dev-server pref.
+// Emulator/simulator hosts are unambiguous, so fill in the loopback alias; physical devices stay
+// ambiguous and still require an explicit `--metro-host`.
+export function applyDeviceDefaultMetroHost(
+  runtime: SessionRuntimeHints | undefined,
+  device: DeviceInfo,
+): SessionRuntimeHints | undefined {
+  if (!runtime) return runtime;
+  if (trimRuntimeValue(runtime.metroHost)) return runtime;
+  if (trimRuntimeValue(runtime.bundleUrl)) return runtime; // bundleUrl carries its own host
+  if (runtime.metroPort === undefined) return runtime;
+  const host = defaultMetroHostForDevice(device);
+  if (!host) return runtime;
+  return { ...runtime, metroHost: host };
+}
+
 function normalizeExplicitRuntimeHints(params: {
   runtime: unknown;
   sessionName: string;
@@ -202,16 +229,21 @@ function resolveOpenRuntimeHints(params: {
   });
   if (req.runtime === undefined) {
     return {
-      runtime: resolveSessionRuntimeHints(sessionStore, sessionName, device),
+      runtime: applyDeviceDefaultMetroHost(
+        resolveSessionRuntimeHints(sessionStore, sessionName, device),
+        device,
+      ),
       previousRuntime,
       replacedStoredRuntime: false,
     };
   }
   return {
-    runtime:
+    runtime: applyDeviceDefaultMetroHost(
       explicitRuntime && countConfiguredRuntimeHints(explicitRuntime) > 0
         ? explicitRuntime
         : undefined,
+      device,
+    ),
     previousRuntime,
     replacedStoredRuntime: true,
   };

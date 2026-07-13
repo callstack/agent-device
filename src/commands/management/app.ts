@@ -46,10 +46,13 @@ const openCommandMetadata = defineFieldCommandMetadata(
     ),
     noRecord: booleanField('Do not record this action.'),
     metroHost: stringField('Session-scoped Metro/debug host hint applied to the opened app.'),
-    metroPort: integerField('Session-scoped Metro/debug port hint applied to the opened app.', {
-      min: 1,
-      max: 65535,
-    }),
+    metroPort: integerField(
+      'Session-scoped Metro/debug port hint applied to the opened app. On an emulator/simulator the host defaults to the loopback alias (Android 10.0.2.2, iOS 127.0.0.1) when --metro-host is omitted; physical devices still require an explicit --metro-host.',
+      {
+        min: 1,
+        max: 65535,
+      },
+    ),
     bundleUrl: stringField('Session-scoped bundle URL hint applied to the opened app.'),
     launchUrl: stringField('Session-scoped launch URL hint applied to the opened app.'),
   },

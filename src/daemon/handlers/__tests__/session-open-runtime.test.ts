@@ -516,6 +516,118 @@ test('open runtime payload does not persist replacement when launch fails', asyn
   });
 });
 
+test('open --metro-port alone defaults the host to 10.0.2.2 on an Android emulator', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'runtime-open-port-only-android';
+  const runtimeApplyCalls: Array<{ host?: string; port?: number }> = [];
+
+  mockResolveTargetDevice.mockResolvedValue({
+    platform: 'android',
+    id: 'emulator-5556',
+    name: 'Pixel',
+    kind: 'emulator',
+    booted: true,
+  });
+  mockResolveAndroidPackage.mockResolvedValue('com.example.demo');
+  mockApplyRuntimeHints.mockImplementation(async ({ runtime }) => {
+    runtimeApplyCalls.push({ host: runtime?.metroHost, port: runtime?.metroPort });
+  });
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'open',
+      positionals: ['Demo'],
+      flags: { platform: 'android' },
+      runtime: { metroPort: 8084 },
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(runtimeApplyCalls).toEqual([{ host: '10.0.2.2', port: 8084 }]);
+  expect(sessionStore.getRuntimeHints(sessionName)?.metroHost).toBe('10.0.2.2');
+  expect(sessionStore.getRuntimeHints(sessionName)?.metroPort).toBe(8084);
+});
+
+test('open --metro-port alone defaults the host to 127.0.0.1 on an iOS simulator', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'runtime-open-port-only-ios';
+  const runtimeApplyCalls: Array<{ host?: string; port?: number }> = [];
+
+  mockResolveTargetDevice.mockResolvedValue({
+    platform: 'apple',
+    id: 'sim-1',
+    name: 'iPhone 17 Pro',
+    kind: 'simulator',
+    booted: true,
+  });
+  mockApplyRuntimeHints.mockImplementation(async ({ runtime }) => {
+    runtimeApplyCalls.push({ host: runtime?.metroHost, port: runtime?.metroPort });
+  });
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'open',
+      positionals: ['Demo'],
+      flags: { platform: 'ios' },
+      runtime: { metroPort: 8084 },
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(runtimeApplyCalls).toEqual([{ host: '127.0.0.1', port: 8084 }]);
+  expect(sessionStore.getRuntimeHints(sessionName)?.metroHost).toBe('127.0.0.1');
+});
+
+test('open --metro-port alone stays host-ambiguous on a physical Android device', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'runtime-open-port-only-physical';
+  const runtimeApplyCalls: Array<{ host?: string; port?: number }> = [];
+
+  mockResolveTargetDevice.mockResolvedValue({
+    platform: 'android',
+    id: 'R5CN30',
+    name: 'Galaxy',
+    kind: 'device',
+    booted: true,
+  });
+  mockResolveAndroidPackage.mockResolvedValue('com.example.demo');
+  mockApplyRuntimeHints.mockImplementation(async ({ runtime }) => {
+    runtimeApplyCalls.push({ host: runtime?.metroHost, port: runtime?.metroPort });
+  });
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'open',
+      positionals: ['Demo'],
+      flags: { platform: 'android' },
+      runtime: { metroPort: 8084 },
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(runtimeApplyCalls).toEqual([{ host: undefined, port: 8084 }]);
+  expect(sessionStore.getRuntimeHints(sessionName)?.metroHost).toBeUndefined();
+  expect(sessionStore.getRuntimeHints(sessionName)?.metroPort).toBe(8084);
+});
+
 test('open --relaunch allows Android package names ending with apk-like suffix', async () => {
   const sessionStore = makeSessionStore();
   const dispatchCalls: Array<{ command: string; positionals: string[] }> = [];
