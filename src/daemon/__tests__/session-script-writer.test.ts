@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { SessionScriptWriter } from '../session-script-writer.ts';
+import { recordActionEntry } from '../session-action-recorder.ts';
 import { makeIosSession } from '../../__tests__/test-utils/session-factories.ts';
 import { parseReplayScriptDetailed } from '../../replay/script.ts';
 import type { SessionAction } from '../types.ts';
@@ -216,4 +217,39 @@ test('write() DOES overwrite when the caller passed an explicit --save-script=<p
   expect(result.written).toBe(true);
   const parsed = parseReplayScriptDetailed(fs.readFileSync(outPath, 'utf8'));
   expect(parsed.actions.map((a) => a.positionals[0])).toEqual(['id="new"']);
+});
+
+test('close --save-script=<explicit path> clears the defaulted marker, so an explicit overwrite of an existing file SUCCEEDS', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-close-explicit-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const defaultedHealed = path.join(root, 'flows', 'login.healed.ad');
+  const explicitOut = path.join(root, 'flows', 'promoted.ad');
+  fs.mkdirSync(path.dirname(explicitOut), { recursive: true });
+  fs.writeFileSync(explicitOut, 'context platform=ios device="x"\nclick id="old"\n');
+
+  // The repair defaulted to `.healed.ad` (marker set).
+  const session = makeIosSession('default', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+    saveScriptPath: defaultedHealed,
+    saveScriptDefaultedHealedPath: true,
+    actions: [action({ command: 'click', positionals: ['id="new"'] })],
+  });
+
+  // `close --save-script=<explicit existing path>` re-points the path AND
+  // clears the marker (regression: it used to retain the marker and wrongly
+  // refuse the explicit overwrite).
+  recordActionEntry(session, {
+    command: 'close',
+    positionals: [],
+    flags: { saveScript: explicitOut },
+  });
+  expect(session.saveScriptDefaultedHealedPath).toBe(false);
+  expect(session.saveScriptPath).toBe(explicitOut);
+
+  const result = writer.write(session);
+  expect(result.written).toBe(true);
+  expect(result.written && result.path).toBe(explicitOut);
+  const parsed = parseReplayScriptDetailed(fs.readFileSync(explicitOut, 'utf8'));
+  expect(parsed.actions.some((a) => a.positionals[0] === 'id="new"')).toBe(true);
 });

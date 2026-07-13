@@ -22,7 +22,11 @@ export function recordActionEntry(
   if (entry.flags?.saveScript) {
     session.recordSession = true;
     if (typeof entry.flags.saveScript === 'string') {
+      // ADR 0012 decision 6: an explicit `--save-script=<path>` (e.g. `close
+      // --save-script=<path>`) clears the defaulted-healed marker so the
+      // writer's clobber guard never refuses an overwrite the caller directed.
       session.saveScriptPath = expandSessionPath(entry.flags.saveScript);
+      session.saveScriptDefaultedHealedPath = false;
     }
   }
   const action: SessionAction = {

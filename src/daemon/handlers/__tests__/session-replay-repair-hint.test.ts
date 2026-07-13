@@ -333,11 +333,52 @@ test('fail-safe: unavailable capture on an action-failure -> manual', () => {
   assert.equal(hint, 'manual');
 });
 
-// --- root-level target with no ancestry and no scrollRegion: falls back to "capture has any content" ---
+// --- fail-safe 3: NO usable structural container signal (empty ancestry AND
+// no/unidentified scrollRegion) -> manual, never record-and-heal on an
+// unrelated screen (same mis-binding class as the unidentified-region P0). ---
 
-test('selector-miss with no ancestry/scrollRegion falls back to non-empty capture -> record-and-heal', () => {
+test('selector-miss with no ancestry/scrollRegion on an unrelated screen -> manual (not record-and-heal)', () => {
   const evidence = saveButtonEvidence({ ancestry: [] });
   const nodes = toSnapshotNodes([{ index: 0, type: 'toolbar', label: 'Editor' }]);
+  const hint = computeReplayRepairHint({
+    kind: 'selector-miss',
+    targetEvidence: evidence,
+    capture: AVAILABLE(nodes),
+  });
+  assert.equal(hint, 'manual');
+});
+
+test('action-failure with no ancestry/scrollRegion on an unrelated screen -> manual', () => {
+  const evidence = saveButtonEvidence({ ancestry: [] });
+  const nodes = toSnapshotNodes([{ index: 0, type: 'toolbar', label: 'Editor' }]);
+  const hint = computeReplayRepairHint({
+    kind: 'action-failure',
+    targetEvidence: evidence,
+    capture: AVAILABLE(nodes),
+  });
+  assert.equal(hint, 'manual');
+});
+
+test('no ancestry but an UNIDENTIFIED scrollRegion is still no usable signal -> manual', () => {
+  const evidence = saveButtonEvidence({ ancestry: [], scrollRegion: { role: 'scrollview' } });
+  const nodes = toSnapshotNodes([{ index: 0, type: 'scrollview' }]);
+  const hint = computeReplayRepairHint({
+    kind: 'selector-miss',
+    targetEvidence: evidence,
+    capture: AVAILABLE(nodes),
+  });
+  assert.equal(hint, 'manual');
+});
+
+test('no ancestry but an IDENTIFIED scrollRegion IS a usable signal -> record-and-heal when the region is present', () => {
+  const evidence = saveButtonEvidence({
+    ancestry: [],
+    scrollRegion: { role: 'scrollview', id: 'editor-scroll' },
+  });
+  const nodes = toSnapshotNodes([
+    { index: 0, type: 'scrollview', identifier: 'editor-scroll' },
+    { index: 1, type: 'button', label: 'Save Draft', parentIndex: 0 },
+  ]);
   const hint = computeReplayRepairHint({
     kind: 'selector-miss',
     targetEvidence: evidence,
@@ -346,12 +387,16 @@ test('selector-miss with no ancestry/scrollRegion falls back to non-empty captur
   assert.equal(hint, 'record-and-heal');
 });
 
-test('selector-miss with no ancestry/scrollRegion and an empty capture -> state-repair', () => {
-  const evidence = saveButtonEvidence({ ancestry: [] });
+test('no ancestry + IDENTIFIED scrollRegion absent -> state-repair (selector-miss)', () => {
+  const evidence = saveButtonEvidence({
+    ancestry: [],
+    scrollRegion: { role: 'scrollview', id: 'editor-scroll' },
+  });
+  const nodes = toSnapshotNodes([{ index: 0, type: 'window', label: 'Onboarding' }]);
   const hint = computeReplayRepairHint({
     kind: 'selector-miss',
     targetEvidence: evidence,
-    capture: AVAILABLE([]),
+    capture: AVAILABLE(nodes),
   });
   assert.equal(hint, 'state-repair');
 });

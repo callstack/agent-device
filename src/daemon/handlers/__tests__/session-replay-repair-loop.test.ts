@@ -172,9 +172,50 @@ test('R2: a fresh FULL replay --save-script on an already-armed session is rejec
   expect(second.ok).toBe(false);
   if (second.ok) return;
   expect(second.error.code).toBe('INVALID_ARGS');
-  expect(second.error.message).toMatch(/already has a --save-script repair run/);
+  expect(second.error.message).toMatch(/active --save-script repair run/);
   // Rejected before any action ran — no duplicate prefix appended.
   expect(spy).toHaveLength(0);
+});
+
+test('R2 bypass guard: a PLAIN full replay (no --save-script) on an armed session is still rejected', async () => {
+  const { root, sessionStore, sessionName, logPath } = setup(
+    'agent-device-replay-repair-r2-plain-',
+  );
+  const filePath = writeReplayFile(root, ['open "Demo"', 'click id="save"']);
+
+  // Arm the repair run — session stays repair-armed (recordSession +
+  // saveScriptBoundary) after it returns.
+  const first = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke: makeRecordingReplayInvoke({ sessionStore, sessionName }),
+  });
+  expect(first.ok).toBe(true);
+  const armed = sessionStore.get(sessionName)!;
+  expect(armed.saveScriptBoundary).toBe(0);
+  expect(armed.recordSession).toBe(true);
+  const armedActionCount = armed.actions.length;
+
+  // A plain full replay WITHOUT --save-script must NOT bypass R2: recordSession
+  // is still true, so it would re-append the prefix. Reject it, zero dispatches,
+  // healed slice not duplicated.
+  const spy: DaemonRequest[] = [];
+  const plain = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke: makeRecordingReplayInvoke({ sessionStore, sessionName, spy }),
+  });
+  expect(plain.ok).toBe(false);
+  if (plain.ok) return;
+  expect(plain.error.code).toBe('INVALID_ARGS');
+  expect(plain.error.message).toMatch(/active --save-script repair run/);
+  expect(spy).toHaveLength(0);
+  // No prefix duplication: the armed session's actions are unchanged.
+  expect(sessionStore.get(sessionName)!.actions.length).toBe(armedActionCount);
 });
 
 test('R6 no amputation: a pre-populated session whose step-1 open REPLACES the session healed-slices exactly this run', async () => {

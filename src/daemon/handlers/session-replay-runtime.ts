@@ -193,22 +193,21 @@ export async function runReplayScriptFile(params: {
     });
     const actionTracePath = tracePath ?? sessionStore.get(sessionName)?.trace?.outPath;
     const snapshotDiagnosticSamples: SnapshotTimingSample[] = [];
-    // ADR 0012 decision 6, R1/R2/R6: `--save-script` arms the repair loop
-    // before step 1. R2 preflight rejects a fresh full replay --save-script on
-    // an already-armed session (it would duplicate the recorded prefix); the
-    // returned armer stamps the boundary watermark on the session that
-    // actually accumulates this run's actions, robust to step-1 `open`
-    // replacing the session.
-    const saveScript = req.flags?.saveScript;
-    const saveScriptPreflight = preflightReplaySaveScript({
-      saveScript,
+    // ADR 0012 decision 6, R1/R2/R6: R2 preflight rejects ANY fresh full replay
+    // on a session with an active repair run — regardless of `--save-script`
+    // this time — because the session stays repair-armed (`recordSession` +
+    // `saveScriptBoundary`), so even a plain full replay re-appends the
+    // recorded prefix. The armer then stamps the boundary watermark on the
+    // session that actually accumulates this run's actions, robust to step-1
+    // `open` replacing the session.
+    const repairRunPreflight = preflightReplayAgainstActiveRepair({
       entryIndex: entryIndex.value,
       sessionStore,
       sessionName,
     });
-    if (saveScriptPreflight) return saveScriptPreflight;
+    if (repairRunPreflight) return repairRunPreflight;
     const armReplaySaveScriptStep = createReplaySaveScriptArmer({
-      saveScript,
+      saveScript: req.flags?.saveScript,
       sessionStore,
       sessionName,
       sourcePath: resolved,
@@ -398,24 +397,26 @@ function readSelectorDisplayValue(selector: string | undefined): string | undefi
 }
 
 /**
- * ADR 0012 decision 6, R2: reject a fresh FULL `replay --save-script` on a
- * session that already carries a repair-run boundary — a full re-run
- * re-appends the already-recorded prefix (`session-action-recorder.ts` pushes
- * unconditionally), duplicating it in the healed slice. A `--from` resume
- * (`entryIndex > 0`) legitimately continues the same armed run and is allowed.
+ * ADR 0012 decision 6, R2: reject a fresh FULL replay on a session that
+ * already carries a repair-run boundary — the session stays repair-armed
+ * (`recordSession` remains true), so ANY full re-run re-appends the
+ * already-recorded prefix (`session-action-recorder.ts` pushes
+ * unconditionally), duplicating it in the healed slice. This fires REGARDLESS
+ * of whether `--save-script` is passed this invocation (omitting the flag
+ * does not disarm the session). A `--from` resume (`entryIndex > 0`)
+ * legitimately continues the same armed run and is allowed.
  */
-function preflightReplaySaveScript(params: {
-  saveScript: boolean | string | undefined;
+function preflightReplayAgainstActiveRepair(params: {
   entryIndex: number;
   sessionStore: SessionStore;
   sessionName: string;
 }): DaemonResponse | undefined {
-  const { saveScript, entryIndex, sessionStore, sessionName } = params;
-  if (!saveScript || entryIndex > 0) return undefined;
+  const { entryIndex, sessionStore, sessionName } = params;
+  if (entryIndex > 0) return undefined;
   if (sessionStore.get(sessionName)?.saveScriptBoundary === undefined) return undefined;
   return errorResponse(
     'INVALID_ARGS',
-    'This session already has a --save-script repair run recorded; a fresh full replay --save-script would duplicate the recorded prefix. Continue the repair with replay --from <n> --plan-digest <sha256> instead.',
+    'This session has an active --save-script repair run; continue it with replay --from <n> --plan-digest <sha256>, or finish with close, before starting a fresh full replay.',
   );
 }
 
@@ -462,7 +463,11 @@ function armReplaySaveScriptStep(params: {
   if (!session) return;
   session.recordSession = true;
   if (typeof saveScript === 'string') {
+    // An EXPLICIT `--save-script=<path>` clears the defaulted marker so the
+    // clobber guard never refuses a path the caller directed (invariant: the
+    // marker is set iff the current `saveScriptPath` was defaulted).
     session.saveScriptPath = expandSessionPath(saveScript);
+    session.saveScriptDefaultedHealedPath = false;
   } else if (session.saveScriptPath === undefined) {
     session.saveScriptPath = healedScriptSiblingPath(sourcePath);
     session.saveScriptDefaultedHealedPath = true;

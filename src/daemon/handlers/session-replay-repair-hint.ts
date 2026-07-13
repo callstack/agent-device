@@ -51,9 +51,26 @@ export function computeReplayRepairHint(params: {
   // container-presence test, differing only in their "container absent" verdict.
   if (!targetEvidence) return 'manual';
   if (capture.state !== 'available') return 'manual';
+  // A recording with NO usable structural container signal — empty `ancestry`
+  // AND no identified `scrollRegion` — cannot prove it is the same screen, so
+  // "present" would degenerate to "the capture is non-empty" and route an
+  // unrelated screen to `record-and-heal` (the same mis-binding class as the
+  // unidentified-region case). Fail safe to `manual`.
+  if (!hasUsableContainerSignal(targetEvidence)) return 'manual';
   const present = isRecordedContainerPresent(targetEvidence, capture.nodes);
   if (kind === 'selector-miss') return present ? 'record-and-heal' : 'state-repair';
   return present ? 'record-and-heal' : 'manual';
+}
+
+/**
+ * True when the recorded evidence carries at least one trustworthy structural
+ * container signal: a non-empty `ancestry` chain, or an IDENTIFIED
+ * `scrollRegion` (id/label). Empty ancestry + no/unidentified region is no
+ * signal at all.
+ */
+function hasUsableContainerSignal(recorded: TargetAnnotationV1): boolean {
+  if (recorded.ancestry.length > 0) return true;
+  return recorded.scrollRegion !== undefined && isIdentifiedScrollRegion(recorded.scrollRegion);
 }
 
 /**
@@ -104,9 +121,10 @@ function isScrollRegionPresent(
  * Some node's OWN leaf-anchored ancestry chain still matches the recorded
  * target's full `ancestry` prefix — walking the WHOLE recorded chain, not
  * just the immediate parent, so an unrelated screen that happens to reuse the
- * parent role/label (shared app chrome) does not read as containment. A
- * recording with no ancestry at all (a root-level target) has no structural
- * relationship to test, so presence degenerates to "the capture has content."
+ * parent role/label (shared app chrome) does not read as containment. Empty
+ * ancestry only reaches here alongside an identified `scrollRegion` (the
+ * caller fails no-signal cases to `manual` first), so its "capture has
+ * content" result is merely AND-neutral against the region test.
  */
 function isRecordedAncestryPresent(
   ancestry: TargetAnnotationV1['ancestry'],
