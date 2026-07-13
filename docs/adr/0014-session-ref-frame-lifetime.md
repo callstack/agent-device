@@ -35,6 +35,11 @@ remain compatible with selector-based replay, and add no automatic capture or pe
 
 ## Decision
 
+The terms introduced below describe the proposed target model. They do not replace the current domain
+language in `CONTEXT.md` while this ADR is Proposed and the source still implements the snapshot/stale
+marker model. The implementation change that establishes these concepts must promote the accepted
+terms into `CONTEXT.md`; documentation must not present the target model as current behavior early.
+
 ### Ref frames are separate from operational observations
 
 A session owns at most one **ref frame**. The frame is the authorization namespace for mutation refs
@@ -77,11 +82,18 @@ compatibility.
 A complete activation normally accompanies a command result that exposes the complete ref namespace
 for the stored frame, including an interactive or intentionally scoped snapshot. An intentionally
 scoped snapshot replaces authorization with exactly its returned namespace; it neither authorizes
-matching ref bodies outside that scope nor retains the old `all` scope. A frame-activating capture
-scoped by `@ref` must first admit that scope ref against the current active frame. A stale or unissued
-scope ref fails closed; it cannot authorize a capture from a different subtree. Selector-scoped
-captures follow their normal selector rules. Empty, sparse, failed, or unusable captures do not
-replace the frame.
+matching ref bodies outside that scope nor retains the old `all` scope.
+
+A frame-activating capture scoped by `@ref` must first admit that scope ref against the current active
+frame. To preserve the existing repeated scoped-snapshot contract after scoped output reindexes refs,
+the session retains one bounded **scope lineage** for consecutive read-only repetitions of that exact
+scope. The lineage stores the admitted semantic scope (label/selector chain), not the old positional
+tree or mutation authority. A repeated `snapshot -s @ref` may resolve through that lineage only when
+the immediately preceding frame publication was the same scoped capture. The first device-side effect,
+an unrelated frame publication, or another scope clears the lineage. An arbitrary stale or unissued
+scope ref still fails closed; it cannot borrow lineage or authorize a different subtree. Empty, sparse,
+failed, or unusable repeated captures preserve the last useful frame and its still-consecutive lineage.
+Selector-scoped captures follow their normal selector rules.
 
 Snapshot diffs, digests that omit the namespace, `find`, settled diffs/tails, and replay divergence
 screens are partial external publications. They activate a partial frame only when at least one ref
@@ -154,7 +166,8 @@ awaiting that operation.
 
 Failure before this seam preserves the frame. Once the seam is crossed, success, timeout,
 cancellation, connection loss, and ambiguous platform errors all leave it expired because the device
-may already have acted. There is no success-only rollback.
+may already have acted. Crossing the seam also clears scoped-snapshot lineage. There is no success-only
+rollback.
 
 This rule applies to every execution shape:
 
@@ -281,14 +294,23 @@ Read-only `find` may partially publish its returned ref. A mutating `find` retur
 as diagnostic pre-action identity: it must omit `refsGeneration`, must not publish or activate a
 frame, and cannot make that ref valid after the nested action.
 
-The MCP executor continues storing per-ref pins by state-directory/session scope. Remembered pins are
-not cleared on mutation: sending the remembered old epoch is how the daemon produces a precise stale
-rejection. MCP currently neither traverses refs nested inside batch inputs nor learns refs from nested
-batch results; this remains an explicit non-goal.
+The MCP executor continues storing per-ref pins by state-directory/session scope. Issuance handling
+must distinguish the selected `find` action, not infer issuance from the command name alone. A
+read-only `find` with `refsGeneration` merges its partial pin. A mutating `find` without
+`refsGeneration` is explicitly non-issuing and leaves every remembered pin unchanged; it must not
+enter a generic missing-generation branch that clears the session's pin scope. The executor must carry
+enough normalized command/action context to make that distinction. Remembered pins are not cleared on
+mutation: sending the remembered old epoch is how the daemon produces a precise stale rejection. MCP
+currently neither traverses refs nested inside batch inputs nor learns refs from nested batch results;
+this remains an explicit non-goal.
 
 The response-level `refsGeneration` field remains the token-economical authority. Snapshot nodes never
-gain per-node generation bytes. Human CLI output may render a ready-to-copy pinned form for the one or
-few refs in a partial result, but complete trees remain plain.
+gain per-node generation bytes. Every reusable ref in a partial CLI text result must render in
+ready-to-copy `@eN~s<refsGeneration>` form. JSON and Node.js responses retain plain ref bodies plus one
+response-level generation; callers must pair them before a mutation. MCP may render a plain ref because
+it stores and forwards the pin internally. Complete snapshot trees remain plain to protect the token
+budget. A mutating `find` diagnostic ref is never rendered or stored as pinned because it carries no
+`refsGeneration`.
 
 ## Performance and compatibility
 
@@ -343,6 +365,8 @@ It composes with existing ADRs as follows:
   ambiguous dispatch.
 - A read without retained evidence fails rather than resolving the same positional ref body in a
   newer tree. Reads with retained evidence keep the structured warning behavior.
+- Consecutive repeated scoped snapshots retain their admitted semantic scope, while any mutation,
+  unrelated publication, or different scope breaks that lineage.
 - The implementation pays bounded session-memory bookkeeping but adds no automatic capture, platform
   call, round trip, or per-node response bytes.
 
@@ -357,30 +381,44 @@ The implementation is not complete until contract and provider tests prove:
    provider-backed lifecycle/generic paths cross the same seam;
 5. Android freshness cannot retarget an admitted ref through positional coincidence;
 6. read-only operational captures do not replace the authorized frame;
-7. partial publication admits only emitted pinned refs, reports each typed admission failure, and
-   cannot bless unrelated plain refs;
+7. partial publication admits only emitted pinned refs, reports each typed admission failure, cannot
+   bless unrelated plain refs, and CLI text renders every reusable partial ref with its pin while JSON
+   and Node.js retain the response-level representation;
 8. complete publication admits its plain namespace while sparse/unusable captures do not;
 9. mutating `find` omits `refsGeneration` and never pins or activates its pre-action ref as current
-   post-action state;
+   post-action state; an MCP sequence that first remembers a snapshot pin, then performs mutating
+   `find`, still forwards the remembered old pin on a later ref input so the daemon rejects it as stale;
 10. batch and replay delegate per step, retain their existing failure/partial-result contracts, and
     allow `snapshot -> @ref` with an intermediate digest without exposing pins or dynamic bindings;
 11. recorded scripts contain selectors rather than portable generation claims;
 12. press/swipe series and Apple chunks resolve and expire exactly once;
 13. Android dialog recovery expires before its first recovery side effect and aborts an outstanding
     ref action after recovery mutates;
-14. `@ref`-scoped activation rejects stale scope refs, while empty partial output leaves the current
-    frame unchanged;
+14. consecutive repeated `snapshot -s @ref` calls resolve the same admitted semantic scope after
+    scoped output reindexes refs; a mutation, unrelated publication, or different scope breaks the
+    lineage; an arbitrary stale ref cannot use it; and empty/unusable repetition preserves the last
+    useful frame and still-consecutive lineage;
 15. fused keyboard/alert requests and split status/action paths follow their documented conservative
     seams, including already-hidden and no-alert outcomes;
 16. failed or timed-out existing-session open/relaunch leaves the old frame expired after dispatch;
-17. a large-tree fixture proves frame/observation separation introduces no deep copy and records the
+17. a read-only ref with retained stale evidence returns the structured warning, while missing frame
+    evidence fails without falling through to a newer observation by positional coincidence;
+18. a large-tree fixture proves frame/observation separation introduces no deep copy and records the
     bounded peak retained nodes/bytes; and
-18. enforcement and error shapes are consistent across supported platforms.
+19. enforcement and error shapes are consistent across supported platforms.
 
 Performance regression tests prove that admission, expiration, and frame/observation separation add
 no implicit capture or provider/platform call. Device benchmarks are required only if those tests or
 live evidence reveal a regression. No path may claim success until a test proves the relevant
 direct/native/runtime/provider branch actually executed.
+
+Before enforcement is enabled for a platform, fresh-build live evidence must exercise every supported
+production seam affected there: Apple runtime-ref and direct/native paths where available, Android
+helper freshness and recovery, generic/lifecycle mutation, and at least one real provider-backed
+interaction plus lifecycle operation. Each run must prove a fresh ref succeeds, a second mutation with
+the stale ref is rejected before dispatch, and a fresh observation restores usability. A seam not
+exercised remains disabled or is recorded as an explicit release blocker. Fixture-backed tests and
+registry claims are necessary but do not substitute for this live evidence.
 
 ## Migration
 
@@ -391,13 +429,15 @@ Each step lands green and independently useful:
 2. add the complete daemon descriptor classification and gate, including request-sensitive resolvers;
 3. route every leaf side effect, fallback, retry, and readiness recovery through the idempotent
    pre-side-effect transition;
-4. correct complete/partial publication and MCP/CLI rendering while preserving response-level epochs;
+4. correct complete/partial publication, bounded scoped-snapshot lineage, MCP pin retention, pinned
+   partial CLI text, and JSON/Node.js response-level generation handling;
 5. decouple Android freshness capture from positional ref authorization;
 6. add sequence, batch, replay, series, failure-boundary, and cross-platform provider contracts;
 7. enable fail-closed mutation enforcement per platform only after its paths have evidence, ending in
    one uniform policy; and
-8. update help, changelog, and replay/batch guidance for refresh-between-mutations, conservative
-   fused no-op invalidation, and reads without retained evidence; then remove the superseded coarse
+8. update help, changelog, ADR 0012's proposed-amendment note and tests, and replay/batch guidance for
+   refresh-between-mutations, conservative fused no-op invalidation, and reads without retained
+   evidence; promote the implemented vocabulary into `CONTEXT.md`; then remove the superseded coarse
    stale marker.
 
 PR #1241 landed independently as a compatible transitional fix. It rejects a known iOS stale-marker
