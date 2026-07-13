@@ -106,6 +106,9 @@ const SAMPLE_DEVICES: DeviceInfo[] = [
 const isNotMacOs = (device: DeviceInfo): boolean => !isMacOs(device);
 const isMacOsOrAppleSimulator = (device: DeviceInfo): boolean =>
   isMacOs(device) || device.kind === 'simulator';
+const isIosOs = (device: DeviceInfo): boolean =>
+  device.platform === 'apple' &&
+  (device.appleOs ? device.appleOs === 'ios' : device.target !== 'tv');
 const supportsAndroidOrIosNonTv = (device: DeviceInfo): boolean =>
   device.platform === 'android' || (isIosFamily(device) && device.target !== 'tv');
 const supportsTvRemote = (device: DeviceInfo): boolean =>
@@ -136,7 +139,8 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
   keyboard: supportsAndroidOrIosNonTv,
   rotate: supportsAndroidOrIosNonTv,
   'tv-remote': supportsTvRemote,
-  alert: (device) => device.platform === 'android' || isMacOsOrAppleSimulator(device),
+  alert: (device) =>
+    device.platform === 'android' || isIosOs(device) || isMacOsOrAppleSimulator(device),
   settings: (device) =>
     device.platform === 'android' || isMacOs(device) || device.kind === 'simulator',
   audio: supportsHostAudioProbe,

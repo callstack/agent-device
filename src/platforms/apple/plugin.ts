@@ -6,7 +6,12 @@ import {
   shouldUseHostMacFastPath,
   type DeviceInventoryRequest,
 } from '../../contracts/device-inventory.ts';
-import { isMacOs, isTvOsDevice, type DeviceInfo } from '../../kernel/device.ts';
+import {
+  isMacOs,
+  isTvOsDevice,
+  resolveDeviceAppleOs,
+  type DeviceInfo,
+} from '../../kernel/device.ts';
 import type { RunnerContext } from '../../core/interactor-types.ts';
 
 // ---------------------------------------------------------------------------
@@ -44,7 +49,7 @@ const supportsOrientation = (device: DeviceInfo): boolean => {
   return caps ? caps.orientation : device.platform === 'android';
 };
 
-// The Apple arm shared by `clipboard`/`alert`/`settings` (was `macos || simulator`):
+// The Apple arm shared by `clipboard`/`settings` (was `macos || simulator`):
 // reachable on the macOS host directly, on every other Apple OS only on the simulator.
 // Off Apple this preserves the trailing `device.kind === 'simulator'` term verbatim.
 const supportsHostOrSimulatorSurface = (device: DeviceInfo): boolean => {
@@ -54,6 +59,12 @@ const supportsHostOrSimulatorSurface = (device: DeviceInfo): boolean => {
     : device.kind === 'simulator';
 };
 
+// Alerts use the host/simulator surface plus physical iOS, whose XCTest path is
+// device-verified. iPadOS/visionOS remain closed until independently verified.
+const supportsAlertSurface = (device: DeviceInfo): boolean =>
+  device.platform === 'android' ||
+  (device.platform === 'apple' && resolveDeviceAppleOs(device) === 'ios') ||
+  supportsHostOrSimulatorSurface(device);
 // `tv-remote` is Android-TV or tvOS only. Off Apple this preserves the Android-TV
 // branch so the relocated Apple closure stays equivalent to the full original
 // supports predicate under the parity guard; the closure is only consulted for Apple
@@ -80,8 +91,7 @@ const APPLE_SUPPORTS_BY_DEFAULT: Record<string, (device: DeviceInfo) => boolean>
   [PUBLIC_COMMANDS.keyboard]: supportsKeyboard,
   [PUBLIC_COMMANDS.rotate]: supportsOrientation,
   [PUBLIC_COMMANDS.tvRemote]: supportsTvRemote,
-  [PUBLIC_COMMANDS.alert]: (device) =>
-    device.platform === 'android' || supportsHostOrSimulatorSurface(device),
+  [PUBLIC_COMMANDS.alert]: supportsAlertSurface,
   [PUBLIC_COMMANDS.settings]: (device) =>
     device.platform === 'android' || supportsHostOrSimulatorSurface(device),
   [PUBLIC_COMMANDS.audio]: isAudioProbeSupportedDevice,

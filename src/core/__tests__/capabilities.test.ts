@@ -18,6 +18,14 @@ const iosDevice: DeviceInfo = {
   kind: 'device',
 };
 
+const iPadOsDevice: DeviceInfo = {
+  platform: 'apple',
+  appleOs: 'ipados',
+  id: 'ipad-dev-1',
+  name: 'iPad',
+  kind: 'device',
+};
+
 const androidDevice: DeviceInfo = {
   platform: 'android',
   id: 'and-1',
@@ -91,7 +99,8 @@ test('device capability matrix stays consistent across shared command groups', (
       commands: ['alert'],
       checks: [
         { device: iosSimulator, expected: true, label: 'on iOS sim' },
-        { device: iosDevice, expected: false, label: 'on iOS device' },
+        { device: iosDevice, expected: true, label: 'on iOS device' },
+        { device: iPadOsDevice, expected: false, label: 'on iPadOS device' },
         { device: androidDevice, expected: true, label: 'on Android' },
         { device: macOsDevice, expected: true, label: 'on macOS' },
       ],

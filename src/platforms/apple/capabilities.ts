@@ -35,9 +35,10 @@ export type AppleOsCapabilityProfile = {
   /** `rotate` — device orientation. tvOS (focus-only) and macOS lack it. */
   readonly orientation: boolean;
   /**
-   * Whether `clipboard` / `alert` / `settings` are reachable on a PHYSICAL device of
+   * Whether `clipboard` / `settings` are reachable on a PHYSICAL device of
    * this OS. Only the macOS host exposes them without a simulator; the reading closure
    * still admits every Apple *simulator* via its own `kind === 'simulator'` check.
+   * Alert support has a separate command predicate because physical iOS is verified.
    */
   readonly physicalDeviceSurfaces: boolean;
 };
