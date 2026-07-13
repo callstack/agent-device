@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { afterEach, test, vi } from 'vitest';
-import { LimrunRuntime, readLocalhostUrlPort } from '../providers/limrun/runtime.ts';
+import { LimrunRuntime } from '../providers/limrun/runtime.ts';
 import type { SimulatorLease } from '../daemon/lease-registry.ts';
 import type { DeviceInfo } from '../kernel/device.ts';
 import { runCmd } from '../utils/exec.ts';
@@ -83,9 +83,13 @@ vi.mock('@limrun/api/instance-client', () => ({
   })),
 }));
 
-vi.mock('../utils/exec.ts', () => ({
-  runCmd: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
-}));
+vi.mock('../utils/exec.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../utils/exec.ts')>();
+  return {
+    ...actual,
+    runCmd: vi.fn(async () => ({ stdout: '', stderr: '', exitCode: 0 })),
+  };
+});
 
 afterEach(() => {
   limrunMockState.constructorOptions.length = 0;
@@ -182,10 +186,7 @@ async function allocateLimrunDevice(
 
 function assertAndroidTunnelLifecycle(openUrl: string): void {
   assert.equal(limrunMockState.androidStartAdbTunnel.mock.calls.length, 1);
-  const androidOpenUrlCalls = limrunMockState.androidOpenUrl.mock.calls as unknown as Array<
-    [string]
-  >;
-  assert.equal(androidOpenUrlCalls[0]?.[0], openUrl);
+  assert.equal(limrunMockState.androidOpenUrl.mock.calls.length, 0);
   assert.deepEqual(vi.mocked(runCmd).mock.calls[0]?.[1], [
     '-s',
     '127.0.0.1:62001',
@@ -196,11 +197,23 @@ function assertAndroidTunnelLifecycle(openUrl: string): void {
   assert.deepEqual(vi.mocked(runCmd).mock.calls[1]?.[1], [
     '-s',
     '127.0.0.1:62001',
+    'shell',
+    'am',
+    'start',
+    '-W',
+    '-a',
+    'android.intent.action.VIEW',
+    '-d',
+    openUrl,
+  ]);
+  assert.deepEqual(vi.mocked(runCmd).mock.calls[2]?.[1], [
+    '-s',
+    '127.0.0.1:62001',
     'reverse',
     '--remove',
     'tcp:8081',
   ]);
-  assert.deepEqual(vi.mocked(runCmd).mock.calls[2]?.[1], ['disconnect', '127.0.0.1:62001']);
+  assert.deepEqual(vi.mocked(runCmd).mock.calls[3]?.[1], ['disconnect', '127.0.0.1:62001']);
   assert.equal(limrunMockState.androidTunnelClose.mock.calls.length, 1);
 }
 
@@ -469,12 +482,4 @@ test('Limrun keeps session tracked when release fails so release can be retried'
   } finally {
     await runtime.shutdown();
   }
-});
-
-test('readLocalhostUrlPort recognizes loopback URLs only', () => {
-  assert.equal(readLocalhostUrlPort('exp://127.0.0.1:8081'), 8081);
-  assert.equal(readLocalhostUrlPort('http://localhost:19000/status'), 19000);
-  assert.equal(readLocalhostUrlPort('http://[::1]:8097'), 8097);
-  assert.equal(readLocalhostUrlPort('https://metro.agent-device.dev/status'), undefined);
-  assert.equal(readLocalhostUrlPort('not a url'), undefined);
 });

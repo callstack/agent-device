@@ -6,13 +6,11 @@ import { resolveDaemonPaths, resolveDaemonServerMode } from '../config.ts';
 import { createDaemonHttpServer } from './http-server.ts';
 import { trackDownloadableArtifact } from '../artifact-tracking.ts';
 import { createDefaultCloudArtifactProvider } from '../../default-cloud-artifact-provider.ts';
-import { createDefaultCloudWebDriverProviderRuntimes } from '../../cloud-webdriver/provider-runtimes.ts';
-import { createLimrunRuntimeFromEnv } from '../../providers/limrun/runtime.ts';
 import {
   composeCloudArtifactProviders,
   createProviderDeviceRuntimeRequestProviders,
-  type ProviderDeviceRuntime,
 } from '../../provider-device-runtime.ts';
+import { createDefaultProviderDeviceRuntimes } from '../../provider-device-runtimes.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { createRequestHandler } from '../request-router.ts';
 import { teardownSessionResources } from '../session-teardown.ts';
@@ -100,10 +98,7 @@ export async function startDaemonRuntime(
   const token = crypto.randomBytes(24).toString('hex');
   const daemonProcessStartTime = readProcessStartTime(process.pid) ?? undefined;
   const daemonCodeSignature = resolveDaemonCodeSignature();
-  const providerDeviceRuntimes = [
-    ...createDefaultCloudWebDriverProviderRuntimes(env),
-    createLimrunRuntimeFromEnv(env),
-  ].filter((runtime): runtime is ProviderDeviceRuntime => Boolean(runtime));
+  const providerDeviceRuntimes = createDefaultProviderDeviceRuntimes(env);
   const providerRuntimeProviders =
     createProviderDeviceRuntimeRequestProviders(providerDeviceRuntimes);
   const cloudArtifactProvider = composeCloudArtifactProviders(

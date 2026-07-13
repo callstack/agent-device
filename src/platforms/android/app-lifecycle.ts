@@ -394,6 +394,7 @@ async function openAndroidAppBoundDeepLink(
   if (!isDeepLinkTarget(deepLinkUrl)) {
     throw new AppError('INVALID_ARGS', 'Android app-bound open requires a valid URL target');
   }
+  await ensureAndroidLocalhostReverse(device, deepLinkUrl);
   const resolved = await resolveAndroidPackageForOpen(device, app, 'app-bound open');
   await runAndroidAdb(device, [
     'shell',

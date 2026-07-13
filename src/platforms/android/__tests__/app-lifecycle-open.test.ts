@@ -213,6 +213,61 @@ test('openAndroidApp ensures Android reverse before localhost deep link launch',
   ]);
 });
 
+test('openAndroidApp ensures Android reverse before localhost app-bound deep link launch', async () => {
+  const device: DeviceInfo = {
+    platform: 'android',
+    id: 'emulator-5554',
+    name: 'Pixel',
+    kind: 'emulator',
+    booted: true,
+  };
+  const calls: Array<
+    { kind: 'exec'; args: string[] } | { kind: 'reverse'; local: string; remote: string }
+  > = [];
+
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        calls.push({ kind: 'exec', args });
+        return {
+          stdout: args.join(' ') === 'shell pm list packages' ? 'package:com.example.app\n' : '',
+          stderr: '',
+          exitCode: 0,
+        };
+      },
+      reverse: {
+        ensure: async (mapping) => {
+          calls.push({ kind: 'reverse', local: mapping.local, remote: mapping.remote });
+        },
+        remove: async () => {},
+        removeAllOwned: async () => {},
+      },
+    },
+    { serial: 'emulator-5554' },
+    async () =>
+      await openAndroidApp(device, 'com.example.app', { url: 'http://localhost:8081/status' }),
+  );
+
+  assert.deepEqual(calls, [
+    { kind: 'reverse', local: 'tcp:8081', remote: 'tcp:8081' },
+    {
+      kind: 'exec',
+      args: [
+        'shell',
+        'am',
+        'start',
+        '-W',
+        '-a',
+        'android.intent.action.VIEW',
+        '-d',
+        'http://localhost:8081/status',
+        '-p',
+        'com.example.app',
+      ],
+    },
+  ]);
+});
+
 test('openAndroidApp ensures Android reverse before IPv6 localhost deep link launch', async () => {
   const device: DeviceInfo = {
     platform: 'android',

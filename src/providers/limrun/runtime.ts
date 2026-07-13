@@ -15,8 +15,16 @@ import { runCmd } from '../../utils/exec.ts';
 import { readVersion } from '../../utils/version.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import type { Interactor, SnapshotOptions, SnapshotResult } from '../../core/interactor-types.ts';
+import { createAndroidInteractor } from '../../core/interactors/android.ts';
 import type { DeviceInventoryProvider } from '../../core/dispatch-resolve.ts';
-import type { AndroidAdbExecutorOptions } from '../../platforms/android/adb-executor.ts';
+import {
+  withAndroidAdbProvider,
+  type AndroidAdbExecutorOptions,
+  type AndroidAdbExecutorResult,
+  type AndroidAdbProvider,
+  type AndroidPortReverseEndpoint,
+  type AndroidPortReverseProvider,
+} from '../../platforms/android/adb-executor.ts';
 import type { LeaseLifecycleProvider } from '../../daemon/handlers/lease.ts';
 import type { DeviceLease } from '../../daemon/lease-registry.ts';
 import type {
@@ -31,15 +39,7 @@ import {
   platformForLimrunLeaseBackend,
   readLimrunLeaseIdFromInventoryRequest,
 } from './device.ts';
-import {
-  flattenIosTree,
-  mapAndroidNode,
-  toAndroidSelector,
-  toIosSelector,
-  writeBase64File,
-  writeDataUriFile,
-  type IosTreeNode,
-} from './snapshot.ts';
+import { flattenIosTree, toIosSelector, writeBase64File, type IosTreeNode } from './snapshot.ts';
 
 type LimrunAdbTunnel = Awaited<ReturnType<LimrunAndroidClient['startAdbTunnel']>>;
 
@@ -79,7 +79,6 @@ type LimrunRuntimeOptions = {
 };
 
 const LIMRUN_CLIENT_HEADER = 'agent-device-cli';
-const SETTINGS_INTENT = 'android.settings.SETTINGS';
 
 export function createLimrunRuntimeFromEnv(env: NodeJS.ProcessEnv): LimrunRuntime | undefined {
   const apiKey = env.LIMRUN_API_KEY?.trim() || env.LIM_API_KEY?.trim();
@@ -132,7 +131,7 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
     if (!session) return undefined;
     return session.platform === 'ios'
       ? new LimrunIosInteractor(session)
-      : new LimrunAndroidInteractor(session);
+      : createLimrunAndroidInteractor(session);
   }
 
   async installApp(
@@ -429,10 +428,12 @@ async function runLimrunAndroidAdb(
   session: Extract<LimrunRuntimeSession, { platform: 'android' }>,
   args: string[],
   options?: AndroidAdbExecutorOptions,
-): Promise<void> {
+): Promise<AndroidAdbExecutorResult> {
   const serial = await ensurePersistentAndroidAdbSerial(session);
   const result = await runCmd('adb', ['-s', serial, ...args], {
     allowFailure: options?.allowFailure,
+    binaryStdout: options?.binaryStdout,
+    stdin: options?.stdin,
     timeoutMs: options?.timeoutMs ?? 30_000,
     signal: options?.signal,
   });
@@ -444,6 +445,72 @@ async function runLimrunAndroidAdb(
       stderr: result.stderr,
     });
   }
+  return result;
+}
+
+function createLimrunAndroidInteractor(
+  session: Extract<LimrunRuntimeSession, { platform: 'android' }>,
+): Interactor {
+  const base = createAndroidInteractor(session.device);
+  const provider = createLimrunAndroidAdbProvider(session);
+  return new Proxy(base, {
+    get(target, property, receiver) {
+      const value = Reflect.get(target, property, receiver);
+      if (typeof value !== 'function') return value;
+      return (...args: unknown[]) =>
+        withAndroidAdbProvider(provider, { serial: session.device.id }, async () =>
+          value.apply(target, args),
+        );
+    },
+  });
+}
+
+function createLimrunAndroidAdbProvider(
+  session: Extract<LimrunRuntimeSession, { platform: 'android' }>,
+): AndroidAdbProvider {
+  return {
+    exec: async (args, options) => await runLimrunAndroidAdb(session, args, options),
+    reverse: createLimrunAndroidPortReverseProvider(session),
+    text: async (request) => {
+      await session.client.setText(request.target, request.text);
+    },
+  };
+}
+
+function createLimrunAndroidPortReverseProvider(
+  session: Extract<LimrunRuntimeSession, { platform: 'android' }>,
+): AndroidPortReverseProvider {
+  return {
+    async ensure(mapping) {
+      await ensureAndroidPortReverse(session, {
+        devicePort: tcpEndpointPort(mapping.local),
+        hostPort: tcpEndpointPort(mapping.remote),
+        name: mapping.ownerId ?? 'android-adb-provider',
+      });
+    },
+    async remove(local) {
+      await removeAndroidPortReverse(session, tcpEndpointPort(local));
+    },
+    async removeAllOwned(ownerId) {
+      const ownedPorts = Array.from(session.reversedPorts.entries())
+        .filter(([, name]) => name === ownerId)
+        .map(([port]) => port);
+      for (const port of ownedPorts) {
+        await removeAndroidPortReverse(session, port);
+      }
+    },
+  };
+}
+
+function tcpEndpointPort(endpoint: AndroidPortReverseEndpoint): number {
+  if (!endpoint.startsWith('tcp:')) {
+    throw unsupported('port reverse', `Limrun Android only supports tcp reverse endpoints.`);
+  }
+  const port = Number(endpoint.slice('tcp:'.length));
+  if (!Number.isInteger(port) || port <= 0) {
+    throw new AppError('INVALID_ARGS', `Invalid Android tcp reverse endpoint: ${endpoint}`);
+  }
+  return port;
 }
 
 class LimrunIosInteractor implements Interactor {
@@ -577,6 +644,10 @@ class LimrunIosInteractor implements Interactor {
     throw unsupported('app-switcher', 'Limrun iOS direct sessions do not expose app switcher yet.');
   }
 
+  async tvRemote(): Promise<never> {
+    throw unsupported('tv-remote', 'Limrun iOS direct sessions do not expose tv remote control.');
+  }
+
   async readClipboard(): Promise<never> {
     throw unsupported('clipboard', 'Limrun iOS direct sessions do not expose clipboard read yet.');
   }
@@ -587,202 +658,6 @@ class LimrunIosInteractor implements Interactor {
 
   async setSetting(): Promise<never> {
     throw unsupported('settings', 'Limrun iOS direct sessions do not expose settings changes yet.');
-  }
-}
-
-class LimrunAndroidInteractor implements Interactor {
-  private readonly session: Extract<LimrunRuntimeSession, { platform: 'android' }>;
-
-  constructor(session: Extract<LimrunRuntimeSession, { platform: 'android' }>) {
-    this.session = session;
-  }
-
-  async open(app: string, options?: { url?: string }): Promise<void> {
-    if (options?.url) {
-      await this.ensureReverseForUrl(options.url, 'launch-url');
-      await this.runAdb([
-        'shell',
-        'monkey',
-        '-p',
-        app,
-        '-c',
-        'android.intent.category.LAUNCHER',
-        '1',
-      ]);
-      await this.session.client.openUrl(options.url);
-      return;
-    }
-    if (looksLikeUrl(app)) {
-      await this.ensureReverseForUrl(app, 'open-url');
-      await this.session.client.openUrl(app);
-      return;
-    }
-    if (isAndroidSettingsTarget(app)) {
-      await this.runAdb(['shell', 'am', 'start', '-W', '-a', SETTINGS_INTENT]);
-      return;
-    }
-    await this.runAdb([
-      'shell',
-      'monkey',
-      '-p',
-      app,
-      '-c',
-      'android.intent.category.LAUNCHER',
-      '1',
-    ]);
-  }
-
-  async openDevice(): Promise<void> {}
-
-  async close(app: string): Promise<void> {
-    if (app) await this.runAdb(['shell', 'am', 'force-stop', app], { allowFailure: true });
-  }
-
-  async tap(x: number, y: number): Promise<void> {
-    await this.session.client.tap({ x, y });
-  }
-
-  async tapElementSelector(selector: {
-    key: 'id' | 'label' | 'text' | 'value';
-    value: string;
-  }): Promise<void> {
-    await this.session.client.tap({ selector: toAndroidSelector(selector) });
-  }
-
-  async doubleTap(x: number, y: number): Promise<void> {
-    await this.tap(x, y);
-    await this.tap(x, y);
-  }
-
-  async swipe(x1: number, y1: number, x2: number, y2: number, durationMs?: number) {
-    await this.runAdb([
-      'shell',
-      'input',
-      'swipe',
-      String(Math.round(x1)),
-      String(Math.round(y1)),
-      String(Math.round(x2)),
-      String(Math.round(y2)),
-      String(durationMs ?? 300),
-    ]);
-  }
-
-  async pan(x1: number, y1: number, x2: number, y2: number, durationMs?: number) {
-    await this.swipe(x1, y1, x2, y2, durationMs);
-  }
-
-  async fling(x1: number, y1: number, x2: number, y2: number, durationMs?: number) {
-    await this.swipe(x1, y1, x2, y2, durationMs);
-  }
-
-  async longPress(x: number, y: number, durationMs?: number) {
-    await this.swipe(x, y, x, y, durationMs ?? 800);
-  }
-
-  async focus(x: number, y: number): Promise<void> {
-    await this.tap(x, y);
-  }
-
-  async type(text: string): Promise<void> {
-    await this.session.client.setText(undefined, text);
-  }
-
-  async fill(x: number, y: number, text: string): Promise<void> {
-    await this.session.client.setText({ x, y }, text);
-  }
-
-  async fillElementSelector(
-    selector: { key: 'id' | 'label' | 'text' | 'value'; value: string },
-    text: string,
-  ): Promise<void> {
-    await this.session.client.setText({ selector: toAndroidSelector(selector) }, text);
-  }
-
-  async scroll(direction: 'up' | 'down' | 'left' | 'right', options?: { pixels?: number }) {
-    await this.session.client.scrollScreen(direction, options?.pixels);
-  }
-
-  async pinch(): Promise<never> {
-    throw unsupported('pinch', 'Limrun Android direct sessions do not expose pinch yet.');
-  }
-
-  async screenshot(outPath: string): Promise<void> {
-    const screenshot = await this.session.client.screenshot();
-    await writeDataUriFile(outPath, screenshot.dataUri);
-  }
-
-  async snapshot(): Promise<SnapshotResult> {
-    const tree = await this.session.client.getElementTree();
-    return {
-      nodes: tree.nodes.map(mapAndroidNode),
-      ...readOptionalTruncation(tree),
-      backend: 'android',
-    };
-  }
-
-  async back(): Promise<void> {
-    await this.session.client.pressKey('BACK');
-  }
-
-  async home(): Promise<void> {
-    await this.session.client.pressKey('HOME');
-  }
-
-  async rotate(): Promise<never> {
-    throw unsupported('rotate', 'Limrun Android direct sessions do not expose rotate yet.');
-  }
-
-  async rotateGesture(): Promise<never> {
-    throw unsupported(
-      'rotate',
-      'Limrun Android direct sessions do not expose rotate gestures yet.',
-    );
-  }
-
-  async transformGesture(): Promise<never> {
-    throw unsupported(
-      'transform',
-      'Limrun Android direct sessions do not expose transform gestures yet.',
-    );
-  }
-
-  async appSwitcher(): Promise<void> {
-    await this.session.client.pressKey('APP_SWITCH');
-  }
-
-  async readClipboard(): Promise<never> {
-    throw unsupported(
-      'clipboard',
-      'Limrun Android direct sessions do not expose clipboard read yet.',
-    );
-  }
-
-  async writeClipboard(): Promise<never> {
-    throw unsupported(
-      'clipboard',
-      'Limrun Android direct sessions do not expose clipboard write yet.',
-    );
-  }
-
-  async setSetting(): Promise<never> {
-    throw unsupported(
-      'settings',
-      'Limrun Android direct sessions do not expose settings changes yet.',
-    );
-  }
-
-  private async runAdb(args: string[], options?: AndroidAdbExecutorOptions): Promise<void> {
-    await runLimrunAndroidAdb(this.session, args, options);
-  }
-
-  private async ensureReverseForUrl(url: string, name: string): Promise<void> {
-    const port = readLocalhostUrlPort(url);
-    if (!port) return;
-    await ensureAndroidPortReverse(this.session, {
-      devicePort: port,
-      hostPort: port,
-      name,
-    });
   }
 }
 
@@ -842,14 +717,6 @@ async function removeAndroidPortReverse(
   session.reversedPorts.delete(devicePort);
 }
 
-function readOptionalTruncation(value: unknown): Pick<SnapshotResult, 'truncated'> {
-  const truncated =
-    value && typeof value === 'object' && 'truncated' in value
-      ? (value as { truncated?: unknown }).truncated
-      : undefined;
-  return typeof truncated === 'boolean' ? { truncated } : {};
-}
-
 async function ensurePersistentAndroidAdbSerial(
   session: Extract<LimrunRuntimeSession, { platform: 'android' }>,
 ): Promise<string> {
@@ -891,11 +758,6 @@ function resolveIosTarget(app: string): string {
   return app;
 }
 
-function isAndroidSettingsTarget(app: string): boolean {
-  const normalized = app.trim().toLowerCase();
-  return normalized === 'settings' || normalized === 'com.android.settings';
-}
-
 function normalizeOptionalString(value: string | undefined): string | undefined {
   const normalized = value?.trim();
   return normalized ? normalized : undefined;
@@ -920,27 +782,6 @@ function buildAndroidAssetName(packageName: string | undefined, artifactPath: st
 
 function looksLikeUrl(value: string): boolean {
   return /^[a-z][a-z0-9+.-]*:/i.test(value.trim());
-}
-
-export function readLocalhostUrlPort(value: string): number | undefined {
-  let url: URL;
-  try {
-    url = new URL(value);
-  } catch {
-    return undefined;
-  }
-  const hostname = url.hostname.toLowerCase();
-  if (
-    hostname !== 'localhost' &&
-    hostname !== '127.0.0.1' &&
-    hostname !== '::1' &&
-    hostname !== '[::1]'
-  ) {
-    return undefined;
-  }
-  const port = Number(url.port);
-  if (!Number.isInteger(port) || port < 1 || port > 65_535) return undefined;
-  return port;
 }
 
 function unsupported(command: string, message: string): never {
