@@ -20,6 +20,32 @@ beforeEach(() => {
   mockResolveTargetDevice.mockResolvedValue(makeIosSession('resolved').device);
 });
 
+test('typed Maestro does not resolve a device before an explicit-platform flow needs one', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-explicit-platform-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const flowPath = path.join(root, 'flow.yaml');
+  fs.writeFileSync(flowPath, 'appId: com.example.app\n---\n- launchApp\n');
+  const invoked: string[] = [];
+
+  const response = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [flowPath],
+      flags: { replayBackend: 'maestro', platform: 'android' },
+    }),
+    sessionName: 'default',
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (request) => {
+      invoked.push(request.command);
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(mockResolveTargetDevice).not.toHaveBeenCalled();
+  expect(invoked).toEqual(['open']);
+});
+
 test('typed Maestro keeps a port-only runtime digest stable after launch binds the device', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-runtime-device-'));
   const sessionStore = new SessionStore(path.join(root, 'sessions'));

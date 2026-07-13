@@ -187,11 +187,12 @@ function resolveSessionRuntimeHints(
   sessionStore: SessionStore,
   sessionName: string,
   device?: DeviceInfo,
+  platform?: RuntimePlatform,
 ): SessionRuntimeHints | undefined {
   const runtime = sessionStore.getRuntimeHints(sessionName);
   if (!runtime) return undefined;
   const boundPlatform = device ? publicPlatformString(device) : undefined;
-  const deviceRuntimePlatform = toRuntimePlatform(boundPlatform);
+  const deviceRuntimePlatform = toRuntimePlatform(boundPlatform) ?? platform;
   if (runtime.platform && device && !deviceRuntimePlatform) {
     throw new AppError(
       'INVALID_ARGS',
@@ -214,36 +215,42 @@ function resolveOpenRuntimeHints(params: {
   req: DaemonRequest;
   sessionStore: SessionStore;
   sessionName: string;
-  device: DeviceInfo;
+  device?: DeviceInfo;
+  platform?: RuntimePlatform;
 }): {
   runtime: SessionRuntimeHints | undefined;
   previousRuntime: SessionRuntimeHints | undefined;
   replacedStoredRuntime: boolean;
 } {
   const { req, sessionStore, sessionName, device } = params;
+  const runtimePlatform = device
+    ? toRuntimePlatform(publicPlatformString(device))
+    : params.platform;
   const previousRuntime = sessionStore.getRuntimeHints(sessionName);
   const explicitRuntime = normalizeExplicitRuntimeHints({
     runtime: req.runtime,
     sessionName,
-    platform: toRuntimePlatform(publicPlatformString(device)),
+    platform: runtimePlatform,
   });
   if (req.runtime === undefined) {
+    const storedRuntime = resolveSessionRuntimeHints(
+      sessionStore,
+      sessionName,
+      device,
+      runtimePlatform,
+    );
     return {
-      runtime: applyDeviceDefaultMetroHost(
-        resolveSessionRuntimeHints(sessionStore, sessionName, device),
-        device,
-      ),
+      runtime: device ? applyDeviceDefaultMetroHost(storedRuntime, device) : storedRuntime,
       previousRuntime,
       replacedStoredRuntime: false,
     };
   }
+  const selectedRuntime =
+    explicitRuntime && countConfiguredRuntimeHints(explicitRuntime) > 0
+      ? explicitRuntime
+      : undefined;
   return {
-    runtime: applyDeviceDefaultMetroHost(
-      explicitRuntime && countConfiguredRuntimeHints(explicitRuntime) > 0
-        ? explicitRuntime
-        : undefined,
-      device,
-    ),
+    runtime: device ? applyDeviceDefaultMetroHost(selectedRuntime, device) : selectedRuntime,
     previousRuntime,
     replacedStoredRuntime: true,
   };

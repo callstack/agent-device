@@ -167,7 +167,11 @@ async function prepareTypedMaestroReplay(
   });
   const session = sessionStore.get(sessionName);
   if (session) assertSessionSelectorMatches(session, req.flags);
-  const device = session?.device ?? (await resolveTargetDevice(req.flags ?? {}));
+  const device =
+    session?.device ??
+    (maestroReplayNeedsResolvedDevice(req, sessionStore.getRuntimeHints(sessionName))
+      ? await resolveTargetDevice(req.flags ?? {})
+      : undefined);
   const platform = resolveMaestroPlatform(req, device);
   const target = resolveMaestroTarget(req, device);
   const runtimeHints = resolveEffectiveOpenRuntimeHints({
@@ -175,6 +179,7 @@ async function prepareTypedMaestroReplay(
     sessionStore,
     sessionName,
     device,
+    platform,
   });
   return {
     filePath,
@@ -193,6 +198,17 @@ async function prepareTypedMaestroReplay(
     signal: getRequestSignal(req.meta?.requestId),
     loadProgram: createMaestroProgramLoader(path.dirname(filePath)),
   };
+}
+
+function maestroReplayNeedsResolvedDevice(
+  req: DaemonRequest,
+  storedRuntime: ReturnType<SessionStore['getRuntimeHints']>,
+): boolean {
+  if (req.flags?.platform !== 'android' && req.flags?.platform !== 'ios') return true;
+  const runtime = req.runtime ?? storedRuntime;
+  return (
+    runtime?.metroPort !== undefined && !runtime.metroHost?.trim() && !runtime.bundleUrl?.trim()
+  );
 }
 
 function buildTypedMaestroDefaults(params: {
