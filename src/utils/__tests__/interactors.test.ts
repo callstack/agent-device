@@ -1,8 +1,13 @@
-import { beforeEach, test, vi } from 'vitest';
+import { afterEach, beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 import type { RunnerCommand } from '../../platforms/apple/core/runner/runner-client.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { AppError } from '../../kernel/errors.ts';
+import type { Interactor, RunnerContext } from '../../core/interactor-types.ts';
+import {
+  setActiveProviderDeviceRuntimes,
+  type ProviderDeviceRuntime,
+} from '../../provider-device-runtime.ts';
 
 vi.mock('../../platforms/apple/core/runner/runner-client.ts', async (importOriginal) => {
   const actual =
@@ -38,6 +43,10 @@ beforeEach(() => {
   mockRunAppleRunnerCommand.mockReset();
 });
 
+afterEach(() => {
+  setActiveProviderDeviceRuntimes([]);
+});
+
 test('resolveAppleBackRunnerCommand defaults plain back to in-app navigation', () => {
   assert.equal(resolveAppleBackRunnerCommand(), 'backInApp');
 });
@@ -45,6 +54,37 @@ test('resolveAppleBackRunnerCommand defaults plain back to in-app navigation', (
 test('resolveAppleBackRunnerCommand maps explicit back modes to runner commands', () => {
   assert.equal(resolveAppleBackRunnerCommand('in-app'), 'backInApp');
   assert.equal(resolveAppleBackRunnerCommand('system'), 'backSystem');
+});
+
+test('provider device interactor receives runner context from core resolution', async () => {
+  const device: DeviceInfo = {
+    platform: 'apple',
+    id: 'provider:ios:lease-a',
+    name: 'Provider iOS',
+    kind: 'simulator',
+    booted: true,
+  };
+  const interactor = { open: async () => undefined } as unknown as Interactor;
+  const runnerContext: RunnerContext = {
+    appBundleId: 'com.example.app',
+    requestId: 'request-a',
+  };
+  const runnerContexts: RunnerContext[] = [];
+  const runtime: ProviderDeviceRuntime = {
+    provider: 'provider',
+    leaseLifecycle: {},
+    deviceInventoryProvider: async () => [device],
+    ownsDevice: (candidate) => candidate.id === device.id,
+    getInteractor: (_device, context) => {
+      runnerContexts.push(context);
+      return interactor;
+    },
+    shutdown: async () => {},
+  };
+  setActiveProviderDeviceRuntimes([runtime]);
+
+  assert.equal(await getInteractor(device, runnerContext), interactor);
+  assert.deepEqual(runnerContexts, [runnerContext]);
 });
 
 test('ios scroll sends a single fused scroll command and reports planned pixels', async () => {

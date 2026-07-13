@@ -145,7 +145,7 @@ test('Limrun Android reverses localhost URL ports through the persistent ADB tun
 
   try {
     const device = await allocateLimrunDevice(runtime, androidLease());
-    const interactor = runtime.getInteractor(device);
+    const interactor = runtime.getInteractor(device, {});
     if (!interactor) throw new Error('Limrun runtime must return an interactor');
 
     await interactor.open('exp://127.0.0.1:8081');

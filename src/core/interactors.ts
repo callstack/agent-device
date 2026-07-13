@@ -14,7 +14,7 @@ export async function getInteractor(
   runnerContext: RunnerContext,
 ): Promise<Interactor> {
   if (isActiveProviderDevice(device)) {
-    const providerInteractor = getProviderDeviceInteractor(device);
+    const providerInteractor = getProviderDeviceInteractor(device, runnerContext);
     if (providerInteractor) return providerInteractor;
     throw new AppError(
       'UNSUPPORTED_OPERATION',

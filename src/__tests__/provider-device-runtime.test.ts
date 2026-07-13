@@ -58,16 +58,18 @@ function makeProviderRuntimeWorld() {
     booted: true,
   };
   const interactor = { open: async () => undefined } as unknown as Interactor;
+  const runnerContexts: unknown[] = [];
   const missRuntime = makeMissingRuntime();
   const hitRuntime = makeRuntime({
     provider: 'hit',
     leaseResult: { provider: 'hit' },
     devices: [device],
     interactor,
+    runnerContexts,
     installResult: { bundleId: 'com.example.app' },
     portReverseResult: { provider: 'hit' },
   });
-  return { lease, device, interactor, missRuntime, hitRuntime };
+  return { lease, device, interactor, runnerContexts, missRuntime, hitRuntime };
 }
 
 function makeMissingRuntime(): ProviderDeviceRuntime {
@@ -82,7 +84,9 @@ function makeMissingRuntime(): ProviderDeviceRuntime {
 }
 
 async function assertProviderRuntimeDelegates(world: ReturnType<typeof makeProviderRuntimeWorld>) {
-  assert.equal(getProviderDeviceInteractor(world.device), world.interactor);
+  const runnerContext = { appBundleId: 'com.example.app', requestId: 'request-a' };
+  assert.equal(getProviderDeviceInteractor(world.device, runnerContext), world.interactor);
+  assert.deepEqual(world.runnerContexts, [runnerContext]);
   assert.deepEqual(
     await installProviderDeviceApp(world.device, 'com.example.app', '/tmp/app.ipa'),
     {
@@ -141,6 +145,7 @@ function makeRuntime(options: {
   leaseResult: Record<string, unknown> | undefined;
   devices: DeviceInfo[] | null;
   interactor: Interactor | undefined;
+  runnerContexts?: unknown[];
   installResult: { bundleId: string } | undefined;
   portReverseResult: Record<string, unknown> | undefined;
   installHook?: boolean;
@@ -154,7 +159,10 @@ function makeRuntime(options: {
     },
     deviceInventoryProvider: async () => options.devices,
     ownsDevice: (device) => options.devices?.some((entry) => entry.id === device.id) ?? false,
-    getInteractor: () => options.interactor,
+    getInteractor: (_device, runnerContext) => {
+      options.runnerContexts?.push(runnerContext);
+      return options.interactor;
+    },
     ...(options.installHook === false ? {} : { installApp: async () => options.installResult }),
     configurePortReverse: async () => options.portReverseResult,
     removePortReverse: async () => options.portReverseResult,

@@ -4,7 +4,7 @@ import type {
   CloudArtifactsResult,
 } from '../cloud-artifacts.ts';
 import type { DeviceInventoryProvider } from '../core/dispatch-resolve.ts';
-import type { Interactor } from '../core/interactor-types.ts';
+import type { Interactor, RunnerContext } from '../core/interactor-types.ts';
 import type { LeaseLifecycleProvider } from '../daemon/handlers/lease.ts';
 import type { DeviceLease } from '../daemon/lease-registry.ts';
 import type { DaemonRequest } from '../daemon/types.ts';
@@ -179,7 +179,7 @@ class CloudWebDriverRuntime implements ProviderDeviceRuntime {
     return [...this.sessionsByLeaseId.values()].some((session) => session.device.id === device.id);
   }
 
-  getInteractor(device: DeviceInfo): Interactor | undefined {
+  getInteractor(device: DeviceInfo, _runnerContext: RunnerContext): Interactor | undefined {
     return [...this.sessionsByLeaseId.values()].find((session) => session.device.id === device.id)
       ?.interactor;
   }

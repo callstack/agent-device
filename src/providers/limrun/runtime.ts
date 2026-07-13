@@ -14,7 +14,12 @@ import { AppError } from '../../kernel/errors.ts';
 import { runCmd } from '../../utils/exec.ts';
 import { readVersion } from '../../utils/version.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
-import type { Interactor, SnapshotOptions, SnapshotResult } from '../../core/interactor-types.ts';
+import type {
+  Interactor,
+  RunnerContext,
+  SnapshotOptions,
+  SnapshotResult,
+} from '../../core/interactor-types.ts';
 import { createAndroidInteractor } from '../../core/interactors/android.ts';
 import type { DeviceInventoryProvider } from '../../core/dispatch-resolve.ts';
 import {
@@ -126,7 +131,7 @@ export class LimrunRuntime implements ProviderDeviceRuntime {
     return parseLimrunDeviceId(device.id) !== undefined;
   }
 
-  getInteractor(device: DeviceInfo): Interactor | undefined {
+  getInteractor(device: DeviceInfo, _runnerContext: RunnerContext): Interactor | undefined {
     const session = this.getSessionForDevice(device);
     if (!session) return undefined;
     return session.platform === 'ios'
@@ -555,18 +560,6 @@ class LimrunIosInteractor implements Interactor {
     await this.tap(x, y);
   }
 
-  async swipe(): Promise<never> {
-    throw unsupported('swipe', 'Limrun iOS direct sessions do not expose swipe yet.');
-  }
-
-  async pan(): Promise<never> {
-    throw unsupported('pan', 'Limrun iOS direct sessions do not expose pan yet.');
-  }
-
-  async fling(): Promise<never> {
-    throw unsupported('fling', 'Limrun iOS direct sessions do not expose fling yet.');
-  }
-
   async longPress(): Promise<never> {
     throw unsupported('longpress', 'Limrun iOS direct sessions do not expose long press yet.');
   }
@@ -602,10 +595,6 @@ class LimrunIosInteractor implements Interactor {
     await this.session.client.scroll(direction, options?.pixels ?? 300);
   }
 
-  async pinch(): Promise<never> {
-    throw unsupported('pinch', 'Limrun iOS direct sessions do not expose multi-touch pinch yet.');
-  }
-
   async screenshot(outPath: string): Promise<void> {
     const screenshot = await this.session.client.screenshot();
     await writeBase64File(outPath, screenshot.base64);
@@ -629,14 +618,10 @@ class LimrunIosInteractor implements Interactor {
     await this.session.client.setOrientation(orientation === 'portrait' ? 'Portrait' : 'Landscape');
   }
 
-  async rotateGesture(): Promise<never> {
-    throw unsupported('rotate', 'Limrun iOS direct sessions do not expose rotate gestures yet.');
-  }
-
-  async transformGesture(): Promise<never> {
+  async performGesture(): Promise<never> {
     throw unsupported(
-      'transform',
-      'Limrun iOS direct sessions do not expose transform gestures yet.',
+      'gesture',
+      'Limrun iOS direct sessions do not expose portable gesture execution yet.',
     );
   }
 

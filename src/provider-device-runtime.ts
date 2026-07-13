@@ -4,7 +4,7 @@ import type {
   CloudArtifactsQuery,
   CloudArtifactsResult,
 } from './cloud-artifacts.ts';
-import type { Interactor } from './core/interactor-types.ts';
+import type { Interactor, RunnerContext } from './core/interactor-types.ts';
 import type { DeviceInventoryProvider } from './core/dispatch-resolve.ts';
 import type { LeaseLifecycleContext, LeaseLifecycleProvider } from './daemon/handlers/lease.ts';
 import type { DeviceLease } from './daemon/lease-registry.ts';
@@ -30,7 +30,7 @@ export type ProviderDeviceRuntime = {
   cloudArtifacts?: CloudArtifactProvider;
   deviceInventoryProvider: DeviceInventoryProvider;
   ownsDevice(device: DeviceInfo): boolean;
-  getInteractor(device: DeviceInfo): Interactor | undefined;
+  getInteractor(device: DeviceInfo, runnerContext: RunnerContext): Interactor | undefined;
   installApp?(
     device: DeviceInfo,
     app: string,
@@ -83,10 +83,13 @@ async function withProviderDeviceRuntimeScope<T>(
   return await providerDeviceRuntimeScope.run([...runtimes], task);
 }
 
-export function getProviderDeviceInteractor(device: DeviceInfo): Interactor | undefined {
+export function getProviderDeviceInteractor(
+  device: DeviceInfo,
+  runnerContext: RunnerContext,
+): Interactor | undefined {
   for (const runtime of getActiveProviderDeviceRuntimes()) {
     if (!runtime.ownsDevice(device)) continue;
-    const interactor = runtime.getInteractor(device);
+    const interactor = runtime.getInteractor(device, runnerContext);
     if (interactor) return interactor;
   }
   return undefined;
