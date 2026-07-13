@@ -8,19 +8,31 @@ import { applyRuntimeHintsToApp, clearRuntimeHintsFromApp } from '../runtime-hin
 import { resolveRuntimeTransportHints } from '../../utils/runtime-transport.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 
+const LEGACY_PREFS_PATH = 'shared_prefs/ReactNativeDevPrefs.xml';
+
+function defaultPrefsPath(packageName: string): string {
+  return `shared_prefs/${packageName}_preferences.xml`;
+}
+
+function prefsKey(prefsPath: string): string {
+  return prefsPath.replaceAll('/', '_');
+}
+
 async function withMockedAdb(
   run: (ctx: {
     device: DeviceInfo;
     argsLogPath: string;
-    readFilePath: string;
-    stdinFilePath: string;
+    seedPrefsFile: (prefsPath: string, xml: string) => Promise<void>;
+    readWrittenPrefsFile: (prefsPath: string) => Promise<string | undefined>;
   }) => Promise<void>,
 ): Promise<void> {
   const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-runtime-hints-android-'));
   const adbPath = path.join(tmpDir, 'adb');
   const argsLogPath = path.join(tmpDir, 'args.log');
-  const readFilePath = path.join(tmpDir, 'existing.xml');
-  const stdinFilePath = path.join(tmpDir, 'write-stdin.xml');
+  const seedDir = path.join(tmpDir, 'seed');
+  const stdinDir = path.join(tmpDir, 'stdin');
+  await fs.mkdir(seedDir, { recursive: true });
+  await fs.mkdir(stdinDir, { recursive: true });
   await fs.writeFile(
     adbPath,
     [
@@ -31,8 +43,9 @@ async function withMockedAdb(
       'fi',
       'printf "%s\\n" "$*" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
       'if [ "$1" = "shell" ] && [ "$2" = "run-as" ] && [ "$4" = "cat" ]; then',
-      '  if [ -f "$AGENT_DEVICE_TEST_READ_FILE" ]; then',
-      '    cat "$AGENT_DEVICE_TEST_READ_FILE"',
+      '  key=$(printf "%s" "$5" | tr "/" "_")',
+      '  if [ -f "$AGENT_DEVICE_TEST_SEED_DIR/$key" ]; then',
+      '    cat "$AGENT_DEVICE_TEST_SEED_DIR/$key"',
       '    exit 0',
       '  fi',
       '  exit 1',
@@ -57,8 +70,9 @@ async function withMockedAdb(
       '  fi',
       '  exit "${AGENT_DEVICE_TEST_RUN_AS_MKDIR_EXIT_CODE:-0}"',
       'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "run-as" ] && [ "$4" = "tee" ] && [ "$5" = "shared_prefs/ReactNativeDevPrefs.xml" ]; then',
-      '  cat > "$AGENT_DEVICE_TEST_STDIN_FILE"',
+      'if [ "$1" = "shell" ] && [ "$2" = "run-as" ] && [ "$4" = "tee" ]; then',
+      '  key=$(printf "%s" "$5" | tr "/" "_")',
+      '  cat > "$AGENT_DEVICE_TEST_STDIN_DIR/$key"',
       '  if [ -n "$AGENT_DEVICE_TEST_RUN_AS_WRITE_STDOUT" ]; then',
       '    printf "%s" "$AGENT_DEVICE_TEST_RUN_AS_WRITE_STDOUT"',
       '  fi',
@@ -80,8 +94,8 @@ async function withMockedAdb(
 
   const previousPath = process.env.PATH;
   const previousArgsFile = process.env.AGENT_DEVICE_TEST_ARGS_FILE;
-  const previousReadFile = process.env.AGENT_DEVICE_TEST_READ_FILE;
-  const previousStdinFile = process.env.AGENT_DEVICE_TEST_STDIN_FILE;
+  const previousSeedDir = process.env.AGENT_DEVICE_TEST_SEED_DIR;
+  const previousStdinDir = process.env.AGENT_DEVICE_TEST_STDIN_DIR;
   const previousRunAsIdExitCode = process.env.AGENT_DEVICE_TEST_RUN_AS_ID_EXIT_CODE;
   const previousRunAsIdStdout = process.env.AGENT_DEVICE_TEST_RUN_AS_ID_STDOUT;
   const previousRunAsIdStderr = process.env.AGENT_DEVICE_TEST_RUN_AS_ID_STDERR;
@@ -93,8 +107,8 @@ async function withMockedAdb(
   const previousRunAsWriteStderr = process.env.AGENT_DEVICE_TEST_RUN_AS_WRITE_STDERR;
   process.env.PATH = `${tmpDir}${path.delimiter}${previousPath ?? ''}`;
   process.env.AGENT_DEVICE_TEST_ARGS_FILE = argsLogPath;
-  process.env.AGENT_DEVICE_TEST_READ_FILE = readFilePath;
-  process.env.AGENT_DEVICE_TEST_STDIN_FILE = stdinFilePath;
+  process.env.AGENT_DEVICE_TEST_SEED_DIR = seedDir;
+  process.env.AGENT_DEVICE_TEST_STDIN_DIR = stdinDir;
 
   const device: DeviceInfo = {
     platform: 'android',
@@ -104,13 +118,24 @@ async function withMockedAdb(
     booted: true,
   };
 
+  const seedPrefsFile = async (prefsPath: string, xml: string): Promise<void> => {
+    await fs.writeFile(path.join(seedDir, prefsKey(prefsPath)), xml, 'utf8');
+  };
+  const readWrittenPrefsFile = async (prefsPath: string): Promise<string | undefined> => {
+    try {
+      return await fs.readFile(path.join(stdinDir, prefsKey(prefsPath)), 'utf8');
+    } catch {
+      return undefined;
+    }
+  };
+
   try {
-    await run({ device, argsLogPath, readFilePath, stdinFilePath });
+    await run({ device, argsLogPath, seedPrefsFile, readWrittenPrefsFile });
   } finally {
     process.env.PATH = previousPath;
     restoreEnv('AGENT_DEVICE_TEST_ARGS_FILE', previousArgsFile);
-    restoreEnv('AGENT_DEVICE_TEST_READ_FILE', previousReadFile);
-    restoreEnv('AGENT_DEVICE_TEST_STDIN_FILE', previousStdinFile);
+    restoreEnv('AGENT_DEVICE_TEST_SEED_DIR', previousSeedDir);
+    restoreEnv('AGENT_DEVICE_TEST_STDIN_DIR', previousStdinDir);
     restoreEnv('AGENT_DEVICE_TEST_RUN_AS_ID_EXIT_CODE', previousRunAsIdExitCode);
     restoreEnv('AGENT_DEVICE_TEST_RUN_AS_ID_STDOUT', previousRunAsIdStdout);
     restoreEnv('AGENT_DEVICE_TEST_RUN_AS_ID_STDERR', previousRunAsIdStderr);
@@ -188,23 +213,23 @@ test('resolveRuntimeTransportHints derives host, port, and scheme from bundle UR
   );
 });
 
-test('applyRuntimeHintsToApp writes React Native Android dev prefs', async () => {
-  await withMockedAdb(async ({ device, argsLogPath, readFilePath, stdinFilePath }) => {
-    await fs.writeFile(
-      readFilePath,
+test('applyRuntimeHintsToApp writes debug_http_host to the RN default-preferences file React Native actually reads', async () => {
+  await withMockedAdb(async ({ device, argsLogPath, seedPrefsFile, readWrittenPrefsFile }) => {
+    const packageName = 'com.example.demo';
+    await seedPrefsFile(
+      defaultPrefsPath(packageName),
       [
         '<?xml version="1.0" encoding="utf-8" standalone="yes" ?>',
         '<map>',
-        '  <string name="keep">value</string>',
+        '  <string name="keep_default">default-value</string>',
         '</map>',
         '',
       ].join('\n'),
-      'utf8',
     );
 
     await applyRuntimeHintsToApp({
       device,
-      appId: 'com.example.demo',
+      appId: packageName,
       runtime: {
         platform: 'android',
         bundleUrl: 'https://10.0.0.10:8082/index.bundle?platform=android',
@@ -212,19 +237,64 @@ test('applyRuntimeHintsToApp writes React Native Android dev prefs', async () =>
     });
 
     const loggedArgs = await fs.readFile(argsLogPath, 'utf8');
-    const stdinPayload = await fs.readFile(stdinFilePath, 'utf8');
+    assert.match(
+      loggedArgs,
+      /shell run-as com\.example\.demo cat shared_prefs\/com\.example\.demo_preferences\.xml/,
+    );
+    assert.match(
+      loggedArgs,
+      /shell run-as com\.example\.demo tee shared_prefs\/com\.example\.demo_preferences\.xml/,
+    );
+
+    const defaultPayload = await readWrittenPrefsFile(defaultPrefsPath(packageName));
+    assert.ok(defaultPayload, 'expected a write to the default RN preferences file');
+    assert.match(defaultPayload ?? '', /<string name="keep_default">default-value<\/string>/);
+    assert.match(
+      defaultPayload ?? '',
+      /<string name="debug_http_host">10\.0\.0\.10:8082<\/string>/,
+    );
+    assert.match(defaultPayload ?? '', /<boolean name="dev_server_https" value="true" \/>/);
+  });
+});
+
+test('applyRuntimeHintsToApp also writes the legacy ReactNativeDevPrefs.xml path for back-compat', async () => {
+  await withMockedAdb(async ({ device, argsLogPath, seedPrefsFile, readWrittenPrefsFile }) => {
+    const packageName = 'com.example.demo';
+    await seedPrefsFile(
+      LEGACY_PREFS_PATH,
+      [
+        '<?xml version="1.0" encoding="utf-8" standalone="yes" ?>',
+        '<map>',
+        '  <string name="keep_legacy">legacy-value</string>',
+        '</map>',
+        '',
+      ].join('\n'),
+    );
+
+    await applyRuntimeHintsToApp({
+      device,
+      appId: packageName,
+      runtime: {
+        platform: 'android',
+        bundleUrl: 'https://10.0.0.10:8082/index.bundle?platform=android',
+      },
+    });
+
+    const loggedArgs = await fs.readFile(argsLogPath, 'utf8');
     assert.match(
       loggedArgs,
       /shell run-as com\.example\.demo cat shared_prefs\/ReactNativeDevPrefs\.xml/,
     );
-    assert.match(loggedArgs, /shell run-as com\.example\.demo mkdir -p shared_prefs/);
     assert.match(
       loggedArgs,
       /shell run-as com\.example\.demo tee shared_prefs\/ReactNativeDevPrefs\.xml/,
     );
-    assert.match(stdinPayload, /<string name="keep">value<\/string>/);
-    assert.match(stdinPayload, /<string name="debug_http_host">10\.0\.0\.10:8082<\/string>/);
-    assert.match(stdinPayload, /<boolean name="dev_server_https" value="true" \/>/);
+
+    const legacyPayload = await readWrittenPrefsFile(LEGACY_PREFS_PATH);
+    assert.ok(legacyPayload, 'expected a write to the legacy ReactNativeDevPrefs.xml file');
+    assert.match(legacyPayload ?? '', /<string name="keep_legacy">legacy-value<\/string>/);
+    assert.match(legacyPayload ?? '', /<string name="debug_http_host">10\.0\.0\.10:8082<\/string>/);
+    assert.match(legacyPayload ?? '', /<boolean name="dev_server_https" value="true" \/>/);
   });
 });
 
@@ -349,7 +419,7 @@ test('applyRuntimeHintsToApp preserves write failures after a successful run-as 
   await withMockedAdb(async ({ device }) => {
     process.env.AGENT_DEVICE_TEST_RUN_AS_WRITE_EXIT_CODE = '1';
     process.env.AGENT_DEVICE_TEST_RUN_AS_WRITE_STDERR =
-      "sh: can't create shared_prefs/ReactNativeDevPrefs.xml: Permission denied";
+      "sh: can't create shared_prefs/com.example.demo_preferences.xml: Permission denied";
     try {
       await assert.rejects(
         applyRuntimeHintsToApp({
@@ -366,7 +436,7 @@ test('applyRuntimeHintsToApp preserves write failures after a successful run-as 
           assert.equal(error.message, 'Failed to write Android runtime hints for com.example.demo');
           assert.equal(
             error.details?.hint,
-            'adb run-as succeeded, but writing ReactNativeDevPrefs.xml failed. Inspect stderr/details for the failing shell command.',
+            'adb run-as succeeded, but writing the React Native dev-server preference file failed. Inspect stderr/details for the failing shell command.',
           );
           assert.equal(error.details?.phase, 'write-runtime-hints');
           assert.equal(error.details?.exitCode, 1);
@@ -381,31 +451,38 @@ test('applyRuntimeHintsToApp preserves write failures after a successful run-as 
   });
 });
 
-test('clearRuntimeHintsFromApp removes managed Android runtime prefs but preserves unrelated entries', async () => {
-  await withMockedAdb(async ({ device, readFilePath, stdinFilePath }) => {
-    await fs.writeFile(
-      readFilePath,
+test('clearRuntimeHintsFromApp removes managed Android runtime prefs from both files but preserves unrelated entries', async () => {
+  await withMockedAdb(async ({ device, seedPrefsFile, readWrittenPrefsFile }) => {
+    const packageName = 'com.example.demo';
+    const seeded = (keepKey: string, keepValue: string): string =>
       [
         '<?xml version="1.0" encoding="utf-8" standalone="yes" ?>',
         '<map>',
-        '  <string name="keep">value</string>',
+        `  <string name="${keepKey}">${keepValue}</string>`,
         '  <string name="debug_http_host">10.0.0.10:8081</string>',
         '  <boolean name="dev_server_https" value="true" />',
         '</map>',
         '',
-      ].join('\n'),
-      'utf8',
-    );
+      ].join('\n');
+    await seedPrefsFile(defaultPrefsPath(packageName), seeded('keep_default', 'default-value'));
+    await seedPrefsFile(LEGACY_PREFS_PATH, seeded('keep_legacy', 'legacy-value'));
 
     await clearRuntimeHintsFromApp({
       device,
-      appId: 'com.example.demo',
+      appId: packageName,
     });
 
-    const stdinPayload = await fs.readFile(stdinFilePath, 'utf8');
-    assert.match(stdinPayload, /<string name="keep">value<\/string>/);
-    assert.doesNotMatch(stdinPayload, /debug_http_host/);
-    assert.doesNotMatch(stdinPayload, /dev_server_https/);
+    const defaultPayload = await readWrittenPrefsFile(defaultPrefsPath(packageName));
+    assert.ok(defaultPayload, 'expected the default RN preferences file to be rewritten');
+    assert.match(defaultPayload ?? '', /<string name="keep_default">default-value<\/string>/);
+    assert.doesNotMatch(defaultPayload ?? '', /debug_http_host/);
+    assert.doesNotMatch(defaultPayload ?? '', /dev_server_https/);
+
+    const legacyPayload = await readWrittenPrefsFile(LEGACY_PREFS_PATH);
+    assert.ok(legacyPayload, 'expected the legacy ReactNativeDevPrefs.xml file to be rewritten');
+    assert.match(legacyPayload ?? '', /<string name="keep_legacy">legacy-value<\/string>/);
+    assert.doesNotMatch(legacyPayload ?? '', /debug_http_host/);
+    assert.doesNotMatch(legacyPayload ?? '', /dev_server_https/);
   });
 });
 
