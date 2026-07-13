@@ -8,6 +8,7 @@ import type { SessionState } from '../types.ts';
 import { buildRequestFinishedEvent } from '../session-event-log.ts';
 import type { TargetAnnotationV1 } from '../../replay/target-identity.ts';
 import { HEAL_COMPLETE_SENTINEL } from '../session-script-writer.ts';
+import { parseReplayScriptDetailed } from '../../replay/script.ts';
 
 type RecordActionEntry = Parameters<SessionStore['recordAction']>[1];
 
@@ -740,4 +741,47 @@ test('BLOCKER 2: finalizeRepairTeardown of a COMPLETE transaction whose commit F
   assert.ok(tombstone?.commitFailure, 'expected the tombstone to carry the commit failure');
   assert.match(tombstone!.commitFailure!.message, /already exists/);
   assert.equal(tombstone?.sourcePath, '/flows/login.ad');
+});
+
+// --- ADR 0012 decision 6 (BLOCKER 3): idle-reap/shutdown auto-commit must
+// record the same synthetic terminal `close` an explicit close records, so
+// the committed healed .ad is self-contained (fresh-replayable) exactly like
+// an explicit `close --save-script` commit. ---
+
+test('BLOCKER 3: finalizeRepairTeardown auto-commit records a terminal close, producing a self-contained, fresh-replayable healed .ad', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-teardown-autocommit-close-'));
+  const store = new SessionStore(path.join(root, 'sessions'));
+  const healedPath = path.join(root, 'flow.healed.ad');
+
+  const session = makeSession('default');
+  session.recordSession = true;
+  session.saveScriptBoundary = 0;
+  session.saveScriptComplete = true;
+  session.saveScriptPath = healedPath;
+  session.saveScriptDefaultedHealedPath = true;
+  session.actions = [
+    { ts: 1, command: 'open', positionals: ['Demo'], flags: {} },
+    { ts: 2, command: 'click', positionals: ['id="save-v2"'], flags: {} },
+  ];
+
+  // The source plan's terminal `close` was already skipped-while-armed
+  // (Fix 3) — `session.actions` never gained one. Idle-reap/shutdown teardown
+  // must synthesize it itself before auto-committing.
+  store.finalizeRepairTeardown(session);
+
+  assert.equal(session.saveScriptCommitted, true);
+  assert.equal(store.readRepairTombstone('default'), undefined);
+  const script = fs.readFileSync(healedPath, 'utf8');
+  assert.ok(script.includes(HEAL_COMPLETE_SENTINEL));
+  const parsed = parseReplayScriptDetailed(script);
+  // Self-contained: the auto-committed artifact ends with its OWN terminal
+  // close, exactly like an explicit close's commit — never a healed script
+  // that a fresh replay would run off the end of.
+  assert.deepEqual(
+    parsed.actions.map((a) => a.command),
+    ['open', 'click', 'close'],
+  );
+  assert.deepEqual(parsed.actions[2]?.positionals, []);
+  const bareRefs = parsed.actions.flatMap((a) => a.positionals.filter((p) => p.startsWith('@')));
+  assert.deepEqual(bareRefs, []);
 });

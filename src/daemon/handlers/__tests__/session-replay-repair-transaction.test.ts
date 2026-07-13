@@ -327,12 +327,14 @@ test('C5a: an incomplete repair reaped by idle-reap leaves a tombstone (no heale
   expect(sessionStore.readRepairTombstone(sessionName)).toBeUndefined();
 });
 
-test('C5a: teardown of a COMPLETE repair auto-commits the healed file and writes NO tombstone', async () => {
+test('C5a/BLOCKER 3: teardown of a COMPLETE repair auto-commits a self-contained, fresh-replayable healed file (recording the skipped terminal close) and writes NO tombstone', async () => {
   const { root, sessionStore, sessionName, logPath } = setup(
     'agent-device-repair-transaction-autocommit-',
   );
-  // A clean (non-diverging) repair-armed replay completes the plan.
-  const filePath = writeReplayFile(root, ['open "Demo" --relaunch', 'click id="save-v2"']);
+  // A clean (non-diverging) repair-armed replay completes the plan. The
+  // source plan's OWN terminal `close` is the exact thing Fix 3 skips while
+  // armed — proving BLOCKER 3 requires a source that actually has one.
+  const filePath = writeReplayFile(root, ['open "Demo" --relaunch', 'click id="save-v2"', 'close']);
   const invoke = makeRecordingReplayInvoke({
     sessionStore,
     sessionName,
@@ -349,15 +351,28 @@ test('C5a: teardown of a COMPLETE repair auto-commits the healed file and writes
   expect(response.ok).toBe(true);
   const session = sessionStore.get(sessionName)!;
   expect(session.saveScriptComplete).toBe(true);
+  // Fix 3: the source plan's terminal `close` never dispatched or recorded —
+  // this is exactly the skip BLOCKER 3 must still account for at teardown.
+  expect(session.actions.map((a) => a.command)).toEqual(['open', 'click']);
 
   // Teardown (e.g. the client tearing down the ephemeral daemon after a clean
   // repair) auto-commits the completed transaction and leaves no tombstone.
   sessionStore.finalizeRepairTeardown(session);
   expect(fs.existsSync(path.join(root, 'flow.healed.ad'))).toBe(true);
-  expect(fs.readFileSync(path.join(root, 'flow.healed.ad'), 'utf8')).toContain(
-    HEAL_COMPLETE_SENTINEL,
-  );
+  const healedScript = fs.readFileSync(path.join(root, 'flow.healed.ad'), 'utf8');
+  expect(healedScript).toContain(HEAL_COMPLETE_SENTINEL);
   expect(sessionStore.readRepairTombstone(sessionName)).toBeUndefined();
+
+  // BLOCKER 3: the ADR requires the committed artifact to be SELF-CONTAINED
+  // and fresh-replayable — not merely "a file with the sentinel exists".
+  // Parse it and assert it ends with its own terminal `close`, exactly like
+  // an explicit `close --save-script` commit does, never a script a fresh
+  // replay would run off the end of.
+  const parsed = parseReplayScriptDetailed(healedScript);
+  expect(parsed.actions.map((a) => a.command)).toEqual(['open', 'click', 'close']);
+  expect(parsed.actions[2]?.positionals).toEqual([]);
+  const bareRefs = parsed.actions.flatMap((a) => a.positionals.filter((p) => p.startsWith('@')));
+  expect(bareRefs).toEqual([]);
 });
 
 test('BLOCKER 1: a --from continuation on a reaped session returns SESSION_NOT_FOUND (translated to REPAIR_SESSION_EXPIRED), not a REPLAY_DIVERGENCE', async () => {

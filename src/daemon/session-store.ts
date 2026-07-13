@@ -5,6 +5,7 @@ import type { SessionRuntimeHints, SessionState } from './types.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
 import { expandSessionPath, safeSessionName } from './session-paths.ts';
 import { SessionScriptWriter, type SessionScriptWriteResult } from './session-script-writer.ts';
+import { successText } from '../utils/success-text.ts';
 import {
   appendActionEvent,
   appendSessionEvent,
@@ -122,8 +123,17 @@ export class SessionStore {
   }
 
   /**
-   * ADR 0012 decision 6, R7 + commit semantics (C2/C5a, BLOCKER 2): the
+   * ADR 0012 decision 6, R7 + commit semantics (C2/C5a, BLOCKER 2/3): the
    * teardown finalize step for a session (idle-reap or daemon shutdown).
+   *
+   * BLOCKER 3: unlike the explicit `close --save-script` path
+   * (`commitRepairBeforeClose`), teardown never runs `close`'s handler — but
+   * the source plan's terminal `close` was already skipped-while-armed (Fix
+   * 3), so a COMPLETE transaction's auto-commit here must record the same
+   * synthetic finalize `close` first, or the auto-committed healed `.ad`
+   * would be missing its own terminal `close` (not self-contained, unlike an
+   * explicit close's commit).
+   *
    * `writeSessionLog` commits the healed `.ad` iff the repair transaction
    * COMPLETED (auto-commit on completion, even without an explicit `close`)
    * and otherwise publishes nothing.
@@ -140,6 +150,7 @@ export class SessionStore {
    * (non-repair) sessions beyond the existing `writeSessionLog`.
    */
   finalizeRepairTeardown(session: SessionState): void {
+    this.recordRepairFinalizeCloseIfCommitting(session);
     const result = this.writeSessionLog(session);
     if (session.saveScriptBoundary !== undefined && session.saveScriptCommitted !== true) {
       if (!result.written && result.error) {
@@ -151,6 +162,26 @@ export class SessionStore {
         this.writeRepairTombstone(session);
       }
     }
+  }
+
+  /**
+   * BLOCKER 3: mirrors `commitRepairBeforeClose`'s finalize-`close` recording
+   * (session-close.ts) for the auto-commit teardown path, which never routes
+   * through `close`'s handler. Only recorded when this teardown is actually
+   * about to attempt a commit (COMPLETE, not yet COMMITTED) — an aborted
+   * (incomplete) transaction's write is a no-op regardless, so there is
+   * nothing to make self-contained.
+   */
+  private recordRepairFinalizeCloseIfCommitting(session: SessionState): void {
+    if (session.saveScriptBoundary === undefined) return;
+    if (session.saveScriptComplete !== true) return;
+    if (session.saveScriptCommitted === true) return;
+    this.recordAction(session, {
+      command: 'close',
+      positionals: [],
+      flags: {},
+      result: { session: session.name, ...successText(`Closed: ${session.name}`) },
+    });
   }
 
   /**
