@@ -53,11 +53,10 @@ the same by aliasing mutable session state.
 
 Only one frame is retained. Activating a new frame supersedes the previous frame and advances the
 epoch; historical generation-to-tree caches are not introduced. Complete and partial frames retain
-the immutable source tree because occlusion, actionable-ancestor promotion, viewport selection,
-selector-chain construction, and replay identity can depend on nodes outside the emitted subset.
-The issuance set, not the evidence tree, bounds partial authority. The frame and latest observation
-share immutable capture data when they originate from the same capture; neither transition deep-copies
-the tree.
+the immutable source tree because interaction guards and replay identity can depend on context outside
+the emitted subset, including ancestors, siblings, overlays, and the viewport. The issuance set, not
+the evidence tree, bounds partial authority. The frame and latest observation share immutable capture
+data when they originate from the same capture; neither transition deep-copies the tree.
 
 The existing `snapshotGeneration`/`snapshotRefsStale` implementation evolves behind one ref-frame
 module. The public name `refsGeneration` and the `@e12~s42` grammar remain unchanged for wire
@@ -80,9 +79,9 @@ for the stored frame, including an interactive or intentionally scoped snapshot.
 scoped snapshot replaces authorization with exactly its returned namespace; it neither authorizes
 matching ref bodies outside that scope nor retains the old `all` scope. A frame-activating capture
 scoped by `@ref` must first admit that scope ref against the current active frame. A stale or unissued
-scope ref fails closed and cannot launder a new frame from the wrong subtree. Selector-scoped captures
-follow their normal selector rules. Empty, sparse, failed, or unusable captures do not replace the
-frame.
+scope ref fails closed; it cannot authorize a capture from a different subtree. Selector-scoped
+captures follow their normal selector rules. Empty, sparse, failed, or unusable captures do not
+replace the frame.
 
 Snapshot diffs, digests that omit the namespace, `find`, settled diffs/tails, and replay divergence
 screens are partial external publications. They activate a partial frame only when at least one ref
@@ -214,7 +213,7 @@ classifying representative actions; it must not become a second prose registry:
 
 | Effect | Commands/actions |
 | --- | --- |
-| `may-invalidate` | press, click, fill, longpress, type, focus, scroll, swipe, gesture, back, home, tv remote, rotate, open/relaunch, trigger/push delivery, settings changes, install/reinstall, React Native overlay dismissal, and lifecycle operations that can replace the visible surface |
+| `may-invalidate` | press, click, fill, longpress, type, focus, scroll, swipe, gesture, back, home, `tv-remote`, rotate, open/relaunch, trigger/push delivery, settings changes, install/reinstall, React Native overlay dismissal, and lifecycle operations that can replace the visible surface |
 | Conditional resolver | keyboard status preserves while dismiss/return/input invalidate; alert get/wait preserve while accept/dismiss invalidate; find reads preserve while click/fill/focus/type delegate to their leaf mutation |
 | `delegated` | batch, replay, and test/suite orchestrators; each nested leaf owns its transition |
 | `preserve` | snapshots and other observation, assertion, screenshot, recording, trace, logs, events, network inspection, performance, inventory, capability, lease, and transport-management operations unless a selected subaction directly manipulates the visible surface |
@@ -222,11 +221,14 @@ classifying representative actions; it must not become a second prose registry:
 Clipboard reads and writes preserve the frame because pasteboard state alone does not change element
 identity. A later paste/type action is independently invalidating.
 
-`app-switcher` currently bypasses the daemon facet, so it cannot honestly participate in a
-session-owned lifetime. Before uniform enforcement is complete, that route must move through a
-session-aware daemon leaf or decompose into another classified daemon command. Agent-device-owned
-device mutations may not remain an unclassified local escape hatch; mutations performed by unrelated
-external tools remain outside this session guarantee.
+Generic routing is not an exception to the policy. `back`, `home`, `rotate`, `scroll`, `tv-remote`,
+and `app-switcher` all reach the generic daemon leaf and must cross the same transition there when
+they act. `app-switcher` is currently projected to the daemon by a direct writer but, unlike its
+generic-routed siblings, omits an explicit daemon descriptor facet and relies on the registry's
+generic fallback. Migration adds that facet and its effect classification; it does not invent a
+specialized route. The completeness gate covers every command projected to the daemon, including
+generic fallbacks, so a missing facet cannot hide an unclassified mutation. Mutations performed by
+unrelated external tools remain outside this session guarantee.
 
 This policy is not derived from Apple runner `readOnly`. Runner traits govern retry, liveness,
 readiness probes, and preflight skipping at a lower wire-command seam. `refFrameEffect` governs
@@ -234,8 +236,9 @@ daemon session authorization and includes commands that never reach the Apple ru
 consistency tests may cover direct mappings, but blanket parity would couple different concepts.
 
 Frame admission and transitions are serialized by the existing per-session request lock. The frame
-is shared session state, not per-client or per-lease history; concurrent callers that need precise
-failure attribution should use generation-pinned refs. No second ref-specific mutex is introduced.
+is shared session state, not per-client or per-lease history. Generation pins make the rejected epoch
+and reason precise; they do not reserve a frame or prevent another caller's mutation from expiring it.
+No second ref-specific mutex is introduced.
 
 ### Batch, replay, recording, and repeated actions
 
@@ -304,8 +307,11 @@ to renew refs.
 
 Older clients remain wire-parse-compatible: command grammar, `refsGeneration`, and `~s<n>` remain
 unchanged, and structured error details are additive, so ADR 0006 requires no protocol bump. They are
-not behaviorally compatible for unsafe plain-ref mutation chains, which can newly fail and therefore
-require CLI/help, changelog, `.ad` migration, and batch guidance.
+not fully behaviorally compatible. Unsafe plain-ref mutation chains newly fail. A fused command can
+also expire the frame when its eventual result is a no-op, such as `keyboard dismiss` reporting that
+the keyboard was already hidden or an alert action reporting no alert. Read-only refs that lack
+retained frame evidence newly fail instead of warning and resolving by positional coincidence against
+a newer observation. These changes require CLI/help, changelog, `.ad` migration, and batch guidance.
 
 It composes with existing ADRs as follows:
 
@@ -323,6 +329,22 @@ It composes with existing ADRs as follows:
 - ADR 0012: durable target identity remains selector/evidence based, and divergence refs become
   honest partial issuance; and
 - ADR 0013: coordinate gestures expire frames but remain outside the element guarantee matrix.
+
+## Consequences
+
+- A stale ref cannot silently mutate a different element after navigation; the caller receives a
+  typed failure and must choose a fresh observation or a selector.
+- Ref-oriented workflows that perform multiple logical mutations must capture again between them,
+  consume an honestly issued settled ref, use selectors, or use one repeated-action command such as
+  `--count`. Legacy hand-written `.ad` scripts that reuse several bare refs from one snapshot must
+  change.
+- Conservative fused requests may consume ref authority even when the platform later reports that no
+  action was needed. This favors avoiding a wrong-screen action over preserving refs after an
+  ambiguous dispatch.
+- A read without retained evidence fails rather than resolving the same positional ref body in a
+  newer tree. Reads with retained evidence keep the structured warning behavior.
+- The implementation pays bounded session-memory bookkeeping but adds no automatic capture, platform
+  call, round trip, or per-node response bytes.
 
 ## Required evidence
 
@@ -374,11 +396,12 @@ Each step lands green and independently useful:
 6. add sequence, batch, replay, series, failure-boundary, and cross-platform provider contracts;
 7. enable fail-closed mutation enforcement per platform only after its paths have evidence, ending in
    one uniform policy; and
-8. update help, changelog, replay/batch guidance, and remove the superseded coarse stale marker.
+8. update help, changelog, and replay/batch guidance for refresh-between-mutations, conservative
+   fused no-op invalidation, and reads without retained evidence; then remove the superseded coarse
+   stale marker.
 
-PR #1241 is a compatible transitional fix and should remain independently reviewable. It rejects a
-known iOS stale-marker case before this full lifecycle is implemented; it does not own the architecture
-migration.
+PR #1241 landed independently as a compatible transitional fix. It rejects a known iOS stale-marker
+case before this full lifecycle is implemented; it does not own the architecture migration.
 
 ## Alternatives considered
 
