@@ -2,7 +2,7 @@ import { AppError } from '../../kernel/errors.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { DeviceRotation } from '../../contracts/device-rotation.ts';
-import { buildGesturePlan } from '../../contracts/gesture-plan.ts';
+import { buildGesturePlan, GESTURE_DURATION_MIN_MS } from '../../contracts/gesture-plan.ts';
 import { buildScrollGesturePlan, type ScrollDirection } from '../../contracts/scroll-gesture.ts';
 import { toAndroidTvRemoteKeyevent, type TvRemoteButton } from '../../contracts/tv-remote.ts';
 import { runAndroidAdb, sleep } from './adb.ts';
@@ -280,12 +280,16 @@ export async function scrollAndroid(
   });
   const scrollPlan = {
     ...relativePlan,
+    // Injected coordinates are absolute, so their zero-origin reference frame
+    // must include the viewport offset as well as its dimensions.
+    referenceWidth: viewport.x + viewport.width,
+    referenceHeight: viewport.y + viewport.height,
     x1: viewport.x + relativePlan.x1,
     y1: viewport.y + relativePlan.y1,
     x2: viewport.x + relativePlan.x2,
     y2: viewport.y + relativePlan.y2,
   };
-  const durationMs = options?.durationMs ?? 300;
+  const durationMs = Math.max(options?.durationMs ?? 300, GESTURE_DURATION_MIN_MS);
   const backend = await executeAndroidTouchPlan(
     device,
     buildGesturePlan(
@@ -305,7 +309,7 @@ export async function scrollAndroid(
 
   return {
     ...scrollPlan,
-    ...(options?.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
+    ...(options?.durationMs !== undefined ? { durationMs } : {}),
     ...backend,
   };
 }

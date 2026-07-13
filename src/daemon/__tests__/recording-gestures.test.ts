@@ -108,26 +108,36 @@ test('scroll augmentation preserves explicit reference frame from platform resul
   assert.equal(augmented.y2, 240);
 });
 
-test('scroll augmentation preserves explicit pixel travel coordinates', () => {
+test('scroll visualization preserves absolute travel in its zero-origin reference frame', () => {
   const session = makeSession();
   session.snapshot = undefined;
 
   const augmented = augmentScrollVisualizationResult(session, 'scroll', ['down'], {
     direction: 'down',
     pixels: 240,
-    x1: 201,
-    y1: 557,
-    x2: 201,
-    y2: 317,
-    referenceWidth: 402,
-    referenceHeight: 874,
+    x1: 211,
+    y1: 577,
+    x2: 211,
+    y2: 337,
+    referenceWidth: 412,
+    referenceHeight: 894,
   }) as Record<string, unknown>;
 
-  assert.equal(augmented.x1, 201);
-  assert.equal(augmented.y1, 557);
-  assert.equal(augmented.x2, 201);
-  assert.equal(augmented.y2, 317);
+  recordTouchVisualizationEvent(session, 'scroll', ['down'], augmented, {}, 1_500);
+
+  assert.equal(augmented.x1, 211);
+  assert.equal(augmented.y1, 577);
+  assert.equal(augmented.x2, 211);
+  assert.equal(augmented.y2, 337);
   assert.equal(augmented.pixels, 240);
+  const event = session.recording?.gestureEvents[0];
+  assert.equal(event?.kind, 'scroll');
+  assert.equal(event?.referenceWidth, 412);
+  assert.equal(event?.referenceHeight, 894);
+  assert.equal(event?.x, 211);
+  assert.equal(event?.y, 577);
+  assert.equal(event?.x2, 211);
+  assert.equal(event?.y2, 337);
 });
 
 test('gesture recording prefers native runner timing when available', () => {

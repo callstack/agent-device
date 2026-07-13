@@ -60,7 +60,9 @@ Platform adapters consume the canonical plan:
   available, otherwise to the bundled instrumentation helper. The helper injects the exact planned
   pointer samples. A stationary long-press needs no viewport on the helper path; the executor adds
   the paired provider-owned viewport only for provider-native touch. Android touch execution never
-  falls back to `adb input swipe`; the snapshot helper is stopped
+  falls back to `adb input swipe`. Public scroll durations below one 16 ms planner frame normalize
+  to that physical minimum and report the executed duration. Scroll evidence reports absolute
+  injected coordinates against zero-origin extents that include the viewport offset. The snapshot helper is stopped
   before local gesture instrumentation because Android permits only one instrumentation owner of
   `UiAutomation`.
 - iOS converts every planned point to native orientation and feeds the exact arrays to the existing

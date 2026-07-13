@@ -37,14 +37,46 @@ test('scrollAndroid plans explicit pixel travel through semantic touch injection
   assert.deepEqual(touch.pointers[0]?.samples.at(-1)?.point, { x: 550, y: 860 });
   assert.equal(result.pixels, 240);
   assert.equal(result.durationMs, 120);
-  assert.equal(result.referenceWidth, 1080);
-  assert.equal(result.referenceHeight, 1920);
+  assert.equal(result.referenceWidth, 1090);
+  assert.equal(result.referenceHeight, 1940);
   assert.equal(result.x1, 550);
   assert.equal(result.y1, 1100);
   assert.equal(result.x2, 550);
   assert.equal(result.y2, 860);
   assert.equal(result.backend, 'provider-native-touch');
   assert.equal(result.injected, true);
+});
+
+test('scrollAndroid accepts sub-frame public durations at the Android planner minimum', async () => {
+  const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];
+  const results = await withAndroidAdbProvider(
+    {
+      exec: async () => {
+        throw new Error('adb must not run');
+      },
+      gestureViewport: async () => ({ x: 0, y: 0, width: 1080, height: 1920 }),
+      touch: async (request) => {
+        touchCalls.push(request);
+      },
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      const outputs: Record<string, unknown>[] = [];
+      for (const durationMs of [0, 15]) {
+        outputs.push(await scrollAndroid(ANDROID_EMULATOR, 'down', { durationMs }));
+      }
+      return outputs;
+    },
+  );
+
+  assert.deepEqual(
+    touchCalls.map((call) => call.durationMs),
+    [16, 16],
+  );
+  assert.deepEqual(
+    results.map((result) => result.durationMs),
+    [16, 16],
+  );
 });
 
 test('longPressAndroid sends a stationary semantic touch plan', async () => {

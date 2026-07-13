@@ -295,7 +295,8 @@ test('interaction --settle budgets add post-action settle time on top of the nor
     }),
     125_000,
   );
-  // Longpress keeps its 120-second maximum hold inside the outer envelope.
+  // Longpress keeps the cold Android helper route and its 120-second maximum
+  // hold inside the outer envelope.
   assert.equal(
     resolveDaemonRequestTimeoutMs({
       ...base,
@@ -303,7 +304,7 @@ test('interaction --settle budgets add post-action settle time on top of the nor
       positionals: ['300', '500', '120000'],
       flags: {},
     }),
-    150_000,
+    210_000,
   );
   // Bare --settle adds its default budget after the longpress-specific base,
   // so a maximum hold still leaves room for post-action observation.
@@ -313,7 +314,7 @@ test('interaction --settle budgets add post-action settle time on top of the nor
       command: 'longpress',
       flags: { settle: true },
     }),
-    190_000,
+    250_000,
   );
   // Bare timeoutMs without --settle remains wire-compatible with older touch
   // command clients: it is ignored instead of opting into settle semantics.
