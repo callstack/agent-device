@@ -7,6 +7,7 @@ import { SessionStore } from '../session-store.ts';
 import type { SessionState } from '../types.ts';
 import { buildRequestFinishedEvent } from '../session-event-log.ts';
 import type { TargetAnnotationV1 } from '../../replay/target-identity.ts';
+import { HEAL_COMPLETE_SENTINEL } from '../session-script-writer.ts';
 
 type RecordActionEntry = Parameters<SessionStore['recordAction']>[1];
 
@@ -693,4 +694,50 @@ test('clearRepairTombstone removes a tombstone (a fresh replay --save-script cle
 
   store.clearRepairTombstone('default');
   assert.equal(store.readRepairTombstone('default'), undefined);
+});
+
+// --- ADR 0012 decision 6 (BLOCKER 2): a COMPLETE transaction's commit can
+// still FAIL at idle-reap/daemon-shutdown teardown (no-clobber refusal, a
+// bare-@ref failure, or a filesystem error) — that failure must be preserved,
+// not lost behind a generic "reaped before it was finalized" tombstone. ---
+
+test('BLOCKER 2: finalizeRepairTeardown of a COMPLETE transaction whose commit FAILS preserves the failure in a distinct tombstone, not a generic expiry', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-teardown-commit-fail-'));
+  const store = new SessionStore(path.join(root, 'sessions'));
+  const healedPath = path.join(root, 'flow.healed.ad');
+  // A prior COMPLETE (sentinel-marked) healed artifact already sits at the
+  // default sibling path — teardown's auto-commit attempt must refuse to
+  // clobber it, exactly like an explicit close's commit would.
+  fs.writeFileSync(
+    healedPath,
+    `context platform=ios device="x"\nclick id="old"\n${HEAL_COMPLETE_SENTINEL}\n`,
+  );
+  const before = fs.readFileSync(healedPath, 'utf8');
+
+  const session = makeSession('default');
+  session.recordSession = true;
+  session.saveScriptBoundary = 0;
+  session.saveScriptComplete = true;
+  session.saveScriptPath = healedPath;
+  session.saveScriptDefaultedHealedPath = true;
+  session.repairSourcePath = '/flows/login.ad';
+  session.actions = [{ ts: 1, command: 'open', positionals: ['Demo'], flags: {} }];
+
+  // Idle-reap/shutdown teardown (never routes through close's handler).
+  store.finalizeRepairTeardown(session);
+
+  // The prior complete artifact is untouched — teardown's failed commit
+  // never clobbers it.
+  assert.equal(fs.readFileSync(healedPath, 'utf8'), before);
+  // Never committed (the write failed), so the ordinary success bookkeeping
+  // never ran.
+  assert.notEqual(session.saveScriptCommitted, true);
+
+  const tombstone = store.readRepairTombstone('default');
+  assert.ok(tombstone, 'expected a tombstone to preserve the failed-commit outcome');
+  // BLOCKER 2: distinguishable from a plain "reaped before it was finalized"
+  // tombstone — it carries the real commit failure.
+  assert.ok(tombstone?.commitFailure, 'expected the tombstone to carry the commit failure');
+  assert.match(tombstone!.commitFailure!.message, /already exists/);
+  assert.equal(tombstone?.sourcePath, '/flows/login.ad');
 });

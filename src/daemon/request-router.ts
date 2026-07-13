@@ -341,10 +341,17 @@ function recordThrownRequestEvent(
 }
 
 /**
- * ADR 0012 decision 6, R7 (C5a): when a request finds no session (SESSION_NOT_FOUND)
- * but a live repair tombstone exists for its session key, rewrite the error to
- * `REPAIR_SESSION_EXPIRED` with an actionable re-run command. Any other error, or
- * the absence of a (non-expired) tombstone, passes through untouched.
+ * ADR 0012 decision 6, R7 (C5a, BLOCKER 2): when a request finds no session
+ * (SESSION_NOT_FOUND) but a live repair tombstone exists for its session key,
+ * rewrite the error to an actionable recovery error. Any other error, or the
+ * absence of a (non-expired) tombstone, passes through untouched.
+ *
+ * BLOCKER 2: a tombstone carrying `commitFailure` means the transaction
+ * actually COMPLETED and a commit was attempted at teardown but FAILED (e.g.
+ * no-clobber refusal, a filesystem error) — that is a materially different,
+ * more specific situation than "reaped before it ever finished", so it gets
+ * its own `REPAIR_COMMIT_FAILED` code carrying the real cause, rather than
+ * being folded into the generic `REPAIR_SESSION_EXPIRED` expiry message.
  */
 function repairExpiredIfTombstoned(
   req: DaemonRequest,
@@ -357,6 +364,14 @@ function repairExpiredIfTombstoned(
   const reRun = tombstone.sourcePath
     ? `re-run: replay ${tombstone.sourcePath} --save-script`
     : 're-run your replay <script> --save-script from the start';
+  if (tombstone.commitFailure) {
+    return normalizeError(
+      new AppError(
+        'REPAIR_COMMIT_FAILED',
+        `The repair transaction for session "${req.session}" completed, but committing its healed script failed at teardown: ${tombstone.commitFailure.message}. ${reRun}.`,
+      ),
+    );
+  }
   return normalizeError(
     new AppError(
       'REPAIR_SESSION_EXPIRED',

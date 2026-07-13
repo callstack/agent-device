@@ -26,6 +26,16 @@ export type RepairSessionTombstone = {
   reapedAt: number;
   expiresAt: number;
   sourcePath?: string;
+  /**
+   * ADR 0012 decision 6 (BLOCKER 2): set iff this tombstone marks a COMPLETE
+   * transaction whose commit FAILED at teardown (no-clobber refusal, bare
+   * `@ref`, or a filesystem write error) — as opposed to a transaction that
+   * was merely reaped before it ever finished. Preserves the real failure
+   * instead of losing it behind a generic "reaped before it was finalized"
+   * expiry, so `repairExpiredIfTombstoned` can surface a distinct
+   * `REPAIR_COMMIT_FAILED` with the actual cause.
+   */
+  commitFailure?: { code: string; message: string };
 };
 
 const REPAIR_TOMBSTONE_TTL_MS = 60 * 60_000;
@@ -112,30 +122,53 @@ export class SessionStore {
   }
 
   /**
-   * ADR 0012 decision 6, R7 + commit semantics (C2/C5a): the teardown finalize
-   * step for a session (idle-reap or daemon shutdown). `writeSessionLog` commits
-   * the healed `.ad` iff the repair transaction COMPLETED (auto-commit on
-   * completion, even without an explicit `close`) and otherwise publishes
-   * nothing; a repair-armed session torn down WITHOUT committing then leaves a
-   * bounded `REPAIR_SESSION_EXPIRED` tombstone so the agent's next command gets
-   * actionable re-run guidance rather than a bare SESSION_NOT_FOUND. A no-op for
-   * ordinary (non-repair) sessions beyond the existing `writeSessionLog`.
+   * ADR 0012 decision 6, R7 + commit semantics (C2/C5a, BLOCKER 2): the
+   * teardown finalize step for a session (idle-reap or daemon shutdown).
+   * `writeSessionLog` commits the healed `.ad` iff the repair transaction
+   * COMPLETED (auto-commit on completion, even without an explicit `close`)
+   * and otherwise publishes nothing.
+   *
+   * BLOCKER 2: a COMPLETE transaction's commit can still FAIL here (no-clobber
+   * refusal, bare-`@ref`, or a filesystem error) — that failure must not be
+   * lost behind a generic "reaped before it was finalized" tombstone, since
+   * daemon teardown deletes the session right after this call, discarding the
+   * only in-memory record of what happened. Preserve it in a distinct
+   * commit-failure tombstone instead, so the agent's next command surfaces
+   * the real cause (`REPAIR_COMMIT_FAILED`) rather than a misleading expiry.
+   * A repair-armed session torn down WITHOUT ever completing still leaves the
+   * ordinary bounded `REPAIR_SESSION_EXPIRED` tombstone. A no-op for ordinary
+   * (non-repair) sessions beyond the existing `writeSessionLog`.
    */
   finalizeRepairTeardown(session: SessionState): void {
-    this.writeSessionLog(session);
+    const result = this.writeSessionLog(session);
     if (session.saveScriptBoundary !== undefined && session.saveScriptCommitted !== true) {
-      this.writeRepairTombstone(session);
+      if (!result.written && result.error) {
+        this.writeRepairTombstone(session, REPAIR_TOMBSTONE_TTL_MS, {
+          code: String(result.error.code),
+          message: result.error.message,
+        });
+      } else {
+        this.writeRepairTombstone(session);
+      }
     }
   }
 
   /**
-   * ADR 0012 decision 6, R7 (C5a): drops a bounded tombstone for a repair-armed
-   * session reaped/torn down before it committed, so a later command targeting
-   * the same session key surfaces `REPAIR_SESSION_EXPIRED` with a re-run hint
-   * instead of a bare `SESSION_NOT_FOUND`. Best effort — a tombstone-write
-   * failure never blocks teardown.
+   * ADR 0012 decision 6, R7 (C5a, BLOCKER 2): drops a bounded tombstone for a
+   * repair-armed session reaped/torn down before it committed, so a later
+   * command targeting the same session key surfaces `REPAIR_SESSION_EXPIRED`
+   * with a re-run hint instead of a bare `SESSION_NOT_FOUND`. When
+   * `commitFailure` is supplied (a COMPLETE transaction's commit attempt
+   * FAILED, rather than the transaction never completing), it is preserved on
+   * the tombstone so the router can surface `REPAIR_COMMIT_FAILED` with the
+   * real cause instead. Best effort — a tombstone-write failure never blocks
+   * teardown.
    */
-  writeRepairTombstone(session: SessionState, ttlMs = REPAIR_TOMBSTONE_TTL_MS): void {
+  writeRepairTombstone(
+    session: SessionState,
+    ttlMs = REPAIR_TOMBSTONE_TTL_MS,
+    commitFailure?: { code: string; message: string },
+  ): void {
     try {
       const dir = this.resolveSessionDir(session.name);
       fs.mkdirSync(dir, { recursive: true });
@@ -144,6 +177,7 @@ export class SessionStore {
         reapedAt: Date.now(),
         expiresAt: Date.now() + ttlMs,
         ...(session.repairSourcePath ? { sourcePath: session.repairSourcePath } : {}),
+        ...(commitFailure ? { commitFailure } : {}),
       };
       fs.writeFileSync(this.repairTombstonePath(session.name), `${JSON.stringify(tombstone)}\n`);
     } catch (error) {

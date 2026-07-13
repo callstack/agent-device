@@ -75,6 +75,29 @@ test('without a tombstone, a missing session still returns a plain SESSION_NOT_F
   expect(response.error.code).toBe('SESSION_NOT_FOUND');
 });
 
+// ADR 0012 decision 6 (BLOCKER 2): a tombstone left by a COMPLETE transaction
+// whose commit FAILED at teardown must surface a distinct, actionable
+// REPAIR_COMMIT_FAILED — never the generic "reaped before it was finalized"
+// REPAIR_SESSION_EXPIRED, which would misleadingly suggest the transaction
+// never completed at all.
+test('a command hitting a commit-failure tombstone gets REPAIR_COMMIT_FAILED with the real cause, not a generic REPAIR_SESSION_EXPIRED', async () => {
+  const { sessionStore, handler } = makeHandler('agent-device-router-commit-failed-');
+  sessionStore.writeRepairTombstone(tombstonedSession('repair-commit-fail'), undefined, {
+    code: 'COMMAND_FAILED',
+    message: 'A prior healed script already exists at /flows/login.healed.ad; ...',
+  });
+
+  const response = await handler(closeRequest('repair-commit-fail'));
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('REPAIR_COMMIT_FAILED');
+  expect(response.error.code).not.toBe('REPAIR_SESSION_EXPIRED');
+  expect(response.error.message).toMatch(/already exists/);
+  // Still carries the actionable re-run guidance.
+  expect(response.error.message).toMatch(/replay \/flows\/login\.ad --save-script/);
+});
+
 test('an expired tombstone does not shadow a missing session', async () => {
   const { sessionStore, handler } = makeHandler('agent-device-router-expired-tombstone-');
   // TTL 0 => already stale.

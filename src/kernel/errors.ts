@@ -15,6 +15,7 @@ export type KnownAppErrorCode =
   | 'AMBIGUOUS_MATCH'
   | 'REPLAY_DIVERGENCE'
   | 'REPAIR_SESSION_EXPIRED'
+  | 'REPAIR_COMMIT_FAILED'
   | 'UNKNOWN';
 
 // Intentionally widened with `(string & {})` so daemon-originated codes pass
@@ -248,6 +249,8 @@ export function defaultHintForCode(code: string): string | undefined {
       return 'Read details.divergence (screen/suggestions) for repair context, or rerun with --json for the full report.';
     case 'REPAIR_SESSION_EXPIRED':
       return 'The --save-script repair session was reaped before it was finalized; re-run replay <script> --save-script from the start.';
+    case 'REPAIR_COMMIT_FAILED':
+      return 'The repair transaction completed, but committing its healed script failed at teardown (no-clobber refusal or a filesystem error); inspect the target path/permissions, then re-run replay <script> --save-script to retry.';
     case 'NOT_IMPLEMENTED':
       return 'This command is part of the planned API but is not implemented yet.';
     case 'COMMAND_FAILED':
