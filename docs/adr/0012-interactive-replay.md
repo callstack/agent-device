@@ -469,7 +469,10 @@ so it can change the digest. A resume requires both `--from N` and
 `--plan-digest <planDigest>` from the report. The daemon rebuilds the current plan and rejects
 `INVALID_ARGS` before any action when its digest differs, so edits or parse-time expansion cannot silently
 retarget ordinal N. `allowed: false` explains why no resume is safe; its digest
-is still diagnostic, not an authorization to bypass preflight.
+is still diagnostic, not an authorization to bypass preflight. When `allowed: true`, the diverging
+daemon/session is kept live and addressable for the in-flight repair so the reported `from`/`planDigest`
+resume actually has a session to target — decision 6's R7 makes this a normative repair-transaction
+guarantee, so `resume.allowed: true` is never a promise the session has already been torn down under.
 
 Resume does not reconstruct execution state. For `N > 1`, preflight must reject with `INVALID_ARGS` when
 any skipped action can produce `outputEnv` values, or when the skipped range or resume target is inside
@@ -530,8 +533,14 @@ Implementation is not accepted on benchmark evidence alone. Required automated c
   `target-v1` evidence when recording is armed from step 1 (R1); a `--from`-continuation test proving the
   already-recorded prefix is never duplicated by a second full replay on the same session (R2); a
   boundary-watermark test proving a reused session's pre-invocation actions are excluded from the healed
-  script (R6); and a writer fail-loud test proving a bare `@ref` that cannot materialize to a selector
-  errors with a non-zero exit rather than being silently dropped (R4).
+  script (R6); a writer fail-loud test proving a bare `@ref` that cannot materialize to a selector
+  errors with a non-zero exit rather than being silently dropped (R4); a repair-transaction lifetime test
+  proving a divergence with `resume.allowed: true` keeps the session live and addressable for a following
+  `--from`, that a reaped repair session surfaces `REPAIR_SESSION_EXPIRED` (not `SESSION_NOT_FOUND`), and
+  that a keep-alive-incapable implementation fails fast before step 1 (R7); a commit-semantics test
+  proving the healed `.ad` is published only on completion/explicit finalize, atomically, and is absent
+  after a divergence-only exit or abort `close`; and a no-clobber test proving an existing *complete*
+  (sentinel-marked) healed artifact is protected while an incomplete/partial one is overwritable.
 
 Extend the settle benchmark (`~/.agent-device-bench/rnnav-matrix.py` pattern, external harness) with a
 replay arm only after these contracts pass: measure clean replay and one induced divergence repaired
@@ -589,7 +598,7 @@ rather than routing blind. The two sub-flows use different recording discipline:
    steps, and must not pollute the healed script — then `replay --from N --plan-digest <original>`
    re-runs the *unchanged* step N, which now matches.
 
-**Required protocol rules (normative).** These six rules are the difference between "the mechanism
+**Required protocol rules (normative).** These seven rules are the difference between "the mechanism
 works" and "healed scripts are always valid":
 
 - **R1 — recording is armed from the first replay, not on divergence.** `replay <file>.ad
@@ -654,6 +663,32 @@ works" and "healed scripts are always valid":
   replay's own execution path — so a reused session's earlier, unrelated actions never leak into the
   healed script. This makes the healed output independent of prior session history without requiring a
   fresh session for the repair itself.
+- **R7 — the repair transaction spans the whole live session; the session is kept alive until `close`.**
+  `--save-script` opens a multi-invocation repair **transaction**: a repair-armed replay that returns
+  `REPLAY_DIVERGENCE` with `resume.allowed: true` **MUST NOT** tear down the owning daemon or session.
+  The subsequent heal actions and `replay --from` continuations (R2) target that **same live session**
+  until the agent finishes with `close`; the boundary watermark (R6) and the accumulating
+  `session.actions` slice only mean anything if that one session survives across invocations. This
+  strengthens R2: same-session continuation is not merely preferred, it is a lifetime guarantee. A plain
+  `close` (without `--save-script`), a daemon teardown, or an idle-reap while the repair is still armed is
+  an **abort/discard** — no healed `.ad` is emitted; committing is the agent's explicit act
+  (`close --save-script`, or the full plan completing cleanly), per the commit semantics below. An
+  implementation MAY offer a bounded-expiry escape hatch, but if the repair
+  session is reaped it must surface a specific `REPAIR_SESSION_EXPIRED` recovery error (with re-run
+  guidance), never a bare `SESSION_NOT_FOUND`. A **persistent-daemon precondition is explicitly
+  rejected**: if some implementation constraint would prevent keep-alive, the armed replay must
+  **fail-fast before step 1** with actionable guidance, never proceed and then fail a later `--from` with
+  `SESSION_NOT_FOUND`.
+
+**Terminal lifecycle steps during a repair-armed `--from` resume.** Verification is scoped, per decision
+3, to *annotated resolved targets* — so a non-target step (a source `close`, or any step carrying no
+`target-v1` `targetEvidence`) is already exempt from target-binding divergence: it may still surface an
+`action-failure` if its dispatch genuinely fails, but never a `selector-miss`/`identity-mismatch`/
+`identity-unverifiable` merely for lacking evidence. This is a clarification of decision 3's existing
+scope, not a change to it. Because the repair transaction is finalized by the agent's own
+`close --save-script` (R7 + commit semantics), the **source plan's terminal `close` should be SKIPPED
+while the repair is armed** — running it would abort the transaction; the agent finalizes explicitly
+instead.
 
 **Acceptance test (mandatory).** A healed sibling `.ad` produced by the repair loop must replay
 end-to-end in a **fresh session** with every selector step annotated and no bare `@ref`.
@@ -681,6 +716,23 @@ by construction. The healed `.ad` is written only when the repair ends (below) a
   path with its `.ad` extension replaced by `.healed.ad` (e.g. `flows/login.ad` → `flows/login.healed.ad`),
   written beside the original. The original is never overwritten in place without an explicit `<out>`
   path, so a human reviews the diff and promotes it.
+
+**Commit semantics — the healed `.ad` is committed only on successful repair completion.** R6 defines the
+*slice*; this defines *when the slice is complete and durable*. The healed artifact is committed only when
+the full plan finishes cleanly under the resume loop **or** the agent explicitly finalizes with
+`close --save-script`. It is **never** emitted on a divergence-only exit, on daemon teardown, or on an
+idle-reap — a prefix-only partial is not "the healed script IS `session.actions`", it is an incomplete
+transaction. The write is **atomic**: serialize to a transaction-scoped temp path, then atomically publish
+to the target path, so a reader never observes a half-written healed script and an aborted repair leaves
+no partial artifact behind.
+
+**No-clobber applies only to a COMPLETE healed artifact.** The guard that refuses to overwrite an existing
+healed `.ad` protects a *complete, review-worthy* artifact only. An incomplete or partial file is always
+overwritable by a fresh repair that completes. Completeness is established by a sentinel written **only on
+successful commit** — e.g. a trailing `# agent-device:heal-complete` marker — or an equivalent structural
+check; the atomic temp→publish flow is what makes that sentinel trustworthy (a partial never reaches the
+published path with the sentinel). Auto-versioned output names (e.g. `.healed.2.ad`) are explicitly **out
+of scope** here — that is a separate naming change, not part of this decision.
 
 ## Consequences
 
@@ -777,8 +829,10 @@ each states its dependencies explicitly.
    selector-miss must route through the same divergence-wrapping path as a returned failure, or the
    repair loop never sees a divergence report to act on. Net-new implementation is narrow: the daemon-side
    `repairHint` computation over all four `kind`s (R3), `--save-script` arming plus the repair-run
-   boundary watermark on `replay` (R1/R6), the writer's post-watermark slice and bare-`@ref` fail-loud
-   guard (R4/R6) — the healed-script emission otherwise reuses `close --save-script`'s existing
+   boundary watermark on `replay` (R1/R6), the repair-transaction keep-alive with fail-fast/`REPAIR_SESSION_EXPIRED`
+   handling (R7), the writer's post-watermark slice, bare-`@ref` fail-loud guard, and
+   commit-on-completion atomic temp→publish with the completeness sentinel and no-clobber guard (R4/R6 +
+   commit semantics) — the healed-script emission otherwise reuses `close --save-script`'s existing
    `session.actions` serializer.
 
 ## Migration progress
