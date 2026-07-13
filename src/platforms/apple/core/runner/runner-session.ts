@@ -10,7 +10,7 @@ import { isIosFamily, isApplePlatform, type DeviceInfo } from '../../../../kerne
 import type { RunnerLogicalLeaseContext } from '../../../../core/runner-lease-context.ts';
 import type { AppleRunnerLifecycleOptions } from './runner-provider.ts';
 import { emitRequestProgress } from '../../../../request/progress.ts';
-import { getRequestSignal } from '../../../../request/cancel.ts';
+import { createRequestCanceledError, getRequestSignal } from '../../../../request/cancel.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../../../utils/diagnostics.ts';
 import { buildSimctlArgsForDevice } from '../simctl.ts';
 import { runAppleToolCommand, runXcrun } from '../tool-provider.ts';
@@ -283,6 +283,13 @@ async function startRunnerSessionWithLease(
     simulatorSetRedirect: simulatorSetRedirect ?? undefined,
     lease,
   };
+  if (signal?.aborted) {
+    await disposeRunnerSession(session, {
+      graceful: false,
+      waitTimeoutMs: RUNNER_INVALIDATE_WAIT_TIMEOUT_MS,
+    });
+    throw createRequestCanceledError();
+  }
   try {
     writeRunnerLease(lease);
   } catch (error) {

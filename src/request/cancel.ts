@@ -7,6 +7,11 @@ const REQUEST_CANCELED_MESSAGE = 'request canceled';
 const REQUEST_CANCELED_HINT =
   'The request was canceled intentionally (explicit cancel or client disconnect) — no retry is needed unless the cancellation was unintended.';
 
+export type RequestAbortRegistration = {
+  requestId: string;
+  controller: AbortController;
+};
+
 export function resolveRequestTrackingId(
   requestId: string | undefined,
   fallbackSeed?: unknown,
@@ -50,14 +55,23 @@ function evictOldestSetEntries<V>(set: Set<V>): void {
   }
 }
 
-export function registerRequestAbort(requestId: string | undefined): void {
-  if (!requestId) return;
+export function registerRequestAbort(
+  requestId: string | undefined,
+): RequestAbortRegistration | undefined {
+  if (!requestId) return undefined;
+  if (requestAbortControllers.has(requestId)) {
+    throw new AppError('INVALID_ARGS', `Request ID is already in flight: ${requestId}`, {
+      requestId,
+      reason: 'duplicate_request_id',
+    });
+  }
   evictOldestEntries(requestAbortControllers);
   const controller = new AbortController();
   requestAbortControllers.set(requestId, controller);
   if (canceledRequestIds.has(requestId)) {
     controller.abort();
   }
+  return { requestId, controller };
 }
 
 export function markRequestCanceled(requestId: string | undefined): void {
@@ -67,8 +81,18 @@ export function markRequestCanceled(requestId: string | undefined): void {
   requestAbortControllers.get(requestId)?.abort();
 }
 
-export function clearRequestCanceled(requestId: string | undefined): void {
+export function clearRequestCanceled(
+  requestId: string | undefined,
+  registration?: RequestAbortRegistration,
+): void {
   if (!requestId) return;
+  if (
+    registration &&
+    (registration.requestId !== requestId ||
+      requestAbortControllers.get(requestId) !== registration.controller)
+  ) {
+    return;
+  }
   canceledRequestIds.delete(requestId);
   requestAbortControllers.delete(requestId);
 }

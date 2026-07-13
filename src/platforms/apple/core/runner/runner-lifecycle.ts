@@ -288,6 +288,10 @@ export async function executeRunnerCommand(
     );
   } catch (err) {
     const appErr = asAppError(err, 'COMMAND_FAILED');
+    if (session && !session.ready && isRequestCanceledError(appErr)) {
+      await invalidateRunnerSessionBestEffort(session, 'runner_startup_request_canceled');
+      throw err;
+    }
     if (
       appErr.code === 'COMMAND_FAILED' &&
       typeof appErr.message === 'string' &&

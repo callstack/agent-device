@@ -21,6 +21,10 @@ test('HTTP request disconnected before response headers cancels the request', as
   const handlerStarted = new Promise<void>((resolve) => {
     markHandlerStarted = resolve;
   });
+  let markAbortObserved: () => void = () => {};
+  const abortObserved = new Promise<void>((resolve) => {
+    markAbortObserved = resolve;
+  });
 
   const server = await createDaemonHttpServer({
     token: 'provider-scenario-token',
@@ -31,6 +35,7 @@ test('HTTP request disconnected before response headers cancels the request', as
       // No progress is emitted, so no response headers are sent: this exercises
       // the pre-header disconnect path specifically.
       await waitForAbort(signal);
+      markAbortObserved();
       return { ok: true, data: { canceled: signal.aborted } };
     },
   });
@@ -47,10 +52,63 @@ test('HTTP request disconnected before response headers cancels the request', as
         meta: { requestId },
       },
     });
-    // Resolves only if the handler's request signal fires, proving the pre-header
-    // disconnect canceled the request rather than letting it run to completion.
-    await Promise.all([handlerStarted, requestClosed]);
+    await Promise.all([requestClosed, abortObserved]);
   } finally {
+    await closeLoopbackServer(server);
+  }
+});
+
+test('concurrent HTTP requests reject a duplicate request ID without replacing its signal', async (t) => {
+  if (await skipWhenLoopbackUnavailable(t, 'daemon HTTP disconnect coverage')) return;
+
+  const requestId = 'req-http-duplicate';
+  let markFirstStarted: () => void = () => {};
+  const firstStarted = new Promise<void>((resolve) => {
+    markFirstStarted = resolve;
+  });
+  let releaseFirst: () => void = () => {};
+  const firstReleased = new Promise<void>((resolve) => {
+    releaseFirst = resolve;
+  });
+  let firstSignal: AbortSignal | undefined;
+
+  const server = await createDaemonHttpServer({
+    token: 'provider-scenario-token',
+    handleRequest: async (): Promise<DaemonResponse> => {
+      firstSignal = getRequestSignal(requestId);
+      assert.ok(firstSignal);
+      markFirstStarted();
+      await firstReleased;
+      return { ok: true, data: { survived: !firstSignal.aborted } };
+    },
+  });
+
+  try {
+    const port = await listenOnLoopback(server);
+    const payload = {
+      jsonrpc: '2.0',
+      id: 'rpc-http-duplicate',
+      method: 'agent_device.command',
+      params: {
+        command: 'devices',
+        meta: { requestId },
+      },
+    };
+    const first = postRpcResponse(port, payload);
+    await firstStarted;
+
+    const duplicate = await postRpcResponse(port, payload);
+    assert.equal(duplicate.error?.data?.code, 'INVALID_ARGS');
+    assert.equal(duplicate.error?.data?.details?.reason, 'duplicate_request_id');
+    assert.equal(getRequestSignal(requestId), firstSignal);
+    assert.equal(firstSignal?.aborted, false);
+
+    releaseFirst();
+    const firstResponse = await first;
+    assert.equal(firstResponse.result?.ok, true);
+    assert.deepEqual(firstResponse.result?.data, { survived: true });
+  } finally {
+    releaseFirst();
     await closeLoopbackServer(server);
   }
 });
@@ -167,6 +225,25 @@ function sendRpcAndDisconnectOnceStarted(
 }
 
 function postRpc(port: number, payload: Record<string, unknown>): Promise<void> {
+  return postRpcResponse(port, payload).then(() => undefined);
+}
+
+type JsonRpcTestResponse = {
+  result?: DaemonResponse;
+  error?: {
+    data?: {
+      code?: string;
+      details?: {
+        reason?: string;
+      };
+    };
+  };
+};
+
+function postRpcResponse(
+  port: number,
+  payload: Record<string, unknown>,
+): Promise<JsonRpcTestResponse> {
   return new Promise((resolve, reject) => {
     const body = JSON.stringify(payload);
     const req = http.request(
@@ -182,8 +259,14 @@ function postRpc(port: number, payload: Record<string, unknown>): Promise<void> 
         },
       },
       (res) => {
-        res.resume();
-        res.on('end', resolve);
+        let responseBody = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => {
+          responseBody += chunk;
+        });
+        res.on('end', () => {
+          resolve(JSON.parse(responseBody) as JsonRpcTestResponse);
+        });
         res.on('error', reject);
       },
     );

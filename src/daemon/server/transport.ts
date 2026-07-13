@@ -60,6 +60,7 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
         let response: DaemonResponse;
         inFlightRequests += 1;
         let requestIdForCleanup: string | undefined;
+        let requestAbortRegistration: ReturnType<typeof registerRequestAbort>;
         let streamProgress = false;
         try {
           const req = JSON.parse(line) as DaemonRequest;
@@ -69,8 +70,8 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
             ...req.meta,
             requestId: requestIdForCleanup,
           };
+          requestAbortRegistration = registerRequestAbort(requestIdForCleanup);
           activeRequestIds.add(requestIdForCleanup);
-          registerRequestAbort(requestIdForCleanup);
           if (isRequestCanceled(requestIdForCleanup)) {
             throw createRequestCanceledError();
           }
@@ -88,9 +89,9 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
           response = { ok: false, error: normalizeError(err) };
         } finally {
           inFlightRequests -= 1;
-          if (requestIdForCleanup) {
+          if (requestIdForCleanup && requestAbortRegistration) {
             activeRequestIds.delete(requestIdForCleanup);
-            clearRequestCanceled(requestIdForCleanup);
+            clearRequestCanceled(requestIdForCleanup, requestAbortRegistration);
           }
         }
         if (!socket.destroyed) {

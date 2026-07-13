@@ -604,6 +604,7 @@ export async function createDaemonHttpServer(options: {
       }
 
       let requestIdForCleanup: string | undefined;
+      let requestAbortRegistration: ReturnType<typeof registerRequestAbort>;
       let handlerCompleted = false;
       try {
         const params = rpcRequest.params as Record<string, unknown>;
@@ -628,7 +629,7 @@ export async function createDaemonHttpServer(options: {
           ...daemonRequest.meta,
           requestId: requestIdForCleanup,
         };
-        registerRequestAbort(requestIdForCleanup);
+        requestAbortRegistration = registerRequestAbort(requestIdForCleanup);
 
         const authResult = await runHttpAuthHook(authHook, {
           headers: req.headers,
@@ -736,7 +737,9 @@ export async function createDaemonHttpServer(options: {
           statusCodeForNormalizedError(normalized.code),
         );
       } finally {
-        clearRequestCanceled(requestIdForCleanup);
+        if (requestAbortRegistration) {
+          clearRequestCanceled(requestIdForCleanup, requestAbortRegistration);
+        }
       }
     });
   });

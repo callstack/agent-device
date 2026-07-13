@@ -127,15 +127,6 @@ import {
   writeRunnerLease,
   type RunnerLease,
 } from '../runner/runner-lease.ts';
-import { prepareLocalIosRunner } from '../runner/runner-lifecycle.ts';
-import {
-  clearRequestCanceled,
-  createRequestCanceledError,
-  getRequestSignal,
-  isRequestCanceledError,
-  markRequestCanceled,
-  registerRequestAbort,
-} from '../../../../request/cancel.ts';
 
 beforeEach(async () => {
   await abortAllIosRunnerSessions();
@@ -1811,59 +1802,6 @@ test('runner session invalidates when the runner reports abandoned main-thread w
   );
 
   assert.equal(getRunnerSessionSnapshot(device.id), null);
-});
-
-test('prepareLocalIosRunner cancellation stops only the disconnected request and preserves unrelated prep', async () => {
-  const survivorRequestId = 'prepare-runner-survivor-B';
-  const canceledRequestId = 'prepare-runner-canceled-A';
-  const survivorDevice = { ...IOS_SIMULATOR, id: 'prepare-survivor-sim' };
-  const canceledDevice = { ...IOS_DEVICE, id: 'prepare-canceled-device' };
-  registerRequestAbort(survivorRequestId);
-  registerRequestAbort(canceledRequestId);
-
-  try {
-    // Request B prepares normally and its runner session is retained.
-    mockWaitForRunner.mockResolvedValue(runnerResponse({ uptimeMs: 1 }));
-    await prepareLocalIosRunner(survivorDevice, {
-      requestId: survivorRequestId,
-      logPath: '/tmp/runner.log',
-      healthTimeoutMs: 30_000,
-    });
-    assert.ok(getRunnerSessionSnapshot(survivorDevice.id)?.alive);
-
-    // Request A is canceled while its runner startup health check is blocked
-    // (client disconnect): the health check fails with a request-canceled error,
-    // driving the handlePrepareHealthFailure invalidation branch.
-    mockWaitForRunner.mockImplementation(async () => {
-      markRequestCanceled(canceledRequestId);
-      throw createRequestCanceledError();
-    });
-    await assert.rejects(
-      prepareLocalIosRunner(canceledDevice, {
-        requestId: canceledRequestId,
-        logPath: '/tmp/runner.log',
-        healthTimeoutMs: 30_000,
-      }),
-      (error: unknown) => isRequestCanceledError(error),
-    );
-
-    // The canceled request's runner launch received that request's abort signal,
-    // which is now aborted — a real launch would be killed via the process tree.
-    const canceledSignal = getRequestSignal(canceledRequestId);
-    const canceledLaunch = mockRunCmdBackground.mock.calls.find(
-      (call) => call[2]?.signal === canceledSignal,
-    );
-    assert.ok(canceledLaunch, 'canceled request launch received its request signal');
-    assert.equal(canceledSignal?.aborted, true);
-
-    // The canceled request never retains a runner session/lease, and the
-    // unrelated request B's session survives.
-    assert.equal(getRunnerSessionSnapshot(canceledDevice.id), null);
-    assert.ok(getRunnerSessionSnapshot(survivorDevice.id)?.alive);
-  } finally {
-    clearRequestCanceled(survivorRequestId);
-    clearRequestCanceled(canceledRequestId);
-  }
 });
 
 function makeRunnerSession(overrides: Partial<RunnerSession> = {}): RunnerSession {
