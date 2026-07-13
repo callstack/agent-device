@@ -89,6 +89,9 @@ final class RunnerTests: XCTestCase {
   let treeCaptureLock = NSLock()
   var abandonedTreeCaptureCount = 0
   let treeCaptureSliceBudget: TimeInterval = 8
+  // Bounds the pre-plan SpringBoard system-modal probe, which can otherwise grind for tens of
+  // seconds on remote-hosted consent dialogs and bypass the plan budget (#1244).
+  let systemModalProbeBudget: TimeInterval = 4
   // Observability for the record(_:) suppression below: how many AX-broken-screen snapshot
   // issues this session muted, so wedge investigations see the volume without grepping logs.
   let suppressedIssueLock = NSLock()

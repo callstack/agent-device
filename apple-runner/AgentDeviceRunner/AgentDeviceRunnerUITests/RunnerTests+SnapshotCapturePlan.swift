@@ -185,12 +185,14 @@ extension RunnerTests {
     _ plan: [SnapshotBackendKind],
     app: XCUIApplication,
     options: SnapshotOptions,
-    terminal: SnapshotCaptureTerminalPolicy
+    terminal: SnapshotCaptureTerminalPolicy,
+    deadline: Date? = nil
   ) throws -> DataPayload {
     var best: (kind: SnapshotBackendKind, capture: SnapshotBackendCapture)?
     var firstFailure: (reason: String, code: String)?
     var axFailure: SnapshotCaptureFailure?
-    let deadline = Date().addingTimeInterval(Self.snapshotPlanBudget)
+    // A caller may share the pre-plan system-modal probe's deadline; otherwise own the full budget (#1244).
+    let deadline = deadline ?? Date().addingTimeInterval(Self.snapshotPlanBudget)
     let suppressXCTestPenalty = consumeSnapshotXCTestPenaltyWarmupExemption()
 
     // Reorder is iOS-only because hostile screens can make XCTest tree/query work grind while

@@ -3,11 +3,11 @@ import XCTest
 extension RunnerTests {
   // MARK: - Blocking System Modal Snapshot
 
-  func blockingSystemAlertSnapshot() -> DataPayload? {
+  func blockingSystemAlertSnapshot(deadline: Date = .distantFuture) -> DataPayload? {
     #if os(macOS)
       return nil
     #else
-    guard let modal = firstBlockingSystemModal(in: springboard) else {
+    guard let modal = firstBlockingSystemModal(in: springboard, deadline: deadline) else {
       return nil
     }
     let actions = actionableElements(in: modal)
@@ -61,7 +61,10 @@ extension RunnerTests {
     #endif
   }
 
-  func firstBlockingSystemModal(in springboard: XCUIApplication) -> XCUIElement? {
+  func firstBlockingSystemModal(
+    in springboard: XCUIApplication,
+    deadline: Date = .distantFuture
+  ) -> XCUIElement? {
     let disableSafeProbe = RunnerEnv.isTruthy("AGENT_DEVICE_RUNNER_DISABLE_SAFE_MODAL_PROBE")
     let queryElements: (() -> [XCUIElement]) -> [XCUIElement] = { fetch in
       if disableSafeProbe {
@@ -77,6 +80,12 @@ extension RunnerTests {
       if safeIsBlockingSystemModal(alert, in: springboard) {
         return alert
       }
+    }
+
+    // Don't start the second (sheet) enumeration once the shared probe deadline is spent (#1244).
+    if Date() >= deadline {
+      NSLog("AGENT_DEVICE_RUNNER_SYSTEM_MODAL_PROBE_DEADLINE stage=sheets")
+      return nil
     }
 
     let sheets = queryElements {

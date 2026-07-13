@@ -102,14 +102,16 @@ extension RunnerTests {
   static let flatInteractiveFallbackBudget: TimeInterval = 1.0
 
   func snapshotFast(app: XCUIApplication, options: SnapshotOptions) throws -> DataPayload {
-    if let blocking = blockingSystemAlertSnapshot() {
+    let deadline = Date().addingTimeInterval(Self.snapshotPlanBudget)
+    if let blocking = boundedBlockingSystemAlertSnapshot(deadline: deadline) {
       return blocking
     }
     return try runSnapshotCapturePlan(
       Self.regularVisiblePlan,
       app: app,
       options: options,
-      terminal: .sparseWithFatalOnAXFailure
+      terminal: .sparseWithFatalOnAXFailure,
+      deadline: deadline
     )
   }
 
@@ -246,15 +248,84 @@ extension RunnerTests {
   }
 
   func snapshotRaw(app: XCUIApplication, options: SnapshotOptions) throws -> DataPayload {
-    if let blocking = blockingSystemAlertSnapshot() {
+    let deadline = Date().addingTimeInterval(Self.snapshotPlanBudget)
+    if let blocking = boundedBlockingSystemAlertSnapshot(deadline: deadline) {
       return blocking
     }
     return try runSnapshotCapturePlan(
       Self.rawDiagnosticPlan,
       app: app,
       options: options,
-      terminal: .throwOnAXFailure
+      terminal: .throwOnAXFailure,
+      deadline: deadline
     )
+  }
+
+  /// Runs the pre-plan SpringBoard system-modal probe as a bounded capture tier sharing the plan
+  /// deadline, so a slow alert enumeration cannot bypass the snapshot timeout and stall (#1244).
+  func boundedBlockingSystemAlertSnapshot(deadline: Date) -> DataPayload? {
+    #if os(macOS)
+      return nil
+    #else
+    let slice = Self.systemModalProbeSlice(
+      budget: systemModalProbeBudget,
+      deadlineRemaining: deadline.timeIntervalSinceNow
+    )
+    guard slice > 0 else {
+      NSLog("AGENT_DEVICE_RUNNER_SYSTEM_MODAL_PROBE_SKIPPED reason=budget_exhausted")
+      return nil
+    }
+    let probeDeadline = Date().addingTimeInterval(slice)
+    let startedAt = Date()
+    do {
+      return try runMainThreadWork(
+        command: nil,
+        timeout: slice,
+        timeoutError: systemModalProbeTimeoutError(slice: slice),
+        onAbandoned: {
+          self.retainAbandonedXCTestChannelWork()
+          NSLog("AGENT_DEVICE_RUNNER_SYSTEM_MODAL_PROBE_TIMEOUT slice=%.1f", slice)
+          self.penalizeSnapshotXCTestChannel(
+            bundleId: self.currentBundleId,
+            reason: "system_modal_probe_timeout"
+          )
+        },
+        onDrained: {
+          self.releaseAbandonedXCTestChannelWork()
+          NSLog("AGENT_DEVICE_RUNNER_SYSTEM_MODAL_PROBE_DRAINED")
+        }
+      ) {
+        self.blockingSystemAlertSnapshot(deadline: probeDeadline)
+      }
+    } catch {
+      NSLog(
+        "AGENT_DEVICE_RUNNER_SYSTEM_MODAL_PROBE_ABORTED elapsedMs=%d error=%@",
+        Int(Date().timeIntervalSince(startedAt) * 1000),
+        String(describing: error)
+      )
+      return nil
+    }
+    #endif
+  }
+
+  /// The probe gets its own budget, clamped by whatever remains of the shared plan deadline, and
+  /// 0 (skip entirely) once that deadline is already spent.
+  static func systemModalProbeSlice(
+    budget: TimeInterval,
+    deadlineRemaining: TimeInterval
+  ) -> TimeInterval {
+    guard deadlineRemaining > 0 else { return 0 }
+    return min(budget, deadlineRemaining)
+  }
+
+  private func systemModalProbeTimeoutError(slice: TimeInterval) -> () -> Error {
+    {
+      SnapshotCaptureFailure(
+        code: Self.xCTestSnapshotTimeoutCode,
+        message: "the system-modal probe exceeded its \(slice)s time slice",
+        hint: "The capture plan recovers through non-XCTest snapshot tiers while the modal probe drains."
+      )
+    }
   }
 
   func rawTreeSnapshotPayload(
@@ -477,6 +548,16 @@ extension RunnerTests {
     XCTAssertTrue(failure.message.contains("\(Self.rawSnapshotMaxNodes) nodes"))
     XCTAssertEqual(failure.hint, Self.rawSnapshotTooLargeHint)
   }
+
+  func testSystemModalProbeSliceSharesAndClampsToPlanDeadline() {
+    // Fresh plan deadline: the probe gets its full dedicated budget.
+    XCTAssertEqual(Self.systemModalProbeSlice(budget: 4, deadlineRemaining: 20), 4)
+    // Nearly-spent plan deadline: the probe is clamped so it can't run past the shared budget.
+    XCTAssertEqual(Self.systemModalProbeSlice(budget: 4, deadlineRemaining: 1.5), 1.5)
+    // Exactly/already exhausted deadline: skip the probe entirely (0), never a negative timeout.
+    XCTAssertEqual(Self.systemModalProbeSlice(budget: 4, deadlineRemaining: 0), 0)
+    XCTAssertEqual(Self.systemModalProbeSlice(budget: 4, deadlineRemaining: -5), 0)
+  }
 #endif
 
   private func interactiveRootNode(rect: CGRect) -> SnapshotNode {
@@ -610,6 +691,20 @@ extension RunnerTests {
     return abandonedTreeCaptureCount > 0
   }
 
+  /// The watchdog abandoned one unit of XCTest main-thread capture work that is still draining on
+  /// main; XCTest-backed snapshot tiers skip (`hasAbandonedTreeCapture`) until a matching release.
+  func retainAbandonedXCTestChannelWork() {
+    treeCaptureLock.lock()
+    abandonedTreeCaptureCount += 1
+    treeCaptureLock.unlock()
+  }
+
+  func releaseAbandonedXCTestChannelWork() {
+    treeCaptureLock.lock()
+    abandonedTreeCaptureCount -= 1
+    treeCaptureLock.unlock()
+  }
+
   /// Runs the blocking tree-snapshot XPC on the main thread bounded by `sliceSeconds`. On
   /// timeout the XPC keeps running on main (it cannot be cancelled); the capture is marked
   /// abandoned so plans avoid XCTest-backed tiers until it drains, the tree backend is penalized
@@ -627,9 +722,7 @@ extension RunnerTests {
       timeout: sliceSeconds,
       timeoutError: treeCaptureTimeoutError(sliceSeconds: sliceSeconds),
       onAbandoned: {
-        self.treeCaptureLock.lock()
-        self.abandonedTreeCaptureCount += 1
-        self.treeCaptureLock.unlock()
+        self.retainAbandonedXCTestChannelWork()
         NSLog("AGENT_DEVICE_RUNNER_TREE_CAPTURE_SLICE_TIMEOUT slice=%.1f", sliceSeconds)
         self.penalizeSnapshotXCTestChannel(
           bundleId: self.currentBundleId,
@@ -637,9 +730,7 @@ extension RunnerTests {
         )
       },
       onDrained: {
-        self.treeCaptureLock.lock()
-        self.abandonedTreeCaptureCount -= 1
-        self.treeCaptureLock.unlock()
+        self.releaseAbandonedXCTestChannelWork()
         NSLog("AGENT_DEVICE_RUNNER_TREE_CAPTURE_DRAINED")
       }
     ) {
