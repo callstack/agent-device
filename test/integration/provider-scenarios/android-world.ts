@@ -235,7 +235,8 @@ function androidAdbResult(
     androidDeviceStateAdbResult(key, args, clipboardText, options.pidof) ??
     androidMetricsAdbResult(key) ??
     androidPackageAdbResult(key, args, options.dumpsysWindow) ??
-    androidCaptureAdbResult(args, key, searchText, options.snapshotXml) ?? {
+    androidMultiTouchHelperAdbResult(args, key) ??
+    androidCaptureAdbResult(key, searchText, options.snapshotXml) ?? {
       stdout: '',
       stderr: '',
       exitCode: 0,
@@ -436,26 +437,31 @@ function androidPackageAdbResult(
   return undefined;
 }
 
-function androidCaptureAdbResult(
+function androidMultiTouchHelperAdbResult(
   args: string[],
+  key: string,
+): AndroidAdbResult | undefined {
+  if (!key.includes('com.callstack.agentdevice.multitouchhelper/.MultiTouchInstrumentation'))
+    return undefined;
+  const payloadIndex = args.indexOf('payloadBase64');
+  const encodedPayload = payloadIndex >= 0 ? args[payloadIndex + 1] : undefined;
+  const request = encodedPayload
+    ? (JSON.parse(Buffer.from(encodedPayload, 'base64').toString('utf8')) as {
+        kind?: string;
+      })
+    : undefined;
+  return {
+    stdout: androidMultiTouchHelperOutput(request?.kind === 'transform' ? 'transform' : 'swipe'),
+    stderr: '',
+    exitCode: 0,
+  };
+}
+
+function androidCaptureAdbResult(
   key: string,
   searchText: string,
   snapshotXml?: () => string,
 ): AndroidAdbResult | undefined {
-  if (key.includes('com.callstack.agentdevice.multitouchhelper/.MultiTouchInstrumentation')) {
-    const payloadIndex = args.indexOf('payloadBase64');
-    const encodedPayload = payloadIndex >= 0 ? args[payloadIndex + 1] : undefined;
-    const request = encodedPayload
-      ? (JSON.parse(Buffer.from(encodedPayload, 'base64').toString('utf8')) as {
-          kind?: string;
-        })
-      : undefined;
-    return {
-      stdout: androidMultiTouchHelperOutput(request?.kind === 'transform' ? 'transform' : 'swipe'),
-      stderr: '',
-      exitCode: 0,
-    };
-  }
   if (key.startsWith('shell am instrument ')) {
     return {
       stdout: androidSnapshotHelperOutput(snapshotXml?.() ?? androidSettingsXml(searchText)),
