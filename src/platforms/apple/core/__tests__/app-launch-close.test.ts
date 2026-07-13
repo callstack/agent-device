@@ -38,6 +38,8 @@ test('closeIosApp terminates a physical iOS app by its resolved process ID', asy
               ],
             },
           });
+        } else if (args.includes('terminate')) {
+          await writeJsonOutput(args, { info: { outcome: 'success' } });
         }
         return { exitCode: 0, stdout: '', stderr: '' };
       },
@@ -48,7 +50,8 @@ test('closeIosApp terminates a physical iOS app by its resolved process ID', asy
     await closeIosApp(IOS_DEVICE, APP_BUNDLE_ID);
   });
 
-  assert.deepEqual(calls.at(-1), [
+  const terminateCall = calls.at(-1);
+  assert.deepEqual(terminateCall?.slice(0, 7), [
     'device',
     'process',
     'terminate',
@@ -57,7 +60,28 @@ test('closeIosApp terminates a physical iOS app by its resolved process ID', asy
     '--pid',
     '421',
   ]);
-  assert.equal(calls.at(-1)?.includes(APP_BUNDLE_ID), false);
+  assert.equal(terminateCall?.includes('--json-output'), true);
+  assert.equal(terminateCall?.includes(APP_BUNDLE_ID), false);
+});
+
+test('closeIosApp tolerates the process exiting after PID resolution', async () => {
+  await withAppleToolProvider(createTerminateFailureProvider(3), async () => {
+    await closeIosApp(IOS_DEVICE, APP_BUNDLE_ID);
+  });
+});
+
+test('closeIosApp preserves termination failures other than an exited process', async () => {
+  await assert.rejects(
+    () =>
+      withAppleToolProvider(createTerminateFailureProvider(1), async () => {
+        await closeIosApp(IOS_DEVICE, APP_BUNDLE_ID);
+      }),
+    (error: unknown) => {
+      assert.ok(error instanceof AppError);
+      assert.equal(error.message, 'Failed to terminate iOS app');
+      return true;
+    },
+  );
 });
 
 test('closeIosApp reports the required devicectl process-list API', async () => {
@@ -139,4 +163,39 @@ async function writeJsonOutput(args: string[], payload: unknown): Promise<void> 
   const outputPath = args[outputIndex + 1];
   assert.ok(outputPath);
   await fs.writeFile(outputPath, JSON.stringify(payload), 'utf8');
+}
+
+function createTerminateFailureProvider(underlyingCode: number) {
+  return createLocalAppleToolProvider({
+    devicectl: {
+      run: async (args) => {
+        if (args.slice(0, 4).join(' ') === 'device info apps --device') {
+          await writeJsonOutput(args, {
+            result: {
+              apps: [{ bundleIdentifier: APP_BUNDLE_ID, name: 'Demo', url: APP_BUNDLE_URL }],
+            },
+          });
+          return { exitCode: 0, stdout: '', stderr: '' };
+        }
+        if (args.slice(0, 4).join(' ') === 'device info processes --device') {
+          await writeJsonOutput(args, {
+            result: {
+              runningProcesses: [{ executable: `${APP_BUNDLE_URL}Demo`, processIdentifier: 421 }],
+            },
+          });
+          return { exitCode: 0, stdout: '', stderr: '' };
+        }
+        await writeJsonOutput(args, {
+          error: {
+            userInfo: {
+              NSUnderlyingError: {
+                error: { code: underlyingCode, domain: 'NSPOSIXErrorDomain' },
+              },
+            },
+          },
+        });
+        return { exitCode: 1, stdout: '', stderr: 'Process termination failed.' };
+      },
+    },
+  });
 }
