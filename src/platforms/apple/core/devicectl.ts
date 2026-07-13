@@ -26,6 +26,11 @@ export type IosDeviceProcessInfo = {
   pid: number;
 };
 
+export type IosDeviceAppProcesses = {
+  appBundleUrl: string;
+  processes: IosDeviceProcessInfo[];
+};
+
 type IosDeviceProcessesPayload = {
   result?: {
     runningProcesses?: Array<{
@@ -82,7 +87,7 @@ export async function listIosDeviceApps(
   return filterIosDeviceApps(parseIosDeviceAppsPayload(payload), filter);
 }
 
-export async function listIosDeviceProcesses(device: DeviceInfo): Promise<IosDeviceProcessInfo[]> {
+async function listIosDeviceProcesses(device: DeviceInfo): Promise<IosDeviceProcessInfo[]> {
   const payload = await runIosDevicectlJsonCommand(device, {
     jsonPrefix: 'agent-device-ios-processes',
     args: ['devicectl', 'device', 'info', 'processes', '--device', device.id],
@@ -100,7 +105,11 @@ export async function listIosDeviceProcesses(device: DeviceInfo): Promise<IosDev
 }
 
 export async function terminateIosDeviceApp(device: DeviceInfo, bundleId: string): Promise<void> {
-  const process = await resolveIosDeviceAppProcess(device, bundleId);
+  const { appBundleUrl, processes } = await resolveIosDeviceAppProcesses(device, bundleId);
+  const process = processes.sort(
+    (left, right) => processPathDepth(left, appBundleUrl) - processPathDepth(right, appBundleUrl),
+  )[0];
+  // Close is idempotent: no matching process means the installed app is not running.
   if (!process) return;
 
   await runIosDevicectl(
@@ -112,10 +121,10 @@ export async function terminateIosDeviceApp(device: DeviceInfo, bundleId: string
   );
 }
 
-async function resolveIosDeviceAppProcess(
+export async function resolveIosDeviceAppProcesses(
   device: DeviceInfo,
   bundleId: string,
-): Promise<IosDeviceProcessInfo | undefined> {
+): Promise<IosDeviceAppProcesses> {
   const app = (await listIosDeviceApps(device, 'all')).find(
     (candidate) => candidate.bundleId === bundleId,
   );
@@ -126,20 +135,19 @@ async function resolveIosDeviceAppProcess(
     });
   }
   if (!app.url) {
-    throw new AppError('COMMAND_FAILED', `Cannot resolve the process ID for ${bundleId}`, {
+    throw new AppError('COMMAND_FAILED', `Missing app bundle URL for ${bundleId}`, {
       appBundleId: bundleId,
       deviceId: device.id,
-      hint: 'Installed-app metadata from devicectl did not include a bundle URL, so agent-device cannot map this app to the PID required for termination. Use an Xcode/CoreDevice toolchain that reports app URLs, or close the app manually.',
+      hint: 'Installed-app metadata from devicectl did not include the bundle URL required to match running processes. Use an Xcode/CoreDevice toolchain that reports app URLs.',
     });
   }
 
   const appBundleUrl = app.url.replace(/\/+$/, '');
-  const matches = (await listIosDeviceProcesses(device)).filter((process) =>
+  // CoreDevice reports app URLs and process executables in the same file-URL form.
+  const processes = (await listIosDeviceProcesses(device)).filter((process) =>
     process.executable.startsWith(`${appBundleUrl}/`),
   );
-  return matches.sort(
-    (left, right) => processPathDepth(left, appBundleUrl) - processPathDepth(right, appBundleUrl),
-  )[0];
+  return { appBundleUrl, processes };
 }
 
 async function runIosDevicectlJsonCommand(

@@ -16,8 +16,7 @@ import { roundPercent } from '../../perf-utils.ts';
 import { uniqueStrings } from '../../../kernel/collections.ts';
 import {
   IOS_DEVICECTL_DEFAULT_HINT,
-  listIosDeviceApps,
-  listIosDeviceProcesses,
+  resolveIosDeviceAppProcesses,
   resolveIosDevicectlHint,
   type IosDeviceProcessInfo,
 } from './devicectl.ts';
@@ -846,26 +845,8 @@ export async function resolveIosDevicePerfTarget(
   device: DeviceInfo,
   appBundleId: string,
 ): Promise<IosDeviceProcessInfo[]> {
-  const apps = await listIosDeviceApps(device, 'all');
-  const app = apps.find((candidate) => candidate.bundleId === appBundleId);
-  if (!app) {
-    throw new AppError('APP_NOT_INSTALLED', `No iOS device app found for ${appBundleId}`, {
-      appBundleId,
-      deviceId: device.id,
-    });
-  }
-  if (!app.url) {
-    throw new AppError('COMMAND_FAILED', `Missing app bundle URL for ${appBundleId}`, {
-      appBundleId,
-      deviceId: device.id,
-    });
-  }
-
-  const appBundleUrl = app.url.replace(/\/$/, '');
+  const { appBundleUrl, processes } = await resolveIosDeviceAppProcesses(device, appBundleId);
   const appBundlePath = fileURLToPath(appBundleUrl);
-  const processes = (await listIosDeviceProcesses(device)).filter((process) =>
-    process.executable.startsWith(`${appBundleUrl}/`),
-  );
   if (processes.length === 0) {
     throw new AppError('COMMAND_FAILED', `No running process found for ${appBundleId}`, {
       appBundleId,
