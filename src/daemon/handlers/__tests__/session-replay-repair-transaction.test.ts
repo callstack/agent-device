@@ -61,6 +61,7 @@ import { handleCloseCommand } from '../session-close.ts';
 import { SessionStore } from '../../session-store.ts';
 import { LeaseRegistry } from '../../lease-registry.ts';
 import { dispatchCommand } from '../../../core/dispatch.ts';
+import { AppError } from '../../../kernel/errors.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { HEAL_COMPLETE_SENTINEL } from '../../session-script-writer.ts';
 import { parseReplayScriptDetailed } from '../../../replay/script.ts';
@@ -505,6 +506,76 @@ test('BLOCKER 2b/2c: a close whose commit FAILS (no-clobber) keeps the session f
   if (retry.ok) expect(retry.data?.savedScript).toBe(retryPath);
   const promoted = parseReplayScriptDetailed(fs.readFileSync(retryPath, 'utf8'));
   expect(promoted.actions.filter((a) => a.command === 'close')).toHaveLength(1);
+});
+
+test('BLOCKER 2 (new): a repair close whose PLATFORM close fails never commits a healed .ad claiming a successful close', async () => {
+  const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
+    'agent-device-repair-transaction-platform-close-fail-',
+  );
+  const session = makeCompleteRepairSession(sessionStore, sessionName, root);
+  const healedPath = path.join(root, 'flow.healed.ad');
+
+  // A targeted close (an explicit positional app target) is what makes
+  // `dispatchTargetedPlatformClose` actually dispatch instead of no-op.
+  const platformCloseError = new AppError('DEVICE_UNAVAILABLE', 'platform close failed', {
+    reason: 'device_disconnected',
+    hint: 'Reconnect the device and retry close.',
+  });
+  mockDispatchCommand.mockRejectedValueOnce(platformCloseError);
+
+  const closeResponse = await handleCloseCommand({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: ['com.example.app'],
+      flags: {},
+    },
+    sessionName,
+    logPath,
+    sessionStore,
+    leaseRegistry,
+  });
+
+  // The prior implementation committed (recorded a successful `close` +
+  // published the healed .ad) BEFORE the platform close ran at all, so a
+  // failing platform close still left a COMMITTED artifact on disk claiming
+  // success, contradicting the failed-close lifecycle contract. Fixed: the
+  // platform close runs first, so a failure here means NOTHING was committed.
+  expect(fs.existsSync(healedPath)).toBe(false);
+  expect(closeResponse.ok).toBe(false);
+  if (!closeResponse.ok) {
+    expect(closeResponse.error.code).toBe('DEVICE_UNAVAILABLE');
+    // BLOCKER 3: the session was kept for retry — `retriable` must agree.
+    expect(closeResponse.error.details?.retriable).toBe(true);
+  }
+  // BLOCKER 2b-style contract: the session stays addressable, untouched, so
+  // the agent can fix the cause (e.g. reconnect the device) and retry.
+  expect(sessionStore.get(sessionName)).toBe(session);
+  expect(session.actions.some((a) => a.command === 'close')).toBe(false);
+
+  // Retry once the platform close succeeds: commits cleanly.
+  mockDispatchCommand.mockResolvedValueOnce({});
+  const retry = await handleCloseCommand({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: ['com.example.app'],
+      flags: {},
+    },
+    sessionName,
+    logPath,
+    sessionStore,
+    leaseRegistry,
+  });
+  expect(retry.ok).toBe(true);
+  expect(fs.existsSync(healedPath)).toBe(true);
+  const healedScript = fs.readFileSync(healedPath, 'utf8');
+  expect(healedScript).toContain(HEAL_COMPLETE_SENTINEL);
+  expect(
+    parseReplayScriptDetailed(healedScript).actions.filter((a) => a.command === 'close'),
+  ).toHaveLength(1);
 });
 
 test('BLOCKER 3: a competing second writer never overwrites a COMPLETE artifact and gets a clear no-clobber error', async () => {
