@@ -1460,6 +1460,10 @@ function assertAndroidInteractionContract(world: AndroidSettingsWorld): void {
     ),
     JSON.stringify(adbCalls),
   );
+  const helperGestureCalls = adbCalls.filter((call) =>
+    call.includes('com.callstack.agentdevice.multitouchhelper/.MultiTouchInstrumentation'),
+  );
+  assert.equal(helperGestureCalls.length, 4, JSON.stringify(adbCalls));
   assertCommandCall(adbCalls, ['shell', 'input', 'tap', '88', '151']);
   assertCommandCall(adbCalls, [
     'shell',
@@ -1478,10 +1482,6 @@ function assertAndroidInteractionContract(world: AndroidSettingsWorld): void {
   assertCommandCall(adbCalls, ['shell', 'input', 'tap', '50', '60']);
   assertCommandCall(adbCalls, ['shell', 'input', 'swipe', '30', '40', '30', '40', '5']);
   assertCommandCall(adbCalls, ['shell', 'input', 'swipe', '31', '40', '31', '40', '5']);
-  assertCommandCall(adbCalls, ['shell', 'input', 'swipe', '20', '200', '20', '100', '100']);
-  assertCommandCall(adbCalls, ['shell', 'input', 'swipe', '20', '100', '20', '200', '100']);
-  assertCommandCall(adbCalls, ['shell', 'input', 'swipe', '100', '200', '150', '180', '400']);
-  assertCommandCall(adbCalls, ['shell', 'input', 'swipe', '100', '200', '280', '200', '100']);
   assert.equal(
     adbCalls.filter((call) => arrayEqual(call, ['shell', 'input', 'tap', '88', '151'])).length,
     5,

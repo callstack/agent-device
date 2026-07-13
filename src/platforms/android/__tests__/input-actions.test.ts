@@ -1,16 +1,7 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
-import {
-  fillAndroid,
-  rotateAndroid,
-  scrollAndroid,
-  swipeAndroid,
-  typeAndroid,
-} from '../input-actions.ts';
-import type { DeviceInfo } from '../../../kernel/device.ts';
+import { fillAndroid, rotateAndroid, scrollAndroid, typeAndroid } from '../input-actions.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { withScriptedAdb } from '../../../__tests__/test-utils/mocked-binaries.ts';
 
@@ -57,56 +48,6 @@ test('rotateAndroid locks auto-rotate and sets user rotation', async () => {
       assert.match(logged, /shell settings put system user_rotation 1/);
     },
   );
-});
-
-test('swipeAndroid invokes adb input swipe with duration', async () => {
-  const tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'agent-device-swipe-test-'));
-  const adbPath = path.join(tmpDir, 'adb');
-  const argsLogPath = path.join(tmpDir, 'args.log');
-  await fs.writeFile(
-    adbPath,
-    '#!/bin/sh\nprintf "%s\\n" "$@" > "$AGENT_DEVICE_TEST_ARGS_FILE"\nexit 0\n',
-    'utf8',
-  );
-  await fs.chmod(adbPath, 0o755);
-
-  const previousPath = process.env.PATH;
-  const previousArgsFile = process.env.AGENT_DEVICE_TEST_ARGS_FILE;
-  process.env.PATH = `${tmpDir}${path.delimiter}${previousPath ?? ''}`;
-  process.env.AGENT_DEVICE_TEST_ARGS_FILE = argsLogPath;
-
-  const device: DeviceInfo = {
-    platform: 'android',
-    id: 'emulator-5554',
-    name: 'Pixel',
-    kind: 'emulator',
-    booted: true,
-  };
-
-  try {
-    await swipeAndroid(device, 10, 20, 30, 40, 250);
-    const args = (await fs.readFile(argsLogPath, 'utf8')).trim().split('\n').filter(Boolean);
-    assert.deepEqual(args, [
-      '-s',
-      'emulator-5554',
-      'shell',
-      'input',
-      'swipe',
-      '10',
-      '20',
-      '30',
-      '40',
-      '250',
-    ]);
-  } finally {
-    process.env.PATH = previousPath;
-    if (previousArgsFile === undefined) {
-      delete process.env.AGENT_DEVICE_TEST_ARGS_FILE;
-    } else {
-      process.env.AGENT_DEVICE_TEST_ARGS_FILE = previousArgsFile;
-    }
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  }
 });
 
 test('typeAndroid chunks ASCII input text for shell fallback', async () => {

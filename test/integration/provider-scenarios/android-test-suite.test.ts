@@ -118,9 +118,16 @@ test('Provider-backed integration Android Maestro replay uses fresh snapshots an
         world.adbCalls.find((call) => call.slice(0, 3).join(' ') === 'shell input tap'),
         ['shell', 'input', 'tap', '180', '330'],
       );
-      assert.deepEqual(
-        world.adbCalls.find((call) => call.slice(0, 3).join(' ') === 'shell input swipe'),
-        ['shell', 'input', 'swipe', '351', '300', '39', '300', '300'],
+      assert.ok(
+        world.adbCalls.some((call) =>
+          call.includes('com.callstack.agentdevice.multitouchhelper/.MultiTouchInstrumentation'),
+        ),
+        JSON.stringify(world.adbCalls),
+      );
+      assert.equal(
+        world.adbCalls.some((call) => call.slice(0, 3).join(' ') === 'shell input swipe'),
+        false,
+        JSON.stringify(world.adbCalls),
       );
       // Percentage resolution snapshots remain fresh; gesture planning uses the provider viewport.
       assertSnapshotCountInRange(snapshots, 3, 5);

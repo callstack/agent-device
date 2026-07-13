@@ -40,26 +40,6 @@ export async function pressAndroidTvRemote(
   await runAndroidAdb(device, ['shell', 'input', ...keyeventArgs, keyevent]);
 }
 
-export async function swipeAndroid(
-  device: DeviceInfo,
-  x1: number,
-  y1: number,
-  x2: number,
-  y2: number,
-  durationMs = 250,
-): Promise<void> {
-  await runAndroidAdb(device, [
-    'shell',
-    'input',
-    'swipe',
-    String(x1),
-    String(y1),
-    String(x2),
-    String(y2),
-    String(durationMs),
-  ]);
-}
-
 export async function backAndroid(device: DeviceInfo): Promise<void> {
   await runAndroidAdb(device, ['shell', 'input', 'keyevent', '4']);
 }

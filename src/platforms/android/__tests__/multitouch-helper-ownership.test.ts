@@ -92,3 +92,60 @@ test('helper gesture releases persistent snapshot instrumentation before touch i
   assert.equal(result?.backend, 'android-multitouch-helper');
   assert.deepEqual(events, ['snapshot-stop', 'touch-instrumentation']);
 });
+
+test('helper gesture failures do not fall back to adb input swipe', async () => {
+  const adbCalls: string[][] = [];
+  await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        adbCalls.push(args);
+        if (args.includes('--show-versioncode')) {
+          return {
+            exitCode: 0,
+            stdout: `package:${ANDROID_MULTITOUCH_HELPER_MANIFEST.packageName} versionCode:999999`,
+            stderr: '',
+          };
+        }
+        if (args.includes('instrument')) {
+          return {
+            exitCode: 1,
+            stdout: [
+              androidMultiTouchResultRecord({
+                ok: 'false',
+                errorType: 'java.lang.IllegalStateException',
+                message: 'injectInputEvent returned false',
+              }),
+              'INSTRUMENTATION_CODE: 1',
+            ].join('\n'),
+            stderr: '',
+          };
+        }
+        return { exitCode: 0, stdout: '', stderr: '' };
+      },
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      await assert.rejects(
+        () =>
+          performGestureAndroid(
+            ANDROID_EMULATOR,
+            buildGesturePlan(
+              {
+                intent: 'fling',
+                from: { x: 340, y: 400 },
+                to: { x: 60, y: 400 },
+              },
+              { x: 0, y: 0, width: 400, height: 800 },
+              'android',
+            ),
+          ),
+        { code: 'COMMAND_FAILED', message: 'injectInputEvent returned false' },
+      );
+    },
+  );
+
+  assert.equal(
+    adbCalls.some((args) => args.includes('input') && args.includes('swipe')),
+    false,
+  );
+});

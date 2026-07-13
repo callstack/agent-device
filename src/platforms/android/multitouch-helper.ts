@@ -1,7 +1,7 @@
 import type { GesturePlan, PointerTrajectory } from '../../contracts/gesture-plan.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import type { Rect } from '../../kernel/snapshot.ts';
-import { AppError, normalizeError } from '../../kernel/errors.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { execFailureDetails } from '../../utils/exec.ts';
 import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts';
 import {
@@ -24,7 +24,6 @@ import {
   readInstrumentationResultNumber,
 } from './instrumentation-helper.ts';
 import { stopAndroidSnapshotHelperSessionForDevice } from './snapshot-helper.ts';
-import { swipeAndroid } from './input-actions.ts';
 
 const HELPER_NAME = 'android-multitouch-helper';
 const HELPER_PACKAGE = 'com.callstack.agentdevice.multitouchhelper';
@@ -73,21 +72,7 @@ export async function performGestureAndroid(
     const result = (await providerTouch(plan)) ?? {};
     return { backend: 'provider-native-touch', ...result };
   }
-  try {
-    return await runAndroidMultiTouchHelperGestureForDevice(device, plan);
-  } catch (error) {
-    if (plan.topology === 'two') throw error;
-    emitDiagnostic({
-      level: 'warn',
-      phase: 'android_swipe_helper_fallback',
-      data: { error: normalizeError(error).message },
-    });
-    const first = plan.pointers[0].samples[0]?.point;
-    const last = plan.pointers[0].samples.at(-1)?.point;
-    if (!first || !last) throw error;
-    await swipeAndroid(device, first.x, first.y, last.x, last.y, plan.durationMs);
-    return { backend: 'adb-input-swipe-fallback' };
-  }
+  return await runAndroidMultiTouchHelperGestureForDevice(device, plan);
 }
 
 async function runAndroidMultiTouchHelperGestureForDevice(
