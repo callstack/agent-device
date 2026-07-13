@@ -93,7 +93,3 @@ export const ensureAndroidMultiTouchHelper =
     installTimeoutMs: HELPER_INSTALL_TIMEOUT_MS,
     helperLabel: HELPER_LABEL,
   });
-
-export function resetAndroidMultiTouchHelperInstallCache(): void {
-  installedMultiTouchHelpers.clear();
-}

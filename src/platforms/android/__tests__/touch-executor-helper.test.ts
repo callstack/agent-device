@@ -5,7 +5,6 @@ import { buildGesturePlan } from '../../../contracts/gesture-plan.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
 import { longPressAndroid } from '../input-actions.ts';
-import { resetAndroidMultiTouchHelperInstallCache } from '../multitouch-helper-install.ts';
 import { stopAndroidSnapshotHelperSessionForDevice } from '../snapshot-helper.ts';
 import { executeAndroidTouchPlan, readAndroidGestureViewport } from '../touch-executor.ts';
 import {
@@ -35,13 +34,19 @@ vi.mock('../helper-package-install.ts', async (importOriginal) => {
 });
 
 const mockStopSnapshotSession = vi.mocked(stopAndroidSnapshotHelperSessionForDevice);
+let deviceSequence = 0;
 
 beforeEach(() => {
-  resetAndroidMultiTouchHelperInstallCache();
   mockStopSnapshotSession.mockReset();
 });
 
+function makeIsolatedDevice() {
+  deviceSequence += 1;
+  return { ...ANDROID_EMULATOR, id: `emulator-touch-${deviceSequence}` };
+}
+
 test('helper gesture releases persistent snapshot instrumentation before touch instrumentation', async () => {
+  const device = makeIsolatedDevice();
   const events: string[] = [];
   mockStopSnapshotSession.mockImplementation(async () => {
     events.push('snapshot-stop');
@@ -71,10 +76,10 @@ test('helper gesture releases persistent snapshot instrumentation before touch i
         throw new Error(`unexpected adb call: ${args.join(' ')}`);
       },
     },
-    { serial: ANDROID_EMULATOR.id },
+    { serial: device.id },
     async () =>
       await executeAndroidTouchPlan(
-        ANDROID_EMULATOR,
+        device,
         buildGesturePlan(
           {
             intent: 'pan',
@@ -94,6 +99,7 @@ test('helper gesture releases persistent snapshot instrumentation before touch i
 });
 
 test('bare-adb long press executes one helper gesture without a viewport probe', async () => {
+  const device = makeIsolatedDevice();
   const instrumentCalls: string[][] = [];
   const result = await withAndroidAdbProvider(
     {
@@ -119,8 +125,8 @@ test('bare-adb long press executes one helper gesture without a viewport probe',
         throw new Error(`unexpected adb call: ${args.join(' ')}`);
       },
     },
-    { serial: ANDROID_EMULATOR.id },
-    async () => await longPressAndroid(ANDROID_EMULATOR, 30, 40, 750),
+    { serial: device.id },
+    async () => await longPressAndroid(device, 30, 40, 750),
   );
 
   assert.equal(result.backend, 'android-multitouch-helper');
@@ -130,6 +136,7 @@ test('bare-adb long press executes one helper gesture without a viewport probe',
 });
 
 test('single-pointer helper failure propagates through the touch executor', async () => {
+  const device = makeIsolatedDevice();
   await assert.rejects(
     withAndroidAdbProvider(
       {
@@ -158,10 +165,10 @@ test('single-pointer helper failure propagates through the touch executor', asyn
           throw new Error(`unexpected adb call: ${args.join(' ')}`);
         },
       },
-      { serial: ANDROID_EMULATOR.id },
+      { serial: device.id },
       async () =>
         await executeAndroidTouchPlan(
-          ANDROID_EMULATOR,
+          device,
           buildGesturePlan(
             {
               intent: 'pan',
@@ -186,6 +193,7 @@ test('single-pointer helper failure propagates through the touch executor', asyn
 });
 
 test('helper viewport failure preserves its structured message and error type', async () => {
+  const device = makeIsolatedDevice();
   await assert.rejects(
     withAndroidAdbProvider(
       {
@@ -214,8 +222,8 @@ test('helper viewport failure preserves its structured message and error type', 
           throw new Error(`unexpected adb call: ${args.join(' ')}`);
         },
       },
-      { serial: ANDROID_EMULATOR.id },
-      async () => await readAndroidGestureViewport(ANDROID_EMULATOR),
+      { serial: device.id },
+      async () => await readAndroidGestureViewport(device),
     ),
     (error: unknown) => {
       assert.ok(error instanceof AppError);

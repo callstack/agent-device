@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { beforeEach, test } from 'vitest';
+import { test } from 'vitest';
 import { buildGesturePlan } from '../../../contracts/gesture-plan.ts';
 import {
   normalizeAndroidMultiTouchHelperGestureRequest,
@@ -7,15 +7,12 @@ import {
   runAndroidMultiTouchHelperGesture,
   parseAndroidGestureViewportResult,
 } from '../multitouch-helper.ts';
-import { resetAndroidMultiTouchHelperInstallCache } from '../multitouch-helper-install.ts';
 import {
   ANDROID_MULTITOUCH_HELPER_MANIFEST as manifest,
   androidMultiTouchResultRecord as resultRecord,
 } from './multitouch-helper.fixtures.ts';
 
 const viewport = { x: 0, y: 0, width: 400, height: 800 };
-
-beforeEach(resetAndroidMultiTouchHelperInstallCache);
 
 test('helper response parsing returns instrumentation evidence', () => {
   assert.deepEqual(

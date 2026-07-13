@@ -3,17 +3,10 @@ import crypto from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { beforeEach, test } from 'vitest';
-import {
-  ensureAndroidMultiTouchHelper,
-  resetAndroidMultiTouchHelperInstallCache,
-} from '../multitouch-helper-install.ts';
+import { test } from 'vitest';
+import { ensureAndroidMultiTouchHelper } from '../multitouch-helper-install.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from '../adb-executor.ts';
 import { ANDROID_MULTITOUCH_HELPER_MANIFEST } from './multitouch-helper.fixtures.ts';
-
-beforeEach(() => {
-  resetAndroidMultiTouchHelperInstallCache();
-});
 
 test('helper install uses replace and test-package semantics', async () => {
   const fixture = await makeInstallFixture('helper-apk');
@@ -36,7 +29,7 @@ test('helper install uses replace and test-package semantics', async () => {
     adb,
     adbProvider: provider,
     artifact: fixture.artifact,
-    deviceKey: 'android:emulator-5554',
+    deviceKey: 'android:install-semantics',
   });
 
   assert.equal(result.reason, 'missing');
@@ -64,7 +57,7 @@ test('same-version helper is current only when installed APK bytes match', async
     adb,
     adbProvider: provider,
     artifact: fixture.artifact,
-    deviceKey: 'android:emulator-5554',
+    deviceKey: 'android:matching-bytes',
   });
 
   assert.equal(result.reason, 'current');
@@ -85,7 +78,7 @@ test('same-version helper is replaced when installed APK bytes differ', async ()
     adb,
     adbProvider: provider,
     artifact: fixture.artifact,
-    deviceKey: 'android:emulator-5554',
+    deviceKey: 'android:mismatched-bytes',
   });
 
   assert.equal(result.reason, 'mismatched');
@@ -104,7 +97,7 @@ test('same-version helper is replaced when installed APK identity is unavailable
     adb,
     adbProvider: provider,
     artifact: fixture.artifact,
-    deviceKey: 'android:emulator-5554',
+    deviceKey: 'android:unverifiable-identity',
   });
 
   assert.equal(result.reason, 'unverifiable');
@@ -122,7 +115,7 @@ test('newer installed helper remains current without an unsafe downgrade', async
     adb,
     adbProvider: provider,
     artifact: fixture.artifact,
-    deviceKey: 'android:emulator-5554',
+    deviceKey: 'android:newer-helper',
   });
 
   assert.equal(result.reason, 'current');
@@ -143,14 +136,14 @@ test('install memo includes artifact identity, not only version code', async () 
     adb: device.adb,
     adbProvider: device.provider,
     artifact: first.artifact,
-    deviceKey: 'android:emulator-5554',
+    deviceKey: 'android:artifact-identity',
   });
   device.setInstalledApk('first-helper');
   const result = await ensureAndroidMultiTouchHelper({
     adb: device.adb,
     adbProvider: device.provider,
     artifact: second.artifact,
-    deviceKey: 'android:emulator-5554',
+    deviceKey: 'android:artifact-identity',
   });
 
   assert.equal(result.reason, 'mismatched');
@@ -168,7 +161,7 @@ test('install memo skips repeated APK reads for the same artifact identity', asy
     adb: device.adb,
     adbProvider: device.provider,
     artifact: fixture.artifact,
-    deviceKey: 'android:emulator-5554',
+    deviceKey: 'android:install-memo',
   });
   await fs.rm(fixture.artifact.apkPath);
   const result = await ensureAndroidMultiTouchHelper({
@@ -181,7 +174,7 @@ test('install memo skips repeated APK reads for the same artifact identity', asy
       },
     },
     artifact: fixture.artifact,
-    deviceKey: 'android:emulator-5554',
+    deviceKey: 'android:install-memo',
   });
 
   assert.equal(result.reason, 'current');
