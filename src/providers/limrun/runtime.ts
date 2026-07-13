@@ -435,22 +435,34 @@ async function runLimrunAndroidAdb(
   options?: AndroidAdbExecutorOptions,
 ): Promise<AndroidAdbExecutorResult> {
   const serial = await ensurePersistentAndroidAdbSerial(session);
-  const result = await runCmd('adb', ['-s', serial, ...args], {
+  const adbArgs = limrunAdbArgs(serial, args);
+  const result = await runCmd('adb', adbArgs, limrunAdbRunOptions(options));
+  if (result.exitCode !== 0 && options?.allowFailure !== true)
+    throw limrunAndroidAdbError(adbArgs, result);
+  return result;
+}
+
+function limrunAdbArgs(serial: string, args: string[]): string[] {
+  return ['-s', serial, ...args];
+}
+
+function limrunAdbRunOptions(options: AndroidAdbExecutorOptions | undefined) {
+  return {
     allowFailure: options?.allowFailure,
     binaryStdout: options?.binaryStdout,
     stdin: options?.stdin,
     timeoutMs: options?.timeoutMs ?? 30_000,
     signal: options?.signal,
+  };
+}
+
+function limrunAndroidAdbError(adbArgs: string[], result: AndroidAdbExecutorResult): AppError {
+  return new AppError('COMMAND_FAILED', 'Limrun Android ADB command failed', {
+    command: ['adb', ...adbArgs].join(' '),
+    exitCode: result.exitCode,
+    stdout: result.stdout,
+    stderr: result.stderr,
   });
-  if (result.exitCode !== 0 && options?.allowFailure !== true) {
-    throw new AppError('COMMAND_FAILED', 'Limrun Android ADB command failed', {
-      command: ['adb', '-s', serial, ...args].join(' '),
-      exitCode: result.exitCode,
-      stdout: result.stdout,
-      stderr: result.stderr,
-    });
-  }
-  return result;
 }
 
 function createLimrunAndroidInteractor(

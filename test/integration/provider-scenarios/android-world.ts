@@ -440,6 +440,13 @@ function androidCaptureAdbResult(
   searchText: string,
   snapshotXml?: () => string,
 ): AndroidAdbResult | undefined {
+  if (key.includes('com.callstack.agentdevice.multitouchhelper/.MultiTouchInstrumentation')) {
+    return {
+      stdout: androidMultiTouchHelperOutput(),
+      stderr: '',
+      exitCode: 0,
+    };
+  }
   if (key.startsWith('shell am instrument ')) {
     return {
       stdout: androidSnapshotHelperOutput(snapshotXml?.() ?? androidSettingsXml(searchText)),
@@ -465,6 +472,18 @@ export function androidSnapshotHelperOutput(xml: string): string {
     'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-snapshot-helper-v1',
     'INSTRUMENTATION_RESULT: helperApiVersion=1',
     'INSTRUMENTATION_RESULT: ok=true',
+    'INSTRUMENTATION_CODE: 0',
+  ].join('\n');
+}
+
+function androidMultiTouchHelperOutput(): string {
+  return [
+    'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-multitouch-helper-v1',
+    'INSTRUMENTATION_RESULT: helperApiVersion=1',
+    'INSTRUMENTATION_RESULT: kind=swipe',
+    'INSTRUMENTATION_RESULT: ok=true',
+    'INSTRUMENTATION_RESULT: injectedEvents=2',
+    'INSTRUMENTATION_RESULT: elapsedMs=100',
     'INSTRUMENTATION_CODE: 0',
   ].join('\n');
 }
