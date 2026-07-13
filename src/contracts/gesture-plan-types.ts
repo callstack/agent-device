@@ -1,5 +1,5 @@
 import type { Point, Rect } from '../kernel/snapshot.ts';
-import type { ScrollDirection } from './scroll-gesture.ts';
+import type { ScrollDirection, SwipePreset } from './scroll-gesture.ts';
 
 export type GesturePointerCount = 1 | 2;
 
@@ -10,6 +10,7 @@ export type GestureIntent = 'fling' | 'pan' | 'pinch' | 'rotate' | 'transform';
 
 export type GestureSemanticInput =
   | { intent: 'fling'; from: Point; to: Point }
+  | { intent: 'fling'; preset: SwipePreset }
   | {
       intent: 'fling';
       direction: ScrollDirection;
@@ -23,6 +24,7 @@ export type GestureSemanticInput =
       pointerCount?: GesturePointerCount;
       durationMs?: number;
     }
+  | { intent: 'pan'; preset: SwipePreset; durationMs: number }
   | { intent: 'pinch'; origin?: Point; scale: number }
   | { intent: 'rotate'; origin?: Point; degrees: number }
   | {

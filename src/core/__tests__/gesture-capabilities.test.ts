@@ -4,7 +4,6 @@ import type { GestureSemanticInput } from '../../contracts/gesture-plan-types.ts
 import {
   normalizePublicGesture,
   normalizePublicSwipeMotion,
-  type NormalizedGestureInput,
 } from '../../contracts/gesture-normalization.ts';
 import { requireGestureSupported } from '../capabilities.ts';
 import { AppError } from '../../kernel/errors.ts';
@@ -31,12 +30,12 @@ const device = (fields: Partial<DeviceInfo>): DeviceInfo => ({
   ...fields,
 });
 
-function assertSupported(input: NormalizedGestureInput, target: DeviceInfo): void {
+function assertSupported(input: GestureSemanticInput, target: DeviceInfo): void {
   assert.doesNotThrow(() => requireGestureSupported(input, target));
 }
 
 function assertUnsupported(
-  input: NormalizedGestureInput,
+  input: GestureSemanticInput,
   target: DeviceInfo,
   expected: RegExp,
 ): void {

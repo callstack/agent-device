@@ -1,6 +1,6 @@
 import type { Point } from '../kernel/snapshot.ts';
 import { AppError } from '../kernel/errors.ts';
-import type { SwipePreset } from './scroll-gesture.ts';
+import { gestureDirectionDelta } from './scroll-gesture.ts';
 import { readGesturePayload, type GesturePayload } from './gesture-input.ts';
 import { GESTURE_FLING_DEFAULT_DISTANCE } from './gesture-plan.ts';
 import type { GestureSemanticInput } from './gesture-plan-types.ts';
@@ -12,13 +12,8 @@ export type GestureDeprecation = {
   replacement: string;
 };
 
-export type NormalizedGestureInput =
-  | GestureSemanticInput
-  | { intent: 'fling'; preset: SwipePreset }
-  | { intent: 'pan'; preset: SwipePreset; durationMs: number };
-
 export type NormalizedPublicGesture = {
-  gesture: NormalizedGestureInput;
+  gesture: GestureSemanticInput;
   deprecations: GestureDeprecation[];
 };
 
@@ -171,7 +166,7 @@ export function normalizePublicGesture(input: GesturePayload): NormalizedPublicG
           gesture: {
             intent: 'pan',
             origin: input.origin,
-            delta: directionDelta(
+            delta: gestureDirectionDelta(
               input.direction,
               input.distance ?? GESTURE_FLING_DEFAULT_DISTANCE,
             ),
@@ -254,19 +249,6 @@ export function normalizePublicSwipeMotion(input: {
     },
     deprecations: [{ rule: 'swipe-duration', replacement: 'Use gesture pan for timed movement.' }],
   };
-}
-
-function directionDelta(direction: 'up' | 'down' | 'left' | 'right', distance: number): Point {
-  switch (direction) {
-    case 'up':
-      return { x: 0, y: -distance };
-    case 'down':
-      return { x: 0, y: distance };
-    case 'left':
-      return { x: -distance, y: 0 };
-    case 'right':
-      return { x: distance, y: 0 };
-  }
 }
 
 function optionalPositionNumber(value: string | undefined): number | undefined {

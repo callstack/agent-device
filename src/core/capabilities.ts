@@ -4,7 +4,7 @@ import { tryGetPlugin } from './platform-plugin/plugin.ts';
 import { registerBuiltinPlatformPlugins } from './interactors/register-builtins.ts';
 import type { DeviceInfo } from '../kernel/device.ts';
 import { AppError } from '../kernel/errors.ts';
-import type { NormalizedGestureInput } from '../contracts/gesture-normalization.ts';
+import type { GestureSemanticInput } from '../contracts/gesture-plan-types.ts';
 import { assertAppleMultiTouchSupported } from '../contracts/apple-multitouch-support.ts';
 
 // Populate the PlatformPlugin registry once at module load (idempotent; registers
@@ -140,7 +140,7 @@ export function supportedPlatformsForCommand(command: string): string[] {
   return supported;
 }
 
-export function requireGestureSupported(input: NormalizedGestureInput, device: DeviceInfo): void {
+export function requireGestureSupported(input: GestureSemanticInput, device: DeviceInfo): void {
   if (device.platform === 'web' || device.appleOs === 'watchos') {
     throw unsupportedGesture(input, gesturePlatformMessage(input, device));
   }
@@ -158,15 +158,12 @@ export function requireGestureSupported(input: NormalizedGestureInput, device: D
   }
 }
 
-function isMultiTouchGesture(input: NormalizedGestureInput): boolean {
+function isMultiTouchGesture(input: GestureSemanticInput): boolean {
   if (input.intent === 'pan') return ('pointerCount' in input ? input.pointerCount : 1) === 2;
   return input.intent === 'pinch' || input.intent === 'rotate' || input.intent === 'transform';
 }
 
-function requireMultiTouchGestureSupported(
-  input: NormalizedGestureInput,
-  device: DeviceInfo,
-): void {
+function requireMultiTouchGestureSupported(input: GestureSemanticInput, device: DeviceInfo): void {
   if (device.platform === 'android') {
     if (device.target !== 'tv') return;
     throw unsupportedGesture(
@@ -181,15 +178,11 @@ function requireMultiTouchGestureSupported(
   assertAppleMultiTouchSupported(device, input.intent);
 }
 
-function gesturePlatformMessage(input: NormalizedGestureInput, device: DeviceInfo): string {
+function gesturePlatformMessage(input: GestureSemanticInput, device: DeviceInfo): string {
   return `gesture ${input.intent} is not supported on ${device.appleOs ?? device.platform}`;
 }
 
-function unsupportedGesture(
-  input: NormalizedGestureInput,
-  message: string,
-  hint?: string,
-): AppError {
+function unsupportedGesture(input: GestureSemanticInput, message: string, hint?: string): AppError {
   return new AppError('UNSUPPORTED_OPERATION', message, {
     gesture: input.intent,
     ...(hint ? { hint } : {}),

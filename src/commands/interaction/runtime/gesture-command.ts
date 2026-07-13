@@ -1,8 +1,6 @@
 import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
 import type { GestureIntent, GestureSemanticInput } from '../../../contracts/gesture-plan-types.ts';
 import { buildGesturePlan } from '../../../contracts/gesture-plan.ts';
-import type { NormalizedGestureInput } from '../../../contracts/gesture-normalization.ts';
-import { buildSwipePresetGesturePlan } from '../../../contracts/scroll-gesture.ts';
 import type { Point, Rect } from '../../../kernel/snapshot.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { successText } from '../../../utils/success-text.ts';
@@ -16,7 +14,7 @@ import { assertSupportedInteractionSurface, captureInteractionSnapshot } from '.
 import { resolveVisibleSnapshotViewport } from './viewport.ts';
 
 export type GestureCommandOptions = CommandContext & {
-  gesture: NormalizedGestureInput;
+  gesture: GestureSemanticInput;
 };
 
 export type GestureCommandResult = {
@@ -36,8 +34,7 @@ export const gestureCommand: RuntimeCommand<GestureCommandOptions, GestureComman
   }
   await assertSupportedInteractionSurface(runtime, options, options.gesture.intent);
   const viewport = await captureGestureViewport(runtime, options);
-  const gesture = resolvePresetGesture(options.gesture, viewport);
-  const plan = buildGesturePlan(gesture, viewport, runtime.backend.platform);
+  const plan = buildGesturePlan(options.gesture, viewport, runtime.backend.platform);
   const backendResult = await runtime.backend.performGesture(
     toBackendContext(runtime, options),
     plan,
@@ -46,13 +43,13 @@ export const gestureCommand: RuntimeCommand<GestureCommandOptions, GestureComman
   const from = centroidAt(plan.pointers, 0);
   const to = centroidAt(plan.pointers, -1);
   return {
-    kind: gesture.intent,
+    kind: plan.intent,
     durationMs: plan.durationMs,
     pointerCount: plan.topology === 'single' ? 1 : 2,
     from,
     to,
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
-    ...successText(gestureMessage(gesture)),
+    ...successText(gestureMessage(options.gesture, from, to)),
   };
 };
 
@@ -66,23 +63,6 @@ async function captureGestureViewport(
   if (backendViewport) return backendViewport;
   const capture = await captureInteractionSnapshot(runtime, options, false);
   return resolveVisibleSnapshotViewport(capture.snapshot.nodes, 'gesture');
-}
-
-function resolvePresetGesture(input: NormalizedGestureInput, viewport: Rect): GestureSemanticInput {
-  if (!('preset' in input)) return input;
-  const relative = buildSwipePresetGesturePlan(input.preset, {
-    referenceWidth: viewport.width,
-    referenceHeight: viewport.height,
-  });
-  const from = { x: viewport.x + relative.x1, y: viewport.y + relative.y1 };
-  const to = { x: viewport.x + relative.x2, y: viewport.y + relative.y2 };
-  if (input.intent === 'fling') return { intent: 'fling', from, to };
-  return {
-    intent: 'pan',
-    origin: from,
-    delta: { x: to.x - from.x, y: to.y - from.y },
-    durationMs: input.durationMs,
-  };
 }
 
 function centroidAt(
@@ -102,10 +82,13 @@ function centroidAt(
   };
 }
 
-function gestureMessage(input: GestureSemanticInput): string {
+function gestureMessage(input: GestureSemanticInput, from: Point, to: Point): string {
   switch (input.intent) {
-    case 'pan':
-      return `Panned (${input.origin.x}, ${input.origin.y}) by (${input.delta.x}, ${input.delta.y})`;
+    case 'pan': {
+      const origin = 'preset' in input ? from : input.origin;
+      const delta = 'preset' in input ? { x: to.x - from.x, y: to.y - from.y } : input.delta;
+      return `Panned (${origin.x}, ${origin.y}) by (${delta.x}, ${delta.y})`;
+    }
     case 'fling':
       return 'direction' in input ? `Flung ${input.direction}` : 'Flung';
     case 'pinch':

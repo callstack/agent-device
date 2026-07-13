@@ -159,6 +159,19 @@ export function buildSwipePresetGesturePlan(
   };
 }
 
+export function gestureDirectionDelta(direction: ScrollDirection, distance: number): GesturePoint {
+  switch (direction) {
+    case 'up':
+      return { x: 0, y: -distance };
+    case 'down':
+      return { x: 0, y: distance };
+    case 'left':
+      return { x: -distance, y: 0 };
+    case 'right':
+      return { x: distance, y: 0 };
+  }
+}
+
 export function inferGestureReferenceFrame(
   nodes: Array<Pick<SnapshotNode, 'type' | 'rect'>>,
 ): GestureReferenceFrame | undefined {

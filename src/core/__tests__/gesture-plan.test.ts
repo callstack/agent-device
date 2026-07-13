@@ -41,6 +41,18 @@ describe('single-pointer plans', () => {
     assert.deepEqual(directional.pointers[0].samples.at(-1)?.point, { x: 50, y: 20 });
     assert.deepEqual(endpoints.pointers[0].samples.at(-1)?.point, { x: 230, y: 100 });
   });
+
+  test('planner resolves swipe presets inside the active viewport', () => {
+    const viewport = { x: 20, y: 30, width: 400, height: 800 };
+    const fling = buildGesturePlan({ intent: 'fling', preset: 'left' }, viewport);
+    const pan = buildGesturePlan({ intent: 'pan', preset: 'right', durationMs: 400 }, viewport);
+
+    assert.deepEqual(fling.pointers[0].samples[0]?.point, { x: 360, y: 430 });
+    assert.deepEqual(fling.pointers[0].samples.at(-1)?.point, { x: 80, y: 430 });
+    assert.equal(pan.durationMs, 400);
+    assert.deepEqual(pan.pointers[0].samples[0]?.point, { x: 80, y: 430 });
+    assert.deepEqual(pan.pointers[0].samples.at(-1)?.point, { x: 360, y: 430 });
+  });
 });
 
 describe('two-pointer plans', () => {
