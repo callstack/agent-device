@@ -46,6 +46,19 @@ const EDITABLE_TEXT_TYPES = new Set([
  * inputAccessoryView content (e.g. a messaging composer) in the keyboard
  * window, and hiding the field the user is typing into would be worse than
  * leaking chrome. Such windows fall back to the container-descendant walk.
+ *
+ * App-owned accessory guard: even when whole-window classification IS applied
+ * (a button-only accessory has no editable text to trip the guard above), an
+ * `inputAccessoryView` / formatting / send toolbar the app hosts in the
+ * keyboard window is a legitimate control the agent must still see. All of the
+ * keyboard's OWN chrome — keys, shift/Emoji/return, and the "Next keyboard" /
+ * "Dictate" assistant buttons — renders within the keyboard container's own
+ * frame (bottom of the screen), while an inputAccessoryView renders as a bar
+ * ABOVE the keys. So any non-keyboard node in the keyboard window whose center
+ * sits above the keyboard container's top edge is app-owned and survives
+ * classification (`collectKeyboardAccessoryIndexes`). Structural spine nodes
+ * (the window and wrappers that CONTAIN the keyboard) are never exempted, so a
+ * genuine key-only keyboard window is classified exactly as before.
  */
 type SettleChrome = {
   /** Chrome node indexes EXCLUDING the containers: stripped from the diff. */
@@ -62,10 +75,22 @@ function collectKeyboardChrome(nodes: SnapshotNode[]): SettleChrome {
   );
   if (containerIndexes.size === 0) return EMPTY_SETTLE_CHROME;
   const byIndex = new Map(nodes.map((node) => [node.index, node]));
-  const chromeIndexes = collectSubtreeIndexes(nodes, byIndex, containerIndexes);
-  const windowIndexes = resolveKeyboardWindowIndexes(nodes, byIndex, chromeIndexes);
+  const containerSubtreeIndexes = collectSubtreeIndexes(nodes, byIndex, containerIndexes);
+  const chromeIndexes = new Set(containerSubtreeIndexes);
+  const windowIndexes = resolveKeyboardWindowIndexes(nodes, byIndex, containerSubtreeIndexes);
   for (const index of collectSubtreeIndexes(nodes, byIndex, windowIndexes)) {
     chromeIndexes.add(index);
+  }
+  // Preserve app-owned accessory controls hosted above the keyboard: they were
+  // swept in by the whole-window pass but are not keyboard chrome.
+  for (const index of collectKeyboardAccessoryIndexes(
+    nodes,
+    byIndex,
+    windowIndexes,
+    containerIndexes,
+    containerSubtreeIndexes,
+  )) {
+    chromeIndexes.delete(index);
   }
   const refs = new Set(
     nodes.filter((node) => node.ref && chromeIndexes.has(node.index)).map((node) => node.ref),
@@ -76,6 +101,87 @@ function collectKeyboardChrome(nodes: SnapshotNode[]): SettleChrome {
     [...chromeIndexes].filter((index) => !containerIndexes.has(index)),
   );
   return { strippedIndexes, refs };
+}
+
+/**
+ * Indexes of app-owned accessory content in a keyboard window: non-keyboard
+ * nodes whose center sits ABOVE the keyboard container's top edge (an
+ * `inputAccessoryView` toolbar renders above the keys). Structural spine nodes
+ * that CONTAIN the keyboard (the window and its wrappers) are excluded — their
+ * frames span the keys, and exempting them would leak the keyboard itself.
+ */
+function collectKeyboardAccessoryIndexes(
+  nodes: SnapshotNode[],
+  byIndex: Map<number, SnapshotNode>,
+  windowIndexes: ReadonlySet<number>,
+  containerIndexes: ReadonlySet<number>,
+  containerSubtreeIndexes: ReadonlySet<number>,
+): Set<number> {
+  const exempt = new Set<number>();
+  if (windowIndexes.size === 0) return exempt;
+  const keyboardTopByWindow = collectKeyboardTopByWindow(byIndex, windowIndexes, containerIndexes);
+  if (keyboardTopByWindow.size === 0) return exempt;
+  const spineIndexes = collectContainerAncestorIndexes(byIndex, containerIndexes);
+  for (const node of nodes) {
+    const eligible =
+      !containerSubtreeIndexes.has(node.index) && !spineIndexes.has(node.index) && node.rect;
+    if (eligible && isAboveKeyboard(node, byIndex, keyboardTopByWindow)) exempt.add(node.index);
+  }
+  return exempt;
+}
+
+/** True when the node renders above its keyboard window's key area (an accessory bar). */
+function isAboveKeyboard(
+  node: SnapshotNode,
+  byIndex: Map<number, SnapshotNode>,
+  keyboardTopByWindow: ReadonlyMap<number, number>,
+): boolean {
+  if (!node.rect) return false;
+  const window = findNearestWindowAncestor(node, byIndex);
+  if (window === undefined) return false;
+  const keyboardTop = keyboardTopByWindow.get(window);
+  return keyboardTop !== undefined && node.rect.y + node.rect.height / 2 < keyboardTop;
+}
+
+/** Per keyboard window, the top edge (min `rect.y`) of its keyboard container(s). */
+function collectKeyboardTopByWindow(
+  byIndex: Map<number, SnapshotNode>,
+  windowIndexes: ReadonlySet<number>,
+  containerIndexes: ReadonlySet<number>,
+): Map<number, number> {
+  const keyboardTopByWindow = new Map<number, number>();
+  for (const containerIndex of containerIndexes) {
+    const container = byIndex.get(containerIndex);
+    if (!container?.rect) continue;
+    const window = findNearestWindowAncestor(container, byIndex);
+    if (window === undefined || !windowIndexes.has(window)) continue;
+    const currentTop = keyboardTopByWindow.get(window);
+    if (currentTop === undefined || container.rect.y < currentTop) {
+      keyboardTopByWindow.set(window, container.rect.y);
+    }
+  }
+  return keyboardTopByWindow;
+}
+
+/** Every ancestor of every keyboard container (the structural spine that hosts it). */
+function collectContainerAncestorIndexes(
+  byIndex: Map<number, SnapshotNode>,
+  containerIndexes: ReadonlySet<number>,
+): Set<number> {
+  const ancestors = new Set<number>();
+  for (const containerIndex of containerIndexes) {
+    const container = byIndex.get(containerIndex);
+    let current =
+      container && typeof container.parentIndex === 'number'
+        ? byIndex.get(container.parentIndex)
+        : undefined;
+    while (current) {
+      ancestors.add(current.index);
+      current =
+        typeof current.parentIndex === 'number' ? byIndex.get(current.parentIndex) : undefined;
+    }
+  }
+  return ancestors;
 }
 
 /** The root indexes plus every node whose parent chain passes through one. */

@@ -173,3 +173,106 @@ test('buildReplayFailureDivergence excludes keyboard chrome from screen.refs and
   expect(screen.refs.some((ref) => ref.label === 'Push Article')).toBe(true);
   expect(screen.truncated).toBeUndefined();
 });
+
+// Same live-shape keyboard window, but the app hosts an inputAccessoryView
+// toolbar (a "Send" button) as a bar ABOVE the keys inside the keyboard
+// window. The keys are still chrome; the app-owned accessory control must NOT
+// be filtered — otherwise the agent can't see/heal a control that lives there.
+function keyboardWithAccessoryNodes() {
+  const keyboardTop = 583;
+  const keys = Array.from({ length: 26 }, (_, key) => ({
+    index: 10 + key,
+    depth: 3,
+    parentIndex: 2,
+    type: 'Key',
+    label: String.fromCharCode(97 + key),
+    rect: {
+      x: (key % 10) * 40,
+      y: keyboardTop + 10 + Math.floor(key / 10) * 54,
+      width: 39,
+      height: 54,
+    },
+    hittable: true,
+  }));
+  return [
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      label: 'Example',
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+      hittable: true,
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Window',
+      label: 'Keyboard Window',
+      rect: { x: 0, y: 539, width: 402, height: 335 },
+      hittable: true,
+    },
+    // App inputAccessoryView toolbar, rendered above the keys.
+    {
+      index: 2,
+      depth: 2,
+      parentIndex: 1,
+      type: 'Keyboard',
+      label: 'Padding-Left',
+      rect: { x: 0, y: keyboardTop, width: 402, height: 291 },
+    },
+    ...keys,
+    {
+      index: 40,
+      depth: 2,
+      parentIndex: 1,
+      type: 'Button',
+      label: 'Send',
+      identifier: 'composer-send',
+      rect: { x: 320, y: 545, width: 74, height: 40 },
+      hittable: true,
+    },
+  ];
+}
+
+test('buildReplayFailureDivergence keeps an app inputAccessoryView control in screen.refs while filtering keyboard keys', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-accessory-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+
+  mockDispatchCommand.mockResolvedValue({
+    nodes: keyboardWithAccessoryNodes(),
+    truncated: false,
+    backend: 'xctest',
+  });
+
+  const action = {
+    ts: 0,
+    command: 'press',
+    positionals: ['label="Send"'],
+    flags: {},
+    result: { selectorChain: ['label="Send"'] },
+  };
+  const divergence = await buildReplayFailureDivergence({
+    error: { code: 'COMMAND_FAILED', message: 'target not found' },
+    action,
+    index: 0,
+    sourcePath: path.join(root, 'flow.ad'),
+    sourceLine: 1,
+    session: sessionStore.get(sessionName),
+    sessionName,
+    sessionStore,
+    logPath: path.join(root, 'daemon.log'),
+    responseLevel: 'default',
+    planActions: [action],
+    planDigest: 'test-plan-digest',
+  });
+
+  expect(divergence.screen.state).toBe('available');
+  const screen = divergence.screen as Extract<typeof divergence.screen, { state: 'available' }>;
+  // Keyboard keys are still filtered.
+  expect(screen.refs.some((ref) => ref.role.toLowerCase() === 'key')).toBe(false);
+  // The app's accessory "Send" button survives and is available to heal against.
+  expect(screen.refs.some((ref) => ref.label === 'Send')).toBe(true);
+});
