@@ -488,12 +488,15 @@ is still diagnostic, not an authorization to bypass preflight.
 
 `allowed` conveys **plan-resumability only** — whether ordinal `from` can be safely resumed against a
 matching plan — and is emitted for EVERY divergence; it says nothing about whether a session is still
-alive to resume against. Session lifetime is a **distinct** signal: `repairSessionHeld: true` is set
-**only** on a divergence from a repair-armed replay (`--save-script` was in effect), and only that flag
-promises the diverging daemon/session is being kept live and addressable for the in-flight repair.
-Decision 6's R7 keys its lifetime guarantee off `repairSessionHeld`, never off `allowed` — a plain
-(non-armed) replay may report `allowed: true` for plan-resumability yet tear its session down normally,
-so a consumer must not read `allowed: true` as "the session is still there."
+alive to resume against. Session lifetime is a **distinct** signal: `repairSessionHeld: true` is set on
+any divergence whose session carries an **active repair transaction** — one opened by a `--save-script`
+replay and **persisted on the session** until commit/abort (decision 6, R7). It therefore keys off the
+persisted transaction state, not the current request's flags, so a `--from` continuation that does NOT
+repeat `--save-script` still reports `repairSessionHeld: true`. Only that flag promises the diverging
+daemon/session is being kept live and addressable for the in-flight repair. Decision 6's R7 keys its
+lifetime guarantee off `repairSessionHeld`, never off `allowed` — a plain (non-armed) replay may report
+`allowed: true` for plan-resumability yet tear its session down normally, so a consumer must not read
+`allowed: true` as "the session is still there."
 
 Resume does not reconstruct execution state. For `N > 1`, preflight must reject with `INVALID_ARGS` when
 any skipped action can produce `outputEnv` values, or when the skipped range or resume target is inside
@@ -557,16 +560,19 @@ Implementation is not accepted on benchmark evidence alone. Required automated c
   script (R6); a writer fail-loud test proving a bare `@ref` that cannot materialize to a selector
   errors with a non-zero exit rather than being silently dropped (R4); a repair-transaction lifetime test
   proving a divergence with `resume.repairSessionHeld: true` keeps the session live and addressable for a
-  following `--from` while a non-armed divergence with only `resume.allowed: true` does not, that a reaped
-  repair session surfaces `REPAIR_SESSION_EXPIRED` from a tombstone keyed by session key (not
-  `SESSION_NOT_FOUND`) and that a fresh `replay --save-script` on that key clears it, and that a
-  keep-alive-incapable implementation fails fast before step 1 (R7); a commit-state-machine test proving a
-  `close` before `COMPLETE` aborts and publishes nothing, a `close` at `COMPLETE` commits atomically, and
-  a second `close` after `COMMITTED` is idempotent teardown with no re-publish; a terminal-close test
-  proving an armed replay reaching the terminal source `close` **skips** it without deleting the session
-  (C4); an atomic-publication test proving the temp file is created in the target's own directory and the
-  no-clobber is race-safe (create-exclusive/rename-if-absent); and a no-clobber test proving an existing
-  *complete* (sentinel-marked) healed artifact is protected while an incomplete/partial one is
+  following `--from` while a non-armed divergence with only `resume.allowed: true` does not, that
+  continuation resumes off the session's **persisted** transaction with a `--from` that carries no
+  `--save-script`, that a reaped INCOMPLETE transaction surfaces `REPAIR_SESSION_EXPIRED` from a tombstone
+  keyed by session key (not `SESSION_NOT_FOUND`) and that a fresh `replay --save-script` on that key clears
+  it, and that a keep-alive-incapable implementation fails fast before step 1 (R7); a commit-state-machine
+  test proving **any teardown** (explicit `close`, idle-reap, and shutdown) commits atomically at
+  `COMPLETE`, aborts and publishes nothing (no prefix) before `COMPLETE` — with an idle-reap/shutdown of a
+  `COMPLETE` transaction committing (not tombstoning) — and is idempotent with no re-publish once
+  `COMMITTED`; a terminal-close test proving an armed replay reaching the terminal source `close`
+  **skips** it without deleting the session (C4); an atomic-publication test proving the temp file is
+  created in the target's own directory and the no-clobber is race-safe (create-exclusive/rename-if-absent);
+  and a no-clobber test proving an existing *complete* (sentinel-marked) healed artifact is protected
+  while an incomplete/partial one is
   overwritable.
 
 Extend the settle benchmark (`~/.agent-device-bench/rnnav-matrix.py` pattern, external harness) with a
@@ -690,23 +696,30 @@ works" and "healed scripts are always valid":
   replay's own execution path — so a reused session's earlier, unrelated actions never leak into the
   healed script. This makes the healed output independent of prior session history without requiring a
   fresh session for the repair itself.
-- **R7 — the repair transaction spans the whole live session; the session is kept alive until `close`.**
-  `--save-script` opens a multi-invocation repair **transaction**. A repair-armed replay that returns
-  `REPLAY_DIVERGENCE` with **`resume.repairSessionHeld: true`** (decision 4 — the distinct
-  session-lifetime signal, NOT `resume.allowed`, which conveys plan-resumability only and is emitted for
-  every divergence) **MUST NOT** tear down the owning daemon or session. The subsequent heal actions and
-  `replay --from` continuations (R2) target that **same live session** until the agent finalizes with
-  `close`; the boundary watermark (R6) and the accumulating `session.actions` slice only mean anything if
-  that one session survives across invocations. This strengthens R2: same-session continuation is not
-  merely preferred, it is a lifetime guarantee. Whether a `close` commits or aborts is governed by the
-  commit state machine below — a plain `close` before the transaction reaches `COMPLETE`, a daemon
-  teardown, or an idle-reap while armed emits **nothing**. An implementation MAY offer a bounded-expiry
-  escape hatch, but idle-reaping a repair-armed, un-finalized session must leave a **tombstone** (R7's
-  ownership guarantee, detailed under "Repair-session tombstone" below), so a later command on that
-  session key surfaces a specific `REPAIR_SESSION_EXPIRED` recovery error with re-run guidance, never a
-  bare `SESSION_NOT_FOUND`. A **persistent-daemon precondition is explicitly rejected**: if some
-  implementation constraint would prevent keep-alive, the armed replay must **fail-fast before step 1**
-  with actionable guidance, never proceed and then fail a later `--from` with `SESSION_NOT_FOUND`.
+- **R7 — the repair transaction spans the whole live session; the session stays addressable until the
+  transaction ends (commit or abort).** `--save-script` opens a multi-invocation repair **transaction**
+  whose state **persists on the session** — it is not re-derived from each request's flags. A repair-armed
+  replay that returns `REPLAY_DIVERGENCE` with **`resume.repairSessionHeld: true`** (decision 4 — the
+  distinct session-lifetime signal, NOT `resume.allowed`, which conveys plan-resumability only and is
+  emitted for every divergence) **MUST NOT** tear down the owning daemon or session. **Continuation is by
+  persisted transaction state, not the per-request flag:** `replay --from <n> --plan-digest <sha>` resumes
+  the repair on that same armed session **without repeating `--save-script`** — the opener is the only
+  place that flag appears — and the implementation MUST key keep-alive and continuation off the session's
+  persisted transaction, never off whether the current request carried `--save-script`. The boundary
+  watermark (R6) and the accumulating `session.actions` slice only mean anything if that one session
+  survives across invocations. This strengthens R2: same-session continuation is not merely preferred, it
+  is a lifetime guarantee.
+
+  **Commit is at teardown, gated on `COMPLETE`.** Any teardown of the session — an explicit `close`, an
+  idle-reap, or a daemon shutdown — **commits** the healed `.ad` atomically **iff** the transaction is
+  `COMPLETE`, and otherwise **aborts** with no publish (never a prefix), per the commit state machine
+  below. An idle-reap or shutdown of an INCOMPLETE transaction additionally leaves a **tombstone** (R7's
+  ownership guarantee, under "Repair-session tombstone" below), so a later command on that session key
+  surfaces a specific `REPAIR_SESSION_EXPIRED` recovery error with re-run guidance, never a bare
+  `SESSION_NOT_FOUND`; an explicit `close` of an incomplete transaction simply discards. A
+  **persistent-daemon precondition is explicitly rejected**: if some implementation constraint would
+  prevent keep-alive, the armed replay must **fail-fast before step 1** with actionable guidance, never
+  proceed and then fail a later `--from` with `SESSION_NOT_FOUND`.
 
 **Terminal lifecycle steps during a repair-armed `--from` resume.** Verification is scoped, per decision
 3, to *annotated resolved targets* — so a non-target step (a source `close`, or any step carrying no
@@ -717,8 +730,8 @@ scope, not a change to it. The **terminal source `close`** is defined precisely 
 the source plan being a `close`*. During a repair-armed replay or resume that terminal source `close` is
 **SKIPPED — not dispatched**: dispatching it deletes the session mid-transaction (the very session R7
 keeps alive), so it must never run under an armed repair. Reaching it instead marks the transaction
-`COMPLETE` (see commit state machine); the agent then finalizes the transaction with its own explicit
-`close`/`close --save-script`, which commits.
+`COMPLETE` (see commit state machine); the next teardown of the session — normally the agent's own
+`close`/`close --save-script` — then commits (a teardown at `COMPLETE` always commits; R7).
 
 **Acceptance test (mandatory).** A healed sibling `.ad` produced by the repair loop must replay
 end-to-end in a **fresh session** with every selector step annotated and no bare `@ref`.
@@ -739,10 +752,11 @@ by construction. The healed `.ad` is written only when the repair ends (below) a
   **and** records the repair-run boundary watermark `session.actions.length` (R6). Absent this flag,
   replay behaves exactly as today: no recording, no heal. The heal is opt-in, preserving decision 1's "no
   silent rewrite."
-- The healed `.ad` is published when the agent's `close`/`close --save-script <out>` commits the
-  transaction (state `COMPLETE` — see the commit state machine below), reusing the existing
-  `session.actions` serializer (`SessionScriptWriter.write`, `src/daemon/session-script-writer.ts:30-52`)
-  over the post-watermark slice only (R6). When no
+- The healed `.ad` is published when a teardown commits the transaction at state `COMPLETE` — normally the
+  agent's own `close`/`close --save-script <out>`, but any teardown of a completed transaction commits
+  (see the commit state machine below) — reusing the existing `session.actions` serializer
+  (`SessionScriptWriter.write`, `src/daemon/session-script-writer.ts:30-52`) over the post-watermark slice
+  only (R6). When no
   `<out>` path is given, the default is the **`<original-stem>.healed.ad` sibling**: the original script's
   path with its `.ad` extension replaced by `.healed.ad` (e.g. `flows/login.ad` → `flows/login.healed.ad`),
   written beside the original. The original is never overwritten in place without an explicit `<out>`
@@ -759,13 +773,15 @@ the slice may be published*, as a machine-enforceable state, not a heuristic:
   state is a publish permitted.
 - **`COMMITTED`** — the healed `.ad` has been atomically published (below). Terminal.
 
-A `close` (or `close --save-script`) on the repair-armed session is the **commit trigger**, and commits
-**only when the state is `COMPLETE`**. `close` while **not** `COMPLETE` is an **ABORT**: discard the
-slice, publish **nothing** — never a prefix, never on teardown. There is **no separate auto-commit
-trigger**: reaching `COMPLETE` does not itself write a file; it only makes a *subsequent* `close` a commit
-rather than an abort. This "write only on intentional completion" gate (grounded in the second design
-review) is the rule, not a preference. `close` when already `COMMITTED` is **teardown-only, idempotent —
-no re-publish** (so a second finalize can neither double-commit nor trip the no-clobber guard).
+**Teardown is the commit trigger, gated on `COMPLETE`.** Any teardown of the repair-armed session — an
+explicit `close`/`close --save-script`, an idle-reap, or a daemon shutdown — commits the healed `.ad`
+**iff** the state is `COMPLETE`. A teardown while **not** `COMPLETE` is an **ABORT**: discard the slice,
+publish **nothing** — never a prefix. Reaching `COMPLETE` does not itself write a file; it only makes the
+*next* teardown a commit rather than an abort, so the artifact is published exactly once — when the
+transaction has both completed and ended. Commit is thus gated on `COMPLETE` but happens at *any* teardown
+(safer for the artifact than requiring one specific finalize command, and the model #1235 implements).
+Teardown after `COMMITTED` is **teardown-only, idempotent — no re-publish** (so it can neither
+double-commit nor trip the no-clobber guard).
 
 **Atomic, race-safe publication.** The commit serializes the healed slice (ending with a serialized
 `close` line so the artifact is self-contained) to a temp file created **in the same directory as the
@@ -783,9 +799,11 @@ what makes that sentinel trustworthy (a partial never reaches the published path
 Auto-versioned output names (e.g. `.healed.2.ad`) are explicitly **out of scope** here — a separate
 naming change, not part of this decision.
 
-**Repair-session tombstone (R7 ownership).** When a bounded-expiry escape hatch idle-reaps a repair-armed
-session that is still `ARMED`/`COMPLETE` (not `COMMITTED`), it must leave a **tombstone** rather than
-deleting the session record outright. The tombstone is keyed by the **session key** (the same
+**Repair-session tombstone (R7 ownership).** When a bounded-expiry escape hatch idle-reaps (or a daemon
+shutdown tears down) a repair-armed transaction that has **not** reached `COMPLETE`, the teardown aborts
+(no publish, per the state machine) and must leave a **tombstone** rather than deleting the session record
+outright. (A teardown of a `COMPLETE` transaction instead *commits* and needs no tombstone — the
+transaction ended successfully.) The tombstone is keyed by the **session key** (the same
 owner-scoped session identifier a `--from` continuation addresses), records the **owner** and an
 **expiry**, and lives for a bounded window after reap. While it exists, any command targeting that key —
 a `--from` resume, an interactive heal step, or a `close` — resolves to `REPAIR_SESSION_EXPIRED` (with
@@ -892,14 +910,16 @@ each states its dependencies explicitly.
    fail-loud guard (R4/R6) — reusing `close --save-script`'s existing `session.actions` serializer.
 9. **Repair-transaction lifecycle** (decision 6, R7 + commit state machine) — **NOT YET IMPLEMENTED,
    tracked by #1235**; depends on 8. Adds: the distinct `resume.repairSessionHeld` divergence signal and
-   R7 keep-alive keyed off it (with `fail-fast-before-step-1` when keep-alive is impossible); the
-   `ARMED → COMPLETE → COMMITTED` commit state machine (abort-when-not-`COMPLETE`, commit on any teardown
-   at `COMPLETE`, idempotent teardown-when-`COMMITTED`); terminal-source-`close` **skipping** during an
-   armed replay/resume, with a regression proving the session is NOT deleted when the terminal `close` is
-   reached; the `REPAIR_SESSION_EXPIRED` tombstone (keyed by session key, owner + bounded expiry, cleared
-   by a fresh `replay --save-script`); and race-safe atomic publication (temp file in the target's own
-   directory, create-exclusive/rename-if-absent no-clobber against the `# agent-device:heal-complete`
-   sentinel).
+   R7 keep-alive keyed off the session's **persisted** repair-transaction state (so `--from` continuations
+   need no repeat of `--save-script`), with `fail-fast-before-step-1` when keep-alive is impossible; the
+   `ARMED → COMPLETE → COMMITTED` commit state machine where **any teardown** (explicit `close`,
+   idle-reap, or daemon shutdown) commits atomically when `COMPLETE`, aborts (no prefix) when not, and is
+   idempotent once `COMMITTED`; terminal-source-`close` **skipping** during an armed replay/resume, with a
+   regression proving the session is NOT deleted when the terminal `close` is reached; the
+   `REPAIR_SESSION_EXPIRED` tombstone for an incomplete-transaction reap/shutdown (keyed by session key,
+   owner + bounded expiry, cleared by a fresh `replay --save-script`); and race-safe atomic publication
+   (temp file in the target's own directory, create-exclusive/rename-if-absent no-clobber against the
+   `# agent-device:heal-complete` sentinel).
 
 ## Migration progress
 
