@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { isIosFamily } from '../../kernel/device.ts';
 import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
@@ -65,7 +66,7 @@ async function stopRunnerRecordingBestEffort(params: {
   device: SessionState['device'];
   logPath?: string;
   deps: RecordTraceDeps;
-}): Promise<void> {
+}): Promise<boolean> {
   const { req, activeSession, device, logPath, deps } = params;
   const appBundleId = normalizeAppBundleId(activeSession);
 
@@ -75,6 +76,7 @@ async function stopRunnerRecordingBestEffort(params: {
       { command: 'recordStop', appBundleId },
       getIosRunnerOptions(req, logPath, activeSession),
     );
+    return true;
   } catch (error) {
     emitDiagnostic({
       level: 'warn',
@@ -87,6 +89,15 @@ async function stopRunnerRecordingBestEffort(params: {
         error: formatRecordTraceError(error),
       },
     });
+    return false;
+  }
+}
+
+function readRecordingFileSize(filePath: string): number {
+  try {
+    return fs.statSync(filePath).size;
+  } catch {
+    return 0;
   }
 }
 
@@ -318,7 +329,13 @@ export async function stopIosDeviceRecording(params: {
   recording: Extract<NonNullable<SessionState['recording']>, { platform: 'ios-device-runner' }>;
 }): Promise<DaemonResponse | null> {
   const { req, activeSession, device, logPath, deps, recording } = params;
-  await stopRunnerRecordingBestEffort({ req, activeSession, device, logPath, deps });
+  const runnerStopOk = await stopRunnerRecordingBestEffort({
+    req,
+    activeSession,
+    device,
+    logPath,
+    deps,
+  });
 
   let copyResult = { stdout: '', stderr: '', exitCode: 1 };
   for (const bundleId of IOS_RUNNER_CONTAINER_BUNDLE_IDS) {
@@ -353,6 +370,28 @@ export async function stopIosDeviceRecording(params: {
       copyResult.stdout.trim() ||
       `devicectl exited with code ${copyResult.exitCode}`;
     return errorResponse('COMMAND_FAILED', `failed to copy recording from device: ${copyError}`);
+  }
+
+  await deps.waitForStableFile(recording.outPath);
+  const playable = await deps.isPlayableVideo(recording.outPath);
+  if (!playable) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'record_stop_ios_invalid_video',
+      data: {
+        deviceId: device.id,
+        session: activeSession.name,
+        outPath: recording.outPath,
+        runnerStopOk,
+        fileSize: readRecordingFileSize(recording.outPath),
+      },
+    });
+    return errorResponse(
+      'COMMAND_FAILED',
+      runnerStopOk
+        ? `failed to stop recording: ${recording.outPath} was not finalized into a playable video`
+        : `failed to stop recording: the iOS runner reported the stop did not succeed and ${recording.outPath} is not a finalized, playable MP4`,
+    );
   }
 
   const trimStartMs = resolveIosRecordingTrimStartMs(recording);
