@@ -7,8 +7,6 @@ import { emitDiagnostic, withDiagnosticTimer } from '../../utils/diagnostics.ts'
 import {
   resolveAndroidAdbExecutor,
   resolveAndroidAdbProvider,
-  resolveAndroidGestureViewportProvider,
-  resolveAndroidTouchInjector,
   type AndroidAdbExecutor,
 } from './adb-executor.ts';
 import {
@@ -24,6 +22,7 @@ import {
   readInstrumentationResultNumber,
 } from './instrumentation-helper.ts';
 import { stopAndroidSnapshotHelperSessionForDevice } from './snapshot-helper.ts';
+import { validateAndroidGestureViewport } from './gesture-viewport.ts';
 import type { AndroidTouchPlan } from './touch-plan.ts';
 
 const HELPER_NAME = 'android-multitouch-helper';
@@ -65,19 +64,7 @@ type AndroidMultiTouchHelperGestureRequest = {
   pointers: AndroidPlannedPointerTrajectory[];
 };
 
-export async function performGestureAndroid(
-  device: DeviceInfo,
-  plan: AndroidTouchPlan,
-): Promise<Record<string, unknown>> {
-  const providerTouch = resolveAndroidTouchInjector(device);
-  if (providerTouch) {
-    const result = (await providerTouch(plan)) ?? {};
-    return { backend: 'provider-native-touch', ...result };
-  }
-  return await runAndroidMultiTouchHelperGestureForDevice(device, plan);
-}
-
-async function runAndroidMultiTouchHelperGestureForDevice(
+export async function executeAndroidMultiTouchHelperPlan(
   device: DeviceInfo,
   plan: AndroidTouchPlan,
 ): Promise<Record<string, unknown>> {
@@ -126,9 +113,7 @@ async function prepareAndroidMultiTouchHelper(device: DeviceInfo) {
   return { adb, artifact, install };
 }
 
-export async function readAndroidGestureViewport(device: DeviceInfo): Promise<Rect> {
-  const providerViewport = resolveAndroidGestureViewportProvider(device);
-  if (providerViewport) return validateAndroidGestureViewport(await providerViewport());
+export async function readAndroidMultiTouchHelperViewport(device: DeviceInfo): Promise<Rect> {
   const { adb, artifact } = await prepareAndroidMultiTouchHelper(device);
   const result = await adb(
     [
@@ -164,19 +149,6 @@ export function parseAndroidGestureViewportResult(results: Array<Record<string, 
     throw new AppError('COMMAND_FAILED', 'Android helper returned an invalid gesture viewport');
   }
   return validateAndroidGestureViewport({ x, y, width, height });
-}
-
-function validateAndroidGestureViewport(viewport: Rect): Rect {
-  if (
-    !Number.isFinite(viewport.x) ||
-    !Number.isFinite(viewport.y) ||
-    !Number.isFinite(viewport.width) ||
-    !Number.isFinite(viewport.height) ||
-    viewport.width <= 0 ||
-    viewport.height <= 0
-  )
-    throw new AppError('COMMAND_FAILED', 'Android helper returned an invalid gesture viewport');
-  return viewport;
 }
 
 export function normalizeAndroidMultiTouchHelperGestureRequest(

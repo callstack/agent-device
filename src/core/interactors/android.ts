@@ -17,9 +17,9 @@ import {
   typeAndroid,
 } from '../../platforms/android/input-actions.ts';
 import {
-  performGestureAndroid,
+  executeAndroidTouchPlan,
   readAndroidGestureViewport,
-} from '../../platforms/android/multitouch-helper.ts';
+} from '../../platforms/android/touch-executor.ts';
 import {
   readAndroidClipboardText,
   writeAndroidClipboardText,
@@ -53,7 +53,7 @@ export function createAndroidInteractor(device: DeviceInfo): Interactor {
     type: (text, delayMs) => typeAndroid(device, text, delayMs),
     fill: (x, y, text, delayMs) => fillAndroid(device, x, y, text, delayMs),
     scroll: (direction, options) => scrollAndroid(device, direction, options),
-    performGesture: (plan) => performGestureAndroid(device, plan),
+    performGesture: (plan) => executeAndroidTouchPlan(device, plan),
     gestureViewport: () => readAndroidGestureViewport(device),
     screenshot: (outPath, options) => screenshotAndroid(device, outPath, options),
     snapshot: async (options) => {

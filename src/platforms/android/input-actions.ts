@@ -19,7 +19,7 @@ import {
   type AndroidFillVerification,
 } from './fill-verification.ts';
 import { isAndroidTestImeActive } from './ime-lifecycle.ts';
-import { performGestureAndroid, readAndroidGestureViewport } from './multitouch-helper.ts';
+import { executeAndroidTouchPlan, readAndroidGestureViewport } from './touch-executor.ts';
 import {
   clearAndroidImeHelperText,
   resolveAndroidImeHelperArtifact,
@@ -89,7 +89,7 @@ export async function longPressAndroid(
 ): Promise<Record<string, unknown>> {
   const viewport = await readAndroidGestureViewport(device);
   const point = { x, y };
-  return await performGestureAndroid(device, {
+  return await executeAndroidTouchPlan(device, {
     topology: 'single',
     intent: 'longPress',
     durationMs,
@@ -292,7 +292,7 @@ export async function scrollAndroid(
     viewport,
     'android',
   );
-  const backend = await performGestureAndroid(device, gesturePlan);
+  const backend = await executeAndroidTouchPlan(device, gesturePlan);
 
   return {
     ...scrollPlan,

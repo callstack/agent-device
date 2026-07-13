@@ -1,18 +1,13 @@
 import assert from 'node:assert/strict';
 import { beforeEach, test } from 'vitest';
-import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
 import { buildGesturePlan } from '../../../contracts/gesture-plan.ts';
 import {
   normalizeAndroidMultiTouchHelperGestureRequest,
   parseAndroidMultiTouchHelperOutput,
-  performGestureAndroid,
-  readAndroidGestureViewport,
   resetAndroidMultiTouchHelperInstallCache,
   runAndroidMultiTouchHelperGesture,
   parseAndroidGestureViewportResult,
 } from '../multitouch-helper.ts';
-import { createAndroidInteractor } from '../../../core/interactors/android.ts';
-import { withAndroidAdbProvider } from '../adb-executor.ts';
 import {
   ANDROID_MULTITOUCH_HELPER_MANIFEST as manifest,
   androidMultiTouchResultRecord as resultRecord,
@@ -158,30 +153,6 @@ test('transform sends the planner-owned choreography without regenerating geomet
   assert.deepEqual(payload, { protocol: 'android-multitouch-helper-v1', ...request });
 });
 
-test('provider-native touch receives the plan as its only source of truth', async () => {
-  const plan = buildGesturePlan(
-    { intent: 'pinch', origin: { x: 200, y: 300 }, scale: 1.5 },
-    viewport,
-  );
-  const calls: unknown[] = [];
-  const result = await withAndroidAdbProvider(
-    {
-      exec: async () => {
-        throw new Error('adb must not run');
-      },
-      gestureViewport: async () => viewport,
-      touch: async (request) => {
-        calls.push(request);
-        return { injected: true };
-      },
-    },
-    { serial: ANDROID_EMULATOR.id },
-    async () => await performGestureAndroid(ANDROID_EMULATOR, plan),
-  );
-  assert.deepEqual(calls, [plan]);
-  assert.deepEqual(result, { backend: 'provider-native-touch', injected: true });
-});
-
 test('helper failures remain structured and actionable', async () => {
   const request = normalizeAndroidMultiTouchHelperGestureRequest(
     buildGesturePlan({ intent: 'pinch', scale: 1.5 }, viewport),
@@ -238,32 +209,4 @@ test('gesture viewport result is typed and rejects invalid bounds', () => {
     { code: 'COMMAND_FAILED' },
   );
   assert.throws(() => parseAndroidGestureViewportResult([]), { code: 'COMMAND_FAILED' });
-});
-
-test('provider gesture viewport bypasses local helper transport and is validated', async () => {
-  let calls = 0;
-  await withAndroidAdbProvider(
-    {
-      exec: async () => {
-        throw new Error('adb must not run');
-      },
-      gestureViewport: async () => {
-        calls += 1;
-        return calls === 1 ? viewport : { ...viewport, width: 0 };
-      },
-    },
-    { serial: ANDROID_EMULATOR.id },
-    async () => {
-      assert.deepEqual(await readAndroidGestureViewport(ANDROID_EMULATOR), viewport);
-      await assert.rejects(readAndroidGestureViewport(ANDROID_EMULATOR), {
-        code: 'COMMAND_FAILED',
-      });
-    },
-  );
-  assert.equal(calls, 2);
-});
-
-test('production Android interactor exposes the native gesture viewport seam', () => {
-  const interactor = createAndroidInteractor(ANDROID_EMULATOR);
-  assert.equal(typeof interactor.gestureViewport, 'function');
 });

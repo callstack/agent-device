@@ -3,11 +3,9 @@ import { beforeEach, test, vi } from 'vitest';
 import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
 import { buildGesturePlan } from '../../../contracts/gesture-plan.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
-import {
-  performGestureAndroid,
-  resetAndroidMultiTouchHelperInstallCache,
-} from '../multitouch-helper.ts';
+import { resetAndroidMultiTouchHelperInstallCache } from '../multitouch-helper.ts';
 import { stopAndroidSnapshotHelperSessionForDevice } from '../snapshot-helper.ts';
+import { executeAndroidTouchPlan } from '../touch-executor.ts';
 import {
   ANDROID_MULTITOUCH_HELPER_MANIFEST,
   androidMultiTouchResultRecord,
@@ -73,7 +71,7 @@ test('helper gesture releases persistent snapshot instrumentation before touch i
     },
     { serial: ANDROID_EMULATOR.id },
     async () =>
-      await performGestureAndroid(
+      await executeAndroidTouchPlan(
         ANDROID_EMULATOR,
         buildGesturePlan(
           {
