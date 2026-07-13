@@ -126,7 +126,10 @@ describe('system command interface', () => {
   });
 
   test('orientation reader and writer reject missing orientation', () => {
-    expectInvalidArgs(() => orientationCliReader([], flags()), 'orientation requires an orientation');
+    expectInvalidArgs(
+      () => orientationCliReader([], flags()),
+      'orientation requires an orientation',
+    );
     expectInvalidArgs(() => orientationDaemonWriter({}), 'orientation requires orientation');
   });
 

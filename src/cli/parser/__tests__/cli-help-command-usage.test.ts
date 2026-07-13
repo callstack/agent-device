@@ -375,14 +375,20 @@ test('keyboard command usage is documented', async () => {
 test('orientation command usage is documented', async () => {
   const help = await usageForCommand('orientation');
   if (help === null) throw new Error('Expected command help text');
-  assert.match(help, /orientation <portrait\|portrait-upside-down\|landscape-left\|landscape-right>/);
+  assert.match(
+    help,
+    /orientation <portrait\|portrait-upside-down\|landscape-left\|landscape-right>/,
+  );
   assert.match(help, /Set device orientation on iOS and Android/);
 });
 
 test('deprecated rotate alias resolves to orientation usage', async () => {
   const help = await usageForCommand('rotate');
   if (help === null) throw new Error('Expected command help text');
-  assert.match(help, /orientation <portrait\|portrait-upside-down\|landscape-left\|landscape-right>/);
+  assert.match(
+    help,
+    /orientation <portrait\|portrait-upside-down\|landscape-left\|landscape-right>/,
+  );
 });
 
 test('settings usage documents canonical faceid states', async () => {
