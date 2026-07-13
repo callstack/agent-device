@@ -16,7 +16,7 @@ import {
   type Selector,
 } from '../../selectors/index.ts';
 import { collectReplaySelectorCandidates } from './session-replay-heal.ts';
-import { collectSettleChromeRefs } from '../../commands/interaction/runtime/settle.ts';
+import { collectSettleChromeRefs } from '../../core/snapshot-chrome.ts';
 import { buildReplayDivergenceResume } from './session-replay-resume.ts';
 import { formatDivergenceActionLabel, isTouchTargetCommand } from '../../replay/script-utils.ts';
 import {
