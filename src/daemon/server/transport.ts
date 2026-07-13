@@ -3,7 +3,7 @@ import type { Server as HttpServer } from 'node:http';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
 import {
-  clearRequestCanceled,
+  clearRequestAbortRegistration,
   createRequestCanceledError,
   isRequestCanceled,
   markRequestCanceled,
@@ -89,10 +89,10 @@ export function createSocketServer(handleRequest: DaemonInvokeFn): DaemonServer 
           response = { ok: false, error: normalizeError(err) };
         } finally {
           inFlightRequests -= 1;
-          if (requestIdForCleanup && requestAbortRegistration) {
-            activeRequestIds.delete(requestIdForCleanup);
-            clearRequestCanceled(requestIdForCleanup, requestAbortRegistration);
+          if (requestAbortRegistration) {
+            activeRequestIds.delete(requestAbortRegistration.requestId);
           }
+          clearRequestAbortRegistration(requestAbortRegistration);
         }
         if (!socket.destroyed) {
           socket.write(

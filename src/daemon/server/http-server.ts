@@ -12,7 +12,7 @@ import { commandRpcParamsSchema } from '../../kernel/contracts.ts';
 import type { DaemonInstallSource, DaemonInvokeFn, DaemonRequest } from '../types.ts';
 import { normalizeTenantId } from '../config.ts';
 import {
-  clearRequestCanceled,
+  clearRequestAbortRegistration,
   markRequestCanceled,
   registerRequestAbort,
   resolveRequestTrackingId,
@@ -737,9 +737,7 @@ export async function createDaemonHttpServer(options: {
           statusCodeForNormalizedError(normalized.code),
         );
       } finally {
-        if (requestAbortRegistration) {
-          clearRequestCanceled(requestIdForCleanup, requestAbortRegistration);
-        }
+        clearRequestAbortRegistration(requestAbortRegistration);
       }
     });
   });

@@ -97,6 +97,13 @@ export function clearRequestCanceled(
   requestAbortControllers.delete(requestId);
 }
 
+export function clearRequestAbortRegistration(
+  registration: RequestAbortRegistration | undefined,
+): void {
+  if (!registration) return;
+  clearRequestCanceled(registration.requestId, registration);
+}
+
 export function isRequestCanceled(requestId: string | undefined): boolean {
   if (!requestId) return false;
   return canceledRequestIds.has(requestId);
