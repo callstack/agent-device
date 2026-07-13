@@ -55,13 +55,6 @@ export function buildReplayVarScope(sources: ReplayVarSources): ReplayVarScope {
   return { values: merged, expandedBuiltinNames: new Set() };
 }
 
-export function mergeReplayVarScopeValues(
-  scope: ReplayVarScope,
-  values: Record<string, string>,
-): void {
-  Object.assign(scope.values as Record<string, string>, values);
-}
-
 export function collectReplayShellEnv(processEnv: NodeJS.ProcessEnv): Record<string, string> {
   const result: Record<string, string> = {};
   for (const [rawKey, value] of Object.entries(processEnv)) {

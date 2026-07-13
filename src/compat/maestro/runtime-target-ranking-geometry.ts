@@ -7,7 +7,7 @@ import {
 } from '../../snapshot/snapshot-processing.ts';
 import type { MaestroResolvedSnapshotMatch } from './runtime-target-policy.ts';
 
-export const RECT_CONTAINS_EPSILON = 1;
+const RECT_CONTAINS_EPSILON = 1;
 
 export type SnapshotNodeByIndex = ReturnType<typeof buildSnapshotNodeByIndex>;
 

@@ -210,21 +210,56 @@ type TypedSuggestionQuery = {
 };
 
 function typedSuggestionQuery(command: MaestroCommand): TypedSuggestionQuery | undefined {
+  if (isTargetInteraction(command)) return targetInteractionSuggestion(command);
+  if (isObservationCommand(command)) return observationSuggestion(command);
+  if (command.kind === 'swipe' && command.gesture.kind === 'target') {
+    return { selector: command.gesture.from };
+  }
+  return undefined;
+}
+
+type TargetInteractionCommand = Extract<
+  MaestroCommand,
+  { kind: 'tapOn' | 'doubleTapOn' | 'longPressOn' }
+>;
+
+function isTargetInteraction(command: MaestroCommand): command is TargetInteractionCommand {
+  return (
+    command.kind === 'tapOn' || command.kind === 'doubleTapOn' || command.kind === 'longPressOn'
+  );
+}
+
+function targetInteractionSuggestion(
+  command: TargetInteractionCommand,
+): TypedSuggestionQuery | undefined {
+  if (command.target.space !== 'target') return undefined;
+  if (command.kind === 'tapOn') {
+    return {
+      selector: command.target.selector,
+      index: command.index,
+      childOf: command.childOf,
+      promoteTapTarget: true,
+    };
+  }
+  return { selector: command.target.selector, promoteTapTarget: true };
+}
+
+type ObservationCommand = Extract<
+  MaestroCommand,
+  { kind: 'assertVisible' | 'assertNotVisible' | 'extendedWaitUntil' | 'scrollUntilVisible' }
+>;
+
+function isObservationCommand(command: MaestroCommand): command is ObservationCommand {
+  return (
+    command.kind === 'assertVisible' ||
+    command.kind === 'assertNotVisible' ||
+    command.kind === 'extendedWaitUntil' ||
+    command.kind === 'scrollUntilVisible'
+  );
+}
+
+function observationSuggestion(command: ObservationCommand): TypedSuggestionQuery | undefined {
   switch (command.kind) {
-    case 'tapOn':
-      return command.target.space === 'target'
-        ? {
-            selector: command.target.selector,
-            index: command.index,
-            childOf: command.childOf,
-            promoteTapTarget: true,
-          }
-        : undefined;
-    case 'doubleTapOn':
-    case 'longPressOn':
-      return command.target.space === 'target'
-        ? { selector: command.target.selector, promoteTapTarget: true }
-        : undefined;
     case 'assertVisible':
     case 'assertNotVisible':
       return { selector: command.target };
@@ -236,10 +271,6 @@ function typedSuggestionQuery(command: MaestroCommand): TypedSuggestionQuery | u
           : undefined;
     case 'scrollUntilVisible':
       return { selector: command.element };
-    case 'swipe':
-      return command.gesture.kind === 'target' ? { selector: command.gesture.from } : undefined;
-    default:
-      return undefined;
   }
 }
 

@@ -10,29 +10,41 @@ export function buildReplayBuiltinVars(params: {
 }): Record<string, string> {
   const { req, sessionName, metadata, resolvedPath } = params;
   const flags = req.flags ?? {};
-  const cwd = req.meta?.cwd ?? process.cwd();
-  const filename = path.relative(cwd, resolvedPath) || resolvedPath;
   const builtins: Record<string, string> = {
     AD_SESSION: sessionName,
-    AD_FILENAME: filename,
+    AD_FILENAME: resolveReplayFilename(req, resolvedPath),
   };
-  const platform = (flags.platform as string | undefined) ?? metadata.platform;
-  if (platform) builtins.AD_PLATFORM = platform;
-  const target = (flags.target as string | undefined) ?? metadata.target;
-  if (target) builtins.AD_TARGET = target;
-  const device = flags.device;
-  if (typeof device === 'string' && device.length > 0) builtins.AD_DEVICE = device;
-  const deviceId = typeof flags.serial === 'string' ? flags.serial : flags.udid;
-  if (typeof deviceId === 'string' && deviceId.length > 0) {
-    builtins.AD_DEVICE_ID = deviceId;
-  }
-  if (typeof flags.shardIndex === 'number') {
-    builtins.AD_SHARD_INDEX = String(flags.shardIndex);
-  }
-  if (typeof flags.shardCount === 'number') builtins.AD_SHARD_COUNT = String(flags.shardCount);
-  const artifactsDir = flags.artifactsDir;
-  if (typeof artifactsDir === 'string' && artifactsDir.length > 0) {
-    builtins.AD_ARTIFACTS = artifactsDir;
-  }
+  addReplayStringBuiltin(builtins, 'AD_PLATFORM', flags.platform ?? metadata.platform);
+  addReplayStringBuiltin(builtins, 'AD_TARGET', flags.target ?? metadata.target);
+  addReplayStringBuiltin(builtins, 'AD_DEVICE', flags.device);
+  addReplayStringBuiltin(builtins, 'AD_DEVICE_ID', resolveReplayDeviceId(flags));
+  addReplayNumberBuiltin(builtins, 'AD_SHARD_INDEX', flags.shardIndex);
+  addReplayNumberBuiltin(builtins, 'AD_SHARD_COUNT', flags.shardCount);
+  addReplayStringBuiltin(builtins, 'AD_ARTIFACTS', flags.artifactsDir);
   return builtins;
+}
+
+function resolveReplayFilename(req: DaemonRequest, resolvedPath: string): string {
+  const cwd = req.meta?.cwd ?? process.cwd();
+  return path.relative(cwd, resolvedPath) || resolvedPath;
+}
+
+function resolveReplayDeviceId(flags: NonNullable<DaemonRequest['flags']>): unknown {
+  return typeof flags.serial === 'string' ? flags.serial : flags.udid;
+}
+
+function addReplayStringBuiltin(
+  builtins: Record<string, string>,
+  key: string,
+  value: unknown,
+): void {
+  if (typeof value === 'string' && value.length > 0) builtins[key] = value;
+}
+
+function addReplayNumberBuiltin(
+  builtins: Record<string, string>,
+  key: string,
+  value: unknown,
+): void {
+  if (typeof value === 'number') builtins[key] = String(value);
 }

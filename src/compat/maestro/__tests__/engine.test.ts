@@ -84,6 +84,40 @@ describe('executeMaestroProgram', () => {
     expect(result.generation).toBe(1);
   });
 
+  test.each([
+    ['tap', '      - tapOn: Retry'],
+    ['runScript', '      - runScript: setup.js'],
+    ['waitForAnimationToEnd', '      - waitForAnimationToEnd: 10'],
+  ])('invalidates cached observations after a failed %s attempt', async (_name, commandYaml) => {
+    const attempts: MaestroRuntimeRequest[] = [];
+    const observation: MaestroObservation = { generation: 0, matched: true };
+    const port = makePort({
+      observe: vi.fn(async () => observation),
+      execute: vi.fn(async (request) => {
+        attempts.push(request);
+        if (attempts.length === 1) throw new AppError('COMMAND_FAILED', 'retry me');
+        return { mutated: true };
+      }),
+    });
+    const program = parseMaestroProgram(
+      [
+        '---',
+        '- assertVisible: Ready',
+        '- retry:',
+        '    maxRetries: 1',
+        '    commands:',
+        commandYaml,
+      ].join('\n'),
+    );
+
+    const result = await executeMaestroProgram(program, port);
+
+    expect(attempts[0]).toMatchObject({ generation: 0, cachedObservation: observation });
+    expect(attempts[1]).toMatchObject({ generation: 1 });
+    expect(attempts[1]).not.toHaveProperty('cachedObservation');
+    expect(result.generation).toBe(2);
+  });
+
   test('owns hooks, includes, scoped env, output env, repeat, and retry', async () => {
     const executed: MaestroRuntimeRequest[] = [];
     let failingAttempts = 0;

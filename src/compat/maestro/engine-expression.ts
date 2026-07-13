@@ -52,28 +52,51 @@ function tokenizeMaestroBooleanExpression(expression: string): MaestroBooleanTok
 function readMaestroBooleanToken(
   remaining: string,
 ): { value: MaestroBooleanToken; length: number } | null {
+  return (
+    readPlatformToken(remaining) ??
+    readOperatorToken(remaining) ??
+    readParenToken(remaining) ??
+    readQuotedToken(remaining) ??
+    readBooleanToken(remaining)
+  );
+}
+
+type ReadToken = { value: MaestroBooleanToken; length: number };
+
+function readPlatformToken(remaining: string): ReadToken | null {
   const platform = 'maestro.platform';
-  if (remaining.startsWith(platform))
-    return { value: { type: 'platform' }, length: platform.length };
+  return remaining.startsWith(platform)
+    ? { value: { type: 'platform' }, length: platform.length }
+    : null;
+}
 
+function readOperatorToken(remaining: string): ReadToken | null {
   const operator = /^(==|!=|&&|\|\|)/.exec(remaining)?.[1];
-  if (operator) {
-    return {
-      value: {
-        type: 'operator',
-        value: operator as Extract<MaestroBooleanToken, { type: 'operator' }>['value'],
-      },
-      length: operator.length,
-    };
-  }
+  if (!operator) return null;
+  return {
+    value: {
+      type: 'operator',
+      value: operator as Extract<MaestroBooleanToken, { type: 'operator' }>['value'],
+    },
+    length: operator.length,
+  };
+}
 
+function readParenToken(remaining: string): ReadToken | null {
   const paren = remaining[0];
-  if (paren === '(' || paren === ')') return { value: { type: 'paren', value: paren }, length: 1 };
+  return paren === '(' || paren === ')'
+    ? { value: { type: 'paren', value: paren }, length: 1 }
+    : null;
+}
 
+function readQuotedToken(remaining: string): ReadToken | null {
   const quoted = /^(['"])(.*?)\1/.exec(remaining);
-  if (quoted)
-    return { value: { type: 'string', value: quoted[2] ?? '' }, length: quoted[0].length };
+  return quoted
+    ? { value: { type: 'string', value: quoted[2] ?? '' }, length: quoted[0].length }
+    : null;
+}
 
+function readBooleanToken(remaining: string): ReadToken | null {
   const boolean = /^(true|false)\b/.exec(remaining)?.[1];
   return boolean
     ? { value: { type: 'boolean', value: boolean === 'true' }, length: boolean.length }
@@ -129,6 +152,14 @@ class MaestroBooleanExpressionParser {
   }
 
   private parsePlatformComparison(): boolean {
+    this.consumePlatformToken();
+    const operator = this.consumeComparisonOperator();
+    const expectedPlatform = this.consumeStringLiteral();
+    const matches = this.platform === expectedPlatform.toLowerCase();
+    return operator.value === '==' ? matches : !matches;
+  }
+
+  private consumePlatformToken(): void {
     if (this.peek()?.type !== 'platform') {
       throw new AppError(
         'INVALID_ARGS',
@@ -136,18 +167,24 @@ class MaestroBooleanExpressionParser {
       );
     }
     this.index += 1;
-    const operator = this.peek();
-    if (operator?.type !== 'operator' || (operator.value !== '==' && operator.value !== '!=')) {
+  }
+
+  private consumeComparisonOperator(): Extract<MaestroBooleanToken, { type: 'operator' }> {
+    const token = this.peek();
+    if (token?.type !== 'operator' || (token.value !== '==' && token.value !== '!=')) {
       throw new AppError('INVALID_ARGS', 'runFlow.when.true comparison requires == or !=.');
     }
     this.index += 1;
-    const string = this.peek();
-    if (string?.type !== 'string') {
+    return token;
+  }
+
+  private consumeStringLiteral(): string {
+    const token = this.peek();
+    if (token?.type !== 'string') {
       throw new AppError('INVALID_ARGS', 'runFlow.when.true comparison requires a string literal.');
     }
     this.index += 1;
-    const matches = this.platform === string.value.toLowerCase();
-    return operator.value === '==' ? matches : !matches;
+    return token.value;
   }
 
   private consumeOperator(value: '&&' | '||'): boolean {

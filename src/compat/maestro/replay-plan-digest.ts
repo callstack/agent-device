@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto';
-import type { MaestroReplayPlan } from './replay-plan-types.ts';
 
 export function computeMaestroReplayPlanDigest(plan: {
   readonly platform?: string;
@@ -19,10 +18,6 @@ export function computeMaestroReplayPlanDigest(plan: {
   return createHash('sha256')
     .update(JSON.stringify(sortKeysDeep(canonical)), 'utf8')
     .digest('hex');
-}
-
-export function digestMaestroReplayPlan(plan: MaestroReplayPlan): string {
-  return computeMaestroReplayPlanDigest(plan);
 }
 
 function sortKeysDeep(value: unknown): unknown {

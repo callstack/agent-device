@@ -223,16 +223,23 @@ function staticRunFlowDecision(
   if (condition.platform !== undefined && condition.platform !== state.options.platform) {
     return 'omit';
   }
-  if (condition.true === false) return 'omit';
-  if (typeof condition.true === 'string') {
-    const resolved = state.context.resolve(condition.true);
-    if (hasUnresolvedVariable(resolved)) return 'opaque';
-    if (!evaluateMaestroBooleanExpression(condition.true, state.context, state.options.platform)) {
-      return 'omit';
-    }
-  }
+  const booleanDecision = staticBooleanConditionDecision(condition.true, state);
+  if (booleanDecision) return booleanDecision;
   if (condition.visible || condition.notVisible) return 'opaque';
   return 'flatten';
+}
+
+function staticBooleanConditionDecision(
+  condition: boolean | string | undefined,
+  state: BuildState,
+): Extract<StaticRunFlowDecision, 'omit' | 'opaque'> | undefined {
+  if (condition === false) return 'omit';
+  if (typeof condition !== 'string') return undefined;
+  const resolved = state.context.resolve(condition);
+  if (hasUnresolvedVariable(resolved)) return 'opaque';
+  return evaluateMaestroBooleanExpression(condition, state.context, state.options.platform)
+    ? undefined
+    : 'omit';
 }
 
 function staticRepeatCount(

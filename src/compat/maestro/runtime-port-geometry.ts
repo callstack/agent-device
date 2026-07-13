@@ -1,6 +1,5 @@
 import { AppError } from '../../kernel/errors.ts';
 import { normalizePublicSwipeMotion } from '../../contracts/gesture-normalization.ts';
-import type { GestureSemanticInput } from '../../contracts/gesture-plan-types.ts';
 import { buildInPageSwipeGesturePlan, clampToRange } from '../../contracts/scroll-gesture.ts';
 import { pointInsideRect } from '../../utils/rect-center.ts';
 import type { MaestroRuntimeRequest } from './engine-types.ts';
@@ -10,6 +9,7 @@ import { resolveMaestroTarget } from './runtime-port-observation.ts';
 import { MAESTRO_TARGET_SWIPE_POLICY } from './runtime-port-geometry-policy.ts';
 import type {
   MaestroRuntimeOperations,
+  MaestroSinglePointerGestureInput,
   MaestroSwipeOperation,
   MaestroTargetResolution,
 } from './runtime-port-types.ts';
@@ -106,14 +106,24 @@ function normalizedSwipeFromEndpoints(
   start: { x: number; y: number },
   end: { x: number; y: number },
   durationMs: number | undefined,
-): GestureSemanticInput {
-  return normalizePublicSwipeMotion({ from: start, to: end, durationMs }).gesture;
+): MaestroSinglePointerGestureInput {
+  const gesture = normalizePublicSwipeMotion({ from: start, to: end, durationMs }).gesture;
+  if (gesture.intent === 'fling') return gesture;
+  if (gesture.intent === 'pan' && 'origin' in gesture) {
+    return {
+      intent: 'pan',
+      origin: gesture.origin,
+      delta: gesture.delta,
+      ...(gesture.durationMs === undefined ? {} : { durationMs: gesture.durationMs }),
+    };
+  }
+  throw new AppError('COMMAND_FAILED', 'Swipe normalization produced a non-swipe gesture.');
 }
 
 function normalizedScreenHorizontalSwipe(
   direction: Extract<MaestroDirection, 'left' | 'right'>,
   durationMs: number | undefined,
-): GestureSemanticInput {
+): MaestroSinglePointerGestureInput {
   const preset = direction;
   return durationMs === undefined
     ? { intent: 'fling', preset }
@@ -125,7 +135,7 @@ function normalizedScreenVerticalSwipe(
   start: { x: number; y: number },
   end: { x: number; y: number },
   durationMs: number | undefined,
-): GestureSemanticInput {
+): MaestroSinglePointerGestureInput {
   if (durationMs !== undefined) return normalizedSwipeFromEndpoints(start, end, durationMs);
   return {
     intent: 'fling',

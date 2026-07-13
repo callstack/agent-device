@@ -6,9 +6,7 @@ export type CommandRuntimeHintInput = Pick<
 >;
 type CommandRuntimeHintKey = keyof CommandRuntimeHintInput;
 
-export function buildCommandRuntimeHints(
-  hints: CommandRuntimeHintInput,
-): SessionRuntimeHints | undefined {
+function buildCommandRuntimeHints(hints: CommandRuntimeHintInput): SessionRuntimeHints | undefined {
   const { metroHost, metroPort, bundleUrl, launchUrl } = hints;
   if (
     metroHost === undefined &&

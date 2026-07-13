@@ -33,9 +33,6 @@ export async function compileMaestroReplayPlan(
   return freezeDeep({ ...planWithoutDigest, digest });
 }
 
-export const buildMaestroReplayPlan = compileMaestroReplayPlan;
-export const createMaestroReplayPlan = compileMaestroReplayPlan;
-
 function normalizeRuntimeHints(
   hints: Readonly<SessionRuntimeHints> | undefined,
 ): Readonly<SessionRuntimeHints> | undefined {

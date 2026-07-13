@@ -98,7 +98,7 @@ export function filterVisibleMaestroMatches(params: {
   };
 }
 
-export function filterReactNativeOverlayBlockedMatches(
+function filterReactNativeOverlayBlockedMatches(
   nodes: SnapshotState['nodes'],
   matches: SnapshotNode[],
   platform: MaestroPlatform,
@@ -143,7 +143,7 @@ export function maestroVisibleTextMatchRank(node: SnapshotNode, query: string): 
   return 3;
 }
 
-export function textEqualsOrRegex(
+function textEqualsOrRegex(
   value: string | undefined,
   query: string,
   options: MaestroSelectorMatchOptions = {},

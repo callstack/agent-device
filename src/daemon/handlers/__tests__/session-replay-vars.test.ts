@@ -851,7 +851,7 @@ test('runReplayScriptFile explains empty Maestro runScript JSON bodies', async (
   if (!response.ok) {
     assert.match(response.error.message, /Replay failed at step 1/);
     assert.match(response.error.message, /json\(\) received an empty body/);
-    assert.match(response.error.message, /setup server output/);
+    assert.match(response.error.hint ?? '', /setup server output/);
   }
   assert.equal(calls.length, 0);
 });
@@ -1018,7 +1018,7 @@ test('runReplayScriptFile promotes Maestro id tapOn to an actionable ancestor', 
   );
 });
 
-test('runReplayScriptFile captures a fresh Maestro snapshot for tapOn after assertVisible', async () => {
+test('runReplayScriptFile reuses the exact observation snapshot for tapOn after assertVisible', async () => {
   let snapshots = 0;
   const { response, calls } = await runReplayFixture({
     label: 'maestro-assert-visible-tap-fresh-snapshot',
@@ -1037,34 +1037,19 @@ test('runReplayScriptFile captures a fresh Maestro snapshot for tapOn after asse
         return {
           ok: true,
           data: {
-            nodes:
-              snapshots === 1
-                ? [
-                    {
-                      index: 1,
-                      label: 'Article',
-                      rect: { x: 10, y: 100, width: 160, height: 44 },
-                    },
-                    {
-                      index: 2,
-                      label: 'Open feed',
-                      identifier: 'open-feed',
-                      rect: { x: 20, y: 180, width: 180, height: 48 },
-                    },
-                  ]
-                : [
-                    {
-                      index: 1,
-                      label: 'AppStack.tsx (42:7)',
-                      rect: { x: 28, y: 1304, width: 1025, height: 44 },
-                    },
-                    {
-                      index: 2,
-                      label: 'Open feed',
-                      identifier: 'open-feed',
-                      rect: { x: 40, y: 240, width: 200, height: 48 },
-                    },
-                  ],
+            nodes: [
+              {
+                index: 1,
+                label: 'Article',
+                rect: { x: 10, y: 100, width: 160, height: 44 },
+              },
+              {
+                index: 2,
+                label: 'Open feed',
+                identifier: 'open-feed',
+                rect: { x: 20, y: 180, width: 180, height: 48 },
+              },
+            ],
           },
         };
       }
@@ -1073,13 +1058,12 @@ test('runReplayScriptFile captures a fresh Maestro snapshot for tapOn after asse
   });
 
   assert.equal(response.ok, true);
-  assert.equal(snapshots, 2);
+  assert.equal(snapshots, 1);
   assert.deepEqual(
     calls.map((call) => [call.command, call.positionals]),
     [
       ['snapshot', []],
-      ['snapshot', []],
-      ['click', ['140', '264']],
+      ['click', ['110', '204']],
     ],
   );
 });
@@ -1145,7 +1129,6 @@ test('runReplayScriptFile scopes duplicate tap targets after native Maestro asse
   assert.deepEqual(
     calls.map((call) => [call.command, call.positionals]),
     [
-      ['snapshot', []],
       ['snapshot', []],
       ['click', ['112', '242']],
     ],
@@ -1945,7 +1928,6 @@ test('runReplayScriptFile runs Maestro runFlow.when.visible commands when presen
     calls.map((call) => [call.command, call.positionals]),
     [
       ['snapshot', []],
-      ['snapshot', []],
       ['click', ['76', '122']],
     ],
   );
@@ -2090,7 +2072,6 @@ test('runReplayScriptFile resolves nested Maestro runFlow.when command variables
   assert.deepEqual(
     calls.map((call) => [call.command, call.positionals]),
     [
-      ['snapshot', []],
       ['snapshot', []],
       ['click', ['140', '320']],
     ],

@@ -16,7 +16,7 @@ import {
   type MaestroObservationCondition,
 } from './engine-types.ts';
 
-export const MAX_MAESTRO_REPEAT_EXPANSIONS = 1000;
+const MAX_MAESTRO_REPEAT_EXPANSIONS = 1000;
 
 export function resolveCommand<T extends MaestroCommand>(
   command: T,
@@ -91,7 +91,7 @@ export async function readIncludedProgram(
   return await options.loadProgram(command.include.path, command.source.path);
 }
 
-export function includePathKey(
+function includePathKey(
   command: MaestroRunFlowCommand,
   parentSource: string | undefined,
 ): string | undefined {

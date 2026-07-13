@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { AppError, normalizeError } from '../../kernel/errors.ts';
+import { resolveTargetDevice } from '../../core/dispatch.ts';
 import { getRequestSignal } from '../../request/cancel.ts';
 import { emitRequestProgress, readReplayTestActionProgress } from '../../request/progress.ts';
 import {
@@ -20,12 +21,16 @@ import {
   compileMaestroReplayPlan,
   resolveMaestroReplayStartIndex,
 } from '../../compat/maestro/replay-plan.ts';
-import type { MaestroEngineEvent } from '../../compat/maestro/engine-types.ts';
-import type { MaestroPlatform } from '../../compat/maestro/program-ir.ts';
+import type {
+  MaestroEngineEvent,
+  MaestroEngineObserver,
+} from '../../compat/maestro/engine-types.ts';
+import type { MaestroPlatform, MaestroProgram } from '../../compat/maestro/program-ir.ts';
 import type { MaestroReplayPlan } from '../../compat/maestro/replay-plan-types.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import type { ReplayCommandResult } from '../../contracts/replay.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse } from '../types.ts';
+import { assertSessionSelectorMatches } from '../session-selector.ts';
 import { SessionStore } from '../session-store.ts';
 import { errorResponse } from './response.ts';
 import { buildReplayBuiltinVars } from './session-replay-vars.ts';
@@ -34,15 +39,39 @@ import {
   type MaestroFailedEngineEvent,
 } from './session-replay-maestro-failure.ts';
 import { resolveEffectiveOpenRuntimeHints } from './session-runtime.ts';
+import { appendReplayTraceEvent } from './session-replay-trace.ts';
 
-export async function runTypedMaestroReplayFile(params: {
+type TypedMaestroReplayParams = {
   req: DaemonRequest;
   sessionName: string;
   logPath: string;
   sessionStore: SessionStore;
+  tracePath?: string;
   invoke: DaemonInvokeFn;
-}): Promise<DaemonResponse> {
-  const { req, sessionName, logPath, sessionStore, invoke } = params;
+};
+
+type TypedMaestroReplayState = {
+  failedEvent?: MaestroFailedEngineEvent;
+  plan?: MaestroReplayPlan;
+  snapshotStart: number;
+};
+
+type TypedMaestroReplayContext = {
+  filePath: string;
+  program: MaestroProgram;
+  platform: Extract<MaestroPlatform, 'android' | 'ios'>;
+  target: string;
+  runtimeHints: ReturnType<typeof resolveEffectiveOpenRuntimeHints>;
+  defaults: Record<string, string>;
+  env: Record<string, string>;
+  signal: AbortSignal | undefined;
+  loadProgram: ReturnType<typeof createMaestroProgramLoader>;
+};
+
+export async function runTypedMaestroReplayFile(
+  params: TypedMaestroReplayParams,
+): Promise<DaemonResponse> {
+  const { req } = params;
   const requestedPath = req.positionals?.[0];
   if (!requestedPath) return errorResponse('INVALID_ARGS', 'replay requires a path');
   if (req.flags?.saveScript !== undefined) {
@@ -52,128 +81,272 @@ export async function runTypedMaestroReplayFile(params: {
     );
   }
   const startedAt = Date.now();
-  let failedEvent: MaestroFailedEngineEvent | undefined;
-  let plan: MaestroReplayPlan | undefined;
-  let snapshotStart = 0;
+  const state: TypedMaestroReplayState = { snapshotStart: 0 };
   try {
-    const filePath = SessionStore.expandHome(requestedPath, req.meta?.cwd);
-    const program = parseMaestroProgram(fs.readFileSync(filePath, 'utf8'), {
-      sourcePath: filePath,
+    return await executeTypedMaestroReplay({
+      ...params,
+      requestedPath,
+      startedAt,
+      state,
     });
-    const sessionDevice = sessionStore.get(sessionName)?.device;
-    const platform = resolveMaestroPlatform(req, sessionDevice);
-    const target = resolveMaestroTarget(req, sessionDevice);
-    const runtimeHints = sessionDevice
-      ? resolveEffectiveOpenRuntimeHints({ req, sessionStore, sessionName, device: sessionDevice })
-      : req.runtime;
-    const defaults = {
-      ...buildReplayBuiltinVars({
-        req,
-        sessionName,
-        metadata: {},
-        resolvedPath: filePath,
-      }),
-      AD_PLATFORM: platform,
-      AD_TARGET: target,
-    };
-    const env = {
-      ...collectReplayShellEnv(readReplayShellEnvSource(req.flags?.replayShellEnv)),
-      ...parseReplayCliEnvEntries(readReplayCliEnvEntries(req.flags?.replayEnv)),
-    };
-    const signal = getRequestSignal(req.meta?.requestId);
-    const loadProgram = createMaestroProgramLoader(path.dirname(filePath));
-    plan = await compileMaestroReplayPlan(program, {
-      defaults,
-      env,
-      platform,
-      target,
-      runtimeHints,
-      loadProgram,
-      signal,
-    });
-    const startIndex = resolveMaestroReplayStartIndex(plan, {
-      from: req.flags?.replayFrom,
-      planDigest: req.flags?.replayPlanDigest,
-    });
-    const { command: _command, positionals: _positionals, ...requestBase } = req;
-    const executionRuntime = req.runtime ?? runtimeHints;
-    const baseReq =
-      executionRuntime === undefined
-        ? requestBase
-        : { ...requestBase, runtime: executionRuntime };
-    const port = createDaemonMaestroRuntimePort({
-      baseReq,
-      invoke,
-      platform,
-      sourcePath: filePath,
-      dependencies: {
-        now: Date.now,
-        sleep: async (milliseconds, abortSignal) => {
-          await sleep(milliseconds, undefined, { signal: abortSignal });
-        },
-      },
-    });
-    snapshotStart = sessionStore.get(sessionName)?.snapshotDiagnostics?.samples.length ?? 0;
-    const result = await executeMaestroPlan(plan, port, {
-      defaults,
-      env,
-      platform,
-      target,
-      loadProgram,
-      signal,
-      startIndex,
-      observer: {
-        commandStarted: (event) => {
-          emitMaestroProgress(filePath, event);
-        },
-        commandFailed: (event) => {
-          failedEvent = event;
-        },
-      },
-    });
-    const samples =
-      sessionStore.get(sessionName)?.snapshotDiagnostics?.samples.slice(snapshotStart) ?? [];
-    const snapshotDiagnostics = summarizeSnapshotTimingSamples(samples);
-    const replayed = plan.total - startIndex;
-    return {
-      ok: true,
-      data: {
-        replayed,
-        healed: 0,
-        session: sessionName,
-        artifactPaths: result.artifactPaths,
-        ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
-        message: replaySuccessMessage(replayed, Date.now() - startedAt),
-      } satisfies ReplayCommandResult,
-    };
   } catch (error) {
-    const normalizedError = normalizeError(error);
-    if (failedEvent && plan) {
-      const samples =
-        sessionStore.get(sessionName)?.snapshotDiagnostics?.samples.slice(snapshotStart) ?? [];
-      return await buildTypedMaestroFailureResponse({
-        error: normalizedError,
-        event: failedEvent,
-        plan,
-        replayPath: SessionStore.expandHome(requestedPath, req.meta?.cwd),
-        req,
-        sessionName,
-        sessionStore,
-        logPath,
-        snapshotDiagnostics: summarizeSnapshotTimingSamples(samples),
-      });
-    }
-    return errorResponse(normalizedError.code, normalizedError.message, {
-      ...(normalizedError.details ?? {}),
-      ...(failedEvent
-        ? {
-            replaySource: failedEvent.source,
-            replayStep: failedEvent.stepIndex,
-            replayStepTotal: failedEvent.stepTotal,
-          }
-        : {}),
+    return await buildTypedMaestroReplayErrorResponse({
+      ...params,
+      requestedPath,
+      state,
+      error,
     });
   }
+}
+
+async function executeTypedMaestroReplay(
+  params: TypedMaestroReplayParams & {
+    requestedPath: string;
+    startedAt: number;
+    state: TypedMaestroReplayState;
+  },
+): Promise<DaemonResponse> {
+  const { req, sessionName, sessionStore, tracePath, invoke, state } = params;
+  const context = await prepareTypedMaestroReplay(params);
+  const plan = await compileMaestroReplayPlan(context.program, {
+    defaults: context.defaults,
+    env: context.env,
+    platform: context.platform,
+    target: context.target,
+    runtimeHints: context.runtimeHints,
+    loadProgram: context.loadProgram,
+    signal: context.signal,
+  });
+  state.plan = plan;
+  const startIndex = resolveMaestroReplayStartIndex(plan, {
+    from: req.flags?.replayFrom,
+    planDigest: req.flags?.replayPlanDigest,
+  });
+  const port = createMaestroReplayPort({
+    req,
+    invoke,
+    platform: context.platform,
+    runtimeHints: context.runtimeHints,
+    sourcePath: context.filePath,
+  });
+  state.snapshotStart = sessionStore.get(sessionName)?.snapshotDiagnostics?.samples.length ?? 0;
+  const result = await executeMaestroPlan(plan, port, {
+    defaults: context.defaults,
+    env: context.env,
+    platform: context.platform,
+    target: context.target,
+    loadProgram: context.loadProgram,
+    signal: context.signal,
+    startIndex,
+    observer: createMaestroReplayObserver({
+      filePath: context.filePath,
+      tracePath,
+      onFailure: (event) => {
+        state.failedEvent = event;
+      },
+    }),
+  });
+  return buildTypedMaestroSuccessResponse({
+    result,
+    plan,
+    startIndex,
+    startedAt: params.startedAt,
+    sessionName,
+    sessionStore,
+    snapshotStart: state.snapshotStart,
+  });
+}
+
+async function prepareTypedMaestroReplay(
+  params: TypedMaestroReplayParams & { requestedPath: string },
+): Promise<TypedMaestroReplayContext> {
+  const { req, requestedPath, sessionName, sessionStore } = params;
+  const filePath = SessionStore.expandHome(requestedPath, req.meta?.cwd);
+  const program = parseMaestroProgram(fs.readFileSync(filePath, 'utf8'), {
+    sourcePath: filePath,
+  });
+  const session = sessionStore.get(sessionName);
+  if (session) assertSessionSelectorMatches(session, req.flags);
+  const device = session?.device ?? (await resolveTargetDevice(req.flags ?? {}));
+  const platform = resolveMaestroPlatform(req, device);
+  const target = resolveMaestroTarget(req, device);
+  const runtimeHints = resolveEffectiveOpenRuntimeHints({
+    req,
+    sessionStore,
+    sessionName,
+    device,
+  });
+  return {
+    filePath,
+    program,
+    platform,
+    target,
+    runtimeHints,
+    defaults: buildTypedMaestroDefaults({
+      req,
+      sessionName,
+      filePath,
+      platform,
+      target,
+    }),
+    env: buildTypedMaestroEnv(req),
+    signal: getRequestSignal(req.meta?.requestId),
+    loadProgram: createMaestroProgramLoader(path.dirname(filePath)),
+  };
+}
+
+function buildTypedMaestroDefaults(params: {
+  req: DaemonRequest;
+  sessionName: string;
+  filePath: string;
+  platform: Extract<MaestroPlatform, 'android' | 'ios'>;
+  target: string;
+}): Record<string, string> {
+  return {
+    ...buildReplayBuiltinVars({
+      req: params.req,
+      sessionName: params.sessionName,
+      metadata: {},
+      resolvedPath: params.filePath,
+    }),
+    AD_PLATFORM: params.platform,
+    AD_TARGET: params.target,
+  };
+}
+
+function buildTypedMaestroEnv(req: DaemonRequest): Record<string, string> {
+  return {
+    ...collectReplayShellEnv(readReplayShellEnvSource(req.flags?.replayShellEnv)),
+    ...parseReplayCliEnvEntries(readReplayCliEnvEntries(req.flags?.replayEnv)),
+  };
+}
+
+function createMaestroReplayPort(params: {
+  req: DaemonRequest;
+  invoke: DaemonInvokeFn;
+  platform: Extract<MaestroPlatform, 'android' | 'ios'>;
+  runtimeHints: ReturnType<typeof resolveEffectiveOpenRuntimeHints>;
+  sourcePath: string;
+}) {
+  const { req, invoke, platform, runtimeHints, sourcePath } = params;
+  const { command: _command, positionals: _positionals, ...requestBase } = req;
+  const baseReq =
+    runtimeHints === undefined ? requestBase : { ...requestBase, runtime: runtimeHints };
+  return createDaemonMaestroRuntimePort({
+    baseReq,
+    invoke,
+    platform,
+    sourcePath,
+    dependencies: {
+      now: Date.now,
+      sleep: async (milliseconds, abortSignal) => {
+        await sleep(milliseconds, undefined, { signal: abortSignal });
+      },
+    },
+  });
+}
+
+function createMaestroReplayObserver(params: {
+  filePath: string;
+  tracePath: string | undefined;
+  onFailure: (event: MaestroFailedEngineEvent) => void;
+}): MaestroEngineObserver {
+  const { filePath, tracePath, onFailure } = params;
+  return {
+    commandStarted: (event) => {
+      emitMaestroProgress(filePath, event);
+      appendMaestroTraceStart(tracePath, filePath, event);
+    },
+    commandCompleted: (event) => {
+      appendMaestroTraceStop(tracePath, filePath, event, true);
+    },
+    commandFailed: (event) => {
+      onFailure(event);
+      appendMaestroTraceStop(tracePath, filePath, event, false);
+    },
+  };
+}
+
+function buildTypedMaestroSuccessResponse(params: {
+  result: { artifactPaths: string[] };
+  plan: MaestroReplayPlan;
+  startIndex: number;
+  startedAt: number;
+  sessionName: string;
+  sessionStore: SessionStore;
+  snapshotStart: number;
+}): DaemonResponse {
+  const { result, plan, startIndex, startedAt, sessionName, sessionStore, snapshotStart } = params;
+  const snapshotDiagnostics = readTypedMaestroSnapshotDiagnostics(
+    sessionStore,
+    sessionName,
+    snapshotStart,
+  );
+  const replayed = plan.total - startIndex;
+  return {
+    ok: true,
+    data: {
+      replayed,
+      healed: 0,
+      session: sessionName,
+      artifactPaths: result.artifactPaths,
+      ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
+      message: replaySuccessMessage(replayed, Date.now() - startedAt),
+    } satisfies ReplayCommandResult,
+  };
+}
+
+async function buildTypedMaestroReplayErrorResponse(
+  params: TypedMaestroReplayParams & {
+    requestedPath: string;
+    state: TypedMaestroReplayState;
+    error: unknown;
+  },
+): Promise<DaemonResponse> {
+  const normalizedError = normalizeError(params.error);
+  const { failedEvent, plan } = params.state;
+  if (failedEvent && plan) {
+    return await buildTypedMaestroFailureResponse({
+      error: normalizedError,
+      event: failedEvent,
+      plan,
+      replayPath: SessionStore.expandHome(params.requestedPath, params.req.meta?.cwd),
+      req: params.req,
+      sessionName: params.sessionName,
+      sessionStore: params.sessionStore,
+      logPath: params.logPath,
+      snapshotDiagnostics: readTypedMaestroSnapshotDiagnostics(
+        params.sessionStore,
+        params.sessionName,
+        params.state.snapshotStart,
+      ),
+    });
+  }
+  return errorResponse(normalizedError.code, normalizedError.message, {
+    ...(normalizedError.details ?? {}),
+    ...buildTypedMaestroErrorDetails(failedEvent),
+  });
+}
+
+function readTypedMaestroSnapshotDiagnostics(
+  sessionStore: SessionStore,
+  sessionName: string,
+  snapshotStart: number,
+) {
+  const samples =
+    sessionStore.get(sessionName)?.snapshotDiagnostics?.samples.slice(snapshotStart) ?? [];
+  return summarizeSnapshotTimingSamples(samples);
+}
+
+function buildTypedMaestroErrorDetails(
+  failedEvent: MaestroFailedEngineEvent | undefined,
+): Record<string, unknown> {
+  if (!failedEvent) return {};
+  return {
+    replaySource: failedEvent.source,
+    replayStep: failedEvent.stepIndex,
+    replayStepTotal: failedEvent.stepTotal,
+  };
 }
 
 export function isTypedMaestroReplay(req: DaemonRequest, filePath: string): boolean {
@@ -216,6 +389,48 @@ function emitMaestroProgress(file: string, event: MaestroEngineEvent): void {
     stepTotal: event.stepTotal,
     stepCommand: formatted.command,
     ...(formatted.value ? { stepValue: formatted.value } : {}),
+  });
+}
+
+function appendMaestroTraceStart(
+  tracePath: string | undefined,
+  replayPath: string,
+  event: MaestroEngineEvent,
+): void {
+  const formatted = formatMaestroCommandProgress(event.command);
+  appendReplayTraceEvent(tracePath, {
+    type: 'replay_action_start',
+    ts: new Date().toISOString(),
+    replayPath,
+    ...(event.source.path && event.source.path !== replayPath
+      ? { sourcePath: event.source.path }
+      : {}),
+    line: event.source.line,
+    step: event.stepIndex,
+    command: formatted.command,
+    positionals: formatted.value ? [formatted.value] : [],
+  });
+}
+
+function appendMaestroTraceStop(
+  tracePath: string | undefined,
+  replayPath: string,
+  event: MaestroEngineEvent & { durationMs: number; error?: unknown },
+  ok: boolean,
+): void {
+  appendReplayTraceEvent(tracePath, {
+    type: 'replay_action_stop',
+    ts: new Date().toISOString(),
+    replayPath,
+    ...(event.source.path && event.source.path !== replayPath
+      ? { sourcePath: event.source.path }
+      : {}),
+    line: event.source.line,
+    step: event.stepIndex,
+    command: formatMaestroCommandProgress(event.command).command,
+    ok,
+    durationMs: event.durationMs,
+    ...(!ok && event.error instanceof AppError ? { errorCode: event.error.code } : {}),
   });
 }
 

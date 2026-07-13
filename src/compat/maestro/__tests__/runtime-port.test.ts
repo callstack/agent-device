@@ -74,7 +74,7 @@ describe('MaestroRuntimePort', () => {
     expect(result).toEqual({
       executed: 13,
       skipped: 0,
-      generation: 10,
+      generation: 12,
       artifactPaths: ['artifact://checkout.png'],
     });
     expect(calls.map(({ kind }) => kind)).toEqual([
@@ -116,8 +116,31 @@ describe('MaestroRuntimePort', () => {
     expect(calls[12]).toMatchObject({
       kind: 'runScript',
       input: { file: 'setup.js', env: { SEED: 7 } },
-      generation: 10,
+      generation: 11,
     });
+  });
+
+  test('invalidates observation evidence after successful waits and scripts', async () => {
+    const operations = makeOperations({
+      waitForAnimationToEnd: vi.fn(async () => undefined),
+      runScript: vi.fn(async () => undefined),
+    });
+    const port = createMaestroRuntimePort(operations);
+
+    await expect(
+      port.execute({
+        command: { kind: 'waitForAnimationToEnd', source: { line: 2 }, timeout: 50 },
+        generation: 4,
+        env: {},
+      }),
+    ).resolves.toEqual({ mutated: true });
+    await expect(
+      port.execute({
+        command: { kind: 'runScript', source: { line: 3 }, file: 'setup.js' },
+        generation: 5,
+        env: {},
+      }),
+    ).resolves.toEqual({ mutated: true });
   });
 
   test('keeps selector evidence and target geometry in the current generation', async () => {

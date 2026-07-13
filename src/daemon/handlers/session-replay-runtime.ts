@@ -164,7 +164,14 @@ export async function runReplayScriptFile(params: {
           'This session has an active .ad --save-script repair run; finish it with replay --from or close before running Maestro YAML.',
         );
       }
-      return await runTypedMaestroReplayFile({ req, sessionName, logPath, sessionStore, invoke });
+      return await runTypedMaestroReplayFile({
+        req,
+        sessionName,
+        logPath,
+        sessionStore,
+        tracePath,
+        invoke,
+      });
     }
     const script = fs.readFileSync(resolved, 'utf8');
     const firstNonWhitespace = script.trimStart()[0];

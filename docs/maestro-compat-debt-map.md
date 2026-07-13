@@ -1,6 +1,6 @@
 # Maestro Compatibility Architecture
 
-This map describes the direct compatibility engine after ADR 0014. Maestro YAML has one production
+This map describes the direct compatibility engine after ADR 0015. Maestro YAML has one production
 route: typed parse, immutable plan compilation, typed execution, and a runtime port backed by public
 agent-device commands. There is no `SessionAction` lowering, private command namespace, runtime
 fallback, or second compatibility engine.
@@ -10,7 +10,7 @@ fallback, or second compatibility engine.
 | Program parsing | `program-ir*.ts`, `program-loader.ts` | Source-preserving typed IR | The supported Maestro subset must reject unknown syntax explicitly. Keep parser modules focused as the grammar grows. |
 | Plan and resume | `replay-plan*.ts`, `replay-plan-digest.ts` | Immutable expanded plan and digest | Runtime control steps are opaque resume boundaries. Includes, static conditions, and environment inputs must remain digest-bound. |
 | Execution | `engine*.ts`, `runtime-port*.ts` | Typed commands, observation generations, runtime port | Mutation must invalidate observation evidence. Scoped and output variables must not leak across flow boundaries. |
-| Daemon binding | `daemon-runtime-port*.ts` | Public daemon commands only | Preserve one fresh target snapshot on the happy path, structured target retries, and platform-independent command semantics. Never restore private recursive routing. |
+| Daemon binding | `daemon-runtime-port*.ts` | Typed calls to public daemon commands | Reuse only same-generation observation snapshots; otherwise preserve one fresh target snapshot, structured target retries, and platform-independent command semantics. Never restore private compatibility dispatch or re-enter Maestro parsing. |
 | Target policy | `runtime-target*.ts` | Shared snapshot model with Maestro ranking policy | Exact-or-regex selector behavior, visibility, duplicate ranking, ancestor promotion, and platform quirks are compatibility policy. Fuzzy substring fallback is intentionally absent. |
 | Gestures | `runtime-port-geometry*.ts` | ADR 0013 normalized single-pointer input | Preserve authored absolute/percentage endpoints exactly. Maestro does not own multi-touch planning or injection. |
 | Failure and resume reporting | `session-replay-maestro-*.ts` | ADR 0012 `REPLAY_DIVERGENCE` wire contract | Source paths, step ordinals, artifacts, scrubbed variables, screen digest, and typed resume preflight must survive nested control failures. |

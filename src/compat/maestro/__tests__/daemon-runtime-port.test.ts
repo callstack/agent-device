@@ -102,9 +102,15 @@ test('does not leak replay and test controls into nested public commands', async
     generation: 0,
     env: {},
   });
+  await port.execute({
+    command: { kind: 'back', source: { line: 3 } },
+    generation: 1,
+    env: {},
+  });
 
-  expect(requests).toHaveLength(1);
+  expect(requests).toHaveLength(2);
   expect(requests[0]?.flags).toEqual({ platform: 'android', relaunch: true });
+  expect(requests[1]?.flags).toEqual({ platform: 'android' });
 });
 
 test('keeps absent negative observations, script output, and artifacts typed', async () => {
@@ -277,23 +283,39 @@ test('waits for a delayed input target using fresh snapshots', async () => {
   expect(requests.at(-1)?.positionals).toEqual(['80', '62']);
 });
 
-test('fails scrollUntilVisible when the target stays absent', async () => {
-  const invoke: DaemonInvokeFn = async (request) =>
-    request.command === 'snapshot'
-      ? {
-          ok: true,
-          data: {
-            createdAt: 0,
-            nodes: [
-              {
-                index: 0,
-                type: 'Application',
-                rect: { x: 0, y: 0, width: 402, height: 874 },
-              },
-            ],
+test('hands a successful observation snapshot to same-generation target resolution', async () => {
+  const requests: DaemonRequest[] = [];
+  const invoke: DaemonInvokeFn = async (request) => {
+    requests.push(request);
+    if (request.command !== 'snapshot') return { ok: true, data: {} };
+    return {
+      ok: true,
+      data: {
+        createdAt: 0,
+        nodes: [
+          {
+            index: 0,
+            type: 'Application',
+            rect: { x: 0, y: 0, width: 402, height: 874 },
           },
-        }
-      : { ok: true, data: {} };
+          {
+            index: 1,
+            parentIndex: 0,
+            type: 'Text',
+            identifier: 'ready',
+            rect: { x: 20, y: 40, width: 120, height: 44 },
+          },
+          {
+            index: 2,
+            parentIndex: 0,
+            type: 'Button',
+            identifier: 'continue',
+            rect: { x: 20, y: 100, width: 120, height: 44 },
+          },
+        ],
+      },
+    };
+  };
   const port = createDaemonMaestroRuntimePort({
     baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
     invoke,
@@ -301,20 +323,93 @@ test('fails scrollUntilVisible when the target stays absent', async () => {
     platform: 'ios',
   });
 
+  const observation = await port.observe({
+    condition: { kind: 'visible', selector: { id: 'ready' } },
+    timeoutMs: 0,
+    generation: 0,
+    env: {},
+  });
   await expect(
     port.execute({
       command: {
-        kind: 'scrollUntilVisible',
+        kind: 'tapOn',
         source: { line: 2 },
-        element: { text: 'Discover' },
-        direction: 'up',
-        timeout: 500,
+        target: { space: 'target', selector: { id: 'continue' } },
       },
       generation: 0,
+      cachedObservation: observation,
       env: {},
     }),
-  ).rejects.toMatchObject({
-    code: 'COMMAND_FAILED',
-    message: 'Maestro scrollUntilVisible target did not become visible.',
+  ).resolves.toMatchObject({ mutated: true });
+
+  expect(requests.map((request) => request.command)).toEqual(['snapshot', 'click']);
+  expect(requests.at(-1)?.positionals).toEqual(['80', '122']);
+});
+
+test('captures fresh state immediately when a reused observation does not contain the target', async () => {
+  const requests: DaemonRequest[] = [];
+  let snapshots = 0;
+  const invoke: DaemonInvokeFn = async (request) => {
+    requests.push(request);
+    if (request.command !== 'snapshot') return { ok: true, data: {} };
+    snapshots += 1;
+    return {
+      ok: true,
+      data: {
+        createdAt: snapshots,
+        nodes: [
+          {
+            index: 0,
+            type: 'Application',
+            rect: { x: 0, y: 0, width: 402, height: 874 },
+          },
+          {
+            index: 1,
+            parentIndex: 0,
+            type: 'Text',
+            identifier: 'ready',
+            rect: { x: 20, y: 40, width: 120, height: 44 },
+          },
+          ...(snapshots === 1
+            ? []
+            : [
+                {
+                  index: 2,
+                  parentIndex: 0,
+                  type: 'Button',
+                  identifier: 'continue',
+                  rect: { x: 20, y: 100, width: 120, height: 44 },
+                },
+              ]),
+        ],
+      },
+    };
+  };
+  const now = { value: 0 };
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke,
+    dependencies: makeDependencies(now),
+    platform: 'ios',
   });
+
+  const observation = await port.observe({
+    condition: { kind: 'visible', selector: { id: 'ready' } },
+    timeoutMs: 0,
+    generation: 0,
+    env: {},
+  });
+  await port.execute({
+    command: {
+      kind: 'tapOn',
+      source: { line: 2 },
+      target: { space: 'target', selector: { id: 'continue' } },
+    },
+    generation: 0,
+    cachedObservation: observation,
+    env: {},
+  });
+
+  expect(requests.map((request) => request.command)).toEqual(['snapshot', 'snapshot', 'click']);
+  expect(now.value).toBe(0);
 });

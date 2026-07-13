@@ -27,7 +27,9 @@ native injection. Maestro's supported gesture surface is single-pointer swipe on
 
 Parse supported Maestro YAML into a source-preserving typed program and execute it directly through a
 narrow compatibility runtime port. Do not lower the program through `SessionAction`, private command
-names, positional JSON, or recursive daemon command routing.
+names, positional JSON, or a recursive replay dispatcher. The daemon adapter may invoke ordinary public
+commands as typed operations; those calls reuse the shared command semantics and never re-enter Maestro
+parsing or compatibility dispatch.
 
 The engine has five responsibilities:
 
@@ -39,7 +41,8 @@ The engine has five responsibilities:
 4. One explicit execution context owns variables and the current observation generation. A mutation
    invalidates that generation; reads may reuse evidence only within the same generation.
 5. An observer adapts source-aware progress, traces, artifacts, and failures to the existing replay and
-   test result contracts.
+   test result contracts. Observer telemetry is redacted and best-effort; trace persistence cannot
+   change command success or failure.
 
 The engine does not implement platform input. Absolute swipes resolve without a viewport query.
 Percentage and preset swipes resolve against the cheapest fresh interaction viewport available.
@@ -52,6 +55,13 @@ observation generation in one response. The engine must not capture a second hie
 verify evidence already returned by that query. Relational or ambiguous selectors may use a full-tree
 fallback. Raw hierarchies, screenshots, and complete candidate lists are failure/debug artifacts, not
 happy-path requirements.
+
+The daemon adapter may retain the provider snapshot behind a successful observation without exposing it
+through the engine contract. A following target resolution may consume that snapshot only when the
+engine presents the exact same-generation observation produced from that snapshot. A miss captures fresh
+state immediately before polling. Every mutating attempt invalidates retained evidence before a retry,
+including an attempt whose dispatch reports failure, because the adapter cannot prove the app stayed
+unchanged.
 
 Upstream Maestro is a version-pinned development oracle, not a production dependency. Opt-in fixture
 generation and scheduled conformance runs compare syntax, normalized command intent, and app-observable

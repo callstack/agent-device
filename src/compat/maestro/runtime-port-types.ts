@@ -1,4 +1,5 @@
 import type { GestureSemanticInput } from '../../contracts/gesture-plan-types.ts';
+import type { SwipePreset } from '../../contracts/scroll-gesture.ts';
 import type { Point, Rect } from '../../kernel/snapshot.ts';
 import type {
   MaestroDirection,
@@ -63,10 +64,19 @@ export type MaestroSwipeOperation = {
   /** The authored Maestro coordinate space and target mode, preserved for policy and diagnostics. */
   readonly authored: MaestroSwipeGesture;
   /** The normalized contract consumed by the shared input runtime. */
-  readonly gesture: GestureSemanticInput;
+  readonly gesture: MaestroSinglePointerGestureInput;
   readonly target?: MaestroTargetResolution;
   readonly viewport?: Rect;
 };
+
+type GestureFlingInput = Extract<GestureSemanticInput, { intent: 'fling' }>;
+type GesturePresetPanInput = Extract<GestureSemanticInput, { intent: 'pan'; preset: SwipePreset }>;
+type GesturePointPanInput = Extract<GestureSemanticInput, { intent: 'pan'; origin: Point }>;
+
+export type MaestroSinglePointerGestureInput =
+  | GestureFlingInput
+  | GesturePresetPanInput
+  | (Omit<GesturePointPanInput, 'pointerCount'> & { readonly pointerCount?: never });
 
 export type MaestroRuntimeOperationResult = {
   readonly observation?: MaestroObservation;
@@ -117,7 +127,7 @@ export type MaestroRuntimeOperations = {
     readonly delay?: number;
   }>;
   readonly longPressOn: MaestroRuntimeOperation<{ readonly target: MaestroInputTarget }>;
-  readonly gesture: MaestroRuntimeOperation<GestureSemanticInput>;
+  readonly gesture: MaestroRuntimeOperation<MaestroSinglePointerGestureInput>;
   readonly inputText: MaestroRuntimeOperation<{ readonly text: string; readonly label?: string }>;
   readonly eraseText: MaestroRuntimeOperation<{ readonly charactersToErase?: number }>;
   readonly pasteText: MaestroRuntimeOperation<{ readonly text: string }>;

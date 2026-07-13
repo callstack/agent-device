@@ -1,8 +1,4 @@
-export {
-  buildMaestroReplayPlan,
-  compileMaestroReplayPlan,
-  createMaestroReplayPlan,
-} from './replay-plan-compilation.ts';
+export { compileMaestroReplayPlan } from './replay-plan-compilation.ts';
 export {
   assertMaestroReplayStartIndex,
   evaluateMaestroReplayResume,

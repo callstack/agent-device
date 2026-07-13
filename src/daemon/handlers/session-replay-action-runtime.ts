@@ -1,4 +1,3 @@
-import fs from 'node:fs';
 import type { CommandFlags } from '../../core/dispatch.ts';
 import { resolveReplayAction, type ReplayVarScope } from '../../replay/vars.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
@@ -8,6 +7,8 @@ import {
   gesturePayloadFromPositionals,
   swipePayloadFromPositionals,
 } from '../../contracts/gesture-normalization.ts';
+import { buildDisplayPositionals } from '../session-event-action.ts';
+import { appendReplayTraceEvent } from './session-replay-trace.ts';
 
 type ReplayBaseRequest = Omit<DaemonRequest, 'command' | 'positionals'>;
 
@@ -36,7 +37,7 @@ export async function invokeReplayAction(params: {
     line,
     step,
     command: resolved.command,
-    positionals: resolved.positionals ?? [],
+    positionals: buildDisplayPositionals(resolved) ?? [],
   });
 
   // A raw dispatch failure (e.g. a selector-miss during press/click/fill/
@@ -162,14 +163,6 @@ function readResponseTiming(data: unknown): Record<string, unknown> | undefined 
       return kind === 'number' || kind === 'string' || kind === 'boolean';
     }),
   );
-}
-
-function appendReplayTraceEvent(
-  tracePath: string | undefined,
-  event: Record<string, unknown>,
-): void {
-  if (!tracePath) return;
-  fs.appendFileSync(tracePath, `${JSON.stringify(event)}\n`);
 }
 
 function buildReplayActionFlags(

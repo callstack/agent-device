@@ -10,6 +10,7 @@ import type {
   MaestroEngineResult,
   MaestroRuntimePort,
 } from './engine-types.ts';
+import type { MaestroReplayPlan } from './replay-plan-types.ts';
 
 export async function executeMaestroProgram(
   program: MaestroProgram,
@@ -17,29 +18,27 @@ export async function executeMaestroProgram(
   options: MaestroEngineOptions = {},
 ): Promise<MaestroEngineResult> {
   const plan = await compileMaestroReplayPlan(program, options);
-  const startIndex =
-    options.from !== undefined || options.planDigest !== undefined
-      ? resolveMaestroReplayStartIndex(plan, {
-          from: options.from,
-          planDigest: options.planDigest,
-        })
-      : assertMaestroReplayStartIndex(plan, options.startIndex ?? 0);
+  const startIndex = resolveExecutionStartIndex(plan, options);
   return await executeMaestroReplayPlan(plan, port, { ...options, startIndex });
 }
 
 export async function executeMaestroPlan(
-  plan: import('./replay-plan-types.ts').MaestroReplayPlan,
+  plan: MaestroReplayPlan,
   port: MaestroRuntimePort,
   options: MaestroEngineOptions = {},
 ): Promise<MaestroEngineResult> {
-  const startIndex =
-    options.from !== undefined || options.planDigest !== undefined
-      ? resolveMaestroReplayStartIndex(plan, {
-          from: options.from,
-          planDigest: options.planDigest,
-        })
-      : assertMaestroReplayStartIndex(plan, options.startIndex ?? 0);
+  const startIndex = resolveExecutionStartIndex(plan, options);
   return await executeMaestroReplayPlan(plan, port, { ...options, startIndex });
 }
 
-export { executeMaestroReplayPlan } from './replay-plan-execution.ts';
+function resolveExecutionStartIndex(
+  plan: MaestroReplayPlan,
+  options: MaestroEngineOptions,
+): number {
+  return options.from !== undefined || options.planDigest !== undefined
+    ? resolveMaestroReplayStartIndex(plan, {
+        from: options.from,
+        planDigest: options.planDigest,
+      })
+    : assertMaestroReplayStartIndex(plan, options.startIndex ?? 0);
+}

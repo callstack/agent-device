@@ -50,6 +50,28 @@ test('executeRunScriptFile rejects output keys that cannot become replay variabl
   }
 });
 
+test('executeRunScriptFile keeps recovery guidance separate from its bounded error message', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-run-script-'));
+  const scriptPath = path.join(root, 'setup.js');
+  fs.writeFileSync(scriptPath, `output.result = json('').value`);
+
+  try {
+    executeRunScriptFile({ scriptPath, env: {} });
+    throw new Error('expected runScript to fail');
+  } catch (error) {
+    expect(error).toBeInstanceOf(AppError);
+    expect((error as AppError).message).toBe(
+      'Maestro runScript failed: Maestro runScript json() received an empty body.',
+    );
+    expect((error as AppError).details).toEqual({
+      hint: 'Check the preceding HTTP response status and setup server output.',
+      scriptPath,
+    });
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test('executeRunScriptFile strips prototype keys from json output', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-run-script-'));
   const scriptPath = path.join(root, 'setup.js');

@@ -6,11 +6,17 @@ import { executeRunScriptFile } from './run-script-execution.ts';
 import { executeMaestroRuntimeCommand } from './runtime-port-commands.ts';
 import { observeMaestroCondition } from './runtime-port-observation.ts';
 import type {
+  MaestroObservation,
   MaestroRuntimePort,
   MaestroRuntimeRequest,
   MaestroRuntimeResult,
 } from './engine-types.ts';
-import type { MaestroRuntimeOperations } from './runtime-port-types.ts';
+import type {
+  MaestroRuntimeOperationContext,
+  MaestroRuntimeOperations,
+  MaestroTargetMatch,
+  MaestroTargetQuery,
+} from './runtime-port-types.ts';
 import {
   MAESTRO_OBSERVATION_POLL_MS,
   observeTypedMaestroCondition,
@@ -20,6 +26,7 @@ import {
   snapshotViewportRect,
   waitForTypedSnapshotStability,
   type MaestroSnapshotReader,
+  type MaestroSnapshotSource,
 } from './daemon-runtime-port-observation.ts';
 import {
   artifactPathsFromData,
@@ -39,10 +46,11 @@ export type {
   DaemonMaestroRuntimeBaseRequest,
 } from './daemon-runtime-port-support.ts';
 
-export function createDaemonMaestroRuntimeOperations(
-  options: CreateDaemonMaestroRuntimeOperationsOptions,
-): MaestroRuntimeOperations {
-  const snapshot = createSnapshotReader(options);
+function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOperationsOptions): {
+  operations: MaestroRuntimeOperations;
+  snapshots: MaestroSnapshotSource;
+} {
+  const snapshots = createSnapshotSource(options);
   const platform = options.platform;
   const invoke = (
     command: string,
@@ -51,50 +59,19 @@ export function createDaemonMaestroRuntimeOperations(
   ) => invokeMaestroPublicCommand(options, command, positionals, requestOptions);
 
   const operations: MaestroRuntimeOperations = {
-    resolveTarget: async (input, context) => {
-      const deadline = options.dependencies.now() + input.timeoutMs;
-      let lastMatch;
-      while (true) {
-        const captureStartedAt = options.dependencies.now();
-        const currentSnapshot = await snapshot(context);
-        const evidence = context.cachedObservation?.evidence;
-        const preferredContext =
-          evidence && evidence.visible
-            ? resolveTypedMaestroPreferredContext({
-                selector: evidence.selector,
-                snapshot: currentSnapshot,
-                platform,
-              })
-            : undefined;
-        lastMatch = await resolveTypedMaestroTarget({
-          query: input,
-          context,
-          snapshot: currentSnapshot,
-          platform,
-          preferredContext,
-        });
-        if (lastMatch.matched && lastMatch.visible && lastMatch.rect) return lastMatch;
-        if (captureStartedAt >= deadline) return lastMatch;
-        const remaining = deadline - options.dependencies.now();
-        if (remaining > 0) {
-          await options.dependencies.sleep(
-            Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
-            context.signal,
-          );
-        }
-      }
-    },
+    resolveTarget: async (input, context) =>
+      await resolveDaemonMaestroTarget({ input, context, snapshots, options }),
     observe: async (input, context) =>
       await observeTypedMaestroCondition({
         condition: input.condition,
         timeoutMs: input.timeoutMs,
         context,
-        snapshot,
+        snapshot: snapshots.capture,
         dependencies: options.dependencies,
         platform,
       }),
     resolveGestureViewport: async (context) => {
-      const frame = getSnapshotReferenceFrame(await snapshot(context));
+      const frame = getSnapshotReferenceFrame(await snapshots.capture(context));
       if (!frame)
         throw new AppError('COMMAND_FAILED', 'Unable to resolve Maestro gesture viewport.');
       return snapshotViewportRect(frame) as Rect;
@@ -168,7 +145,7 @@ export function createDaemonMaestroRuntimeOperations(
         direction: input.direction,
         timeoutMs: input.timeoutMs,
         context,
-        snapshot,
+        snapshot: snapshots.capture,
         dependencies: options.dependencies,
         platform,
         scroll: async () => {
@@ -206,7 +183,7 @@ export function createDaemonMaestroRuntimeOperations(
       await waitForTypedSnapshotStability({
         timeoutMs: input.timeoutMs ?? 15_000,
         context,
-        snapshot,
+        snapshot: snapshots.capture,
         dependencies: options.dependencies,
       }),
     takeScreenshot: async (input) => ({
@@ -223,31 +200,101 @@ export function createDaemonMaestroRuntimeOperations(
       }),
     }),
   };
-  return operations;
+  return { operations, snapshots };
+}
+
+async function resolveDaemonMaestroTarget(params: {
+  input: MaestroTargetQuery & { timeoutMs: number };
+  context: MaestroRuntimeOperationContext;
+  snapshots: MaestroSnapshotSource;
+  options: CreateDaemonMaestroRuntimeOperationsOptions;
+}): Promise<MaestroTargetMatch> {
+  const { input, context, snapshots, options } = params;
+  const deadline = options.dependencies.now() + input.timeoutMs;
+  let currentSnapshot = snapshots.reuseObservation(context);
+  while (true) {
+    const captureStartedAt = options.dependencies.now();
+    const reusedObservation = currentSnapshot !== undefined;
+    currentSnapshot ??= await snapshots.capture(context);
+    const match = await resolveTypedMaestroTarget({
+      query: input,
+      context,
+      snapshot: currentSnapshot,
+      platform: options.platform,
+      preferredContext: preferredContextForObservation(context, currentSnapshot, options.platform),
+    });
+    if (isActionableTarget(match) || captureStartedAt >= deadline) return match;
+    currentSnapshot = undefined;
+    if (!reusedObservation) await sleepBeforeTargetPoll(options, deadline, context.signal);
+  }
+}
+
+function preferredContextForObservation(
+  context: MaestroRuntimeOperationContext,
+  snapshot: SnapshotState,
+  platform: CreateDaemonMaestroRuntimeOperationsOptions['platform'],
+) {
+  const evidence = context.cachedObservation?.evidence;
+  if (!evidence?.visible) return undefined;
+  return resolveTypedMaestroPreferredContext({ selector: evidence.selector, snapshot, platform });
+}
+
+function isActionableTarget(match: MaestroTargetMatch): boolean {
+  return match.matched && match.visible && match.rect !== undefined;
+}
+
+async function sleepBeforeTargetPoll(
+  options: CreateDaemonMaestroRuntimeOperationsOptions,
+  deadline: number,
+  signal: AbortSignal | undefined,
+): Promise<void> {
+  const remaining = deadline - options.dependencies.now();
+  if (remaining <= 0) return;
+  await options.dependencies.sleep(Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining), signal);
 }
 
 export function createDaemonMaestroRuntimePort(
   options: CreateDaemonMaestroRuntimeOperationsOptions,
 ): MaestroRuntimePort {
-  const operations = createDaemonMaestroRuntimeOperations(options);
+  const { operations, snapshots } = createDaemonMaestroRuntimeParts(options);
   return {
     execute: async (request: MaestroRuntimeRequest): Promise<MaestroRuntimeResult> =>
       await executeMaestroRuntimeCommand(request, operations),
-    observe: async (request) => await observeMaestroCondition(request, operations),
+    observe: async (request) => {
+      const observation = await observeMaestroCondition(request, operations);
+      snapshots.bindObservation(observation);
+      return observation;
+    },
   };
 }
 
-function createSnapshotReader(
+function createSnapshotSource(
   options: CreateDaemonMaestroRuntimeOperationsOptions,
-): MaestroSnapshotReader {
-  return async () => {
+): MaestroSnapshotSource {
+  let cached:
+    | { generation: number; snapshot: SnapshotState; observation?: MaestroObservation }
+    | undefined;
+  const capture: MaestroSnapshotReader = async (context) => {
     const data = await invokeMaestroPublicCommand(options, 'snapshot', [], {
       flags: flagsWith(options.baseReq.flags, { noRecord: true }),
     });
     if (!data || !Array.isArray(data.nodes)) {
       throw new AppError('COMMAND_FAILED', 'Maestro snapshot did not return node data.');
     }
-    return data as SnapshotState;
+    const snapshot = data as SnapshotState;
+    cached = { generation: context.generation, snapshot };
+    return snapshot;
+  };
+  return {
+    capture,
+    bindObservation: (observation) => {
+      if (cached?.generation === observation.generation) cached.observation = observation;
+    },
+    reuseObservation: (context) => {
+      if (context.cachedObservation?.generation !== context.generation) return undefined;
+      if (cached?.generation !== context.generation) return undefined;
+      return cached.observation === context.cachedObservation ? cached.snapshot : undefined;
+    },
   };
 }
 

@@ -5,7 +5,7 @@ import {
 } from '../../daemon/touch-reference-frame.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { Rect, SnapshotState } from '../../kernel/snapshot.ts';
-import type { MaestroObservationCondition } from './engine-types.ts';
+import type { MaestroObservation, MaestroObservationCondition } from './engine-types.ts';
 import type { MaestroPlatform, MaestroSelector } from './program-ir.ts';
 import {
   resolveMaestroTargetFromSnapshot,
@@ -29,6 +29,12 @@ export type DaemonMaestroRuntimeDependencies = {
 export type MaestroSnapshotReader = (
   context: MaestroRuntimeOperationContext,
 ) => Promise<SnapshotState>;
+
+export type MaestroSnapshotSource = {
+  readonly capture: MaestroSnapshotReader;
+  readonly bindObservation: (observation: MaestroObservation) => void;
+  readonly reuseObservation: (context: MaestroRuntimeOperationContext) => SnapshotState | undefined;
+};
 
 export type MaestroTargetResolutionMode = 'tap' | 'swipe' | 'observe';
 

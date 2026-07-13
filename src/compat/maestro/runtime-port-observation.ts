@@ -117,10 +117,7 @@ function isRect(value: unknown): value is { x: number; y: number; width: number;
   );
 }
 
-export function validateTargetMatch(
-  match: MaestroTargetMatch,
-  generation: number,
-): MaestroTargetMatch {
+function validateTargetMatch(match: MaestroTargetMatch, generation: number): MaestroTargetMatch {
   if (match.generation !== generation) {
     throw new AppError(
       'COMMAND_FAILED',

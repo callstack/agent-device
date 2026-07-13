@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import vm from 'node:vm';
-import { AppError } from '../../kernel/errors.ts';
+import { AppError, normalizeError } from '../../kernel/errors.ts';
 import { runCmdSync } from '../../utils/exec.ts';
 
 const RUN_SCRIPT_TIMEOUT_MS = 30_000;
@@ -55,10 +55,19 @@ export function executeRunScriptFile(params: {
       timeout: RUN_SCRIPT_TIMEOUT_MS,
     });
   } catch (error) {
+    const normalized = normalizeError(error);
     throw new AppError(
-      'COMMAND_FAILED',
-      `Maestro runScript failed for ${scriptPath}: ${error instanceof Error ? error.message : String(error)}`,
-      { scriptPath },
+      normalized.code,
+      `Maestro runScript failed: ${normalized.message}`,
+      {
+        ...(normalized.details ?? {}),
+        ...(normalized.hint ? { hint: normalized.hint } : {}),
+        ...(normalized.diagnosticId ? { diagnosticId: normalized.diagnosticId } : {}),
+        ...(normalized.logPath ? { logPath: normalized.logPath } : {}),
+        ...(normalized.retriable === undefined ? {} : { retriable: normalized.retriable }),
+        ...(normalized.supportedOn ? { supportedOn: normalized.supportedOn } : {}),
+        scriptPath,
+      },
       error instanceof Error ? error : undefined,
     );
   }
@@ -95,10 +104,9 @@ function parseRunScriptJson(value: unknown): unknown {
     );
   }
   if (value.trim().length === 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Maestro runScript json() received an empty body. Check the preceding http response status and setup server output.',
-    );
+    throw new AppError('COMMAND_FAILED', 'Maestro runScript json() received an empty body.', {
+      hint: 'Check the preceding HTTP response status and setup server output.',
+    });
   }
   try {
     return JSON.parse(value, safeRunScriptJsonReviver) as unknown;

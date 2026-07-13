@@ -131,6 +131,104 @@ test('typed Maestro nested commands receive the runtime hints bound into the pla
   });
 });
 
+test('typed Maestro writes source-aware redacted step timing traces', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-step-trace-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const yamlPath = path.join(root, 'flow.yaml');
+  const tracePath = path.join(root, 'replay-timing.ndjson');
+  fs.writeFileSync(yamlPath, 'appId: com.example.app\n---\n- inputText: highly-sensitive\n');
+  fs.writeFileSync(tracePath, '');
+
+  const response = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [yamlPath],
+      flags: { replayBackend: 'maestro', platform: 'ios' },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    tracePath,
+    invoke: async () => ({ ok: true, data: {} }),
+  });
+
+  expect(response.ok).toBe(true);
+  const events = fs
+    .readFileSync(tracePath, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  expect(events).toEqual([
+    expect.objectContaining({
+      type: 'replay_action_start',
+      replayPath: yamlPath,
+      line: 3,
+      step: 1,
+      command: 'inputText',
+      positionals: ['<text>'],
+    }),
+    expect.objectContaining({
+      type: 'replay_action_stop',
+      replayPath: yamlPath,
+      line: 3,
+      step: 1,
+      command: 'inputText',
+      ok: true,
+      durationMs: expect.any(Number),
+    }),
+  ]);
+  expect(fs.readFileSync(tracePath, 'utf8')).not.toContain('highly-sensitive');
+});
+
+test('replay trace failures do not change action semantics', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-trace-failure-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const yamlPath = path.join(root, 'flow.yaml');
+  fs.writeFileSync(yamlPath, 'appId: com.example.app\n---\n- back\n');
+
+  const response = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [yamlPath],
+      flags: { replayBackend: 'maestro', platform: 'ios' },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    tracePath: root,
+    invoke: async () => ({ ok: true, data: {} }),
+  });
+
+  expect(response.ok).toBe(true);
+});
+
+test('generic replay traces redact typed text', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-trace-redaction-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const secret = 'highly-sensitive-value';
+  const filePath = writeReplayFile(root, [`type "${secret}"`]);
+  const tracePath = path.join(root, 'replay-timing.ndjson');
+  fs.writeFileSync(tracePath, '');
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    tracePath,
+    invoke: async () => ({ ok: true, data: {} }),
+  });
+
+  expect(response.ok).toBe(true);
+  const trace = fs.readFileSync(tracePath, 'utf8');
+  expect(trace).not.toContain(secret);
+  expect(trace).toContain('<text:22 chars>');
+});
+
 test('Maestro YAML rejects .ad repair recording before executing any command', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-typed-maestro-save-script-'));
   const sessionStore = new SessionStore(path.join(root, 'sessions'));

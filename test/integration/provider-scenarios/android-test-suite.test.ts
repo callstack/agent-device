@@ -69,7 +69,7 @@ test('Provider-backed integration Android replay test suite covers retries and f
   });
 });
 
-test('Provider-backed integration Android Maestro replay uses fresh snapshots and authored swipe points', async () => {
+test('Provider-backed integration Android Maestro reuses observation evidence and preserves authored swipe points', async () => {
   let snapshots = 0;
   await withProviderScenarioResource(
     async () =>
@@ -116,7 +116,7 @@ test('Provider-backed integration Android Maestro replay uses fresh snapshots an
       assert.equal(suite.failed, 0, JSON.stringify(suite));
       assert.deepEqual(
         world.adbCalls.find((call) => call.slice(0, 3).join(' ') === 'shell input tap'),
-        ['shell', 'input', 'tap', '180', '330'],
+        ['shell', 'input', 'tap', '195', '52'],
       );
       assert.equal(world.touchInjectionCalls.length, 1);
       const swipePlan = world.touchInjectionCalls[0]!;
@@ -240,7 +240,7 @@ test('Provider-backed integration Android Maestro types after tapOn inputText wi
   );
 });
 
-test('Provider-backed integration Android Maestro preserves pressKey Enter after native fill', async () => {
+test('Provider-backed integration Android Maestro preserves authored inputText then pressKey Enter', async () => {
   await withProviderScenarioResource(
     async () => await createAndroidSettingsWorld({ nativeTextInjection: true }),
     async (world) => {
@@ -274,8 +274,7 @@ test('Provider-backed integration Android Maestro preserves pressKey Enter after
       assert.equal(suite.failed, 0, JSON.stringify(suite));
       assert.deepEqual(world.textInjectionCalls, [
         {
-          action: 'fill',
-          target: { x: 195, y: 52 },
+          action: 'type',
           text: 'Łódź café',
           delayMs: 0,
         },
@@ -345,7 +344,7 @@ test('Provider-backed integration Android Maestro executes runFlow conditions an
         world.adbCalls.filter((call) => call.slice(0, 3).join(' ') === 'shell input tap'),
         [['shell', 'input', 'tap', '180', '330']],
       );
-      assertSnapshotCountInRange(snapshots, 4, 5);
+      assertSnapshotCountInRange(snapshots, 3, 4);
     },
   );
 });
