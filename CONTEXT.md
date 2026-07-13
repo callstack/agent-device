@@ -48,6 +48,11 @@
 - Coordinate-first resolved element activation: iOS/macOS runner interaction pattern where a selector or text query resolves the semantic `XCUIElement`, then activation uses the element's resolved center coordinate when a frame is available. This keeps target selection semantic while avoiding `XCUIElement.tap()` post-action element re-resolution after normal navigation. tvOS remains focus/remote-driven.
 - Interaction dispatch path: one concrete route an interaction command takes to the device (runtime selector/ref resolution, direct iOS selector, native ref via web clickRef, coordinate, maestro non-hittable fallback). Every path classifies every guarantee in the ADR 0011 registry.
 - Gesture plan: typed, platform-neutral normalization of one- or two-contact gesture intent into bounded pointer trajectories. Contact topology is separate from motion; two-contact intent remains pan/pinch/rotate/transform even when native injection shares one executor. See ADR 0013.
+- Android planned-touch executor: Android-local adapter seam that accepts `AndroidTouchPlan`—the
+  platform-neutral `GesturePlan` plus Android's stationary long-press plan—and selects the paired
+  provider-native touch/viewport adapter or bundled instrumentation-helper adapter. Scroll and
+  long-press retain their command semantics and only share physical touch execution through this
+  seam. See ADR 0013.
 - Multi-touch geometry: the internal initial span and angle plus centroid translation, scale, and rotation used to build both contact trajectories. Geometry is viewport-aware and fails early when the requested motion cannot fit; it is not a public tuning surface.
 - Guarantee cell: one (dispatch path, guarantee) entry in `src/contracts/interaction-guarantees.ts`, classified as runtime/runner/delegated/inapplicable/waived. Completeness is a compile error; honesty is gate-tested.
 - Owned waiver: a `gap:`-prefixed waived cell carrying a `trackingIssue` URL. Waivers are diffable debt with an owner, never folklore.

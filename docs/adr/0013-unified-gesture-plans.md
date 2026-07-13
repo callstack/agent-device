@@ -17,7 +17,7 @@ interaction viewport before injection.
 
 `scroll` remains a separate command because it owns viewport/edge traversal and content-state
 verification rather than a single physical gesture. Its Android physical movement still lowers to
-the shared planned-touch executor.
+the Android planned-touch executor.
 
 ## Decision
 
@@ -55,10 +55,11 @@ no established automation use case justifies a public tuning surface.
 
 Platform adapters consume the canonical plan:
 
-- Android sends planned touch, including gesture plans plus the physical movement for scroll and
-  long-press, to provider-native touch injection when available, otherwise to the bundled
-  instrumentation helper. The helper injects the exact planned pointer samples. Planned Android
-  touch execution never falls back to `adb input swipe`; the snapshot helper is stopped
+- Android's `executeAndroidTouchPlan` adapter seam sends planned touch, including gesture plans plus
+  the physical movement for scroll and long-press, to provider-native touch injection when
+  available, otherwise to the bundled instrumentation helper. The helper injects the exact planned
+  pointer samples. Android touch execution never falls back to `adb input swipe`; the snapshot
+  helper is stopped
   before local gesture instrumentation because Android permits only one instrumentation owner of
   `UiAutomation`.
 - iOS converts every planned point to native orientation and feeds the exact arrays to the existing
