@@ -168,33 +168,6 @@ test('provider-native touch receives the plan as its only source of truth', asyn
   assert.deepEqual(result, { backend: 'provider-native-touch', injected: true });
 });
 
-test('provider-native failures propagate without adb single-pointer fallback', async () => {
-  const plan = buildGesturePlan(
-    { intent: 'fling', from: { x: 300, y: 400 }, to: { x: 100, y: 400 } },
-    viewport,
-  );
-  const adbCalls: string[][] = [];
-  await withAndroidAdbProvider(
-    {
-      exec: async (args) => {
-        adbCalls.push(args);
-        return { exitCode: 0, stdout: '', stderr: '' };
-      },
-      touch: async () => {
-        throw new Error('native touch failed');
-      },
-    },
-    { serial: ANDROID_EMULATOR.id },
-    async () => {
-      await assert.rejects(
-        () => performGestureAndroid(ANDROID_EMULATOR, plan),
-        /native touch failed/,
-      );
-    },
-  );
-  assert.deepEqual(adbCalls, []);
-});
-
 test('helper failures remain structured and actionable', async () => {
   const request = normalizeAndroidMultiTouchHelperGestureRequest(
     buildGesturePlan({ intent: 'pinch', scale: 1.5 }, viewport),

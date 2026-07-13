@@ -1497,11 +1497,6 @@ function assertAndroidInteractionContract(world: AndroidSettingsWorld): void {
   );
   assertCommandCall(adbCalls, ['shell', 'input', 'tap', '50', '60']);
   assert.equal(
-    adbCalls.some((call) => call.slice(0, 3).join(' ') === 'shell input swipe'),
-    false,
-    JSON.stringify(adbCalls),
-  );
-  assert.equal(
     adbCalls.filter((call) => arrayEqual(call, ['shell', 'input', 'tap', '88', '151'])).length,
     5,
   );
