@@ -169,6 +169,7 @@ test('provider-native touch receives the plan as its only source of truth', asyn
       exec: async () => {
         throw new Error('adb must not run');
       },
+      gestureViewport: async () => viewport,
       touch: async (request) => {
         calls.push(request);
         return { injected: true };

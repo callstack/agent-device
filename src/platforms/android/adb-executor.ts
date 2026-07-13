@@ -131,7 +131,7 @@ export type AndroidTouchInjector = (
 
 export type AndroidGestureViewportProvider = () => Promise<Rect>;
 
-export type AndroidAdbProvider = {
+type AndroidAdbProviderBase = {
   /**
    * Fallback executor for device-scoped adb arguments. Providers may omit explicit
    * methods to keep the legacy exec-shaped pull/install fallback.
@@ -143,9 +143,19 @@ export type AndroidAdbProvider = {
   install?: AndroidAdbInstaller;
   installBundle?: AndroidBundleInstaller;
   text?: AndroidTextInjector;
-  touch?: AndroidTouchInjector;
-  gestureViewport?: AndroidGestureViewportProvider;
 };
+
+type AndroidTouchCapabilities =
+  | {
+      touch?: never;
+      gestureViewport?: AndroidGestureViewportProvider;
+    }
+  | {
+      touch: AndroidTouchInjector;
+      gestureViewport: AndroidGestureViewportProvider;
+    };
+
+export type AndroidAdbProvider = AndroidAdbProviderBase & AndroidTouchCapabilities;
 
 export type AndroidAdbProviderScopeOptions = {
   serial: string;
