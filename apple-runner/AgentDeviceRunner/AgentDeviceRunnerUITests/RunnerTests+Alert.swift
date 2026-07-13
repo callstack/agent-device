@@ -1,10 +1,17 @@
 import XCTest
 
 extension RunnerTests {
+  enum RunnerAlertSource {
+    case blockingSystemModal
+    case appAlert
+    case dismissPopup
+  }
+
   struct RunnerAlert {
     let root: XCUIElement
     let ownerApp: XCUIApplication
     let buttons: [XCUIElement]
+    let source: RunnerAlertSource
   }
 
   func resolveAlert(app activeApp: XCUIApplication) -> RunnerAlert? {
@@ -23,10 +30,10 @@ extension RunnerTests {
     // now-gone host as `activeApp`, and its `alerts` query raises
     // kAXErrorServerNotFound. safeElementsQuery absorbs it and reports no alert.
     if let alert = firstExistingElement(in: safeElementsQuery { activeApp.alerts.allElementsBoundByIndex }) {
-      return runnerAlert(root: alert, ownerApp: activeApp)
+      return runnerAlert(root: alert, ownerApp: activeApp, source: .appAlert)
     }
     if let popup = firstDismissPopupWindow(in: activeApp) {
-      return runnerAlert(root: popup, ownerApp: activeApp)
+      return runnerAlert(root: popup, ownerApp: activeApp, source: .dismissPopup)
     }
     return nil
   }
@@ -36,22 +43,38 @@ extension RunnerTests {
       guard let button = chooseAlertButton(alert.buttons, action: action) else {
         return Response(ok: false, error: ErrorPayload(message: "alert \(action) button not found"))
       }
+      let previousTitle = preferredAlertTitle(alert.root, buttons: alert.buttons)
+      let actionButtonLabel = button.label.trimmingCharacters(in: .whitespacesAndNewlines)
+      let actionButtonFrame = button.frame
       let outcome = activateElement(app: alert.ownerApp, element: button, action: "alert \(action)")
       if let response = unsupportedResponse(for: outcome) {
         return response
       }
       sleepFor(0.2)
-      if alertStillVisible(alert, actionButtonLabel: button.label) {
-        let frame = button.frame
-        if !frame.isNull && !frame.isEmpty {
-          let coordinateOutcome = tapAt(app: alert.ownerApp, x: frame.midX, y: frame.midY)
+      if alertStillVisible(
+        in: alert.ownerApp,
+        source: alert.source,
+        previousTitle: previousTitle,
+        actionButtonLabel: actionButtonLabel
+      ) {
+        if !actionButtonFrame.isNull && !actionButtonFrame.isEmpty {
+          let coordinateOutcome = tapAt(
+            app: alert.ownerApp,
+            x: actionButtonFrame.midX,
+            y: actionButtonFrame.midY
+          )
           if let response = unsupportedResponse(for: coordinateOutcome) {
             return response
           }
           sleepFor(0.2)
         }
       }
-      if alertStillVisible(alert, actionButtonLabel: button.label) {
+      if alertStillVisible(
+        in: alert.ownerApp,
+        source: alert.source,
+        previousTitle: previousTitle,
+        actionButtonLabel: actionButtonLabel
+      ) {
         return Response(
           ok: false,
           error: ErrorPayload(
@@ -78,31 +101,67 @@ extension RunnerTests {
     guard !buttons.isEmpty else {
       return nil
     }
-    return RunnerAlert(root: modal.root, ownerApp: modal.ownerApp, buttons: buttons)
-  }
-
-  private func runnerAlert(root: XCUIElement, ownerApp: XCUIApplication) -> RunnerAlert? {
-    runnerAlert(
-      ResolvedBlockingSystemModal(
-        root: root,
-        ownerApp: ownerApp,
-        actions: actionableElements(in: root)
-      )
+    return RunnerAlert(
+      root: modal.root,
+      ownerApp: modal.ownerApp,
+      buttons: buttons,
+      source: .blockingSystemModal
     )
   }
 
-  private func alertStillVisible(_ alert: RunnerAlert, actionButtonLabel: String) -> Bool {
-    guard let current = resolveAlert(app: alert.ownerApp) else {
+  private func runnerAlert(
+    root: XCUIElement,
+    ownerApp: XCUIApplication,
+    source: RunnerAlertSource
+  ) -> RunnerAlert? {
+    let buttons = actionableElements(in: root).filter { isEnabledElement($0) }
+    guard !buttons.isEmpty else {
+      return nil
+    }
+    return RunnerAlert(root: root, ownerApp: ownerApp, buttons: buttons, source: source)
+  }
+
+  private func alertStillVisible(
+    in ownerApp: XCUIApplication,
+    source: RunnerAlertSource,
+    previousTitle: String,
+    actionButtonLabel: String
+  ) -> Bool {
+    guard let current = resolveAlert(source: source, app: ownerApp) else {
       return false
     }
-    let previousTitle = preferredAlertTitle(alert.root, buttons: alert.buttons)
     let currentTitle = preferredAlertTitle(current.root, buttons: current.buttons)
     if previousTitle == currentTitle {
       return true
     }
-    let normalizedActionLabel = actionButtonLabel.trimmingCharacters(in: .whitespacesAndNewlines)
     return current.buttons.contains { button in
-      button.label.trimmingCharacters(in: .whitespacesAndNewlines) == normalizedActionLabel
+      button.label.trimmingCharacters(in: .whitespacesAndNewlines) == actionButtonLabel
+    }
+  }
+
+  private func resolveAlert(source: RunnerAlertSource, app: XCUIApplication) -> RunnerAlert? {
+    switch source {
+    case .blockingSystemModal:
+#if os(macOS)
+      return nil
+#else
+      guard case .resolved(let modal) = resolveBlockingSystemModal() else {
+        return nil
+      }
+      return runnerAlert(modal)
+#endif
+    case .appAlert:
+      guard let alert = firstExistingElement(
+        in: safeElementsQuery { app.alerts.allElementsBoundByIndex }
+      ) else {
+        return nil
+      }
+      return runnerAlert(root: alert, ownerApp: app, source: .appAlert)
+    case .dismissPopup:
+      guard let popup = firstDismissPopupWindow(in: app) else {
+        return nil
+      }
+      return runnerAlert(root: popup, ownerApp: app, source: .dismissPopup)
     }
   }
 
