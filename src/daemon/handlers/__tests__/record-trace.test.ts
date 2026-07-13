@@ -802,7 +802,7 @@ test('record start does not stop recording owned by another session during desyn
   expect(sessionStore.get(ownerSessionName)?.recording?.platform).toBe('ios-device-runner');
 });
 
-test('record stop clears iOS runner recording state when runner stop fails', async () => {
+test('record stop reports iOS runner stop failure after copying and clears recording state', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-device-stop-fail';
   sessionStore.set(sessionName, {
@@ -835,8 +835,9 @@ test('record stop clears iOS runner recording state when runner stop fails', asy
     positionals: ['stop'],
   });
 
-  expect(response?.ok).toBe(true);
-  expect((response as any).data?.recording).toBe('stopped');
+  expect(response?.ok).toBe(false);
+  expect((response as any).error?.code).toBe('COMMAND_FAILED');
+  expect((response as any).error?.message).toMatch(/runner reported recordStop did not succeed/);
   expect(runCmdCalls.length).toBe(1);
   expect(sessionStore.get(sessionName)?.recording).toBeUndefined();
 });

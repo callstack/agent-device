@@ -65,7 +65,7 @@ async function stopRunnerRecordingBestEffort(params: {
   device: SessionState['device'];
   logPath?: string;
   deps: RecordTraceDeps;
-}): Promise<void> {
+}): Promise<boolean> {
   const { req, activeSession, device, logPath, deps } = params;
   const appBundleId = normalizeAppBundleId(activeSession);
 
@@ -75,6 +75,7 @@ async function stopRunnerRecordingBestEffort(params: {
       { command: 'recordStop', appBundleId },
       getIosRunnerOptions(req, logPath, activeSession),
     );
+    return true;
   } catch (error) {
     emitDiagnostic({
       level: 'warn',
@@ -87,6 +88,7 @@ async function stopRunnerRecordingBestEffort(params: {
         error: formatRecordTraceError(error),
       },
     });
+    return false;
   }
 }
 
@@ -318,7 +320,13 @@ export async function stopIosDeviceRecording(params: {
   recording: Extract<NonNullable<SessionState['recording']>, { platform: 'ios-device-runner' }>;
 }): Promise<DaemonResponse | null> {
   const { req, activeSession, device, logPath, deps, recording } = params;
-  await stopRunnerRecordingBestEffort({ req, activeSession, device, logPath, deps });
+  const runnerStopOk = await stopRunnerRecordingBestEffort({
+    req,
+    activeSession,
+    device,
+    logPath,
+    deps,
+  });
 
   let copyResult = { stdout: '', stderr: '', exitCode: 1 };
   for (const bundleId of IOS_RUNNER_CONTAINER_BUNDLE_IDS) {
@@ -361,6 +369,12 @@ export async function stopIosDeviceRecording(params: {
     return errorResponse(
       'COMMAND_FAILED',
       `failed to stop recording: ${recording.outPath} was not finalized into a playable video`,
+    );
+  }
+  if (!runnerStopOk) {
+    return errorResponse(
+      'COMMAND_FAILED',
+      'failed to stop recording: the iOS runner reported recordStop did not succeed',
     );
   }
 
