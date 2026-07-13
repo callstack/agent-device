@@ -1,10 +1,7 @@
 import { AppError } from '../../kernel/errors.ts';
-import {
-  normalizePublicSwipeMotion,
-  type NormalizedGestureInput,
-} from '../../contracts/gesture-normalization.ts';
-import { clampToRange } from '../../contracts/scroll-gesture.ts';
-import { buildInPageSwipeGesturePlan } from '../../contracts/scroll-gesture.ts';
+import { normalizePublicSwipeMotion } from '../../contracts/gesture-normalization.ts';
+import type { GestureSemanticInput } from '../../contracts/gesture-plan-types.ts';
+import { buildInPageSwipeGesturePlan, clampToRange } from '../../contracts/scroll-gesture.ts';
 import { pointInsideRect } from '../../utils/rect-center.ts';
 import type { MaestroRuntimeRequest } from './engine-types.ts';
 import type { MaestroCoordinate, MaestroDirection, MaestroSwipeGesture } from './program-ir.ts';
@@ -109,14 +106,14 @@ function normalizedSwipeFromEndpoints(
   start: { x: number; y: number },
   end: { x: number; y: number },
   durationMs: number | undefined,
-): NormalizedGestureInput {
+): GestureSemanticInput {
   return normalizePublicSwipeMotion({ from: start, to: end, durationMs }).gesture;
 }
 
 function normalizedScreenHorizontalSwipe(
   direction: Extract<MaestroDirection, 'left' | 'right'>,
   durationMs: number | undefined,
-): NormalizedGestureInput {
+): GestureSemanticInput {
   const preset = direction;
   return durationMs === undefined
     ? { intent: 'fling', preset }
@@ -128,7 +125,7 @@ function normalizedScreenVerticalSwipe(
   start: { x: number; y: number },
   end: { x: number; y: number },
   durationMs: number | undefined,
-): NormalizedGestureInput {
+): GestureSemanticInput {
   if (durationMs !== undefined) return normalizedSwipeFromEndpoints(start, end, durationMs);
   return {
     intent: 'fling',

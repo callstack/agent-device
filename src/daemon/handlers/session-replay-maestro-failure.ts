@@ -18,7 +18,9 @@ import {
   buildDivergenceScreen,
   captureDivergenceObservation,
   collectReplayDivergenceSuggestions,
+  toReplayRepairHintCapture,
 } from './session-replay-divergence.ts';
+import { computeReplayRepairHint } from './session-replay-repair-hint.ts';
 import {
   buildReplayDivergenceFailureResponseFromDescriptor,
   hoistReplayFailureCauseDiagnosticMeta,
@@ -104,6 +106,11 @@ export async function buildTypedMaestroFailureResponse(params: {
           planDigest: plan.digest,
           reason: resume.reason,
         },
+    repairHint: computeReplayRepairHint({
+      kind: 'action-failure',
+      targetEvidence: diagnosticAction.targetEvidence,
+      capture: toReplayRepairHintCapture(observation),
+    }),
   };
   const bounded = boundReplayDivergenceForSession({
     sessionStore,
@@ -125,10 +132,7 @@ export async function buildTypedMaestroFailureResponse(params: {
   });
 }
 
-function diagnosticActionForEvent(
-  event: MaestroEngineEvent,
-  req: DaemonRequest,
-): SessionAction {
+function diagnosticActionForEvent(event: MaestroEngineEvent, req: DaemonRequest): SessionAction {
   const progress = formatMaestroCommandProgress(event.command);
   const command = diagnosticCommand(event.command.kind);
   return {
@@ -158,9 +162,7 @@ function safeProgressPositionals(command: string, value: string | undefined): st
   return [value];
 }
 
-function collectExpandedScrubVars(
-  values: Readonly<Record<string, string>>,
-): ReplayVarScrubEntry[] {
+function collectExpandedScrubVars(values: Readonly<Record<string, string>>): ReplayVarScrubEntry[] {
   return Object.entries(values)
     .filter(([, value]) => value.length > 0)
     .map(([name, value]) => ({ name, value }))

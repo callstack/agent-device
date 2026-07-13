@@ -14,14 +14,9 @@ test('typed Maestro text selectors match visible text and state without expressi
   ]).nodes[0]!;
 
   expect(
-    matchesMaestroTypedSelector(
-      node,
-      { text: '^Subtotal.*', enabled: true, selected: true },
-    ),
+    matchesMaestroTypedSelector(node, { text: '^Subtotal.*', enabled: true, selected: true }),
   ).toBe(true);
-  expect(matchesMaestroTypedSelector(node, { text: 'Subtotal', selected: false })).toBe(
-    false,
-  );
+  expect(matchesMaestroTypedSelector(node, { text: 'Subtotal', selected: false })).toBe(false);
 });
 
 test('typed Maestro id and label selectors keep their primary field semantics', () => {

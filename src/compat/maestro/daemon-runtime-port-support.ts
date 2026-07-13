@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { NormalizedGestureInput } from '../../contracts/gesture-normalization.ts';
+import type { GestureSemanticInput } from '../../contracts/gesture-plan-types.ts';
 import type { CommandFlags } from '../../core/dispatch.ts';
 import type {
   DaemonInvokeFn,
@@ -68,7 +68,7 @@ export function launchArgumentValues(
 }
 
 export function publicGestureRequest(
-  input: NormalizedGestureInput,
+  input: GestureSemanticInput,
   context: MaestroRuntimeOperationContext,
 ): { command: 'gesture' | 'swipe'; input: Record<string, unknown> } {
   const endpoints = endpointGesture(input);
@@ -210,7 +210,7 @@ function daemonResponseError(response: Extract<DaemonResponse, { ok: false }>): 
   return new AppError(error.code, error.message, Object.keys(details).length ? details : undefined);
 }
 
-function endpointGesture(input: NormalizedGestureInput): Record<string, unknown> | undefined {
+function endpointGesture(input: GestureSemanticInput): Record<string, unknown> | undefined {
   if (input.intent === 'fling' && 'from' in input) return { from: input.from, to: input.to };
   if (input.intent === 'pan' && !('preset' in input)) {
     return {

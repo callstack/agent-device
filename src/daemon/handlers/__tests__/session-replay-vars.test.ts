@@ -1889,10 +1889,11 @@ test('runReplayScriptFile propagates Maestro runFlow.when runtime errors', async
     assert.equal(response.error.code, 'REPLAY_DIVERGENCE');
     assert.match(response.error.message, /fetch failed/);
     const divergence = response.error.details?.divergence as
-      | { cause: { code: string; message: string } }
+      | { cause: { code: string; message: string }; repairHint: string }
       | undefined;
     assert.equal(divergence?.cause.code, 'UNKNOWN');
     assert.match(divergence?.cause.message ?? '', /fetch failed/);
+    assert.equal(divergence?.repairHint, 'manual');
   }
 });
 

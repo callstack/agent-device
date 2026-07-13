@@ -1,4 +1,4 @@
-import type { NormalizedGestureInput } from '../../contracts/gesture-normalization.ts';
+import type { GestureSemanticInput } from '../../contracts/gesture-plan-types.ts';
 import type { Point, Rect } from '../../kernel/snapshot.ts';
 import type {
   MaestroDirection,
@@ -63,7 +63,7 @@ export type MaestroSwipeOperation = {
   /** The authored Maestro coordinate space and target mode, preserved for policy and diagnostics. */
   readonly authored: MaestroSwipeGesture;
   /** The normalized contract consumed by the shared input runtime. */
-  readonly gesture: NormalizedGestureInput;
+  readonly gesture: GestureSemanticInput;
   readonly target?: MaestroTargetResolution;
   readonly viewport?: Rect;
 };
@@ -117,7 +117,7 @@ export type MaestroRuntimeOperations = {
     readonly delay?: number;
   }>;
   readonly longPressOn: MaestroRuntimeOperation<{ readonly target: MaestroInputTarget }>;
-  readonly gesture: MaestroRuntimeOperation<NormalizedGestureInput>;
+  readonly gesture: MaestroRuntimeOperation<GestureSemanticInput>;
   readonly inputText: MaestroRuntimeOperation<{ readonly text: string; readonly label?: string }>;
   readonly eraseText: MaestroRuntimeOperation<{ readonly charactersToErase?: number }>;
   readonly pasteText: MaestroRuntimeOperation<{ readonly text: string }>;

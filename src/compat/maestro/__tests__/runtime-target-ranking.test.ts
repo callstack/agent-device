@@ -19,13 +19,7 @@ test('target ranking promotes actionable controls over matching static text', ()
   ]);
 
   expect(
-    selectMaestroSnapshotMatch(
-      snapshot.nodes,
-      snapshot.nodes,
-      undefined,
-      'Save',
-      IOS_TAB_FRAME,
-    ),
+    selectMaestroSnapshotMatch(snapshot.nodes, snapshot.nodes, undefined, 'Save', IOS_TAB_FRAME),
   ).toMatchObject({ node: { index: 2 } });
 });
 
