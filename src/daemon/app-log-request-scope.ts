@@ -1,3 +1,3 @@
-// Dedicated lazy boundary for request-scoped app-log provider composition, kept
-// separate from the eager `app-log.ts` module so its dynamic import stays effective.
+// Isolates request-scope provider composition behind its dynamic import.
+// The shared app-log implementation remains eager for observability and teardown.
 export { withAppLogProvider } from './app-log.ts';

@@ -2,15 +2,14 @@
 
 ## Status
 
-Accepted (2026-07-10). Migration steps 1-6 have shipped; steps 7 (benchmark extension) and 8
-(agent-supervised re-record repair) remain. See [Migration progress](#migration-progress) for the
-per-step landing record.
+Accepted (2026-07-10). Migration steps 1-6 and 8 have shipped; step 7 (benchmark extension) remains
+deferred. See [Migration progress](#migration-progress) for the per-step landing record.
 
 ## Context (historical baseline)
 
-This section records the repository state audited on 2026-07-10, before migration steps 1-6 shipped.
-Its present-tense observations are historical evidence; [Migration progress](#migration-progress) is
-the authoritative record of current behavior.
+This section records the repository state audited on 2026-07-10, before the migration steps recorded
+below shipped. Its present-tense observations are historical evidence;
+[Migration progress](#migration-progress) is the authoritative record of current behavior.
 
 At acceptance, replay was deterministic. `.ad` scripts were plain text — one action per line, `#`
 comments, and a `context platform=... device=... theme=...` header (`src/replay/script.ts`) — recorded
@@ -784,7 +783,7 @@ each states its dependencies explicitly.
 
 ## Migration progress
 
-Landing record for the plan above (main as of 2026-07-12). This section tracks progress only; it does
+Landing record for the plan above (main as of 2026-07-13). This section tracks progress only; it does
 not restate or amend the decisions.
 
 | Step | Decision | Status | Landed in |
@@ -796,10 +795,10 @@ not restate or amend the decisions.
 | 5. `replay --from` + `--plan-digest` resume | 4 (resume) | Shipped | #1211 |
 | 6. `--update` retirement | 1 | Shipped | #1211 |
 | 7. Benchmark extension | 5 | Deferred | — |
-| 8. Agent-supervised re-record repair | 6 | Accepted; implementation pending | #1226 (decision only) |
+| 8. Agent-supervised re-record repair | 6 | Shipped | #1228 |
 
 Step 4 (#1209) added the `selector-miss`/`identity-mismatch`/`identity-unverifiable` divergence kinds
 and a post-resolution target guard that cross-checks the dispatched winner against the verified member.
 Issue #1221 ("Complete ADR 0012 replay target-binding verification") was closed as already implemented:
-its verification scope is covered by step 4. Step 7 remains deferred; #1226 accepted the step 8 design
-without implementing its runtime behavior.
+its verification scope is covered by step 4. Step 7 remains deferred. Step 8 implements the repair
+design accepted in #1226 and shipped in #1228.
