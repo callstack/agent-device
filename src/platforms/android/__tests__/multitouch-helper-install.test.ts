@@ -7,7 +7,7 @@ import { beforeEach, test } from 'vitest';
 import {
   ensureAndroidMultiTouchHelper,
   resetAndroidMultiTouchHelperInstallCache,
-} from '../multitouch-helper.ts';
+} from '../multitouch-helper-install.ts';
 import type { AndroidAdbExecutor, AndroidAdbProvider } from '../adb-executor.ts';
 import { ANDROID_MULTITOUCH_HELPER_MANIFEST } from './multitouch-helper.fixtures.ts';
 

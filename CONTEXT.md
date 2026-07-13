@@ -52,7 +52,8 @@
   platform-neutral `GesturePlan` plus Android's stationary long-press plan—and selects the paired
   provider-native touch/viewport adapter or bundled instrumentation-helper adapter. Scroll and
   long-press retain their command semantics and only share physical touch execution through this
-  seam. See ADR 0013.
+  seam. Helper long-press executes its absolute stationary path without a viewport probe; provider
+  long-press receives its paired provider-owned viewport. See ADR 0013.
 - Multi-touch geometry: the internal initial span and angle plus centroid translation, scale, and rotation used to build both contact trajectories. Geometry is viewport-aware and fails early when the requested motion cannot fit; it is not a public tuning surface.
 - Guarantee cell: one (dispatch path, guarantee) entry in `src/contracts/interaction-guarantees.ts`, classified as runtime/runner/delegated/inapplicable/waived. Completeness is a compile error; honesty is gate-tested.
 - Owned waiver: a `gap:`-prefixed waived cell carrying a `trackingIssue` URL. Waivers are diffable debt with an owner, never folklore.

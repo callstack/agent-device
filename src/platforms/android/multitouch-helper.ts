@@ -10,48 +10,23 @@ import {
   type AndroidAdbExecutor,
 } from './adb-executor.ts';
 import {
-  makeEnsureAndroidHelperInstalled,
-  resolveAndroidHelperArtifact,
-} from './helper-package-install.ts';
-import {
   parseInstrumentationRecords,
-  readAndroidHelperManifestInteger,
-  readAndroidHelperManifestLiteral,
-  readAndroidHelperManifestSha256,
-  readAndroidHelperManifestString,
   readInstrumentationResultNumber,
 } from './instrumentation-helper.ts';
 import { stopAndroidSnapshotHelperSessionForDevice } from './snapshot-helper.ts';
 import { validateAndroidGestureViewport } from './gesture-viewport.ts';
 import type { AndroidTouchPlan } from './touch-plan.ts';
+import {
+  ANDROID_MULTITOUCH_HELPER_PROTOCOL,
+  ensureAndroidMultiTouchHelper,
+  resolveAndroidMultiTouchHelperArtifact,
+} from './multitouch-helper-install.ts';
 
-const HELPER_NAME = 'android-multitouch-helper';
-const HELPER_PACKAGE = 'com.callstack.agentdevice.multitouchhelper';
-const HELPER_RUNNER = 'com.callstack.agentdevice.multitouchhelper/.MultiTouchInstrumentation';
-const HELPER_PROTOCOL = 'android-multitouch-helper-v1';
-const HELPER_INSTALL_TIMEOUT_MS = 30_000;
+const HELPER_PROTOCOL = ANDROID_MULTITOUCH_HELPER_PROTOCOL;
 const HELPER_GESTURE_TIMEOUT_MS = 45_000;
 const HELPER_GESTURE_TIMEOUT_OVERHEAD_MS = 15_000;
 const HELPER_NO_FINAL_RESULT = 'ANDROID_MULTITOUCH_HELPER_NO_FINAL_RESULT';
 const HELPER_REPORTED_FAILURE = 'ANDROID_MULTITOUCH_HELPER_REPORTED_FAILURE';
-const HELPER_LABEL = 'Android multi-touch helper';
-const MANIFEST_HELPER_LABEL = 'multi-touch helper';
-
-type AndroidMultiTouchHelperManifest = {
-  name: 'android-multitouch-helper';
-  version: string;
-  assetName: string;
-  sha256: string;
-  packageName: string;
-  versionCode: number;
-  instrumentationRunner: string;
-  statusProtocol: 'android-multitouch-helper-v1';
-};
-
-type AndroidMultiTouchHelperArtifact = {
-  apkPath: string;
-  manifest: AndroidMultiTouchHelperManifest;
-};
 
 type AndroidPlannedPointerTrajectory = {
   pointerId: 0 | 1;
@@ -129,25 +104,15 @@ export async function readAndroidMultiTouchHelperViewport(device: DeviceInfo): P
     { allowFailure: true, timeoutMs: HELPER_GESTURE_TIMEOUT_MS },
   );
   const records = parseInstrumentationRecords(`${result.stdout}\n${result.stderr}`);
-  if (
-    result.exitCode !== 0 &&
-    !records.results.some((record) => record.agentDeviceProtocol === HELPER_PROTOCOL)
-  ) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Android gesture viewport is unavailable',
-      execFailureDetails(result),
-    );
+  if (result.exitCode === 0) return parseAndroidGestureViewportResult(records.results);
+  if (records.results.some((record) => record.agentDeviceProtocol === HELPER_PROTOCOL)) {
+    parseAndroidGestureViewportResult(records.results);
   }
-  const viewport = parseAndroidGestureViewportResult(records.results);
-  if (result.exitCode !== 0) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      'Android gesture viewport is unavailable',
-      execFailureDetails(result),
-    );
-  }
-  return viewport;
+  throw new AppError(
+    'COMMAND_FAILED',
+    'Android gesture viewport is unavailable',
+    execFailureDetails(result),
+  );
 }
 
 export function parseAndroidGestureViewportResult(results: Array<Record<string, string>>): Rect {
@@ -273,68 +238,4 @@ export function parseAndroidMultiTouchHelperOutput(output: string): Record<strin
     injectedEvents: readInstrumentationResultNumber(finalResult.injectedEvents),
     elapsedMs: readInstrumentationResultNumber(finalResult.elapsedMs),
   };
-}
-
-async function resolveAndroidMultiTouchHelperArtifact(): Promise<AndroidMultiTouchHelperArtifact> {
-  return await resolveAndroidHelperArtifact({
-    helperDirName: 'android-multitouch-helper',
-    manifestFileName: (version) =>
-      `agent-device-android-multitouch-helper-${version}.manifest.json`,
-    parseManifest: parseAndroidMultiTouchHelperManifest,
-    unavailableMessage:
-      'Android touch gestures require the bundled Android touch helper artifact, but it was not found or could not be read',
-  });
-}
-
-function parseAndroidMultiTouchHelperManifest(value: unknown): AndroidMultiTouchHelperManifest {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new AppError('INVALID_ARGS', 'Android multi-touch helper manifest must be an object.');
-  }
-  const record = value as Record<string, unknown>;
-  return {
-    name: readAndroidHelperManifestLiteral(record.name, 'name', HELPER_NAME, MANIFEST_HELPER_LABEL),
-    version: readAndroidHelperManifestString(record.version, 'version', MANIFEST_HELPER_LABEL),
-    assetName: readAndroidHelperManifestString(
-      record.assetName,
-      'assetName',
-      MANIFEST_HELPER_LABEL,
-    ),
-    sha256: readAndroidHelperManifestSha256(record.sha256, MANIFEST_HELPER_LABEL),
-    packageName: readAndroidHelperManifestLiteral(
-      record.packageName,
-      'packageName',
-      HELPER_PACKAGE,
-      MANIFEST_HELPER_LABEL,
-    ),
-    versionCode: readAndroidHelperManifestInteger(
-      record.versionCode,
-      'versionCode',
-      MANIFEST_HELPER_LABEL,
-    ),
-    instrumentationRunner: readAndroidHelperManifestLiteral(
-      record.instrumentationRunner,
-      'instrumentationRunner',
-      HELPER_RUNNER,
-      MANIFEST_HELPER_LABEL,
-    ),
-    statusProtocol: readAndroidHelperManifestLiteral(
-      record.statusProtocol,
-      'statusProtocol',
-      HELPER_PROTOCOL,
-      MANIFEST_HELPER_LABEL,
-    ),
-  };
-}
-
-const installedMultiTouchHelpers = new Set<string>();
-
-export const ensureAndroidMultiTouchHelper =
-  makeEnsureAndroidHelperInstalled<AndroidMultiTouchHelperArtifact>({
-    cache: installedMultiTouchHelpers,
-    installTimeoutMs: HELPER_INSTALL_TIMEOUT_MS,
-    helperLabel: HELPER_LABEL,
-  });
-
-export function resetAndroidMultiTouchHelperInstallCache(): void {
-  installedMultiTouchHelpers.clear();
 }

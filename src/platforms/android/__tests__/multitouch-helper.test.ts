@@ -4,10 +4,10 @@ import { buildGesturePlan } from '../../../contracts/gesture-plan.ts';
 import {
   normalizeAndroidMultiTouchHelperGestureRequest,
   parseAndroidMultiTouchHelperOutput,
-  resetAndroidMultiTouchHelperInstallCache,
   runAndroidMultiTouchHelperGesture,
   parseAndroidGestureViewportResult,
 } from '../multitouch-helper.ts';
+import { resetAndroidMultiTouchHelperInstallCache } from '../multitouch-helper-install.ts';
 import {
   ANDROID_MULTITOUCH_HELPER_MANIFEST as manifest,
   androidMultiTouchResultRecord as resultRecord,
@@ -89,7 +89,6 @@ test('Android long press lowers to a stationary single-pointer helper request', 
     topology: 'single',
     intent: 'longPress',
     durationMs: 120_000,
-    viewport,
     pointers: [
       {
         pointerId: 0,

@@ -39,6 +39,10 @@ test('scrollAndroid plans explicit pixel travel through semantic touch injection
   assert.equal(result.durationMs, 120);
   assert.equal(result.referenceWidth, 1080);
   assert.equal(result.referenceHeight, 1920);
+  assert.equal(result.x1, 550);
+  assert.equal(result.y1, 1100);
+  assert.equal(result.x2, 550);
+  assert.equal(result.y2, 860);
   assert.equal(result.backend, 'provider-native-touch');
   assert.equal(result.injected, true);
 });

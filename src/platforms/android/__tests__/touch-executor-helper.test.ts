@@ -4,7 +4,8 @@ import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
 import { buildGesturePlan } from '../../../contracts/gesture-plan.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
-import { resetAndroidMultiTouchHelperInstallCache } from '../multitouch-helper.ts';
+import { longPressAndroid } from '../input-actions.ts';
+import { resetAndroidMultiTouchHelperInstallCache } from '../multitouch-helper-install.ts';
 import { stopAndroidSnapshotHelperSessionForDevice } from '../snapshot-helper.ts';
 import { executeAndroidTouchPlan, readAndroidGestureViewport } from '../touch-executor.ts';
 import {
@@ -90,6 +91,42 @@ test('helper gesture releases persistent snapshot instrumentation before touch i
 
   assert.equal(result?.backend, 'android-multitouch-helper');
   assert.deepEqual(events, ['snapshot-stop', 'touch-instrumentation']);
+});
+
+test('bare-adb long press executes one helper gesture without a viewport probe', async () => {
+  const instrumentCalls: string[][] = [];
+  const result = await withAndroidAdbProvider(
+    {
+      exec: async (args) => {
+        if (args.includes('--show-versioncode')) {
+          return {
+            exitCode: 0,
+            stdout: `package:${ANDROID_MULTITOUCH_HELPER_MANIFEST.packageName} versionCode:999999`,
+            stderr: '',
+          };
+        }
+        if (args.includes('instrument')) {
+          instrumentCalls.push(args);
+          return {
+            exitCode: 0,
+            stdout: [
+              androidMultiTouchResultRecord({ ok: 'true', kind: 'swipe' }),
+              'INSTRUMENTATION_CODE: 0',
+            ].join('\n'),
+            stderr: '',
+          };
+        }
+        throw new Error(`unexpected adb call: ${args.join(' ')}`);
+      },
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => await longPressAndroid(ANDROID_EMULATOR, 30, 40, 750),
+  );
+
+  assert.equal(result.backend, 'android-multitouch-helper');
+  assert.equal(instrumentCalls.length, 1);
+  assert.equal(instrumentCalls[0]?.includes('viewport'), false);
+  assert.equal(mockStopSnapshotSession.mock.calls.length, 1);
 });
 
 test('single-pointer helper failure propagates through the touch executor', async () => {

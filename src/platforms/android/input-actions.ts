@@ -87,13 +87,11 @@ export async function longPressAndroid(
   y: number,
   durationMs = 800,
 ): Promise<Record<string, unknown>> {
-  const viewport = await readAndroidGestureViewport(device);
   const point = { x, y };
   return await executeAndroidTouchPlan(device, {
     topology: 'single',
     intent: 'longPress',
     durationMs,
-    viewport,
     pointers: [
       {
         pointerId: 0,
@@ -273,26 +271,37 @@ export async function scrollAndroid(
   options?: { amount?: number; pixels?: number; durationMs?: number },
 ): Promise<Record<string, unknown>> {
   const viewport = await readAndroidGestureViewport(device);
-  const scrollPlan = buildScrollGesturePlan({
+  const relativePlan = buildScrollGesturePlan({
     direction,
     amount: options?.amount,
     pixels: options?.pixels,
     referenceWidth: viewport.width,
     referenceHeight: viewport.height,
   });
+  const scrollPlan = {
+    ...relativePlan,
+    x1: viewport.x + relativePlan.x1,
+    y1: viewport.y + relativePlan.y1,
+    x2: viewport.x + relativePlan.x2,
+    y2: viewport.y + relativePlan.y2,
+  };
   const durationMs = options?.durationMs ?? 300;
-  const origin = { x: viewport.x + scrollPlan.x1, y: viewport.y + scrollPlan.y1 };
-  const gesturePlan = buildGesturePlan(
-    {
-      intent: 'pan',
-      origin,
-      delta: { x: scrollPlan.x2 - scrollPlan.x1, y: scrollPlan.y2 - scrollPlan.y1 },
-      durationMs,
-    },
-    viewport,
-    'android',
+  const backend = await executeAndroidTouchPlan(
+    device,
+    buildGesturePlan(
+      {
+        intent: 'pan',
+        origin: { x: scrollPlan.x1, y: scrollPlan.y1 },
+        delta: {
+          x: scrollPlan.x2 - scrollPlan.x1,
+          y: scrollPlan.y2 - scrollPlan.y1,
+        },
+        durationMs,
+      },
+      viewport,
+      'android',
+    ),
   );
-  const backend = await executeAndroidTouchPlan(device, gesturePlan);
 
   return {
     ...scrollPlan,

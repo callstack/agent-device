@@ -5,8 +5,11 @@ export type AndroidLongPressTouchPlan = {
   topology: 'single';
   intent: 'longPress';
   durationMs: number;
-  viewport: Rect;
   pointers: readonly [PointerTrajectory];
 };
 
 export type AndroidTouchPlan = GesturePlan | AndroidLongPressTouchPlan;
+
+export type AndroidProviderTouchPlan =
+  | GesturePlan
+  | (AndroidLongPressTouchPlan & { viewport: Rect });

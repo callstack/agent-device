@@ -42,6 +42,7 @@ test('provider touch viewport bypasses local helper transport and is validated',
         calls += 1;
         return calls === 1 ? viewport : { ...viewport, width: 0 };
       },
+      touch: async () => {},
     },
     { serial: ANDROID_EMULATOR.id },
     async () => {

@@ -58,8 +58,9 @@ Platform adapters consume the canonical plan:
 - Android's `executeAndroidTouchPlan` adapter seam sends planned touch, including gesture plans plus
   the physical movement for scroll and long-press, to provider-native touch injection when
   available, otherwise to the bundled instrumentation helper. The helper injects the exact planned
-  pointer samples. Android touch execution never falls back to `adb input swipe`; the snapshot
-  helper is stopped
+  pointer samples. A stationary long-press needs no viewport on the helper path; the executor adds
+  the paired provider-owned viewport only for provider-native touch. Android touch execution never
+  falls back to `adb input swipe`; the snapshot helper is stopped
   before local gesture instrumentation because Android permits only one instrumentation owner of
   `UiAutomation`.
 - iOS converts every planned point to native orientation and feeds the exact arrays to the existing
@@ -96,6 +97,9 @@ selectors or refs and therefore cannot claim element-targeting guarantees.
 - One-finger pan remains the default and explicit two-finger pan retains pan intent.
 - The active viewport is resolved for each gesture, so rotation, keyboard, and window changes do
   not use stale geometry.
+- On bare ADB, Android scroll and long-press require the bundled touch helper and `UiAutomation`;
+  helper installation or runtime failure is surfaced directly rather than degrading to an
+  approximate `adb input swipe`.
 - Pointer plans are larger than scalar requests but bounded by duration and the 16 ms sample
   cadence; deleting duplicate scalar executors offsets the package cost.
 
