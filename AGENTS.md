@@ -10,7 +10,7 @@ Issues and PRDs live in GitHub Issues for `callstack/agent-device`; external PRs
 
 ### Triage labels
 
-Follow the issue label workflow in `docs/agents/triage-labels.md`, including `ready-for-agent` and `ready-for-human`.
+Follow the issue label workflow in `docs/agents/triage-labels.md`, including `ready-for-agent`.
 
 ### Domain docs
 
