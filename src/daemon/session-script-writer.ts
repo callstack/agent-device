@@ -4,6 +4,7 @@ import { publicPlatformString } from '../kernel/device.ts';
 import { inferFillText } from './action-utils.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { AppError } from '../kernel/errors.ts';
+import { isProcessAlive } from '../utils/host-process.ts';
 import {
   formatPortableActionLine,
   formatTargetAnnotationLines,
@@ -208,52 +209,121 @@ function publishOverwriteAtomically(tempPath: string, scriptPath: string): void 
 }
 
 const NO_CLOBBER_PUBLISH_MAX_ATTEMPTS = 16;
+const LOCK_ACQUIRE_MAX_ATTEMPTS = 40;
+const LOCK_ACQUIRE_BACKOFF_MS = 5;
 
 /**
  * ADR 0012 decision 6, no-clobber (BLOCKER 1): publishes to the DEFAULT healed
  * sibling path, where a COMPLETE (sentinel-marked) prior artifact must never
  * be clobbered.
  *
- * The prior implementation decided "is the existing target overwritable" with
- * a plain read (`isCompleteHealedScript`) followed later by an unconditional
- * `renameSync`. Two concurrent writers could both read the SAME pre-existing
- * partial as incomplete and then both `renameSync` over it — each returning
- * success with no signal to the other. Neither writer ever observed the
- * loss: a silent, undetectable clobber.
+ * A prior fix made the "is the existing target overwritable" decision itself
+ * atomic (grab-to-quarantine + inspect, `grabAndDiscardPartialTarget` below)
+ * instead of a plain read — but the inspect/restore/publish SEQUENCE was
+ * still not exclusive: writer A could quarantine an existing COMPLETE
+ * target, and — before A restored it — writer B could `linkSync` its own
+ * COMPLETE artifact into the now-empty `scriptPath` and return success, only
+ * for A's restore (`renameSync`, which replaces an existing destination per
+ * POSIX) to silently stomp B's freshly published bytes. B would report
+ * success while its bytes were gone.
  *
- * Here every step that could decide a winner is an atomic filesystem
- * primitive, never a check-then-write gap:
- * - `linkSync` is the ONLY way to WIN outright: it fails atomically (`EEXIST`)
- *   iff a file is at `scriptPath` at that exact instant.
- * - On `EEXIST`, the existing file is inspected on a PRIVATE copy, never the
- *   shared path: `renameSync` atomically moves whatever currently sits at
- *   `scriptPath` into a uniquely-named quarantine file first, so the
- *   completeness check runs on a copy nobody else can race against. If a
- *   competing writer's own grab (or publish) already claimed `scriptPath` in
- *   between, our `renameSync` fails (`ENOENT`) and we re-evaluate from the
- *   top against the current state — never a stale read.
- * - A COMPLETE quarantined file is put back (best effort) and the publish is
- *   refused; a genuinely partial one is discarded and the exclusive
- *   `linkSync` is retried.
- *
- * Every interleaving converges on exactly one winning `linkSync` and every
- * other writer observing a definitive, thrown "already exists" — never two
- * silent successes, never a torn/half-clobbered file.
+ * Here the ENTIRE decide-and-act sequence for a given `scriptPath` — the
+ * exclusive-link attempt, the grab/inspect, and the refuse-and-restore or
+ * discard-and-retry — runs while holding an exclusive publish lock
+ * (`acquireNoClobberLock`/`releaseNoClobberLock`, itself an atomic `linkSync`
+ * claim). A competing writer for the SAME `scriptPath` cannot even begin its
+ * own decision until the lock holder's entire sequence has finished and
+ * released it, so the "restore stomps a concurrently-published winner"
+ * interleaving above is no longer reachable: whichever writer holds the lock
+ * always observes (and, on refusal, restores) exactly what it itself grabbed,
+ * with nothing else able to touch `scriptPath` in between.
  */
 function publishNoClobberAtomically(tempPath: string, scriptPath: string): void {
-  for (let attempt = 0; attempt < NO_CLOBBER_PUBLISH_MAX_ATTEMPTS; attempt += 1) {
-    if (tryExclusiveLink(tempPath, scriptPath)) return;
-    // Something is at `scriptPath`. Either it gets grabbed-and-discarded as a
-    // genuine partial, or a competing writer's own grab/publish already beat
-    // us to it — either way, re-evaluate from the top via the exclusive link
-    // above rather than trust a stale read. Throws (never returns) if what we
-    // grabbed turns out to be a COMPLETE artifact.
-    grabAndDiscardPartialTarget(scriptPath);
+  const lockPath = acquireNoClobberLock(scriptPath);
+  try {
+    for (let attempt = 0; attempt < NO_CLOBBER_PUBLISH_MAX_ATTEMPTS; attempt += 1) {
+      if (tryExclusiveLink(tempPath, scriptPath)) return;
+      // Something is at `scriptPath`. We hold the exclusive publish lock, so
+      // nothing else can repopulate it underneath us: this is either a
+      // genuine partial (grabbed-and-discarded, then retried above) or a
+      // COMPLETE artifact (grabbed, restored, and the publish refused —
+      // `grabAndDiscardPartialTarget` never returns on that path).
+      grabAndDiscardPartialTarget(scriptPath);
+    }
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Could not publish the healed script to ${scriptPath}: too much contention from concurrent writers.`,
+    );
+  } finally {
+    releaseNoClobberLock(lockPath);
   }
-  throw new AppError(
-    'COMMAND_FAILED',
-    `Could not publish the healed script to ${scriptPath}: too much contention from concurrent writers.`,
-  );
+}
+
+/**
+ * Claims the exclusive right to decide/publish for `scriptPath` via an atomic
+ * `linkSync` (fails `EEXIST` iff someone else already holds it). On
+ * contention, waits with a bounded backoff — the lock is held only for the
+ * handful of synchronous fs calls in `publishNoClobberAtomically`, so any
+ * live holder releases it quickly.
+ *
+ * A lock whose recorded PID is no longer running is a crashed writer's
+ * abandoned claim — reclaimed immediately (a dead process can never release
+ * it). A lock held by a LIVE process is never stolen: exhausting the bounded
+ * wait fails loudly instead, so a slow (but live) holder's in-progress
+ * publish is never second-guessed.
+ */
+function acquireNoClobberLock(scriptPath: string): string {
+  const lockPath = `${scriptPath}.lock`;
+  const tempLockPath = `${lockPath}.${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`;
+  fs.writeFileSync(tempLockPath, String(process.pid));
+  try {
+    for (let attempt = 0; attempt < LOCK_ACQUIRE_MAX_ATTEMPTS; attempt += 1) {
+      try {
+        fs.linkSync(tempLockPath, lockPath);
+        return lockPath;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        if (isHeldByDeadProcess(lockPath)) {
+          fs.rmSync(lockPath, { force: true });
+          continue;
+        }
+        sleepSyncMs(LOCK_ACQUIRE_BACKOFF_MS);
+      }
+    }
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Could not publish the healed script to ${scriptPath}: timed out waiting for a concurrent writer to finish publishing.`,
+    );
+  } finally {
+    fs.rmSync(tempLockPath, { force: true });
+  }
+}
+
+function releaseNoClobberLock(lockPath: string): void {
+  fs.rmSync(lockPath, { force: true });
+}
+
+/** `true` iff `lockPath` names a PID that is provably no longer running. */
+function isHeldByDeadProcess(lockPath: string): boolean {
+  let raw: string;
+  try {
+    raw = fs.readFileSync(lockPath, 'utf8');
+  } catch {
+    // Released between our EEXIST and this read — not steal-worthy, the next
+    // attempt's `linkSync` will simply succeed against the now-clear path.
+    return false;
+  }
+  const pid = Number(raw.trim());
+  return Number.isInteger(pid) && pid > 0 && !isProcessAlive(pid);
+}
+
+/**
+ * Blocks the event loop for `ms` — a synchronous backoff to match this
+ * file's synchronous (`Sync`) publish primitives. Never runs longer than
+ * `LOCK_ACQUIRE_MAX_ATTEMPTS * LOCK_ACQUIRE_BACKOFF_MS` in the worst case.
+ */
+function sleepSyncMs(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
 
 /**
@@ -273,13 +343,13 @@ function tryExclusiveLink(tempPath: string, scriptPath: string): boolean {
 
 /**
  * Atomically grabs whatever currently sits at `scriptPath` into a private,
- * uniquely-named quarantine file (a single `renameSync`, so nobody else can
- * race the completeness check against it) and inspects it there. A genuinely
- * partial grab is discarded (returns normally — the caller retries the
- * exclusive link). `ENOENT` means a competing writer's own grab or publish
- * already changed `scriptPath` between our `EEXIST` and this call — also
- * returns normally, for the same "retry from the top" reason. A COMPLETE
- * grab is restored (best effort) and this throws, refusing the clobber.
+ * uniquely-named quarantine file (a single `renameSync`) and inspects it
+ * there. The caller holds the exclusive publish lock for the whole of this
+ * decision, so no OTHER writer can be repopulating `scriptPath` while we
+ * inspect our quarantined copy. A genuinely partial grab is discarded
+ * (returns normally — the caller retries the exclusive link). `ENOENT` is
+ * unreachable under the lock but is handled defensively rather than assumed.
+ * A COMPLETE grab is restored and this throws, refusing the clobber.
  */
 function grabAndDiscardPartialTarget(scriptPath: string): void {
   const quarantinePath = `${scriptPath}.${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.quarantine`;
@@ -296,16 +366,15 @@ function grabAndDiscardPartialTarget(scriptPath: string): void {
   }
 }
 
-/** Restores a quarantined COMPLETE artifact (best effort) and refuses the publish. */
+/**
+ * Restores a quarantined COMPLETE artifact and refuses the publish. The
+ * caller holds the exclusive publish lock, so nothing else can have
+ * repopulated `scriptPath` in the meantime — the restore always lands back
+ * on the same empty slot we just vacated, never over another writer's
+ * publish.
+ */
 function refuseCompleteClobber(quarantinePath: string, scriptPath: string): never {
-  try {
-    // If another writer already republished to `scriptPath` in the meantime,
-    // this fails and ours stays quarantined (cleaned up by the caller) — we
-    // lose cleanly either way.
-    fs.renameSync(quarantinePath, scriptPath);
-  } catch {
-    /* already re-occupied by another writer's publish */
-  }
+  fs.renameSync(quarantinePath, scriptPath);
   throw new AppError(
     'COMMAND_FAILED',
     `A prior healed script already exists at ${scriptPath}; pass replay --save-script=<path> to write elsewhere, or remove/rename it first, so an unreviewed healed script is never clobbered.`,

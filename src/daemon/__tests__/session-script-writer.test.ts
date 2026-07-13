@@ -305,15 +305,23 @@ test('BLOCKER 1: two writers racing on the SAME pre-existing PARTIAL target — 
   renameSpy.mockRestore();
 
   expect(resultB).toBeDefined();
-  // Exactly one writer wins (publishes), the other observes a definitive,
-  // thrown no-clobber loss — never both silently succeeding, never a torn
-  // file caused by an unconditional renameSync racing another.
+  // Exactly one writer wins (publishes), the other observes a definitive
+  // loss — never both silently succeeding, never a torn file caused by an
+  // unconditional renameSync racing another. BLOCKER 1's follow-up fix now
+  // serializes the whole decide-and-act sequence for `scriptPath` behind an
+  // exclusive publish lock (see `publishNoClobberAtomically`), so the loser
+  // here may fail either via the no-clobber refusal (it grabbed the target
+  // and found it COMPLETE) or via lock contention (it never got a turn before
+  // the winner published) — which one depends on interleaving timing, but
+  // either way it is a clean, thrown loss, never a silent one.
   const outcomes = [resultA, resultB!];
   const wins = outcomes.filter((r) => r.written);
   const losses = outcomes.filter((r) => !r.written);
   expect(wins).toHaveLength(1);
   expect(losses).toHaveLength(1);
-  expect(losses[0]!.written === false && losses[0]!.error?.message).toMatch(/already exists/);
+  expect(losses[0]!.written === false && losses[0]!.error?.message).toMatch(
+    /already exists|timed out waiting/,
+  );
 
   // The surviving file is exactly the winner's complete, uncorrupted script —
   // never an interleaved mix of both writers' content.
@@ -322,6 +330,82 @@ test('BLOCKER 1: two writers racing on the SAME pre-existing PARTIAL target — 
   const parsed = parseReplayScriptDetailed(finalScript);
   const winnerLabel = resultB!.written ? 'id="from-b"' : 'id="from-a"';
   expect(parsed.actions.map((a) => a.positionals[0])).toEqual([winnerLabel]);
+});
+
+// BLOCKER 1 (follow-up): the reported race is a COMPLETE target being
+// silently clobbered because the inspect/restore/publish sequence was not
+// exclusive — writer A quarantines an existing COMPLETE artifact, writer B
+// publishes its own COMPLETE artifact into the now-empty slot and returns
+// success, and writer A's restore (`renameSync`, which replaces an existing
+// destination per POSIX) then silently stomps B's freshly published bytes.
+test('BLOCKER 1 (follow-up): a writer publishing while another is mid quarantine-and-restore of a COMPLETE target never gets silently clobbered', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-complete-race-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const healedPath = path.join(root, 'flows', 'login.healed.ad');
+  fs.mkdirSync(path.dirname(healedPath), { recursive: true });
+  // A genuine, pre-existing COMPLETE (sentinel-marked) healed artifact.
+  fs.writeFileSync(
+    healedPath,
+    `context platform=ios device="x"\nclick id="original"\n${HEAL_COMPLETE_SENTINEL}\n`,
+  );
+  const before = fs.readFileSync(healedPath, 'utf8');
+
+  const sessionA = makeIosSession('writer-a', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+    saveScriptComplete: true,
+    saveScriptPath: healedPath,
+    saveScriptDefaultedHealedPath: true,
+    actions: [action({ command: 'click', positionals: ['id="from-a"'] })],
+  });
+  const sessionB = makeIosSession('writer-b', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+    saveScriptComplete: true,
+    saveScriptPath: healedPath,
+    saveScriptDefaultedHealedPath: true,
+    actions: [action({ command: 'click', positionals: ['id="from-b"'] })],
+  });
+
+  // Force the exact interleaving the reviewer identified: let writer A's own
+  // atomic "grab the existing COMPLETE target into quarantine" rename
+  // actually happen (scriptPath is now momentarily empty), THEN — before A
+  // restores its quarantined copy — run writer B's entire publish. Under the
+  // prior implementation, B's `linkSync` won the now-empty slot and returned
+  // success, only for A's subsequent restore to silently stomp B's bytes.
+  const realRenameSync = fs.renameSync;
+  let triggeredCompetingWriter = false;
+  let resultB: ReturnType<SessionScriptWriter['write']> | undefined;
+  const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+    const isGrab =
+      !triggeredCompetingWriter && from === healedPath && String(to).includes('.quarantine');
+    if (isGrab) {
+      const result = realRenameSync(from, to);
+      triggeredCompetingWriter = true;
+      resultB = writer.write(sessionB);
+      return result;
+    }
+    return realRenameSync(from, to);
+  });
+
+  const resultA = writer.write(sessionA);
+  renameSpy.mockRestore();
+
+  expect(triggeredCompetingWriter).toBe(true);
+  expect(resultB).toBeDefined();
+
+  // No writer may report success unless ITS complete bytes are the ones
+  // actually sitting at the target.
+  const finalScript = fs.readFileSync(healedPath, 'utf8');
+  if (resultA.written) expect(finalScript).toContain('id="from-a"');
+  if (resultB!.written) expect(finalScript).toContain('id="from-b"');
+
+  // A genuine COMPLETE artifact already sat at the target before either
+  // writer ran: no-clobber means NEITHER may publish over it — both must be
+  // refused, and the original bytes survive byte-for-byte.
+  expect(resultA.written).toBe(false);
+  expect(resultB!.written).toBe(false);
+  expect(finalScript).toBe(before);
 });
 
 test('write() DOES overwrite when the caller passed an explicit --save-script=<path> (not defaulted)', () => {
