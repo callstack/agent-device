@@ -1,4 +1,4 @@
-import type { GesturePlan, PointerTrajectory } from '../../contracts/gesture-plan.ts';
+import type { PointerTrajectory } from '../../contracts/gesture-plan.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import type { Rect } from '../../kernel/snapshot.ts';
 import { AppError } from '../../kernel/errors.ts';
@@ -66,13 +66,6 @@ type AndroidMultiTouchHelperGestureRequest = {
 };
 
 export async function performGestureAndroid(
-  device: DeviceInfo,
-  plan: GesturePlan,
-): Promise<Record<string, unknown>> {
-  return await performAndroidTouchPlan(device, plan);
-}
-
-export async function performAndroidTouchPlan(
   device: DeviceInfo,
   plan: AndroidTouchPlan,
 ): Promise<Record<string, unknown>> {

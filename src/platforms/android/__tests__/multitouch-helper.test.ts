@@ -13,7 +13,6 @@ import {
 } from '../multitouch-helper.ts';
 import { createAndroidInteractor } from '../../../core/interactors/android.ts';
 import { withAndroidAdbProvider } from '../adb-executor.ts';
-import { buildAndroidLongPressTouchPlan } from '../touch-plan.ts';
 import {
   ANDROID_MULTITOUCH_HELPER_MANIFEST as manifest,
   androidMultiTouchResultRecord as resultRecord,
@@ -90,8 +89,22 @@ test('single-pointer plans use the same exact helper protocol', () => {
 });
 
 test('Android long press lowers to a stationary single-pointer helper request', () => {
-  const hold = buildAndroidLongPressTouchPlan({ x: 20, y: 30 }, 120_000, viewport);
-  const request = normalizeAndroidMultiTouchHelperGestureRequest(hold);
+  const point = { x: 20, y: 30 };
+  const request = normalizeAndroidMultiTouchHelperGestureRequest({
+    topology: 'single',
+    intent: 'longPress',
+    durationMs: 120_000,
+    viewport,
+    pointers: [
+      {
+        pointerId: 0,
+        samples: [
+          { offsetMs: 0, point },
+          { offsetMs: 120_000, point },
+        ],
+      },
+    ],
+  });
   assert.equal(request.kind, 'swipe');
   assert.equal(request.durationMs, 120_000);
   assert.deepEqual(request.pointers[0]?.samples, [
