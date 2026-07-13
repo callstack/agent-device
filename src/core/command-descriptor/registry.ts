@@ -4,6 +4,7 @@ import { resolveWaitBudgetMs } from '../wait-positionals.ts';
 import {
   DEFAULT_TIMEOUT_POLICY,
   INSTALL_REQUEST_TIMEOUT_MS,
+  LONG_PRESS_REQUEST_TIMEOUT_MS,
   PREPARE_REQUEST_TIMEOUT_MS,
 } from './timeout-policy.ts';
 import { resolvePostActionObservationSupport } from './post-action-observation.ts';
@@ -160,6 +161,11 @@ const SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY: CommandTimeoutPolicy = {
     defaultBudgetMs: DEFAULT_SETTLE_TIMEOUT_MS,
   },
   onTimeout: 'preserve-daemon',
+};
+
+const LONG_PRESS_TIMEOUT_POLICY: CommandTimeoutPolicy = {
+  ...SETTLE_FLAG_PRESERVE_DAEMON_TIMEOUT_POLICY,
+  envelopeMs: LONG_PRESS_REQUEST_TIMEOUT_MS,
 };
 
 const TOUCH_INTERACTION_RESPONSE_DATA_TRANSFORM = {
@@ -703,7 +709,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     daemon: { route: 'interaction', replayScopedAction: true, androidBlockingDialogGuard: true },
     dispatch: {},
     capability: { apple: APPLE_SIM_AND_DEVICE, android: ANDROID_ALL, linux: LINUX_DEVICE },
-    timeoutPolicy: interactionTimeoutPolicy('longpress'),
+    timeoutPolicy: LONG_PRESS_TIMEOUT_POLICY,
     postActionObservation: postActionObservation('longpress'),
     batchable: true,
   },

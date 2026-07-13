@@ -295,15 +295,25 @@ test('interaction --settle budgets add post-action settle time on top of the nor
     }),
     125_000,
   );
-  // Bare --settle uses the settle loop's default budget, so a slow pre-action
-  // capture still leaves room for the post-action observation to report.
+  // Longpress keeps its 120-second maximum hold inside the outer envelope.
+  assert.equal(
+    resolveDaemonRequestTimeoutMs({
+      ...base,
+      command: 'longpress',
+      positionals: ['300', '500', '120000'],
+      flags: {},
+    }),
+    150_000,
+  );
+  // Bare --settle adds its default budget after the longpress-specific base,
+  // so a maximum hold still leaves room for post-action observation.
   assert.equal(
     resolveDaemonRequestTimeoutMs({
       ...base,
       command: 'longpress',
       flags: { settle: true },
     }),
-    130_000,
+    190_000,
   );
   // Bare timeoutMs without --settle remains wire-compatible with older touch
   // command clients: it is ignored instead of opting into settle semantics.

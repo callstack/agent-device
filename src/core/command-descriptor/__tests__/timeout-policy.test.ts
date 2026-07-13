@@ -127,6 +127,7 @@ test('request envelopes deviating from the default are bounded, reviewed sets', 
     install: 180_000,
     reinstall: 180_000,
     install_source: 180_000,
+    longpress: 150_000,
     test: 'unbounded',
   };
   for (const descriptor of commandDescriptors) {

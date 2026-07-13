@@ -7,6 +7,11 @@ import type { CommandTimeoutPolicy } from './types.ts';
 const DAEMON_REQUEST_TIMEOUT_MS = 90_000;
 export const PREPARE_REQUEST_TIMEOUT_MS = 240_000;
 
+// A valid longpress may hold for 120 seconds. Keep the outer request alive
+// beyond both that command budget and the helper's 15-second completion
+// overhead so the platform result, rather than the client envelope, wins.
+export const LONG_PRESS_REQUEST_TIMEOUT_MS = 150_000;
+
 // Keep this above the longest platform install subprocess timeout so the client
 // envelope does not abort a still-progressing device install first.
 export const INSTALL_REQUEST_TIMEOUT_MS = 180_000;

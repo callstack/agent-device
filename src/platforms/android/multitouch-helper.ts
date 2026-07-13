@@ -129,9 +129,25 @@ export async function readAndroidMultiTouchHelperViewport(device: DeviceInfo): P
     { allowFailure: true, timeoutMs: HELPER_GESTURE_TIMEOUT_MS },
   );
   const records = parseInstrumentationRecords(`${result.stdout}\n${result.stderr}`);
-  if (result.exitCode !== 0)
-    throw new AppError('COMMAND_FAILED', 'Android gesture viewport is unavailable');
-  return parseAndroidGestureViewportResult(records.results);
+  const helperResult = records.results.find(
+    (record) => record.agentDeviceProtocol === HELPER_PROTOCOL,
+  );
+  if (result.exitCode !== 0 && !helperResult) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Android gesture viewport is unavailable',
+      execFailureDetails(result),
+    );
+  }
+  const viewport = parseAndroidGestureViewportResult(records.results);
+  if (result.exitCode !== 0) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Android gesture viewport is unavailable',
+      execFailureDetails(result, { helper: helperResult }),
+    );
+  }
+  return viewport;
 }
 
 export function parseAndroidGestureViewportResult(results: Array<Record<string, string>>): Rect {
@@ -140,6 +156,7 @@ export function parseAndroidGestureViewportResult(results: Array<Record<string, 
     throw new AppError(
       'COMMAND_FAILED',
       output?.message || 'Android gesture viewport is unavailable',
+      output ? { errorType: output.errorType, helper: output } : undefined,
     );
   const x = readInstrumentationResultNumber(output.x);
   const y = readInstrumentationResultNumber(output.y);
