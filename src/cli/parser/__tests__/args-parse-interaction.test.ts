@@ -305,9 +305,15 @@ test('parseArgs supports trigger-app-event payload argument', () => {
   assert.deepEqual(parsed.positionals, ['screenshot_taken', '{"source":"qa"}']);
 });
 
-test('parseArgs accepts rotate orientation aliases', () => {
+test('parseArgs accepts the orientation command', () => {
+  const parsed = parseArgs(['orientation', 'left'], { strictFlags: true });
+  assert.equal(parsed.command, 'orientation');
+  assert.deepEqual(parsed.positionals, ['left']);
+});
+
+test('parseArgs normalizes the deprecated rotate alias to orientation', () => {
   const parsed = parseArgs(['rotate', 'left'], { strictFlags: true });
-  assert.equal(parsed.command, 'rotate');
+  assert.equal(parsed.command, 'orientation');
   assert.deepEqual(parsed.positionals, ['left']);
 });
 

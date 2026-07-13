@@ -38,7 +38,7 @@ import { systemCliOutputFormatters } from './output.ts';
 const APPSTATE_COMMAND_NAME = 'appstate';
 const BACK_COMMAND_NAME = 'back';
 const HOME_COMMAND_NAME = 'home';
-const ROTATE_COMMAND_NAME = 'rotate';
+const ORIENTATION_COMMAND_NAME = 'orientation';
 const APP_SWITCHER_COMMAND_NAME = 'app-switcher';
 const KEYBOARD_COMMAND_NAME = 'keyboard';
 const CLIPBOARD_COMMAND_NAME = 'clipboard';
@@ -51,7 +51,7 @@ const KEYBOARD_METADATA_ACTION_VALUES = ['status', 'dismiss'] as const;
 const appStateCommandDescription = 'Show foreground app or activity.';
 const backCommandDescription = 'Navigate back.';
 const homeCommandDescription = 'Go to the home screen.';
-const rotateCommandDescription = 'Rotate device orientation.';
+const orientationCommandDescription = 'Set device orientation.';
 const appSwitcherCommandDescription = 'Open the app switcher.';
 const keyboardCommandDescription = 'Inspect or dismiss the keyboard.';
 const clipboardCommandDescription = 'Read or write clipboard text.';
@@ -73,9 +73,9 @@ const homeCommandMetadata = defineFieldCommandMetadata(
   {},
 );
 
-const rotateCommandMetadata = defineFieldCommandMetadata(
-  ROTATE_COMMAND_NAME,
-  rotateCommandDescription,
+const orientationCommandMetadata = defineFieldCommandMetadata(
+  ORIENTATION_COMMAND_NAME,
+  orientationCommandDescription,
   {
     orientation: requiredField(enumField(DEVICE_ROTATIONS)),
   },
@@ -135,10 +135,10 @@ const homeCommandDefinition = defineExecutableCommand(
   NAVIGATION_COMMAND_PROJECTIONS.home,
 );
 
-const rotateCommandDefinition = defineExecutableCommand(
-  rotateCommandMetadata,
-  (client, input) => client.command.rotate(input),
-  NAVIGATION_COMMAND_PROJECTIONS.rotate,
+const orientationCommandDefinition = defineExecutableCommand(
+  orientationCommandMetadata,
+  (client, input) => client.command.orientation(input),
+  NAVIGATION_COMMAND_PROJECTIONS.orientation,
 );
 
 const appSwitcherCommandDefinition = defineExecutableCommand(
@@ -172,9 +172,9 @@ const backCliSchema = {
   allowedFlags: ['backMode'],
 } as const satisfies CommandSchemaOverride;
 
-const rotateCliSchema = {
-  usageOverride: 'rotate <portrait|portrait-upside-down|landscape-left|landscape-right>',
-  helpDescription: 'Rotate device orientation on iOS and Android',
+const orientationCliSchema = {
+  usageOverride: 'orientation <portrait|portrait-upside-down|landscape-left|landscape-right>',
+  helpDescription: 'Set device orientation on iOS and Android',
   positionalArgs: ['orientation'],
 } as const satisfies CommandSchemaOverride;
 
@@ -213,7 +213,7 @@ export const backCliReader: CliReader = (_positionals, flags) => ({
   mode: flags.backMode,
 });
 
-export const rotateCliReader: CliReader = (positionals, flags) => ({
+export const orientationCliReader: CliReader = (positionals, flags) => ({
   ...commonInputFromFlags(flags),
   orientation: parseDeviceRotation(positionals[0]),
 });
@@ -240,8 +240,8 @@ export const backDaemonWriter: DaemonWriter = (input) =>
 
 export const homeDaemonWriter: DaemonWriter = direct(HOME_COMMAND_NAME);
 
-export const rotateDaemonWriter: DaemonWriter = direct(ROTATE_COMMAND_NAME, (input) => [
-  requiredDaemonString(input.orientation, 'rotate requires orientation'),
+export const orientationDaemonWriter: DaemonWriter = direct(ORIENTATION_COMMAND_NAME, (input) => [
+  requiredDaemonString(input.orientation, 'orientation requires orientation'),
 ]);
 
 export const appSwitcherDaemonWriter: DaemonWriter = direct(APP_SWITCHER_COMMAND_NAME);
@@ -288,14 +288,14 @@ const homeCommandFacet = defineCommandFacet({
   cliOutputFormatter: systemCliOutputFormatters.home,
 });
 
-const rotateCommandFacet = defineCommandFacet({
-  name: ROTATE_COMMAND_NAME,
-  metadata: rotateCommandMetadata,
-  definition: rotateCommandDefinition,
-  cliSchema: rotateCliSchema,
-  cliReader: rotateCliReader,
-  daemonWriter: rotateDaemonWriter,
-  cliOutputFormatter: systemCliOutputFormatters.rotate,
+const orientationCommandFacet = defineCommandFacet({
+  name: ORIENTATION_COMMAND_NAME,
+  metadata: orientationCommandMetadata,
+  definition: orientationCommandDefinition,
+  cliSchema: orientationCliSchema,
+  cliReader: orientationCliReader,
+  daemonWriter: orientationDaemonWriter,
+  cliOutputFormatter: systemCliOutputFormatters.orientation,
 });
 
 const appSwitcherCommandFacet = defineCommandFacet({
@@ -345,7 +345,7 @@ export const systemCommandFamily = defineCommandFamilyFromFacets({
     appStateCommandFacet,
     backCommandFacet,
     homeCommandFacet,
-    rotateCommandFacet,
+    orientationCommandFacet,
     appSwitcherCommandFacet,
     keyboardCommandFacet,
     clipboardCommandFacet,

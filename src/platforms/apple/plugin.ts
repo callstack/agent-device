@@ -38,7 +38,7 @@ const supportsKeyboard = (device: DeviceInfo): boolean => {
   return caps ? caps.keyboard : device.platform === 'android';
 };
 
-// `rotate` (was `android || (ios && target !== 'tv')`). Off Apple: `android`.
+// `orientation` (was `android || (ios && target !== 'tv')`). Off Apple: `android`.
 const supportsOrientation = (device: DeviceInfo): boolean => {
   const caps = appleOsCapabilities(device);
   return caps ? caps.orientation : device.platform === 'android';
@@ -78,7 +78,7 @@ const APPLE_SUPPORTS_BY_DEFAULT: Record<string, (device: DeviceInfo) => boolean>
     device.platform === 'linux' ||
     supportsHostOrSimulatorSurface(device),
   [PUBLIC_COMMANDS.keyboard]: supportsKeyboard,
-  [PUBLIC_COMMANDS.rotate]: supportsOrientation,
+  [PUBLIC_COMMANDS.orientation]: supportsOrientation,
   [PUBLIC_COMMANDS.tvRemote]: supportsTvRemote,
   [PUBLIC_COMMANDS.alert]: (device) =>
     device.platform === 'android' || supportsHostOrSimulatorSurface(device),

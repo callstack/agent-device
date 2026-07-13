@@ -12,7 +12,7 @@ export function parseDeviceRotation(input: string | undefined): DeviceRotation {
   if (input === undefined) {
     throw new AppError(
       'INVALID_ARGS',
-      'rotate requires an orientation argument. Use portrait|portrait-upside-down|landscape-left|landscape-right.',
+      'orientation requires an orientation argument. Use portrait|portrait-upside-down|landscape-left|landscape-right.',
     );
   }
   const normalized = input?.trim().toLowerCase();

@@ -66,7 +66,7 @@ const SUPPORTS_REF: Record<string, (device: DeviceInfo) => boolean> = {
     isMacOs(device) ||
     device.kind === 'simulator',
   keyboard: supportsAndroidOrIosNonTv,
-  rotate: supportsAndroidOrIosNonTv,
+  orientation: supportsAndroidOrIosNonTv,
   'tv-remote': supportsTvRemote,
   alert: (device) => device.platform === 'android' || isMacOsOrAppleSimulator(device),
   settings: (device) =>

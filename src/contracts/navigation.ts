@@ -25,9 +25,9 @@ export type BackCommandResult = {
   message: string;
 };
 
-/** `rotate` — `{ action: 'rotate', orientation, message: 'Rotated to <orientation>' }`. */
-export type RotateCommandResult = {
-  action: 'rotate';
+/** `orientation` — `{ action: 'orientation', orientation, message: 'Rotated to <orientation>' }`. */
+export type OrientationCommandResult = {
+  action: 'orientation';
   orientation: DeviceRotation;
   message: string;
 };

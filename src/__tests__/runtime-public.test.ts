@@ -258,7 +258,7 @@ test('internal backend, commands, and io modules are usable', () => {
   assert.equal(typeof commands.interactions.gesture, 'function');
   assert.equal(typeof commands.system.back, 'function');
   assert.equal(typeof commands.system.home, 'function');
-  assert.equal(typeof commands.system.rotate, 'function');
+  assert.equal(typeof commands.system.orientation, 'function');
   assert.equal(typeof commands.system.keyboard, 'function');
   assert.equal(typeof commands.system.clipboard, 'function');
   assert.equal(typeof commands.system.settings, 'function');

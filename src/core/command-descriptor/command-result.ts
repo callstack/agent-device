@@ -9,7 +9,7 @@ import type {
   AppSwitcherCommandResult,
   BackCommandResult,
   HomeCommandResult,
-  RotateCommandResult,
+  OrientationCommandResult,
   TvRemoteCommandResult,
 } from '../../contracts/navigation.ts';
 import type { ClipboardCommandResult } from '../../contracts/clipboard.ts';
@@ -35,7 +35,7 @@ import type { ReplayCommandResult, ReplaySuiteResult } from '../../contracts/rep
  * invented shape.
  *
  * Batches 1-2 wired `boot` / `shutdown` / `viewport` and the navigation/action
- * commands `home` / `back` / `rotate` / `app-switcher` alongside the seed
+ * commands `home` / `back` / `orientation` / `app-switcher` alongside the seed
  * interaction quartet. Batch 3 adds `clipboard` (a closed `read`/`write` union) and
  * `appstate` (a closed `platform` union — Apple session state with the iOS-only
  * device locators, or Android package/activity). Batch 4 adds `keyboard` (a
@@ -53,7 +53,7 @@ export interface CommandResultMap {
   viewport: ViewportCommandResult;
   home: HomeCommandResult;
   back: BackCommandResult;
-  rotate: RotateCommandResult;
+  orientation: OrientationCommandResult;
   'app-switcher': AppSwitcherCommandResult;
   clipboard: ClipboardCommandResult;
   appstate: AppStateCommandResult;

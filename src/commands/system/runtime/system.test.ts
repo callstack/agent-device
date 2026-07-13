@@ -20,7 +20,7 @@ test('runtime system commands call typed backend primitives', async () => {
 
   const back = await device.system.back({ session: 'default', mode: 'system' });
   const home = await device.system.home({ session: 'default' });
-  const rotated = await device.system.rotate({ orientation: 'landscape-left' });
+  const rotated = await device.system.orientation({ orientation: 'landscape-left' });
   const keyboard = await device.system.keyboard({ action: 'dismiss' });
   const clipboardRead = await device.system.clipboard({ action: 'read' });
   const clipboardWrite = await device.system.clipboard({ action: 'write', text: 'hello' });
@@ -44,7 +44,7 @@ test('runtime system commands call typed backend primitives', async () => {
   assert.deepEqual(calls, [
     { command: 'pressBack', mode: 'system', session: 'default' },
     { command: 'pressHome', session: 'default' },
-    { command: 'rotate', orientation: 'landscape-left' },
+    { command: 'setOrientation', orientation: 'landscape-left' },
     { command: 'setKeyboard', options: { action: 'dismiss' } },
     { command: 'getClipboard' },
     { command: 'setClipboard', text: 'hello' },
@@ -64,7 +64,7 @@ test('runtime system commands validate options before backend calls', async () =
   });
 
   await assert.rejects(
-    () => device.system.rotate({ orientation: 'sideways' as BackendDeviceOrientation }),
+    () => device.system.orientation({ orientation: 'sideways' as BackendDeviceOrientation }),
     /orientation must be/,
   );
   await assert.rejects(
@@ -97,8 +97,8 @@ function createSystemBackend(calls: unknown[]): AgentDeviceBackend {
     pressHome: async (context) => {
       calls.push({ command: 'pressHome', session: context.session });
     },
-    rotate: async (_context, orientation) => {
-      calls.push({ command: 'rotate', orientation });
+    setOrientation: async (_context, orientation) => {
+      calls.push({ command: 'setOrientation', orientation });
     },
     setKeyboard: async (_context, options) => {
       calls.push({ command: 'setKeyboard', options });

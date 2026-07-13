@@ -4,7 +4,7 @@ import type {
   AppSwitcherCommandResult,
   BackCommandResult,
   HomeCommandResult,
-  RotateCommandResult,
+  OrientationCommandResult,
   TvRemoteCommandResult,
 } from '../../contracts/navigation.ts';
 import { TV_REMOTE_BUTTONS, type TvRemoteButton } from '../../contracts/tv-remote.ts';
@@ -60,17 +60,17 @@ export const NAVIGATION_COMMAND_PROJECTIONS = {
       required: ['action', 'message'],
     },
   }),
-  rotate: defineNavigationCommandProjection<
+  orientation: defineNavigationCommandProjection<
     { orientation: DeviceRotation },
-    RotateCommandResult,
+    OrientationCommandResult,
     true,
-    'rotate'
+    'orientation'
   >({
-    clientMethod: 'rotate',
+    clientMethod: 'orientation',
     outputSchema: {
       type: 'object',
       properties: {
-        action: { type: 'string', const: 'rotate' },
+        action: { type: 'string', const: 'orientation' },
         orientation: { type: 'string', enum: DEVICE_ROTATIONS },
         message: { type: 'string' },
       },

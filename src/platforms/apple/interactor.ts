@@ -122,9 +122,11 @@ export function createAppleInteractor(
         runnerOpts,
       );
     },
-    rotate: async (orientation) => {
+    setOrientation: async (orientation) => {
       await runAppleRunnerCommand(
         device,
+        // `rotate` is the runner-protocol command name (its own namespace); the
+        // CLI-facing command/method is `orientation`.
         { command: 'rotate', orientation, appBundleId: runnerContext.appBundleId },
         runnerOpts,
       );

@@ -44,7 +44,7 @@ test('catalog commands use generic routing only when intentionally passthrough o
     PUBLIC_COMMANDS.focus,
     PUBLIC_COMMANDS.home,
     PUBLIC_COMMANDS.installFromSource,
-    PUBLIC_COMMANDS.rotate,
+    PUBLIC_COMMANDS.orientation,
     PUBLIC_COMMANDS.screenshot,
     PUBLIC_COMMANDS.scroll,
     PUBLIC_COMMANDS.tvRemote,

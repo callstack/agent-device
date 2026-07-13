@@ -10,7 +10,7 @@ import type {
   AppSwitcherCommandResult,
   BackCommandResult,
   HomeCommandResult,
-  RotateCommandResult,
+  OrientationCommandResult,
   TvRemoteCommandResult,
 } from '../../../contracts/navigation.ts';
 import type { ClipboardCommandResult } from '../../../contracts/clipboard.ts';
@@ -45,7 +45,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
   const viewport: Equal<CommandResult<'viewport'>, ViewportCommandResult> = true;
   const home: Equal<CommandResult<'home'>, HomeCommandResult> = true;
   const back: Equal<CommandResult<'back'>, BackCommandResult> = true;
-  const rotate: Equal<CommandResult<'rotate'>, RotateCommandResult> = true;
+  const orientation: Equal<CommandResult<'orientation'>, OrientationCommandResult> = true;
   const appSwitcher: Equal<CommandResult<'app-switcher'>, AppSwitcherCommandResult> = true;
   const clipboard: Equal<CommandResult<'clipboard'>, ClipboardCommandResult> = true;
   const appstate: Equal<CommandResult<'appstate'>, AppStateCommandResult> = true;
@@ -74,7 +74,7 @@ test('seeded CommandResult entries resolve to their existing contract result typ
     viewport,
     home,
     back,
-    rotate,
+    orientation,
     appSwitcher,
     clipboard,
     appstate,
@@ -138,7 +138,7 @@ test('CommandResultMap is seeded only from already-existing contract result type
     | 'viewport'
     | 'home'
     | 'back'
-    | 'rotate'
+    | 'orientation'
     | 'app-switcher'
     | 'clipboard'
     | 'appstate'

@@ -10,8 +10,9 @@ import { listCliCommandNames } from '../../command-catalog.ts';
  * parse as a valid invocation of it; the registry-drift tests in
  * `src/cli/parser/__tests__/command-suggestions.test.ts` fail the build on drift.
  *
- * True aliases (`tap` -> press, `launch`/`relaunch` -> open) are normalized
- * case-insensitively in `normalizeCommandAlias` (args.ts) before the
+ * True aliases (`tap` -> press, `launch`/`relaunch` -> open, `rotate` ->
+ * orientation) are normalized case-insensitively in `normalizeCommandAlias`
+ * (args.ts) before the
  * unknown-command check runs, so they never reach this map and must not be
  * listed here. `start`/`restart` stay suggestion-only: `start` is genuinely
  * ambiguous, so a hint beats silently guessing.

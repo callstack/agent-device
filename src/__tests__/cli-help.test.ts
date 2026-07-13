@@ -254,6 +254,15 @@ test('launch dispatches as a plain open without forcing a relaunch', async () =>
   assert.notEqual(result.calls[0]?.flags?.relaunch, true);
 });
 
+test('rotate dispatches as orientation (deprecated alias) with positionals preserved', async () => {
+  const result = await runCliCapture(['rotate', 'landscape-left', '--json']);
+  assert.doesNotMatch(result.stderr, /Unknown command/);
+  // Canonicalization: the daemon call must record orientation, never rotate.
+  assert.equal(result.calls.length, 1);
+  assert.equal(result.calls[0]?.command, 'orientation');
+  assert.deepEqual(result.calls[0]?.positionals, ['landscape-left']);
+});
+
 // From #1052 (credit: @vku2018): the alias must compose with the bare-ref
 // hint — `tap e3` normalizes to press, then gets the @e3 suggestion.
 test('tap with a bare ref gets the @ref hint, not an unknown-command error', async () => {

@@ -59,8 +59,8 @@ export function createLinuxInteractor(): Interactor {
     },
     back: () => backLinux(),
     home: () => homeLinux(),
-    rotate: () => {
-      throw new AppError('UNSUPPORTED_OPERATION', 'rotate not supported on Linux');
+    setOrientation: () => {
+      throw new AppError('UNSUPPORTED_OPERATION', 'orientation not supported on Linux');
     },
     appSwitcher: () => {
       throw new AppError('UNSUPPORTED_OPERATION', 'appSwitcher not yet supported on Linux');

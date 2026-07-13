@@ -221,8 +221,9 @@ class WebDriverInteractor implements Interactor {
     await this.client.executeScript('mobile: pressButton', [{ name: 'home' }]);
   }
 
-  async rotate(orientation: DeviceRotation): Promise<void> {
-    this.requireSupport('rotate');
+  async setOrientation(orientation: DeviceRotation): Promise<void> {
+    this.requireSupport('orientation');
+    // `mobile: rotate` is Appium's device-orientation script command.
     await this.client.executeScript('mobile: rotate', [{ orientation }]);
   }
 

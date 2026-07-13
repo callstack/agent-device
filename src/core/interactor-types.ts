@@ -118,7 +118,7 @@ export type Interactor = {
   gestureViewport?(): Promise<Rect>;
   back(mode?: BackMode): Promise<void>;
   home(): Promise<void>;
-  rotate(orientation: DeviceRotation): Promise<void>;
+  setOrientation(orientation: DeviceRotation): Promise<void>;
   performGesture?(plan: GesturePlan): Promise<Record<string, unknown> | void>;
   appSwitcher(): Promise<void>;
   tvRemote(button: TvRemoteButton, durationMs?: number): Promise<void>;

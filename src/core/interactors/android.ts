@@ -12,8 +12,8 @@ import {
   longPressAndroid,
   pressAndroid,
   pressAndroidTvRemote,
-  rotateAndroid,
   scrollAndroid,
+  setAndroidOrientation,
   typeAndroid,
 } from '../../platforms/android/input-actions.ts';
 import {
@@ -81,7 +81,7 @@ export function createAndroidInteractor(device: DeviceInfo): Interactor {
     },
     back: (_mode) => backAndroid(device),
     home: () => homeAndroid(device),
-    rotate: (orientation) => rotateAndroid(device, orientation),
+    setOrientation: (orientation) => setAndroidOrientation(device, orientation),
     appSwitcher: () => appSwitcherAndroid(device),
     tvRemote: (button, durationMs) => pressAndroidTvRemote(device, button, durationMs),
     readClipboard: () => readAndroidClipboardText(device),

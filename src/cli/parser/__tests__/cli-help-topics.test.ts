@@ -31,7 +31,7 @@ test('usage includes concise top-level commands', async () => {
   assert.doesNotMatch(usageText, /^  fling <up\|down\|left\|right>/m);
   assert.doesNotMatch(usageText, /^  pinch <scale> \[x\] \[y\]/m);
   assert.doesNotMatch(usageText, /^  rotate-gesture <degrees>/m);
-  assert.match(usageText, /rotate <orientation>/);
+  assert.match(usageText, /orientation <orientation>/);
   assert.match(usageText, /record start \[path\] \| record stop/);
   assert.match(usageText, /trace start <path> \| trace stop <path>/);
 });

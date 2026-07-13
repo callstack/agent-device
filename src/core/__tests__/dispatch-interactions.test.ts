@@ -48,7 +48,7 @@ function makeUnusedInteractor(): Interactor {
     snapshot: fail,
     back: fail,
     home: fail,
-    rotate: fail,
+    setOrientation: fail,
     appSwitcher: fail,
     tvRemote: fail,
     readClipboard: fail,

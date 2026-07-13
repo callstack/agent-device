@@ -4,8 +4,8 @@ import { promises as fs } from 'node:fs';
 import {
   fillAndroid,
   longPressAndroid,
-  rotateAndroid,
   scrollAndroid,
+  setAndroidOrientation,
   typeAndroid,
 } from '../input-actions.ts';
 import { AppError } from '../../../kernel/errors.ts';
@@ -115,12 +115,12 @@ test('longPressAndroid sends a stationary semantic touch plan', async () => {
   assert.equal(result.backend, 'provider-native-touch');
 });
 
-test('rotateAndroid locks auto-rotate and sets user rotation', async () => {
+test('setAndroidOrientation locks auto-rotate and sets user rotation', async () => {
   await withScriptedAdb(
     'agent-device-android-rotate-landscape-left-',
     '#!/bin/sh\nprintf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"\nexit 0\n',
     async ({ argsLogPath, device }) => {
-      await rotateAndroid(device, 'landscape-left');
+      await setAndroidOrientation(device, 'landscape-left');
       const lines = (await fs.readFile(argsLogPath, 'utf8')).trim().split('\n').filter(Boolean);
       const logged = lines.join(' ');
       assert.match(logged, /shell settings put system accelerometer_rotation 0/);

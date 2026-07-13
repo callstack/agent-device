@@ -32,7 +32,7 @@ export function createWebInteractor(): Interactor {
     },
     back: () => unsupportedWebOperation('back'),
     home: () => unsupportedWebOperation('home'),
-    rotate: () => unsupportedWebOperation('rotate'),
+    setOrientation: () => unsupportedWebOperation('orientation'),
     appSwitcher: () => unsupportedWebOperation('appSwitcher'),
     tvRemote: () => unsupportedWebOperation('tvRemote'),
     readClipboard: () => unsupportedWebOperation('readClipboard'),

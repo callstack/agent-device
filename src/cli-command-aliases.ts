@@ -16,6 +16,8 @@ const CLI_COMMAND_ALIASES: readonly CliCommandAlias[] = [
   { alias: 'tap', command: 'press' },
   { alias: 'launch', command: 'open' },
   { alias: 'relaunch', command: 'open', impliedFlags: ['relaunch'] },
+  // Deprecated: `rotate` collided with the `gesture rotate` two-finger gesture.
+  { alias: 'rotate', command: 'orientation' },
 ];
 
 const aliasByToken: ReadonlyMap<string, CliCommandAlias> = new Map(

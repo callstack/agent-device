@@ -32,7 +32,7 @@ export type AppleOsCapabilityProfile = {
   readonly appAndDeviceLifecycle: boolean;
   /** `keyboard` — hardware/text keyboard input. tvOS (focus-only) and macOS lack it. */
   readonly keyboard: boolean;
-  /** `rotate` — device orientation. tvOS (focus-only) and macOS lack it. */
+  /** `orientation` — device orientation. tvOS (focus-only) and macOS lack it. */
   readonly orientation: boolean;
   /**
    * Whether `clipboard` / `alert` / `settings` are reachable on a PHYSICAL device of

@@ -190,7 +190,7 @@ test('core commands support iOS simulator, iOS device, and Android', () => {
       'perf',
       'press',
       'record',
-      'rotate',
+      'orientation',
       'screenshot',
       'scroll',
       'snapshot',
@@ -248,7 +248,7 @@ test('macOS supports the Apple runner interaction core but excludes mobile-only 
       'install-from-source',
       'push',
       'reinstall',
-      'rotate',
+      'orientation',
     ],
     [{ device: macOsDevice, expected: false, label: 'on macOS' }],
   );
@@ -295,9 +295,9 @@ test('tvOS follows iOS capability matrix by device kind', () => {
     'keyboard on tvOS simulator',
   );
   assert.equal(
-    isCommandSupportedOnDevice('rotate', tvOsSimulator),
+    isCommandSupportedOnDevice('orientation', tvOsSimulator),
     false,
-    'rotate on tvOS simulator',
+    'orientation on tvOS simulator',
   );
 });
 
@@ -342,7 +342,7 @@ test('Linux supports desktop interaction commands and blocks mobile/unsupported 
       'push',
       'record',
       'reinstall',
-      'rotate',
+      'orientation',
       'settings',
       'shutdown',
       'trigger-app-event',
@@ -393,7 +393,7 @@ test('web supports only the initial browser interaction slice', () => {
       'perf',
       'push',
       'reinstall',
-      'rotate',
+      'orientation',
       'settings',
       'shutdown',
       'swipe',

@@ -811,7 +811,7 @@ export const RAW_COMMAND_DESCRIPTORS = [
     batchable: true,
   },
   {
-    name: 'rotate',
+    name: 'orientation',
     ...(ownerFilesEnabled ? { ownerFiles: ['src/commands/system/index.ts'] as const } : {}),
     catalog: { group: 'public' },
     daemon: { route: 'generic', replayScopedAction: true, androidBlockingDialogGuard: true },

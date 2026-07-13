@@ -7,7 +7,7 @@ import {
   clipboardCommand,
   homeCommand,
   keyboardCommand,
-  rotateCommand,
+  orientationCommand,
   settingsCommand,
   tvRemoteCommand,
   type SystemAlertCommandOptions,
@@ -22,8 +22,8 @@ import {
   type SystemHomeCommandResult,
   type SystemKeyboardCommandOptions,
   type SystemKeyboardCommandResult,
-  type SystemRotateCommandOptions,
-  type SystemRotateCommandResult,
+  type SystemOrientationCommandOptions,
+  type SystemOrientationCommandResult,
   type SystemSettingsCommandOptions,
   type SystemSettingsCommandResult,
   type SystemTvRemoteCommandOptions,
@@ -33,7 +33,7 @@ import {
 export type SystemCommands = {
   back: RuntimeCommand<SystemBackCommandOptions | undefined, SystemBackCommandResult>;
   home: RuntimeCommand<SystemHomeCommandOptions | undefined, SystemHomeCommandResult>;
-  rotate: RuntimeCommand<SystemRotateCommandOptions, SystemRotateCommandResult>;
+  orientation: RuntimeCommand<SystemOrientationCommandOptions, SystemOrientationCommandResult>;
   keyboard: RuntimeCommand<SystemKeyboardCommandOptions | undefined, SystemKeyboardCommandResult>;
   clipboard: RuntimeCommand<SystemClipboardCommandOptions, SystemClipboardCommandResult>;
   settings: RuntimeCommand<SystemSettingsCommandOptions | undefined, SystemSettingsCommandResult>;
@@ -48,7 +48,7 @@ export type SystemCommands = {
 export type BoundSystemCommands = {
   back: (options?: SystemBackCommandOptions) => Promise<SystemBackCommandResult>;
   home: (options?: SystemHomeCommandOptions) => Promise<SystemHomeCommandResult>;
-  rotate: BoundRuntimeCommand<SystemRotateCommandOptions, SystemRotateCommandResult>;
+  orientation: BoundRuntimeCommand<SystemOrientationCommandOptions, SystemOrientationCommandResult>;
   keyboard: (options?: SystemKeyboardCommandOptions) => Promise<SystemKeyboardCommandResult>;
   clipboard: BoundRuntimeCommand<SystemClipboardCommandOptions, SystemClipboardCommandResult>;
   settings: (options?: SystemSettingsCommandOptions) => Promise<SystemSettingsCommandResult>;
@@ -62,7 +62,7 @@ export type BoundSystemCommands = {
 export const systemCommands: SystemCommands = {
   back: backCommand,
   home: homeCommand,
-  rotate: rotateCommand,
+  orientation: orientationCommand,
   keyboard: keyboardCommand,
   clipboard: clipboardCommand,
   settings: settingsCommand,
@@ -75,7 +75,7 @@ export function bindSystemCommands(runtime: AgentDeviceRuntime): BoundSystemComm
   return {
     back: (options) => systemCommands.back(runtime, options),
     home: (options) => systemCommands.home(runtime, options),
-    rotate: (options) => systemCommands.rotate(runtime, options),
+    orientation: (options) => systemCommands.orientation(runtime, options),
     keyboard: (options) => systemCommands.keyboard(runtime, options),
     clipboard: (options) => systemCommands.clipboard(runtime, options),
     settings: (options) => systemCommands.settings(runtime, options),

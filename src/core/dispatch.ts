@@ -167,10 +167,10 @@ const DISPATCH_HANDLERS: Record<DispatchCommand, DispatchHandler> = {
     await interactor.home();
     return { action: 'home', ...successText('Home') };
   },
-  rotate: async ({ interactor, positionals }) => {
+  orientation: async ({ interactor, positionals }) => {
     const orientation = parseDeviceRotation(positionals[0]);
-    await interactor.rotate(orientation);
-    return { action: 'rotate', orientation, ...successText(`Rotated to ${orientation}`) };
+    await interactor.setOrientation(orientation);
+    return { action: 'orientation', orientation, ...successText(`Rotated to ${orientation}`) };
   },
   'app-switcher': async ({ interactor }) => {
     await interactor.appSwitcher();

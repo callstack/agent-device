@@ -1023,11 +1023,11 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
   assert.equal(diff.baselineInitialized, false);
   assert.deepEqual(diff.summary, { additions: 0, removals: 0, unchanged: 3 });
 
-  const rotate = await client.command.rotate({
+  const rotate = await client.command.orientation({
     orientation: 'landscape-left',
     ...selection,
   });
-  assert.equal(rotate.action, 'rotate');
+  assert.equal(rotate.action, 'orientation');
   assert.equal(rotate.orientation, 'landscape-left');
 
   const appSwitcher = await client.command.appSwitcher(selection);

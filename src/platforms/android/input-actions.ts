@@ -54,7 +54,7 @@ export async function pressAndroidEnter(device: DeviceInfo): Promise<void> {
   await runAndroidAdb(device, ['shell', 'input', 'keyevent', 'ENTER']);
 }
 
-export async function rotateAndroid(
+export async function setAndroidOrientation(
   device: DeviceInfo,
   orientation: DeviceRotation,
 ): Promise<void> {

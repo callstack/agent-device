@@ -18,7 +18,7 @@ export type CloudWebDriverOperation =
   | 'type'
   | 'back'
   | 'home'
-  | 'rotate'
+  | 'orientation'
   | 'appSwitcher'
   | 'tvRemote'
   | 'clipboard.read'
@@ -92,7 +92,7 @@ const BASE_WEBDRIVER_CAPABILITIES: CloudWebDriverCapabilityMap = {
     support: 'partial',
     note: 'Uses provider/Appium mobile pressButton support where available.',
   },
-  rotate: {
+  orientation: {
     support: 'partial',
     note: 'Uses provider/Appium mobile rotate support where available.',
   },

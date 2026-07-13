@@ -3,7 +3,7 @@ import type {
   AgentDeviceCommandClient,
   AppSwitcherCommandOptions,
   BackCommandOptions,
-  RotateCommandOptions,
+  OrientationCommandOptions,
   TvRemoteCommandOptions,
 } from '../../client/client-types.ts';
 import type { CommandResult } from '../../core/command-descriptor/command-result.ts';
@@ -21,8 +21,8 @@ import {
   homeDaemonWriter,
   keyboardCliReader,
   keyboardDaemonWriter,
-  rotateCliReader,
-  rotateDaemonWriter,
+  orientationCliReader,
+  orientationDaemonWriter,
   tvRemoteCliReader,
   tvRemoteDaemonWriter,
   systemCommandFamily,
@@ -46,8 +46,8 @@ describe('system command interface', () => {
     expectTypeOf<AgentDeviceCommandClient['back']>().toEqualTypeOf<
       (options?: BackCommandOptions) => Promise<CommandResult<'back'>>
     >();
-    expectTypeOf<AgentDeviceCommandClient['rotate']>().toEqualTypeOf<
-      (options: RotateCommandOptions) => Promise<CommandResult<'rotate'>>
+    expectTypeOf<AgentDeviceCommandClient['orientation']>().toEqualTypeOf<
+      (options: OrientationCommandOptions) => Promise<CommandResult<'orientation'>>
     >();
     expectTypeOf<AgentDeviceCommandClient['appSwitcher']>().toEqualTypeOf<
       (options?: AppSwitcherCommandOptions) => Promise<CommandResult<'app-switcher'>>
@@ -62,7 +62,7 @@ describe('system command interface', () => {
       appState: 'appstate',
       back: 'back',
       home: 'home',
-      rotate: 'rotate',
+      orientation: 'orientation',
       appSwitcher: 'app-switcher',
       keyboard: 'keyboard',
       clipboard: 'clipboard',
@@ -80,7 +80,7 @@ describe('system command interface', () => {
     ).toEqual({
       back: 'back',
       home: 'home',
-      rotate: 'rotate',
+      orientation: 'orientation',
       'app-switcher': 'appSwitcher',
       'tv-remote': 'tvRemote',
     });
@@ -118,16 +118,16 @@ describe('system command interface', () => {
     ).toBeUndefined();
   });
 
-  test('rotate reader and writer normalize orientation', () => {
-    expect(rotateCliReader(['left'], flags())).toMatchObject({
+  test('orientation reader and writer normalize orientation', () => {
+    expect(orientationCliReader(['left'], flags())).toMatchObject({
       orientation: 'landscape-left',
     });
-    expect(rotateDaemonWriter({ orientation: 'portrait' }).positionals).toEqual(['portrait']);
+    expect(orientationDaemonWriter({ orientation: 'portrait' }).positionals).toEqual(['portrait']);
   });
 
-  test('rotate reader and writer reject missing orientation', () => {
-    expectInvalidArgs(() => rotateCliReader([], flags()), 'rotate requires an orientation');
-    expectInvalidArgs(() => rotateDaemonWriter({}), 'rotate requires orientation');
+  test('orientation reader and writer reject missing orientation', () => {
+    expectInvalidArgs(() => orientationCliReader([], flags()), 'orientation requires an orientation');
+    expectInvalidArgs(() => orientationDaemonWriter({}), 'orientation requires orientation');
   });
 
   test('keyboard reader maps aliases and validates arguments', () => {

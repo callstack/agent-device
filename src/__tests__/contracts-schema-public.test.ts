@@ -11,7 +11,7 @@ import type {
   AppSwitcherCommandResult,
   BackCommandResult,
   HomeCommandResult,
-  RotateCommandResult,
+  OrientationCommandResult,
   TvRemoteCommandResult,
 } from '../contracts/navigation.ts';
 import type { ViewportCommandResult } from '../contracts/viewport.ts';
@@ -121,12 +121,12 @@ test('command result contracts are assignable to command result map', () => {
   } satisfies AppSwitcherCommandResult;
   const appSwitcherFromMap: CommandResult<'app-switcher'> = appSwitcher;
 
-  const rotate = {
-    action: 'rotate',
+  const orientation = {
+    action: 'orientation',
     orientation: 'portrait',
     message: 'Rotated to portrait',
-  } satisfies RotateCommandResult;
-  const rotateFromMap: CommandResult<'rotate'> = rotate;
+  } satisfies OrientationCommandResult;
+  const orientationFromMap: CommandResult<'orientation'> = orientation;
 
   const tvRemote = {
     action: 'tv-remote',
@@ -155,7 +155,7 @@ test('command result contracts are assignable to command result map', () => {
   assert.equal(backFromMap.mode, 'in-app');
   assert.equal(homeFromMap.action, 'home');
   assert.equal(appSwitcherFromMap.action, 'app-switcher');
-  assert.equal(rotateFromMap.orientation, 'portrait');
+  assert.equal(orientationFromMap.orientation, 'portrait');
   assert.equal(tvRemoteFromMap.button, 'select');
   assert.equal(clipboardFromMap.action === 'write' ? clipboardFromMap.textLength : -1, 11);
   assert.equal(

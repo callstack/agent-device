@@ -75,7 +75,7 @@ export type {
   AppSwitcherCommandResult,
   BackCommandResult,
   HomeCommandResult,
-  RotateCommandResult,
+  OrientationCommandResult,
   TvRemoteCommandResult,
 } from '../contracts/navigation.ts';
 export type { ClipboardCommandResult } from '../contracts/clipboard.ts';
@@ -539,7 +539,8 @@ export type AppStateCommandOptions = DeviceCommandBaseOptions;
 
 export type BackCommandOptions = DeviceCommandBaseOptions & NavigationCommandOptions<'back'>;
 
-export type RotateCommandOptions = DeviceCommandBaseOptions & NavigationCommandOptions<'rotate'>;
+export type OrientationCommandOptions = DeviceCommandBaseOptions &
+  NavigationCommandOptions<'orientation'>;
 
 export type AppSwitcherCommandOptions = DeviceCommandBaseOptions &
   NavigationCommandOptions<'app-switcher'>;

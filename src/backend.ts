@@ -493,7 +493,7 @@ export type AgentDeviceBackend = {
     context: BackendCommandContext,
     options: BackendTvRemoteOptions,
   ): Promise<BackendActionResult>;
-  rotate?(
+  setOrientation?(
     context: BackendCommandContext,
     orientation: BackendDeviceOrientation,
   ): Promise<BackendActionResult>;

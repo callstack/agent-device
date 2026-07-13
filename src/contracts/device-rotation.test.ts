@@ -23,7 +23,7 @@ describe('parseDeviceRotation', () => {
     expect(() => parseDeviceRotation(undefined)).toThrow(
       expect.objectContaining({
         code: 'INVALID_ARGS',
-        message: expect.stringContaining('rotate requires an orientation argument'),
+        message: expect.stringContaining('orientation requires an orientation argument'),
       }),
     );
   });

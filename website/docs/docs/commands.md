@@ -49,8 +49,8 @@ agent-device back
 agent-device back --in-app
 agent-device back --system
 agent-device home
-agent-device rotate portrait
-agent-device rotate landscape-left
+agent-device orientation portrait
+agent-device orientation landscape-left
 agent-device app-switcher
 ```
 
@@ -74,8 +74,8 @@ agent-device app-switcher
 - `back` now defaults to app-owned back navigation. On Apple targets that means visible in-app back UI only. On Android this currently maps to the same back keyevent because Android routes in-app back through that platform event.
 - `back --in-app` is an explicit alias for the default app-owned behavior.
 - `back --system` asks for system back input explicitly. On Android this is the normal back keyevent. On iOS and tvOS it uses the platform back gesture or Siri Remote menu action. On macOS, where there is no generic system back input, `back --system` reports unavailable instead of falling back to app-owned navigation.
-- `rotate <orientation>` forces a mobile device into `portrait`, `portrait-upside-down`, `landscape-left`, or `landscape-right`.
-- `rotate` is supported on iOS and Android mobile targets. macOS and tvOS do not expose it.
+- `orientation <orientation>` forces a mobile device into `portrait`, `portrait-upside-down`, `landscape-left`, or `landscape-right`. `rotate` is accepted as a deprecated alias.
+- `orientation` is supported on iOS and Android mobile targets. macOS and tvOS do not expose it.
 - On iOS devices, `http(s)://` URLs open in Safari when no app is active. Custom scheme URLs require an active app in the session.
 - Commands that omit `--session` use an implicit `default` session scoped to the caller's current git worktree or working directory. This keeps independent local agents from accidentally attaching to each other's default session.
 - `--session <name>` or `AGENT_DEVICE_SESSION` opt into an explicitly named session when a script intentionally wants to share or reuse that session name.
@@ -242,7 +242,7 @@ agent-device snapshot -i --platform apple --target desktop
 - In macOS app sessions, `screenshot` captures the target app window bounds rather than the full desktop.
 - Prefer selector or `@ref`-driven interactions on macOS. Window position can shift between runs, so raw x/y point commands are less stable than snapshot-derived targets.
 - Use `click --button secondary` for context menus on macOS, then run `snapshot -i` again.
-- Mobile-only helpers remain unsupported on macOS: `boot`, `shutdown`, `home`, `rotate`, `app-switcher`, `install`, `reinstall`, `install-from-source`, and `push`.
+- Mobile-only helpers remain unsupported on macOS: `boot`, `shutdown`, `home`, `orientation`, `app-switcher`, `install`, `reinstall`, `install-from-source`, and `push`.
 
 Recommended loops:
 
@@ -389,7 +389,7 @@ done
 
 `longpress` is supported on iOS and Android.
 `gesture pinch` is supported on Android and iOS simulator app sessions.
-`gesture rotate` is supported on Android and iOS simulator app sessions. Use `rotate` for device orientation.
+`gesture rotate` is supported on Android and iOS simulator app sessions. Use `orientation` for device orientation.
 Two-finger `gesture pan` and `gesture transform` are supported on Android and iOS simulator app sessions. One-finger `gesture pan` keeps the broader platform support of ordinary coordinate drags.
 
 ## Find (semantic)

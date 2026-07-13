@@ -20,11 +20,11 @@ beforeEach(() => {
   mockRunAppleRunnerCommand.mockResolvedValue({ message: 'rotate', orientation: 'landscape-left' });
 });
 
-test('dispatch rotate normalizes aliases before Android execution', async () => {
-  await withMockedAdb('agent-device-dispatch-rotate-android-', async (argsLogPath) => {
-    const result = await dispatchCommand(ANDROID_EMULATOR, 'rotate', ['left']);
+test('dispatch orientation normalizes value aliases before Android execution', async () => {
+  await withMockedAdb('agent-device-dispatch-orientation-android-', async (argsLogPath) => {
+    const result = await dispatchCommand(ANDROID_EMULATOR, 'orientation', ['left']);
 
-    assert.equal(result?.action, 'rotate');
+    assert.equal(result?.action, 'orientation');
     assert.equal(result?.orientation, 'landscape-left');
 
     const logged = await fs.readFile(argsLogPath, 'utf8');
@@ -33,15 +33,16 @@ test('dispatch rotate normalizes aliases before Android execution', async () => 
   });
 });
 
-test('dispatch rotate sends normalized orientation to the iOS runner', async () => {
-  const result = await dispatchCommand(IOS_DEVICE, 'rotate', ['right'], undefined, {
+test('dispatch orientation sends normalized orientation to the iOS runner', async () => {
+  const result = await dispatchCommand(IOS_DEVICE, 'orientation', ['right'], undefined, {
     appBundleId: 'com.example.app',
   });
 
-  assert.equal(result?.action, 'rotate');
+  assert.equal(result?.action, 'orientation');
   assert.equal(result?.orientation, 'landscape-right');
   assert.equal(mockRunAppleRunnerCommand.mock.calls.length, 1);
   assert.deepEqual(mockRunAppleRunnerCommand.mock.calls[0]?.[1], {
+    // `rotate` is the runner-protocol command name; the CLI command is `orientation`.
     command: 'rotate',
     orientation: 'landscape-right',
     appBundleId: 'com.example.app',

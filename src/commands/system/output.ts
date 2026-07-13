@@ -44,7 +44,7 @@ export const systemCliOutputFormatters = {
   appstate: resultOutput(appStateCliOutput),
   back: messageOutput,
   home: messageOutput,
-  rotate: messageOutput,
+  orientation: messageOutput,
   'app-switcher': messageOutput,
   keyboard: resultOutput(keyboardCliOutput),
   clipboard: resultOutput(clipboardCliOutput),

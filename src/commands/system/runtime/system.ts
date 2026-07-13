@@ -37,12 +37,12 @@ export type SystemHomeCommandResult = {
   kind: 'systemHome';
 } & BackendResultEnvelope;
 
-export type SystemRotateCommandOptions = CommandContext & {
+export type SystemOrientationCommandOptions = CommandContext & {
   orientation: BackendDeviceOrientation;
 };
 
-export type SystemRotateCommandResult = {
-  kind: 'systemRotated';
+export type SystemOrientationCommandResult = {
+  kind: 'systemOrientationSet';
   orientation: BackendDeviceOrientation;
 } & BackendResultEnvelope;
 
@@ -202,21 +202,24 @@ export const tvRemoteCommand: RuntimeCommand<
   };
 };
 
-export const rotateCommand: RuntimeCommand<
-  SystemRotateCommandOptions,
-  SystemRotateCommandResult
-> = async (runtime, options): Promise<SystemRotateCommandResult> => {
-  if (!runtime.backend.rotate) {
-    throw new AppError('UNSUPPORTED_OPERATION', 'system.rotate is not supported by this backend');
+export const orientationCommand: RuntimeCommand<
+  SystemOrientationCommandOptions,
+  SystemOrientationCommandResult
+> = async (runtime, options): Promise<SystemOrientationCommandResult> => {
+  if (!runtime.backend.setOrientation) {
+    throw new AppError(
+      'UNSUPPORTED_OPERATION',
+      'system.orientation is not supported by this backend',
+    );
   }
   const orientation = requireOrientation(options.orientation);
-  const backendResult = await runtime.backend.rotate(
+  const backendResult = await runtime.backend.setOrientation(
     toBackendContext(runtime, options),
     orientation,
   );
   const formattedBackendResult = toBackendResult(backendResult);
   return {
-    kind: 'systemRotated',
+    kind: 'systemOrientationSet',
     orientation,
     ...(formattedBackendResult ? { backendResult: formattedBackendResult } : {}),
     ...successText(`Rotated to ${orientation}`),
@@ -365,7 +368,7 @@ function requireOrientation(orientation: BackendDeviceOrientation): BackendDevic
     default:
       throw new AppError(
         'INVALID_ARGS',
-        'system.rotate orientation must be portrait, portrait-upside-down, landscape-left, or landscape-right',
+        'system.orientation must be portrait, portrait-upside-down, landscape-left, or landscape-right',
       );
   }
 }
