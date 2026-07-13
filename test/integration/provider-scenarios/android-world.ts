@@ -235,7 +235,7 @@ function androidAdbResult(
     androidDeviceStateAdbResult(key, args, clipboardText, options.pidof) ??
     androidMetricsAdbResult(key) ??
     androidPackageAdbResult(key, args, options.dumpsysWindow) ??
-    androidCaptureAdbResult(key, searchText, options.snapshotXml) ?? {
+    androidCaptureAdbResult(args, key, searchText, options.snapshotXml) ?? {
       stdout: '',
       stderr: '',
       exitCode: 0,
@@ -437,13 +437,21 @@ function androidPackageAdbResult(
 }
 
 function androidCaptureAdbResult(
+  args: string[],
   key: string,
   searchText: string,
   snapshotXml?: () => string,
 ): AndroidAdbResult | undefined {
   if (key.includes('com.callstack.agentdevice.multitouchhelper/.MultiTouchInstrumentation')) {
+    const payloadIndex = args.indexOf('payloadBase64');
+    const encodedPayload = payloadIndex >= 0 ? args[payloadIndex + 1] : undefined;
+    const request = encodedPayload
+      ? (JSON.parse(Buffer.from(encodedPayload, 'base64').toString('utf8')) as {
+          kind?: string;
+        })
+      : undefined;
     return {
-      stdout: androidMultiTouchHelperOutput(),
+      stdout: androidMultiTouchHelperOutput(request?.kind === 'transform' ? 'transform' : 'swipe'),
       stderr: '',
       exitCode: 0,
     };
@@ -484,11 +492,11 @@ export function androidSnapshotHelperOutput(xml: string): string {
   ].join('\n');
 }
 
-function androidMultiTouchHelperOutput(): string {
+function androidMultiTouchHelperOutput(kind: 'swipe' | 'transform'): string {
   return [
     'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-multitouch-helper-v1',
     'INSTRUMENTATION_RESULT: helperApiVersion=1',
-    'INSTRUMENTATION_RESULT: kind=swipe',
+    `INSTRUMENTATION_RESULT: kind=${kind}`,
     'INSTRUMENTATION_RESULT: ok=true',
     'INSTRUMENTATION_RESULT: injectedEvents=2',
     'INSTRUMENTATION_RESULT: elapsedMs=100',

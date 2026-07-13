@@ -55,9 +55,10 @@ no established automation use case justifies a public tuning surface.
 Platform adapters consume the canonical plan:
 
 - Android sends the plan to provider-native touch injection when available, otherwise to the
-  bundled instrumentation helper. The helper injects the exact planned pointer samples. Gesture
-  execution never falls back to `adb input swipe`; the snapshot helper is stopped before local
-  gesture instrumentation because Android permits only one instrumentation owner of `UiAutomation`.
+  bundled instrumentation helper. The helper injects the exact planned pointer samples. Canonical
+  gesture-plan execution never falls back to `adb input swipe`; the snapshot helper is stopped
+  before local gesture instrumentation because Android permits only one instrumentation owner of
+  `UiAutomation`.
 - iOS converts every planned point to native orientation and feeds the exact arrays to the existing
   private XCTest event bridge. macOS lowers a one-contact plan to its drag executor and tvOS lowers
   it to remote direction. Core admission and the Apple adapter both consume the same shared
