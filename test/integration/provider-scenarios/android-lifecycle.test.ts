@@ -80,7 +80,7 @@ test('Provider-backed integration Android text provider handles Unicode without 
 
 test('Provider-backed integration Android touch provider handles multi-touch gestures', async () => {
   await withProviderScenarioResource(
-    async () => await createAndroidSettingsWorld({ nativeTouchInjection: true }),
+    async () => await createAndroidSettingsWorld(),
     async (world) => {
       const client = world.daemon.client();
       await client.apps.open({ app: 'settings', ...world.selection });
@@ -181,17 +181,6 @@ test('Provider-backed integration Android touch provider handles multi-touch ges
         { topology: 'two', intent: 'transform', pointerCount: 2, durationMs: 700 },
       ]);
       assert.equal(world.gestureViewportCalls, 8);
-      assert.equal(
-        world.adbCalls.some(
-          (call) =>
-            call[0] === 'shell' &&
-            call[1] === 'am' &&
-            call[2] === 'instrument' &&
-            call.includes('com.callstack.agentdevice.multitouchhelper/.MultiTouchInstrumentation'),
-        ),
-        false,
-        JSON.stringify(world.adbCalls),
-      );
     },
   );
 });
@@ -1476,10 +1465,20 @@ function assertAndroidInteractionContract(world: AndroidSettingsWorld): void {
     ),
     JSON.stringify(adbCalls),
   );
-  const helperGestureCalls = adbCalls.filter((call) =>
-    call.includes('com.callstack.agentdevice.multitouchhelper/.MultiTouchInstrumentation'),
+  assert.deepEqual(
+    world.touchInjectionCalls.map((plan) => ({
+      intent: plan.intent,
+      durationMs: plan.durationMs,
+    })),
+    [
+      { intent: 'longPress', durationMs: 5 },
+      { intent: 'longPress', durationMs: 5 },
+      { intent: 'fling', durationMs: 100 },
+      { intent: 'fling', durationMs: 100 },
+      { intent: 'pan', durationMs: 400 },
+      { intent: 'fling', durationMs: 100 },
+    ],
   );
-  assert.equal(helperGestureCalls.length, 6, JSON.stringify(adbCalls));
   assertCommandCall(adbCalls, ['shell', 'input', 'tap', '88', '151']);
   assertCommandCall(adbCalls, [
     'shell',

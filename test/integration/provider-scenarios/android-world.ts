@@ -48,7 +48,6 @@ type AndroidSettingsWorld = {
 
 export async function createAndroidSettingsWorld(options?: {
   nativeTextInjection?: boolean;
-  nativeTouchInjection?: boolean;
   snapshotXml?: () => string;
   dumpsysWindow?: () => string;
   onAdbExec?: (args: string[]) => void;
@@ -98,6 +97,10 @@ export async function createAndroidSettingsWorld(options?: {
         pidof: (packageName) => androidPidofResult(appState, packageName),
       });
     },
+    touch: async (request) => {
+      touchInjectionCalls.push({ ...request });
+      return { backend: 'provider-native-touch' };
+    },
     install: async (apk, options) => {
       apkInstallCalls.push({ apkPath: apk, replace: options?.replace });
       return { stdout: '', stderr: '', exitCode: 0 };
@@ -140,12 +143,6 @@ export async function createAndroidSettingsWorld(options?: {
     adbProvider.text = async (request) => {
       textInjectionCalls.push({ ...request });
       shellState.searchText = request.text;
-    };
-  }
-  if (options?.nativeTouchInjection) {
-    adbProvider.touch = async (request) => {
-      touchInjectionCalls.push({ ...request });
-      return { backend: 'provider-native-touch' };
     };
   }
   const daemon = await createProviderScenarioHarness({
@@ -235,7 +232,6 @@ function androidAdbResult(
     androidDeviceStateAdbResult(key, args, clipboardText, options.pidof) ??
     androidMetricsAdbResult(key) ??
     androidPackageAdbResult(key, args, options.dumpsysWindow) ??
-    androidMultiTouchHelperAdbResult(args, key) ??
     androidCaptureAdbResult(key, searchText, options.snapshotXml) ?? {
       stdout: '',
       stderr: '',
@@ -437,26 +433,6 @@ function androidPackageAdbResult(
   return undefined;
 }
 
-function androidMultiTouchHelperAdbResult(
-  args: string[],
-  key: string,
-): AndroidAdbResult | undefined {
-  if (!key.includes('com.callstack.agentdevice.multitouchhelper/.MultiTouchInstrumentation'))
-    return undefined;
-  const payloadIndex = args.indexOf('payloadBase64');
-  const encodedPayload = payloadIndex >= 0 ? args[payloadIndex + 1] : undefined;
-  const request = encodedPayload
-    ? (JSON.parse(Buffer.from(encodedPayload, 'base64').toString('utf8')) as {
-        kind?: string;
-      })
-    : undefined;
-  return {
-    stdout: androidMultiTouchHelperOutput(request?.kind === 'transform' ? 'transform' : 'swipe'),
-    stderr: '',
-    exitCode: 0,
-  };
-}
-
 function androidCaptureAdbResult(
   key: string,
   searchText: string,
@@ -494,18 +470,6 @@ export function androidSnapshotHelperOutput(xml: string): string {
     'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-snapshot-helper-v1',
     'INSTRUMENTATION_RESULT: helperApiVersion=1',
     'INSTRUMENTATION_RESULT: ok=true',
-    'INSTRUMENTATION_CODE: 0',
-  ].join('\n');
-}
-
-function androidMultiTouchHelperOutput(kind: 'swipe' | 'transform'): string {
-  return [
-    'INSTRUMENTATION_RESULT: agentDeviceProtocol=android-multitouch-helper-v1',
-    'INSTRUMENTATION_RESULT: helperApiVersion=1',
-    `INSTRUMENTATION_RESULT: kind=${kind}`,
-    'INSTRUMENTATION_RESULT: ok=true',
-    'INSTRUMENTATION_RESULT: injectedEvents=2',
-    'INSTRUMENTATION_RESULT: elapsedMs=100',
     'INSTRUMENTATION_CODE: 0',
   ].join('\n');
 }
