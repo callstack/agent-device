@@ -15,7 +15,7 @@ import {
   resolveIosDeviceDeepLinkBundleId,
 } from '../../../contracts/open-target.ts';
 import { IOS_APP_LAUNCH_TIMEOUT_MS, IOS_SIMULATOR_TERMINATE_TIMEOUT_MS } from './config.ts';
-import { runIosDevicectl } from './devicectl.ts';
+import { runIosDevicectl, terminateIosDeviceApp } from './devicectl.ts';
 import {
   isSimulatorLaunchFBSError,
   probeSimulatorLaunchContext,
@@ -170,10 +170,7 @@ export async function closeIosApp(device: DeviceInfo, app: string): Promise<void
     return;
   }
 
-  await runIosDevicectl(['device', 'process', 'terminate', '--device', device.id, bundleId], {
-    action: 'terminate iOS app',
-    deviceId: device.id,
-  });
+  await terminateIosDeviceApp(device, bundleId);
 }
 
 async function launchIosSimulatorApp(

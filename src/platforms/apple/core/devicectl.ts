@@ -83,14 +83,63 @@ export async function listIosDeviceApps(
 }
 
 export async function listIosDeviceProcesses(device: DeviceInfo): Promise<IosDeviceProcessInfo[]> {
-  return parseIosDeviceProcessesPayload(
-    await runIosDevicectlJsonCommand(device, {
-      jsonPrefix: 'agent-device-ios-processes',
-      args: ['devicectl', 'device', 'info', 'processes', '--device', device.id],
-      failureMessage: 'Failed to list iOS processes',
-      parseFailureMessage: 'Failed to parse iOS process list',
-    }),
+  const payload = await runIosDevicectlJsonCommand(device, {
+    jsonPrefix: 'agent-device-ios-processes',
+    args: ['devicectl', 'device', 'info', 'processes', '--device', device.id],
+    failureMessage: 'Failed to list iOS processes',
+    parseFailureMessage: 'Failed to parse iOS process list',
+    fallbackHint: IOS_DEVICE_PROCESS_LIST_HINT,
+  });
+  if (!isIosDeviceProcessesPayload(payload)) {
+    throw new AppError('COMMAND_FAILED', 'Unsupported iOS process list response', {
+      deviceId: device.id,
+      hint: IOS_DEVICE_PROCESS_LIST_HINT,
+    });
+  }
+  return parseIosDeviceProcessesPayload(payload);
+}
+
+export async function terminateIosDeviceApp(device: DeviceInfo, bundleId: string): Promise<void> {
+  const process = await resolveIosDeviceAppProcess(device, bundleId);
+  if (!process) return;
+
+  await runIosDevicectl(
+    ['device', 'process', 'terminate', '--device', device.id, '--pid', String(process.pid)],
+    {
+      action: 'terminate iOS app',
+      deviceId: device.id,
+    },
   );
+}
+
+async function resolveIosDeviceAppProcess(
+  device: DeviceInfo,
+  bundleId: string,
+): Promise<IosDeviceProcessInfo | undefined> {
+  const app = (await listIosDeviceApps(device, 'all')).find(
+    (candidate) => candidate.bundleId === bundleId,
+  );
+  if (!app) {
+    throw new AppError('APP_NOT_INSTALLED', `No iOS device app found for ${bundleId}`, {
+      appBundleId: bundleId,
+      deviceId: device.id,
+    });
+  }
+  if (!app.url) {
+    throw new AppError('COMMAND_FAILED', `Cannot resolve the process ID for ${bundleId}`, {
+      appBundleId: bundleId,
+      deviceId: device.id,
+      hint: 'Installed-app metadata from devicectl did not include a bundle URL, so agent-device cannot map this app to the PID required for termination. Use an Xcode/CoreDevice toolchain that reports app URLs, or close the app manually.',
+    });
+  }
+
+  const appBundleUrl = app.url.replace(/\/+$/, '');
+  const matches = (await listIosDeviceProcesses(device)).filter((process) =>
+    process.executable.startsWith(`${appBundleUrl}/`),
+  );
+  return matches.sort(
+    (left, right) => processPathDepth(left, appBundleUrl) - processPathDepth(right, appBundleUrl),
+  )[0];
 }
 
 async function runIosDevicectlJsonCommand(
@@ -100,6 +149,7 @@ async function runIosDevicectlJsonCommand(
     args: string[];
     failureMessage: string;
     parseFailureMessage: string;
+    fallbackHint?: string;
   },
 ): Promise<unknown> {
   const jsonPath = path.join(
@@ -124,7 +174,10 @@ async function runIosDevicectlJsonCommand(
           stdout,
           stderr,
           deviceId: device.id,
-          hint: resolveIosDevicectlHint(stdout, stderr) ?? IOS_DEVICECTL_DEFAULT_HINT,
+          hint:
+            resolveIosDevicectlHint(stdout, stderr) ??
+            options.fallbackHint ??
+            IOS_DEVICECTL_DEFAULT_HINT,
         }),
       );
     }
@@ -138,6 +191,16 @@ async function runIosDevicectlJsonCommand(
   } finally {
     await fs.unlink(jsonPath).catch(() => {});
   }
+}
+
+function processPathDepth(process: IosDeviceProcessInfo, appBundleUrl: string): number {
+  return process.executable.slice(appBundleUrl.length + 1).split('/').length;
+}
+
+function isIosDeviceProcessesPayload(payload: unknown): payload is IosDeviceProcessesPayload {
+  return Array.isArray(
+    (payload as IosDeviceProcessesPayload | null | undefined)?.result?.runningProcesses,
+  );
 }
 
 export function parseIosDeviceAppsPayload(payload: unknown): IosAppInfo[] {
@@ -184,6 +247,9 @@ function filterIosDeviceApps(apps: IosAppInfo[], filter: 'user-installed' | 'all
 
 export const IOS_DEVICECTL_DEFAULT_HINT =
   'Ensure the iOS device is unlocked, trusted, and available in Xcode > Devices, then retry.';
+
+const IOS_DEVICE_PROCESS_LIST_HINT =
+  "This Xcode/CoreDevice toolchain must support 'devicectl device info processes' with JSON runningProcesses so agent-device can resolve app process IDs. Inspect diagnostics for the exact devicectl API failure.";
 
 export function resolveIosDevicectlHint(stdout: string, stderr: string): string | null {
   const text = `${stdout}\n${stderr}`.toLowerCase();
