@@ -371,6 +371,8 @@ test('a failure inside a retry-wrapped runFlow include reports the include file 
   expect(step.index).toBe(1);
   expect(step.source.path).toBe(childPath);
   expect(step.source.line).toBe(3);
+  expect(divergence.action).toBe('back');
+  expect(response.error.details?.action).toBe('back');
   // The transport-internal provenance marker is stripped from the flat details.
   expect(response.error.details?.replaySource).toBeUndefined();
 });
@@ -420,5 +422,99 @@ test('a failure inside a runtime runFlow.when-wrapped include reports the includ
   expect(step.index).toBe(1);
   expect(step.source.path).toBe(childPath);
   expect(step.source.line).toBe(3);
+  expect(divergence.action).toBe('back');
+  expect(response.error.details?.action).toBe('back');
   expect(response.error.details?.replaySource).toBeUndefined();
+});
+
+test('typed Maestro failures rank suggestions with Maestro regex selector semantics', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-suggestion-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const flowPath = path.join(root, 'flow.yaml');
+  fs.writeFileSync(
+    flowPath,
+    ['appId: com.example.app', '---', '- tapOn:', '    id: save-.*', ''].join('\n'),
+  );
+  const nodes = [
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+    },
+    {
+      index: 1,
+      parentIndex: 0,
+      depth: 1,
+      type: 'Button',
+      identifier: 'save-button',
+      label: 'Save',
+      rect: { x: 20, y: 40, width: 120, height: 44 },
+      hittable: true,
+    },
+  ];
+  mockDispatchCommand.mockResolvedValue({ nodes, truncated: false, backend: 'xctest' });
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [flowPath], flags: { replayBackend: 'maestro' } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) => {
+      if (req.command === 'snapshot') return { ok: true, data: { createdAt: 0, nodes } };
+      if (req.command === 'click') {
+        return { ok: false, error: { code: 'COMMAND_FAILED', message: 'tap failed' } };
+      }
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  const divergence = response.error.details?.divergence as {
+    suggestionCount: number;
+    suggestions: Array<{ selector: string; basis: string }>;
+  };
+  expect(divergence.suggestionCount).toBe(1);
+  expect(divergence.suggestions).toEqual([
+    expect.objectContaining({ selector: expect.stringContaining('save-button'), basis: 'id' }),
+  ]);
+});
+
+test('typed Maestro failures never serialize input text', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-text-redaction-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const flowPath = path.join(root, 'flow.yaml');
+  const typedText = 'highly-sensitive-value';
+  fs.writeFileSync(
+    flowPath,
+    ['appId: com.example.app', '---', `- inputText: ${typedText}`, ''].join('\n'),
+  );
+  mockDispatchCommand.mockRejectedValue(new Error('no device runner available'));
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [flowPath], flags: { replayBackend: 'maestro' } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (req) =>
+      req.command === 'type'
+        ? {
+            ok: false,
+            error: { code: 'COMMAND_FAILED', message: `could not type ${typedText}` },
+          }
+        : { ok: true, data: {} },
+  });
+
+  expect(response.ok).toBe(false);
+  expect(JSON.stringify(response)).not.toContain(typedText);
+  if (!response.ok) {
+    const divergence = response.error.details?.divergence as { action: string };
+    expect(divergence.action).toBe('inputText <text>');
+    expect(response.error.message).toContain('inputText <text>');
+  }
 });

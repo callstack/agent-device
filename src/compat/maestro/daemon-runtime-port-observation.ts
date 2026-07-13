@@ -89,11 +89,11 @@ export async function observeTypedMaestroCondition(params: {
 }): Promise<MaestroTargetMatch> {
   validateTimeout(params.timeoutMs, 'observation');
   let lastMatch: MaestroTargetMatch | undefined;
-  const startedAt = params.dependencies.now();
-  const deadline = startedAt + params.timeoutMs;
+  const deadline = params.dependencies.now() + params.timeoutMs;
 
-  while (lastMatch === undefined || params.dependencies.now() <= deadline) {
+  while (true) {
     throwIfAborted(params.context.signal);
+    const captureStartedAt = params.dependencies.now();
     const snapshot = await params.snapshot(params.context);
     const match = resolveTargetFromSnapshot({
       query: { selector: params.condition.selector },
@@ -104,14 +104,16 @@ export async function observeTypedMaestroCondition(params: {
     });
     lastMatch = match;
     if (conditionMatches(params.condition, match)) return match;
+    if (captureStartedAt >= deadline) break;
 
     const remaining = deadline - params.dependencies.now();
-    if (remaining <= 0) break;
-    await sleepWithinBudget(
-      params.dependencies,
-      Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
-      params.context.signal,
-    );
+    if (remaining > 0) {
+      await sleepWithinBudget(
+        params.dependencies,
+        Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
+        params.context.signal,
+      );
+    }
   }
 
   throwIfAborted(params.context.signal);
@@ -129,12 +131,12 @@ export async function scrollUntilTypedMaestroTarget(params: {
   readonly platform: Extract<MaestroPlatform, 'ios' | 'android'>;
 }): Promise<MaestroTargetMatch> {
   validateTimeout(params.timeoutMs, 'scrollUntilVisible');
-  const startedAt = params.dependencies.now();
-  const deadline = startedAt + params.timeoutMs;
+  const deadline = params.dependencies.now() + params.timeoutMs;
   let lastMatch: MaestroTargetMatch | undefined;
 
-  while (lastMatch === undefined || params.dependencies.now() <= deadline) {
+  while (true) {
     throwIfAborted(params.context.signal);
+    const captureStartedAt = params.dependencies.now();
     const snapshot = await params.snapshot(params.context);
     lastMatch = resolveTargetFromSnapshot({
       query: { selector: params.selector },
@@ -144,17 +146,20 @@ export async function scrollUntilTypedMaestroTarget(params: {
       mode: 'observe',
     });
     if (lastMatch.matched && lastMatch.visible) return lastMatch;
+    if (captureStartedAt >= deadline) break;
 
     const remaining = deadline - params.dependencies.now();
-    if (remaining <= 0) break;
-    await params.scroll();
-    const afterScroll = deadline - params.dependencies.now();
-    if (afterScroll <= 0) break;
-    await sleepWithinBudget(
-      params.dependencies,
-      Math.min(MAESTRO_OBSERVATION_POLL_MS, afterScroll),
-      params.context.signal,
-    );
+    if (remaining > 0) {
+      await params.scroll();
+      const afterScroll = deadline - params.dependencies.now();
+      if (afterScroll > 0) {
+        await sleepWithinBudget(
+          params.dependencies,
+          Math.min(MAESTRO_OBSERVATION_POLL_MS, afterScroll),
+          params.context.signal,
+        );
+      }
+    }
   }
 
   throwIfAborted(params.context.signal);
@@ -168,24 +173,26 @@ export async function waitForTypedSnapshotStability(params: {
   readonly dependencies: DaemonMaestroRuntimeDependencies;
 }): Promise<void> {
   validateTimeout(params.timeoutMs, 'waitForAnimationToEnd');
-  const startedAt = params.dependencies.now();
-  const deadline = startedAt + params.timeoutMs;
+  const deadline = params.dependencies.now() + params.timeoutMs;
   let previousSignature: string | undefined;
 
-  while (previousSignature === undefined || params.dependencies.now() <= deadline) {
+  while (true) {
     throwIfAborted(params.context.signal);
+    const captureStartedAt = params.dependencies.now();
     const snapshot = await params.snapshot(params.context);
     const signature = snapshotStabilitySignature(snapshot);
     if (signature === previousSignature) return;
     previousSignature = signature;
+    if (captureStartedAt >= deadline) return;
 
     const remaining = deadline - params.dependencies.now();
-    if (remaining <= 0) return;
-    await sleepWithinBudget(
-      params.dependencies,
-      Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
-      params.context.signal,
-    );
+    if (remaining > 0) {
+      await sleepWithinBudget(
+        params.dependencies,
+        Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
+        params.context.signal,
+      );
+    }
   }
 }
 

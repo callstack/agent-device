@@ -1,10 +1,13 @@
 import { beforeEach, test, vi } from 'vitest';
 import assert from 'node:assert/strict';
 
-const { mockFindBootableIosSimulator, mockListAppleDevices } = vi.hoisted(() => ({
-  mockFindBootableIosSimulator: vi.fn(),
-  mockListAppleDevices: vi.fn(),
-}));
+const { mockFindBootableIosSimulator, mockListAppleDevices, mockListAndroidDevices } = vi.hoisted(
+  () => ({
+    mockFindBootableIosSimulator: vi.fn(),
+    mockListAppleDevices: vi.fn(),
+    mockListAndroidDevices: vi.fn(),
+  }),
+);
 
 vi.mock('../../platforms/apple/core/devices.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../platforms/apple/core/devices.ts')>();
@@ -12,6 +15,14 @@ vi.mock('../../platforms/apple/core/devices.ts', async (importOriginal) => {
     ...actual,
     findBootableIosSimulator: mockFindBootableIosSimulator,
     listAppleDevices: mockListAppleDevices,
+  };
+});
+
+vi.mock('../../platforms/android/devices.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../platforms/android/devices.ts')>();
+  return {
+    ...actual,
+    listAndroidDevices: mockListAndroidDevices,
   };
 });
 
@@ -59,10 +70,51 @@ const webDesktop: DeviceInfo = {
   booted: true,
 };
 
+const androidEmulator: DeviceInfo = {
+  platform: 'android',
+  id: 'emulator-5554',
+  name: 'Pixel 9 Pro XL',
+  kind: 'emulator',
+  target: 'mobile',
+  booted: true,
+};
+
 beforeEach(() => {
   mockFindBootableIosSimulator.mockReset();
   mockFindBootableIosSimulator.mockResolvedValue(null);
   mockListAppleDevices.mockReset();
+  mockListAndroidDevices.mockReset();
+});
+
+test('resolveTargetDevice narrows local Android discovery to an explicit serial', async () => {
+  mockListAndroidDevices.mockResolvedValue([androidEmulator]);
+
+  const result = await resolveTargetDevice({
+    platform: 'android',
+    serial: androidEmulator.id,
+  });
+
+  assert.equal(result.id, androidEmulator.id);
+  assert.deepEqual(Array.from(mockListAndroidDevices.mock.calls[0]?.[0]?.serialAllowlist ?? []), [
+    androidEmulator.id,
+  ]);
+});
+
+test('resolveTargetDevice does not discover an explicit Android serial outside its allowlist', async () => {
+  mockListAndroidDevices.mockResolvedValue([]);
+
+  await expectDeviceNotFound(() =>
+    resolveTargetDevice({
+      platform: 'android',
+      serial: androidEmulator.id,
+      androidDeviceAllowlist: 'emulator-5556',
+    }),
+  );
+
+  assert.deepEqual(
+    Array.from(mockListAndroidDevices.mock.calls[0]?.[0]?.serialAllowlist ?? []),
+    [],
+  );
 });
 
 test('resolveTargetDevice reuses request-scoped device resolution cache for identical selectors', async () => {

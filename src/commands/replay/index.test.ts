@@ -50,6 +50,9 @@ describe('replay command interface', () => {
           replayUpdate: true,
           replayMaestro: true,
           replayEnv: ['FOO=bar'],
+          metroHost: '127.0.0.1',
+          metroPort: 8083,
+          bundleUrl: 'http://127.0.0.1:8083/index.bundle',
         }),
       ),
     ).toEqual({
@@ -57,6 +60,9 @@ describe('replay command interface', () => {
       update: true,
       backend: 'maestro',
       env: ['FOO=bar'],
+      metroHost: '127.0.0.1',
+      metroPort: 8083,
+      bundleUrl: 'http://127.0.0.1:8083/index.bundle',
     });
   });
 
@@ -72,6 +78,9 @@ describe('replay command interface', () => {
           replayUpdate: true,
           replayMaestro: true,
           replayEnv: ['FOO=bar'],
+          metroHost: '127.0.0.1',
+          metroPort: 8083,
+          bundleUrl: 'http://127.0.0.1:8083/index.bundle',
           failFast: true,
           timeoutMs: 10_000,
           retries: 2,
@@ -86,6 +95,9 @@ describe('replay command interface', () => {
       update: true,
       backend: 'maestro',
       env: ['FOO=bar'],
+      metroHost: '127.0.0.1',
+      metroPort: 8083,
+      bundleUrl: 'http://127.0.0.1:8083/index.bundle',
       failFast: true,
       timeoutMs: 10_000,
       retries: 2,
@@ -119,6 +131,8 @@ describe('replay command interface', () => {
     const testRequest = testDaemonWriter({
       paths: ['./suite.ad'],
       maestro: true,
+      metroHost: '127.0.0.1',
+      metroPort: 8083,
       reportJunit: './junit.xml',
     });
     expect(testRequest).toMatchObject({
@@ -126,9 +140,47 @@ describe('replay command interface', () => {
       positionals: ['./suite.ad'],
       options: {
         replayBackend: 'maestro',
+        metroHost: '127.0.0.1',
+        metroPort: 8083,
       },
     });
     expect(testRequest.options).not.toHaveProperty('reportJunit');
+  });
+
+  test('folds replay and test Metro hints into the runtime request envelope', async () => {
+    const runCalls: unknown[] = [];
+    const testCalls: unknown[] = [];
+    const client = {
+      replay: {
+        run: async (input: unknown) => {
+          runCalls.push(input);
+          return {};
+        },
+        test: async (input: unknown) => {
+          testCalls.push(input);
+          return {};
+        },
+      },
+    } as never;
+    const runtimeFlags = flags({
+      metroHost: '127.0.0.1',
+      metroPort: 8083,
+      bundleUrl: 'http://127.0.0.1:8083/index.bundle',
+    });
+
+    await replayCommandDefinition.invoke(client, replayCliReader(['./flow.ad'], runtimeFlags));
+    await testCommandDefinition.invoke(client, testCliReader(['./suite'], runtimeFlags));
+
+    const runtime = {
+      metroHost: '127.0.0.1',
+      metroPort: 8083,
+      bundleUrl: 'http://127.0.0.1:8083/index.bundle',
+      launchUrl: undefined,
+    };
+    expect(runCalls[0]).toMatchObject({ path: './flow.ad', runtime });
+    expect(testCalls[0]).toMatchObject({ paths: ['./suite'], runtime });
+    expect(runCalls[0]).not.toHaveProperty('metroHost');
+    expect(testCalls[0]).not.toHaveProperty('metroPort');
   });
 });
 

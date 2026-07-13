@@ -66,6 +66,47 @@ test('delegates lifecycle and coordinate gestures through public daemon commands
   ]);
 });
 
+test('does not leak replay and test controls into nested public commands', async () => {
+  const requests: DaemonRequest[] = [];
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({
+      flags: {
+        platform: 'android',
+        replayBackend: 'maestro',
+        replayUpdate: true,
+        replayEnv: ['TOKEN=value'],
+        replayShellEnv: { AD_VAR_TOKEN: 'value' },
+        replayFrom: 2,
+        replayPlanDigest: 'digest',
+        saveScript: true,
+        failFast: true,
+        timeoutMs: 30_000,
+        retries: 2,
+        recordVideo: true,
+        shardAll: 4,
+        shardSplit: 2,
+        shardCount: 4,
+        shardIndex: 1,
+      },
+    }),
+    invoke: async (request) => {
+      requests.push(request);
+      return { ok: true, data: {} };
+    },
+    dependencies: makeDependencies(),
+    platform: 'android',
+  });
+
+  await port.execute({
+    command: { kind: 'launchApp', source: { line: 2 }, appId: 'com.example.app' },
+    generation: 0,
+    env: {},
+  });
+
+  expect(requests).toHaveLength(1);
+  expect(requests[0]?.flags).toEqual({ platform: 'android', relaunch: true });
+});
+
 test('keeps absent negative observations, script output, and artifacts typed', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-daemon-port-'));
   const sourcePath = path.join(root, 'flow.yaml');
@@ -122,6 +163,59 @@ test('keeps absent negative observations, script output, and artifacts typed', a
       env: { PREFIX: 'typed' },
     }),
   ).resolves.toMatchObject({ artifactPaths: [path.join(root, 'shot.png')] });
+});
+
+test('takes one final observation when polling wakes after the deadline', async () => {
+  const now = { value: 0 };
+  let snapshots = 0;
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      if (request.command !== 'snapshot') return { ok: true, data: {} };
+      snapshots += 1;
+      return {
+        ok: true,
+        data: {
+          createdAt: now.value,
+          nodes: [
+            {
+              index: 0,
+              type: 'Application',
+              rect: { x: 0, y: 0, width: 402, height: 874 },
+            },
+            ...(now.value < 500
+              ? []
+              : [
+                  {
+                    index: 1,
+                    parentIndex: 0,
+                    type: 'Text',
+                    identifier: 'ready',
+                    rect: { x: 20, y: 40, width: 120, height: 44 },
+                  },
+                ]),
+          ],
+        },
+      };
+    },
+    dependencies: {
+      now: () => now.value,
+      sleep: async (milliseconds) => {
+        now.value += milliseconds + 1;
+      },
+    },
+    platform: 'android',
+  });
+
+  await expect(
+    port.observe({
+      condition: { kind: 'visible', selector: { id: 'ready' } },
+      timeoutMs: 500,
+      generation: 0,
+      env: {},
+    }),
+  ).resolves.toMatchObject({ matched: true });
+  expect(snapshots).toBe(3);
 });
 
 test('waits for a delayed input target using fresh snapshots', async () => {

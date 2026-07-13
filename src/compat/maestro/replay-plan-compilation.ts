@@ -2,6 +2,7 @@ import { computeMaestroReplayPlanDigest } from './replay-plan-digest.ts';
 import type { MaestroProgram } from './program-ir.ts';
 import { compileMaestroReplayPlanSteps } from './replay-plan-steps.ts';
 import type { MaestroReplayPlan, MaestroReplayPlanOptions } from './replay-plan-types.ts';
+import type { SessionRuntimeHints } from '../../kernel/contracts.ts';
 
 export async function compileMaestroReplayPlan(
   program: MaestroProgram,
@@ -9,10 +10,12 @@ export async function compileMaestroReplayPlan(
 ): Promise<MaestroReplayPlan> {
   const { steps, staticallyExecutedControls, staticallySkippedControls } =
     await compileMaestroReplayPlanSteps(program, options);
+  const runtimeHints = normalizeRuntimeHints(options.runtimeHints);
   const planWithoutDigest = {
     kind: 'maestroReplayPlan' as const,
     ...(options.platform === undefined ? {} : { platform: options.platform }),
     ...(options.target === undefined ? {} : { target: options.target }),
+    ...(runtimeHints === undefined ? {} : { runtimeHints }),
     initialStaticEnv: cloneValue({
       ...(options.defaults ?? {}),
       ...(options.builtins ?? {}),
@@ -32,6 +35,14 @@ export async function compileMaestroReplayPlan(
 
 export const buildMaestroReplayPlan = compileMaestroReplayPlan;
 export const createMaestroReplayPlan = compileMaestroReplayPlan;
+
+function normalizeRuntimeHints(
+  hints: Readonly<SessionRuntimeHints> | undefined,
+): Readonly<SessionRuntimeHints> | undefined {
+  if (!hints) return undefined;
+  const entries = Object.entries(hints).filter((entry) => entry[1] !== undefined);
+  return entries.length === 0 ? undefined : Object.fromEntries(entries);
+}
 
 function cloneValue<T>(value: T): T {
   if (Array.isArray(value)) return value.map((entry) => cloneValue(entry)) as T;

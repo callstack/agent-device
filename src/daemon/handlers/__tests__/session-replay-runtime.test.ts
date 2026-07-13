@@ -90,6 +90,104 @@ test('Maestro YAML uses the typed engine while .ad remains generic', async () =>
   expect(adResponse).toMatchObject({ ok: true, data: { replayed: 1 } });
   expect(commands).toEqual(['open']);
 });
+
+test('typed Maestro nested commands receive the runtime hints bound into the plan', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-runtime-envelope-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.setRuntimeHints(sessionName, {
+    platform: 'ios',
+    metroHost: '127.0.0.1',
+    metroPort: 8083,
+  });
+  const yamlPath = path.join(root, 'flow.yaml');
+  fs.writeFileSync(yamlPath, 'appId: com.example.app\n---\n- launchApp\n');
+  const requests: Parameters<Parameters<typeof runReplayScriptFile>[0]['invoke']>[0][] = [];
+
+  const response = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [yamlPath],
+      flags: { replayBackend: 'maestro', platform: 'ios' },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async (request) => {
+      requests.push(request);
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(response.ok).toBe(true);
+  expect(requests).toHaveLength(1);
+  expect(requests[0]).toMatchObject({
+    command: 'open',
+    runtime: {
+      platform: 'ios',
+      metroHost: '127.0.0.1',
+      metroPort: 8083,
+    },
+  });
+});
+
+test('Maestro YAML rejects .ad repair recording before executing any command', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-typed-maestro-save-script-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const yamlPath = path.join(root, 'flow.yaml');
+  fs.writeFileSync(yamlPath, 'appId: com.example.app\n---\n- launchApp\n');
+  const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
+
+  const response = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [yamlPath],
+      flags: { replayBackend: 'maestro', platform: 'ios', saveScript: true },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('INVALID_ARGS');
+  expect(response.error.message).toMatch(/Maestro YAML.*--save-script.*\.ad scripts/);
+  expect(invoke).not.toHaveBeenCalled();
+  expect(sessionStore.get(sessionName)?.recordSession).not.toBe(true);
+});
+
+test('Maestro YAML cannot append commands to an active .ad repair session', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-typed-maestro-active-repair-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  const session = makeIosSession(sessionName);
+  session.recordSession = true;
+  session.saveScriptBoundary = 0;
+  sessionStore.set(sessionName, session);
+  const yamlPath = path.join(root, 'flow.yaml');
+  fs.writeFileSync(yamlPath, 'appId: com.example.app\n---\n- launchApp\n');
+  const invoke = vi.fn(async () => ({ ok: true as const, data: {} }));
+
+  const response = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [yamlPath],
+      flags: { replayBackend: 'maestro', platform: 'ios' },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+
+  expect(response.ok).toBe(false);
+  if (response.ok) return;
+  expect(response.error.code).toBe('INVALID_ARGS');
+  expect(response.error.message).toMatch(/active \.ad --save-script repair run/);
+  expect(invoke).not.toHaveBeenCalled();
+});
 test('replay rejects legacy JSON payload files', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-json-rejected-'));
   const sessionStore = new SessionStore(path.join(root, 'sessions'));

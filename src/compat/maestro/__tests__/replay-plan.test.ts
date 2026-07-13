@@ -42,6 +42,7 @@ describe('typed Maestro replay plan', () => {
     const plan = await compileMaestroReplayPlan(program, {
       platform: 'android',
       target: 'simulator',
+      runtimeHints: { platform: 'android', metroHost: '127.0.0.1', metroPort: 8083 },
       defaults: { BUILTIN: 'default' },
       env: { INCLUDE: 'child.yaml', FLOW: 'runtime' },
       loadProgram,
@@ -66,6 +67,11 @@ describe('typed Maestro replay plan', () => {
       FLOW: 'runtime',
       INCLUDE: 'child.yaml',
     });
+    expect(plan.runtimeHints).toEqual({
+      platform: 'android',
+      metroHost: '127.0.0.1',
+      metroPort: 8083,
+    });
     expect(loadProgram).toHaveBeenCalledWith('child.yaml', '/flows/main.yaml');
     expect(Object.isFrozen(plan)).toBe(true);
 
@@ -76,6 +82,16 @@ describe('typed Maestro replay plan', () => {
       loadProgram,
     });
     expect(changed.digest).not.toBe(plan.digest);
+
+    const changedRuntime = await compileMaestroReplayPlan(program, {
+      platform: 'android',
+      target: 'simulator',
+      runtimeHints: { platform: 'android', metroHost: '127.0.0.1', metroPort: 8084 },
+      defaults: { BUILTIN: 'default' },
+      env: { INCLUDE: 'child.yaml', FLOW: 'runtime' },
+      loadProgram,
+    });
+    expect(changedRuntime.digest).not.toBe(plan.digest);
 
     expect(evaluateMaestroReplayResume(plan, { from: 4, planDigest: plan.digest })).toEqual({
       allowed: true,

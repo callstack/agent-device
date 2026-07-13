@@ -26,9 +26,7 @@ export async function listLocalDeviceInventory(
   if (request.platform === 'android') {
     const { listAndroidDevices } = await import('../platforms/android/devices.ts');
     return await listAndroidDevices({
-      serialAllowlist: request.androidSerialAllowlist
-        ? new Set(request.androidSerialAllowlist)
-        : undefined,
+      serialAllowlist: resolveAndroidDiscoverySerialAllowlist(request),
     });
   }
 
@@ -49,4 +47,14 @@ export async function listLocalDeviceInventory(
     } catch {}
   }
   return devices;
+}
+
+export function resolveAndroidDiscoverySerialAllowlist(
+  request: DeviceInventoryRequest,
+): ReadonlySet<string> | undefined {
+  const policyAllowlist = request.androidSerialAllowlist;
+  const selectedSerial = request.serial?.trim();
+  if (!selectedSerial) return policyAllowlist ? new Set(policyAllowlist) : undefined;
+  if (!policyAllowlist) return new Set([selectedSerial]);
+  return new Set(policyAllowlist.includes(selectedSerial) ? [selectedSerial] : []);
 }

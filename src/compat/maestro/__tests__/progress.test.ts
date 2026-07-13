@@ -21,3 +21,12 @@ test('formats progress directly from typed Maestro commands', () => {
     { command: 'assertVisible', value: 'Page 2' },
   ]);
 });
+
+test('redacts typed values from progress output', () => {
+  const program = parseMaestroProgram('---\n- inputText: highly-sensitive\n- pasteText: secret\n');
+
+  expect(program.commands.map(formatMaestroCommandProgress)).toEqual([
+    { command: 'inputText', value: '<text>' },
+    { command: 'pasteText', value: '<text>' },
+  ]);
+});

@@ -7,6 +7,7 @@ import {
   type DeviceInventoryRequest,
 } from '../../contracts/device-inventory.ts';
 import type { Platform, DeviceInfo } from '../../kernel/device.ts';
+import { resolveAndroidDiscoverySerialAllowlist } from '../platform-inventory.ts';
 
 // The builtin-plugin wiring lives at the interactor seam (src/core/interactors/) —
 // the one place R3 (see scripts/layering/check.ts) permits a STATIC value import of
@@ -56,9 +57,7 @@ const androidPlugin = {
   discoverDevices: async (request: DeviceInventoryRequest) => {
     const { listAndroidDevices } = await import('../../platforms/android/devices.ts');
     return await listAndroidDevices({
-      serialAllowlist: request.androidSerialAllowlist
-        ? new Set(request.androidSerialAllowlist)
-        : undefined,
+      serialAllowlist: resolveAndroidDiscoverySerialAllowlist(request),
     });
   },
 } as const satisfies PlatformPlugin;

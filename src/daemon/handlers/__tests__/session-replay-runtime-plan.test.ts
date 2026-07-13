@@ -312,3 +312,112 @@ test('resume rejects resuming past a retry-wrapped step in the skipped range', a
   expect(resumedAttempt.error.code).toBe('INVALID_ARGS');
   expect(resumedAttempt.error.message).toMatch(/control flow/);
 });
+
+test('typed Maestro resume digest binds an inferred session target', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-session-target-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  const session = makeIosSession(sessionName);
+  sessionStore.set(sessionName, session);
+  const flowPath = path.join(root, 'flow.yaml');
+  fs.writeFileSync(flowPath, 'appId: com.example.app\n---\n- back\n');
+
+  const firstAttempt = await runReplayScriptFile({
+    req: baseReq({ positionals: [flowPath], flags: { replayBackend: 'maestro' } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => ({
+      ok: false,
+      error: { code: 'COMMAND_FAILED', message: 'back failed' },
+    }),
+  });
+  expect(firstAttempt.ok).toBe(false);
+  if (firstAttempt.ok) return;
+  const divergence = firstAttempt.error.details?.divergence as {
+    resume: { from: number; planDigest: string };
+  };
+
+  sessionStore.set(sessionName, {
+    ...session,
+    device: { ...session.device, target: 'tv' },
+  });
+  const resumedAttempt = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [flowPath],
+      flags: {
+        replayBackend: 'maestro',
+        replayFrom: divergence.resume.from,
+        replayPlanDigest: divergence.resume.planDigest,
+      },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => {
+      throw new Error('must not execute after the effective session target changed');
+    },
+  });
+
+  expect(resumedAttempt.ok).toBe(false);
+  if (resumedAttempt.ok) return;
+  expect(resumedAttempt.error.code).toBe('INVALID_ARGS');
+  expect(resumedAttempt.error.message).toMatch(/plan digest/);
+});
+
+test('typed Maestro resume digest binds effective stored runtime hints', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-session-runtime-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  sessionStore.setRuntimeHints(sessionName, {
+    platform: 'ios',
+    metroHost: '127.0.0.1',
+    metroPort: 8083,
+  });
+  const flowPath = path.join(root, 'flow.yaml');
+  fs.writeFileSync(flowPath, 'appId: com.example.app\n---\n- back\n');
+
+  const firstAttempt = await runReplayScriptFile({
+    req: baseReq({ positionals: [flowPath], flags: { replayBackend: 'maestro' } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => ({
+      ok: false,
+      error: { code: 'COMMAND_FAILED', message: 'back failed' },
+    }),
+  });
+  expect(firstAttempt.ok).toBe(false);
+  if (firstAttempt.ok) return;
+  const divergence = firstAttempt.error.details?.divergence as {
+    resume: { from: number; planDigest: string };
+  };
+
+  sessionStore.setRuntimeHints(sessionName, {
+    platform: 'ios',
+    metroHost: '127.0.0.1',
+    metroPort: 8084,
+  });
+  const resumedAttempt = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [flowPath],
+      flags: {
+        replayBackend: 'maestro',
+        replayFrom: divergence.resume.from,
+        replayPlanDigest: divergence.resume.planDigest,
+      },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke: async () => {
+      throw new Error('must not execute after the effective runtime hints changed');
+    },
+  });
+
+  expect(resumedAttempt.ok).toBe(false);
+  if (resumedAttempt.ok) return;
+  expect(resumedAttempt.error.code).toBe('INVALID_ARGS');
+  expect(resumedAttempt.error.message).toMatch(/plan digest/);
+});

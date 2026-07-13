@@ -84,6 +84,7 @@ async function executeObservedStep(
     const failure = asMaestroReplayPlanStepFailure(error, step);
     state.options.observer?.commandFailed?.({
       ...event,
+      ...(failure.command ? { command: failure.command } : {}),
       source: failure.source,
       durationMs: now() - startedAt,
       error: failure.error,

@@ -33,6 +33,7 @@ import {
   buildTypedMaestroFailureResponse,
   type MaestroFailedEngineEvent,
 } from './session-replay-maestro-failure.ts';
+import { resolveEffectiveOpenRuntimeHints } from './session-runtime.ts';
 
 export async function runTypedMaestroReplayFile(params: {
   req: DaemonRequest;
@@ -44,6 +45,12 @@ export async function runTypedMaestroReplayFile(params: {
   const { req, sessionName, logPath, sessionStore, invoke } = params;
   const requestedPath = req.positionals?.[0];
   if (!requestedPath) return errorResponse('INVALID_ARGS', 'replay requires a path');
+  if (req.flags?.saveScript !== undefined) {
+    return errorResponse(
+      'INVALID_ARGS',
+      'Maestro YAML does not support --save-script; ADR 0012 repair recording applies only to .ad scripts.',
+    );
+  }
   const startedAt = Date.now();
   let failedEvent: MaestroFailedEngineEvent | undefined;
   let plan: MaestroReplayPlan | undefined;
@@ -53,13 +60,22 @@ export async function runTypedMaestroReplayFile(params: {
     const program = parseMaestroProgram(fs.readFileSync(filePath, 'utf8'), {
       sourcePath: filePath,
     });
-    const platform = resolveMaestroPlatform(req, sessionStore.get(sessionName)?.device);
-    const defaults = buildReplayBuiltinVars({
-      req,
-      sessionName,
-      metadata: {},
-      resolvedPath: filePath,
-    });
+    const sessionDevice = sessionStore.get(sessionName)?.device;
+    const platform = resolveMaestroPlatform(req, sessionDevice);
+    const target = resolveMaestroTarget(req, sessionDevice);
+    const runtimeHints = sessionDevice
+      ? resolveEffectiveOpenRuntimeHints({ req, sessionStore, sessionName, device: sessionDevice })
+      : req.runtime;
+    const defaults = {
+      ...buildReplayBuiltinVars({
+        req,
+        sessionName,
+        metadata: {},
+        resolvedPath: filePath,
+      }),
+      AD_PLATFORM: platform,
+      AD_TARGET: target,
+    };
     const env = {
       ...collectReplayShellEnv(readReplayShellEnvSource(req.flags?.replayShellEnv)),
       ...parseReplayCliEnvEntries(readReplayCliEnvEntries(req.flags?.replayEnv)),
@@ -70,7 +86,8 @@ export async function runTypedMaestroReplayFile(params: {
       defaults,
       env,
       platform,
-      target: typeof req.flags?.target === 'string' ? req.flags.target : undefined,
+      target,
+      runtimeHints,
       loadProgram,
       signal,
     });
@@ -78,7 +95,12 @@ export async function runTypedMaestroReplayFile(params: {
       from: req.flags?.replayFrom,
       planDigest: req.flags?.replayPlanDigest,
     });
-    const { command: _command, positionals: _positionals, ...baseReq } = req;
+    const { command: _command, positionals: _positionals, ...requestBase } = req;
+    const executionRuntime = req.runtime ?? runtimeHints;
+    const baseReq =
+      executionRuntime === undefined
+        ? requestBase
+        : { ...requestBase, runtime: executionRuntime };
     const port = createDaemonMaestroRuntimePort({
       baseReq,
       invoke,
@@ -96,6 +118,7 @@ export async function runTypedMaestroReplayFile(params: {
       defaults,
       env,
       platform,
+      target,
       loadProgram,
       signal,
       startIndex,
@@ -172,6 +195,12 @@ function resolveMaestroPlatform(
     'INVALID_ARGS',
     'Maestro replay requires --platform android|ios or an active mobile session.',
   );
+}
+
+function resolveMaestroTarget(req: DaemonRequest, sessionDevice: DeviceInfo | undefined): string {
+  return typeof req.flags?.target === 'string'
+    ? req.flags.target
+    : (sessionDevice?.target ?? 'mobile');
 }
 
 function emitMaestroProgress(file: string, event: MaestroEngineEvent): void {

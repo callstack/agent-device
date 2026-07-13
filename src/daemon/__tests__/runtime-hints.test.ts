@@ -284,7 +284,15 @@ test('applyRuntimeHintsToApp also writes the legacy ReactNativeDevPrefs.xml path
     const loggedArgs = await fs.readFile(argsLogPath, 'utf8');
     assert.match(
       loggedArgs,
+      /shell run-as com\.example\.demo cat shared_prefs\/com\.example\.demo_preferences\.xml/,
+    );
+    assert.match(
+      loggedArgs,
       /shell run-as com\.example\.demo cat shared_prefs\/ReactNativeDevPrefs\.xml/,
+    );
+    assert.match(
+      loggedArgs,
+      /shell run-as com\.example\.demo tee shared_prefs\/com\.example\.demo_preferences\.xml/,
     );
     assert.match(
       loggedArgs,
@@ -483,7 +491,7 @@ test('applyRuntimeHintsToApp preserves write failures after a successful run-as 
           assert.equal(error.message, 'Failed to write Android runtime hints for com.example.demo');
           assert.equal(
             error.details?.hint,
-            'adb run-as succeeded, but writing the React Native dev-server preference file failed. Inspect stderr/details for the failing shell command.',
+            'adb run-as succeeded, but writing React Native dev-server preferences failed. Inspect stderr/details for the failing shell command.',
           );
           assert.equal(error.details?.phase, 'write-runtime-hints');
           assert.equal(error.details?.exitCode, 1);

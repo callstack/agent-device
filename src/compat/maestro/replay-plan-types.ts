@@ -1,6 +1,7 @@
 import type { MaestroProgramLoader } from './program-loader.ts';
 import type { MaestroPlatform, MaestroSourceLocation } from './program-ir.ts';
 import type { MaestroControlCommand, MaestroRuntimeCommand } from './engine-types.ts';
+import type { SessionRuntimeHints } from '../../kernel/contracts.ts';
 
 export type MaestroReplayPlanScope = Readonly<Record<string, string | number | boolean>>;
 
@@ -27,6 +28,7 @@ export type MaestroReplayPlan = {
   readonly kind: 'maestroReplayPlan';
   readonly platform?: MaestroPlatform;
   readonly target?: string;
+  readonly runtimeHints?: Readonly<SessionRuntimeHints>;
   /** Effective static values used to resolve the plan; runtime output values are excluded. */
   readonly initialStaticEnv: Readonly<Record<string, string | number | boolean>>;
   readonly steps: readonly MaestroReplayPlanStep[];
@@ -48,6 +50,7 @@ export type MaestroReplayPlanOptions = {
   readonly builtins?: Readonly<Record<string, string>>;
   readonly platform?: MaestroPlatform;
   readonly target?: string;
+  readonly runtimeHints?: Readonly<SessionRuntimeHints>;
   readonly loadProgram?: MaestroProgramLoader;
   readonly signal?: AbortSignal;
 };

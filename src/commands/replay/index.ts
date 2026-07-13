@@ -19,7 +19,8 @@ import {
   requiredString,
 } from '../cli-grammar/common.ts';
 import type { CliReader, CommandInput, DaemonWriter } from '../cli-grammar/types.ts';
-import { REPLAY_FLAGS } from '../cli-grammar/flag-groups.ts';
+import { METRO_RELOAD_FLAGS, REPLAY_FLAGS } from '../cli-grammar/flag-groups.ts';
+import { withCommandRuntimeHints } from '../runtime-hints.ts';
 
 const REPLAY_COMMAND_NAME = 'replay';
 const TEST_COMMAND_NAME = 'test';
@@ -38,6 +39,9 @@ export const replayCommandMetadata = defineFieldCommandMetadata(
     backend: stringField(),
     maestro: booleanField(),
     env: stringArrayField(),
+    metroHost: stringField('Metro/debug host hint inherited by replay-opened sessions.'),
+    metroPort: integerField('Metro/debug port hint inherited by replay-opened sessions.'),
+    bundleUrl: stringField('Bundle URL hint inherited by replay-opened sessions.'),
     // ADR 0012 decision 4 / migration step 5: replay-only resume. Named
     // `resumeFrom`/`resumePlanDigest` (not `from`/`planDigest`) because
     // `from` already means a gesture's `PointInput` on `CommandInput`
@@ -64,6 +68,9 @@ export const testCommandMetadata = defineFieldCommandMetadata(
     backend: stringField(),
     maestro: booleanField(),
     env: stringArrayField(),
+    metroHost: stringField('Metro/debug host hint inherited by each test session.'),
+    metroPort: integerField('Metro/debug port hint inherited by each test session.'),
+    bundleUrl: stringField('Bundle URL hint inherited by each test session.'),
     failFast: booleanField(),
     timeoutMs: integerField(),
     retries: integerField(),
@@ -76,11 +83,11 @@ export const testCommandMetadata = defineFieldCommandMetadata(
 
 export const replayCommandDefinition = defineExecutableCommand(
   replayCommandMetadata,
-  (client, input) => client.replay.run(input),
+  (client, input) => client.replay.run(withCommandRuntimeHints(input)),
 );
 
 export const testCommandDefinition = defineExecutableCommand(testCommandMetadata, (client, input) =>
-  client.replay.test(input),
+  client.replay.test(withCommandRuntimeHints(input)),
 );
 
 const replayCliSchema = {
@@ -94,6 +101,7 @@ const replayCliSchema = {
     'replayMaestro',
     'replayExportFormat',
     ...REPLAY_FLAGS,
+    ...METRO_RELOAD_FLAGS,
     'replayFrom',
     'replayPlanDigest',
     'timeoutMs',
@@ -113,6 +121,7 @@ const testCliSchema = {
   allowedFlags: [
     'replayMaestro',
     ...REPLAY_FLAGS,
+    ...METRO_RELOAD_FLAGS,
     'failFast',
     'timeoutMs',
     'retries',
@@ -131,6 +140,9 @@ export const replayCliReader: CliReader = (positionals, flags) => ({
   update: flags.replayUpdate,
   backend: flags.replayMaestro ? 'maestro' : undefined,
   env: flags.replayEnv,
+  metroHost: flags.metroHost,
+  metroPort: flags.metroPort,
+  bundleUrl: flags.bundleUrl,
   resumeFrom: flags.replayFrom,
   resumePlanDigest: flags.replayPlanDigest,
   saveScript: flags.saveScript,
@@ -143,6 +155,9 @@ export const testCliReader: CliReader = (positionals, flags) => ({
   update: flags.replayUpdate,
   backend: flags.replayMaestro ? 'maestro' : undefined,
   env: flags.replayEnv,
+  metroHost: flags.metroHost,
+  metroPort: flags.metroPort,
+  bundleUrl: flags.bundleUrl,
   failFast: flags.failFast,
   timeoutMs: flags.timeoutMs,
   retries: flags.retries,

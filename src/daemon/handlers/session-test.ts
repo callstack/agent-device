@@ -393,7 +393,7 @@ function shouldStopReplayTestExecution(
 ): boolean {
   return (
     isRequestCanceled(requestId) ||
-    flags?.failFast === true ||
+    (flags?.failFast === true && result.status === 'failed') ||
     isReplayInfrastructureFailure(result)
   );
 }

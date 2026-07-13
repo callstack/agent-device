@@ -158,6 +158,12 @@ export async function runReplayScriptFile(params: {
   try {
     resolved = SessionStore.expandHome(filePath, req.meta?.cwd);
     if (isTypedMaestroReplay(req, resolved)) {
+      if (sessionStore.get(sessionName)?.saveScriptBoundary !== undefined) {
+        return errorResponse(
+          'INVALID_ARGS',
+          'This session has an active .ad --save-script repair run; finish it with replay --from or close before running Maestro YAML.',
+        );
+      }
       return await runTypedMaestroReplayFile({ req, sessionName, logPath, sessionStore, invoke });
     }
     const script = fs.readFileSync(resolved, 'utf8');
@@ -435,15 +441,9 @@ function formatReplayTestActionProgress(
   action: SessionAction,
 ): Pick<ReplayTestProgressEvent, 'stepCommand' | 'stepValue'> {
   return {
-    stepCommand: formatReplayTestProgressCommand(action.command),
+    stepCommand: action.command,
     ...formatReplayTestProgressValue(action),
   };
-}
-
-function formatReplayTestProgressCommand(command: string): string {
-  if (!command.startsWith('__maestro')) return command;
-  const name = command.slice('__maestro'.length);
-  return name.length > 0 ? name[0]!.toLowerCase() + name.slice(1) : command;
 }
 
 function formatReplayTestProgressValue(
@@ -452,9 +452,6 @@ function formatReplayTestProgressValue(
   const positionals = action.positionals ?? [];
   const selectorValue = readSelectorDisplayValue(positionals[0]);
   if (selectorValue) return { stepValue: selectorValue };
-  if (action.command === '__maestroTapPointPercent' && positionals.length >= 2) {
-    return { stepValue: `${positionals[0]},${positionals[1]}%` };
-  }
   if (positionals.length === 0) return {};
   return { stepValue: positionals.join(' ') };
 }

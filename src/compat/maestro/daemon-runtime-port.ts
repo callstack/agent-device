@@ -54,7 +54,8 @@ export function createDaemonMaestroRuntimeOperations(
     resolveTarget: async (input, context) => {
       const deadline = options.dependencies.now() + input.timeoutMs;
       let lastMatch;
-      do {
+      while (true) {
+        const captureStartedAt = options.dependencies.now();
         const currentSnapshot = await snapshot(context);
         const evidence = context.cachedObservation?.evidence;
         const preferredContext =
@@ -73,14 +74,15 @@ export function createDaemonMaestroRuntimeOperations(
           preferredContext,
         });
         if (lastMatch.matched && lastMatch.visible && lastMatch.rect) return lastMatch;
+        if (captureStartedAt >= deadline) return lastMatch;
         const remaining = deadline - options.dependencies.now();
-        if (remaining <= 0) return lastMatch;
-        await options.dependencies.sleep(
-          Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
-          context.signal,
-        );
-      } while (options.dependencies.now() <= deadline);
-      return lastMatch;
+        if (remaining > 0) {
+          await options.dependencies.sleep(
+            Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
+            context.signal,
+          );
+        }
+      }
     },
     observe: async (input, context) =>
       await observeTypedMaestroCondition({

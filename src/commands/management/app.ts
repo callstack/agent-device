@@ -2,7 +2,6 @@ import { PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import type { AppCloseOptions, AppOpenOptions } from '../../client/client-types.ts';
 import { DEFAULT_APPS_FILTER } from '../../contracts/app-inventory.ts';
 import { SESSION_SURFACES } from '../../contracts/session-surface.ts';
-import type { SessionRuntimeHints } from '../../kernel/contracts.ts';
 import type { CommandSchemaOverride } from '../../cli-schema/types.ts';
 import { assertResolvedAppsFilter } from './app-inventory-contract.ts';
 import {
@@ -18,8 +17,10 @@ import {
 import { defineExecutableCommand } from '../command-contract.ts';
 import { commonInputFromFlags, direct, optionalString } from '../cli-grammar/common.ts';
 import type { CliReader, CommandInput, DaemonWriter } from '../cli-grammar/types.ts';
+import { METRO_RELOAD_FLAGS } from '../cli-grammar/flag-groups.ts';
 import { defineCommandFacet } from '../family/types.ts';
 import { defineFieldCommandMetadata } from '../field-command-contract.ts';
+import { withCommandRuntimeHints } from '../runtime-hints.ts';
 import { managementCliOutputFormatters } from './output.ts';
 
 const appsCommandMetadata = defineFieldCommandMetadata('apps', 'List installed apps.', {
@@ -91,27 +92,7 @@ function toAppOpenOptions(
     launchUrl?: string;
   },
 ): AppOpenOptions {
-  const { metroHost, metroPort, bundleUrl, launchUrl, ...rest } = input;
-  const runtime = buildOpenRuntimeHints({ metroHost, metroPort, bundleUrl, launchUrl });
-  return runtime ? { ...rest, runtime } : rest;
-}
-
-function buildOpenRuntimeHints(hints: {
-  metroHost?: string;
-  metroPort?: number;
-  bundleUrl?: string;
-  launchUrl?: string;
-}): SessionRuntimeHints | undefined {
-  const { metroHost, metroPort, bundleUrl, launchUrl } = hints;
-  if (
-    metroHost === undefined &&
-    metroPort === undefined &&
-    bundleUrl === undefined &&
-    launchUrl === undefined
-  ) {
-    return undefined;
-  }
-  return { metroHost, metroPort, bundleUrl, launchUrl };
+  return withCommandRuntimeHints(input);
 }
 
 const closeCommandDefinition = defineExecutableCommand(closeCommandMetadata, (client, input) =>
@@ -141,9 +122,7 @@ const openCliSchema = {
     'noRecord',
     'relaunch',
     'surface',
-    'metroHost',
-    'metroPort',
-    'bundleUrl',
+    ...METRO_RELOAD_FLAGS,
     'launchUrl',
   ],
 } as const satisfies CommandSchemaOverride;

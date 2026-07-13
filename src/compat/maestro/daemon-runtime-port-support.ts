@@ -50,8 +50,29 @@ export function flagsWith(
   base: CommandFlags | undefined,
   extra: Partial<CommandFlags>,
 ): CommandFlags | undefined {
-  const flags = { ...(base ?? {}), ...extra };
+  const flags = { ...stripReplayControlFlags(base), ...extra };
   return Object.keys(flags).length > 0 ? flags : undefined;
+}
+
+function stripReplayControlFlags(flags: CommandFlags | undefined): CommandFlags | undefined {
+  if (!flags) return undefined;
+  const nested = { ...flags };
+  delete nested.saveScript;
+  delete nested.replayUpdate;
+  delete nested.replayBackend;
+  delete nested.replayEnv;
+  delete nested.replayShellEnv;
+  delete nested.replayFrom;
+  delete nested.replayPlanDigest;
+  delete nested.failFast;
+  delete nested.timeoutMs;
+  delete nested.retries;
+  delete nested.recordVideo;
+  delete nested.shardAll;
+  delete nested.shardSplit;
+  delete nested.shardCount;
+  delete nested.shardIndex;
+  return Object.keys(nested).length > 0 ? nested : undefined;
 }
 
 export function launchArgumentValues(

@@ -4,13 +4,15 @@ import type { MaestroReplayPlan } from './replay-plan-types.ts';
 export function computeMaestroReplayPlanDigest(plan: {
   readonly platform?: string;
   readonly target?: string;
+  readonly runtimeHints?: Readonly<Record<string, unknown>>;
   readonly initialStaticEnv: Readonly<Record<string, unknown>>;
   readonly steps: readonly unknown[];
 }): string {
   const canonical = {
-    version: 1,
+    version: 2,
     platform: plan.platform ?? null,
     target: plan.target ?? null,
+    runtimeHints: plan.runtimeHints ?? null,
     initialStaticEnv: plan.initialStaticEnv,
     steps: plan.steps,
   };

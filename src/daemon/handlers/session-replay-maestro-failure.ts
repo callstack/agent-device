@@ -1,8 +1,12 @@
 import type { MaestroEngineEvent } from '../../compat/maestro/engine-types.ts';
 import { formatMaestroCommandProgress } from '../../compat/maestro/progress.ts';
+import type { MaestroCommand, MaestroSelector } from '../../compat/maestro/program-ir.ts';
 import { evaluateMaestroReplayResume } from '../../compat/maestro/replay-plan.ts';
 import type { MaestroReplayPlan } from '../../compat/maestro/replay-plan-types.ts';
+import { resolveMaestroTargetFromSnapshot } from '../../compat/maestro/runtime-targets.ts';
+import { getSnapshotReferenceFrame } from '../touch-reference-frame.ts';
 import type { DaemonError } from '../../kernel/contracts.ts';
+import type { SnapshotNode } from '../../kernel/snapshot.ts';
 import {
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
   createReplayDivergenceSanitizer,
@@ -12,13 +16,15 @@ import {
 import { formatScriptArg } from '../../replay/script-utils.ts';
 import type { SnapshotDiagnosticsSummary } from '../../snapshot-diagnostics.ts';
 import { SessionStore } from '../session-store.ts';
-import type { DaemonRequest, DaemonResponse, SessionAction } from '../types.ts';
+import type { DaemonRequest, DaemonResponse, SessionAction, SessionState } from '../types.ts';
 import {
   boundReplayDivergenceForSession,
+  buildReplayDivergenceSuggestionForNode,
   buildDivergenceScreen,
   captureDivergenceObservation,
   collectReplayDivergenceSuggestions,
   toReplayRepairHintCapture,
+  type DivergenceFieldSanitizer,
 } from './session-replay-divergence.ts';
 import { computeReplayRepairHint } from './session-replay-repair-hint.ts';
 import {
@@ -46,8 +52,16 @@ export async function buildTypedMaestroFailureResponse(params: {
 }): Promise<DaemonResponse> {
   const { event, plan, replayPath, req, sessionName, sessionStore, logPath } = params;
   const cause = hoistReplayFailureCauseDiagnosticMeta(params.error);
-  const scrubVars = collectExpandedScrubVars(event.expandedVariables);
+  const scrubVars = [
+    ...collectExpandedScrubVars(event.expandedVariables),
+    ...collectMaestroTextScrubVars(event.command),
+  ].sort((left, right) => right.value.length - left.value.length);
   const sanitize = createReplayDivergenceSanitizer(scrubVars);
+  const safeCause = {
+    ...cause,
+    message: sanitize(cause.message),
+    ...(cause.hint ? { hint: sanitize(cause.hint) } : {}),
+  };
   const diagnosticAction = diagnosticActionForEvent(event, req);
   const session = sessionStore.get(sessionName);
   const observation = session
@@ -63,20 +77,23 @@ export async function buildTypedMaestroFailureResponse(params: {
         reason: 'no-session',
         hint: 'The session closed before a post-failure screen could be captured.',
       };
-  const suggestions = session
-    ? collectReplayDivergenceSuggestions({
-        action: diagnosticAction,
-        session,
-        nodes: observation.state === 'available' ? observation.nodes : [],
-        sanitize,
-      })
-    : [];
+  const suggestions =
+    session && observation.state === 'available'
+      ? collectTypedMaestroSuggestions({
+          command: event.command,
+          platform: plan.platform,
+          action: diagnosticAction,
+          session,
+          nodes: observation.nodes,
+          sanitize,
+        })
+      : [];
   const resume = evaluateMaestroReplayResume(plan, {
     from: event.stepIndex,
     planDigest: plan.digest,
   });
   const progress = formatMaestroCommandProgress(event.command);
-  const actionLabel = [event.command.kind, progress.value ? formatScriptArg(progress.value) : '']
+  const actionLabel = [event.command.kind, formatMaestroActionValue(progress.value)]
     .filter(Boolean)
     .join(' ');
   const divergence: ReplayDivergence = {
@@ -91,9 +108,9 @@ export async function buildTypedMaestroFailureResponse(params: {
     },
     action: sanitize(actionLabel),
     cause: {
-      code: cause.code,
-      message: sanitize(cause.message),
-      ...(cause.hint ? { hint: sanitize(cause.hint) } : {}),
+      code: safeCause.code,
+      message: safeCause.message,
+      ...(safeCause.hint ? { hint: safeCause.hint } : {}),
     },
     screen: buildDivergenceScreen(observation, sanitize),
     suggestions: suggestions.slice(0, REPLAY_DIVERGENCE_SUGGESTION_LIMIT),
@@ -119,7 +136,7 @@ export async function buildTypedMaestroFailureResponse(params: {
     responseLevel: req.meta?.responseLevel,
   });
   return buildReplayDivergenceFailureResponseFromDescriptor({
-    error: cause,
+    error: safeCause,
     actionLabel,
     action: event.command.kind,
     positionals: safeProgressPositionals(event.command.kind, progress.value),
@@ -132,6 +149,11 @@ export async function buildTypedMaestroFailureResponse(params: {
   });
 }
 
+function formatMaestroActionValue(value: string | undefined): string {
+  if (!value || value === '<text>') return value ?? '';
+  return formatScriptArg(value);
+}
+
 function diagnosticActionForEvent(event: MaestroEngineEvent, req: DaemonRequest): SessionAction {
   const progress = formatMaestroCommandProgress(event.command);
   const command = diagnosticCommand(event.command.kind);
@@ -141,6 +163,90 @@ function diagnosticActionForEvent(event: MaestroEngineEvent, req: DaemonRequest)
     positionals: safeProgressPositionals(event.command.kind, progress.value),
     flags: req.flags ?? {},
   };
+}
+
+function collectTypedMaestroSuggestions(params: {
+  command: MaestroCommand;
+  platform: MaestroReplayPlan['platform'];
+  action: SessionAction;
+  session: SessionState;
+  nodes: SnapshotNode[];
+  sanitize: DivergenceFieldSanitizer;
+}) {
+  const query = typedSuggestionQuery(params.command);
+  if (!query || (params.platform !== 'android' && params.platform !== 'ios')) {
+    return collectReplayDivergenceSuggestions({
+      action: params.action,
+      session: params.session,
+      nodes: params.nodes,
+      sanitize: params.sanitize,
+    });
+  }
+  const snapshot = { createdAt: Date.now(), nodes: params.nodes };
+  const resolution = resolveMaestroTargetFromSnapshot(
+    snapshot,
+    query,
+    params.platform,
+    getSnapshotReferenceFrame(snapshot),
+    { requireOnScreen: true, promoteTapTarget: query.promoteTapTarget },
+  );
+  if (!resolution.ok) return [];
+  return [
+    buildReplayDivergenceSuggestionForNode({
+      node: resolution.node,
+      session: params.session,
+      action: params.action,
+      basis: suggestionBasis(query.selector),
+      sanitize: params.sanitize,
+    }),
+  ];
+}
+
+type TypedSuggestionQuery = {
+  selector: MaestroSelector;
+  index?: number;
+  childOf?: MaestroSelector;
+  promoteTapTarget?: boolean;
+};
+
+function typedSuggestionQuery(command: MaestroCommand): TypedSuggestionQuery | undefined {
+  switch (command.kind) {
+    case 'tapOn':
+      return command.target.space === 'target'
+        ? {
+            selector: command.target.selector,
+            index: command.index,
+            childOf: command.childOf,
+            promoteTapTarget: true,
+          }
+        : undefined;
+    case 'doubleTapOn':
+    case 'longPressOn':
+      return command.target.space === 'target'
+        ? { selector: command.target.selector, promoteTapTarget: true }
+        : undefined;
+    case 'assertVisible':
+    case 'assertNotVisible':
+      return { selector: command.target };
+    case 'extendedWaitUntil':
+      return command.visible
+        ? { selector: command.visible }
+        : command.notVisible
+          ? { selector: command.notVisible }
+          : undefined;
+    case 'scrollUntilVisible':
+      return { selector: command.element };
+    case 'swipe':
+      return command.gesture.kind === 'target' ? { selector: command.gesture.from } : undefined;
+    default:
+      return undefined;
+  }
+}
+
+function suggestionBasis(selector: MaestroSelector): 'id' | 'label' | 'other' {
+  if (selector.id !== undefined) return 'id';
+  if (selector.text !== undefined || selector.label !== undefined) return 'label';
+  return 'other';
 }
 
 function diagnosticCommand(command: string): string {
@@ -167,4 +273,11 @@ function collectExpandedScrubVars(values: Readonly<Record<string, string>>): Rep
     .filter(([, value]) => value.length > 0)
     .map(([name, value]) => ({ name, value }))
     .sort((left, right) => right.value.length - left.value.length);
+}
+
+function collectMaestroTextScrubVars(command: MaestroCommand): ReplayVarScrubEntry[] {
+  if ((command.kind !== 'inputText' && command.kind !== 'pasteText') || command.text.length === 0) {
+    return [];
+  }
+  return [{ name: `${command.kind}.text`, value: command.text }];
 }

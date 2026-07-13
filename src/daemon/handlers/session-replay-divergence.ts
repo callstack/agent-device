@@ -552,24 +552,40 @@ function resolveSuggestionCandidate(params: {
     disambiguateAmbiguous: matching.allowDisambiguation,
   });
   if (!resolved) return undefined;
+  const basis = classifySuggestionBasis(resolved.selector);
+  return {
+    suggestion: buildReplayDivergenceSuggestionForNode({
+      node: resolved.node,
+      session,
+      action,
+      basis,
+      sanitize,
+    }),
+    basisRank: BASIS_RANK[basis],
+    nodeIndex: resolved.node.index,
+  };
+}
 
-  const selectorChain = buildSelectorChainForNode(resolved.node, session.device.platform, {
+export function buildReplayDivergenceSuggestionForNode(params: {
+  node: SnapshotNode;
+  session: SessionState;
+  action: SessionAction;
+  basis: ReplayDivergenceSuggestionBasis;
+  sanitize: DivergenceFieldSanitizer;
+}): ReplayDivergenceSuggestion {
+  const { node, session, action, basis, sanitize } = params;
+  const selectorChain = buildSelectorChainForNode(node, session.device.platform, {
     action:
       action.command === 'fill' ? 'fill' : isTouchTargetCommand(action.command) ? 'click' : 'get',
   });
-  const basis = classifySuggestionBasis(resolved.selector);
-  const role = formatRole(resolved.node.type ?? 'Element');
-  const label = displayLabel(resolved.node, role);
+  const role = formatRole(node.type ?? 'Element');
+  const label = displayLabel(node, role);
   return {
-    suggestion: {
-      selector: sanitize(selectorChain.join(' || ')),
-      basis,
-      ...(resolved.node.ref ? { ref: resolved.node.ref } : {}),
-      role: sanitize(role),
-      ...(label ? { label: sanitize(label) } : {}),
-    },
-    basisRank: BASIS_RANK[basis],
-    nodeIndex: resolved.node.index,
+    selector: sanitize(selectorChain.join(' || ')),
+    basis,
+    ...(node.ref ? { ref: node.ref } : {}),
+    role: sanitize(role),
+    ...(label ? { label: sanitize(label) } : {}),
   };
 }
 

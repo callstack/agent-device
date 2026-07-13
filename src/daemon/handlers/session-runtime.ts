@@ -249,6 +249,12 @@ function resolveOpenRuntimeHints(params: {
   };
 }
 
+export function resolveEffectiveOpenRuntimeHints(
+  params: Parameters<typeof resolveOpenRuntimeHints>[0],
+): SessionRuntimeHints | undefined {
+  return resolveOpenRuntimeHints(params).runtime;
+}
+
 export function tryResolveOpenRuntimeHints(
   params: Parameters<typeof resolveOpenRuntimeHints>[0],
 ): { ok: true; data: ReturnType<typeof resolveOpenRuntimeHints> } | DaemonFailureResponse {

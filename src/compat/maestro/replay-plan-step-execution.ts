@@ -38,6 +38,7 @@ type PlanStepFailure = {
   readonly kind: 'maestroPlanStepFailure';
   readonly error: unknown;
   readonly source: MaestroReplayPlanStep['source'];
+  readonly command?: MaestroCommand;
 };
 
 export async function executeMaestroReplayPlanStep(
@@ -258,6 +259,7 @@ export function asMaestroReplayPlanStepFailure(
     kind: 'maestroPlanStepFailure',
     error: withSource(error, step?.command),
     source,
+    ...(step ? { command: step.command } : {}),
   };
 }
 

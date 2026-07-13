@@ -27,7 +27,7 @@ function progressValue(command: MaestroCommand): Pick<MaestroCommandProgress, 'v
       return valueOf(formatSelector(command.element));
     case 'inputText':
     case 'pasteText':
-      return valueOf(command.text);
+      return valueOf('<text>');
     case 'openLink':
       return valueOf(command.link);
     case 'takeScreenshot':
