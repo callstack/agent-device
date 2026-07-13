@@ -16,6 +16,7 @@ import {
   type Selector,
 } from '../../selectors/index.ts';
 import { collectReplaySelectorCandidates } from './session-replay-heal.ts';
+import { collectSettleChromeRefs } from '../../commands/interaction/runtime/settle.ts';
 import { buildReplayDivergenceResume } from './session-replay-resume.ts';
 import { formatDivergenceActionLabel, isTouchTargetCommand } from '../../replay/script-utils.ts';
 import {
@@ -157,7 +158,13 @@ export function boundReplayDivergenceForSession(params: {
 }
 
 export type DivergenceObservation =
-  | { state: 'available'; nodes: SnapshotNode[]; refsGeneration: number }
+  | {
+      state: 'available';
+      nodes: SnapshotNode[];
+      refsGeneration: number;
+      /** Session's app bundle id at capture time; threaded to `buildDivergenceScreen`'s chrome filter (Android IME-scope guard — inert on iOS). */
+      appBundleId: string | undefined;
+    }
   | { state: 'unavailable'; reason: string; hint: string };
 
 /** Adapts a capture observation to the `repairHint` container-presence test's input shape. */
@@ -216,6 +223,7 @@ export async function captureDivergenceObservation(params: {
       state: 'available',
       nodes: snapshot.nodes,
       refsGeneration: session.snapshotGeneration ?? 0,
+      appBundleId: session.appBundleId,
     };
   } catch (error) {
     return {
@@ -249,7 +257,11 @@ export function buildDivergenceScreen(
       hint: sanitize(observation.hint),
     };
   }
-  const { refs, truncated } = buildReplayDivergenceScreenRefs(observation.nodes, sanitize);
+  const { refs, truncated } = buildReplayDivergenceScreenRefs(
+    observation.nodes,
+    sanitize,
+    observation.appBundleId,
+  );
   return {
     state: 'available',
     refsGeneration: observation.refsGeneration,
@@ -265,11 +277,18 @@ const SCREEN_REF_CAPTURE_LIMIT = 20;
 function buildReplayDivergenceScreenRefs(
   nodes: SnapshotNode[],
   sanitize: DivergenceFieldSanitizer,
+  appBundleId: string | undefined,
 ): {
   refs: ReplayDivergenceScreenRef[];
   truncated: boolean;
 } {
-  const candidates = nodes.filter((node) => node.ref && node.interactionBlocked !== 'covered');
+  // Keyboard/IME chrome must not consume the ref budget: it reuses the exact
+  // structural classifier `--settle`'s tail already relies on (#1198/#1200)
+  // rather than a second keyboard/IME node-type list.
+  const chromeRefs = collectSettleChromeRefs(nodes, appBundleId);
+  const candidates = nodes.filter(
+    (node) => node.ref && node.interactionBlocked !== 'covered' && !chromeRefs.has(node.ref),
+  );
   const refs = candidates.slice(0, SCREEN_REF_CAPTURE_LIMIT).map((node) => {
     const role = formatRole(node.type ?? 'Element');
     const label = displayLabel(node, role);

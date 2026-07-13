@@ -494,7 +494,14 @@ function withoutSettleChrome(
   return nodes.filter((node) => !strippedIndexes.has(node.index));
 }
 
-function collectSettleChromeRefs(
+/**
+ * Refs of iOS keyboard-window chrome unioned with Android IME/system chrome
+ * (see `collectSettleChrome`). Exported so any ref-selection budget — not
+ * just the settle tail — can exclude keyboard/IME chrome without duplicating
+ * the structural classification (e.g. the replay divergence `screen.refs`
+ * cap; ADR 0012 decision 6).
+ */
+export function collectSettleChromeRefs(
   nodes: SnapshotNode[],
   appBundleId: string | undefined,
 ): ReadonlySet<string> {
