@@ -7,23 +7,11 @@ extension RunnerTests {
     #if os(macOS)
       return nil
     #else
-    guard let springboardModal = firstBlockingSystemModal(
-      in: springboard,
-      deadline: deadline
-    ) else {
+    guard case .resolved(let resolvedModal) = resolveBlockingSystemModal(deadline: deadline) else {
       return nil
     }
-    var modal = springboardModal
-    var actions = actionableElements(in: modal)
-    if Date() < deadline,
-       RemoteHostedSystemModalPolicy.shouldProbeRemoteHost(springboardActionCount: actions.count),
-       let remote = remoteHostedSystemModal() {
-      modal = remote.host
-      actions = remote.actions
-    }
-    guard !actions.isEmpty else {
-      return nil
-    }
+    let modal = resolvedModal.root
+    let actions = resolvedModal.actions
 
     let title = preferredSystemModalTitle(modal)
     guard let modalNode = safeMakeSnapshotNode(
@@ -107,47 +95,6 @@ extension RunnerTests {
       }
     }
 
-    return nil
-  }
-
-  // MARK: - Remote-Hosted System Modal Probe
-
-  /// System UI hosted out-of-process — the AccessorySetupKit picker, hosted by
-  /// AccessorySetupUI.app on iOS 18+ — mirrors into `springboard.alerts`, but the
-  /// mirrored content does not reliably pass `isHittable` from the springboard scope,
-  /// so `actionableElements(in:)` can come back empty while the picker is on screen.
-  /// Querying the hosting process directly sees the real elements, and synthesized
-  /// taps on them work. Query only: activating the host tears the picker sheet into
-  /// a black full-screen state.
-  private static let remoteSystemModalHostBundleIds = [
-    "com.apple.AccessorySetupUI"
-  ]
-
-  struct RemoteHostedSystemModal {
-    let host: XCUIApplication
-    let actions: [XCUIElement]
-  }
-
-  func remoteHostedSystemModal() -> RemoteHostedSystemModal? {
-    // CONSERVATIVE: Callers probe remote hosts only after a springboard modal was
-    // detected but yielded no hittable actions, so the common no-modal snapshot path
-    // never pays the cross-process query (~1s against a live host, exception-absorbed
-    // against a dead one). Revisit if a remote-hosted modal ever stops mirroring into
-    // springboard entirely.
-    for bundleId in Self.remoteSystemModalHostBundleIds {
-      let host = XCUIApplication(bundleIdentifier: bundleId)
-      // Fall back to `.unknown` (an ineligible state) so a query that raises rather
-      // than returns is treated as "do not substitute", not as a runnable host.
-      let state = safely("REMOTE_MODAL_STATE", XCUIApplication.State.unknown) { host.state }
-      // Fail closed to a foreground host: a background/unknown host must not
-      // substitute its action tree for an unrelated unusable springboard modal.
-      guard RemoteHostedSystemModalPolicy.isEligibleHostState(state) else { continue }
-      // A host that just dismissed its UI raises kAXErrorServerNotFound on query;
-      // safely(...) inside actionableElements absorbs it and yields no actions.
-      let actions = actionableElements(in: host)
-      guard !actions.isEmpty else { continue }
-      return RemoteHostedSystemModal(host: host, actions: actions)
-    }
     return nil
   }
 
@@ -318,40 +265,3 @@ extension RunnerTests {
     }
   }
 }
-
-// Pure routing/gating rules for the remote-hosted system-modal probe, split out
-// (like `SynthesizedFallbackPolicy`) so the fail-closed decisions can be proven
-// against a simulator-free unit test under `AGENT_DEVICE_RUNNER_UNIT_TESTS`.
-enum RemoteHostedSystemModalPolicy {
-  /// The remote-host probe runs only when a springboard modal was detected but
-  /// yielded no hittable actions — the mirror is present but unusable. When the
-  /// springboard modal already exposes actions, its own tree stays authoritative
-  /// and the cross-process probe is skipped.
-  static func shouldProbeRemoteHost(springboardActionCount: Int) -> Bool {
-    springboardActionCount == 0
-  }
-
-  /// Only a foreground host may substitute its action tree for an unusable
-  /// springboard modal. A background/suspended/not-running/unknown host fails
-  /// closed, so a stale or unrelated host process can never replace the modal tree.
-  static func isEligibleHostState(_ state: XCUIApplication.State) -> Bool {
-    state == .runningForeground
-  }
-}
-
-#if AGENT_DEVICE_RUNNER_UNIT_TESTS
-extension RunnerTests {
-  func testRemoteHostProbeRunsOnlyWhenSpringboardModalHasNoActions() {
-    XCTAssertTrue(RemoteHostedSystemModalPolicy.shouldProbeRemoteHost(springboardActionCount: 0))
-    XCTAssertFalse(RemoteHostedSystemModalPolicy.shouldProbeRemoteHost(springboardActionCount: 1))
-    XCTAssertFalse(RemoteHostedSystemModalPolicy.shouldProbeRemoteHost(springboardActionCount: 3))
-  }
-
-  func testRemoteHostStateGateFailsClosedToForeground() {
-    XCTAssertTrue(RemoteHostedSystemModalPolicy.isEligibleHostState(.runningForeground))
-    XCTAssertFalse(RemoteHostedSystemModalPolicy.isEligibleHostState(.runningBackground))
-    XCTAssertFalse(RemoteHostedSystemModalPolicy.isEligibleHostState(.notRunning))
-    XCTAssertFalse(RemoteHostedSystemModalPolicy.isEligibleHostState(.unknown))
-  }
-}
-#endif
