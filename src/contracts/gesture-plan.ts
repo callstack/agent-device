@@ -15,6 +15,7 @@ export * from './gesture-plan-types.ts';
 
 export const GESTURE_SAMPLE_INTERVAL_MS = 16;
 export const GESTURE_INITIAL_ANGLE_DEGREES = -90;
+export const GESTURE_FLING_DEFAULT_DISTANCE = 180;
 
 const GESTURE_INITIAL_SPAN_RATIO = 0.25;
 const GESTURE_PINCH_INITIAL_SPAN_RATIO = 0.4;
@@ -117,7 +118,10 @@ function buildFlingPlan(
     );
   }
   const start = finitePoint(input.origin, 'gesture fling origin');
-  const distance = positiveNumber(input.distance ?? 180, 'gesture fling distance');
+  const distance = positiveNumber(
+    input.distance ?? GESTURE_FLING_DEFAULT_DISTANCE,
+    'gesture fling distance',
+  );
   return buildSinglePointerPlan(
     'fling',
     start,

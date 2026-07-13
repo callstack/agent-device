@@ -1,6 +1,6 @@
 import type { RecordingGestureEvent } from './types.ts';
 import type { TouchReferenceFrame as ReferenceFrame } from './touch-reference-frame.ts';
-import { readRecordingNumber } from './recording-values.ts';
+import { readRecordingNumber, resolveRecordingDurationMs } from './recording-values.ts';
 
 const DEFAULT_GESTURE_TRAVEL_DURATION_MS = 250;
 const DEFAULT_PINCH_DURATION_MS = 280;
@@ -35,9 +35,9 @@ export function buildCanonicalGestureEvents(
           from.y,
           to.x,
           to.y,
-          resolveDurationMs(
+          resolveRecordingDurationMs(
             gestureDurationMs,
-            result.durationMs,
+            [result.durationMs],
             DEFAULT_GESTURE_TRAVEL_DURATION_MS,
           ),
           {
@@ -59,9 +59,9 @@ export function buildCanonicalGestureEvents(
           y: center.y,
           ...referenceFrame,
           scale,
-          durationMs: resolveDurationMs(
+          durationMs: resolveRecordingDurationMs(
             gestureDurationMs,
-            result.durationMs,
+            [result.durationMs],
             DEFAULT_PINCH_DURATION_MS,
           ),
         },
@@ -137,21 +137,4 @@ function readPoint(value: unknown): { x: number; y: number } | undefined {
   const y = readRecordingNumber(point.y);
   if (x === undefined || y === undefined) return undefined;
   return { x, y };
-}
-
-function resolveDurationMs(
-  gestureDurationMs: number,
-  reportedDurationMs: unknown,
-  fallbackDurationMs: number,
-): number {
-  for (const value of [
-    gestureDurationMs,
-    readRecordingNumber(reportedDurationMs),
-    fallbackDurationMs,
-  ]) {
-    if (typeof value === 'number' && Number.isFinite(value) && value >= 1) {
-      return Math.floor(value);
-    }
-  }
-  return fallbackDurationMs;
 }

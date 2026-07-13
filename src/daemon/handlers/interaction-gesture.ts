@@ -3,6 +3,7 @@ import {
   gesturePayloadToPositionals,
   normalizePublicGesture,
   normalizePublicSwipeMotion,
+  type GestureDeprecation,
   type SwipePayload,
 } from '../../contracts/gesture-normalization.ts';
 import { requireGestureSupported } from '../../core/capabilities.ts';
@@ -17,7 +18,7 @@ import { readOptionalInteger } from '../../kernel/input-validation.ts';
 import type { Point } from '../../kernel/snapshot.ts';
 import { isActiveProviderDevice } from '../../provider-device-runtime.ts';
 import { sleep } from '../../utils/timeouts.ts';
-import type { DaemonResponse } from '../types.ts';
+import type { DaemonResponse, SessionState } from '../types.ts';
 import { ensureAndroidBlockingSystemDialogReady } from '../android-system-dialog.ts';
 import type { InteractionHandlerParams } from './interaction-common.ts';
 import { finalizeTouchInteraction } from './interaction-common.ts';
@@ -25,62 +26,105 @@ import { createInteractionRuntime } from './interaction-runtime.ts';
 import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
 import { noActiveSessionError } from './response.ts';
 
+type GestureHandlerParams = InteractionHandlerParams & {
+  captureSnapshotForSession: CaptureSnapshotForSession;
+};
+
+type GestureRuntime = ReturnType<typeof createInteractionRuntime>;
+type GestureRuntimeResult = Awaited<ReturnType<GestureRuntime['interactions']['gesture']>>;
+
+type GestureInteractionOutcome = {
+  positionals: string[];
+  flags: InteractionHandlerParams['req']['flags'];
+  responseData: Record<string, unknown>;
+  recordingResultExtra?: Record<string, unknown>;
+};
+
 export async function dispatchGestureViaRuntime(
-  params: InteractionHandlerParams & {
-    captureSnapshotForSession: CaptureSnapshotForSession;
-  },
+  params: GestureHandlerParams,
 ): Promise<DaemonResponse> {
-  const session = params.sessionStore.get(params.sessionName);
-  if (!session) return noActiveSessionError();
-  const startedAt = Date.now();
-  try {
+  return await dispatchGestureInteraction(params, 'gesture', async (session) => {
     const input = readGesturePayload(params.req.input);
     const normalized = normalizePublicGesture(input);
     requireGestureSupported(normalized.gesture, session.device);
-    const providerDevice = isActiveProviderDevice(session.device);
-    const readiness = providerDevice
-      ? ({ status: 'clear' } as const)
-      : await ensureAndroidBlockingSystemDialogReady({
-          session,
-          command: 'gesture',
-          phase: 'before-command',
-        });
     const result = await createInteractionRuntime(params).interactions.gesture({
       session: params.sessionName,
       requestId: params.req.meta?.requestId,
       gesture: normalized.gesture,
     });
+    return {
+      positionals: gesturePayloadToPositionals(input),
+      flags: gestureReplayFlags(input, params.req.flags),
+      responseData: gestureResponseData(result, normalized.deprecations),
+      ...(input.kind === 'pinch' ? { recordingResultExtra: { scale: input.scale } } : {}),
+    };
+  });
+}
+
+export async function dispatchSwipeViaRuntime(
+  params: GestureHandlerParams,
+): Promise<DaemonResponse> {
+  return await dispatchGestureInteraction(params, 'swipe', async (session) => {
+    const input = readSwipeInput(params.req.input);
+    requireGestureSupported(normalizePublicSwipeMotion(input).gesture, session.device);
+    const count = input.count ?? 1;
+    const pauseMs = input.pauseMs ?? 0;
+    const pattern = input.pattern ?? 'one-way';
+    const runtime = createInteractionRuntime(params);
+    const result = await runSwipeRepetitions(runtime, params, input, count, pauseMs, pattern);
+    return {
+      positionals: swipeReplayPositionals(input),
+      flags: params.req.flags,
+      responseData: gestureResponseData(result, result.deprecations ?? [], {
+        count,
+        pauseMs,
+        pattern,
+      }),
+    };
+  });
+}
+
+async function dispatchGestureInteraction(
+  params: GestureHandlerParams,
+  command: 'gesture' | 'swipe',
+  run: (session: SessionState) => Promise<GestureInteractionOutcome>,
+): Promise<DaemonResponse> {
+  const session = params.sessionStore.get(params.sessionName);
+  if (!session) return noActiveSessionError();
+  const actionStartedAt = Date.now();
+  try {
+    const providerDevice = isActiveProviderDevice(session.device);
+    const readiness = providerDevice
+      ? ({ status: 'clear' } as const)
+      : await ensureAndroidBlockingSystemDialogReady({
+          session,
+          command,
+          phase: 'before-command',
+        });
+    const outcome = await run(session);
     if (!providerDevice) {
       await ensureAndroidBlockingSystemDialogReady({
         session,
-        command: 'gesture',
+        command,
         phase: 'after-command',
       });
     }
-    const responseData: Record<string, unknown> = {
-      kind: result.kind,
-      durationMs: result.durationMs,
-      pointerCount: result.pointerCount,
-      from: result.from,
-      to: result.to,
-      ...(result.backendResult ?? {}),
-      ...(normalized.deprecations.length > 0 ? { deprecations: normalized.deprecations } : {}),
-      message: result.message,
-    };
-    if (readiness.status === 'recovered') responseData.warning = readiness.warning;
+    const responseData = { ...outcome.responseData };
+    if (readiness.status === 'recovered') {
+      const existingWarning =
+        typeof responseData.warning === 'string' ? `${responseData.warning} ` : '';
+      responseData.warning = `${existingWarning}${readiness.warning}`;
+    }
     return finalizeTouchInteraction({
       session,
       sessionStore: params.sessionStore,
-      command: 'gesture',
-      actionCommand: 'gesture',
-      positionals: gesturePayloadToPositionals(input),
-      flags: gestureReplayFlags(input, params.req.flags),
-      result: {
-        ...responseData,
-        ...(input.kind === 'pinch' ? { scale: input.scale } : {}),
-      },
+      command,
+      actionCommand: command,
+      positionals: outcome.positionals,
+      flags: outcome.flags,
+      result: { ...responseData, ...(outcome.recordingResultExtra ?? {}) },
       responseData,
-      actionStartedAt: startedAt,
+      actionStartedAt,
       actionFinishedAt: Date.now(),
     });
   } catch (error) {
@@ -88,66 +132,22 @@ export async function dispatchGestureViaRuntime(
   }
 }
 
-export async function dispatchSwipeViaRuntime(
-  params: InteractionHandlerParams & {
-    captureSnapshotForSession: CaptureSnapshotForSession;
-  },
-): Promise<DaemonResponse> {
-  const session = params.sessionStore.get(params.sessionName);
-  if (!session) return noActiveSessionError();
-  const startedAt = Date.now();
-  try {
-    const input = readSwipeInput(params.req.input);
-    requireGestureSupported(normalizePublicSwipeMotion(input).gesture, session.device);
-    const count = input.count ?? 1;
-    const pauseMs = input.pauseMs ?? 0;
-    const pattern = input.pattern ?? 'one-way';
-    const providerDevice = isActiveProviderDevice(session.device);
-    const readiness = providerDevice
-      ? ({ status: 'clear' } as const)
-      : await ensureAndroidBlockingSystemDialogReady({
-          session,
-          command: 'swipe',
-          phase: 'before-command',
-        });
-    const runtime = createInteractionRuntime(params);
-    const result = await runSwipeRepetitions(runtime, params, input, count, pauseMs, pattern);
-    if (!providerDevice) {
-      await ensureAndroidBlockingSystemDialogReady({
-        session,
-        command: 'swipe',
-        phase: 'after-command',
-      });
-    }
-    const responseData: Record<string, unknown> = {
-      kind: result.kind,
-      durationMs: result.durationMs,
-      pointerCount: result.pointerCount,
-      from: result.from,
-      to: result.to,
-      count,
-      pauseMs,
-      pattern,
-      ...(result.backendResult ?? {}),
-      ...(result.deprecations ? { deprecations: result.deprecations } : {}),
-      message: result.message,
-    };
-    if (readiness.status === 'recovered') responseData.warning = readiness.warning;
-    return finalizeTouchInteraction({
-      session,
-      sessionStore: params.sessionStore,
-      command: 'swipe',
-      actionCommand: 'swipe',
-      positionals: swipeReplayPositionals(input),
-      flags: params.req.flags,
-      result: responseData,
-      responseData,
-      actionStartedAt: startedAt,
-      actionFinishedAt: Date.now(),
-    });
-  } catch (error) {
-    return { ok: false, error: normalizeError(error) };
-  }
+function gestureResponseData(
+  result: GestureRuntimeResult,
+  deprecations: readonly GestureDeprecation[],
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return {
+    kind: result.kind,
+    durationMs: result.durationMs,
+    pointerCount: result.pointerCount,
+    from: result.from,
+    to: result.to,
+    ...extra,
+    ...(result.backendResult ?? {}),
+    ...(deprecations.length > 0 ? { deprecations } : {}),
+    message: result.message,
+  };
 }
 
 function readSwipeInput(input: unknown): SwipePayload {

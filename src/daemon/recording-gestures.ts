@@ -17,7 +17,7 @@ import {
   type TouchReferenceFrame as ReferenceFrame,
 } from './touch-reference-frame.ts';
 import { buildCanonicalGestureEvents, buildSwipeTravelEvent } from './recording-gesture-events.ts';
-import { readRecordingNumber } from './recording-values.ts';
+import { readRecordingNumber, resolveRecordingDurationMs } from './recording-values.ts';
 
 const DEFAULT_TAP_GAP_MS = 90;
 const DEFAULT_SWIPE_DURATION_MS = 250;
@@ -277,7 +277,7 @@ function buildLongPressEvents(
   const coordinates = readCoordinates(result, positionals);
   if (!coordinates) return [];
   const { x, y } = coordinates;
-  const durationMs = resolveDurationMs(
+  const durationMs = resolveRecordingDurationMs(
     gestureDurationMs,
     [readRecordingNumber(result.durationMs), readRecordingNumber(positionals[2])],
     800,
@@ -296,7 +296,7 @@ function buildSwipeEvents(
   if (!coordinates) return [];
   const { x1, y1, x2, y2 } = coordinates;
 
-  const durationMs = resolveDurationMs(
+  const durationMs = resolveRecordingDurationMs(
     gestureDurationMs,
     [
       readRecordingNumber(result.effectiveDurationMs),
@@ -346,7 +346,7 @@ function buildScrollEvents(
   }
   const { x1, y1, x2, y2 } = coordinates;
 
-  const durationMs = resolveDurationMs(gestureDurationMs, [], DEFAULT_SWIPE_DURATION_MS);
+  const durationMs = resolveRecordingDurationMs(gestureDurationMs, [], DEFAULT_SWIPE_DURATION_MS);
   const amount = readRecordingNumber(result.amount) ?? readRecordingNumber(positionals[1]);
   const pixels = readRecordingNumber(result.pixels);
   return [
@@ -452,18 +452,4 @@ function readTravelCoordinates(
 
 function readFirstNumber(...values: unknown[]): number | undefined {
   return values.map(readRecordingNumber).find((value) => value !== undefined);
-}
-
-function resolveDurationMs(
-  gestureDurationMs: number,
-  candidates: Array<number | undefined>,
-  fallbackDurationMs: number,
-): number {
-  return (
-    clampInt(gestureDurationMs, 1) ??
-    candidates
-      .map((candidate) => clampInt(candidate, 1))
-      .find((candidate) => candidate !== undefined) ??
-    fallbackDurationMs
-  );
 }

@@ -2,6 +2,7 @@ import type { Point } from '../kernel/snapshot.ts';
 import { AppError } from '../kernel/errors.ts';
 import type { SwipePreset } from './scroll-gesture.ts';
 import { readGesturePayload, type GesturePayload } from './gesture-input.ts';
+import { GESTURE_FLING_DEFAULT_DISTANCE } from './gesture-plan.ts';
 import type { GestureSemanticInput } from './gesture-plan-types.ts';
 
 export type GestureCompatibilityRule = 'swipe-duration' | 'fling-duration' | 'rotate-velocity';
@@ -101,12 +102,16 @@ export function gesturePayloadToPositionals(input: GesturePayload): string[] {
         input.durationMs,
       ]);
     case 'fling':
+      // `.ad` positionals cannot encode an empty distance slot. Preserve the
+      // planner default when a deprecated duration must occupy the next slot.
       return compact([
         input.kind,
         input.direction,
         input.origin.x,
         input.origin.y,
-        input.durationMs === undefined ? input.distance : (input.distance ?? 180),
+        input.durationMs === undefined
+          ? input.distance
+          : (input.distance ?? GESTURE_FLING_DEFAULT_DISTANCE),
         input.durationMs,
       ]);
     case 'swipe':
@@ -166,7 +171,10 @@ export function normalizePublicGesture(input: GesturePayload): NormalizedPublicG
           gesture: {
             intent: 'pan',
             origin: input.origin,
-            delta: directionDelta(input.direction, input.distance ?? 180),
+            delta: directionDelta(
+              input.direction,
+              input.distance ?? GESTURE_FLING_DEFAULT_DISTANCE,
+            ),
             durationMs: input.durationMs,
           },
           deprecations: [

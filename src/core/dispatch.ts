@@ -44,17 +44,7 @@ export async function dispatchCommand(
   outPath?: string,
   context?: DispatchContext,
 ): Promise<Record<string, unknown> | void> {
-  const runnerCtx: RunnerContext = {
-    requestId: context?.requestId,
-    appBundleId: context?.appBundleId,
-    verbose: context?.verbose,
-    logPath: context?.logPath,
-    traceLogPath: context?.traceLogPath,
-    iosXctestrunFile: context?.iosXctestrunFile,
-    iosXctestDerivedDataPath: context?.iosXctestDerivedDataPath,
-    iosXctestEnvDir: context?.iosXctestEnvDir,
-    runnerLeaseContext: context?.runnerLeaseContext,
-  };
+  const runnerCtx = runnerContextFromDispatchContext(context);
   const interactor = await getInteractor(device, runnerCtx);
   emitDiagnostic({
     level: 'debug',
@@ -90,17 +80,7 @@ export async function dispatchGesturePlan(
   plan: GesturePlan,
   context?: DispatchContext,
 ): Promise<Record<string, unknown> | void> {
-  const interactor = await getInteractor(device, {
-    requestId: context?.requestId,
-    appBundleId: context?.appBundleId,
-    verbose: context?.verbose,
-    logPath: context?.logPath,
-    traceLogPath: context?.traceLogPath,
-    iosXctestrunFile: context?.iosXctestrunFile,
-    iosXctestDerivedDataPath: context?.iosXctestDerivedDataPath,
-    iosXctestEnvDir: context?.iosXctestEnvDir,
-    runnerLeaseContext: context?.runnerLeaseContext,
-  });
+  const interactor = await getInteractor(device, runnerContextFromDispatchContext(context));
   if (!interactor.performGesture) {
     throw new AppError('UNSUPPORTED_OPERATION', 'Gesture execution is unavailable');
   }
@@ -111,7 +91,12 @@ export async function dispatchGestureViewport(
   device: DeviceInfo,
   context?: DispatchContext,
 ): Promise<Rect | undefined> {
-  const interactor = await getInteractor(device, {
+  const interactor = await getInteractor(device, runnerContextFromDispatchContext(context));
+  return await interactor.gestureViewport?.();
+}
+
+function runnerContextFromDispatchContext(context?: DispatchContext): RunnerContext {
+  return {
     requestId: context?.requestId,
     appBundleId: context?.appBundleId,
     verbose: context?.verbose,
@@ -121,8 +106,7 @@ export async function dispatchGestureViewport(
     iosXctestDerivedDataPath: context?.iosXctestDerivedDataPath,
     iosXctestEnvDir: context?.iosXctestEnvDir,
     runnerLeaseContext: context?.runnerLeaseContext,
-  });
-  return await interactor.gestureViewport?.();
+  };
 }
 
 type DispatchCommand = DescriptorDispatchCommandName;
