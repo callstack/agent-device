@@ -101,9 +101,13 @@ extension RunnerTests {
 
   static let flatInteractiveFallbackBudget: TimeInterval = 1.0
 
-  func snapshotFast(app: XCUIApplication, options: SnapshotOptions) throws -> DataPayload {
+  func snapshotFast(
+    app: XCUIApplication,
+    options: SnapshotOptions,
+    probeWork: (() -> DataPayload?)? = nil
+  ) throws -> DataPayload {
     let deadline = Date().addingTimeInterval(Self.snapshotPlanBudget)
-    if let blocking = boundedBlockingSystemAlertSnapshot(deadline: deadline) {
+    if let blocking = boundedBlockingSystemAlertSnapshot(deadline: deadline, probeWork: probeWork) {
       return blocking
     }
     return try runSnapshotCapturePlan(
@@ -247,9 +251,13 @@ extension RunnerTests {
     )
   }
 
-  func snapshotRaw(app: XCUIApplication, options: SnapshotOptions) throws -> DataPayload {
+  func snapshotRaw(
+    app: XCUIApplication,
+    options: SnapshotOptions,
+    probeWork: (() -> DataPayload?)? = nil
+  ) throws -> DataPayload {
     let deadline = Date().addingTimeInterval(Self.snapshotPlanBudget)
-    if let blocking = boundedBlockingSystemAlertSnapshot(deadline: deadline) {
+    if let blocking = boundedBlockingSystemAlertSnapshot(deadline: deadline, probeWork: probeWork) {
       return blocking
     }
     return try runSnapshotCapturePlan(
@@ -263,7 +271,17 @@ extension RunnerTests {
 
   /// Runs the pre-plan SpringBoard system-modal probe as a bounded capture tier sharing the plan
   /// deadline, so a slow alert enumeration cannot bypass the snapshot timeout and stall (#1244).
-  func boundedBlockingSystemAlertSnapshot(deadline: Date) -> DataPayload? {
+  ///
+  /// `probeWork` exists only as a unit-test seam: production callers (`snapshotFast`/
+  /// `snapshotRaw`) always leave it `nil`, in which case the default below reproduces today's
+  /// exact production body (`self.blockingSystemAlertSnapshot(deadline: probeDeadline)`) run
+  /// through the real bounding/hook machinery. Tests substitute a slow/blocking closure to force
+  /// a real timeout without a live SpringBoard alert, while still exercising the real
+  /// `runMainThreadWork` wrap and the real `onAbandoned`/`onDrained` hooks below.
+  func boundedBlockingSystemAlertSnapshot(
+    deadline: Date,
+    probeWork: (() -> DataPayload?)? = nil
+  ) -> DataPayload? {
     #if os(macOS)
       return nil
     #else
@@ -277,6 +295,7 @@ extension RunnerTests {
     }
     let probeDeadline = Date().addingTimeInterval(slice)
     let startedAt = Date()
+    let work = probeWork ?? { self.blockingSystemAlertSnapshot(deadline: probeDeadline) }
     do {
       return try runMainThreadWork(
         command: nil,
@@ -301,7 +320,7 @@ extension RunnerTests {
           NSLog("AGENT_DEVICE_RUNNER_SYSTEM_MODAL_PROBE_DRAINED")
         }
       ) {
-        self.blockingSystemAlertSnapshot(deadline: probeDeadline)
+        work()
       }
     } catch {
       NSLog(
@@ -553,6 +572,83 @@ extension RunnerTests {
     // Exactly/already exhausted deadline: skip the probe entirely (0), never a negative timeout.
     XCTAssertEqual(Self.systemModalProbeSlice(budget: 4, deadlineRemaining: 0), 0)
     XCTAssertEqual(Self.systemModalProbeSlice(budget: 4, deadlineRemaining: -5), 0)
+  }
+
+  /// Regression for #1244/#1248: drives the bounded system-modal probe through `snapshotFast` —
+  /// the real command entry point, not `boundedBlockingSystemAlertSnapshot` directly — with an
+  /// injected `probeWork` that blocks past the probe's real slice, forcing a real
+  /// `runMainThreadWork` timeout. This is revert-sensitive on both halves of the fix:
+  ///   - if `snapshotFast` reverted to calling the unbounded `blockingSystemAlertSnapshot`
+  ///     directly (or dropped the `runMainThreadWork` wrap), nothing here would ever time out,
+  ///     so the mid-flight busy/penalty assertions below would never be met;
+  ///   - if the `onAbandoned`/`onDrained` retain/release hooks were dropped, the timeout would
+  ///     still fire, but the busy/penalty accounting and the drain assertion would not hold.
+  func testBoundedSystemModalProbeTimeoutRecoversThenReleasesOnDrain() {
+    currentApp = springboard
+    currentBundleId = Self.springboardBundleId
+    defer {
+      currentApp = nil
+      currentBundleId = nil
+      clearSnapshotXCTestChannelPenalty(reason: "test-cleanup")
+    }
+
+    final class ResultBox {
+      var payload: DataPayload?
+      var wasBusyBeforeDrain = false
+      var hadAbandonedCaptureBeforeDrain = false
+      var wasPenalizedBeforeDrain = false
+    }
+    let box = ResultBox()
+    // Bounded so a revert that never actually times out (nothing would ever wait on this gate)
+    // cannot hang the test -- it just leaves `box` at its false/nil defaults, below.
+    let probeReleaseGate = DispatchSemaphore(value: 0)
+    let probeWork: () -> DataPayload? = {
+      _ = probeReleaseGate.wait(timeout: .now() + 8)
+      return nil
+    }
+
+    let completion = expectation(
+      description: "snapshotFast recovered while the probe was abandoned, then released it"
+    )
+    DispatchQueue(label: "agent-device.runner.tests.modal-probe-timeout").async {
+      box.payload = try? self.snapshotFast(
+        app: self.springboard,
+        options: SnapshotOptions(interactiveOnly: false, depth: nil, scope: nil, raw: false),
+        probeWork: probeWork
+      )
+
+      // 1) Penalty/busy accounting: must already be in place by the time snapshotFast returns,
+      // well before we release the still-blocked probe below.
+      if case .busy = self.currentMainThreadBusyState() {
+        box.wasBusyBeforeDrain = true
+      }
+      box.hadAbandonedCaptureBeforeDrain = self.hasAbandonedTreeCapture()
+      box.wasPenalizedBeforeDrain = self.isSnapshotXCTestChannelPenalized(bundleId: self.currentBundleId)
+
+      // 2) `box.payload` above was already produced -- through the capture plan's recovery
+      // tiers -- while the probe is still blocked on `probeReleaseGate`, i.e. recovered before
+      // drain, not queued behind it.
+
+      // 3) Only now let the abandoned probe finish and drain.
+      probeReleaseGate.signal()
+      completion.fulfill()
+    }
+
+    wait(for: [completion], timeout: 15)
+
+    // 1) Penalty/busy accounting.
+    XCTAssertTrue(box.wasBusyBeforeDrain, "expected RUNNER_BUSY while the modal probe timeout is outstanding")
+    XCTAssertTrue(box.hadAbandonedCaptureBeforeDrain, "onAbandoned must retain the abandoned XCTest channel work")
+    XCTAssertTrue(box.wasPenalizedBeforeDrain, "a timed-out modal probe must penalize the XCTest snapshot channel")
+
+    // 2) Recovered response before drain.
+    XCTAssertNotNil(box.payload, "snapshotFast must recover a payload through the capture plan while the probe drains")
+
+    // 3) Release after drain.
+    guard case .idle = currentMainThreadBusyState() else {
+      return XCTFail("expected the runner to be idle once the abandoned probe drained")
+    }
+    XCTAssertFalse(hasAbandonedTreeCapture(), "onDrained must release the abandoned XCTest channel work")
   }
 
   func testDispatchRecoverySkipsBookkeepingWhileXCTestChannelOccupied() {
