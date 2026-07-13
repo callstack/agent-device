@@ -29,20 +29,26 @@ test('Provider-backed integration iOS physical recording flow uses runner and de
       const tracePath = path.join(tmpDir, 'trace.adtrace');
       const finalTracePath = path.join(tmpDir, 'trace-final.adtrace');
       const recordingPath = path.join(tmpDir, 'recording.mp4');
-      const runnerTranscript = createProviderTranscript([
+      const invalidRecordingPath = path.join(tmpDir, 'invalid-recording.mp4');
+      let copiedRecording = likelyPlayableMp4Container();
+      const recordingTranscriptEntries = [
         {
           command: 'ios.runner.recordStart',
           deviceId: PROVIDER_SCENARIO_IOS_DEVICE.id,
-          platform: 'apple',
+          platform: 'apple' as const,
           result: {},
         },
         {
           command: 'ios.runner.recordStop',
           deviceId: PROVIDER_SCENARIO_IOS_DEVICE.id,
-          platform: 'apple',
+          platform: 'apple' as const,
           request: { command: 'recordStop', appBundleId: 'com.apple.Preferences' },
           result: {},
         },
+      ];
+      const runnerTranscript = createProviderTranscript([
+        ...recordingTranscriptEntries,
+        ...recordingTranscriptEntries,
       ]);
       const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
         runnerTranscript,
@@ -51,7 +57,7 @@ test('Provider-backed integration iOS physical recording flow uses runner and de
       const appleTool = createRecordingAppleToolProvider({
         devicectl: async (args) => {
           writeJsonOutputIfRequested(args);
-          writeCopiedRecordingIfRequested(args);
+          writeCopiedRecordingIfRequested(args, copiedRecording);
           return { stdout: '', stderr: '', exitCode: 0 };
         },
       });
@@ -60,6 +66,10 @@ test('Provider-backed integration iOS physical recording flow uses runner and de
         appleToolProvider: () => appleTool.provider,
         deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_DEVICE],
       });
+      const previousPath = process.env.PATH;
+      const previousSwiftCacheDir = process.env.AGENT_DEVICE_SWIFT_CACHE_DIR;
+      process.env.PATH = tmpDir;
+      process.env.AGENT_DEVICE_SWIFT_CACHE_DIR = path.join(tmpDir, 'swift-cache');
 
       try {
         const open = await daemon.callCommand('open', ['com.apple.Preferences'], {
@@ -93,6 +103,22 @@ test('Provider-backed integration iOS physical recording flow uses runner and de
           { meta: { requestId: 'ios-physical-record-stop' } },
         );
         assertRecordingStopped(recordStop, recordingPath, { showTouches: false });
+
+        copiedRecording = Buffer.from('unfinalized-recording');
+        const invalidRecordStart = await daemon.callCommand(
+          'record',
+          ['start', invalidRecordingPath],
+          { hideTouches: true },
+        );
+        assertRecordingStarted(invalidRecordStart, { showTouches: false });
+        const invalidRecordStop = await daemon.callCommand('record', ['stop']);
+        assert.equal(invalidRecordStop.statusCode, 200, JSON.stringify(invalidRecordStop.json));
+        assert.equal(invalidRecordStop.json?.result, undefined);
+        assert.equal(invalidRecordStop.json?.error?.data?.code, 'COMMAND_FAILED');
+        assert.match(
+          String(invalidRecordStop.json?.error?.data?.message),
+          /was not finalized into a playable video/,
+        );
 
         const traceStop = await daemon.callCommand('trace', ['stop', finalTracePath]);
         assert.equal(traceStop.statusCode, 200, JSON.stringify(traceStop.json));
@@ -151,6 +177,8 @@ test('Provider-backed integration iOS physical recording flow uses runner and de
         ]);
       } finally {
         await daemon.close();
+        restoreEnv('PATH', previousPath);
+        restoreEnv('AGENT_DEVICE_SWIFT_CACHE_DIR', previousSwiftCacheDir);
       }
     },
   );
@@ -264,9 +292,9 @@ function writeJsonOutputIfRequested(args: string[]): void {
   );
 }
 
-function writeCopiedRecordingIfRequested(args: string[]): void {
+function writeCopiedRecordingIfRequested(args: string[], contents: Buffer): void {
   const destinationIndex = args.indexOf('--destination');
   const destination = destinationIndex >= 0 ? args[destinationIndex + 1] : undefined;
   if (!destination) return;
-  fs.writeFileSync(destination, 'provider-scenario-recording');
+  fs.writeFileSync(destination, contents);
 }
