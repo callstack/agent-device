@@ -51,7 +51,7 @@ test('closeIosApp terminates a physical iOS app by its resolved process ID', asy
   });
 
   const terminateCall = calls.at(-1);
-  assert.deepEqual(terminateCall?.slice(0, 7), [
+  assert.deepEqual(terminateCall?.slice(0, 8), [
     'device',
     'process',
     'terminate',
@@ -59,6 +59,7 @@ test('closeIosApp terminates a physical iOS app by its resolved process ID', asy
     IOS_DEVICE.id,
     '--pid',
     '421',
+    '--kill',
   ]);
   assert.equal(terminateCall?.includes('--json-output'), true);
   assert.equal(terminateCall?.includes(APP_BUNDLE_ID), false);

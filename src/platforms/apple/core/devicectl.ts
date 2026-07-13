@@ -137,6 +137,7 @@ export async function terminateIosDeviceApp(device: DeviceInfo, bundleId: string
       device.id,
       '--pid',
       String(process.pid),
+      '--kill',
     ],
     failureMessage: 'Failed to terminate iOS app',
     parseFailureMessage: 'Failed to parse iOS process termination response',
