@@ -15,7 +15,9 @@ extension RunnerTests {
     }
     var modal = springboardModal
     var actions = actionableElements(in: modal)
-    if actions.isEmpty, Date() < deadline, let remote = remoteHostedSystemModal() {
+    if Date() < deadline,
+       RemoteHostedSystemModalPolicy.shouldProbeRemoteHost(springboardActionCount: actions.count),
+       let remote = remoteHostedSystemModal() {
       modal = remote.host
       actions = remote.actions
     }
@@ -134,8 +136,12 @@ extension RunnerTests {
     // springboard entirely.
     for bundleId in Self.remoteSystemModalHostBundleIds {
       let host = XCUIApplication(bundleIdentifier: bundleId)
-      let state = safely("REMOTE_MODAL_STATE", XCUIApplication.State.notRunning) { host.state }
-      guard state != .notRunning else { continue }
+      // Fall back to `.unknown` (an ineligible state) so a query that raises rather
+      // than returns is treated as "do not substitute", not as a runnable host.
+      let state = safely("REMOTE_MODAL_STATE", XCUIApplication.State.unknown) { host.state }
+      // Fail closed to a foreground host: a background/unknown host must not
+      // substitute its action tree for an unrelated unusable springboard modal.
+      guard RemoteHostedSystemModalPolicy.isEligibleHostState(state) else { continue }
       // A host that just dismissed its UI raises kAXErrorServerNotFound on query;
       // safely(...) inside actionableElements absorbs it and yields no actions.
       let actions = actionableElements(in: host)
@@ -312,3 +318,40 @@ extension RunnerTests {
     }
   }
 }
+
+// Pure routing/gating rules for the remote-hosted system-modal probe, split out
+// (like `SynthesizedFallbackPolicy`) so the fail-closed decisions can be proven
+// against a simulator-free unit test under `AGENT_DEVICE_RUNNER_UNIT_TESTS`.
+enum RemoteHostedSystemModalPolicy {
+  /// The remote-host probe runs only when a springboard modal was detected but
+  /// yielded no hittable actions — the mirror is present but unusable. When the
+  /// springboard modal already exposes actions, its own tree stays authoritative
+  /// and the cross-process probe is skipped.
+  static func shouldProbeRemoteHost(springboardActionCount: Int) -> Bool {
+    springboardActionCount == 0
+  }
+
+  /// Only a foreground host may substitute its action tree for an unusable
+  /// springboard modal. A background/suspended/not-running/unknown host fails
+  /// closed, so a stale or unrelated host process can never replace the modal tree.
+  static func isEligibleHostState(_ state: XCUIApplication.State) -> Bool {
+    state == .runningForeground
+  }
+}
+
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+extension RunnerTests {
+  func testRemoteHostProbeRunsOnlyWhenSpringboardModalHasNoActions() {
+    XCTAssertTrue(RemoteHostedSystemModalPolicy.shouldProbeRemoteHost(springboardActionCount: 0))
+    XCTAssertFalse(RemoteHostedSystemModalPolicy.shouldProbeRemoteHost(springboardActionCount: 1))
+    XCTAssertFalse(RemoteHostedSystemModalPolicy.shouldProbeRemoteHost(springboardActionCount: 3))
+  }
+
+  func testRemoteHostStateGateFailsClosedToForeground() {
+    XCTAssertTrue(RemoteHostedSystemModalPolicy.isEligibleHostState(.runningForeground))
+    XCTAssertFalse(RemoteHostedSystemModalPolicy.isEligibleHostState(.runningBackground))
+    XCTAssertFalse(RemoteHostedSystemModalPolicy.isEligibleHostState(.notRunning))
+    XCTAssertFalse(RemoteHostedSystemModalPolicy.isEligibleHostState(.unknown))
+  }
+}
+#endif

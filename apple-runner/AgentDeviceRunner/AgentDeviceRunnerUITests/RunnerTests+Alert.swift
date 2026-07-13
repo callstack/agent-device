@@ -22,7 +22,11 @@ extension RunnerTests {
       return nil
     }
 #endif
-    if let alert = firstExistingElement(in: activeApp.alerts.allElementsBoundByIndex) {
+    // Guard the query: when a remote-hosted modal (e.g. the AccessorySetupKit
+    // picker) was just dismissed, the dismissal re-check re-enters here with the
+    // now-gone host as `activeApp`, and its `alerts` query raises
+    // kAXErrorServerNotFound. safeElementsQuery absorbs it and reports no alert.
+    if let alert = firstExistingElement(in: safeElementsQuery { activeApp.alerts.allElementsBoundByIndex }) {
       return runnerAlert(root: alert, ownerApp: activeApp)
     }
     if let popup = firstDismissPopupWindow(in: activeApp) {
