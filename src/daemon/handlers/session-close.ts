@@ -118,8 +118,10 @@ function buildRepairCloseFailureResponse(session: SessionState, error: AppError)
       details: {
         session: session.name,
         ...(session.saveScriptPath ? { savedScript: session.saveScriptPath } : {}),
-        // The session was preserved: retry after fixing the cause.
-        retriable: false,
+        // BLOCKER 3: the session was preserved specifically so the agent can
+        // retry (`close`/`close --save-script=<other>`) — `retriable` must
+        // agree with that, never contradict the recovery guidance above.
+        retriable: true,
       },
     },
   };

@@ -474,6 +474,9 @@ test('BLOCKER 2b/2c: a close whose commit FAILS (no-clobber) keeps the session f
   // success, not a swallowed skip), distinguishable from a filesystem failure.
   if (!closeResponse.ok) {
     expect(closeResponse.error.message).toMatch(/already exists/);
+    // BLOCKER 3: the session was kept specifically so the agent can retry —
+    // `retriable` must say so, never contradict that recovery guidance.
+    expect(closeResponse.error.details?.retriable).toBe(true);
   }
   // The prior complete artifact is untouched.
   expect(fs.readFileSync(path.join(root, 'flow.healed.ad'), 'utf8')).toBe(before);
