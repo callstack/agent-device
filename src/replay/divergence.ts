@@ -114,10 +114,18 @@ export type ReplayDivergenceSuggestion = {
  * are always present. `allowed` is the preflight verdict for resuming AT
  * `from` (`evaluateReplayResumePreflight`); `reason` is present only when
  * `allowed` is `false`.
+ *
+ * `repairSessionHeld` is decision 6, R7's repair-transaction liveness signal
+ * (C1): set `true` by the daemon on ANY divergence from a repair-armed
+ * (`--save-script`) replay — independent of `allowed`, which only reports
+ * plan-resumability. It is the distinct wire signal that the owning
+ * daemon/session was KEPT LIVE and remains addressable for the agent's
+ * corrective actions + `replay --from`/`close`. Absent (never `false`) on a
+ * plain, non-repair divergence, which gets no keep-alive.
  */
 export type ReplayDivergenceResume =
-  | { allowed: true; from: number; planDigest: string }
-  | { allowed: false; from: number; planDigest: string; reason: string };
+  | { allowed: true; from: number; planDigest: string; repairSessionHeld?: true }
+  | { allowed: false; from: number; planDigest: string; reason: string; repairSessionHeld?: true };
 
 export type ReplayDivergenceOverflow = {
   omittedBytes: number;

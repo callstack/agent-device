@@ -3,7 +3,7 @@ import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '../../kernel/errors.ts';
-import type { DaemonRequest } from '../types.ts';
+import type { DaemonRequest, DaemonResponse } from '../types.ts';
 import { runCmdDetachedMonitored, type ExecDetachedExit } from '../../utils/exec.ts';
 import { findProjectRoot, readVersion } from '../../utils/version.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
@@ -309,11 +309,22 @@ export async function cleanupDaemonAfterRequest(
   req: Omit<DaemonRequest, 'token'>,
   daemon: EnsuredDaemon,
   settings: DaemonClientSettings,
+  response: DaemonResponse | undefined,
 ): Promise<void> {
   if (
     !isOneShotReplayCommand(req.command) ||
     (!daemon.startedByClient && !settings.ownedStateDir) ||
-    isRemoteDaemon(daemon.info)
+    isRemoteDaemon(daemon.info) ||
+    // ADR 0012 decision 6, R7 (Fix 1, C1): a repair-armed `--save-script`
+    // replay that comes back as a HELD divergence must keep its owning daemon
+    // (and the session on it) addressable for the agent's corrective press +
+    // `replay --from`/`close` — tearing it down here is what turns a
+    // recoverable divergence into a later bare SESSION_NOT_FOUND. The daemon
+    // then bounds the held session's own lifetime via idle-reap (writing a
+    // `REPAIR_SESSION_EXPIRED` tombstone on reap), so an abandoned repair still
+    // cannot leak indefinitely; this only stops the ONE-SHOT-COMMAND teardown
+    // below from racing ahead of that window.
+    isHeldRepairDivergence(response)
   ) {
     return;
   }
@@ -350,6 +361,56 @@ export async function cleanupDaemonAfterRequest(
     phase: 'daemon_replay_cleanup',
     data: result,
   });
+}
+
+/**
+ * ADR 0012 decision 6, R7 (Fix 1, C1): true when this response must keep the
+ * owning daemon alive — a `REPLAY_DIVERGENCE` whose payload carries the
+ * daemon's `resume.repairSessionHeld` liveness signal. The daemon sets that
+ * signal from the PERSISTED repair-transaction state (the session is
+ * repair-armed and not yet committed), NOT from the current request's
+ * `--save-script` flag — so a `replay --from` continuation that does not
+ * repeat `--save-script` (R2) is still kept alive if it diverges. Keying the
+ * client purely off the signal (the daemon is the authority on transaction
+ * state) is what makes that continuation work; a plain, non-repair divergence
+ * carries no signal and gets no keep-alive. Also independent of
+ * `resume.allowed` (plan-resumability): a held divergence with `allowed: false`
+ * still holds the session so the agent can inspect and `close` cleanly.
+ */
+export function isHeldRepairDivergence(response: DaemonResponse | undefined): boolean {
+  if (!response || response.ok) return false;
+  if (response.error.code !== 'REPLAY_DIVERGENCE') return false;
+  const divergence = response.error.details?.divergence;
+  if (!divergence || typeof divergence !== 'object') return false;
+  const resume = (divergence as Record<string, unknown>).resume;
+  if (!resume || typeof resume !== 'object') return false;
+  return (resume as Record<string, unknown>).repairSessionHeld === true;
+}
+
+/**
+ * ADR 0012 decision 6 (Fix 1): "keep it addressable" — an owned ephemeral
+ * daemon lives at a randomly generated `--state-dir` (`createOwnedReplayStateDir`)
+ * that no other invocation knows about, so keeping the process alive is not
+ * enough on its own. Appended (never overwriting an existing hint, e.g. a
+ * selector-miss's own guidance) so the agent's next command knows to target
+ * the SAME daemon instead of resolving to the default one.
+ */
+export function attachRepairSessionAddressHint(
+  response: Extract<DaemonResponse, { ok: false }>,
+  stateDir: string,
+): Extract<DaemonResponse, { ok: false }> {
+  const addressHint =
+    `This repair session's daemon was kept alive to continue the repair; pass ` +
+    `--state-dir ${stateDir} on your next command (press, replay --from, or ` +
+    `close --save-script) to reach it.`;
+  const existingHint = response.error.hint;
+  return {
+    ...response,
+    error: {
+      ...response.error,
+      hint: existingHint ? `${existingHint} ${addressHint}` : addressHint,
+    },
+  };
 }
 
 function isOneShotReplayCommand(command: string | undefined): boolean {

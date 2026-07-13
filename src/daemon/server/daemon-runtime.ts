@@ -149,7 +149,10 @@ export async function startDaemonRuntime(
         stderr.write(`Daemon session teardown timed out (${session.name}).\n`);
       }),
     ]);
-    sessionStore.writeSessionLog(session);
+    // ADR 0012 decision 6, R7 + commit semantics (C2/C5a): commit the healed
+    // `.ad` iff the repair transaction completed, else leave a bounded
+    // `REPAIR_SESSION_EXPIRED` tombstone for the reaped-before-finalize case.
+    sessionStore.finalizeRepairTeardown(session);
     sessionStore.delete(session.name);
   };
 

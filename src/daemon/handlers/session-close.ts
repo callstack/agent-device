@@ -1,4 +1,5 @@
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
+import { AppError } from '../../kernel/errors.ts';
 import { scheduleIosRunnerIdleStop } from '../../platforms/apple/core/runner/runner-client.ts';
 import { isApplePlatform, type DeviceInfo } from '../../kernel/device.ts';
 import { dispatchCommand } from '../../core/dispatch.ts';
@@ -60,10 +61,74 @@ function shouldStopAppleRunnerBeforeTargetedClose(session: SessionState): boolea
   return isApplePlatform(session.device.platform) && !isIosSimulator(session.device);
 }
 
-// Runs the failure-isolated resource teardown and the targeted platform close.
-// Returns the preserved platform-close error (if any); best-effort cleanup
-// failures are pushed into `cleanupFailures`. Never throws for a cleanup step so
-// the caller's lease release and session deletion always run.
+/**
+ * ADR 0012 decision 6 (BLOCKER 2): outcome of committing a repair transaction
+ * at `close` time, BEFORE any destructive teardown. `not-armed` = not a repair
+ * session (normal close flow); `committed` = the healed `.ad` was written
+ * (`path`) or the transaction was incomplete and intentionally discarded (no
+ * `path`) — either way close proceeds and tears the session down; `failed` = a
+ * COMPLETE transaction's commit failed (no-clobber / bare-`@ref` / fs error),
+ * so the session must be KEPT for retry and the failure surfaced.
+ */
+type RepairCloseOutcome =
+  | { kind: 'not-armed' }
+  | { kind: 'committed'; path?: string }
+  | { kind: 'failed'; error: AppError };
+
+function commitRepairBeforeClose(
+  sessionStore: SessionStore,
+  session: SessionState,
+  req: DaemonRequest,
+): RepairCloseOutcome {
+  if (session.saveScriptBoundary === undefined) return { kind: 'not-armed' };
+  // Record the finalize `close` (so the committed healed slice ends with it),
+  // then COMMIT before any destructive teardown. A repair-armed session commits
+  // iff the transaction COMPLETED, regardless of `--save-script` on the close
+  // (C2); `recordSession` is already true from arming.
+  const actionsBeforeClose = session.actions.length;
+  recordSessionAction(sessionStore, session, req, 'close', {
+    session: session.name,
+    ...successText(`Closed: ${session.name}`),
+  });
+  const result = sessionStore.writeSessionLog(session);
+  if (result.written) return { kind: 'committed', path: result.path };
+  if (result.error) {
+    // The session is kept for retry (BLOCKER 2b): roll back the just-recorded
+    // finalize `close` so a subsequent `close --save-script=<other>` retry does
+    // not accumulate duplicate `close` lines in the healed slice.
+    session.actions.length = actionsBeforeClose;
+    return { kind: 'failed', error: result.error };
+  }
+  return { kind: 'committed' };
+}
+
+/**
+ * ADR 0012 decision 6 (BLOCKER 2b): a commit-failure close response. The session
+ * is intentionally NOT torn down (the caller returns before teardown), so the
+ * agent can fix the cause and retry `close --save-script`.
+ */
+function buildRepairCloseFailureResponse(session: SessionState, error: AppError): DaemonResponse {
+  const hint = typeof error.details?.hint === 'string' ? error.details.hint : undefined;
+  return {
+    ok: false,
+    error: {
+      code: error.code,
+      message: error.message,
+      ...(hint ? { hint } : {}),
+      details: {
+        session: session.name,
+        ...(session.saveScriptPath ? { savedScript: session.saveScriptPath } : {}),
+        // The session was preserved: retry after fixing the cause.
+        retriable: false,
+      },
+    },
+  };
+}
+
+// Runs the failure-isolated resource teardown and the targeted platform close
+// (#1225). Returns the preserved platform-close error (if any); best-effort
+// cleanup failures are pushed into `cleanupFailures`. Never throws for a cleanup
+// step so the caller's lease release and session deletion always run.
 async function runSessionCloseTeardown(params: {
   req: DaemonRequest;
   session: SessionState;
@@ -71,8 +136,9 @@ async function runSessionCloseTeardown(params: {
   logPath: string;
   sessionStore: SessionStore;
   cleanupFailures: SessionCleanupFailure[];
+  repairArmed: boolean;
 }): Promise<unknown> {
-  const { req, session, sessionName, logPath, sessionStore, cleanupFailures } = params;
+  const { req, session, sessionName, logPath, sessionStore, cleanupFailures, repairArmed } = params;
   const attemptCleanup = async (step: string, run: () => Promise<void>): Promise<void> => {
     try {
       await run();
@@ -85,23 +151,26 @@ async function runSessionCloseTeardown(params: {
   // its AppError (code/details/hint) is preserved and returned for the caller to
   // rethrow, and a failed close must not be recorded as `Closed`. Subsequent
   // resource cleanup still runs regardless.
-  const platformCloseError = await dispatchTargetedPlatformClose({
-    req,
-    session,
-    logPath,
-  });
+  const platformCloseError = await dispatchTargetedPlatformClose({ req, session, logPath });
   await stopOrRetainAppleRunnerAfterClose(req, session, attemptCleanup);
   await clearSessionRuntimeHints(session, sessionStore, sessionName);
-  if (!platformCloseError) {
-    recordSessionAction(sessionStore, session, req, 'close', {
-      session: session.name,
-      ...successText(`Closed: ${session.name}`),
-    });
+  // ADR 0012 decision 6 (BLOCKER 2): a repair-armed session already recorded its
+  // finalize `close` and committed (or aborted) its healed `.ad` BEFORE this
+  // teardown (commit-state machine — the single commit path). Only an ordinary
+  // (non-repair) session records `close` + writes its session log here, and —
+  // per #1225 — a failed platform close is not recorded as `Closed`.
+  if (!repairArmed) {
+    if (!platformCloseError) {
+      recordSessionAction(sessionStore, session, req, 'close', {
+        session: session.name,
+        ...successText(`Closed: ${session.name}`),
+      });
+    }
+    if (req.flags?.saveScript) {
+      session.recordSession = true;
+    }
+    sessionStore.writeSessionLog(session);
   }
-  if (req.flags?.saveScript) {
-    session.recordSession = true;
-  }
-  sessionStore.writeSessionLog(session);
   await attemptCleanup('materialized_paths', () =>
     cleanupRetainedMaterializedPathsForSession(sessionName),
   );
@@ -207,6 +276,14 @@ export async function handleCloseCommand(params: {
   if (!session) {
     return await closeWithoutSession(req, logPath);
   }
+  // ADR 0012 decision 6 (BLOCKER 2): commit the repair transaction BEFORE any
+  // destructive teardown. On failure, return without tearing the session down —
+  // it stays addressable so the agent can fix the cause and retry.
+  const repairCommit = commitRepairBeforeClose(sessionStore, session, req);
+  if (repairCommit.kind === 'failed') {
+    return buildRepairCloseFailureResponse(session, repairCommit.error);
+  }
+  const healedScriptPath = repairCommit.kind === 'committed' ? repairCommit.path : undefined;
   let providerData: Record<string, unknown> | undefined;
   // Resource teardown is failure-isolated: a rejected step is collected instead of
   // short-circuiting the rest, so every subsequent resource (and the runner stop)
@@ -222,6 +299,7 @@ export async function handleCloseCommand(params: {
       logPath,
       sessionStore,
       cleanupFailures,
+      repairArmed: repairCommit.kind !== 'not-armed',
     });
   } finally {
     // Always drop the local session, even if provider-side release fails:
@@ -246,6 +324,10 @@ export async function handleCloseCommand(params: {
     device: session.device,
     shutdownRequested: req.flags?.shutdown,
   });
+  // ADR 0012 decision 6 (BLOCKER 2a): positively report the committed healed
+  // artifact path so the agent learns the repair published (and where) without
+  // an extra round-trip.
+  const savedScript = healedScriptPath ? { savedScript: healedScriptPath } : {};
   if (shutdownResult) {
     return {
       ok: true,
@@ -253,6 +335,7 @@ export async function handleCloseCommand(params: {
         {
           session: session.name,
           shutdown: shutdownResult,
+          ...savedScript,
           ...(providerData ? { provider: providerData } : {}),
         },
         `Closed: ${session.name}`,
@@ -264,6 +347,7 @@ export async function handleCloseCommand(params: {
     data: {
       session: session.name,
       ...successText(`Closed: ${session.name}`),
+      ...savedScript,
       ...(providerData ? { provider: providerData } : {}),
     },
   };

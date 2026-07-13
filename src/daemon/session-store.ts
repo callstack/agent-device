@@ -4,7 +4,7 @@ import { emitDiagnostic } from '../utils/diagnostics.ts';
 import type { SessionRuntimeHints, SessionState } from './types.ts';
 import { recordActionEntry, type RecordActionEntry } from './session-action-recorder.ts';
 import { expandSessionPath, safeSessionName } from './session-paths.ts';
-import { SessionScriptWriter } from './session-script-writer.ts';
+import { SessionScriptWriter, type SessionScriptWriteResult } from './session-script-writer.ts';
 import {
   appendActionEvent,
   appendSessionEvent,
@@ -14,6 +14,21 @@ import {
   type SessionEventLogInput,
   type SessionEventLogPage,
 } from './session-event-log.ts';
+
+/**
+ * ADR 0012 decision 6, R7 (C5a): a reaped repair session leaves this bounded
+ * marker so the next command on the same key gets `REPAIR_SESSION_EXPIRED` +
+ * re-run guidance, never a bare `SESSION_NOT_FOUND`. Bounded by `expiresAt`
+ * so an old tombstone never shadows an unrelated future session name.
+ */
+export type RepairSessionTombstone = {
+  owner: string;
+  reapedAt: number;
+  expiresAt: number;
+  sourcePath?: string;
+};
+
+const REPAIR_TOMBSTONE_TTL_MS = 60 * 60_000;
 
 export class SessionStore {
   private readonly sessions = new Map<string, SessionState>();
@@ -84,7 +99,7 @@ export class SessionStore {
     );
   }
 
-  writeSessionLog(session: SessionState): void {
+  writeSessionLog(session: SessionState): SessionScriptWriteResult {
     const result = this.scriptWriter.write(session);
     if (result.written) {
       emitDiagnostic({
@@ -93,6 +108,83 @@ export class SessionStore {
         data: { session: session.name, path: result.path },
       });
     }
+    return result;
+  }
+
+  /**
+   * ADR 0012 decision 6, R7 + commit semantics (C2/C5a): the teardown finalize
+   * step for a session (idle-reap or daemon shutdown). `writeSessionLog` commits
+   * the healed `.ad` iff the repair transaction COMPLETED (auto-commit on
+   * completion, even without an explicit `close`) and otherwise publishes
+   * nothing; a repair-armed session torn down WITHOUT committing then leaves a
+   * bounded `REPAIR_SESSION_EXPIRED` tombstone so the agent's next command gets
+   * actionable re-run guidance rather than a bare SESSION_NOT_FOUND. A no-op for
+   * ordinary (non-repair) sessions beyond the existing `writeSessionLog`.
+   */
+  finalizeRepairTeardown(session: SessionState): void {
+    this.writeSessionLog(session);
+    if (session.saveScriptBoundary !== undefined && session.saveScriptCommitted !== true) {
+      this.writeRepairTombstone(session);
+    }
+  }
+
+  /**
+   * ADR 0012 decision 6, R7 (C5a): drops a bounded tombstone for a repair-armed
+   * session reaped/torn down before it committed, so a later command targeting
+   * the same session key surfaces `REPAIR_SESSION_EXPIRED` with a re-run hint
+   * instead of a bare `SESSION_NOT_FOUND`. Best effort — a tombstone-write
+   * failure never blocks teardown.
+   */
+  writeRepairTombstone(session: SessionState, ttlMs = REPAIR_TOMBSTONE_TTL_MS): void {
+    try {
+      const dir = this.resolveSessionDir(session.name);
+      fs.mkdirSync(dir, { recursive: true });
+      const tombstone: RepairSessionTombstone = {
+        owner: session.name,
+        reapedAt: Date.now(),
+        expiresAt: Date.now() + ttlMs,
+        ...(session.repairSourcePath ? { sourcePath: session.repairSourcePath } : {}),
+      };
+      fs.writeFileSync(this.repairTombstonePath(session.name), `${JSON.stringify(tombstone)}\n`);
+    } catch (error) {
+      emitDiagnostic({
+        level: 'warn',
+        phase: 'repair_tombstone_write_failed',
+        data: {
+          session: session.name,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+    }
+  }
+
+  /** Returns a non-expired repair tombstone for `sessionName`, or `undefined`. */
+  readRepairTombstone(sessionName: string): RepairSessionTombstone | undefined {
+    let raw: string;
+    try {
+      raw = fs.readFileSync(this.repairTombstonePath(sessionName), 'utf8');
+    } catch {
+      return undefined;
+    }
+    let parsed: RepairSessionTombstone;
+    try {
+      parsed = JSON.parse(raw) as RepairSessionTombstone;
+    } catch {
+      return undefined;
+    }
+    if (typeof parsed?.expiresAt !== 'number' || parsed.expiresAt <= Date.now()) return undefined;
+    return parsed;
+  }
+
+  /** ADR 0012 R7 (C5a): a fresh `replay --save-script` on this key clears the tombstone. */
+  clearRepairTombstone(sessionName: string): void {
+    try {
+      fs.rmSync(this.repairTombstonePath(sessionName), { force: true });
+    } catch {}
+  }
+
+  private repairTombstonePath(sessionName: string): string {
+    return path.join(this.resolveSessionDir(sessionName), 'repair-tombstone.json');
   }
 
   defaultTracePath(session: SessionState): string {
@@ -106,9 +198,7 @@ export class SessionStore {
   }
 
   // Daemon state dir (parent of the `sessions/` dir), matching daemonPaths.baseDir. Called via
-  // sessionStore.resolveDaemonStateDir() in session-open.ts; fallow's class-member tracer does not
-  // resolve it inside a call argument, hence the suppression.
-  // fallow-ignore-next-line unused-class-member
+  // sessionStore.resolveDaemonStateDir() in session-open.ts and session-close.ts.
   resolveDaemonStateDir(): string {
     return path.dirname(this.sessionsDir);
   }

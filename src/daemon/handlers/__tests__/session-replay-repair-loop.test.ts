@@ -402,3 +402,243 @@ test('R1 bootstrap: a session created by step 1 (open) arms in time for step 2 t
   expect(session.saveScriptBoundary).toBe(0);
   expect(session.actions[1]?.targetEvidence).toBeDefined();
 });
+
+test('BLOCKER 4: a minimal [open, terminal close] cold-start script arms the transaction and skips the close', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-repair-open-close-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  // No pre-existing session — step 1 (`open`) CREATES it, so pre-open arming is
+  // a no-op and the transaction can only arm once the session exists.
+  const filePath = writeReplayFile(root, ['open "Demo"', 'close']);
+  const spy: DaemonRequest[] = [];
+  const invoke = makeRecordingReplayInvoke({ sessionStore, sessionName, spy });
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+
+  expect(response.ok).toBe(true);
+  const session = sessionStore.get(sessionName)!;
+  // ARMED-before-step-1 semantics satisfied: the transaction armed even though
+  // `open` created the session.
+  expect(session.recordSession).toBe(true);
+  expect(session.saveScriptBoundary).toBe(0);
+  // The terminal `close` was recognized as lifecycle and SKIPPED (never
+  // dispatched), leaving the session alive for finalize.
+  expect(spy.map((r) => r.command)).toEqual(['open']);
+  expect(sessionStore.get(sessionName)).toBeDefined();
+  // The commit-state machine applies: a completed armed transaction.
+  expect(session.saveScriptComplete).toBe(true);
+});
+
+// --- ADR 0012 decision 6 (Fix 3): the source plan's own terminal `close` is
+// lifecycle, not a script step, while a repair is armed — the agent
+// finalizes with `close --save-script` instead. ---
+
+test("Fix 3: the source plan's terminal close is skipped (never dispatched, never recorded) while the repair is armed", async () => {
+  const { root, sessionStore, sessionName, logPath } = setup(
+    'agent-device-replay-repair-close-skip-',
+  );
+  const filePath = writeReplayFile(root, ['open "Demo"', 'click id="save"', 'close']);
+  const spy: DaemonRequest[] = [];
+  const invoke = makeRecordingReplayInvoke({
+    sessionStore,
+    sessionName,
+    spy,
+    evidence: (req) => (req.command === 'click' ? freshEvidence('save', 'Save') : undefined),
+  });
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke,
+  });
+
+  expect(response.ok).toBe(true);
+  // `close` never reached dispatch...
+  expect(spy.map((r) => r.command)).toEqual(['open', 'click']);
+  // ...so it never lands in session.actions (the healed script never carries
+  // it — the agent's own `close --save-script` supplies the real one).
+  const session = sessionStore.get(sessionName)!;
+  expect(session.actions.map((a) => a.command)).toEqual(['open', 'click']);
+  // C4: skipping the terminal close does NOT delete the session — it stays
+  // alive and COMPLETE so the agent can finalize it with `close --save-script`.
+  expect(sessionStore.get(sessionName)).toBeDefined();
+  expect(session.saveScriptComplete).toBe(true);
+});
+
+test('Fix 3: an ordinary (non-repair) replay still dispatches its terminal close normally', async () => {
+  const { root, sessionStore, sessionName, logPath } = setup(
+    'agent-device-replay-repair-close-ordinary-',
+  );
+  const filePath = writeReplayFile(root, ['open "Demo"', 'click id="save"', 'close']);
+  const spy: DaemonRequest[] = [];
+  const invoke = makeRecordingReplayInvoke({ sessionStore, sessionName, spy });
+
+  // No --save-script: this is a plain deterministic replay, not a repair.
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath] }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke,
+  });
+
+  expect(response.ok).toBe(true);
+  expect(spy.map((r) => r.command)).toEqual(['open', 'click', 'close']);
+});
+
+test('Fix 3: only the TERMINAL close is skipped during a repair — a mid-plan close still dispatches', async () => {
+  const { root, sessionStore, sessionName, logPath } = setup(
+    'agent-device-replay-repair-close-midplan-',
+  );
+  const filePath = writeReplayFile(root, ['open "Demo"', 'close', 'open "Demo2"']);
+  const spy: DaemonRequest[] = [];
+  const invoke = makeRecordingReplayInvoke({
+    sessionStore,
+    sessionName,
+    spy,
+    openReplacesSession: true,
+  });
+
+  const response = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke,
+  });
+
+  expect(response.ok).toBe(true);
+  // The mid-plan close (not the plan's last action) dispatches normally; only
+  // a close in the FINAL position is treated as repair lifecycle.
+  expect(spy.map((r) => r.command)).toEqual(['open', 'close', 'open']);
+});
+
+test('Fix 3: a --from resume that lands on the terminal close skips it too, letting the run complete', async () => {
+  const { root, sessionStore, sessionName, logPath } = setup(
+    'agent-device-replay-repair-close-from-',
+  );
+  const filePath = writeReplayFile(root, [
+    'open "Demo" --relaunch',
+    SAVE_ANNOTATION,
+    'click id="save"',
+    'close',
+  ]);
+  const spy: DaemonRequest[] = [];
+  const invoke = makeRecordingReplayInvoke({
+    sessionStore,
+    sessionName,
+    spy,
+    failSteps: new Set(['click id="save"']),
+  });
+
+  const leg1 = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke,
+  });
+  expect(leg1.ok).toBe(false);
+  if (leg1.ok) return;
+  const divergence = leg1.error.details?.divergence as {
+    resume: { allowed: boolean; from: number; planDigest: string };
+  };
+  expect(divergence.resume.allowed).toBe(true);
+  expect(divergence.resume.from).toBe(2);
+
+  const session = sessionStore.get(sessionName)!;
+  sessionStore.recordAction(session, {
+    command: 'press',
+    positionals: ['@e9'],
+    flags: {},
+    result: { selectorChain: ['id="save-v2"'] },
+    targetEvidence: freshEvidence('save-v2', 'Save V2'),
+  });
+
+  spy.length = 0;
+  const leg2 = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [filePath],
+      flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
+    }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke,
+  });
+
+  // The resume lands directly on the (skipped) terminal close and completes
+  // — not a REPLAY_DIVERGENCE with repairHint "manual".
+  expect(leg2.ok).toBe(true);
+  expect(spy).toHaveLength(0);
+  // "click id=save" failed and was never recorded; the corrective press was
+  // recorded live; the terminal close was skipped, never dispatched.
+  expect(session.actions.map((a) => a.command)).toEqual(['open', 'press']);
+});
+
+// --- ADR 0012 decision 6, R7 (continuation persisted-state): a `replay --from`
+// continuation does NOT repeat --save-script; if it diverges, the session is
+// still held alive keyed off the PERSISTED armed state, not the request flag. ---
+
+test('a --from continuation WITHOUT --save-script that diverges is still held alive (repairSessionHeld set from persisted state)', async () => {
+  const { root, sessionStore, sessionName, logPath } = setup(
+    'agent-device-replay-repair-continuation-',
+  );
+  // No annotations => action-failure path; both clicks fail so leg1 diverges at
+  // step 2 and the --from-3 continuation diverges at step 3.
+  const filePath = writeReplayFile(root, ['open "Demo"', 'click id="a"', 'click id="b"']);
+  const invoke = makeRecordingReplayInvoke({
+    sessionStore,
+    sessionName,
+    failSteps: new Set(['click id="a"', 'click id="b"']),
+  });
+
+  // Leg 1: `replay --save-script` opens the transaction, arms the session, and
+  // diverges at step 2 — held alive.
+  const leg1 = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke,
+  });
+  expect(leg1.ok).toBe(false);
+  if (leg1.ok) return;
+  const leg1Divergence = leg1.error.details?.divergence as {
+    resume: { planDigest: string; repairSessionHeld?: boolean };
+  };
+  expect(leg1Divergence.resume.repairSessionHeld).toBe(true);
+  const armed = sessionStore.get(sessionName)!;
+  expect(armed.saveScriptBoundary).not.toBeUndefined();
+
+  // Leg 2: the `--from 3` continuation carries NO --save-script. It re-diverges
+  // at step 3 — and must STILL be held alive, keyed off the persisted armed
+  // state, so the transaction survives.
+  const leg2 = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [filePath],
+      flags: { replayFrom: 3, replayPlanDigest: leg1Divergence.resume.planDigest },
+    }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke,
+  });
+  expect(leg2.ok).toBe(false);
+  if (leg2.ok) return;
+  expect(leg2.error.code).toBe('REPLAY_DIVERGENCE');
+  const leg2Divergence = leg2.error.details?.divergence as {
+    resume: { repairSessionHeld?: boolean };
+  };
+  // The key assertion: held alive despite no --save-script on this request.
+  expect(leg2Divergence.resume.repairSessionHeld).toBe(true);
+  expect(sessionStore.get(sessionName)).toBeDefined();
+});

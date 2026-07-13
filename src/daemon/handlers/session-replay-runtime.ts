@@ -12,7 +12,7 @@ import { SessionStore } from '../session-store.ts';
 import { expandSessionPath } from '../session-paths.ts';
 import { type ReplayScriptMetadata } from '../../replay/script.ts';
 import { computeReplayPlanDigest } from '../../replay/plan-digest.ts';
-import { errorResponse } from './response.ts';
+import { errorResponse, noActiveSessionError } from './response.ts';
 import { invokeReplayAction } from './session-replay-action-runtime.ts';
 import { tryParseSelectorChain } from '../../selectors/index.ts';
 import type { ResponseLevel } from '../../kernel/contracts.ts';
@@ -206,6 +206,26 @@ export async function runReplayScriptFile(params: {
       sessionName,
     });
     if (repairRunPreflight) return repairRunPreflight;
+    // ADR 0012 decision 6, R7 (BLOCKER 1): a `--from` continuation (entryIndex > 0)
+    // resumes an EXISTING session — it never replays step 1 (`open`), so it
+    // cannot create one. If the session is gone (its repair was idle-reaped),
+    // surface SESSION_NOT_FOUND HERE so the router translates it to
+    // REPAIR_SESSION_EXPIRED via the tombstone — instead of the missing session
+    // surfacing later as a REPLAY_DIVERGENCE that wraps the first step's failure
+    // and slips past the tombstone translation.
+    if (entryIndex.value > 0 && !sessionStore.get(sessionName)) {
+      return noActiveSessionError();
+    }
+    if (req.flags?.saveScript) {
+      // ADR 0012 decision 6, R7 (C5a): a fresh `replay --save-script` on this
+      // key clears any prior reap tombstone before starting a new transaction.
+      sessionStore.clearRepairTombstone(sessionName);
+    }
+    // ADR 0012 decision 6 (C2): a repair-armed resume re-opens the completion
+    // window — a leg that re-diverges must not inherit a prior leg's COMPLETE
+    // flag and let a later `close` commit a now-stale transaction.
+    const preRunSession = sessionStore.get(sessionName);
+    if (preRunSession?.saveScriptBoundary !== undefined) preRunSession.saveScriptComplete = false;
     const armReplaySaveScriptStep = createReplaySaveScriptArmer({
       saveScript: req.flags?.saveScript,
       sessionStore,
@@ -248,7 +268,26 @@ export async function runReplayScriptFile(params: {
     for (let index = entryIndex.value; index < actions.length; index += 1) {
       const action = actions[index];
       if (!action || action.command === 'replay') continue;
+      // ADR 0012 decision 6, R1 (BLOCKER 4): arm BEFORE the terminal-close
+      // check. Pre-`open` arming is a no-op (no session yet), so for a script
+      // whose first step CREATES the session (`open`), the boundary is only set
+      // once a later iteration runs the armer on the now-existing session.
+      // Arming first means a minimal `[open, close]` transaction arms at the
+      // `close` step, so `isRepairArmedTerminalClose` then sees the boundary and
+      // treats the terminal `close` as lifecycle (skipped) rather than
+      // dispatching it and tearing the session down un-armed.
       armReplaySaveScriptStep();
+      if (
+        isRepairArmedTerminalClose({
+          action,
+          index,
+          totalActions: actions.length,
+          sessionStore,
+          sessionName,
+        })
+      ) {
+        continue;
+      }
       emitReplayTestActionProgress(resolved, index, actions.length, action);
       const sampleStart = readSessionSnapshotSampleCount(sessionStore, sessionName);
       const response = await resolveReplayStepResponse(stepContext, action, index, [
@@ -259,12 +298,32 @@ export async function runReplayScriptFile(params: {
       );
       collectReplayActionArtifactPaths(response).forEach((entry) => artifactPaths.add(entry));
       if (!response.ok) {
+        // ADR 0012 decision 6, R7 (C1): a divergence from a repair-armed run
+        // keeps its session live — mark the wire signal so the client keeps the
+        // owning daemon alive and the agent knows the session is addressable.
+        const held = (r: DaemonResponse): DaemonResponse =>
+          markRepairSessionHeldIfArmed({ response: r, sessionStore, sessionName });
         // A complete target-binding divergence must pass through unchanged —
         // failStep would rebuild it as a generic action-failure divergence
         // (double-capture + lost kind/targetBinding).
-        if (isCompleteTargetBindingDivergenceResponse(response)) return response;
-        return await failStep(response, action, index);
+        if (isCompleteTargetBindingDivergenceResponse(response)) return held(response);
+        return held(await failStep(response, action, index));
       }
+    }
+
+    // ADR 0012 decision 6, R1 (BLOCKER 4): a final arm so a repair whose LAST
+    // executable step created the session (e.g. a bare `[open]`, or `[open,
+    // close]` where the close is skipped) still arms the transaction before the
+    // completion/commit gate below evaluates it.
+    armReplaySaveScriptStep();
+
+    // ADR 0012 decision 6 (C2): the loop reached the last executable step with
+    // no outstanding divergence (the terminal source `close` was skipped, C4) —
+    // the repair transaction is now COMPLETE and commit-eligible.
+    const completedSession = sessionStore.get(sessionName);
+    if (completedSession?.saveScriptBoundary !== undefined) {
+      completedSession.saveScriptComplete = true;
+      sessionStore.set(sessionName, completedSession);
     }
 
     const replayedCount = actions.length - entryIndex.value;
@@ -421,6 +480,32 @@ function preflightReplayAgainstActiveRepair(params: {
 }
 
 /**
+ * ADR 0012 decision 6 (Fix 3): the source plan's own terminal `close` is
+ * lifecycle, not a script step to replay, while a repair is armed — the agent
+ * finalizes the transaction with `close --save-script` instead
+ * (`session-close.ts`). Replaying the recorded `close` here would dispatch it
+ * as an ordinary step: it tears the session down (and, absent Fix 1/2, could
+ * even publish or diverge) before the agent gets that chance. Skipped exactly
+ * like the `replay` pseudo-command just above it in the loop — never
+ * dispatched, never divergence-checked, and (like that skip) not counted out
+ * of `replayedCount`. Checked against session state, not this invocation's
+ * own flags, matching R2: a repair stays armed across separate `--from` legs
+ * regardless of whether `--save-script` is repeated on each one.
+ */
+function isRepairArmedTerminalClose(params: {
+  action: SessionAction;
+  index: number;
+  totalActions: number;
+  sessionStore: SessionStore;
+  sessionName: string;
+}): boolean {
+  const { action, index, totalActions, sessionStore, sessionName } = params;
+  if (action.command !== 'close') return false;
+  if (index !== totalActions - 1) return false;
+  return sessionStore.get(sessionName)?.saveScriptBoundary !== undefined;
+}
+
+/**
  * ADR 0012 decision 6, R1/R6: returns a per-step armer that sets
  * `recordSession` and stamps the repair-run boundary watermark ONCE. Absent
  * `--save-script` it is a no-op, so replay is byte-identical to today.
@@ -475,7 +560,47 @@ function armReplaySaveScriptStep(params: {
   if (session.saveScriptBoundary === undefined) {
     session.saveScriptBoundary = firstArm ? session.actions.length : 0;
   }
+  // ADR 0012 decision 6, R7 (C5a): stash the original replay input so a reap
+  // tombstone can hand back an actionable `replay <path> --save-script` re-run.
+  if (session.repairSourcePath === undefined) session.repairSourcePath = sourcePath;
   sessionStore.set(sessionName, session);
+}
+
+/**
+ * ADR 0012 decision 6, R7 (C1): stamps the `resume.repairSessionHeld` liveness
+ * signal on a repair-armed divergence — the honest wire marker that the owning
+ * session was kept live (this daemon never tears it down on a divergence) and
+ * remains addressable for the corrective press + `replay --from`/`close`. Set
+ * only when the session is genuinely held (armed): a plain non-repair
+ * divergence, or one before step-1 `open` created/armed the session, gets no
+ * signal (and no keep-alive). Never `false` — absent when not held.
+ */
+function markRepairSessionHeldIfArmed(params: {
+  response: DaemonResponse;
+  sessionStore: SessionStore;
+  sessionName: string;
+}): DaemonResponse {
+  const { response, sessionStore, sessionName } = params;
+  if (response.ok) return response;
+  // The transaction is active iff the session is repair-armed and not yet
+  // committed — the PERSISTED state, NOT this request's `--save-script` flag.
+  // A `replay --from` continuation (which does not repeat `--save-script`, per
+  // R2) is therefore still held on divergence and stays in the transaction.
+  const session = sessionStore.get(sessionName);
+  if (session?.saveScriptBoundary === undefined || session.saveScriptCommitted) return response;
+  const resume = readDivergenceResumeRecord(response);
+  if (resume) resume.repairSessionHeld = true;
+  return response;
+}
+
+/** The mutable `details.divergence.resume` record on a failed response, or `undefined`. */
+function readDivergenceResumeRecord(
+  response: Extract<DaemonResponse, { ok: false }>,
+): Record<string, unknown> | undefined {
+  const divergence = response.error.details?.divergence;
+  if (!divergence || typeof divergence !== 'object') return undefined;
+  const resume = (divergence as Record<string, unknown>).resume;
+  return resume && typeof resume === 'object' ? (resume as Record<string, unknown>) : undefined;
 }
 
 /** `flows/login.ad` -> `flows/login.healed.ad`, beside the original (R6). */

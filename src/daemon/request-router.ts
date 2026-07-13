@@ -114,7 +114,11 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
         // wasted round-trip. Returned unchanged when neither applies, so the
         // default error wire shape is preserved.
         if (!response.ok) {
-          return { ok: false, error: enrichDaemonError(req.command, response.error) };
+          // ADR 0012 decision 6, R7 (C5a): a command that finds no session but
+          // hits a live repair tombstone gets `REPAIR_SESSION_EXPIRED` with
+          // re-run guidance, never a bare SESSION_NOT_FOUND.
+          const error = repairExpiredIfTombstoned(req, response.error, sessionStore);
+          return { ok: false, error: enrichDaemonError(req.command, error) };
         }
         // Phase 4 (agent-cost) grafts on the success path. Runs inside the
         // diagnostics scope so cost can read this request's runner-round-trip tally.
@@ -333,6 +337,31 @@ function recordThrownRequestEvent(
       response,
       durationMs: Math.max(0, Date.now() - scope.startedAtMs),
     }),
+  );
+}
+
+/**
+ * ADR 0012 decision 6, R7 (C5a): when a request finds no session (SESSION_NOT_FOUND)
+ * but a live repair tombstone exists for its session key, rewrite the error to
+ * `REPAIR_SESSION_EXPIRED` with an actionable re-run command. Any other error, or
+ * the absence of a (non-expired) tombstone, passes through untouched.
+ */
+function repairExpiredIfTombstoned(
+  req: DaemonRequest,
+  error: DaemonError,
+  sessionStore: SessionStore,
+): DaemonError {
+  if (error.code !== 'SESSION_NOT_FOUND') return error;
+  const tombstone = sessionStore.readRepairTombstone(req.session);
+  if (!tombstone) return error;
+  const reRun = tombstone.sourcePath
+    ? `re-run: replay ${tombstone.sourcePath} --save-script`
+    : 're-run your replay <script> --save-script from the start';
+  return normalizeError(
+    new AppError(
+      'REPAIR_SESSION_EXPIRED',
+      `The --save-script repair session "${req.session}" was reaped before it was finalized (idle-reap); ${reRun}.`,
+    ),
   );
 }
 

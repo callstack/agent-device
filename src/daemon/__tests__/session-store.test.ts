@@ -656,3 +656,41 @@ test('writeSessionLog never fabricates a target-v1 annotation for actions record
   const script = writeScript(fixture);
   assert.equal(/agent-device:target-v1/.test(script), false);
 });
+
+// --- ADR 0012 decision 6, R7 (C5a): repair tombstones turn a post-reap
+// SESSION_NOT_FOUND into REPAIR_SESSION_EXPIRED with re-run guidance. ---
+
+test('writeRepairTombstone/readRepairTombstone round-trips owner + source path', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-tombstone-'));
+  const store = new SessionStore(path.join(root, 'sessions'));
+  const session = makeSession('default');
+  session.saveScriptBoundary = 0;
+  session.repairSourcePath = '/flows/login.ad';
+
+  store.writeRepairTombstone(session);
+  const tombstone = store.readRepairTombstone('default');
+  assert.ok(tombstone);
+  assert.equal(tombstone?.owner, 'default');
+  assert.equal(tombstone?.sourcePath, '/flows/login.ad');
+  assert.ok((tombstone?.expiresAt ?? 0) > Date.now());
+});
+
+test('readRepairTombstone returns undefined once the tombstone has expired', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-tombstone-expiry-'));
+  const store = new SessionStore(path.join(root, 'sessions'));
+  const session = makeSession('default');
+  // TTL 0 => expiresAt <= now => already stale.
+  store.writeRepairTombstone(session, 0);
+  assert.equal(store.readRepairTombstone('default'), undefined);
+});
+
+test('clearRepairTombstone removes a tombstone (a fresh replay --save-script clears the key)', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-tombstone-clear-'));
+  const store = new SessionStore(path.join(root, 'sessions'));
+  const session = makeSession('default');
+  store.writeRepairTombstone(session);
+  assert.ok(store.readRepairTombstone('default'));
+
+  store.clearRepairTombstone('default');
+  assert.equal(store.readRepairTombstone('default'), undefined);
+});

@@ -124,7 +124,10 @@ test('a healed script survives repair + fresh-session replay: self-contained ope
   expect(session.actions.map((a) => a.command)).toEqual(['open', 'press', 'click']);
 
   // --- End the repair: write the healed script (the `close --save-script`
-  // path reuses exactly this writer). ---
+  // path reuses exactly this writer; ADR 0012 decision 6 Fix 2 gates a
+  // repair-armed write on the same explicit finalize signal `close
+  // --save-script` sets). ---
+  session.saveScriptComplete = true;
   sessionStore.writeSessionLog(session);
   const healedPath = path.join(root, 'flow.healed.ad');
   expect(fs.existsSync(healedPath)).toBe(true);

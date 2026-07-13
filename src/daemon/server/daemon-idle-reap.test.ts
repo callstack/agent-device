@@ -9,7 +9,7 @@ import type { SessionState } from '../types.ts';
 import {
   createDaemonIdleReap,
   hasActiveRecording,
-  hasOpenSessions,
+  hasReapBlockingOpenSessions,
   isDaemonIdle,
   resolveDaemonIdleReapMs,
 } from './daemon-idle-reap.ts';
@@ -57,10 +57,10 @@ test('resolveDaemonIdleReapMs ignores invalid overrides', () => {
   assert.equal(resolveDaemonIdleReapMs({ AGENT_DEVICE_DAEMON_IDLE_TIMEOUT_MS: '-5' }), 5 * 60_000);
 });
 
-test('hasOpenSessions reflects the session store', () => {
-  assert.equal(hasOpenSessions(sessionStore), false);
+test('hasReapBlockingOpenSessions reflects the session store', () => {
+  assert.equal(hasReapBlockingOpenSessions(sessionStore), false);
   sessionStore.set('default', makeSession());
-  assert.equal(hasOpenSessions(sessionStore), true);
+  assert.equal(hasReapBlockingOpenSessions(sessionStore), true);
 });
 
 test('hasActiveRecording is true only when a stored session carries a recording', () => {
@@ -89,6 +89,35 @@ test('isDaemonIdle requires no in-flight requests, no sessions, and no recording
   assert.equal(isDaemonIdle({ sessionStore, inFlightRequestCount: 1 }), false);
 
   sessionStore.set('default', makeSession());
+  assert.equal(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 }), false);
+});
+
+// --- ADR 0012 decision 6, R7 (C5a): a repair-armed, un-committed session is
+// bounded-lifetime and does NOT block idle-reap, so an abandoned repair is
+// reaped (with a tombstone) rather than pinning the daemon forever. ---
+
+test('a repair-armed, un-committed session does NOT block idle-reap', () => {
+  sessionStore.set('default', makeSession({ saveScriptBoundary: 0 }));
+  assert.equal(hasReapBlockingOpenSessions(sessionStore), false);
+  assert.equal(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 }), true);
+});
+
+test('a repair-armed session that has already COMMITTED still blocks idle-reap (until close deletes it)', () => {
+  sessionStore.set('default', makeSession({ saveScriptBoundary: 0, saveScriptCommitted: true }));
+  assert.equal(hasReapBlockingOpenSessions(sessionStore), true);
+  assert.equal(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 }), false);
+});
+
+test('an ordinary (non-repair) open session still blocks idle-reap', () => {
+  sessionStore.set('default', makeSession());
+  assert.equal(hasReapBlockingOpenSessions(sessionStore), true);
+  assert.equal(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 }), false);
+});
+
+test('a normal session alongside a reapable repair session still blocks idle-reap', () => {
+  sessionStore.set('default', makeSession({ name: 'default', saveScriptBoundary: 0 }));
+  sessionStore.set('other', makeSession({ name: 'other' }));
+  assert.equal(hasReapBlockingOpenSessions(sessionStore), true);
   assert.equal(isDaemonIdle({ sessionStore, inFlightRequestCount: 0 }), false);
 });
 

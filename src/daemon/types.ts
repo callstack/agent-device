@@ -287,6 +287,32 @@ export type SessionState = {
    * prior `.healed.ad` diff.
    */
   saveScriptDefaultedHealedPath?: boolean;
+  /**
+   * ADR 0012 decision 6, R7 + commit semantics (C2): the repair TRANSACTION
+   * completion flag. `true` iff the last repair-armed replay run reached its
+   * final EXECUTABLE step with no outstanding divergence (the terminal source
+   * `close` is excluded — C4). Commit is gated on this, NOT merely on a
+   * `close`: `SessionScriptWriter.write` publishes a repair-armed session's
+   * healed `.ad` only when complete, so a `close`/`close --save-script`
+   * issued after a divergence but before the plan finishes discards a prefix
+   * instead of committing it. States: ARMED (`saveScriptBoundary` set,
+   * complete unset) -> COMPLETE (this true) -> COMMITTED (`saveScriptCommitted`).
+   */
+  saveScriptComplete?: boolean;
+  /**
+   * ADR 0012 decision 6 (C2): set by the writer after a repair-armed session's
+   * healed `.ad` is atomically published. Makes re-publish idempotent (a second
+   * `writeSessionLog` no-ops) and lets teardown distinguish a COMMITTED session
+   * (nothing to tombstone) from an aborted/reaped one.
+   */
+  saveScriptCommitted?: boolean;
+  /**
+   * ADR 0012 decision 6, R7 (C5a): the original replay input path of an armed
+   * repair, stashed so an idle-reap tombstone can hand the agent an actionable
+   * `replay <path> --save-script` re-run command instead of a bare
+   * SESSION_NOT_FOUND.
+   */
+  repairSourcePath?: string;
   actions: SessionAction[];
   recording?:
     | (SessionRecordingBase & {

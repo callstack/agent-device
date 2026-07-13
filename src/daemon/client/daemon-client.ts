@@ -7,9 +7,12 @@ import { createRequestId, emitDiagnostic, withDiagnosticTimer } from '../../util
 import { INTERNAL_COMMANDS, PUBLIC_COMMANDS } from '../../command-catalog.ts';
 import { prepareRemoteRequestArtifacts } from '../../remote/daemon-artifacts.ts';
 import {
+  attachRepairSessionAddressHint,
   cleanupDaemonAfterRequest,
   ensureDaemon,
+  isHeldRepairDivergence,
   resolveClientSettings,
+  type DaemonClientSettings,
 } from './daemon-client-lifecycle.ts';
 import { sendRequest } from './daemon-client-transport.ts';
 import { resolveDaemonRequestTimeoutMs } from './daemon-client-timeout.ts';
@@ -75,8 +78,9 @@ export async function sendToDaemon(
       session: req.session,
     },
   });
+  let response: DaemonResponse | undefined;
   try {
-    return await withDiagnosticTimer(
+    response = await withDiagnosticTimer(
       'daemon_request',
       async () =>
         await sendRequest(
@@ -89,9 +93,27 @@ export async function sendToDaemon(
         ),
       { requestId, command: req.command },
     );
+    response = withRepairSessionAddressHintIfOwned(response, settings);
+    return response;
   } finally {
-    await cleanupDaemonAfterRequest(req, daemon, settings);
+    await cleanupDaemonAfterRequest(req, daemon, settings, response);
   }
+}
+
+/**
+ * ADR 0012 decision 6 (Fix 1): the owned ephemeral state dir this daemon was
+ * started at is otherwise unaddressable by a later invocation — hint it here,
+ * only when the daemon is actually being kept alive for it
+ * (`settings.ownedStateDir` means `daemon.startedByClient` is also true).
+ */
+function withRepairSessionAddressHintIfOwned(
+  response: DaemonResponse,
+  settings: DaemonClientSettings,
+): DaemonResponse {
+  if (response.ok || !settings.ownedStateDir || !isHeldRepairDivergence(response)) {
+    return response;
+  }
+  return attachRepairSessionAddressHint(response, settings.paths.baseDir);
 }
 
 function writeInstallInProgressNotice(command: string | undefined): void {

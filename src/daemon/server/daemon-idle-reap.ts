@@ -1,5 +1,6 @@
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { SessionStore } from '../session-store.ts';
+import type { SessionState } from '../types.ts';
 
 // Bounds the daemon's own lifetime when nothing is using it. Each
 // AGENT_DEVICE_STATE_DIR spawns a dedicated daemon that otherwise never exits
@@ -29,14 +30,29 @@ export function resolveDaemonIdleReapMs(env: NodeJS.ProcessEnv = process.env): n
   return DAEMON_IDLE_REAP_DEFAULT_MS;
 }
 
-export function hasOpenSessions(sessionStore: SessionStore): boolean {
-  return sessionStore.toArray().length > 0;
+/**
+ * ADR 0012 decision 6, R7 (C5a): true when any open session must block
+ * idle-reap. A repair-armed, not-yet-committed session is a bounded-lifetime
+ * repair transaction, NOT a session that should pin the daemon forever: it
+ * intentionally does NOT block idle-reap, so an actively-driven repair resets
+ * the idle timer on every command while an ABANDONED one is reaped after the
+ * idle window and leaves a `REPAIR_SESSION_EXPIRED` tombstone
+ * (`teardownDaemonSession`) rather than leaking the daemon/lease indefinitely.
+ * Every ordinary open session (and a repair that already committed) blocks
+ * idle-reap as before.
+ */
+export function hasReapBlockingOpenSessions(sessionStore: SessionStore): boolean {
+  return sessionStore.toArray().some((session) => !isReapableRepairSession(session));
 }
 
-// Recording lifecycle is session-scoped (session.recording), so this is
-// currently implied by hasOpenSessions. Kept as an explicit, independently
-// testable guard so a future recording path that outlives its session cannot
-// silently lose this protection.
+function isReapableRepairSession(session: SessionState): boolean {
+  return session.saveScriptBoundary !== undefined && session.saveScriptCommitted !== true;
+}
+
+// Recording lifecycle is session-scoped (session.recording), so a recording
+// only ever exists alongside an open session. Kept as an explicit,
+// independently testable guard so a future recording path that outlives its
+// session cannot silently lose this protection.
 export function hasActiveRecording(sessionStore: SessionStore): boolean {
   return sessionStore.toArray().some((session) => Boolean(session.recording));
 }
@@ -46,7 +62,9 @@ export function isDaemonIdle(params: {
   inFlightRequestCount: number;
 }): boolean {
   if (params.inFlightRequestCount > 0) return false;
-  if (hasOpenSessions(params.sessionStore)) return false;
+  // A reapable repair-armed session (C5a) does not block idle-reap, so an
+  // abandoned repair is bounded; every other open session still does.
+  if (hasReapBlockingOpenSessions(params.sessionStore)) return false;
   return !hasActiveRecording(params.sessionStore);
 }
 
