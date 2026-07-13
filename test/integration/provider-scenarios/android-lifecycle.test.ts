@@ -1097,6 +1097,15 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
     pattern: 'ping-pong',
     ...selection,
   });
+  assert.deepEqual(swipe.from, { x: 20, y: 200 });
+  assert.deepEqual(swipe.to, { x: 20, y: 100 });
+  assert.equal(swipe.x1, 20);
+  assert.equal(swipe.y1, 200);
+  assert.equal(swipe.x2, 20);
+  assert.equal(swipe.y2, 100);
+  assert.equal(swipe.durationMs, 100);
+  assert.equal(swipe.effectiveDurationMs, 100);
+  assert.equal(swipe.timingMode, 'direct');
   assert.equal(swipe.count, 2);
   assert.equal(swipe.pauseMs, 1);
   assert.equal(swipe.pattern, 'ping-pong');
