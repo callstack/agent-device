@@ -7,10 +7,18 @@ extension RunnerTests {
     #if os(macOS)
       return nil
     #else
-    guard let modal = firstBlockingSystemModal(in: springboard, deadline: deadline) else {
+    guard let springboardModal = firstBlockingSystemModal(
+      in: springboard,
+      deadline: deadline
+    ) else {
       return nil
     }
-    let actions = actionableElements(in: modal)
+    var modal = springboardModal
+    var actions = actionableElements(in: modal)
+    if actions.isEmpty, Date() < deadline, let remote = remoteHostedSystemModal() {
+      modal = remote.host
+      actions = remote.actions
+    }
     guard !actions.isEmpty else {
       return nil
     }
@@ -97,6 +105,43 @@ extension RunnerTests {
       }
     }
 
+    return nil
+  }
+
+  // MARK: - Remote-Hosted System Modal Probe
+
+  /// System UI hosted out-of-process — the AccessorySetupKit picker, hosted by
+  /// AccessorySetupUI.app on iOS 18+ — mirrors into `springboard.alerts`, but the
+  /// mirrored content does not reliably pass `isHittable` from the springboard scope,
+  /// so `actionableElements(in:)` can come back empty while the picker is on screen.
+  /// Querying the hosting process directly sees the real elements, and synthesized
+  /// taps on them work. Query only: activating the host tears the picker sheet into
+  /// a black full-screen state.
+  private static let remoteSystemModalHostBundleIds = [
+    "com.apple.AccessorySetupUI"
+  ]
+
+  struct RemoteHostedSystemModal {
+    let host: XCUIApplication
+    let actions: [XCUIElement]
+  }
+
+  func remoteHostedSystemModal() -> RemoteHostedSystemModal? {
+    // CONSERVATIVE: Callers probe remote hosts only after a springboard modal was
+    // detected but yielded no hittable actions, so the common no-modal snapshot path
+    // never pays the cross-process query (~1s against a live host, exception-absorbed
+    // against a dead one). Revisit if a remote-hosted modal ever stops mirroring into
+    // springboard entirely.
+    for bundleId in Self.remoteSystemModalHostBundleIds {
+      let host = XCUIApplication(bundleIdentifier: bundleId)
+      let state = safely("REMOTE_MODAL_STATE", XCUIApplication.State.notRunning) { host.state }
+      guard state != .notRunning else { continue }
+      // A host that just dismissed its UI raises kAXErrorServerNotFound on query;
+      // safely(...) inside actionableElements absorbs it and yields no actions.
+      let actions = actionableElements(in: host)
+      guard !actions.isEmpty else { continue }
+      return RemoteHostedSystemModal(host: host, actions: actions)
+    }
     return nil
   }
 

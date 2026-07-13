@@ -10,7 +10,16 @@ extension RunnerTests {
   func resolveAlert(app activeApp: XCUIApplication) -> RunnerAlert? {
 #if !os(macOS)
     if let systemModal = firstBlockingSystemModal(in: springboard) {
-      return runnerAlert(root: systemModal, ownerApp: springboard)
+      if let alert = runnerAlert(root: systemModal, ownerApp: springboard) {
+        return alert
+      }
+      // Springboard modal with no hittable actions: remote-hosted system UI
+      // (e.g. the AccessorySetupKit picker). Resolve it in the hosting process's
+      // own scope, where the elements are hittable and taps land.
+      if let remote = remoteHostedSystemModal() {
+        return runnerAlert(root: remote.host, ownerApp: remote.host, actions: remote.actions)
+      }
+      return nil
     }
 #endif
     if let alert = firstExistingElement(in: activeApp.alerts.allElementsBoundByIndex) {
@@ -64,8 +73,12 @@ extension RunnerTests {
     )
   }
 
-  private func runnerAlert(root: XCUIElement, ownerApp: XCUIApplication) -> RunnerAlert? {
-    let buttons = actionableElements(in: root).filter { isEnabledElement($0) }
+  private func runnerAlert(
+    root: XCUIElement,
+    ownerApp: XCUIApplication,
+    actions: [XCUIElement]? = nil
+  ) -> RunnerAlert? {
+    let buttons = (actions ?? actionableElements(in: root)).filter { isEnabledElement($0) }
     guard !buttons.isEmpty else {
       return nil
     }
