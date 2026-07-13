@@ -151,8 +151,8 @@ function formatSessionScript(session: SessionState, appendCompleteSentinel: bool
 }
 
 /**
- * ADR 0012 decision 6, commit semantics + no-clobber (Fix 4, C5b): publishes
- * `script` to `scriptPath` atomically AND race-safely.
+ * ADR 0012 decision 6, commit semantics + no-clobber (Fix 4, C5b, BLOCKER 1):
+ * publishes `script` to `scriptPath` atomically AND race-safely.
  *
  * - Atomic: the temp file is created in the SAME DIRECTORY as the target
  *   (never `/tmp`), so the final publish is an intra-directory rename/link on
@@ -160,11 +160,11 @@ function formatSessionScript(session: SessionState, appendCompleteSentinel: bool
  *   explicit `--save-script=<path>` on a different mount still publishes
  *   atomically. An aborted write leaves only the (removed) temp, no partial
  *   at the target.
- * - Race-safe no-clobber: the absent-target case publishes via `linkSync`,
- *   which fails atomically with `EEXIST` if a file appeared meanwhile — there
- *   is no check-then-write TOCTOU window against a COMPLETE artifact. Only
- *   after confirming the existing file is incomplete/unprotected do we
- *   overwrite it via rename.
+ * - Race-safe no-clobber (BLOCKER 1): the DEFAULT healed-sibling path is
+ *   protected by `publishNoClobberAtomically`, which makes an atomic primitive
+ *   (never a check-then-write gap) decide the winner even when the existing
+ *   target is a partial. An explicit `--save-script=<path>` target is
+ *   caller-directed and unprotected either way (`publishOverwriteAtomically`).
  */
 function publishHealedScriptAtomically(params: {
   scriptPath: string;
@@ -179,28 +179,137 @@ function publishHealedScriptAtomically(params: {
   );
   fs.writeFileSync(tempPath, script);
   try {
-    try {
-      // Atomic create-if-absent: EEXIST iff the target already exists.
-      fs.linkSync(tempPath, scriptPath);
-      return;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    if (protectComplete) {
+      publishNoClobberAtomically(tempPath, scriptPath);
+    } else {
+      publishOverwriteAtomically(tempPath, scriptPath);
     }
-    // The target exists. A COMPLETE (sentinel-marked) default healed artifact
-    // is review-worthy and must never be silently clobbered; an incomplete or
-    // partial one is always overwritable by a fresh repair that completes.
-    if (protectComplete && isCompleteHealedScript(scriptPath)) {
-      throw new AppError(
-        'COMMAND_FAILED',
-        `A prior healed script already exists at ${scriptPath}; pass replay --save-script=<path> to write elsewhere, or remove/rename it first, so an unreviewed healed script is never clobbered.`,
-      );
-    }
-    fs.renameSync(tempPath, scriptPath);
   } finally {
     // linkSync leaves the temp hard-link behind on success; rename consumes it;
-    // an error leaves it — always clean up whatever remains.
+    // an error leaves it — always clean up whatever of our own temp remains.
     fs.rmSync(tempPath, { force: true });
   }
+}
+
+/**
+ * An explicit `--save-script=<path>` target is caller-directed and never
+ * no-clobber-protected — BLOCKER 1's "is the existing target incomplete"
+ * classification never runs on this path, so a plain atomic publish is
+ * correct: absent -> exclusive create; present -> atomic rename-replace.
+ */
+function publishOverwriteAtomically(tempPath: string, scriptPath: string): void {
+  try {
+    // Atomic create-if-absent: EEXIST iff the target already exists.
+    fs.linkSync(tempPath, scriptPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+    fs.renameSync(tempPath, scriptPath);
+  }
+}
+
+const NO_CLOBBER_PUBLISH_MAX_ATTEMPTS = 16;
+
+/**
+ * ADR 0012 decision 6, no-clobber (BLOCKER 1): publishes to the DEFAULT healed
+ * sibling path, where a COMPLETE (sentinel-marked) prior artifact must never
+ * be clobbered.
+ *
+ * The prior implementation decided "is the existing target overwritable" with
+ * a plain read (`isCompleteHealedScript`) followed later by an unconditional
+ * `renameSync`. Two concurrent writers could both read the SAME pre-existing
+ * partial as incomplete and then both `renameSync` over it — each returning
+ * success with no signal to the other. Neither writer ever observed the
+ * loss: a silent, undetectable clobber.
+ *
+ * Here every step that could decide a winner is an atomic filesystem
+ * primitive, never a check-then-write gap:
+ * - `linkSync` is the ONLY way to WIN outright: it fails atomically (`EEXIST`)
+ *   iff a file is at `scriptPath` at that exact instant.
+ * - On `EEXIST`, the existing file is inspected on a PRIVATE copy, never the
+ *   shared path: `renameSync` atomically moves whatever currently sits at
+ *   `scriptPath` into a uniquely-named quarantine file first, so the
+ *   completeness check runs on a copy nobody else can race against. If a
+ *   competing writer's own grab (or publish) already claimed `scriptPath` in
+ *   between, our `renameSync` fails (`ENOENT`) and we re-evaluate from the
+ *   top against the current state — never a stale read.
+ * - A COMPLETE quarantined file is put back (best effort) and the publish is
+ *   refused; a genuinely partial one is discarded and the exclusive
+ *   `linkSync` is retried.
+ *
+ * Every interleaving converges on exactly one winning `linkSync` and every
+ * other writer observing a definitive, thrown "already exists" — never two
+ * silent successes, never a torn/half-clobbered file.
+ */
+function publishNoClobberAtomically(tempPath: string, scriptPath: string): void {
+  for (let attempt = 0; attempt < NO_CLOBBER_PUBLISH_MAX_ATTEMPTS; attempt += 1) {
+    if (tryExclusiveLink(tempPath, scriptPath)) return;
+    // Something is at `scriptPath`. Either it gets grabbed-and-discarded as a
+    // genuine partial, or a competing writer's own grab/publish already beat
+    // us to it — either way, re-evaluate from the top via the exclusive link
+    // above rather than trust a stale read. Throws (never returns) if what we
+    // grabbed turns out to be a COMPLETE artifact.
+    grabAndDiscardPartialTarget(scriptPath);
+  }
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Could not publish the healed script to ${scriptPath}: too much contention from concurrent writers.`,
+  );
+}
+
+/**
+ * The only primitive that can WIN outright: atomic create-if-absent.
+ * `true` = published (won); `false` = `EEXIST` (a file is at `scriptPath`
+ * right now). Any other error propagates.
+ */
+function tryExclusiveLink(tempPath: string, scriptPath: string): boolean {
+  try {
+    fs.linkSync(tempPath, scriptPath);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+    throw error;
+  }
+}
+
+/**
+ * Atomically grabs whatever currently sits at `scriptPath` into a private,
+ * uniquely-named quarantine file (a single `renameSync`, so nobody else can
+ * race the completeness check against it) and inspects it there. A genuinely
+ * partial grab is discarded (returns normally — the caller retries the
+ * exclusive link). `ENOENT` means a competing writer's own grab or publish
+ * already changed `scriptPath` between our `EEXIST` and this call — also
+ * returns normally, for the same "retry from the top" reason. A COMPLETE
+ * grab is restored (best effort) and this throws, refusing the clobber.
+ */
+function grabAndDiscardPartialTarget(scriptPath: string): void {
+  const quarantinePath = `${scriptPath}.${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.quarantine`;
+  try {
+    fs.renameSync(scriptPath, quarantinePath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw error;
+  }
+  try {
+    if (isCompleteHealedScript(quarantinePath)) refuseCompleteClobber(quarantinePath, scriptPath);
+  } finally {
+    fs.rmSync(quarantinePath, { force: true });
+  }
+}
+
+/** Restores a quarantined COMPLETE artifact (best effort) and refuses the publish. */
+function refuseCompleteClobber(quarantinePath: string, scriptPath: string): never {
+  try {
+    // If another writer already republished to `scriptPath` in the meantime,
+    // this fails and ours stays quarantined (cleaned up by the caller) — we
+    // lose cleanly either way.
+    fs.renameSync(quarantinePath, scriptPath);
+  } catch {
+    /* already re-occupied by another writer's publish */
+  }
+  throw new AppError(
+    'COMMAND_FAILED',
+    `A prior healed script already exists at ${scriptPath}; pass replay --save-script=<path> to write elsewhere, or remove/rename it first, so an unreviewed healed script is never clobbered.`,
+  );
 }
 
 function buildOptimizedActions(session: SessionState): SessionAction[] {

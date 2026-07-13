@@ -1,4 +1,4 @@
-import { test, expect } from 'vitest';
+import { test, expect, vi } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -251,6 +251,77 @@ test('write() DOES overwrite a stale INCOMPLETE .healed.ad at the default path (
   expect(script).toContain(HEAL_COMPLETE_SENTINEL);
   const parsed = parseReplayScriptDetailed(script);
   expect(parsed.actions.map((a) => a.positionals[0])).toEqual(['id="new"']);
+});
+
+// BLOCKER 1: the reported race is TWO writers concurrently seeing the SAME
+// pre-existing PARTIAL (no-sentinel) default healed sibling and both
+// classifying it as overwritable — the prior implementation then let both
+// `renameSync` over it, silently, with no signal to the loser. The publish
+// primitive (not the "is it complete" check) must decide exactly one winner.
+test('BLOCKER 1: two writers racing on the SAME pre-existing PARTIAL target — the atomic primitive, not the incomplete check, decides exactly one winner', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-partial-race-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const healedPath = path.join(root, 'flows', 'login.healed.ad');
+  fs.mkdirSync(path.dirname(healedPath), { recursive: true });
+  // The shared, pre-existing PARTIAL target both writers race against — no
+  // sentinel, so both writers' own completeness checks say "overwritable".
+  fs.writeFileSync(healedPath, 'context platform=ios device="x"\nclick id="stale-partial"\n');
+
+  const sessionA = makeIosSession('writer-a', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+    saveScriptComplete: true,
+    saveScriptPath: healedPath,
+    saveScriptDefaultedHealedPath: true,
+    actions: [action({ command: 'click', positionals: ['id="from-a"'] })],
+  });
+  const sessionB = makeIosSession('writer-b', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+    saveScriptComplete: true,
+    saveScriptPath: healedPath,
+    saveScriptDefaultedHealedPath: true,
+    actions: [action({ command: 'click', positionals: ['id="from-b"'] })],
+  });
+
+  // Force a genuine interleaving deterministically instead of hoping two
+  // in-process calls happen to race: when writer A performs its atomic
+  // "grab the existing target to inspect it" rename, run writer B's ENTIRE
+  // publish to completion first — exactly the reported scenario, both
+  // writers starting against the identical partial target — then let A's own
+  // call proceed against whatever B left behind.
+  const realRenameSync = fs.renameSync;
+  let triggeredCompetingWriter = false;
+  let resultB: ReturnType<SessionScriptWriter['write']> | undefined;
+  const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementation((from, to) => {
+    if (!triggeredCompetingWriter && from === healedPath) {
+      triggeredCompetingWriter = true;
+      resultB = writer.write(sessionB);
+    }
+    return realRenameSync(from, to);
+  });
+
+  const resultA = writer.write(sessionA);
+  renameSpy.mockRestore();
+
+  expect(resultB).toBeDefined();
+  // Exactly one writer wins (publishes), the other observes a definitive,
+  // thrown no-clobber loss — never both silently succeeding, never a torn
+  // file caused by an unconditional renameSync racing another.
+  const outcomes = [resultA, resultB!];
+  const wins = outcomes.filter((r) => r.written);
+  const losses = outcomes.filter((r) => !r.written);
+  expect(wins).toHaveLength(1);
+  expect(losses).toHaveLength(1);
+  expect(losses[0]!.written === false && losses[0]!.error?.message).toMatch(/already exists/);
+
+  // The surviving file is exactly the winner's complete, uncorrupted script —
+  // never an interleaved mix of both writers' content.
+  const finalScript = fs.readFileSync(healedPath, 'utf8');
+  expect(finalScript).toContain(HEAL_COMPLETE_SENTINEL);
+  const parsed = parseReplayScriptDetailed(finalScript);
+  const winnerLabel = resultB!.written ? 'id="from-b"' : 'id="from-a"';
+  expect(parsed.actions.map((a) => a.positionals[0])).toEqual([winnerLabel]);
 });
 
 test('write() DOES overwrite when the caller passed an explicit --save-script=<path> (not defaulted)', () => {
