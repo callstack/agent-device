@@ -15,8 +15,9 @@ Two-contact geometry also differed by platform. Android used a fixed radius whil
 radius from the app frame. Neither path validated every planned point against the active
 interaction viewport before injection.
 
-`scroll` remains separate because it owns viewport/edge traversal, content-state verification, and
-runner fallback policy rather than a single physical gesture.
+`scroll` remains a separate command because it owns viewport/edge traversal and content-state
+verification rather than a single physical gesture. Its Android physical movement still lowers to
+the shared planned-touch executor.
 
 ## Decision
 
@@ -54,9 +55,10 @@ no established automation use case justifies a public tuning surface.
 
 Platform adapters consume the canonical plan:
 
-- Android sends the plan to provider-native touch injection when available, otherwise to the
-  bundled instrumentation helper. The helper injects the exact planned pointer samples. Canonical
-  gesture-plan execution never falls back to `adb input swipe`; the snapshot helper is stopped
+- Android sends planned touch, including gesture plans plus the physical movement for scroll and
+  long-press, to provider-native touch injection when available, otherwise to the bundled
+  instrumentation helper. The helper injects the exact planned pointer samples. Planned Android
+  touch execution never falls back to `adb input swipe`; the snapshot helper is stopped
   before local gesture instrumentation because Android permits only one instrumentation owner of
   `UiAutomation`.
 - iOS converts every planned point to native orientation and feeds the exact arrays to the existing
@@ -106,4 +108,5 @@ selectors or refs and therefore cannot claim element-targeting guarantees.
   fling/swipe as a quick directional throw and pan as deliberate timed translation.
 - Add `two-finger-pan`: rejected because pointer count is topology, not a new motion intent.
 - Expose span/angle controls: rejected until a concrete automation use case needs them.
-- Consolidate scroll: rejected because edge/content verification and fallback policy are distinct.
+- Consolidate scroll command semantics: rejected because edge/content verification is distinct;
+  only its Android physical touch execution is shared.

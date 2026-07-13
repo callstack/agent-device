@@ -1,39 +1,82 @@
 import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import { promises as fs } from 'node:fs';
-import { fillAndroid, rotateAndroid, scrollAndroid, typeAndroid } from '../input-actions.ts';
+import {
+  fillAndroid,
+  longPressAndroid,
+  rotateAndroid,
+  scrollAndroid,
+  typeAndroid,
+} from '../input-actions.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { withScriptedAdb } from '../../../__tests__/test-utils/mocked-binaries.ts';
+import { ANDROID_EMULATOR } from '../../../__tests__/test-utils/index.ts';
+import { withAndroidAdbProvider, type AndroidTouchInjector } from '../adb-executor.ts';
 
-test('scrollAndroid supports explicit pixel travel distance', async () => {
-  await withScriptedAdb(
-    'agent-device-android-scroll-pixels-',
-    [
-      '#!/bin/sh',
-      'printf "%s\\n" "$@" >> "$AGENT_DEVICE_TEST_ARGS_FILE"',
-      'if [ "$1" = "-s" ]; then',
-      '  shift',
-      '  shift',
-      'fi',
-      'if [ "$1" = "shell" ] && [ "$2" = "wm" ] && [ "$3" = "size" ]; then',
-      '  echo "Physical size: 1080x1920"',
-      '  exit 0',
-      'fi',
-      'exit 0',
-      '',
-    ].join('\n'),
-    async ({ argsLogPath, device }) => {
-      const result = await scrollAndroid(device, 'down', { pixels: 240, durationMs: 120 });
-      const args = await fs.readFile(argsLogPath, 'utf8');
-
-      assert.match(args, /shell\ninput\nswipe\n540\n1080\n540\n840\n120\n/);
-      assert.doesNotMatch(args, /uiautomator|dump/);
-      assert.equal(result.pixels, 240);
-      assert.equal(result.durationMs, 120);
-      assert.equal(result.referenceWidth, 1080);
-      assert.equal(result.referenceHeight, 1920);
+test('scrollAndroid plans explicit pixel travel through semantic touch injection', async () => {
+  const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];
+  const result = await withAndroidAdbProvider(
+    {
+      exec: async () => {
+        throw new Error('adb must not run');
+      },
+      gestureViewport: async () => ({ x: 10, y: 20, width: 1080, height: 1920 }),
+      touch: async (request) => {
+        touchCalls.push(request);
+        return { injected: true };
+      },
     },
+    { serial: ANDROID_EMULATOR.id },
+    async () => await scrollAndroid(ANDROID_EMULATOR, 'down', { pixels: 240, durationMs: 120 }),
   );
+
+  assert.equal(touchCalls.length, 1);
+  const touch = touchCalls[0]!;
+  assert.equal(touch.intent, 'pan');
+  assert.deepEqual(touch.pointers[0]?.samples[0]?.point, { x: 550, y: 1100 });
+  assert.deepEqual(touch.pointers[0]?.samples.at(-1)?.point, { x: 550, y: 860 });
+  assert.equal(result.pixels, 240);
+  assert.equal(result.durationMs, 120);
+  assert.equal(result.referenceWidth, 1080);
+  assert.equal(result.referenceHeight, 1920);
+  assert.equal(result.backend, 'provider-native-touch');
+  assert.equal(result.injected, true);
+});
+
+test('longPressAndroid sends a stationary semantic touch plan', async () => {
+  const touchCalls: Parameters<AndroidTouchInjector>[0][] = [];
+  const result = await withAndroidAdbProvider(
+    {
+      exec: async () => {
+        throw new Error('adb must not run');
+      },
+      gestureViewport: async () => ({ x: 10, y: 20, width: 300, height: 500 }),
+      touch: async (request) => {
+        touchCalls.push(request);
+      },
+    },
+    { serial: ANDROID_EMULATOR.id },
+    async () => await longPressAndroid(ANDROID_EMULATOR, 30, 40, 750),
+  );
+
+  assert.deepEqual(touchCalls, [
+    {
+      topology: 'single',
+      intent: 'longPress',
+      durationMs: 750,
+      viewport: { x: 10, y: 20, width: 300, height: 500 },
+      pointers: [
+        {
+          pointerId: 0,
+          samples: [
+            { offsetMs: 0, point: { x: 30, y: 40 } },
+            { offsetMs: 750, point: { x: 30, y: 40 } },
+          ],
+        },
+      ],
+    },
+  ]);
+  assert.equal(result.backend, 'provider-native-touch');
 });
 
 test('rotateAndroid locks auto-rotate and sets user rotation', async () => {

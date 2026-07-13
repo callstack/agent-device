@@ -85,6 +85,20 @@ test('Provider-backed integration Android touch provider handles multi-touch ges
       const client = world.daemon.client();
       await client.apps.open({ app: 'settings', ...world.selection });
 
+      await client.interactions.longPress({
+        x: 195,
+        y: 320,
+        durationMs: 750,
+        ...world.selection,
+      });
+
+      await client.interactions.scroll({
+        direction: 'down',
+        pixels: 120,
+        durationMs: 350,
+        ...world.selection,
+      });
+
       await client.interactions.swipe({
         from: { x: 340, y: 400 },
         to: { x: 60, y: 400 },
@@ -157,6 +171,8 @@ test('Provider-backed integration Android touch provider handles multi-touch ges
         durationMs: plan.durationMs,
       }));
       assert.deepEqual(touchCalls, [
+        { topology: 'single', intent: 'longPress', pointerCount: 1, durationMs: 750 },
+        { topology: 'single', intent: 'pan', pointerCount: 1, durationMs: 350 },
         { topology: 'single', intent: 'pan', pointerCount: 1, durationMs: 300 },
         { topology: 'single', intent: 'pan', pointerCount: 1, durationMs: 500 },
         { topology: 'two', intent: 'pan', pointerCount: 2, durationMs: 500 },
@@ -164,7 +180,7 @@ test('Provider-backed integration Android touch provider handles multi-touch ges
         { topology: 'two', intent: 'rotate', pointerCount: 2, durationMs: 784 },
         { topology: 'two', intent: 'transform', pointerCount: 2, durationMs: 700 },
       ]);
-      assert.equal(world.gestureViewportCalls, 6);
+      assert.equal(world.gestureViewportCalls, 8);
       assert.equal(
         world.adbCalls.some(
           (call) =>
@@ -1463,7 +1479,7 @@ function assertAndroidInteractionContract(world: AndroidSettingsWorld): void {
   const helperGestureCalls = adbCalls.filter((call) =>
     call.includes('com.callstack.agentdevice.multitouchhelper/.MultiTouchInstrumentation'),
   );
-  assert.equal(helperGestureCalls.length, 4, JSON.stringify(adbCalls));
+  assert.equal(helperGestureCalls.length, 6, JSON.stringify(adbCalls));
   assertCommandCall(adbCalls, ['shell', 'input', 'tap', '88', '151']);
   assertCommandCall(adbCalls, [
     'shell',
@@ -1480,8 +1496,11 @@ function assertAndroidInteractionContract(world: AndroidSettingsWorld): void {
     2,
   );
   assertCommandCall(adbCalls, ['shell', 'input', 'tap', '50', '60']);
-  assertCommandCall(adbCalls, ['shell', 'input', 'swipe', '30', '40', '30', '40', '5']);
-  assertCommandCall(adbCalls, ['shell', 'input', 'swipe', '31', '40', '31', '40', '5']);
+  assert.equal(
+    adbCalls.some((call) => call.slice(0, 3).join(' ') === 'shell input swipe'),
+    false,
+    JSON.stringify(adbCalls),
+  );
   assert.equal(
     adbCalls.filter((call) => arrayEqual(call, ['shell', 'input', 'tap', '88', '151'])).length,
     5,

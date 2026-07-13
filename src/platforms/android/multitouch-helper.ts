@@ -24,6 +24,7 @@ import {
   readInstrumentationResultNumber,
 } from './instrumentation-helper.ts';
 import { stopAndroidSnapshotHelperSessionForDevice } from './snapshot-helper.ts';
+import type { AndroidTouchPlan } from './touch-plan.ts';
 
 const HELPER_NAME = 'android-multitouch-helper';
 const HELPER_PACKAGE = 'com.callstack.agentdevice.multitouchhelper';
@@ -31,6 +32,7 @@ const HELPER_RUNNER = 'com.callstack.agentdevice.multitouchhelper/.MultiTouchIns
 const HELPER_PROTOCOL = 'android-multitouch-helper-v1';
 const HELPER_INSTALL_TIMEOUT_MS = 30_000;
 const HELPER_GESTURE_TIMEOUT_MS = 45_000;
+const HELPER_GESTURE_TIMEOUT_OVERHEAD_MS = 15_000;
 const HELPER_NO_FINAL_RESULT = 'ANDROID_MULTITOUCH_HELPER_NO_FINAL_RESULT';
 const HELPER_REPORTED_FAILURE = 'ANDROID_MULTITOUCH_HELPER_REPORTED_FAILURE';
 const HELPER_LABEL = 'Android multi-touch helper';
@@ -67,6 +69,13 @@ export async function performGestureAndroid(
   device: DeviceInfo,
   plan: GesturePlan,
 ): Promise<Record<string, unknown>> {
+  return await performAndroidTouchPlan(device, plan);
+}
+
+export async function performAndroidTouchPlan(
+  device: DeviceInfo,
+  plan: AndroidTouchPlan,
+): Promise<Record<string, unknown>> {
   const providerTouch = resolveAndroidTouchInjector(device);
   if (providerTouch) {
     const result = (await providerTouch(plan)) ?? {};
@@ -77,7 +86,7 @@ export async function performGestureAndroid(
 
 async function runAndroidMultiTouchHelperGestureForDevice(
   device: DeviceInfo,
-  plan: GesturePlan,
+  plan: AndroidTouchPlan,
 ): Promise<Record<string, unknown>> {
   const { adb, artifact, install } = await prepareAndroidMultiTouchHelper(device);
   const output = await withDiagnosticTimer(
@@ -178,7 +187,7 @@ function validateAndroidGestureViewport(viewport: Rect): Rect {
 }
 
 export function normalizeAndroidMultiTouchHelperGestureRequest(
-  plan: GesturePlan,
+  plan: AndroidTouchPlan,
 ): AndroidMultiTouchHelperGestureRequest {
   return {
     kind: plan.topology === 'single' ? 'swipe' : 'transform',
@@ -220,7 +229,13 @@ export async function runAndroidMultiTouchHelperGesture(options: {
       payloadBase64,
       options.instrumentationRunner,
     ],
-    { allowFailure: true, timeoutMs: HELPER_GESTURE_TIMEOUT_MS },
+    {
+      allowFailure: true,
+      timeoutMs: Math.max(
+        HELPER_GESTURE_TIMEOUT_MS,
+        options.request.durationMs + HELPER_GESTURE_TIMEOUT_OVERHEAD_MS,
+      ),
+    },
   );
   let output: Record<string, unknown>;
   try {

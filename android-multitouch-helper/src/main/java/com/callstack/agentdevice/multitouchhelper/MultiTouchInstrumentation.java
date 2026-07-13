@@ -19,8 +19,8 @@ import org.json.JSONObject;
 public final class MultiTouchInstrumentation extends Instrumentation {
   private static final String PROTOCOL = "android-multitouch-helper-v1";
   private static final String HELPER_API_VERSION = "1";
-  private static final int MIN_DURATION_MS = 16;
-  private static final int MAX_DURATION_MS = 10_000;
+  private static final int MIN_DURATION_MS = 0;
+  private static final int MAX_DURATION_MS = 120_000;
   private Bundle arguments;
 
   @Override
@@ -204,7 +204,8 @@ public final class MultiTouchInstrumentation extends Instrumentation {
           throw new IllegalArgumentException("Planned sample coordinates must be finite");
         }
         long offsetMs = (long) rawOffsetMs;
-        if (offsetMs <= previousOffsetMs) {
+        if (offsetMs < previousOffsetMs
+            || (offsetMs == previousOffsetMs && durationMs != 0)) {
           throw new IllegalArgumentException("Planned sample offsets must be strictly increasing");
         }
         parsed[sampleIndex] = new PointerSample(offsetMs, (float) x, (float) y);
@@ -307,7 +308,7 @@ public final class MultiTouchInstrumentation extends Instrumentation {
 
   private static int requireDuration(int value) {
     if (value < MIN_DURATION_MS || value > MAX_DURATION_MS) {
-      throw new IllegalArgumentException("durationMs must be between 16 and 10000");
+      throw new IllegalArgumentException("durationMs must be between 0 and 120000");
     }
     return value;
   }

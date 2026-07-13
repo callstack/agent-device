@@ -2,6 +2,7 @@ import { AppError } from '../../kernel/errors.ts';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import { emitDiagnostic } from '../../utils/diagnostics.ts';
 import type { DeviceRotation } from '../../contracts/device-rotation.ts';
+import { buildGesturePlan } from '../../contracts/gesture-plan.ts';
 import { buildScrollGesturePlan, type ScrollDirection } from '../../contracts/scroll-gesture.ts';
 import { toAndroidTvRemoteKeyevent, type TvRemoteButton } from '../../contracts/tv-remote.ts';
 import { runAndroidAdb, sleep } from './adb.ts';
@@ -18,6 +19,12 @@ import {
   type AndroidFillVerification,
 } from './fill-verification.ts';
 import { isAndroidTestImeActive } from './ime-lifecycle.ts';
+import {
+  performAndroidTouchPlan,
+  performGestureAndroid,
+  readAndroidGestureViewport,
+} from './multitouch-helper.ts';
+import { buildAndroidLongPressTouchPlan } from './touch-plan.ts';
 import {
   clearAndroidImeHelperText,
   resolveAndroidImeHelperArtifact,
@@ -84,17 +91,12 @@ export async function longPressAndroid(
   x: number,
   y: number,
   durationMs = 800,
-): Promise<void> {
-  await runAndroidAdb(device, [
-    'shell',
-    'input',
-    'swipe',
-    String(x),
-    String(y),
-    String(x),
-    String(y),
-    String(durationMs),
-  ]);
+): Promise<Record<string, unknown>> {
+  const viewport = await readAndroidGestureViewport(device);
+  return await performAndroidTouchPlan(
+    device,
+    buildAndroidLongPressTouchPlan({ x, y }, durationMs, viewport),
+  );
 }
 
 export async function typeAndroid(device: DeviceInfo, text: string, delayMs = 0): Promise<void> {
@@ -263,30 +265,32 @@ export async function scrollAndroid(
   direction: ScrollDirection,
   options?: { amount?: number; pixels?: number; durationMs?: number },
 ): Promise<Record<string, unknown>> {
-  const size = await getAndroidScreenSize(device);
-  const plan = buildScrollGesturePlan({
+  const viewport = await readAndroidGestureViewport(device);
+  const scrollPlan = buildScrollGesturePlan({
     direction,
     amount: options?.amount,
     pixels: options?.pixels,
-    referenceWidth: size.width,
-    referenceHeight: size.height,
+    referenceWidth: viewport.width,
+    referenceHeight: viewport.height,
   });
   const durationMs = options?.durationMs ?? 300;
-
-  await runAndroidAdb(device, [
-    'shell',
-    'input',
-    'swipe',
-    String(plan.x1),
-    String(plan.y1),
-    String(plan.x2),
-    String(plan.y2),
-    String(durationMs),
-  ]);
+  const origin = { x: viewport.x + scrollPlan.x1, y: viewport.y + scrollPlan.y1 };
+  const gesturePlan = buildGesturePlan(
+    {
+      intent: 'pan',
+      origin,
+      delta: { x: scrollPlan.x2 - scrollPlan.x1, y: scrollPlan.y2 - scrollPlan.y1 },
+      durationMs,
+    },
+    viewport,
+    'android',
+  );
+  const backend = await performGestureAndroid(device, gesturePlan);
 
   return {
-    ...plan,
+    ...scrollPlan,
     ...(options?.durationMs !== undefined ? { durationMs: options.durationMs } : {}),
+    ...backend,
   };
 }
 

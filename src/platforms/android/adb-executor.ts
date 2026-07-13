@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Readable, Writable } from 'node:stream';
 import type { DeviceInfo } from '../../kernel/device.ts';
 import type { Rect } from '../../kernel/snapshot.ts';
-import type { GesturePlan } from '../../contracts/gesture-plan.ts';
+import type { AndroidTouchPlan } from './touch-plan.ts';
 import {
   coerceExecResult,
   execFailureDetails,
@@ -126,7 +126,7 @@ export type AndroidTextInjectionRequest = {
 export type AndroidTextInjector = (request: AndroidTextInjectionRequest) => Promise<void>;
 
 export type AndroidTouchInjector = (
-  request: GesturePlan,
+  request: AndroidTouchPlan,
 ) => Promise<Record<string, unknown> | void>;
 
 export type AndroidGestureViewportProvider = () => Promise<Rect>;
