@@ -14,6 +14,24 @@ import {
 
 const viewport = { x: 0, y: 0, width: 400, height: 800 };
 
+function longPressRequest(durationMs = 120_000) {
+  const point = { x: 20, y: 30 };
+  return normalizeAndroidMultiTouchHelperGestureRequest({
+    topology: 'single',
+    intent: 'longPress',
+    durationMs,
+    pointers: [
+      {
+        pointerId: 0,
+        samples: [
+          { offsetMs: 0, point },
+          { offsetMs: durationMs, point },
+        ],
+      },
+    ],
+  });
+}
+
 test('helper response parsing returns instrumentation evidence', () => {
   assert.deepEqual(
     parseAndroidMultiTouchHelperOutput(
@@ -81,27 +99,29 @@ test('single-pointer plans use the same exact helper protocol', () => {
 });
 
 test('Android long press lowers to a stationary single-pointer helper request', () => {
-  const point = { x: 20, y: 30 };
-  const request = normalizeAndroidMultiTouchHelperGestureRequest({
-    topology: 'single',
-    intent: 'longPress',
-    durationMs: 120_000,
-    pointers: [
-      {
-        pointerId: 0,
-        samples: [
-          { offsetMs: 0, point },
-          { offsetMs: 120_000, point },
-        ],
-      },
-    ],
-  });
+  const request = longPressRequest();
   assert.equal(request.kind, 'swipe');
   assert.equal(request.durationMs, 120_000);
   assert.deepEqual(request.pointers[0]?.samples, [
     { offsetMs: 0, x: 20, y: 30 },
     { offsetMs: 120_000, x: 20, y: 30 },
   ]);
+});
+
+test('max-duration long press extends the helper process timeout', async () => {
+  await runAndroidMultiTouchHelperGesture({
+    adb: async (_args, options) => {
+      assert.equal(options?.timeoutMs, 135_000);
+      return {
+        exitCode: 0,
+        stdout: [resultRecord({ ok: 'true', kind: 'swipe' }), 'INSTRUMENTATION_CODE: 0'].join('\n'),
+        stderr: '',
+      };
+    },
+    request: longPressRequest(),
+    packageName: manifest.packageName,
+    instrumentationRunner: manifest.instrumentationRunner,
+  });
 });
 
 test('transform sends the planner-owned choreography without regenerating geometry', async () => {
