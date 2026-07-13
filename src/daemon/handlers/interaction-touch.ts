@@ -64,6 +64,7 @@ import {
   ensureAndroidBlockingSystemDialogReady,
   type AndroidBlockingDialogReadinessResult,
 } from '../android-system-dialog.ts';
+import { validateStaleIosRefBeforeTouch } from './interaction-ref-freshness.ts';
 
 export async function handleTouchInteractionCommands(
   params: InteractionHandlerParams & {
@@ -153,6 +154,13 @@ async function dispatchTargetedTouchViaRuntime(
     );
     if (invalidRefFlagsResponse) return invalidRefFlagsResponse;
     androidFreshnessBaseline = await refreshAndroidRefSnapshotIfFreshnessActive(params, session);
+    const staleRefResponse = await validateStaleIosRefBeforeTouch({
+      handler: params,
+      session,
+      target: parsedTarget.target,
+      staleRefsWarning,
+    });
+    if (staleRefResponse) return staleRefResponse;
   }
   // ADR 0012 step 4: a guarded replay dispatch must resolve through the
   // runtime tree path so the post-resolution identity guard runs — the

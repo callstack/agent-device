@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { assertRpcOk } from './assertions.ts';
+import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 import {
@@ -42,12 +42,32 @@ const NODES = [
   },
 ];
 
-function snapshotEntry(): ProviderScenarioProviderEntry {
+const MAGIC_CODE_NODES = [
+  NODES[0]!,
+  {
+    index: 1,
+    parentIndex: 0,
+    type: 'Button',
+    label: 'Back',
+    hittable: true,
+    rect: { x: 8, y: 76, width: 40, height: 44 },
+  },
+  {
+    index: 2,
+    parentIndex: 0,
+    type: 'Button',
+    label: 'Verify',
+    hittable: true,
+    rect: { x: 100, y: 700, width: 200, height: 44 },
+  },
+];
+
+function snapshotEntry(nodes = NODES): ProviderScenarioProviderEntry {
   return {
     command: 'ios.runner.snapshot',
     deviceId: DEVICE_ID,
     platform: 'apple',
-    result: { nodes: NODES, truncated: false },
+    result: { nodes, truncated: false },
   };
 }
 
@@ -67,6 +87,8 @@ test('Provider-backed integration @refs warn after a selector press replaces the
     // press label=Continue: selector resolution capture replaces the stored tree
     snapshotEntry(),
     tapEntry(200, 322),
+    // The stale ref is validated against the current surface before dispatch.
+    snapshotEntry(),
     // press @e2 while stale: executes, warns
     tapEntry(200, 422),
     // snapshot: re-issues refs
@@ -122,6 +144,65 @@ test('Provider-backed integration @refs warn after a selector press replaces the
       const freshData = assertRpcOk(freshPress);
       assert.equal(freshData.warning, undefined);
 
+      runnerTranscript.assertComplete();
+    },
+  );
+});
+
+test('Provider-backed iOS press rejects a stale ref after navigation', async () => {
+  const homeNodes = [
+    NODES[0]!,
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Home',
+      hittable: true,
+      rect: { x: 100, y: 200, width: 200, height: 44 },
+    },
+  ];
+  const runnerTranscript = createProviderTranscript([
+    // snapshot -i: @e3 is Verify on the magic-code screen.
+    snapshotEntry(MAGIC_CODE_NODES),
+    // press label=Back: the pre-action capture still sees that screen.
+    snapshotEntry(MAGIC_CODE_NODES),
+    tapEntry(28, 98),
+    // The stale press validates against the post-navigation Home surface.
+    snapshotEntry(homeNodes),
+  ]);
+  const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
+    runnerTranscript,
+    'ios.runner',
+  );
+  const appleTool = createRecordingAppleToolProvider({
+    simctl: simctlListDevicesHandler('com.apple.CoreSimulator.SimRuntime.iOS-18-0', [
+      { name: PROVIDER_SCENARIO_IOS_SIMULATOR.name, udid: DEVICE_ID },
+    ]),
+  });
+
+  await withProviderScenarioResource(
+    async () =>
+      await createProviderScenarioHarness({
+        appleRunnerProvider: () => appleRunnerProvider,
+        appleToolProvider: () => appleTool.provider,
+        deviceInventoryProvider: async () => [PROVIDER_SCENARIO_IOS_SIMULATOR],
+      }),
+    async (daemon) => {
+      assertRpcOk(
+        await daemon.callCommand('open', [APP], {
+          platform: 'ios',
+          udid: DEVICE_ID,
+        }),
+      );
+      assertRpcOk(
+        await daemon.callCommand('snapshot', [], {
+          snapshotInteractiveOnly: true,
+        }),
+      );
+      assertRpcOk(await daemon.callCommand('press', ['label=Back'], {}));
+
+      const stalePress = await daemon.callCommand('press', ['@e3'], {});
+      assertRpcError(stalePress, 'COMMAND_FAILED', /Ref @e3 not found or has no bounds/);
       runnerTranscript.assertComplete();
     },
   );

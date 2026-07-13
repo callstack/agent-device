@@ -4,9 +4,9 @@ import type { SessionState } from './types.ts';
 
 /**
  * Warning attached to responses of commands that consume an `@ref` argument
- * while `session.snapshotRefsStale` is true (#1076). Warning, not error: the
- * command still executes, and the geometric guards (offscreen/covered/
- * STALE_REF) keep catching the cases where the drift is detectable.
+ * while `session.snapshotRefsStale` is true (#1076). Most consumers remain
+ * warn-only. iOS touch interactions additionally validate the saved node
+ * identity against a current capture before dispatch (#1239).
  */
 export const STALE_SNAPSHOT_REFS_WARNING =
   'The session snapshot changed since your refs were issued — @refs may now point at different elements. Re-run snapshot -i to refresh refs.';
@@ -99,9 +99,9 @@ function buildPinnedStaleRefWarning(params: {
  * - pinned ref with any other generation → the precise pinned warning;
  * - plain ref → the coarse #1093 marker behavior, unchanged.
  *
- * Warn-only in this release: a stale pinned ref still executes with a warning
- * attached. The compat ladder tightens this to an error in a later release,
- * once auto-pinning clients (the MCP layer) are established.
+ * This resolver is advisory; command handlers may enforce stronger freshness
+ * policy. In particular, iOS touch interactions validate a stale ref against a
+ * current capture before dispatch (#1239).
  */
 export function resolveRefStalenessWarning(params: {
   session: SessionState | undefined;

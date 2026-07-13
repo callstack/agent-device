@@ -73,7 +73,7 @@ async function emulateCaptureSnapshotForSession(
     appBundleId?: string,
     traceLogPath?: string,
   ) => Record<string, unknown>,
-  options: { interactiveOnly: boolean },
+  options: { interactiveOnly: boolean; store?: boolean },
 ) {
   const effectiveFlags = { ...(flags ?? {}), snapshotInteractiveOnly: options.interactiveOnly };
   const snapshotData = (await mockDispatch(
@@ -84,8 +84,10 @@ async function emulateCaptureSnapshotForSession(
     contextFromFlags(effectiveFlags, session.appBundleId, session.trace?.outPath),
   )) as { nodes?: never[]; truncated?: boolean; backend?: SnapshotBackend };
   const snapshot = buildSnapshotState(snapshotData ?? {}, effectiveFlags);
-  setSessionSnapshot(session, snapshot);
-  sessionStore.set(session.name, session);
+  if (options.store !== false) {
+    setSessionSnapshot(session, snapshot);
+    sessionStore.set(session.name, session);
+  }
   return snapshot;
 }
 
@@ -266,7 +268,7 @@ test('press --settle keeps the stale-refs input warning while re-issuing fresh r
   const session = seedSession(sessionName, sessionStore);
   session.snapshotRefsStale = true;
   sessionStore.set(sessionName, session);
-  mockCommandDispatch({ snapshots: [AFTER_NODES, AFTER_NODES] });
+  mockCommandDispatch({ snapshots: [BEFORE_NODES, AFTER_NODES, AFTER_NODES] });
 
   const response = await handleInteractionCommands({
     req: {

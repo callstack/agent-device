@@ -3437,6 +3437,9 @@ test('press with a pinned ref from an older generation gets the precise warning'
   const session = makeStaleRefSession(sessionName);
   session.snapshotGeneration = 15;
   sessionStore.set(sessionName, session);
+  mockDispatch.mockImplementation(async (_device, command) =>
+    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
+  );
 
   const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1~s12']);
   expect(response?.ok).toBe(true);
@@ -3511,6 +3514,9 @@ test('a plain ref keeps the coarse #1093 warning, never the pinned text', async 
   session.snapshotGeneration = 7;
   session.snapshotRefsStale = true;
   sessionStore.set(sessionName, session);
+  mockDispatch.mockImplementation(async (_device, command) =>
+    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
+  );
 
   const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
   expect(response?.ok).toBe(true);
@@ -3557,6 +3563,9 @@ test('after a session reopen, a pin from the previous lifetime warns (reseeded g
   sessionStore.set(sessionName, reopened);
   // Probabilistic (~1/900000 collision) — accepted residual risk.
   expect(reopened.snapshotGeneration).not.toBe(oldGeneration);
+  mockDispatch.mockImplementation(async (_device, command) =>
+    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
+  );
 
   const response = await runInteraction(sessionStore, sessionName, 'press', [
     `@e1~s${oldGeneration}`,

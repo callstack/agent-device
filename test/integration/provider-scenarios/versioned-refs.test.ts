@@ -76,7 +76,8 @@ test('Provider-backed integration pinned @refs get precise generation warnings',
     // tree (g1+1) without issuing refs
     snapshotEntry(),
     tapEntry(200, 322),
-    // press @e2~s{g1}: pinned to the outlived generation — executes, warns precisely
+    // press @e2~s{g1}: validate the outlived ref, then execute with a precise warning
+    snapshotEntry(),
     tapEntry(200, 422),
     // press @e2~s{g1+1}: pinned to the CURRENT generation — clean
     tapEntry(200, 422),
@@ -85,7 +86,8 @@ test('Provider-backed integration pinned @refs get precise generation warnings',
     snapshotEntry(),
     tapEntry(200, 422),
     // press @e1~s{g1+1}: a PRE-find pin — the find must not bless it (the
-    // #1076 hole): precise warning naming g1+1 → g1+2
+    // #1076 hole): validate, then warn precisely naming g1+1 → g1+2
+    snapshotEntry(),
     tapEntry(200, 322),
     // press @e1~s{g1+2}: pinned to the post-find generation — clean
     tapEntry(200, 322),
