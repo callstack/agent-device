@@ -3262,7 +3262,7 @@ async function runInteraction(
   });
 }
 
-test('press selector then press @ref warns that refs outlived the stored snapshot', async () => {
+test('press selector then press @ref rejects refs that outlived the stored snapshot before dispatch', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'stale-ref-warns';
   const session = makeStaleRefSession(sessionName);
@@ -3282,11 +3282,15 @@ test('press selector then press @ref warns that refs outlived the stored snapsho
   expect(selectorPress.data?.warning).toBeUndefined();
   expect(sessionStore.get(sessionName)?.snapshotRefsStale).toBe(true);
 
+  const dispatchCallsBeforeStaleRef = mockDispatch.mock.calls.length;
   const refPress = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
-  expect(refPress?.ok).toBe(true);
-  if (refPress?.ok) {
-    expect(refPress.data?.warning).toBe(STALE_SNAPSHOT_REFS_WARNING);
+  expect(refPress?.ok).toBe(false);
+  if (refPress && !refPress.ok) {
+    expect(refPress.error.code).toBe('COMMAND_FAILED');
+    expect(refPress.error.message).toBe('Ref @e1 not found or has no bounds');
+    expect(refPress.error.details?.hint).toBe(STALE_SNAPSHOT_REFS_WARNING);
   }
+  expect(mockDispatch).toHaveBeenCalledTimes(dispatchCallsBeforeStaleRef);
 });
 
 test('press @ref directly after refs were issued does not warn', async () => {
@@ -3330,7 +3334,7 @@ test('re-issuing refs clears the stale marker so press @ref does not warn', asyn
   }
 });
 
-test('fill @ref warns while refs are stale', async () => {
+test('fill @ref rejects while refs are stale', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'stale-ref-fill';
   const session = makeStaleRefSession(sessionName);
@@ -3350,15 +3354,19 @@ test('fill @ref warns while refs are stale', async () => {
   };
   session.snapshotRefsStale = true;
   sessionStore.set(sessionName, session);
+  mockDispatch.mockRejectedValue(new Error('dispatch should not be called for a stale iOS ref'));
 
   const response = await runInteraction(sessionStore, sessionName, 'fill', [
     '@e1',
     'hello@example.com',
   ]);
-  expect(response?.ok).toBe(true);
-  if (response?.ok) {
-    expect(response.data?.warning).toBe(STALE_SNAPSHOT_REFS_WARNING);
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('COMMAND_FAILED');
+    expect(response.error.message).toBe('Ref @e1 not found or has no bounds');
+    expect(response.error.details?.hint).toBe(STALE_SNAPSHOT_REFS_WARNING);
   }
+  expect(mockDispatch).not.toHaveBeenCalled();
 });
 
 test('get text @ref warns while refs are stale', async () => {
@@ -3376,39 +3384,6 @@ test('get text @ref warns while refs are stale', async () => {
   if (response?.ok) {
     expect(response.data?.warning).toBe(STALE_SNAPSHOT_REFS_WARNING);
     expect(response.data?.ref).toBe('e1');
-  }
-});
-
-test('stale-ref warning appends to an existing interaction warning', async () => {
-  const sessionStore = makeSessionStore();
-  const sessionName = 'stale-ref-appends';
-  const session = makeStaleRefSession(sessionName);
-  session.snapshot = {
-    nodes: attachRefs([
-      {
-        index: 0,
-        // Non-fillable type produces the runtime fill warning the stale-ref
-        // warning must append to, not replace.
-        type: 'XCUIElementTypeStaticText',
-        label: 'Read-only',
-        rect: { x: 10, y: 20, width: 200, height: 40 },
-        enabled: true,
-        hittable: true,
-      },
-    ]),
-    createdAt: Date.now(),
-    backend: 'xctest',
-  };
-  session.snapshotRefsStale = true;
-  sessionStore.set(sessionName, session);
-
-  const response = await runInteraction(sessionStore, sessionName, 'fill', ['@e1', 'nope']);
-  expect(response?.ok).toBe(true);
-  if (response?.ok) {
-    const warning = String(response.data?.warning ?? '');
-    expect(warning).toContain('attempting fill anyway');
-    expect(warning).toContain(STALE_SNAPSHOT_REFS_WARNING);
-    expect(warning.endsWith(STALE_SNAPSHOT_REFS_WARNING)).toBe(true);
   }
 });
 
@@ -3431,26 +3406,26 @@ test('press with a pinned ref matching the stored generation is clean even while
   }
 });
 
-test('press with a pinned ref from an older generation gets the precise warning', async () => {
+test('press with a pinned ref from an older generation rejects with the precise hint', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'pinned-stale-precise';
   const session = makeStaleRefSession(sessionName);
   session.snapshotGeneration = 15;
   sessionStore.set(sessionName, session);
-  mockDispatch.mockImplementation(async (_device, command) =>
-    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
-  );
+  mockDispatch.mockRejectedValue(new Error('dispatch should not be called for a stale iOS ref'));
 
   const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1~s12']);
-  expect(response?.ok).toBe(true);
-  if (response?.ok) {
-    expect(response.data?.warning).toBe(
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('COMMAND_FAILED');
+    expect(response.error.details?.hint).toBe(
       'Ref @e1 was minted from snapshot s12 but the session tree is now s15 — re-run snapshot -i.',
     );
   }
+  expect(mockDispatch).not.toHaveBeenCalled();
 });
 
-test('fill with a pinned stale ref gets the precise warning; pinned current is clean', async () => {
+test('fill with a pinned stale ref rejects; pinned current is clean', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'pinned-fill';
   const session = makeStaleRefSession(sessionName);
@@ -3473,12 +3448,14 @@ test('fill with a pinned stale ref gets the precise warning; pinned current is c
   sessionStore.set(sessionName, session);
 
   const stale = await runInteraction(sessionStore, sessionName, 'fill', ['@e1~s2', 'hello']);
-  expect(stale?.ok).toBe(true);
-  if (stale?.ok) {
-    expect(stale.data?.warning).toBe(
+  expect(stale?.ok).toBe(false);
+  if (stale && !stale.ok) {
+    expect(stale.error.code).toBe('COMMAND_FAILED');
+    expect(stale.error.details?.hint).toBe(
       'Ref @e1 was minted from snapshot s2 but the session tree is now s3 — re-run snapshot -i.',
     );
   }
+  expect(mockDispatch).not.toHaveBeenCalled();
 
   const current = await runInteraction(sessionStore, sessionName, 'fill', ['@e1~s3', 'hello']);
   expect(current?.ok).toBe(true);
@@ -3507,22 +3484,22 @@ test('get text with a pinned stale ref gets the precise warning', async () => {
   }
 });
 
-test('a plain ref keeps the coarse #1093 warning, never the pinned text', async () => {
+test('a plain stale ref rejects with the coarse #1093 hint, never the pinned text', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'plain-ref-coarse';
   const session = makeStaleRefSession(sessionName);
   session.snapshotGeneration = 7;
   session.snapshotRefsStale = true;
   sessionStore.set(sessionName, session);
-  mockDispatch.mockImplementation(async (_device, command) =>
-    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
-  );
+  mockDispatch.mockRejectedValue(new Error('dispatch should not be called for a stale iOS ref'));
 
   const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
-  expect(response?.ok).toBe(true);
-  if (response?.ok) {
-    expect(response.data?.warning).toBe(STALE_SNAPSHOT_REFS_WARNING);
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('COMMAND_FAILED');
+    expect(response.error.details?.hint).toBe(STALE_SNAPSHOT_REFS_WARNING);
   }
+  expect(mockDispatch).not.toHaveBeenCalled();
 });
 
 test('a malformed generation suffix is INVALID_ARGS with the ref grammar hint', async () => {
@@ -3546,7 +3523,7 @@ test('a malformed generation suffix is INVALID_ARGS with the ref grammar hint', 
   }
 });
 
-test('after a session reopen, a pin from the previous lifetime warns (reseeded generations)', async () => {
+test('after a session reopen, a pin from the previous lifetime rejects (reseeded generations)', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'reopened-pin-warns';
   // Previous lifetime: a seeded generation minted the client's pin.
@@ -3563,15 +3540,17 @@ test('after a session reopen, a pin from the previous lifetime warns (reseeded g
   sessionStore.set(sessionName, reopened);
   // Probabilistic (~1/900000 collision) — accepted residual risk.
   expect(reopened.snapshotGeneration).not.toBe(oldGeneration);
-  mockDispatch.mockImplementation(async (_device, command) =>
-    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
-  );
+  mockDispatch.mockRejectedValue(new Error('dispatch should not be called for a stale iOS ref'));
 
   const response = await runInteraction(sessionStore, sessionName, 'press', [
     `@e1~s${oldGeneration}`,
   ]);
-  expect(response?.ok).toBe(true);
-  if (response?.ok) {
-    expect(String(response.data?.warning)).toContain(`minted from snapshot s${oldGeneration}`);
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('COMMAND_FAILED');
+    expect(String(response.error.details?.hint)).toContain(
+      `minted from snapshot s${oldGeneration}`,
+    );
   }
+  expect(mockDispatch).not.toHaveBeenCalled();
 });

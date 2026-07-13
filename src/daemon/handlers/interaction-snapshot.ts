@@ -16,8 +16,6 @@ export type CaptureSnapshotForSession = (
     interactiveOnly: boolean;
     androidFreshnessMode?: 'ref-refresh';
     includeRects?: boolean;
-    /** Observation-only probes must not replace the session tree or advance its ref generation. */
-    store?: boolean;
   },
 ) => Promise<SnapshotState>;
 
@@ -30,7 +28,6 @@ export async function captureSnapshotForSession(
     interactiveOnly: boolean;
     androidFreshnessMode?: 'ref-refresh';
     includeRects?: boolean;
-    store?: boolean;
   },
 ): Promise<SnapshotState> {
   const effectiveFlags = {
@@ -51,7 +48,7 @@ export async function captureSnapshotForSession(
     includeRects: options.includeRects,
     androidFreshnessMode: options.androidFreshnessMode,
   });
-  if (options.store !== false && !isSparseSnapshotQualityVerdict(snapshot.snapshotQuality)) {
+  if (!isSparseSnapshotQualityVerdict(snapshot.snapshotQuality)) {
     setSessionSnapshot(session, snapshot);
     sessionStore.set(session.name, session);
   }

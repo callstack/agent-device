@@ -71,8 +71,9 @@ export function buildInteractionResponseData(params: {
    * `resolveRefStalenessWarning` (src/daemon/session-snapshot.ts): the coarse
    * STALE_SNAPSHOT_REFS_WARNING for plain refs while `snapshotRefsStale` is
    * set, or the precise pinned-generation warning for `@e12~s3` refs whose
-   * generation no longer matches the stored tree. Appended to the response
-   * warning.
+   * generation no longer matches the stored tree. iOS stale mutations are
+   * rejected before reaching this builder; remaining paths append it to the
+   * response warning.
    */
   staleRefsWarning?: string;
   /**

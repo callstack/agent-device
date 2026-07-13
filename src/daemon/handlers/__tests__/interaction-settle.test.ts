@@ -73,7 +73,7 @@ async function emulateCaptureSnapshotForSession(
     appBundleId?: string,
     traceLogPath?: string,
   ) => Record<string, unknown>,
-  options: { interactiveOnly: boolean; store?: boolean },
+  options: { interactiveOnly: boolean },
 ) {
   const effectiveFlags = { ...(flags ?? {}), snapshotInteractiveOnly: options.interactiveOnly };
   const snapshotData = (await mockDispatch(
@@ -84,10 +84,8 @@ async function emulateCaptureSnapshotForSession(
     contextFromFlags(effectiveFlags, session.appBundleId, session.trace?.outPath),
   )) as { nodes?: never[]; truncated?: boolean; backend?: SnapshotBackend };
   const snapshot = buildSnapshotState(snapshotData ?? {}, effectiveFlags);
-  if (options.store !== false) {
-    setSessionSnapshot(session, snapshot);
-    sessionStore.set(session.name, session);
-  }
+  setSessionSnapshot(session, snapshot);
+  sessionStore.set(session.name, session);
   return snapshot;
 }
 
@@ -262,13 +260,13 @@ test('press --settle on a removals-only diff attaches the unchanged interactive 
   expect(settle.refsGeneration).toBe(session.snapshotGeneration);
 });
 
-test('press --settle keeps the stale-refs input warning while re-issuing fresh refs', async () => {
+test('press --settle rejects a stale iOS ref before dispatch or observation', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'settle-stale-ref';
   const session = seedSession(sessionName, sessionStore);
   session.snapshotRefsStale = true;
   sessionStore.set(sessionName, session);
-  mockCommandDispatch({ snapshots: [BEFORE_NODES, AFTER_NODES, AFTER_NODES] });
+  mockDispatch.mockRejectedValue(new Error('dispatch should not be called for a stale iOS ref'));
 
   const response = await handleInteractionCommands({
     req: {
@@ -283,11 +281,14 @@ test('press --settle keeps the stale-refs input warning while re-issuing fresh r
     contextFromFlags,
   });
 
-  const data = expectOkData(response);
-  // The @ref was consumed while stale — the input warning stands…
-  expect(String(data.warning)).toMatch(/refs were issued/);
-  // …and the settled diff re-issues refs, so the NEXT @ref command is clean.
-  expect(sessionStore.get(sessionName)?.snapshotRefsStale).toBe(false);
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('COMMAND_FAILED');
+    expect(response.error.message).toBe('Ref @e2 not found or has no bounds');
+    expect(String(response.error.details?.hint)).toMatch(/refs were issued/);
+  }
+  expect(mockCaptureSnapshotForSession).not.toHaveBeenCalled();
+  expect(sessionStore.get(sessionName)?.snapshotRefsStale).toBe(true);
 });
 
 test('a settle observation without a diff leaves ref staleness untouched', async () => {

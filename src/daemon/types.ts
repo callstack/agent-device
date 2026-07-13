@@ -208,8 +208,10 @@ export type SessionState = {
    * snapshot was replaced by a capture whose response did NOT hand the new refs
    * to the client (selector-resolution captures, wait/find polling captures,
    * verify-evidence captures, ...). Commands that consume `@ref` arguments while
-   * this is true attach a warning — refs are positional indexes into the latest
-   * tree, so they may silently resolve to different elements. Cleared only where
+   * this is true must surface staleness — refs are positional indexes into the
+   * latest tree, so they may silently resolve to different elements. iOS
+   * mutations reject before dispatch; read-only and non-iOS consumers attach a
+   * warning. Cleared only where
    * the client demonstrably receives the new refs (snapshot responses, find
    * responses that return a ref). Set/cleared at the choke points documented in
    * `setSessionSnapshot` (src/daemon/session-snapshot.ts).
@@ -221,7 +223,7 @@ export type SessionState = {
    * the `setSessionSnapshot` choke point and in the snapshot/diff command path
    * (`buildNextSnapshotSession`). Ref-issuing responses (snapshot command, find
    * ref outputs) report it once as the additive `refsGeneration` field;
-   * consumers may pin refs as `@e12~s3` and get a precise staleness warning
+   * consumers may pin refs as `@e12~s3` and get a precise staleness diagnostic
    * when the pinned generation no longer matches the stored tree. Plain number
    * with per-session lifetime — no persistence. The first bump of a lifetime
    * seeds at a random 6-digit base (`nextSnapshotGeneration`), so a pin from a

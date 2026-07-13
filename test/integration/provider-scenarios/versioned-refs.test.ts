@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
-import { assertRpcOk } from './assertions.ts';
+import { assertRpcError, assertRpcOk } from './assertions.ts';
 import { PROVIDER_SCENARIO_IOS_SIMULATOR } from './fixtures.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
 import {
@@ -16,8 +16,8 @@ const DEVICE_ID = PROVIDER_SCENARIO_IOS_SIMULATOR.id;
 // #1076 versioned refs: ref-issuing responses carry the session tree's
 // generation once (`refsGeneration`); a consumer may pin refs as `@e2~s<n>`.
 // A pinned ref matching the stored generation is clean; a pinned ref from an
-// older generation gets a PRECISE warning naming both generations — including
-// after a later find issued a NEWER generation (the find-blessing hole this
+// older generation is rejected with a PRECISE hint naming both generations,
+// including after a later find issued a NEWER generation (the find-blessing hole this
 // feature closes). The tree output itself stays plain `e2` refs, and the
 // generation values are seeded per session lifetime, so every assertion below
 // is relative to the observed seed.
@@ -64,11 +64,7 @@ function tapEntry(x: number, y: number): ProviderScenarioProviderEntry {
   };
 }
 
-function pinnedStaleWarning(ref: string, minted: number, current: number): string {
-  return `Ref ${ref} was minted from snapshot s${minted} but the session tree is now s${current} — re-run snapshot -i.`;
-}
-
-test('Provider-backed integration pinned @refs get precise generation warnings', async () => {
+test('Provider-backed integration rejects stale pinned @refs and accepts current pins', async () => {
   const runnerTranscript = createProviderTranscript([
     // snapshot -i: issues refs at the seeded generation g1
     snapshotEntry(),
@@ -76,9 +72,7 @@ test('Provider-backed integration pinned @refs get precise generation warnings',
     // tree (g1+1) without issuing refs
     snapshotEntry(),
     tapEntry(200, 322),
-    // press @e2~s{g1}: validate the outlived ref, then execute with a precise warning
-    snapshotEntry(),
-    tapEntry(200, 422),
+    // press @e2~s{g1}: reject the outlived ref before any runner command
     // press @e2~s{g1+1}: pinned to the CURRENT generation — clean
     tapEntry(200, 422),
     // find Cancel click: capture replaces the tree AGAIN (g1+2) and issues
@@ -86,9 +80,7 @@ test('Provider-backed integration pinned @refs get precise generation warnings',
     snapshotEntry(),
     tapEntry(200, 422),
     // press @e1~s{g1+1}: a PRE-find pin — the find must not bless it (the
-    // #1076 hole): validate, then warn precisely naming g1+1 → g1+2
-    snapshotEntry(),
-    tapEntry(200, 322),
+    // #1076 hole): reject before any runner command
     // press @e1~s{g1+2}: pinned to the post-find generation — clean
     tapEntry(200, 322),
   ]);
@@ -133,8 +125,15 @@ test('Provider-backed integration pinned @refs get precise generation warnings',
       assert.equal(selectorData.warning, undefined);
 
       const pinnedStale = await daemon.callCommand('press', [`@e2~s${g1}`], {});
-      const pinnedStaleData = assertRpcOk(pinnedStale);
-      assert.equal(pinnedStaleData.warning, pinnedStaleWarning('@e2', g1, g1 + 1));
+      const pinnedStaleData = assertRpcError(
+        pinnedStale,
+        'COMMAND_FAILED',
+        /Ref @e2 not found or has no bounds/,
+      );
+      assert.equal(
+        pinnedStaleData.hint,
+        `Ref @e2 was minted from snapshot s${g1} but the session tree is now s${g1 + 1} — re-run snapshot -i.`,
+      );
 
       const pinnedCurrent = await daemon.callCommand('press', [`@e2~s${g1 + 1}`], {});
       const pinnedCurrentData = assertRpcOk(pinnedCurrent);
@@ -146,11 +145,18 @@ test('Provider-backed integration pinned @refs get precise generation warnings',
       const findData = assertRpcOk(find);
       assert.equal(findData.refsGeneration, g1 + 2);
 
-      // …but a ref pinned BEFORE the find keeps warning precisely — the find
-      // response must not silently re-bless it.
+      // …but a ref pinned BEFORE the find is still rejected precisely — the
+      // find response must not silently re-bless it.
       const preFindPin = await daemon.callCommand('press', [`@e1~s${g1 + 1}`], {});
-      const preFindPinData = assertRpcOk(preFindPin);
-      assert.equal(preFindPinData.warning, pinnedStaleWarning('@e1', g1 + 1, g1 + 2));
+      const preFindPinData = assertRpcError(
+        preFindPin,
+        'COMMAND_FAILED',
+        /Ref @e1 not found or has no bounds/,
+      );
+      assert.equal(
+        preFindPinData.hint,
+        `Ref @e1 was minted from snapshot s${g1 + 1} but the session tree is now s${g1 + 2} — re-run snapshot -i.`,
+      );
 
       const postFindPin = await daemon.callCommand('press', [`@e1~s${g1 + 2}`], {});
       const postFindPinData = assertRpcOk(postFindPin);

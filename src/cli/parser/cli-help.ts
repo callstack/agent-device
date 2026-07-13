@@ -83,7 +83,7 @@ const AGENT_QUICKSTART_LINES = [
   'Planning output contract: when asked to plan commands, output command lines only: no prose, numbering, Markdown fences, pipes, or shell helpers.',
   'If you did not use --settle, verify a mutation with diff snapshot (or diff snapshot -i), not a full snapshot: it prints only the added/removed/changed lines since the last snapshot in this session.',
   'Network-backed or debounced results may arrive after the --settle quiet window; follow the settled action with wait text "Expected result" or wait <selector> instead of polling full snapshots.',
-  'Pin a raw CLI ref to the response that minted it with ~s<n> (n = refsGeneration): press @e12~s4; plain refs stay valid input.',
+  'Pin a raw CLI ref to the response that minted it with ~s<n> (n = refsGeneration): press @e12~s4. On iOS, stale refs are rejected for mutations; refresh refs or use a stable selector.',
   'Plain snapshot reads state; snapshot -i refreshes current interactive refs only.',
   'Default snapshot text is an agent-facing, token-efficient view for planning and targeting actions.',
   'Read-only visible/state question: use snapshot/get/is/find; use snapshot -i only when refs are needed.',
@@ -223,7 +223,7 @@ Snapshots and refs:
   For press/fill/click/longpress, prefer --settle and continue from its settled diff when it exposes the next target or evidence. Refresh with snapshot -i only when you did not settle, settle printed not settled, or the settle output lacks what you need.
   Anti-pattern: snapshot -i followed by snapshot -i | grep ..., or adding 2>/dev/null | jq ... before reading the raw command output.
   Refs from the first snapshot remain valid until you press, click, fill, type, scroll, go back, wait for async UI, or otherwise change app state.
-  Pinned refs (@e12~s4, generation from refsGeneration or settle.refsGeneration) get exact staleness warnings instead of the coarse tree-changed one; plain refs stay valid input.
+  Pinned refs (@e12~s4, generation from refsGeneration or settle.refsGeneration) identify their source tree. On iOS, stale refs are rejected for press/fill/click/longpress before dispatch; refresh with snapshot -i or use a stable selector. Read-only commands report a staleness warning, and other platforms retain their existing warning behavior.
   After a mutation, prefer a known selector/label directly (for example press 'label="Send"') because interaction commands refresh interactive state internally. A settled diff with no added refs (for example a modal dismiss) also lists an "unchanged interactive" tail of still-present refs, so check that before falling back. If you need to discover a new control not shown by settle or its tail, use snapshot -i, or snapshot -i -s "Composer" when a stable container label/id can scope the refresh.
   If typing/fill opened the keyboard or changed layout and the next target has no stable selector, run snapshot -i, use the fresh ref, then verify with wait/find or diff snapshot -i.
   For a targeted query, use find/get/is. If you truly need the full tree again, pass --force-full.

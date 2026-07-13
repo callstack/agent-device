@@ -15,8 +15,8 @@ const DEVICE_ID = PROVIDER_SCENARIO_IOS_SIMULATOR.id;
 
 // #1076: refs are positional indexes into the latest stored session tree. A
 // selector press recaptures that tree without handing the new refs to the
-// client, so a follow-up @ref command gets an honest stale-refs warning until
-// a snapshot response re-issues refs.
+// client. iOS mutations must reject a follow-up @ref before runner dispatch
+// until a snapshot response re-issues refs.
 const NODES = [
   {
     index: 0,
@@ -80,17 +80,14 @@ function tapEntry(x: number, y: number): ProviderScenarioProviderEntry {
   };
 }
 
-test('Provider-backed integration @refs warn after a selector press replaces the tree', async () => {
+test('Provider-backed integration iOS @refs reject after a selector press replaces the tree', async () => {
   const runnerTranscript = createProviderTranscript([
     // snapshot -i: issues refs to the client
     snapshotEntry(),
     // press label=Continue: selector resolution capture replaces the stored tree
     snapshotEntry(),
     tapEntry(200, 322),
-    // The stale ref is validated against the current surface before dispatch.
-    snapshotEntry(),
-    // press @e2 while stale: executes, warns
-    tapEntry(200, 422),
+    // press @e2 while stale: rejects before any runner command
     // snapshot: re-issues refs
     snapshotEntry(),
     // press @e2 after refresh: no warning
@@ -130,10 +127,7 @@ test('Provider-backed integration @refs warn after a selector press replaces the
       assert.equal(selectorData.warning, undefined);
 
       const stalePress = await daemon.callCommand('press', ['@e2'], {});
-      const staleData = assertRpcOk(stalePress);
-      assert.equal(typeof staleData.warning, 'string');
-      assert.match(String(staleData.warning), /snapshot changed since your refs were issued/);
-      assert.match(String(staleData.warning), /Re-run snapshot -i/);
+      assertRpcError(stalePress, 'COMMAND_FAILED', /Ref @e2 not found or has no bounds/);
 
       const refresh = await daemon.callCommand('snapshot', [], {
         snapshotInteractiveOnly: true,
@@ -150,25 +144,13 @@ test('Provider-backed integration @refs warn after a selector press replaces the
 });
 
 test('Provider-backed iOS press rejects a stale ref after navigation', async () => {
-  const homeNodes = [
-    NODES[0]!,
-    {
-      index: 1,
-      parentIndex: 0,
-      type: 'Button',
-      label: 'Home',
-      hittable: true,
-      rect: { x: 100, y: 200, width: 200, height: 44 },
-    },
-  ];
   const runnerTranscript = createProviderTranscript([
     // snapshot -i: @e3 is Verify on the magic-code screen.
     snapshotEntry(MAGIC_CODE_NODES),
     // press label=Back: the pre-action capture still sees that screen.
     snapshotEntry(MAGIC_CODE_NODES),
     tapEntry(28, 98),
-    // The stale press validates against the post-navigation Home surface.
-    snapshotEntry(homeNodes),
+    // The stale press rejects before any runner command.
   ]);
   const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
     runnerTranscript,

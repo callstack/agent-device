@@ -64,7 +64,7 @@ import {
   ensureAndroidBlockingSystemDialogReady,
   type AndroidBlockingDialogReadinessResult,
 } from '../android-system-dialog.ts';
-import { validateStaleIosRefBeforeTouch } from './interaction-ref-freshness.ts';
+import { staleIosRefGuardResponse } from './interaction-ref-policy.ts';
 
 export async function handleTouchInteractionCommands(
   params: InteractionHandlerParams & {
@@ -153,14 +153,13 @@ async function dispatchTargetedTouchViaRuntime(
       req.flags,
     );
     if (invalidRefFlagsResponse) return invalidRefFlagsResponse;
-    androidFreshnessBaseline = await refreshAndroidRefSnapshotIfFreshnessActive(params, session);
-    const staleRefResponse = await validateStaleIosRefBeforeTouch({
-      handler: params,
+    const staleRefResponse = staleIosRefGuardResponse({
       session,
-      target: parsedTarget.target,
+      ref: parsedTarget.target.ref,
       staleRefsWarning,
     });
     if (staleRefResponse) return staleRefResponse;
+    androidFreshnessBaseline = await refreshAndroidRefSnapshotIfFreshnessActive(params, session);
   }
   // ADR 0012 step 4: a guarded replay dispatch must resolve through the
   // runtime tree path so the post-resolution identity guard runs — the
@@ -594,7 +593,8 @@ async function dispatchFillViaRuntime(
 
 // The fill @ref preamble shared with the press path's shape: read staleness
 // relative to what the client knew BEFORE any internal recapture, validate
-// @ref-incompatible flags, and run the Android freshness refresh.
+// @ref-incompatible flags, enforce iOS mutation freshness, and run the Android
+// freshness refresh.
 async function prepareFillRefTarget(
   params: InteractionHandlerParams & {
     captureSnapshotForSession: CaptureSnapshotForSession;
@@ -612,6 +612,12 @@ async function prepareFillRefTarget(
   });
   const invalidRefFlagsResponse = params.refSnapshotFlagGuardResponse('fill', params.req.flags);
   if (invalidRefFlagsResponse) return { response: invalidRefFlagsResponse, staleRefsWarning };
+  const staleRefResponse = staleIosRefGuardResponse({
+    session,
+    ref: target.ref,
+    staleRefsWarning,
+  });
+  if (staleRefResponse) return { response: staleRefResponse, staleRefsWarning };
   await refreshAndroidRefSnapshotIfFreshnessActive(params, session);
   return { staleRefsWarning };
 }
