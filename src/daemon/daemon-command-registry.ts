@@ -7,10 +7,38 @@ export type { DaemonCommandRoute } from './request-handler-chain.ts';
 
 export type SessionCommandKind = 'inventory' | 'state' | 'observability' | 'replay';
 
+/**
+ * ADR 0014 session ref-frame lifetime. Declares how a daemon command relates to
+ * the session's authorized ref frame:
+ * - `preserve`: no successful path changes device-visible element identity, so
+ *   the frame carries through untouched (snapshots, reads, inventory, ...);
+ * - `may-invalidate`: some successful path crosses a device side effect, so the
+ *   leaf must expire the frame at its side-effect seam when that path runs;
+ * - `delegated`: an orchestrator (batch/replay/test) whose nested leaves own
+ *   their own transitions — the outer command never expires a frame itself.
+ *
+ * This classification is an honesty/completeness guard, NOT the transition site:
+ * a `may-invalidate` command still calls the ref-frame module only when its
+ * mutating path is selected. The completeness gate
+ * (`__tests__/ref-frame-effect.test.ts`) fails if a daemon-projected command
+ * omits this classification.
+ */
+export type RefFrameEffect = 'preserve' | 'may-invalidate' | 'delegated';
+
+/**
+ * Request-sensitive form of {@link RefFrameEffect}. Commands whose subactions
+ * differ (keyboard `status` vs `dismiss`, alert `get`/`wait` vs
+ * `accept`/`dismiss`) use the resolver form instead of pretending all
+ * subcommands behave alike. Mirrors the existing `(req) => boolean` closure
+ * traits below.
+ */
+export type DaemonRefFrameEffect = RefFrameEffect | ((req: DaemonRequest) => RefFrameEffect);
+
 export type DaemonCommandDescriptor = {
   command: string;
   route: DaemonCommandRoute;
   sessionKind?: SessionCommandKind;
+  refFrameEffect?: DaemonRefFrameEffect;
   leaseAdmissionExempt?: boolean;
   sessionExecutionLockExempt?: boolean;
   selectorValidationExempt?: boolean;
@@ -84,6 +112,18 @@ export function shouldPreferExplicitDeviceOverExistingSession(req: DaemonRequest
 export function usesSessionlessDefaultProviderDevice(req: DaemonRequest): boolean {
   const allow = getDaemonCommandDescriptor(req.command)?.allowSessionlessDefaultDevice;
   return typeof allow === 'function' ? allow(req) : false;
+}
+
+/**
+ * ADR 0014: the ref-frame effect a request resolves to, honoring the
+ * request-sensitive resolver form. Returns `undefined` for commands with no
+ * daemon descriptor (never daemon-projected) — the completeness gate ensures
+ * every daemon-projected command declares an effect, so `undefined` here means
+ * the command does not reach a session-owning daemon leaf.
+ */
+export function resolveRefFrameEffect(req: DaemonRequest): RefFrameEffect | undefined {
+  const effect = getDaemonCommandDescriptor(req.command)?.refFrameEffect;
+  return typeof effect === 'function' ? effect(req) : effect;
 }
 
 export function resolveProviderDeviceResolutionIntent(

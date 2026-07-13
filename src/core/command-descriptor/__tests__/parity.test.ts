@@ -32,10 +32,11 @@ const DAEMON_FUNCTION_TRAITS = [
 
 // Public commands that intentionally have no daemon route — they live only in the
 // capability/batch tables, so the daemon registry has never covered them.
-const UNROUTED_PUBLIC_COMMANDS = new Set<string>([
-  PUBLIC_COMMANDS.appSwitcher,
-  PUBLIC_COMMANDS.installFromSource,
-]);
+// `install-from-source` projects to the daemon via the `install_source` internal
+// command (its daemon writer), never by its own name, so the daemon registry has
+// never covered it. (`app-switcher` gained a daemon facet under ADR 0014 so its
+// device mutation could be classified, so it is no longer unrouted.)
+const UNROUTED_PUBLIC_COMMANDS = new Set<string>([PUBLIC_COMMANDS.installFromSource]);
 
 // Public commands that intentionally carry no capability entry — pure control-plane
 // or always-admitted commands, so the capability matrix has never covered them.
