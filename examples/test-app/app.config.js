@@ -1,5 +1,14 @@
 const buildRunCacheDir =
   process.env.AGENT_DEVICE_EXPO_BUILD_CACHE_DIR?.trim() || './.expo/build-run-cache';
+const accessoryBluetoothName =
+  process.env.AGENT_DEVICE_TEST_ACCESSORY_BLUETOOTH_NAME?.trim() || 'Mori';
+const accessoryServiceUuid = process.env.AGENT_DEVICE_TEST_ACCESSORY_SERVICE_UUID?.trim();
+
+const accessoryInfoPlist = {
+  NSAccessorySetupBluetoothNames: [accessoryBluetoothName],
+  NSAccessorySetupSupports: ['Bluetooth'],
+  ...(accessoryServiceUuid ? { NSAccessorySetupBluetoothServices: [accessoryServiceUuid] } : {}),
+};
 
 module.exports = {
   expo: {
@@ -19,6 +28,7 @@ module.exports = {
     ios: {
       supportsTablet: true,
       bundleIdentifier: 'com.callstack.agentdevicelab',
+      infoPlist: accessoryInfoPlist,
     },
     android: {
       package: 'com.callstack.agentdevicelab',

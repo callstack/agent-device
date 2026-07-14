@@ -96,6 +96,23 @@ the same session when verification is complete:
 agent-device close --platform ios --udid "<physical udid>" --session test-app-physical
 ```
 
+#### AccessorySetupKit picker fixture
+
+The Settings tab includes an iOS-only **Open accessory picker** action backed by a local Expo
+module. AccessorySetupKit requires the app's discovery descriptor to declare a Bluetooth service
+UUID; configure the service advertised by the physical test accessory before building:
+
+```bash
+AGENT_DEVICE_TEST_ACCESSORY_SERVICE_UUID="<16-or-128-bit-service-uuid>" \
+AGENT_DEVICE_TEST_ACCESSORY_BLUETOOTH_NAME="Mori" \
+pnpm test-app:ios -- --device "<physical device name>"
+```
+
+This is native configuration, so changing either value requires rebuilding and reinstalling the
+development client. A Metro reload is not sufficient. The picker itself requires physical iOS 18+
+hardware; use the normal session hygiene above when validating its snapshot, wait, and selector
+paths.
+
 ### Android emulator or device
 
 Install dependencies and run the development build on the target Android
