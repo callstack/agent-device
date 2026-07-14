@@ -66,11 +66,12 @@ are failure/debug artifacts, not happy-path requirements.
 
 The daemon adapter may retain the provider snapshot behind a successful observation without exposing it
 through the engine contract. A following target resolution may use that snapshot only as semantic
-evidence. Maestro selector semantics continue to use the raw provider nodes. On iOS, the adapter derives
-the provider's canonical interactive presentation from that same snapshot solely to determine atomic
-selector uniqueness; it does not deduplicate raw nodes with compatibility heuristics or perform another
-capture. A unique exact match in the canonical presentation may be dispatched as a selector so XCTest
-resolves geometry and taps atomically; a structured live-selector miss, ambiguity, or off-screen result
+evidence. Maestro selector semantics continue to use the raw provider nodes, except for equivalent iOS
+accessibility wrapper chains described below. On iOS, the adapter derives the provider's canonical
+interactive presentation from that same snapshot solely to determine atomic selector uniqueness; it
+does not perform another capture. A unique exact, canonically hittable match may be dispatched with its
+resolved point so XCTest binds the live selector identity and coordinate delivery atomically; a
+structured live-selector miss, ambiguity, point mismatch, or off-screen result
 falls back to fresh Maestro resolution. All other targets capture fresh geometry before coordinate
 dispatch. Visibility can
 be true while a scroll view or tab strip is still moving, so an observation frame is never authoritative
@@ -85,6 +86,11 @@ matches. It does not adopt the public agent-device command surface's unique-matc
 `AMBIGUOUS_MATCH` produced by a nested public command is an agent-device authoring failure and is not
 suppressed by Maestro `optional`; atomic iOS dispatch handles that result by performing fresh Maestro
 resolution, as described above. Cancellation and infrastructure failures are likewise non-optional.
+
+`tapOn` preserves Maestro's two-attempt `retryIfNoChange` default for coordinate injection, including
+the live-bound iOS selector path and non-hittable fallback. After one compatibility polling interval it
+compares the hierarchy with the target-resolution hierarchy and retries once when nothing changed. The
+observed result primes the next command, so the outcome check does not add another hierarchy read there.
 
 Successful gestures and scrolls require stabilization before the next command executes. The runtime
 port records that requirement without capturing a hierarchy in the gesture command itself. At the next
@@ -112,8 +118,8 @@ The migration cannot switch production routing until Android and iOS satisfy all
 and react-navigation corpora:
 
 - total wall time is no slower than the pre-migration compatibility engine;
-- successful simple target interactions perform at most one provider query; an atomic iOS selector tap
-  may reuse same-generation semantic evidence while resolving live geometry inside XCTest;
+- target interactions perform one outcome query after the compatibility polling interval and prime that
+  result for the next command;
 - no command captures a second hierarchy merely to re-verify evidence produced within that command;
 - absolute coordinate swipes perform one direct viewport query and no accessibility capture;
 - gesture stabilization is deferred to the next command boundary and primes the following observation;

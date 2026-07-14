@@ -110,5 +110,11 @@ function validateTargetMatch(match: MaestroTargetMatch, generation: number): Mae
   ) {
     throw new AppError('COMMAND_FAILED', 'Maestro target evidence has invalid geometry.');
   }
+  if (match.surfaceSignature !== undefined && typeof match.surfaceSignature !== 'string') {
+    throw new AppError(
+      'COMMAND_FAILED',
+      'Maestro target evidence has an invalid surface signature.',
+    );
+  }
   return match;
 }

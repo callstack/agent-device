@@ -65,9 +65,20 @@ describe('Maestro public operation projection', () => {
       operation: {
         kind: 'clickSelector',
         selector: { key: 'id', value: 'submit' },
+        expectedPoint: { x: 10, y: 20 },
         options: { count: 2 },
       },
-      expected: { command: 'click', positionals: ['id="submit"'], flags: { count: 2 } },
+      expected: {
+        command: 'click',
+        positionals: ['id="submit"'],
+        flags: {
+          count: 2,
+          maestro: {
+            allowNonHittableCoordinateFallback: true,
+            expectedTapPoint: { x: 10, y: 20 },
+          },
+        },
+      },
     },
     {
       operation: { kind: 'clickPoint', point: { x: 10, y: 20 }, options: { holdMs: 3000 } },

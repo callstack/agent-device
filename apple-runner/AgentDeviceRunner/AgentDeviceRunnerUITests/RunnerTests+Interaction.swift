@@ -149,7 +149,8 @@ extension RunnerTests {
     app: XCUIApplication,
     selectorKey: String,
     selectorValue: String,
-    allowNonHittableFallback: Bool = false
+    allowNonHittableFallback: Bool = false,
+    expectedPoint: CGPoint? = nil
   ) -> SelectorElementMatch {
     let value = selectorValue.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !value.isEmpty else {
@@ -173,6 +174,9 @@ extension RunnerTests {
     var nonHittableElement: XCUIElement?
     let matches = app.descendants(matching: .any).matching(predicate).allElementsBoundByIndex
     for element in matches where element.exists {
+      if let expectedPoint, !element.frame.contains(expectedPoint) {
+        continue
+      }
       if !element.isHittable {
         if allowNonHittableFallback && hasTappableFrame(app: app, element: element) {
           guard nonHittableElement == nil else {

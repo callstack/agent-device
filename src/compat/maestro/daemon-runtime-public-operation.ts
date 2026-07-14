@@ -22,7 +22,12 @@ export type MaestroPublicOperation =
   | { kind: 'stopApp'; appId?: string }
   | { kind: 'openLink'; appId?: string; link: string; prewarmRunner: boolean }
   | { kind: 'typeText'; text: string }
-  | { kind: 'clickSelector'; selector: MaestroDispatchSelector; options: MaestroClickOptions }
+  | {
+      kind: 'clickSelector';
+      selector: MaestroDispatchSelector;
+      expectedPoint: Point;
+      options: MaestroClickOptions;
+    }
   | { kind: 'clickPoint'; point: Point; options: MaestroClickOptions }
   | { kind: 'swipe'; gesture: MaestroSinglePointerGestureInput; viewport?: Rect }
   | { kind: 'scroll'; direction: string; durationMs?: number }
@@ -124,7 +129,13 @@ function projectSelectorClick(
   return {
     command: 'click',
     positionals: [`${operation.selector.key}=${JSON.stringify(operation.selector.value)}`],
-    flags: operation.options,
+    flags: {
+      ...operation.options,
+      maestro: {
+        allowNonHittableCoordinateFallback: true,
+        expectedTapPoint: operation.expectedPoint,
+      },
+    },
   };
 }
 

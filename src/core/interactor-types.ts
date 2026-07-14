@@ -9,6 +9,7 @@ import type { BackendSnapshotResult } from '../backend.ts';
 import type { RunnerLogicalLeaseContext } from './runner-lease-context.ts';
 import type {
   RawSnapshotNode,
+  Point,
   Rect,
   SnapshotBackend,
   SnapshotOptions as BaseSnapshotOptions,
@@ -57,6 +58,7 @@ export type ElementSelectorTapOptions = {
   key: ElementSelectorKey;
   value: string;
   allowNonHittableCoordinateFallback?: boolean;
+  expectedPoint?: Point;
 };
 
 /**

@@ -1458,11 +1458,21 @@ extension RunnerTests {
       )
     case .tap:
       if let selectorKey = command.selectorKey, let selectorValue = command.selectorValue {
+        let expectedPoint: CGPoint?
+        if command.allowNonHittableCoordinateFallback == true,
+          let x = command.x,
+          let y = command.y
+        {
+          expectedPoint = CGPoint(x: x, y: y)
+        } else {
+          expectedPoint = nil
+        }
         let match = findElement(
           app: activeApp,
           selectorKey: selectorKey,
           selectorValue: selectorValue,
-          allowNonHittableFallback: command.allowNonHittableCoordinateFallback == true
+          allowNonHittableFallback: command.allowNonHittableCoordinateFallback == true,
+          expectedPoint: expectedPoint
         )
         if match.isAmbiguous {
           return Response(ok: false, error: ErrorPayload(code: "AMBIGUOUS_MATCH", message: "selector matched multiple elements"))
@@ -1488,15 +1498,19 @@ extension RunnerTests {
               message: "element resolved off-screen at (\(Int(frame.midX)), \(Int(frame.midY)))"))
           }
           let isTextEntry = isTextEntryElement(element)
-          let touchFrame = frame.isEmpty
-            ? nil
-            : resolvedTouchVisualizationFrame(app: activeApp, x: frame.midX, y: frame.midY)
+          let touchPoint = expectedPoint ?? CGPoint(x: frame.midX, y: frame.midY)
+          let touchFrame = resolvedTouchVisualizationFrame(
+            app: activeApp,
+            x: touchPoint.x,
+            y: touchPoint.y
+          )
           let (timing, outcome) = performGesture(activeApp) {
-            if match.usedNonHittableFallback {
+            if expectedPoint != nil || match.usedNonHittableFallback {
               // Maestro compatibility: RN E2E backdoor controls can be 1x1 and
-              // reported non-hittable by XCTest, while Maestro still taps their
-              // resolved bounds. Keep this behind the explicit replay-only flag.
-              return tapAt(app: activeApp, x: frame.midX, y: frame.midY)
+              // reported non-hittable by XCTest. Snapshot-resolved targets also
+              // need coordinate delivery because XCUIElement.activate() does not
+              // invoke every React Native accessibility wrapper.
+              return tapAt(app: activeApp, x: touchPoint.x, y: touchPoint.y)
             }
             return activateElement(app: activeApp, element: element, action: "tap by selector")
           }

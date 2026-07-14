@@ -136,9 +136,7 @@ function screenSwipeEndpoints(
     preset.centerFraction,
     preset.upStartFraction[platform],
   );
-  return direction === 'up'
-    ? { start: upStart, end: nearY }
-    : { start: downStart, end: farY };
+  return direction === 'up' ? { start: upStart, end: nearY } : { start: downStart, end: farY };
 }
 
 function pointInViewport(

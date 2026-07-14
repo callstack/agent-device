@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { createRequestCanceledError } from '../../request/cancel.ts';
 import {
   getSnapshotReferenceFrame,
@@ -35,6 +36,7 @@ export type MaestroSnapshotSource = {
   readonly reuseObservation: (context: MaestroRuntimeReadContext) => SnapshotState | undefined;
   readonly invalidate: () => void;
   readonly requireStability: () => void;
+  readonly prime: (generation: number, snapshot: SnapshotState) => void;
   readonly settlePending: (context: MaestroRuntimeReadContext) => Promise<void>;
 };
 
@@ -93,6 +95,7 @@ function resolveTargetFromSnapshot(params: {
   );
   return targetMatchFromResolution(
     resolution,
+    params.snapshot,
     params.context.generation,
     frame,
     params.query,
@@ -194,23 +197,25 @@ export async function waitForTypedSnapshotStability(params: {
   validateTimeout(params.timeoutMs, 'waitForAnimationToEnd');
   const deadline = params.dependencies.now() + params.timeoutMs;
   let previous = await captureRetriableMaestroSnapshot(params, deadline);
-  let previousSignature = snapshotStabilitySignature(previous);
+  let previousSignature = maestroSnapshotSignature(previous);
 
   while (true) {
     throwIfAborted(params.context.signal);
+    const remaining = deadline - params.dependencies.now();
+    if (remaining > 0) {
+      await sleepWithinBudget(
+        params.dependencies,
+        Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
+        params.context.signal,
+      );
+    }
     const snapshot = await captureRetriableMaestroSnapshot(params, deadline);
-    const signature = snapshotStabilitySignature(snapshot);
+    const signature = maestroSnapshotSignature(snapshot);
     if (signature === previousSignature) return snapshot;
     previous = snapshot;
     previousSignature = signature;
 
-    const remaining = deadline - params.dependencies.now();
-    if (remaining <= 0) return previous;
-    await sleepWithinBudget(
-      params.dependencies,
-      Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
-      params.context.signal,
-    );
+    if (params.dependencies.now() >= deadline) return previous;
   }
 }
 
@@ -222,6 +227,7 @@ function snapshotViewportRect(frame: TouchReferenceFrame | undefined): Rect | un
 
 function targetMatchFromResolution(
   resolution: ReturnType<typeof resolveMaestroTargetFromSnapshot>,
+  snapshot: SnapshotState,
   generation: number,
   frame: TouchReferenceFrame | undefined,
   query: SnapshotTargetQuery & { allowAtomicSelectorDispatch?: boolean },
@@ -255,12 +261,13 @@ function targetMatchFromResolution(
     ...(resolution.evidence.ref ? { ref: resolution.evidence.ref } : {}),
     ...(viewport ? { viewport } : {}),
     ...(dispatchSelector ? { dispatchSelector } : {}),
+    surfaceSignature: maestroSnapshotSignature(snapshot),
   };
 }
 
 function visibleScreenPercentage(rect: Rect, viewport: Rect): number {
   if (!isPositiveFiniteRect(rect) || !isPositiveFiniteRect(viewport)) return 0;
-  if (rectContains(rect, viewport) || rectContains(viewport, rect)) return 100;
+  if (rectContains(viewport, rect)) return 100;
 
   const width = Math.max(
     0,
@@ -350,35 +357,39 @@ function isRetriableSnapshotError(error: unknown): boolean {
   return error instanceof AppError && error.details?.retriable === true;
 }
 
-function snapshotStabilitySignature(snapshot: SnapshotState): string {
-  return JSON.stringify(
-    snapshot.nodes.map((node) => ({
-      index: node.index,
-      parentIndex: node.parentIndex,
-      depth: node.depth,
-      type: node.type,
-      role: node.role,
-      subrole: node.subrole,
-      identifier: node.identifier,
-      label: node.label,
-      value: node.value,
-      enabled: node.enabled,
-      selected: node.selected,
-      focused: node.focused,
-      visibleToUser: node.visibleToUser,
-      hittable: node.hittable,
-      pid: node.pid,
-      bundleId: node.bundleId,
-      appName: node.appName,
-      windowTitle: node.windowTitle,
-      surface: node.surface,
-      hiddenContentAbove: node.hiddenContentAbove,
-      hiddenContentBelow: node.hiddenContentBelow,
-      interactionBlocked: node.interactionBlocked,
-      presentationHints: node.presentationHints,
-      rect: node.rect,
-    })),
-  );
+export function maestroSnapshotSignature(snapshot: SnapshotState): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify(
+        snapshot.nodes.map((node) => ({
+          index: node.index,
+          parentIndex: node.parentIndex,
+          depth: node.depth,
+          type: node.type,
+          role: node.role,
+          subrole: node.subrole,
+          identifier: node.identifier,
+          label: node.label,
+          value: node.value,
+          enabled: node.enabled,
+          selected: node.selected,
+          focused: node.focused,
+          visibleToUser: node.visibleToUser,
+          hittable: node.hittable,
+          pid: node.pid,
+          bundleId: node.bundleId,
+          appName: node.appName,
+          windowTitle: node.windowTitle,
+          surface: node.surface,
+          hiddenContentAbove: node.hiddenContentAbove,
+          hiddenContentBelow: node.hiddenContentBelow,
+          interactionBlocked: node.interactionBlocked,
+          presentationHints: node.presentationHints,
+          rect: node.rect,
+        })),
+      ),
+    )
+    .digest('hex');
 }
 
 function requireObservationResult(match: MaestroTargetMatch | undefined): MaestroTargetMatch {

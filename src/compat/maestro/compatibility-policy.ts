@@ -12,6 +12,7 @@ export const MAESTRO_COMPATIBILITY_PRESETS = {
     retryMaxRetries: 3,
   },
   command: {
+    tapMaxAttempts: 2,
     targetLookupTimeoutMs: 17_000,
     optionalTargetLookupTimeoutMs: 7_000,
     scrollUntilVisibleTimeoutMs: 20_000,

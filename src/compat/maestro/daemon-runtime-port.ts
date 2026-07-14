@@ -32,6 +32,7 @@ import {
   resolveTypedMaestroTarget,
   scrollUntilTypedMaestroTarget,
   waitForTypedSnapshotStability,
+  maestroSnapshotSignature,
   type MaestroSnapshotReader,
   type MaestroSnapshotSource,
 } from './daemon-runtime-port-observation.ts';
@@ -131,7 +132,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     },
 
     tapOn: async (input, context) =>
-      await tapTarget(options, snapshots, input.target, context, {
+      await tapTargetWithOutcome(options, snapshots, input.target, context, {
         count: input.repeat,
         intervalMs: input.delay,
       }),
@@ -339,6 +340,7 @@ function createSnapshotSource(
     if (primed?.generation === context.generation) {
       const snapshot = primed.snapshot;
       primed = undefined;
+      cached = { generation: context.generation, snapshot };
       return snapshot;
     }
     primed = undefined;
@@ -368,6 +370,9 @@ function createSnapshotSource(
       stabilityRequired = true;
       primed = undefined;
     },
+    prime: (generation, snapshot) => {
+      primed = { generation, snapshot };
+    },
     settlePending: async (context) => {
       if (!stabilityRequired) return;
       stabilityRequired = false;
@@ -382,7 +387,36 @@ function createSnapshotSource(
   };
 }
 
-async function tapTarget(
+async function tapTargetWithOutcome(
+  options: CreateDaemonMaestroRuntimeOperationsOptions,
+  snapshots: MaestroSnapshotSource,
+  target: Parameters<MaestroRuntimeOperations['tapOn']>[0]['target'],
+  context: MaestroRuntimeOperationContext,
+  flags: MaestroClickOptions,
+): Promise<void> {
+  const baselineSignature =
+    target.resolution?.surfaceSignature ??
+    maestroSnapshotSignature(await snapshots.capture(context));
+  const dispatch = async () => await dispatchTapTarget(options, snapshots, target, context, flags);
+
+  await dispatch();
+
+  await options.dependencies.sleep(MAESTRO_OBSERVATION_POLL_MS, context.signal);
+  let observed = await snapshots.capture(context);
+  let attempts = 1;
+  while (
+    maestroSnapshotSignature(observed) === baselineSignature &&
+    attempts < MAESTRO_COMPATIBILITY_PRESETS.command.tapMaxAttempts
+  ) {
+    await dispatch();
+    attempts += 1;
+    await options.dependencies.sleep(MAESTRO_OBSERVATION_POLL_MS, context.signal);
+    observed = await snapshots.capture(context);
+  }
+  snapshots.prime(context.generation + 1, observed);
+}
+
+async function dispatchTapTarget(
   options: CreateDaemonMaestroRuntimeOperationsOptions,
   snapshots: MaestroSnapshotSource,
   target: Parameters<MaestroRuntimeOperations['tapOn']>[0]['target'],
@@ -394,7 +428,7 @@ async function tapTarget(
     const resolution = target.resolution!;
     snapshots.invalidate();
     try {
-      await clickSelector(options, dispatchSelector, flags);
+      await clickSelector(options, dispatchSelector, target.point!, flags);
       return;
     } catch (error) {
       if (!isAtomicSelectorFallbackError(error)) throw error;
@@ -418,11 +452,13 @@ async function tapTarget(
 async function clickSelector(
   options: CreateDaemonMaestroRuntimeOperationsOptions,
   selector: MaestroDispatchSelector,
+  expectedPoint: { x: number; y: number },
   flags: MaestroClickOptions,
 ): Promise<void> {
   await invokeMaestroPublicOperation(options, {
     kind: 'clickSelector',
     selector,
+    expectedPoint,
     options: flags,
   });
 }

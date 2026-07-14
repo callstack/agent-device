@@ -170,7 +170,7 @@ test('settles a gesture before the next observation and reuses the stable snapsh
     'snapshot',
     'snapshot',
   ]);
-  expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);
+  expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS * 2);
 });
 
 test('settles a gesture before dispatching another gesture', async () => {
@@ -224,7 +224,7 @@ test('settles a gesture before dispatching another gesture', async () => {
     'snapshot',
     'swipe',
   ]);
-  expect(clock.value).toBe(0);
+  expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);
 });
 
 test('preserves the resolved nested-command request context', async () => {

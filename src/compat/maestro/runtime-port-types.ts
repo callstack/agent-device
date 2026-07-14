@@ -39,6 +39,7 @@ export type MaestroTargetMatch = {
   readonly viewport?: Rect;
   readonly ref?: string;
   readonly dispatchSelector?: MaestroDispatchSelector;
+  readonly surfaceSignature?: string;
 };
 
 export type MaestroDispatchSelector = {

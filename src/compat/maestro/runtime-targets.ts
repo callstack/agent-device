@@ -16,7 +16,7 @@ import {
   normalizeMaestroSnapshotMatches,
   selectMaestroSnapshotMatch,
 } from './runtime-target-ranking.ts';
-import { areRectsApproximatelyEqual } from '../../utils/rect-center.ts';
+import { pointInsideRect } from '../../utils/rect-center.ts';
 
 export type MaestroTargetQuery = {
   selector: MaestroSelector;
@@ -123,7 +123,17 @@ function countCanonicalDispatchCandidates(
   );
   if (canonicalRankedMatches.length !== 1) return canonicalRankedMatches.length;
   const canonicalTarget = selectMaestroSnapshotMatch(canonicalRankedMatches, undefined);
-  return canonicalTarget && areRectsApproximatelyEqual(canonicalTarget.rect, target.rect) ? 1 : 0;
+  return canonicalTarget &&
+    canonicalTarget.node.hittable !== false &&
+    haveSameTapPoint(canonicalTarget.rect, target.rect)
+    ? 1
+    : 0;
+}
+
+function haveSameTapPoint(left: Rect, right: Rect): boolean {
+  const leftPoint = pointInsideRect(left);
+  const rightPoint = pointInsideRect(right);
+  return leftPoint.x === rightPoint.x && leftPoint.y === rightPoint.y;
 }
 
 function buildMaestroTargetEvidence(
