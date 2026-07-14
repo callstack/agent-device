@@ -6,7 +6,7 @@ import { runAppleRunnerCommand } from '../platforms/apple/core/runner/runner-cli
 import { buildAppleRunnerRequestOptions } from './apple-runner-options.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from './types.ts';
 import { errorResponse, requireCommandSupported } from './handlers/response.ts';
-import { markSessionSnapshotRefsIssued, resolveRefStalenessWarning } from './session-snapshot.ts';
+import { markSessionPartialRefsIssued, resolveRefStalenessWarning } from './session-snapshot.ts';
 import { resolveSessionDevice, withSessionlessRunnerCleanup } from './handlers/snapshot-session.ts';
 import { parseFindArgs, type FindAction } from '../selectors/find.ts';
 import { splitIsSelectorArgs } from '../selectors/index.ts';
@@ -111,7 +111,9 @@ export async function dispatchFindReadOnlyViaRuntime(
     if (typeof data.ref === 'string') {
       const session = params.sessionStore.get(params.sessionName);
       if (session) {
-        markSessionSnapshotRefsIssued(session);
+        // ADR 0014: a read-only find publishes exactly its one returned ref, so
+        // it activates a PARTIAL frame authorizing only that ref body.
+        markSessionPartialRefsIssued(session, [data.ref]);
         params.sessionStore.set(params.sessionName, session);
         if (session.snapshotGeneration !== undefined) {
           return { ...data, refsGeneration: session.snapshotGeneration };

@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { dispatchCommand } from '../../core/dispatch.ts';
 import { contextFromFlags } from '../context.ts';
-import { markSessionSnapshotRefsIssued, setSessionSnapshot } from '../session-snapshot.ts';
+import { markSessionPartialRefsIssued, setSessionSnapshot } from '../session-snapshot.ts';
 import { isSparseSnapshotQualityVerdict } from '../../snapshot/snapshot-quality.ts';
 import { displayLabel, formatRole } from '../../snapshot/snapshot-lines.ts';
 import { redactDiagnosticData } from '../../kernel/redaction.ts';
@@ -230,7 +230,20 @@ export async function captureDivergenceObservation(params: {
       };
     }
     setSessionSnapshot(session, snapshot);
-    markSessionSnapshotRefsIssued(session);
+    // ADR 0014: the divergence screen digest publishes only its capped,
+    // non-covered, non-chrome refs — the same set `buildReplayDivergenceScreenRefs`
+    // renders. Activate a PARTIAL frame authorizing exactly those bodies.
+    const chromeRefs = collectSettleChromeRefs(snapshot.nodes, session.appBundleId);
+    const digestBodies = snapshot.nodes
+      .filter(
+        (node) =>
+          node.ref !== undefined &&
+          node.interactionBlocked !== 'covered' &&
+          !chromeRefs.has(node.ref),
+      )
+      .slice(0, SCREEN_REF_CAPTURE_LIMIT)
+      .map((node) => node.ref as string);
+    markSessionPartialRefsIssued(session, digestBodies);
     sessionStore.set(sessionName, session);
     return {
       state: 'available',

@@ -42,7 +42,7 @@
     "shape": "$.message:string|$.ref:string|$.settle.captures:number|$.settle.diff.summary.additions:number|$.settle.diff.summary.removals:number|$.settle.diff.summary.unchanged:number|$.settle.diff.summary:object|$.settle.diff:object|$.settle.quietMs:number|$.settle.refs:array|$.settle.refsGeneration:number|$.settle.refs[].ref:string|$.settle.refs[]:object|$.settle.settled:boolean|$.settle.timeoutMs:number|$.settle.waitedMs:number|$.settle:object|$.x:number|$.y:number|$:object"
   },
   "settle-tail.default.text": {
-    "bytes": 180,
+    "bytes": 188,
     "lines": 7,
     "refs": 4,
     "hints": 0,
@@ -175,7 +175,7 @@
     "shape": "text"
   },
   "workflow.mutation-tail.cli.text": {
-    "bytes": 165,
+    "bytes": 173,
     "lines": 6,
     "refs": 3,
     "hints": 0,

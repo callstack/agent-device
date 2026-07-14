@@ -14,6 +14,17 @@ function getCliOutput(params: { result: CommandRequestResult; format?: string })
   return defaultCommandCliOutput(data);
 }
 
+// ADR 0014: a reusable ref in a PARTIAL result renders in ready-to-copy
+// `@eN~s<refsGeneration>` form so a human CLI caller can paste it into the next
+// mutation without a separate pin step. A mutating result carries no
+// `refsGeneration`, so its acted ref is never pinned.
+function pinnedRefText(ref: unknown, refsGeneration: unknown): string | undefined {
+  if (typeof ref !== 'string' || ref.length === 0) return undefined;
+  if (typeof refsGeneration !== 'number') return undefined;
+  const body = ref.startsWith('@') ? ref.slice(1) : ref;
+  return `@${body}~s${refsGeneration}`;
+}
+
 function findCliOutput(result: CommandRequestResult): CliOutput {
   const data = result as Record<string, unknown>;
   // Interactive find actions (click/fill/focus/type) carry the same success message as
@@ -21,6 +32,9 @@ function findCliOutput(result: CommandRequestResult): CliOutput {
   const message = readCommandMessage(data);
   if (message) return { data, text: message };
   if (typeof data.text === 'string') return { data, text: data.text };
+  // A read-only find that returns a reusable ref renders it pinned (ADR 0014).
+  const pinned = pinnedRefText(data.ref, data.refsGeneration);
+  if (pinned) return { data, text: `Found: ${pinned}` };
   if (typeof data.found === 'boolean') return { data, text: `Found: ${data.found}` };
   if (data.node) return { data, text: JSON.stringify(data.node, null, 2) };
   return defaultCommandCliOutput(data);
@@ -64,6 +78,7 @@ type SettleTextView = {
   };
   tail?: Array<{ ref?: string; role?: string; label?: string }>;
   tailTruncated?: boolean;
+  refsGeneration?: number;
 };
 
 /**
@@ -100,7 +115,10 @@ function formatSettleTailLines(view: SettleTextView): string[] {
   const lines = [`unchanged interactive (${tail.length}):`];
   for (const entry of tail) {
     const label = entry.label ? ` "${entry.label}"` : '';
-    lines.push(`= @${entry.ref ?? ''} [${entry.role ?? ''}]${label}`);
+    // ADR 0014: the settled tail refs are reusable, so render them pinned when
+    // the settle response carried its generation.
+    const ref = pinnedRefText(entry.ref, view.refsGeneration) ?? `@${entry.ref ?? ''}`;
+    lines.push(`= ${ref} [${entry.role ?? ''}]${label}`);
   }
   if (view.tailTruncated) {
     lines.push('… more interactive elements not shown, use snapshot -i');

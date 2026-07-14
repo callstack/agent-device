@@ -73,15 +73,42 @@ export function nextSnapshotGeneration(current: number | undefined): number {
 /**
  * The response being returned hands the stored snapshot's refs to the client.
  *
- * ADR 0014: every caller is a PARTIAL publication (`find`, settled diff, replay
- * divergence) that exposes only a few refs, so this clears the coarse client
- * marker but must NOT re-authorize a complete frame — restoring broad `all`-scope
- * mutation authority from a partial result is exactly the ADR hole. Only a
- * complete namespace (the snapshot command, via `buildNextSnapshotSession`)
- * re-activates the frame; bounded partial issuance scope lands in a later step.
+ * ADR 0014: this clears the coarse client marker but must NOT re-authorize a
+ * complete frame — restoring broad `all`-scope mutation authority from a partial
+ * result is the ADR hole. Only a complete namespace (the snapshot command, via
+ * `buildNextSnapshotSession`) re-activates a complete frame. A partial
+ * publication that wants to authorize its bounded ref set calls
+ * {@link markSessionPartialRefsIssued} instead.
  */
 export function markSessionSnapshotRefsIssued(session: SessionState): void {
   session.snapshotRefsStale = false;
+}
+
+/** Plain ref body: strip a leading `@` and any `~s<n>` generation suffix. */
+function normalizeRefBody(ref: string): string {
+  const withoutAt = ref.startsWith('@') ? ref.slice(1) : ref;
+  const suffix = withoutAt.indexOf('~');
+  return suffix === -1 ? withoutAt : withoutAt.slice(0, suffix);
+}
+
+/**
+ * ADR 0014 partial issuance: a `find`, settled diff, or replay divergence screen
+ * publishes only the refs it actually returned. It activates a PARTIAL frame that
+ * authorizes ONLY those ref bodies (scope = the emitted set) at the current
+ * epoch — a plain ref then requires a complete frame, and a pinned ref outside
+ * the set is rejected. An empty partial result does not supersede existing
+ * authority (it leaves the frame untouched), so a useful prior frame survives.
+ */
+export function markSessionPartialRefsIssued(session: SessionState, refs: Iterable<string>): void {
+  session.snapshotRefsStale = false;
+  const scope = new Set<string>();
+  for (const ref of refs) {
+    const body = normalizeRefBody(ref);
+    if (body.length > 0) scope.add(body);
+  }
+  if (scope.size === 0) return;
+  session.refFrameState = 'active';
+  session.refFrameScope = scope;
 }
 
 /**

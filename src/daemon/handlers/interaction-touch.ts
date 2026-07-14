@@ -20,7 +20,7 @@ import { asAppError, normalizeError } from '../../kernel/errors.ts';
 import type { ReplayTargetGuardDenotation } from '../../replay/target-identity-node.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';
-import { markSessionSnapshotRefsIssued, resolveRefStalenessWarning } from '../session-snapshot.ts';
+import { markSessionPartialRefsIssued, resolveRefStalenessWarning } from '../session-snapshot.ts';
 import {
   buildInteractionResponseData,
   type InteractionResponsePayloads,
@@ -317,8 +317,21 @@ function settleRefsGenerationIssue(
   result: PressCommandResult | FillCommandResult | LongPressCommandResult,
 ): number | undefined {
   if (!result.settle?.diff) return undefined;
-  markSessionSnapshotRefsIssued(session);
+  // ADR 0014: a settled diff publishes the refs it exposed, so it activates a
+  // PARTIAL frame authorizing exactly those bodies (not the whole tree).
+  markSessionPartialRefsIssued(session, collectSettleIssuedRefBodies(result.settle));
   return session.snapshotGeneration;
+}
+
+/** The reusable refs a settled diff exposed: added diff lines, `refs`, `tail`. */
+function collectSettleIssuedRefBodies(settle: NonNullable<PressCommandResult['settle']>): string[] {
+  const bodies: string[] = [];
+  for (const line of settle.diff?.lines ?? []) {
+    if (line.ref) bodies.push(line.ref);
+  }
+  for (const entry of settle.refs ?? []) bodies.push(entry.ref);
+  for (const entry of settle.tail ?? []) bodies.push(entry.ref);
+  return bodies;
 }
 
 function readLongPressResultDuration(result: TargetedTouchResult): number | undefined {

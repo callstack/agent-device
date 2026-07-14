@@ -219,6 +219,12 @@ function mergeIssuedRefPins(
   const record = asOptionalRecord(result);
   const refsGeneration = record?.refsGeneration;
   if (record === undefined || typeof refsGeneration !== 'number') {
+    // ADR 0014: a MUTATING find returns its acted ref as diagnostic pre-action
+    // identity WITHOUT `refsGeneration` — it is explicitly non-issuing and must
+    // leave remembered pins untouched (forwarding the old pin on a later ref is
+    // how the daemon produces a precise stale rejection). Only a snapshot that
+    // genuinely issued no generation clears the scope.
+    if (name === 'find') return;
     refPinsByScope.delete(scopeKey);
     return;
   }

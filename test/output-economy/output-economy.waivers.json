@@ -1,1 +1,10 @@
-{}
+{
+  "settle-tail.default.text": {
+    "bytes": 188,
+    "reason": "ADR 0014: a settled diff's reusable tail refs render in ready-to-copy pinned @eN~s<refsGeneration> form so a human CLI caller can paste them straight into the next mutation (+8 bytes for the two tail pins). The response-level refsGeneration stays the token-economical authority for JSON and MCP; only human-CLI text carries the pins."
+  },
+  "workflow.mutation-tail.cli.text": {
+    "bytes": 173,
+    "reason": "ADR 0014: the routine-workflow mutation-tail step renders the same pinned tail refs in human-CLI text (+8 bytes). See settle-tail.default.text."
+  }
+}
