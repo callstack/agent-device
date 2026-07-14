@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed
+Accepted
 
 ## Context
 
@@ -35,10 +35,9 @@ remain compatible with selector-based replay, and add no automatic capture or pe
 
 ## Decision
 
-The terms introduced below describe the proposed target model. They do not replace the current domain
-language in `CONTEXT.md` while this ADR is Proposed and the source still implements the snapshot/stale
-marker model. The implementation change that establishes these concepts must promote the accepted
-terms into `CONTEXT.md`; documentation must not present the target model as current behavior early.
+The terms introduced below are now the implemented model; the ref-frame vocabulary is promoted into
+`CONTEXT.md`. The coarse `snapshotRefsStale` marker still backs read-only staleness warnings and is
+removed once per-platform enforcement is confirmed by live evidence (migration step 8).
 
 ### Ref frames are separate from operational observations
 
@@ -439,6 +438,15 @@ Each step lands green and independently useful:
    refresh-between-mutations, conservative fused no-op invalidation, and reads without retained
    evidence; promote the implemented vocabulary into `CONTEXT.md`; then remove the superseded coarse
    stale marker.
+
+Implementation status: steps 1–7 have landed — the ref-frame module and observation split (1), the
+complete daemon classification and gate (2), the pre-side-effect seam at every leaf (3), correct
+complete/partial publication with bounded scope, MCP pin retention, and pinned partial CLI text (4),
+Android freshness decoupled from positional ref authorization (5), the cross-platform contract and
+provider evidence (6), and fail-closed admission enforcement across platforms with typed reasons (7).
+Per-platform enablement is confirmed by the live-evidence runs required above; step 8's removal of the
+superseded coarse `snapshotRefsStale` marker follows that confirmation so read-only warnings are not
+disturbed before enforcement is proven on hardware.
 
 PR #1241 landed independently as a compatible transitional fix. It rejects a known iOS stale-marker
 case before this full lifecycle is implemented; it does not own the architecture migration.

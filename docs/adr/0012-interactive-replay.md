@@ -463,11 +463,12 @@ every `screen` ref with `refsGeneration` before returning it, including on the e
 client callers receive the unpinned refs and generation already present in the daemon error. No caller
 gets a text-only divergence that loses its repair data.
 
-> **Proposed ADR 0014 amendment:** if ADR 0014 is accepted and implemented, replay divergence
-> `screen.refs` becomes a partial ref publication. MCP keeps auto-pinning those refs; CLI text renders
-> `@eN~s<refsGeneration>`; JSON and Node.js callers pair each plain ref with the response-level
-> generation before mutation. Until that migration lands, the current unpinned contract above remains
-> accepted. The implementation must update this note and its contract tests in the same change.
+> **ADR 0014 amendment (accepted, implemented):** replay divergence `screen.refs` is now a partial ref
+> publication — it activates a bounded partial ref frame authorizing exactly the divergence screen's refs
+> (`markSessionPartialRefsIssued`). MCP auto-pins those refs; CLI text renders `@eN~s<refsGeneration>`;
+> JSON and Node.js callers pair each plain ref with the response-level generation before mutation. Because
+> the frame is partial, a mutation through a divergence ref requires the pinned form; a plain ref there
+> reports `plain_ref_requires_complete_frame`.
 
 `--from N` is a `replay`-only flag. `test` must reject it as `INVALID_ARGS`; test shares replay execution
 but must remain a full, deterministic suite run. `N` is a 1-based index into the fully expanded
