@@ -125,7 +125,10 @@ export async function buildReplayFailureDivergence(params: {
     planDigest,
     repairHint,
   });
-  if (session) stampPendingRecordAndHealWatermark({ session, resume, repairHint });
+  if (session) {
+    stampPendingRecordAndHealWatermark({ session, resume, repairHint });
+    sessionStore.set(sessionName, session);
+  }
 
   const divergence: ReplayDivergence = {
     version: 1,

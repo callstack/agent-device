@@ -142,7 +142,10 @@ function buildTargetBindingDivergenceResponse(
     repairHint,
   });
   const session = sessionStore.get(sessionName);
-  if (session) stampPendingRecordAndHealWatermark({ session, resume, repairHint });
+  if (session) {
+    stampPendingRecordAndHealWatermark({ session, resume, repairHint });
+    sessionStore.set(sessionName, session);
+  }
 
   const divergence: ReplayDivergence = {
     version: 1,
