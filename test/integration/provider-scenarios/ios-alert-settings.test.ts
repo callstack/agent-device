@@ -19,14 +19,36 @@ test('Provider-backed integration iOS Settings permission and alert flow uses pr
       command: 'ios.runner.alert',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
       platform: 'apple',
-      request: { command: 'alert', action: 'get', appBundleId: 'com.apple.Preferences' },
+      request: {
+        command: 'alert',
+        action: 'get',
+        appBundleId: 'com.apple.Preferences',
+        timeoutMs: 10_000,
+      },
       result: { title: 'Camera Access', message: 'Allow Settings to access Camera?' },
     },
     {
       command: 'ios.runner.alert',
       deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
       platform: 'apple',
-      request: { command: 'alert', action: 'accept', appBundleId: 'com.apple.Preferences' },
+      request: {
+        command: 'alert',
+        action: 'get',
+        appBundleId: 'com.apple.Preferences',
+        timeoutMs: 37,
+      },
+      result: { title: 'Camera Access', message: 'Allow Settings to access Camera?' },
+    },
+    {
+      command: 'ios.runner.alert',
+      deviceId: PROVIDER_SCENARIO_IOS_SIMULATOR.id,
+      platform: 'apple',
+      request: {
+        command: 'alert',
+        action: 'accept',
+        appBundleId: 'com.apple.Preferences',
+        timeoutMs: 2_000,
+      },
       result: { action: 'accept', accepted: true },
     },
   ]);
@@ -146,6 +168,9 @@ test('Provider-backed integration iOS Settings permission and alert flow uses pr
 
       const alertGet = await client.command.alert({ action: 'get', ...selection });
       assert.equal(alertGet.title, 'Camera Access');
+
+      const alertWait = await client.command.alert({ action: 'wait', timeoutMs: 37, ...selection });
+      assert.equal(alertWait.title, 'Camera Access');
 
       const alertAccept = await client.command.alert({ action: 'accept', ...selection });
       assert.equal(alertAccept.accepted, true);

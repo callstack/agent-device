@@ -67,6 +67,8 @@ export type RunnerCommand = {
   x2?: number;
   y2?: number;
   durationMs?: number;
+  /** Remaining request budget for runner work that performs bounded XCTest queries. */
+  timeoutMs?: number;
   direction?: ScrollDirection;
   amount?: number;
   pixels?: number;

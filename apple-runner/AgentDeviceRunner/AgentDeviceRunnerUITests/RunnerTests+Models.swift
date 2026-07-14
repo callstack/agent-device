@@ -126,6 +126,7 @@ struct Command: Codable {
   let x2: Double?
   let y2: Double?
   let durationMs: Double?
+  let timeoutMs: Double?
   let direction: String?
   let amount: Double?
   let pixels: Double?

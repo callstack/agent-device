@@ -26,7 +26,7 @@ type HandleAlertCommandParams = {
 };
 
 type NativeAlertAction = Exclude<AlertAction, 'wait'>;
-type NativeAlertRunner = (action: NativeAlertAction) => Promise<unknown>;
+type NativeAlertRunner = (action: NativeAlertAction, timeoutMs: number) => Promise<unknown>;
 
 const ALERT_FALLBACK_HINT =
   'If the permission sheet is visible in snapshot or screenshot but alert reports no alert, take a scoped snapshot around the visible button label and use press @ref.';
@@ -68,10 +68,10 @@ export async function handleAlertCommand(
     logPath,
     traceLogPath: session?.trace?.outPath,
   });
-  const runAlert: NativeAlertRunner = async (alertAction) =>
+  const runAlert: NativeAlertRunner = async (alertAction, timeoutMs) =>
     await runAppleRunnerCommand(
       device,
-      { command: 'alert', action: alertAction, appBundleId: session?.appBundleId },
+      { command: 'alert', action: alertAction, appBundleId: session?.appBundleId, timeoutMs },
       runnerOptions,
     );
   return await handleNativeAlertCommand(params, action, runAlert);
@@ -91,7 +91,7 @@ async function handleNativeAlertCommand(
     return await handleNativeAlertAction(params, resolvedAction, runAlert);
   }
 
-  return recordAlertResponse(params, await runAlert('get'));
+  return recordAlertResponse(params, await runAlert('get', DEFAULT_TIMEOUT_MS));
 }
 
 function normalizeAlertAction(action: string | undefined): AlertAction {
@@ -105,9 +105,12 @@ async function waitForNativeAlert(
 ): Promise<DaemonResponse> {
   const timeout = parseTimeout(params.req.positionals?.[1]) ?? DEFAULT_TIMEOUT_MS;
   const start = Date.now();
+  let firstAttempt = true;
   while (Date.now() - start < timeout) {
     try {
-      return recordAlertResponse(params, await runAlert('get'));
+      const budgetMs = firstAttempt ? timeout : remainingBudgetMs(start, timeout);
+      firstAttempt = false;
+      return recordAlertResponse(params, await runAlert('get', budgetMs));
     } catch {
       // keep waiting
     }
@@ -123,9 +126,14 @@ async function handleNativeAlertAction(
 ): Promise<DaemonResponse> {
   const start = Date.now();
   let lastError: unknown;
+  let firstAttempt = true;
   while (Date.now() - start < ALERT_ACTION_RETRY_MS) {
     try {
-      return recordAlertResponse(params, await runAlert(action));
+      const budgetMs = firstAttempt
+        ? ALERT_ACTION_RETRY_MS
+        : remainingBudgetMs(start, ALERT_ACTION_RETRY_MS);
+      firstAttempt = false;
+      return recordAlertResponse(params, await runAlert(action, budgetMs));
     } catch (err) {
       lastError = err;
       const msg = String((err as { message?: unknown })?.message ?? '').toLowerCase();
@@ -134,6 +142,10 @@ async function handleNativeAlertAction(
     await sleep(POLL_INTERVAL_MS);
   }
   throw withAlertFallbackHint(lastError);
+}
+
+function remainingBudgetMs(start: number, timeoutMs: number): number {
+  return Math.max(1, timeoutMs - (Date.now() - start));
 }
 
 function recordAlertResponse(params: HandleAlertCommandParams, data: unknown): DaemonResponse {

@@ -14,7 +14,7 @@ extension RunnerTests {
   }
 
   func resolveBlockingSystemModal(
-    deadline: Date = .distantFuture
+    deadline: Date
   ) -> BlockingSystemModalResolution {
     guard let springboardModal = firstBlockingSystemModal(
       in: springboard,

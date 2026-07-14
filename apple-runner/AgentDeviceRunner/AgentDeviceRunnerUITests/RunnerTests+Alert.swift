@@ -14,9 +14,21 @@ extension RunnerTests {
     let source: RunnerAlertSource
   }
 
-  func resolveAlert(app activeApp: XCUIApplication) -> RunnerAlert? {
+  static let defaultAlertCommandTimeout: TimeInterval = 10
+
+  static func alertCommandTimeout(timeoutMs: Double?) -> TimeInterval {
+    guard let timeoutMs, timeoutMs.isFinite else { return defaultAlertCommandTimeout }
+    return max(0.001, timeoutMs / 1000)
+  }
+
+  func resolveAlert(app activeApp: XCUIApplication, deadline: Date) -> RunnerAlert? {
+#if AGENT_DEVICE_RUNNER_UNIT_TESTS
+    if let override = alertResolutionOverrideForTesting {
+      return override(deadline)
+    }
+#endif
 #if !os(macOS)
-    switch resolveBlockingSystemModal() {
+    switch resolveBlockingSystemModal(deadline: deadline) {
     case .resolved(let modal):
       return runnerAlert(modal)
     case .unresolved:
@@ -38,7 +50,7 @@ extension RunnerTests {
     return nil
   }
 
-  func handleAlert(_ alert: RunnerAlert, action: String) -> Response {
+  func handleAlert(_ alert: RunnerAlert, action: String, deadline: Date) -> Response {
     if action == "accept" || action == "dismiss" {
       guard let button = chooseAlertButton(alert.buttons, action: action) else {
         return Response(ok: false, error: ErrorPayload(message: "alert \(action) button not found"))
@@ -55,7 +67,8 @@ extension RunnerTests {
         in: alert.ownerApp,
         source: alert.source,
         previousTitle: previousTitle,
-        actionButtonLabel: actionButtonLabel
+        actionButtonLabel: actionButtonLabel,
+        deadline: deadline
       ) {
         if !actionButtonFrame.isNull && !actionButtonFrame.isEmpty {
           let coordinateOutcome = tapAt(
@@ -73,7 +86,8 @@ extension RunnerTests {
         in: alert.ownerApp,
         source: alert.source,
         previousTitle: previousTitle,
-        actionButtonLabel: actionButtonLabel
+        actionButtonLabel: actionButtonLabel,
+        deadline: deadline
       ) {
         return Response(
           ok: false,
@@ -125,9 +139,12 @@ extension RunnerTests {
     in ownerApp: XCUIApplication,
     source: RunnerAlertSource,
     previousTitle: String,
-    actionButtonLabel: String
+    actionButtonLabel: String,
+    deadline: Date
   ) -> Bool {
-    guard let current = resolveAlert(source: source, app: ownerApp) else {
+    guard Date() < deadline,
+          let current = resolveAlert(source: source, app: ownerApp, deadline: deadline)
+    else {
       return false
     }
     let currentTitle = preferredAlertTitle(current.root, buttons: current.buttons)
@@ -139,13 +156,17 @@ extension RunnerTests {
     }
   }
 
-  private func resolveAlert(source: RunnerAlertSource, app: XCUIApplication) -> RunnerAlert? {
+  private func resolveAlert(
+    source: RunnerAlertSource,
+    app: XCUIApplication,
+    deadline: Date
+  ) -> RunnerAlert? {
     switch source {
     case .blockingSystemModal:
 #if os(macOS)
       return nil
 #else
-      guard case .resolved(let modal) = resolveBlockingSystemModal() else {
+      guard case .resolved(let modal) = resolveBlockingSystemModal(deadline: deadline) else {
         return nil
       }
       return runnerAlert(modal)
