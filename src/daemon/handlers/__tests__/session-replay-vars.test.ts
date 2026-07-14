@@ -14,6 +14,7 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
     dispatchCommand: vi.fn(async () => {
       throw new Error('no device runner available in this test');
     }),
+    dispatchGestureViewport: vi.fn(async () => ({ x: 0, y: 0, width: 400, height: 800 })),
   };
 });
 
@@ -26,7 +27,7 @@ import { runCmdBackground, type ExecBackgroundResult } from '../../../utils/exec
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionAction } from '../../types.ts';
 import type { CommandFlags } from '../../../core/dispatch.ts';
 import { SessionStore } from '../../session-store.ts';
-import { makeIosSession } from '../../../__tests__/test-utils/index.ts';
+import { makeAndroidSession, makeIosSession } from '../../../__tests__/test-utils/index.ts';
 import {
   buildReplayVarScope,
   collectReplayShellEnv,
@@ -52,6 +53,7 @@ async function runReplayFixture(params: {
   files?: Record<string, string>;
   flags?: CommandFlags;
   invoke?: DaemonInvokeFn;
+  sessionPlatform?: 'android' | 'ios';
 }): Promise<{
   response: DaemonResponse;
   calls: CapturedInvocation[];
@@ -79,6 +81,12 @@ async function runReplayFixture(params: {
     }
     return { ok: true, data: {} };
   };
+  const sessionStore = new SessionStore(path.join(root, 'state'));
+  if (params.sessionPlatform === 'android') {
+    sessionStore.set('s', makeAndroidSession('s'));
+  } else if (params.sessionPlatform === 'ios') {
+    sessionStore.set('s', makeIosSession('s'));
+  }
   const response = await runReplayScriptFile({
     req: {
       token: 't',
@@ -93,7 +101,7 @@ async function runReplayFixture(params: {
     },
     sessionName: 's',
     logPath: path.join(root, 'log'),
-    sessionStore: new SessionStore(path.join(root, 'state')),
+    sessionStore,
     invoke,
   });
   return { response, calls, root, scriptPath };
@@ -938,16 +946,16 @@ test('runReplayScriptFile retries Maestro scrollUntilVisible with scroll probes'
       ['snapshot', []],
       ['scroll', ['up']],
       ['snapshot', []],
-      ['scroll', ['up']],
+      ['snapshot', []],
       ['snapshot', []],
     ],
   );
 });
 
-test('runReplayScriptFile promotes Maestro text tapOn to an actionable ancestor', async () => {
+test('runReplayScriptFile uses semantic iOS dispatch for an exact text tapOn', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
-    label: 'maestro-tap-visible-text-actionable-ancestor',
+    label: 'maestro-tap-visible-text-atomic-ios',
     script: ['appId: demo.app', '---', '- tapOn: Article', ''].join('\n'),
     flags: { replayBackend: 'maestro', platform: 'ios' },
     invoke: async (req) => {
@@ -984,15 +992,15 @@ test('runReplayScriptFile promotes Maestro text tapOn to an actionable ancestor'
     calls.map((call) => [call.command, call.positionals]),
     [
       ['snapshot', []],
-      ['click', ['100', '124']],
+      ['click', ['text="Article"']],
     ],
   );
 });
 
-test('runReplayScriptFile promotes Maestro id tapOn to an actionable ancestor', async () => {
+test('runReplayScriptFile uses matched Android id geometry for tapOn', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
-    label: 'maestro-tap-id-actionable-ancestor',
+    label: 'maestro-tap-id-matched-geometry',
     script: ['appId: demo.app', '---', '- tapOn:', '    id: album-0', ''].join('\n'),
     flags: { replayBackend: 'maestro', platform: 'android' },
     invoke: async (req) => {
@@ -1029,12 +1037,12 @@ test('runReplayScriptFile promotes Maestro id tapOn to an actionable ancestor', 
     calls.map((call) => [call.command, call.positionals]),
     [
       ['snapshot', []],
-      ['click', ['180', '352']],
+      ['click', ['84', '346']],
     ],
   );
 });
 
-test('runReplayScriptFile reuses the exact observation snapshot for tapOn after assertVisible', async () => {
+test('runReplayScriptFile captures fresh geometry for tapOn after assertVisible', async () => {
   let snapshots = 0;
   const { response, calls } = await runReplayFixture({
     label: 'maestro-assert-visible-tap-fresh-snapshot',
@@ -1074,10 +1082,11 @@ test('runReplayScriptFile reuses the exact observation snapshot for tapOn after 
   });
 
   assert.equal(response.ok, true);
-  assert.equal(snapshots, 1);
+  assert.equal(snapshots, 2);
   assert.deepEqual(
     calls.map((call) => [call.command, call.positionals]),
     [
+      ['snapshot', []],
       ['snapshot', []],
       ['click', ['110', '204']],
     ],
@@ -1145,6 +1154,7 @@ test('runReplayScriptFile scopes duplicate tap targets after native Maestro asse
   assert.deepEqual(
     calls.map((call) => [call.command, call.positionals]),
     [
+      ['snapshot', []],
       ['snapshot', []],
       ['click', ['112', '242']],
     ],
@@ -1268,12 +1278,13 @@ test('runReplayScriptFile treats absent Maestro extendedWaitUntil.notVisible tar
   assert.equal(calls[0]?.flags?.noRecord, true);
 });
 
-test('runReplayScriptFile resolves Maestro percentage point taps from snapshot size', async () => {
+test('runReplayScriptFile resolves Maestro percentage point taps from the direct viewport', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-tap-point-percent',
     script: ['appId: demo.app', '---', '- tapOn:', '    point: 20%,20%', ''].join('\n'),
     flags: { replayBackend: 'maestro' },
+    sessionPlatform: 'ios',
     invoke: async (req) => {
       calls.push({ command: req.command, positionals: req.positionals, flags: req.flags });
       if (req.command === 'snapshot') {
@@ -1297,12 +1308,12 @@ test('runReplayScriptFile resolves Maestro percentage point taps from snapshot s
   assert.equal(response.ok, true);
   assert.deepEqual(
     calls.map((call) => [call.command, call.positionals]),
-    [
-      ['snapshot', []],
-      ['click', ['200', '400']],
-    ],
+    [['click', ['80', '160']]],
   );
-  assert.equal(calls[0]?.flags?.noRecord, true);
+  assert.equal(
+    calls.some((call) => call.command === 'snapshot'),
+    false,
+  );
 });
 
 test('runReplayScriptFile retries Maestro id tapOn through snapshot coordinates', async () => {
@@ -1549,7 +1560,7 @@ test('runReplayScriptFile resolves Maestro swipe.label from a labeled element re
     calls.map((call) => [call.command, call.input]),
     [
       ['snapshot', undefined],
-      ['swipe', { from: { x: 110, y: 250 }, to: { x: 110, y: 8 }, durationMs: 400 }],
+      ['swipe', { from: { x: 110, y: 250 }, to: { x: 110, y: 40 }, durationMs: 400 }],
     ],
   );
 });
@@ -1607,12 +1618,12 @@ test('runReplayScriptFile keeps Maestro swipe.label anchored to the matched labe
     calls.map((call) => [call.command, call.input]),
     [
       ['snapshot', undefined],
-      ['swipe', { from: { x: 100, y: 124 }, to: { x: 100, y: 8 }, durationMs: 400 }],
+      ['swipe', { from: { x: 100, y: 124 }, to: { x: 100, y: 14 }, durationMs: 400 }],
     ],
   );
 });
 
-test('runReplayScriptFile resolves Maestro screen swipes from the snapshot frame', async () => {
+test('runReplayScriptFile resolves Maestro screen swipes from the direct viewport', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
     label: 'maestro-screen-swipe',
@@ -1629,6 +1640,7 @@ test('runReplayScriptFile resolves Maestro screen swipes from the snapshot frame
       '',
     ].join('\n'),
     flags: { replayBackend: 'maestro' },
+    sessionPlatform: 'ios',
     invoke: async (req) => {
       calls.push({
         command: req.command,
@@ -1658,8 +1670,15 @@ test('runReplayScriptFile resolves Maestro screen swipes from the snapshot frame
   assert.deepEqual(
     calls.map((call) => [call.command, call.input]),
     [
-      ['gesture', { kind: 'swipe', preset: 'left', durationMs: 300 }],
-      ['snapshot', undefined],
+      [
+        'gesture',
+        {
+          kind: 'pan',
+          origin: { x: 360, y: 400 },
+          delta: { x: -320, y: 0 },
+          durationMs: 300,
+        },
+      ],
       ['swipe', { from: { x: 360, y: 400 }, to: { x: 40, y: 400 }, durationMs: 300 }],
     ],
   );
@@ -1682,6 +1701,7 @@ test('runReplayScriptFile delegates Android directional swipes and preserves per
       '',
     ].join('\n'),
     flags: { replayBackend: 'maestro', platform: 'android' },
+    sessionPlatform: 'android',
     invoke: async (req) => {
       calls.push({
         command: req.command,
@@ -1711,8 +1731,15 @@ test('runReplayScriptFile delegates Android directional swipes and preserves per
   assert.deepEqual(
     calls.map((call) => [call.command, call.input]),
     [
-      ['gesture', { kind: 'swipe', preset: 'left', durationMs: 300 }],
-      ['snapshot', undefined],
+      [
+        'gesture',
+        {
+          kind: 'pan',
+          origin: { x: 360, y: 400 },
+          delta: { x: -320, y: 0 },
+          durationMs: 300,
+        },
+      ],
       ['swipe', { from: { x: 360, y: 400 }, to: { x: 40, y: 400 }, durationMs: 300 }],
     ],
   );
@@ -1775,10 +1802,10 @@ test('runReplayScriptFile waits for Maestro animation snapshots to stabilize', a
   assert.equal(calls[0]?.flags?.noRecord, true);
 });
 
-test('runReplayScriptFile falls back to newline type when keyboard enter is unsupported', async () => {
+test('runReplayScriptFile propagates unsupported keyboard enter dispatch', async () => {
   const calls: CapturedInvocation[] = [];
   const { response } = await runReplayFixture({
-    label: 'maestro-press-enter-fallback',
+    label: 'maestro-press-enter-unsupported',
     script: ['appId: demo.app', '---', '- pressKey: Enter', ''].join('\n'),
     flags: { replayBackend: 'maestro' },
     invoke: async (req) => {
@@ -1790,13 +1817,14 @@ test('runReplayScriptFile falls back to newline type when keyboard enter is unsu
     },
   });
 
-  assert.equal(response.ok, true);
+  assert.equal(response.ok, false);
+  if (!response.ok) {
+    assert.equal(response.error.code, 'REPLAY_DIVERGENCE');
+    assert.match(response.error.message, /unsupported/);
+  }
   assert.deepEqual(
     calls.map((call) => [call.command, call.positionals]),
-    [
-      ['keyboard', ['enter']],
-      ['type', ['\n']],
-    ],
+    [['keyboard', ['enter']]],
   );
 });
 
@@ -1946,6 +1974,7 @@ test('runReplayScriptFile runs Maestro runFlow.when.visible commands when presen
     calls.map((call) => [call.command, call.positionals]),
     [
       ['snapshot', []],
+      ['snapshot', []],
       ['click', ['76', '122']],
     ],
   );
@@ -1955,7 +1984,7 @@ test('runReplayScriptFile runs Maestro runFlow.when.visible commands when presen
   );
   assert.equal(
     calls.find((call) => call.command === 'click')?.flags?.postGestureStabilization,
-    true,
+    undefined,
   );
 });
 
@@ -2027,6 +2056,7 @@ test('runReplayScriptFile runs nested Maestro runtime commands inside runFlow.wh
       ['snapshot', []],
       ['scroll', ['down']],
       ['snapshot', []],
+      ['snapshot', []],
     ],
   );
 });
@@ -2090,6 +2120,7 @@ test('runReplayScriptFile resolves nested Maestro runFlow.when command variables
   assert.deepEqual(
     calls.map((call) => [call.command, call.positionals]),
     [
+      ['snapshot', []],
       ['snapshot', []],
       ['click', ['140', '320']],
     ],
