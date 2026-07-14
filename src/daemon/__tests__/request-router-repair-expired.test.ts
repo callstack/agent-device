@@ -132,9 +132,7 @@ test('a replay --from continuation on a reaped repair session gets REPAIR_SESSIO
   // Compute the plan digest exactly as runReplayScriptFile does (a real agent
   // takes it from the divergence report's resume.planDigest).
   const flags = { platform: 'ios' as const };
-  const parsed = parseReplayInput(fs.readFileSync(scriptPath, 'utf8'), flags, {
-    sourcePath: scriptPath,
-  });
+  const parsed = parseReplayInput(fs.readFileSync(scriptPath, 'utf8'), flags);
   const digest = computeReplayPlanDigest({
     actions: parsed.actions,
     actionLines: parsed.actionLines,
