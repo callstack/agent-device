@@ -14,6 +14,28 @@ export type RecordActionEntry = {
   targetEvidence?: TargetAnnotationV1;
 };
 
+/**
+ * #1258: point the session at `nextPath` and, when this is a RETARGET to a
+ * different path than the one currently persisted AND no live
+ * `--force`/`--overwrite` accompanies it, drop any `saveScriptForce` persisted
+ * for the OLD target. Force is authorization for the target it was opted into
+ * (`--save-script=a.ad --force`), NOT a session-wide standing grant that
+ * silently follows a later `--save-script=b.ad` and overwrites a file nobody
+ * opted to overwrite. A live `force` on this same retarget re-grants it for the
+ * new target (handled by the caller, AFTER this — so a live flag always wins).
+ * Shared by both re-arming paths: `armReplaySaveScriptStep` (replay) and
+ * `recordActionEntry` (close --save-script).
+ */
+export function applySaveScriptRetarget(
+  session: SessionState,
+  nextPath: string,
+  liveForce: boolean | undefined,
+): void {
+  const retargeted = session.saveScriptPath !== undefined && session.saveScriptPath !== nextPath;
+  if (retargeted && !liveForce) session.saveScriptForce = undefined;
+  session.saveScriptPath = nextPath;
+}
+
 export function recordActionEntry(
   session: SessionState,
   entry: RecordActionEntry,
@@ -29,15 +51,20 @@ export function recordActionEntry(
       // guard is uniform (see `publishHealedScriptAtomically`) and refuses
       // ANY pre-existing target — an explicit, caller-DIRECTED path included.
       // Directing the path is not the same as authorizing an overwrite.
-      session.saveScriptPath = expandSessionPath(entry.flags.saveScript);
+      applySaveScriptRetarget(
+        session,
+        expandSessionPath(entry.flags.saveScript),
+        entry.flags.force,
+      );
       session.saveScriptDefaultedHealedPath = false;
     }
     // #1258: persist `--force`/`--overwrite`, like `saveScriptPath`, so a
     // LATER write that does not repeat the flag (a bare `close` finishing a
     // session opened with `open --save-script --force`, or an unattended
-    // auto-commit teardown with no live request) still honors it. Sticky —
-    // once true, a later action carrying `saveScript` without `force` must
-    // not clear it back to false.
+    // auto-commit teardown with no live request) still honors it. Sticky FOR
+    // THE SAME TARGET — a retarget to a different path without a live `force`
+    // drops it (see `applySaveScriptRetarget`); a same-path later action
+    // carrying `saveScript` without `force` still must not clear it.
     if (entry.flags.force) {
       session.saveScriptForce = true;
     }

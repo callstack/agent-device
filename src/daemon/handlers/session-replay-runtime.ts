@@ -10,6 +10,7 @@ import {
 } from '../../request/progress.ts';
 import { SessionStore } from '../session-store.ts';
 import { expandSessionPath } from '../session-paths.ts';
+import { applySaveScriptRetarget } from '../session-action-recorder.ts';
 import { type ReplayScriptMetadata } from '../../replay/script.ts';
 import { computeReplayPlanDigest } from '../../replay/plan-digest.ts';
 import { errorResponse, noActiveSessionError } from './response.ts';
@@ -255,10 +256,14 @@ export async function runReplayScriptFile(params: {
     // fresh repair, its very first `open`) execute only to hit the SAME
     // refuse-on-exist at publish time (`publishHealedScriptAtomically`, at
     // `close`/completion). Computes the SAME target `armReplaySaveScriptStep`
-    // below would resolve, without needing the session to exist yet.
+    // below would resolve, without needing the session to exist yet, and
+    // honors the SAME effective force decision publication uses — the live
+    // `--force`/`--overwrite` OR the one persisted at arm time
+    // (`saveScriptForce`), so a `--from` continuation that does not repeat the
+    // flag is not rejected on a target a prior `--force` leg already authorized.
     const saveScriptPreflight = preflightSaveScriptTarget({
       saveScript: req.flags?.saveScript,
-      force: req.flags?.force,
+      force: Boolean(req.flags?.force || preRunSession?.saveScriptForce),
       sourcePath: resolved,
       existingSaveScriptPath: preRunSession?.saveScriptPath,
     });
@@ -620,10 +625,6 @@ function armReplaySaveScriptStep(params: {
   const session = sessionStore.get(sessionName);
   if (!session) return;
   session.recordSession = true;
-  // #1258: sticky, like `saveScriptPath` — persisted so a LATER `--from`
-  // continuation leg or an unattended auto-commit teardown (no live request)
-  // still honors a `--force`/`--overwrite` that was only passed at this arm.
-  if (force) session.saveScriptForce = true;
   if (typeof saveScript === 'string') {
     // An EXPLICIT `--save-script=<path>` clears the defaulted marker
     // (invariant: the marker is set iff the current `saveScriptPath` was
@@ -632,12 +633,18 @@ function armReplaySaveScriptStep(params: {
     // (`publishHealedScriptAtomically`) and refuses ANY pre-existing target,
     // an explicit caller-directed path included, exactly like the default
     // healed sibling.
-    session.saveScriptPath = expandSessionPath(saveScript);
+    applySaveScriptRetarget(session, expandSessionPath(saveScript), force);
     session.saveScriptDefaultedHealedPath = false;
   } else if (session.saveScriptPath === undefined) {
     session.saveScriptPath = healedScriptSiblingPath(sourcePath);
     session.saveScriptDefaultedHealedPath = true;
   }
+  // #1258: force is per-target — a LIVE `--force`/`--overwrite` persists onto
+  // the session (`saveScriptForce`) so a LATER `--from` continuation leg or an
+  // unattended auto-commit teardown (no live request) still honors it. Set
+  // AFTER `applySaveScriptRetarget` so a live flag always wins over a
+  // retarget-clear.
+  if (force) session.saveScriptForce = true;
   if (session.saveScriptBoundary === undefined) {
     session.saveScriptBoundary = firstArm ? session.actions.length : 0;
   }

@@ -329,7 +329,13 @@ export type SessionState = {
    * `--from` continuation leg, or an unattended auto-commit teardown with no
    * live request at all) still honors the overwrite the caller opted into up
    * front. The effective decision at any write site is `req.flags?.force ||
-   * session.saveScriptForce`; once set true it is never cleared.
+   * session.saveScriptForce`.
+   *
+   * Force is PER-TARGET, not a session-wide standing grant: it stays set while
+   * the target is unchanged, but re-arming a DIFFERENT `--save-script=<other>`
+   * without a live `--force` CLEARS it (`applySaveScriptRetarget`), so a later
+   * retarget can never silently overwrite a file the caller never opted into.
+   * A live `--force` on the retarget re-grants it for the new target.
    */
   saveScriptForce?: boolean;
   /**

@@ -615,6 +615,148 @@ test('#1258: --force skips the arm-time preflight and the replay proceeds despit
   expect(sessionStore.get(sessionName)?.saveScriptForce).toBe(true);
 });
 
+test('#1258 preflight honors PERSISTED force: a --from continuation without --force is NOT rejected on an existing target a prior --force leg authorized', async () => {
+  const { root, sessionStore, sessionName, logPath } = setup(
+    'agent-device-repair-transaction-preflight-persisted-force-',
+  );
+  const filePath = writeReplayFile(root, [
+    'open "Demo" --relaunch',
+    SAVE_ANNOTATION,
+    'click id="save"',
+    'click id="confirm"',
+    'close',
+  ]);
+  // The healed target already exists — the preflight WOULD reject a
+  // continuation that only saw the (absent, this leg) LIVE force flag.
+  fs.writeFileSync(path.join(root, 'flow.healed.ad'), 'context platform=ios device="x"\n');
+  const invoke = makeRecordingReplayInvoke({
+    sessionStore,
+    sessionName,
+    evidence: (req) => (req.command === 'click' ? freshEvidence('confirm', 'Confirm') : undefined),
+  });
+
+  // Leg 1: `replay --save-script --force` — the LIVE force passes the preflight
+  // (target exists), arms the session, PERSISTS saveScriptForce, then diverges
+  // (nothing published, so the pre-existing target survives).
+  const leg1 = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true, force: true } }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke,
+  });
+  expect(leg1.ok).toBe(false);
+  if (leg1.ok) return;
+  expect(leg1.error.code).toBe('REPLAY_DIVERGENCE');
+  const divergence = leg1.error.details?.divergence as { resume: { planDigest: string } };
+  expect(sessionStore.get(sessionName)?.saveScriptForce).toBe(true);
+
+  // The agent's corrective press (blessed @ref), recorded live.
+  const session = sessionStore.get(sessionName)!;
+  sessionStore.recordAction(session, {
+    command: 'press',
+    positionals: ['@e7'],
+    flags: {},
+    result: { selectorChain: ['id="save-v2"'] },
+    targetEvidence: freshEvidence('save-v2', 'Save V2'),
+  });
+
+  // Leg 2: `replay --from N --save-script` WITHOUT --force — the target still
+  // exists. The persisted saveScriptForce must make the arm-time preflight use
+  // the SAME effective decision publication uses, so this is NOT rejected.
+  const leg2 = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [filePath],
+      flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
+    }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke,
+  });
+  // Not rejected by the arm-time preflight (no "already exists"): the
+  // transaction reached completion instead.
+  expect(leg2.ok).toBe(true);
+  expect(sessionStore.get(sessionName)?.saveScriptComplete).toBe(true);
+  // A bare-boolean continuation never retargets, so force stays persisted.
+  expect(sessionStore.get(sessionName)?.saveScriptForce).toBe(true);
+});
+
+test('#1258 force is per-target: re-arming --save-script=<b> WITHOUT --force drops force persisted for <a>, so <b> is NOT overwritten', async () => {
+  const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
+    'agent-device-repair-transaction-retarget-clears-force-',
+  );
+  // Armed and forced for target <a> (flow.healed.ad).
+  const session = makeCompleteRepairSession(sessionStore, sessionName, root);
+  session.saveScriptForce = true;
+  // A DIFFERENT, unrelated file already sits at the retarget destination <b>
+  // (flow.promoted.ad) — nobody opted to overwrite THIS one.
+  const promotedPath = path.join(root, 'flow.promoted.ad');
+  fs.writeFileSync(
+    promotedPath,
+    `context platform=ios device="x"\nclick id="unrelated"\n${HEAL_COMPLETE_SENTINEL}\n`,
+  );
+  const before = fs.readFileSync(promotedPath, 'utf8');
+
+  // `close --save-script=<b>` (NO --force): retargeting from <a> to <b>
+  // without a live opt-in drops the force that was granted for <a>.
+  const closeResponse = await handleCloseCommand({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: { saveScript: promotedPath },
+    },
+    sessionName,
+    logPath,
+    sessionStore,
+    leaseRegistry,
+  });
+
+  // Refused — the retarget cleared the sticky force, so <b> is protected by the
+  // default no-clobber exactly like a fresh target would be.
+  expect(closeResponse.ok).toBe(false);
+  if (!closeResponse.ok) expect(closeResponse.error.message).toMatch(/already exists/);
+  // <b> is untouched, and the session is kept for retry.
+  expect(fs.readFileSync(promotedPath, 'utf8')).toBe(before);
+  expect(sessionStore.get(sessionName)).toBeDefined();
+  expect(sessionStore.get(sessionName)?.saveScriptForce).toBeUndefined();
+});
+
+test('#1258 force per-target, contrast: re-arming --save-script=<b> WITH --force DOES overwrite <b>', async () => {
+  const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
+    'agent-device-repair-transaction-retarget-force-overwrites-',
+  );
+  const session = makeCompleteRepairSession(sessionStore, sessionName, root);
+  session.saveScriptForce = true;
+  const promotedPath = path.join(root, 'flow.promoted.ad');
+  fs.writeFileSync(
+    promotedPath,
+    `context platform=ios device="x"\nclick id="unrelated"\n${HEAL_COMPLETE_SENTINEL}\n`,
+  );
+
+  // `close --save-script=<b> --force`: the live opt-in re-grants force for the
+  // new target, overwriting it.
+  const closeResponse = await handleCloseCommand({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: { saveScript: promotedPath, force: true },
+    },
+    sessionName,
+    logPath,
+    sessionStore,
+    leaseRegistry,
+  });
+
+  expect(closeResponse.ok).toBe(true);
+  const parsed = parseReplayScriptDetailed(fs.readFileSync(promotedPath, 'utf8'));
+  expect(parsed.actions.some((a) => a.positionals[0] === 'id="unrelated"')).toBe(false);
+});
+
 test('BLOCKER 2 (new): a repair close whose PLATFORM close fails never commits a healed .ad claiming a successful close', async () => {
   const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-platform-close-fail-',
