@@ -140,6 +140,7 @@ test('buildReplayDivergenceResume reports allowed:true with from/planDigest for 
     failedIndex: 2,
     actions,
     planDigest: 'abc123',
+    repairHint: 'manual',
   });
   assert.deepEqual(resume, { allowed: true, from: 2, planDigest: 'abc123' });
 });
@@ -157,10 +158,72 @@ test('buildReplayDivergenceResume reports allowed:false with from/planDigest/rea
     failedIndex: 2,
     actions,
     planDigest: 'abc123',
+    repairHint: 'manual',
   });
   assert.equal(resume.allowed, false);
   assert.equal(resume.from, 2);
   assert.equal(resume.planDigest, 'abc123');
   if (resume.allowed) return;
   assert.ok(resume.reason.length > 0);
+});
+
+// --- repairHint 'record-and-heal' shifts `from` to failedIndex + 1 (ADR 0012
+// decision 6, R2): the agent already performed the diverged step manually, so
+// resuming AT it would re-diverge on the exact same step. ---
+
+test('buildReplayDivergenceResume with repairHint record-and-heal resumes AFTER the failed step', () => {
+  const actions: SessionAction[] = [
+    action({ command: 'open', positionals: ['Demo'] }),
+    action({ command: 'click', positionals: ['label="Save"'] }),
+    action({ command: 'click', positionals: ['label="Confirm"'] }),
+  ];
+  const resume = buildReplayDivergenceResume({
+    failedIndex: 2,
+    actions,
+    planDigest: 'abc123',
+    repairHint: 'record-and-heal',
+  });
+  assert.deepEqual(resume, { allowed: true, from: 3, planDigest: 'abc123' });
+});
+
+test('buildReplayDivergenceResume with repairHint record-and-heal on the LAST plan step has nothing left to resume', () => {
+  const actions: SessionAction[] = [
+    action({ command: 'open', positionals: ['Demo'] }),
+    action({ command: 'click', positionals: ['label="Save"'] }),
+  ];
+  const resume = buildReplayDivergenceResume({
+    failedIndex: 2,
+    actions,
+    planDigest: 'abc123',
+    repairHint: 'record-and-heal',
+  });
+  assert.equal(resume.allowed, false);
+  assert.equal(resume.from, 3);
+  assert.equal(resume.planDigest, 'abc123');
+  if (resume.allowed) return;
+  assert.match(resume.reason, /out of range/);
+});
+
+test('buildReplayDivergenceResume with repairHint record-and-heal still rejects a skipped control-flow range', () => {
+  const actions: SessionAction[] = [
+    action({
+      command: 'back',
+      positionals: [],
+      replayControl: { kind: 'retry', maxRetries: 1, actions: [action({ command: 'back' })] },
+    }),
+    action({ command: 'click' }),
+    action({ command: 'click' }),
+  ];
+  // failedIndex 2 shifts to from 3, which still skips step 1's control-flow
+  // block — the shift does not bypass the existing skip-safety preflight.
+  const resume = buildReplayDivergenceResume({
+    failedIndex: 2,
+    actions,
+    planDigest: 'abc123',
+    repairHint: 'record-and-heal',
+  });
+  assert.equal(resume.allowed, false);
+  assert.equal(resume.from, 3);
+  if (resume.allowed) return;
+  assert.match(resume.reason, /control flow/);
 });

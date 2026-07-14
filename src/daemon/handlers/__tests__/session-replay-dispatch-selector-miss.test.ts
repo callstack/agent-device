@@ -66,7 +66,10 @@ function throwSelectorMiss(selector: string): never {
   });
 }
 
-function assertDivergenceShape(response: Awaited<ReturnType<typeof runReplayScriptFile>>): {
+function assertDivergenceShape(
+  response: Awaited<ReturnType<typeof runReplayScriptFile>>,
+  expectedResume: { allowed: boolean; from: number } = { allowed: true, from: 1 },
+): {
   divergence: Record<string, unknown>;
   targetBinding: Record<string, unknown> | undefined;
 } {
@@ -78,8 +81,8 @@ function assertDivergenceShape(response: Awaited<ReturnType<typeof runReplayScri
   expect(typeof divergence.kind).toBe('string');
 
   const resume = divergence.resume as { allowed: boolean; from?: number; planDigest?: string };
-  expect(resume.allowed).toBe(true);
-  expect(resume.from).toBe(1);
+  expect(resume.allowed).toBe(expectedResume.allowed);
+  expect(resume.from).toBe(expectedResume.from);
   expect(typeof resume.planDigest).toBe('string');
   expect((resume.planDigest ?? '').length).toBeGreaterThan(0);
 
@@ -128,11 +131,21 @@ test('(a) an ANNOTATED press whose dispatch throws a selector-miss yields REPLAY
   });
 
   expect(invoked).toEqual(['click']);
-  const { divergence } = assertDivergenceShape(response);
+  // The recorded evidence carries a real, non-empty ancestry (a nested tab
+  // button) and the post-response capture still contains that same
+  // container, so this action-failure divergence routes to `record-and-heal`
+  // (ADR 0012 decision 6, R3's container-presence test) — not the `manual`
+  // default. `resume.from` must therefore target `failedIndex + 1` (decision
+  // 6, R2), and since this is the plan's only (and last) step, there is no
+  // step 2 to resume into: `allowed: false` with an out-of-range reason.
+  const { divergence } = assertDivergenceShape(response, { allowed: false, from: 2 });
   // A thrown dispatch failure is a generic action-failure divergence — it is
   // NOT re-derived as a target-binding classification (that only happens
   // when verification's OWN pre-action check finds the mismatch).
   expect(divergence.kind).toBe('action-failure');
+  expect(divergence.repairHint).toBe('record-and-heal');
+  const resume = divergence.resume as { reason?: string };
+  expect(resume.reason).toMatch(/out of range/);
   const cause = divergence.cause as { code: string; message: string };
   expect(cause.code).toBe('COMMAND_FAILED');
   expect(cause.message).toContain('No element matched selector');

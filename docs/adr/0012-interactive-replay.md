@@ -476,6 +476,16 @@ repeat iteration label. Static includes, platform conditions, and fixed-count re
 indexing, so repeated source lines are distinguished by their plan index.
 
 Every divergence includes `resume: { allowed, from, reason?, planDigest, repairSessionHeld? }`.
+`from` is not merely the failed step's ordinal — it is the ordinal the caller should actually pass to
+`--from`, computed from the same `repairHint` carried alongside it (decision 6, R2/R3): for `record-and-heal`,
+`from` is the failed step's index **+ 1** (the agent performs that step manually before resuming, so
+resuming AT it would re-diverge on the exact step just completed); for every other hint (`state-repair`,
+`caution`, `manual`), `from` equals the failed step's index unchanged. This keeps the structured `resume`
+block and the `repairHint` text guidance below in agreement — a JSON/MCP-first caller that blindly resumes
+at `resume.from` gets the same continuation a text caller reads out of the rendered guidance, never a stale
+`from` that loops the caller back onto the step it just repaired. If the shifted `from` would exceed the
+plan's length (the diverged step was the plan's last), `allowed` is `false` with a reason explaining there
+is nothing left to resume into — finish the repair with `close` instead.
 `planDigest` is SHA-256 over
 the canonical fully expanded plan, including each action's command, normalized inputs, control shape,
 platform-conditioned expansion, and source provenance. Concretely "normalized inputs" bind each action's

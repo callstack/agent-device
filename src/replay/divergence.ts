@@ -339,7 +339,7 @@ export function formatReplayDivergenceReport(
   const lines = [
     ...divergenceStepLine(record.step),
     ...divergenceTargetBindingLines(record.kind, record.targetBinding),
-    ...divergenceRepairHintLine(record.repairHint),
+    ...divergenceRepairHintLine(record.repairHint, record.resume),
     ...divergenceScreenLine(record.screen),
     ...divergenceSuggestionLines(record.suggestions, record.suggestionCount),
     ...divergenceOverflowLine(record.overflow, record.artifactUnavailable),
@@ -351,21 +351,48 @@ export function formatReplayDivergenceReport(
  * ADR 0012 decision 6: the repair-routing hint rendered on every text
  * surface (CLI, MCP text, `test` failures) — the same field that rides
  * `structuredContent`/JSON, so a text-only caller still learns which repair
- * sub-flow applies.
+ * sub-flow applies. `record-and-heal`/`state-repair` guidance embeds the
+ * CONCRETE `resume.from`/`planDigest` values (computed by
+ * `buildReplayDivergenceResume`, decision 6 R2) rather than a placeholder, so
+ * a text-only or JSON/MCP-first caller reads the identical next command
+ * instead of deriving it (and potentially disagreeing with `resume.from`).
+ * Falls back to a placeholder only when `resume` carries no usable ordinal
+ * (e.g. `allowed: false`, or a divergence shape without one).
  */
-const REPAIR_HINT_GUIDANCE: Record<string, string> = {
-  'record-and-heal':
-    'press the correct control via a blessed @ref from screen.refs (recorded), then replay --from <step+1>.',
-  'state-repair': 'fix app state with --no-record actions, then replay --from <step> to re-run it.',
-  caution:
-    'something already matches the recorded selector; a blind re-press may repeat the mistake.',
-  manual: 'no safe automated repair could be proven; inspect the screen and repair by hand.',
-};
-
-function divergenceRepairHintLine(repairHint: unknown): string[] {
+function divergenceRepairHintLine(repairHint: unknown, resume: unknown): string[] {
   if (typeof repairHint !== 'string') return [];
-  const guidance = REPAIR_HINT_GUIDANCE[repairHint];
+  const guidance = buildRepairHintGuidance(repairHint, resume);
   return [`Repair hint: ${repairHint}${guidance ? ` — ${guidance}` : ''}`];
+}
+
+function buildRepairHintGuidance(repairHint: string, resume: unknown): string | undefined {
+  const resumeCommand = formatResumeCommand(resume);
+  switch (repairHint) {
+    case 'record-and-heal':
+      return (
+        'press the correct control via a blessed @ref from screen.refs (recorded), then ' +
+        `${resumeCommand ?? 'replay --from <step+1>'}.`
+      );
+    case 'state-repair':
+      return `fix app state with --no-record actions, then ${resumeCommand ?? 'replay --from <step>'} to re-run it.`;
+    case 'caution':
+      return 'something already matches the recorded selector; a blind re-press may repeat the mistake.';
+    case 'manual':
+      return 'no safe automated repair could be proven; inspect the screen and repair by hand.';
+    default:
+      return undefined;
+  }
+}
+
+/** `replay --from <n> --plan-digest <sha>` from a resolved `resume`, only when it is actually resumable. */
+function formatResumeCommand(resume: unknown): string | undefined {
+  const record = resume as Record<string, unknown> | undefined;
+  if (!record || record.allowed !== true) return undefined;
+  const { from, planDigest } = record;
+  if (typeof from !== 'number' || typeof planDigest !== 'string' || planDigest.length === 0) {
+    return undefined;
+  }
+  return `replay --from ${from} --plan-digest ${planDigest}`;
 }
 
 function divergenceTargetBindingLines(kind: unknown, targetBinding: unknown): string[] {

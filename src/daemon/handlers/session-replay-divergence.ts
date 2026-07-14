@@ -106,6 +106,16 @@ export async function buildReplayFailureDivergence(params: {
         })
       : [];
 
+  // ADR 0012 decision 6, R3: `action-failure`'s capture is the POST-response
+  // tree (this is the dispatch-thrown path) — the same one the container
+  // test needs. Computed before `resume` so its `from` ordinal (decision 6,
+  // R2: `record-and-heal` resumes at failedIndex + 1) agrees with the hint.
+  const repairHint = computeReplayRepairHint({
+    kind: 'action-failure',
+    targetEvidence: action.targetEvidence,
+    capture: toReplayRepairHintCapture(observation),
+  });
+
   const divergence: ReplayDivergence = {
     version: 1,
     kind: 'action-failure',
@@ -122,15 +132,9 @@ export async function buildReplayFailureDivergence(params: {
       failedIndex: index + 1,
       actions: planActions,
       planDigest,
+      repairHint,
     }),
-    // ADR 0012 decision 6, R3: `action-failure`'s capture is the POST-response
-    // tree (this is the dispatch-thrown path) — the same one the container
-    // test needs.
-    repairHint: computeReplayRepairHint({
-      kind: 'action-failure',
-      targetEvidence: action.targetEvidence,
-      capture: toReplayRepairHintCapture(observation),
-    }),
+    repairHint,
   };
 
   return boundReplayDivergenceForSession({ sessionStore, sessionName, divergence, responseLevel });

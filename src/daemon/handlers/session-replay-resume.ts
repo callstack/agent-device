@@ -1,6 +1,6 @@
 import { MAESTRO_RUNTIME_COMMAND } from '../../compat/maestro/runtime-commands.ts';
 import type { SessionAction } from '../types.ts';
-import type { ReplayDivergenceResume } from '../../replay/divergence.ts';
+import type { ReplayDivergenceResume, ReplayRepairHint } from '../../replay/divergence.ts';
 
 /**
  * ADR 0012 decision 4 / migration step 5: resume does not reconstruct
@@ -60,15 +60,38 @@ function producesOutputEnv(action: SessionAction): boolean {
   return action.command === OUTPUT_ENV_PRODUCING_COMMAND;
 }
 
-/** Builds the `resume` object attached to every divergence report. */
+/**
+ * Builds the `resume` object attached to every divergence report. `from` is
+ * the ordinal the agent should actually pass to `--from`, not merely the
+ * failed step's index: per ADR 0012 decision 6, R2, a `record-and-heal`
+ * repair has the agent perform the diverged step manually before this report
+ * is acted on, so the correct continuation is `failedIndex + 1` (re-running
+ * `failedIndex` would re-diverge on the step the agent already performed).
+ * Every other repair hint (including a plain `action-failure`) resumes AT
+ * `failedIndex` unchanged. This must agree with the text guidance rendered by
+ * `formatReplayDivergenceReport` (`src/replay/divergence.ts`) — both are
+ * derived from the same computed `from` value.
+ */
 export function buildReplayDivergenceResume(params: {
   failedIndex: number; // 1-based
   actions: SessionAction[];
   planDigest: string;
+  repairHint: ReplayRepairHint;
 }): ReplayDivergenceResume {
-  const { failedIndex, actions, planDigest } = params;
-  const preflight = evaluateReplayResumePreflight({ from: failedIndex, actions });
+  const { failedIndex, actions, planDigest, repairHint } = params;
+  const from = repairHint === 'record-and-heal' ? failedIndex + 1 : failedIndex;
+  if (from > actions.length) {
+    return {
+      allowed: false,
+      from,
+      planDigest,
+      reason:
+        `replay --from ${from} would be out of range for this ${actions.length}-step plan; ` +
+        'the corrective action already completes the script, so finish the repair with close instead of --from.',
+    };
+  }
+  const preflight = evaluateReplayResumePreflight({ from, actions });
   return preflight.allowed
-    ? { allowed: true, from: failedIndex, planDigest }
-    : { allowed: false, from: failedIndex, planDigest, reason: preflight.reason };
+    ? { allowed: true, from, planDigest }
+    : { allowed: false, from, planDigest, reason: preflight.reason };
 }
