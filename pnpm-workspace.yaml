@@ -1,4 +1,7 @@
 packages:
   - "website"
+# Keep non-interactive checks from downloading tooling or reinstalling dependencies implicitly.
+pmOnFail: warn
+verifyDepsBeforeRun: warn
 allowBuilds:
   fallow: true
