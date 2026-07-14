@@ -3,7 +3,10 @@ import { formatMaestroCommandProgress } from '../../compat/maestro/progress.ts';
 import type { MaestroCommand, MaestroSelector } from '../../compat/maestro/program-ir.ts';
 import { evaluateMaestroReplayResume } from '../../compat/maestro/replay-plan.ts';
 import type { MaestroReplayPlan } from '../../compat/maestro/replay-plan-types.ts';
-import { findMaestroTypedSelectorMatches } from '../../compat/maestro/runtime-target-matching.ts';
+import {
+  findMaestroTypedSelectorMatches,
+  scopeMaestroMatchesByAncestor,
+} from '../../compat/maestro/runtime-target-matching.ts';
 import {
   filterVisibleMaestroMatches,
   matchesMaestroTypedSelector,
@@ -11,10 +14,6 @@ import {
 import { normalizeMaestroSnapshotMatches } from '../../compat/maestro/runtime-target-ranking.ts';
 import type { DaemonError } from '../../kernel/contracts.ts';
 import type { SnapshotNode } from '../../kernel/snapshot.ts';
-import {
-  buildSnapshotNodeByIndex,
-  isDescendantOfSnapshotNode,
-} from '../../snapshot/snapshot-processing.ts';
 import {
   REPLAY_DIVERGENCE_SUGGESTION_LIMIT,
   createReplayDivergenceSanitizer,
@@ -236,14 +235,7 @@ function collectTypedMaestroCandidates(
 ): SnapshotNode[] {
   let matches = findMaestroTypedSelectorMatches(snapshot, query.selector);
   if (query.childOf) {
-    const parents = findMaestroTypedSelectorMatches(snapshot, query.childOf);
-    if (parents.length === 0) return [];
-    const nodeByIndex = buildSnapshotNodeByIndex(snapshot.nodes);
-    matches = matches.filter((node) =>
-      parents.some((parent) =>
-        isDescendantOfSnapshotNode(snapshot.nodes, node, parent, nodeByIndex),
-      ),
-    );
+    matches = scopeMaestroMatchesByAncestor(snapshot, matches, query.childOf).matches;
   }
 
   const visible = filterVisibleMaestroMatches({

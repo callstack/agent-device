@@ -81,5 +81,6 @@ export type DispatchContext = ScreenshotDispatchFlags & {
     value: string;
     raw: string;
     allowNonHittableCoordinateFallback?: boolean;
+    expectedPoint?: Point;
   };
 };

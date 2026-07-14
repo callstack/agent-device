@@ -64,7 +64,7 @@ type TypedMaestroReplayState = {
 type TypedMaestroReplayContext = {
   filePath: string;
   program: MaestroProgram;
-  device: DeviceInfo;
+  device?: DeviceInfo;
   platform: Extract<MaestroPlatform, 'android' | 'ios'>;
   target: string;
   runtimeHints: ReturnType<typeof resolveEffectiveOpenRuntimeHints>;
@@ -73,6 +73,11 @@ type TypedMaestroReplayContext = {
   signal: AbortSignal | undefined;
   loadProgram: ReturnType<typeof createMaestroProgramLoader>;
 };
+
+type MaestroReplayBinding = Pick<
+  TypedMaestroReplayContext,
+  'device' | 'platform' | 'target' | 'runtimeHints'
+>;
 
 export async function runTypedMaestroReplayFile(
   params: TypedMaestroReplayParams,
@@ -177,9 +182,38 @@ async function prepareTypedMaestroReplay(
   });
   const session = sessionStore.get(sessionName);
   if (session) assertSessionSelectorMatches(session, req.flags);
-  const device = session?.device ?? (await resolveTargetDevice(req.flags ?? {}));
+  const binding = await resolveMaestroReplayBinding({ req, sessionStore, sessionName, session });
+  return {
+    filePath,
+    program,
+    ...binding,
+    defaults: buildTypedMaestroDefaults({
+      req,
+      sessionName,
+      filePath,
+      platform: binding.platform,
+      target: binding.target,
+    }),
+    env: buildTypedMaestroEnv(req),
+    signal: getRequestSignal(req.meta?.requestId),
+    loadProgram: createMaestroProgramLoader(path.dirname(filePath)),
+  };
+}
+
+async function resolveMaestroReplayBinding(params: {
+  req: DaemonRequest;
+  sessionStore: SessionStore;
+  sessionName: string;
+  session: ReturnType<SessionStore['get']>;
+}): Promise<MaestroReplayBinding> {
+  const { req, sessionStore, sessionName, session } = params;
+  const requestedPlatform = req.flags?.platform;
+  const device =
+    session?.device ??
+    (requestedPlatform === 'android' || requestedPlatform === 'ios'
+      ? undefined
+      : await resolveTargetDevice(req.flags ?? {}));
   const platform = resolveMaestroPlatform(req, device);
-  const target = resolveMaestroTarget(req, device);
   const runtimeHints = resolveEffectiveOpenRuntimeHints({
     req,
     sessionStore,
@@ -187,24 +221,48 @@ async function prepareTypedMaestroReplay(
     device,
     platform,
   });
-  return {
-    filePath,
-    program,
+  return await completeMaestroRuntimeBinding({
+    req,
+    sessionStore,
+    sessionName,
     device,
     platform,
-    target,
+    target: resolveMaestroTarget(req, device),
     runtimeHints,
-    defaults: buildTypedMaestroDefaults({
-      req,
-      sessionName,
-      filePath,
-      platform,
-      target,
+  });
+}
+
+async function completeMaestroRuntimeBinding(
+  params: {
+    req: DaemonRequest;
+    sessionStore: SessionStore;
+    sessionName: string;
+  } & MaestroReplayBinding,
+): Promise<MaestroReplayBinding> {
+  if (params.device || !requiresDeviceRuntimeDefaults(params.runtimeHints)) return params;
+  const device = await resolveTargetDevice(params.req.flags ?? {});
+  return {
+    device,
+    platform: params.platform,
+    target: resolveMaestroTarget(params.req, device),
+    runtimeHints: resolveEffectiveOpenRuntimeHints({
+      req: params.req,
+      sessionStore: params.sessionStore,
+      sessionName: params.sessionName,
+      device,
+      platform: params.platform,
     }),
-    env: buildTypedMaestroEnv(req),
-    signal: getRequestSignal(req.meta?.requestId),
-    loadProgram: createMaestroProgramLoader(path.dirname(filePath)),
   };
+}
+
+function requiresDeviceRuntimeDefaults(
+  runtimeHints: ReturnType<typeof resolveEffectiveOpenRuntimeHints>,
+): boolean {
+  return (
+    runtimeHints?.metroPort !== undefined &&
+    runtimeHints.metroHost === undefined &&
+    runtimeHints.bundleUrl === undefined
+  );
 }
 
 function buildTypedMaestroDefaults(params: {
@@ -239,7 +297,7 @@ function createMaestroReplayPort(params: {
   logPath: string;
   sessionName: string;
   sessionStore: SessionStore;
-  device: DeviceInfo;
+  device: DeviceInfo | undefined;
   platform: Extract<MaestroPlatform, 'android' | 'ios'>;
   runtimeHints: ReturnType<typeof resolveEffectiveOpenRuntimeHints>;
   sourcePath: string;
@@ -264,7 +322,7 @@ function createMaestroReplayPort(params: {
   } = req;
   const baseReq = {
     ...requestBase,
-    flags: maestroRuntimeDeviceFlags(device, platform),
+    flags: maestroRuntimeDeviceFlags(device, platform, req.flags),
     ...(runtimeHints === undefined ? {} : { runtime: runtimeHints }),
   };
   return createDaemonMaestroRuntimePort({
@@ -292,9 +350,11 @@ function createMaestroReplayPort(params: {
 }
 
 function maestroRuntimeDeviceFlags(
-  device: DeviceInfo,
+  device: DeviceInfo | undefined,
   platform: Extract<MaestroPlatform, 'android' | 'ios'>,
+  requestedFlags: CommandFlags | undefined,
 ): CommandFlags {
+  if (!device) return unresolvedMaestroRuntimeDeviceFlags(platform, requestedFlags);
   const flags: CommandFlags = {
     platform,
     target: device.target,
@@ -306,6 +366,43 @@ function maestroRuntimeDeviceFlags(
     udid: device.id,
     ...(device.simulatorSetPath ? { iosSimulatorDeviceSet: device.simulatorSetPath } : {}),
   };
+}
+
+function unresolvedMaestroRuntimeDeviceFlags(
+  platform: Extract<MaestroPlatform, 'android' | 'ios'>,
+  requestedFlags: CommandFlags | undefined,
+): CommandFlags {
+  const flags: CommandFlags = {
+    platform,
+    target: requestedFlags?.target ?? 'mobile',
+    noRecord: true,
+  };
+  if (requestedFlags?.device) flags.device = requestedFlags.device;
+  return platform === 'android'
+    ? unresolvedAndroidMaestroFlags(flags, requestedFlags)
+    : unresolvedIosMaestroFlags(flags, requestedFlags);
+}
+
+function unresolvedAndroidMaestroFlags(
+  flags: CommandFlags,
+  requestedFlags: CommandFlags | undefined,
+): CommandFlags {
+  if (requestedFlags?.serial) flags.serial = requestedFlags.serial;
+  if (requestedFlags?.androidDeviceAllowlist) {
+    flags.androidDeviceAllowlist = requestedFlags.androidDeviceAllowlist;
+  }
+  return flags;
+}
+
+function unresolvedIosMaestroFlags(
+  flags: CommandFlags,
+  requestedFlags: CommandFlags | undefined,
+): CommandFlags {
+  if (requestedFlags?.udid) flags.udid = requestedFlags.udid;
+  if (requestedFlags?.iosSimulatorDeviceSet) {
+    flags.iosSimulatorDeviceSet = requestedFlags.iosSimulatorDeviceSet;
+  }
+  return flags;
 }
 
 function createMaestroReplayObserver(params: {

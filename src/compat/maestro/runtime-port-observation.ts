@@ -95,26 +95,42 @@ function isRect(value: unknown): value is { x: number; y: number; width: number;
 }
 
 function validateTargetMatch(match: MaestroTargetMatch, generation: number): MaestroTargetMatch {
+  assertMatchingGeneration(match, generation);
+  assertValidCandidateCount(match);
+  assertValidGeometry(match);
+  assertValidSurfaceSignature(match);
+  return match;
+}
+
+function assertMatchingGeneration(match: MaestroTargetMatch, generation: number): void {
   if (match.generation !== generation) {
     throw new AppError(
       'COMMAND_FAILED',
       `Maestro target evidence generation ${match.generation} does not match ${generation}.`,
     );
   }
+}
+
+function assertValidCandidateCount(match: MaestroTargetMatch): void {
   if (!Number.isInteger(match.candidateCount) || match.candidateCount < 0) {
     throw new AppError('COMMAND_FAILED', 'Maestro target evidence has an invalid candidate count.');
   }
+}
+
+function assertValidGeometry(match: MaestroTargetMatch): void {
   if (
     (match.rect !== undefined && !isRect(match.rect)) ||
     (match.viewport !== undefined && !isRect(match.viewport))
   ) {
     throw new AppError('COMMAND_FAILED', 'Maestro target evidence has invalid geometry.');
   }
+}
+
+function assertValidSurfaceSignature(match: MaestroTargetMatch): void {
   if (match.surfaceSignature !== undefined && typeof match.surfaceSignature !== 'string') {
     throw new AppError(
       'COMMAND_FAILED',
       'Maestro target evidence has an invalid surface signature.',
     );
   }
-  return match;
 }

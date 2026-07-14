@@ -5,12 +5,11 @@ import {
   type SnapshotState,
 } from '../../kernel/snapshot.ts';
 import { presentIosInteractiveSnapshot } from '../../daemon/snapshot-presentation/ios/index.ts';
-import {
-  buildSnapshotNodeByIndex,
-  isDescendantOfSnapshotNode,
-} from '../../snapshot/snapshot-processing.ts';
 import type { MaestroSelector } from './program-ir.ts';
-import { findMaestroTypedSelectorMatches } from './runtime-target-matching.ts';
+import {
+  findMaestroTypedSelectorMatches,
+  scopeMaestroMatchesByAncestor,
+} from './runtime-target-matching.ts';
 import { filterVisibleMaestroMatches, type MaestroPlatform } from './runtime-target-policy.ts';
 import {
   normalizeMaestroSnapshotMatches,
@@ -51,20 +50,15 @@ export function resolveMaestroTargetFromSnapshot(
 ): MaestroTargetResolution {
   let matches = findMaestroTypedSelectorMatches(snapshot, query.selector);
   if (query.childOf) {
-    const parents = findMaestroTypedSelectorMatches(snapshot, query.childOf);
-    if (parents.length === 0) {
+    const scoped = scopeMaestroMatchesByAncestor(snapshot, matches, query.childOf);
+    if (!scoped.parentMatched) {
       return {
         ok: false,
         message: 'Maestro childOf parent did not match.',
         evidence: buildMaestroTargetEvidence(query, matches, [], undefined),
       };
     }
-    const nodeByIndex = buildSnapshotNodeByIndex(snapshot.nodes);
-    matches = matches.filter((node) =>
-      parents.some((parent) =>
-        isDescendantOfSnapshotNode(snapshot.nodes, node, parent, nodeByIndex),
-      ),
-    );
+    matches = scoped.matches;
   }
 
   const visible = filterVisibleMaestroMatches({ nodes: snapshot.nodes, matches, platform });

@@ -83,8 +83,9 @@ export function iosRunnerOverrides(
             selectorKey: selector.key,
             selectorValue: selector.value,
             allowNonHittableCoordinateFallback: selector.allowNonHittableCoordinateFallback,
-            x: selector.expectedPoint?.x,
-            y: selector.expectedPoint?.y,
+            ...(selector.expectedPoint
+              ? { x: selector.expectedPoint.x, y: selector.expectedPoint.y }
+              : {}),
             appBundleId: ctx.appBundleId,
           },
           runnerOpts,
