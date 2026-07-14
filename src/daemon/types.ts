@@ -18,6 +18,9 @@ import type { RecordingScope } from '../contracts/recording-scope.ts';
 import type { DeviceInfo, Platform, PlatformSelector } from '../kernel/device.ts';
 import type { ExecBackgroundResult, ExecResult } from '../utils/exec.ts';
 import type { SnapshotState } from '../kernel/snapshot.ts';
+// Type-only import; erased at runtime. ref-frame.ts imports SessionState from
+// here, so this back-edge must stay type-only to avoid a runtime cycle.
+import type { RefFrameScope, RefFrameState } from './ref-frame.ts';
 import type { TargetAnnotationV1 } from '../replay/target-identity.ts';
 import type { ReplayTargetGuardDenotation } from '../replay/target-identity-node.ts';
 import type { AppLogFailure, AppLogState } from './app-log-process.ts';
@@ -234,6 +237,21 @@ export type SessionState = {
   snapshotGeneration?: number;
   /** Source snapshot used to resolve repeated `snapshot -s @ref` after scoped output replaces refs. */
   snapshotScopeSource?: SnapshotState;
+  /**
+   * ADR 0014 ref-frame lifecycle state. Undefined is treated as `active`. A
+   * device side effect transitions the frame to `expired` (wired at the
+   * side-effect seam in a later migration step); an expired frame admits no ref
+   * mutation. Managed only through `src/daemon/ref-frame.ts`.
+   */
+  refFrameState?: RefFrameState;
+  /**
+   * ADR 0014 issuance scope of the current ref frame. Undefined is treated as
+   * `all` (a complete namespace). A bounded set names the ref bodies a partial
+   * publication (`find`, settled diff, replay divergence) actually issued, which
+   * are the only bodies a pinned mutation may target. Managed only through
+   * `src/daemon/ref-frame.ts`.
+   */
+  refFrameScope?: RefFrameScope;
   /** Last broad snapshot safe for Android route-freshness comparisons after interactive snapshots. */
   lastComparisonSafeSnapshot?: SnapshotState;
   androidSnapshotFreshness?: AndroidSnapshotFreshness;

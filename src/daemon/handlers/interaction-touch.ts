@@ -156,6 +156,7 @@ async function dispatchTargetedTouchViaRuntime(
     const staleRefResponse = staleIosRefGuardResponse({
       session,
       ref: parsedTarget.target.ref,
+      mintedGeneration: parsedTarget.refGeneration,
       staleRefsWarning,
     });
     if (staleRefResponse) return staleRefResponse;
@@ -615,6 +616,7 @@ async function prepareFillRefTarget(
   const staleRefResponse = staleIosRefGuardResponse({
     session,
     ref: target.ref,
+    mintedGeneration: refGeneration,
     staleRefsWarning,
   });
   if (staleRefResponse) return { response: staleRefResponse, staleRefsWarning };
