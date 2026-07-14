@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/index.ts';
 import type { AndroidAdbProvider } from '../../../src/platforms/android/adb-executor.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
 import { createProviderScenarioHarness, withProviderScenarioResource } from './harness.ts';
@@ -7,6 +8,7 @@ import { createProviderScenarioHarness, withProviderScenarioResource } from './h
 test('Provider-backed integration normalizes provider failures through the request path', async () => {
   const adbCalls: string[][] = [];
   const adbProvider: AndroidAdbProvider = {
+    snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
     exec: async (args) => {
       adbCalls.push([...args]);
       if (args.join(' ') === 'shell getprop sys.boot_completed') {
@@ -14,6 +16,7 @@ test('Provider-backed integration normalizes provider failures through the reque
       }
       return { stdout: '', stderr: 'uiautomator unavailable', exitCode: 1 };
     },
+    install: async () => ({ stdout: '', stderr: '', exitCode: 0 }),
   };
   await withProviderScenarioResource(
     async () =>

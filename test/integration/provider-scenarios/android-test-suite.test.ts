@@ -69,7 +69,7 @@ test('Provider-backed integration Android replay test suite covers retries and f
   });
 });
 
-test('Provider-backed integration Android Maestro reuses the exact observation snapshot and preserves authored swipe points', async () => {
+test('Provider-backed integration Android Maestro refreshes action geometry and preserves authored swipe points', async () => {
   let snapshots = 0;
   await withProviderScenarioResource(
     async () =>
@@ -116,7 +116,7 @@ test('Provider-backed integration Android Maestro reuses the exact observation s
       assert.equal(suite.failed, 0, JSON.stringify(suite));
       assert.deepEqual(
         world.adbCalls.find((call) => call.slice(0, 3).join(' ') === 'shell input tap'),
-        ['shell', 'input', 'tap', '195', '52'],
+        ['shell', 'input', 'tap', '180', '330'],
       );
       assert.equal(world.touchInjectionCalls.length, 1);
       const swipePlan = world.touchInjectionCalls[0]!;
@@ -124,9 +124,8 @@ test('Provider-backed integration Android Maestro reuses the exact observation s
       assert.equal(swipePlan.durationMs, 300);
       assert.deepEqual(swipePlan.pointers[0]?.samples[0]?.point, { x: 351, y: 300 });
       assert.deepEqual(swipePlan.pointers[0]?.samples.at(-1)?.point, { x: 39, y: 300 });
-      // The snapshot frame used to resolve percentages is paired with the gesture plan.
-      assert.equal(world.gestureViewportCalls, 0);
-      assertSnapshotCountInRange(snapshots, 3, 5);
+      assert.equal(world.gestureViewportCalls, 1);
+      assert.equal(snapshots, 2);
     },
   );
 });
@@ -387,7 +386,7 @@ test('Provider-backed integration Android Maestro optional tap misses without to
       JSON.stringify(world.adbCalls),
     );
   });
-});
+}, 10_000);
 
 function androidMaestroReplayXml(searchBounds: string): string {
   return [

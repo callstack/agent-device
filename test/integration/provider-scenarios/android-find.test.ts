@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
+import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/index.ts';
 import type { AndroidAdbProvider } from '../../../src/platforms/android/adb-executor.ts';
 import { arrayEqual, assertCommandCall } from './assertions.ts';
 import { androidSettingsXml, androidSnapshotHelperOutput } from './android-world.ts';
@@ -11,6 +12,7 @@ test('Provider-backed integration Android find flow covers refs, wait, ambiguity
   let searchText = '';
   let includeDuplicateAppsRow = false;
   const adbProvider: AndroidAdbProvider = {
+    snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
     exec: async (args) => {
       adbCalls.push([...args]);
       if (args[0] === 'shell' && args[1] === 'input' && args[2] === 'text') {
