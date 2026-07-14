@@ -139,7 +139,7 @@ export async function observeTypedMaestroCondition(params: {
   }
 
   throwIfAborted(params.context.signal);
-  return lastMatch ?? unreachableObservationResult(params.context.generation);
+  return requireObservationResult(lastMatch);
 }
 
 export async function scrollUntilTypedMaestroTarget(params: {
@@ -183,7 +183,7 @@ export async function scrollUntilTypedMaestroTarget(params: {
   }
 
   throwIfAborted(params.context.signal);
-  return lastMatch ?? unreachableObservationResult(params.context.generation);
+  return requireObservationResult(lastMatch);
 }
 
 export async function waitForTypedSnapshotStability(params: {
@@ -401,11 +401,7 @@ function snapshotStabilitySignature(snapshot: SnapshotState): string {
   );
 }
 
-function unreachableObservationResult(generation: number): MaestroTargetMatch {
-  return {
-    generation,
-    matched: false,
-    visible: false,
-    candidateCount: 0,
-  };
+function requireObservationResult(match: MaestroTargetMatch | undefined): MaestroTargetMatch {
+  if (match) return match;
+  throw new AppError('COMMAND_FAILED', 'Maestro observation completed without a snapshot result.');
 }
