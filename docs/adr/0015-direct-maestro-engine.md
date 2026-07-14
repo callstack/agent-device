@@ -45,8 +45,9 @@ The engine has five responsibilities:
    test result contracts. Observer telemetry is redacted and best-effort; trace persistence cannot
    change command success or failure.
 
-The engine does not implement platform input. Absolute swipes resolve without a viewport query.
-Percentage and preset swipes resolve against the cheapest fresh interaction viewport available.
+The engine does not implement platform input. Absolute swipes preserve authored endpoints without a
+hierarchy capture. Absolute, percentage, and preset swipes resolve the cheapest fresh interaction
+viewport available so ADR 0013 can validate every planned sample.
 When normalization already resolves a viewport, the adapter pairs it with the nested public gesture
 request as daemon-internal metadata. ADR 0013 planning consumes that exact frame instead of probing
 the platform a second time.
@@ -83,7 +84,7 @@ and react-navigation corpora:
 - successful simple target interactions perform at most one provider query; an atomic iOS selector tap
   may reuse same-generation semantic evidence while resolving live geometry inside XCTest;
 - no command captures a second hierarchy merely to re-verify evidence produced within that command;
-- absolute coordinate swipes perform no viewport or accessibility capture;
+- absolute coordinate swipes perform one direct viewport query and no accessibility capture;
 - percentage swipe conversion preserves authored endpoints exactly;
 - helper/runner startup remains amortized across a suite;
 - p50/p95 command latency, captures, retries, and transferred hierarchy bytes are reported separately;
