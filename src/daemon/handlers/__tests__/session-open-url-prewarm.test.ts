@@ -7,6 +7,7 @@ import {
   mockResolveTargetDevice,
   mockEnsureDeviceReady,
   mockPrewarmIosRunnerSession,
+  mockNotifyIosRunnerAppRelaunched,
   mockPrewarmAppleRunnerCache,
   mockPrepareIosRunner,
   mockResolveIosApp,
@@ -397,6 +398,57 @@ test('open iOS Maestro app link waits for runner prewarm before launching app', 
     runnerPrewarmScheduled: true,
     runnerPrewarmWaited: true,
   });
+});
+
+test('open iOS Maestro app link resets a simulator runner prewarmed before URL dispatch', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'ios-simulator-maestro-open-link';
+  const events: string[] = [];
+  const device = {
+    platform: 'apple' as const,
+    id: 'ios-simulator-1',
+    name: 'iPhone Simulator',
+    kind: 'simulator' as const,
+    booted: true,
+  };
+  sessionStore.set(sessionName, {
+    ...makeSession(sessionName, device),
+    appBundleId: 'com.example.app',
+    appName: 'Example App',
+  });
+  mockResolveTargetDevice.mockResolvedValue(device);
+
+  mockPrewarmIosRunnerSession.mockImplementation(async () => {
+    events.push('prewarm');
+  });
+  mockDispatch.mockImplementation(async (_device, command) => {
+    events.push(`dispatch:${command}`);
+    return {};
+  });
+  mockNotifyIosRunnerAppRelaunched.mockImplementation(async () => {
+    events.push('target-reset');
+  });
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'open',
+      positionals: ['com.example.app', 'rne://screen-layout'],
+      flags: { maestro: { prewarmRunnerBeforeOpen: true } },
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  });
+
+  expect(response?.ok).toBe(true);
+  expect(events).toEqual(['prewarm', 'dispatch:open', 'target-reset']);
+  expect(mockNotifyIosRunnerAppRelaunched).toHaveBeenCalledWith(
+    expect.objectContaining({ id: 'ios-simulator-1' }),
+    expect.any(Object),
+  );
 });
 
 test('open iOS Maestro app link reports blocking runner prewarm failures before launching app', async () => {

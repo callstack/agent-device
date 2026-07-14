@@ -290,6 +290,7 @@ async function completeOpenCommand(params: {
     schedulePrewarm({ ...runnerPrewarmOptions, propagateError: true });
     await awaitPrewarm();
   }
+  const runnerTargetPredatesOpen = runnerPrewarmAwaited;
   const openStartedAtMs = Date.now();
   const provisionalSession = await prepareOpenDispatchSession({
     req,
@@ -331,11 +332,11 @@ async function completeOpenCommand(params: {
   }
   if (shouldRelaunch) {
     await awaitPrewarm();
-    if (isIosSimulator(device)) {
-      await notifyIosRunnerAppRelaunched(device, runnerPrewarmOptions);
-    }
   } else if (runnerPrewarm && !runnerPrewarmAwaited) {
     timing.runnerPrewarmWaited = false;
+  }
+  if (isIosSimulator(device) && (shouldRelaunch || runnerTargetPredatesOpen)) {
+    await notifyIosRunnerAppRelaunched(device, runnerPrewarmOptions);
   }
   sessionAppBundleId = await inferAndroidPackageAfterOpen(device, openTarget, sessionAppBundleId);
   if (device.platform === 'android' && sessionAppBundleId) {

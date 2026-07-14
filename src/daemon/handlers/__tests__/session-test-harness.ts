@@ -204,6 +204,8 @@ beforeEach(() => {
   mockClearRuntimeHints.mockReset();
   mockClearRuntimeHints.mockResolvedValue(undefined);
   mockPrewarmIosRunnerSession.mockReset();
+  mockNotifyIosRunnerAppRelaunched.mockReset();
+  mockNotifyIosRunnerAppRelaunched.mockResolvedValue(undefined);
   mockPrewarmAppleRunnerCache.mockReset();
   mockPrepareIosRunner.mockReset();
   mockPrepareIosRunner.mockResolvedValue({
