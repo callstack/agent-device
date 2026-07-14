@@ -92,6 +92,14 @@ final class RunnerTests: XCTestCase {
   // Bounds the pre-plan SpringBoard system-modal probe, which can otherwise grind for tens of
   // seconds on remote-hosted consent dialogs and bypass the plan budget (#1244).
   let systemModalProbeBudget: TimeInterval = 4
+  #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+  // Unit-test-only injectable override for the system-modal probe (see
+  // `boundedBlockingSystemAlertSnapshot` in RunnerTests+Snapshot.swift): when set, a test's probe
+  // body runs in place of `blockingSystemAlertSnapshot` so it can force a real timeout without a
+  // live SpringBoard alert. Production never compiles this property. Stored here (rather than in
+  // the extension that reads it) because Swift extensions cannot hold stored properties.
+  var systemModalProbeOverrideForTesting: ((Date) -> DataPayload?)?
+  #endif
   // Observability for the record(_:) suppression below: how many AX-broken-screen snapshot
   // issues this session muted, so wedge investigations see the volume without grepping logs.
   let suppressedIssueLock = NSLock()
