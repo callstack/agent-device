@@ -172,7 +172,7 @@ test('does not leak replay and test controls into nested public commands', async
   expect(requests[1]?.flags).toEqual({ platform: 'android' });
 });
 
-test('falls back from Enter only when keyboard dispatch is unsupported', async () => {
+test('preserves native Enter dispatch failures', async () => {
   const requests: DaemonRequest[] = [];
   const port = createDaemonMaestroRuntimePort({
     baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
@@ -189,14 +189,16 @@ test('falls back from Enter only when keyboard dispatch is unsupported', async (
     platform: 'android',
   });
 
-  await port.execute({
-    command: { kind: 'pressKey', source: { line: 2 }, key: 'enter' },
-    generation: 0,
-    env: {},
-    invalidateObservation() {},
-  });
+  await expect(
+    port.execute({
+      command: { kind: 'pressKey', source: { line: 2 }, key: 'enter' },
+      generation: 0,
+      env: {},
+      invalidateObservation() {},
+    }),
+  ).rejects.toMatchObject({ code: 'UNSUPPORTED_OPERATION' });
 
-  expect(requests.map(({ command }) => command)).toEqual(['keyboard', 'type']);
+  expect(requests.map(({ command }) => command)).toEqual(['keyboard']);
 });
 
 test('does not repeat Enter after an ambiguous keyboard failure', async () => {

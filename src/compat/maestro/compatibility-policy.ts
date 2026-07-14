@@ -16,18 +16,21 @@ export const MAESTRO_COMPATIBILITY_PRESETS = {
     swipeDurationMs: 400,
     repeatDelayMs: 100,
     scrollUntilVisibleSpeed: 40,
+    scrollUntilVisiblePercentage: 100,
+    eraseTextMaxCharacters: 50,
   },
   // ScreenshotUtils.waitForAppToSettle and MAX_TIMEOUT_WAIT_TO_SETTLE_MS.
   observation: {
     pollIntervalMs: 200,
     defaultSettleAttempts: 10,
   },
-  // Element swipes in Maestro's AndroidDriver and IOSDriver.
+  // AndroidDriver.swipe(elementPoint, ...) and IOSDriver.swipe(elementPoint, ...).
   targetSwipe: {
     defaultDirection: 'up' as const,
     nearEdgeFraction: 0.1,
     farEdgeFraction: 0.9,
   },
+  // AndroidDriver.swipe(direction, ...) and IOSDriver.swipe(direction, ...).
   screenSwipe: {
     nearEdgeFraction: 0.1,
     farEdgeFraction: 0.9,
@@ -38,6 +41,7 @@ export const MAESTRO_COMPATIBILITY_PRESETS = {
 } as const;
 
 export function maestroScrollDurationFromSpeed(speed: number): number {
+  // ScrollUntilVisibleCommand.speedToDuration intentionally adds one millisecond.
   return Math.trunc((1_000 * (100 - speed)) / 100) + 1;
 }
 

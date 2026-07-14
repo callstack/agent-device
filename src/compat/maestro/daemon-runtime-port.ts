@@ -2,6 +2,7 @@ import type { CommandFlags } from '../../core/dispatch.ts';
 import { getSnapshotReferenceFrame } from '../../daemon/touch-reference-frame.ts';
 import { AppError, asAppError } from '../../kernel/errors.ts';
 import type { Rect, SnapshotState } from '../../kernel/snapshot.ts';
+import { isRequestCanceledError } from '../../request/cancel.ts';
 import { executeRunScriptFile } from './run-script-execution.ts';
 import {
   MAESTRO_COMPATIBILITY_PRESETS,
@@ -77,12 +78,16 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     context: MaestroRuntimeOperationContext,
   ): Promise<void> => {
     await invokeMutation('type', [text]);
-    await waitForTypedSnapshotStability({
-      timeoutMs: MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
-      context,
-      snapshot: snapshots.capture,
-      dependencies: options.dependencies,
-    });
+    try {
+      await waitForTypedSnapshotStability({
+        timeoutMs: MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
+        context,
+        snapshot: snapshots.capture,
+        dependencies: options.dependencies,
+      });
+    } catch (error) {
+      if (context.signal?.aborted || isRequestCanceledError(error)) throw error;
+    }
   };
 
   const operations: MaestroRuntimeOperations = {
@@ -164,7 +169,12 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     },
     inputText: async (input, context) => await typeTextAndSettle(input.text, context),
     eraseText: async (input, context) =>
-      await typeTextAndSettle('\b'.repeat(input.charactersToErase ?? 50), context),
+      await typeTextAndSettle(
+        '\b'.repeat(
+          input.charactersToErase ?? MAESTRO_COMPATIBILITY_PRESETS.command.eraseTextMaxCharacters,
+        ),
+        context,
+      ),
     pasteText: async (input, context) => await typeTextAndSettle(input.text, context),
     scroll: async (input) => {
       await invokeMutation('scroll', [input.direction], {
@@ -193,7 +203,10 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
           });
         },
       });
-      if (!match.matched || !match.visible) {
+      if (
+        match.visiblePercentage !==
+        MAESTRO_COMPATIBILITY_PRESETS.command.scrollUntilVisiblePercentage
+      ) {
         throw maestroTestFailure('Maestro scrollUntilVisible target did not become visible.', {
           selector: input.selector,
           timeoutMs: input.timeoutMs,
@@ -206,17 +219,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
         await invokeMutation(input.key, []);
         return;
       }
-      try {
-        await invokeMutation('keyboard', [input.key]);
-      } catch (error) {
-        if (
-          (input.key !== 'enter' && input.key !== 'return') ||
-          asAppError(error).code !== 'UNSUPPORTED_OPERATION'
-        ) {
-          throw error;
-        }
-        await invokeMutation('type', ['\n']);
-      }
+      await invokeMutation('keyboard', [input.key]);
     },
     back: async () => {
       await invokeMutation('back', []);

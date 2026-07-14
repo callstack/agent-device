@@ -291,6 +291,60 @@ test('fails scrollUntilVisible when the target stays absent', async () => {
   expect(requests.filter(({ command }) => command === 'snapshot')).toHaveLength(3);
 });
 
+test('scrolls until the target is fully visible in the screen viewport', async () => {
+  const requests: DaemonRequest[] = [];
+  let snapshots = 0;
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      if (request.command !== 'snapshot') return { ok: true, data: {} };
+      snapshots += 1;
+      return {
+        ok: true,
+        data: {
+          createdAt: snapshots,
+          nodes: [
+            {
+              index: 0,
+              type: 'Application',
+              rect: { x: 0, y: 0, width: 402, height: 874 },
+            },
+            {
+              index: 1,
+              parentIndex: 0,
+              type: 'Text',
+              label: 'Discover',
+              rect:
+                snapshots === 1
+                  ? { x: 20, y: 850, width: 120, height: 48 }
+                  : { x: 20, y: 700, width: 120, height: 48 },
+            },
+          ],
+        },
+      };
+    },
+    dependencies: makeDependencies(),
+    platform: 'ios',
+  });
+
+  await port.execute({
+    command: {
+      kind: 'scrollUntilVisible',
+      source: { line: 2 },
+      element: { text: 'Discover' },
+      direction: 'up',
+      timeout: 2_000,
+    },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+
+  expect(requests.filter(({ command }) => command === 'scroll')).toHaveLength(1);
+  expect(requests.filter(({ command }) => command === 'snapshot')).toHaveLength(3);
+});
+
 test.each([
   [{ kind: 'inputText', source: { line: 2 }, text: 'hello' }, 'hello'],
   [{ kind: 'eraseText', source: { line: 2 }, charactersToErase: 3 }, '\b\b\b'],
@@ -338,6 +392,35 @@ test.each([
     'snapshot',
   ]);
   expect(requests[0]?.positionals).toEqual([text]);
+});
+
+test('keeps a successful input mutation successful when optional settling is unavailable', async () => {
+  const requests: DaemonRequest[] = [];
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      if (request.command === 'snapshot') {
+        return {
+          ok: false,
+          error: { code: 'COMMAND_FAILED', message: 'Snapshot helper is unavailable.' },
+        };
+      }
+      return { ok: true, data: {} };
+    },
+    dependencies: makeDependencies(),
+    platform: 'android',
+  });
+
+  await expect(
+    port.execute({
+      command: { kind: 'inputText', source: { line: 2 }, text: 'hello' },
+      generation: 0,
+      env: {},
+      invalidateObservation() {},
+    }),
+  ).resolves.toBeDefined();
+  expect(requests.map(({ command }) => command)).toEqual(['type', 'snapshot']);
 });
 
 test('commits Maestro input text before dispatching an immediate tap', async () => {

@@ -20,26 +20,28 @@ export type ReactNativeOverlayFilterResult = {
  * Match the source-preserving selector IR directly. In particular, this does
  * not lower the selector to the legacy `key=value` expression grammar.
  *
- * Maestro's compatibility parser treats id as the strongest primary field,
- * then text, then label. Primary values are full-match regular expressions.
- * Text is the visible-text form used by scalar
- * selectors, so it checks label, readable node text, and identifier values.
- * Enabled and selected are independent state constraints.
+ * Maestro intersects every authored selector field. String values are
+ * full-match regular expressions. Text is the visible-text form used by
+ * scalar selectors, so it checks label, readable node text, and identifier
+ * values. Enabled and selected are independent state constraints.
  */
 export function matchesMaestroTypedSelector(
   node: SnapshotNode,
   selector: MaestroSelector,
 ): boolean {
-  const primary = readTypedPrimarySelector(selector);
-  if (primary) {
-    const matched =
-      primary.key === 'text'
-        ? matchesMaestroVisibleText(node, primary.value)
-        : matchesMaestroSelectorValue(readMaestroTextTermValue(node, primary.key), primary.value);
-    if (!matched) return false;
-  } else if (selector.enabled === undefined && selector.selected === undefined) {
+  const textTerms = [
+    selector.id === undefined
+      ? undefined
+      : matchesMaestroSelectorValue(node.identifier, selector.id),
+    selector.text === undefined ? undefined : matchesMaestroVisibleText(node, selector.text),
+    selector.label === undefined
+      ? undefined
+      : matchesMaestroSelectorValue(node.label, selector.label),
+  ].filter((matched): matched is boolean => matched !== undefined);
+  if (textTerms.length === 0 && selector.enabled === undefined && selector.selected === undefined) {
     return false;
   }
+  if (textTerms.some((matched) => !matched)) return false;
 
   if (selector.enabled !== undefined && Boolean(node.enabled !== false) !== selector.enabled) {
     return false;
@@ -118,26 +120,8 @@ function matchesMaestroSelectorValue(value: string | undefined, query: string): 
   return matchesMaestroRegex(text, query);
 }
 
-function readTypedPrimarySelector(
-  selector: MaestroSelector,
-): { key: 'id' | 'text' | 'label'; value: string } | null {
-  if (selector.id !== undefined) return { key: 'id', value: selector.id };
-  if (selector.text !== undefined) return { key: 'text', value: selector.text };
-  if (selector.label !== undefined) return { key: 'label', value: selector.label };
-  return null;
-}
-
 function matchesMaestroVisibleText(node: SnapshotNode, query: string): boolean {
   return [node.label, extractNodeText(node), node.identifier]
     .filter((value): value is string => Boolean(value))
     .some((value) => matchesMaestroSelectorValue(value, query));
-}
-
-function readMaestroTextTermValue(
-  node: SnapshotNode,
-  key: 'id' | 'label' | 'text',
-): string | undefined {
-  if (key === 'id') return node.identifier;
-  if (key === 'label') return node.label;
-  return extractNodeText(node);
 }

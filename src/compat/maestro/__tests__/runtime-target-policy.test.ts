@@ -34,6 +34,30 @@ test('typed Maestro id and label selectors keep their primary field semantics', 
   expect(matchesMaestroTypedSelector(node, { label: '^Submit.*' })).toBe(true);
 });
 
+test('intersects every field in a compound Maestro selector', () => {
+  const node = makeSnapshot([
+    {
+      index: 1,
+      identifier: 'checkout-submit',
+      label: 'Submit order',
+      value: 'Submit order',
+      enabled: true,
+    },
+  ]).nodes[0]!;
+
+  expect(
+    matchesMaestroTypedSelector(node, {
+      id: 'checkout-submit',
+      text: 'Submit order',
+      label: '^Submit.*',
+      enabled: true,
+    }),
+  ).toBe(true);
+  expect(matchesMaestroTypedSelector(node, { id: 'checkout-submit', text: 'Cancel order' })).toBe(
+    false,
+  );
+});
+
 test('treats selector values as full Maestro regex without punctuation inference', () => {
   const node = makeSnapshot([
     {

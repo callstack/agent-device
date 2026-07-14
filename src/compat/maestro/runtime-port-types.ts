@@ -34,6 +34,7 @@ export type MaestroTargetMatch = {
   readonly generation: number;
   readonly matched: boolean;
   readonly visible: boolean;
+  readonly visiblePercentage?: number;
   readonly candidateCount: number;
   readonly rect?: Rect;
   readonly viewport?: Rect;

@@ -167,7 +167,12 @@ export async function scrollUntilTypedMaestroTarget(params: {
       platform: params.platform,
       mode: 'observe',
     });
-    if (lastMatch.matched && lastMatch.visible) return lastMatch;
+    if (
+      lastMatch.visiblePercentage ===
+      MAESTRO_COMPATIBILITY_PRESETS.command.scrollUntilVisiblePercentage
+    ) {
+      return lastMatch;
+    }
     if (params.dependencies.now() >= deadline) break;
 
     const remaining = deadline - params.dependencies.now();
@@ -243,16 +248,53 @@ function targetMatchFromResolution(
     platform,
     mode,
   });
+  const viewport = snapshotViewportRect(frame);
   return {
     generation,
     matched: true,
     visible: true,
+    ...(viewport ? { visiblePercentage: visibleScreenPercentage(resolution.rect, viewport) } : {}),
     candidateCount: resolution.evidence.candidateCount,
     rect: resolution.rect,
     ...(resolution.evidence.ref ? { ref: resolution.evidence.ref } : {}),
-    ...(snapshotViewportRect(frame) ? { viewport: snapshotViewportRect(frame) } : {}),
+    ...(viewport ? { viewport } : {}),
     ...(dispatchSelector ? { dispatchSelector } : {}),
   };
+}
+
+function visibleScreenPercentage(rect: Rect, viewport: Rect): number {
+  if (!hasPositiveArea(rect) || !hasPositiveArea(viewport)) return 0;
+  if (containsRect(rect, viewport) || containsRect(viewport, rect)) return 100;
+
+  const width = Math.max(
+    0,
+    Math.min(rect.x + rect.width, viewport.x + viewport.width) - Math.max(rect.x, viewport.x),
+  );
+  const height = Math.max(
+    0,
+    Math.min(rect.y + rect.height, viewport.y + viewport.height) - Math.max(rect.y, viewport.y),
+  );
+  return (width * height * 100) / (rect.width * rect.height);
+}
+
+function containsRect(container: Rect, nested: Rect): boolean {
+  return (
+    nested.x >= container.x &&
+    nested.y >= container.y &&
+    nested.x + nested.width <= container.x + container.width &&
+    nested.y + nested.height <= container.y + container.height
+  );
+}
+
+function hasPositiveArea(rect: Rect): boolean {
+  return (
+    Number.isFinite(rect.x) &&
+    Number.isFinite(rect.y) &&
+    Number.isFinite(rect.width) &&
+    Number.isFinite(rect.height) &&
+    rect.width > 0 &&
+    rect.height > 0
+  );
 }
 
 function resolveAtomicIosDispatchSelector(params: {

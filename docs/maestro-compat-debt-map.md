@@ -25,6 +25,8 @@ fallback, or second compatibility engine.
 - `wait`/`find` fallback chains after coordinate input.
 - Selector-name heuristics for text-entry coalescing.
 - Fuzzy substring matching that broadened plain Maestro text selectors.
+- Duplicate-stack ranking and visible-context promotion over provider order.
+- Fabricated tab-strip slots and ancestor geometry used in place of provider rectangles.
 - Cached gesture frames; percentage gestures use fresh shared viewport evidence.
 
 ## Convergence Rules

@@ -160,13 +160,14 @@ the observable freshness and failure semantics below before any runtime refactor
   disables direct iOS selector shortcuts while pending.
 - `setSessionSnapshot` is the centralized session snapshot mutation path. Sparse captures do not
   write back, and empty `@ref`-scoped snapshot output must not replace the stored session snapshot.
-- Maestro target matching remains snapshot-based and policy-rich. Coordinate dispatch always uses a
+- Maestro target matching remains snapshot-based and policy-owned. Coordinate dispatch always uses a
   fresh target snapshot. A unique exact iOS match may instead reuse bound same-generation semantic
   evidence and dispatch through XCTest's atomic selector tap; structured live-selector failures return
   to fresh Maestro resolution. This optimization must not erase Maestro regex/string selector behavior,
-  visibility filtering, ranking, visible-context preference, Android duplicate handling, tab-strip
-  inference, or assertion/wait semantics. Plain text is exact and regex-aware; do not add
-  substring/fuzzy recovery that changes authored selector meaning.
+  visibility filtering, provider-order first-match selection, explicit index selection, or
+  assertion/wait semantics. Provider normalization belongs below the compatibility layer. Plain text is
+  exact and regex-aware; do not add substring/fuzzy recovery, synthetic geometry, or hierarchy-shape
+  heuristics that change authored selector meaning.
 
 Evidence: [ADR 0002](docs/adr/0002-persistent-platform-helper-sessions.md),
 [ADR 0004](docs/adr/0004-ios-snapshot-backend-strategy.md),
