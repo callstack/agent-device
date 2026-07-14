@@ -1,5 +1,6 @@
 import type { AndroidSnapshotBackendMetadata } from './snapshot-types.ts';
 import { isAndroidInputMethodOwnedNode } from '../../contracts/android-input-ownership.ts';
+import { classifyAndroidAlertIdentifier } from './alert-detection.ts';
 import { androidUiNodes, type AndroidUiNodeMetadata } from './ui-hierarchy.ts';
 
 const ANDROID_WINDOW_TYPE_APPLICATION = 1;
@@ -48,6 +49,7 @@ export function classifyAndroidHelperContentRecovery(
     );
   }
 
+  if (hasRecognizedAndroidAlertSurface(summary)) return undefined;
   if (isForegroundAppContentHiddenByInputMethod(summary)) return undefined;
   if (isForegroundAppContentPoor(summary)) {
     return buildRecoveryDecision(
@@ -143,6 +145,10 @@ function isSystemWindowOnly(summary: AndroidHelperXmlSummary): boolean {
   );
 }
 
+function hasRecognizedAndroidAlertSurface(summary: AndroidHelperXmlSummary): boolean {
+  return summary.hasAlertButtonIdentifier && summary.hasAlertContentIdentifier;
+}
+
 function buildRecoveryDecision(
   summary: AndroidHelperXmlSummary,
   metadata: AndroidSnapshotBackendMetadata,
@@ -165,6 +171,8 @@ type AndroidHelperXmlSummary = {
   applicationMeaningfulNodeCount: number;
   nonSystemMeaningfulNodeCount: number;
   inputMethodMeaningfulNodeCount: number;
+  hasAlertButtonIdentifier: boolean;
+  hasAlertContentIdentifier: boolean;
   foregroundAppPackage?: string;
   foregroundAppMeaningfulNodeCount?: number;
   windowTypes: number[];
@@ -200,6 +208,8 @@ function createAndroidHelperXmlSummaryState(
     applicationMeaningfulNodeCount: 0,
     nonSystemMeaningfulNodeCount: 0,
     inputMethodMeaningfulNodeCount: 0,
+    hasAlertButtonIdentifier: false,
+    hasAlertContentIdentifier: false,
     ...(foregroundAppPackage !== undefined
       ? { foregroundAppPackage, foregroundAppMeaningfulNodeCount: 0 }
       : {}),
@@ -213,8 +223,18 @@ function recordAndroidHelperSummaryNode(
 ): void {
   summary.nodeCount += 1;
   if (node.packageName === ANDROID_SYSTEM_UI_PACKAGE) summary.systemUiNodeCount += 1;
+  if (node.visibleToUser !== false) recordAndroidAlertIdentifier(summary, node.resourceId);
   recordAndroidHelperWindowNode(summary, node);
   recordAndroidHelperMeaningfulNode(summary, node);
+}
+
+function recordAndroidAlertIdentifier(
+  summary: AndroidHelperXmlSummaryState,
+  resourceId: string | null,
+): void {
+  const kind = classifyAndroidAlertIdentifier(resourceId);
+  if (kind === 'button') summary.hasAlertButtonIdentifier = true;
+  if (kind === 'content') summary.hasAlertContentIdentifier = true;
 }
 
 function recordAndroidHelperWindowNode(
@@ -275,6 +295,8 @@ function finalizeAndroidHelperXmlSummary(
     applicationMeaningfulNodeCount: summary.applicationMeaningfulNodeCount,
     nonSystemMeaningfulNodeCount: summary.nonSystemMeaningfulNodeCount,
     inputMethodMeaningfulNodeCount: summary.inputMethodMeaningfulNodeCount,
+    hasAlertButtonIdentifier: summary.hasAlertButtonIdentifier,
+    hasAlertContentIdentifier: summary.hasAlertContentIdentifier,
     ...(summary.foregroundAppPackage !== undefined
       ? {
           foregroundAppPackage: summary.foregroundAppPackage,

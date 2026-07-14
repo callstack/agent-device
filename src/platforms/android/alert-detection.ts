@@ -42,6 +42,15 @@ const ACCEPT_LABEL_PATTERN =
 const DISMISS_LABEL_PATTERN =
   /^(?:cancel|deny|don.t allow|don’t allow|not now|no|dismiss|close|close app|later|skip)$/i;
 
+export function classifyAndroidAlertIdentifier(
+  identifier: string | null,
+): 'button' | 'content' | undefined {
+  if (identifier === null) return undefined;
+  if (ANDROID_ALERT_BUTTON_ID_PATTERN.test(identifier)) return 'button';
+  if (ANDROID_ALERT_ID_PATTERN.test(identifier)) return 'content';
+  return undefined;
+}
+
 export function findAndroidAlertCandidate(nodes: RawSnapshotNode[]): AndroidAlertCandidate | null {
   const candidate = findAndroidAlertNodes(nodes);
   const candidateNodes = candidate.nodes;

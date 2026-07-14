@@ -159,6 +159,47 @@ test('rejects a status-bar-only capture without window metadata', () => {
   expect(decision?.diagnostics.helperNonSystemMeaningfulNodeCount).toBe(0);
 });
 
+test('keeps a recognized system dialog without window metadata', () => {
+  const decision = classifyAndroidHelperContentRecovery(
+    helperXml([
+      node({
+        text: "Demo isn't responding",
+        resourceId: 'android:id/alertTitle',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.TextView',
+      }),
+      node({
+        text: 'Do you want to close it?',
+        resourceId: 'android:id/message',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.TextView',
+      }),
+      node({
+        text: 'Close app',
+        resourceId: 'android:id/button2',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.Button',
+      }),
+      node({
+        text: 'Wait',
+        resourceId: 'android:id/button1',
+        packageName: 'com.android.systemui',
+        className: 'android.widget.Button',
+      }),
+    ]),
+    {
+      backend: 'android-helper',
+      nodeCount: 4,
+      rootPresent: true,
+      windowCount: 1,
+      captureMode: 'interactive-windows',
+    },
+    { foregroundAppPackage: 'com.pagerviewexample' },
+  );
+
+  expect(decision).toBeUndefined();
+});
+
 test('rejects system chrome inherited under an empty application window', () => {
   const decision = classifyAndroidHelperContentRecovery(
     helperXml([
