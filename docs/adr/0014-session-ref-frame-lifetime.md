@@ -447,13 +447,16 @@ selector, generation-pin, generic, and lifecycle paths; Android helper freshness
 non-retarget) and Android existing-session relaunch; and a real provider-backed interaction plus
 provider-backed lifecycle operation (AWS Device Farm, `backend: webdriver`: a fresh ref succeeded, an
 immediate stale ref was rejected before dispatch with the shared typed fields, an `open --relaunch`
-lifecycle mutation expired the frame, and a fresh observation restored authorization). ONE seam remains
-UNEXERCISED and is therefore an explicit release blocker, not confirmed enablement: Android
-blocking-dialog recovery — blocked only on a bootable free Android target plus a deterministic
-app-owned ANR trigger, not on any code gap. Enforcement stays enabled in code, but that seam is not
-claimed as verified until its live run exists. Step 8's removal of the superseded coarse
-`snapshotRefsStale` marker follows that final confirmation, so read-only warnings are not disturbed
-before every enabled seam is proven on hardware.
+lifecycle mutation expired the frame, and a fresh observation restored authorization). ONE seam —
+Android blocking-dialog recovery — was NOT live-exercised: the repo harness exposes no deterministic
+app-owned ANR trigger, and no reproducible control exists to raise the system dialog on demand. The
+team accepted shipping without a live run for it: its transition and abort logic are covered by fixture
+regressions (`android-system-dialog-ref-frame.test.ts` proves recovery expires the frame before its
+tap; `interaction-android-recovery-abort.test.ts` proves an outstanding ref action then aborts with the
+shared `ref_frame_expired` rejection and no dispatch), the seam is enforced in code identically to the
+verified paths, and it is recorded here as a documented, accepted evidence gap rather than an open
+release blocker. Every other enabled seam is proven on hardware, so step 8's removal of the superseded
+coarse `snapshotRefsStale` marker is unblocked.
 
 PR #1241 landed independently as a compatible transitional fix. It rejects a known iOS stale-marker
 case before this full lifecycle is implemented; it does not own the architecture migration.
