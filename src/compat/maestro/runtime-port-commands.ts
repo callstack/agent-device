@@ -249,8 +249,6 @@ async function executeSwipeCommand(
     swipe.gesture,
     {
       ...context,
-      authoredSwipe: swipe.authored,
-      ...(swipe.target ? { swipeTarget: swipe.target } : {}),
       ...(swipe.viewport ? { gestureViewport: swipe.viewport } : {}),
     },
     'invalidate',

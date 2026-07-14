@@ -1,5 +1,3 @@
-import type { GestureSemanticInput } from '../../contracts/gesture-plan-types.ts';
-import type { SwipePreset } from '../../contracts/scroll-gesture.ts';
 import type { Point, Rect } from '../../kernel/snapshot.ts';
 import type {
   MaestroDirection,
@@ -24,8 +22,6 @@ export type MaestroRuntimeOperationContext = {
   readonly cachedObservation?: MaestroObservation;
   readonly invalidateObservation: () => void;
   readonly signal?: AbortSignal;
-  readonly authoredSwipe?: MaestroSwipeGesture;
-  readonly swipeTarget?: MaestroTargetResolution;
   readonly gestureViewport?: Rect;
 };
 
@@ -80,14 +76,11 @@ export type MaestroSwipeOperation = {
   readonly viewport?: Rect;
 };
 
-type GestureFlingInput = Extract<GestureSemanticInput, { intent: 'fling' }>;
-type GesturePresetPanInput = Extract<GestureSemanticInput, { intent: 'pan'; preset: SwipePreset }>;
-type GesturePointPanInput = Extract<GestureSemanticInput, { intent: 'pan'; origin: Point }>;
-
-export type MaestroSinglePointerGestureInput =
-  | GestureFlingInput
-  | GesturePresetPanInput
-  | (Omit<GesturePointPanInput, 'pointerCount'> & { readonly pointerCount?: never });
+export type MaestroSinglePointerGestureInput = {
+  readonly from: Point;
+  readonly to: Point;
+  readonly durationMs: number;
+};
 
 export type MaestroRuntimeOperationResult = {
   readonly observation?: MaestroObservation;

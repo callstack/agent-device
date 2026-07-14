@@ -41,7 +41,6 @@ import {
   invokeMaestroPublicCommand,
   launchArgumentValues,
   observationFromMatch,
-  publicGestureRequest,
   resolveScriptPath,
   stringifyEnvironment,
   type CreateDaemonMaestroRuntimeOperationsOptions,
@@ -158,9 +157,8 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       });
     },
     gesture: async (input, context) => {
-      const request = publicGestureRequest(input, context);
-      await invokeMutation(request.command, [], {
-        input: request.input,
+      await invokeMutation('swipe', [], {
+        input,
         flags: flagsWith(options.baseReq.flags, { postGestureStabilization: false }),
         ...(context.gestureViewport
           ? { internal: { gestureViewport: context.gestureViewport } }

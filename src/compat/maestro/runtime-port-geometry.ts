@@ -1,5 +1,4 @@
 import { AppError } from '../../kernel/errors.ts';
-import { normalizePublicSwipeMotion } from '../../contracts/gesture-normalization.ts';
 import { pointInsideRect } from '../../utils/rect-center.ts';
 import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
 import type { MaestroRuntimeRequest } from './engine-types.ts';
@@ -33,7 +32,7 @@ export async function resolveMaestroSwipeOperation(
     const end = await resolveMaestroCoordinate(authored.end, request, operations, viewport);
     return {
       authored,
-      gesture: normalizedSwipeFromEndpoints(start, end, authored.duration),
+      gesture: swipeFromEndpoints(start, end, authored.duration),
       ...(viewport ? { viewport } : {}),
     };
   }
@@ -45,7 +44,7 @@ export async function resolveMaestroSwipeOperation(
     const { start, end } = screenSwipeEndpoints(viewport, authored.direction, operations.platform);
     return {
       authored,
-      gesture: normalizedSwipeFromEndpoints(start, end, authored.duration),
+      gesture: swipeFromEndpoints(start, end, authored.duration),
       viewport,
     };
   }
@@ -69,7 +68,7 @@ export async function resolveMaestroSwipeOperation(
   );
   return {
     authored,
-    gesture: normalizedSwipeFromEndpoints(start, end, authored.duration),
+    gesture: swipeFromEndpoints(start, end, authored.duration),
     target,
     viewport,
   };
@@ -96,26 +95,16 @@ export async function resolveMaestroCoordinate(
   };
 }
 
-function normalizedSwipeFromEndpoints(
+function swipeFromEndpoints(
   start: { x: number; y: number },
   end: { x: number; y: number },
   durationMs: number | undefined,
 ): MaestroSinglePointerGestureInput {
-  const gesture = normalizePublicSwipeMotion({
+  return {
     from: start,
     to: end,
     durationMs: durationMs ?? MAESTRO_COMPATIBILITY_PRESETS.command.swipeDurationMs,
-  }).gesture;
-  if (gesture.intent === 'pan' && 'origin' in gesture) {
-    return {
-      intent: 'pan',
-      origin: gesture.origin,
-      delta: gesture.delta,
-      durationMs: gesture.durationMs,
-      executionProfile: 'endpoint-hold',
-    };
-  }
-  throw new AppError('COMMAND_FAILED', 'Swipe normalization produced a non-swipe gesture.');
+  };
 }
 
 function screenSwipeEndpoints(

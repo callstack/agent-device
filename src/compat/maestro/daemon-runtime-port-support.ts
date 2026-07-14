@@ -11,7 +11,6 @@ import type { MaestroPlatform } from './program-ir.ts';
 import type { MaestroObservation } from './engine-types.ts';
 import type {
   MaestroRuntimeOperationContext,
-  MaestroSinglePointerGestureInput,
   MaestroTargetMatch,
   MaestroTargetQuery,
 } from './runtime-port-types.ts';
@@ -109,65 +108,6 @@ export function launchArgumentValues(
   return Object.entries(value.values).flatMap(([key, entry]) => [key, String(entry)]);
 }
 
-export function publicGestureRequest(
-  input: MaestroSinglePointerGestureInput,
-  context: MaestroRuntimeOperationContext,
-): PublicGestureRequest {
-  const endpoints = endpointGesture(input);
-  if (endpoints && shouldPreserveEndpoints(input, context)) {
-    return { command: 'swipe', input: endpoints };
-  }
-  return input.intent === 'fling' ? publicFlingRequest(input) : publicPanRequest(input);
-}
-
-type PublicGestureRequest = { command: 'gesture' | 'swipe'; input: Record<string, unknown> };
-
-function shouldPreserveEndpoints(
-  input: MaestroSinglePointerGestureInput,
-  context: MaestroRuntimeOperationContext,
-): boolean {
-  const authoredKind = context.authoredSwipe?.kind;
-  return authoredKind === 'coordinates' || authoredKind === 'target' || input.intent === 'fling';
-}
-
-function publicFlingRequest(
-  input: Extract<MaestroSinglePointerGestureInput, { intent: 'fling' }>,
-): PublicGestureRequest {
-  if ('preset' in input) {
-    return { command: 'gesture', input: { kind: 'swipe', preset: input.preset } };
-  }
-  if ('from' in input) return { command: 'swipe', input: { from: input.from, to: input.to } };
-  return {
-    command: 'gesture',
-    input: {
-      kind: 'fling',
-      direction: input.direction,
-      origin: input.origin,
-      ...(input.distance === undefined ? {} : { distance: input.distance }),
-    },
-  };
-}
-
-function publicPanRequest(
-  input: Extract<MaestroSinglePointerGestureInput, { intent: 'pan' }>,
-): PublicGestureRequest {
-  if ('preset' in input) {
-    return {
-      command: 'gesture',
-      input: { kind: 'swipe', preset: input.preset, durationMs: input.durationMs },
-    };
-  }
-  return {
-    command: 'gesture',
-    input: {
-      kind: 'pan',
-      origin: input.origin,
-      delta: input.delta,
-      ...(input.durationMs === undefined ? {} : { durationMs: input.durationMs }),
-    },
-  };
-}
-
 export function observationFromMatch(
   selector: MaestroTargetQuery['selector'],
   match: MaestroTargetMatch,
@@ -232,18 +172,4 @@ function daemonResponseError(response: Extract<DaemonResponse, { ok: false }>): 
     ...(error.supportedOn === undefined ? {} : { supportedOn: error.supportedOn }),
   };
   return new AppError(error.code, error.message, Object.keys(details).length ? details : undefined);
-}
-
-function endpointGesture(
-  input: MaestroSinglePointerGestureInput,
-): Record<string, unknown> | undefined {
-  if (input.intent === 'fling' && 'from' in input) return { from: input.from, to: input.to };
-  if (input.intent === 'pan' && !('preset' in input)) {
-    return {
-      from: input.origin,
-      to: { x: input.origin.x + input.delta.x, y: input.origin.y + input.delta.y },
-      ...(input.durationMs === undefined ? {} : { durationMs: input.durationMs }),
-    };
-  }
-  return undefined;
 }

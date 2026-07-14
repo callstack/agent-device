@@ -62,64 +62,45 @@ test('uses the structured gesture contract without observing absolute swipes', a
   expect(gesture).toHaveBeenNthCalledWith(
     1,
     {
-      intent: 'pan',
-      origin: { x: 100, y: 200 },
-      delta: { x: 200, y: 0 },
+      from: { x: 100, y: 200 },
+      to: { x: 300, y: 200 },
       durationMs: 240,
-      executionProfile: 'endpoint-hold',
     },
-    expect.objectContaining({
-      generation: 0,
-      authoredSwipe: {
-        kind: 'coordinates',
-        start: { space: 'absolute', x: 100, y: 200 },
-        end: { space: 'absolute', x: 300, y: 200 },
-        duration: 240,
-      },
-    }),
+    expect.objectContaining({ generation: 0 }),
   );
   expect(gesture).toHaveBeenNthCalledWith(
     2,
     {
-      intent: 'pan',
-      origin: { x: 370, y: 420 },
-      delta: { x: -320, y: 0 },
+      from: { x: 370, y: 420 },
+      to: { x: 50, y: 420 },
       durationMs: 400,
-      executionProfile: 'endpoint-hold',
     },
     expect.objectContaining({
       generation: 1,
-      authoredSwipe: expect.objectContaining({ kind: 'coordinates' }),
       gestureViewport: { x: 10, y: 20, width: 400, height: 800 },
     }),
   );
   expect(gesture).toHaveBeenNthCalledWith(
     3,
     {
-      intent: 'pan',
-      origin: { x: 210, y: 180 },
-      delta: { x: 0, y: 560 },
+      from: { x: 210, y: 180 },
+      to: { x: 210, y: 740 },
       durationMs: 300,
-      executionProfile: 'endpoint-hold',
     },
     expect.objectContaining({
       generation: 2,
-      authoredSwipe: { kind: 'screen', direction: 'down', duration: 300 },
       gestureViewport: { x: 10, y: 20, width: 400, height: 800 },
     }),
   );
   expect(gesture).toHaveBeenNthCalledWith(
     4,
     {
-      intent: 'pan',
-      origin: { x: 370, y: 420 },
-      delta: { x: -320, y: 0 },
+      from: { x: 370, y: 420 },
+      to: { x: 50, y: 420 },
       durationMs: 400,
-      executionProfile: 'endpoint-hold',
     },
     expect.objectContaining({
       generation: 3,
-      authoredSwipe: { kind: 'screen', direction: 'left' },
       gestureViewport: { x: 10, y: 20, width: 400, height: 800 },
     }),
   );
@@ -141,19 +122,19 @@ test('uses Maestro iOS screen-swipe geometry', async () => {
   });
 
   expect(gesture).toHaveBeenCalledWith(
-    expect.objectContaining({ origin: { x: 201, y: 786 }, delta: { x: 0, y: -699 } }),
+    expect.objectContaining({ from: { x: 201, y: 786 }, to: { x: 201, y: 87 } }),
     expect.anything(),
   );
 });
 
 test.each([
-  ['up', { x: 0, y: -140 }],
-  ['down', { x: 0, y: 500 }],
-  ['left', { x: -100, y: 0 }],
-  ['right', { x: 220, y: 0 }],
+  ['up', { x: 150, y: 100 }],
+  ['down', { x: 150, y: 740 }],
+  ['left', { x: 50, y: 240 }],
+  ['right', { x: 370, y: 240 }],
 ] as const)(
   'projects a target-relative %s swipe to Maestro viewport endpoints',
-  async (direction, delta) => {
+  async (direction, to) => {
     const gesture = vi.fn(async () => undefined);
     const operations = makeOperations({
       resolveTarget: vi.fn(async () => ({
@@ -179,7 +160,7 @@ test.each([
     });
 
     expect(gesture).toHaveBeenCalledWith(
-      expect.objectContaining({ origin: { x: 150, y: 240 }, delta }),
+      expect.objectContaining({ from: { x: 150, y: 240 }, to }),
       expect.objectContaining({ gestureViewport: { x: 10, y: 20, width: 400, height: 800 } }),
     );
   },
