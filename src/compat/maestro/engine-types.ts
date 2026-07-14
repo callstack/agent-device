@@ -95,7 +95,7 @@ export type MaestroEngineOptions = {
   env?: Readonly<Record<string, string>>;
   /** Lowest-precedence defaults, normally replay built-ins. */
   defaults?: Readonly<Record<string, string | number | boolean>>;
-  /** Explicit alias for callers passing replay built-ins. */
+  /** @deprecated Use `defaults`; accepted at the engine boundary for compatibility. */
   builtins?: Readonly<Record<string, string>>;
   platform?: MaestroPlatform;
   target?: string;
@@ -114,6 +114,8 @@ export type MaestroEngineOptions = {
   observer?: MaestroEngineObserver;
   now?: () => number;
 };
+
+export type MaestroEngineExecutionOptions = Omit<MaestroEngineOptions, 'builtins'>;
 
 export type MaestroEngineResult = {
   executed: number;

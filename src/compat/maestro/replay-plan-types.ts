@@ -46,8 +46,6 @@ export type MaestroReplayPlanOptions = {
   readonly env?: Readonly<Record<string, string>>;
   /** Lowest-precedence defaults, normally replay built-ins. */
   readonly defaults?: Readonly<Record<string, string | number | boolean>>;
-  /** Alias for defaults for callers that name this layer explicitly. */
-  readonly builtins?: Readonly<Record<string, string>>;
   readonly platform?: MaestroPlatform;
   readonly target?: string;
   readonly runtimeHints?: Readonly<SessionRuntimeHints>;

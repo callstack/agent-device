@@ -6,6 +6,7 @@ import {
 } from './replay-plan.ts';
 import { executeMaestroReplayPlan } from './replay-plan-execution.ts';
 import type {
+  MaestroEngineExecutionOptions,
   MaestroEngineOptions,
   MaestroEngineResult,
   MaestroRuntimePort,
@@ -17,9 +18,10 @@ export async function executeMaestroProgram(
   port: MaestroRuntimePort,
   options: MaestroEngineOptions = {},
 ): Promise<MaestroEngineResult> {
-  const plan = await compileMaestroReplayPlan(program, options);
-  const startIndex = resolveExecutionStartIndex(plan, options);
-  return await executeMaestroReplayPlan(plan, port, { ...options, startIndex });
+  const normalizedOptions = normalizeMaestroEngineOptions(options);
+  const plan = await compileMaestroReplayPlan(program, normalizedOptions);
+  const startIndex = resolveExecutionStartIndex(plan, normalizedOptions);
+  return await executeMaestroReplayPlan(plan, port, { ...normalizedOptions, startIndex });
 }
 
 export async function executeMaestroPlan(
@@ -27,13 +29,25 @@ export async function executeMaestroPlan(
   port: MaestroRuntimePort,
   options: MaestroEngineOptions = {},
 ): Promise<MaestroEngineResult> {
-  const startIndex = resolveExecutionStartIndex(plan, options);
-  return await executeMaestroReplayPlan(plan, port, { ...options, startIndex });
+  const normalizedOptions = normalizeMaestroEngineOptions(options);
+  const startIndex = resolveExecutionStartIndex(plan, normalizedOptions);
+  return await executeMaestroReplayPlan(plan, port, { ...normalizedOptions, startIndex });
+}
+
+function normalizeMaestroEngineOptions(
+  options: MaestroEngineOptions,
+): MaestroEngineExecutionOptions {
+  const { builtins, ...normalizedOptions } = options;
+  if (builtins === undefined) return normalizedOptions;
+  return {
+    ...normalizedOptions,
+    defaults: { ...(normalizedOptions.defaults ?? {}), ...builtins },
+  };
 }
 
 function resolveExecutionStartIndex(
   plan: MaestroReplayPlan,
-  options: MaestroEngineOptions,
+  options: MaestroEngineExecutionOptions,
 ): number {
   return options.from !== undefined || options.planDigest !== undefined
     ? resolveMaestroReplayStartIndex(plan, {

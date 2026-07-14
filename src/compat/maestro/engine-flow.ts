@@ -13,7 +13,10 @@ import {
   DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY,
   type MaestroCompatibilityTimingPolicy,
 } from './compatibility-policy.ts';
-import { type MaestroEngineOptions, type MaestroObservationCondition } from './engine-types.ts';
+import {
+  type MaestroEngineExecutionOptions,
+  type MaestroObservationCondition,
+} from './engine-types.ts';
 
 const MAX_MAESTRO_REPEAT_EXPANSIONS = 1000;
 
@@ -70,7 +73,7 @@ export function checkpointMaestroCancellation(signal: AbortSignal | undefined): 
 
 export async function readIncludedProgram(
   command: MaestroRunFlowCommand,
-  options: MaestroEngineOptions,
+  options: MaestroEngineExecutionOptions,
 ): Promise<MaestroProgram> {
   if (command.include.kind === 'commands') {
     return {
@@ -138,7 +141,7 @@ export function registerIncludedProgramPaths(
 export function staticConditionMatches(
   condition: MaestroRunFlowCondition,
   context: MaestroExecutionContext,
-  options: MaestroEngineOptions,
+  options: MaestroEngineExecutionOptions,
 ): boolean {
   if (condition.platform && condition.platform !== options.platform) return false;
   if (condition.true === undefined) return true;

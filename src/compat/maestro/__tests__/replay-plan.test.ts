@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 import { executeMaestroProgram } from '../engine.ts';
-import type { MaestroRuntimePort } from '../engine-types.ts';
+import type { MaestroRuntimePort, MaestroRuntimeRequest } from '../engine-types.ts';
 import { parseMaestroProgram } from '../program-ir-parser.ts';
 import { compileMaestroReplayPlan, evaluateMaestroReplayResume } from '../replay-plan.ts';
 
@@ -136,5 +136,37 @@ describe('typed Maestro replay plan', () => {
     expect(observer.commandStarted).toHaveBeenCalledWith(
       expect.objectContaining({ stepIndex: 2, stepTotal: 2 }),
     );
+  });
+
+  test('normalizes the legacy builtins alias before plan compilation and execution', async () => {
+    const program = parseMaestroProgram(
+      [
+        '---',
+        '- repeat:',
+        '    times: ${COUNT}',
+        '    commands:',
+        '      - inputText: ${VALUE}',
+      ].join('\n'),
+    );
+    const execute = vi.fn(async (request: MaestroRuntimeRequest) => {
+      request.invalidateObservation();
+      return {};
+    });
+    const port: MaestroRuntimePort = {
+      execute,
+      observe: vi.fn(async ({ generation }) => ({ generation, matched: true })),
+    };
+
+    await executeMaestroProgram(program, port, {
+      defaults: { COUNT: 1, VALUE: 'default' },
+      builtins: { COUNT: '2', VALUE: 'builtin' },
+    });
+
+    expect(execute).toHaveBeenCalledTimes(2);
+    expect(execute.mock.calls.map(([request]) => request.command)).toEqual([
+      expect.objectContaining({ kind: 'inputText', text: 'builtin' }),
+      expect.objectContaining({ kind: 'inputText', text: 'builtin' }),
+    ]);
+    expect(execute.mock.calls[0]?.[0].env).toEqual({ COUNT: '2', VALUE: 'builtin' });
   });
 });

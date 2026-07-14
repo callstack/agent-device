@@ -18,7 +18,6 @@ export async function compileMaestroReplayPlan(
     ...(runtimeHints === undefined ? {} : { runtimeHints }),
     initialStaticEnv: cloneValue({
       ...(options.defaults ?? {}),
-      ...(options.builtins ?? {}),
       ...(program.config.env ?? {}),
       ...(options.env ?? {}),
     }),

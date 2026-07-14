@@ -2,7 +2,7 @@ import { AppError } from '../../kernel/errors.ts';
 import { createMaestroExecutionContext } from './engine-context.ts';
 import { checkpointMaestroCancellation, resolveMaestroTimingPolicy } from './engine-flow.ts';
 import type {
-  MaestroEngineOptions,
+  MaestroEngineExecutionOptions,
   MaestroEngineResult,
   MaestroRuntimePort,
 } from './engine-types.ts';
@@ -17,7 +17,7 @@ import {
 export async function executeMaestroReplayPlan(
   plan: MaestroReplayPlan,
   port: MaestroRuntimePort,
-  options: MaestroEngineOptions = {},
+  options: MaestroEngineExecutionOptions = {},
 ): Promise<MaestroEngineResult> {
   checkpointMaestroCancellation(options.signal);
   const startIndex = options.startIndex ?? 0;
@@ -31,10 +31,7 @@ export async function executeMaestroReplayPlan(
     plan,
     port,
     options,
-    context: createMaestroExecutionContext(
-      { ...(options.defaults ?? {}), ...(options.builtins ?? {}) },
-      options.env ? { ...options.env } : {},
-    ),
+    context: createMaestroExecutionContext(options.defaults, options.env ? { ...options.env } : {}),
     timing: resolveMaestroTimingPolicy(options.timing),
     artifacts: new Set(),
     executed: plan.compatibility.staticallyExecutedControls,

@@ -50,14 +50,14 @@ agent-device replay ~/.agent-device/sessions/e2e-2026-02-09T12-00-00-000Z.ad --s
 
 ## Run Maestro compatibility flows
 
-Agent Device can run a supported subset of Maestro YAML through the replay runtime:
+Agent Device can run a supported subset of Maestro YAML through its typed Maestro compatibility runtime:
 
 ```bash
 agent-device replay ./flow.yaml --maestro --platform ios --session e2e-run
 agent-device test ./maestro-flows --maestro --platform android --artifacts-dir ./tmp/maestro-artifacts
 ```
 
-Maestro compatibility translates supported YAML commands into Agent Device replay actions. It is intended for common mobile flows, not full Maestro parity. Unsupported Maestro syntax fails loudly with the command or field name and a line number when available. If a missing command matters for your flows, use the compatibility tracker to check current support and share demand:
+Maestro compatibility parses supported YAML into a source-preserving typed program and executes it directly through the Agent Device runtime. It is intended for common mobile flows, not full Maestro parity; it does not lower YAML into generic replay actions. Unsupported Maestro syntax fails loudly with the command or field name and a line number when available. If a missing command matters for your flows, use the compatibility tracker to check current support and share demand:
 
 - Supported and unsupported capabilities: https://github.com/callstack/agent-device/issues/558
 - New focused compatibility request: https://github.com/callstack/agent-device/issues/new

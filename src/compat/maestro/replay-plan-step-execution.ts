@@ -12,7 +12,7 @@ import {
 } from './engine-flow.ts';
 import type { MaestroCommand, MaestroRunFlowCondition } from './program-ir.ts';
 import type {
-  MaestroEngineOptions,
+  MaestroEngineExecutionOptions,
   MaestroObservation,
   MaestroObservationCondition,
   MaestroRuntimeCommand,
@@ -29,7 +29,7 @@ const MAX_RETRIES_ALLOWED = 3;
 export type MaestroReplayPlanExecutionState = {
   readonly plan: MaestroReplayPlan;
   readonly port: MaestroRuntimePort;
-  readonly options: MaestroEngineOptions;
+  readonly options: MaestroEngineExecutionOptions;
   readonly context: MaestroExecutionContext;
   readonly timing: ReturnType<typeof resolveMaestroTimingPolicy>;
   readonly artifacts: Set<string>;
