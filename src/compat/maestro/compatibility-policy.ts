@@ -8,6 +8,9 @@ export type MaestroCompatibilityTimingPolicy = {
 // Maestro 2.5.1 defaults at a4c7c95f; pinned source metadata lives in
 // scripts/maestro-conformance-fixtures/upstream-maestro-2.5.1.json.
 export const MAESTRO_COMPATIBILITY_PRESETS = {
+  control: {
+    retryMaxRetries: 3,
+  },
   command: {
     targetLookupTimeoutMs: 17_000,
     optionalTargetLookupTimeoutMs: 7_000,

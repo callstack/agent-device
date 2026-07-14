@@ -2,10 +2,8 @@ import { AppError } from '../../kernel/errors.ts';
 import { createMaestroExecutionContext, type MaestroExecutionContext } from './engine-context.ts';
 import {
   assertIncludePathAvailable,
-  assertMaestroRepeatExpansionLimit,
   checkpointMaestroCancellation,
   readIncludedProgram,
-  readIterationCount,
   registerIncludedProgramPaths,
   resolveCommand,
   sourcePathKey,
@@ -136,24 +134,6 @@ async function compileCommand(
       return [opaqueStep(plannedCommand, scopes, appId, body)];
     }
     case 'repeat': {
-      const times = staticRepeatCount(plannedCommand.times, state.context);
-      if (times !== undefined) {
-        assertMaestroRepeatExpansionLimit(times);
-        state.staticallyExecutedControls += 1;
-        const steps: MaestroReplayPlanStep[] = [];
-        for (let iteration = 0; iteration < times; iteration += 1) {
-          steps.push(
-            ...(await compileCommands(
-              plannedCommand.commands,
-              scopes,
-              appId,
-              fallbackSourcePath,
-              state,
-            )),
-          );
-        }
-        return steps;
-      }
       const body = await compileCommands(
         plannedCommand.commands,
         scopes,
@@ -237,17 +217,6 @@ function staticBooleanConditionDecision(
   return evaluateMaestroBooleanExpression(condition, state.context, state.options.platform)
     ? undefined
     : 'omit';
-}
-
-function staticRepeatCount(
-  value: number | string | undefined,
-  context: MaestroExecutionContext,
-): number | undefined {
-  if (typeof value === 'number') return readIterationCount(value, 0, context, 'repeat.times');
-  if (value === undefined) return 0;
-  const resolved = context.resolve(value);
-  if (hasUnresolvedVariable(resolved)) return undefined;
-  return readIterationCount(value, 0, context, 'repeat.times');
 }
 
 function hasUnresolvedVariable(value: string): boolean {

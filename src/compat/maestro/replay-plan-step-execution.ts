@@ -1,8 +1,8 @@
 import { AppError } from '../../kernel/errors.ts';
 import { isMaestroTestFailure, maestroTestFailure } from './compatibility-errors.ts';
+import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
 import type { MaestroExecutionContext } from './engine-context.ts';
 import {
-  assertMaestroRepeatExpansionLimit,
   checkpointMaestroCancellation,
   observationConditions,
   readIterationCount,
@@ -23,8 +23,6 @@ import type {
   MaestroReplayPlanOpaqueStep,
   MaestroReplayPlanStep,
 } from './replay-plan-types.ts';
-
-const MAX_RETRIES_ALLOWED = 3;
 
 export type MaestroReplayPlanExecutionState = {
   readonly plan: MaestroReplayPlan;
@@ -141,7 +139,6 @@ async function executeOpaqueStep(
       return;
     case 'repeat': {
       const times = readIterationCount(command.times, 0, state.context, 'repeat.times');
-      assertMaestroRepeatExpansionLimit(times);
       state.executed += 1;
       for (let iteration = 0; iteration < times; iteration += 1) {
         checkpointMaestroCancellation(state.options.signal);
@@ -152,7 +149,7 @@ async function executeOpaqueStep(
     case 'retry': {
       const retries = Math.min(
         readIterationCount(command.maxRetries, 1, state.context, 'retry.maxRetries'),
-        MAX_RETRIES_ALLOWED,
+        MAESTRO_COMPATIBILITY_PRESETS.control.retryMaxRetries,
       );
       state.executed += 1;
       await executeRetry(step.body, retries, state);
