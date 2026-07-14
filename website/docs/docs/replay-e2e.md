@@ -62,7 +62,7 @@ Maestro compatibility parses supported YAML into a source-preserving typed progr
 - Supported and unsupported capabilities: https://github.com/callstack/agent-device/issues/558
 - New focused compatibility request: https://github.com/callstack/agent-device/issues/new
 
-Currently supported areas include app launch with Apple-platform launch arguments and Android/iOS simulator `clearState`, `runFlow` file/inline with `when.platform`, `when.visible`, `when.notVisible`, and limited `when.true` boolean/platform expressions, `onFlowStart` and `onFlowComplete` hooks, deterministic `repeat.times`, `tapOn` including `optional`, `index`, `childOf`, `label`, and absolute/percentage point taps, `doubleTapOn` and `longPressOn`, `inputText`, focused-field `eraseText`, and `pasteText`, `openLink`, visibility assertions and `extendedWaitUntil`, `scroll` and `scrollUntilVisible`, absolute/percentage `swipe` and `swipe.label`, screenshots, keyboard dismiss, basic `pressKey`, `back`, animation waits, and `stopApp`, and ordered trusted `runScript` file/env scripts with `http.post`, `json`, and `output` variables. `runScript` is supported only as an ordered Maestro compatibility step for trusted file/env scripts; it can make network requests, and is not a native `.ad` command or security sandbox. Script execution uses Node `vm` only for compatibility isolation, not for security; the script timeout bounds synchronous execution, while `http.post` requests are bounded by the helper process timeout. Output keys cannot contain `.` because exported variables are addressed as `output.<key>`.
+Currently supported areas include app launch with Apple-platform launch arguments and Android/iOS simulator `clearState`, `runFlow` file/inline with `when.platform`, `when.visible`, `when.notVisible`, and limited `when.true` boolean/platform expressions, `onFlowStart` and `onFlowComplete` hooks, deterministic `repeat.times` and retry blocks, `tapOn` including `index`, `childOf`, `label`, and absolute/percentage point taps, `doubleTapOn` and `longPressOn`, `optional` target and assertion commands, `inputText` and focused-field `eraseText`, `openLink`, visibility assertions and `extendedWaitUntil`, `scroll` and `scrollUntilVisible`, absolute/percentage `swipe` and `swipe.label`, screenshots, keyboard dismiss, basic `pressKey`, `back`, animation waits, and `stopApp`, and ordered trusted `runScript` file/env scripts with `http.post`, `json`, and `output` variables. `runScript` is supported only as an ordered Maestro compatibility step for trusted file/env scripts; it can make network requests, and is not a native `.ad` command or security sandbox. Script execution uses Node `vm` only for compatibility isolation, not for security; the script timeout bounds synchronous execution, while `http.post` requests are bounded by the helper process timeout. Output keys cannot contain `.` because exported variables are addressed as `output.<key>`.
 
 Maestro `env` values use the same replay precedence as `.ad` files: flow `env` is the default, shell `AD_VAR_*` values override it, and CLI `-e KEY=VALUE` wins over both.
 
@@ -154,13 +154,10 @@ For a live terminal reporter that prints each completed test as an emoji, title,
 export default {
   name: 'emoji-status',
   onTestResult(test, context) {
-    const icon =
-      test.status === 'pass' ? '✓' : test.status === 'fail' ? '⨯' : '-';
+    const icon = test.status === 'pass' ? '✓' : test.status === 'fail' ? '⨯' : '-';
     const title = test.title?.trim() || test.file;
     const duration =
-      typeof test.durationMs === 'number'
-        ? ` ${(test.durationMs / 1000).toFixed(2)}s`
-        : '';
+      typeof test.durationMs === 'number' ? ` ${(test.durationMs / 1000).toFixed(2)}s` : '';
 
     context.stderr.write(`${icon} ${title}${duration}\n`);
   },
@@ -302,11 +299,17 @@ A failing `replay`/`test` step returns a structured `REPLAY_DIVERGENCE` error in
   "details": {
     "divergence": {
       "step": { "index": 4, "source": { "path": "flow.ad", "line": 6 } },
-      "screen": { "state": "available", "refsGeneration": 3, "refs": [ /* ... */ ] },
+      "screen": {
+        "state": "available",
+        "refsGeneration": 3,
+        "refs": [
+          /* ... */
+        ],
+      },
       "suggestions": [{ "selector": "id=\"auth_continue\"", "basis": "id" }],
-      "resume": { "allowed": true, "from": 4, "planDigest": "…64 hex chars…" }
-    }
-  }
+      "resume": { "allowed": true, "from": 4, "planDigest": "…64 hex chars…" },
+    },
+  },
 }
 ```
 
@@ -334,10 +337,10 @@ agent-device replay ./flow.ad
 agent-device replay ./flow.ad --from 4 --plan-digest ab12...
 ```
 
-`resume.allowed` is `false`, with a `reason`, when resuming cannot be proven safe:
-
-- a skipped step can produce `outputEnv` values (a Maestro `runScript` step) a later step might consume;
-- the skipped range or the resume target itself is runtime control flow (a Maestro `retry:` or `runFlow.when:` block) — these execute dynamically and are never individually addressable by `--from`.
+For Maestro flows, `--from` addresses the immutable top-level typed plan. Compact runtime control nodes
+remain single plan steps and nested commands are not independently addressable. As with generic `.ad`
+replay, the caller is responsible for restoring any state and environment values established by skipped
+steps before resuming.
 
 Passing `--plan-digest` that no longer matches the current script — because you edited it, an include changed, or platform-conditioned expansion differs — fails `INVALID_ARGS` before any action; run a fresh full replay to get a new digest. `--from` is `replay`-only; `test` rejects it (a suite run must stay full and deterministic).
 
