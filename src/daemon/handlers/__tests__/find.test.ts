@@ -111,8 +111,9 @@ test('handleFindCommands click returns deterministic metadata across locator var
       positionals: ['Increment', 'click'],
       nodes: [hittableParentNoRect, nonHittableChildWithRect],
       invoke: async () => ({ platformSpecificRef: 'XCUIElementTypeView' }),
-      // refsGeneration rides every ref-issuing find response (#1076 versioned refs).
-      expectedKeys: ['locator', 'message', 'query', 'ref', 'refsGeneration', 'x', 'y'],
+      // ADR 0014: a mutating find (click) omits refsGeneration — its ref is
+      // diagnostic pre-action identity, never a pinnable issued ref.
+      expectedKeys: ['locator', 'message', 'query', 'ref', 'x', 'y'],
       expectedLocator: 'any',
       expectedQuery: 'Increment',
       expectedCoordinates: { x: 100, y: 50 },
@@ -777,7 +778,7 @@ test('handleFindCommands click re-issues a fresh ref and clears the stale-refs m
   expect(storedSession.snapshotRefsStale).toBe(false);
 });
 
-test('handleFindCommands click carries refsGeneration for the freshly stored tree (#1076 versioned refs)', async () => {
+test('handleFindCommands click omits refsGeneration — a mutating find never issues a pinnable ref (ADR 0014)', async () => {
   const sessionName = 'default';
   const session = makeSession(sessionName);
   // Two earlier tree replacements happened in this session.
@@ -799,10 +800,12 @@ test('handleFindCommands click carries refsGeneration for the freshly stored tre
   });
 
   expect(response.ok).toBe(true);
-  // The find capture replaced the stored tree (generation 3) and the response
-  // returns a ref minted from it, so it reports that generation ONCE.
+  // The find capture still replaced the stored tree (generation 3)…
   expect(storedSession.snapshotGeneration).toBe(3);
   if (response.ok) {
-    expect((response.data as Record<string, unknown>).refsGeneration).toBe(3);
+    // …but a mutating find must NOT report refsGeneration: its acted ref is
+    // diagnostic pre-action identity, so MCP cannot pin and reuse it after the
+    // action.
+    expect((response.data as Record<string, unknown>).refsGeneration).toBeUndefined();
   }
 });

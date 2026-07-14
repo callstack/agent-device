@@ -35,7 +35,13 @@ export function createInteractionRuntime(
     sessions: createDaemonRuntimeSessionStore({
       sessionName: params.sessionName,
       getSession: () => session,
-      recordOptions: { includeSnapshot: true },
+      recordOptions: {
+        includeSnapshot: true,
+        // ADR 0014: a mutating find's internal dispatch already re-resolved its
+        // target by locator against the fresh capture, so it resolves against the
+        // observation, not the authorized frame tree.
+        omitRefFrameSnapshot: params.req.internal?.findResolvedTarget === true,
+      },
       setRecord: (record) => {
         if (!record.snapshot) return;
         setSessionSnapshot(session, record.snapshot);

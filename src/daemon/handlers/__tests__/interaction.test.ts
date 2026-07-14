@@ -1443,7 +1443,7 @@ test('longpress @ref resolves the target and dispatches coordinate longpress', a
   expect(sessionStore.get(sessionName)?.actions[0]?.command).toBe('longpress');
 });
 
-test('press @ref refreshes stale stored refs and syncs the daemon session snapshot', async () => {
+test('press @ref fails closed when the authorized ref has no usable bounds (ADR 0014)', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'stale-ref-refresh';
   const session = makeSession(sessionName);
@@ -1462,24 +1462,9 @@ test('press @ref refreshes stale stored refs and syncs the daemon session snapsh
   };
   sessionStore.set(sessionName, session);
 
-  mockDispatch.mockImplementation(async (_device, command) => {
-    if (command === 'snapshot') {
-      return {
-        nodes: [
-          {
-            index: 0,
-            type: 'XCUIElementTypeButton',
-            label: 'Continue',
-            rect: { x: 10, y: 20, width: 100, height: 40 },
-            enabled: true,
-            hittable: true,
-          },
-        ],
-        backend: 'xctest',
-      };
-    }
-    return { pressed: true };
-  });
+  mockDispatch.mockRejectedValue(
+    new Error('dispatch must not run: no positional recapture on missing frame evidence'),
+  );
 
   const response = await handleInteractionCommands({
     req: {
@@ -1494,18 +1479,15 @@ test('press @ref refreshes stale stored refs and syncs the daemon session snapsh
     contextFromFlags,
   });
 
-  expect(response?.ok).toBe(true);
-  if (response?.ok) {
-    expect(response.data?.x).toBe(60);
-    expect(response.data?.y).toBe(40);
+  // ADR 0014: the authorized frame's @e1 has no usable rect, so the ref FAILS
+  // rather than recapturing and accepting the same index from a newer tree by
+  // positional coincidence. No fresh capture, no dispatch.
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('COMMAND_FAILED');
+    expect(response.error.message).toMatch(/not found or has no bounds/);
   }
-  expect(mockDispatch.mock.calls.map((call) => call[1])).toEqual(['snapshot', 'press']);
-  expect(sessionStore.get(sessionName)?.snapshot?.nodes[0]?.rect).toEqual({
-    x: 10,
-    y: 20,
-    width: 100,
-    height: 40,
-  });
+  expect(mockDispatch).not.toHaveBeenCalled();
 });
 
 test('press @ref refreshes Android snapshot when freshness tracking is active', async () => {
@@ -2515,7 +2497,7 @@ test('click --button middle on macOS fails with an explicit unsupported-operatio
   }
 });
 
-test('press @ref refreshes snapshot when stored ref bounds are invalid', async () => {
+test('press @ref fails closed when stored ref bounds are invalid (ADR 0014)', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'default';
   const session = makeSession(sessionName);
@@ -2542,26 +2524,9 @@ test('press @ref refreshes snapshot when stored ref bounds are invalid', async (
   };
   sessionStore.set(sessionName, session);
 
-  let snapshotCalls = 0;
-  mockDispatch.mockImplementation(async (_device, command, _positionals) => {
-    if (command === 'snapshot') {
-      snapshotCalls += 1;
-      return {
-        nodes: [
-          {
-            index: 0,
-            type: 'android.widget.TextView',
-            label: 'My App',
-            rect: { x: 20, y: 40, width: 100, height: 40 },
-            enabled: true,
-            hittable: true,
-          },
-        ],
-        backend: 'android',
-      };
-    }
-    return { pressed: true };
-  });
+  mockDispatch.mockRejectedValue(
+    new Error('dispatch must not run: no positional recapture on unusable frame evidence'),
+  );
 
   const response = await handleInteractionCommands({
     req: {
@@ -2576,17 +2541,14 @@ test('press @ref refreshes snapshot when stored ref bounds are invalid', async (
     contextFromFlags,
   });
 
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(true);
-  expect(snapshotCalls).toBe(1);
-  const pressCalls = mockDispatch.mock.calls.filter((c) => c[1] === 'press');
-  expect(pressCalls.length).toBe(1);
-  expect(pressCalls[0]?.[2]).toEqual(['70', '60']);
-  if (response?.ok) {
-    expect(response.data?.x).toBe(70);
-    expect(response.data?.y).toBe(60);
-    expect(response.data?.ref).toBe('e1');
+  // ADR 0014: the authorized frame's @e1 has an unusable rect (NaN), so it FAILS
+  // rather than recapturing and accepting the same index from a newer tree.
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('COMMAND_FAILED');
+    expect(response.error.message).toMatch(/not found or has no bounds/);
   }
+  expect(mockDispatch).not.toHaveBeenCalled();
 });
 
 test('press @ref fails fast when the target is off-screen', async () => {
@@ -2640,7 +2602,7 @@ test('press @ref fails fast when the target is off-screen', async () => {
   }
 });
 
-test('press @ref fallback label is used after refresh when ref bounds remain invalid', async () => {
+test('press @ref with a trailing label recovers within the authorized frame (no positional recapture)', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'default';
   const session = makeSession(sessionName);
@@ -2651,13 +2613,24 @@ test('press @ref fallback label is used after refresh when ref bounds remain inv
     kind: 'emulator',
     booted: true,
   };
+  // @e1's rect is unusable, but the SAME frame tree carries another node with
+  // the trailing label at usable bounds. ADR 0014 label recovery resolves within
+  // the authorized frame — never by recapturing a fresh tree.
   session.snapshot = {
     nodes: attachRefs([
       {
         index: 0,
         type: 'android.widget.TextView',
-        label: 'My App',
+        label: 'Different',
         rect: { x: 20, y: 40, width: Number.NaN, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+      {
+        index: 1,
+        type: 'android.widget.TextView',
+        label: 'My App',
+        rect: { x: 100, y: 200, width: 80, height: 40 },
         enabled: true,
         hittable: true,
       },
@@ -2668,29 +2641,7 @@ test('press @ref fallback label is used after refresh when ref bounds remain inv
   sessionStore.set(sessionName, session);
 
   mockDispatch.mockImplementation(async (_device, command) => {
-    if (command === 'snapshot') {
-      return {
-        nodes: [
-          {
-            index: 0,
-            type: 'android.widget.TextView',
-            label: 'Different',
-            rect: { x: 20, y: 40, width: Number.NaN, height: 40 },
-            enabled: true,
-            hittable: true,
-          },
-          {
-            index: 1,
-            type: 'android.widget.TextView',
-            label: 'My App',
-            rect: { x: 100, y: 200, width: 80, height: 40 },
-            enabled: true,
-            hittable: true,
-          },
-        ],
-        backend: 'android',
-      };
-    }
+    if (command === 'snapshot') throw new Error('no positional recapture: recovery stays in-frame');
     return { pressed: true };
   });
 
@@ -2773,7 +2724,7 @@ test('fill @ref fails fast when the target is off-screen', async () => {
   }
 });
 
-test('fill @ref refreshes snapshot when stored ref bounds are invalid', async () => {
+test('fill @ref fails closed when stored ref bounds are invalid (ADR 0014)', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'default';
   const session = makeSession(sessionName);
@@ -2800,26 +2751,9 @@ test('fill @ref refreshes snapshot when stored ref bounds are invalid', async ()
   };
   sessionStore.set(sessionName, session);
 
-  let snapshotCalls = 0;
-  mockDispatch.mockImplementation(async (_device, command) => {
-    if (command === 'snapshot') {
-      snapshotCalls += 1;
-      return {
-        nodes: [
-          {
-            index: 0,
-            type: 'android.widget.EditText',
-            label: 'Email',
-            rect: { x: 20, y: 40, width: 100, height: 40 },
-            enabled: true,
-            hittable: true,
-          },
-        ],
-        backend: 'android',
-      };
-    }
-    return { filled: true };
-  });
+  mockDispatch.mockRejectedValue(
+    new Error('dispatch must not run: no positional recapture on unusable frame evidence'),
+  );
 
   const response = await handleInteractionCommands({
     req: {
@@ -2834,19 +2768,14 @@ test('fill @ref refreshes snapshot when stored ref bounds are invalid', async ()
     contextFromFlags,
   });
 
-  expect(response).toBeTruthy();
-  expect(response?.ok).toBe(true);
-  expect(snapshotCalls).toBe(1);
-  const fillCalls = mockDispatch.mock.calls.filter((c) => c[1] === 'fill');
-  expect(fillCalls.length).toBe(1);
-  expect(fillCalls[0]?.[2]).toEqual(['70', '60', 'hello@example.com']);
-  expect((fillCalls[0]?.[4] as Record<string, unknown> | undefined)?.delayMs).toBe(25);
-
-  const stored = sessionStore.get(sessionName);
-  const result = (stored?.actions[0]?.result ?? {}) as Record<string, unknown>;
-  expect(result.ref).toBe('e1');
-  expect(result.x).toBe(70);
-  expect(result.y).toBe(60);
+  // ADR 0014: the authorized frame's @e1 has an unusable rect, so the fill FAILS
+  // rather than recapturing a fresh tree and filling the same index.
+  expect(response?.ok).toBe(false);
+  if (response && !response.ok) {
+    expect(response.error.code).toBe('COMMAND_FAILED');
+    expect(response.error.message).toMatch(/not found or has no bounds/);
+  }
+  expect(mockDispatch).not.toHaveBeenCalled();
 });
 
 test('press coordinates does not treat extra trailing args as selector', async () => {

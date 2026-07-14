@@ -412,7 +412,7 @@ test('runtime interactions reject unsupported macOS desktop and menubar surfaces
   assert.equal(pressed, true);
 });
 
-test('runtime ref interactions refresh the snapshot when a stored ref has no usable rect', async () => {
+test('runtime ref interactions fail closed when the authorized ref has no usable bounds (ADR 0014)', async () => {
   const staleSnapshot = makeSnapshotState([
     {
       index: 0,
@@ -422,25 +422,30 @@ test('runtime ref interactions refresh the snapshot when a stored ref has no usa
       hittable: true,
     },
   ]);
-  const freshSnapshot = selectorSnapshot();
   const calls: Point[] = [];
   let captures = 0;
   const device = createInteractionDevice(staleSnapshot, {
     captureSnapshot: async () => {
       captures += 1;
-      return { snapshot: freshSnapshot };
+      return { snapshot: selectorSnapshot() };
     },
     tap: async (_context, point) => {
       calls.push(point);
     },
   });
 
-  const result = await device.interactions.click(ref('@e1'), { session: 'default' });
-
-  assert.equal(captures, 1);
-  assert.deepEqual(calls, [{ x: 60, y: 40 }]);
-  assert.equal(result.kind, 'ref');
-  assert.equal(result.node?.rect?.width, 100);
+  // ADR 0014: the authorized frame's @e1 has no usable rect, so it FAILS rather
+  // than recapturing and accepting the same index from a newer tree by
+  // positional coincidence.
+  await assert.rejects(
+    () => device.interactions.click(ref('@e1'), { session: 'default' }),
+    (error: unknown) => {
+      assert.match((error as Error).message, /Ref @e1 not found or has no bounds/);
+      return true;
+    },
+  );
+  assert.equal(captures, 0);
+  assert.deepEqual(calls, []);
 });
 
 test('tryResolveRefNode discloses exact for a resolved ref and label-fallback for label recovery', () => {

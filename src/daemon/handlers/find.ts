@@ -166,6 +166,21 @@ export async function handleFindCommands(params: {
     sessionStore.set(sessionName, session);
   }
 
+  return dispatchFindAction(ctx, match, action, value);
+}
+
+/**
+ * Run the selected find action and, for a READ-ONLY action only, attach the
+ * issued `refsGeneration`. A mutating find (click/fill/focus/type) returns
+ * `data.ref` solely as diagnostic pre-action identity (ADR 0014) — it must omit
+ * `refsGeneration` so MCP cannot pin and reuse it after the action.
+ */
+async function dispatchFindAction(
+  ctx: FindContext,
+  match: ResolvedMatch,
+  action: string,
+  value: string | undefined,
+): Promise<DaemonResponse | null> {
   const actionHandlers: Record<string, () => Promise<DaemonResponse | null>> = {
     exists: () => handleFindExists(ctx),
     get_text: () => handleFindGetText(ctx, match),
@@ -178,11 +193,12 @@ export async function handleFindCommands(params: {
 
   const handler = actionHandlers[action];
   if (!handler) return null;
-  // Re-read the session AFTER the handler: internal click/fill sub-invocations
-  // may have replaced the stored tree again (Android freshness refresh), and
-  // the reported generation must describe the tree the response's ref resolves
-  // against at response time.
-  return attachIssuedRefsGeneration(await handler(), () => sessionStore.get(sessionName));
+  const result = await handler();
+  if (!isReadOnlyFindAction(action)) return result;
+  // Re-read the session AFTER the handler: the read capture may have replaced the
+  // stored tree, and the reported generation must describe the tree the
+  // response's ref resolves against at response time.
+  return attachIssuedRefsGeneration(result, () => ctx.sessionStore.get(ctx.sessionName));
 }
 
 /**

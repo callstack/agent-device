@@ -4,6 +4,13 @@ import type { SessionState } from './types.ts';
 
 export type RuntimeSessionRecordOptions = {
   includeSnapshot?: boolean;
+  /**
+   * ADR 0014: omit the authorized frame tree so `@ref` resolution binds against
+   * the latest observation instead. Set for a mutating `find`'s internal leaf
+   * dispatch, whose ref was just re-resolved by locator against the find's fresh
+   * capture — the frame model does not govern that internal re-resolution.
+   */
+  omitRefFrameSnapshot?: boolean;
   metadata?: Record<string, unknown>;
 };
 
@@ -23,7 +30,9 @@ function toRuntimeSessionRecord(
           // ADR 0014: expose the authorized frame tree so ref resolution binds a
           // `@eN` to the node the caller was authorized against, not to whatever
           // now sits at that index in a newer observation.
-          ...(session.refFrameTree ? { refFrameSnapshot: session.refFrameTree } : {}),
+          ...(session.refFrameTree && options.omitRefFrameSnapshot !== true
+            ? { refFrameSnapshot: session.refFrameTree }
+            : {}),
         }
       : {}),
     metadata: {

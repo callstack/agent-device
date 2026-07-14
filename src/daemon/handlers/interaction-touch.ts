@@ -16,7 +16,7 @@ import type {
   LongPressCommandResult,
   PressCommandResult,
 } from '../../contracts/interaction.ts';
-import { asAppError, normalizeError } from '../../kernel/errors.ts';
+import { AppError, asAppError, normalizeError } from '../../kernel/errors.ts';
 import type { ReplayTargetGuardDenotation } from '../../replay/target-identity-node.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';
@@ -65,7 +65,7 @@ import {
   type AndroidBlockingDialogReadinessResult,
 } from '../android-system-dialog.ts';
 import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
-import { expireRefFrame } from '../ref-frame.ts';
+import { expireRefFrame, refFrameState } from '../ref-frame.ts';
 
 export async function handleTouchInteractionCommands(
   params: InteractionHandlerParams & {
@@ -185,6 +185,7 @@ async function dispatchTargetedTouchViaRuntime(
 
   return await dispatchRuntimeInteraction(params, {
     androidFreshnessBaseline,
+    refTarget: parsedTarget.target.kind === 'ref',
     run: async (runtime) =>
       await runTargetedTouchInteraction({
         runtime,
@@ -593,6 +594,7 @@ async function dispatchFillViaRuntime(
   if (directResponse) return directResponse;
 
   return await dispatchRuntimeInteraction(params, {
+    refTarget: parsedTarget.target.kind === 'ref',
     run: async (runtime) =>
       await runtime.interactions.fill(parsedTarget.target, parsedTarget.text, {
         session: sessionName,
@@ -730,6 +732,8 @@ async function dispatchRuntimeInteraction<
   },
   options: {
     androidFreshnessBaseline?: SessionState['snapshot'];
+    /** True when the action targets a `@ref`; aborts if Android dialog recovery expires the frame first. */
+    refTarget?: boolean;
     run(runtime: ReturnType<typeof createInteractionRuntime>): Promise<TResult>;
     afterRun?(result: TResult): Promise<void>;
     buildPayloads(
@@ -745,6 +749,7 @@ async function dispatchRuntimeInteraction<
     const { readiness, runtimeResult } = await runWithAndroidDialogReadinessCheck(
       session,
       params.req.command,
+      { refTarget: options.refTarget === true },
       async () => {
         const result = await options.run(runtime);
         await options.afterRun?.(result);
@@ -787,6 +792,7 @@ async function dispatchRuntimeInteraction<
 async function runWithAndroidDialogReadinessCheck<TResult>(
   session: SessionState,
   command: string,
+  options: { refTarget: boolean },
   run: () => Promise<TResult>,
 ): Promise<{
   readiness: AndroidBlockingDialogReadinessResult;
@@ -800,6 +806,24 @@ async function runWithAndroidDialogReadinessCheck<TResult>(
     command,
     phase: 'before-command',
   });
+  // ADR 0014: blocking-dialog recovery is itself device-mutating and expires the
+  // frame at its own seam. A ref action admitted against the pre-recovery frame
+  // must NOT continue against the recovered UI — abort it with ref_frame_expired.
+  // (Selector/coordinate actions re-resolve and continue under their own policy.)
+  if (
+    options.refTarget &&
+    readiness.status === 'recovered' &&
+    refFrameState(session) === 'expired'
+  ) {
+    throw new AppError(
+      'COMMAND_FAILED',
+      `Ref belongs to an expired ref frame — Android dialog recovery changed the screen before ${command} dispatched`,
+      {
+        reason: 'ref_frame_expired',
+        hint: 'Capture a fresh interactive snapshot (snapshot -i) or use a stable selector, then retry.',
+      },
+    );
+  }
   const runtimeResult = await run();
   await ensureAndroidBlockingSystemDialogReady({
     session,

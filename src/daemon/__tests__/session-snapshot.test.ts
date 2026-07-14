@@ -2,6 +2,7 @@ import { expect, test } from 'vitest';
 import type { SnapshotState } from '../../kernel/snapshot.ts';
 import type { SessionState } from '../types.ts';
 import {
+  markSessionPartialRefsIssued,
   resolveRefStalenessWarning,
   setSessionSnapshot,
   STALE_SNAPSHOT_REFS_WARNING,
@@ -96,4 +97,25 @@ test('resolveRefStalenessWarning treats a missing stored generation as s0', () =
     'Ref @e2 was minted from snapshot s3 but the session tree is now s0 — re-run snapshot -i.',
   );
   expect(resolveRefStalenessWarning({ session, ref: '@e2', mintedGeneration: 0 })).toBeUndefined();
+});
+
+test('markSessionPartialRefsIssued: an empty result leaves all state untouched (ADR 0014)', () => {
+  const session = makeSession();
+  // A useful prior frame exists.
+  session.snapshotRefsStale = true;
+  session.refFrameState = 'active';
+  session.refFrameScope = new Set(['e1']);
+  session.refFrameGeneration = 7;
+
+  // An empty partial publication (no refs) must not supersede that authority or
+  // even clear the coarse marker.
+  markSessionPartialRefsIssued(session, []);
+  expect(session.snapshotRefsStale).toBe(true);
+  expect(session.refFrameScope).toEqual(new Set(['e1']));
+  expect(session.refFrameGeneration).toBe(7);
+
+  // A non-empty result supersedes with exactly its bodies.
+  markSessionPartialRefsIssued(session, ['@e5~s7', 'e6']);
+  expect(session.snapshotRefsStale).toBe(false);
+  expect(session.refFrameScope).toEqual(new Set(['e5', 'e6']));
 });

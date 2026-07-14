@@ -562,26 +562,23 @@ async function resolveSnapshotForRef(
   const authorized = tryResolveRefNode(frameTree.nodes, target.ref, {
     fallbackLabel,
   });
-  if (authorized) {
-    return reconcileFreshObservation({
-      session,
-      frameTree,
-      target,
-      fallbackLabel,
-      authorized,
-    });
-  }
-
-  const capture = await captureInteractionSnapshot(runtime, options, true);
-  const refreshed = tryResolveRefNode(capture.snapshot.nodes, target.ref, {
-    fallbackLabel,
-  });
-  if (!refreshed) {
+  // ADR 0014: missing authorized-frame evidence FAILS. It must not fall through
+  // to a fresh capture and accept the same ref body from a newer tree — that is
+  // exactly the positional-coincidence retarget the frame model forbids. A stale
+  // read is observable and recoverable; a stale mutation can act on the wrong
+  // element. The caller re-observes (snapshot) or uses a selector.
+  if (!authorized) {
     throw new AppError('COMMAND_FAILED', `Ref ${target.ref} not found or has no bounds`, {
       hint: STALE_REF_HINT,
     });
   }
-  return { ...capture, resolved: refreshed };
+  return reconcileFreshObservation({
+    session,
+    frameTree,
+    target,
+    fallbackLabel,
+    authorized,
+  });
 }
 
 /**

@@ -4,6 +4,7 @@ import type { RawSnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import { makeAndroidSession } from '../../../__tests__/test-utils/index.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
+import { expireRefFrame } from '../../ref-frame.ts';
 
 vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
@@ -47,6 +48,35 @@ test('snapshot resolves @ref scope with the stored source after scoped output re
   ]);
   expect(sessionStore.get(sessionName)?.snapshot?.nodes).toHaveLength(2);
   expect(sessionStore.get(sessionName)?.snapshotScopeSource?.nodes[2]?.ref).toBe('e3');
+});
+
+test('a mutation clears scoped-snapshot lineage so a repeated snapshot -s @ref cannot borrow it (ADR 0014)', async () => {
+  const sessionStore = makeSessionStore('agent-device-snapshot-scoped-refs-');
+  const sessionName = 'android-ref-scope-broken-by-mutation';
+  const session = makeAndroidSession(sessionName, { snapshot: androidRefScopeSourceSnapshot() });
+  sessionStore.set(sessionName, session);
+
+  mockDispatch.mockResolvedValue({
+    nodes: scopedScriptErrorNodes(),
+    truncated: false,
+    backend: 'android',
+  });
+
+  // First scoped snapshot establishes the lineage and reindexes the stored refs
+  // (the reduced output no longer contains @e3).
+  const first = await requestScopedSnapshot(sessionName, sessionStore, '@e3');
+  expect(first?.ok).toBe(true);
+  expect(sessionStore.get(sessionName)?.snapshotScopeSource?.nodes[2]?.ref).toBe('e3');
+
+  // A device mutation crosses the side-effect seam and clears the lineage.
+  expireRefFrame(sessionStore.get(sessionName)!);
+  expect(sessionStore.get(sessionName)?.snapshotScopeSource).toBeUndefined();
+
+  // The repeated `snapshot -s @e3` can no longer borrow the stale lineage: the
+  // reindexed stored tree has no @e3, so it fails closed rather than resolving a
+  // different subtree.
+  const second = await requestScopedSnapshot(sessionName, sessionStore, '@e3');
+  expect(second?.ok).toBe(false);
 });
 
 test('empty @ref-scoped snapshot output does not replace the stored session snapshot', async () => {

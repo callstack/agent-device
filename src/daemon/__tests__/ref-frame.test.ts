@@ -115,3 +115,16 @@ test('activateCompleteRefFrame re-authorizes a complete frame after expiry', () 
     admitted: true,
   });
 });
+
+test('expireRefFrame clears scoped-snapshot lineage at the seam (ADR 0014)', () => {
+  const scopeTree = {
+    nodes: [],
+    createdAt: 0,
+    backend: 'xctest',
+  } as unknown as SessionState['snapshot'];
+  const s = session({ snapshotGeneration: 42, snapshotScopeSource: scopeTree });
+  expireRefFrame(s);
+  // A mutation breaks the consecutive `snapshot -s @ref` chain, so a later
+  // repeated scoped snapshot cannot borrow stale lineage across the side effect.
+  assert.equal(s.snapshotScopeSource, undefined);
+});

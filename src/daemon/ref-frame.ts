@@ -61,9 +61,15 @@ export function refFrameEpoch(session: SessionState): number | undefined {
  * element identity, so that a post-dispatch failure (timeout, connection loss,
  * ambiguous error) still leaves the frame expired — there is no success-only
  * rollback.
+ *
+ * Crossing the seam also clears the scoped-snapshot lineage (`snapshotScopeSource`,
+ * ADR 0014): a mutation breaks the consecutive `snapshot -s @ref` chain, so a
+ * later repeated scoped snapshot cannot borrow stale lineage across a device
+ * side effect.
  */
 export function expireRefFrame(session: SessionState): void {
   session.refFrameState = 'expired';
+  session.snapshotScopeSource = undefined;
 }
 
 /**

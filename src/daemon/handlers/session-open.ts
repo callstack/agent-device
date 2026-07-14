@@ -255,6 +255,11 @@ async function completeOpenCommand(params: {
     isIosSimulator(device) &&
     req.flags?.clearAppState !== true;
   if (shouldRelaunch && openTarget && !collapseSimulatorRelaunch) {
+    // ADR 0014 side-effect seam: the relaunch close is the FIRST device dispatch
+    // against the existing session. Expire its frame before awaiting the close,
+    // so a close timeout/failure that may already have torn the app down still
+    // leaves the old frame expired rather than active.
+    if (existingSession) expireRefFrame(existingSession);
     const closeTarget = sessionAppBundleId ?? openTarget;
     const closeStartedAtMs = Date.now();
     await relaunchCloseApp({

@@ -101,13 +101,16 @@ function normalizeRefBody(ref: string): string {
  * authority (it leaves the frame untouched), so a useful prior frame survives.
  */
 export function markSessionPartialRefsIssued(session: SessionState, refs: Iterable<string>): void {
-  session.snapshotRefsStale = false;
   const scope = new Set<string>();
   for (const ref of refs) {
     const body = normalizeRefBody(ref);
     if (body.length > 0) scope.add(body);
   }
+  // ADR 0014: an empty partial result does not supersede existing authority — it
+  // leaves ALL session state untouched, including the coarse marker. Build the
+  // scope before touching anything so a no-ref result is a true no-op.
   if (scope.size === 0) return;
+  session.snapshotRefsStale = false;
   session.refFrameState = 'active';
   session.refFrameScope = scope;
   // ADR 0014: retain the tree this partial result published from as the frame's
