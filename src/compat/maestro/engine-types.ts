@@ -122,4 +122,5 @@ export type MaestroEngineResult = {
   skipped: number;
   generation: number;
   artifactPaths: string[];
+  warnings?: string[];
 };

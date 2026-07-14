@@ -17,6 +17,7 @@ import {
   hasEntry,
   invalidAt,
   readMapEntries,
+  readOptionalCommandOption,
   readOptionalBoolean,
   readOptionalEntry,
   readOptionalNonNegativeInteger,
@@ -62,6 +63,14 @@ export function parseMaestroSelector(
   if (isScalar(node)) return { text: readRequiredString(node, name, context) };
   const entries = readMapEntries(node, name, context);
   assertOnlyKeys(entries, name, selectorKeys, context);
+  return parseMaestroSelectorEntries(entries, name, context);
+}
+
+export function parseMaestroSelectorEntries(
+  entries: readonly MaestroMapEntry[],
+  name: string,
+  context: MaestroProgramParseContext,
+): MaestroSelector {
   return parseSelectorEntries(entries, name, context);
 }
 
@@ -128,7 +137,13 @@ export function parseMaestroDoubleTapOnCommand(
     };
   }
   const entries = readMapEntries(value, 'doubleTapOn', context);
-  assertOnlyKeys(entries, 'doubleTapOn', ['point', ...BASE_SELECTOR_KEYS, 'delay'], context);
+  assertOnlyKeys(
+    entries,
+    'doubleTapOn',
+    ['point', ...BASE_SELECTOR_KEYS, 'delay', 'optional'],
+    context,
+  );
+  const options = readOptionalCommandOption(entries, 'doubleTapOn', context);
   const delay = hasEntry(entries, 'delay')
     ? readOptionalNonNegativeInteger(entryValue(entries, 'delay'), 'doubleTapOn.delay', context)
     : undefined;
@@ -144,6 +159,7 @@ export function parseMaestroDoubleTapOnCommand(
       kind: 'doubleTapOn',
       source,
       target: parseAbsolutePoint(entryValue(entries, 'point'), 'doubleTapOn.point', context),
+      ...options,
       ...(delay === undefined ? {} : { delay }),
     };
   }
@@ -157,6 +173,7 @@ export function parseMaestroDoubleTapOnCommand(
         context,
       ),
     ),
+    ...options,
     ...(delay === undefined ? {} : { delay }),
   };
 }
@@ -175,7 +192,8 @@ export function parseMaestroLongPressOnCommand(
     };
   }
   const entries = readMapEntries(value, 'longPressOn', context);
-  assertOnlyKeys(entries, 'longPressOn', ['point', ...BASE_SELECTOR_KEYS], context);
+  assertOnlyKeys(entries, 'longPressOn', ['point', ...BASE_SELECTOR_KEYS, 'optional'], context);
+  const options = readOptionalCommandOption(entries, 'longPressOn', context);
   if (hasEntry(entries, 'point')) {
     if (entries.some((entry) => isSelectorKey(entry.key, BASE_SELECTOR_KEYS))) {
       invalidAt(
@@ -188,6 +206,7 @@ export function parseMaestroLongPressOnCommand(
       kind: 'longPressOn',
       source,
       target: parseAbsolutePoint(entryValue(entries, 'point'), 'longPressOn.point', context),
+      ...options,
     };
   }
   return {
@@ -200,6 +219,7 @@ export function parseMaestroLongPressOnCommand(
         context,
       ),
     ),
+    ...options,
   };
 }
 
@@ -213,22 +233,26 @@ export function parseMaestroSwipeCommand(
   assertOnlyKeys(
     entries,
     'swipe',
-    ['start', 'end', 'direction', 'duration', 'from', 'label'],
+    ['start', 'end', 'direction', 'duration', 'from', 'label', 'optional'],
     context,
   );
+  const options = readOptionalCommandOption(entries, 'swipe', context);
   const duration = hasEntry(entries, 'duration')
     ? readOptionalNumber(entryValue(entries, 'duration'), 'swipe.duration', context)
     : undefined;
   if (hasEntry(entries, 'start') || hasEntry(entries, 'end')) {
-    return parseCoordinateSwipe(entries, source, duration, commandNode, context);
+    return { ...parseCoordinateSwipe(entries, source, duration, commandNode, context), ...options };
   }
   const direction = hasEntry(entries, 'direction')
     ? parseMaestroDirection(entryValue(entries, 'direction'), 'swipe.direction', context)
     : undefined;
   if (hasEntry(entries, 'from') || hasEntry(entries, 'label')) {
-    return parseTargetSwipe(entries, source, direction, duration, commandNode, context);
+    return {
+      ...parseTargetSwipe(entries, source, direction, duration, commandNode, context),
+      ...options,
+    };
   }
-  return parseScreenSwipe(source, direction, duration, commandNode, context);
+  return { ...parseScreenSwipe(source, direction, duration, commandNode, context), ...options };
 }
 
 function parseCoordinateSwipe(
@@ -327,9 +351,7 @@ function tapOptions(
   const delay = readOptionalEntry(entries, 'delay', (entry) =>
     readOptionalNonNegativeInteger(entry, 'tapOn.delay', context),
   );
-  const optional = readOptionalEntry(entries, 'optional', (entry) =>
-    readOptionalBoolean(entry, 'tapOn.optional', context),
-  );
+  const optional = readOptionalCommandOption(entries, 'tapOn', context).optional;
   const label = includeLabel
     ? readOptionalEntry(entries, 'label', (entry) =>
         readOptionalString(entry, 'tapOn.label', context),

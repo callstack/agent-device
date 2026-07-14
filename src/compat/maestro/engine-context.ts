@@ -60,6 +60,9 @@ export function createMaestroExecutionContext(
     resolve(value: string): string {
       return resolveValue(value, currentValues(), recordExpandedValue);
     },
+    resolveDeferred(value: string): string {
+      return resolveValue(value, currentValues(), undefined, new Set(), false);
+    },
   };
 
   function currentValues(): Record<string, string> {
@@ -144,6 +147,7 @@ function assertNoUnsupportedInterpolation(value: string): void {
 }
 
 function isMaestroPlatformExpression(value: string): boolean {
-  const expression = /^\$\{\s*maestro\.platform\s*(?:==|!=)\s*(['"]).*\1(?:\s*(?:&&|\|\|).*)?\s*\}$/;
+  const expression =
+    /^\$\{\s*maestro\.platform\s*(?:==|!=)\s*(['"]).*\1(?:\s*(?:&&|\|\|).*)?\s*\}$/;
   return expression.test(value);
 }

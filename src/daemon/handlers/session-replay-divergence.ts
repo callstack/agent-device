@@ -466,7 +466,7 @@ function classifySuggestionBasis(selector: Selector): ReplayDivergenceSuggestion
  * then document order; the same-scrollRegion tier awaits decision 3's
  * recorded evidence (migration step 4).
  */
-export function collectReplayDivergenceSuggestions(params: {
+function collectReplayDivergenceSuggestions(params: {
   action: ReplayReportAction;
   session: SessionState;
   nodes: SnapshotNode[];

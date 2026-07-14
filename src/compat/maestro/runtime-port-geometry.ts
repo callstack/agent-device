@@ -53,7 +53,10 @@ export async function resolveMaestroSwipeOperation(
     authored.from,
     {
       purpose: 'swipe',
-      timeoutMs: MAESTRO_COMPATIBILITY_PRESETS.command.targetLookupTimeoutMs,
+      timeoutMs:
+        'optional' in request.command && request.command.optional === true
+          ? MAESTRO_COMPATIBILITY_PRESETS.command.optionalTargetLookupTimeoutMs
+          : MAESTRO_COMPATIBILITY_PRESETS.command.targetLookupTimeoutMs,
     },
     request,
     operations,
@@ -61,14 +64,7 @@ export async function resolveMaestroSwipeOperation(
   const viewport =
     target.viewport ??
     (await operations.resolveGestureViewport(operationContext(request, request.command)));
-  if (authored.direction === undefined) {
-    throw new AppError('INVALID_ARGS', 'Maestro target swipe requires direction.');
-  }
-  const { start, end } = targetSwipeEndpoints(
-    target,
-    authored.direction,
-    viewport,
-  );
+  const { start, end } = targetSwipeEndpoints(target, authored.direction, viewport);
   return {
     authored,
     gesture: swipeFromEndpoints(start, end, authored.duration),

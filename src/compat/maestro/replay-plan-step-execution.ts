@@ -31,6 +31,7 @@ export type MaestroReplayPlanExecutionState = {
   readonly context: MaestroExecutionContext;
   readonly timing: ReturnType<typeof resolveMaestroTimingPolicy>;
   readonly artifacts: Set<string>;
+  readonly warnings: string[];
   executed: number;
   skipped: number;
 };
@@ -59,10 +60,35 @@ export async function executeMaestroReplayPlanStep(
 async function executeStep(step: MaestroReplayPlanStep, state: MaestroReplayPlanExecutionState) {
   checkpointMaestroCancellation(state.options.signal);
   if (step.kind === 'command') {
-    await executeCommand(step.command, step.appId, state);
+    await executeOptionalCommand(step.command, step.appId, state);
     return;
   }
   await executeOpaqueStep(step, state);
+}
+
+async function executeOptionalCommand(
+  command: MaestroRuntimeCommand,
+  appId: string | undefined,
+  state: MaestroReplayPlanExecutionState,
+): Promise<void> {
+  try {
+    await executeCommand(command, appId, state);
+  } catch (error) {
+    checkpointMaestroCancellation(state.options.signal);
+    if (!isOptionalCommand(command) || !isMaestroTestFailure(error)) throw error;
+    state.warnings.push(formatOptionalWarning(command, error));
+    state.skipped += 1;
+  }
+}
+
+function formatOptionalWarning(command: MaestroRuntimeCommand, error: unknown): string {
+  const source = `${command.source.path ? `${command.source.path}:` : ''}line ${command.source.line}`;
+  const message = error instanceof AppError ? error.message : String(error);
+  return `Optional Maestro ${command.kind} skipped at ${source}: ${message}`;
+}
+
+function isOptionalCommand(command: MaestroRuntimeCommand): boolean {
+  return 'optional' in command && command.optional === true;
 }
 
 async function executeCommand(

@@ -6,6 +6,7 @@ export type ReplayCommandResult = {
   healed: number;
   session: string;
   artifactPaths: string[];
+  warnings?: string[];
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
   message: string;
 };

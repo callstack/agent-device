@@ -15,7 +15,7 @@ export function formatMaestroCommandProgress(command: MaestroCommand): MaestroCo
 function progressValue(command: MaestroCommand): Pick<MaestroCommandProgress, 'value'> {
   if (isGestureTargetCommand(command)) return valueOf(formatGestureTarget(command.target));
   if (isSelectorProgressCommand(command)) return selectorProgressValue(command);
-  if (command.kind === 'inputText' || command.kind === 'pasteText') return valueOf('<text>');
+  if (command.kind === 'inputText') return valueOf('<text>');
   return commandDetailProgressValue(command);
 }
 

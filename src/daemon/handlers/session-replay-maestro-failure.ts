@@ -296,7 +296,7 @@ function reportCommandForCapture(command: string): string {
 }
 
 function safeProgressPositionals(command: string, value: string | undefined): string[] {
-  if (!value || command === 'inputText' || command === 'pasteText') return [];
+  if (!value || command === 'inputText') return [];
   return [value];
 }
 
@@ -308,7 +308,7 @@ function collectExpandedScrubVars(values: Readonly<Record<string, string>>): Rep
 }
 
 function collectMaestroTextScrubVars(command: MaestroCommand): ReplayVarScrubEntry[] {
-  if ((command.kind !== 'inputText' && command.kind !== 'pasteText') || command.text.length === 0) {
+  if (command.kind !== 'inputText' || command.text.length === 0) {
     return [];
   }
   return [{ name: `${command.kind}.text`, value: command.text }];

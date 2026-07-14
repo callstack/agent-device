@@ -125,7 +125,6 @@ export type MaestroRuntimeOperations = {
     readonly target: MaestroInputTarget;
     readonly repeat?: number;
     readonly delay?: number;
-    readonly optional?: boolean;
     readonly label?: string;
     readonly index?: number;
     readonly childOf?: MaestroSelector;
@@ -138,7 +137,6 @@ export type MaestroRuntimeOperations = {
   readonly gesture: MaestroRuntimeOperation<MaestroSinglePointerGestureInput>;
   readonly inputText: MaestroRuntimeOperation<{ readonly text: string; readonly label?: string }>;
   readonly eraseText: MaestroRuntimeOperation<{ readonly charactersToErase?: number }>;
-  readonly pasteText: MaestroRuntimeOperation<{ readonly text: string }>;
   readonly scroll: MaestroRuntimeOperation<{ readonly direction: MaestroDirection }>;
   readonly scrollUntilVisible: MaestroRuntimeOperation<{
     readonly selector: MaestroSelector;

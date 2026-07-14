@@ -23,6 +23,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { AppError } from '../../../kernel/errors.ts';
+import { PNG } from '../../../utils/png.ts';
 import { runCmdBackground, type ExecBackgroundResult } from '../../../utils/exec.ts';
 import type { DaemonInvokeFn, DaemonRequest, DaemonResponse, SessionAction } from '../../types.ts';
 import type { CommandFlags } from '../../../core/dispatch.ts';
@@ -61,50 +62,74 @@ async function runReplayFixture(params: {
   scriptPath: string;
 }> {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), `agent-device-replay-${params.label}-`));
-  for (const [name, contents] of Object.entries(params.files ?? {})) {
-    fs.writeFileSync(path.join(root, name), contents);
-  }
+  writeFixtureFiles(root, params.files);
   const isMaestro = params.flags?.replayBackend === 'maestro';
   const scriptPath = path.join(root, isMaestro ? 'flow.yaml' : 'flow.ad');
   fs.writeFileSync(scriptPath, params.script);
   const calls: CapturedInvocation[] = [];
-  const invoke = async (req: DaemonRequest): Promise<DaemonResponse> => {
-    calls.push({
-      command: req.command,
-      positionals: req.positionals,
-      input: req.input,
-      flags: req.flags,
-    });
-    if (params.invoke) return await params.invoke(req);
-    if (isMaestro && req.command === 'snapshot') {
-      return { ok: true, data: { createdAt: 0, nodes: [] } };
-    }
-    return { ok: true, data: {} };
-  };
+  const invoke = createFixtureInvoke({ calls, delegate: params.invoke, isMaestro });
   const sessionStore = new SessionStore(path.join(root, 'state'));
-  if (params.sessionPlatform === 'android') {
-    sessionStore.set('s', makeAndroidSession('s'));
-  } else if (params.sessionPlatform === 'ios') {
-    sessionStore.set('s', makeIosSession('s'));
-  }
+  seedFixtureSession(sessionStore, params.sessionPlatform);
   const response = await runReplayScriptFile({
-    req: {
-      token: 't',
-      session: 's',
-      command: 'replay',
-      positionals: [scriptPath],
-      flags: {
-        ...(params.flags ?? {}),
-        ...(isMaestro && params.flags?.platform === undefined ? { platform: 'ios' } : {}),
-      },
-      meta: { cwd: root },
-    },
+    req: fixtureReplayRequest({ root, scriptPath, flags: params.flags, isMaestro }),
     sessionName: 's',
     logPath: path.join(root, 'log'),
     sessionStore,
     invoke,
   });
   return { response, calls, root, scriptPath };
+}
+
+function writeFixtureFiles(root: string, files: Record<string, string> | undefined): void {
+  for (const [name, contents] of Object.entries(files ?? {})) {
+    fs.writeFileSync(path.join(root, name), contents);
+  }
+}
+
+function createFixtureInvoke(params: {
+  calls: CapturedInvocation[];
+  delegate: DaemonInvokeFn | undefined;
+  isMaestro: boolean;
+}): DaemonInvokeFn {
+  return async (req) => {
+    params.calls.push({
+      command: req.command,
+      positionals: req.positionals,
+      input: req.input,
+      flags: req.flags,
+    });
+    if (params.delegate) return await params.delegate(req);
+    return params.isMaestro && req.command === 'snapshot'
+      ? { ok: true, data: { createdAt: 0, nodes: [] } }
+      : { ok: true, data: {} };
+  };
+}
+
+function seedFixtureSession(
+  sessionStore: SessionStore,
+  platform: 'android' | 'ios' | undefined,
+): void {
+  if (platform === 'android') sessionStore.set('s', makeAndroidSession('s'));
+  if (platform === 'ios') sessionStore.set('s', makeIosSession('s'));
+}
+
+function fixtureReplayRequest(params: {
+  root: string;
+  scriptPath: string;
+  flags: CommandFlags | undefined;
+  isMaestro: boolean;
+}): DaemonRequest {
+  return {
+    token: 't',
+    session: 's',
+    command: 'replay',
+    positionals: [params.scriptPath],
+    flags: {
+      ...(params.flags ?? {}),
+      ...(params.isMaestro && params.flags?.platform === undefined ? { platform: 'ios' } : {}),
+    },
+    meta: { cwd: params.root },
+  };
 }
 
 async function readFirstStdoutLine(process: ExecBackgroundResult): Promise<string> {
@@ -1671,14 +1696,15 @@ test('runReplayScriptFile resolves Maestro screen swipes from the direct viewpor
     calls.map((call) => [call.command, call.input]),
     [
       [
-        'gesture',
+        'swipe',
         {
-          kind: 'pan',
-          origin: { x: 360, y: 400 },
-          delta: { x: -320, y: 0 },
+          from: { x: 360, y: 400 },
+          to: { x: 40, y: 400 },
           durationMs: 300,
         },
       ],
+      ['snapshot', undefined],
+      ['snapshot', undefined],
       ['swipe', { from: { x: 360, y: 400 }, to: { x: 40, y: 400 }, durationMs: 300 }],
     ],
   );
@@ -1732,14 +1758,15 @@ test('runReplayScriptFile delegates Android directional swipes and preserves per
     calls.map((call) => [call.command, call.input]),
     [
       [
-        'gesture',
+        'swipe',
         {
-          kind: 'pan',
-          origin: { x: 360, y: 400 },
-          delta: { x: -320, y: 0 },
+          from: { x: 360, y: 400 },
+          to: { x: 40, y: 400 },
           durationMs: 300,
         },
       ],
+      ['snapshot', undefined],
+      ['snapshot', undefined],
       ['swipe', { from: { x: 360, y: 400 }, to: { x: 40, y: 400 }, durationMs: 300 }],
     ],
   );
@@ -1764,29 +1791,17 @@ test('runReplayScriptFile maps Maestro enter to keyboard enter', async () => {
   );
 });
 
-test('runReplayScriptFile waits for Maestro animation snapshots to stabilize', async () => {
+test('runReplayScriptFile waits for Maestro animation screenshots to stabilize', async () => {
   const calls: CapturedInvocation[] = [];
-  let snapshots = 0;
+  const screenshot = PNG.sync.write(new PNG({ width: 1, height: 1 }));
   const { response } = await runReplayFixture({
     label: 'maestro-wait-animation-stable',
-    script: ['appId: demo.app', '---', '- waitForAnimationToEnd', ''].join('\n'),
+    script: ['appId: demo.app', '---', '- waitForAnimationToEnd:', '    timeout: 0', ''].join('\n'),
     flags: { replayBackend: 'maestro' },
     invoke: async (req) => {
       calls.push({ command: req.command, positionals: req.positionals, flags: req.flags });
-      snapshots += 1;
-      const y = snapshots === 1 ? 100 : 120;
-      return {
-        ok: true,
-        data: {
-          nodes: [
-            {
-              index: 1,
-              label: 'Animating',
-              rect: { x: 10, y, width: 100, height: 40 },
-            },
-          ],
-        },
-      };
+      if (req.command === 'screenshot') fs.writeFileSync(req.positionals[0]!, screenshot);
+      return { ok: true, data: {} };
     },
   });
 
@@ -1794,12 +1809,12 @@ test('runReplayScriptFile waits for Maestro animation snapshots to stabilize', a
   assert.deepEqual(
     calls.map((call) => [call.command, call.positionals]),
     [
-      ['snapshot', []],
-      ['snapshot', []],
-      ['snapshot', []],
+      ['screenshot', [calls[0]?.positionals?.[0]]],
+      ['screenshot', [calls[1]?.positionals?.[0]]],
     ],
   );
-  assert.equal(calls[0]?.flags?.noRecord, true);
+  assert.equal(calls[0]?.flags?.screenshotNoStabilize, true);
+  assert.equal(calls[1]?.flags?.screenshotNoStabilize, true);
 });
 
 test('runReplayScriptFile propagates unsupported keyboard enter dispatch', async () => {

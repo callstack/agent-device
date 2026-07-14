@@ -196,33 +196,6 @@ test.each([
   },
 );
 
-test('rejects target swipes without a direction before dispatch', async () => {
-  const resolveTarget = vi.fn(async () => ({
-    generation: 0,
-    matched: true,
-    visible: true,
-    candidateCount: 1,
-    rect: { x: 100, y: 200, width: 100, height: 80 },
-    viewport: { x: 10, y: 20, width: 400, height: 800 },
-  }));
-  const gesture = vi.fn(async () => undefined);
-  const operations = makeOperations({ resolveTarget, gesture });
-
-  await expect(
-    createMaestroRuntimePort(operations).execute({
-      command: {
-        kind: 'swipe',
-        source: { line: 2 },
-        gesture: { kind: 'target', from: { id: 'pager' } },
-      },
-      generation: 0,
-      env: {},
-      invalidateObservation() {},
-    }),
-  ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
-  expect(gesture).not.toHaveBeenCalled();
-});
-
 test('rejects stale typed selector evidence before input execution', async () => {
   const tapOn = vi.fn(async () => undefined);
   const operations = makeOperations({

@@ -7,7 +7,7 @@ import {
 } from '../daemon-runtime-port-observation.ts';
 import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
 
-test('does not pair an observation with a later same-generation snapshot', async () => {
+test('does not pair an observation with later same-generation snapshots', async () => {
   const requests: DaemonRequest[] = [];
   let snapshots = 0;
   const port = createDaemonMaestroRuntimePort({
@@ -56,7 +56,7 @@ test('does not pair an observation with a later same-generation snapshot', async
     env: {},
   });
   await port.execute({
-    command: { kind: 'waitForAnimationToEnd', source: { line: 2 }, timeout: 500 },
+    command: { kind: 'inputText', source: { line: 2 }, text: 'hello' },
     generation: 0,
     cachedObservation: observation,
     env: {},
@@ -76,6 +76,7 @@ test('does not pair an observation with a later same-generation snapshot', async
 
   expect(requests.map((request) => request.command)).toEqual([
     'snapshot',
+    'type',
     'snapshot',
     'snapshot',
     'snapshot',
@@ -375,7 +376,6 @@ test('scrolls until the target is fully visible in the screen viewport', async (
 test.each([
   [{ kind: 'inputText', source: { line: 2 }, text: 'hello' }, 'hello'],
   [{ kind: 'eraseText', source: { line: 2 }, charactersToErase: 3 }, '\b\b\b'],
-  [{ kind: 'pasteText', source: { line: 2 }, text: 'pasted' }, 'pasted'],
 ] as const)('waits for a stable snapshot after a Maestro $kind mutation', async (command, text) => {
   const requests: DaemonRequest[] = [];
   let snapshots = 0;

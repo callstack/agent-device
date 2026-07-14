@@ -23,10 +23,9 @@ test('formats progress directly from typed Maestro commands', () => {
 });
 
 test('redacts typed values from progress output', () => {
-  const program = parseMaestroProgram('---\n- inputText: highly-sensitive\n- pasteText: secret\n');
+  const program = parseMaestroProgram('---\n- inputText: highly-sensitive\n');
 
   expect(program.commands.map(formatMaestroCommandProgress)).toEqual([
     { command: 'inputText', value: '<text>' },
-    { command: 'pasteText', value: '<text>' },
   ]);
 });

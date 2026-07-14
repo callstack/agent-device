@@ -10,5 +10,9 @@ export function maestroTestFailure(message: string, details: AppErrorDetails = {
 }
 
 export function isMaestroTestFailure(error: unknown): boolean {
-  return error instanceof AppError && error.details?.reason === MAESTRO_TEST_FAILURE_REASON;
+  return (
+    error instanceof AppError &&
+    error.code === 'COMMAND_FAILED' &&
+    error.details?.reason === MAESTRO_TEST_FAILURE_REASON
+  );
 }

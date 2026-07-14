@@ -23,6 +23,7 @@ import {
   parseMaestroDoubleTapOnCommand,
   parseMaestroLongPressOnCommand,
   parseMaestroSelector,
+  parseMaestroSelectorEntries,
   parseMaestroSwipeCommand,
   parseMaestroTapOnCommand,
 } from './program-ir-gesture-parser.ts';
@@ -40,6 +41,7 @@ import {
   isNullNode,
   readMapEntries,
   readOptionalBoolean,
+  readOptionalCommandOption,
   readOptionalEntry,
   readOptionalNonNegativeInteger,
   readOptionalNumber,
@@ -264,10 +266,22 @@ function parseAssertion(
   commandNode: Node,
   context: MaestroProgramParseContext,
 ): MaestroAssertVisibleCommand | MaestroAssertNotVisibleCommand {
+  const source = sourceAt(commandNode, context);
+  if (isScalar(value)) {
+    return { kind, source, target: parseMaestroSelector(value, kind, context) };
+  }
+  const entries = readMapEntries(value, kind, context);
+  assertOnlyKeys(entries, kind, ['id', 'text', 'enabled', 'selected', 'optional'], context);
+  const options = readOptionalCommandOption(entries, kind, context);
   return {
     kind,
-    source: sourceAt(commandNode, context),
-    target: parseMaestroSelector(value, kind, context),
+    source,
+    target: parseMaestroSelectorEntries(
+      entries.filter((entry) => entry.key !== 'optional'),
+      kind,
+      context,
+    ),
+    ...options,
   };
 }
 
@@ -277,7 +291,13 @@ function parseExtendedWaitUntil(
   context: MaestroProgramParseContext,
 ): MaestroExtendedWaitUntilCommand {
   const entries = readMapEntries(value, 'extendedWaitUntil', context);
-  assertOnlyKeys(entries, 'extendedWaitUntil', ['visible', 'notVisible', 'timeout'], context);
+  assertOnlyKeys(
+    entries,
+    'extendedWaitUntil',
+    ['visible', 'notVisible', 'timeout', 'optional'],
+    context,
+  );
+  const options = readOptionalCommandOption(entries, 'extendedWaitUntil', context);
   const visible = hasEntry(entries, 'visible')
     ? parseMaestroSelector(entryValue(entries, 'visible'), 'extendedWaitUntil.visible', context)
     : undefined;
@@ -299,6 +319,7 @@ function parseExtendedWaitUntil(
     ...(visible === undefined ? {} : { visible }),
     ...(notVisible === undefined ? {} : { notVisible }),
     ...(timeout === undefined ? {} : { timeout }),
+    ...options,
   };
 }
 
@@ -337,7 +358,13 @@ function parseScrollUntilVisible(
       element: parseMaestroSelector(value, 'scrollUntilVisible.element', context),
     };
   const entries = readMapEntries(value, 'scrollUntilVisible', context);
-  assertOnlyKeys(entries, 'scrollUntilVisible', ['element', 'direction', 'timeout'], context);
+  assertOnlyKeys(
+    entries,
+    'scrollUntilVisible',
+    ['element', 'direction', 'timeout', 'optional'],
+    context,
+  );
+  const options = readOptionalCommandOption(entries, 'scrollUntilVisible', context);
   if (!hasEntry(entries, 'element'))
     invalidAt('Maestro scrollUntilVisible requires element.', commandNode, context);
   const element = parseMaestroSelector(
@@ -361,6 +388,7 @@ function parseScrollUntilVisible(
     element,
     ...(direction === undefined ? {} : { direction }),
     ...(timeout === undefined ? {} : { timeout }),
+    ...options,
   };
 }
 

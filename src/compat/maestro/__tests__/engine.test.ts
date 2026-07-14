@@ -86,6 +86,63 @@ describe('executeMaestroProgram', () => {
     expect(result.generation).toBe(1);
   });
 
+  test('continues after optional assertion and target misses', async () => {
+    const execute = vi.fn(async (request: MaestroRuntimeRequest) => {
+      request.invalidateObservation();
+      return {};
+    });
+    const port = makePort({
+      observe: vi.fn(async ({ generation }) => ({ generation, matched: false })),
+      execute,
+    });
+    const program = parseMaestroProgram(
+      [
+        '---',
+        '- assertVisible:',
+        '    text: Missing assertion',
+        '    optional: true',
+        '- doubleTapOn:',
+        '    text: Missing target',
+        '    optional: true',
+        '- inputText: continued',
+      ].join('\n'),
+    );
+    execute.mockImplementationOnce(async () => {
+      throw maestroTestFailure('Maestro target did not resolve to a visible element.');
+    });
+
+    const result = await executeMaestroProgram(program, port);
+
+    expect(result).toMatchObject({
+      executed: 1,
+      skipped: 2,
+    });
+    expect(result.warnings).toEqual([
+      expect.stringMatching(/Optional Maestro assertVisible skipped at line 2/),
+      expect.stringMatching(/Optional Maestro doubleTapOn skipped at line 5/),
+    ]);
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: expect.objectContaining({ kind: 'inputText', text: 'continued' }),
+      }),
+    );
+  });
+
+  test('propagates AMBIGUOUS_MATCH from an optional target command', async () => {
+    const ambiguous = new AppError('AMBIGUOUS_MATCH', 'multiple target matches');
+    const execute = vi.fn(async () => {
+      throw ambiguous;
+    });
+    const program = parseMaestroProgram(
+      ['---', '- doubleTapOn:', '    text: Submit', '    optional: true'].join('\n'),
+    );
+
+    await expect(executeMaestroProgram(program, makePort({ execute }))).rejects.toMatchObject({
+      code: 'AMBIGUOUS_MATCH',
+    });
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
   test('invalidates cached observations when a failed runtime operation says it may have changed', async () => {
     const attempts: MaestroRuntimeRequest[] = [];
     const observation: MaestroObservation = { generation: 0, matched: true };

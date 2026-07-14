@@ -4,6 +4,7 @@ import {
   type TouchReferenceFrame,
 } from '../../daemon/touch-reference-frame.ts';
 import { AppError } from '../../kernel/errors.ts';
+import { isPositiveFiniteRect, rectContains } from '../../kernel/rect.ts';
 import type { Rect, SnapshotState } from '../../kernel/snapshot.ts';
 import type { MaestroObservation, MaestroObservationCondition } from './engine-types.ts';
 import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
@@ -213,7 +214,7 @@ export async function waitForTypedSnapshotStability(params: {
   }
 }
 
-export function snapshotViewportRect(frame: TouchReferenceFrame | undefined): Rect | undefined {
+function snapshotViewportRect(frame: TouchReferenceFrame | undefined): Rect | undefined {
   return frame
     ? { x: 0, y: 0, width: frame.referenceWidth, height: frame.referenceHeight }
     : undefined;
@@ -258,8 +259,8 @@ function targetMatchFromResolution(
 }
 
 function visibleScreenPercentage(rect: Rect, viewport: Rect): number {
-  if (!hasPositiveArea(rect) || !hasPositiveArea(viewport)) return 0;
-  if (containsRect(rect, viewport) || containsRect(viewport, rect)) return 100;
+  if (!isPositiveFiniteRect(rect) || !isPositiveFiniteRect(viewport)) return 0;
+  if (rectContains(rect, viewport) || rectContains(viewport, rect)) return 100;
 
   const width = Math.max(
     0,
@@ -270,26 +271,6 @@ function visibleScreenPercentage(rect: Rect, viewport: Rect): number {
     Math.min(rect.y + rect.height, viewport.y + viewport.height) - Math.max(rect.y, viewport.y),
   );
   return (width * height * 100) / (rect.width * rect.height);
-}
-
-function containsRect(container: Rect, nested: Rect): boolean {
-  return (
-    nested.x >= container.x &&
-    nested.y >= container.y &&
-    nested.x + nested.width <= container.x + container.width &&
-    nested.y + nested.height <= container.y + container.height
-  );
-}
-
-function hasPositiveArea(rect: Rect): boolean {
-  return (
-    Number.isFinite(rect.x) &&
-    Number.isFinite(rect.y) &&
-    Number.isFinite(rect.width) &&
-    Number.isFinite(rect.height) &&
-    rect.width > 0 &&
-    rect.height > 0
-  );
 }
 
 function resolveAtomicIosDispatchSelector(params: {

@@ -30,7 +30,7 @@ type MaestroCommandOf<K extends MaestroRuntimeCommand['kind']> = Extract<
 
 type MaestroLifecycleCommand = MaestroCommandOf<'launchApp' | 'stopApp' | 'openLink'>;
 type MaestroTargetCommand = MaestroCommandOf<'tapOn' | 'doubleTapOn' | 'longPressOn'>;
-type MaestroTextCommand = MaestroCommandOf<'inputText' | 'eraseText' | 'pasteText'>;
+type MaestroTextCommand = MaestroCommandOf<'inputText' | 'eraseText'>;
 type MaestroNavigationCommand = MaestroCommandOf<
   'scroll' | 'scrollUntilVisible' | 'hideKeyboard' | 'pressKey' | 'back' | 'waitForAnimationToEnd'
 >;
@@ -59,7 +59,6 @@ const MAESTRO_RUNTIME_COMMAND_HANDLERS = {
   swipe: executeSwipeCommand,
   inputText: executeTextCommand,
   eraseText: executeTextCommand,
-  pasteText: executeTextCommand,
   scroll: executeNavigationCommand,
   scrollUntilVisible: executeNavigationCommand,
   hideKeyboard: executeNavigationCommand,
@@ -147,7 +146,7 @@ async function executeTargetCommand(
         command.target,
         {
           purpose: 'doubleTap',
-          timeoutMs: MAESTRO_COMPATIBILITY_PRESETS.command.targetLookupTimeoutMs,
+          timeoutMs: targetLookupTimeout(command),
         },
         request,
         operations,
@@ -168,7 +167,7 @@ async function executeTargetCommand(
         command.target,
         {
           purpose: 'longPress',
-          timeoutMs: MAESTRO_COMPATIBILITY_PRESETS.command.targetLookupTimeoutMs,
+          timeoutMs: targetLookupTimeout(command),
         },
         request,
         operations,
@@ -191,7 +190,6 @@ async function executeTapOnCommand(
   context: MaestroRuntimeOperationContext,
 ): Promise<MaestroRuntimeResult> {
   const target = await resolveTapOnTarget(command, request, operations);
-  if (!target) return {};
   return await invokeOperation(
     operations.tapOn,
     tapOnInput(command, target),
@@ -205,20 +203,21 @@ async function resolveTapOnTarget(
   command: MaestroCommandOf<'tapOn'>,
   request: MaestroRuntimeRequest,
   operations: MaestroRuntimeOperations,
-): Promise<MaestroInputTarget | undefined> {
+): Promise<MaestroInputTarget> {
   const query = {
     purpose: 'tap' as const,
-    timeoutMs:
-      command.optional === true
-        ? MAESTRO_COMPATIBILITY_PRESETS.command.optionalTargetLookupTimeoutMs
-        : MAESTRO_COMPATIBILITY_PRESETS.command.targetLookupTimeoutMs,
+    timeoutMs: targetLookupTimeout(command),
     index: command.index,
     childOf: command.childOf,
     allowAtomicSelectorDispatch: command.repeat === undefined && command.delay === undefined,
   };
+  return await resolveInputTarget(command.target, query, request, operations);
+}
+
+function targetLookupTimeout(command: { readonly optional?: boolean }): number {
   return command.optional === true
-    ? await resolveInputTarget(command.target, query, request, operations, true)
-    : await resolveInputTarget(command.target, query, request, operations);
+    ? MAESTRO_COMPATIBILITY_PRESETS.command.optionalTargetLookupTimeoutMs
+    : MAESTRO_COMPATIBILITY_PRESETS.command.targetLookupTimeoutMs;
 }
 
 function tapOnInput(command: MaestroCommandOf<'tapOn'>, target: MaestroInputTarget) {
@@ -230,7 +229,6 @@ function tapOnInput(command: MaestroCommandOf<'tapOn'>, target: MaestroInputTarg
         ? {}
         : { delay: command.delay }
       : { delay: command.delay ?? MAESTRO_COMPATIBILITY_PRESETS.command.repeatDelayMs }),
-    ...(command.optional === undefined ? {} : { optional: command.optional }),
     ...(command.label === undefined ? {} : { label: command.label }),
     ...(command.index === undefined ? {} : { index: command.index }),
     ...(command.childOf === undefined ? {} : { childOf: command.childOf }),
@@ -278,13 +276,6 @@ async function executeTextCommand(
             ? {}
             : { charactersToErase: command.charactersToErase }),
         },
-        context,
-        'invalidate',
-      );
-    case 'pasteText':
-      return await invokeOperation(
-        operations.pasteText,
-        { text: command.text },
         context,
         'invalidate',
       );
@@ -444,32 +435,14 @@ function optionalArtifactPaths(
   return artifactPaths.length > 0 ? { artifactPaths } : {};
 }
 
-function resolveInputTarget(
-  authored: MaestroGestureTarget,
-  query: Pick<MaestroTargetQuery, 'purpose' | 'timeoutMs' | 'index' | 'childOf'>,
-  request: MaestroRuntimeRequest,
-  operations: MaestroRuntimeOperations,
-  optional: true,
-): Promise<MaestroInputTarget | undefined>;
-function resolveInputTarget(
-  authored: MaestroGestureTarget,
-  query: Pick<MaestroTargetQuery, 'purpose' | 'timeoutMs' | 'index' | 'childOf'>,
-  request: MaestroRuntimeRequest,
-  operations: MaestroRuntimeOperations,
-  optional?: false,
-): Promise<MaestroInputTarget>;
 async function resolveInputTarget(
   authored: MaestroGestureTarget,
   query: Pick<MaestroTargetQuery, 'purpose' | 'timeoutMs' | 'index' | 'childOf'>,
   request: MaestroRuntimeRequest,
   operations: MaestroRuntimeOperations,
-  optional = false,
-): Promise<MaestroInputTarget | undefined> {
+): Promise<MaestroInputTarget> {
   if (authored.space === 'target') {
-    const resolution = optional
-      ? await resolveMaestroTarget(authored.selector, query, request, operations, true)
-      : await resolveMaestroTarget(authored.selector, query, request, operations);
-    if (!resolution) return undefined;
+    const resolution = await resolveMaestroTarget(authored.selector, query, request, operations);
     return {
       authored,
       point: pointInsideRect(resolution.rect),

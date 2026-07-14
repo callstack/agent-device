@@ -16,6 +16,7 @@ export const MAESTRO_COMPATIBILITY_PRESETS = {
     optionalTargetLookupTimeoutMs: 7_000,
     scrollUntilVisibleTimeoutMs: 20_000,
     waitForAnimationToEndTimeoutMs: 15_000,
+    waitForAnimationToEndDifferencePercent: 0.005,
     longPressDurationMs: 3_000,
     swipeDurationMs: 400,
     repeatDelayMs: 100,
@@ -30,7 +31,6 @@ export const MAESTRO_COMPATIBILITY_PRESETS = {
   },
   // AndroidDriver.swipe(elementPoint, ...) and IOSDriver.swipe(elementPoint, ...).
   targetSwipe: {
-    defaultDirection: 'up' as const,
     nearEdgeFraction: 0.1,
     farEdgeFraction: 0.9,
   },

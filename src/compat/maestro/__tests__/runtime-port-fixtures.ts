@@ -41,7 +41,6 @@ export function makeOperations(
     gesture: noOp,
     inputText: noOp,
     eraseText: noOp,
-    pasteText: noOp,
     scroll: noOp,
     scrollUntilVisible: noOp,
     pressKey: noOp,

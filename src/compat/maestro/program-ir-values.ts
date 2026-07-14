@@ -1,6 +1,6 @@
 import { isMap, isNode, isScalar, isSeq, LineCounter, type Node } from 'yaml';
 import { AppError } from '../../kernel/errors.ts';
-import type { MaestroScalar, MaestroSourceLocation } from './program-ir.ts';
+import type { MaestroOptionalCommand, MaestroScalar, MaestroSourceLocation } from './program-ir.ts';
 
 export type MaestroProgramParseContext = {
   lineCounter: LineCounter;
@@ -130,6 +130,17 @@ export function readOptionalEntry<T>(
   read: (value: Node | null | undefined) => T,
 ): T | undefined {
   return hasEntry(entries, key) ? read(entryValue(entries, key)) : undefined;
+}
+
+export function readOptionalCommandOption(
+  entries: readonly MaestroMapEntry[],
+  name: string,
+  context: MaestroProgramParseContext,
+): MaestroOptionalCommand {
+  const optional = readOptionalEntry(entries, 'optional', (entry) =>
+    readOptionalBoolean(entry, `${name}.optional`, context),
+  );
+  return optional === undefined ? {} : { optional };
 }
 
 export function isNullNode(node: Node | null | undefined): boolean {

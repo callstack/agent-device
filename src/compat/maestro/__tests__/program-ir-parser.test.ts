@@ -165,6 +165,42 @@ describe('parseMaestroProgram', () => {
     );
   });
 
+  test('parses optional on assertion and target command maps', () => {
+    const program = parseMaestroProgram(
+      [
+        '---',
+        '- assertVisible:',
+        '    text: Maybe present',
+        '    optional: true',
+        '- doubleTapOn:',
+        '    id: maybe-present',
+        '    optional: true',
+        '- scrollUntilVisible:',
+        '    element: Maybe visible',
+        '    optional: true',
+      ].join('\n'),
+    );
+
+    assert.deepEqual(program.commands[0], {
+      kind: 'assertVisible',
+      source: { line: 2 },
+      target: { text: 'Maybe present' },
+      optional: true,
+    });
+    assert.deepEqual(program.commands[1], {
+      kind: 'doubleTapOn',
+      source: { line: 5 },
+      target: { space: 'target', selector: { id: 'maybe-present' } },
+      optional: true,
+    });
+    assert.deepEqual(program.commands[2], {
+      kind: 'scrollUntilVisible',
+      source: { line: 8 },
+      element: { text: 'Maybe visible' },
+      optional: true,
+    });
+  });
+
   test('preserves an include boundary and the authored include path', () => {
     const program = parseMaestroProgram(
       `appId: example.app
@@ -302,9 +338,12 @@ describe('parseMaestroProgram', () => {
     );
     assert.throws(
       () =>
-        parseMaestroProgram(`---
+        parseMaestroProgram(
+          `---
 - pasteText: pasted
-`, { sourcePath: '/flows/paste.yaml' }),
+`,
+          { sourcePath: '/flows/paste.yaml' },
+        ),
       /command "pasteText" is not supported.*\/flows\/paste\.yaml:line 2/i,
     );
   });

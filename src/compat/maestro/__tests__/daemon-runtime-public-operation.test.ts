@@ -113,6 +113,14 @@ describe('Maestro public operation projection', () => {
       expected: { command: 'screenshot', positionals: ['/tmp/screen.png'] },
     },
     {
+      operation: { kind: 'screenshot', path: '/tmp/animation.png', stabilize: false },
+      expected: {
+        command: 'screenshot',
+        positionals: ['/tmp/animation.png'],
+        flags: { screenshotNoStabilize: true },
+      },
+    },
+    {
       operation: { kind: 'snapshot' },
       expected: {
         command: 'snapshot',

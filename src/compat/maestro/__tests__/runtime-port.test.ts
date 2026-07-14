@@ -13,7 +13,6 @@ describe('MaestroRuntimePort', () => {
       openLink: vi.fn(async (input, context) => record(calls, 'openLink', input, context)),
       inputText: vi.fn(async (input, context) => record(calls, 'inputText', input, context)),
       eraseText: vi.fn(async (input, context) => record(calls, 'eraseText', input, context)),
-      pasteText: vi.fn(async (input, context) => record(calls, 'pasteText', input, context)),
       scroll: vi.fn(async (input, context) => record(calls, 'scroll', input, context)),
       scrollUntilVisible: vi.fn(async (input, context) =>
         record(calls, 'scrollUntilVisible', input, context),
@@ -47,7 +46,6 @@ describe('MaestroRuntimePort', () => {
         '    label: email',
         '- eraseText:',
         '    charactersToErase: 3',
-        '- pasteText: pasted',
         '- scroll',
         '- scrollUntilVisible:',
         '    element: Checkout',
@@ -68,9 +66,9 @@ describe('MaestroRuntimePort', () => {
     const result = await executeMaestroProgram(program, createMaestroRuntimePort(operations));
 
     expect(result).toEqual({
-      executed: 13,
+      executed: 12,
       skipped: 0,
-      generation: 11,
+      generation: 10,
       artifactPaths: ['artifact://checkout.png'],
     });
     expect(calls.map(({ kind }) => kind)).toEqual([
@@ -78,7 +76,6 @@ describe('MaestroRuntimePort', () => {
       'openLink',
       'inputText',
       'eraseText',
-      'pasteText',
       'scroll',
       'scrollUntilVisible',
       'hideKeyboard',
@@ -98,7 +95,7 @@ describe('MaestroRuntimePort', () => {
       generation: 0,
       appId: 'com.example.checkout',
     });
-    expect(calls[6]).toMatchObject({
+    expect(calls[5]).toMatchObject({
       kind: 'scrollUntilVisible',
       input: {
         selector: { text: 'Checkout' },
@@ -107,17 +104,17 @@ describe('MaestroRuntimePort', () => {
         durationMs: 601,
       },
     });
-    expect(calls[7]).toMatchObject({ kind: 'hideKeyboard', input: {}, generation: 7 });
-    expect(calls[8]).toMatchObject({ kind: 'pressKey', input: { key: 'enter' }, generation: 8 });
-    expect(calls[10]).toMatchObject({
+    expect(calls[6]).toMatchObject({ kind: 'hideKeyboard', input: {}, generation: 6 });
+    expect(calls[7]).toMatchObject({ kind: 'pressKey', input: { key: 'enter' }, generation: 7 });
+    expect(calls[9]).toMatchObject({
       kind: 'waitForAnimationToEnd',
       input: { timeoutMs: 50 },
-      generation: 10,
+      generation: 9,
     });
-    expect(calls[12]).toMatchObject({
+    expect(calls[11]).toMatchObject({
       kind: 'runScript',
       input: { file: 'setup.js', env: { SEED: 7 } },
-      generation: 11,
+      generation: 10,
     });
   });
 
@@ -294,7 +291,7 @@ describe('MaestroRuntimePort', () => {
     expect(operations.resolveGestureViewport).not.toHaveBeenCalled();
   });
 
-  test('skips an absent optional tap without hiding resolver infrastructure failures', async () => {
+  test('reports optional tap misses to the interpreter without hiding infrastructure failures', async () => {
     const tapOn = vi.fn(async () => undefined);
     const missingOperations = makeOperations({
       resolveTarget: vi.fn(async ({ purpose }, context) => ({
@@ -309,16 +306,20 @@ describe('MaestroRuntimePort', () => {
     const command = parseMaestroProgram('---\n- tapOn:\n    text: Missing\n    optional: true\n')
       .commands[0]!;
 
-    const result = await createMaestroRuntimePort(missingOperations).execute({
-      command: command as Extract<typeof command, { kind: 'tapOn' }>,
-      generation: 0,
-      env: {},
-      invalidateObservation: vi.fn(),
-    });
-
-    expect(result).toEqual({});
+    await expect(
+      createMaestroRuntimePort(missingOperations).execute({
+        command: command as Extract<typeof command, { kind: 'tapOn' }>,
+        generation: 0,
+        env: {},
+        invalidateObservation: vi.fn(),
+      }),
+    ).rejects.toMatchObject({ details: { reason: 'maestro-test-failure' } });
     expect(missingOperations.resolveTarget).toHaveBeenCalledWith(
-      expect.objectContaining({ purpose: 'tap', selector: { text: 'Missing' } }),
+      expect.objectContaining({
+        purpose: 'tap',
+        selector: { text: 'Missing' },
+        timeoutMs: 7_000,
+      }),
       expect.any(Object),
     );
     expect(tapOn).not.toHaveBeenCalled();

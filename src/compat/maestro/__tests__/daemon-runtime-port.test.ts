@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { expect, test, vi } from 'vitest';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon/types.ts';
+import { PNG } from '../../../utils/png.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
 import { MAESTRO_OBSERVATION_POLL_MS } from '../daemon-runtime-port-observation.ts';
 import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
@@ -169,7 +170,7 @@ test('settles a gesture before the next observation and reuses the stable snapsh
     'snapshot',
     'snapshot',
   ]);
-  expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS * 2);
+  expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);
 });
 
 test('settles a gesture before dispatching another gesture', async () => {
@@ -223,7 +224,7 @@ test('settles a gesture before dispatching another gesture', async () => {
     'snapshot',
     'swipe',
   ]);
-  expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);
+  expect(clock.value).toBe(0);
 });
 
 test('preserves the resolved nested-command request context', async () => {
@@ -461,4 +462,31 @@ test('takes one final observation when polling wakes after the deadline', async 
     }),
   ).resolves.toMatchObject({ matched: true });
   expect(snapshots).toBe(Math.ceil(500 / MAESTRO_OBSERVATION_POLL_MS) + 1);
+});
+
+test('waitForAnimationToEnd uses two unstabilized screenshot captures', async () => {
+  const requests: DaemonRequest[] = [];
+  const screenshot = PNG.sync.write(new PNG({ width: 1, height: 1 }));
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      if (request.command === 'screenshot') {
+        await fs.promises.writeFile(request.positionals[0]!, screenshot);
+      }
+      return { ok: true, data: {} };
+    },
+    dependencies: makeDependencies(),
+    platform: 'android',
+  });
+
+  await port.execute({
+    command: { kind: 'waitForAnimationToEnd', source: { line: 2 }, timeout: 0 },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+
+  expect(requests.map(({ command }) => command)).toEqual(['screenshot', 'screenshot']);
+  expect(requests.every(({ flags }) => flags?.screenshotNoStabilize === true)).toBe(true);
 });

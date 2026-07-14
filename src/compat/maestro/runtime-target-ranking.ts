@@ -1,4 +1,5 @@
 import type { Rect, SnapshotNode } from '../../kernel/snapshot.ts';
+import { isPositiveFiniteRect } from '../../kernel/rect.ts';
 
 export function selectMaestroSnapshotMatch(
   matches: SnapshotNode[],
@@ -10,14 +11,5 @@ export function selectMaestroSnapshotMatch(
 }
 
 function hasUsableRect(node: SnapshotNode): node is SnapshotNode & { rect: Rect } {
-  const rect = node.rect;
-  return Boolean(
-    rect &&
-    Number.isFinite(rect.x) &&
-    Number.isFinite(rect.y) &&
-    Number.isFinite(rect.width) &&
-    Number.isFinite(rect.height) &&
-    rect.width > 0 &&
-    rect.height > 0,
-  );
+  return isPositiveFiniteRect(node.rect);
 }

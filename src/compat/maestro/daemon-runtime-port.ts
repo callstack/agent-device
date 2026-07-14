@@ -9,6 +9,7 @@ import { maestroTestFailure } from './compatibility-errors.ts';
 import { executeMaestroRuntimeCommand } from './runtime-port-commands.ts';
 import { observationContext, operationContext } from './runtime-port-context.ts';
 import { observeMaestroCondition } from './runtime-port-observation.ts';
+import { waitForMaestroAnimationToEnd } from './wait-for-animation-to-end.ts';
 import type {
   MaestroObservationIdentity,
   MaestroRuntimePort,
@@ -163,7 +164,6 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
         ),
         context,
       ),
-    pasteText: async (input, context) => await typeTextAndSettle(input.text, context),
     scroll: async (input) => {
       await invokeMutation({ kind: 'scroll', direction: input.direction });
       snapshots.requireStability();
@@ -216,12 +216,14 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       await invokeMutation({ kind: 'pressKey', key: 'dismiss' });
     },
     waitForAnimationToEnd: async (input, context) => {
-      await waitForTypedSnapshotStability({
+      await waitForMaestroAnimationToEnd({
         timeoutMs:
           input.timeoutMs ?? MAESTRO_COMPATIBILITY_PRESETS.command.waitForAnimationToEndTimeoutMs,
-        context,
-        snapshot: snapshots.capture,
-        dependencies: options.dependencies,
+        now: options.dependencies.now,
+        signal: context.signal,
+        capture: async (screenshotPath) => {
+          await invoke({ kind: 'screenshot', path: screenshotPath, stabilize: false });
+        },
       });
     },
     takeScreenshot: async (input) => ({

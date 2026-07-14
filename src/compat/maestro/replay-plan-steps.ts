@@ -5,7 +5,6 @@ import {
   checkpointMaestroCancellation,
   readIncludedProgram,
   registerIncludedProgramPaths,
-  resolveCommand,
   sourcePathKey,
 } from './engine-flow.ts';
 import { evaluateMaestroBooleanExpression } from './engine-expression.ts';
@@ -165,7 +164,7 @@ async function compileRunFlowBody(
   fallbackSourcePath: string | undefined,
   state: BuildState,
 ): Promise<MaestroReplayPlanStep[]> {
-  const resolvedCommand = resolveCommand(command, state.context);
+  const resolvedCommand = resolveRunFlowInclude(command, state.context);
   const requestedPath = assertIncludePathAvailable(resolvedCommand, state.activeIncludePaths);
   const program = await readIncludedProgram(resolvedCommand, state.options);
   checkpointMaestroCancellation(state.options.signal);
@@ -212,11 +211,22 @@ function staticBooleanConditionDecision(
 ): Extract<StaticRunFlowDecision, 'omit' | 'opaque'> | undefined {
   if (condition === false) return 'omit';
   if (typeof condition !== 'string') return undefined;
-  const resolved = state.context.resolve(condition);
+  const resolved = state.context.resolveDeferred(condition);
   if (hasUnresolvedVariable(resolved)) return 'opaque';
   return evaluateMaestroBooleanExpression(condition, state.context, state.options.platform)
     ? undefined
     : 'omit';
+}
+
+function resolveRunFlowInclude(
+  command: MaestroRunFlowCommand,
+  context: MaestroExecutionContext,
+): MaestroRunFlowCommand {
+  if (command.include.kind !== 'file') return command;
+  return {
+    ...command,
+    include: { ...command.include, path: context.resolve(command.include.path) },
+  };
 }
 
 function hasUnresolvedVariable(value: string): boolean {

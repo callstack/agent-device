@@ -1,5 +1,6 @@
 import type { Platform, PublicPlatform } from '../kernel/device.ts';
 import type { SnapshotState } from '../kernel/snapshot.ts';
+import { isPositiveFiniteRect } from '../kernel/rect.ts';
 import { isNodeVisibleInEffectiveViewport } from '../snapshot/mobile-snapshot-semantics.ts';
 import { isNodeEditable, isNodeVisible } from './node.ts';
 import { tryParseSelectorChain } from './parse.ts';
@@ -98,12 +99,12 @@ function isAssertionVisible(
   platform: Platform | PublicPlatform,
 ): boolean {
   if (platform === 'android' && node.visibleToUser === false) return false;
-  if (hasPositiveRect(node.rect)) return isRectVisibleInViewport(node, nodes);
+  if (isPositiveFiniteRect(node.rect)) return isRectVisibleInViewport(node, nodes);
   if (node.rect) return false;
   if (platform !== 'android' && node.hittable === true) return true;
   const anchor = resolveVisibilityAnchor(node, nodes, platform);
   if (!anchor) return false;
-  if (!hasPositiveRect(anchor.rect)) return platform !== 'android' && anchor.hittable === true;
+  if (!isPositiveFiniteRect(anchor.rect)) return platform !== 'android' && anchor.hittable === true;
   return isRectVisibleInViewport(anchor, nodes);
 }
 
@@ -146,21 +147,7 @@ function isUsefulVisibilityAnchor(
     return false;
   }
   if (platform === 'android') {
-    return node.hittable === true && hasPositiveRect(node.rect);
+    return node.hittable === true && isPositiveFiniteRect(node.rect);
   }
-  return node.hittable === true || hasPositiveRect(node.rect);
-}
-
-function hasPositiveRect(
-  rect: SnapshotState['nodes'][number]['rect'],
-): rect is NonNullable<SnapshotState['nodes'][number]['rect']> {
-  return Boolean(
-    rect &&
-    Number.isFinite(rect.x) &&
-    Number.isFinite(rect.y) &&
-    Number.isFinite(rect.width) &&
-    Number.isFinite(rect.height) &&
-    rect.width > 0 &&
-    rect.height > 0,
-  );
+  return node.hittable === true || isPositiveFiniteRect(node.rect);
 }

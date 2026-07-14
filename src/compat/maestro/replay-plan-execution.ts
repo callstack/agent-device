@@ -34,6 +34,7 @@ export async function executeMaestroReplayPlan(
     context: createMaestroExecutionContext(options.defaults, options.env ? { ...options.env } : {}),
     timing: resolveMaestroTimingPolicy(options.timing),
     artifacts: new Set(),
+    warnings: [],
     executed: plan.compatibility.staticallyExecutedControls,
     skipped: plan.compatibility.staticallySkippedControls,
   };
@@ -50,6 +51,7 @@ export async function executeMaestroReplayPlan(
     skipped: state.skipped,
     generation: state.context.generation,
     artifactPaths: [...state.artifacts],
+    ...(state.warnings.length > 0 ? { warnings: state.warnings } : {}),
   };
 }
 

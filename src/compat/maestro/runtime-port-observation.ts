@@ -44,34 +44,18 @@ export async function observeMaestroCondition(
   };
 }
 
-export function resolveMaestroTarget(
-  selector: MaestroSelector,
-  query: Pick<MaestroTargetQuery, 'purpose' | 'timeoutMs' | 'index' | 'childOf'>,
-  request: MaestroRuntimeRequest,
-  operations: MaestroRuntimeOperations,
-  optional: true,
-): Promise<MaestroTargetResolution | undefined>;
-export function resolveMaestroTarget(
-  selector: MaestroSelector,
-  query: Pick<MaestroTargetQuery, 'purpose' | 'timeoutMs' | 'index' | 'childOf'>,
-  request: MaestroRuntimeRequest,
-  operations: MaestroRuntimeOperations,
-  optional?: false,
-): Promise<MaestroTargetResolution>;
 export async function resolveMaestroTarget(
   selector: MaestroSelector,
   query: Pick<MaestroTargetQuery, 'purpose' | 'timeoutMs' | 'index' | 'childOf'>,
   request: MaestroRuntimeRequest,
   operations: MaestroRuntimeOperations,
-  optional = false,
-): Promise<MaestroTargetResolution | undefined> {
+): Promise<MaestroTargetResolution> {
   const match = await operations.resolveTarget(
     { selector, ...query },
     operationContext(request, request.command),
   );
   const validated = validateTargetMatch(match, request.generation);
   if (!validated.matched || !validated.visible || !validated.rect) {
-    if (optional) return undefined;
     throw maestroTestFailure('Maestro target did not resolve to a visible element.', {
       selector,
       candidateCount: validated.candidateCount,

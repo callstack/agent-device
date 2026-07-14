@@ -84,7 +84,7 @@ test('usageForCommand includes Maestro replay flag', async () => {
   assert.match(help, /--out <path>/);
   assert.match(help, /--maestro/);
   assert.match(help, /doubleTapOn/);
-  assert.match(help, /pasteText/);
+  assert.doesNotMatch(help, /pasteText/);
   assert.match(help, /runFlow file\/inline/);
   assert.match(help, /ordered trusted runScript/);
   assert.match(help, /repeat\.times/);

@@ -350,7 +350,7 @@ function maestroTraceStopEvent(
 }
 
 function buildTypedMaestroSuccessResponse(params: {
-  result: { artifactPaths: string[] };
+  result: { artifactPaths: string[]; warnings?: string[] };
   plan: MaestroReplayPlan;
   startIndex: number;
   startedAt: number;
@@ -372,6 +372,7 @@ function buildTypedMaestroSuccessResponse(params: {
       healed: 0,
       session: sessionName,
       artifactPaths: result.artifactPaths,
+      ...(result.warnings ? { warnings: result.warnings } : {}),
       ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
       message: replaySuccessMessage(replayed, Date.now() - startedAt),
     } satisfies ReplayCommandResult,

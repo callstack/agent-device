@@ -27,6 +27,10 @@ export type MaestroSelectorMap = {
 
 export type MaestroSelector = MaestroSelectorMap;
 
+export type MaestroOptionalCommand = {
+  optional?: boolean;
+};
+
 export type MaestroGestureTarget =
   | MaestroCoordinate
   | { space: 'target'; selector: MaestroSelector };
@@ -46,7 +50,7 @@ export type MaestroLaunchAppCommand = {
   launchArguments?: MaestroLaunchArguments;
 };
 
-export type MaestroTapOnCommand = {
+export type MaestroTapOnCommand = MaestroOptionalCommand & {
   kind: 'tapOn';
   source: MaestroSourceLocation;
   target: MaestroGestureTarget;
@@ -58,14 +62,14 @@ export type MaestroTapOnCommand = {
   childOf?: MaestroSelector;
 };
 
-export type MaestroDoubleTapOnCommand = {
+export type MaestroDoubleTapOnCommand = MaestroOptionalCommand & {
   kind: 'doubleTapOn';
   source: MaestroSourceLocation;
   target: MaestroGestureTarget;
   delay?: number;
 };
 
-export type MaestroLongPressOnCommand = {
+export type MaestroLongPressOnCommand = MaestroOptionalCommand & {
   kind: 'longPressOn';
   source: MaestroSourceLocation;
   target: MaestroGestureTarget;
@@ -86,12 +90,12 @@ export type MaestroSwipeGesture =
   | {
       kind: 'target';
       from: MaestroSelector;
-      direction?: MaestroDirection;
+      direction: MaestroDirection;
       duration?: number;
       label?: string;
     };
 
-export type MaestroSwipeCommand = {
+export type MaestroSwipeCommand = MaestroOptionalCommand & {
   kind: 'swipe';
   source: MaestroSourceLocation;
   gesture: MaestroSwipeGesture;
@@ -110,31 +114,25 @@ export type MaestroEraseTextCommand = {
   charactersToErase?: number;
 };
 
-export type MaestroPasteTextCommand = {
-  kind: 'pasteText';
-  source: MaestroSourceLocation;
-  text: string;
-};
-
 export type MaestroOpenLinkCommand = {
   kind: 'openLink';
   source: MaestroSourceLocation;
   link: string;
 };
 
-export type MaestroAssertVisibleCommand = {
+export type MaestroAssertVisibleCommand = MaestroOptionalCommand & {
   kind: 'assertVisible';
   source: MaestroSourceLocation;
   target: MaestroSelector;
 };
 
-export type MaestroAssertNotVisibleCommand = {
+export type MaestroAssertNotVisibleCommand = MaestroOptionalCommand & {
   kind: 'assertNotVisible';
   source: MaestroSourceLocation;
   target: MaestroSelector;
 };
 
-export type MaestroExtendedWaitUntilCommand = {
+export type MaestroExtendedWaitUntilCommand = MaestroOptionalCommand & {
   kind: 'extendedWaitUntil';
   source: MaestroSourceLocation;
   visible?: MaestroSelector;
@@ -153,7 +151,7 @@ export type MaestroScrollCommand = {
   source: MaestroSourceLocation;
 };
 
-export type MaestroScrollUntilVisibleCommand = {
+export type MaestroScrollUntilVisibleCommand = MaestroOptionalCommand & {
   kind: 'scrollUntilVisible';
   source: MaestroSourceLocation;
   element: MaestroSelector;
@@ -234,7 +232,6 @@ export type MaestroCommand =
   | MaestroSwipeCommand
   | MaestroInputTextCommand
   | MaestroEraseTextCommand
-  | MaestroPasteTextCommand
   | MaestroOpenLinkCommand
   | MaestroAssertVisibleCommand
   | MaestroAssertNotVisibleCommand
