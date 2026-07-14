@@ -79,7 +79,6 @@ test('falls back to fresh Maestro geometry when atomic iOS dispatch resolves off
     'click',
     'snapshot',
     'click',
-    'snapshot',
   ]);
   expect(requests.filter(({ command }) => command === 'click').at(-1)?.positionals).toEqual([
     '220',
@@ -149,20 +148,10 @@ test.each(['ios', 'android'] as const)(
       invalidateObservation() {},
     });
 
-    expect(requests.map((request) => request.command)).toEqual([
-      'snapshot',
-      'snapshot',
-      'click',
-      'snapshot',
-      'click',
-      'snapshot',
-    ]);
+    expect(requests.map((request) => request.command)).toEqual(['snapshot', 'snapshot', 'click']);
     expect(
       requests.filter(({ command }) => command === 'click').map(({ positionals }) => positionals),
-    ).toEqual([
-      ['220', '122'],
-      ['220', '122'],
-    ]);
+    ).toEqual([['220', '122']]);
   },
 );
 

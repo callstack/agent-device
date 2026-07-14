@@ -54,6 +54,7 @@ export type MaestroTapOnCommand = MaestroOptionalCommand & {
   kind: 'tapOn';
   source: MaestroSourceLocation;
   target: MaestroGestureTarget;
+  retryTapIfNoChange?: boolean;
   repeat?: number;
   delay?: number;
   optional?: boolean;

@@ -59,16 +59,10 @@ test('waits for a delayed input target using fresh snapshots', async () => {
     'snapshot',
     'snapshot',
     'click',
-    'snapshot',
-    'click',
-    'snapshot',
   ]);
   expect(
     requests.filter(({ command }) => command === 'click').map(({ positionals }) => positionals),
-  ).toEqual([
-    ['80', '62'],
-    ['80', '62'],
-  ]);
+  ).toEqual([['80', '62']]);
 });
 
 test('atomically dispatches a unique exact iOS target from same-generation evidence', async () => {
@@ -149,7 +143,7 @@ test('atomically dispatches a unique exact iOS target from same-generation evide
     }),
   ).resolves.toEqual({});
 
-  expect(requests.map((request) => request.command)).toEqual(['snapshot', 'click', 'snapshot']);
+  expect(requests.map((request) => request.command)).toEqual(['snapshot', 'click']);
   expect(observation.identity).toBeDefined();
   const click = requests.find((request) => request.command === 'click');
   expect(click?.positionals).toEqual(['id="continue"']);
@@ -211,6 +205,7 @@ test('retries an iOS non-hittable coordinate fallback when the hierarchy does no
       kind: 'tapOn',
       source: { line: 2 },
       target: { space: 'target', selector: { text: 'Pop to top' } },
+      retryTapIfNoChange: true,
     },
     generation: 0,
     env: {},
@@ -221,7 +216,9 @@ test('retries an iOS non-hittable coordinate fallback when the hierarchy does no
     'snapshot',
     'click',
     'snapshot',
+    'snapshot',
     'click',
+    'snapshot',
     'snapshot',
   ]);
   expect(clicks).toBe(2);

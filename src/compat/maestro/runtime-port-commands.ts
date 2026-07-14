@@ -223,6 +223,9 @@ function targetLookupTimeout(command: { readonly optional?: boolean }): number {
 function tapOnInput(command: MaestroCommandOf<'tapOn'>, target: MaestroInputTarget) {
   return {
     target,
+    ...(command.retryTapIfNoChange === undefined
+      ? {}
+      : { retryTapIfNoChange: command.retryTapIfNoChange }),
     ...(command.repeat === undefined ? {} : { repeat: command.repeat }),
     ...(command.repeat === undefined
       ? command.delay === undefined

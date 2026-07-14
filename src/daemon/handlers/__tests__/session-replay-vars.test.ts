@@ -11,6 +11,24 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../../core/dispatch.ts')>();
   return {
     ...actual,
+    resolveTargetDevice: vi.fn(async (flags) =>
+      flags.platform === 'android'
+        ? {
+            platform: 'android',
+            id: 'emulator-5554',
+            name: 'Pixel',
+            kind: 'emulator',
+            booted: true,
+          }
+        : {
+            platform: 'apple',
+            appleOs: 'ios',
+            id: 'sim-1',
+            name: 'iPhone 17 Pro',
+            kind: 'simulator',
+            booted: true,
+          },
+    ),
     dispatchCommand: vi.fn(async () => {
       throw new Error('no device runner available in this test');
     }),
@@ -993,6 +1011,7 @@ test('runReplayScriptFile uses semantic iOS dispatch for an exact text tapOn', a
               {
                 index: 1,
                 type: 'XCUIElementTypeButton',
+                label: 'Article',
                 rect: { x: 40, y: 100, width: 120, height: 48 },
                 hittable: true,
               },
@@ -1451,6 +1470,7 @@ test('runReplayScriptFile resolves Maestro tapOn index and childOf from snapshot
       ['snapshot', []],
       ['click', ['40', '130']],
       ['snapshot', []],
+      ['snapshot', []],
       ['click', ['220', '310']],
     ],
   );
@@ -1533,6 +1553,8 @@ test('runReplayScriptFile resolves a text-entry target once before typing', asyn
     [
       ['snapshot', []],
       ['click', ['120', '120']],
+      ['snapshot', []],
+      ['snapshot', []],
       ['type', ['Saved list']],
       ['snapshot', []],
       ['snapshot', []],

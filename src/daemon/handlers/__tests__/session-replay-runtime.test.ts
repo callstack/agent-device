@@ -98,7 +98,11 @@ test('typed Maestro nested commands receive the runtime hints bound into the pla
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-runtime-envelope-'));
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
-  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const session = makeIosSession(sessionName);
+  sessionStore.set(sessionName, {
+    ...session,
+    device: { ...session.device, simulatorSetPath: '/tmp/custom-simulator-set' },
+  });
   sessionStore.setRuntimeHints(sessionName, {
     platform: 'ios',
     metroHost: '127.0.0.1',
@@ -126,6 +130,12 @@ test('typed Maestro nested commands receive the runtime hints bound into the pla
   expect(requests).toHaveLength(1);
   expect(requests[0]).toMatchObject({
     command: 'open',
+    flags: {
+      platform: 'ios',
+      udid: 'sim-1',
+      iosSimulatorDeviceSet: '/tmp/custom-simulator-set',
+      noRecord: true,
+    },
     runtime: {
       platform: 'ios',
       metroHost: '127.0.0.1',

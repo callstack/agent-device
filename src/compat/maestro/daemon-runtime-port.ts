@@ -132,9 +132,12 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     },
 
     tapOn: async (input, context) =>
-      await tapTargetWithOutcome(options, snapshots, input.target, context, {
-        count: input.repeat,
-        intervalMs: input.delay,
+      await tapTargetAndSettle(options, snapshots, input.target, context, {
+        click: {
+          count: input.repeat,
+          intervalMs: input.delay,
+        },
+        retryIfNoChange: input.retryTapIfNoChange === true,
       }),
     doubleTapOn: async (input) => {
       snapshots.invalidate();
@@ -387,31 +390,42 @@ function createSnapshotSource(
   };
 }
 
-async function tapTargetWithOutcome(
+async function tapTargetAndSettle(
   options: CreateDaemonMaestroRuntimeOperationsOptions,
   snapshots: MaestroSnapshotSource,
   target: Parameters<MaestroRuntimeOperations['tapOn']>[0]['target'],
   context: MaestroRuntimeOperationContext,
-  flags: MaestroClickOptions,
+  policy: { click: MaestroClickOptions; retryIfNoChange: boolean },
 ): Promise<void> {
+  const dispatch = async () =>
+    await dispatchTapTarget(options, snapshots, target, context, policy.click);
+  if (!policy.retryIfNoChange) {
+    await dispatch();
+    snapshots.requireStability();
+    return;
+  }
+
   const baselineSignature =
     target.resolution?.surfaceSignature ??
     maestroSnapshotSignature(await snapshots.capture(context));
-  const dispatch = async () => await dispatchTapTarget(options, snapshots, target, context, flags);
+  const settle = async () =>
+    await waitForTypedSnapshotStability({
+      timeoutMs: MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
+      context,
+      snapshot: snapshots.capture,
+      dependencies: options.dependencies,
+    });
 
   await dispatch();
-
-  await options.dependencies.sleep(MAESTRO_OBSERVATION_POLL_MS, context.signal);
-  let observed = await snapshots.capture(context);
+  let observed = await settle();
   let attempts = 1;
   while (
     maestroSnapshotSignature(observed) === baselineSignature &&
-    attempts < MAESTRO_COMPATIBILITY_PRESETS.command.tapMaxAttempts
+    attempts < MAESTRO_COMPATIBILITY_PRESETS.command.retryTapMaxAttempts
   ) {
     await dispatch();
     attempts += 1;
-    await options.dependencies.sleep(MAESTRO_OBSERVATION_POLL_MS, context.signal);
-    observed = await snapshots.capture(context);
+    observed = await settle();
   }
   snapshots.prime(context.generation + 1, observed);
 }

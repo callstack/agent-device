@@ -87,10 +87,10 @@ matches. It does not adopt the public agent-device command surface's unique-matc
 suppressed by Maestro `optional`; atomic iOS dispatch handles that result by performing fresh Maestro
 resolution, as described above. Cancellation and infrastructure failures are likewise non-optional.
 
-`tapOn` preserves Maestro's two-attempt `retryIfNoChange` default for coordinate injection, including
-the live-bound iOS selector path and non-hittable fallback. After one compatibility polling interval it
-compares the hierarchy with the target-resolution hierarchy and retries once when nothing changed. The
-observed result primes the next command, so the outcome check does not add another hierarchy read there.
+Every `tapOn` waits for hierarchy stability before the next command, matching Maestro's tap boundary.
+`retryTapIfNoChange` defaults to false; when explicitly enabled, the runtime compares the stable hierarchy
+with the target-resolution hierarchy and retries once when nothing changed. The stable result primes the
+next command, so the tap boundary does not add another hierarchy read there.
 
 Successful gestures and scrolls require stabilization before the next command executes. The runtime
 port records that requirement without capturing a hierarchy in the gesture command itself. At the next

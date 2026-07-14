@@ -131,19 +131,10 @@ test('uses resolved iOS geometry when canonical presentation changes target boun
     invalidateObservation() {},
   });
 
-  expect(requests.map(({ command }) => command)).toEqual([
-    'snapshot',
-    'click',
-    'snapshot',
-    'click',
-    'snapshot',
-  ]);
+  expect(requests.map(({ command }) => command)).toEqual(['snapshot', 'click']);
   expect(
     requests.filter(({ command }) => command === 'click').map(({ positionals }) => positionals),
-  ).toEqual([
-    ['56', '121'],
-    ['56', '121'],
-  ]);
+  ).toEqual([['56', '121']]);
 });
 
 test('atomically dispatches canonical iOS geometry with the same tap point', async () => {
@@ -260,19 +251,10 @@ test('does not collapse distinct nested iOS controls with identical frames', asy
     invalidateObservation() {},
   });
 
-  expect(requests.map(({ command }) => command)).toEqual([
-    'snapshot',
-    'click',
-    'snapshot',
-    'click',
-    'snapshot',
-  ]);
+  expect(requests.map(({ command }) => command)).toEqual(['snapshot', 'click']);
   expect(
     requests.filter(({ command }) => command === 'click').map(({ positionals }) => positionals),
-  ).toEqual([
-    ['106', '322'],
-    ['106', '322'],
-  ]);
+  ).toEqual([['106', '322']]);
 });
 
 test('does not atomically dispatch distinct iOS matches with identical frames', async () => {
@@ -312,17 +294,8 @@ test('does not atomically dispatch distinct iOS matches with identical frames', 
     invalidateObservation() {},
   });
 
-  expect(requests.map(({ command }) => command)).toEqual([
-    'snapshot',
-    'click',
-    'snapshot',
-    'click',
-    'snapshot',
-  ]);
+  expect(requests.map(({ command }) => command)).toEqual(['snapshot', 'click']);
   expect(
     requests.filter(({ command }) => command === 'click').map(({ positionals }) => positionals),
-  ).toEqual([
-    ['106', '322'],
-    ['106', '322'],
-  ]);
+  ).toEqual([['106', '322']]);
 });

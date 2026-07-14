@@ -93,6 +93,7 @@ describe('parseMaestroProgram', () => {
     point: 20%, 30%
 - tapOn:
     id: submit
+    retryTapIfNoChange: true
 - doubleTapOn:
     point: 100,200
 - longPressOn:
@@ -128,6 +129,7 @@ describe('parseMaestroProgram', () => {
 
     assert.deepEqual(percentTapCommand.target, { space: 'percent', x: 20, y: 30 });
     assert.deepEqual(targetTapCommand.target, { space: 'target', selector: { id: 'submit' } });
+    assert.equal(targetTapCommand.retryTapIfNoChange, true);
     assert.deepEqual(absoluteDoubleTapCommand.target, { space: 'absolute', x: 100, y: 200 });
     assert.deepEqual(targetLongPressCommand.target, {
       space: 'target',

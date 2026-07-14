@@ -90,7 +90,12 @@ export function parseMaestroTapOnCommand(
 
   const entries = readMapEntries(value, 'tapOn', context);
   if (hasEntry(entries, 'point')) {
-    assertOnlyKeys(entries, 'tapOn', ['point', 'repeat', 'delay', 'optional', 'label'], context);
+    assertOnlyKeys(
+      entries,
+      'tapOn',
+      ['point', 'retryTapIfNoChange', 'repeat', 'delay', 'optional', 'label'],
+      context,
+    );
     return {
       kind: 'tapOn',
       source,
@@ -102,7 +107,7 @@ export function parseMaestroTapOnCommand(
   assertOnlyKeys(
     entries,
     'tapOn',
-    [...TAP_SELECTOR_KEYS, 'repeat', 'delay', 'optional', 'index', 'childOf'],
+    [...TAP_SELECTOR_KEYS, 'retryTapIfNoChange', 'repeat', 'delay', 'optional', 'index', 'childOf'],
     context,
   );
   const selectorEntries = entries.filter((entry) => isSelectorKey(entry.key, TAP_SELECTOR_KEYS));
@@ -344,7 +349,10 @@ function tapOptions(
   entries: readonly MaestroMapEntry[],
   context: MaestroProgramParseContext,
   includeLabel: boolean,
-): Pick<MaestroTapOnCommand, 'repeat' | 'delay' | 'optional' | 'label'> {
+): Pick<MaestroTapOnCommand, 'retryTapIfNoChange' | 'repeat' | 'delay' | 'optional' | 'label'> {
+  const retryTapIfNoChange = readOptionalEntry(entries, 'retryTapIfNoChange', (entry) =>
+    readOptionalBoolean(entry, 'tapOn.retryTapIfNoChange', context),
+  );
   const repeat = readOptionalEntry(entries, 'repeat', (entry) =>
     readRequiredPositiveInteger(entry, 'tapOn.repeat', context),
   );
@@ -358,6 +366,7 @@ function tapOptions(
       )
     : undefined;
   return {
+    ...(retryTapIfNoChange === undefined ? {} : { retryTapIfNoChange }),
     ...(repeat === undefined ? {} : { repeat }),
     ...(delay === undefined ? {} : { delay }),
     ...(optional === undefined ? {} : { optional }),

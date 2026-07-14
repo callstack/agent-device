@@ -124,6 +124,7 @@ export type MaestroRuntimeOperations = {
 
   readonly tapOn: MaestroRuntimeOperation<{
     readonly target: MaestroInputTarget;
+    readonly retryTapIfNoChange?: boolean;
     readonly repeat?: number;
     readonly delay?: number;
     readonly label?: string;
