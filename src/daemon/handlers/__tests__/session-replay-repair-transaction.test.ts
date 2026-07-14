@@ -682,6 +682,86 @@ test('#1258 preflight honors PERSISTED force: a --from continuation without --fo
   expect(sessionStore.get(sessionName)?.saveScriptForce).toBe(true);
 });
 
+test('#1258 preflight is per-target: a --from continuation RETARGETING to an existing <b> WITHOUT live force is refused BEFORE dispatch and leaves the session target unmutated', async () => {
+  const { root, sessionStore, sessionName, logPath } = setup(
+    'agent-device-repair-transaction-preflight-retarget-',
+  );
+  const filePath = writeReplayFile(root, [
+    'open "Demo" --relaunch',
+    SAVE_ANNOTATION,
+    'click id="save"',
+    'click id="confirm"',
+    'close',
+  ]);
+  const targetA = path.join(root, 'a.ad');
+  const targetB = path.join(root, 'b.ad');
+  // <b> already exists (nobody opted to overwrite it); <a> does not, so leg 1
+  // arms/forces <a> cleanly.
+  fs.writeFileSync(targetB, 'context platform=ios device="x"\nclick id="unrelated"\n');
+  const beforeB = fs.readFileSync(targetB, 'utf8');
+  const spy: DaemonRequest[] = [];
+  const invoke = makeRecordingReplayInvoke({
+    sessionStore,
+    sessionName,
+    spy,
+    evidence: (req) => (req.command === 'click' ? freshEvidence('confirm', 'Confirm') : undefined),
+  });
+
+  // Leg 1: `--save-script=<a> --force` — arms + PERSISTS force for <a>, then
+  // diverges (nothing published).
+  const leg1 = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: targetA, force: true } }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke,
+  });
+  expect(leg1.ok).toBe(false);
+  if (leg1.ok) return;
+  const divergence = leg1.error.details?.divergence as { resume: { planDigest: string } };
+  const session = sessionStore.get(sessionName)!;
+  expect(session.saveScriptPath).toBe(targetA);
+  expect(session.saveScriptForce).toBe(true);
+  // The agent's corrective press.
+  sessionStore.recordAction(session, {
+    command: 'press',
+    positionals: ['@e7'],
+    flags: {},
+    result: { selectorChain: ['id="save-v2"'] },
+    targetEvidence: freshEvidence('save-v2', 'Save V2'),
+  });
+  const dispatchesBeforeLeg2 = spy.length;
+
+  // Leg 2: `--from N --save-script=<b>` (explicit RETARGET, NO live force) — <b>
+  // exists. The persisted force was granted for <a>, and
+  // `applySaveScriptRetarget` WOULD clear it for <b>; the preflight must MATCH
+  // that per-target contract and REFUSE here, before any step dispatches,
+  // instead of executing the leg and only refusing at publish time.
+  const leg2 = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [filePath],
+      flags: { saveScript: targetB, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
+    }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke,
+  });
+  expect(leg2.ok).toBe(false);
+  if (!leg2.ok) {
+    expect(leg2.error.code).toBe('COMMAND_FAILED');
+    expect(leg2.error.message).toMatch(/already exists/);
+  }
+  // Not a single step of leg 2 dispatched — refused BEFORE the loop.
+  expect(spy.length).toBe(dispatchesBeforeLeg2);
+  // READ-ONLY: the rejected request left the session target untouched — still
+  // armed/forced for <a>, never retargeted to <b>.
+  expect(sessionStore.get(sessionName)?.saveScriptPath).toBe(targetA);
+  expect(sessionStore.get(sessionName)?.saveScriptForce).toBe(true);
+  // <b> is byte-for-byte untouched.
+  expect(fs.readFileSync(targetB, 'utf8')).toBe(beforeB);
+});
+
 test('#1258 force is per-target: re-arming --save-script=<b> WITHOUT --force drops force persisted for <a>, so <b> is NOT overwritten', async () => {
   const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
     'agent-device-repair-transaction-retarget-clears-force-',

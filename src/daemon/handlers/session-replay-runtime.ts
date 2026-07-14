@@ -257,13 +257,14 @@ export async function runReplayScriptFile(params: {
     // refuse-on-exist at publish time (`publishHealedScriptAtomically`, at
     // `close`/completion). Computes the SAME target `armReplaySaveScriptStep`
     // below would resolve, without needing the session to exist yet, and
-    // honors the SAME effective force decision publication uses — the live
-    // `--force`/`--overwrite` OR the one persisted at arm time
-    // (`saveScriptForce`), so a `--from` continuation that does not repeat the
-    // flag is not rejected on a target a prior `--force` leg already authorized.
+    // honors the SAME effective force decision publication uses — read-only:
+    // it never mutates the session (it runs BEFORE `applySaveScriptRetarget`),
+    // so `liveForce`/`persistedForce` are passed separately for it to apply the
+    // per-target rule against the target it computes.
     const saveScriptPreflight = preflightSaveScriptTarget({
       saveScript: req.flags?.saveScript,
-      force: Boolean(req.flags?.force || preRunSession?.saveScriptForce),
+      liveForce: req.flags?.force,
+      persistedForce: preRunSession?.saveScriptForce,
       sourcePath: resolved,
       existingSaveScriptPath: preRunSession?.saveScriptPath,
     });
@@ -532,22 +533,37 @@ function preflightReplayAgainstActiveRepair(params: {
  * wins; otherwise an already-armed session's existing path if this is a
  * `--from` continuation leg reusing it, else the default `<stem>.healed.ad`
  * sibling) WITHOUT needing the session to exist yet, so it runs before step 1
- * dispatches even when that step is the `open` that creates the session. A
- * no-op when `--save-script` was not passed this invocation, or when `force`
- * was — the caller explicitly opted into overwriting.
+ * dispatches even when that step is the `open` that creates the session.
+ * READ-ONLY: it never mutates the session (it runs before
+ * `applySaveScriptRetarget`).
+ *
+ * The effective-force decision MATCHES `applySaveScriptRetarget`'s per-target
+ * contract, computed against the target THIS request resolves to: a live
+ * `--force`/`--overwrite` always bypasses; a PERSISTED `saveScriptForce`
+ * bypasses ONLY when this request writes to the SAME target it was granted for
+ * (`targetPath === existingSaveScriptPath`). An explicit RETARGET to a
+ * different path without a live force does NOT bypass here — because
+ * `applySaveScriptRetarget` will CLEAR that persisted force for the new target
+ * before publication anyway, so letting the run execute (mutating the session
+ * mid-flight) only to refuse the existing target at the end is exactly what
+ * this preflight exists to prevent. A no-op when `--save-script` was not passed.
  */
 function preflightSaveScriptTarget(params: {
   saveScript: boolean | string | undefined;
-  force: boolean | undefined;
+  liveForce: boolean | undefined;
+  persistedForce: boolean | undefined;
   sourcePath: string;
   existingSaveScriptPath: string | undefined;
 }): DaemonResponse | undefined {
-  const { saveScript, force, sourcePath, existingSaveScriptPath } = params;
-  if (!saveScript || force) return undefined;
+  const { saveScript, liveForce, persistedForce, sourcePath, existingSaveScriptPath } = params;
+  if (!saveScript) return undefined;
   const targetPath =
     typeof saveScript === 'string'
       ? expandSessionPath(saveScript)
       : (existingSaveScriptPath ?? healedScriptSiblingPath(sourcePath));
+  const effectiveForce =
+    Boolean(liveForce) || (Boolean(persistedForce) && targetPath === existingSaveScriptPath);
+  if (effectiveForce) return undefined;
   if (!fs.existsSync(targetPath)) return undefined;
   return errorResponse(
     'COMMAND_FAILED',
