@@ -95,7 +95,6 @@ function resolveTargetFromSnapshot(params: {
     params.context.generation,
     frame,
     params.query,
-    params.snapshot,
     params.platform,
     params.mode,
   );
@@ -227,7 +226,6 @@ function targetMatchFromResolution(
   generation: number,
   frame: TouchReferenceFrame | undefined,
   query: SnapshotTargetQuery & { allowAtomicSelectorDispatch?: boolean },
-  snapshot: SnapshotState,
   platform: Extract<MaestroPlatform, 'ios' | 'android'>,
   mode: MaestroTargetResolutionMode,
 ): MaestroTargetMatch {
@@ -243,8 +241,6 @@ function targetMatchFromResolution(
   }
   const dispatchSelector = resolveAtomicIosDispatchSelector({
     query,
-    resolution,
-    snapshot,
     platform,
     mode,
   });
@@ -299,25 +295,12 @@ function hasPositiveArea(rect: Rect): boolean {
 
 function resolveAtomicIosDispatchSelector(params: {
   query: SnapshotTargetQuery & { allowAtomicSelectorDispatch?: boolean };
-  resolution: Extract<ReturnType<typeof resolveMaestroTargetFromSnapshot>, { ok: true }>;
-  snapshot: SnapshotState;
   platform: Extract<MaestroPlatform, 'ios' | 'android'>;
   mode: MaestroTargetResolutionMode;
 }): MaestroDispatchSelector | undefined {
-  const { query, resolution, snapshot, platform, mode } = params;
+  const { query, platform, mode } = params;
   if (!allowsAtomicIosDispatch(query, platform, mode)) return undefined;
-  const selector = singleExactDispatchSelector(query.selector);
-  if (!selector) return undefined;
-
-  const exactMatches = snapshot.nodes.filter((node) =>
-    runnerSelectorValues(node, selector.key).some((candidate) =>
-      equalIgnoringCase(candidate, selector.value),
-    ),
-  );
-  if (exactMatches.length !== 1 || exactMatches[0]?.index !== resolution.node.index) {
-    return undefined;
-  }
-  return selector;
+  return singleExactDispatchSelector(query.selector);
 }
 
 function allowsAtomicIosDispatch(
@@ -347,21 +330,6 @@ function singleExactDispatchSelector(
 
 function isDispatchSelectorKey(key: string): key is MaestroDispatchSelector['key'] {
   return key === 'id' || key === 'label' || key === 'text';
-}
-
-function runnerSelectorValues(
-  node: SnapshotState['nodes'][number],
-  key: MaestroDispatchSelector['key'],
-): string[] {
-  if (key === 'id') return typeof node.identifier === 'string' ? [node.identifier] : [];
-  if (key === 'label') return typeof node.label === 'string' ? [node.label] : [];
-  return [node.label, node.identifier, node.value].filter(
-    (value): value is string => typeof value === 'string',
-  );
-}
-
-function equalIgnoringCase(left: string, right: string): boolean {
-  return left.toLocaleLowerCase() === right.toLocaleLowerCase();
 }
 
 function conditionMatches(

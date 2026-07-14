@@ -128,9 +128,46 @@ test('atomically dispatches a unique exact iOS target from same-generation evide
   expect(requests.map((request) => request.command)).toEqual(['snapshot', 'click']);
   expect(observation.identity).toBeDefined();
   expect(requests.at(-1)?.positionals).toEqual(['id="continue"']);
-  expect(requests.at(-1)?.flags?.maestro).toEqual({
-    allowNonHittableCoordinateFallback: true,
+  expect(requests.at(-1)?.flags?.maestro).toBeUndefined();
+});
+
+test('lets atomic iOS dispatch resolve raw provider wrapper duplicates', async () => {
+  const requests: DaemonRequest[] = [];
+  const duplicateRect = { x: 0, y: 298, width: 393, height: 48 };
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      if (request.command !== 'snapshot') return { ok: true, data: {} };
+      return {
+        ok: true,
+        data: {
+          createdAt: 0,
+          nodes: [
+            { index: 0, type: 'Application', rect: { x: 0, y: 0, width: 393, height: 852 } },
+            { index: 1, parentIndex: 0, type: 'Other', label: 'First', rect: duplicateRect },
+            { index: 2, parentIndex: 1, type: 'ScrollView', label: 'First', rect: duplicateRect },
+          ],
+        },
+      };
+    },
+    dependencies: makeDependencies(),
+    platform: 'ios',
   });
+
+  await port.execute({
+    command: {
+      kind: 'tapOn',
+      source: { line: 2 },
+      target: { space: 'target', selector: { text: 'First' } },
+    },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+
+  expect(requests.map(({ command }) => command)).toEqual(['snapshot', 'click']);
+  expect(requests[1]?.positionals).toEqual(['text="First"']);
 });
 
 test('falls back to fresh Maestro geometry when atomic iOS dispatch resolves off-screen', async () => {

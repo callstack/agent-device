@@ -405,10 +405,7 @@ async function clickSelector(
     'click',
     [`${selector.key}=${JSON.stringify(selector.value)}`],
     {
-      flags: flagsWith(options.baseReq.flags, {
-        ...flags,
-        maestro: { allowNonHittableCoordinateFallback: true },
-      }),
+      flags: flagsWith(options.baseReq.flags, flags),
     },
   );
 }
