@@ -47,8 +47,10 @@ The engine has five responsibilities:
    test result contracts. Observer telemetry is redacted and best-effort; trace persistence cannot
    change command success or failure.
 
-The engine does not implement platform input. Absolute swipes preserve authored endpoints without a
-hierarchy capture. Absolute, percentage, and preset swipes resolve the cheapest fresh interaction
+The engine does not implement platform input. Absolute and percentage swipes preserve authored
+endpoints without a hierarchy capture. Directional horizontal swipes reuse ADR 0013's shared in-page
+preset geometry so an iOS right swipe does not become an interactive-back gesture; vertical presets
+retain Maestro's platform geometry. All viewport-relative swipes resolve the cheapest fresh interaction
 viewport available so ADR 0013 can validate every planned sample.
 When normalization already resolves a viewport, the adapter pairs it with the nested public gesture
 request as daemon-internal metadata. ADR 0013 planning consumes that exact frame instead of probing
@@ -76,8 +78,10 @@ for a later interaction, even within the same mutation generation. Every mutatin
 retained evidence before dispatch, including an attempt whose dispatch reports failure, because the
 adapter cannot prove the app stayed unchanged.
 
-Maestro target resolution preserves upstream first-match and explicit-index semantics. It does not
-adopt the public agent-device command surface's unique-match requirement. Conversely, an
+Maestro target resolution preserves upstream first-match and explicit-index semantics. Equivalent iOS
+accessibility wrapper chains are normalized to the semantic control or deepest matching leaf before
+applying an authored index, matching XCTest element-query behavior without changing distinct nested
+matches. It does not adopt the public agent-device command surface's unique-match requirement. Conversely, an
 `AMBIGUOUS_MATCH` produced by a nested public command is an agent-device authoring failure and is not
 suppressed by Maestro `optional`; atomic iOS dispatch handles that result by performing fresh Maestro
 resolution, as described above. Cancellation and infrastructure failures are likewise non-optional.

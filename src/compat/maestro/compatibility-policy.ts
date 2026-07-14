@@ -34,7 +34,8 @@ export const MAESTRO_COMPATIBILITY_PRESETS = {
     nearEdgeFraction: 0.1,
     farEdgeFraction: 0.9,
   },
-  // AndroidDriver.swipe(direction, ...) and IOSDriver.swipe(direction, ...).
+  // Vertical AndroidDriver.swipe(direction, ...) and IOSDriver.swipe(direction, ...).
+  // Horizontal presets use the shared in-page gesture planner to avoid OS edge gestures.
   screenSwipe: {
     nearEdgeFraction: 0.1,
     farEdgeFraction: 0.9,

@@ -1698,8 +1698,8 @@ test('runReplayScriptFile resolves Maestro screen swipes from the direct viewpor
       [
         'swipe',
         {
-          from: { x: 360, y: 400 },
-          to: { x: 40, y: 400 },
+          from: { x: 340, y: 400 },
+          to: { x: 60, y: 400 },
           durationMs: 300,
         },
       ],
@@ -1760,8 +1760,8 @@ test('runReplayScriptFile delegates Android directional swipes and preserves per
       [
         'swipe',
         {
-          from: { x: 360, y: 400 },
-          to: { x: 40, y: 400 },
+          from: { x: 340, y: 400 },
+          to: { x: 60, y: 400 },
           durationMs: 300,
         },
       ],

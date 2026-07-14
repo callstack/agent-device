@@ -1,5 +1,41 @@
 import type { Rect, SnapshotNode } from '../../kernel/snapshot.ts';
 import { isPositiveFiniteRect } from '../../kernel/rect.ts';
+import {
+  buildSnapshotNodeByIndex,
+  isDescendantOfSnapshotNode,
+  normalizeType,
+} from '../../snapshot/snapshot-processing.ts';
+import { normalizeText } from '../../selectors/find.ts';
+import type { MaestroSelector } from './program-ir.ts';
+import type { MaestroPlatform } from './runtime-target-policy.ts';
+
+export function normalizeMaestroSnapshotMatches(
+  nodes: SnapshotNode[],
+  matches: SnapshotNode[],
+  selector: MaestroSelector,
+  platform: MaestroPlatform,
+): SnapshotNode[] {
+  if (platform !== 'ios' || !hasTextualSelector(selector)) return matches;
+  const nodeByIndex = buildSnapshotNodeByIndex(nodes);
+  return matches.filter((candidate) => {
+    if (isInteractiveControl(candidate)) return true;
+    const equivalentMatches = matches.filter(
+      (other) => other !== candidate && haveSameSelectorIdentity(candidate, other, selector),
+    );
+    if (
+      equivalentMatches.some(
+        (other) =>
+          isInteractiveControl(other) &&
+          isDescendantOfSnapshotNode(nodes, candidate, other, nodeByIndex),
+      )
+    ) {
+      return false;
+    }
+    return !equivalentMatches.some((other) =>
+      isDescendantOfSnapshotNode(nodes, other, candidate, nodeByIndex),
+    );
+  });
+}
 
 export function selectMaestroSnapshotMatch(
   matches: SnapshotNode[],
@@ -12,4 +48,52 @@ export function selectMaestroSnapshotMatch(
 
 function hasUsableRect(node: SnapshotNode): node is SnapshotNode & { rect: Rect } {
   return isPositiveFiniteRect(node.rect);
+}
+
+function hasTextualSelector(selector: MaestroSelector): boolean {
+  return selector.id !== undefined || selector.label !== undefined || selector.text !== undefined;
+}
+
+function haveSameSelectorIdentity(
+  left: SnapshotNode,
+  right: SnapshotNode,
+  selector: MaestroSelector,
+): boolean {
+  if (selector.id !== undefined && normalize(left.identifier) !== normalize(right.identifier)) {
+    return false;
+  }
+  if (selector.label !== undefined && normalize(left.label) !== normalize(right.label)) {
+    return false;
+  }
+  if (selector.text !== undefined) {
+    const leftText = visibleTextValues(left);
+    const rightText = new Set(visibleTextValues(right));
+    if (!leftText.some((value) => rightText.has(value))) return false;
+  }
+  return true;
+}
+
+function visibleTextValues(node: SnapshotNode): string[] {
+  return [node.label, node.value, node.identifier]
+    .map(normalize)
+    .filter((value): value is string => value !== undefined);
+}
+
+function normalize(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  const normalized = normalizeText(value);
+  return normalized || undefined;
+}
+
+function isInteractiveControl(node: SnapshotNode): boolean {
+  const type = normalizeType(node.type ?? '');
+  return (
+    type === 'button' ||
+    type === 'link' ||
+    type === 'switch' ||
+    type === 'searchfield' ||
+    type === 'textfield' ||
+    type === 'securetextfield' ||
+    type === 'textview'
+  );
 }

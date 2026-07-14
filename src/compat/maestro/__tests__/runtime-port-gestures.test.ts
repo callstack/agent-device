@@ -95,14 +95,39 @@ test('uses the structured gesture contract without observing absolute swipes', a
   expect(gesture).toHaveBeenNthCalledWith(
     4,
     {
-      from: { x: 370, y: 420 },
-      to: { x: 50, y: 420 },
+      from: { x: 350, y: 420 },
+      to: { x: 70, y: 420 },
       durationMs: 400,
     },
     expect.objectContaining({
       generation: 3,
       gestureViewport: { x: 10, y: 20, width: 400, height: 800 },
     }),
+  );
+});
+
+test('keeps directional right swipes inside the system gesture edges', async () => {
+  const gesture = vi.fn(async () => undefined);
+  const operations = makeOperations({
+    platform: 'ios',
+    gesture,
+    resolveGestureViewport: vi.fn(async () => ({ x: 0, y: 0, width: 400, height: 800 })),
+  });
+
+  await createMaestroRuntimePort(operations).execute({
+    command: {
+      kind: 'swipe',
+      source: { line: 2 },
+      gesture: { kind: 'screen', direction: 'right', duration: 300 },
+    },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+
+  expect(gesture).toHaveBeenCalledWith(
+    { from: { x: 60, y: 400 }, to: { x: 340, y: 400 }, durationMs: 300 },
+    expect.anything(),
   );
 });
 

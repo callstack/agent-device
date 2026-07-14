@@ -190,6 +190,79 @@ test('uses canonical iOS presentation only for atomic selector uniqueness', asyn
   expect(requests[1]?.positionals).toEqual(['text="First"']);
 });
 
+test('uses resolved iOS geometry when canonical presentation changes target bounds', async () => {
+  const requests: DaemonRequest[] = [];
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      if (request.command !== 'snapshot') return { ok: true, data: {} };
+      return {
+        ok: true,
+        data: {
+          createdAt: 0,
+          nodes: [
+            {
+              index: 0,
+              depth: 0,
+              type: 'Application',
+              rect: { x: 0, y: 0, width: 393, height: 852 },
+            },
+            {
+              index: 1,
+              depth: 1,
+              parentIndex: 0,
+              type: 'Other',
+              label: 'Article',
+              rect: { x: 0, y: 97, width: 393, height: 48 },
+            },
+            {
+              index: 2,
+              depth: 2,
+              parentIndex: 1,
+              type: 'ScrollView',
+              label: 'Article',
+              rect: { x: 0, y: 97, width: 393, height: 48 },
+            },
+            {
+              index: 3,
+              depth: 3,
+              parentIndex: 2,
+              type: 'Other',
+              label: 'Article',
+              rect: { x: -13.666, y: 97, width: 560, height: 48 },
+            },
+            {
+              index: 4,
+              depth: 4,
+              parentIndex: 3,
+              type: 'Other',
+              label: 'Article',
+              rect: { x: -3.666, y: 97, width: 120, height: 48 },
+            },
+          ],
+        },
+      };
+    },
+    dependencies: makeDependencies(),
+    platform: 'ios',
+  });
+
+  await port.execute({
+    command: {
+      kind: 'tapOn',
+      source: { line: 2 },
+      target: { space: 'target', selector: { text: 'Article' } },
+    },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+
+  expect(requests.map(({ command }) => command)).toEqual(['snapshot', 'click']);
+  expect(requests[1]?.positionals).toEqual(['56', '121']);
+});
+
 test('does not collapse distinct nested iOS controls with identical frames', async () => {
   const requests: DaemonRequest[] = [];
   const duplicateRect = { x: 16, y: 298, width: 180, height: 48 };

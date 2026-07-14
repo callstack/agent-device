@@ -66,3 +66,77 @@ test('typed target resolution applies typed childOf and reports structured misse
     evidence: { matched: true, visible: false, candidateCount: 1 },
   });
 });
+
+test('iOS target resolution selects a matching leaf through duplicate accessibility wrappers', () => {
+  const snapshot = makeSnapshot([
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 393, height: 852 },
+    },
+    {
+      index: 1,
+      depth: 1,
+      parentIndex: 0,
+      type: 'Other',
+      label: 'Article',
+      rect: { x: 0, y: 97, width: 393, height: 48 },
+    },
+    {
+      index: 2,
+      depth: 2,
+      parentIndex: 1,
+      type: 'ScrollView',
+      label: 'Article',
+      rect: { x: 0, y: 97, width: 393, height: 48 },
+    },
+    {
+      index: 3,
+      depth: 3,
+      parentIndex: 2,
+      type: 'Other',
+      label: 'Article',
+      rect: { x: -13.666, y: 97, width: 560, height: 48 },
+    },
+    {
+      index: 4,
+      depth: 4,
+      parentIndex: 3,
+      type: 'Other',
+      label: 'Article',
+      rect: { x: -3.666, y: 97, width: 120, height: 48 },
+    },
+  ]);
+
+  expect(
+    resolveMaestroTargetFromSnapshot(snapshot, { selector: { text: 'Article' } }, 'ios'),
+  ).toMatchObject({
+    ok: true,
+    node: { index: 4 },
+    rect: { x: -3.666, y: 97, width: 120, height: 48 },
+    matches: 1,
+  });
+});
+
+test('iOS target resolution preserves distinct nested controls matched by one expression', () => {
+  const snapshot = makeSnapshot([
+    {
+      index: 0,
+      type: 'Button',
+      label: 'Save row',
+      rect: { x: 16, y: 100, width: 200, height: 48 },
+    },
+    {
+      index: 1,
+      parentIndex: 0,
+      type: 'Button',
+      label: 'Save action',
+      rect: { x: 136, y: 100, width: 80, height: 48 },
+    },
+  ]);
+
+  expect(
+    resolveMaestroTargetFromSnapshot(snapshot, { selector: { text: 'Save.*' }, index: 1 }, 'ios'),
+  ).toMatchObject({ ok: true, node: { index: 1 }, matches: 2 });
+});

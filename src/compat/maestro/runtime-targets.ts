@@ -12,7 +12,11 @@ import {
 import type { MaestroSelector } from './program-ir.ts';
 import { findMaestroTypedSelectorMatches } from './runtime-target-matching.ts';
 import { filterVisibleMaestroMatches, type MaestroPlatform } from './runtime-target-policy.ts';
-import { selectMaestroSnapshotMatch } from './runtime-target-ranking.ts';
+import {
+  normalizeMaestroSnapshotMatches,
+  selectMaestroSnapshotMatch,
+} from './runtime-target-ranking.ts';
+import { areRectsApproximatelyEqual } from '../../utils/rect-center.ts';
 
 export type MaestroTargetQuery = {
   selector: MaestroSelector;
@@ -64,15 +68,21 @@ export function resolveMaestroTargetFromSnapshot(
   }
 
   const visible = filterVisibleMaestroMatches({ nodes: snapshot.nodes, matches, platform });
-  const target = selectMaestroSnapshotMatch(visible.matches, query.index);
-  const evidence = buildMaestroTargetEvidence(query, matches, visible.matches, target?.node);
+  const rankedMatches = normalizeMaestroSnapshotMatches(
+    snapshot.nodes,
+    visible.matches,
+    query.selector,
+    platform,
+  );
+  const target = selectMaestroSnapshotMatch(rankedMatches, query.index);
+  const evidence = buildMaestroTargetEvidence(query, matches, rankedMatches, target?.node);
   if (!target) {
     const index = query.index === undefined ? '' : ` index ${query.index}`;
     return {
       ok: false,
       message: visible.blockedByReactNativeOverlay
         ? 'React Native overlay is covering app content.'
-        : matches.length > 0 && visible.matches.length === 0
+        : matches.length > 0 && rankedMatches.length === 0
           ? `Maestro selector matched ${matches.length} element(s), but none were visible.`
           : `Maestro selector did not match${index}.`,
       evidence,
@@ -82,13 +92,8 @@ export function resolveMaestroTargetFromSnapshot(
     ok: true,
     node: target.node,
     rect: target.rect,
-    matches: visible.matches.length,
-    dispatchCandidates: countCanonicalDispatchCandidates(
-      snapshot,
-      query,
-      platform,
-      visible.matches,
-    ),
+    matches: rankedMatches.length,
+    dispatchCandidates: countCanonicalDispatchCandidates(snapshot, query, platform, target),
     evidence,
   };
 }
@@ -97,19 +102,28 @@ function countCanonicalDispatchCandidates(
   snapshot: SnapshotState,
   query: MaestroTargetQuery,
   platform: MaestroPlatform,
-  visibleMatches: SnapshotNode[],
+  target: { node: SnapshotNode; rect: Rect },
 ): number {
-  if (platform !== 'ios' || query.childOf) return visibleMatches.length;
+  if (platform !== 'ios' || query.childOf) return 0;
   const canonicalSnapshot = {
     ...snapshot,
     nodes: attachRefs(presentIosInteractiveSnapshot(snapshot.nodes)),
   };
   const canonicalMatches = findMaestroTypedSelectorMatches(canonicalSnapshot, query.selector);
-  return filterVisibleMaestroMatches({
+  const canonicalVisibleMatches = filterVisibleMaestroMatches({
     nodes: canonicalSnapshot.nodes,
     matches: canonicalMatches,
     platform,
-  }).matches.length;
+  }).matches;
+  const canonicalRankedMatches = normalizeMaestroSnapshotMatches(
+    canonicalSnapshot.nodes,
+    canonicalVisibleMatches,
+    query.selector,
+    platform,
+  );
+  if (canonicalRankedMatches.length !== 1) return canonicalRankedMatches.length;
+  const canonicalTarget = selectMaestroSnapshotMatch(canonicalRankedMatches, undefined);
+  return canonicalTarget && areRectsApproximatelyEqual(canonicalTarget.rect, target.rect) ? 1 : 0;
 }
 
 function buildMaestroTargetEvidence(

@@ -1,4 +1,5 @@
 import { AppError } from '../../kernel/errors.ts';
+import { buildInPageSwipeGesturePlan } from '../../contracts/scroll-gesture.ts';
 import { pointInsideRect } from '../../utils/rect-center.ts';
 import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
 import type { MaestroRuntimeRequest } from './engine-types.ts';
@@ -116,9 +117,17 @@ function screenSwipeEndpoints(
   direction: MaestroDirection,
   platform: MaestroRuntimeOperations['platform'],
 ): { start: { x: number; y: number }; end: { x: number; y: number } } {
+  if (direction === 'left' || direction === 'right') {
+    const plan = buildInPageSwipeGesturePlan(direction, {
+      referenceWidth: viewport.width,
+      referenceHeight: viewport.height,
+    });
+    return {
+      start: { x: viewport.x + plan.x1, y: viewport.y + plan.y1 },
+      end: { x: viewport.x + plan.x2, y: viewport.y + plan.y2 },
+    };
+  }
   const preset = MAESTRO_COMPATIBILITY_PRESETS.screenSwipe;
-  const nearX = pointInViewport(viewport, preset.nearEdgeFraction, preset.centerFraction);
-  const farX = pointInViewport(viewport, preset.farEdgeFraction, preset.centerFraction);
   const nearY = pointInViewport(viewport, preset.centerFraction, preset.nearEdgeFraction);
   const farY = pointInViewport(viewport, preset.centerFraction, preset.farEdgeFraction);
   const downStart = pointInViewport(viewport, preset.centerFraction, preset.downStartFraction);
@@ -127,16 +136,9 @@ function screenSwipeEndpoints(
     preset.centerFraction,
     preset.upStartFraction[platform],
   );
-  switch (direction) {
-    case 'up':
-      return { start: upStart, end: nearY };
-    case 'down':
-      return { start: downStart, end: farY };
-    case 'left':
-      return { start: farX, end: nearX };
-    case 'right':
-      return { start: nearX, end: farX };
-  }
+  return direction === 'up'
+    ? { start: upStart, end: nearY }
+    : { start: downStart, end: farY };
 }
 
 function pointInViewport(
