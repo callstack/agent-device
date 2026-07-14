@@ -1,5 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 import { AppError } from '../../../kernel/errors.ts';
+import { maestroTestFailure } from '../compatibility-errors.ts';
 import { executeMaestroProgram } from '../engine.ts';
 import { parseMaestroProgram } from '../program-ir-parser.ts';
 import type {
@@ -94,7 +95,7 @@ describe('executeMaestroProgram', () => {
         attempts.push(request);
         if (attempts.length === 1) {
           request.invalidateObservation();
-          throw new AppError('COMMAND_FAILED', 'retry me');
+          throw maestroTestFailure('retry me');
         }
         request.invalidateObservation();
         return {};
@@ -119,6 +120,77 @@ describe('executeMaestroProgram', () => {
     expect(result.generation).toBe(2);
   });
 
+  test('caps retry blocks at three retries', async () => {
+    const execute = vi.fn(async (request: MaestroRuntimeRequest) => {
+      request.invalidateObservation();
+      throw maestroTestFailure('retry me');
+    });
+    const program = parseMaestroProgram(
+      ['---', '- retry:', '    maxRetries: 99', '    commands:', '      - tapOn: Retry'].join('\n'),
+    );
+
+    await expect(executeMaestroProgram(program, makePort({ execute }))).rejects.toThrow('retry me');
+
+    expect(execute).toHaveBeenCalledTimes(4);
+  });
+
+  test('does not retry infrastructure or ambiguous dispatch failures', async () => {
+    const execute = vi.fn(async () => {
+      throw new AppError('COMMAND_FAILED', 'dispatch outcome is unknown');
+    });
+    const program = parseMaestroProgram(
+      ['---', '- retry:', '    maxRetries: 3', '    commands:', '      - tapOn: Submit'].join('\n'),
+    );
+
+    await expect(executeMaestroProgram(program, makePort({ execute }))).rejects.toThrow(
+      'dispatch outcome is unknown',
+    );
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
+  test('observer callbacks cannot alter successful execution', async () => {
+    const observer = {
+      commandStarted: vi.fn(() => {
+        throw new Error('start observer failed');
+      }),
+      commandCompleted: vi.fn(() => {
+        throw new Error('complete observer failed');
+      }),
+    };
+    const program = parseMaestroProgram('---\n- back\n');
+
+    await expect(executeMaestroProgram(program, makePort(), { observer })).resolves.toMatchObject({
+      executed: 1,
+    });
+    expect(observer.commandStarted).toHaveBeenCalledOnce();
+    expect(observer.commandCompleted).toHaveBeenCalledOnce();
+  });
+
+  test('observer failure cannot mask nested leaf failure provenance', async () => {
+    const execute = vi.fn(async (request: MaestroRuntimeRequest) => {
+      request.invalidateObservation();
+      throw new AppError('COMMAND_FAILED', 'leaf command failed');
+    });
+    const observer = {
+      commandFailed: vi.fn(() => {
+        throw new Error('failure observer failed');
+      }),
+    };
+    const program = parseMaestroProgram(
+      ['---', '- retry:', '    maxRetries: 0', '    commands:', '      - tapOn: Leaf'].join('\n'),
+    );
+
+    await expect(
+      executeMaestroProgram(program, makePort({ execute }), { observer }),
+    ).rejects.toThrow('leaf command failed');
+    expect(observer.commandFailed).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: expect.objectContaining({ kind: 'tapOn' }),
+        source: { line: 5 },
+      }),
+    );
+  });
+
   test('owns hooks, includes, scoped env, output env, repeat, and retry', async () => {
     const executed: MaestroRuntimeRequest[] = [];
     let failingAttempts = 0;
@@ -134,7 +206,7 @@ describe('executeMaestroProgram', () => {
           request.command.target.selector.text === 'Retry'
         ) {
           failingAttempts += 1;
-          if (failingAttempts === 1) throw new AppError('COMMAND_FAILED', 'retry me');
+          if (failingAttempts === 1) throw maestroTestFailure('retry me');
         }
         if (request.command.kind !== 'takeScreenshot') request.invalidateObservation();
         return {};
@@ -366,19 +438,17 @@ describe('executeMaestroProgram', () => {
 
 function makePort(overrides: Partial<MaestroRuntimePort> = {}): MaestroRuntimePort {
   return {
-    execute: vi.fn(
-      async (request): Promise<MaestroRuntimeResult> => {
-        const { command } = request;
-        if (
-          command.kind !== 'takeScreenshot' &&
-          command.kind !== 'runScript' &&
-          command.kind !== 'waitForAnimationToEnd'
-        ) {
-          request.invalidateObservation();
-        }
-        return command.kind === 'takeScreenshot' ? { artifactPaths: [command.path] } : {};
-      },
-    ),
+    execute: vi.fn(async (request): Promise<MaestroRuntimeResult> => {
+      const { command } = request;
+      if (
+        command.kind !== 'takeScreenshot' &&
+        command.kind !== 'runScript' &&
+        command.kind !== 'waitForAnimationToEnd'
+      ) {
+        request.invalidateObservation();
+      }
+      return command.kind === 'takeScreenshot' ? { artifactPaths: [command.path] } : {};
+    }),
     observe: vi.fn(async ({ generation }) => ({ generation, matched: true })),
     ...overrides,
   };

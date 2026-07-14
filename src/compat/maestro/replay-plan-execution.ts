@@ -72,25 +72,35 @@ async function executeObservedStep(
     stepIndex: index + 1,
     stepTotal: state.plan.total,
   };
-  state.options.observer?.commandStarted?.(event);
+  notifyMaestroObserver(() => state.options.observer?.commandStarted?.(event));
   try {
     await executeMaestroReplayPlanStep(step, state);
     checkpointMaestroCancellation(state.options.signal);
-    state.options.observer?.commandCompleted?.({
-      ...event,
-      durationMs: now() - startedAt,
-    });
+    notifyMaestroObserver(() =>
+      state.options.observer?.commandCompleted?.({
+        ...event,
+        durationMs: now() - startedAt,
+      }),
+    );
   } catch (error) {
     const failure = asMaestroReplayPlanStepFailure(error, step);
-    state.options.observer?.commandFailed?.({
-      ...event,
-      ...(failure.command ? { command: failure.command } : {}),
-      source: failure.source,
-      durationMs: now() - startedAt,
-      error: failure.error,
-      artifactPaths: [...state.artifacts],
-      expandedVariables: state.context.expandedVariables,
-    });
+    notifyMaestroObserver(() =>
+      state.options.observer?.commandFailed?.({
+        ...event,
+        ...(failure.command ? { command: failure.command } : {}),
+        source: failure.source,
+        durationMs: now() - startedAt,
+        error: failure.error,
+        artifactPaths: [...state.artifacts],
+        expandedVariables: state.context.expandedVariables,
+      }),
+    );
     throw failure;
   }
+}
+
+function notifyMaestroObserver(callback: (() => void) | undefined): void {
+  try {
+    callback?.();
+  } catch {}
 }

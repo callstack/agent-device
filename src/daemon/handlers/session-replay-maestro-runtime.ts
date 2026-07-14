@@ -268,18 +268,57 @@ function createMaestroReplayObserver(params: {
   onFailure: (event: MaestroFailedEngineEvent) => void;
 }): MaestroEngineObserver {
   const { filePath, tracePath, onFailure } = params;
+  const traceStarts = new Map<number, MaestroEngineEvent>();
   return {
     commandStarted: (event) => {
-      emitMaestroProgress(filePath, event);
-      appendMaestroTraceStart(tracePath, filePath, event);
+      traceStarts.set(event.stepIndex, event);
+      runMaestroObserverCallback(() => emitMaestroProgress(filePath, event));
+      runMaestroObserverCallback(() => appendMaestroTraceStart(tracePath, filePath, event));
     },
     commandCompleted: (event) => {
-      appendMaestroTraceStop(tracePath, filePath, event, true);
+      const traceEvent = takeMaestroTraceStart(traceStarts, event.stepIndex);
+      runMaestroObserverCallback(() =>
+        appendMaestroTraceStop(tracePath, filePath, maestroTraceStopEvent(traceEvent, event), true),
+      );
     },
     commandFailed: (event) => {
-      onFailure(event);
-      appendMaestroTraceStop(tracePath, filePath, event, false);
+      const traceEvent = takeMaestroTraceStart(traceStarts, event.stepIndex);
+      runMaestroObserverCallback(() => onFailure(event));
+      runMaestroObserverCallback(() =>
+        appendMaestroTraceStop(
+          tracePath,
+          filePath,
+          maestroTraceStopEvent(traceEvent, event),
+          false,
+        ),
+      );
     },
+  };
+}
+
+function runMaestroObserverCallback(callback: () => void): void {
+  try {
+    callback();
+  } catch {}
+}
+
+function takeMaestroTraceStart(
+  traceStarts: Map<number, MaestroEngineEvent>,
+  stepIndex: number,
+): MaestroEngineEvent | undefined {
+  const event = traceStarts.get(stepIndex);
+  traceStarts.delete(stepIndex);
+  return event;
+}
+
+function maestroTraceStopEvent(
+  start: MaestroEngineEvent | undefined,
+  event: MaestroEngineEvent & { durationMs: number; error?: unknown },
+): MaestroEngineEvent & { durationMs: number; error?: unknown } {
+  return {
+    ...(start ?? event),
+    durationMs: event.durationMs,
+    ...(event.error === undefined ? {} : { error: event.error }),
   };
 }
 

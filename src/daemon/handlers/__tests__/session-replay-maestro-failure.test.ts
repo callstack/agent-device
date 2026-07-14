@@ -125,3 +125,99 @@ test('typed Maestro failure diagnostics scrub expanded selector values', async (
   expect(divergence.cause.hint).toContain('<var:TARGET>');
   expect(divergence.suggestions).toEqual([]);
 });
+
+test('typed Maestro nested scopes scrub failure values after unwind and keep retry trace identity', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-maestro-nested-redaction-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName));
+  const flowPath = path.join(root, 'flow.yaml');
+  const tracePath = path.join(root, 'replay-timing.ndjson');
+  const sentinel = 'nested-maestro-scope-secret';
+  fs.writeFileSync(
+    flowPath,
+    [
+      'appId: com.example.app',
+      '---',
+      '- retry:',
+      '    maxRetries: 0',
+      '    commands:',
+      '      - runFlow:',
+      '          env:',
+      '            TARGET: ${SECRET}',
+      '          commands:',
+      '            - tapOn: ${TARGET}',
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(tracePath, '');
+  const nodes = [
+    {
+      index: 0,
+      depth: 0,
+      type: 'Application',
+      rect: { x: 0, y: 0, width: 402, height: 874 },
+    },
+    {
+      index: 1,
+      parentIndex: 0,
+      depth: 1,
+      type: 'Button',
+      label: sentinel,
+      rect: { x: 20, y: 40, width: 120, height: 44 },
+      hittable: true,
+    },
+  ];
+
+  const response = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [flowPath],
+      flags: {
+        replayBackend: 'maestro',
+        platform: 'ios',
+        replayEnv: [`SECRET=${sentinel}`],
+      },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    tracePath,
+    invoke: async (req) => {
+      if (req.command === 'snapshot') return { ok: true, data: { nodes } };
+      if (req.command === 'click') {
+        return {
+          ok: false,
+          error: {
+            code: 'COMMAND_FAILED',
+            message: `tap failed for ${sentinel}`,
+            hint: `Find ${sentinel}`,
+          },
+        };
+      }
+      return { ok: true, data: {} };
+    },
+  });
+
+  expect(response.ok).toBe(false);
+  expect(JSON.stringify(response)).not.toContain(sentinel);
+  const events = fs
+    .readFileSync(tracePath, 'utf8')
+    .trim()
+    .split('\n')
+    .map((line) => JSON.parse(line) as Record<string, unknown>);
+  expect(events).toEqual([
+    expect.objectContaining({
+      type: 'replay_action_start',
+      step: 1,
+      line: 3,
+      command: 'retry',
+    }),
+    expect.objectContaining({
+      type: 'replay_action_stop',
+      step: 1,
+      line: 3,
+      command: 'retry',
+      ok: false,
+    }),
+  ]);
+});

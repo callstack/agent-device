@@ -1,4 +1,5 @@
 import { AppError } from '../../kernel/errors.ts';
+import { isMaestroTestFailure, maestroTestFailure } from './compatibility-errors.ts';
 import type { MaestroExecutionContext } from './engine-context.ts';
 import {
   assertMaestroRepeatExpansionLimit,
@@ -22,6 +23,8 @@ import type {
   MaestroReplayPlanOpaqueStep,
   MaestroReplayPlanStep,
 } from './replay-plan-types.ts';
+
+const MAX_RETRIES_ALLOWED = 3;
 
 export type MaestroReplayPlanExecutionState = {
   readonly plan: MaestroReplayPlan;
@@ -147,7 +150,10 @@ async function executeOpaqueStep(
       return;
     }
     case 'retry': {
-      const retries = readIterationCount(command.maxRetries, 1, state.context, 'retry.maxRetries');
+      const retries = Math.min(
+        readIterationCount(command.maxRetries, 1, state.context, 'retry.maxRetries'),
+        MAX_RETRIES_ALLOWED,
+      );
       state.executed += 1;
       await executeRetry(step.body, retries, state);
       return;
@@ -178,6 +184,7 @@ async function executeRetry(
       return;
     } catch (error) {
       checkpointMaestroCancellation(state.options.signal);
+      if (!isMaestroTestFailure(unwrapMaestroReplayPlanStepFailure(error))) throw error;
       failure = asMaestroReplayPlanStepFailure(error, steps[0]);
     }
   }
@@ -205,7 +212,7 @@ async function requireObservation(
   state: MaestroReplayPlanExecutionState,
 ): Promise<void> {
   if (!(await observe(condition, timeoutMs, state)).matched) {
-    throw new AppError('COMMAND_FAILED', `Maestro ${condition.kind} condition did not match.`);
+    throw maestroTestFailure(`Maestro ${condition.kind} condition did not match.`);
   }
 }
 

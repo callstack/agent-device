@@ -11,7 +11,7 @@ export function createMaestroExecutionContext(
   // Flow config and runFlow env values are stack-scoped; script output variables persist.
   let persistentValues = stringifyValues(defaults);
   const scopes: Record<string, string>[] = [];
-  const expandedNames = new Set<string>();
+  const expandedValues = new Map<string, string>();
   let generation = 0;
   let observation: MaestroObservation | undefined;
 
@@ -26,12 +26,7 @@ export function createMaestroExecutionContext(
       return observation?.generation === generation ? observation : undefined;
     },
     get expandedVariables(): Readonly<Record<string, string>> {
-      const values = currentValues();
-      return Object.fromEntries(
-        [...expandedNames]
-          .filter((name) => Object.hasOwn(values, name))
-          .map((name) => [name, values[name]!] as const),
-      );
+      return Object.fromEntries(expandedValues);
     },
     enter(scopedValues: Record<string, string | number | boolean> = {}): () => void {
       const resolved = resolveScopedValues(scopedValues);
@@ -63,7 +58,7 @@ export function createMaestroExecutionContext(
       observation = undefined;
     },
     resolve(value: string): string {
-      return resolveValue(value, currentValues(), (name) => expandedNames.add(name));
+      return resolveValue(value, currentValues(), recordExpandedValue);
     },
   };
 
@@ -89,6 +84,10 @@ export function createMaestroExecutionContext(
     }
     return resolved;
   }
+
+  function recordExpandedValue(name: string, value: string): void {
+    expandedValues.set(name, value);
+  }
 }
 
 function stringifyValues(
@@ -100,12 +99,13 @@ function stringifyValues(
 function resolveValue(
   value: string,
   values: Readonly<Record<string, string>>,
-  onExpanded?: (name: string) => void,
+  onExpanded?: (name: string, value: string) => void,
   resolving = new Set<string>(),
 ): string {
   return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_.]*)\}/g, (match, key: string) => {
     if (!Object.hasOwn(values, key) || resolving.has(key)) return match;
-    onExpanded?.(key);
-    return resolveValue(values[key]!, values, onExpanded, new Set([...resolving, key]));
+    const resolved = resolveValue(values[key]!, values, onExpanded, new Set([...resolving, key]));
+    onExpanded?.(key, resolved);
+    return resolved;
   });
 }
