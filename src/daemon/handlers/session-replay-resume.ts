@@ -94,12 +94,21 @@ export function buildReplayDivergenceResume(params: {
   actions: SessionAction[];
   planDigest: string;
   repairHint: ReplayRepairHint;
+  // Whether a live session exists at divergence time — the `pendingRecordAndHeal`
+  // watermark can only be stamped on a session, so it gates the empty-tail
+  // (one-past-the-end) `alternateFrom`. See `computeReplayResumeAlternateFrom`.
+  sessionExists: boolean;
 }): ReplayDivergenceResume {
-  const { failedIndex, actions, planDigest, repairHint } = params;
+  const { failedIndex, actions, planDigest, repairHint, sessionExists } = params;
   const from = repairHint === 'record-and-heal' ? failedIndex + 1 : failedIndex;
   const preflight = evaluateReplayResumePreflight({ from, actions });
   if (!preflight.allowed) return { allowed: false, from, planDigest, reason: preflight.reason };
-  const alternateFrom = computeReplayResumeAlternateFrom({ failedIndex, actions, repairHint });
+  const alternateFrom = computeReplayResumeAlternateFrom({
+    failedIndex,
+    actions,
+    repairHint,
+    sessionExists,
+  });
   return {
     allowed: true,
     from,
@@ -115,11 +124,23 @@ export function buildReplayDivergenceResume(params: {
  * actually be accepted by the daemon — i.e. exactly its own resume preflight
  * passes (`evaluateReplayResumePreflight`, which unlike `from`'s own preflight
  * ALSO requires the DIVERGED step to be skip-safe, since reaching
- * `failedIndex + 1` skips the diverged step). That preflight is the shared
- * acceptance condition on BOTH the mid-plan path (un-gated, in range) and the
- * last-step empty-tail path (`computeRecordAndHealWatermark` stamps on exactly
- * this condition). Its checked range is a strict superset of `from`'s, so
- * `alternateFrom` present implies `resume.allowed` — never a contradiction.
+ * `failedIndex + 1` skips the diverged step). Its checked range is a strict
+ * superset of `from`'s, so `alternateFrom` present implies `resume.allowed` —
+ * never a contradiction.
+ *
+ * The alternate has two acceptance regimes by position:
+ *  - MID-PLAN (`failedIndex + 1 <= actions.length`): in range, needs no
+ *    watermark — session-independent, gated on the preflight alone.
+ *  - LAST STEP / EMPTY-TAIL (`failedIndex + 1 > actions.length`, one past the
+ *    plan's end): the range check accepts this ordinal ONLY when it matches a
+ *    stamped `pendingRecordAndHeal` watermark (`describeOutOfRangeResumeFrom`),
+ *    and that watermark can only be stamped on a LIVE session (both divergence
+ *    sites gate `stampPendingRecordAndHealWatermark` on `if (session)`). With
+ *    no session — a one-step `open` failure, or a session closed mid-replay —
+ *    the watermark can never be stamped, so `--from actions.length + 1` would
+ *    be rejected as out of range; advertising it would re-introduce the exact
+ *    text/structured mismatch #1262 fixed. So the empty-tail alternate
+ *    additionally requires `sessionExists`.
  *
  * Absent for `record-and-heal` (its `from` already IS `failedIndex + 1`) and
  * `state-repair` (no recorded-action alternate); absent when the diverged step
@@ -132,13 +153,15 @@ function computeReplayResumeAlternateFrom(params: {
   failedIndex: number;
   actions: SessionAction[];
   repairHint: ReplayRepairHint;
+  sessionExists: boolean;
 }): number | undefined {
-  const { failedIndex, actions, repairHint } = params;
+  const { failedIndex, actions, repairHint, sessionExists } = params;
   if (repairHint !== 'caution' && repairHint !== 'manual') return undefined;
   const alternateFrom = failedIndex + 1;
-  return evaluateReplayResumePreflight({ from: alternateFrom, actions }).allowed
-    ? alternateFrom
-    : undefined;
+  if (!evaluateReplayResumePreflight({ from: alternateFrom, actions }).allowed) return undefined;
+  // Empty-tail: authorizable only via a watermark, which needs a live session.
+  if (alternateFrom > actions.length && !sessionExists) return undefined;
+  return alternateFrom;
 }
 
 /**

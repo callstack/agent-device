@@ -146,6 +146,7 @@ test('buildReplayDivergenceResume reports allowed:true with from/planDigest for 
     actions,
     planDigest: 'abc123',
     repairHint: 'state-repair',
+    sessionExists: true,
   });
   assert.deepEqual(resume, { allowed: true, from: 2, planDigest: 'abc123' });
 });
@@ -164,6 +165,7 @@ test('buildReplayDivergenceResume reports allowed:false with from/planDigest/rea
     actions,
     planDigest: 'abc123',
     repairHint: 'manual',
+    sessionExists: true,
   });
   assert.equal(resume.allowed, false);
   assert.equal(resume.from, 2);
@@ -187,6 +189,7 @@ test('buildReplayDivergenceResume with repairHint record-and-heal resumes AFTER 
     actions,
     planDigest: 'abc123',
     repairHint: 'record-and-heal',
+    sessionExists: true,
   });
   assert.deepEqual(resume, { allowed: true, from: 3, planDigest: 'abc123' });
 });
@@ -204,6 +207,7 @@ test('buildReplayDivergenceResume with repairHint record-and-heal on the LAST pl
     actions,
     planDigest: 'abc123',
     repairHint: 'record-and-heal',
+    sessionExists: true,
   });
   assert.deepEqual(resume, { allowed: true, from: 3, planDigest: 'abc123' });
 });
@@ -225,6 +229,7 @@ test('buildReplayDivergenceResume with repairHint record-and-heal still rejects 
     actions,
     planDigest: 'abc123',
     repairHint: 'record-and-heal',
+    sessionExists: true,
   });
   assert.equal(resume.allowed, false);
   assert.equal(resume.from, 3);
@@ -251,6 +256,7 @@ test('buildReplayDivergenceResume: caution mid-plan (skip-safe diverged step) ca
     actions,
     planDigest: 'abc123',
     repairHint: 'caution',
+    sessionExists: true,
   });
   assert.equal(resume.allowed, true);
   assert.equal(resume.from, 2); // unshifted
@@ -265,6 +271,7 @@ test('buildReplayDivergenceResume: manual last-step (skip-safe diverged step) ca
     actions,
     planDigest: 'abc123',
     repairHint: 'manual',
+    sessionExists: true,
   });
   assert.equal(resume.allowed, true);
   assert.equal(resume.from, 2);
@@ -286,6 +293,7 @@ test('buildReplayDivergenceResume: caution whose diverged step is a runScript ca
     actions: midPlan,
     planDigest: 'abc123',
     repairHint: 'caution',
+    sessionExists: true,
   });
   assert.equal(midPlanResume.allowed, true); // resuming AT 2 is fine
   assert.equal(midPlanResume.from, 2);
@@ -301,6 +309,7 @@ test('buildReplayDivergenceResume: caution whose diverged step is a runScript ca
     actions: lastStep,
     planDigest: 'abc123',
     repairHint: 'caution',
+    sessionExists: true,
   });
   assert.equal(lastStepResume.allowed, true);
   assert.equal(lastStepResume.from, 2);
@@ -329,6 +338,7 @@ test('buildReplayDivergenceResume: manual whose diverged step is inside runtime 
     actions: midPlan,
     planDigest: 'abc123',
     repairHint: 'manual',
+    sessionExists: true,
   });
   assert.equal('alternateFrom' in midPlanResume, false);
 
@@ -338,6 +348,7 @@ test('buildReplayDivergenceResume: manual whose diverged step is inside runtime 
     actions: lastStep,
     planDigest: 'abc123',
     repairHint: 'manual',
+    sessionExists: true,
   });
   assert.equal('alternateFrom' in lastStepResume, false);
 });
@@ -354,10 +365,61 @@ test('buildReplayDivergenceResume: record-and-heal and state-repair never carry 
       actions,
       planDigest: 'abc123',
       repairHint,
+      sessionExists: true,
     });
     assert.equal(resume.allowed, true);
     if (!resume.allowed) return;
     assert.equal(resume.alternateFrom, undefined, `expected no alternateFrom for ${repairHint}`);
+  }
+});
+
+// --- #1262 (re-review): the EMPTY-TAIL alternate (`failedIndex + 1 >
+// actions.length`) is authorizable only via the `pendingRecordAndHeal`
+// watermark, which can only be stamped on a LIVE session. With NO session — a
+// one-step `open` failure, or a session closed mid-replay — advertising
+// `--from actions.length + 1` would be rejected as out of range, so it must
+// not be emitted. A MID-PLAN alternate (in range) needs no watermark and stays
+// session-independent. ---
+
+test('buildReplayDivergenceResume: LAST-step caution/manual with NO session carries NO alternateFrom (empty-tail needs a watermark, which needs a session)', () => {
+  const actions: SessionAction[] = [action({ command: 'open' }), action({ command: 'click' })];
+  for (const repairHint of ['caution', 'manual'] as const) {
+    const resume = buildReplayDivergenceResume({
+      failedIndex: 2, // last step → alternate would be the one-past-end ordinal 3
+      actions,
+      planDigest: 'abc123',
+      repairHint,
+      sessionExists: false,
+    });
+    assert.equal(resume.allowed, true); // resuming AT the failed step (2) is still fine
+    if (!resume.allowed) return;
+    assert.equal(
+      resume.alternateFrom,
+      undefined,
+      `expected no empty-tail alternateFrom without a session for ${repairHint}`,
+    );
+  }
+});
+
+test('buildReplayDivergenceResume: MID-PLAN caution/manual with NO session STILL carries alternateFrom (in-range, no watermark needed)', () => {
+  // 3-step plan; failedIndex 2 → alternate 3 is IN RANGE (<= actions.length),
+  // so it needs no watermark and is emitted regardless of session existence.
+  const actions: SessionAction[] = [
+    action({ command: 'open' }),
+    action({ command: 'click' }),
+    action({ command: 'click' }),
+  ];
+  for (const repairHint of ['caution', 'manual'] as const) {
+    const resume = buildReplayDivergenceResume({
+      failedIndex: 2,
+      actions,
+      planDigest: 'abc123',
+      repairHint,
+      sessionExists: false,
+    });
+    assert.equal(resume.allowed, true);
+    if (!resume.allowed) return;
+    assert.equal(resume.alternateFrom, 3, `expected mid-plan alternateFrom for ${repairHint}`);
   }
 });
 
@@ -388,6 +450,7 @@ test('stampPendingRecordAndHealWatermark stamps record-and-heal at its own (alre
     actions: midPlanActions,
     planDigest: 'abc123',
     repairHint: 'record-and-heal',
+    sessionExists: true,
   });
   const midPlanSession = sessionWithActions(1);
   stampPendingRecordAndHealWatermark({
@@ -412,6 +475,7 @@ test('stampPendingRecordAndHealWatermark stamps record-and-heal at its own (alre
     actions: lastStepActions,
     planDigest: 'abc123',
     repairHint: 'record-and-heal',
+    sessionExists: true,
   });
   const lastStepSession = sessionWithActions(1);
   stampPendingRecordAndHealWatermark({
@@ -434,6 +498,7 @@ test('stampPendingRecordAndHealWatermark stamps caution at the LAST-step empty-t
     actions,
     planDigest: 'abc123',
     repairHint: 'caution',
+    sessionExists: true,
   });
   assert.equal(resume.from, 2); // unshifted — item 1 of #1262's resolution
   const session = sessionWithActions(1);
@@ -459,6 +524,7 @@ test('stampPendingRecordAndHealWatermark stamps manual the same way as caution a
     actions,
     planDigest: 'abc123',
     repairHint: 'manual',
+    sessionExists: true,
   });
   const session = sessionWithActions(1);
   stampPendingRecordAndHealWatermark({
@@ -487,6 +553,7 @@ test('stampPendingRecordAndHealWatermark does NOT stamp for a MID-PLAN caution/m
       actions,
       planDigest: 'abc123',
       repairHint,
+      sessionExists: true,
     });
     const session = sessionWithActions(1);
     stampPendingRecordAndHealWatermark({ session, resume, repairHint, failedIndex: 2, actions });
@@ -513,6 +580,7 @@ test('stampPendingRecordAndHealWatermark does not stamp for a LAST-step caution/
     actions,
     planDigest: 'abc123',
     repairHint: 'caution',
+    sessionExists: true,
   });
   const session = sessionWithActions(2);
   stampPendingRecordAndHealWatermark({
@@ -532,6 +600,7 @@ test('stampPendingRecordAndHealWatermark never stamps for state-repair (not in t
     actions,
     planDigest: 'abc123',
     repairHint: 'state-repair',
+    sessionExists: true,
   });
   const session = sessionWithActions(1);
   stampPendingRecordAndHealWatermark({
@@ -553,6 +622,7 @@ test('stampPendingRecordAndHealWatermark clears a stale watermark from an earlie
     actions,
     planDigest: 'abc123',
     repairHint: 'state-repair',
+    sessionExists: true,
   });
   stampPendingRecordAndHealWatermark({
     session,
