@@ -36,7 +36,6 @@ export async function observeMaestroCondition(
     kind: 'selector',
     selector: request.condition.selector,
     visible: match.visible,
-    ...(match.rect ? { frame: match.rect } : {}),
     candidateCount: match.candidateCount,
     ...(match.ref ? { ref: match.ref } : {}),
   };
@@ -98,7 +97,6 @@ export function observationForTarget(target: MaestroTargetResolution): MaestroOb
     kind: 'selector',
     selector: target.selector,
     visible: target.visible,
-    frame: target.rect,
     candidateCount: target.candidateCount,
     ...(target.ref ? { ref: target.ref } : {}),
   };

@@ -18,7 +18,6 @@ export type MaestroMatchResolutionOptions = {
   promoteTapTarget?: boolean;
   preferredContext?: MaestroPreferredContext;
   requireOnScreen?: boolean;
-  allowLeadingCompositeLabelMatch?: boolean;
 };
 
 export type MaestroTargetQuery = {
@@ -55,12 +54,9 @@ export function resolveMaestroTargetFromSnapshot(
   frame: TouchReferenceFrame | undefined,
   options: MaestroMatchResolutionOptions = {},
 ): MaestroTargetResolution {
-  const matchOptions = {
-    allowLeadingCompositeLabelMatch: options.allowLeadingCompositeLabelMatch,
-  };
-  let matches = findMaestroTypedSelectorMatches(snapshot, query.selector, matchOptions);
+  let matches = findMaestroTypedSelectorMatches(snapshot, query.selector);
   if (query.childOf) {
-    const parents = findMaestroTypedSelectorMatches(snapshot, query.childOf, matchOptions);
+    const parents = findMaestroTypedSelectorMatches(snapshot, query.childOf);
     if (parents.length === 0) {
       return {
         ok: false,

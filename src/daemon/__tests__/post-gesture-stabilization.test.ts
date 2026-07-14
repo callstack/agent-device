@@ -32,6 +32,14 @@ test('markPostGestureStabilization marks gesture swipe sessions', () => {
   assert.equal(session.postGestureStabilization?.action, 'gesture');
 });
 
+test('markPostGestureStabilization honors an explicit opt-out', () => {
+  const session = makeSession('android');
+
+  markPostGestureStabilization(session, 'swipe', [], { postGestureStabilization: false });
+
+  assert.equal(session.postGestureStabilization, undefined);
+});
+
 test('markPostGestureStabilization ignores non-swipe gesture sessions', () => {
   const session = makeSession('android');
 

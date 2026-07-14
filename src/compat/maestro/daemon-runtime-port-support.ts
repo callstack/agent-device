@@ -173,7 +173,6 @@ export function observationFromMatch(
       kind: 'selector',
       selector,
       visible: match.visible,
-      ...(match.rect ? { frame: match.rect } : {}),
       candidateCount: match.candidateCount,
       ...(match.ref ? { ref: match.ref } : {}),
     },

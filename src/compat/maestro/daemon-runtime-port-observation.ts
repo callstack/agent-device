@@ -38,7 +38,7 @@ export type MaestroSnapshotReader = (
 
 export type MaestroSnapshotSource = {
   readonly capture: MaestroSnapshotReader;
-  readonly bindObservation: (observation: MaestroObservation) => void;
+  readonly bindObservation: (observation: MaestroObservation) => MaestroObservation;
   readonly reuseObservation: (context: MaestroRuntimeOperationContext) => SnapshotState | undefined;
   readonly invalidate: () => void;
 };
@@ -262,7 +262,6 @@ function resolutionOptions(
 ): MaestroMatchResolutionOptions {
   return {
     promoteTapTarget: mode === 'tap',
-    allowLeadingCompositeLabelMatch: mode === 'tap',
     requireOnScreen: true,
     ...(preferredContext ? { preferredContext } : {}),
   };

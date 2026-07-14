@@ -13,23 +13,21 @@ export type MaestroControlCommand = Extract<
 
 export type MaestroRuntimeCommand = Exclude<MaestroCommand, MaestroControlCommand>;
 
-export type MaestroObservationFrame = {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
+declare const maestroObservationIdentity: unique symbol;
+export type MaestroObservationIdentity = string & {
+  readonly [maestroObservationIdentity]: true;
 };
 
 export type MaestroObservationEvidence = {
   kind: 'selector';
   selector: MaestroSelector;
   visible: boolean;
-  frame?: MaestroObservationFrame;
   candidateCount: number;
   ref?: string;
 };
 
 export type MaestroObservation = {
+  identity?: MaestroObservationIdentity;
   generation: number;
   matched: boolean;
   candidateCount?: number;

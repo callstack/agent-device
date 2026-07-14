@@ -47,3 +47,15 @@ test('treats selector values as full Maestro regex without punctuation inference
   expect(matchesMaestroTypedSelector(node, { text: 'Item 2' })).toBe(false);
   expect(matchesMaestroTypedSelector(node, { text: 'Item 22 [ready' })).toBe(true);
 });
+
+test('normalizes provider-composite labels for observations and actions', () => {
+  const node = makeSnapshot([
+    {
+      index: 1,
+      type: 'Alert',
+      label: 'You are on 1 page, Hey, OK',
+    },
+  ]).nodes[0]!;
+
+  expect(matchesMaestroTypedSelector(node, { text: 'You are on 1 page' })).toBe(true);
+});

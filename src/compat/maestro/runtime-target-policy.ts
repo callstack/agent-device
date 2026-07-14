@@ -11,10 +11,6 @@ import {
 
 export type MaestroPlatform = 'ios' | 'android';
 
-export type MaestroSelectorMatchOptions = {
-  allowLeadingCompositeLabelMatch?: boolean;
-};
-
 export type MaestroResolvedSnapshotMatch = {
   node: SnapshotNode;
   rect: NonNullable<SnapshotNode['rect']>;
@@ -44,18 +40,13 @@ export type ReactNativeOverlayFilterResult = {
 export function matchesMaestroTypedSelector(
   node: SnapshotNode,
   selector: MaestroSelector,
-  options: MaestroSelectorMatchOptions = {},
 ): boolean {
   const primary = readTypedPrimarySelector(selector);
   if (primary) {
     const matched =
       primary.key === 'text'
-        ? matchesMaestroVisibleText(node, primary.value, options)
-        : matchesMaestroSelectorValue(
-            readMaestroTextTermValue(node, primary.key),
-            primary.value,
-            options,
-          );
+        ? matchesMaestroVisibleText(node, primary.value)
+        : matchesMaestroSelectorValue(readMaestroTextTermValue(node, primary.key), primary.value);
     if (!matched) return false;
   } else if (selector.enabled === undefined && selector.selected === undefined) {
     return false;
@@ -149,19 +140,12 @@ export function maestroVisibleTextMatchRank(node: SnapshotNode, query: string): 
   return 3;
 }
 
-function matchesMaestroSelectorValue(
-  value: string | undefined,
-  query: string,
-  options: MaestroSelectorMatchOptions = {},
-): boolean {
+function matchesMaestroSelectorValue(value: string | undefined, query: string): boolean {
   const text = value ?? '';
   const normalizedText = normalizeText(text);
   const normalizedQuery = normalizeText(query);
   if (normalizedText === normalizedQuery) return true;
-  if (
-    options.allowLeadingCompositeLabelMatch === true &&
-    isLeadingCompositeLabelMatch(normalizedText, normalizedQuery)
-  ) {
+  if (isLeadingCompositeLabelMatch(normalizedText, normalizedQuery)) {
     return true;
   }
   return matchesMaestroRegex(text, query);
@@ -176,14 +160,10 @@ function readTypedPrimarySelector(
   return null;
 }
 
-function matchesMaestroVisibleText(
-  node: SnapshotNode,
-  query: string,
-  options: MaestroSelectorMatchOptions,
-): boolean {
+function matchesMaestroVisibleText(node: SnapshotNode, query: string): boolean {
   return [node.label, extractNodeText(node), node.identifier]
     .filter((value): value is string => Boolean(value))
-    .some((value) => matchesMaestroSelectorValue(value, query, options));
+    .some((value) => matchesMaestroSelectorValue(value, query));
 }
 
 function readMaestroTextTermValue(

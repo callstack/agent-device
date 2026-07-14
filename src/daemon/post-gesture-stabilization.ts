@@ -92,6 +92,7 @@ function isPostGestureStabilizingAction(
   positionals: string[],
   flags: CommandFlags | undefined,
 ): boolean {
+  if (flags?.postGestureStabilization === false) return false;
   if (flags?.postGestureStabilization === true) return true;
   if (action === 'swipe' || action === 'scroll') return true;
   return action === 'gesture' && positionals[0] === 'swipe';

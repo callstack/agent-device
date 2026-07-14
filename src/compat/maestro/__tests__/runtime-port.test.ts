@@ -188,7 +188,7 @@ describe('MaestroRuntimePort', () => {
     expect(events).toEqual(['resolve', 'invalidate', 'dispatch']);
   });
 
-  test('keeps selector evidence and target geometry in the current generation', async () => {
+  test('keeps action geometry local while preserving semantic selector evidence', async () => {
     const resolved: Record<string, MaestroTargetMatch> = {
       ready: {
         generation: 0,
@@ -259,6 +259,13 @@ describe('MaestroRuntimePort', () => {
     const result = await executeMaestroProgram(program, createMaestroRuntimePort(operations));
 
     expect(result.generation).toBe(2);
+    const observed = await createMaestroRuntimePort(operations).observe({
+      condition: { kind: 'visible', selector: { id: 'ready' } },
+      timeoutMs: 0,
+      generation: 0,
+      env: {},
+    });
+    expect(observed.evidence).not.toHaveProperty('frame');
     expect(resolveTarget).toHaveBeenCalledTimes(2);
     expect(tapOn).toHaveBeenCalledWith(
       expect.objectContaining({

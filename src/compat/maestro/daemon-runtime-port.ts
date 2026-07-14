@@ -6,7 +6,7 @@ import { executeRunScriptFile } from './run-script-execution.ts';
 import { executeMaestroRuntimeCommand } from './runtime-port-commands.ts';
 import { observeMaestroCondition } from './runtime-port-observation.ts';
 import type {
-  MaestroObservation,
+  MaestroObservationIdentity,
   MaestroRuntimePort,
   MaestroRuntimeRequest,
   MaestroRuntimeResult,
@@ -136,27 +136,25 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       await tapTarget(options, snapshots, input.target, context, {
         count: input.repeat,
         intervalMs: input.delay,
-        postGestureStabilization: true,
       }),
     doubleTapOn: async (input) => {
       snapshots.invalidate();
       await clickTarget(options, input.target.point, {
         doubleTap: true,
         ...(input.delay === undefined ? {} : { intervalMs: input.delay }),
-        postGestureStabilization: true,
       });
     },
     longPressOn: async (input) => {
       snapshots.invalidate();
       await clickTarget(options, input.target.point, {
         holdMs: 3_000,
-        postGestureStabilization: true,
       });
     },
     gesture: async (input, context) => {
       const request = publicGestureRequest(input, context);
       await invokeMutation(request.command, [], {
         input: request.input,
+        flags: flagsWith(options.baseReq.flags, { postGestureStabilization: false }),
         ...(context.gestureViewport
           ? { internal: { gestureViewport: context.gestureViewport } }
           : {}),
@@ -167,7 +165,9 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       await typeTextAndSettle('\b'.repeat(input.charactersToErase ?? 50), context),
     pasteText: async (input, context) => await typeTextAndSettle(input.text, context),
     scroll: async (input) => {
-      await invokeMutation('scroll', [input.direction]);
+      await invokeMutation('scroll', [input.direction], {
+        flags: flagsWith(options.baseReq.flags, { postGestureStabilization: false }),
+      });
     },
     scrollUntilVisible: async (input, context) => {
       const match = await scrollUntilTypedMaestroTarget({
@@ -179,7 +179,9 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
         dependencies: options.dependencies,
         platform,
         scroll: async () => {
-          await invokeMutation('scroll', [input.direction]);
+          await invokeMutation('scroll', [input.direction], {
+            flags: flagsWith(options.baseReq.flags, { postGestureStabilization: false }),
+          });
         },
       });
       if (!match.matched || !match.visible) {
@@ -258,10 +260,7 @@ async function resolveDaemonMaestroTarget(params: {
       platform: options.platform,
       preferredContext: preferredContextForObservation(context, currentSnapshot, options.platform),
     });
-    if (
-      canUseResolvedTarget(match, options.platform, reusedObservation) ||
-      captureStartedAt >= deadline
-    ) {
+    if (canUseResolvedTarget(match, reusedObservation) || captureStartedAt >= deadline) {
       return match;
     }
     currentSnapshot = undefined;
@@ -283,13 +282,9 @@ function isActionableTarget(match: MaestroTargetMatch): boolean {
   return match.matched && match.visible && match.rect !== undefined;
 }
 
-function canUseResolvedTarget(
-  match: MaestroTargetMatch,
-  platform: CreateDaemonMaestroRuntimeOperationsOptions['platform'],
-  reusedObservation: boolean,
-): boolean {
+function canUseResolvedTarget(match: MaestroTargetMatch, reusedObservation: boolean): boolean {
   if (!isActionableTarget(match)) return false;
-  return !reusedObservation || platform === 'android' || match.dispatchSelector !== undefined;
+  return !reusedObservation || match.dispatchSelector !== undefined;
 }
 
 async function sleepBeforeTargetPoll(
@@ -311,8 +306,7 @@ export function createDaemonMaestroRuntimePort(
       await executeMaestroRuntimeCommand(request, operations),
     observe: async (request) => {
       const observation = await observeMaestroCondition(request, operations);
-      snapshots.bindObservation(observation);
-      return observation;
+      return snapshots.bindObservation(observation);
     },
   };
 }
@@ -321,8 +315,13 @@ function createSnapshotSource(
   options: CreateDaemonMaestroRuntimeOperationsOptions,
 ): MaestroSnapshotSource {
   let cached:
-    | { generation: number; snapshot: SnapshotState; observation?: MaestroObservation }
+    | {
+        generation: number;
+        snapshot: SnapshotState;
+        observationIdentity?: MaestroObservationIdentity;
+      }
     | undefined;
+  let nextObservationIdentity = 0;
   const capture: MaestroSnapshotReader = async (context) => {
     const data = await invokeMaestroPublicCommand(options, 'snapshot', [], {
       flags: flagsWith(options.baseReq.flags, { noRecord: true }),
@@ -337,12 +336,18 @@ function createSnapshotSource(
   return {
     capture,
     bindObservation: (observation) => {
-      if (cached?.generation === observation.generation) cached.observation = observation;
+      if (cached?.generation !== observation.generation) return observation;
+      const identity =
+        `maestro-observation-${++nextObservationIdentity}` as MaestroObservationIdentity;
+      cached.observationIdentity = identity;
+      return { ...observation, identity };
     },
     reuseObservation: (context) => {
       if (context.cachedObservation?.generation !== context.generation) return undefined;
+      if (context.cachedObservation.identity === undefined) return undefined;
       if (cached?.generation !== context.generation) return undefined;
-      return cached.observation === context.cachedObservation ? cached.snapshot : undefined;
+      if (context.cachedObservation.identity !== cached.observationIdentity) return undefined;
+      return cached.snapshot;
     },
     invalidate: () => {
       cached = undefined;
