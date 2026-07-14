@@ -49,6 +49,9 @@ export const replayCommandMetadata = defineFieldCommandMetadata(
     // from the first replay attempt; optional string value is the healed
     // script's output path.
     saveScript: jsonSchemaField<boolean | string>({ oneOf: [booleanSchema(), stringSchema()] }),
+    // #1258: overwrite an existing --save-script target (arm-time preflight +
+    // publish) instead of refusing. Alias: --overwrite.
+    force: booleanField(),
   },
 );
 
@@ -96,6 +99,7 @@ const replayCliSchema = {
     'timeoutMs',
     'out',
     'saveScript',
+    'force',
   ],
 } as const satisfies CommandSchemaOverride;
 
@@ -130,6 +134,7 @@ export const replayCliReader: CliReader = (positionals, flags) => ({
   resumeFrom: flags.replayFrom,
   resumePlanDigest: flags.replayPlanDigest,
   saveScript: flags.saveScript,
+  force: flags.force,
 });
 
 export const testCliReader: CliReader = (positionals, flags) => ({

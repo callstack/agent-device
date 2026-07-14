@@ -75,7 +75,7 @@ export class SessionScriptWriter {
     this.sessionsDir = sessionsDir;
   }
 
-  write(session: SessionState): SessionScriptWriteResult {
+  write(session: SessionState, options?: { force?: boolean }): SessionScriptWriteResult {
     const repairArmed = session.saveScriptBoundary !== undefined;
     let scriptPath: string | undefined;
     try {
@@ -85,7 +85,11 @@ export class SessionScriptWriter {
       const scriptDir = path.dirname(scriptPath);
       if (!fs.existsSync(scriptDir)) fs.mkdirSync(scriptDir, { recursive: true });
       const script = formatSessionScript(session, repairArmed);
-      publishHealedScriptAtomically({ scriptPath, script });
+      // #1258: `options.force` is the caller's already-merged decision
+      // (typically `req.flags?.force || session.saveScriptForce` — see
+      // `session-close.ts`/`session-store.ts`), not read from `session`
+      // directly here, so this stays a pure formatting+publish step.
+      publishHealedScriptAtomically({ scriptPath, script, force: options?.force });
       // COMMITTED: idempotent guard above + teardown's abort/tombstone routing.
       if (repairArmed) session.saveScriptCommitted = true;
       return { written: true, path: scriptPath };
@@ -159,29 +163,40 @@ function formatSessionScript(session: SessionState, appendCompleteSentinel: bool
  * ADR 0012 decision 6, no-clobber (maintainer-approved simplification):
  * publishes `script` to `scriptPath` atomically, refusing ANY pre-existing
  * target — complete or partial, the default healed sibling or an explicit
- * `--save-script=<path>` alike.
+ * `--save-script=<path>` alike — UNLESS `force` is set (#1258).
  *
  * This is `write()`'s ONLY publish primitive, called unconditionally for
  * every target — a repair-armed heal AND an ordinary, non-repair
  * `open`/`close --save-script` recording alike. There is no
- * repair-armed-vs-ordinary branch here (an earlier design had one —
- * `publishOverwriteAtomically`, rename-replace for ordinary writes — since
- * removed): an ordinary recording's target is refused exactly like a healed
- * repair's, never silently overwritten. `--force`/`--overwrite` is a future
- * escape hatch (#1258), not implemented today.
+ * repair-armed-vs-ordinary branch here: an ordinary recording's target is
+ * refused exactly like a healed repair's, and `force` overwrites exactly
+ * like a healed repair's.
  *
  * The temp file is created in the SAME DIRECTORY as the target (never
- * `/tmp`), so the publish itself is a single intra-directory `linkSync`:
- * atomic create-exclusive, first writer wins. That single primitive is
- * enough — a concurrent complete-vs-complete race is already correct this
- * way (the loser sees `EEXIST` and is refused), and a partial healed file
- * left behind by an aborted/reaped repair is a degenerate state: the caller
- * clears it explicitly (remove it, or pick another `--save-script` path)
- * rather than having it silently replaced. No lock, no lease, no steal, no
- * overwrite.
+ * `/tmp`). Default (no `force`): the publish is a single intra-directory
+ * `linkSync`: atomic create-exclusive, first writer wins. That single
+ * primitive is enough — a concurrent complete-vs-complete race is already
+ * correct this way (the loser sees `EEXIST` and is refused), and a partial
+ * healed file left behind by an aborted/reaped repair is a degenerate
+ * state: the caller clears it explicitly (remove it, or pick another
+ * `--save-script` path) rather than having it silently replaced. No lock,
+ * no lease, no steal, no overwrite.
+ *
+ * `force`/`--overwrite` (#1258): `renameSync` instead — an atomic REPLACE
+ * within the same directory (on POSIX; Node's Windows implementation uses
+ * `MoveFileEx` with `MOVEFILE_REPLACE_EXISTING`), so there is no window
+ * where `scriptPath` is briefly missing and no separate unlink step. The
+ * caller opted into overwriting explicitly (a live `--force`/`--overwrite`,
+ * or one persisted on the session from arm time — see
+ * `SessionState.saveScriptForce`), so first-writer-wins no longer applies:
+ * the last write wins instead, same as any ordinary file overwrite.
  */
-function publishHealedScriptAtomically(params: { scriptPath: string; script: string }): void {
-  const { scriptPath, script } = params;
+function publishHealedScriptAtomically(params: {
+  scriptPath: string;
+  script: string;
+  force?: boolean;
+}): void {
+  const { scriptPath, script, force } = params;
   const dir = path.dirname(scriptPath);
   const tempPath = path.join(
     dir,
@@ -189,17 +204,23 @@ function publishHealedScriptAtomically(params: { scriptPath: string; script: str
   );
   fs.writeFileSync(tempPath, script);
   try {
+    if (force) {
+      fs.renameSync(tempPath, scriptPath);
+      return;
+    }
     // Atomic create-exclusive: EEXIST iff a file already sits at scriptPath.
     fs.linkSync(tempPath, scriptPath);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
     throw new AppError(
       'COMMAND_FAILED',
-      `A file already exists at ${scriptPath}; remove it or pass replay --save-script=<other-path> so an existing healed script is never overwritten.`,
+      `A file already exists at ${scriptPath}; remove it, pass replay --save-script=<other-path>, or pass --force/--overwrite to replace it.`,
     );
   } finally {
     // linkSync leaves the temp hard-link behind on success; an error leaves
-    // it too — always clean up whatever of our own temp remains.
+    // it too — always clean up whatever of our own temp remains. A `force`
+    // rename already consumed tempPath (it no longer exists at this path),
+    // so this is a harmless no-op in that branch.
     fs.rmSync(tempPath, { force: true });
   }
 }

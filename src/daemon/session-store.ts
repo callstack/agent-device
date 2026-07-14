@@ -110,8 +110,8 @@ export class SessionStore {
     );
   }
 
-  writeSessionLog(session: SessionState): SessionScriptWriteResult {
-    const result = this.scriptWriter.write(session);
+  writeSessionLog(session: SessionState, options?: { force?: boolean }): SessionScriptWriteResult {
+    const result = this.scriptWriter.write(session, options);
     if (result.written) {
       emitDiagnostic({
         level: 'info',
@@ -151,7 +151,10 @@ export class SessionStore {
    */
   finalizeRepairTeardown(session: SessionState): void {
     this.recordRepairFinalizeCloseIfCommitting(session);
-    const result = this.writeSessionLog(session);
+    // #1258: no live request here (idle-reap/daemon-shutdown teardown), so
+    // the only source of `force` is whatever was persisted on the session at
+    // arm time.
+    const result = this.writeSessionLog(session, { force: session.saveScriptForce });
     if (session.saveScriptBoundary !== undefined && session.saveScriptCommitted !== true) {
       if (!result.written && result.error) {
         this.writeRepairTombstone(session, REPAIR_TOMBSTONE_TTL_MS, {

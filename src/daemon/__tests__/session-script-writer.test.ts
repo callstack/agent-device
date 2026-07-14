@@ -283,6 +283,77 @@ test('write() now refuses to clobber a stale PARTIAL (non-sentinel) .healed.ad a
   expect(fs.readFileSync(healedPath, 'utf8')).toBe(before);
 });
 
+// --- #1258: `--force`/`--overwrite` opts into replacing an existing target
+// atomically instead of refusing. ---
+
+test('write(session, { force: true }) overwrites an existing COMPLETE target atomically', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-force-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const healedPath = path.join(root, 'flows', 'login.healed.ad');
+  fs.mkdirSync(path.dirname(healedPath), { recursive: true });
+  fs.writeFileSync(
+    healedPath,
+    `context platform=ios device="x"\nclick id="old"\n${HEAL_COMPLETE_SENTINEL}\n`,
+  );
+
+  const session = makeIosSession('default', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+    saveScriptComplete: true,
+    saveScriptPath: healedPath,
+    saveScriptDefaultedHealedPath: true,
+    actions: [action({ command: 'click', positionals: ['id="new"'] })],
+  });
+
+  const result = writer.write(session, { force: true });
+  expect(result.written).toBe(true);
+  expect(result.written && result.path).toBe(healedPath);
+  const parsed = parseReplayScriptDetailed(fs.readFileSync(healedPath, 'utf8'));
+  expect(parsed.actions.map((a) => a.positionals[0])).toEqual(['id="new"']);
+  // The overwrite is atomic (rename-replace): only the published target
+  // remains in the directory, no stray temp file left behind.
+  expect(fs.readdirSync(path.dirname(healedPath))).toEqual([path.basename(healedPath)]);
+});
+
+test('write(session, { force: true }) overwrites an existing target for ORDINARY (non-repair) recording too', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-force-ordinary-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const outPath = path.join(root, 'flows', 'existing.ad');
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, 'context platform=ios device="x"\nclick id="old"\n');
+
+  const session = makeIosSession('default', {
+    recordSession: true,
+    // No saveScriptBoundary: ordinary open/close --save-script, not a repair.
+    saveScriptPath: outPath,
+    actions: [action({ command: 'click', positionals: ['id="new"'] })],
+  });
+
+  const result = writer.write(session, { force: true });
+  expect(result.written).toBe(true);
+  const parsed = parseReplayScriptDetailed(fs.readFileSync(outPath, 'utf8'));
+  expect(parsed.actions.map((a) => a.positionals[0])).toEqual(['id="new"']);
+});
+
+test('write(session) without { force: true } still refuses, even when a prior write in the same test used force', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-force-default-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const outPath = path.join(root, 'flows', 'existing.ad');
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  fs.writeFileSync(outPath, 'context platform=ios device="x"\nclick id="old"\n');
+  const before = fs.readFileSync(outPath, 'utf8');
+
+  const session = makeIosSession('default', {
+    recordSession: true,
+    saveScriptPath: outPath,
+    actions: [action({ command: 'click', positionals: ['id="new"'] })],
+  });
+
+  // Default (no options / force omitted): refuse-on-exist, unchanged.
+  expect(() => writer.write(session)).toThrow(/already exists/);
+  expect(fs.readFileSync(outPath, 'utf8')).toBe(before);
+});
+
 // The lock/lease machinery previously here (acquireLease/releaseLease/
 // stealExpiredLease/the three-writer interleaving) is gone: the publish
 // primitive is now a single exclusive `linkSync`, which already decides a

@@ -65,6 +65,7 @@ import { AppError } from '../../../kernel/errors.ts';
 import { makeIosSession } from '../../../__tests__/test-utils/session-factories.ts';
 import { HEAL_COMPLETE_SENTINEL } from '../../session-script-writer.ts';
 import { parseReplayScriptDetailed } from '../../../replay/script.ts';
+import type { DaemonRequest } from '../../types.ts';
 import {
   baseReplayRequest as baseReq,
   writeReplayFile,
@@ -510,6 +511,108 @@ test('BLOCKER 2b/2c: a close whose commit FAILS (no-clobber) keeps the session f
   if (retry.ok) expect(retry.data?.savedScript).toBe(retryPath);
   const promoted = parseReplayScriptDetailed(fs.readFileSync(retryPath, 'utf8'));
   expect(promoted.actions.filter((a) => a.command === 'close')).toHaveLength(1);
+});
+
+// --- #1258: `--force`/`--overwrite` on `--save-script`. ---
+
+test('#1258: close --save-script --force overwrites an existing COMPLETE healed .ad instead of refusing', async () => {
+  const { root, sessionStore, sessionName, logPath, leaseRegistry } = setup(
+    'agent-device-repair-transaction-force-overwrite-',
+  );
+  makeCompleteRepairSession(sessionStore, sessionName, root);
+  // A prior COMPLETE (sentinel-marked) healed artifact already sits at the
+  // default path — `--force` must overwrite it instead of refusing.
+  fs.writeFileSync(
+    path.join(root, 'flow.healed.ad'),
+    `context platform=ios device="x"\nclick id="old"\n${HEAL_COMPLETE_SENTINEL}\n`,
+  );
+
+  const closeResponse = await handleCloseCommand({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'close',
+      positionals: [],
+      flags: { force: true },
+    },
+    sessionName,
+    logPath,
+    sessionStore,
+    leaseRegistry,
+  });
+
+  expect(closeResponse.ok).toBe(true);
+  expect(sessionStore.get(sessionName)).toBeUndefined();
+  const healedPath = path.join(root, 'flow.healed.ad');
+  if (closeResponse.ok) expect(closeResponse.data?.savedScript).toBe(healedPath);
+  const script = fs.readFileSync(healedPath, 'utf8');
+  expect(script).toContain(HEAL_COMPLETE_SENTINEL);
+  const parsed = parseReplayScriptDetailed(script);
+  // The new repair's own actions replaced the stale prior artifact — the old
+  // content is gone, never merged/appended.
+  expect(parsed.actions.some((a) => a.positionals[0] === 'id="old"')).toBe(false);
+  expect(parsed.actions.map((a) => a.command)).toEqual(['open', 'press', 'close']);
+});
+
+test('#1258 arm-time preflight: an existing --save-script target rejects BEFORE any step runs', async () => {
+  const { root, sessionStore, sessionName, logPath } = setup(
+    'agent-device-repair-transaction-arm-preflight-',
+  );
+  const filePath = writeReplayFile(root, ['open "Demo" --relaunch', 'close']);
+  // The default healed sibling already exists — a prior repair, or an
+  // unrelated stale file sitting at that path.
+  fs.writeFileSync(path.join(root, 'flow.healed.ad'), 'context platform=ios device="x"\n');
+
+  const spy: DaemonRequest[] = [];
+  const invoke = makeRecordingReplayInvoke({ sessionStore, sessionName, spy });
+
+  const result = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke,
+  });
+
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error.code).toBe('COMMAND_FAILED');
+    expect(result.error.message).toMatch(/already exists/);
+  }
+  // Not a single step dispatched — the preflight fired BEFORE the loop, not
+  // merely at the end (publish time). Even `open` never ran.
+  expect(spy).toHaveLength(0);
+  // The session was never armed (no boundary stamped) either — the whole
+  // repair-arm side effect is skipped, not just the dispatch.
+  expect(sessionStore.get(sessionName)?.saveScriptBoundary).toBeUndefined();
+});
+
+test('#1258: --force skips the arm-time preflight and the replay proceeds despite the existing target', async () => {
+  const { root, sessionStore, sessionName, logPath } = setup(
+    'agent-device-repair-transaction-arm-preflight-force-',
+  );
+  const filePath = writeReplayFile(root, ['open "Demo" --relaunch', 'close']);
+  fs.writeFileSync(path.join(root, 'flow.healed.ad'), 'context platform=ios device="x"\n');
+
+  const spy: DaemonRequest[] = [];
+  const invoke = makeRecordingReplayInvoke({ sessionStore, sessionName, spy });
+
+  const result = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true, force: true } }),
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke,
+  });
+
+  expect(result.ok).toBe(true);
+  // `open` dispatched — the preflight did not block it. The terminal `close`
+  // is skipped while repair-armed (existing, unrelated behavior), so `open`
+  // is the only step this minimal script actually dispatches.
+  expect(spy.map((r) => r.command)).toEqual(['open']);
+  // `force` is persisted on the session from arm time, so a LATER commit
+  // (e.g. a bare `close`, or teardown) still honors the overwrite.
+  expect(sessionStore.get(sessionName)?.saveScriptForce).toBe(true);
 });
 
 test('BLOCKER 2 (new): a repair close whose PLATFORM close fails never commits a healed .ad claiming a successful close', async () => {

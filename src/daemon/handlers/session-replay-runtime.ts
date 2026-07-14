@@ -250,8 +250,22 @@ export async function runReplayScriptFile(params: {
     // flag and let a later `close` commit a now-stale transaction.
     const preRunSession = sessionStore.get(sessionName);
     if (preRunSession?.saveScriptBoundary !== undefined) preRunSession.saveScriptComplete = false;
+    // #1258: arm-time EEXIST preflight — fail HERE, before any step of this
+    // invocation dispatches, rather than letting the whole run (and, for a
+    // fresh repair, its very first `open`) execute only to hit the SAME
+    // refuse-on-exist at publish time (`publishHealedScriptAtomically`, at
+    // `close`/completion). Computes the SAME target `armReplaySaveScriptStep`
+    // below would resolve, without needing the session to exist yet.
+    const saveScriptPreflight = preflightSaveScriptTarget({
+      saveScript: req.flags?.saveScript,
+      force: req.flags?.force,
+      sourcePath: resolved,
+      existingSaveScriptPath: preRunSession?.saveScriptPath,
+    });
+    if (saveScriptPreflight) return saveScriptPreflight;
     const armReplaySaveScriptStep = createReplaySaveScriptArmer({
       saveScript: req.flags?.saveScript,
+      force: req.flags?.force,
       sessionStore,
       sessionName,
       sourcePath: resolved,
@@ -504,6 +518,39 @@ function preflightReplayAgainstActiveRepair(params: {
 }
 
 /**
+ * #1258: arm-time EEXIST preflight. Absent this, a repair-armed run's target
+ * is only checked at PUBLISH time (`publishHealedScriptAtomically`, on
+ * `close`/completion) — by then the ENTIRE repair (agent's corrective steps
+ * included) may already have executed against the device, only to fail on a
+ * pre-existing target at the very end. Resolves the SAME target
+ * `armReplaySaveScriptStep` would (explicit `--save-script=<path>` always
+ * wins; otherwise an already-armed session's existing path if this is a
+ * `--from` continuation leg reusing it, else the default `<stem>.healed.ad`
+ * sibling) WITHOUT needing the session to exist yet, so it runs before step 1
+ * dispatches even when that step is the `open` that creates the session. A
+ * no-op when `--save-script` was not passed this invocation, or when `force`
+ * was — the caller explicitly opted into overwriting.
+ */
+function preflightSaveScriptTarget(params: {
+  saveScript: boolean | string | undefined;
+  force: boolean | undefined;
+  sourcePath: string;
+  existingSaveScriptPath: string | undefined;
+}): DaemonResponse | undefined {
+  const { saveScript, force, sourcePath, existingSaveScriptPath } = params;
+  if (!saveScript || force) return undefined;
+  const targetPath =
+    typeof saveScript === 'string'
+      ? expandSessionPath(saveScript)
+      : (existingSaveScriptPath ?? healedScriptSiblingPath(sourcePath));
+  if (!fs.existsSync(targetPath)) return undefined;
+  return errorResponse(
+    'COMMAND_FAILED',
+    `A file already exists at ${targetPath}; remove it, pass replay --save-script=<other-path>, or pass --force/--overwrite to replace it.`,
+  );
+}
+
+/**
  * ADR 0012 decision 6 (Fix 3): the source plan's own terminal `close` is
  * lifecycle, not a script step to replay, while a repair is armed — the agent
  * finalizes the transaction with `close --save-script` instead
@@ -536,15 +583,16 @@ function isRepairArmedTerminalClose(params: {
  */
 function createReplaySaveScriptArmer(params: {
   saveScript: boolean | string | undefined;
+  force: boolean | undefined;
   sessionStore: SessionStore;
   sessionName: string;
   sourcePath: string;
 }): () => void {
-  const { saveScript, sessionStore, sessionName, sourcePath } = params;
+  const { saveScript, force, sessionStore, sessionName, sourcePath } = params;
   if (!saveScript) return () => {};
   let firstArm = true;
   return () => {
-    armReplaySaveScriptStep({ sessionStore, sessionName, saveScript, sourcePath, firstArm });
+    armReplaySaveScriptStep({ sessionStore, sessionName, saveScript, force, sourcePath, firstArm });
     firstArm = false;
   };
 }
@@ -564,13 +612,18 @@ function armReplaySaveScriptStep(params: {
   sessionStore: SessionStore;
   sessionName: string;
   saveScript: boolean | string;
+  force: boolean | undefined;
   sourcePath: string;
   firstArm: boolean;
 }): void {
-  const { sessionStore, sessionName, saveScript, sourcePath, firstArm } = params;
+  const { sessionStore, sessionName, saveScript, force, sourcePath, firstArm } = params;
   const session = sessionStore.get(sessionName);
   if (!session) return;
   session.recordSession = true;
+  // #1258: sticky, like `saveScriptPath` — persisted so a LATER `--from`
+  // continuation leg or an unattended auto-commit teardown (no live request)
+  // still honors a `--force`/`--overwrite` that was only passed at this arm.
+  if (force) session.saveScriptForce = true;
   if (typeof saveScript === 'string') {
     // An EXPLICIT `--save-script=<path>` clears the defaulted marker
     // (invariant: the marker is set iff the current `saveScriptPath` was

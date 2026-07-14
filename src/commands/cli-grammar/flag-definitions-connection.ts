@@ -195,10 +195,11 @@ export const CONNECTION_FLAG_DEFINITIONS: readonly FlagDefinition[] = [
   },
   {
     key: 'force',
-    names: ['--force'],
+    names: ['--force', '--overwrite'],
     type: 'boolean',
-    usageLabel: '--force',
-    usageDescription: 'Force connection state replacement when reconnecting',
+    usageLabel: '--force, --overwrite',
+    usageDescription:
+      'Force replacement of existing state (connect: replace an active connection; --save-script: overwrite an existing target instead of refusing)',
   },
   {
     key: 'noLogin',

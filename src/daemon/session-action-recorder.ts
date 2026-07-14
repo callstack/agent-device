@@ -32,6 +32,15 @@ export function recordActionEntry(
       session.saveScriptPath = expandSessionPath(entry.flags.saveScript);
       session.saveScriptDefaultedHealedPath = false;
     }
+    // #1258: persist `--force`/`--overwrite`, like `saveScriptPath`, so a
+    // LATER write that does not repeat the flag (a bare `close` finishing a
+    // session opened with `open --save-script --force`, or an unattended
+    // auto-commit teardown with no live request) still honors it. Sticky —
+    // once true, a later action carrying `saveScript` without `force` must
+    // not clear it back to false.
+    if (entry.flags.force) {
+      session.saveScriptForce = true;
+    }
   }
   const action: SessionAction = {
     ts: Date.now(),
@@ -72,6 +81,7 @@ const SANITIZED_FLAG_KEYS = [
   ...SCREENSHOT_ACTION_FLAG_KEYS,
   'relaunch',
   'saveScript',
+  'force',
   'noRecord',
   'fps',
   'quality',

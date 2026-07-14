@@ -40,6 +40,9 @@ const openCommandMetadata = defineFieldCommandMetadata(
     ),
     relaunch: booleanField('Force relaunch.'),
     saveScript: jsonSchemaField<boolean | string>({ oneOf: [booleanSchema(), stringSchema()] }),
+    force: booleanField(
+      'Overwrite an existing --save-script target instead of refusing (alias: --overwrite).',
+    ),
     deviceHub: booleanField('Use Xcode Device Hub when surfacing Apple simulators.'),
     testIme: booleanField(
       'Activate the headless Android test IME for deterministic Unicode text entry (default on for emulators; opt-in on real devices).',
@@ -65,6 +68,9 @@ const closeCommandMetadata = defineFieldCommandMetadata(
     app: stringField('Optional app to close.'),
     shutdown: booleanField('Shutdown the session/device where supported.'),
     saveScript: jsonSchemaField<boolean | string>({ oneOf: [booleanSchema(), stringSchema()] }),
+    force: booleanField(
+      'Overwrite an existing --save-script target instead of refusing (alias: --overwrite).',
+    ),
   },
 );
 
@@ -131,6 +137,7 @@ const openCliSchema = {
     'deviceHub',
     'testIme',
     'saveScript',
+    'force',
     'noRecord',
     'relaunch',
     'surface',
@@ -143,7 +150,7 @@ const openCliSchema = {
 
 const closeCliSchema = {
   positionalArgs: ['app?'],
-  allowedFlags: ['saveScript', 'shutdown'],
+  allowedFlags: ['saveScript', 'force', 'shutdown'],
 } as const satisfies CommandSchemaOverride;
 
 const appsCliReader: CliReader = (_positionals, flags) => ({
@@ -161,6 +168,7 @@ const openCliReader: CliReader = (positionals, flags) => ({
   launchArgs: flags.launchArgs,
   relaunch: flags.relaunch,
   saveScript: flags.saveScript,
+  force: flags.force,
   deviceHub: flags.deviceHub,
   testIme: flags.testIme,
   noRecord: flags.noRecord,
@@ -175,6 +183,7 @@ const closeCliReader: CliReader = (positionals, flags) => ({
   app: positionals[0],
   shutdown: flags.shutdown,
   saveScript: flags.saveScript,
+  force: flags.force,
 });
 
 const appsDaemonWriter: DaemonWriter = direct(PUBLIC_COMMANDS.apps);

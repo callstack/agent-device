@@ -48,6 +48,17 @@ async function maybeShutdownSessionTarget(params: {
   return await shutdownDeviceTarget(device);
 }
 
+/**
+ * #1258: the effective `--force`/`--overwrite` decision for a `close`-time
+ * publish — this close request's own flag OR'd with whatever was persisted
+ * on the session at an earlier arm (`open --save-script --force`, or a
+ * repair's first `replay --save-script --force`). Either source authorizes
+ * overwriting; neither being set keeps the default refuse-on-exist.
+ */
+function resolveEffectiveSaveScriptForce(req: DaemonRequest, session: SessionState): boolean {
+  return Boolean(req.flags?.force || session.saveScriptForce);
+}
+
 function shouldRetainAppleRunnerAfterClose(req: DaemonRequest, session: SessionState): boolean {
   return (
     isIosSimulator(session.device) &&
@@ -91,7 +102,9 @@ function commitRepairBeforeClose(
     session: session.name,
     ...successText(`Closed: ${session.name}`),
   });
-  const result = sessionStore.writeSessionLog(session);
+  const result = sessionStore.writeSessionLog(session, {
+    force: resolveEffectiveSaveScriptForce(req, session),
+  });
   if (result.written) return { kind: 'committed', path: result.path };
   if (result.error) {
     // The session is kept for retry (BLOCKER 2b): roll back the just-recorded
@@ -207,7 +220,7 @@ async function runSessionCloseTeardown(params: {
     if (req.flags?.saveScript) {
       session.recordSession = true;
     }
-    sessionStore.writeSessionLog(session);
+    sessionStore.writeSessionLog(session, { force: resolveEffectiveSaveScriptForce(req, session) });
   }
   await attemptCleanup('materialized_paths', () =>
     cleanupRetainedMaterializedPathsForSession(sessionName),

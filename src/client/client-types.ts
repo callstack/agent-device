@@ -292,6 +292,8 @@ export type AppOpenOptions = AgentDeviceRequestOverrides &
     launchArgs?: string[];
     relaunch?: boolean;
     saveScript?: boolean | string;
+    /** #1258: overwrite an existing --save-script target instead of refusing. Alias: --overwrite. */
+    force?: boolean;
     deviceHub?: boolean;
     testIme?: boolean;
     noRecord?: boolean;
@@ -316,6 +318,9 @@ export type AppOpenResult = {
 export type AppCloseOptions = AgentDeviceRequestOverrides & {
   app?: string;
   shutdown?: boolean;
+  saveScript?: boolean | string;
+  /** #1258: overwrite an existing --save-script target instead of refusing. Alias: --overwrite. */
+  force?: boolean;
 };
 
 export type AppCloseResult = {
@@ -866,6 +871,8 @@ export type ReplayRunOptions = AgentDeviceRequestOverrides &
      * `<stem>.healed.ad` when the repair ends with `close --save-script`.
      */
     saveScript?: boolean | string;
+    /** #1258: overwrite an existing --save-script target instead of refusing. Alias: --overwrite. */
+    force?: boolean;
   };
 
 export type ReplayTestOptions = AgentDeviceRequestOverrides &
@@ -1072,6 +1079,8 @@ export type InternalRequestOptions = AgentDeviceClientConfig &
     relaunch?: boolean;
     shutdown?: boolean;
     saveScript?: boolean | string;
+    /** #1258: overwrite an existing --save-script target instead of refusing. Alias: --overwrite. */
+    force?: boolean;
     deviceHub?: boolean;
     testIme?: boolean;
     noRecord?: boolean;
@@ -1110,7 +1119,12 @@ export type AgentDeviceClient = {
       options?: AgentDeviceRequestOverrides & Pick<AgentDeviceClientConfig, 'stateDir'>,
     ) => Promise<string>;
     close: (
-      options?: AgentDeviceRequestOverrides & { shutdown?: boolean },
+      options?: AgentDeviceRequestOverrides & {
+        shutdown?: boolean;
+        saveScript?: boolean | string;
+        /** #1258: overwrite an existing --save-script target instead of refusing. Alias: --overwrite. */
+        force?: boolean;
+      },
     ) => Promise<SessionCloseResult>;
     artifacts: (options?: CloudArtifactsOptions) => Promise<AgentArtifactsResult>;
   };
