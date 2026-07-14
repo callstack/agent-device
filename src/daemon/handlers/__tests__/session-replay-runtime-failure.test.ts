@@ -82,10 +82,23 @@ test('a failing replay step returns REPLAY_DIVERGENCE with cause preserved and c
 
   expect(divergence.suggestions).toEqual([]);
   expect(divergence.suggestionCount).toBe(0);
-  const resume = divergence.resume as { allowed: boolean; from: number; planDigest: string };
+  const resume = divergence.resume as {
+    allowed: boolean;
+    from: number;
+    planDigest: string;
+    alternateFrom?: number;
+  };
   // Step 1 ("open") is a plain action with no control flow and no outputEnv
-  // production, so resuming at the failed step (2) is safe.
-  expect(resume).toEqual({ allowed: true, from: 2, planDigest: expect.any(String) });
+  // production, so resuming at the failed step (2) is safe. This unannotated
+  // action-failure routes to `manual`, and the diverged step (2) is the plan's
+  // LAST and is itself skip-safe, so the #1262 record-and-heal-shaped alternate
+  // ordinal (`alternateFrom = 3`) rides the wire alongside the unshifted `from`.
+  expect(resume).toEqual({
+    allowed: true,
+    from: 2,
+    planDigest: expect.any(String),
+    alternateFrom: 3,
+  });
   expect(resume.planDigest).toMatch(/^[0-9a-f]{64}$/);
 });
 

@@ -84,6 +84,10 @@ function producesOutputEnv(action: SessionAction): boolean {
  * COMPLETE. Rejecting it here would send the agent to `close` instead —
  * which discards the just-recorded corrective action, since commit is gated
  * on that same COMPLETE flag.
+ *
+ * `alternateFrom` (#1262) is the `caution`/`manual` dual-path's SECOND
+ * ordinal (`failedIndex + 1`, the record-and-heal-shaped alternate) — see
+ * `computeReplayResumeAlternateFrom`.
  */
 export function buildReplayDivergenceResume(params: {
   failedIndex: number; // 1-based
@@ -94,9 +98,47 @@ export function buildReplayDivergenceResume(params: {
   const { failedIndex, actions, planDigest, repairHint } = params;
   const from = repairHint === 'record-and-heal' ? failedIndex + 1 : failedIndex;
   const preflight = evaluateReplayResumePreflight({ from, actions });
-  return preflight.allowed
-    ? { allowed: true, from, planDigest }
-    : { allowed: false, from, planDigest, reason: preflight.reason };
+  if (!preflight.allowed) return { allowed: false, from, planDigest, reason: preflight.reason };
+  const alternateFrom = computeReplayResumeAlternateFrom({ failedIndex, actions, repairHint });
+  return {
+    allowed: true,
+    from,
+    planDigest,
+    ...(alternateFrom !== undefined ? { alternateFrom } : {}),
+  };
+}
+
+/**
+ * ADR 0012 decision 4 / #1262: the `caution`/`manual` dual-path's SECOND
+ * ordinal, the record-and-heal-shaped alternate (`failedIndex + 1`). Returned
+ * ONLY when a `--from failedIndex + 1` request for this divergence would
+ * actually be accepted by the daemon — i.e. exactly its own resume preflight
+ * passes (`evaluateReplayResumePreflight`, which unlike `from`'s own preflight
+ * ALSO requires the DIVERGED step to be skip-safe, since reaching
+ * `failedIndex + 1` skips the diverged step). That preflight is the shared
+ * acceptance condition on BOTH the mid-plan path (un-gated, in range) and the
+ * last-step empty-tail path (`computeRecordAndHealWatermark` stamps on exactly
+ * this condition). Its checked range is a strict superset of `from`'s, so
+ * `alternateFrom` present implies `resume.allowed` — never a contradiction.
+ *
+ * Absent for `record-and-heal` (its `from` already IS `failedIndex + 1`) and
+ * `state-repair` (no recorded-action alternate); absent when the diverged step
+ * is a `runScript` (outputEnv producer) or inside runtime control flow, so the
+ * alternate `--from failedIndex + 1` would be refused. The text renderer gates
+ * the `N + 1` command on this field's PRESENCE rather than re-deriving
+ * resumability, keeping text and the structured wire in agreement.
+ */
+function computeReplayResumeAlternateFrom(params: {
+  failedIndex: number;
+  actions: SessionAction[];
+  repairHint: ReplayRepairHint;
+}): number | undefined {
+  const { failedIndex, actions, repairHint } = params;
+  if (repairHint !== 'caution' && repairHint !== 'manual') return undefined;
+  const alternateFrom = failedIndex + 1;
+  return evaluateReplayResumePreflight({ from: alternateFrom, actions }).allowed
+    ? alternateFrom
+    : undefined;
 }
 
 /**

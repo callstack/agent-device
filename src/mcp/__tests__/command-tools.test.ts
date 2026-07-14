@@ -1089,6 +1089,53 @@ test('MCP tool error is a ref-issuing result: isError, structuredContent, and pi
   assert.deepEqual(runCalls[1]?.input, { target: { kind: 'ref', ref: '@e5~s12' } });
 });
 
+// --- #1262: a `caution` divergence's dual-path must reach a structured caller,
+// not only text. `resume.alternateFrom` rides the MCP structuredContent
+// projection (parity with a text caller, who reads the second `--from`
+// command), and the MCP text carries BOTH concrete commands. ---
+test("MCP projections carry a caution divergence's alternateFrom (structuredContent) and both --from commands (text)", async () => {
+  const executor = createCommandToolExecutor({
+    createClient: () => ({}) as AgentDeviceClient,
+    runCommand: async (_client, name) => {
+      if (name === 'replay') {
+        throw new AppError('REPLAY_DIVERGENCE', 'Replay diverged at step 2 (click label="Save")', {
+          divergence: {
+            version: 1,
+            kind: 'identity-mismatch',
+            step: { index: 2, source: { path: '/tmp/flow.ad', line: 3 } },
+            action: 'click label="Save"',
+            cause: { code: 'IDENTITY_MISMATCH', message: 'resolved a different element' },
+            screen: {
+              state: 'available',
+              refsGeneration: 4,
+              refs: [{ ref: 'e1', role: 'button' }],
+            },
+            suggestions: [],
+            suggestionCount: 0,
+            resume: { allowed: true, from: 2, planDigest: 'deadbeef', alternateFrom: 3 },
+            repairHint: 'caution',
+          },
+        });
+      }
+      return {};
+    },
+  });
+
+  const result = await executor.execute('replay', { positionals: ['/tmp/flow.ad'] });
+  assert.equal(result.isError, true);
+  const structured = result.structuredContent as {
+    details?: { divergence?: { resume?: { from?: number; alternateFrom?: number } } };
+  };
+  // Parity: the structured caller gets BOTH ordinals, not just `from`.
+  assert.equal(structured.details?.divergence?.resume?.from, 2);
+  assert.equal(structured.details?.divergence?.resume?.alternateFrom, 3);
+  // The MCP text carries both concrete commands, the second from alternateFrom.
+  const text = result.content[0]?.text ?? '';
+  assert.match(text, /Repair hint: caution/);
+  assert.match(text, /if you fixed app state with --no-record actions: replay --from 2/);
+  assert.match(text, /if you performed the step's intent as a recorded action: replay --from 3/);
+});
+
 test('MCP tool error without a divergence never touches existing pins (merge-only)', async () => {
   const runCalls: Array<{ name: string; input: unknown }> = [];
   const executor = createCommandToolExecutor({

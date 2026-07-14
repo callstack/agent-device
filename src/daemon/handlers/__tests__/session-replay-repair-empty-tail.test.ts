@@ -219,12 +219,15 @@ test('a manual divergence (unannotated action-failure) on the LAST step resumes 
   const divergence = leg1.error.details?.divergence as {
     kind: string;
     repairHint: string;
-    resume: { allowed: boolean; from: number; planDigest: string };
+    resume: { allowed: boolean; from: number; planDigest: string; alternateFrom?: number };
   };
   expect(divergence.kind).toBe('action-failure');
   expect(divergence.repairHint).toBe('manual');
   expect(divergence.resume.allowed).toBe(true);
   expect(divergence.resume.from).toBe(2);
+  // #1262: the wire carries the record-and-heal-shaped alternate (N + 1 = 3)
+  // — the diverged step is skip-safe, so `--from 3` would be accepted.
+  expect(divergence.resume.alternateFrom).toBe(3);
 
   const session = sessionStore.get(sessionName)!;
   expect(session.actions.map((a) => a.command)).toEqual(['open']);
@@ -348,12 +351,14 @@ test('a caution (identity-mismatch) divergence on the LAST step resumes with an 
   const divergence = leg1.error.details?.divergence as {
     kind: string;
     repairHint: string;
-    resume: { allowed: boolean; from: number; planDigest: string };
+    resume: { allowed: boolean; from: number; planDigest: string; alternateFrom?: number };
   };
   expect(divergence.kind).toBe('identity-mismatch');
   expect(divergence.repairHint).toBe('caution');
   expect(divergence.resume.allowed).toBe(true);
   expect(divergence.resume.from).toBe(2);
+  // #1262: the wire carries the record-and-heal-shaped alternate (N + 1 = 3).
+  expect(divergence.resume.alternateFrom).toBe(3);
 
   const session = sessionStore.get(sessionName)!;
   expect(session.actions.map((a) => a.command)).toEqual(['open']);

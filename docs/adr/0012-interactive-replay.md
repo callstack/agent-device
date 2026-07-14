@@ -475,7 +475,7 @@ executable plan and must be in range. It is never a YAML line number, fractional
 repeat iteration label. Static includes, platform conditions, and fixed-count repeats expand before
 indexing, so repeated source lines are distinguished by their plan index.
 
-Every divergence includes `resume: { allowed, from, reason?, planDigest, repairSessionHeld? }`.
+Every divergence includes `resume: { allowed, from, reason?, planDigest, alternateFrom?, repairSessionHeld? }`.
 `from` is not merely the failed step's ordinal — it is the ordinal the caller should actually pass to
 `--from`, computed from the same `repairHint` carried alongside it (decision 6, R2/R3): for `record-and-heal`,
 `from` is the failed step's index **+ 1** (the agent performs that step manually before resuming, so
@@ -484,6 +484,22 @@ resuming AT it would re-diverge on the exact step just completed); for every oth
 block and the `repairHint` text guidance below in agreement — a JSON/MCP-first caller that blindly resumes
 at `resume.from` gets the same continuation a text caller reads out of the rendered guidance, never a stale
 `from` that loops the caller back onto the step it just repaired.
+
+`alternateFrom` is an **additive optional** ordinal (#1262) that makes the `caution`/`manual` dual-path
+structured-caller-legible, not text-only. Those two hints have TWO legitimate repairs the daemon cannot
+disambiguate at divergence time: an app-state fix (`--no-record`, then re-run the unchanged step at `from` =
+`N`), and a record-and-heal-shaped correction (perform the diverged step's intent as a recorded action, then
+resume PAST it at `N + 1`). `from` carries the first; `alternateFrom` carries the second (`N + 1`), present
+**only when a `--from N + 1` request for this divergence would actually be accepted** — the daemon computes
+it as `evaluateReplayResumePreflight({ from: N + 1, actions }).allowed`, which additionally requires the
+diverged step `N` itself to be skip-safe (so it is absent when `N` is a `runScript` outputEnv producer or
+sits inside runtime control flow, where `--from N + 1` would be refused). Because that preflight's checked
+range is a strict superset of `from`'s, `alternateFrom` present implies `allowed: true` — it never
+contradicts the primary. Absent for `record-and-heal` (its `from` already IS the `N + 1` continuation) and
+`state-repair` (no recorded-action alternate). The `repairHint` text guidance renders the `N + 1` command
+**iff `alternateFrom` is present**, never re-deriving resumability client-side, so the text surface and the
+structured wire advertise the identical next command — closing both the text-vs-structured disagreement a
+client-side re-derivation would reintroduce and the parity gap where a structured caller saw only `from`.
 
 If the shifted `from` equals `actions.length + 1` (the diverged step was the plan's LAST step), that is a
 legal EMPTY-TAIL resume, not an error: there is nothing left to replay, so the resumed run executes zero
