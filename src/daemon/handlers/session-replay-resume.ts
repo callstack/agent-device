@@ -1,5 +1,5 @@
 import { MAESTRO_RUNTIME_COMMAND } from '../../compat/maestro/runtime-commands.ts';
-import type { SessionAction } from '../types.ts';
+import type { SessionAction, SessionState } from '../types.ts';
 import type { ReplayDivergenceResume, ReplayRepairHint } from '../../replay/divergence.ts';
 
 /**
@@ -71,6 +71,19 @@ function producesOutputEnv(action: SessionAction): boolean {
  * `failedIndex` unchanged. This must agree with the text guidance rendered by
  * `formatReplayDivergenceReport` (`src/replay/divergence.ts`) — both are
  * derived from the same computed `from` value.
+ *
+ * `failedIndex` is always a valid 1-based index into `actions` (both call
+ * sites resolve it from the plan they are actively executing), so the shifted
+ * `from` is at most `actions.length + 1` — never further out of range. That
+ * boundary case (`record-and-heal` diverged on the plan's LAST step) is a
+ * legal EMPTY-TAIL resume, not an error: `evaluateReplayResumePreflight`
+ * already proves it safe (it only checks whether the SKIPPED range 1..from-1
+ * is safe to skip; there is no `from`-th step to reject), and the runtime
+ * loop (`runReplayScriptFile`) executes zero steps and reaches the normal
+ * end-of-plan completion path, correctly flipping a repair transaction
+ * COMPLETE. Rejecting it here would send the agent to `close` instead —
+ * which discards the just-recorded corrective action, since commit is gated
+ * on that same COMPLETE flag.
  */
 export function buildReplayDivergenceResume(params: {
   failedIndex: number; // 1-based
@@ -80,18 +93,35 @@ export function buildReplayDivergenceResume(params: {
 }): ReplayDivergenceResume {
   const { failedIndex, actions, planDigest, repairHint } = params;
   const from = repairHint === 'record-and-heal' ? failedIndex + 1 : failedIndex;
-  if (from > actions.length) {
-    return {
-      allowed: false,
-      from,
-      planDigest,
-      reason:
-        `replay --from ${from} would be out of range for this ${actions.length}-step plan; ` +
-        'the corrective action already completes the script, so finish the repair with close instead of --from.',
-    };
-  }
   const preflight = evaluateReplayResumePreflight({ from, actions });
   return preflight.allowed
     ? { allowed: true, from, planDigest }
     : { allowed: false, from, planDigest, reason: preflight.reason };
+}
+
+/**
+ * ADR 0012 decision 6, R2/R3: a `record-and-heal` divergence's `resume.from`
+ * assumes the agent performs the diverged step manually before continuing —
+ * nothing else enforces that. Stamps a watermark on the LIVE session so a
+ * later `--from` request that lands exactly on the expected target with NO
+ * new action recorded since (proof the corrective press never happened) can
+ * be rejected by `rejectUnperformedRecordAndHeal` instead of silently
+ * resuming past the unrepaired step and, if the tail then completes,
+ * committing a healed script with a hole at the diverged step.
+ *
+ * Called at every divergence site (not only `record-and-heal` ones) so a
+ * stale watermark from an earlier divergence never survives an unrelated
+ * later one: a non-`record-and-heal` hint, or a `record-and-heal` hint whose
+ * `resume` was not `allowed`, clears the field.
+ */
+export function stampPendingRecordAndHealWatermark(params: {
+  session: SessionState;
+  resume: ReplayDivergenceResume;
+  repairHint: ReplayRepairHint;
+}): void {
+  const { session, resume, repairHint } = params;
+  session.pendingRecordAndHeal =
+    repairHint === 'record-and-heal' && resume.allowed
+      ? { expectedFrom: resume.from, actionsCountAtDivergence: session.actions.length }
+      : undefined;
 }

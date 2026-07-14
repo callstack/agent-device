@@ -186,22 +186,21 @@ test('buildReplayDivergenceResume with repairHint record-and-heal resumes AFTER 
   assert.deepEqual(resume, { allowed: true, from: 3, planDigest: 'abc123' });
 });
 
-test('buildReplayDivergenceResume with repairHint record-and-heal on the LAST plan step has nothing left to resume', () => {
+test('buildReplayDivergenceResume with repairHint record-and-heal on the LAST plan step is a legal empty-tail resume', () => {
   const actions: SessionAction[] = [
     action({ command: 'open', positionals: ['Demo'] }),
     action({ command: 'click', positionals: ['label="Save"'] }),
   ];
+  // failedIndex 2 (the last of 2 actions) shifts to from 3 = actions.length +
+  // 1 — there is no step 3 to run, but that is not an error: the runtime
+  // executes zero steps and reaches the normal end-of-plan completion path.
   const resume = buildReplayDivergenceResume({
     failedIndex: 2,
     actions,
     planDigest: 'abc123',
     repairHint: 'record-and-heal',
   });
-  assert.equal(resume.allowed, false);
-  assert.equal(resume.from, 3);
-  assert.equal(resume.planDigest, 'abc123');
-  if (resume.allowed) return;
-  assert.match(resume.reason, /out of range/);
+  assert.deepEqual(resume, { allowed: true, from: 3, planDigest: 'abc123' });
 });
 
 test('buildReplayDivergenceResume with repairHint record-and-heal still rejects a skipped control-flow range', () => {

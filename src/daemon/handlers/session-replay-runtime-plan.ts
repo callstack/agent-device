@@ -66,7 +66,14 @@ function validateReplayResumeRequest(params: {
   actions: SessionAction[];
 }): string | undefined {
   const { from, digest, planDigest, actionCount, actions } = params;
-  if (!Number.isInteger(from) || from < 1 || from > actionCount) {
+  // `from === actionCount + 1` is a legal EMPTY-TAIL resume (ADR 0012 decision
+  // 6, R2): a `record-and-heal` divergence on the plan's LAST step reports
+  // exactly this `resume.from`, since the agent performs that step manually
+  // and there is nothing left to replay. The loop then executes zero steps
+  // and falls through to the normal end-of-plan completion path
+  // (`runReplayScriptFile`), correctly flipping an armed repair transaction
+  // COMPLETE. `from > actionCount + 1` has no addressable target at all.
+  if (!Number.isInteger(from) || from < 1 || from > actionCount + 1) {
     return `replay --from ${from} is out of range for a ${actionCount}-step plan.`;
   }
   if (digest !== planDigest) {

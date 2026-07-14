@@ -136,16 +136,15 @@ test('(a) an ANNOTATED press whose dispatch throws a selector-miss yields REPLAY
   // container, so this action-failure divergence routes to `record-and-heal`
   // (ADR 0012 decision 6, R3's container-presence test) — not the `manual`
   // default. `resume.from` must therefore target `failedIndex + 1` (decision
-  // 6, R2), and since this is the plan's only (and last) step, there is no
-  // step 2 to resume into: `allowed: false` with an out-of-range reason.
-  const { divergence } = assertDivergenceShape(response, { allowed: false, from: 2 });
+  // 6, R2): since this is the plan's only (and last) step, that is `from: 2`
+  // = actions.length + 1 — a legal EMPTY-TAIL resume (nothing left to run
+  // after the agent performs the corrective press), not an error.
+  const { divergence } = assertDivergenceShape(response, { allowed: true, from: 2 });
   // A thrown dispatch failure is a generic action-failure divergence — it is
   // NOT re-derived as a target-binding classification (that only happens
   // when verification's OWN pre-action check finds the mismatch).
   expect(divergence.kind).toBe('action-failure');
   expect(divergence.repairHint).toBe('record-and-heal');
-  const resume = divergence.resume as { reason?: string };
-  expect(resume.reason).toMatch(/out of range/);
   const cause = divergence.cause as { code: string; message: string };
   expect(cause.code).toBe('COMMAND_FAILED');
   expect(cause.message).toContain('No element matched selector');

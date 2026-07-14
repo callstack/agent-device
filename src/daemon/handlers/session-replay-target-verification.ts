@@ -36,7 +36,10 @@ import {
   type ReplayRepairHintCapture,
 } from './session-replay-repair-hint.ts';
 import { buildReplayDivergenceFailureResponse } from './session-replay-runtime-failure-response.ts';
-import { buildReplayDivergenceResume } from './session-replay-resume.ts';
+import {
+  buildReplayDivergenceResume,
+  stampPendingRecordAndHealWatermark,
+} from './session-replay-resume.ts';
 import {
   classifyReplayTarget,
   identityFieldMismatches,
@@ -132,6 +135,14 @@ function buildTargetBindingDivergenceResponse(
     targetEvidence: recorded,
     capture: built.repairCapture,
   });
+  const resume = buildReplayDivergenceResume({
+    failedIndex: step,
+    actions: planActions,
+    planDigest,
+    repairHint,
+  });
+  const session = sessionStore.get(sessionName);
+  if (session) stampPendingRecordAndHealWatermark({ session, resume, repairHint });
 
   const divergence: ReplayDivergence = {
     version: 1,
@@ -155,12 +166,7 @@ function buildTargetBindingDivergenceResponse(
     // preflight as an action-failure divergence (allowed unless a skipped
     // step produces outputEnv or the range crosses runtime control flow).
     // This is the only resume site for target-binding divergences.
-    resume: buildReplayDivergenceResume({
-      failedIndex: step,
-      actions: planActions,
-      planDigest,
-      repairHint,
-    }),
+    resume,
     repairHint,
     targetBinding,
   };

@@ -17,7 +17,10 @@ import {
 } from '../../selectors/index.ts';
 import { collectReplaySelectorCandidates } from './session-replay-heal.ts';
 import { collectSettleChromeRefs } from '../../core/snapshot-chrome.ts';
-import { buildReplayDivergenceResume } from './session-replay-resume.ts';
+import {
+  buildReplayDivergenceResume,
+  stampPendingRecordAndHealWatermark,
+} from './session-replay-resume.ts';
 import { formatDivergenceActionLabel, isTouchTargetCommand } from '../../replay/script-utils.ts';
 import {
   computeReplayRepairHint,
@@ -116,6 +119,14 @@ export async function buildReplayFailureDivergence(params: {
     capture: toReplayRepairHintCapture(observation),
   });
 
+  const resume = buildReplayDivergenceResume({
+    failedIndex: index + 1,
+    actions: planActions,
+    planDigest,
+    repairHint,
+  });
+  if (session) stampPendingRecordAndHealWatermark({ session, resume, repairHint });
+
   const divergence: ReplayDivergence = {
     version: 1,
     kind: 'action-failure',
@@ -128,12 +139,7 @@ export async function buildReplayFailureDivergence(params: {
     screen,
     suggestions: suggestions.slice(0, REPLAY_DIVERGENCE_SUGGESTION_LIMIT),
     suggestionCount: suggestions.length,
-    resume: buildReplayDivergenceResume({
-      failedIndex: index + 1,
-      actions: planActions,
-      planDigest,
-      repairHint,
-    }),
+    resume,
     repairHint,
   };
 

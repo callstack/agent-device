@@ -216,6 +216,17 @@ export async function runReplayScriptFile(params: {
     if (entryIndex.value > 0 && !sessionStore.get(sessionName)) {
       return noActiveSessionError();
     }
+    // ADR 0012 decision 6, R2/R3: a `record-and-heal` divergence's reported
+    // `resume.from` assumes the agent performed the diverged step manually
+    // before resuming. Reject a `--from` that lands exactly on that expected
+    // target with no new action recorded since — the corrective press never
+    // happened — instead of silently skipping the unrepaired step.
+    const recordAndHealGuard = rejectUnperformedRecordAndHeal({
+      from: req.flags?.replayFrom,
+      sessionStore,
+      sessionName,
+    });
+    if (recordAndHealGuard) return recordAndHealGuard;
     if (req.flags?.saveScript) {
       // ADR 0012 decision 6, R7 (C5a): a fresh `replay --save-script` on this
       // key clears any prior reap tombstone before starting a new transaction.
@@ -477,6 +488,40 @@ function preflightReplayAgainstActiveRepair(params: {
     'INVALID_ARGS',
     'This session has an active --save-script repair run; continue it with replay --from <n> --plan-digest <sha256>, or finish with close, before starting a fresh full replay.',
   );
+}
+
+/**
+ * ADR 0012 decision 6, R2/R3: `stampPendingRecordAndHealWatermark`
+ * (`session-replay-resume.ts`) marks a `record-and-heal` divergence's
+ * expected `--from` target and the session's recorded action count at that
+ * moment. If a `--from` request matching that exact target arrives while the
+ * action count is UNCHANGED, no corrective action was ever recorded — the
+ * agent (or a JSON/MCP-first caller blindly following `resume.from`) skipped
+ * straight past the diverged step instead of performing it. Reject rather
+ * than silently resuming past it, since a completed tail would then commit a
+ * healed script with a hole at that step. Once a request observes the count
+ * having grown, the watermark is consumed (cleared) so it can never fire
+ * against a later, unrelated request.
+ */
+function rejectUnperformedRecordAndHeal(params: {
+  from: number | undefined;
+  sessionStore: SessionStore;
+  sessionName: string;
+}): DaemonResponse | undefined {
+  const { from, sessionStore, sessionName } = params;
+  if (from === undefined) return undefined;
+  const session = sessionStore.get(sessionName);
+  const pending = session?.pendingRecordAndHeal;
+  if (!session || !pending || pending.expectedFrom !== from) return undefined;
+  if (session.actions.length === pending.actionsCountAtDivergence) {
+    return errorResponse(
+      'INVALID_ARGS',
+      `replay --from ${from} continues a record-and-heal repair, but no corrective action has been recorded on this session since that divergence; press the correct control via a blessed @ref from the divergence's screen.refs (recorded, no --no-record) before resuming with --from ${from}.`,
+    );
+  }
+  session.pendingRecordAndHeal = undefined;
+  sessionStore.set(sessionName, session);
+  return undefined;
 }
 
 /**

@@ -346,6 +346,20 @@ export type SessionState = {
    * SESSION_NOT_FOUND.
    */
   repairSourcePath?: string;
+  /**
+   * ADR 0012 decision 6, R2/R3: set whenever a `record-and-heal` divergence's
+   * `resume` reports `allowed: true` — its `from` (the failed step's index +
+   * 1) assumes the agent performs the diverged step manually before
+   * continuing, and nothing else enforces that. A later `--from` request that
+   * matches `expectedFrom` while `session.actions.length` is still exactly
+   * `actionsCountAtDivergence` (no new action recorded since) is rejected —
+   * proof the corrective press never happened, so the resume would silently
+   * skip the unrepaired step instead of healing it. Overwritten by the next
+   * divergence (cleared to `undefined` for any non-`record-and-heal` hint),
+   * and cleared once a `--from` request observes the action count having
+   * grown, so it never fires against an unrelated later request.
+   */
+  pendingRecordAndHeal?: { expectedFrom: number; actionsCountAtDivergence: number };
   actions: SessionAction[];
   recording?:
     | (SessionRecordingBase & {
