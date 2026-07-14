@@ -9,6 +9,7 @@ import { resolveDeployResultTarget } from '../../contracts/result-serialization.
 import { withSuccessText } from '../../utils/success-text.ts';
 import { requireSessionOrExplicitSelector, resolveCommandDevice } from './session-device-utils.ts';
 import { errorResponse, requireCommandSupported } from './response.ts';
+import { expireRefFrame } from '../ref-frame.ts';
 
 export type ReinstallOps = {
   ios: (device: DeviceInfo, app: string, appPath: string) => Promise<{ bundleId: string }>;
@@ -153,6 +154,10 @@ export async function handleAppDeployCommand(params: {
     });
     const unsupported = requireCommandSupported(command, device);
     if (unsupported) return unsupported;
+
+    // ADR 0014 side-effect seam: install/reinstall replace the app binary and
+    // can replace the visible surface; expire the frame before the deploy op.
+    if (session) expireRefFrame(session);
 
     const result = isIosFamily(device)
       ? buildIosDeployResult(app, appPath, await deployOps.ios(device, app, appPath))

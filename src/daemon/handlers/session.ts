@@ -37,7 +37,8 @@ import { handleSessionStateCommands } from './session-state.ts';
 import { handleSessionObservabilityCommands } from './session-observability.ts';
 import { handleSessionReplayCommands } from './session-replay.ts';
 import { handleDoctorCommand } from './session-doctor.ts';
-import { getSessionCommandKind } from '../daemon-command-registry.ts';
+import { getSessionCommandKind, resolveRefFrameEffect } from '../daemon-command-registry.ts';
+import { expireRefFrame } from '../ref-frame.ts';
 import { LeaseRegistry } from '../lease-registry.ts';
 import { PREPARE_REQUEST_TIMEOUT_MS } from '../../core/command-descriptor/timeout-policy.ts';
 import { Deadline } from '../../utils/retry.ts';
@@ -201,6 +202,14 @@ async function runSessionOrSelectorDispatch(params: {
   });
   const unsupported = requireCommandSupported(command, device);
   if (unsupported) return unsupported;
+
+  // ADR 0014 side-effect seam for session/selector-route leaves (keyboard
+  // dismiss/enter/return, push, trigger-app-event). Expire the frame before the
+  // dispatch when the classification says this request mutates; keyboard
+  // status/get resolve to `preserve` and leave the frame untouched.
+  if (session && resolveRefFrameEffect(req) === 'may-invalidate') {
+    expireRefFrame(session);
+  }
 
   const result = await dispatchCommand(device, command, positionals, req.flags?.out, {
     ...contextFromFlags(logPath, req.flags, session?.appBundleId, session?.trace?.outPath),

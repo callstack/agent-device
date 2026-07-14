@@ -15,6 +15,8 @@ import { SessionStore } from '../session-store.ts';
 import { buildAppleRunnerRequestOptions } from '../apple-runner-options.ts';
 import { recordIfSession } from './snapshot-session.ts';
 import { parseTimeout } from '../../utils/parse-timeout.ts';
+import { resolveRefFrameEffect } from '../daemon-command-registry.ts';
+import { expireRefFrame } from '../ref-frame.ts';
 import { errorResponse, requireCommandSupported } from './response.ts';
 
 type HandleAlertCommandParams = {
@@ -48,6 +50,13 @@ export async function handleAlertCommand(
   })();
   const unsupported = requireCommandSupported('alert', device);
   if (unsupported) return unsupported;
+  // ADR 0014 side-effect seam: alert accept/dismiss act on the device; get/wait
+  // are read-only. The alert resolver returns `may-invalidate` only for the
+  // acting subactions, so this covers both the Android and native accept/dismiss
+  // mutations without touching the read paths.
+  if (session && resolveRefFrameEffect(req) === 'may-invalidate') {
+    expireRefFrame(session);
+  }
   if (device.platform === 'android') {
     const timeoutMs = parseTimeout(req.positionals?.[1]) ?? DEFAULT_TIMEOUT_MS;
     return recordAlertResponse(

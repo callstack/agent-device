@@ -155,6 +155,55 @@ test('appstate fails when iOS session has no tracked app', async () => {
   }
 });
 
+test('keyboard dismiss crosses the ADR 0014 seam while keyboard status preserves the frame', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'kb';
+  const device: SessionState['device'] = {
+    platform: 'apple',
+    id: 'sim-1',
+    name: 'iPhone 17 Pro',
+    kind: 'simulator',
+    booted: true,
+  };
+  mockResolveTargetDevice.mockResolvedValue(device);
+  mockDispatch.mockResolvedValue({});
+  const logPath = path.join(os.tmpdir(), 'daemon.log');
+
+  // dismiss mutates the device → frame expires.
+  sessionStore.set(sessionName, makeSession(sessionName, device));
+  await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'keyboard',
+      positionals: ['dismiss'],
+      flags: {},
+    },
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke: noopInvoke,
+  });
+  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+
+  // status is a read-only probe → frame preserved (undefined === active).
+  sessionStore.set(sessionName, makeSession(sessionName, device));
+  await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'keyboard',
+      positionals: ['status'],
+      flags: {},
+    },
+    sessionName,
+    logPath,
+    sessionStore,
+    invoke: noopInvoke,
+  });
+  expect(sessionStore.get(sessionName)?.refFrameState).toBeUndefined();
+});
+
 test('appstate without session on iOS selector returns SESSION_NOT_FOUND', async () => {
   const sessionStore = makeSessionStore();
   const selectedDevice: SessionState['device'] = {

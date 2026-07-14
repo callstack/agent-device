@@ -16,6 +16,7 @@ import type { DaemonResponse, SessionState } from '../types.ts';
 import { errorResponse, noActiveSessionError, requireCommandSupported } from './response.ts';
 import { captureSnapshotForSession } from './interaction-snapshot.ts';
 import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';
+import { expireRefFrame } from '../ref-frame.ts';
 import { readSnapshotNodesReferenceFrame } from './interaction-touch-reference-frame.ts';
 
 export async function handleReactNativeCommands(
@@ -109,6 +110,9 @@ async function dismissReactNativeOverlayTarget(
 ): Promise<DaemonResponse> {
   const { req, sessionStore } = params;
   const actionStartedAt = Date.now();
+  // ADR 0014 side-effect seam: React Native overlay dismissal taps the device;
+  // the target is already resolved, so expire the frame before the press.
+  expireRefFrame(session);
   const data =
     (await dispatchCommand(
       session.device,

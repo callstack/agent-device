@@ -77,6 +77,9 @@ test('react-native dismiss-overlay taps collapsed warning close affordance inste
   });
 
   expect(response?.ok).toBe(true);
+  // ADR 0014 side-effect seam: overlay dismissal taps the device, so it expires
+  // the ref frame.
+  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
   expect(mockDispatchCommand).toHaveBeenCalledWith(
     expect.objectContaining({ platform: 'apple' }),
     'press',

@@ -21,6 +21,7 @@ import {
   settleIosSimulator,
 } from './session-device-utils.ts';
 import { errorResponse } from './response.ts';
+import { expireRefFrame } from '../ref-frame.ts';
 import { recordSessionAction } from './handler-utils.ts';
 import type { LeaseRegistry } from '../lease-registry.ts';
 import { releaseSessionLease } from '../lease-lifecycle.ts';
@@ -271,6 +272,10 @@ async function dispatchTargetedPlatformClose(params: {
     }
   }
   try {
+    // ADR 0014 side-effect seam: close mutates the device. The frame expires
+    // here for uniformity, though a successful close deletes the whole session
+    // (and its frame) in handleCloseCommand's finally, so nothing is restored.
+    expireRefFrame(session);
     await dispatchCommand(session.device, 'close', req.positionals ?? [], req.flags?.out, {
       ...contextFromFlags(logPath, req.flags, session.appBundleId, session.trace?.outPath),
     });

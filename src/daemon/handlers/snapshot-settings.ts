@@ -10,6 +10,7 @@ import { SessionStore } from '../session-store.ts';
 import type { DaemonRequest, DaemonResponse, SessionState } from '../types.ts';
 import { recordIfSession } from './snapshot-session.ts';
 import { errorResponse, requireCommandSupported, type DaemonFailureResponse } from './response.ts';
+import { expireRefFrame } from '../ref-frame.ts';
 
 type ParsedSettingsArgs = {
   setting: string;
@@ -100,6 +101,9 @@ export async function handleSettingsCommand(
         : setting === 'location' && state === 'set'
           ? [setting, state, latitude ?? '', longitude ?? '', appBundleId ?? '']
           : [setting, state, appBundleId ?? ''];
+  // ADR 0014 side-effect seam: a settings mutation changes device state; expire
+  // the frame before the dispatch (settings is always classified may-invalidate).
+  if (session) expireRefFrame(session);
   const data = await dispatchCommand(device, 'settings', positionals, req.flags?.out, {
     ...contextFromFlags(logPath, req.flags, appBundleId, session?.trace?.outPath),
   });
