@@ -3,7 +3,7 @@ import {
   withTargetDeviceResolutionScope,
 } from '../core/dispatch-resolve.ts';
 import { AppError, normalizeError, retriableForErrorCode } from '../kernel/errors.ts';
-import { normalizeCommandAlias } from '../command-aliases.ts';
+import { normalizeCrossSurfaceCommandAlias } from '../command-aliases.ts';
 import { supportedPlatformsForCommand } from '../core/capabilities.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
 import type { DaemonArtifactType, DaemonError, ResponseCost } from '../kernel/contracts.ts';
@@ -413,7 +413,7 @@ function enrichDaemonError(command: string, error: DaemonError): DaemonError {
 // command reaches its canonical descriptor no matter the ingress path. Returns
 // the original request object unchanged when the command is already canonical.
 function canonicalizeRequestCommand(req: DaemonRequest): DaemonRequest {
-  const canonical = normalizeCommandAlias(req.command);
+  const canonical = normalizeCrossSurfaceCommandAlias(req.command);
   return canonical === req.command ? req : { ...req, command: canonical };
 }
 

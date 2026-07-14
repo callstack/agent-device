@@ -1,6 +1,6 @@
 import { deriveStructuredBatchCommandNames } from './core/command-descriptor/derive.ts';
 import { commandDescriptors } from './core/command-descriptor/registry.ts';
-import { normalizeCommandAlias } from './command-aliases.ts';
+import { normalizeCrossSurfaceCommandAlias } from './command-aliases.ts';
 import { AppError } from './kernel/errors.ts';
 
 /**
@@ -62,7 +62,7 @@ export function normalizeBatchCommandName(command: unknown): string {
   // map so structured batch data carrying a renamed command validates and runs
   // against the canonical descriptor instead of failing as unavailable.
   const raw = typeof command === 'string' ? command.trim().toLowerCase() : '';
-  return raw ? normalizeCommandAlias(raw) : '';
+  return raw ? normalizeCrossSurfaceCommandAlias(raw) : '';
 }
 
 export function readStructuredBatchCommandName(

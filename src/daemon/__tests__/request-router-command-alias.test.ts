@@ -91,3 +91,22 @@ test('daemon boundary leaves canonical commands untouched', async () => {
 
   expect(mockDispatch.mock.calls[0]?.[1]).toBe('orientation');
 });
+
+test('daemon boundary does not rewrite relaunch to plain open without its implied flag', async () => {
+  const sessionStore = makeSessionStore('agent-device-router-alias-');
+  sessionStore.set('qa-ios', makeIosSession('qa-ios'));
+
+  const handler = createHandler(sessionStore);
+  await handler({
+    token: 'test-token',
+    session: 'qa-ios',
+    command: 'relaunch',
+    positionals: ['com.example.app'],
+    flags: {},
+    meta: { requestId: 'req-relaunch-alias' },
+  });
+
+  expect(mockDispatch).toHaveBeenCalledTimes(1);
+  expect(mockDispatch.mock.calls[0]?.[1]).toBe('relaunch');
+  expect(mockDispatch.mock.calls[0]?.[1]).not.toBe('open');
+});

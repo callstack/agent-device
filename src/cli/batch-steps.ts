@@ -3,7 +3,7 @@ import { type SessionRuntimeHints } from '../kernel/contracts.ts';
 import { parseBatchStepRuntime } from '../batch-contract.ts';
 import { readInputFromCli } from '../commands/cli-grammar.ts';
 import { isCommandName, type CommandName } from '../commands/command-metadata.ts';
-import { normalizeCommandAlias } from '../command-aliases.ts';
+import { normalizeCrossSurfaceCommandAlias } from '../command-aliases.ts';
 import type { CliFlags } from '../commands/cli-grammar/flag-types.ts';
 import { AppError } from '../kernel/errors.ts';
 import { isRecord } from '../utils/parsing.ts';
@@ -70,7 +70,7 @@ function readStructuredBatchStep(
   return {
     ...rest,
     // Resolve command-name aliases (e.g. `rotate` -> `orientation`) from the shared map.
-    command: normalizeCommandAlias(rest.command),
+    command: normalizeCrossSurfaceCommandAlias(rest.command),
     ...(runtime === undefined ? {} : { runtime }),
   };
 }
@@ -96,7 +96,7 @@ function readLegacyCommand(value: unknown, stepNumber: number): CommandName {
   const raw = typeof value === 'string' ? value.trim().toLowerCase() : '';
   if (!raw) throw new AppError('INVALID_ARGS', `Batch step ${stepNumber} requires command.`);
   // Resolve command-name aliases (e.g. `rotate` -> `orientation`) from the shared map.
-  const command = normalizeCommandAlias(raw);
+  const command = normalizeCrossSurfaceCommandAlias(raw);
   if (isCommandName(command)) return command;
   throw new AppError(
     'INVALID_ARGS',

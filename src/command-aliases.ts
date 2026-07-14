@@ -8,14 +8,16 @@ export type CommandAlias = {
   alias: string;
   command: string;
   impliedFlags?: readonly BooleanCliFlagKey[];
+  /** A previously canonical command name that must work outside CLI parsing. */
+  crossSurfaceRename?: true;
+  /** Legacy response discriminant retained for hidden compatibility execution. */
+  legacyResultAction?: string;
 };
 
-// The single source of truth for command-name aliases. It is applied at two
-// ingress boundaries so an alias resolves the same way regardless of how a
-// command arrives: CLI token parsing (`src/cli/parser/args.ts`) and the daemon
-// request boundary (`src/daemon/request-router.ts`), which covers structured
-// batch steps, recorded replay data, and older remote clients that send the
-// wire command directly. `impliedFlags` is a CLI-parse-only concern.
+// The single source of truth for command-name aliases. CLI parsing accepts all
+// entries and applies implied flags. Non-CLI command-data boundaries accept only
+// cross-surface renames: ordinary CLI aliases such as `relaunch` cannot be
+// rewritten safely without also applying their parser-only implied flags.
 const COMMAND_ALIASES: readonly CommandAlias[] = [
   { alias: 'long-press', command: 'longpress' },
   { alias: 'metrics', command: 'perf' },
@@ -23,7 +25,12 @@ const COMMAND_ALIASES: readonly CommandAlias[] = [
   { alias: 'launch', command: 'open' },
   { alias: 'relaunch', command: 'open', impliedFlags: ['relaunch'] },
   // Deprecated: `rotate` collided with the `gesture rotate` two-finger gesture.
-  { alias: 'rotate', command: 'orientation' },
+  {
+    alias: 'rotate',
+    command: 'orientation',
+    crossSurfaceRename: true,
+    legacyResultAction: 'rotate',
+  },
 ];
 
 const aliasByToken: ReadonlyMap<string, CommandAlias> = new Map(
@@ -32,6 +39,11 @@ const aliasByToken: ReadonlyMap<string, CommandAlias> = new Map(
 
 export function normalizeCommandAlias(command: string): string {
   return aliasByToken.get(command.toLowerCase())?.command ?? command;
+}
+
+export function normalizeCrossSurfaceCommandAlias(command: string): string {
+  const entry = aliasByToken.get(command.toLowerCase());
+  return entry?.crossSurfaceRename === true ? entry.command : command;
 }
 
 export function commandAlias(rawCommand: string): CommandAlias | undefined {

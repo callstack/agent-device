@@ -10,6 +10,11 @@ import {
 import { COMMAND_OUTPUT_SCHEMAS } from './command-output-schemas.ts';
 import { AppError } from '../kernel/errors.ts';
 import { formatToolErrorText, normalizeToolError } from './tool-error.ts';
+import {
+  commandAlias,
+  normalizeCrossSurfaceCommandAlias,
+  type CommandAlias,
+} from '../command-aliases.ts';
 
 export type ToolResult = {
   isError: boolean;
@@ -65,17 +70,28 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
   const refPinsByScope = new Map<string, Map<string, number>>();
   return {
     execute: async (name, input) => {
-      if (!isCommandName(name)) {
+      const canonicalName = normalizeCrossSurfaceCommandAlias(name);
+      if (!isCommandName(canonicalName)) {
         throw new AppError('INVALID_ARGS', `Unknown command tool: ${name}`);
       }
+      const alias = canonicalName === name ? undefined : commandAlias(name);
       const config = readMcpToolConfig(input);
       const commandInput = stripMcpConfigFields(input);
       const scopeKey = readPinScopeKey(config, commandInput);
-      const pinnedInput = pinPlainRefArguments(name, commandInput, refPinsByScope.get(scopeKey));
+      const pinnedInput = pinPlainRefArguments(
+        canonicalName,
+        commandInput,
+        refPinsByScope.get(scopeKey),
+      );
       const client = await createClient(deps, config.client);
       try {
-        const result = await (deps.runCommand ?? runCommand)(client, name, pinnedInput);
-        mergeIssuedRefPins(refPinsByScope, scopeKey, name, result);
+        const canonicalResult = await (deps.runCommand ?? runCommand)(
+          client,
+          canonicalName,
+          pinnedInput,
+        );
+        const result = restoreLegacyAliasResult(alias, canonicalResult);
+        mergeIssuedRefPins(refPinsByScope, scopeKey, canonicalName, result);
         return {
           isError: false,
           structuredContent: result,
@@ -85,7 +101,7 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
               // Render from the UNPINNED input: the model typed plain refs and
               // must never see generation suffixes (zero token cost).
               text: renderToolText({
-                name,
+                name: canonicalName,
                 input: commandInput,
                 result,
                 outputFormat: config.outputFormat,
@@ -99,6 +115,12 @@ export function createCommandToolExecutor(deps: CommandToolExecutorDeps = {}): C
       }
     },
   };
+}
+
+function restoreLegacyAliasResult(alias: CommandAlias | undefined, result: unknown): unknown {
+  if (!alias?.legacyResultAction) return result;
+  const record = asOptionalRecord(result);
+  return record ? { ...record, action: alias.legacyResultAction } : result;
 }
 
 /**

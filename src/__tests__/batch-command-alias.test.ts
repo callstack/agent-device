@@ -33,3 +33,15 @@ test('daemon batch policy leaves canonical and unknown names intact', () => {
   assert.equal(normalizeBatchCommandName('press'), 'press');
   assert.throws(() => readStructuredBatchCommandName('not-a-command', 1), /not available/);
 });
+
+test('non-CLI batch normalization does not drop relaunch implied flags', () => {
+  assert.equal(normalizeBatchCommandName('relaunch'), 'relaunch');
+  assert.throws(() => readStructuredBatchCommandName('relaunch', 1), /not available/);
+  assert.throws(
+    () =>
+      readCliBatchStepsJson(
+        JSON.stringify([{ command: 'relaunch', positionals: ['com.example.app'] }]),
+      ),
+    /not available/,
+  );
+});
