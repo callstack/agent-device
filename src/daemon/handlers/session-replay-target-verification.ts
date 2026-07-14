@@ -143,7 +143,13 @@ function buildTargetBindingDivergenceResponse(
   });
   const session = sessionStore.get(sessionName);
   if (session) {
-    stampPendingRecordAndHealWatermark({ session, resume, repairHint });
+    stampPendingRecordAndHealWatermark({
+      session,
+      resume,
+      repairHint,
+      failedIndex: step,
+      actions: planActions,
+    });
     sessionStore.set(sessionName, session);
   }
 

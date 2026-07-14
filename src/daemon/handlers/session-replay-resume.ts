@@ -100,28 +100,76 @@ export function buildReplayDivergenceResume(params: {
 }
 
 /**
- * ADR 0012 decision 6, R2/R3: a `record-and-heal` divergence's `resume.from`
- * assumes the agent performs the diverged step manually before continuing —
- * nothing else enforces that. Stamps a watermark on the LIVE session so a
- * later `--from` request that lands exactly on the expected target with NO
- * new action recorded since (proof the corrective press never happened) can
- * be rejected by `rejectUnperformedRecordAndHeal` instead of silently
- * resuming past the unrepaired step and, if the tail then completes,
- * committing a healed script with a hole at the diverged step.
+ * ADR 0012 decision 6, R2/R3, extended per #1262: a `record-and-heal`
+ * divergence's `resume.from` assumes the agent performs the diverged step
+ * manually before continuing — nothing else enforces that, mid-plan or at
+ * the plan's LAST step, so the watermark is stamped unconditionally
+ * (position-independent) whenever `resume.allowed`.
  *
- * Called at every divergence site (not only `record-and-heal` ones) so a
- * stale watermark from an earlier divergence never survives an unrelated
- * later one: a non-`record-and-heal` hint, or a `record-and-heal` hint whose
- * `resume` was not `allowed`, clears the field.
+ * `caution` (identity-mismatch) and `manual` are different in kind:
+ * `resume.from` stays at the failed step's own index `N` unconditionally (a
+ * `--no-record` app-state fix re-runs the unchanged step, and #1262 requires
+ * `N` never be made illegal for these hints), and — UNLIKE `record-and-heal`
+ * — a mid-plan `--from N + 1` was ALREADY unconditionally legal (in range,
+ * `<= actionCount`) and un-gated before #1262: these hints never mandate a
+ * corrective action the way `record-and-heal` does, so an agent may
+ * legitimately decide to skip the diverged step's execution entirely
+ * (dropping it from a healed script) and continue. That pre-existing,
+ * un-gated pattern must not regress.
+ *
+ * The ONE gap #1262 closes is the boundary case: when the diverged step IS
+ * the plan's LAST step, `N + 1` is one past the plan's end — previously
+ * ALWAYS out of range for `caution`/`manual` (dead end: `close` on the
+ * not-yet-COMPLETE transaction discards a just-recorded corrective action).
+ * Only THAT boundary ordinal is newly authorized here, and only when it is
+ * independently preflight-safe (`evaluateReplayResumePreflight` on `N + 1`,
+ * NOT the unrelated preflight verdict `resume.allowed` already carries for
+ * `N` — a different ordinal). Authorizing it stamps the SAME watermark
+ * `record-and-heal` uses, which — as an unavoidable side effect of sharing
+ * the mechanism — also puts `describeUnperformedRecordAndHeal`'s
+ * recorded-corrective-action guard in front of that specific `N + 1`
+ * request: the empty-tail exception is new, so proof it was earned is
+ * required, same as record-and-heal's requirement.
+ *
+ * Called at every divergence site (not only the eligible hints/positions) so
+ * a stale watermark from an earlier divergence never survives an unrelated
+ * later one: an ineligible hint, a mid-plan `caution`/`manual` divergence, or
+ * a last-step `caution`/`manual` divergence whose `N + 1` target is not
+ * itself preflight-safe, all clear the field.
  */
 export function stampPendingRecordAndHealWatermark(params: {
   session: SessionState;
   resume: ReplayDivergenceResume;
   repairHint: ReplayRepairHint;
+  failedIndex: number; // 1-based, the diverged step's own plan ordinal (N)
+  actions: SessionAction[];
 }): void {
-  const { session, resume, repairHint } = params;
-  session.pendingRecordAndHeal =
-    repairHint === 'record-and-heal' && resume.allowed
-      ? { expectedFrom: resume.from, actionsCountAtDivergence: session.actions.length }
-      : undefined;
+  const { session, resume, repairHint, failedIndex, actions } = params;
+  session.pendingRecordAndHeal = computeRecordAndHealWatermark({
+    resume,
+    repairHint,
+    failedIndex,
+    actions,
+    actionsCountAtDivergence: session.actions.length,
+  });
+}
+
+function computeRecordAndHealWatermark(params: {
+  resume: ReplayDivergenceResume;
+  repairHint: ReplayRepairHint;
+  failedIndex: number;
+  actions: SessionAction[];
+  actionsCountAtDivergence: number;
+}): { expectedFrom: number; actionsCountAtDivergence: number } | undefined {
+  const { resume, repairHint, failedIndex, actions, actionsCountAtDivergence } = params;
+  if (repairHint === 'record-and-heal') {
+    return resume.allowed ? { expectedFrom: resume.from, actionsCountAtDivergence } : undefined;
+  }
+  if (repairHint !== 'caution' && repairHint !== 'manual') return undefined;
+  // #1262: only the LAST-step empty-tail alternate is newly authorized —
+  // see the function doc comment for why mid-plan `N + 1` stays un-gated.
+  if (failedIndex !== actions.length) return undefined;
+  const expectedFrom = failedIndex + 1;
+  const authorized = evaluateReplayResumePreflight({ from: expectedFrom, actions }).allowed;
+  return authorized ? { expectedFrom, actionsCountAtDivergence } : undefined;
 }

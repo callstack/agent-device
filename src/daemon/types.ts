@@ -347,15 +347,34 @@ export type SessionState = {
    */
   repairSourcePath?: string;
   /**
-   * ADR 0012 decision 6, R2/R3: set whenever a `record-and-heal` divergence's
-   * `resume` reports `allowed: true` — its `from` (the failed step's index +
-   * 1) assumes the agent performs the diverged step manually before
-   * continuing, and nothing else enforces that. A later `--from` request that
-   * matches `expectedFrom` while `session.actions.length` is still exactly
-   * `actionsCountAtDivergence` (no new action recorded since) is rejected —
-   * proof the corrective press never happened, so the resume would silently
-   * skip the unrepaired step instead of healing it. Overwritten by the next
-   * divergence (cleared to `undefined` for any non-`record-and-heal` hint),
+   * ADR 0012 decision 6, R2/R3, extended per #1262: set whenever a
+   * `record-and-heal` divergence's `resume` reports `allowed: true` — its
+   * `from` (the failed step's index + 1) assumes the agent performs the
+   * diverged step manually before continuing, and nothing else enforces
+   * that. Position-independent for `record-and-heal` (mid-plan or the
+   * plan's last step).
+   *
+   * Also set for `caution`/`manual`, whose OWN `resume.from` stays at the
+   * failed step's index unchanged (never made illegal) — but ONLY when the
+   * diverged step is the plan's LAST one: those hints have a legitimate
+   * record-and-heal-SHAPED alternate repair targeting `failedIndex + 1`,
+   * stamped when that target is independently preflight-safe
+   * (`stampPendingRecordAndHealWatermark`, `session-replay-resume.ts`). A
+   * MID-PLAN `caution`/`manual` `failedIndex + 1` was already unconditionally
+   * legal (in range) and un-gated before #1262 — these hints never mandate a
+   * corrective action the way `record-and-heal` does, so an agent may
+   * legitimately skip the diverged step without repairing it — and stays
+   * un-gated: this field is never set for a mid-plan `caution`/`manual`
+   * divergence.
+   *
+   * A later `--from` request that matches `expectedFrom` while
+   * `session.actions.length` is still exactly `actionsCountAtDivergence` (no
+   * new action recorded since) is rejected — proof the corrective press
+   * never happened, so the resume would silently skip the unrepaired step
+   * instead of healing it. Overwritten by the next divergence (cleared to
+   * `undefined` for any hint outside the eligible set, a mid-plan
+   * `caution`/`manual` divergence, or a last-step `caution`/`manual`
+   * divergence whose `failedIndex + 1` target is not itself preflight-safe),
    * and cleared once a `--from` request observes the action count having
    * grown, so it never fires against an unrelated later request.
    */

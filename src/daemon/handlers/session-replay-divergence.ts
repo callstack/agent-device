@@ -126,7 +126,13 @@ export async function buildReplayFailureDivergence(params: {
     repairHint,
   });
   if (session) {
-    stampPendingRecordAndHealWatermark({ session, resume, repairHint });
+    stampPendingRecordAndHealWatermark({
+      session,
+      resume,
+      repairHint,
+      failedIndex: index + 1,
+      actions: planActions,
+    });
     sessionStore.set(sessionName, session);
   }
 

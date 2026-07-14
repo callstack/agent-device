@@ -1,6 +1,7 @@
 /**
- * ADR 0012 decision 6, R2/R3: two behaviors introduced alongside the
- * `resume.from` / `repairHint` agreement fix (`session-replay-resume.ts`).
+ * ADR 0012 decision 6, R2/R3, extended per #1262: behaviors introduced
+ * alongside the `resume.from` / `repairHint` agreement fix
+ * (`session-replay-resume.ts`).
  *
  * 1. A `record-and-heal` divergence on the plan's LAST step reports
  *    `resume.from = actions.length + 1` — a legal EMPTY-TAIL resume, not an
@@ -13,6 +14,13 @@
  *    exactly on that reported target with NO new action recorded since the
  *    divergence — proof the agent never performed the corrective press —
  *    instead of silently resuming past the unrepaired step.
+ * 3. #1262: `caution`/`manual` are genuinely dual-path. Their OWN
+ *    `resume.from` stays AT the failed step unconditionally (never shifted,
+ *    never made illegal — items 1/2 above still apply verbatim once resumed
+ *    there), but they ALSO get the SAME `actions.length + 1` empty-tail
+ *    authorization (gated behind the SAME recorded-corrective-action proof)
+ *    for their record-and-heal-shaped alternate repair, so a last-step
+ *    `caution`/`manual` divergence is no longer a dead end.
  */
 import { test, expect, vi, beforeEach } from 'vitest';
 
@@ -170,16 +178,23 @@ test('a record-and-heal divergence on the LAST step resumes with an empty tail a
   expect(healedScript).not.toMatch(/^click /m);
 });
 
-test('a --from one past the plan end is rejected as out of range when no record-and-heal watermark authorizes it', async () => {
-  const root = fs.mkdtempSync(
-    path.join(os.tmpdir(), 'agent-device-replay-empty-tail-unauthorized-'),
-  );
+// --- #1262: `caution`/`manual` are genuinely dual-path — their OWN
+// `resume.from` stays AT the failed step (N) unconditionally (never shifted,
+// never made illegal), but they ALSO have a record-and-heal-shaped alternate
+// repair (the agent performs the diverged step's intent as a recorded action
+// instead), reachable at `--from N + 1`. `stampPendingRecordAndHealWatermark`
+// now stamps the SAME empty-tail watermark for these hints, gated behind the
+// SAME recorded-corrective-action proof, so a last-step `caution`/`manual`
+// divergence is no longer a dead end (#1260 fixed this only for
+// `record-and-heal`). ---
+
+test('a manual divergence (unannotated action-failure) on the LAST step resumes with an empty tail and commits — but only after the corrective press is actually recorded', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-empty-tail-manual-'));
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
   const sessionName = 'default';
   sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
   // No target-v1 annotation: an unannotated action-failure always routes to
-  // the `manual` fail-safe (no recorded targetEvidence), so NO
-  // `pendingRecordAndHeal` watermark is ever stamped for this divergence.
+  // the `manual` fail-safe (no recorded targetEvidence).
   const filePath = writeReplayFile(root, ['open "Demo" --relaunch', 'click label="Save"']);
 
   const invoke = makeRecordingReplayInvoke({
@@ -187,6 +202,257 @@ test('a --from one past the plan end is rejected as out of range when no record-
     sessionName,
     failSteps: new Set(['click label="Save"']),
   });
+
+  // --- Leg 1: open records; "click label=Save" fails at dispatch with no
+  // recorded target evidence, routing to `manual`. It is the plan's LAST
+  // step, so the record-and-heal-shaped alternate target is 3 = actions
+  // (2) + 1 — but `resume.from` itself stays at 2, unshifted. ---
+  const leg1 = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+  expect(leg1.ok).toBe(false);
+  if (leg1.ok) return;
+  const divergence = leg1.error.details?.divergence as {
+    kind: string;
+    repairHint: string;
+    resume: { allowed: boolean; from: number; planDigest: string };
+  };
+  expect(divergence.kind).toBe('action-failure');
+  expect(divergence.repairHint).toBe('manual');
+  expect(divergence.resume.allowed).toBe(true);
+  expect(divergence.resume.from).toBe(2);
+
+  const session = sessionStore.get(sessionName)!;
+  expect(session.actions.map((a) => a.command)).toEqual(['open']);
+  expect(session.saveScriptComplete).toBeFalsy();
+  // The watermark IS now stamped for `manual` (#1262) — targeting N + 1 (3),
+  // a DIFFERENT ordinal than the unshifted `resume.from` (2) above.
+  expect(session.pendingRecordAndHeal).toEqual({ expectedFrom: 3, actionsCountAtDivergence: 1 });
+
+  // --- A blind resume at the empty-tail target BEFORE performing the
+  // corrective press is rejected: no new action was recorded since the
+  // divergence, so nothing proves the diverged step's intent was actually
+  // performed. ---
+  const blindResume = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [filePath],
+      flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+  expect(blindResume.ok).toBe(false);
+  if (!blindResume.ok) {
+    expect(blindResume.error.code).toBe('INVALID_ARGS');
+    expect(blindResume.error.message).toMatch(/no corrective action/);
+  }
+  expect(session.actions.map((a) => a.command)).toEqual(['open']);
+
+  // --- Agent performs the step's intent as a recorded action (blessed
+  // @ref), recorded live. ---
+  sessionStore.recordAction(session, {
+    command: 'press',
+    positionals: ['@e6'],
+    flags: {},
+    result: { selectorChain: ['label="Save"'] },
+    targetEvidence: freshEvidence('save-v2', 'Save'),
+  });
+
+  // --- Leg 2: the SAME `--from 3` now succeeds — the corrective press grew
+  // session.actions, consuming the watermark. Zero steps execute, and the
+  // runtime's normal end-of-plan path flips the transaction COMPLETE. ---
+  const leg2 = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [filePath],
+      flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+  expect(leg2.ok).toBe(true);
+  if (leg2.ok) {
+    expect((leg2.data as { replayed: number }).replayed).toBe(0);
+  }
+  expect(session.actions.map((a) => a.command)).toEqual(['open', 'press']);
+  expect(session.saveScriptComplete).toBe(true);
+
+  // --- Commit: the transaction is COMPLETE, so the healed script actually
+  // publishes — the corrective press survives, "click" (never recorded,
+  // since a `manual` divergence never dispatched it) does not. Proves the
+  // empty-tail resume did not lead to a discarded repair (the #1260
+  // discard-at-close trap, now also closed for `manual`). ---
+  const writeResult = sessionStore.writeSessionLog(session);
+  expect(writeResult.written).toBe(true);
+  const healedPath = path.join(root, 'flow.healed.ad');
+  expect(fs.existsSync(healedPath)).toBe(true);
+  const healedScript = fs.readFileSync(healedPath, 'utf8');
+  expect(healedScript).toContain('open');
+  expect(healedScript).toContain('save-v2');
+  expect(healedScript).not.toMatch(/^click /m);
+});
+
+test('a caution (identity-mismatch) divergence on the LAST step resumes with an empty tail and commits — but only after the corrective press is actually recorded', async () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-empty-tail-caution-'));
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  const SAVE_ANNOTATION =
+    '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}';
+  const filePath = writeReplayFile(root, [
+    'open "Demo" --relaunch',
+    SAVE_ANNOTATION,
+    'click label="Save"',
+  ]);
+
+  // The pre-action verification capture finds a node with the recorded
+  // LABEL but a renamed id — a genuine identity-mismatch (matchCount 1),
+  // never reaching dispatch for "click".
+  mockDispatchCommand.mockResolvedValue({
+    nodes: [
+      {
+        index: 0,
+        depth: 0,
+        type: 'Button',
+        identifier: 'save-v2',
+        label: 'Save',
+        rect: { x: 10, y: 10, width: 40, height: 20 },
+      },
+    ],
+    truncated: false,
+    backend: 'xctest',
+  });
+
+  const invoke = makeRecordingReplayInvoke({ sessionStore, sessionName });
+
+  // --- Leg 1: open records; "click label=Save" diverges pre-action as
+  // identity-mismatch/`caution`. It is the plan's LAST step, so the
+  // record-and-heal-shaped alternate target is 3 = actions (2) + 1 — but
+  // `resume.from` itself stays at 2, unshifted (#1262 item 1). ---
+  const leg1 = await runReplayScriptFile({
+    req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+  expect(leg1.ok).toBe(false);
+  if (leg1.ok) return;
+  const divergence = leg1.error.details?.divergence as {
+    kind: string;
+    repairHint: string;
+    resume: { allowed: boolean; from: number; planDigest: string };
+  };
+  expect(divergence.kind).toBe('identity-mismatch');
+  expect(divergence.repairHint).toBe('caution');
+  expect(divergence.resume.allowed).toBe(true);
+  expect(divergence.resume.from).toBe(2);
+
+  const session = sessionStore.get(sessionName)!;
+  expect(session.actions.map((a) => a.command)).toEqual(['open']);
+  expect(session.saveScriptComplete).toBeFalsy();
+  expect(session.pendingRecordAndHeal).toEqual({ expectedFrom: 3, actionsCountAtDivergence: 1 });
+
+  // --- A blind resume at the empty-tail target BEFORE performing the
+  // corrective press is rejected. ---
+  const blindResume = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [filePath],
+      flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+  expect(blindResume.ok).toBe(false);
+  if (!blindResume.ok) {
+    expect(blindResume.error.code).toBe('INVALID_ARGS');
+    expect(blindResume.error.message).toMatch(/no corrective action/);
+  }
+  expect(session.actions.map((a) => a.command)).toEqual(['open']);
+
+  // --- Agent presses the actual (renamed) control via a blessed @ref,
+  // recorded live — the record-and-heal-shaped repair for path (a) from
+  // #1262 ("selector binds the wrong node on the right screen"). ---
+  sessionStore.recordAction(session, {
+    command: 'press',
+    positionals: ['@e6'],
+    flags: {},
+    result: { selectorChain: ['id="save-v2"'] },
+    targetEvidence: freshEvidence('save-v2', 'Save'),
+  });
+
+  // --- Leg 2: the SAME `--from 3` now succeeds — zero steps execute, and
+  // the runtime's normal end-of-plan path flips the transaction COMPLETE. ---
+  const leg2 = await runReplayScriptFile({
+    req: baseReq({
+      positionals: [filePath],
+      flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
+    }),
+    sessionName,
+    logPath: path.join(root, 'daemon.log'),
+    sessionStore,
+    invoke,
+  });
+  expect(leg2.ok).toBe(true);
+  if (leg2.ok) {
+    expect((leg2.data as { replayed: number }).replayed).toBe(0);
+  }
+  expect(session.actions.map((a) => a.command)).toEqual(['open', 'press']);
+  expect(session.saveScriptComplete).toBe(true);
+
+  // --- Commit: COMPLETE, so the healed script publishes the corrective
+  // press; the pre-action "click" (never dispatched) does not appear. ---
+  const writeResult = sessionStore.writeSessionLog(session);
+  expect(writeResult.written).toBe(true);
+  const healedPath = path.join(root, 'flow.healed.ad');
+  expect(fs.existsSync(healedPath)).toBe(true);
+  const healedScript = fs.readFileSync(healedPath, 'utf8');
+  expect(healedScript).toContain('open');
+  expect(healedScript).toContain('save-v2');
+  expect(healedScript).not.toMatch(/^click /m);
+});
+
+test('--from N stays legal for a caution divergence even after the N + 1 empty-tail watermark is stamped', async () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-replay-empty-tail-caution-from-n-'),
+  );
+  const sessionStore = new SessionStore(path.join(root, 'sessions'));
+  const sessionName = 'default';
+  sessionStore.set(sessionName, makeIosSession(sessionName, { appBundleId: 'com.example.app' }));
+  const SAVE_ANNOTATION =
+    '# agent-device:target-v1 {"id":"save","role":"button","label":"Save","ancestry":[],"sibling":0,"viewportOrder":0,"verification":"verified"}';
+  const filePath = writeReplayFile(root, [
+    'open "Demo" --relaunch',
+    SAVE_ANNOTATION,
+    'click label="Save"',
+  ]);
+
+  // Leg 1's capture: a genuine identity-mismatch (renamed id, same label).
+  mockDispatchCommand.mockResolvedValueOnce({
+    nodes: [
+      {
+        index: 0,
+        depth: 0,
+        type: 'Button',
+        identifier: 'save-v2',
+        label: 'Save',
+        rect: { x: 10, y: 10, width: 40, height: 20 },
+      },
+    ],
+    truncated: false,
+    backend: 'xctest',
+  });
+
+  const invoke = makeRecordingReplayInvoke({ sessionStore, sessionName });
 
   const leg1 = await runReplayScriptFile({
     req: baseReq({ positionals: [filePath], flags: { saveScript: true } }),
@@ -201,36 +467,54 @@ test('a --from one past the plan end is rejected as out of range when no record-
     repairHint: string;
     resume: { allowed: boolean; from: number; planDigest: string };
   };
-  expect(divergence.repairHint).toBe('manual');
-  // `from` stays AT the failed step (2) — never shifted, since only
-  // `record-and-heal` shifts `from`. The plan has 2 actions, so `--from 3`
-  // (one past the end) is what an EMPTY-TAIL resume would use — but this
-  // session never authorized it.
+  expect(divergence.repairHint).toBe('caution');
   expect(divergence.resume.from).toBe(2);
   const session = sessionStore.get(sessionName)!;
-  expect(session.pendingRecordAndHeal).toBeUndefined();
+  // The N + 1 watermark is stamped (path (a) is available)...
+  expect(session.pendingRecordAndHeal).toEqual({ expectedFrom: 3, actionsCountAtDivergence: 1 });
 
-  // --- A caller crafts `--from 3` directly — exactly the one-past-the-end
-  // ordinal a record-and-heal empty-tail resume would use, but with no
-  // matching watermark on this session. Must be rejected as out of range,
-  // never silently executed with zero steps (which would let `close`
-  // commit while the actual final "click" step remains unresolved). ---
-  const exploitAttempt = await runReplayScriptFile({
+  // --- ...but path (b) — a `--no-record` app-state fix, then resuming AT
+  // the unshifted `resume.from` (N = 2) — must stay unconditionally legal:
+  // the watermark for the N + 1 alternate must never make N itself illegal.
+  // The recorded-corrective-action guard only ever matches `expectedFrom`
+  // (3), never N, so this request sails through the entry-index checks
+  // straight to re-running "click" — this time against a capture where the
+  // recorded id is present again (the state fix), so it verifies and
+  // dispatches for real. ---
+  mockDispatchCommand.mockResolvedValueOnce({
+    nodes: [
+      {
+        index: 0,
+        depth: 0,
+        type: 'Button',
+        identifier: 'save',
+        label: 'Save',
+        rect: { x: 10, y: 10, width: 40, height: 20 },
+      },
+    ],
+    truncated: false,
+    backend: 'xctest',
+  });
+  const resumeAtN = await runReplayScriptFile({
     req: baseReq({
       positionals: [filePath],
-      flags: { saveScript: true, replayFrom: 3, replayPlanDigest: divergence.resume.planDigest },
+      flags: {
+        saveScript: true,
+        replayFrom: divergence.resume.from,
+        replayPlanDigest: divergence.resume.planDigest,
+      },
     }),
     sessionName,
     logPath: path.join(root, 'daemon.log'),
     sessionStore,
     invoke,
   });
-  expect(exploitAttempt.ok).toBe(false);
-  if (!exploitAttempt.ok) {
-    expect(exploitAttempt.error.code).toBe('INVALID_ARGS');
-    expect(exploitAttempt.error.message).toMatch(/out of range/);
+  expect(resumeAtN.ok).toBe(true);
+  if (resumeAtN.ok) {
+    expect((resumeAtN.data as { replayed: number }).replayed).toBe(1);
   }
-  expect(session.saveScriptComplete).toBeFalsy();
+  expect(session.actions.map((a) => a.command)).toEqual(['open', 'click']);
+  expect(session.saveScriptComplete).toBe(true);
 });
 
 test('an unauthorized --from one past the plan end is rejected on an ARMED session whose last-step divergence hint is state-repair, not record-and-heal', async () => {
