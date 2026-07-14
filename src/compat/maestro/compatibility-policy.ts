@@ -5,7 +5,8 @@ export type MaestroCompatibilityTimingPolicy = {
   runFlowConditionTimeoutMs: number;
 };
 
-// Defaults from Maestro Orchestra command models and lookup policy.
+// Maestro 2.5.1 defaults at a4c7c95f; pinned source metadata lives in
+// scripts/maestro-conformance-fixtures/upstream-maestro-2.5.1.json.
 export const MAESTRO_COMPATIBILITY_PRESETS = {
   command: {
     targetLookupTimeoutMs: 17_000,
