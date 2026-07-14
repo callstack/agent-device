@@ -4,7 +4,6 @@ import { publicPlatformString } from '../kernel/device.ts';
 import { inferFillText } from './action-utils.ts';
 import { emitDiagnostic } from '../utils/diagnostics.ts';
 import { AppError } from '../kernel/errors.ts';
-import { isProcessAlive } from '../utils/host-process.ts';
 import {
   formatPortableActionLine,
   formatTargetAnnotationLines,
@@ -217,13 +216,23 @@ function publishOverwriteAtomically(tempPath: string, scriptPath: string): void 
 }
 
 const NO_CLOBBER_PUBLISH_MAX_ATTEMPTS = 16;
-const LOCK_ACQUIRE_MAX_ATTEMPTS = 40;
-const LOCK_ACQUIRE_BACKOFF_MS = 5;
+const LEASE_ACQUIRE_MAX_ATTEMPTS = 40;
+const LEASE_ACQUIRE_BACKOFF_MS = 5;
+/**
+ * ADR 0012 decision 6 (BLOCKER 1, lease replacement, maintainer-approved
+ * design): a holder older than this is treated as crashed/hung, never merely
+ * slow — the publish lease's whole decide-and-act sequence is a handful of
+ * synchronous fs calls, nowhere close to this budget.
+ */
+const LEASE_TTL_MS = 30_000;
 
 /**
- * ADR 0012 decision 6, no-clobber (BLOCKER 1): publishes to the DEFAULT healed
- * sibling path, where a COMPLETE (sentinel-marked) prior artifact must never
- * be clobbered.
+ * ADR 0012 decision 6, no-clobber (BLOCKER 1, BLOCKER 4): publishes to a
+ * repair-armed session's target — the DEFAULT healed sibling path OR an
+ * explicit `--save-script=<path>` alike (BLOCKER 4: an explicit target is
+ * caller-DIRECTED, never caller-AUTHORIZED to silently destroy an unreviewed
+ * prior healed diff) — where a COMPLETE (sentinel-marked) prior artifact must
+ * never be clobbered.
  *
  * A prior fix made the "is the existing target overwritable" decision itself
  * atomic (grab-to-quarantine + inspect, `grabAndDiscardPartialTarget` below)
@@ -237,24 +246,35 @@ const LOCK_ACQUIRE_BACKOFF_MS = 5;
  *
  * Here the ENTIRE decide-and-act sequence for a given `scriptPath` — the
  * exclusive-link attempt, the grab/inspect, and the refuse-and-restore or
- * discard-and-retry — runs while holding an exclusive publish lock
- * (`acquireNoClobberLock`/`releaseNoClobberLock`, itself an atomic `linkSync`
- * claim). A competing writer for the SAME `scriptPath` cannot even begin its
- * own decision until the lock holder's entire sequence has finished and
- * released it, so the "restore stomps a concurrently-published winner"
- * interleaving above is no longer reachable: whichever writer holds the lock
- * always observes (and, on refusal, restores) exactly what it itself grabbed,
- * with nothing else able to touch `scriptPath` in between.
+ * discard-and-retry — runs while holding a verified, exclusive publish LEASE
+ * (`acquireLease`/`releaseLease` below). A competing writer for the SAME
+ * `scriptPath` cannot even begin its own decision until the lease holder's
+ * entire sequence has finished and released it, so the "restore stomps a
+ * concurrently-published winner" interleaving above is no longer reachable:
+ * whichever writer holds the lease always observes (and, on refusal,
+ * restores) exactly what it itself grabbed, with nothing else able to touch
+ * `scriptPath` in between.
  */
 function publishNoClobberAtomically(tempPath: string, scriptPath: string): void {
-  const lockPath = acquireNoClobberLock(scriptPath);
+  const lockPath = `${scriptPath}.lock`;
+  const myToken = acquireLease(lockPath);
   try {
+    // Closes the pathological window where acquiring took long enough (or
+    // ran up against a small enough TTL) that this lease itself expired and
+    // was stolen by someone else between `acquireLease` returning and here —
+    // never publish on a lease this caller no longer verifiably holds.
+    if (!verifyOwnership(lockPath, myToken)) {
+      throw new AppError(
+        'COMMAND_FAILED',
+        `Could not publish the healed script to ${scriptPath}: the publish lease expired before the write could start.`,
+      );
+    }
     for (let attempt = 0; attempt < NO_CLOBBER_PUBLISH_MAX_ATTEMPTS; attempt += 1) {
       if (tryExclusiveLink(tempPath, scriptPath)) return;
-      // Something is at `scriptPath`. We hold the exclusive publish lock, so
-      // nothing else can repopulate it underneath us: this is either a
-      // genuine partial (grabbed-and-discarded, then retried above) or a
-      // COMPLETE artifact (grabbed, restored, and the publish refused —
+      // Something is at `scriptPath`. We hold the verified exclusive publish
+      // lease, so nothing else can repopulate it underneath us: this is
+      // either a genuine partial (grabbed-and-discarded, then retried above)
+      // or a COMPLETE artifact (grabbed, restored, and the publish refused —
       // `grabAndDiscardPartialTarget` never returns on that path).
       grabAndDiscardPartialTarget(scriptPath);
     }
@@ -263,113 +283,142 @@ function publishNoClobberAtomically(tempPath: string, scriptPath: string): void 
       `Could not publish the healed script to ${scriptPath}: too much contention from concurrent writers.`,
     );
   } finally {
-    releaseNoClobberLock(lockPath);
+    releaseLease(lockPath, myToken);
   }
 }
 
 /**
- * Claims the exclusive right to decide/publish for `scriptPath` via an atomic
- * `linkSync` (fails `EEXIST` iff someone else already holds it). On
- * contention, waits with a bounded backoff — the lock is held only for the
- * handful of synchronous fs calls in `publishNoClobberAtomically`, so any
- * live holder releases it quickly.
+ * ADR 0012 decision 6 (BLOCKER 1, lease replacement — maintainer-approved
+ * design): claims a TTL LEASE on `lockPath` — replaces the prior PID-liveness
+ * "reclaim" scheme (`reclaimDeadLock`, removed), which was structurally
+ * race-prone: reclaiming a dead lock meant GRABBING it away first (rename to
+ * inspect) and, if it turned out to have gone LIVE in the meantime (raced by
+ * a concurrent reclaimer), RESTORING it. That grab-then-restore shape is
+ * exactly the bug the reviewer found: a three-writer interleaving lets waiter
+ * A rename waiter B's now-LIVE lock away (to inspect it), waiter C
+ * `linkSync` its own lock into the momentarily-empty path, then A's
+ * "restore" (`renameSync`, which replaces an existing destination) silently
+ * clobbers C's freshly acquired lock — and a pathname-based release could
+ * then remove a SUCCESSOR's lock, not the caller's own.
  *
- * A lock whose recorded PID is no longer running is a crashed writer's
- * abandoned claim — reclaimed via `reclaimDeadLock` (race-safely; see its
- * doc). A lock held by a LIVE process is never stolen: exhausting the
- * bounded wait fails loudly instead, so a slow (but live) holder's
- * in-progress publish is never second-guessed.
+ * A lease never has that shape — there is no restore path, ever. Each lock
+ * file's content is a unique OWNER TOKEN (`pid:random:createdAtMs`).
+ * Staleness is judged purely from the trailing timestamp (`LEASE_TTL_MS`),
+ * never from asking the OS whether a PID is alive, so there is nothing to
+ * "put back" if the judgment turns out to be wrong: a lease found to be
+ * fresh is simply left completely untouched (back off, retry later); a lease
+ * found to be expired is stolen via a single atomic
+ * `renameSync(lockPath, <lockPath>.expired.<unique>)` — exactly one caller
+ * can ever win that rename for a given still-existing `lockPath` (a second,
+ * concurrent rename of the same already-moved source fails `ENOENT`, never
+ * silently succeeds), so it doubles as a compare-and-swap on "the right to
+ * discard whatever currently sits here". The winner discards what it grabbed
+ * and retries the link; a loser (`ENOENT`) does nothing and also retries the
+ * link, observing whatever the winner left behind. A LIVE holder's canonical
+ * claim at `lockPath` is thus NEVER renamed or removed by anyone but its own
+ * `releaseLease`.
  */
-function acquireNoClobberLock(scriptPath: string): string {
-  const lockPath = `${scriptPath}.lock`;
-  const tempLockPath = `${lockPath}.${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.tmp`;
-  fs.writeFileSync(tempLockPath, String(process.pid));
-  try {
-    for (let attempt = 0; attempt < LOCK_ACQUIRE_MAX_ATTEMPTS; attempt += 1) {
-      try {
-        fs.linkSync(tempLockPath, lockPath);
-        return lockPath;
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
-        // 'reclaimed' (we cleared a dead lock) and 'contended' (someone
-        // else's reclaim of that SAME dead lock just won) both retry the
-        // exclusive link immediately — only a confirmed-LIVE holder backs off.
-        if (reclaimDeadLock(lockPath) === 'live') sleepSyncMs(LOCK_ACQUIRE_BACKOFF_MS);
-      }
+function acquireLease(lockPath: string): string {
+  const myToken = createLeaseToken();
+  for (let attempt = 0; attempt < LEASE_ACQUIRE_MAX_ATTEMPTS; attempt += 1) {
+    if (tryClaimLease(lockPath, myToken)) return myToken;
+    const existingToken = readLeaseToken(lockPath);
+    // Raced away between our EEXIST and this read (the holder released, or a
+    // steal completed) — nothing to judge; retry the link immediately.
+    if (existingToken === undefined) continue;
+    const createdAtMs = leaseCreatedAtMs(existingToken);
+    if (createdAtMs === undefined || Date.now() - createdAtMs > LEASE_TTL_MS) {
+      // Expired (or unparseable, which we also treat as abandoned) — steal
+      // it. Whether WE won the steal or someone else did, the lock is now
+      // either empty or held by a fresh claimant: retry the link either way.
+      stealExpiredLease(lockPath);
+      continue;
     }
-    throw new AppError(
-      'COMMAND_FAILED',
-      `Could not publish the healed script to ${scriptPath}: timed out waiting for a concurrent writer to finish publishing.`,
-    );
+    // A fresh claim — a genuinely live holder. Never touched; just wait.
+    sleepSyncMs(LEASE_ACQUIRE_BACKOFF_MS);
+  }
+  throw new AppError(
+    'COMMAND_FAILED',
+    `Could not publish the healed script: timed out waiting for a concurrent writer.`,
+  );
+}
+
+/** A unique per-attempt owner token: `pid:random:createdAtMs`. */
+function createLeaseToken(): string {
+  return `${process.pid}:${Math.random().toString(36).slice(2)}:${Date.now()}`;
+}
+
+/** Parses the trailing `createdAtMs` segment off a lease token; `undefined` if malformed. */
+function leaseCreatedAtMs(token: string): number | undefined {
+  const raw = token.split(':').at(-1);
+  const parsed = raw === undefined ? Number.NaN : Number(raw);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+/**
+ * The only primitive that can WIN a lease outright: atomic create-if-absent
+ * via `linkSync`. `true` = claimed; `false` = `EEXIST` (something is at
+ * `lockPath` right now, live or expired — the caller decides which next).
+ */
+function tryClaimLease(lockPath: string, token: string): boolean {
+  const tempPath = `${lockPath}.${token.replace(/:/g, '-')}.tmp`;
+  fs.writeFileSync(tempPath, token);
+  try {
+    fs.linkSync(tempPath, lockPath);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'EEXIST') return false;
+    throw error;
   } finally {
-    fs.rmSync(tempLockPath, { force: true });
+    fs.rmSync(tempPath, { force: true });
   }
 }
 
-function releaseNoClobberLock(lockPath: string): void {
-  fs.rmSync(lockPath, { force: true });
+/** Reads the current owner token at `lockPath`; `undefined` if missing/unreadable. */
+function readLeaseToken(lockPath: string): string | undefined {
+  try {
+    return fs.readFileSync(lockPath, 'utf8');
+  } catch {
+    return undefined;
+  }
 }
 
-type LockReclaimOutcome = 'reclaimed' | 'contended' | 'live';
-
 /**
- * Reclaims `lockPath` iff it is provably a DEAD writer's abandoned lock —
- * race-safely. The prior implementation decided "dead" from a plain read,
- * then removed the lock BY PATHNAME as a separate step
- * (`fs.rmSync(lockPath)`) — a classic TOCTOU: waiters A and B could both read
- * the same dead-PID lock and both decide to reclaim; if B's reclaim (remove
- * + re-`linkSync` its OWN live lock) completed inside the gap between A's
- * read and A's own removal, A's stale `rmSync(lockPath)` would delete B's
- * LIVE lock by pathname — not the dead one A actually inspected — and both
- * waiters would then believe they held the exclusive lock at once.
- *
- * Here the removal is never "read, then act by pathname" — it is a single
- * atomic claim: `fs.renameSync(lockPath, claimPath)` can only ever move a
- * given SOURCE path for exactly one caller (a second, concurrent rename of
- * the same already-moved source fails `ENOENT`, never silently succeeds), so
- * it doubles as a compare-and-swap on "claim the right to inspect/discard
- * whatever currently sits at `lockPath` right now". Only the winner of that
- * claim inspects the object it actually grabbed (not a stale earlier read):
- * if it is genuinely dead, discard it; if the claim raced with someone
- * else's fresh reclaim and grabbed their LIVE lock instead, restore it
- * untouched and report contention rather than dropping it. The live holder's
- * lock is never stolen.
+ * Steals an EXPIRED lease via a single atomic rename — never a restore. On
+ * success, the caller is the SOLE owner of the quarantined file (no one else
+ * can have grabbed the same source path) and discards it. On `ENOENT`,
+ * someone else's steal of this exact lease already won the race; there is
+ * nothing left to discard. Either way, the (now-live-or-empty) `lockPath` is
+ * left for the caller's next `tryClaimLease` retry to observe.
  */
-function reclaimDeadLock(lockPath: string): LockReclaimOutcome {
-  if (!isHeldByDeadProcess(lockPath)) return 'live';
-  const claimPath = `${lockPath}.${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}.dead-claim`;
+function stealExpiredLease(lockPath: string): void {
+  const quarantinePath = `${lockPath}.expired.${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   try {
-    fs.renameSync(lockPath, claimPath);
+    fs.renameSync(lockPath, quarantinePath);
   } catch (error) {
-    // Someone else's claim of this exact dead lock already won the race —
-    // there is nothing left for us to reclaim; the caller retries and will
-    // observe whatever that winner leaves behind (dead-again or freshly live).
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return 'contended';
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return;
     throw error;
   }
-  if (isHeldByDeadProcess(claimPath)) {
-    fs.rmSync(claimPath, { force: true });
-    return 'reclaimed';
-  }
-  // What we claimed is actually LIVE: another writer reclaimed and
-  // re-acquired between our precheck read above and this rename winning.
-  // Restore it exactly as claimed — never discard a live holder's lock.
-  fs.renameSync(claimPath, lockPath);
-  return 'live';
+  fs.rmSync(quarantinePath, { force: true });
 }
 
-/** `true` iff `filePath` names a PID that is provably no longer running. */
-function isHeldByDeadProcess(filePath: string): boolean {
-  let raw: string;
+/** `true` iff `token` is still the current owner of `lockPath` right now. */
+function verifyOwnership(lockPath: string, token: string): boolean {
+  return readLeaseToken(lockPath) === token;
+}
+
+/**
+ * Releases `lockPath` iff its CURRENT token is still `myToken` — a successor
+ * that has since stolen (expired) or freshly re-claimed the same path is
+ * NEVER removed by an earlier holder's release; only the caller's own claim
+ * is ever a release candidate. Best-effort: a concurrent removal (already
+ * gone) is not an error.
+ */
+function releaseLease(lockPath: string, myToken: string): void {
+  if (readLeaseToken(lockPath) !== myToken) return;
   try {
-    raw = fs.readFileSync(filePath, 'utf8');
-  } catch {
-    // Released/moved between our EEXIST and this read — not steal-worthy,
-    // the next attempt will simply observe whatever the current state is.
-    return false;
-  }
-  const pid = Number(raw.trim());
-  return Number.isInteger(pid) && pid > 0 && !isProcessAlive(pid);
+    fs.unlinkSync(lockPath);
+  } catch {}
 }
 
 /**

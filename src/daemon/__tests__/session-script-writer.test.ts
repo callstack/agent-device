@@ -408,15 +408,23 @@ test('BLOCKER 1 (follow-up): a writer publishing while another is mid quarantine
   expect(finalScript).toBe(before);
 });
 
-// BLOCKER 1 (lock reclaim, second follow-up): the reclaim of a DEAD lock was
-// itself a TOCTOU — `isHeldByDeadProcess` read the lock file's PID, then a
-// SEPARATE `rmSync(lockPath)` acted on it BY PATHNAME. If a second waiter
-// reclaimed the SAME dead lock and re-acquired with its OWN live lock inside
-// that gap, the first waiter's stale removal deleted the live lock it never
-// actually inspected — not the dead one it read — letting both waiters
-// believe they held the exclusive lock at once.
-test('BLOCKER 1 (lock reclaim): a stale dead-lock decision never steals a lock a concurrent reclaimer has since made LIVE', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-lock-race-'));
+// BLOCKER 1 (lease replacement — maintainer-approved design): the PID-liveness
+// `reclaimDeadLock` scheme (grab lock away -> inspect PID -> restore if live)
+// was structurally race-prone: a three-writer interleaving let waiter A
+// rename waiter B's now-LIVE lock away (to inspect it), waiter C `linkSync`
+// its own lock into the momentarily-empty path, then A's "restore"
+// (`renameSync`, which replaces an existing destination) silently clobbered
+// C's freshly acquired lock — and the pathname-based release could then
+// remove a SUCCESSOR's lock, not the caller's own. Replaced with a TTL LEASE:
+// staleness is judged purely from a timestamp embedded in the lock file's own
+// content (never by asking the OS whether a PID is alive), a stolen lease is
+// NEVER restored (an unconditional discard after a single atomic rename), and
+// every publish verifies it STILL owns the lease immediately before entering
+// the critical section — closing the window where the lock FILE could be
+// contended out from under a legitimate holder.
+
+test('BLOCKER 1 (lease): a FRESH lease is never stolen regardless of its recorded owner — staleness is judged purely by age — and a contender backs off and times out', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-lease-fresh-'));
   const writer = new SessionScriptWriter(path.join(root, 'sessions'));
   const healedPath = path.join(root, 'flows', 'login.healed.ad');
   fs.mkdirSync(path.dirname(healedPath), { recursive: true });
@@ -424,61 +432,179 @@ test('BLOCKER 1 (lock reclaim): a stale dead-lock decision never steals a lock a
   fs.writeFileSync(healedPath, originalContent);
 
   const lockPath = `${healedPath}.lock`;
-  // A DEAD writer's abandoned lock: a PID far outside any real range, so
-  // `isProcessAlive` reports it as not running — same convention used for the
-  // same purpose in `process-lock.test.ts`.
-  fs.writeFileSync(lockPath, '999999999');
+  // A lease recorded under a pid that could never be a real, running
+  // process — the OLD PID-liveness scheme would have judged this "dead" on
+  // sight and reclaimed it. The lease scheme must never steal it: it is
+  // FRESH (just created), and staleness is judged purely by age now, never
+  // by asking the OS whether a pid is alive.
+  const freshToken = `999999999:unrelated-writer:${Date.now()}`;
+  fs.writeFileSync(lockPath, freshToken);
 
-  const sessionA = makeIosSession('writer-a', {
+  const session = makeIosSession('default', {
     recordSession: true,
     saveScriptBoundary: 0,
     saveScriptComplete: true,
     saveScriptPath: healedPath,
     saveScriptDefaultedHealedPath: true,
-    actions: [action({ command: 'click', positionals: ['id="from-a"'] })],
+    actions: [action({ command: 'click', positionals: ['id="new"'] })],
   });
 
-  // Deterministically drive the exact interleaving the reviewer found: A's
-  // FIRST read of the dead lock (`isHeldByDeadProcess`'s `readFileSync`)
-  // captures the stale dead-PID snapshot A will act on — but as a side
-  // effect of that very read, "writer B" independently reclaims the SAME
-  // dead lock and re-acquires it with a genuinely LIVE pid (this test
-  // process's own, real, alive pid) before A's own reclaim step runs. A must
-  // never destroy B's freshly-live lock.
-  const realReadFileSync = fs.readFileSync;
-  let interleaved = false;
-  const liveMarkerPid = String(process.pid);
-  const readSpy = vi
-    .spyOn(fs, 'readFileSync')
-    .mockImplementation((target: fs.PathOrFileDescriptor, options?: unknown) => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = (realReadFileSync as any)(target, options);
-      if (!interleaved && target === lockPath) {
-        interleaved = true;
-        // "Writer B" reclaims the same dead lock and re-acquires it live,
-        // using the exact same primitives the real implementation uses.
-        const bTempLockPath = `${lockPath}.b-writer.tmp`;
-        fs.rmSync(lockPath, { force: true });
-        fs.writeFileSync(bTempLockPath, liveMarkerPid);
-        fs.linkSync(bTempLockPath, lockPath);
-        fs.rmSync(bTempLockPath, { force: true });
+  const result = writer.write(session);
+  expect(result.written).toBe(false);
+  expect(result.written === false && result.error?.message).toMatch(/timed out waiting/);
+  // The fresh lease survives byte-for-byte — never renamed/removed.
+  expect(fs.readFileSync(lockPath, 'utf8')).toBe(freshToken);
+  // The contender never entered the critical section.
+  expect(fs.readFileSync(healedPath, 'utf8')).toBe(originalContent);
+});
+
+test('BLOCKER 1 (lease): an EXPIRED lease is stolen safely — never restored — and a fresh reclaim afterward publishes cleanly', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-script-writer-lease-expired-'));
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const healedPath = path.join(root, 'flows', 'login.healed.ad');
+  fs.mkdirSync(path.dirname(healedPath), { recursive: true });
+  fs.writeFileSync(healedPath, 'context platform=ios device="x"\nclick id="stale-partial"\n');
+
+  const lockPath = `${healedPath}.lock`;
+  // A crashed writer's abandoned lease: older than LEASE_TTL_MS (30_000ms).
+  fs.writeFileSync(lockPath, `424242:crashed-writer:${Date.now() - 31_000}`);
+
+  const session = makeIosSession('default', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+    saveScriptComplete: true,
+    saveScriptPath: healedPath,
+    saveScriptDefaultedHealedPath: true,
+    actions: [action({ command: 'click', positionals: ['id="new"'] })],
+  });
+
+  const result = writer.write(session);
+  expect(result.written).toBe(true);
+  // The expired lease was stolen and released again — no lock file lingers.
+  expect(fs.existsSync(lockPath)).toBe(false);
+  const script = fs.readFileSync(healedPath, 'utf8');
+  expect(script).toContain(HEAL_COMPLETE_SENTINEL);
+  expect(parseReplayScriptDetailed(script).actions.map((a) => a.positionals[0])).toEqual([
+    'id="new"',
+  ]);
+});
+
+// BLOCKER 1 (lease, three-writer interleaving — the reviewer's exact missing
+// case): during ANY reclaim window, a third writer C can validly acquire and
+// enter the critical section. Assert: (1) exactly one holder is EVER in the
+// critical section for a given moment — a writer whose lease gets displaced
+// underneath it (B) is never fooled into proceeding unprotected, because
+// `verifyOwnership` re-checks immediately before the critical section; (2) a
+// displaced writer's OWN release never deletes its successor's (A's) lock —
+// release is strictly token-scoped; (3) the discarding writer (A) never
+// performs a destination-replacing "restore" — a live claim it accidentally
+// grabbed is discarded outright, never renamed back over whoever now holds
+// the path, so a genuinely fresh writer (C) can subsequently acquire and
+// publish cleanly once the lock is free.
+test('BLOCKER 1 (lease, three-writer interleaving): a stale steal decision can never let two writers enter the critical section at once, and release never deletes a successor lock', () => {
+  const root = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'agent-device-script-writer-lease-three-writer-'),
+  );
+  const writer = new SessionScriptWriter(path.join(root, 'sessions'));
+  const healedPath = path.join(root, 'flows', 'login.healed.ad');
+  fs.mkdirSync(path.dirname(healedPath), { recursive: true });
+  const originalContent = 'context platform=ios device="x"\nclick id="stale-partial"\n';
+  fs.writeFileSync(healedPath, originalContent);
+
+  const lockPath = `${healedPath}.lock`;
+  // Writer X crashed, leaving an abandoned, genuinely EXPIRED lease — both A
+  // and B will independently decide (correctly, at the time each reads it)
+  // that this is stealable.
+  fs.writeFileSync(lockPath, `111111:x-writer-token:${Date.now() - 31_000}`);
+
+  const sessionB = makeIosSession('writer-b', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+    saveScriptComplete: true,
+    saveScriptPath: healedPath,
+    saveScriptDefaultedHealedPath: true,
+    actions: [action({ command: 'click', positionals: ['id="from-b"'] })],
+  });
+
+  // Deterministically drive the exact interleaving: right after WRITER B's
+  // own claim (`linkSync`) legitimately WINS the now-freed `lockPath` (B has
+  // just, validly, re-acquired a FRESH lease and is about to verify
+  // ownership and publish) — inject WRITER A independently grabbing
+  // whatever CURRENTLY sits at `lockPath`. A's own decision to steal was
+  // made from an EARLIER read of X's now-superseded dead lease — but a
+  // rename operates on whatever is there NOW, not on the bytes A read
+  // earlier, so A's grab unavoidably catches B's fresh claim instead of X's.
+  // A discards it outright (never a restore) and re-claims fresh as its own
+  // — using the exact same primitives the real implementation uses.
+  const realLinkSync = fs.linkSync;
+  let injected = false;
+  const aToken = `222222:a-writer-token:${Date.now()}`;
+  let lockContentDuringInjection: string | undefined;
+  const linkSpy = vi
+    .spyOn(fs, 'linkSync')
+    .mockImplementation((existingPath: fs.PathLike, newPath: fs.PathLike) => {
+      let thrown: unknown;
+      try {
+        realLinkSync(existingPath, newPath);
+      } catch (error) {
+        thrown = error;
       }
-      return result;
+      if (!thrown && !injected && newPath === lockPath) {
+        injected = true;
+        const aQuarantine = `${lockPath}.a-writer.quarantine`;
+        fs.renameSync(lockPath, aQuarantine); // A's grab — catches B's fresh claim, not X's.
+        fs.rmSync(aQuarantine, { force: true }); // Unconditional discard — never a restore.
+        const aTemp = `${lockPath}.a-writer.tmp`;
+        fs.writeFileSync(aTemp, aToken);
+        fs.linkSync(aTemp, lockPath); // A's own fresh re-claim.
+        fs.rmSync(aTemp, { force: true });
+        lockContentDuringInjection = fs.readFileSync(lockPath, 'utf8');
+      }
+      if (thrown) throw thrown;
     });
 
-  const resultA = writer.write(sessionA);
-  readSpy.mockRestore();
+  const resultB = writer.write(sessionB);
+  linkSpy.mockRestore();
 
-  expect(interleaved).toBe(true);
-  // B's live lock is never stolen: A must back off rather than silently
-  // steal it and proceed into the exclusive/publish section — B never
-  // releases it in this test, so A exhausts its bounded wait and fails loud.
-  expect(resultA.written).toBe(false);
-  expect(resultA.written === false && resultA.error?.message).toMatch(/timed out waiting/);
-  // B's lock survives, byte-for-byte, for the entire time A contended for it.
-  expect(fs.readFileSync(lockPath, 'utf8')).toBe(liveMarkerPid);
-  // A never published over the target while B's lock was live.
+  expect(injected).toBe(true);
+  // A's re-claim was its OWN fresh token — never B's trampled one restored
+  // back verbatim (that would be the forbidden clobbering "restore" shape).
+  expect(lockContentDuringInjection).toBe(aToken);
+  // (1) B's fresh claim was displaced underneath it, but B is never fooled
+  // into proceeding unprotected: `verifyOwnership` catches the mismatch
+  // immediately before the critical section, so B safely aborts instead of
+  // silently entering it alongside anyone else.
+  expect(resultB.written).toBe(false);
+  expect(resultB.written === false && resultB.error?.message).toMatch(/lease/);
+  // scriptPath is untouched — B never reached the critical section, so it
+  // never got the chance to publish or corrupt it.
   expect(fs.readFileSync(healedPath, 'utf8')).toBe(originalContent);
+  // (2) B's own `finally` release ran as it unwound from the throw — it
+  // must NOT have deleted A's now-current lock: release is strictly
+  // token-scoped (B's token no longer matches what's actually there).
+  expect(fs.readFileSync(lockPath, 'utf8')).toBe(aToken);
+
+  // A eventually releases (as any real holder would), and a genuinely fresh
+  // writer C can then cleanly acquire and publish — (3) exactly ONE holder
+  // (C) ever actually ends up in the critical section for this scriptPath.
+  fs.rmSync(lockPath, { force: true });
+  const sessionC = makeIosSession('writer-c', {
+    recordSession: true,
+    saveScriptBoundary: 0,
+    saveScriptComplete: true,
+    saveScriptPath: healedPath,
+    saveScriptDefaultedHealedPath: true,
+    actions: [action({ command: 'click', positionals: ['id="from-c"'] })],
+  });
+  const resultC = writer.write(sessionC);
+  expect(resultC.written).toBe(true);
+  const finalScript = fs.readFileSync(healedPath, 'utf8');
+  expect(finalScript).toContain(HEAL_COMPLETE_SENTINEL);
+  expect(parseReplayScriptDetailed(finalScript).actions.map((a) => a.positionals[0])).toEqual([
+    'id="from-c"',
+  ]);
+  // No lock file lingers once C's publish (and release) completes.
+  expect(fs.existsSync(lockPath)).toBe(false);
 });
 
 // BLOCKER 4: the no-clobber, complete-artifact protection must apply to an
