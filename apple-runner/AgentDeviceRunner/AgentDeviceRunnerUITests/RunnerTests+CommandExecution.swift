@@ -337,26 +337,81 @@ extension RunnerTests {
     XCTAssertFalse(snapshotXCTestPenaltyWarmupExemptionPending)
   }
 
-  func testSkipAppActivationPreflightOnlyIncludesCoordinateOnlySynthesizedTaps() throws {
+  func testSkipAppActivationPreflightIncludesForegroundCachedCoordinateOnlyTaps() throws {
+    app.launch()
     currentApp = app
     currentBundleId = nil
     defer {
       currentApp = nil
       currentBundleId = nil
+      app.terminate()
     }
     let tap = try runnerCommandFixture(
-      #"{"command":"tap","commandId":"tap-1","x":10,"y":20,"synthesized":true}"#
+      #"{"command":"tap","commandId":"tap-1","x":10,"y":20}"#
     )
 
     XCTAssertTrue(shouldSkipAppActivationPreflight(tap))
   }
 
+  func testSkipAppActivationPreflightRejectsMissingChangedAndBackgroundTargets() throws {
+    let coordinateTap = try runnerCommandFixture(
+      #"{"command":"tap","commandId":"tap-1","x":10,"y":20}"#
+    )
+    currentApp = nil
+    currentBundleId = nil
+    XCTAssertFalse(shouldSkipAppActivationPreflight(coordinateTap))
+
+    app.launch()
+    currentApp = app
+    currentBundleId = "com.example.current"
+    defer {
+      currentApp = nil
+      currentBundleId = nil
+      app.terminate()
+    }
+    let changedBundleTap = try runnerCommandFixture(
+      #"{"command":"tap","commandId":"tap-2","appBundleId":"com.example.other","x":10,"y":20}"#
+    )
+
+    XCTAssertFalse(shouldSkipAppActivationPreflight(changedBundleTap))
+
+    app.terminate()
+    currentApp = app
+    currentBundleId = nil
+
+    XCTAssertFalse(shouldSkipAppActivationPreflight(coordinateTap))
+  }
+
+  func testPrepareActiveCommandContextRoutesBlockingSystemModalToSpringboard() throws {
+    blockingSystemModalPresenceOverrideForTesting = true
+    currentApp = nil
+    currentBundleId = nil
+    defer {
+      blockingSystemModalPresenceOverrideForTesting = nil
+      currentApp = nil
+      currentBundleId = nil
+    }
+    let tap = try runnerCommandFixture(
+      #"{"command":"tap","commandId":"tap-1","x":10,"y":20}"#
+    )
+
+    let preparation = prepareActiveCommandContext(command: tap)
+
+    guard case .context(let context) = preparation else {
+      XCTFail("expected command context")
+      return
+    }
+    XCTAssertTrue(context.app === springboard)
+  }
+
   func testSkipAppActivationPreflightRejectsSelectorAndMixedSequenceGestures() throws {
+    app.launch()
     currentApp = app
     currentBundleId = nil
     defer {
       currentApp = nil
       currentBundleId = nil
+      app.terminate()
     }
     let selectorTap = try runnerCommandFixture(
       #"{"command":"tap","commandId":"tap-1","selectorKey":"label","selectorValue":"Search","synthesized":true}"#
@@ -378,7 +433,7 @@ extension RunnerTests {
     XCTAssertFalse(shouldSkipAppActivationPreflight(mixedSequence))
   }
 
-  func testSkipAppActivationPreflightRequiresCachedTarget() throws {
+  func testSkipAppActivationPreflightRequiresCachedForegroundTarget() throws {
     currentApp = nil
     currentBundleId = nil
     let scroll = try runnerCommandFixture(
@@ -389,11 +444,13 @@ extension RunnerTests {
   }
 
   func testSkipAppActivationPreflightKeepsDragScrollAndSequenceOnForegroundGuard() throws {
+    app.launch()
     currentApp = app
     currentBundleId = nil
     defer {
       currentApp = nil
       currentBundleId = nil
+      app.terminate()
     }
     let drag = try runnerCommandFixture(
       #"{"command":"drag","commandId":"drag-1","x":10,"y":20,"x2":30,"y2":40,"synthesized":true}"#
@@ -413,6 +470,14 @@ extension RunnerTests {
     XCTAssertFalse(shouldSkipAppActivationPreflight(drag))
     XCTAssertFalse(shouldSkipAppActivationPreflight(scroll))
     XCTAssertFalse(shouldSkipAppActivationPreflight(sequence))
+  }
+
+  func testSkipAppActivationPreflightIncludesAlertCommands() throws {
+    let alert = try runnerCommandFixture(
+      #"{"command":"alert","commandId":"alert-1","action":"get"}"#
+    )
+
+    XCTAssertTrue(shouldSkipAppActivationPreflight(alert))
   }
 
   func testExecuteDispatchedReturnsBusyBeforeMainThreadFastPath() throws {
@@ -1171,7 +1236,9 @@ extension RunnerTests {
 
   private func prepareActiveCommandContext(command: Command) -> ActiveCommandPreparation {
     var activeApp = currentApp ?? app
-    if shouldSkipAppActivationPreflight(command) {
+    if shouldRouteToSpringboardBlockingSystemModal(command) {
+      activeApp = springboard
+    } else if shouldSkipAppActivationPreflight(command) {
       activeApp = resolveAppWithoutActivation(command: command)
     } else if !isRunnerLifecycleCommand(command.command) {
       let normalizedBundleId = command.appBundleId?
@@ -2034,23 +2101,48 @@ extension RunnerTests {
 
   private func shouldSkipAppActivationPreflight(_ command: Command) -> Bool {
 #if os(iOS)
-    // Coordinate-only synthesized taps can run after an AX-fatal screen because they do not
+    if command.command == .alert {
+      return true
+    }
+    // Coordinate-only synthesized taps can run after an AX-fatal foreground screen because they do not
     // need app activation, window lookup, keyboard lookup, or element resolution. Selector/text
     // interactions intentionally stay on the normal AX path because they need an element query.
     // Scroll/drag/sequence keep the normal foreground guard and stabilization path.
     guard command.text == nil, command.selectorKey == nil else { return false }
     guard hasCachedTargetForActivationSkip(command: command) else { return false }
-    return command.command == .tap
-      && command.synthesized == true
-      && command.x != nil
-      && command.y != nil
+    return isCoordinateOnlyTap(command)
 #else
     return false
 #endif
   }
 
+  private func shouldRouteToSpringboardBlockingSystemModal(_ command: Command) -> Bool {
+#if os(iOS)
+    guard command.command == .alert || isCoordinateOnlyTap(command) else {
+      return false
+    }
+    #if AGENT_DEVICE_RUNNER_UNIT_TESTS
+    if let override = blockingSystemModalPresenceOverrideForTesting {
+      return override
+    }
+    #endif
+    let deadline = Date().addingTimeInterval(systemModalProbeBudget)
+    return firstBlockingSystemModal(in: springboard, deadline: deadline) != nil
+#else
+    return false
+#endif
+  }
+
+  private func isCoordinateOnlyTap(_ command: Command) -> Bool {
+    return command.command == .tap
+      && command.text == nil
+      && command.selectorKey == nil
+      && command.x != nil
+      && command.y != nil
+  }
+
   private func hasCachedTargetForActivationSkip(command: Command) -> Bool {
-    guard currentApp != nil else { return false }
+    guard let currentApp, currentApp.state == .runningForeground else { return false }
     guard let bundleId = command.appBundleId?.trimmingCharacters(in: .whitespacesAndNewlines),
       !bundleId.isEmpty
     else {

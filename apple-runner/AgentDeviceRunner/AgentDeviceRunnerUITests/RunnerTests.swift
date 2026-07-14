@@ -99,6 +99,7 @@ final class RunnerTests: XCTestCase {
   // live SpringBoard alert. Production never compiles this property. Stored here (rather than in
   // the extension that reads it) because Swift extensions cannot hold stored properties.
   var systemModalProbeOverrideForTesting: ((Date) -> DataPayload?)?
+  var blockingSystemModalPresenceOverrideForTesting: Bool?
   var alertResolutionOverrideForTesting: ((Date) -> RunnerAlert?)?
   #endif
   // Observability for the record(_:) suppression below: how many AX-broken-screen snapshot
