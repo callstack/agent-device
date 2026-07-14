@@ -252,6 +252,18 @@ export type SessionState = {
    * `src/daemon/ref-frame.ts`.
    */
   refFrameScope?: RefFrameScope;
+  /**
+   * ADR 0014 immutable source tree of the current ref frame: the tree that
+   * minted the frame's refs, retained so a ref resolves to the node the caller
+   * was authorized against — never to a different element by positional
+   * coincidence in a newer operational observation (`snapshot`). Shares the
+   * capture object with `snapshot` at activation (no deep copy); an Android
+   * freshness or other read-only capture advances `snapshot` WITHOUT touching
+   * this, so the two intentionally diverge. Managed only through
+   * `src/daemon/ref-frame.ts` and the partial-issuance writer. Undefined falls
+   * back to `snapshot` (pre-frame sessions).
+   */
+  refFrameTree?: SnapshotState;
   /** Last broad snapshot safe for Android route-freshness comparisons after interactive snapshots. */
   lastComparisonSafeSnapshot?: SnapshotState;
   androidSnapshotFreshness?: AndroidSnapshotFreshness;

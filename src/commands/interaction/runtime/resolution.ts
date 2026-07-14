@@ -2,7 +2,11 @@ import { AppError } from '../../../kernel/errors.ts';
 import type { Point, SnapshotNode, SnapshotState } from '../../../kernel/snapshot.ts';
 import { findNodeByRef, normalizeRef } from '../../../kernel/snapshot.ts';
 import { resolveRectCenter } from '../../../utils/rect-center.ts';
-import type { AgentDeviceRuntime, CommandContext } from '../../../runtime-contract.ts';
+import type {
+  AgentDeviceRuntime,
+  CommandContext,
+  CommandSessionRecord,
+} from '../../../runtime-contract.ts';
 import { parseSelectorChain } from '../../../selectors/parse.ts';
 import {
   formatSelectorFailure,
@@ -545,16 +549,27 @@ async function resolveSnapshotForRef(
   const sessionName = options.session ?? 'default';
   const session = await runtime.sessions.get(sessionName);
   if (!session) throw new AppError('SESSION_NOT_FOUND', 'No active session. Run open first.');
-  if (!session.snapshot) {
+  // ADR 0014: a ref resolves against the AUTHORIZED frame tree, not the latest
+  // operational observation. They share the capture object until a read-only
+  // capture (e.g. Android freshness) advances `snapshot` alone; from then on the
+  // frame tree is the identity authority for `@eN`.
+  const frameTree = session.refFrameSnapshot ?? session.snapshot;
+  if (!frameTree) {
     throw new AppError('INVALID_ARGS', 'No snapshot in session. Run snapshot first.');
   }
 
   const fallbackLabel = target.fallbackLabel ?? '';
-  const stored = tryResolveRefNode(session.snapshot.nodes, target.ref, {
+  const authorized = tryResolveRefNode(frameTree.nodes, target.ref, {
     fallbackLabel,
   });
-  if (stored) {
-    return { snapshot: session.snapshot, resolved: stored };
+  if (authorized) {
+    return reconcileFreshObservation({
+      session,
+      frameTree,
+      target,
+      fallbackLabel,
+      authorized,
+    });
   }
 
   const capture = await captureInteractionSnapshot(runtime, options, true);
@@ -567,6 +582,41 @@ async function resolveSnapshotForRef(
     });
   }
   return { ...capture, resolved: refreshed };
+}
+
+/**
+ * ADR 0014 step 5: decouple Android freshness from ref authorization. The frame
+ * tree names WHICH node `@eN` authorizes. When a freshness (or other read-only)
+ * capture has advanced the operational observation past the frame, adopt the
+ * observation's node — its fresh on-screen coordinates — ONLY when its local
+ * identity still matches the authorized node. That covers the legitimate case of
+ * an element that merely moved. If the identity differs (a different element now
+ * sits at that index) or the ref is absent from the observation, keep the
+ * authorized frame node so a positional coincidence cannot retarget the action.
+ */
+function reconcileFreshObservation(params: {
+  session: CommandSessionRecord;
+  frameTree: SnapshotState;
+  target: Extract<InteractionTarget, { kind: 'ref' }>;
+  fallbackLabel: string;
+  authorized: ResolvedRefNode;
+}): CapturedSnapshot & { resolved: ResolvedRefNode } {
+  const { session, frameTree, target, fallbackLabel, authorized } = params;
+  const observation = session.snapshot;
+  if (!observation || observation === frameTree) {
+    return { snapshot: frameTree, resolved: authorized };
+  }
+  const observed = tryResolveRefNode(observation.nodes, target.ref, { fallbackLabel });
+  if (
+    observed &&
+    localIdentitiesEqual(
+      readNodeLocalIdentity(authorized.node),
+      readNodeLocalIdentity(observed.node),
+    )
+  ) {
+    return { snapshot: observation, resolved: observed };
+  }
+  return { snapshot: frameTree, resolved: authorized };
 }
 
 /** The runtime-ref resolver: `exact` for a resolved `@ref`, `label-fallback` for trailing-label recovery. */

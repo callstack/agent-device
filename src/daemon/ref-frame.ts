@@ -66,10 +66,16 @@ export function expireRefFrame(session: SessionState): void {
  * reserved for a COMPLETE namespace publication (the snapshot command). Partial
  * publications (`find`, settled diffs, replay divergence) and internal read
  * captures never call it, so a partial result cannot restore broad authority.
+ *
+ * Retains the just-published tree (`session.snapshot`) as the frame's immutable
+ * source tree by SHARED reference — no deep copy (ADR 0014 performance). A later
+ * read-only capture advances `session.snapshot` without disturbing this tree, so
+ * a ref keeps resolving against the namespace that authorized it.
  */
 export function activateCompleteRefFrame(session: SessionState): void {
   session.refFrameState = 'active';
   session.refFrameScope = undefined;
+  session.refFrameTree = session.snapshot;
 }
 
 export function refFrameState(session: SessionState): RefFrameState {

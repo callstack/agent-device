@@ -17,7 +17,15 @@ function toRuntimeSessionRecord(
     name,
     appBundleId: session.appBundleId,
     appName: session.appName,
-    ...(options.includeSnapshot === true ? { snapshot: session.snapshot } : {}),
+    ...(options.includeSnapshot === true
+      ? {
+          snapshot: session.snapshot,
+          // ADR 0014: expose the authorized frame tree so ref resolution binds a
+          // `@eN` to the node the caller was authorized against, not to whatever
+          // now sits at that index in a newer observation.
+          ...(session.refFrameTree ? { refFrameSnapshot: session.refFrameTree } : {}),
+        }
+      : {}),
     metadata: {
       surface: session.surface,
       ...(options.metadata ?? {}),

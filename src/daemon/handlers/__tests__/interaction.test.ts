@@ -1580,6 +1580,78 @@ test('press @ref refreshes Android snapshot when freshness tracking is active', 
   });
 });
 
+test('ADR 0014: Android freshness cannot retarget an admitted ref by positional coincidence', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-fresh-ref-no-retarget';
+  const session = makeAndroidSession(sessionName);
+  const frameTree = {
+    nodes: attachRefs([
+      {
+        index: 0,
+        type: 'android.widget.Button',
+        label: 'Continue',
+        rect: { x: 0, y: 0, width: 40, height: 40 },
+        enabled: true,
+        hittable: true,
+      },
+    ]),
+    createdAt: Date.now(),
+    backend: 'android' as const,
+    comparisonSafe: true,
+  };
+  session.snapshot = frameTree;
+  // ADR 0014: the authorized frame tree names WHICH node @e1 authorizes.
+  session.refFrameTree = frameTree;
+  session.androidSnapshotFreshness = {
+    action: 'press',
+    markedAt: Date.now(),
+    baselineCount: 1,
+    routeComparable: false,
+  };
+  sessionStore.set(sessionName, session);
+
+  // The freshness refresh returns a DIFFERENT element at @e1's index — after
+  // navigation the button at that position is now "Cancel", not "Continue".
+  mockDispatch.mockImplementation(async (_device, command, args) => {
+    if (command === 'snapshot') {
+      return {
+        nodes: [
+          {
+            index: 0,
+            type: 'android.widget.Button',
+            label: 'Cancel',
+            rect: { x: 100, y: 200, width: 80, height: 40 },
+            enabled: true,
+            hittable: true,
+          },
+        ],
+        backend: 'android',
+      };
+    }
+    return { pressed: true, args };
+  });
+
+  const response = await handleInteractionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'press',
+      positionals: ['@e1'],
+      flags: {},
+    },
+    sessionName,
+    sessionStore,
+    contextFromFlags,
+  });
+
+  expect(response?.ok).toBe(true);
+  // The identity at @e1 changed (Continue -> Cancel), so the refreshed
+  // observation must NOT redefine the target: the press stays on the frame
+  // node's coordinates (center of {0,0,40,40}), never the fresh (140, 220).
+  expect(mockDispatch.mock.calls.map((call) => call[1])).toEqual(['snapshot', 'press']);
+  expect(mockDispatch.mock.calls[1]?.[2]).toEqual(['20', '20']);
+});
+
 test('press @ref falls back to cached Android ref when freshness refresh fails', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'android-fresh-ref-refresh-failure';

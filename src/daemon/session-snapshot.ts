@@ -109,6 +109,12 @@ export function markSessionPartialRefsIssued(session: SessionState, refs: Iterab
   if (scope.size === 0) return;
   session.refFrameState = 'active';
   session.refFrameScope = scope;
+  // ADR 0014: retain the tree this partial result published from as the frame's
+  // immutable source (shared reference — the caller already stored it via
+  // setSessionSnapshot). Interaction guards and replay identity can depend on
+  // ancestors, siblings, and viewport outside the emitted subset, so the whole
+  // tree is kept while the issuance set bounds authority.
+  session.refFrameTree = session.snapshot;
 }
 
 /**
