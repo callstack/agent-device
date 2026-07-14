@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { MaestroCompatibilityTimingPolicy } from './compatibility-policy.ts';
 import { executeMaestroProgram } from './engine.ts';
 import type {
   MaestroEngineObserver,
   MaestroEngineResult,
-  MaestroCompatibilityTimingPolicy,
   MaestroRuntimePort,
 } from './engine-types.ts';
 import type { MaestroPlatform } from './program-ir.ts';

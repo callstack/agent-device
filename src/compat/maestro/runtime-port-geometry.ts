@@ -1,23 +1,18 @@
 import { AppError } from '../../kernel/errors.ts';
 import { normalizePublicSwipeMotion } from '../../contracts/gesture-normalization.ts';
-import { buildInPageSwipeGesturePlan, clampToRange } from '../../contracts/scroll-gesture.ts';
+import { buildInPageSwipeGesturePlan } from '../../contracts/scroll-gesture.ts';
 import { pointInsideRect } from '../../utils/rect-center.ts';
+import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
 import type { MaestroRuntimeRequest } from './engine-types.ts';
 import type { MaestroCoordinate, MaestroDirection, MaestroSwipeGesture } from './program-ir.ts';
 import { operationContext } from './runtime-port-context.ts';
 import { resolveMaestroTarget } from './runtime-port-observation.ts';
-import {
-  MAESTRO_DEFAULT_SWIPE_DURATION_MS,
-  MAESTRO_TARGET_SWIPE_POLICY,
-} from './runtime-port-geometry-policy.ts';
 import type {
   MaestroRuntimeOperations,
   MaestroSinglePointerGestureInput,
   MaestroSwipeOperation,
   MaestroTargetResolution,
 } from './runtime-port-types.ts';
-
-const MAESTRO_SWIPE_TARGET_TIMEOUT_MS = 0;
 
 export async function resolveMaestroSwipeOperation(
   authored: MaestroSwipeGesture,
@@ -64,7 +59,10 @@ export async function resolveMaestroSwipeOperation(
 
   const target = await resolveMaestroTarget(
     authored.from,
-    { purpose: 'swipe', timeoutMs: MAESTRO_SWIPE_TARGET_TIMEOUT_MS },
+    {
+      purpose: 'swipe',
+      timeoutMs: MAESTRO_COMPATIBILITY_PRESETS.command.targetLookupTimeoutMs,
+    },
     request,
     operations,
   );
@@ -73,7 +71,7 @@ export async function resolveMaestroSwipeOperation(
     (await operations.resolveGestureViewport(operationContext(request, request.command)));
   const { start, end } = targetSwipeEndpoints(
     target,
-    authored.direction ?? MAESTRO_TARGET_SWIPE_POLICY.defaultDirection,
+    authored.direction ?? MAESTRO_COMPATIBILITY_PRESETS.targetSwipe.defaultDirection,
     viewport,
   );
   return {
@@ -113,7 +111,7 @@ function normalizedSwipeFromEndpoints(
   const gesture = normalizePublicSwipeMotion({
     from: start,
     to: end,
-    durationMs: durationMs ?? MAESTRO_DEFAULT_SWIPE_DURATION_MS,
+    durationMs: durationMs ?? MAESTRO_COMPATIBILITY_PRESETS.command.swipeDurationMs,
   }).gesture;
   if (gesture.intent === 'pan' && 'origin' in gesture) {
     return {
@@ -134,7 +132,7 @@ function normalizedScreenHorizontalSwipe(
   return {
     intent: 'pan',
     preset: direction,
-    durationMs: durationMs ?? MAESTRO_DEFAULT_SWIPE_DURATION_MS,
+    durationMs: durationMs ?? MAESTRO_COMPATIBILITY_PRESETS.command.swipeDurationMs,
     executionProfile: 'endpoint-hold',
   };
 }
@@ -177,46 +175,26 @@ function targetSwipeEndpoints(
   },
 ): { start: { x: number; y: number }; end: { x: number; y: number } } {
   const start = pointInsideRect(target.rect);
-  const horizontalDistance = swipeDistance(viewport.width, target.rect.width);
-  const verticalDistance = swipeDistance(viewport.height, target.rect.height);
-  const minX = viewport.x + MAESTRO_TARGET_SWIPE_POLICY.viewportMarginPx;
-  const minY = viewport.y + MAESTRO_TARGET_SWIPE_POLICY.viewportMarginPx;
-  const maxX = viewport.x + viewport.width - MAESTRO_TARGET_SWIPE_POLICY.viewportMarginPx;
-  const maxY = viewport.y + viewport.height - MAESTRO_TARGET_SWIPE_POLICY.viewportMarginPx;
+  const nearX =
+    viewport.x +
+    Math.trunc(viewport.width * MAESTRO_COMPATIBILITY_PRESETS.targetSwipe.nearEdgeFraction);
+  const nearY =
+    viewport.y +
+    Math.trunc(viewport.height * MAESTRO_COMPATIBILITY_PRESETS.targetSwipe.nearEdgeFraction);
+  const farX =
+    viewport.x +
+    Math.trunc(viewport.width * MAESTRO_COMPATIBILITY_PRESETS.targetSwipe.farEdgeFraction);
+  const farY =
+    viewport.y +
+    Math.trunc(viewport.height * MAESTRO_COMPATIBILITY_PRESETS.targetSwipe.farEdgeFraction);
   switch (direction) {
     case 'up':
-      return {
-        start,
-        end: { x: start.x, y: clampToRange(start.y - verticalDistance, minY, maxY) },
-      };
+      return { start, end: { x: start.x, y: nearY } };
     case 'down':
-      return {
-        start,
-        end: { x: start.x, y: clampToRange(start.y + verticalDistance, minY, maxY) },
-      };
+      return { start, end: { x: start.x, y: farY } };
     case 'left':
-      return {
-        start,
-        end: { x: clampToRange(start.x - horizontalDistance, minX, maxX), y: start.y },
-      };
+      return { start, end: { x: nearX, y: start.y } };
     case 'right':
-      return {
-        start,
-        end: { x: clampToRange(start.x + horizontalDistance, minX, maxX), y: start.y },
-      };
+      return { start, end: { x: farX, y: start.y } };
   }
-}
-
-function swipeDistance(viewportSize: number, targetSize: number): number {
-  const screenRelative = viewportSize * MAESTRO_TARGET_SWIPE_POLICY.screenTravelFraction;
-  return Math.round(
-    Math.min(
-      MAESTRO_TARGET_SWIPE_POLICY.maxTravelPx,
-      Math.max(
-        MAESTRO_TARGET_SWIPE_POLICY.minTravelPx,
-        screenRelative,
-        targetSize * MAESTRO_TARGET_SWIPE_POLICY.targetTravelMultiplier,
-      ),
-    ),
-  );
 }

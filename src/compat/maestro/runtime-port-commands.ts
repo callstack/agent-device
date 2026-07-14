@@ -1,5 +1,6 @@
 import { AppError } from '../../kernel/errors.ts';
 import { pointInsideRect } from '../../utils/rect-center.ts';
+import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
 import type { MaestroGestureTarget } from './program-ir.ts';
 import type {
   MaestroObservation,
@@ -18,10 +19,6 @@ import type {
   MaestroRuntimeOperations,
   MaestroTargetQuery,
 } from './runtime-port-types.ts';
-
-const DEFAULT_SCROLL_UNTIL_VISIBLE_TIMEOUT_MS = 5_000;
-const MAESTRO_INPUT_TARGET_TIMEOUT_MS = 30_000;
-const MAESTRO_OPTIONAL_INPUT_TARGET_TIMEOUT_MS = 3_000;
 
 type MaestroCommandOf<K extends MaestroRuntimeCommand['kind']> = Extract<
   MaestroRuntimeCommand,
@@ -145,7 +142,10 @@ async function executeTargetCommand(
     case 'doubleTapOn': {
       const target = await resolveInputTarget(
         command.target,
-        { purpose: 'doubleTap', timeoutMs: MAESTRO_INPUT_TARGET_TIMEOUT_MS },
+        {
+          purpose: 'doubleTap',
+          timeoutMs: MAESTRO_COMPATIBILITY_PRESETS.command.targetLookupTimeoutMs,
+        },
         request,
         operations,
       );
@@ -160,7 +160,10 @@ async function executeTargetCommand(
     case 'longPressOn': {
       const target = await resolveInputTarget(
         command.target,
-        { purpose: 'longPress', timeoutMs: MAESTRO_INPUT_TARGET_TIMEOUT_MS },
+        {
+          purpose: 'longPress',
+          timeoutMs: MAESTRO_COMPATIBILITY_PRESETS.command.targetLookupTimeoutMs,
+        },
         request,
         operations,
       );
@@ -201,8 +204,8 @@ async function resolveTapOnTarget(
     purpose: 'tap' as const,
     timeoutMs:
       command.optional === true
-        ? MAESTRO_OPTIONAL_INPUT_TARGET_TIMEOUT_MS
-        : MAESTRO_INPUT_TARGET_TIMEOUT_MS,
+        ? MAESTRO_COMPATIBILITY_PRESETS.command.optionalTargetLookupTimeoutMs
+        : MAESTRO_COMPATIBILITY_PRESETS.command.targetLookupTimeoutMs,
     index: command.index,
     childOf: command.childOf,
     allowAtomicSelectorDispatch: command.repeat === undefined && command.delay === undefined,
@@ -288,12 +291,7 @@ async function executeNavigationCommand(
 ): Promise<MaestroRuntimeResult> {
   switch (command.kind) {
     case 'scroll':
-      return await invokeOperation(
-        operations.scroll,
-        { direction: 'down' },
-        context,
-        'invalidate',
-      );
+      return await invokeOperation(operations.scroll, { direction: 'down' }, context, 'invalidate');
     case 'scrollUntilVisible':
       return await invokeOperation(
         operations.scrollUntilVisible,
@@ -326,7 +324,7 @@ function scrollUntilVisibleInput(command: MaestroCommandOf<'scrollUntilVisible'>
   return {
     selector: command.element,
     direction: command.direction ?? 'down',
-    timeoutMs: command.timeout ?? DEFAULT_SCROLL_UNTIL_VISIBLE_TIMEOUT_MS,
+    timeoutMs: command.timeout ?? MAESTRO_COMPATIBILITY_PRESETS.command.scrollUntilVisibleTimeoutMs,
   };
 }
 

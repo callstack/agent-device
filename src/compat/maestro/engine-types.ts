@@ -5,6 +5,7 @@ import type {
   MaestroSelector,
   MaestroSourceLocation,
 } from './program-ir.ts';
+import type { MaestroCompatibilityTimingPolicy } from './compatibility-policy.ts';
 
 export type MaestroControlCommand = Extract<
   MaestroCommand,
@@ -67,20 +68,6 @@ export type MaestroRuntimePort = {
     signal?: AbortSignal;
   }): Promise<MaestroObservation>;
 };
-
-export type MaestroCompatibilityTimingPolicy = {
-  assertVisibleTimeoutMs: number;
-  assertNotVisibleTimeoutMs: number;
-  extendedWaitUntilTimeoutMs: number;
-  runFlowConditionTimeoutMs: number;
-};
-
-export const DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY = {
-  assertVisibleTimeoutMs: 17_000,
-  assertNotVisibleTimeoutMs: 3_000,
-  extendedWaitUntilTimeoutMs: 17_000,
-  runFlowConditionTimeoutMs: 3_000,
-} as const satisfies MaestroCompatibilityTimingPolicy;
 
 export type MaestroEngineEvent = {
   command: MaestroCommand;

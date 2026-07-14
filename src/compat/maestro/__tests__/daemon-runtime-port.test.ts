@@ -4,6 +4,7 @@ import path from 'node:path';
 import { expect, test } from 'vitest';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon/types.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
+import { MAESTRO_OBSERVATION_POLL_MS } from '../daemon-runtime-port-observation.ts';
 import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
 
 test('delegates lifecycle and coordinate gestures through public daemon commands', async () => {
@@ -281,5 +282,5 @@ test('takes one final observation when polling wakes after the deadline', async 
       env: {},
     }),
   ).resolves.toMatchObject({ matched: true });
-  expect(snapshots).toBe(3);
+  expect(snapshots).toBe(Math.ceil(500 / MAESTRO_OBSERVATION_POLL_MS) + 1);
 });

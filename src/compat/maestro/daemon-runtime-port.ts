@@ -3,6 +3,10 @@ import { getSnapshotReferenceFrame } from '../../daemon/touch-reference-frame.ts
 import { AppError, asAppError } from '../../kernel/errors.ts';
 import type { Rect, SnapshotState } from '../../kernel/snapshot.ts';
 import { executeRunScriptFile } from './run-script-execution.ts';
+import {
+  MAESTRO_COMPATIBILITY_PRESETS,
+  MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
+} from './compatibility-policy.ts';
 import { executeMaestroRuntimeCommand } from './runtime-port-commands.ts';
 import { observeMaestroCondition } from './runtime-port-observation.ts';
 import type {
@@ -43,9 +47,6 @@ import {
   type CreateDaemonMaestroRuntimeOperationsOptions,
 } from './daemon-runtime-port-support.ts';
 
-// Maestro's default waitForAppToSettle loop is bounded to ten 200 ms polls.
-const MAESTRO_TEXT_SETTLE_TIMEOUT_MS = 2_000;
-
 export type { DaemonMaestroRuntimeDependencies } from './daemon-runtime-port-observation.ts';
 export type {
   CreateDaemonMaestroRuntimeOperationsOptions,
@@ -77,7 +78,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
   ): Promise<void> => {
     await invokeMutation('type', [text]);
     await waitForTypedSnapshotStability({
-      timeoutMs: MAESTRO_TEXT_SETTLE_TIMEOUT_MS,
+      timeoutMs: MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
       context,
       snapshot: snapshots.capture,
       dependencies: options.dependencies,
@@ -147,7 +148,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     longPressOn: async (input) => {
       snapshots.invalidate();
       await clickTarget(options, input.target.point, {
-        holdMs: 3_000,
+        holdMs: MAESTRO_COMPATIBILITY_PRESETS.command.longPressDurationMs,
       });
     },
     gesture: async (input, context) => {
@@ -213,7 +214,8 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
     },
     waitForAnimationToEnd: async (input, context) =>
       await waitForTypedSnapshotStability({
-        timeoutMs: input.timeoutMs ?? 15_000,
+        timeoutMs:
+          input.timeoutMs ?? MAESTRO_COMPATIBILITY_PRESETS.command.waitForAnimationToEndTimeoutMs,
         context,
         snapshot: snapshots.capture,
         dependencies: options.dependencies,

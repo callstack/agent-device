@@ -8,7 +8,7 @@ import {
   type ReplayScriptMetadata,
 } from '../../replay/script.ts';
 import { formatMaestroPoint } from './export-points.ts';
-import { DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY } from './engine-types.ts';
+import { DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY } from './compatibility-policy.ts';
 import type { MaestroExportCommand, MaestroExportConfig } from './export-types.ts';
 import { stringifyMaestroYamlDocuments } from './export-yaml.ts';
 

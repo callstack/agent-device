@@ -6,6 +6,7 @@ import {
 import { AppError } from '../../kernel/errors.ts';
 import type { Rect, SnapshotState } from '../../kernel/snapshot.ts';
 import type { MaestroObservation, MaestroObservationCondition } from './engine-types.ts';
+import { MAESTRO_COMPATIBILITY_PRESETS } from './compatibility-policy.ts';
 import type { MaestroPlatform, MaestroSelector } from './program-ir.ts';
 import { literalFromMaestroRegex } from './selector-regex.ts';
 import {
@@ -21,11 +22,9 @@ import type {
   MaestroTargetQuery,
 } from './runtime-port-types.ts';
 
-export const MAESTRO_OBSERVATION_POLL_MS = 250;
-// Snapshot transport readiness is distinct from selector matching. A launched app may own the
-// foreground activity before it exposes an accessibility surface, especially during a cold start.
-export const MAESTRO_INITIAL_SNAPSHOT_READY_TIMEOUT_MS = 30_000;
-const MAESTRO_STABILITY_POLL_MS = 200;
+export const MAESTRO_OBSERVATION_POLL_MS = MAESTRO_COMPATIBILITY_PRESETS.observation.pollIntervalMs;
+export const MAESTRO_INITIAL_SNAPSHOT_READY_TIMEOUT_MS =
+  MAESTRO_COMPATIBILITY_PRESETS.observation.maxSettleTimeoutMs;
 
 export type DaemonMaestroRuntimeDependencies = {
   readonly now: () => number;
@@ -243,7 +242,7 @@ export async function waitForTypedSnapshotStability(params: {
     if (hadPreviousSignature && remaining > 0) {
       await sleepWithinBudget(
         params.dependencies,
-        Math.min(MAESTRO_STABILITY_POLL_MS, remaining),
+        Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
         params.context.signal,
       );
     }

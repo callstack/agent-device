@@ -12,9 +12,8 @@ import { evaluateMaestroBooleanExpression } from './engine-expression.ts';
 import {
   DEFAULT_MAESTRO_COMPATIBILITY_TIMING_POLICY,
   type MaestroCompatibilityTimingPolicy,
-  type MaestroEngineOptions,
-  type MaestroObservationCondition,
-} from './engine-types.ts';
+} from './compatibility-policy.ts';
+import { type MaestroEngineOptions, type MaestroObservationCondition } from './engine-types.ts';
 
 const MAX_MAESTRO_REPEAT_EXPANSIONS = 1000;
 

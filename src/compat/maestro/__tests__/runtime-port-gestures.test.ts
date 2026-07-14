@@ -123,6 +123,45 @@ test('uses the structured gesture contract without observing absolute swipes', a
   );
 });
 
+test.each([
+  ['up', { x: 0, y: -140 }],
+  ['down', { x: 0, y: 500 }],
+  ['left', { x: -100, y: 0 }],
+  ['right', { x: 220, y: 0 }],
+] as const)(
+  'projects a target-relative %s swipe to Maestro viewport endpoints',
+  async (direction, delta) => {
+    const gesture = vi.fn(async () => undefined);
+    const operations = makeOperations({
+      resolveTarget: vi.fn(async () => ({
+        generation: 0,
+        matched: true,
+        visible: true,
+        candidateCount: 1,
+        rect: { x: 100, y: 200, width: 100, height: 80 },
+        viewport: { x: 10, y: 20, width: 400, height: 800 },
+      })),
+      gesture,
+    });
+
+    await createMaestroRuntimePort(operations).execute({
+      command: {
+        kind: 'swipe',
+        source: { line: 2 },
+        gesture: { kind: 'target', from: { id: 'pager' }, direction },
+      },
+      generation: 0,
+      env: {},
+      invalidateObservation() {},
+    });
+
+    expect(gesture).toHaveBeenCalledWith(
+      expect.objectContaining({ origin: { x: 150, y: 240 }, delta }),
+      expect.objectContaining({ gestureViewport: { x: 10, y: 20, width: 400, height: 800 } }),
+    );
+  },
+);
+
 test('rejects stale typed selector evidence before input execution', async () => {
   const tapOn = vi.fn(async () => undefined);
   const operations = makeOperations({

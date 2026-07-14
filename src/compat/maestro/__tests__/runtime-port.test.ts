@@ -283,7 +283,7 @@ describe('MaestroRuntimePort', () => {
       {
         intent: 'pan',
         origin: { x: 150, y: 240 },
-        delta: { x: 150, y: 0 },
+        delta: { x: 211, y: 0 },
         durationMs: 400,
         executionProfile: 'endpoint-hold',
       },
