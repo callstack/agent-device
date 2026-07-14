@@ -94,34 +94,7 @@ export class SessionScriptWriter {
       if (repairArmed) session.saveScriptCommitted = true;
       return { written: true, path: scriptPath };
     } catch (error) {
-      emitDiagnostic({
-        level: 'warn',
-        phase: 'session_script_write_failed',
-        data: {
-          session: session.name,
-          path: scriptPath,
-          error: error instanceof Error ? error.message : String(error),
-        },
-      });
-      // ADR 0012 decision 6, R4 + BLOCKER 2: a repair COMMIT failure must be
-      // SURFACED (no-clobber refusal, bare-`@ref`, or a filesystem error alike)
-      // so close/teardown can report it and keep the session for retry — never
-      // swallowed into a silent `{written:false}`. Ordinary (non-repair)
-      // recording keeps its existing SHAPE of behavior: an AppError still
-      // fails loud (thrown, not swallowed into `{written:false}`) and any other
-      // fs error is a quiet skip — but an AppError is no longer only
-      // theoretical here. Since `publishHealedScriptAtomically` refuses ANY
-      // pre-existing target uniformly (maintainer-approved: refuse-on-exist
-      // applies to ordinary recording too, not just repair heals), an ordinary
-      // `open`/`close --save-script` write against an existing target now
-      // throws that same no-clobber AppError, surfacing here as a genuine
-      // "fails loud" case rather than the "none is raised on that path" it was
-      // before that change.
-      if (repairArmed) {
-        return { written: false, error: toRepairCommitFailure(error, scriptPath) };
-      }
-      if (error instanceof AppError) throw error;
-      return { written: false };
+      return handleSessionScriptWriteFailure({ session, error, scriptPath, repairArmed });
     }
   }
 
@@ -134,6 +107,47 @@ export class SessionScriptWriter {
     const timestamp = new Date(session.createdAt).toISOString().replace(/[:.]/g, '-');
     return path.join(this.sessionsDir, `${safeName}-${timestamp}.ad`);
   }
+}
+
+/**
+ * `write()`'s catch-block classifier, extracted verbatim (no behavior change):
+ * diagnose, then route by whether the session is repair-armed.
+ *
+ * ADR 0012 decision 6, R4 + BLOCKER 2: a repair COMMIT failure must be
+ * SURFACED (no-clobber refusal, bare-`@ref`, or a filesystem error alike) so
+ * close/teardown can report it and keep the session for retry — never
+ * swallowed into a silent `{written:false}`. Ordinary (non-repair) recording
+ * keeps its existing SHAPE of behavior: an AppError still fails loud (thrown,
+ * not swallowed into `{written:false}`) and any other fs error is a quiet
+ * skip — but an AppError is no longer only theoretical here. Since
+ * `publishHealedScriptAtomically` refuses ANY pre-existing target uniformly
+ * (maintainer-approved: refuse-on-exist applies to ordinary recording too, not
+ * just repair heals), an ordinary `open`/`close --save-script` write against
+ * an existing target now throws that same no-clobber AppError, surfacing here
+ * as a genuine "fails loud" case rather than the "none is raised on that path"
+ * it was before that change.
+ */
+function handleSessionScriptWriteFailure(params: {
+  session: SessionState;
+  error: unknown;
+  scriptPath: string | undefined;
+  repairArmed: boolean;
+}): SessionScriptWriteResult {
+  const { session, error, scriptPath, repairArmed } = params;
+  emitDiagnostic({
+    level: 'warn',
+    phase: 'session_script_write_failed',
+    data: {
+      session: session.name,
+      path: scriptPath,
+      error: error instanceof Error ? error.message : String(error),
+    },
+  });
+  if (repairArmed) {
+    return { written: false, error: toRepairCommitFailure(error, scriptPath) };
+  }
+  if (error instanceof AppError) throw error;
+  return { written: false };
 }
 
 /**
