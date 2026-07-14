@@ -1,7 +1,10 @@
 import { expect, test } from 'vitest';
 import type { DaemonInvokeFn, DaemonRequest } from '../../../daemon/types.ts';
 import { createDaemonMaestroRuntimePort } from '../daemon-runtime-port.ts';
-import { MAESTRO_OBSERVATION_POLL_MS } from '../daemon-runtime-port-observation.ts';
+import {
+  MAESTRO_OBSERVATION_POLL_MS,
+  waitForTypedSnapshotStability,
+} from '../daemon-runtime-port-observation.ts';
 import { makeBaseRequest, makeDependencies } from './daemon-runtime-port-fixtures.ts';
 
 test('does not pair an observation with a later same-generation snapshot', async () => {
@@ -79,6 +82,30 @@ test('does not pair an observation with a later same-generation snapshot', async
     'click',
   ]);
   expect(requests.at(-1)?.positionals).toEqual(['id="continue"']);
+});
+
+test('compares snapshots before sleeping and captures once beyond a zero settle budget', async () => {
+  const clock = { value: 0 };
+  const captures = [
+    { createdAt: 1, nodes: [{ ref: '@e1', index: 0, type: 'Text', value: 'moving' }] },
+    { createdAt: 2, nodes: [{ ref: '@e1', index: 0, type: 'Text', value: 'settled' }] },
+  ];
+  let captureIndex = 0;
+
+  const result = await waitForTypedSnapshotStability({
+    timeoutMs: 0,
+    context: { generation: 0, env: {} },
+    snapshot: async () => captures[Math.min(captureIndex++, captures.length - 1)]!,
+    dependencies: {
+      now: () => clock.value,
+      sleep: async () => {
+        throw new Error('zero-budget settling must not sleep');
+      },
+    },
+  });
+
+  expect(captureIndex).toBe(2);
+  expect(result.nodes[0]?.value).toBe('settled');
 });
 
 test('retries typed transient snapshot failures within the observation budget', async () => {

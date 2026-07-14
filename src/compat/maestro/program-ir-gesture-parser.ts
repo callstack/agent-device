@@ -226,7 +226,7 @@ export function parseMaestroSwipeCommand(
     ? parseMaestroDirection(entryValue(entries, 'direction'), 'swipe.direction', context)
     : undefined;
   if (hasEntry(entries, 'from') || hasEntry(entries, 'label')) {
-    return parseTargetSwipe(entries, source, direction, duration, context);
+    return parseTargetSwipe(entries, source, direction, duration, commandNode, context);
   }
   return parseScreenSwipe(source, direction, duration, commandNode, context);
 }
@@ -270,8 +270,12 @@ function parseTargetSwipe(
   source: MaestroSourceLocation,
   direction: MaestroDirection | undefined,
   duration: number | undefined,
+  commandNode: Node,
   context: MaestroProgramParseContext,
 ): MaestroSwipeCommand {
+  if (direction === undefined) {
+    invalidAt('Maestro target swipe requires direction.', commandNode, context);
+  }
   const label = hasEntry(entries, 'label')
     ? readOptionalString(entryValue(entries, 'label'), 'swipe.label', context)
     : undefined;
@@ -284,7 +288,7 @@ function parseTargetSwipe(
     gesture: {
       kind: 'target',
       from,
-      ...(direction === undefined ? {} : { direction }),
+      direction,
       ...(duration === undefined ? {} : { duration }),
       ...(label === undefined ? {} : { label }),
     },
@@ -401,7 +405,7 @@ function parsePoint(
   const value = readRequiredString(node, name, context);
   const absolute = /^\s*(\d+)\s*,\s*(\d+)\s*$/.exec(value);
   if (absolute) return { space: 'absolute', x: Number(absolute[1]), y: Number(absolute[2]) };
-  const percent = /^\s*(\d+(?:\.\d+)?)%\s*,\s*(\d+(?:\.\d+)?)%\s*$/.exec(value);
+  const percent = /^\s*(\d+)%\s*,\s*(\d+)%\s*$/.exec(value);
   if (percent) {
     const x = Number(percent[1]);
     const y = Number(percent[2]);
@@ -413,6 +417,9 @@ function parsePoint(
       );
     }
     return { space: 'percent', x, y };
+  }
+  if (/^\s*\d+(?:\.\d+)?%\s*,\s*\d+(?:\.\d+)?%\s*$/.test(value)) {
+    invalidAt(`Maestro ${name} percentage coordinates must be whole numbers.`, node, context);
   }
   invalidAt(`Maestro ${name} expects absolute or percentage coordinates.`, node, context);
 }

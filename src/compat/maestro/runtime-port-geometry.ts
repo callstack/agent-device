@@ -61,9 +61,12 @@ export async function resolveMaestroSwipeOperation(
   const viewport =
     target.viewport ??
     (await operations.resolveGestureViewport(operationContext(request, request.command)));
+  if (authored.direction === undefined) {
+    throw new AppError('INVALID_ARGS', 'Maestro target swipe requires direction.');
+  }
   const { start, end } = targetSwipeEndpoints(
     target,
-    authored.direction ?? MAESTRO_COMPATIBILITY_PRESETS.targetSwipe.defaultDirection,
+    authored.direction,
     viewport,
   );
   return {
@@ -90,8 +93,8 @@ export async function resolveMaestroCoordinate(
     knownViewport ??
     (await operations.resolveGestureViewport(operationContext(request, request.command)));
   return {
-    x: Math.round(viewport.x + (viewport.width * coordinate.x) / 100),
-    y: Math.round(viewport.y + (viewport.height * coordinate.y) / 100),
+    x: viewport.x + Math.trunc((viewport.width * coordinate.x) / 100),
+    y: viewport.y + Math.trunc((viewport.height * coordinate.y) / 100),
   };
 }
 

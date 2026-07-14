@@ -283,6 +283,32 @@ describe('parseMaestroProgram', () => {
     );
   });
 
+  test('rejects fractional percentages, directionless target swipes, and pasteText', () => {
+    assert.throws(
+      () =>
+        parseMaestroProgram(`---
+- tapOn:
+    point: 12.5%, 40%
+`),
+      /percentage coordinates must be whole numbers.*line 3/i,
+    );
+    assert.throws(
+      () =>
+        parseMaestroProgram(`---
+- swipe:
+    from: Pager
+`),
+      /target swipe requires direction.*line 2/i,
+    );
+    assert.throws(
+      () =>
+        parseMaestroProgram(`---
+- pasteText: pasted
+`, { sourcePath: '/flows/paste.yaml' }),
+      /command "pasteText" is not supported.*\/flows\/paste\.yaml:line 2/i,
+    );
+  });
+
   test('preserves source paths for unsupported and malformed flows', () => {
     const sourcePath = '/flows/includes/child.yaml';
     assert.throws(

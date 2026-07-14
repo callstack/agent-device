@@ -127,6 +127,36 @@ test('uses Maestro iOS screen-swipe geometry', async () => {
   );
 });
 
+test('truncates percentage coordinates with Maestro integer arithmetic', async () => {
+  const resolveGestureViewport = vi.fn(async () => ({ x: 10, y: 20, width: 401, height: 801 }));
+  const gesture = vi.fn(async () => undefined);
+  const operations = makeOperations({ resolveGestureViewport, gesture });
+
+  await createMaestroRuntimePort(operations).execute({
+    command: {
+      kind: 'swipe',
+      source: { line: 2 },
+      gesture: {
+        kind: 'coordinates',
+        start: { space: 'percent', x: 50, y: 50 },
+        end: { space: 'percent', x: 51, y: 51 },
+      },
+    },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+
+  expect(gesture).toHaveBeenCalledWith(
+    {
+      from: { x: 210, y: 420 },
+      to: { x: 214, y: 428 },
+      durationMs: 400,
+    },
+    expect.objectContaining({ gestureViewport: { x: 10, y: 20, width: 401, height: 801 } }),
+  );
+});
+
 test.each([
   ['up', { x: 150, y: 100 }],
   ['down', { x: 150, y: 740 }],
@@ -165,6 +195,33 @@ test.each([
     );
   },
 );
+
+test('rejects target swipes without a direction before dispatch', async () => {
+  const resolveTarget = vi.fn(async () => ({
+    generation: 0,
+    matched: true,
+    visible: true,
+    candidateCount: 1,
+    rect: { x: 100, y: 200, width: 100, height: 80 },
+    viewport: { x: 10, y: 20, width: 400, height: 800 },
+  }));
+  const gesture = vi.fn(async () => undefined);
+  const operations = makeOperations({ resolveTarget, gesture });
+
+  await expect(
+    createMaestroRuntimePort(operations).execute({
+      command: {
+        kind: 'swipe',
+        source: { line: 2 },
+        gesture: { kind: 'target', from: { id: 'pager' } },
+      },
+      generation: 0,
+      env: {},
+      invalidateObservation() {},
+    }),
+  ).rejects.toMatchObject({ code: 'INVALID_ARGS' });
+  expect(gesture).not.toHaveBeenCalled();
+});
 
 test('rejects stale typed selector evidence before input execution', async () => {
   const tapOn = vi.fn(async () => undefined);

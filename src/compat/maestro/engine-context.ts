@@ -75,12 +75,18 @@ export function createMaestroExecutionContext(
     const rawValues = stringifyValues(scopedValues);
     const resolved: Record<string, string> = {};
     for (const [key, value] of Object.entries(rawValues)) {
-      resolved[key] = resolveValue(value, {
-        ...currentValues(),
-        ...rawValues,
-        ...resolved,
-        ...overrides,
-      });
+      resolved[key] = resolveValue(
+        value,
+        {
+          ...currentValues(),
+          ...rawValues,
+          ...resolved,
+          ...overrides,
+        },
+        undefined,
+        new Set(),
+        false,
+      );
     }
     return resolved;
   }
@@ -101,11 +107,43 @@ function resolveValue(
   values: Readonly<Record<string, string>>,
   onExpanded?: (name: string, value: string) => void,
   resolving = new Set<string>(),
+  failOnUnresolved = true,
 ): string {
-  return value.replace(/\$\{([A-Za-z_][A-Za-z0-9_.]*)\}/g, (match, key: string) => {
-    if (!Object.hasOwn(values, key) || resolving.has(key)) return match;
-    const resolved = resolveValue(values[key]!, values, onExpanded, new Set([...resolving, key]));
+  const resolved = value.replace(/\$\{([A-Za-z_][A-Za-z0-9_.]*)\}/g, (match, key: string) => {
+    if (!Object.hasOwn(values, key)) {
+      if (!failOnUnresolved) return match;
+      throw new AppError('INVALID_ARGS', `Maestro variable "${key}" is not defined.`);
+    }
+    if (resolving.has(key)) {
+      if (!failOnUnresolved) return match;
+      throw new AppError('INVALID_ARGS', `Maestro variable "${key}" has a cyclic reference.`);
+    }
+    const resolved = resolveValue(
+      values[key]!,
+      values,
+      onExpanded,
+      new Set([...resolving, key]),
+      failOnUnresolved,
+    );
     onExpanded?.(key, resolved);
     return resolved;
   });
+  if (failOnUnresolved) assertNoUnsupportedInterpolation(resolved);
+  return resolved;
+}
+
+function assertNoUnsupportedInterpolation(value: string): void {
+  const interpolation = /\$\{[^{}]*\}/g;
+  for (const match of value.matchAll(interpolation)) {
+    if (isMaestroPlatformExpression(match[0])) continue;
+    throw new AppError(
+      'INVALID_ARGS',
+      `Maestro interpolation "${match[0]}" is unresolved or unsupported.`,
+    );
+  }
+}
+
+function isMaestroPlatformExpression(value: string): boolean {
+  const expression = /^\$\{\s*maestro\.platform\s*(?:==|!=)\s*(['"]).*\1(?:\s*(?:&&|\|\|).*)?\s*\}$/;
+  return expression.test(value);
 }

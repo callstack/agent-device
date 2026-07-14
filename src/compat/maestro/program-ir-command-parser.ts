@@ -11,7 +11,6 @@ import type {
   MaestroLaunchAppCommand,
   MaestroLaunchArguments,
   MaestroOpenLinkCommand,
-  MaestroPasteTextCommand,
   MaestroPressKeyCommand,
   MaestroScrollCommand,
   MaestroScrollUntilVisibleCommand,
@@ -118,7 +117,6 @@ const COMMAND_VALUE_PARSERS: Readonly<Record<string, CommandValueParser>> = {
   longPressOn: parseMaestroLongPressOnCommand,
   inputText: parseInputText,
   eraseText: parseEraseText,
-  pasteText: parsePasteText,
   openLink: parseOpenLink,
   assertVisible: (value, node, context) => parseAssertion('assertVisible', value, node, context),
   assertNotVisible: (value, node, context) =>
@@ -240,18 +238,6 @@ function parseEraseText(
     kind: 'eraseText',
     source,
     ...(charactersToErase === undefined ? {} : { charactersToErase }),
-  };
-}
-
-function parsePasteText(
-  value: Node | null,
-  commandNode: Node,
-  context: MaestroProgramParseContext,
-): MaestroPasteTextCommand {
-  return {
-    kind: 'pasteText',
-    source: sourceAt(commandNode, context),
-    text: readRequiredString(value, 'pasteText', context),
   };
 }
 

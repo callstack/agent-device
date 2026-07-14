@@ -195,21 +195,22 @@ export async function waitForTypedSnapshotStability(params: {
   let previous = await captureRetriableMaestroSnapshot(params, deadline);
   let previousSignature = snapshotStabilitySignature(previous);
 
-  while (params.dependencies.now() < deadline) {
+  while (true) {
     throwIfAborted(params.context.signal);
-    const remaining = deadline - params.dependencies.now();
-    await sleepWithinBudget(
-      params.dependencies,
-      Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
-      params.context.signal,
-    );
     const snapshot = await captureRetriableMaestroSnapshot(params, deadline);
     const signature = snapshotStabilitySignature(snapshot);
     if (signature === previousSignature) return snapshot;
     previous = snapshot;
     previousSignature = signature;
+
+    const remaining = deadline - params.dependencies.now();
+    if (remaining <= 0) return previous;
+    await sleepWithinBudget(
+      params.dependencies,
+      Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
+      params.context.signal,
+    );
   }
-  return previous;
 }
 
 export function snapshotViewportRect(frame: TouchReferenceFrame | undefined): Rect | undefined {
