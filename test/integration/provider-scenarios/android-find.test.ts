@@ -45,6 +45,12 @@ test('Provider-backed integration Android find flow covers refs, wait, ambiguity
     assertString(attrsRef, 'find attrs ref');
     assert.match(attrsRef, /^@e\d+$/);
     assert.equal((attrs.node as { label?: string } | undefined)?.label, 'Apps');
+    // ADR 0014: a read-only find partially publishes its returned ref, so it is
+    // consumed in pinned form (`@eN~s<gen>`) — a plain ref would require a
+    // complete frame.
+    const attrsGeneration = (attrs as { refsGeneration?: number }).refsGeneration;
+    assert.equal(typeof attrsGeneration, 'number');
+    const attrsPinnedRef = `${attrsRef}~s${attrsGeneration}`;
 
     const exists = await client.interactions.find({
       locator: 'label',
@@ -54,7 +60,7 @@ test('Provider-backed integration Android find flow covers refs, wait, ambiguity
     });
     assert.equal(exists.found, true);
 
-    const pressFoundRef = await client.interactions.press({ ref: attrsRef, ...selection });
+    const pressFoundRef = await client.interactions.press({ ref: attrsPinnedRef, ...selection });
     assert.equal(pressFoundRef.x, 88);
     assert.equal(pressFoundRef.y, 151);
 

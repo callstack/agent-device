@@ -137,6 +137,13 @@ test('Provider-backed integration Linux desktop flow uses semantic desktop and i
             },
           },
           {
+            // ADR 0014: the earlier ref press (and the coordinate gestures)
+            // expired the frame, so re-observe before the next ref mutation.
+            name: 're-observe before the next ref mutation',
+            command: 'snapshot',
+            flags: { snapshotInteractiveOnly: true },
+          },
+          {
             name: 'fill snapshot ref',
             command: 'fill',
             positionals: ['@e2', 'Seven'],

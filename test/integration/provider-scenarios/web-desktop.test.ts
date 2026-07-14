@@ -95,6 +95,13 @@ test('Provider-backed integration web desktop flow uses semantic web provider ca
           },
         },
         {
+          // ADR 0014: the ref click above expired the frame, so a fresh
+          // observation is required before the next ref mutation.
+          name: 're-observe before the next ref mutation',
+          command: 'snapshot',
+          flags: { snapshotInteractiveOnly: true },
+        },
+        {
           name: 'fill email ref',
           command: 'fill',
           positionals: ['@e3', 'qa@example.test'],

@@ -66,23 +66,17 @@ function tapEntry(x: number, y: number): ProviderScenarioProviderEntry {
 
 test('Provider-backed integration rejects stale pinned @refs and accepts current pins', async () => {
   const runnerTranscript = createProviderTranscript([
-    // snapshot -i: issues refs at the seeded generation g1
+    // snapshot -i: issues the complete frame at the seeded generation g1
     snapshotEntry(),
-    // press label=Continue: selector resolution capture replaces the stored
-    // tree (g1+1) without issuing refs
-    snapshotEntry(),
-    tapEntry(200, 322),
-    // press @e2~s{g1}: reject the outlived ref before any runner command
-    // press @e2~s{g1+1}: pinned to the CURRENT generation — clean
+    // press @e2~s{g1}: pinned to the CURRENT frame — admitted, taps Cancel,
+    // and crosses the seam so the frame expires
     tapEntry(200, 422),
-    // find Cancel click: capture replaces the tree AGAIN (g1+2) and issues
-    // only the found ref at the new generation
+    // snapshot -i: re-issues a fresh complete frame at g2 (= g1+1)
     snapshotEntry(),
+    // press @e2~s{g1}: an outlived pin against the active g2 frame — rejected
+    // with a precise generation mismatch before any runner command
+    // press @e2~s{g2}: pinned to the current frame — admitted, taps Cancel
     tapEntry(200, 422),
-    // press @e1~s{g1+1}: a PRE-find pin — the find must not bless it (the
-    // #1076 hole): reject before any runner command
-    // press @e1~s{g1+2}: pinned to the post-find generation — clean
-    tapEntry(200, 322),
   ]);
   const appleRunnerProvider = createAppleRunnerProviderFromTranscript(
     runnerTranscript,
@@ -120,47 +114,37 @@ test('Provider-backed integration rejects stale pinned @refs and accepts current
       assert.ok(nodes.length > 0);
       assert.ok(nodes.every((node) => node.ref === undefined || !node.ref.includes('~')));
 
-      const selectorPress = await daemon.callCommand('press', ['label=Continue'], {});
-      const selectorData = assertRpcOk(selectorPress);
-      assert.equal(selectorData.warning, undefined);
+      // A pin to the current frame is admitted; the tap crosses the seam.
+      const pinnedCurrent = await daemon.callCommand('press', [`@e2~s${g1}`], {});
+      assert.equal(assertRpcOk(pinnedCurrent).warning, undefined);
 
+      // ADR 0014: the mutation expired the frame, so a fresh observation is
+      // required before another ref mutation.
+      const refresh = await daemon.callCommand('snapshot', [], {
+        snapshotInteractiveOnly: true,
+      });
+      const g2 = assertRpcOk(refresh).refsGeneration as number;
+      assert.equal(g2, g1 + 1);
+
+      // The outlived pin is rejected precisely against the active g2 frame.
       const pinnedStale = await daemon.callCommand('press', [`@e2~s${g1}`], {});
       const pinnedStaleData = assertRpcError(
         pinnedStale,
         'COMMAND_FAILED',
-        /Ref @e2 not found or has no bounds/,
+        /Ref @e2 was minted from a superseded snapshot generation/,
       );
+      const pinnedStaleDetails = pinnedStaleData.details as Record<string, unknown>;
+      assert.equal(pinnedStaleDetails.reason, 'ref_generation_mismatch');
+      assert.equal(pinnedStaleDetails.mintedGeneration, g1);
+      assert.equal(pinnedStaleDetails.currentGeneration, g2);
       assert.equal(
         pinnedStaleData.hint,
-        `Ref @e2 was minted from snapshot s${g1} but the session tree is now s${g1 + 1} — re-run snapshot -i.`,
+        `Ref @e2 was minted from snapshot s${g1} but the session tree is now s${g2} — re-run snapshot -i.`,
       );
 
-      const pinnedCurrent = await daemon.callCommand('press', [`@e2~s${g1 + 1}`], {});
-      const pinnedCurrentData = assertRpcOk(pinnedCurrent);
-      assert.equal(pinnedCurrentData.warning, undefined);
-
-      // The blessing flow: find replaces the tree and issues its ref at the
-      // NEW generation…
-      const find = await daemon.callCommand('find', ['Cancel', 'click'], {});
-      const findData = assertRpcOk(find);
-      assert.equal(findData.refsGeneration, g1 + 2);
-
-      // …but a ref pinned BEFORE the find is still rejected precisely — the
-      // find response must not silently re-bless it.
-      const preFindPin = await daemon.callCommand('press', [`@e1~s${g1 + 1}`], {});
-      const preFindPinData = assertRpcError(
-        preFindPin,
-        'COMMAND_FAILED',
-        /Ref @e1 not found or has no bounds/,
-      );
-      assert.equal(
-        preFindPinData.hint,
-        `Ref @e1 was minted from snapshot s${g1 + 1} but the session tree is now s${g1 + 2} — re-run snapshot -i.`,
-      );
-
-      const postFindPin = await daemon.callCommand('press', [`@e1~s${g1 + 2}`], {});
-      const postFindPinData = assertRpcOk(postFindPin);
-      assert.equal(postFindPinData.warning, undefined);
+      // A pin to the current generation is admitted.
+      const pinnedFresh = await daemon.callCommand('press', [`@e2~s${g2}`], {});
+      assert.equal(assertRpcOk(pinnedFresh).warning, undefined);
 
       runnerTranscript.assertComplete();
     },

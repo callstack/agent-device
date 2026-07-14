@@ -71,6 +71,14 @@ type DaemonRequestInternal = {
    * different same-identity duplicate.
    */
   replayTargetGuard?: ReplayTargetGuardDenotation;
+  /**
+   * ADR 0014: set when a mutating `find` re-enters the interaction leaf with the
+   * ref it just resolved by locator against a fresh capture. That ref is find's
+   * own diagnostic identity, not a client-supplied ref subject to frame
+   * lifetime, so the leaf skips ref-frame admission (it still crosses the
+   * side-effect seam and expires the frame).
+   */
+  findResolvedTarget?: boolean;
 };
 
 export type DaemonRequest = Omit<PublicDaemonRequest, 'token' | 'session' | 'flags' | 'meta'> & {
@@ -264,6 +272,17 @@ export type SessionState = {
    * back to `snapshot` (pre-frame sessions).
    */
   refFrameTree?: SnapshotState;
+  /**
+   * ADR 0014 ref-frame epoch, frozen at the generation the frame was issued at
+   * (the `refsGeneration` the client received). A later read-only capture
+   * advances `snapshotGeneration` (the observation counter) WITHOUT reissuing
+   * refs, so admission and pin comparisons use this frame-pinned epoch — a
+   * correct pin from the issuing frame is not falsely rejected because an
+   * intervening read bumped the observation counter. Undefined falls back to
+   * `snapshotGeneration`. Managed only through `src/daemon/ref-frame.ts` and the
+   * partial-issuance writer.
+   */
+  refFrameGeneration?: number;
   /** Last broad snapshot safe for Android route-freshness comparisons after interactive snapshots. */
   lastComparisonSafeSnapshot?: SnapshotState;
   androidSnapshotFreshness?: AndroidSnapshotFreshness;

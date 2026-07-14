@@ -527,6 +527,7 @@ async function handleFindClick(ctx: FindContext, match: ResolvedMatch): Promise<
     command: 'click',
     positionals: [match.ref],
     flags: match.actionFlags,
+    internal: { findResolvedTarget: true },
   });
   if (!response.ok) return response;
   const matchCoords = match.resolvedNode.rect
@@ -569,6 +570,7 @@ async function handleFindFill(
     command: 'fill',
     positionals: [match.ref, value],
     flags: match.actionFlags,
+    internal: { findResolvedTarget: true },
   });
   if (!response.ok) return response;
   recordSessionAction(

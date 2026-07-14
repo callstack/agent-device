@@ -1,5 +1,6 @@
 import { randomInt } from 'node:crypto';
 import type { SnapshotState } from '../kernel/snapshot.ts';
+import { refFrameEpoch } from './ref-frame.ts';
 import type { SessionState } from './types.ts';
 
 /**
@@ -115,6 +116,10 @@ export function markSessionPartialRefsIssued(session: SessionState, refs: Iterab
   // ancestors, siblings, and viewport outside the emitted subset, so the whole
   // tree is kept while the issuance set bounds authority.
   session.refFrameTree = session.snapshot;
+  // Freeze the epoch the client is handed (the response-level refsGeneration),
+  // so a later read-only capture that bumps the observation counter cannot
+  // invalidate a correct pin from this frame.
+  session.refFrameGeneration = session.snapshotGeneration;
 }
 
 /**
@@ -151,7 +156,10 @@ export function resolveRefStalenessWarning(params: {
 }): string | undefined {
   const { session, ref, mintedGeneration } = params;
   if (mintedGeneration !== undefined) {
-    const currentGeneration = session?.snapshotGeneration ?? 0;
+    // ADR 0014: compare against the FRAME epoch (frozen at issuance), not the
+    // observation counter — a read-only capture that bumped `snapshotGeneration`
+    // must not make a valid pin from the issuing frame look stale.
+    const currentGeneration = session ? (refFrameEpoch(session) ?? 0) : 0;
     if (mintedGeneration === currentGeneration) return undefined;
     return buildPinnedStaleRefWarning({ ref, mintedGeneration, currentGeneration });
   }

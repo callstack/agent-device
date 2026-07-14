@@ -1033,6 +1033,9 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
   const appSwitcher = await client.command.appSwitcher(selection);
   assert.equal(appSwitcher.action, 'app-switcher');
 
+  // ADR 0014: rotate + app-switcher expired the frame, so re-observe before
+  // acting through a ref again (the mock re-captures the same tree).
+  await client.capture.snapshot({ interactiveOnly: true, ...selection });
   const press = await client.interactions.press({ ref: `@${apps.ref}`, ...selection });
   assert.equal(press.x, 88);
   assert.equal(press.y, 151);
@@ -1049,6 +1052,8 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
   assert.equal(heldPress.holdMs, 5);
   assert.equal(heldPress.jitterPx, 1);
 
+  // ADR 0014: the press + held coordinate press expired the frame — re-observe.
+  await client.capture.snapshot({ interactiveOnly: true, ...selection });
   const click = await client.interactions.click({ ref: `@${apps.ref}`, ...selection });
   assert.equal(click.x, 88);
   assert.equal(click.y, 151);
@@ -1070,6 +1075,8 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
     false,
   );
 
+  // ADR 0014: the ref click expired the frame — re-observe before filling.
+  await client.capture.snapshot({ interactiveOnly: true, ...selection });
   const fill = await client.interactions.fill({
     ref: `@${search.ref}`,
     text: 'Display',
@@ -1162,6 +1169,10 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
     [
       'snapshot -i',
       'press @e2 Apps --count 2 --interval-ms 1',
+      // ADR 0014: the ref press expired the frame, so the script re-observes
+      // before mutating through another ref (a legacy multi-ref-from-one-snapshot
+      // script would now fail closed).
+      'snapshot -i',
       'fill @e3 Search "Network"',
       'get text @e3 Search',
       '',
@@ -1172,7 +1183,7 @@ async function runAndroidCaptureInteractionAndReplayWorkflow(
     update: true,
     ...selection,
   });
-  assert.equal(updateReplay.replayed, 4);
+  assert.equal(updateReplay.replayed, 5);
   assert.equal(updateReplay.healed, 0);
 
   const replayEnvPath = path.join(tempRoot, 'settings-env.ad');

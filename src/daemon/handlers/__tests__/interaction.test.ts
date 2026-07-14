@@ -11,6 +11,7 @@ import {
   setSessionSnapshot,
   STALE_SNAPSHOT_REFS_WARNING,
 } from '../../session-snapshot.ts';
+import { activateCompleteRefFrame, expireRefFrame } from '../../ref-frame.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import {
   makeIosSession,
@@ -3358,12 +3359,16 @@ test('press selector then press @ref rejects refs that outlived the stored snaps
   expect(selectorPress.data?.warning).toBeUndefined();
   expect(sessionStore.get(sessionName)?.snapshotRefsStale).toBe(true);
 
+  // ADR 0014: the selector press crossed the side-effect seam and expired the
+  // frame, so the ref that outlived it is rejected before dispatch.
+  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
   const dispatchCallsBeforeStaleRef = mockDispatch.mock.calls.length;
   const refPress = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
   expect(refPress?.ok).toBe(false);
   if (refPress && !refPress.ok) {
     expect(refPress.error.code).toBe('COMMAND_FAILED');
-    expect(refPress.error.message).toBe('Ref @e1 not found or has no bounds');
+    expect(refPress.error.message).toMatch(/expired ref frame/);
+    expect(refPress.error.details?.reason).toBe('ref_frame_expired');
     expect(refPress.error.details?.hint).toBe(STALE_SNAPSHOT_REFS_WARNING);
   }
   expect(mockDispatch).toHaveBeenCalledTimes(dispatchCallsBeforeStaleRef);
@@ -3441,11 +3446,16 @@ test('re-issuing refs clears the stale marker so press @ref does not warn', asyn
   ]);
   expect(selectorPress?.ok).toBe(true);
   expect(sessionStore.get(sessionName)?.snapshotRefsStale).toBe(true);
+  // The selector press expired the frame (ADR 0014 seam).
+  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
 
-  // Simulate the snapshot command re-issuing refs (its handler clears the
-  // marker through buildNextSnapshotSession; covered in snapshot-handler tests).
+  // Simulate the snapshot command re-issuing the complete ref namespace: it
+  // clears the marker AND re-activates a complete frame (through
+  // buildNextSnapshotSession; covered in snapshot-handler tests). Clearing the
+  // coarse marker alone would leave the frame expired.
   const stored = sessionStore.get(sessionName)!;
   stored.snapshotRefsStale = false;
+  activateCompleteRefFrame(stored);
   sessionStore.set(sessionName, stored);
 
   const refPress = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
@@ -3455,7 +3465,7 @@ test('re-issuing refs clears the stale marker so press @ref does not warn', asyn
   }
 });
 
-test('fill @ref rejects while refs are stale', async () => {
+test('fill @ref rejects after a device action expired the frame', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'stale-ref-fill';
   const session = makeStaleRefSession(sessionName);
@@ -3473,9 +3483,14 @@ test('fill @ref rejects while refs are stale', async () => {
     createdAt: Date.now(),
     backend: 'xctest',
   };
+  // ADR 0014: an unobserved device action expired the frame; the coarse marker
+  // rides along and supplies the hint.
   session.snapshotRefsStale = true;
+  expireRefFrame(session);
   sessionStore.set(sessionName, session);
-  mockDispatch.mockRejectedValue(new Error('dispatch should not be called for a stale iOS ref'));
+  mockDispatch.mockRejectedValue(
+    new Error('dispatch should not be called for an expired-frame ref'),
+  );
 
   const response = await runInteraction(sessionStore, sessionName, 'fill', [
     '@e1',
@@ -3484,7 +3499,8 @@ test('fill @ref rejects while refs are stale', async () => {
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     expect(response.error.code).toBe('COMMAND_FAILED');
-    expect(response.error.message).toBe('Ref @e1 not found or has no bounds');
+    expect(response.error.message).toMatch(/expired ref frame/);
+    expect(response.error.details?.reason).toBe('ref_frame_expired');
     expect(response.error.details?.hint).toBe(STALE_SNAPSHOT_REFS_WARNING);
   }
   expect(mockDispatch).not.toHaveBeenCalled();
@@ -3605,22 +3621,29 @@ test('get text with a pinned stale ref gets the precise warning', async () => {
   }
 });
 
-test('a plain stale ref rejects with the coarse #1093 hint, never the pinned text', async () => {
+test('ADR 0014: a read-only capture that set the coarse marker does not invalidate a mutation ref', async () => {
+  // Evidence #6: an internal read-only capture advances the operational
+  // observation (and the coarse marker) but does NOT expire the frame, so a
+  // plain ref from the still-active frame is admitted and dispatches — the old
+  // coarse-marker mutation block was the ADR's false positive.
   const sessionStore = makeSessionStore();
   const sessionName = 'plain-ref-coarse';
   const session = makeStaleRefSession(sessionName);
   session.snapshotGeneration = 7;
   session.snapshotRefsStale = true;
   sessionStore.set(sessionName, session);
-  mockDispatch.mockRejectedValue(new Error('dispatch should not be called for a stale iOS ref'));
+  mockDispatch.mockResolvedValue({ pressed: true });
 
   const response = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
-  expect(response?.ok).toBe(false);
-  if (response && !response.ok) {
-    expect(response.error.code).toBe('COMMAND_FAILED');
-    expect(response.error.details?.hint).toBe(STALE_SNAPSHOT_REFS_WARNING);
+  expect(response?.ok).toBe(true);
+  expect(mockDispatch).toHaveBeenCalled();
+  // Crossing the seam expired the frame, so a SECOND plain ref is now rejected.
+  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+  const second = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
+  expect(second?.ok).toBe(false);
+  if (second && !second.ok) {
+    expect(second.error.details?.reason).toBe('ref_frame_expired');
   }
-  expect(mockDispatch).not.toHaveBeenCalled();
 });
 
 test('a malformed generation suffix is INVALID_ARGS with the ref grammar hint', async () => {

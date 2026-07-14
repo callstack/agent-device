@@ -224,9 +224,12 @@ test('Provider-backed integration press --settle returns the settled diff and fr
       // The settled tree is never serialized into the response.
       assert.equal(pressData.nodes, undefined);
 
-      // The diff's ref acts directly on the stored settled tree — no fresh
-      // snapshot round trip and no stale-refs warning.
-      const followUp = await daemon.callCommand('press', ['@e2'], {});
+      // ADR 0014: the settle issued a PARTIAL frame authorizing exactly its
+      // emitted ref, so the follow-up consumes it in pinned form — acting
+      // directly on the stored settled tree with no fresh snapshot round trip
+      // and no stale-refs warning. The plain `@e2` would require a complete
+      // frame.
+      const followUp = await daemon.callCommand('press', [`@e2~s${settle.refsGeneration}`], {});
       const followUpData = assertRpcOk(followUp);
       assert.equal(followUpData.warning, undefined);
       assert.equal(followUpData.x, 200);
@@ -387,8 +390,9 @@ test('Provider-backed integration modal-dismiss press --settle attaches the unch
       assert.equal(typeof settle.refsGeneration, 'number');
 
       // The tail's ref acts directly on the stored settled tree, same as an
-      // added-line ref would.
-      const followUp = await daemon.callCommand('press', ['@e3'], {});
+      // added-line ref would — consumed in pinned form from the partial frame
+      // (ADR 0014).
+      const followUp = await daemon.callCommand('press', [`@e3~s${settle.refsGeneration}`], {});
       const followUpData = assertRpcOk(followUp);
       assert.equal(followUpData.warning, undefined);
       assert.equal(followUpData.x, 200);
@@ -720,7 +724,7 @@ test('Provider-backed integration fill --settle summoning the keyboard still att
       assert.equal(settle.tailTruncated, undefined);
       assert.equal(typeof settle.refsGeneration, 'number');
 
-      const followUp = await daemon.callCommand('press', ['@e17'], {});
+      const followUp = await daemon.callCommand('press', [`@e17~s${settle.refsGeneration}`], {});
       const followUpData = assertRpcOk(followUp);
       assert.equal(followUpData.warning, undefined);
       assert.equal(followUpData.x, 201);

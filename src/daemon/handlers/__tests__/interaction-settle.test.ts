@@ -260,13 +260,18 @@ test('press --settle on a removals-only diff attaches the unchanged interactive 
   expect(settle.refsGeneration).toBe(session.snapshotGeneration);
 });
 
-test('press --settle rejects a stale iOS ref before dispatch or observation', async () => {
+test('press --settle rejects an expired-frame ref before dispatch or observation', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'settle-stale-ref';
   const session = seedSession(sessionName, sessionStore);
+  // ADR 0014: a device action since the snapshot expired the ref frame; the
+  // coarse marker rides along but the frame lifecycle is what rejects.
   session.snapshotRefsStale = true;
+  session.refFrameState = 'expired';
   sessionStore.set(sessionName, session);
-  mockDispatch.mockRejectedValue(new Error('dispatch should not be called for a stale iOS ref'));
+  mockDispatch.mockRejectedValue(
+    new Error('dispatch should not be called for an expired-frame ref'),
+  );
 
   const response = await handleInteractionCommands({
     req: {
@@ -284,7 +289,8 @@ test('press --settle rejects a stale iOS ref before dispatch or observation', as
   expect(response?.ok).toBe(false);
   if (response && !response.ok) {
     expect(response.error.code).toBe('COMMAND_FAILED');
-    expect(response.error.message).toBe('Ref @e2 not found or has no bounds');
+    expect(response.error.message).toMatch(/expired ref frame/);
+    expect(response.error.details?.reason).toBe('ref_frame_expired');
     expect(String(response.error.details?.hint)).toMatch(/refs were issued/);
   }
   expect(mockCaptureSnapshotForSession).not.toHaveBeenCalled();

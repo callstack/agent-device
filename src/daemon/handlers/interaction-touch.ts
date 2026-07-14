@@ -64,7 +64,7 @@ import {
   ensureAndroidBlockingSystemDialogReady,
   type AndroidBlockingDialogReadinessResult,
 } from '../android-system-dialog.ts';
-import { staleIosRefGuardResponse } from './interaction-ref-policy.ts';
+import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
 import { expireRefFrame } from '../ref-frame.ts';
 
 export async function handleTouchInteractionCommands(
@@ -154,13 +154,15 @@ async function dispatchTargetedTouchViaRuntime(
       req.flags,
     );
     if (invalidRefFlagsResponse) return invalidRefFlagsResponse;
-    const staleRefResponse = staleIosRefGuardResponse({
-      session,
-      ref: parsedTarget.target.ref,
-      mintedGeneration: parsedTarget.refGeneration,
-      staleRefsWarning,
-    });
-    if (staleRefResponse) return staleRefResponse;
+    const admissionResponse = req.internal?.findResolvedTarget
+      ? null
+      : refMutationAdmissionResponse({
+          session,
+          ref: parsedTarget.target.ref,
+          mintedGeneration: parsedTarget.refGeneration,
+          staleRefsWarning,
+        });
+    if (admissionResponse) return admissionResponse;
     androidFreshnessBaseline = await refreshAndroidRefSnapshotIfFreshnessActive(params, session);
   }
   // ADR 0012 step 4: a guarded replay dispatch must resolve through the
@@ -632,13 +634,15 @@ async function prepareFillRefTarget(
   });
   const invalidRefFlagsResponse = params.refSnapshotFlagGuardResponse('fill', params.req.flags);
   if (invalidRefFlagsResponse) return { response: invalidRefFlagsResponse, staleRefsWarning };
-  const staleRefResponse = staleIosRefGuardResponse({
-    session,
-    ref: target.ref,
-    mintedGeneration: refGeneration,
-    staleRefsWarning,
-  });
-  if (staleRefResponse) return { response: staleRefResponse, staleRefsWarning };
+  const admissionResponse = params.req.internal?.findResolvedTarget
+    ? null
+    : refMutationAdmissionResponse({
+        session,
+        ref: target.ref,
+        mintedGeneration: refGeneration,
+        staleRefsWarning,
+      });
+  if (admissionResponse) return { response: admissionResponse, staleRefsWarning };
   await refreshAndroidRefSnapshotIfFreshnessActive(params, session);
   return { staleRefsWarning };
 }

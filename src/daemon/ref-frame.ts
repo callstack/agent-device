@@ -43,9 +43,15 @@ export type RefFrameAdmission =
   | { admitted: true }
   | { admitted: false; reason: RefFrameRejectReason };
 
-/** The frame epoch exposed to clients as `refsGeneration`. */
+/**
+ * The frame epoch exposed to clients as `refsGeneration`. Frozen at issuance
+ * (`refFrameGeneration`) so a later read-only capture that advances the
+ * observation counter (`snapshotGeneration`) does not shift the epoch a valid
+ * pin is compared against. Falls back to `snapshotGeneration` for pre-frame
+ * sessions.
+ */
 export function refFrameEpoch(session: SessionState): number | undefined {
-  return session.snapshotGeneration;
+  return session.refFrameGeneration ?? session.snapshotGeneration;
 }
 
 /**
@@ -76,6 +82,7 @@ export function activateCompleteRefFrame(session: SessionState): void {
   session.refFrameState = 'active';
   session.refFrameScope = undefined;
   session.refFrameTree = session.snapshot;
+  session.refFrameGeneration = session.snapshotGeneration;
 }
 
 export function refFrameState(session: SessionState): RefFrameState {

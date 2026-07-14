@@ -127,7 +127,11 @@ test('Provider-backed integration iOS @refs reject after a selector press replac
       assert.equal(selectorData.warning, undefined);
 
       const stalePress = await daemon.callCommand('press', ['@e2'], {});
-      assertRpcError(stalePress, 'COMMAND_FAILED', /Ref @e2 not found or has no bounds/);
+      assertRpcError(stalePress, 'COMMAND_FAILED', /Ref @e2 belongs to an expired ref frame/);
+      assert.equal(
+        (stalePress.json?.error?.data?.details as Record<string, unknown>)?.reason,
+        'ref_frame_expired',
+      );
 
       const refresh = await daemon.callCommand('snapshot', [], {
         snapshotInteractiveOnly: true,
@@ -184,7 +188,11 @@ test('Provider-backed iOS press rejects a stale ref after navigation', async () 
       assertRpcOk(await daemon.callCommand('press', ['label=Back'], {}));
 
       const stalePress = await daemon.callCommand('press', ['@e3'], {});
-      assertRpcError(stalePress, 'COMMAND_FAILED', /Ref @e3 not found or has no bounds/);
+      assertRpcError(stalePress, 'COMMAND_FAILED', /Ref @e3 belongs to an expired ref frame/);
+      assert.equal(
+        (stalePress.json?.error?.data?.details as Record<string, unknown>)?.reason,
+        'ref_frame_expired',
+      );
       runnerTranscript.assertComplete();
     },
   );
