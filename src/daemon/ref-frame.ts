@@ -48,6 +48,29 @@ export function refFrameEpoch(session: SessionState): number | undefined {
   return session.snapshotGeneration;
 }
 
+/**
+ * Expire the current frame at a device side-effect seam (ADR 0014). Idempotent:
+ * additional effects while already expired are a no-op. Call this SYNCHRONOUSLY,
+ * immediately before awaiting the operation that may change device-visible
+ * element identity, so that a post-dispatch failure (timeout, connection loss,
+ * ambiguous error) still leaves the frame expired — there is no success-only
+ * rollback.
+ */
+export function expireRefFrame(session: SessionState): void {
+  session.refFrameState = 'expired';
+}
+
+/**
+ * Re-authorize a complete frame when a response issues its refs to the client
+ * (ADR 0014). This is the only transition that restores plain-ref mutation after
+ * an expiry; internal read captures never call it. The complete namespace has
+ * scope `all`.
+ */
+export function activateRefFrame(session: SessionState): void {
+  session.refFrameState = 'active';
+  session.refFrameScope = undefined;
+}
+
 export function refFrameState(session: SessionState): RefFrameState {
   return session.refFrameState ?? 'active';
 }

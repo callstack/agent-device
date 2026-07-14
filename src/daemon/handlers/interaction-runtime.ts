@@ -13,6 +13,7 @@ import { createAgentDevice } from '../../runtime.ts';
 import { AppError } from '../../kernel/errors.ts';
 import type { SessionState } from '../types.ts';
 import { setSessionSnapshot } from '../session-snapshot.ts';
+import { expireRefFrame } from '../ref-frame.ts';
 import type { InteractionHandlerParams } from './interaction-common.ts';
 import type { CaptureSnapshotForSession } from './interaction-snapshot.ts';
 import { createDaemonRuntimePolicy } from '../runtime-policy.ts';
@@ -70,8 +71,11 @@ function createInteractionBackend(
         session.device,
         params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
       ),
-    tap: async (_context, point): Promise<BackendActionResult> =>
-      toBackendActionResult(
+    tap: async (_context, point): Promise<BackendActionResult> => {
+      // ADR 0014 side-effect seam: the point is resolved; expire the ref frame
+      // synchronously before dispatching so a later step cannot reuse it.
+      expireRefFrame(session);
+      return toBackendActionResult(
         await dispatchCommand(
           session.device,
           'press',
@@ -79,15 +83,18 @@ function createInteractionBackend(
           req.flags?.out,
           params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
         ),
-      ),
+      );
+    },
     tapTarget: webProvider?.clickRef
       ? async (_context, target): Promise<BackendActionResult> => {
+          expireRefFrame(session);
           await webProvider.clickRef?.(target.ref);
           return { ref: stripAtPrefix(target.ref) };
         }
       : undefined,
-    fill: async (_context, point, text): Promise<BackendActionResult> =>
-      toBackendActionResult(
+    fill: async (_context, point, text): Promise<BackendActionResult> => {
+      expireRefFrame(session);
+      return toBackendActionResult(
         await dispatchCommand(
           session.device,
           'fill',
@@ -95,9 +102,11 @@ function createInteractionBackend(
           req.flags?.out,
           params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
         ),
-      ),
+      );
+    },
     fillTarget: webProvider?.fillRef
       ? async (_context, target, text, options): Promise<BackendActionResult> => {
+          expireRefFrame(session);
           await webProvider.fillRef?.(target.ref, text, options);
           return {
             ref: stripAtPrefix(target.ref),
@@ -106,8 +115,9 @@ function createInteractionBackend(
           };
         }
       : undefined,
-    longPress: async (_context, point, options): Promise<BackendActionResult> =>
-      toBackendActionResult(
+    longPress: async (_context, point, options): Promise<BackendActionResult> => {
+      expireRefFrame(session);
+      return toBackendActionResult(
         await dispatchCommand(
           session.device,
           'longpress',
@@ -119,17 +129,21 @@ function createInteractionBackend(
           req.flags?.out,
           params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
         ),
-      ),
-    performGesture: async (_context, plan): Promise<BackendActionResult> =>
-      toBackendActionResult(
+      );
+    },
+    performGesture: async (_context, plan): Promise<BackendActionResult> => {
+      expireRefFrame(session);
+      return toBackendActionResult(
         await dispatchGesturePlan(
           session.device,
           plan,
           params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
         ),
-      ),
-    typeText: async (_context, text): Promise<BackendActionResult> =>
-      toBackendActionResult(
+      );
+    },
+    typeText: async (_context, text): Promise<BackendActionResult> => {
+      expireRefFrame(session);
+      return toBackendActionResult(
         await dispatchCommand(
           session.device,
           'type',
@@ -137,7 +151,8 @@ function createInteractionBackend(
           req.flags?.out,
           params.contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
         ),
-      ),
+      );
+    },
   };
 }
 

@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'vitest';
 import {
+  activateRefFrame,
   admitRefMutation,
+  expireRefFrame,
   refFrameEpoch,
   refFrameScope,
   refFrameState,
@@ -89,4 +91,27 @@ test('generation mismatch is evaluated before issuance scope', () => {
     reason(admitRefMutation({ session: s, refBody: 'e1', mintedGeneration: 42 })),
     'ref_generation_mismatch',
   );
+});
+
+test('expireRefFrame is idempotent and rejects all refs while expired', () => {
+  const s = session({ snapshotGeneration: 42 });
+  expireRefFrame(s);
+  assert.equal(refFrameState(s), 'expired');
+  expireRefFrame(s); // idempotent
+  assert.equal(refFrameState(s), 'expired');
+  assert.equal(
+    reason(admitRefMutation({ session: s, refBody: 'e1', mintedGeneration: 42 })),
+    'ref_frame_expired',
+  );
+});
+
+test('activateRefFrame re-authorizes a complete frame after expiry', () => {
+  const s = session({ snapshotGeneration: 42, refFrameScope: new Set(['e1']) });
+  expireRefFrame(s);
+  activateRefFrame(s);
+  assert.equal(refFrameState(s), 'active');
+  assert.equal(refFrameScope(s), 'all');
+  assert.deepEqual(admitRefMutation({ session: s, refBody: 'e9', mintedGeneration: undefined }), {
+    admitted: true,
+  });
 });

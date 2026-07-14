@@ -6,7 +6,11 @@ import type { CommandFlags } from '../../../core/dispatch.ts';
 import { attachRefs, type SnapshotBackend } from '../../../kernel/snapshot.ts';
 import { AppError } from '../../../kernel/errors.ts';
 import { buildSnapshotState } from '../snapshot-capture.ts';
-import { setSessionSnapshot, STALE_SNAPSHOT_REFS_WARNING } from '../../session-snapshot.ts';
+import {
+  markSessionSnapshotRefsIssued,
+  setSessionSnapshot,
+  STALE_SNAPSHOT_REFS_WARNING,
+} from '../../session-snapshot.ts';
 import { makeSessionStore } from '../../../__tests__/test-utils/store-factory.ts';
 import {
   makeIosSession,
@@ -3291,6 +3295,29 @@ test('press selector then press @ref rejects refs that outlived the stored snaps
     expect(refPress.error.details?.hint).toBe(STALE_SNAPSHOT_REFS_WARNING);
   }
   expect(mockDispatch).toHaveBeenCalledTimes(dispatchCallsBeforeStaleRef);
+});
+
+test('a ref press crosses the ADR 0014 side-effect seam and expires the ref frame', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'seam-expiry';
+  const session = makeStaleRefSession(sessionName);
+  sessionStore.set(sessionName, session);
+  mockDispatch.mockImplementation(async (_device, command) =>
+    command === 'snapshot' ? { nodes: makeTwoButtonNodes(), backend: 'xctest' } : {},
+  );
+
+  // A freshly issued frame is active (undefined === active).
+  expect(sessionStore.get(sessionName)?.refFrameState).toBeUndefined();
+
+  const press = await runInteraction(sessionStore, sessionName, 'press', ['@e1']);
+  expect(press?.ok).toBe(true);
+  // The transition is wired at the leaf seam even though iOS enforcement of the
+  // expired-frame rejection is deferred to a later migration step.
+  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+
+  // Re-issuing a complete snapshot re-authorizes the frame.
+  markSessionSnapshotRefsIssued(sessionStore.get(sessionName)!);
+  expect(sessionStore.get(sessionName)?.refFrameState).toBe('active');
 });
 
 test('press @ref directly after refs were issued does not warn', async () => {

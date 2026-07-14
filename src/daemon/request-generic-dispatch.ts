@@ -24,7 +24,11 @@ import {
 } from './recording-gestures.ts';
 import { markPostGestureStabilization } from './post-gesture-stabilization.ts';
 import { normalizeError } from '../kernel/errors.ts';
-import { shouldGuardAndroidBlockingDialog } from './daemon-command-registry.ts';
+import { expireRefFrame } from './ref-frame.ts';
+import {
+  resolveRefFrameEffect,
+  shouldGuardAndroidBlockingDialog,
+} from './daemon-command-registry.ts';
 import { isActiveProviderDevice } from '../provider-device-runtime.ts';
 import {
   assertSupportedScreenshotPixelDensity,
@@ -59,6 +63,14 @@ export async function dispatchGenericCommand(params: {
     ...contextFromFlags(req.flags, session.appBundleId, session.trace?.outPath),
     surface: session.surface,
   };
+  // ADR 0014 side-effect seam for generic-route leaves (back/home/rotate/scroll/
+  // tv-remote/app-switcher/viewport/focus, ...). The daemon effect classification
+  // is the honesty guard that decides which of these mutate; expire the frame
+  // before dispatching so a later ref cannot reuse it. Read-only generic leaves
+  // (screenshot) are classified `preserve` and leave the frame untouched.
+  if (resolveRefFrameEffect(req) === 'may-invalidate') {
+    expireRefFrame(session);
+  }
   let data = await executeGenericPlatformCommand({
     session,
     sessionName: params.sessionName,

@@ -1,5 +1,6 @@
 import { randomInt } from 'node:crypto';
 import type { SnapshotState } from '../kernel/snapshot.ts';
+import { activateRefFrame } from './ref-frame.ts';
 import type { SessionState } from './types.ts';
 
 /**
@@ -73,6 +74,9 @@ export function nextSnapshotGeneration(current: number | undefined): number {
 /** The response being returned hands the stored snapshot's refs to the client. */
 export function markSessionSnapshotRefsIssued(session: SessionState): void {
   session.snapshotRefsStale = false;
+  // ADR 0014: issuing refs to the client (re-)authorizes a complete frame, so a
+  // fresh capture between mutations restores usability after a side-effect expiry.
+  activateRefFrame(session);
 }
 
 /**

@@ -264,6 +264,11 @@ function buildNextSnapshotSession(params: {
   nextSession.snapshotGeneration = keepCurrentSnapshot
     ? current?.snapshotGeneration
     : nextSnapshotGeneration(current?.snapshotGeneration);
+  nextSession.refFrameState = resolveNextRefFrameState({
+    current,
+    keepCurrentSnapshot,
+    issuesRefsToClient: params.issuesRefsToClient,
+  });
   if (record.appName) nextSession.appName = record.appName;
   return nextSession;
 }
@@ -280,6 +285,19 @@ function shouldKeepCurrentSnapshot(
   return (
     refScopedSnapshot && record.snapshot?.nodes.length === 0 && current?.snapshot !== undefined
   );
+}
+
+// ADR 0014: a snapshot command hands the client the complete ref namespace, so
+// it re-authorizes a complete frame (recovering usability after a side-effect
+// expiry). A diff (summary response) or a kept tree preserves the prior
+// authorization state that buildSnapshotSession carried over.
+function resolveNextRefFrameState(params: {
+  current: SessionState | undefined;
+  keepCurrentSnapshot: boolean;
+  issuesRefsToClient: boolean;
+}): SessionState['refFrameState'] {
+  if (!params.keepCurrentSnapshot && params.issuesRefsToClient) return 'active';
+  return params.current?.refFrameState;
 }
 
 function resolveNextSnapshotScopeSource(params: {
