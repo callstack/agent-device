@@ -113,6 +113,119 @@ test('uses the direct viewport without snapshot and pairs it with the nested ges
   expect(requests.map(({ command }) => command)).toEqual(['swipe']);
 });
 
+test('settles a gesture before the next observation and reuses the stable snapshot', async () => {
+  const requests: DaemonRequest[] = [];
+  const clock = { value: 0 };
+  let snapshots = 0;
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'ios', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      if (request.command !== 'snapshot') return { ok: true, data: {} };
+      snapshots += 1;
+      return {
+        ok: true,
+        data: {
+          nodes: [
+            {
+              index: 0,
+              identifier: 'pageNumber2',
+              rect: { x: 20, y: snapshots === 1 ? 120 : 100, width: 120, height: 44 },
+            },
+          ],
+        },
+      };
+    },
+    dependencies: makeDependencies(clock),
+    platform: 'ios',
+  });
+
+  await port.execute({
+    command: {
+      kind: 'swipe',
+      source: { line: 2 },
+      gesture: {
+        kind: 'coordinates',
+        start: { space: 'absolute', x: 360, y: 400 },
+        end: { space: 'absolute', x: 40, y: 400 },
+        duration: 100,
+      },
+    },
+    generation: 0,
+    env: {},
+    invalidateObservation() {},
+  });
+  const observation = await port.observe({
+    condition: { kind: 'visible', selector: { id: 'pageNumber2' } },
+    timeoutMs: 500,
+    generation: 1,
+    env: {},
+  });
+
+  expect(observation).toMatchObject({ matched: true });
+  expect(requests.map(({ command }) => command)).toEqual([
+    'swipe',
+    'snapshot',
+    'snapshot',
+    'snapshot',
+  ]);
+  expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS * 2);
+});
+
+test('settles a gesture before dispatching another gesture', async () => {
+  const requests: DaemonRequest[] = [];
+  const clock = { value: 0 };
+  const port = createDaemonMaestroRuntimePort({
+    baseReq: makeBaseRequest({ flags: { platform: 'android', replayBackend: 'maestro' } }),
+    invoke: async (request) => {
+      requests.push(request);
+      return request.command === 'snapshot'
+        ? {
+            ok: true,
+            data: {
+              nodes: [
+                {
+                  index: 0,
+                  identifier: 'pageNumber1',
+                  rect: { x: 20, y: 100, width: 120, height: 44 },
+                },
+              ],
+            },
+          }
+        : { ok: true, data: {} };
+    },
+    dependencies: makeDependencies(clock),
+    platform: 'android',
+  });
+  const swipe = (generation: number) =>
+    port.execute({
+      command: {
+        kind: 'swipe',
+        source: { line: generation + 2 },
+        gesture: {
+          kind: 'coordinates',
+          start: { space: 'absolute', x: 360, y: 400 },
+          end: { space: 'absolute', x: 40, y: 400 },
+          duration: 100,
+        },
+      },
+      generation,
+      env: {},
+      invalidateObservation() {},
+    });
+
+  await swipe(0);
+  await swipe(1);
+
+  expect(requests.map(({ command }) => command)).toEqual([
+    'swipe',
+    'snapshot',
+    'snapshot',
+    'swipe',
+  ]);
+  expect(clock.value).toBe(MAESTRO_OBSERVATION_POLL_MS);
+});
+
 test('does not leak replay and test controls into nested public commands', async () => {
   const requests: DaemonRequest[] = [];
   const port = createDaemonMaestroRuntimePort({

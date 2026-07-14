@@ -35,6 +35,8 @@ export type MaestroSnapshotSource = {
   readonly bindObservation: (observation: MaestroObservation) => MaestroObservation;
   readonly reuseObservation: (context: MaestroRuntimeOperationContext) => SnapshotState | undefined;
   readonly invalidate: () => void;
+  readonly requireStability: () => void;
+  readonly settlePending: (context: MaestroRuntimeOperationContext) => Promise<void>;
 };
 
 export type MaestroTargetResolutionMode = 'tap' | 'swipe' | 'observe';
@@ -192,27 +194,24 @@ export async function waitForTypedSnapshotStability(params: {
 }): Promise<SnapshotState> {
   validateTimeout(params.timeoutMs, 'waitForAnimationToEnd');
   const deadline = params.dependencies.now() + params.timeoutMs;
-  let previousSignature: string | undefined;
+  let previous = await captureRetriableMaestroSnapshot(params, deadline);
+  let previousSignature = snapshotStabilitySignature(previous);
 
-  while (true) {
+  while (params.dependencies.now() < deadline) {
     throwIfAborted(params.context.signal);
-    const captureStartedAt = params.dependencies.now();
+    const remaining = deadline - params.dependencies.now();
+    await sleepWithinBudget(
+      params.dependencies,
+      Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
+      params.context.signal,
+    );
     const snapshot = await captureRetriableMaestroSnapshot(params, deadline);
     const signature = snapshotStabilitySignature(snapshot);
     if (signature === previousSignature) return snapshot;
-    const hadPreviousSignature = previousSignature !== undefined;
+    previous = snapshot;
     previousSignature = signature;
-    if (captureStartedAt >= deadline) return snapshot;
-
-    const remaining = deadline - params.dependencies.now();
-    if (hadPreviousSignature && remaining > 0) {
-      await sleepWithinBudget(
-        params.dependencies,
-        Math.min(MAESTRO_OBSERVATION_POLL_MS, remaining),
-        params.context.signal,
-      );
-    }
   }
+  return previous;
 }
 
 export function snapshotViewportRect(frame: TouchReferenceFrame | undefined): Rect | undefined {

@@ -9,6 +9,7 @@ import {
 } from './compatibility-policy.ts';
 import { maestroTestFailure } from './compatibility-errors.ts';
 import { executeMaestroRuntimeCommand } from './runtime-port-commands.ts';
+import { operationContext } from './runtime-port-context.ts';
 import { observeMaestroCondition } from './runtime-port-observation.ts';
 import type {
   MaestroObservationIdentity,
@@ -165,6 +166,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
           ? { internal: { gestureViewport: context.gestureViewport } }
           : {}),
       });
+      snapshots.requireStability();
     },
     inputText: async (input, context) => await typeTextAndSettle(input.text, context),
     eraseText: async (input, context) =>
@@ -179,6 +181,7 @@ function createDaemonMaestroRuntimeParts(options: CreateDaemonMaestroRuntimeOper
       await invokeMutation('scroll', [input.direction], {
         flags: flagsWith(options.baseReq.flags, { postGestureStabilization: false }),
       });
+      snapshots.requireStability();
     },
     scrollUntilVisible: async (input, context) => {
       const match = await scrollUntilTypedMaestroTarget({
@@ -308,9 +311,12 @@ export function createDaemonMaestroRuntimePort(
 ): MaestroRuntimePort {
   const { operations, snapshots } = createDaemonMaestroRuntimeParts(options);
   return {
-    execute: async (request: MaestroRuntimeRequest): Promise<MaestroRuntimeResult> =>
-      await executeMaestroRuntimeCommand(request, operations),
+    execute: async (request: MaestroRuntimeRequest): Promise<MaestroRuntimeResult> => {
+      await snapshots.settlePending(operationContext(request, request.command));
+      return await executeMaestroRuntimeCommand(request, operations);
+    },
     observe: async (request) => {
+      await snapshots.settlePending(operationContext(request));
       const observation = await observeMaestroCondition(request, operations);
       return snapshots.bindObservation(observation);
     },
@@ -327,8 +333,10 @@ function createSnapshotSource(
         observationIdentity?: MaestroObservationIdentity;
       }
     | undefined;
+  let primed: { generation: number; snapshot: SnapshotState } | undefined;
+  let stabilityRequired = false;
   let nextObservationIdentity = 0;
-  const capture: MaestroSnapshotReader = async (context) => {
+  const captureFresh: MaestroSnapshotReader = async (context) => {
     const data = await invokeMaestroPublicCommand(options, 'snapshot', [], {
       flags: flagsWith(options.baseReq.flags, { noRecord: true }),
     });
@@ -338,6 +346,15 @@ function createSnapshotSource(
     const snapshot = data as SnapshotState;
     cached = { generation: context.generation, snapshot };
     return snapshot;
+  };
+  const capture: MaestroSnapshotReader = async (context) => {
+    if (primed?.generation === context.generation) {
+      const snapshot = primed.snapshot;
+      primed = undefined;
+      return snapshot;
+    }
+    primed = undefined;
+    return await captureFresh(context);
   };
   return {
     capture,
@@ -357,6 +374,26 @@ function createSnapshotSource(
     },
     invalidate: () => {
       cached = undefined;
+      primed = undefined;
+    },
+    requireStability: () => {
+      stabilityRequired = true;
+      primed = undefined;
+    },
+    settlePending: async (context) => {
+      if (!stabilityRequired) return;
+      stabilityRequired = false;
+      try {
+        const snapshot = await waitForTypedSnapshotStability({
+          timeoutMs: MAESTRO_DEFAULT_SETTLE_TIMEOUT_MS,
+          context,
+          snapshot: captureFresh,
+          dependencies: options.dependencies,
+        });
+        primed = { generation: context.generation, snapshot };
+      } catch (error) {
+        if (context.signal?.aborted || isRequestCanceledError(error)) throw error;
+      }
     },
   };
 }
