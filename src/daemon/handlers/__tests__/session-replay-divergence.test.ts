@@ -8,6 +8,18 @@ vi.mock('../../../core/dispatch.ts', async (importOriginal) => {
   return { ...actual, dispatchCommand: vi.fn(async () => ({})), resolveTargetDevice: vi.fn() };
 });
 
+// Stub the Android freshness-retry delay to a no-op so the capture-parity test
+// exercises the retry BRANCH without a real wall-clock wait (repo guidance:
+// no real-time sleeps in unit tests). This is the exact `sleep` the retry path
+// in `snapshot-capture.ts` (`capturePostActionAwareSnapshot`) awaits; making it
+// instant does not change control flow — the loop still runs, retries, and
+// re-captures — so the test still proves two dispatches and use of the retried
+// tree. No other test in this file triggers a sleep path.
+vi.mock('../../../utils/timeouts.ts', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../../utils/timeouts.ts')>();
+  return { ...actual, sleep: vi.fn(async () => {}) };
+});
+
 import { dispatchCommand } from '../../../core/dispatch.ts';
 import {
   makeAndroidSession,
@@ -825,7 +837,8 @@ test('buildReplayFailureDivergence: a mass-covered app with no actionable overla
 // on-device dump is a stale, near-empty tree (sharp node-count drop, no
 // meaningful content → the `sharp-drop` retry trigger), and only the RETRIED
 // second dump contains the system overlay. The divergence must reflect the
-// retried tree.
+// retried tree. The retry delay (`sleep`) is stubbed to a no-op at the top of
+// this file, so the retry BRANCH runs without a real wall-clock wait.
 test('buildReplayFailureDivergence: routes through the freshness-retry wrapper and uses the retried fresh tree, not the first stale dump (#1264 capture parity)', async () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'agent-device-replay-divergence-fresh-'));
   const sessionStore = new SessionStore(path.join(root, 'sessions'));
