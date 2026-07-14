@@ -19,15 +19,15 @@ vi.mock('../snapshot-helper.ts', async (importOriginal) => ({
 
 vi.mock('../helper-package-install.ts', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../helper-package-install.ts')>();
-  const fixture = await import('./android-helper-artifact.fixtures.ts');
+  const fixture = await import('../../../__tests__/test-utils/android-snapshot-helper.ts');
   const multitouchFixture = await import('./multitouch-helper.fixtures.ts');
   return {
     ...actual,
     resolveAndroidHelperArtifact: vi.fn(async () => ({
-      apkPath: fixture.ANDROID_HELPER_FIXTURE_APK_PATH,
+      apkPath: fixture.ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.apkPath,
       manifest: {
         ...multitouchFixture.ANDROID_MULTITOUCH_HELPER_MANIFEST,
-        sha256: fixture.ANDROID_HELPER_FIXTURE_APK_SHA256,
+        sha256: fixture.ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT.manifest.sha256,
       },
     })),
   };

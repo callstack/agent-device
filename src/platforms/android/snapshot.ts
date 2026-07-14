@@ -180,9 +180,13 @@ async function captureAndroidUiHierarchy(
   options: AndroidSnapshotOptions,
   adb: AndroidAdbExecutor,
 ): Promise<{ xml: string; metadata: AndroidSnapshotBackendMetadata }> {
+  const adbProvider = resolveAndroidAdbProvider(device, options.helperAdb);
   const helper = await withDiagnosticTimer(
     'android_snapshot_helper_artifact_resolution',
-    async () => await resolveAndroidSnapshotHelperArtifact(options.helperArtifact),
+    async () =>
+      await resolveAndroidSnapshotHelperArtifact(
+        options.helperArtifact ?? adbProvider.snapshotHelperArtifact,
+      ),
   );
   if (helper.artifact) {
     return await captureAndroidUiHierarchyWithHelper(device, options, adb, helper.artifact);

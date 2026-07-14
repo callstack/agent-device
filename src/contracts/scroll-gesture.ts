@@ -247,19 +247,6 @@ function pointFromPercent(
   };
 }
 
-export function pointFromPercentInFrame(
-  frame: GestureReferenceFrame,
-  xPercent: number,
-  yPercent: number,
-): GesturePoint {
-  const point = pointFromPercent(frame, xPercent, yPercent);
-  // Frame dimensions are exclusive upper bounds for zero-based input coordinates.
-  return {
-    x: clampToRange(point.x, 0, Math.max(0, Math.round(frame.referenceWidth) - 1)),
-    y: clampToRange(point.y, 0, Math.max(0, Math.round(frame.referenceHeight) - 1)),
-  };
-}
-
 function clampGesturePoint(
   point: GesturePoint,
   frame: GestureReferenceFrame,

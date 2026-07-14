@@ -18,8 +18,6 @@ export const MAESTRO_COMPAT_SUPPORTED_CAPABILITIES = [
 
 export const MAESTRO_COMPAT_TRACKER_URL = 'https://github.com/callstack/agent-device/issues/558';
 
-export const MAESTRO_NEW_ISSUE_URL = 'https://github.com/callstack/agent-device/issues/new';
-
 export function formatMaestroSupportedSubsetForCli(): string {
   return `Supported subset: ${formatMaestroCapabilityList(MAESTRO_COMPAT_SUPPORTED_CAPABILITIES)}.`;
 }

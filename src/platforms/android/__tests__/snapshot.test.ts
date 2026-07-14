@@ -26,16 +26,13 @@ import { runCmd } from '../../../utils/exec.ts';
 import { sleep } from '../adb.ts';
 import { resetAndroidSnapshotHelperInstallCache } from '../snapshot-helper-install.ts';
 import { resetAndroidSnapshotHelperSessions } from '../snapshot-helper-session.ts';
-import { type AndroidAdbExecutor, type AndroidSnapshotHelperManifest } from '../snapshot-helper.ts';
+import { type AndroidAdbExecutor } from '../snapshot-helper.ts';
+import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../__tests__/test-utils/index.ts';
 import {
   withAndroidAdbProvider,
   type AndroidAdbProcess,
   type AndroidAdbProvider,
 } from '../adb-executor.ts';
-import {
-  ANDROID_HELPER_FIXTURE_APK_PATH,
-  ANDROID_HELPER_FIXTURE_APK_SHA256,
-} from './android-helper-artifact.fixtures.ts';
 
 const VALID_PNG = Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+b9xkAAAAASUVORK5CYII=',
@@ -52,25 +49,7 @@ const device: DeviceInfo = {
   booted: true,
 };
 
-const helperManifest: AndroidSnapshotHelperManifest = {
-  name: 'android-snapshot-helper',
-  version: '0.13.3',
-  apkUrl: null,
-  sha256: ANDROID_HELPER_FIXTURE_APK_SHA256,
-  packageName: 'com.callstack.agentdevice.snapshothelper',
-  versionCode: 13003,
-  instrumentationRunner: 'com.callstack.agentdevice.snapshothelper/.SnapshotInstrumentation',
-  minSdk: 23,
-  targetSdk: 36,
-  outputFormat: 'uiautomator-xml',
-  statusProtocol: 'android-snapshot-helper-v1',
-  installArgs: ['install', '-r', '-t'],
-};
-
-const helperArtifact = {
-  apkPath: ANDROID_HELPER_FIXTURE_APK_PATH,
-  manifest: helperManifest,
-};
+const helperArtifact = ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT;
 const installedHelperProbe = {
   exitCode: 0,
   stdout: 'package:com.callstack.agentdevice.snapshothelper versionCode:13004',
@@ -606,6 +585,7 @@ test('snapshotAndroid emits helper phase diagnostics', async () => {
 test('snapshotAndroid resolves helper adb through scoped provider', async () => {
   const adbCalls: string[][] = [];
   const provider: AndroidAdbProvider = {
+    snapshotHelperArtifact: helperArtifact,
     exec: async (args) => {
       adbCalls.push(args);
       if (args.includes('--show-versioncode')) {
@@ -635,13 +615,12 @@ test('snapshotAndroid resolves helper adb through scoped provider', async () => 
   };
 
   const result = await withAndroidAdbProvider(provider, { serial: device.id }, async () =>
-    snapshotAndroid(device, {
-      helperArtifact,
-    }),
+    snapshotAndroid(device),
   );
 
   assert.equal(result.nodes[0]?.label, 'provider-helper');
   assert.equal(result.androidSnapshot.backend, 'android-helper');
+  assert.equal(result.androidSnapshot.helperVersion, helperArtifact.manifest.version);
   assert.deepEqual(
     adbCalls.map((args) => args[0]),
     ['shell', 'shell'],

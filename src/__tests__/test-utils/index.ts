@@ -26,6 +26,7 @@ export {
 } from './android-ui-hierarchy-fixtures.ts';
 
 export {
+  ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
   androidSnapshotHelperOutput,
   createAndroidSnapshotHelperExecutor,
   isAndroidSnapshotHelperCapture,

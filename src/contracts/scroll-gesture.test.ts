@@ -6,7 +6,6 @@ import {
   buildInPageSwipeGesturePlan,
   buildScrollGesturePlan,
   clampGestureCoordinate,
-  pointFromPercentInFrame,
 } from './scroll-gesture.ts';
 
 test('buildInPageSwipeGesturePlan applies one inset lane policy in every direction', () => {
@@ -199,14 +198,6 @@ test('assertScrollGestureInput rejects non-positive or non-finite pixels', () =>
         /pixels must be a positive integer/i.test(error.message),
     );
   }
-});
-
-test('pointFromPercentInFrame preserves authored percentages within valid pixel bounds', () => {
-  const frame = { referenceWidth: 400, referenceHeight: 800 };
-
-  assert.deepEqual(pointFromPercentInFrame(frame, 10, 30), { x: 40, y: 240 });
-  assert.deepEqual(pointFromPercentInFrame(frame, 100, 0), { x: 399, y: 0 });
-  assert.deepEqual(pointFromPercentInFrame(frame, -10, 100), { x: 0, y: 799 });
 });
 
 test('clampGestureCoordinate rounds values and clamps them into the safe gesture band', () => {

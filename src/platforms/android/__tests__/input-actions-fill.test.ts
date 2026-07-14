@@ -2,6 +2,7 @@ import { test } from 'vitest';
 import assert from 'node:assert/strict';
 import {
   ANDROID_EMULATOR,
+  ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
   createAndroidSnapshotHelperExecutor,
 } from '../../../__tests__/test-utils/index.ts';
 import { AppError } from '../../../kernel/errors.ts';
@@ -180,6 +181,7 @@ test('fillAndroid delegates target replacement to provider-native text injection
   let value = '';
   await withAndroidAdbProvider(
     {
+      snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
       exec: createAndroidSnapshotHelperExecutor({
         exec: async (args) => {
           throw new Error(`unexpected adb call: ${args.join(' ')}`);
@@ -376,7 +378,10 @@ async function withFillAdb(
       };
   const fn = maybeFn ?? (captureXmlOrFn as () => Promise<void>);
   await withAndroidAdbProvider(
-    { exec: createAndroidSnapshotHelperExecutor({ exec, captureXml }) },
+    {
+      exec: createAndroidSnapshotHelperExecutor({ exec, captureXml }),
+      snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
+    },
     { serial: ANDROID_EMULATOR.id },
     fn,
   );

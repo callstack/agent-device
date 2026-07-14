@@ -27,6 +27,7 @@ vi.mock('../ime-helper.ts', async (importOriginal) => {
 
 import {
   ANDROID_EMULATOR,
+  ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
   createAndroidSnapshotHelperExecutor,
 } from '../../../__tests__/test-utils/index.ts';
 import { fillAndroid, typeAndroid } from '../input-actions.ts';
@@ -102,9 +103,13 @@ test('fillAndroid clears then commits non-ASCII text through the test IME and ve
     captureXml: () => androidInputXml({ text: currentText }),
   });
 
-  await withAndroidAdbProvider(adb, { serial: ANDROID_EMULATOR.id }, async () => {
-    await fillAndroid(ANDROID_EMULATOR, 10, 10, 'Café ☕ 🎉 你好');
-  });
+  await withAndroidAdbProvider(
+    { exec: adb, snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT },
+    { serial: ANDROID_EMULATOR.id },
+    async () => {
+      await fillAndroid(ANDROID_EMULATOR, 10, 10, 'Café ☕ 🎉 你好');
+    },
+  );
 
   assert.equal(currentText, 'Café ☕ 🎉 你好');
   assert.equal(

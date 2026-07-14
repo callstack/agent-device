@@ -9,6 +9,7 @@ import type {
   AndroidAdbProvider,
 } from '../../../src/platforms/android/adb-executor.ts';
 import type { DeviceInventoryRequest } from '../../../src/core/dispatch-resolve.ts';
+import { ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT } from '../../../src/__tests__/test-utils/index.ts';
 import { runCmd } from '../../../src/utils/exec.ts';
 import { validPng } from './assertions.ts';
 import { PROVIDER_SCENARIO_ANDROID } from './fixtures.ts';
@@ -78,6 +79,7 @@ export async function createAndroidSettingsWorld(options?: {
     packageName: 'io.example.demo_manifest',
   });
   const adbProvider: AndroidAdbProvider = {
+    snapshotHelperArtifact: ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT,
     gestureViewport: async () => {
       gestureViewportCalls += 1;
       return { x: 0, y: 0, width: 390, height: 600 };

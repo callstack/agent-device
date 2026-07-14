@@ -1,6 +1,31 @@
 import type { AndroidAdbExecutor } from '../../platforms/android/adb-executor.ts';
+import type { AndroidSnapshotHelperArtifact } from '../../platforms/android/snapshot-helper-types.ts';
+import { fileURLToPath } from 'node:url';
 
 const SNAPSHOT_HELPER_PACKAGE = 'com.callstack.agentdevice.snapshothelper';
+const SNAPSHOT_HELPER_FIXTURE_APK_PATH = fileURLToPath(
+  new URL('./fixtures/android-helper-apk.fixture', import.meta.url),
+);
+const SNAPSHOT_HELPER_FIXTURE_APK_SHA256 =
+  'a5f6a2fba1163bba2f13026bd3a192f52ba2816524b7cfa83c6b7ca568f6710a';
+
+export const ANDROID_SNAPSHOT_HELPER_FIXTURE_ARTIFACT: AndroidSnapshotHelperArtifact = {
+  apkPath: SNAPSHOT_HELPER_FIXTURE_APK_PATH,
+  manifest: {
+    name: 'android-snapshot-helper',
+    version: '0.13.3',
+    apkUrl: null,
+    sha256: SNAPSHOT_HELPER_FIXTURE_APK_SHA256,
+    packageName: SNAPSHOT_HELPER_PACKAGE,
+    versionCode: 13003,
+    instrumentationRunner: `${SNAPSHOT_HELPER_PACKAGE}/.SnapshotInstrumentation`,
+    minSdk: 23,
+    targetSdk: 36,
+    outputFormat: 'uiautomator-xml',
+    statusProtocol: 'android-snapshot-helper-v1',
+    installArgs: ['install', '-r', '-t'],
+  },
+};
 
 export function createAndroidSnapshotHelperExecutor(options: {
   readonly exec: AndroidAdbExecutor;
