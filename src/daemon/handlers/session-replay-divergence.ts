@@ -324,6 +324,31 @@ function isMeaningfulDivergenceTarget(node: SnapshotNode): boolean {
   return Boolean(displayLabel(node, formatRole(node.type ?? 'Element'))) || node.hittable === true;
 }
 
+/**
+ * ADR 0012 decision 4 amendment (#1264): a hittable node owned by a window
+ * OTHER than the app under test — a system-overlay window (volume dialog,
+ * quick-settings shade, permission dialog) whose actionable nodes are the
+ * dismiss targets for whatever is covering the app. Ownership is the node's own
+ * `bundleId`/package: Android sets it per node from the accessibility `package`,
+ * so a systemui/permission-controller/`android` node reads as foreign; iOS and
+ * macOS leave per-node `bundleId` undefined, so this is inert there (those
+ * platforms surface separate-window modals through the dedicated probe path,
+ * not by cap-competing with app content). Guarded on a known `appBundleId` so a
+ * sessionless capture never reorders — without an app identity there is no
+ * "foreign" to promote.
+ */
+function isForeignOverlayDismissTarget(
+  node: SnapshotNode,
+  appBundleId: string | undefined,
+): boolean {
+  return (
+    appBundleId !== undefined &&
+    node.bundleId !== undefined &&
+    node.bundleId !== appBundleId &&
+    node.hittable === true
+  );
+}
+
 function buildReplayDivergenceScreenRefs(
   nodes: SnapshotNode[],
   sanitize: DivergenceFieldSanitizer,
@@ -336,14 +361,34 @@ function buildReplayDivergenceScreenRefs(
   // structural classifier `--settle`'s tail already relies on (#1198/#1200)
   // rather than a second keyboard/IME node-type list.
   const chromeRefs = collectSettleChromeRefs(nodes, appBundleId);
-  const candidates = nodes.filter(
-    (node) =>
-      node.ref &&
-      node.interactionBlocked !== 'covered' &&
-      !chromeRefs.has(node.ref) &&
-      isMeaningfulDivergenceTarget(node),
+  const meaningful = nodes.filter(
+    (node) => node.ref && !chromeRefs.has(node.ref) && isMeaningfulDivergenceTarget(node),
   );
-  const refs = candidates.slice(0, SCREEN_REF_CAPTURE_LIMIT).map((node) => {
+  // Occlusion fallback (#1264): a `covered` node is normally dropped — an agent
+  // cannot tap what an overlay hides. But when a system overlay MASS-COVERS the
+  // app, EVERY app node is annotated `covered`; dropping them all would emit an
+  // empty `screen.refs` while the capture plainly holds meaningful nodes — a
+  // report broken by construction (the agent is shown nothing to act on). So
+  // `covered` nodes are excluded only while non-covered candidates remain; if
+  // the entire meaningful surface is covered, they are surfaced rather than
+  // returning empty.
+  const visible = meaningful.filter((node) => node.interactionBlocked !== 'covered');
+  const pool = visible.length > 0 ? visible : meaningful;
+  // Rank within the cap instead of slicing document order (#1264 cap burial):
+  // `SCREEN_REF_CAPTURE_LIMIT` is a BYTE bound, NOT a "first 20 in tree order"
+  // policy. A separate-window overlay enumerates AFTER the app window's nodes,
+  // so on a realistic tree its dismiss target sits past position 20 and is
+  // truncated away even though it was captured. Foreign-bundle hittable overlay
+  // nodes (the dismiss targets) are promoted ahead of app content; ordering is
+  // otherwise STABLE — document order is preserved within each tier, so
+  // equal-priority app nodes are never reshuffled. `repairHint`/`suggestions`
+  // consume the FULL captured node list, not this slice, so hint routing is
+  // unaffected; only the agent-visible `screen.refs` selection changes.
+  const ranked = [
+    ...pool.filter((node) => isForeignOverlayDismissTarget(node, appBundleId)),
+    ...pool.filter((node) => !isForeignOverlayDismissTarget(node, appBundleId)),
+  ];
+  const refs = ranked.slice(0, SCREEN_REF_CAPTURE_LIMIT).map((node) => {
     const role = formatRole(node.type ?? 'Element');
     const label = displayLabel(node, role);
     return {
@@ -352,7 +397,7 @@ function buildReplayDivergenceScreenRefs(
       ...(label ? { label: sanitize(label) } : {}),
     };
   });
-  return { refs, truncated: candidates.length > refs.length };
+  return { refs, truncated: ranked.length > refs.length };
 }
 
 const BASIS_RANK: Record<ReplayDivergenceSuggestionBasis, number> = {
