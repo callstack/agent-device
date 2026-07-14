@@ -131,6 +131,19 @@ test('serializeSnapshotResult includes Android backend metadata', () => {
   });
 });
 
+test('serializeSnapshotResult preserves the response-level refsGeneration (ADR 0014)', () => {
+  const data = serializeSnapshotResult({
+    nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Button', label: 'Go' }],
+    truncated: false,
+    refsGeneration: 752890,
+    identifiers: { session: 'qa' },
+  } as Parameters<typeof serializeSnapshotResult>[0]);
+
+  assert.equal(data.refsGeneration, 752890);
+  // The node tree stays plain — the generation rides once at the response level.
+  assert.equal((data.nodes as Array<{ ref?: string }>)[0]?.ref, 'e1');
+});
+
 test('serializeSnapshotResult maps capture quality annotation to public snapshotQuality', () => {
   const snapshotQuality = {
     state: 'healthy',

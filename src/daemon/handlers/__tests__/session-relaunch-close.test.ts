@@ -57,6 +57,51 @@ test('open --relaunch closes and reopens active session app', async () => {
   expect(calls[1]).toEqual({ command: 'open', positionals: ['com.example.app'] });
 });
 
+test('open --relaunch leaves the old frame expired when the close dispatch fails after dispatch (ADR 0014)', async () => {
+  const sessionStore = makeSessionStore();
+  const sessionName = 'android-session';
+  sessionStore.set(sessionName, {
+    ...makeSession(sessionName, {
+      platform: 'android',
+      id: 'emulator-5554',
+      name: 'Pixel Emulator',
+      kind: 'emulator',
+      booted: true,
+    }),
+    appName: 'com.example.app',
+    snapshotGeneration: 400,
+  });
+  // A freshly issued frame is active before the relaunch.
+  expect(sessionStore.get(sessionName)?.refFrameState).toBeUndefined();
+
+  // The relaunch close dispatches and then fails/times out AFTER the app may
+  // already have been torn down.
+  mockDispatch.mockImplementation(async (_device, command) => {
+    if (command === 'close') throw new Error('adb: close timed out after dispatch');
+    return {};
+  });
+
+  const response = await handleSessionCommands({
+    req: {
+      token: 't',
+      session: sessionName,
+      command: 'open',
+      positionals: [],
+      flags: { relaunch: true },
+    },
+    sessionName,
+    logPath: path.join(os.tmpdir(), 'daemon.log'),
+    sessionStore,
+    invoke: noopInvoke,
+  }).catch(() => null);
+
+  // Whether the failure surfaced as an error response or a throw, the existing
+  // session's frame was expired BEFORE the close dispatch and stays expired — a
+  // post-dispatch close failure never restores it (there is no rollback).
+  expect(response?.ok ?? false).toBe(false);
+  expect(sessionStore.get(sessionName)?.refFrameState).toBe('expired');
+});
+
 test('open --relaunch on iOS stops runner before close/open', async () => {
   const sessionStore = makeSessionStore();
   const sessionName = 'ios-session';

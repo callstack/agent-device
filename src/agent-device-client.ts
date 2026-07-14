@@ -501,6 +501,7 @@ function optionalSnapshotResponseFields(
     | 'warnings'
     | 'snapshotQuality'
     | 'snapshotDiagnostics'
+    | 'refsGeneration'
   >
 > {
   const visibility = readObject(data.visibility);
@@ -511,6 +512,9 @@ function optionalSnapshotResponseFields(
     ...readSerializedSnapshotCaptureAnnotations(data),
     ...(unchanged ? { unchanged: unchanged as CaptureSnapshotResult['unchanged'] } : {}),
     ...(snapshotDiagnostics ? { snapshotDiagnostics } : {}),
+    // ADR 0014: keep the response-level ref-frame generation on Node.js results
+    // so callers can pin refs (`@e12~s<refsGeneration>`) before a mutation.
+    ...(typeof data.refsGeneration === 'number' ? { refsGeneration: data.refsGeneration } : {}),
   };
 }
 

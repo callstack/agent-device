@@ -68,15 +68,15 @@ compatibility.
 
 ### Frame transitions
 
-| Event | Frame transition | Plain refs | Pinned refs |
-| --- | --- | --- | --- |
-| Internal observation that returns no refs | None | Unchanged | Unchanged |
-| Complete frame activation | New active epoch, scope `all` | Accepted from this frame | Accepted when epoch matches |
-| Non-empty partial publication | New active epoch, scope = emitted refs | Rejected | Accepted only for an emitted ref at this epoch |
-| First possible device-side effect | Advance once to `expired` | Rejected | Previous epoch rejected |
-| Additional effects while already expired | Idempotent | Rejected | Rejected |
-| Sparse, failed, or unusable capture | None | Unchanged | Unchanged |
-| Session reopen | New random-seeded lifetime | Rejected until publication | Old lifetime rejected probabilistically as today |
+| Event                                     | Frame transition                       | Plain refs                 | Pinned refs                                      |
+| ----------------------------------------- | -------------------------------------- | -------------------------- | ------------------------------------------------ |
+| Internal observation that returns no refs | None                                   | Unchanged                  | Unchanged                                        |
+| Complete frame activation                 | New active epoch, scope `all`          | Accepted from this frame   | Accepted when epoch matches                      |
+| Non-empty partial publication             | New active epoch, scope = emitted refs | Rejected                   | Accepted only for an emitted ref at this epoch   |
+| First possible device-side effect         | Advance once to `expired`              | Rejected                   | Previous epoch rejected                          |
+| Additional effects while already expired  | Idempotent                             | Rejected                   | Rejected                                         |
+| Sparse, failed, or unusable capture       | None                                   | Unchanged                  | Unchanged                                        |
+| Session reopen                            | New random-seeded lifetime             | Rejected until publication | Old lifetime rejected probabilistically as today |
 
 A complete activation normally accompanies a command result that exposes the complete ref namespace
 for the stored frame, including an interactive or intentionally scoped snapshot. An intentionally
@@ -209,9 +209,7 @@ The command descriptor's daemon facet declares a request policy:
 ```ts
 type RefFrameEffect = 'preserve' | 'may-invalidate' | 'delegated';
 
-type DaemonRefFrameEffect =
-  | RefFrameEffect
-  | ((request: DaemonRequest) => RefFrameEffect);
+type DaemonRefFrameEffect = RefFrameEffect | ((request: DaemonRequest) => RefFrameEffect);
 ```
 
 The daemon registry exposes a named resolver. Every daemon command is classified, but the
@@ -444,9 +442,14 @@ complete daemon classification and gate (2), the pre-side-effect seam at every l
 complete/partial publication with bounded scope, MCP pin retention, and pinned partial CLI text (4),
 Android freshness decoupled from positional ref authorization (5), the cross-platform contract and
 provider evidence (6), and fail-closed admission enforcement across platforms with typed reasons (7).
-Per-platform enablement is confirmed by the live-evidence runs required above; step 8's removal of the
-superseded coarse `snapshotRefsStale` marker follows that confirmation so read-only warnings are not
-disturbed before enforcement is proven on hardware.
+Fresh live evidence has exercised most production seams — Apple runtime-ref, direct/native selector,
+generation-pin, generic, and lifecycle paths, plus Android helper freshness (including proven
+non-retarget) and Android existing-session relaunch. Two seams remain UNEXERCISED and are therefore
+explicit release blockers, not confirmed enablement: Android blocking-dialog recovery, and a real
+provider-backed interaction plus provider-backed lifecycle operation. Enforcement stays enabled in
+code, but those two seams are not claimed as verified until their live runs exist. Step 8's removal of
+the superseded coarse `snapshotRefsStale` marker follows full confirmation, so read-only warnings are
+not disturbed before every enabled seam is proven on hardware.
 
 PR #1241 landed independently as a compatible transitional fix. It rejects a known iOS stale-marker
 case before this full lifecycle is implemented; it does not own the architecture migration.

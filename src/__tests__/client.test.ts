@@ -903,6 +903,24 @@ test('client capture.snapshot preserves visibility metadata from daemon response
   });
 });
 
+test('client capture.snapshot preserves refsGeneration from daemon responses (ADR 0014)', async () => {
+  const setup = createTransport(async () => ({
+    ok: true,
+    data: {
+      nodes: [{ ref: 'e1', index: 0, depth: 0, type: 'Button', label: 'Go' }],
+      truncated: false,
+      refsGeneration: 752890,
+    },
+  }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const result = await client.capture.snapshot();
+
+  // Node.js callers must retain the response-level generation to pin a plain ref
+  // (`@e1~s752890`) before a mutation.
+  assert.equal(result.refsGeneration, 752890);
+});
+
 test('client capture.snapshot preserves snapshot quality annotation from daemon responses', async () => {
   const snapshotQuality = {
     state: 'recovered',

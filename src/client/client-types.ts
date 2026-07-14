@@ -450,6 +450,12 @@ export type CaptureSnapshotResult = {
   unchanged?: SnapshotUnchanged;
   snapshotDiagnostics?: SnapshotDiagnosticsSummary;
   identifiers: AgentDeviceIdentifiers;
+  /**
+   * ADR 0014: the response-level ref-frame epoch the plain node refs were minted
+   * from. A ref-issuing snapshot carries it ONCE (nodes stay plain `@e12` for the
+   * token budget); pair a ref with it (`@e12~s<refsGeneration>`) before a mutation.
+   */
+  refsGeneration?: number;
 } & PublicSnapshotCaptureAnnotations;
 
 export type CaptureScreenshotOptions = AgentDeviceRequestOverrides & {

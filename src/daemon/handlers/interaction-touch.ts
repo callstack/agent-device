@@ -16,7 +16,7 @@ import type {
   LongPressCommandResult,
   PressCommandResult,
 } from '../../contracts/interaction.ts';
-import { AppError, asAppError, normalizeError } from '../../kernel/errors.ts';
+import { asAppError, normalizeError } from '../../kernel/errors.ts';
 import type { ReplayTargetGuardDenotation } from '../../replay/target-identity-node.ts';
 import type { DaemonResponse, SessionState } from '../types.ts';
 import { finalizeTouchInteraction, type InteractionHandlerParams } from './interaction-common.ts';
@@ -65,7 +65,7 @@ import {
   type AndroidBlockingDialogReadinessResult,
 } from '../android-system-dialog.ts';
 import { refMutationAdmissionResponse } from './interaction-ref-policy.ts';
-import { expireRefFrame, refFrameState } from '../ref-frame.ts';
+import { expireRefFrame } from '../ref-frame.ts';
 
 export async function handleTouchInteractionCommands(
   params: InteractionHandlerParams & {
@@ -185,7 +185,14 @@ async function dispatchTargetedTouchViaRuntime(
 
   return await dispatchRuntimeInteraction(params, {
     androidFreshnessBaseline,
-    refTarget: parsedTarget.target.kind === 'ref',
+    refContext:
+      parsedTarget.target.kind === 'ref' && req.internal?.findResolvedTarget !== true
+        ? {
+            ref: parsedTarget.target.ref,
+            mintedGeneration: parsedTarget.refGeneration,
+            staleRefsWarning,
+          }
+        : undefined,
     run: async (runtime) =>
       await runTargetedTouchInteraction({
         runtime,
@@ -594,7 +601,14 @@ async function dispatchFillViaRuntime(
   if (directResponse) return directResponse;
 
   return await dispatchRuntimeInteraction(params, {
-    refTarget: parsedTarget.target.kind === 'ref',
+    refContext:
+      parsedTarget.target.kind === 'ref' && req.internal?.findResolvedTarget !== true
+        ? {
+            ref: parsedTarget.target.ref,
+            mintedGeneration: parsedTarget.refGeneration,
+            staleRefsWarning,
+          }
+        : undefined,
     run: async (runtime) =>
       await runtime.interactions.fill(parsedTarget.target, parsedTarget.text, {
         session: sessionName,
@@ -732,8 +746,12 @@ async function dispatchRuntimeInteraction<
   },
   options: {
     androidFreshnessBaseline?: SessionState['snapshot'];
-    /** True when the action targets a `@ref`; aborts if Android dialog recovery expires the frame first. */
-    refTarget?: boolean;
+    /**
+     * Present when the action targets a `@ref`: if Android dialog recovery
+     * expires the frame before dispatch, the action aborts through the shared
+     * admission rejection built from this context.
+     */
+    refContext?: RefAdmissionContext;
     run(runtime: ReturnType<typeof createInteractionRuntime>): Promise<TResult>;
     afterRun?(result: TResult): Promise<void>;
     buildPayloads(
@@ -746,16 +764,18 @@ async function dispatchRuntimeInteraction<
   const runtime = createInteractionRuntime(params);
   const actionStartedAt = Date.now();
   try {
-    const { readiness, runtimeResult } = await runWithAndroidDialogReadinessCheck(
+    const outcome = await runWithAndroidDialogReadinessCheck(
       session,
       params.req.command,
-      { refTarget: options.refTarget === true },
+      { refContext: options.refContext },
       async () => {
         const result = await options.run(runtime);
         await options.afterRun?.(result);
         return result;
       },
     );
+    if (outcome.aborted) return outcome.response;
+    const { readiness, runtimeResult } = outcome;
     const actionFinishedAt = Date.now();
     const { result, responseData, recordedTarget } = await options.buildPayloads(runtimeResult);
     if (readiness.status === 'recovered') {
@@ -789,17 +809,28 @@ async function dispatchRuntimeInteraction<
   }
 }
 
+type RefAdmissionContext = {
+  ref: string;
+  mintedGeneration: number | undefined;
+  staleRefsWarning: string | undefined;
+};
+
+type ReadinessOutcome<TResult> =
+  | { aborted: true; response: DaemonResponse }
+  | {
+      aborted: false;
+      readiness: AndroidBlockingDialogReadinessResult;
+      runtimeResult: TResult;
+    };
+
 async function runWithAndroidDialogReadinessCheck<TResult>(
   session: SessionState,
   command: string,
-  options: { refTarget: boolean },
+  options: { refContext: RefAdmissionContext | undefined },
   run: () => Promise<TResult>,
-): Promise<{
-  readiness: AndroidBlockingDialogReadinessResult;
-  runtimeResult: TResult;
-}> {
+): Promise<ReadinessOutcome<TResult>> {
   if (session.lease?.leaseProvider) {
-    return { readiness: { status: 'clear' }, runtimeResult: await run() };
+    return { aborted: false, readiness: { status: 'clear' }, runtimeResult: await run() };
   }
   const readiness = await ensureAndroidBlockingSystemDialogReady({
     session,
@@ -808,21 +839,19 @@ async function runWithAndroidDialogReadinessCheck<TResult>(
   });
   // ADR 0014: blocking-dialog recovery is itself device-mutating and expires the
   // frame at its own seam. A ref action admitted against the pre-recovery frame
-  // must NOT continue against the recovered UI — abort it with ref_frame_expired.
-  // (Selector/coordinate actions re-resolve and continue under their own policy.)
-  if (
-    options.refTarget &&
-    readiness.status === 'recovered' &&
-    refFrameState(session) === 'expired'
-  ) {
-    throw new AppError(
-      'COMMAND_FAILED',
-      `Ref belongs to an expired ref frame — Android dialog recovery changed the screen before ${command} dispatched`,
-      {
-        reason: 'ref_frame_expired',
-        hint: 'Capture a fresh interactive snapshot (snapshot -i) or use a stable selector, then retry.',
-      },
-    );
+  // must NOT continue against the recovered UI — abort it through the SHARED
+  // admission rejection so the failure shape (reason, ref, currentGeneration,
+  // scope, mintedGeneration, hint) is identical to every other expired-frame
+  // rejection across platforms. Selector/coordinate actions carry no refContext
+  // and re-resolve and continue under their own policy.
+  if (options.refContext && readiness.status === 'recovered') {
+    const abort = refMutationAdmissionResponse({
+      session,
+      ref: options.refContext.ref,
+      mintedGeneration: options.refContext.mintedGeneration,
+      staleRefsWarning: options.refContext.staleRefsWarning,
+    });
+    if (abort) return { aborted: true, response: abort };
   }
   const runtimeResult = await run();
   await ensureAndroidBlockingSystemDialogReady({
@@ -830,7 +859,7 @@ async function runWithAndroidDialogReadinessCheck<TResult>(
     command,
     phase: 'after-command',
   });
-  return { readiness, runtimeResult };
+  return { aborted: false, readiness, runtimeResult };
 }
 
 async function refreshAndroidRefSnapshotIfFreshnessActive(
