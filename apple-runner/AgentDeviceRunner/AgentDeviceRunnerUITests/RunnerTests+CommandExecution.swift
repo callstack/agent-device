@@ -1293,6 +1293,8 @@ extension RunnerTests {
     switch command.command {
     case .status:
       return executeStatus(command: command)
+    case .targetReset:
+      return resetTargetAfterExternalRelaunch()
     case .shutdown:
       stopRecordingIfNeeded()
       return Response(ok: true, data: DataPayload(message: "shutdown"))
@@ -1446,7 +1448,7 @@ extension RunnerTests {
   ) throws -> Response {
     var activeApp = activeApp
     switch command.command {
-    case .status, .shutdown, .recordStart, .recordStop, .uptime:
+    case .status, .targetReset, .shutdown, .recordStart, .recordStop, .uptime:
       return Response(
         ok: false,
         error: ErrorPayload(

@@ -99,6 +99,12 @@ extension RunnerTests {
     snapshotXCTestPenaltyWarmupExemptionPending = false
   }
 
+  func resetTargetAfterExternalRelaunch() -> Response {
+    invalidateCachedTarget(reason: "external_app_relaunch")
+    needsFirstInteractionDelay = true
+    return Response(ok: true, data: DataPayload(message: "target reset"))
+  }
+
   func refreshCachedTargetIfProcessChanged(bundleId: String) {
     guard currentBundleId == bundleId, currentApp != nil else { return }
     let candidate = XCUIApplication(bundleIdentifier: bundleId)

@@ -178,6 +178,7 @@ const runnerProtocolCommandFixtures: Record<RunnerCommand['command'], RunnerComm
   recordStop: { command: 'recordStop' },
   status: { command: 'status', statusCommandId: 'runner-command-1' },
   uptime: { command: 'uptime' },
+  targetReset: { command: 'targetReset' },
   shutdown: { command: 'shutdown' },
 };
 
@@ -347,6 +348,7 @@ test('runner protocol fixtures cover every runner command with JSON-safe samples
     'status',
     'swipe',
     'tap',
+    'targetReset',
     'type',
     'uptime',
   ]);

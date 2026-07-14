@@ -108,4 +108,21 @@ extension RunnerTests {
     XCTAssertNil(currentAppProcessIdentifier)
     XCTAssertFalse(snapshotXCTestPenaltyWarmupExemptionPending)
   }
+
+  func testTargetResetInvalidatesProcessBoundStateWithoutRestartingRunner() {
+    currentApp = app
+    currentBundleId = "com.example.app"
+    currentAppProcessIdentifier = 42
+    snapshotXCTestPenaltyWarmupExemptionPending = true
+    needsFirstInteractionDelay = false
+
+    let response = resetTargetAfterExternalRelaunch()
+
+    XCTAssertTrue(response.ok)
+    XCTAssertNil(currentApp)
+    XCTAssertNil(currentBundleId)
+    XCTAssertNil(currentAppProcessIdentifier)
+    XCTAssertFalse(snapshotXCTestPenaltyWarmupExemptionPending)
+    XCTAssertTrue(needsFirstInteractionDelay)
+  }
 }

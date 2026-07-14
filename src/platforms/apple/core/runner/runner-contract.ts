@@ -49,6 +49,7 @@ export type RunnerCommand = {
     | 'recordStop'
     | 'status'
     | 'uptime'
+    | 'targetReset'
     | 'shutdown';
   commandId?: string;
   statusCommandId?: string;

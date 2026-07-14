@@ -4,6 +4,7 @@ import type { SessionSurface } from '../../contracts/session-surface.ts';
 import { contextFromFlags } from '../context.ts';
 import { createRequestCanceledError, isRequestCanceled } from '../../request/cancel.ts';
 import {
+  notifyIosRunnerAppRelaunched,
   prewarmIosRunnerSession,
   stopIosRunnerSession,
 } from '../../platforms/apple/core/runner/runner-client.ts';
@@ -330,6 +331,9 @@ async function completeOpenCommand(params: {
   }
   if (shouldRelaunch) {
     await awaitPrewarm();
+    if (isIosSimulator(device)) {
+      await notifyIosRunnerAppRelaunched(device, runnerPrewarmOptions);
+    }
   } else if (runnerPrewarm && !runnerPrewarmAwaited) {
     timing.runnerPrewarmWaited = false;
   }

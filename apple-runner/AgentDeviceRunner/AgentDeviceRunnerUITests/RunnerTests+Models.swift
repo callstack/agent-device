@@ -31,6 +31,7 @@ enum CommandType: String, Codable {
   case recordStop
   case status
   case uptime
+  case targetReset
   case shutdown
 }
 
@@ -89,7 +90,7 @@ extension CommandType {
       return CommandTraits(isInteraction: false, readOnly: .conditional, isLifecycle: false)
 
     // Runner-lifecycle commands: skip the app-activation preflight.
-    case .recordStop, .uptime, .shutdown:
+    case .recordStop, .uptime, .targetReset, .shutdown:
       return CommandTraits(isInteraction: false, readOnly: .never, isLifecycle: true)
 
     case .status:

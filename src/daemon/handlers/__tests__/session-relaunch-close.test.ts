@@ -6,6 +6,7 @@ import {
   mockDispatch,
   mockResolveTargetDevice,
   mockPrewarmIosRunnerSession,
+  mockNotifyIosRunnerAppRelaunched,
   mockStopIosRunner,
   mockScheduleIosRunnerIdleStop,
   mockDismissMacOsAlert,
@@ -201,6 +202,10 @@ test('open --relaunch on iOS simulator collapses into one terminate-running open
   expect(response?.ok).toBe(true);
   expect(calls).toEqual(['open:com.example.app']);
   expect(openContext?.terminateRunningApp).toBe(true);
+  expect(mockNotifyIosRunnerAppRelaunched).toHaveBeenCalledWith(
+    expect.objectContaining({ id: 'sim-1' }),
+    expect.any(Object),
+  );
 });
 
 test('open <app> <url> --relaunch on iOS simulator keeps close-first ordering', async () => {

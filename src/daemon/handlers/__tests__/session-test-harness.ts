@@ -28,6 +28,7 @@ vi.mock('../../../platforms/apple/core/runner/runner-client.ts', async (importOr
     })),
     prewarmAppleRunnerCache: vi.fn(),
     prewarmIosRunnerSession: vi.fn(),
+    notifyIosRunnerAppRelaunched: vi.fn(async () => {}),
     scheduleIosRunnerIdleStop: vi.fn(),
     stopIosRunnerSession: vi.fn(async () => {}),
   };
@@ -120,6 +121,7 @@ import {
   prepareIosRunner,
   prewarmAppleRunnerCache,
   prewarmIosRunnerSession,
+  notifyIosRunnerAppRelaunched,
   scheduleIosRunnerIdleStop,
   stopIosRunnerSession,
 } from '../../../platforms/apple/core/runner/runner-client.ts';
@@ -162,6 +164,7 @@ export const mockEnsureDeviceReady = vi.mocked(ensureDeviceReady);
 export const mockApplyRuntimeHints = vi.mocked(applyRuntimeHintsToApp);
 export const mockClearRuntimeHints = vi.mocked(clearRuntimeHintsFromApp);
 export const mockPrewarmIosRunnerSession = vi.mocked(prewarmIosRunnerSession);
+export const mockNotifyIosRunnerAppRelaunched = vi.mocked(notifyIosRunnerAppRelaunched);
 export const mockPrewarmAppleRunnerCache = vi.mocked(prewarmAppleRunnerCache);
 export const mockPrepareIosRunner = vi.mocked(prepareIosRunner);
 export const mockStopIosRunner = vi.mocked(stopIosRunnerSession);

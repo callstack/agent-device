@@ -147,7 +147,7 @@ final class RunnerCommandJournal {
          .remotePress, .type, .swipe, .scroll, .desktopScroll, .findText, .querySelector, .readText, .back,
          .backInApp, .backSystem, .home, .rotate, .appSwitcher, .keyboardDismiss, .keyboardReturn,
          .alert, .sequence, .gesture, .gestureViewport, .recordStart, .recordStop,
-         .status, .uptime, .shutdown:
+         .status, .uptime, .targetReset, .shutdown:
       return true
     }
   }

@@ -1,7 +1,11 @@
 import { withRetry } from '../../../../utils/retry.ts';
 import { isIosFamily, type DeviceInfo } from '../../../../kernel/device.ts';
 import { emitDiagnostic } from '../../../../utils/diagnostics.ts';
-import { type RunnerSessionOptions, validateRunnerDevice } from './runner-session.ts';
+import {
+  stopIosRunnerSession,
+  type RunnerSessionOptions,
+  validateRunnerDevice,
+} from './runner-session.ts';
 import {
   assertRunnerRequestActive,
   isRetryableRunnerError,
@@ -52,6 +56,23 @@ export async function runAppleRunnerCommand(
     );
   }
   return provider.runCommand(device, runnerCommand, options);
+}
+
+export async function notifyIosRunnerAppRelaunched(
+  device: DeviceInfo,
+  options: AppleRunnerCommandOptions = {},
+): Promise<void> {
+  if (!isIosFamily(device)) return;
+  try {
+    await runAppleRunnerCommand(device, { command: 'targetReset' }, options);
+  } catch (error) {
+    emitDiagnostic({
+      level: 'warn',
+      phase: 'ios_runner_target_reset_failed',
+      data: { deviceId: device.id, error: error instanceof Error ? error.message : String(error) },
+    });
+    await stopIosRunnerSession(device.id);
+  }
 }
 
 type PrewarmIosRunnerOptions = RunnerSessionOptions & {
