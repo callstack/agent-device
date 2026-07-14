@@ -20,6 +20,7 @@ import type {
   PlatformSelector,
 } from '../kernel/device.ts';
 import type { BackMode } from '../contracts/back-mode.ts';
+import type { RotateCommandResult } from '../contracts/navigation.ts';
 import type { ClickButton } from '../core/click-button.ts';
 import type { RecordingExportQuality } from '../core/recording-export-quality.ts';
 import type { RecordingScope } from '../contracts/recording-scope.ts';
@@ -76,6 +77,8 @@ export type {
   BackCommandResult,
   HomeCommandResult,
   OrientationCommandResult,
+  /** @deprecated Renamed to `OrientationCommandResult`. Retained until the next major. */
+  RotateCommandResult,
   TvRemoteCommandResult,
 } from '../contracts/navigation.ts';
 export type { ClipboardCommandResult } from '../contracts/clipboard.ts';
@@ -542,6 +545,9 @@ export type BackCommandOptions = DeviceCommandBaseOptions & NavigationCommandOpt
 export type OrientationCommandOptions = DeviceCommandBaseOptions &
   NavigationCommandOptions<'orientation'>;
 
+/** @deprecated Renamed to `OrientationCommandOptions`. Retained until the next major. */
+export type RotateCommandOptions = OrientationCommandOptions;
+
 export type AppSwitcherCommandOptions = DeviceCommandBaseOptions &
   NavigationCommandOptions<'app-switcher'>;
 
@@ -597,7 +603,17 @@ type NonNavigationCommandClient = {
 };
 
 export type AgentDeviceCommandClient = ProjectedNavigationCommandClient<DeviceCommandBaseOptions> &
-  NonNavigationCommandClient;
+  NonNavigationCommandClient &
+  DeprecatedCommandClient;
+
+/** Renamed command methods retained for existing consumers until the next major. */
+type DeprecatedCommandClient = {
+  /**
+   * @deprecated Renamed to `orientation`. Delegates to it and returns the legacy
+   * `action: 'rotate'` response contract. Retained until the next major version.
+   */
+  rotate: (options: RotateCommandOptions) => Promise<RotateCommandResult>;
+};
 
 type SelectorSnapshotCommandOptions = Pick<CaptureSnapshotOptions, 'depth' | 'scope' | 'raw'>;
 type FindSnapshotCommandOptions = Pick<CaptureSnapshotOptions, 'depth' | 'raw'>;

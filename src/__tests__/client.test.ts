@@ -166,6 +166,26 @@ test('client exposes narrowed result types for closed daemon projections', async
   assert.equal(triggerResult.transport, 'deep-link');
 });
 
+test('deprecated client.command.rotate delegates to orientation and keeps the legacy action', async () => {
+  const setup = createTransport(async () => ({
+    ok: true,
+    data: {
+      action: 'orientation',
+      orientation: 'landscape-left',
+      message: 'Rotated to landscape-left',
+    },
+  }));
+  const client = createAgentDeviceClient(setup.config, { transport: setup.transport });
+
+  const result = await client.command.rotate({ orientation: 'landscape-left' });
+
+  // The wrapper sends the canonical wire command...
+  assert.equal(setup.calls.at(-1)?.command, 'orientation');
+  // ...and restores the shipped v0.18/v0.19 response contract for old consumers.
+  assert.equal(result.action, 'rotate');
+  assert.equal(result.orientation, 'landscape-left');
+});
+
 function closedProjectionResponse(command: string): DaemonResponse {
   const data = closedProjectionResponses[command];
   if (!data) throw new Error(`Unexpected command: ${command}`);

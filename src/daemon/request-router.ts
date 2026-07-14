@@ -3,6 +3,7 @@ import {
   withTargetDeviceResolutionScope,
 } from '../core/dispatch-resolve.ts';
 import { AppError, normalizeError, retriableForErrorCode } from '../kernel/errors.ts';
+import { normalizeCommandAlias } from '../command-aliases.ts';
 import { supportedPlatformsForCommand } from '../core/capabilities.ts';
 import { timingSafeStringEqual } from '../utils/timing-safe-equal.ts';
 import type { DaemonArtifactType, DaemonError, ResponseCost } from '../kernel/contracts.ts';
@@ -95,7 +96,13 @@ export function createRequestHandler(deps: RequestRouterDeps): DaemonInvokeFn {
   } = deps;
   const { sessionStore, leaseRegistry } = deps;
 
-  async function handleRequest(req: DaemonRequest): Promise<DaemonResponse> {
+  async function handleRequest(rawReq: DaemonRequest): Promise<DaemonResponse> {
+    // Central compatibility boundary: resolve command-name aliases once, at the
+    // single point every request arrives — CLI, structured batch steps, recorded
+    // replay data, and older remote clients that send the wire command directly.
+    // This is why deprecated/renamed commands (e.g. `rotate` -> `orientation`)
+    // reach their canonical descriptor here without the CLI parser in the loop.
+    const req = canonicalizeRequestCommand(rawReq);
     const start = Date.now();
     const debug = Boolean(req.meta?.debug || req.flags?.verbose);
     return await withDiagnosticsScope(
@@ -402,6 +409,14 @@ function enrichDaemonError(command: string, error: DaemonError): DaemonError {
 
 // Phase 4 (agent-cost) success-path grafts: a leveled response view and an
 // opt-in cost block, both purely additive. With responseLevel `default` (or
+// Resolves command-name aliases at the daemon boundary so a renamed/deprecated
+// command reaches its canonical descriptor no matter the ingress path. Returns
+// the original request object unchanged when the command is already canonical.
+function canonicalizeRequestCommand(req: DaemonRequest): DaemonRequest {
+  const canonical = normalizeCommandAlias(req.command);
+  return canonical === req.command ? req : { ...req, command: canonical };
+}
+
 // unset) AND no registered view AND no --cost, the original `response` object is
 // returned unchanged — byte-identical to today (Maestro `.ad` recompare safe).
 function applyAgentCostGrafts(

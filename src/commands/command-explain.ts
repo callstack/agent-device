@@ -1,5 +1,5 @@
 import { listCliCommandNames } from '../command-catalog.ts';
-import { cliAliasesForCommand, normalizeCliCommandAlias } from '../cli-command-aliases.ts';
+import { aliasesForCommand, normalizeCommandAlias } from '../command-aliases.ts';
 import { buildCommandUsage } from '../cli-schema/usage.ts';
 import type { DaemonCommandRoute } from '../daemon/daemon-command-registry.ts';
 import { commandDescriptors, type Command } from '../core/command-descriptor/registry.ts';
@@ -165,13 +165,13 @@ export function formatCommandExplanation(
 }
 
 function resolveDescriptor(query: string): CommandDescriptor | undefined {
-  const direct = descriptorByName.get(normalizeCliCommandAlias(query));
+  const direct = descriptorByName.get(normalizeCommandAlias(query));
   if (direct) return direct;
   return commandDescriptors.find((descriptor) => readCatalogKey(descriptor) === query);
 }
 
 function describeCliAliases(command: string): CommandAliasExplanation[] {
-  return cliAliasesForCommand(command).map((entry) => ({
+  return aliasesForCommand(command).map((entry) => ({
     alias: entry.alias,
     ...(entry.impliedFlags && entry.impliedFlags.length > 0
       ? { impliedFlags: [...entry.impliedFlags] }
@@ -240,7 +240,7 @@ function suggestCommands(query: string): string[] {
   const candidates = commandDescriptors.flatMap((descriptor) => [
     descriptor.name,
     readCatalogKey(descriptor),
-    ...cliAliasesForCommand(descriptor.name).map((alias) => alias.alias),
+    ...aliasesForCommand(descriptor.name).map((alias) => alias.alias),
   ]);
   return [...new Set(candidates)]
     .map((candidate) => ({ candidate, distance: levenshtein(query, candidate) }))

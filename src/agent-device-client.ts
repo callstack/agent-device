@@ -53,8 +53,10 @@ import type {
   MaterializationReleaseOptions,
   MetroPrepareOptions,
   MetroPrepareResult,
+  OrientationCommandResult,
   PanOptions,
   FlingOptions,
+  RotateCommandResult,
   SwipeGestureOptions,
   PinchOptions,
   RotateGestureOptions,
@@ -74,7 +76,7 @@ import type { ProjectedNavigationCommandClient } from './commands/system/navigat
 import { AppError } from './kernel/errors.ts';
 
 type ProjectedSystemCommandClient = ProjectedNavigationCommandClient<InternalRequestOptions> &
-  Pick<AgentDeviceCommandClient, 'appState' | 'keyboard' | 'clipboard'>;
+  Pick<AgentDeviceCommandClient, 'appState' | 'keyboard' | 'clipboard' | 'rotate'>;
 
 export function createAgentDeviceClient(
   config: AgentDeviceClientConfig = {},
@@ -520,6 +522,17 @@ function buildProjectedSystemCommandClient(
     methods[method] = async (options = {}) =>
       await executeCommand<CommandResult<typeof command>>(command as DaemonCommandName, options);
   }
+  // Deprecated (v0.18/v0.19): `rotate` was renamed to `orientation`. Retain a
+  // thin wrapper that delegates to `orientation` and restores the legacy
+  // `action: 'rotate'` response contract for existing consumers.
+  const orientation = methods.orientation;
+  if (!orientation) {
+    throw new Error('orientation client method missing from the system command family');
+  }
+  methods.rotate = async (options = {}) => {
+    const result = (await orientation(options)) as OrientationCommandResult;
+    return { ...result, action: 'rotate' } satisfies RotateCommandResult;
+  };
   return methods as unknown as ProjectedSystemCommandClient;
 }
 

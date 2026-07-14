@@ -226,7 +226,7 @@ classifying representative actions; it must not become a second prose registry:
 
 | Effect | Commands/actions |
 | --- | --- |
-| `may-invalidate` | press, click, fill, longpress, type, focus, scroll, swipe, gesture, back, home, `tv-remote`, rotate, open/relaunch, trigger/push delivery, settings changes, install/reinstall, React Native overlay dismissal, and lifecycle operations that can replace the visible surface |
+| `may-invalidate` | press, click, fill, longpress, type, focus, scroll, swipe, gesture, back, home, `tv-remote`, orientation, open/relaunch, trigger/push delivery, settings changes, install/reinstall, React Native overlay dismissal, and lifecycle operations that can replace the visible surface |
 | Conditional resolver | keyboard status preserves while dismiss/return/input invalidate; alert get/wait preserve while accept/dismiss invalidate; find reads preserve while click/fill/focus/type delegate to their leaf mutation |
 | `delegated` | batch, replay, and test/suite orchestrators; each nested leaf owns its transition |
 | `preserve` | snapshots and other observation, assertion, screenshot, recording, trace, logs, events, network inspection, performance, inventory, capability, lease, and transport-management operations unless a selected subaction directly manipulates the visible surface |
@@ -234,7 +234,7 @@ classifying representative actions; it must not become a second prose registry:
 Clipboard reads and writes preserve the frame because pasteboard state alone does not change element
 identity. A later paste/type action is independently invalidating.
 
-Generic routing is not an exception to the policy. `back`, `home`, `rotate`, `scroll`, `tv-remote`,
+Generic routing is not an exception to the policy. `back`, `home`, `orientation`, `scroll`, `tv-remote`,
 and `app-switcher` all reach the generic daemon leaf and must cross the same transition there when
 they act. `app-switcher` is currently projected to the daemon by a direct writer but, unlike its
 generic-routed siblings, omits an explicit daemon descriptor facet and relies on the registry's
