@@ -2134,6 +2134,11 @@ test('alert accept retries on "alert not found" and succeeds on second attempt',
   expect(response).toBeTruthy();
   expect(response?.ok).toBe(true);
   expect(calls).toBe(2);
+  expect(mockRunnerCommand.mock.calls[0]?.[1]).toMatchObject({
+    command: 'alert',
+    action: 'accept',
+    timeoutMs: 10_000,
+  });
 });
 
 test('alert accept does not retry on non-alert errors', async () => {

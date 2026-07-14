@@ -47,7 +47,7 @@ test('Provider-backed integration iOS Settings permission and alert flow uses pr
         command: 'alert',
         action: 'accept',
         appBundleId: 'com.apple.Preferences',
-        timeoutMs: 2_000,
+        timeoutMs: 10_000,
       },
       result: { action: 'accept', accepted: true },
     },

@@ -27,20 +27,6 @@ extension RunnerTests {
     }
     var nodes: [SnapshotNode] = [modalNode]
 
-    for content in informativeElements(in: modal, excluding: actions) {
-      guard let contentNode = safeMakeSnapshotNode(
-        element: content,
-        index: nodes.count,
-        type: elementTypeName(content.elementType),
-        depth: 1,
-        parentIndex: 0,
-        hittableOverride: false
-      ) else {
-        continue
-      }
-      nodes.append(contentNode)
-    }
-
     for action in actions {
       guard let actionNode = safeMakeSnapshotNode(
         element: action,
@@ -53,6 +39,25 @@ extension RunnerTests {
         continue
       }
       nodes.append(actionNode)
+    }
+
+    // Action controls are the interaction contract. Informative text is useful context, but
+    // must not make a usable modal miss the bounded system-modal probe deadline.
+    let contentDeadline = deadline.addingTimeInterval(-0.5)
+    for content in informativeElements(in: modal, deadline: contentDeadline) {
+      guard Date() < contentDeadline,
+            let contentNode = safeMakeSnapshotNode(
+              element: content,
+              index: nodes.count,
+              type: elementTypeName(content.elementType),
+              depth: 1,
+              parentIndex: 0,
+              hittableOverride: false
+            )
+      else {
+        break
+      }
+      nodes.append(contentNode)
     }
 
     return DataPayload(nodes: nodes, truncated: false)
@@ -144,20 +149,18 @@ extension RunnerTests {
     }
   }
 
-  private func informativeElements(in element: XCUIElement, excluding actions: [XCUIElement]) -> [XCUIElement] {
-    let actionKeys = Set(actions.map(systemModalElementKey))
+  private func informativeElements(in element: XCUIElement, deadline: Date) -> [XCUIElement] {
     var seen = Set<String>()
     var contents: [XCUIElement] = []
-    let descendants = readableSystemModalTypes.flatMap {
-      modalDescendants(in: element, matching: $0, limit: 2)
-    }
-    for candidate in descendants {
-      guard let key = safeInformativeElementKey(candidate, actionKeys: actionKeys) else {
-        continue
+    for type in readableSystemModalTypes {
+      guard Date() < deadline else { break }
+      for candidate in modalDescendants(in: element, matching: type, limit: 2) {
+        guard Date() < deadline else { return contents }
+        guard let key = safeInformativeElementKey(candidate) else { continue }
+        if seen.contains(key) { continue }
+        seen.insert(key)
+        contents.append(candidate)
       }
-      if seen.contains(key) { continue }
-      seen.insert(key)
-      contents.append(candidate)
     }
     return contents
   }
@@ -180,11 +183,9 @@ extension RunnerTests {
     return Array(elements.prefix(limit))
   }
 
-  private func safeInformativeElementKey(_ candidate: XCUIElement, actionKeys: Set<String>) -> String? {
+  private func safeInformativeElementKey(_ candidate: XCUIElement) -> String? {
     safely("MODAL_CONTENT") { () -> String? in
       let key = systemModalElementKey(candidate)
-      if actionKeys.contains(key) { return nil }
-      if actionableTypes.contains(candidate.elementType) { return nil }
       if !candidate.exists { return nil }
       let frame = candidate.frame
       if frame.isNull || frame.isEmpty { return nil }

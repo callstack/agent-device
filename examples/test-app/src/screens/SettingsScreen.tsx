@@ -1,4 +1,3 @@
-import { useState } from 'react';
 import {
   Alert,
   ActivityIndicator,
@@ -10,7 +9,6 @@ import {
 } from 'react-native';
 
 import { ActionButton, InlineBadge, ScreenTitle, SectionCard, ToggleRow } from '../components';
-import { showAccessorySetupPicker } from '../accessory-setup';
 import { useAppColors, type AppColors } from '../theme';
 
 export interface SettingsScreenProps {
@@ -19,6 +17,7 @@ export interface SettingsScreenProps {
   diagnosticsState: 'idle' | 'ready' | 'error';
   notificationsEnabled: boolean;
   reducedMotionEnabled: boolean;
+  onOpenAccessorySetup: () => void;
   onLoadDiagnostics: () => void;
   onRetryDiagnostics: () => void;
   onSetNotificationsEnabled: (value: boolean) => void;
@@ -30,24 +29,6 @@ export interface SettingsScreenProps {
 export function SettingsScreen(props: SettingsScreenProps) {
   const colors = useAppColors();
   const styles = createStyles(colors);
-  const [accessoryPickerStatus, setAccessoryPickerStatus] = useState<
-    'idle' | 'opening' | 'dismissed' | 'error'
-  >('idle');
-  const [accessoryPickerMessage, setAccessoryPickerMessage] = useState('');
-
-  async function openAccessoryPicker() {
-    setAccessoryPickerStatus('opening');
-    setAccessoryPickerMessage('Accessory picker requested.');
-
-    try {
-      await showAccessorySetupPicker();
-      setAccessoryPickerStatus('dismissed');
-      setAccessoryPickerMessage('Accessory picker dismissed.');
-    } catch (error) {
-      setAccessoryPickerStatus('error');
-      setAccessoryPickerMessage(error instanceof Error ? error.message : String(error));
-    }
-  }
 
   function showResetAlert() {
     Alert.alert(
@@ -78,6 +59,17 @@ export function SettingsScreen(props: SettingsScreenProps) {
         title="Settings"
         testID="settings-title"
       />
+
+      <SectionCard
+        subtitle="Open the physical iOS AccessorySetupUI verification fixture."
+        title="Accessory setup"
+      >
+        <ActionButton
+          label="Open accessory setup lab"
+          onPress={props.onOpenAccessorySetup}
+          testID="open-accessory-setup-lab"
+        />
+      </SectionCard>
 
       <SectionCard subtitle="Simple switch rows for durable selectors." title="Preferences">
         <ToggleRow
@@ -165,29 +157,6 @@ export function SettingsScreen(props: SettingsScreenProps) {
             testID="reset-lab"
           />
         </View>
-      </SectionCard>
-
-      <SectionCard
-        subtitle="Physical iOS 18+ fixture for the out-of-process AccessorySetupUI picker."
-        title="Accessory setup"
-      >
-        <Text style={styles.diagnosticsText}>
-          Rebuild the iOS development client after configuring the accessory Bluetooth service UUID.
-        </Text>
-        <ActionButton
-          label="Open accessory picker"
-          onPress={openAccessoryPicker}
-          testID="open-accessory-picker"
-        />
-        {accessoryPickerStatus !== 'idle' ? (
-          <Text
-            accessibilityLiveRegion="polite"
-            style={accessoryPickerStatus === 'error' ? styles.errorText : styles.diagnosticsText}
-            testID="accessory-picker-status"
-          >
-            {accessoryPickerMessage}
-          </Text>
-        ) : null}
       </SectionCard>
     </ScrollView>
   );

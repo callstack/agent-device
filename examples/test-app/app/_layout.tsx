@@ -23,6 +23,7 @@ function RootLayoutContent() {
         }}
       >
         <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="accessory-setup" />
         <Stack.Screen name="product/[productId]" />
       </Stack>
       {toastMessage ? <ToastViewport message={toastMessage} /> : null}

@@ -1,4 +1,4 @@
-import { isMacOs } from '../../kernel/device.ts';
+import { isIosFamily, isMacOs } from '../../kernel/device.ts';
 import {
   ALERT_ACTION_RETRY_MS,
   ALERT_POLL_INTERVAL_MS as POLL_INTERVAL_MS,
@@ -124,13 +124,14 @@ async function handleNativeAlertAction(
   action: 'accept' | 'dismiss',
   runAlert: NativeAlertRunner,
 ): Promise<DaemonResponse> {
+  const runnerTimeoutMs = isIosFamily(params.device) ? DEFAULT_TIMEOUT_MS : ALERT_ACTION_RETRY_MS;
   const start = Date.now();
   let lastError: unknown;
   let firstAttempt = true;
   while (Date.now() - start < ALERT_ACTION_RETRY_MS) {
     try {
       const budgetMs = firstAttempt
-        ? ALERT_ACTION_RETRY_MS
+        ? runnerTimeoutMs
         : remainingBudgetMs(start, ALERT_ACTION_RETRY_MS);
       firstAttempt = false;
       return recordAlertResponse(params, await runAlert(action, budgetMs));

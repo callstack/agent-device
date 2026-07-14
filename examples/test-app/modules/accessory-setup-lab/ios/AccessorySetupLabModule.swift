@@ -49,15 +49,10 @@ private final class AccessorySetupController {
         Exception(
           name: "MissingAccessoryService",
           description:
-            "Set AGENT_DEVICE_TEST_ACCESSORY_SERVICE_UUID before rebuilding the iOS development client."
+            "The development client is missing its AccessorySetupKit test service configuration."
         )
       )
       return
-    }
-
-    if !isActivated {
-      session.activate(on: .main) { _ in }
-      isActivated = true
     }
 
     let descriptor = ASDiscoveryDescriptor()
@@ -76,16 +71,37 @@ private final class AccessorySetupController {
       descriptor: descriptor
     )
 
-    isPickerPresented = true
-    session.showPicker(for: [displayItem]) { [weak self] error in
-      self?.isPickerPresented = false
-      if let error {
-        promise.reject(
-          Exception(name: "AccessoryPickerFailed", description: error.localizedDescription)
-        )
-      } else {
-        promise.resolve(nil)
+    if #available(iOS 26.0, *) {
+      let settings = ASPickerDisplaySettings.default
+      settings.discoveryTimeout = .short
+      session.pickerDisplaySettings = settings
+    }
+
+    let presentPicker = { [weak self] in
+      guard let self else { return }
+
+      session.showPicker(for: [displayItem]) { [weak self] error in
+        self?.isPickerPresented = false
+        if let error {
+          promise.reject(
+            Exception(name: "AccessoryPickerFailed", description: error.localizedDescription)
+          )
+        } else {
+          promise.resolve(nil)
+        }
       }
+    }
+
+    isPickerPresented = true
+    if isActivated {
+      presentPicker()
+      return
+    }
+
+    session.activate(on: .main) { [weak self] event in
+      guard let self, event.eventType == .activated else { return }
+      isActivated = true
+      presentPicker()
     }
   }
 
