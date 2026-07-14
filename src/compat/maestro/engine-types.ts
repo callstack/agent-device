@@ -46,11 +46,13 @@ export type MaestroRuntimeRequest = {
   appId?: string;
   generation: number;
   cachedObservation?: MaestroObservation;
+  invalidateObservation(): void;
   signal?: AbortSignal;
 };
 
+export type MaestroObservationEffect = 'preserve' | 'invalidate';
+
 export type MaestroRuntimeResult = {
-  mutated: boolean;
   observation?: MaestroObservation;
   outputEnv?: Record<string, string>;
   artifactPaths?: string[];

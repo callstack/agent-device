@@ -60,6 +60,7 @@ test('does not pair an observation with a later same-generation snapshot', async
     generation: 0,
     cachedObservation: observation,
     env: {},
+    invalidateObservation() {},
   });
   await port.execute({
     command: {
@@ -70,6 +71,7 @@ test('does not pair an observation with a later same-generation snapshot', async
     generation: 0,
     cachedObservation: observation,
     env: {},
+    invalidateObservation() {},
   });
 
   expect(requests.map((request) => request.command)).toEqual([
@@ -274,6 +276,7 @@ test('fails scrollUntilVisible when the target stays absent', async () => {
       },
       generation: 0,
       env: {},
+      invalidateObservation() {},
     }),
   ).rejects.toMatchObject({
     code: 'COMMAND_FAILED',
@@ -319,7 +322,7 @@ test.each([
     platform: 'android',
   });
 
-  await port.execute({ command, generation: 0, env: {} });
+  await port.execute({ command, generation: 0, env: {}, invalidateObservation() {} });
 
   expect(requests.map((request) => request.command)).toEqual([
     'type',
@@ -381,6 +384,7 @@ test('commits Maestro input text before dispatching an immediate tap', async () 
     command: { kind: 'inputText', source: { line: 2 }, text: 'hello' },
     generation: 0,
     env: {},
+    invalidateObservation() {},
   });
   await port.execute({
     command: {
@@ -390,6 +394,7 @@ test('commits Maestro input text before dispatching an immediate tap', async () 
     },
     generation: 1,
     env: {},
+    invalidateObservation() {},
   });
 
   expect(requests.map((request) => request.command)).toEqual([

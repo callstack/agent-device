@@ -29,6 +29,7 @@ test('delegates lifecycle and coordinate gestures through public daemon commands
     },
     generation: 0,
     env: {},
+    invalidateObservation() {},
   });
   await port.execute({
     command: {
@@ -43,6 +44,7 @@ test('delegates lifecycle and coordinate gestures through public daemon commands
     },
     generation: 1,
     env: {},
+    invalidateObservation() {},
   });
 
   expect(requests).toEqual([
@@ -106,6 +108,7 @@ test('pairs percentage swipe geometry with the nested public gesture request', a
     },
     generation: 0,
     env: {},
+    invalidateObservation() {},
   });
 
   expect(requests.at(-1)).toMatchObject({
@@ -154,11 +157,13 @@ test('does not leak replay and test controls into nested public commands', async
     command: { kind: 'launchApp', source: { line: 2 }, appId: 'com.example.app' },
     generation: 0,
     env: {},
+    invalidateObservation() {},
   });
   await port.execute({
     command: { kind: 'back', source: { line: 3 } },
     generation: 1,
     env: {},
+    invalidateObservation() {},
   });
 
   expect(requests).toHaveLength(2);
@@ -213,6 +218,7 @@ test('keeps absent negative observations, script output, and artifacts typed', a
       command: { kind: 'runScript', source: { path: sourcePath, line: 2 }, file: 'setup.js' },
       generation: 0,
       env: { PREFIX: 'typed' },
+      invalidateObservation() {},
     }),
   ).resolves.toMatchObject({ outputEnv: { 'output.token': 'typed-ready' } });
   await expect(
@@ -220,6 +226,7 @@ test('keeps absent negative observations, script output, and artifacts typed', a
       command: { kind: 'takeScreenshot', source: { line: 3 }, path: 'shot.png' },
       generation: 0,
       env: { PREFIX: 'typed' },
+      invalidateObservation() {},
     }),
   ).resolves.toMatchObject({ artifactPaths: [path.join(root, 'shot.png')] });
 });

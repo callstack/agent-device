@@ -110,27 +110,16 @@ async function executeRuntimeCommand(
     env: state.context.values,
     ...(appId === undefined ? {} : { appId: state.context.resolve(appId) }),
     generation: state.context.generation,
+    invalidateObservation: state.context.invalidateObservation,
     ...(state.context.observation ? { cachedObservation: state.context.observation } : {}),
     ...(state.options.signal ? { signal: state.options.signal } : {}),
   };
-  const mayMutate = runtimeCommandMayMutate(command);
-  let result;
-  try {
-    result = await state.port.execute(request);
-    checkpointMaestroCancellation(state.options.signal);
-  } catch (error) {
-    if (mayMutate) state.context.recordMutation();
-    throw error;
-  }
+  const result = await state.port.execute(request);
+  checkpointMaestroCancellation(state.options.signal);
   if (result.observation) state.context.recordObservation(result.observation);
   if (result.outputEnv) state.context.merge(result.outputEnv);
   result.artifactPaths?.forEach((entry) => state.artifacts.add(entry));
-  if (result.mutated) state.context.recordMutation();
   state.executed += 1;
-}
-
-function runtimeCommandMayMutate(command: MaestroRuntimeCommand): boolean {
-  return command.kind !== 'takeScreenshot';
 }
 
 async function executeOpaqueStep(

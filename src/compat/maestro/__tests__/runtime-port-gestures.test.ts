@@ -21,6 +21,7 @@ test('uses the structured gesture contract without observing absolute swipes', a
     },
     generation: 0,
     env: {},
+    invalidateObservation() {},
   });
   await port.execute({
     command: {
@@ -34,6 +35,7 @@ test('uses the structured gesture contract without observing absolute swipes', a
     },
     generation: 1,
     env: {},
+    invalidateObservation() {},
   });
   await port.execute({
     command: {
@@ -43,6 +45,7 @@ test('uses the structured gesture contract without observing absolute swipes', a
     },
     generation: 2,
     env: {},
+    invalidateObservation() {},
   });
   await port.execute({
     command: {
@@ -52,6 +55,7 @@ test('uses the structured gesture contract without observing absolute swipes', a
     },
     generation: 3,
     env: {},
+    invalidateObservation() {},
   });
 
   expect(resolveGestureViewport).toHaveBeenCalledTimes(2);
@@ -142,6 +146,7 @@ test('rejects stale typed selector evidence before input execution', async () =>
       },
       generation: 0,
       env: {},
+      invalidateObservation() {},
     }),
   ).rejects.toThrow(/evidence generation 9 does not match 0/);
   expect(tapOn).not.toHaveBeenCalled();

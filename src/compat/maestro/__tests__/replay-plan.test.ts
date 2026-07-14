@@ -109,7 +109,10 @@ describe('typed Maestro replay plan', () => {
 
   test('executes from a stable plan index and reports plan ordinals', async () => {
     const program = parseMaestroProgram('---\n- inputText: first\n- inputText: second\n');
-    const execute = vi.fn(async () => ({ mutated: true }));
+    const execute = vi.fn(async (request) => {
+      request.invalidateObservation();
+      return {};
+    });
     const observer = { commandStarted: vi.fn() };
     const port: MaestroRuntimePort = {
       execute,

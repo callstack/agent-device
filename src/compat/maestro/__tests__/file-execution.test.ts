@@ -14,7 +14,10 @@ test('executes root and included Maestro files through one typed runtime port', 
     mainPath,
     ['appId: com.example.app', '---', '- runFlow:', '    file: child.yaml'].join('\n'),
   );
-  const execute = vi.fn(async () => ({ mutated: true }));
+  const execute = vi.fn(async (request) => {
+    request.invalidateObservation();
+    return {};
+  });
   const port: MaestroRuntimePort = {
     execute,
     observe: vi.fn(async ({ generation }) => ({ generation, matched: true })),

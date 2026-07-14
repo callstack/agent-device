@@ -33,6 +33,7 @@ describe('executeMaestroProgram', () => {
       },
       env: {},
       generation: 0,
+      invalidateObservation: expect.any(Function),
     });
     expect(port.observe).not.toHaveBeenCalled();
     expect(result).toEqual({ executed: 1, skipped: 0, generation: 1, artifactPaths: [] });
@@ -84,19 +85,19 @@ describe('executeMaestroProgram', () => {
     expect(result.generation).toBe(1);
   });
 
-  test.each([
-    ['tap', '      - tapOn: Retry'],
-    ['runScript', '      - runScript: setup.js'],
-    ['waitForAnimationToEnd', '      - waitForAnimationToEnd: 10'],
-  ])('invalidates cached observations after a failed %s attempt', async (_name, commandYaml) => {
+  test('invalidates cached observations when a failed runtime operation says it may have changed', async () => {
     const attempts: MaestroRuntimeRequest[] = [];
     const observation: MaestroObservation = { generation: 0, matched: true };
     const port = makePort({
       observe: vi.fn(async () => observation),
       execute: vi.fn(async (request) => {
         attempts.push(request);
-        if (attempts.length === 1) throw new AppError('COMMAND_FAILED', 'retry me');
-        return { mutated: true };
+        if (attempts.length === 1) {
+          request.invalidateObservation();
+          throw new AppError('COMMAND_FAILED', 'retry me');
+        }
+        request.invalidateObservation();
+        return {};
       }),
     });
     const program = parseMaestroProgram(
@@ -106,7 +107,7 @@ describe('executeMaestroProgram', () => {
         '- retry:',
         '    maxRetries: 1',
         '    commands:',
-        commandYaml,
+        '      - tapOn: Retry',
       ].join('\n'),
     );
 
@@ -125,7 +126,7 @@ describe('executeMaestroProgram', () => {
       execute: vi.fn(async (request) => {
         executed.push(request);
         if (request.command.kind === 'runScript') {
-          return { mutated: false, outputEnv: { TOKEN: 'generated' } };
+          return { outputEnv: { TOKEN: 'generated' } };
         }
         if (
           request.command.kind === 'tapOn' &&
@@ -135,7 +136,8 @@ describe('executeMaestroProgram', () => {
           failingAttempts += 1;
           if (failingAttempts === 1) throw new AppError('COMMAND_FAILED', 'retry me');
         }
-        return { mutated: request.command.kind !== 'takeScreenshot' };
+        if (request.command.kind !== 'takeScreenshot') request.invalidateObservation();
+        return {};
       }),
     });
     const main = parseMaestroProgram(
@@ -301,9 +303,10 @@ describe('executeMaestroProgram', () => {
       execute: vi.fn(async (request) => {
         if (request.command.kind === 'inputText') seenTexts.push(request.command.text);
         if (request.command.kind === 'runScript') {
-          return { mutated: false, outputEnv: { OUTPUT: 'generated' } };
+          return { outputEnv: { OUTPUT: 'generated' } };
         }
-        return { mutated: true };
+        request.invalidateObservation();
+        return {};
       }),
     });
     const program = parseMaestroProgram(
@@ -345,7 +348,7 @@ describe('executeMaestroProgram', () => {
     const controller = new AbortController();
     const execute = vi.fn(async (_request: MaestroRuntimeRequest) => {
       controller.abort();
-      return { mutated: false };
+      return {};
     });
     const port = makePort({ execute });
     const program = parseMaestroProgram('---\n- inputText: first\n- inputText: second\n');
@@ -364,13 +367,17 @@ describe('executeMaestroProgram', () => {
 function makePort(overrides: Partial<MaestroRuntimePort> = {}): MaestroRuntimePort {
   return {
     execute: vi.fn(
-      async ({ command }): Promise<MaestroRuntimeResult> => ({
-        mutated:
+      async (request): Promise<MaestroRuntimeResult> => {
+        const { command } = request;
+        if (
           command.kind !== 'takeScreenshot' &&
           command.kind !== 'runScript' &&
-          command.kind !== 'waitForAnimationToEnd',
-        ...(command.kind === 'takeScreenshot' ? { artifactPaths: [command.path] } : {}),
-      }),
+          command.kind !== 'waitForAnimationToEnd'
+        ) {
+          request.invalidateObservation();
+        }
+        return command.kind === 'takeScreenshot' ? { artifactPaths: [command.path] } : {};
+      },
     ),
     observe: vi.fn(async ({ generation }) => ({ generation, matched: true })),
     ...overrides,

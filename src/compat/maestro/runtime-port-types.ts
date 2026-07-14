@@ -21,6 +21,7 @@ export type MaestroRuntimeOperationContext = {
   readonly generation: number;
   readonly source?: MaestroSourceLocation;
   readonly cachedObservation?: MaestroObservation;
+  readonly invalidateObservation: () => void;
   readonly signal?: AbortSignal;
   readonly authoredSwipe?: MaestroSwipeGesture;
   readonly swipeTarget?: MaestroTargetResolution;

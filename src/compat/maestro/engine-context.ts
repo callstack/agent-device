@@ -58,7 +58,7 @@ export function createMaestroExecutionContext(
       }
       observation = next;
     },
-    recordMutation(): void {
+    invalidateObservation(): void {
       generation += 1;
       observation = undefined;
     },

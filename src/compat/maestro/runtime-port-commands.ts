@@ -3,6 +3,7 @@ import { pointInsideRect } from '../../utils/rect-center.ts';
 import type { MaestroGestureTarget } from './program-ir.ts';
 import type {
   MaestroObservation,
+  MaestroObservationEffect,
   MaestroRuntimeCommand,
   MaestroRuntimeRequest,
   MaestroRuntimeResult,
@@ -99,21 +100,26 @@ async function executeLifecycleCommand(
 ): Promise<MaestroRuntimeResult> {
   switch (command.kind) {
     case 'launchApp':
-      return await invokeMutation(
+      return await invokeOperation(
         operations.launchApp,
         launchAppInput(command, request),
         context,
-        true,
+        'invalidate',
       );
     case 'stopApp':
-      return await invokeMutation(
+      return await invokeOperation(
         operations.stopApp,
         { appId: command.appId ?? request.appId },
         context,
-        true,
+        'invalidate',
       );
     case 'openLink':
-      return await invokeMutation(operations.openLink, { link: command.link }, context, true);
+      return await invokeOperation(
+        operations.openLink,
+        { link: command.link },
+        context,
+        'invalidate',
+      );
   }
 }
 
@@ -143,11 +149,11 @@ async function executeTargetCommand(
         request,
         operations,
       );
-      return await invokeMutation(
+      return await invokeOperation(
         operations.doubleTapOn,
         { target, ...(command.delay === undefined ? {} : { delay: command.delay }) },
         context,
-        true,
+        'invalidate',
         target.resolution ? observationForTarget(target.resolution) : undefined,
       );
     }
@@ -158,11 +164,11 @@ async function executeTargetCommand(
         request,
         operations,
       );
-      return await invokeMutation(
+      return await invokeOperation(
         operations.longPressOn,
         { target },
         context,
-        true,
+        'invalidate',
         target.resolution ? observationForTarget(target.resolution) : undefined,
       );
     }
@@ -176,12 +182,12 @@ async function executeTapOnCommand(
   context: MaestroRuntimeOperationContext,
 ): Promise<MaestroRuntimeResult> {
   const target = await resolveTapOnTarget(command, request, operations);
-  if (!target) return { mutated: false };
-  return await invokeMutation(
+  if (!target) return {};
+  return await invokeOperation(
     operations.tapOn,
     tapOnInput(command, target),
     context,
-    true,
+    'invalidate',
     target.resolution ? observationForTarget(target.resolution) : undefined,
   );
 }
@@ -225,7 +231,7 @@ async function executeSwipeCommand(
   context: MaestroRuntimeOperationContext,
 ): Promise<MaestroRuntimeResult> {
   const swipe = await resolveMaestroSwipeOperation(command.gesture, request, operations);
-  return await invokeMutation(
+  return await invokeOperation(
     operations.gesture,
     swipe.gesture,
     {
@@ -234,7 +240,7 @@ async function executeSwipeCommand(
       ...(swipe.target ? { swipeTarget: swipe.target } : {}),
       ...(swipe.viewport ? { gestureViewport: swipe.viewport } : {}),
     },
-    true,
+    'invalidate',
     swipe.target ? observationForTarget(swipe.target) : undefined,
   );
 }
@@ -247,14 +253,14 @@ async function executeTextCommand(
 ): Promise<MaestroRuntimeResult> {
   switch (command.kind) {
     case 'inputText':
-      return await invokeMutation(
+      return await invokeOperation(
         operations.inputText,
         { text: command.text, ...(command.label === undefined ? {} : { label: command.label }) },
         context,
-        true,
+        'invalidate',
       );
     case 'eraseText':
-      return await invokeMutation(
+      return await invokeOperation(
         operations.eraseText,
         {
           ...(command.charactersToErase === undefined
@@ -262,10 +268,15 @@ async function executeTextCommand(
             : { charactersToErase: command.charactersToErase }),
         },
         context,
-        true,
+        'invalidate',
       );
     case 'pasteText':
-      return await invokeMutation(operations.pasteText, { text: command.text }, context, true);
+      return await invokeOperation(
+        operations.pasteText,
+        { text: command.text },
+        context,
+        'invalidate',
+      );
   }
 }
 
@@ -277,26 +288,36 @@ async function executeNavigationCommand(
 ): Promise<MaestroRuntimeResult> {
   switch (command.kind) {
     case 'scroll':
-      return await invokeMutation(operations.scroll, { direction: 'down' }, context, true);
+      return await invokeOperation(
+        operations.scroll,
+        { direction: 'down' },
+        context,
+        'invalidate',
+      );
     case 'scrollUntilVisible':
-      return await invokeMutation(
+      return await invokeOperation(
         operations.scrollUntilVisible,
         scrollUntilVisibleInput(command),
         context,
-        true,
+        'invalidate',
       );
     case 'hideKeyboard':
-      return await invokeMutation(operations.hideKeyboard, {}, context, true);
+      return await invokeOperation(operations.hideKeyboard, {}, context, 'invalidate');
     case 'pressKey':
-      return await invokeMutation(operations.pressKey, { key: command.key }, context, true);
+      return await invokeOperation(
+        operations.pressKey,
+        { key: command.key },
+        context,
+        'invalidate',
+      );
     case 'back':
-      return await invokeMutation(operations.back, {}, context, true);
+      return await invokeOperation(operations.back, {}, context, 'invalidate');
     case 'waitForAnimationToEnd':
-      return await invokeMutation(
+      return await invokeOperation(
         operations.waitForAnimationToEnd,
         waitForAnimationToEndInput(command),
         context,
-        true,
+        'invalidate',
       );
   }
 }
@@ -322,17 +343,17 @@ async function executeSupportCommand(
   switch (command.kind) {
     case 'takeScreenshot': {
       const result = await operations.takeScreenshot({ path: command.path }, context);
-      return resultWithArtifacts(false, result, [], undefined, context.generation);
+      return resultWithArtifacts(result, [], undefined, context.generation);
     }
     case 'runScript':
-      return await invokeMutation(
+      return await invokeOperation(
         operations.runScript,
         {
           file: command.file,
           ...(command.env === undefined ? {} : { env: command.env }),
         },
         context,
-        true,
+        'preserve',
       );
   }
 }
@@ -344,32 +365,40 @@ async function executeObservationCommand(command: MaestroObservationCommand): Pr
   );
 }
 
-async function invokeMutation<TInput>(
+async function invokeOperation<TInput>(
   operation: (
     input: TInput,
     context: MaestroRuntimeOperationContext,
   ) => Promise<MaestroRuntimeOperationResult | void>,
   input: TInput,
   context: MaestroRuntimeOperationContext,
-  mutated: boolean,
+  observationEffect: MaestroObservationEffect,
   observation?: MaestroObservation,
 ): Promise<MaestroRuntimeResult> {
+  if (observationEffect === 'invalidate') context.invalidateObservation();
   const result = await operation(input, context);
-  return resultWithArtifacts(mutated, result, [], observation, context.generation);
+  return resultWithArtifacts(
+    result,
+    [],
+    observationEffect === 'preserve' ? observation : undefined,
+    context.generation,
+    observationEffect === 'preserve',
+  );
 }
 
 function resultWithArtifacts(
-  mutated: boolean,
   result: MaestroRuntimeOperationResult | void,
   defaultArtifacts: readonly string[],
   observation?: MaestroObservation,
   generation?: number,
+  includeOperationObservation = true,
 ): MaestroRuntimeResult {
   const operationObservation = result?.observation;
   assertObservationGeneration(operationObservation, generation);
   return {
-    mutated,
-    ...optionalObservation(observation ?? operationObservation),
+    ...optionalObservation(
+      observation ?? (includeOperationObservation ? operationObservation : undefined),
+    ),
     ...optionalOutputEnv(result?.outputEnv),
     ...optionalArtifactPaths(defaultArtifacts, result?.artifactPaths),
   };

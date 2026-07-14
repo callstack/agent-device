@@ -74,7 +74,7 @@ describe('MaestroRuntimePort', () => {
     expect(result).toEqual({
       executed: 13,
       skipped: 0,
-      generation: 12,
+      generation: 11,
       artifactPaths: ['artifact://checkout.png'],
     });
     expect(calls.map(({ kind }) => kind)).toEqual([
@@ -120,7 +120,9 @@ describe('MaestroRuntimePort', () => {
     });
   });
 
-  test('invalidates observation evidence after successful waits and scripts', async () => {
+  test('describes observation validity after successful waits and scripts', async () => {
+    const waitInvalidation = vi.fn();
+    const scriptInvalidation = vi.fn();
     const operations = makeOperations({
       waitForAnimationToEnd: vi.fn(async () => undefined),
       runScript: vi.fn(async () => undefined),
@@ -132,15 +134,58 @@ describe('MaestroRuntimePort', () => {
         command: { kind: 'waitForAnimationToEnd', source: { line: 2 }, timeout: 50 },
         generation: 4,
         env: {},
+        invalidateObservation: waitInvalidation,
       }),
-    ).resolves.toEqual({ mutated: true });
+    ).resolves.toEqual({});
     await expect(
       port.execute({
         command: { kind: 'runScript', source: { line: 3 }, file: 'setup.js' },
         generation: 5,
         env: {},
+        invalidateObservation: scriptInvalidation,
       }),
-    ).resolves.toEqual({ mutated: true });
+    ).resolves.toEqual({});
+    expect(waitInvalidation).toHaveBeenCalledOnce();
+    expect(scriptInvalidation).not.toHaveBeenCalled();
+  });
+
+  test('invalidates retained observations after target preparation and before dispatch', async () => {
+    const events: string[] = [];
+    const operations = makeOperations({
+      resolveTarget: vi.fn(async ({ selector }, context) => {
+        events.push('resolve');
+        return {
+          generation: context.generation,
+          matched: true,
+          visible: true,
+          candidateCount: 1,
+          rect: { x: 0, y: 0, width: 20, height: 20 },
+          dispatchSelector: { key: 'id' as const, value: selector.id! },
+        };
+      }),
+      tapOn: vi.fn(async () => {
+        events.push('dispatch');
+        throw new Error('dispatch failed');
+      }),
+    });
+
+    await expect(
+      createMaestroRuntimePort(operations).execute({
+        command: {
+          kind: 'tapOn',
+          source: { line: 2 },
+          target: {
+            space: 'target',
+            selector: { id: 'continue' },
+          },
+        },
+        generation: 0,
+        env: {},
+        invalidateObservation: () => events.push('invalidate'),
+      }),
+    ).rejects.toThrow('dispatch failed');
+
+    expect(events).toEqual(['resolve', 'invalidate', 'dispatch']);
   });
 
   test('keeps selector evidence and target geometry in the current generation', async () => {
@@ -263,9 +308,10 @@ describe('MaestroRuntimePort', () => {
       command: command as Extract<typeof command, { kind: 'tapOn' }>,
       generation: 0,
       env: {},
+      invalidateObservation: vi.fn(),
     });
 
-    expect(result).toEqual({ mutated: false });
+    expect(result).toEqual({});
     expect(missingOperations.resolveTarget).toHaveBeenCalledWith(
       expect.objectContaining({ purpose: 'tap', selector: { text: 'Missing' } }),
       expect.any(Object),
@@ -284,6 +330,7 @@ describe('MaestroRuntimePort', () => {
         command: command as Extract<typeof command, { kind: 'tapOn' }>,
         generation: 0,
         env: {},
+        invalidateObservation: vi.fn(),
       }),
     ).rejects.toBe(failure);
   });

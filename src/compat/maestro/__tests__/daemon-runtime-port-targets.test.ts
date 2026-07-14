@@ -51,8 +51,9 @@ test('waits for a delayed input target using fresh snapshots', async () => {
       },
       generation: 0,
       env: {},
+      invalidateObservation() {},
     }),
-  ).resolves.toMatchObject({ mutated: true });
+  ).resolves.toEqual({});
   expect(requests.map((request) => request.command)).toEqual([
     'snapshot',
     'snapshot',
@@ -120,8 +121,9 @@ test('atomically dispatches a unique exact iOS target from same-generation evide
       generation: 0,
       cachedObservation: observation,
       env: {},
+      invalidateObservation() {},
     }),
-  ).resolves.toMatchObject({ mutated: true });
+  ).resolves.toEqual({});
 
   expect(requests.map((request) => request.command)).toEqual(['snapshot', 'click']);
   expect(requests.at(-1)?.positionals).toEqual(['id="continue"']);
@@ -198,6 +200,7 @@ test('falls back to fresh Maestro geometry when atomic iOS dispatch resolves off
     generation: 0,
     cachedObservation: observation,
     env: {},
+    invalidateObservation() {},
   });
 
   expect(requests.map((request) => request.command)).toEqual([
@@ -266,6 +269,7 @@ test('refreshes filtered target geometry instead of reusing an observation recta
     generation: 0,
     cachedObservation: observation,
     env: {},
+    invalidateObservation() {},
   });
 
   expect(requests.map((request) => request.command)).toEqual(['snapshot', 'snapshot', 'click']);
@@ -334,6 +338,7 @@ test('captures fresh target state immediately after a same-generation observatio
     generation: 0,
     cachedObservation: observation,
     env: {},
+    invalidateObservation() {},
   });
 
   expect(requests.map((request) => request.command)).toEqual(['snapshot', 'snapshot', 'click']);
